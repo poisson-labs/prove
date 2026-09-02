@@ -196,10 +196,15 @@ def verify_against_diff(diff_path: Path) -> None:
 # ---------- provenance ----------
 
 
-def source_commit(path: Path) -> str:
+def source_commit(files: list[Path]) -> str:
+    """SHA of the last commit that touched any of the source files.
+
+    Keyed on the files, not on HEAD, so unrelated commits to the source repo do not
+    change the provenance a fresh build writes.
+    """
     try:
         r = subprocess.run(
-            ["git", "-C", str(path.parent), "rev-parse", "HEAD"],
+            ["git", "-C", str(files[0].parent), "log", "-1", "--format=%H", "--", *map(str, files)],
             capture_output=True,
             text=True,
             check=False,
@@ -306,7 +311,7 @@ def build(v0: Path, v1: Path, out: Path, diff: Path | None, argv: list[str]) -> 
         stats[run_id] = s
 
     # Nothing above touched disk. Everything below does.
-    commit = source_commit(v0)
+    commit = source_commit([v0, v1] + ([diff] if diff is not None else []))
     date = datetime.now(UTC).date().isoformat()
     out.mkdir(parents=True, exist_ok=True)
     store = Store(out)
