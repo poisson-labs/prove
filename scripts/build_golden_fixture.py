@@ -130,11 +130,16 @@ def convert(run_id: str, manifest_path: Path) -> tuple[list[EpisodeRecord], dict
             )
         )
     n = len(records)
+    per_cell: dict[tuple[float, float], int] = {}
+    for rec in source["records"]:
+        key = (float(rec["mu"]), float(rec["push_pct_bw"]))
+        per_cell[key] = per_cell.get(key, 0) + (rec["fell_time_upz_s"] is not None)
     stats = {
         "n": n,
         "fell": fell,
         "diverged": diverged,
         "fell_pct": 100.0 * fell / n if n else float("nan"),
+        "per_cell_fell": per_cell,
     }
     return records, stats
 
@@ -158,7 +163,7 @@ def check_drift(run_id: str, stats: dict[str, Any]) -> None:
 # ---------- verification against the published diff JSON ----------
 
 
-def verify_against_diff(diff_path: Path) -> None:
+def verify_against_diff(diff_path: Path, stats: dict[str, dict[str, Any]]) -> None:
     d = json.loads(diff_path.read_text())
     checks: list[tuple[str, Any, Any]] = [
         ("n_better", d["n_better"], GOLDEN["diff"]["safer"]),
@@ -176,6 +181,11 @@ def verify_against_diff(diff_path: Path) -> None:
     fell_b = sum(int(c["fell_b"]) for c in cells)
     checks.append(("v0 fell_pct", round(100.0 * fell_a / total, 1), GOLDEN["v0"]["fell_pct"]))
     checks.append(("v1 fell_pct", round(100.0 * fell_b / total, 1), GOLDEN["v1"]["fell_pct"]))
+    v0_cells, v1_cells = stats["go1-v0"]["per_cell_fell"], stats["go1-v1"]["per_cell_fell"]
+    for c in cells:
+        key = (float(c["mu"]), float(c["push_pct_bw"]))
+        checks.append((f"cell {key} fell_a", v0_cells.get(key), int(c["fell_a"])))
+        checks.append((f"cell {key} fell_b", v1_cells.get(key), int(c["fell_b"])))
     bad = [(name, got, want) for name, got, want in checks if got != want]
     # Boundary medians are published to one decimal, rounded half up. Compare with a
     # half-decimal tolerance rather than round(), which sends x.x5 down.
@@ -299,9 +309,6 @@ def write_readme(
 
 def build(v0: Path, v1: Path, out: Path, diff: Path | None, argv: list[str]) -> None:
     manifests = {"go1-v0": v0, "go1-v1": v1}
-    if diff is not None:
-        verify_against_diff(diff)
-
     converted: dict[str, list[EpisodeRecord]] = {}
     stats: dict[str, dict[str, Any]] = {}
     for run_id, path in manifests.items():
@@ -309,6 +316,8 @@ def build(v0: Path, v1: Path, out: Path, diff: Path | None, argv: list[str]) -> 
         check_drift(run_id, s)
         converted[run_id] = records
         stats[run_id] = s
+    if diff is not None:
+        verify_against_diff(diff, stats)
 
     # Nothing above touched disk. Everything below does.
     commit = source_commit([v0, v1] + ([diff] if diff is not None else []))
@@ -325,6 +334,18 @@ def build(v0: Path, v1: Path, out: Path, diff: Path | None, argv: list[str]) -> 
 
     golden = json.loads(json.dumps(GOLDEN))
     golden["source"]["commit"] = commit
+    # Per-cell counts, computed from the manifests (so a build without --diff is identical)
+    # and verified against the published diff JSON whenever --diff is given.
+    v0_cells, v1_cells = stats["go1-v0"]["per_cell_fell"], stats["go1-v1"]["per_cell_fell"]
+    golden["cells"] = [
+        {
+            "mu": mu,
+            "push_pct_bw": push,
+            "fell_a": v0_cells[(mu, push)],
+            "fell_b": v1_cells[(mu, push)],
+        }
+        for mu, push in sorted(v0_cells)
+    ]
     (out / "golden.json").write_text(json.dumps(golden, indent=2) + "\n")
     write_readme(out, manifests, diff, commit, date, stats, argv)
 
