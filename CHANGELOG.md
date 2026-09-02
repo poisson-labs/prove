@@ -1,3 +1,4 @@
 S0: repository scaffold.
 S0.1: move lifelines to dev; core is numpy/pandas/scipy/pyarrow.
 M1: Episode contract and Rollout protocol.
+M4: Parquet store, run manifest, config_hash, resume support.
