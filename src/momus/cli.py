@@ -1,0 +1,14 @@
+import argparse
+
+from momus import __version__
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="momus")
+    parser.add_argument("--version", action="version", version=__version__)
+    try:
+        parser.parse_args(argv)
+    except SystemExit as exc:
+        code = exc.code
+        return code if isinstance(code, int) else 1
+    return 0

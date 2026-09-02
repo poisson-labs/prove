@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "momus"
+version = "0.0.1"
+description = "A statistical instrument for finding where autonomous and agentic systems break."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = ["numpy", "pandas", "scipy", "pyarrow", "lifelines"]
+
+[project.optional-dependencies]
+modal = ["modal"]
+agent = ["litellm"]
+viz = ["matplotlib"]
+all = ["modal", "litellm", "matplotlib"]
+dev = ["pytest", "hypothesis", "mypy", "ruff"]
+
+[project.scripts]
+momus = "momus.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/momus"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["I"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
