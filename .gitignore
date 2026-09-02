@@ -24,7 +24,7 @@ env/
 htmlcov/
 
 # Session notes
-notes/
+notes
 
 # Editors / OS
 .vscode/
