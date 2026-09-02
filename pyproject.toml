@@ -9,14 +9,14 @@ description = "A statistical instrument for finding where autonomous and agentic
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-dependencies = ["numpy", "pandas", "scipy", "pyarrow", "lifelines"]
+dependencies = ["numpy", "pandas", "scipy", "pyarrow"]
 
 [project.optional-dependencies]
 modal = ["modal"]
 agent = ["litellm"]
 viz = ["matplotlib"]
 all = ["modal", "litellm", "matplotlib"]
-dev = ["pytest", "hypothesis", "mypy", "ruff"]
+dev = ["pytest", "hypothesis", "mypy", "ruff", "lifelines"]
 
 [project.scripts]
 momus = "momus.cli:main"

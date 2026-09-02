@@ -47,7 +47,7 @@ def test_pyproject_core_deps_are_math_only():
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
     core = {d.split("[")[0].split(">")[0].split("=")[0].strip().lower()
             for d in data["project"]["dependencies"]}
-    assert core == {"numpy", "pandas", "scipy", "pyarrow", "lifelines"}
+    assert core == {"numpy", "pandas", "scipy", "pyarrow"}
 
 
 def test_python_floor():
