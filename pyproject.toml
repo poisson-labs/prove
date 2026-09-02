@@ -16,7 +16,7 @@ modal = ["modal"]
 agent = ["litellm"]
 viz = ["matplotlib"]
 all = ["modal", "litellm", "matplotlib"]
-dev = ["pytest", "hypothesis", "mypy", "ruff", "lifelines"]
+dev = ["pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels"]
 
 [project.scripts]
 momus = "momus.cli:main"
