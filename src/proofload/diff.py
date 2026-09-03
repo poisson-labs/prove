@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
@@ -21,6 +21,7 @@ from numpy.typing import NDArray
 from scipy import stats
 
 from proofload.store import RunManifest
+from proofload.survival import aalen_johansen
 
 Method = Literal["fisher_bh", "mcnemar_bh", "logrank_bh"]
 
@@ -58,6 +59,8 @@ SUMMARY_FIELDS = (
     "dropped_a",
     "dropped_b",
     "truncated",
+    "max_mde_unchanged",
+    "max_mde_unchanged_cell",
 )
 
 
@@ -228,6 +231,8 @@ class DiffResult:
     dropped_a: int
     dropped_b: int
     truncated: int
+    max_mde_unchanged: float = field(default=math.nan)  # max mde over verdict == 'unchanged'
+    max_mde_unchanged_cell: str | None = None  # config_hash attaining it; None if none unchanged
 
     def to_markdown(self) -> str:
         cols = list(CELLS_COLUMNS)
@@ -237,7 +242,9 @@ class DiffResult:
             f"n_not_comparable={self.n_not_comparable}, max_mde={self.max_mde:.4f}, "
             f"method={self.method}, paired={self.paired}, t_unit={self.t_unit}, "
             f"horizon={self.horizon}, truncated={self.truncated}, "
-            f"dropped_a={self.dropped_a}, dropped_b={self.dropped_b}",
+            f"dropped_a={self.dropped_a}, dropped_b={self.dropped_b}, "
+            f"max_mde_unchanged={self.max_mde_unchanged:.4f}, "
+            f"max_mde_unchanged_cell={self.max_mde_unchanged_cell}",
             "",
             "| " + " | ".join(cols) + " |",
             "|" + "|".join("---" for _ in cols) + "|",
@@ -248,7 +255,8 @@ class DiffResult:
         return "\n".join(lines) + "\n"
 
     def to_json(self) -> dict[str, Any]:
-        out: dict[str, Any] = {field: _native(getattr(self, field)) for field in SUMMARY_FIELDS}
+        out: dict[str, Any] = {name: _native(getattr(self, name)) for name in SUMMARY_FIELDS}
+        out["max_mde_unchanged"] = _nan_to_none(self.max_mde_unchanged)
         out["cells"] = [
             {col: _native(value) for col, value in record.items()}
             for record in self.cells.to_dict(orient="records")
@@ -428,6 +436,7 @@ def diff(
     n_worse = int((cells["verdict"] == "worse").sum())
     n_unchanged = int(len(cells)) - n_safer - n_worse
     max_mde = float(cells["mde"].max()) if rows else 0.0
+    max_mde_unchanged, max_mde_unchanged_cell = _unchanged_mde(cells)
 
     return DiffResult(
         cells=cells,
@@ -445,4 +454,473 @@ def diff(
         dropped_a=dropped_a,
         dropped_b=dropped_b,
         truncated=truncated_a + truncated_b,
+        max_mde_unchanged=max_mde_unchanged,
+        max_mde_unchanged_cell=max_mde_unchanged_cell,
+    )
+
+
+def _nan_to_none(value: float) -> float | None:
+    return None if math.isnan(value) else float(value)
+
+
+def _unchanged_mde(cells: pd.DataFrame) -> tuple[float, str | None]:
+    """(max mde over verdict == 'unchanged', first config_hash attaining it), or (nan, None)."""
+    unchanged = cells[cells["verdict"] == "unchanged"]
+    if len(unchanged) == 0:
+        return math.nan, None
+    top = float(unchanged["mde"].max())
+    hits = unchanged.loc[unchanged["mde"] == top, "config_hash"]
+    return top, str(hits.iloc[0])
+
+
+# ---------- multi-event ----------
+
+_RAW_REQUIRED = ("config_hash", "config", "replicate_index", "outcome", "t", "horizon")
+_MAX_EVENTS = 6
+_TRADES_COLUMNS = ("config_hash", "config", "safer_events", "worse_events")
+_MULTI_SUMMARY_FIELDS = (
+    "method",
+    "paired",
+    "q",
+    "t_unit",
+    "horizon",
+    "n_tests",
+    "n_not_comparable",
+    "dropped_a",
+    "dropped_b",
+    "truncated",
+    "inferred",
+    "non_event",
+)
+_EVENT_SUMMARY_FIELDS = (
+    "event",
+    "n_safer",
+    "n_worse",
+    "n_unchanged",
+    "max_mde",
+    "max_mde_unchanged",
+    "max_mde_unchanged_cell",
+    "cause_specific",
+)
+
+
+class EventInferenceError(DiffError):
+    """The event set could not be inferred from the outcomes present."""
+
+
+@dataclass(frozen=True, eq=False)
+class EventDiff:
+    """One event's view of a multi-event diff. ``cells`` has the ``DiffResult.cells`` columns;
+    ``rate_a`` / ``rate_b`` are Aalen-Johansen cumulative incidence at the horizon."""
+
+    event: str
+    cells: pd.DataFrame
+    n_safer: int
+    n_worse: int
+    n_unchanged: int
+    max_mde: float
+    max_mde_unchanged: float
+    max_mde_unchanged_cell: str | None
+    cause_specific: bool
+
+    def to_json(self) -> dict[str, Any]:
+        out: dict[str, Any] = {name: _native(getattr(self, name)) for name in _EVENT_SUMMARY_FIELDS}
+        out["max_mde_unchanged"] = _nan_to_none(self.max_mde_unchanged)
+        out["cells"] = [
+            {col: _native(value) for col, value in record.items()}
+            for record in self.cells.to_dict(orient="records")
+        ]
+        return out
+
+
+@dataclass(frozen=True, eq=False)
+class MultiDiffResult:
+    events: tuple[str, ...]
+    by_event: Mapping[str, EventDiff]
+    method: Method
+    paired: bool
+    q: float
+    t_unit: str
+    horizon: float
+    n_tests: int
+    n_not_comparable: int
+    dropped_a: int
+    dropped_b: int
+    truncated: int
+    trades: pd.DataFrame
+    inferred: bool
+    non_event: str | None
+
+    def _ordered_events(self) -> list[str]:
+        return sorted(
+            self.events,
+            key=lambda e: (-self.by_event[e].n_worse, -self.by_event[e].n_safer, e),
+        )
+
+    def _method_label(self) -> str:
+        return f"{self.method} (cause-specific)" if self.method == "logrank_bh" else self.method
+
+    def headline(self) -> str:
+        """Every event, worst first, then the method line. Never a causal claim."""
+        parts = [
+            f"{e}: {self.by_event[e].n_safer} safer, {self.by_event[e].n_worse} worse"
+            for e in self._ordered_events()
+        ]
+        pairing = "paired" if self.paired else "unpaired"
+        return (
+            " · ".join(parts)
+            + f"\n(aalen_johansen + {self._method_label()}, BH q<{self.q} over "
+            f"{self.n_tests} tests, {pairing})"
+        )
+
+    def trade_line(self) -> str | None:
+        """None when ``trades`` is empty; otherwise a count of co-occurrence, not a cause."""
+        if len(self.trades) == 0:
+            return None
+        pairs: dict[tuple[str, str], int] = {}
+        for row in self.trades.itertuples(index=False):
+            for safer in row.safer_events:
+                for worse in row.worse_events:
+                    pairs[(safer, worse)] = pairs.get((safer, worse), 0) + 1
+        (safer, worse), _ = min(pairs.items(), key=lambda kv: (-kv[1], kv[0]))
+        n = len(self.trades)
+        return (
+            f"Trade: {safer} fell in {n} {'cell' if n == 1 else 'cells'} where {worse} rose. "
+            "The patch moved failures, it did not remove them."
+        )
+
+    def to_markdown(self) -> str:
+        lines: list[str] = []
+        if self.inferred:
+            lines.append(
+                f"events: {', '.join(self.events)} "
+                f"(inferred; {self.non_event} treated as non-event)"
+            )
+        lines.extend(self.headline().splitlines())
+        trade = self.trade_line()
+        if trade is not None:
+            lines.append(trade)
+        lines.append(
+            f"method={self._method_label()}, paired={self.paired}, q={self.q}, "
+            f"t_unit={self.t_unit}, horizon={self.horizon}, n_tests={self.n_tests}, "
+            f"n_not_comparable={self.n_not_comparable}, dropped_a={self.dropped_a}, "
+            f"dropped_b={self.dropped_b}, truncated={self.truncated}"
+        )
+        cols = list(CELLS_COLUMNS)
+        for e in self._ordered_events():
+            ev = self.by_event[e]
+            lines.extend(
+                [
+                    "",
+                    f"## {e}: n_safer={ev.n_safer}, n_worse={ev.n_worse}, "
+                    f"n_unchanged={ev.n_unchanged}, max_mde={ev.max_mde:.4f}, "
+                    f"max_mde_unchanged={ev.max_mde_unchanged:.4f}, "
+                    f"max_mde_unchanged_cell={ev.max_mde_unchanged_cell}",
+                    "",
+                    "| " + " | ".join(cols) + " |",
+                    "|" + "|".join("---" for _ in cols) + "|",
+                ]
+            )
+            for row in ev.cells.itertuples(index=False):
+                lines.append("| " + " | ".join(_md_cell(getattr(row, col)) for col in cols) + " |")
+        if len(self.trades):
+            tcols = list(_TRADES_COLUMNS)
+            lines.extend(
+                [
+                    "",
+                    "## trades",
+                    "",
+                    "| " + " | ".join(tcols) + " |",
+                    "|" + "|".join("---" for _ in tcols) + "|",
+                ]
+            )
+            for row in self.trades.itertuples(index=False):
+                lines.append(
+                    f"| {row.config_hash} | {_md_cell(row.config)} | "
+                    f"{', '.join(row.safer_events)} | {', '.join(row.worse_events)} |"
+                )
+        return "\n".join(lines) + "\n"
+
+    def to_json(self) -> dict[str, Any]:
+        out: dict[str, Any] = {name: _native(getattr(self, name)) for name in _MULTI_SUMMARY_FIELDS}
+        out["events"] = list(self.events)
+        out["by_event"] = {e: self.by_event[e].to_json() for e in self.events}
+        out["trades"] = [
+            {col: _native(value) for col, value in record.items()}
+            for record in self.trades.to_dict(orient="records")
+        ]
+        out["headline"] = self.headline()
+        out["trade_line"] = self.trade_line()
+        return out
+
+    def check(self, fail_on: Literal["worse", "any"] = "worse") -> bool:
+        """True if the diff passes. 'worse': no cell significantly worse in any event.
+        'any': nothing significant either way in any event."""
+        if fail_on == "worse":
+            return all(ev.n_worse == 0 for ev in self.by_event.values())
+        if fail_on == "any":
+            return all(ev.n_worse == 0 and ev.n_safer == 0 for ev in self.by_event.values())
+        raise DiffError(f"fail_on must be 'worse' or 'any', got {fail_on!r}")
+
+
+def _outcome_counts(a: pd.DataFrame, b: pd.DataFrame) -> dict[str, int]:
+    pooled = pd.concat([a["outcome"], b["outcome"]], ignore_index=True).dropna()
+    return {str(k): int(v) for k, v in pooled.astype(str).value_counts().items()}
+
+
+def infer_events(a: pd.DataFrame, b: pd.DataFrame) -> tuple[tuple[str, ...], str]:
+    """Returns (events, non_event). Distinct non-null outcomes across both runs pooled,
+    minus the single most frequent. Raises EventInferenceError on 0 events or more than 6."""
+    for label, df in (("a", a), ("b", b)):
+        if "outcome" not in df.columns:
+            raise DiffError(f"frame {label} lacks an outcome column; pass raw store frames")
+    counts = _outcome_counts(a, b)
+    if not counts:
+        raise EventInferenceError("no non-null outcomes in either run; nothing to infer")
+    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    top = ordered[0][1]
+    tied = [name for name, n in ordered if n == top]
+    if len(tied) > 1:
+        raise EventInferenceError(
+            f"most frequent outcome is tied between {tied} at {top} rows each; "
+            f"outcome counts: {dict(ordered)}; pass events= explicitly"
+        )
+    non_event = ordered[0][0]
+    events = tuple(name for name, _ in ordered[1:])
+    if not events:
+        raise EventInferenceError(
+            f"only one outcome present ({non_event!r}, {top} rows); no events to infer"
+        )
+    if len(events) > _MAX_EVENTS:
+        raise EventInferenceError(
+            f"{len(events)} events after dropping {non_event!r}, more than {_MAX_EVENTS}; "
+            f"outcome counts: {dict(ordered)}; pass events= explicitly"
+        )
+    return events, non_event
+
+
+def _validate_raw(df: pd.DataFrame, label: str) -> None:
+    missing = [c for c in _RAW_REQUIRED if c not in df.columns]
+    if missing:
+        raise DiffError(f"frame {label} lacks columns {missing}; pass raw store frames")
+    if len(df) == 0:
+        raise DiffError(f"frame {label} is empty")
+
+
+def _pairing(
+    method: str, manifest_a: RunManifest | None, manifest_b: RunManifest | None
+) -> tuple[bool, str]:
+    """(paired, t_unit) with the S5 guards, raised before any event is tested."""
+    if manifest_a is not None and manifest_b is not None:
+        if manifest_a.t_unit != manifest_b.t_unit:
+            raise UnitMismatch(
+                f"t_unit differs: {manifest_a.t_unit!r} (a) vs {manifest_b.t_unit!r} (b)"
+            )
+        paired = manifest_a.run_salt == manifest_b.run_salt
+    else:
+        paired = False
+    if method == "mcnemar_bh" and not paired:
+        if manifest_a is None or manifest_b is None:
+            raise NotPairable("mcnemar_bh needs both manifests to establish pairing")
+        raise NotPairable(
+            f"mcnemar_bh needs matching run_salt; got {manifest_a.run_salt!r} vs "
+            f"{manifest_b.run_salt!r}"
+        )
+    if manifest_a is not None:
+        return paired, manifest_a.t_unit
+    if manifest_b is not None:
+        return paired, manifest_b.t_unit
+    return paired, "unknown"
+
+
+def _truncate_raw(df: pd.DataFrame, h: float) -> tuple[pd.DataFrame, int]:
+    """Rows with t > h are re-censored at h: outcome becomes null so they are an event of
+    no kind and count as censored at h for every CIF."""
+    out = df.copy()
+    over = out["t"].to_numpy(dtype=np.float64) > h
+    count = int(np.sum(over))
+    if count:
+        out.loc[over, "t"] = h
+        out.loc[over, "outcome"] = None
+    out["outcome"] = out["outcome"].astype(object)
+    return out, count
+
+
+def _indicator_frame(cell: pd.DataFrame, observed: NDArray[np.bool_]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {"replicate_index": cell["replicate_index"].to_numpy(), "observed": observed}
+    )
+
+
+def multi_diff(
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    *,
+    events: Sequence[str] | None = None,
+    method: Method = "fisher_bh",
+    q: float = 0.05,
+    power: float = 0.8,
+    manifest_a: RunManifest | None = None,
+    manifest_b: RunManifest | None = None,
+) -> MultiDiffResult:
+    """Diff two RAW store frames across several competing events at once.
+
+    a, b are Store.read() frames (not censored); censoring is applied per event internally.
+    events=None infers the set with infer_events. Per cell and event the compared quantity
+    is the Aalen-Johansen cumulative incidence at the horizon, estimated once per cell over
+    every terminal outcome present (the requested events and the non-event alike compete);
+    the per-event test statistic treats every other outcome as censoring. One BH family
+    covers every (cell, event) pair. Errored rows (null outcome) are excluded from every
+    numerator and denominator.
+    """
+    if method not in _METHODS:
+        raise DiffError(f"method must be one of {_METHODS}, got {method!r}")
+    if not 0.0 < q < 1.0:
+        raise DiffError(f"q must be in (0, 1), got {q}")
+    _validate_raw(a, "a")
+    _validate_raw(b, "b")
+    paired, t_unit = _pairing(method, manifest_a, manifest_b)
+
+    inferred = events is None
+    non_event: str | None = None
+    if events is None:
+        event_set, non_event = infer_events(a, b)
+    else:
+        event_set = tuple(dict.fromkeys(str(e) for e in events))
+        if not event_set:
+            raise DiffError("events must name at least one outcome")
+
+    a_valid = a.loc[a["outcome"].notna()].reset_index(drop=True)
+    b_valid = b.loc[b["outcome"].notna()].reset_index(drop=True)
+    if len(a_valid) == 0 or len(b_valid) == 0:
+        raise DiffError("a run has no rows with a non-null outcome")
+    horizon = min(_frame_horizon(a_valid, "a"), _frame_horizon(b_valid, "b"))
+    a_t, truncated_a = _truncate_raw(a_valid, horizon)
+    b_t, truncated_b = _truncate_raw(b_valid, horizon)
+
+    hashes_a = set(a_t["config_hash"].astype(str))
+    hashes_b = set(b_t["config_hash"].astype(str))
+    common = sorted(hashes_a & hashes_b)
+    dropped_a = len(hashes_a - hashes_b)
+    dropped_b = len(hashes_b - hashes_a)
+    groups_a = {str(k): g for k, g in a_t.groupby("config_hash", sort=False)}
+    groups_b = {str(k): g for k, g in b_t.groupby("config_hash", sort=False)}
+
+    # The competing set for Aalen-Johansen is every terminal outcome present in either run,
+    # not just the events asked for: a row that ended in the non-event is absorbed, not
+    # censored, so it must stay out of the risk set for the events being compared. Only
+    # rows re-censored by horizon truncation (null outcome) are censored.
+    present = sorted(_outcome_counts(a_t, b_t))
+    competing = tuple(dict.fromkeys([*event_set, *present]))
+
+    # Gather every (cell, event) row first; one BH pass afterwards.
+    rows: list[dict[str, Any]] = []
+    for h in common:
+        cell_a, cell_b = groups_a[h], groups_b[h]
+        n_a, n_b = int(len(cell_a)), int(len(cell_b))
+        t_a = cell_a["t"].to_numpy(dtype=np.float64)
+        t_b = cell_b["t"].to_numpy(dtype=np.float64)
+        out_a = cell_a["outcome"].to_numpy(dtype=object)
+        out_b = cell_b["outcome"].to_numpy(dtype=object)
+        cif_a = aalen_johansen(t_a, out_a, competing)
+        cif_b = aalen_johansen(t_b, out_b, competing)
+        for k in event_set:
+            o_a = np.asarray(out_a == k, dtype=bool)
+            o_b = np.asarray(out_b == k, dtype=bool)
+            events_a, events_b = int(o_a.sum()), int(o_b.sum())
+            rate_a = min(max(cif_a.at(k, horizon), 0.0), 1.0)
+            rate_b = min(max(cif_b.at(k, horizon), 0.0), 1.0)
+            if method == "fisher_bh":
+                statistic, p = _fisher(events_a, n_a, events_b, n_b)
+            elif method == "mcnemar_bh":
+                statistic, p = _mcnemar(
+                    _indicator_frame(cell_a, o_a), _indicator_frame(cell_b, o_b), h
+                )
+            else:
+                statistic, p = _logrank(t_a, o_a, t_b, o_b)
+            rows.append(
+                {
+                    "event": k,
+                    "config_hash": h,
+                    "config": cell_a["config"].iloc[0],
+                    "n_a": n_a,
+                    "n_b": n_b,
+                    "events_a": events_a,
+                    "events_b": events_b,
+                    "rate_a": float(rate_a),
+                    "rate_b": float(rate_b),
+                    "delta": float(rate_b - rate_a) + 0.0,
+                    "stat": float(statistic),
+                    "p": float(p),
+                    "q": math.nan,
+                    "verdict": "unchanged",
+                    "mde": mde_two_proportion(rate_a, n_a, n_b, alpha=q, power=power),
+                }
+            )
+
+    if rows:
+        adjusted = bh(np.array([r["p"] for r in rows], dtype=np.float64), q)
+        for r, q_adj in zip(rows, adjusted, strict=True):
+            r["q"] = float(q_adj)
+            if q_adj < q and r["delta"] < 0:
+                r["verdict"] = "safer"
+            elif q_adj < q and r["delta"] > 0:
+                r["verdict"] = "worse"
+
+    by_event: dict[str, EventDiff] = {}
+    verdicts: dict[str, dict[str, str]] = {}
+    for k in event_set:
+        records = [{c: r[c] for c in CELLS_COLUMNS} for r in rows if r["event"] == k]
+        cells = pd.DataFrame.from_records(records, columns=list(CELLS_COLUMNS))
+        cells["config"] = cells["config"].astype(object)
+        cells["verdict"] = cells["verdict"].astype(object)
+        n_safer = int((cells["verdict"] == "safer").sum())
+        n_worse = int((cells["verdict"] == "worse").sum())
+        max_mde_unchanged, max_mde_unchanged_cell = _unchanged_mde(cells)
+        by_event[k] = EventDiff(
+            event=k,
+            cells=cells,
+            n_safer=n_safer,
+            n_worse=n_worse,
+            n_unchanged=int(len(cells)) - n_safer - n_worse,
+            max_mde=float(cells["mde"].max()) if records else 0.0,
+            max_mde_unchanged=max_mde_unchanged,
+            max_mde_unchanged_cell=max_mde_unchanged_cell,
+            cause_specific=method == "logrank_bh",
+        )
+        verdicts[k] = dict(zip(cells["config_hash"], cells["verdict"], strict=True))
+
+    trade_rows: list[dict[str, Any]] = []
+    for h in common:
+        safer = tuple(k for k in event_set if verdicts[k][h] == "safer")
+        worse = tuple(k for k in event_set if verdicts[k][h] == "worse")
+        if safer and worse:
+            trade_rows.append(
+                {
+                    "config_hash": h,
+                    "config": groups_a[h]["config"].iloc[0],
+                    "safer_events": safer,
+                    "worse_events": worse,
+                }
+            )
+    trades = pd.DataFrame.from_records(trade_rows, columns=list(_TRADES_COLUMNS))
+    for col in ("config", "safer_events", "worse_events"):
+        trades[col] = trades[col].astype(object)
+
+    return MultiDiffResult(
+        events=event_set,
+        by_event=by_event,
+        method=method,
+        paired=paired,
+        q=float(q),
+        t_unit=t_unit,
+        horizon=float(horizon),
+        n_tests=len(common) * len(event_set),
+        n_not_comparable=dropped_a + dropped_b,
+        dropped_a=dropped_a,
+        dropped_b=dropped_b,
+        truncated=truncated_a + truncated_b,
+        trades=trades,
+        inferred=inferred,
+        non_event=non_event,
     )
