@@ -163,6 +163,19 @@ def censor(df: pd.DataFrame, event: str) -> pd.DataFrame:
     return out
 
 
+def competing_set(*frames: pd.DataFrame) -> tuple[str, ...]:
+    """Every distinct non-null ``outcome`` across all frames, sorted.
+
+    Empty frames contribute nothing. This is the ONLY supported way to build the event set
+    passed to aalen_johansen / cell_table (ADR-021): every terminal outcome present is an
+    absorbing competing risk, whether or not its CIF is being reported.
+    """
+    present: set[str] = set()
+    for df in frames:
+        present.update(str(o) for o in df["outcome"].dropna().unique())
+    return tuple(sorted(present))
+
+
 def multi_outcome_guard(df: pd.DataFrame, event: str) -> list[str]:
     """Distinct non-event terminal outcomes present, when there is more than one.
 

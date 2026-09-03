@@ -21,7 +21,7 @@ from numpy.typing import NDArray
 from scipy import stats
 
 from proofload.store import RunManifest
-from proofload.survival import aalen_johansen
+from proofload.survival import aalen_johansen, competing_set
 
 Method = Literal["fisher_bh", "mcnemar_bh", "logrank_bh"]
 
@@ -74,6 +74,14 @@ class UnitMismatch(DiffError):
 
 class NotPairable(DiffError):
     """A paired method was requested but the runs are not pairable."""
+
+
+class UnknownEvent(DiffError):
+    """An event name that appears in none of the frames a command loaded.
+
+    Raised by the CLI's validation, not by the library: ``multi_diff`` stays permissive, so
+    a caller may legitimately report on an event that did not occur.
+    """
 
 
 # ---------- multiple comparisons ----------
@@ -809,9 +817,9 @@ def multi_diff(
     # The competing set for Aalen-Johansen is every terminal outcome present in either run,
     # not just the events asked for: a row that ended in the non-event is absorbed, not
     # censored, so it must stay out of the risk set for the events being compared. Only
-    # rows re-censored by horizon truncation (null outcome) are censored.
-    present = sorted(_outcome_counts(a_t, b_t))
-    competing = tuple(dict.fromkeys([*event_set, *present]))
+    # rows re-censored by horizon truncation (null outcome) are censored. A requested event
+    # outside this set did not occur; its incidence is zero rather than an error.
+    competing = competing_set(a_t, b_t)
 
     # Gather every (cell, event) row first; one BH pass afterwards.
     rows: list[dict[str, Any]] = []
@@ -828,8 +836,8 @@ def multi_diff(
             o_a = np.asarray(out_a == k, dtype=bool)
             o_b = np.asarray(out_b == k, dtype=bool)
             events_a, events_b = int(o_a.sum()), int(o_b.sum())
-            rate_a = min(max(cif_a.at(k, horizon), 0.0), 1.0)
-            rate_b = min(max(cif_b.at(k, horizon), 0.0), 1.0)
+            rate_a = min(max(cif_a.at(k, horizon), 0.0), 1.0) if k in competing else 0.0
+            rate_b = min(max(cif_b.at(k, horizon), 0.0), 1.0) if k in competing else 0.0
             if method == "fisher_bh":
                 statistic, p = _fisher(events_a, n_a, events_b, n_b)
             elif method == "mcnemar_bh":

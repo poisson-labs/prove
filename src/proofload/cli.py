@@ -34,13 +34,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn, TextIO, cast
 
 if TYPE_CHECKING:
+    import pandas as pd
     from _typeshed import SupportsWrite
 
     from proofload.diff import Method
 
 from proofload import __version__
 from proofload._resolve import resolve
-from proofload.diff import DiffError, EventInferenceError, MultiDiffResult, infer_events, multi_diff
+from proofload.diff import (
+    DiffError,
+    EventInferenceError,
+    MultiDiffResult,
+    UnknownEvent,
+    infer_events,
+    multi_diff,
+)
 from proofload.executor import ExecutorError, Plan, RunSummary, plan, preflight, run_local
 from proofload.executor_modal import (
     ImageSpec,
@@ -59,7 +67,7 @@ from proofload.report import (
 )
 from proofload.sampler import SamplerError, SweepSpec
 from proofload.store import RunManifest, Store, StoreError
-from proofload.survival import SurvivalError, cell_table
+from proofload.survival import SurvivalError, cell_table, competing_set
 
 __all__ = ["main"]
 
@@ -388,11 +396,33 @@ def _multi(
         ) from exc
 
 
+def _require_known_events(
+    verb: str, events: Sequence[str] | None, *frames: pd.DataFrame
+) -> None:
+    """Refuse an ``--event`` name absent from every frame the verb loaded, before any work.
+
+    Compared against the outcomes actually present, never against an inferred set: a typo
+    should never produce a plausible-looking empty result, and the CLI is where every typo
+    originates. The library underneath stays permissive.
+    """
+    if events is None:
+        return
+    present = competing_set(*frames)
+    missing = [str(e) for e in events if str(e) not in present]
+    if missing:
+        where = "either run" if len(frames) > 1 else "the run"
+        raise UnknownEvent(
+            f'{verb}: event "{missing[0]}" does not appear in {where}. '
+            f"Present: {', '.join(present)}."
+        )
+
+
 def _run_diffs(
     store: Store,
     a: str,
     b: str,
     *,
+    verb: str,
     events: Sequence[str] | None,
     method: str,
     q: float,
@@ -401,6 +431,7 @@ def _run_diffs(
     """The primary diff first (so a refusal fires before extra work), then the other two on
     the same event set."""
     fa, fb, ma, mb = _load_pair(store, a, b)
+    _require_known_events(verb, events, fa, fb)
     primary = _multi(fa, fb, ma, mb, events=events, method=method, q=q)
     others: dict[str, Any] = {}
     if all_methods:
@@ -588,6 +619,7 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         Store(root),
         ns.a,
         ns.b,
+        verb="diff",
         events=ns.event,
         method=ns.method,
         q=ns.q,
@@ -653,7 +685,14 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
     q = _DEFAULT_Q if ns.q is None else ns.q
 
     multi, others, manifests = _run_diffs(
-        Store(root), a, b, events=ns.event, method=method, q=q, all_methods=ns.methods == "all"
+        Store(root),
+        a,
+        b,
+        verb="report",
+        events=ns.event,
+        method=method,
+        q=q,
+        all_methods=ns.methods == "all",
     )
     spec = ReportSpec(
         title=ns.title if ns.title else f"{a} vs {b}: {', '.join(multi.events)}",
@@ -691,6 +730,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
     store = Store(root)
     manifest = store.manifest(run)
     df = store.read(run)
+    _require_known_events("report", ns.event, df)
     inferred = ns.event is None
     if inferred:
         try:
@@ -713,10 +753,9 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
 
     # The Aalen-Johansen competing set is every terminal outcome present, not only the events
     # asked for: a row that ended in the non-event is absorbed, not censored, so it must stay
-    # out of the risk set. multi_diff builds its set the same way; passing only ``events``
-    # would censor the non-event and inflate every incidence this report prints.
-    present = sorted({str(o) for o in df["outcome"].dropna().unique()})
-    competing = list(dict.fromkeys([*events, *present]))
+    # out of the risk set. This is the call site that printed 100% violated in S13 by passing
+    # only ``events``; the helper is the one construction (ADR-021), and multi_diff uses it too.
+    competing = list(competing_set(df))
     cells = cell_table(df, events[0], horizon=horizon, method="aj", events=competing)
     spec = ReportSpec(
         title=ns.title if ns.title else f"{run}: {', '.join(events)}",
@@ -766,7 +805,14 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             f"is not a gate. Inferred events for this pair: {suggestion}."
         )
     multi, _, _ = _run_diffs(
-        store, ns.a, ns.b, events=ns.event, method=ns.method, q=ns.q, all_methods=False
+        store,
+        ns.a,
+        ns.b,
+        verb="check",
+        events=ns.event,
+        method=ns.method,
+        q=ns.q,
+        all_methods=False,
     )
     passed = multi.check(fail_on=ns.fail_on)
     _write_summary(io, multi)

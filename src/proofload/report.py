@@ -806,6 +806,10 @@ def build_multi_report(
 
 
 def _rate_cell(coords: tuple[object, ...], r: dict[str, Any]) -> Cell:
+    # A cell with no observed episodes -- every rollout errored, or every one censored out --
+    # is a hole, not a measured zero. It takes the same path as a grid coordinate with no row.
+    if int(r["n"]) == 0:
+        return _absent(coords)
     nan = float("nan")
     return Cell(
         coords=coords,
@@ -824,9 +828,13 @@ def _rate_cell(coords: tuple[object, ...], r: dict[str, Any]) -> Cell:
 
 
 def _cif_at(curve: object, event: str, horizon: float) -> float:
-    """F_k(horizon) from the cell table's curve: a CIF curve directly, a KM curve as 1 - S."""
+    """F_k(horizon) from the cell table's curve: a CIF curve directly, a KM curve as 1 - S.
+
+    An event that is not one of the curve's competing outcomes never occurred in the run, so
+    its incidence is zero; the report stays permissive and draws an empty panel.
+    """
     if isinstance(curve, CIFCurve):
-        return curve.at(event, horizon)
+        return curve.at(event, horizon) if event in curve.cif else 0.0
     if isinstance(curve, KMCurve):
         return 1.0 - curve.at(horizon)
     raise ReportError(f"cell table curve must be a CIFCurve or KMCurve, got {type(curve).__name__}")

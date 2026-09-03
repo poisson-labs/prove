@@ -14,3 +14,4 @@ M10: CLI — sweep, diff, report, check, inspect, runs; keyless mock-agent quick
 M6: multi-event diff — per-event CIF comparison, single BH family, trade detection, max_mde_unchanged.
 M7: multi-event report — per-event panels on a shared scale, trade line and marker, max_mde_unchanged honesty, saturation marker, forest plot, single-run survival report.
 M10: multi-event CLI — inferred events, repeatable --event, check requires explicit events, single-run report, forest flag, readable receipt, local import_path.
+Fix: competing set is constructed in one place; check refuses unknown events; zero-n cells render as holes.
