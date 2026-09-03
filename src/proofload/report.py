@@ -1456,16 +1456,30 @@ def _html_lines(text: str) -> str:
 
 
 def _html_style(theme: Theme) -> str:
+    """The receipt's whole stylesheet. The body is bounded and its text wraps; the stacked
+    SVG sits in a horizontally scrollable figure at full width with its aspect ratio kept;
+    print scales the figure to the page instead of scrolling."""
     return (
-        "body{margin:0;padding:24px;font-family:" + _FONT + ";font-size:14px;"
-        f"background:{_CANVAS[theme]};color:{_TEXT[theme]}}}"
-        "table{border-collapse:collapse;margin:12px 0}"
+        "html{background:" + _CANVAS[theme] + "}"
+        "body{max-width:1100px;margin:0 auto;padding:24px;box-sizing:border-box;"
+        "font-family:" + _FONT + ";font-size:14px;line-height:1.45;"
+        f"background:{_CANVAS[theme]};color:{_TEXT[theme]};"
+        "overflow-wrap:anywhere;white-space:normal}"
+        "h1,h2,p,li,blockquote{white-space:normal;overflow-wrap:anywhere}"
+        "table{border-collapse:collapse;margin:12px 0;max-width:100%}"
         f"th,td{{border:1px solid {_MUTED[theme]};padding:4px 8px;text-align:left}}"
-        "svg{max-width:100%;height:auto}"
+        ".figure{width:100%;overflow-x:auto;margin:12px 0}"
+        ".figure svg{display:block;width:100%;height:auto;max-width:none}"
         f"blockquote{{border-left:3px solid {_MUTED[theme]};margin:12px 0;padding-left:12px}}"
         f".trade{{color:{_FAILED}}}"
-        "@media print{body{background:#FFFFFF;color:#000000}svg{page-break-inside:avoid}}"
+        "@media print{body{max-width:none;background:#FFFFFF;color:#000000}"
+        ".figure{overflow:visible;page-break-inside:avoid}"
+        ".figure svg{width:100%;height:auto}}"
     )
+
+
+def _html_figure(svg: str) -> str:
+    return f'<div class="figure">{svg.rstrip(chr(10))}</div>'
 
 
 def _html_head(title: str, theme: Theme) -> list[str]:
@@ -1499,7 +1513,7 @@ def _render_html(rep: Report) -> str:
     parts = _html_head(rep.spec.title, rep.spec.theme)
     parts += [
         f"<p>{_html.escape(rep.headline)}</p>",
-        rep.to_svg().rstrip("\n"),
+        _html_figure(rep.to_svg()),
         "<h2>Worst cells</h2>",
         _html_table(_worst_header(rep), _worst_table_rows(rep)),
     ]
@@ -1522,7 +1536,7 @@ def _render_multi_html(rep: MultiReport) -> str:
     parts.append(f"<p>{_html_lines(rep.headline)}</p>")
     if rep.trade_line is not None:
         parts.append(f'<p class="trade">{_html.escape(rep.trade_line)}</p>')
-    parts.append(rep.to_svg().rstrip("\n"))
+    parts.append(_html_figure(rep.to_svg()))
     for e in rep.events:
         panel = rep.panels[e]
         parts += [
@@ -1540,7 +1554,7 @@ def _render_survival_html(rep: SurvivalReport) -> str:
     # The coverage line is printed once per panel, inside the inline SVG; the body does not
     # repeat it.
     parts = _html_head(rep.spec.title, rep.spec.theme)
-    parts.append(rep.to_svg().rstrip("\n"))
+    parts.append(_html_figure(rep.to_svg()))
     for e in rep.events:
         panel = rep.panels[e]
         parts += [

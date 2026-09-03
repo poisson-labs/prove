@@ -5,7 +5,13 @@ prompt; ``diff``, ``report`` and ``check`` operate on stored runs; ``inspect`` d
 ``(config, seed)`` pairs behind an event plus a reproduction snippet; ``runs`` lists the store.
 This module computes nothing and decides nothing statistical: it parses arguments, calls
 M2–M7, and renders their results. Every number it prints is a field on a ``RunSummary``,
-``DiffResult``, ``Report``, ``RunManifest`` or a store frame.
+``MultiDiffResult``, ``MultiReport``, ``SurvivalReport``, ``RunManifest`` or a store frame.
+
+``diff``, ``report`` and ``check`` go through the multi-event path: raw store frames to
+``multi_diff`` (which censors per event itself), one panel per event in the report. One event
+is not a special case; it is a one-event multi call. ``--event`` is repeatable and, when
+omitted, inferred (``check`` excepted: a gate never infers). ``report`` with one run id is
+the single-run survival report.
 
 ``main`` owns the streams. Every write goes through the streams it was given (``sys.*`` by
 default), which is what makes the whole CLI testable in-process. Exceptions map to exit codes
@@ -21,17 +27,20 @@ import os
 import sys
 import tomllib
 import traceback
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn, TextIO
+from typing import TYPE_CHECKING, Any, NoReturn, TextIO, cast
 
 if TYPE_CHECKING:
     from _typeshed import SupportsWrite
 
+    from proofload.diff import Method
+
 from proofload import __version__
 from proofload._resolve import resolve
-from proofload.diff import DiffError, DiffResult, diff
+from proofload.diff import DiffError, EventInferenceError, MultiDiffResult, infer_events, multi_diff
 from proofload.executor import ExecutorError, Plan, RunSummary, plan, preflight, run_local
 from proofload.executor_modal import (
     ImageSpec,
@@ -40,22 +49,37 @@ from proofload.executor_modal import (
     preflight_modal,
     run_modal,
 )
-from proofload.report import Report, ReportError, ReportSpec, _fmt, build_report
+from proofload.report import (
+    MultiReport,
+    ReportError,
+    ReportSpec,
+    SurvivalReport,
+    build_multi_report,
+    build_survival_report,
+)
 from proofload.sampler import SamplerError, SweepSpec
 from proofload.store import RunManifest, Store, StoreError
-from proofload.survival import censor
+from proofload.survival import SurvivalError, cell_table
 
 __all__ = ["main"]
 
 _ENV_STORE = "PROOFLOAD_STORE"
 _DEFAULT_STORE = "./proofload-runs"
 _DEFAULT_BATCH_SIZE = 64
+_DEFAULT_METHOD = "fisher_bh"
+_DEFAULT_Q = 0.05
 _METHODS: tuple[str, ...] = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 _REPORT_FILES = ("report.md", "heatmap.svg", "receipt.html")
 _TRACE_SCHEMA = "proofload.trace/1"
 _SNIPPET_MARKER = "# reproduce one episode"
 _MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
-_REFUSABLE = (SamplerError, ExecutorError, DiffError, ReportError, StoreError)
+_DIFF_ONLY_FLAGS = ("method", "methods", "q")
+_RUN_ONLY_FLAGS = ("horizon",)
+_REFUSABLE = (SamplerError, ExecutorError, DiffError, ReportError, StoreError, SurvivalError)
+_REPORT_FORMS = (
+    "report A B --x AXIS [...]  (two run ids: diff report) or "
+    "report RUN --x AXIS [...]  (one run id: survival report)"
+)
 
 
 # ---------- streams, exits, parser ----------
@@ -148,29 +172,56 @@ def _build_parser(io: _IO) -> _Parser:
         "--image", default="image", metavar="SECTION", help="[modal.SECTION] image table"
     )
 
-    diff_p = sub.add_parser("diff", help="compare two stored runs cell by cell")
-    _add_pair_arguments(diff_p)
+    diff_p = sub.add_parser("diff", help="compare two stored runs cell by cell, per event")
+    diff_p.add_argument("a", metavar="A", help="run id of the baseline")
+    diff_p.add_argument("b", metavar="B", help="run id of the candidate")
+    _add_event_argument(diff_p, "omitted: inferred from the outcomes present")
+    _add_method_arguments(diff_p, defaults=True)
     diff_p.add_argument("--methods", choices=("all",), help="also run the other two methods")
     diff_p.add_argument("--format", choices=("md", "json"), default="md")
 
     report_p = sub.add_parser(
-        "report", help="render a diff as report.md, heatmap.svg, receipt.html"
+        "report",
+        help="render report.md, heatmap.svg, receipt.html: two run ids diff them, one run id "
+        "is its survival report",
     )
-    _add_pair_arguments(report_p)
+    report_p.add_argument(
+        "runs", nargs="+", metavar="RUN", help="A B for a diff report, RUN for a survival report"
+    )
+    _add_event_argument(report_p, "omitted: inferred from the outcomes present")
+    _add_method_arguments(report_p, defaults=False)
+    report_p.add_argument(
+        "--methods", choices=("all",), help="add the method comparison table (diff report only)"
+    )
     report_p.add_argument("--x", required=True, metavar="AXIS", help="config key on the x axis")
     report_p.add_argument("--y", metavar="AXIS", help="config key on the y axis")
     report_p.add_argument(
         "--fix", action="append", default=[], metavar="KEY=VALUE", help="pin a config key"
     )
-    report_p.add_argument("--methods", choices=("all",), help="add the method comparison table")
+    report_p.add_argument(
+        "--horizon", type=float, metavar="FLOAT", help="truncate a survival report's horizon"
+    )
     report_p.add_argument("--theme", choices=("dark", "light"), default="dark")
     report_p.add_argument("--top-n", type=int, default=10, metavar="N", help="worst cells listed")
-    report_p.add_argument("--out", metavar="DIR", help="default ./proofload-report-<A>-<B>")
+    report_p.add_argument(
+        "--forest",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help="single-axis diff panels: forest plot, strip, or forest for categorical axes",
+    )
+    report_p.add_argument(
+        "--out",
+        metavar="DIR",
+        help="default ./proofload-report-<A>-<B> or ./proofload-report-<RUN>",
+    )
     report_p.add_argument("--title", metavar="TEXT")
     report_p.add_argument("--force", action="store_true", help="write into a non-empty --out")
 
     check_p = sub.add_parser("check", help="gate on a diff: exit 0 on PASS, 1 on FAIL")
-    _add_pair_arguments(check_p)
+    check_p.add_argument("a", metavar="A", help="run id of the baseline")
+    check_p.add_argument("b", metavar="B", help="run id of the candidate")
+    _add_event_argument(check_p, "required: a gate never infers its events")
+    _add_method_arguments(check_p, defaults=True)
     check_p.add_argument("--fail-on", choices=("worse", "any"), default="worse")
 
     inspect_p = sub.add_parser("inspect", help="dump the (config, seed) pairs behind an event")
@@ -189,14 +240,22 @@ def _build_parser(io: _IO) -> _Parser:
     return parser
 
 
-def _add_pair_arguments(p: argparse.ArgumentParser) -> None:
-    p.add_argument("a", metavar="A", help="run id of the baseline")
-    p.add_argument("b", metavar="B", help="run id of the candidate")
+def _add_event_argument(p: argparse.ArgumentParser, note: str) -> None:
     p.add_argument(
-        "--event", required=True, metavar="NAME", help="outcome that counts as the event"
+        "--event",
+        action="append",
+        metavar="NAME",
+        help=f"outcome that counts as an event; repeatable ({note})",
     )
-    p.add_argument("--method", choices=_METHODS, default="fisher_bh")
-    p.add_argument("--q", type=float, default=0.05, help="BH false discovery rate")
+
+
+def _add_method_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None:
+    """``--method`` and ``--q``. Without defaults the namespace keeps ``None`` for a flag the
+    user did not pass, so the single-run report can name the diff-only flags it was given."""
+    p.add_argument("--method", choices=_METHODS, default=_DEFAULT_METHOD if defaults else None)
+    p.add_argument(
+        "--q", type=float, default=_DEFAULT_Q if defaults else None, help="BH false discovery rate"
+    )
 
 
 # ---------- entry point ----------
@@ -287,50 +346,91 @@ def _parse_pairs(items: Sequence[str], flag: str) -> dict[str, Any]:
     return out
 
 
-def _load_pair(
-    store: Store, a: str, b: str, event: str
-) -> tuple[Any, Any, RunManifest, RunManifest]:
+def _load_pair(store: Store, a: str, b: str) -> tuple[Any, Any, RunManifest, RunManifest]:
+    """Raw frames and manifests. Nothing is censored here: ``multi_diff`` censors per event."""
     ma, mb = store.manifest(a), store.manifest(b)
-    fa, fb = censor(store.read(a), event), censor(store.read(b), event)
-    return fa, fb, ma, mb
+    return store.read(a), store.read(b), ma, mb
+
+
+def _outcome_counts(*frames: Any) -> str:
+    """``name=count`` pairs over the non-null outcomes of the given store frames, most first."""
+    counter: Counter[str] = Counter()
+    for frame in frames:
+        counter.update(str(o) for o in frame["outcome"].dropna().tolist())
+    ordered = sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))
+    return ", ".join(f"{name}={count}" for name, count in ordered)
+
+
+def _multi(
+    fa: Any,
+    fb: Any,
+    ma: RunManifest,
+    mb: RunManifest,
+    *,
+    events: Sequence[str] | None,
+    method: str,
+    q: float,
+) -> MultiDiffResult:
+    try:
+        return multi_diff(
+            fa,
+            fb,
+            events=events,
+            method=cast("Method", method),
+            q=q,
+            manifest_a=ma,
+            manifest_b=mb,
+        )
+    except EventInferenceError as exc:
+        raise _Refusal(
+            f"cannot infer the event set: {exc}; outcome counts: {_outcome_counts(fa, fb)}; "
+            "pass --event NAME (repeatable)"
+        ) from exc
 
 
 def _run_diffs(
-    store: Store, ns: argparse.Namespace, *, all_methods: bool
-) -> tuple[DiffResult, dict[str, DiffResult], tuple[RunManifest, RunManifest]]:
-    """The primary diff first (so a refusal fires before extra work), then the other two."""
-    fa, fb, ma, mb = _load_pair(store, ns.a, ns.b, ns.event)
-
-    def one(method: Any) -> DiffResult:
-        return diff(fa, fb, event=ns.event, method=method, q=ns.q, manifest_a=ma, manifest_b=mb)
-
-    primary = one(ns.method)
-    others: dict[str, DiffResult] = {}
+    store: Store,
+    a: str,
+    b: str,
+    *,
+    events: Sequence[str] | None,
+    method: str,
+    q: float,
+    all_methods: bool,
+) -> tuple[MultiDiffResult, dict[str, Any], tuple[RunManifest, RunManifest]]:
+    """The primary diff first (so a refusal fires before extra work), then the other two on
+    the same event set."""
+    fa, fb, ma, mb = _load_pair(store, a, b)
+    primary = _multi(fa, fb, ma, mb, events=events, method=method, q=q)
+    others: dict[str, Any] = {}
     if all_methods:
-        for method in _METHODS:
-            if method != ns.method:
-                others[method] = one(method)
+        for other in _METHODS:
+            if other != method:
+                others[other] = _multi(fa, fb, ma, mb, events=primary.events, method=other, q=q)
     return primary, others, (ma, mb)
 
 
-def _headline(d: DiffResult) -> str:
-    """M7's headline template, rendered from the DiffResult alone."""
-    pairing = "paired" if d.paired else "unpaired"
-    return (
-        f"{d.n_safer} of {len(d.cells)} cells safer, {d.n_worse} worse "
-        f"({d.method}, BH q<{_fmt(d.q, 'sig3')}, {pairing})."
-    )
-
-
-def _method_table(results: Sequence[DiffResult]) -> str:
-    header = ("method", "paired", "safer", "worse", "unchanged", "max_mde")
+def _method_table(results: Sequence[MultiDiffResult]) -> str:
+    header = ("method", "event", "paired", "safer", "worse", "unchanged", "max_mde")
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
-    for d in results:
-        lines.append(
-            f"| {d.method} | {d.paired} | {d.n_safer} | {d.n_worse} | {d.n_unchanged} "
-            f"| {d.max_mde:.4f} |"
-        )
+    for m in results:
+        for e in m.events:
+            ev = m.by_event[e]
+            lines.append(
+                f"| {m.method} | {e} | {m.paired} | {ev.n_safer} | {ev.n_worse} "
+                f"| {ev.n_unchanged} | {ev.max_mde:.4f} |"
+            )
     return "\n".join(lines) + "\n"
+
+
+def _write_summary(io: _IO, multi: MultiDiffResult) -> None:
+    """Inference line when inferred, the headline, and the trade line when present."""
+    if multi.inferred:
+        io.out.write(multi.to_markdown().splitlines()[0] + "\n")
+    io.out.write(multi.headline() + "\n")
+    trade = multi.trade_line()
+    if trade is not None:
+        io.out.write(trade + "\n")
 
 
 class _Progress:
@@ -444,6 +544,7 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         run_salt=ns.salt,
         pair_with=ns.pair_with,
         resume=ns.resume,
+        import_path=ns.target,
     )
 
     if ns.backend == "modal":
@@ -483,7 +584,15 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
 
 
 def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    primary, others, _ = _run_diffs(Store(root), ns, all_methods=ns.methods == "all")
+    primary, others, _ = _run_diffs(
+        Store(root),
+        ns.a,
+        ns.b,
+        events=ns.event,
+        method=ns.method,
+        q=ns.q,
+        all_methods=ns.methods == "all",
+    )
     if ns.format == "json":
         payload: Any = primary.to_json()
         if others:
@@ -496,48 +605,171 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
     return 0
 
 
-def _cmd_report(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    out_dir = Path(ns.out) if ns.out else Path(f"./proofload-report-{ns.a}-{ns.b}")
+def _prepare_out_dir(ns: argparse.Namespace, default: str) -> Path:
+    """Refuse a non-empty ``--out`` before any work unless ``--force``; nothing is created yet."""
+    out_dir = Path(ns.out) if ns.out else Path(default)
     if out_dir.exists():
         if not out_dir.is_dir():
             raise _Refusal(f"--out {out_dir} exists and is not a directory")
         if any(out_dir.iterdir()) and not ns.force:
             raise _Refusal(f"--out {out_dir} exists and is not empty; pass --force to overwrite")
-    fixed = _parse_pairs(ns.fix, "--fix")
+    return out_dir
 
-    primary, others, manifests = _run_diffs(Store(root), ns, all_methods=ns.methods == "all")
+
+def _write_report_files(
+    io: _IO,
+    out_dir: Path,
+    report: MultiReport | SurvivalReport,
+    receipt: MultiReport | SurvivalReport,
+) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "report.md").write_text(report.to_markdown())
+    (out_dir / "heatmap.svg").write_text(report.to_svg())
+    (out_dir / "receipt.html").write_text(receipt.to_html())
+    for name in _REPORT_FILES:
+        io.out.write(f"{out_dir / name}\n")
+
+
+def _cmd_report(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
+    """The positional arity picks the verb: two run ids diff, one run id is a survival report."""
+    runs: list[str] = list(ns.runs)
+    if len(runs) == 2:
+        return _report_pair(ns, io, root, runs[0], runs[1])
+    if len(runs) == 1:
+        return _report_run(ns, io, root, runs[0])
+    raise _Refusal(f"report takes one or two run ids, got {len(runs)}: {_REPORT_FORMS}")
+
+
+def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) -> int:
+    stray = [f"--{name}" for name in _RUN_ONLY_FLAGS if getattr(ns, name) is not None]
+    if stray:
+        raise _Refusal(
+            f"{', '.join(stray)}: single-run flag{'s' if len(stray) > 1 else ''}; a diff report "
+            f"takes its horizon from the two runs ({_REPORT_FORMS})"
+        )
+    out_dir = _prepare_out_dir(ns, f"./proofload-report-{a}-{b}")
+    fixed = _parse_pairs(ns.fix, "--fix")
+    method = _DEFAULT_METHOD if ns.method is None else ns.method
+    q = _DEFAULT_Q if ns.q is None else ns.q
+
+    multi, others, manifests = _run_diffs(
+        Store(root), a, b, events=ns.event, method=method, q=q, all_methods=ns.methods == "all"
+    )
     spec = ReportSpec(
-        title=ns.title if ns.title else f"{ns.a} vs {ns.b}: {ns.event}",
+        title=ns.title if ns.title else f"{a} vs {b}: {', '.join(multi.events)}",
         x_axis=ns.x,
         y_axis=ns.y,
         fixed=fixed,
         comparison=others,
         theme=ns.theme,
         top_n=ns.top_n,
+        forest=ns.forest,
     )
-    report: Report = build_report(primary, spec, curves=None, manifests=manifests)
+    report = build_multi_report(multi, spec, manifests=manifests)
     receipt = (
         report
         if spec.theme == "light"
-        else build_report(
-            primary, dataclasses.replace(spec, theme="light"), curves=None, manifests=manifests
+        else build_multi_report(
+            multi, dataclasses.replace(spec, theme="light"), manifests=manifests
         )
     )
+    _write_summary(io, multi)
+    _write_report_files(io, out_dir, report, receipt)
+    return 0
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "report.md").write_text(report.to_markdown())
-    (out_dir / "heatmap.svg").write_text(report.to_svg())
-    (out_dir / "receipt.html").write_text(receipt.to_html())
-    io.out.write(report.headline + "\n")
-    for name in _REPORT_FILES:
-        io.out.write(f"{out_dir / name}\n")
+
+def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
+    given = [f"--{name}" for name in _DIFF_ONLY_FLAGS if getattr(ns, name) is not None]
+    if given:
+        raise _Refusal(
+            f"{', '.join(given)}: diff-only flag{'s' if len(given) > 1 else ''}; "
+            f"a single-run report compares nothing ({_REPORT_FORMS})"
+        )
+    out_dir = _prepare_out_dir(ns, f"./proofload-report-{run}")
+    fixed = _parse_pairs(ns.fix, "--fix")
+
+    store = Store(root)
+    manifest = store.manifest(run)
+    df = store.read(run)
+    inferred = ns.event is None
+    if inferred:
+        try:
+            # One frame, so the second arm is an empty slice of it: infer_events pools both
+            # arms for its counts, and passing df twice would double every count it reports.
+            events, non_event = infer_events(df, df.iloc[0:0])
+        except EventInferenceError as exc:
+            raise _Refusal(
+                f"cannot infer the event set: {exc}; outcome counts: {_outcome_counts(df)}; "
+                "pass --event NAME (repeatable)"
+            ) from exc
+    else:
+        events, non_event = tuple(dict.fromkeys(str(e) for e in ns.event)), None
+    valid_t = df["t"].dropna()
+    if valid_t.empty:
+        raise _Refusal(f"run {run} has no rows with a time; nothing to report")
+    horizon = float(valid_t.max()) if ns.horizon is None else float(ns.horizon)
+    if horizon <= 0.0:
+        raise _Refusal(f"--horizon must be > 0, got {horizon}")
+
+    # The Aalen-Johansen competing set is every terminal outcome present, not only the events
+    # asked for: a row that ended in the non-event is absorbed, not censored, so it must stay
+    # out of the risk set. multi_diff builds its set the same way; passing only ``events``
+    # would censor the non-event and inflate every incidence this report prints.
+    present = sorted({str(o) for o in df["outcome"].dropna().unique()})
+    competing = list(dict.fromkeys([*events, *present]))
+    cells = cell_table(df, events[0], horizon=horizon, method="aj", events=competing)
+    spec = ReportSpec(
+        title=ns.title if ns.title else f"{run}: {', '.join(events)}",
+        x_axis=ns.x,
+        y_axis=ns.y,
+        fixed=fixed,
+        theme=ns.theme,
+        top_n=ns.top_n,
+        forest=ns.forest,
+    )
+    report = build_survival_report(
+        cells, spec, events=events, horizon=horizon, manifest=manifest
+    )
+    receipt = (
+        report
+        if spec.theme == "light"
+        else build_survival_report(
+            cells,
+            dataclasses.replace(spec, theme="light"),
+            events=events,
+            horizon=horizon,
+            manifest=manifest,
+        )
+    )
+    if inferred:
+        io.out.write(
+            f"events: {', '.join(events)} (inferred; {non_event} treated as non-event)\n"
+        )
+    io.out.write(
+        f"{run}: survival report over {', '.join(events)} at horizon "
+        f"{report.provenance['horizon']}\n"
+    )
+    _write_report_files(io, out_dir, report, receipt)
     return 0
 
 
 def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    primary, _, _ = _run_diffs(Store(root), ns, all_methods=False)
-    passed = primary.check(fail_on=ns.fail_on)
-    io.out.write(_headline(primary) + "\n")
+    store = Store(root)
+    if ns.event is None:
+        fa, fb, _, _ = _load_pair(store, ns.a, ns.b)
+        try:
+            suggestion = ", ".join(infer_events(fa, fb)[0])
+        except Exception:  # noqa: BLE001 - the refusal must print whatever happens here
+            suggestion = "(could not infer)"
+        raise _Refusal(
+            "check requires --event; a gate whose meaning changes when a new outcome appears "
+            f"is not a gate. Inferred events for this pair: {suggestion}."
+        )
+    multi, _, _ = _run_diffs(
+        store, ns.a, ns.b, events=ns.event, method=ns.method, q=ns.q, all_methods=False
+    )
+    passed = multi.check(fail_on=ns.fail_on)
+    _write_summary(io, multi)
     io.out.write("PASS\n" if passed else "FAIL\n")
     return 0 if passed else 1
 

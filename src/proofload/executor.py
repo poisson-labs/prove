@@ -87,6 +87,7 @@ class Plan:
     pairs: tuple[Pair, ...]
     resumed: bool
     already_stored: int
+    import_path: str | None = None
 
 
 def _all_keys(spec: SweepSpec) -> list[tuple[str, int]]:
@@ -108,12 +109,15 @@ def plan(
     run_salt: str | None = None,
     pair_with: str | None = None,
     resume: str | None = None,
+    import_path: str | None = None,
 ) -> Plan:
     """Build the ordered list of (config, replicate, seed) pairs for a run.
 
     pair_with=<run_id>: inherit that run's salt; t_unit must match.
     resume=<run_id>: reuse that run's id + salt; pairs = store.missing(...).
     run_salt, pair_with, resume are mutually exclusive; none -> new salt.
+    import_path, when given, is recorded at manifest.environment["import_path"] by
+    run_local, matching the Modal backend; the executor still receives the callable.
     """
     options = (("run_salt", run_salt), ("pair_with", pair_with), ("resume", resume))
     given = [name for name, value in options if value is not None]
@@ -174,6 +178,7 @@ def plan(
         pairs=pairs,
         resumed=resumed,
         already_stored=already_stored,
+        import_path=import_path,
     )
 
 
@@ -353,6 +358,9 @@ def run_local(
             raise ExecutorError(
                 f"run {p.run_id!r} already exists; plan with resume= to continue it"
             )
+        environment = _environment(p.spec)
+        if p.import_path is not None:
+            environment["import_path"] = p.import_path
         store.create_run(
             RunManifest(
                 run_id=p.run_id,
@@ -361,7 +369,7 @@ def run_local(
                 run_salt=p.run_salt,
                 axis_types=dict(p.spec.axis_types),
                 backend=p.backend,
-                environment=_environment(p.spec),
+                environment=environment,
                 retain_traces_for=p.spec.retain_traces_for,
             )
         )
