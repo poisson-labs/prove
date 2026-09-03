@@ -969,8 +969,8 @@ def _assert_json_round_trip(result: MultiDiffResult) -> None:
         for field in EVENT_COUNT_FIELDS:
             assert counts[field] == getattr(result.by_event[e], field), (e, field)
     text = json.dumps(js)
-    assert "-0.0" not in text
-    assert "-0.0" not in result.to_markdown()
+    assert not re.search(r"-0\.0+(?!\d)", text)
+    assert not re.search(r"-0\.0+(?!\d)", result.to_markdown())
 
 
 def test_a14_json_round_trips_on_fixture(multi_fell: MultiDiffResult) -> None:
