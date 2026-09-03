@@ -909,9 +909,13 @@ def test_i13_fix_parses_toml_scalars(go1_store: Store, tmp_path: Path) -> None:
         ]
     )
     assert r.code == 0, r.text
-    m = HEADLINE_RE.search((out / "report.md").read_text())
-    assert m, r.out
-    assert int(m.group(2)) == 20
+    md = (out / "report.md").read_text()
+    # --fix restricts the report grid, not the diff: the panel covers the mu=0.05 row while
+    # the diff line still covers all 400 cells. Pinning the row's own counts pins the parse.
+    whole = re.search(r"^fell: 60 safer, 0 worse$", md, re.MULTILINE)
+    panel = re.search(r"^## fell: (\d+) safer, (\d+) worse$", md, re.MULTILINE)
+    assert whole and panel, md
+    assert (int(panel.group(1)), int(panel.group(2))) == (9, 0), panel.group(0)
 
 
 def test_i13_fix_with_bad_toml_scalar_exits_two(go1_store: Store, tmp_path: Path) -> None:
@@ -1233,12 +1237,15 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     out = tmp_path / f"proofload-report-{run_a}-{run_b}"
     assert out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
     assert {p.name for p in out.iterdir()} == REPORT_FILES
-    m = HEADLINE_RE.search((out / "report.md").read_text())
-    assert m, (out / "report.md").read_text()
-    safer, total, worse = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    assert worse == 0 and safer >= 1, m.group(0)
-    assert total == QUICKSTART_CELLS
-    assert m.group(6) == "paired"
+    md = (out / "report.md").read_text()
+    panel = re.search(r"^## violated: (\d+) safer, (\d+) worse$", md, re.MULTILINE)
+    assert panel, md
+    safer, worse = int(panel.group(1)), int(panel.group(2))
+    assert worse == 0 and safer >= 1, panel.group(0)
+    tail = re.search(r"over (\d+) tests, (paired|unpaired)\)", md)
+    assert tail, md
+    assert int(tail.group(1)) == QUICKSTART_CELLS
+    assert tail.group(2) == "paired"
     assert Store(tmp_path / "proofload-runs").runs() == sorted([run_a, run_b])
 
 
