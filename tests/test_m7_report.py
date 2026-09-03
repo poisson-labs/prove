@@ -25,6 +25,7 @@ zero prints as ``0``.
 
 import hashlib
 import json
+from html import escape as html_escape
 import math
 import re
 import subprocess
@@ -499,7 +500,7 @@ def test_i4_counts_and_headline_agree() -> None:
     assert (safer, n_present, worse) == (report.n_safer, len(present), report.n_worse)
     assert method == d.method and pairing == "paired"
     assert q_text == _sig3(d.q)
-    assert report.headline in report.to_markdown() and report.headline in report.to_html()
+    assert report.headline in report.to_markdown() and html_escape(report.headline) in report.to_html()
 
 
 # ---------- I5: verdicts copied ----------
@@ -1061,6 +1062,6 @@ def test_i20_three_thousand_cells_render_in_all_formats() -> None:
     assert len(cell_rects(root)) == 3000
     assert len(glyphs(root)) == report.n_safer + report.n_worse
     _check_svg_hygiene(svg)
-    assert report.headline in md and report.headline in html
+    assert report.headline in md and html_escape(report.headline) in html
     pipe_rows = [line for line in md.splitlines() if line.startswith("|")]
     assert len(pipe_rows) < 100
