@@ -10,3 +10,4 @@ M2: grid / sobol / scenarios samplers, axis typing, SweepSpec, TOML loader, tool
 M3: local executor — seed derivation, plan/pair/resume, pre-flight, batched runs, timeout, caps.
 M7: report — delta heatmap, worst-cells table, MDE honesty block, markdown/SVG/HTML.
 M3: modal backend — image spec, parallel map, infra retry, cost guard, parity with local.
+M10: CLI — sweep, diff, report, check, inspect, runs; keyless mock-agent quickstart.

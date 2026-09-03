@@ -1,3 +1,5 @@
+import sys
+
 from proofload.cli import main
 
-main()
+sys.exit(main())

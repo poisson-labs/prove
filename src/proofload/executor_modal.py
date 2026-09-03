@@ -15,7 +15,6 @@ off to ``run_with_mapper``. Core ``proofload`` imports and runs without ``modal`
 
 from __future__ import annotations
 
-import importlib
 import importlib.metadata
 import time
 import traceback
@@ -24,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from proofload._resolve import resolve, split_import_path
 from proofload.diff import mde_two_proportion
 from proofload.episode import Episode
 from proofload.executor import (
@@ -99,12 +99,7 @@ class CostGuard(ModalBackendError):
 
 
 def _split_import_path(import_path: str) -> tuple[str, str]:
-    if not isinstance(import_path, str) or ":" not in import_path:
-        raise ValueError(f"import_path must look like 'pkg.module:rollout', got {import_path!r}")
-    module, attr = import_path.split(":", 1)
-    if not module or not attr or ":" in attr:
-        raise ValueError(f"import_path must look like 'pkg.module:rollout', got {import_path!r}")
-    return module, attr
+    return split_import_path(import_path)
 
 
 @dataclass(frozen=True)
@@ -210,9 +205,7 @@ exception is an infra failure of the whole batch; ``batch_index`` refers to the 
 
 
 def _resolve_rollout(import_path: str) -> Any:
-    module_name, attr = _split_import_path(import_path)
-    module = importlib.import_module(module_name)
-    return getattr(module, attr)
+    return resolve(import_path)
 
 
 def worker_batch(

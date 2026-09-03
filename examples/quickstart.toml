@@ -1,0 +1,18 @@
+# Proofload quickstart: the keyless mock agent over the tool-reliability preset shape.
+# 3 tasks x 5 tool failure rates x 16 replicates = 240 rollouts. No API key, no network.
+#
+#   proofload sweep examples/quickstart.toml --target proofload.examples.mock_agent:rollout --yes
+#   proofload sweep examples/quickstart.toml --target proofload.examples.mock_agent:rollout_patched --pair-with <run_a> --yes
+#   proofload report <run_a> <run_b> --event violated --x tool_fail_rate --y task_id
+
+target_id = "mock-agent@v0"
+t_unit = "tool_calls"
+replicates = 16
+
+[axes.task_id]
+type = "categorical"
+values = ["search", "checkout", "refund"]
+
+[axes.tool_fail_rate]
+type = "continuous"
+values = [0.0, 0.3, 0.45, 0.5, 0.55]
