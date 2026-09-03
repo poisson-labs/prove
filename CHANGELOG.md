@@ -9,3 +9,4 @@ M6: run diff — Fisher/BH, paired McNemar, log-rank, MDE.
 M2: grid / sobol / scenarios samplers, axis typing, SweepSpec, TOML loader, tool-reliability preset.
 M3: local executor — seed derivation, plan/pair/resume, pre-flight, batched runs, timeout, caps.
 M7: report — delta heatmap, worst-cells table, MDE honesty block, markdown/SVG/HTML.
+M3: modal backend — image spec, parallel map, infra retry, cost guard, parity with local.

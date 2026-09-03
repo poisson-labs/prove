@@ -279,6 +279,8 @@ class RunSummary:
     wall_time: float
     stopped_by: str | None
     complete: bool
+    n_infra_retried: int = 0
+    n_infra_failed: int = 0
 
 
 def _environment(spec: SweepSpec) -> dict[str, Any]:
