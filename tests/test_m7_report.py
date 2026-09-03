@@ -67,9 +67,11 @@ HEADLINE_RE = re.compile(
     r"^(\d+) of (\d+) cells safer, (\d+) worse \((\S+), BH q<([^,]+), (paired|unpaired)\)\.$"
 )
 HONESTY_RE = re.compile(
-    r'Worst-powered cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d+)pp rise\. '
-    r'"(\d+) worse" is an honest claim only above that\.'
+    r'^Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d+)pp rise\. '
+    r'"(\d+) worse" is an honest claim only above that\.$'
 )
+HONESTY_NONE = "No unchanged cells; every cell moved significantly."
+HONESTY_OVERALL_RE = re.compile(r"^Worst-powered cell overall: (\d+)pp \((.*)\)\.$")
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 HASH_RE = re.compile(r"\b[0-9a-f]{16}\b")
@@ -582,41 +584,85 @@ def test_i8_golden_svg_size_is_sane(golden_report: Report) -> None:
 # ---------- I9: honesty block ----------
 
 
-def _check_honesty(report: Report, diff_result: DiffResult) -> None:
-    m = HONESTY_RE.search(report.honesty)
-    assert m, report.honesty
-    coords_text, n_a, n_b, mde_pp, worse = m.groups()
-    assert mde_pp == _pp0(diff_result.max_mde)
-    assert int(worse) == report.n_worse
-    attaining = [c for c in present_cells(report) if c.mde == diff_result.max_mde]
-    assert attaining
-    printed = dict(part.split("=", 1) for part in coords_text.split(", "))
+def _with_unchanged_mde(d: DiffResult) -> DiffResult:
+    """make_diff leaves the two S11 fields at their defaults; fill them the way M6 does."""
+    unchanged = d.cells[d.cells["verdict"] == "unchanged"]
+    if len(unchanged) == 0:
+        return d
+    top = float(unchanged["mde"].max())
+    cell = str(unchanged.loc[unchanged["mde"] == top, "config_hash"].iloc[0])
+    return DiffResult(**{
+        **{f: getattr(d, f) for f in d.__dataclass_fields__},
+        "max_mde_unchanged": top,
+        "max_mde_unchanged_cell": cell,
+    })
+
+
+def _printed_coords(coords_text: str) -> dict[str, str]:
+    return dict(part.split("=", 1) for part in coords_text.split(", "))
+
+
+def _coords_match(report: Report, cell: Cell, printed: dict[str, str]) -> bool:
     axes = [report.spec.x_axis] + ([report.spec.y_axis] if report.spec.y_axis else [])
-    assert set(printed) == set(axes)
+    if set(printed) != set(axes):
+        return False
+    for axis, value in zip(axes, cell.coords, strict=True):
+        shown = printed[axis]
+        try:
+            if not math.isclose(float(shown), float(value)):
+                return False
+        except (TypeError, ValueError):
+            if shown != str(value):
+                return False
+    return True
 
-    def matches(cell: Cell) -> bool:
-        for axis, value in zip(axes, cell.coords, strict=True):
-            shown = printed[axis]
-            try:
-                if not math.isclose(float(shown), float(value)):
-                    return False
-            except (TypeError, ValueError):
-                if shown != str(value):
-                    return False
-        return int(n_a) == cell.n_a and int(n_b) == cell.n_b
 
-    assert any(matches(c) for c in attaining)
-    for text in render_all(report):
-        assert "Worst-powered cell" in text
+def _check_honesty(report: Report, diff_result: DiffResult) -> None:
+    """The two-line block: an unchanged cell at max_mde_unchanged, then max_mde overall."""
+    lines = report.honesty.splitlines()
+    assert len(lines) == 2, report.honesty
+    first, second = lines
+    present = present_cells(report)
+    if math.isnan(diff_result.max_mde_unchanged):
+        assert first == HONESTY_NONE
+    else:
+        m = HONESTY_RE.match(first)
+        assert m, first
+        coords_text, n_a, n_b, mde_pp, worse = m.groups()
+        assert mde_pp == _pp0(diff_result.max_mde_unchanged)
+        assert int(worse) == report.n_worse
+        attaining = [
+            c for c in present
+            if c.verdict == "unchanged" and c.mde == diff_result.max_mde_unchanged
+        ]
+        assert attaining
+        printed = _printed_coords(coords_text)
+        assert any(
+            _coords_match(report, c, printed) and int(n_a) == c.n_a and int(n_b) == c.n_b
+            for c in attaining
+        )
+    m2 = HONESTY_OVERALL_RE.match(second)
+    assert m2, second
+    overall_pp, overall_coords = m2.groups()
+    assert overall_pp == _pp0(diff_result.max_mde)
+    overall = [c for c in present if c.mde == diff_result.max_mde]
+    assert overall
+    assert any(_coords_match(report, c, _printed_coords(overall_coords)) for c in overall)
+    md, svg, html = render_all(report)
+    for line in lines:
+        assert line in md, line
+        assert html_escape(line) in html, line
+    assert "Worst-powered cell overall" in svg
+    assert "Worst-powered unchanged cell" in svg or HONESTY_NONE in svg
 
 
 def test_i9_honesty_block_on_synthetic_with_ties() -> None:
-    d = two_by_two()
+    d = _with_unchanged_mde(two_by_two())
     _check_honesty(build_report(d, spec2()), d)
 
 
 def test_i9_honesty_block_when_nothing_is_significant() -> None:
-    d = grid_diff([0.1, 0.2], [10, 20], delta_fn=lambda i, j: 0.01 * (i - j))
+    d = _with_unchanged_mde(grid_diff([0.1, 0.2], [10, 20], delta_fn=lambda i, j: 0.01 * (i - j)))
     report = build_report(d, spec2())
     assert report.n_safer == report.n_worse == 0
     _check_honesty(report, d)
