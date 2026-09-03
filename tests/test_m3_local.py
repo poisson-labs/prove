@@ -217,7 +217,7 @@ def test_i2_new_run_id_shape_and_uniqueness() -> None:
     for rid in (a, b):
         assert RUN_ID_RE.match(rid), rid
         assert not any(ch in rid for ch in "/\\ :")
-        assert rid[14] == "Z" and rid[15] == "-" and len(rid[:15]) == 15
+        assert rid[15] == "Z" and rid[16] == "-" and len(rid[:16]) == 16
     assert a != b
 
 
