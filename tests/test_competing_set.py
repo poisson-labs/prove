@@ -33,34 +33,28 @@ Reading notes for Session B:
   ``competing_set``; the one forwarding call inside ``cell_table`` itself is the plumbing that
   carries a caller's set, not a second construction, and is named as such in the test.
 
-Deliberately absent, reported to the spec author rather than adapted (see the session report):
+H6 and H9 were rewritten by the spec author after the first pass of this oracle reported
+that the original pair could not both hold. The tests below are written against the revised
+§2/§3-D3/§4: validation moved into the CLI, where every typo originates, and ``multi_diff``
+was pinned permissive instead. Two readings the revised text still leaves to the test:
 
-- H6. The ``build_survival_report`` half is implementable on its own -- the cell table's
-  ``CIFCurve`` keys are the competing set it was built with, so no signature change is needed
-  -- but the ``multi_diff`` half cannot hold alongside H12. Making ``multi_diff`` refuse an
-  event absent from the competing set fails three tests in the read-only M6 oracle, and the
-  decisive one is deterministic rather than a property draw:
-  ``test_a15_check_on_synthetic_cases`` (tests/test_m6_multi.py:1015-1017) builds a pair whose
-  only outcomes are ``timeout`` and ``completed``, calls
-  ``multi_diff(a, b, ["timeout", "violated"])`` and asserts on the result -- ``violated``
-  appears in neither run, by construction. ``test_a9_counts_add_up_property`` and
-  ``test_a19_multi_diff_is_deterministic_property`` fail the same way on Hypothesis pairs that
-  need not contain both outcomes. Mapping half the invariant would be adapting it.
-- H9. Two reasons, neither of which a test can decide. It contradicts H6 on the same shared
-  path: if ``multi_diff`` refuses an event absent from the competing set then ``diff`` and
-  ``report A B`` cannot exit 0, so satisfying both needs the CLI to split ``--event`` into
-  known and absent, call ``multi_diff`` over the known set only, and synthesise a panel for
-  the rest -- machinery §2 and §3 never mention. And with the absent event as the only
-  ``--event`` -- the case D3's message shows -- the known set is empty and ``multi_diff``
-  raises ``DiffError("events must name at least one outcome")`` (diff.py:791). The panel
-  clause is reachable but not free either: an all-absent grid trips
-  ``_build_panel``'s ``AxisError("no present cells to report")`` (report.py:514-515), and
-  ``_coverage`` / ``_honesty`` take ``min()`` / ``max()`` over the present cells
-  (report.py:465-486). Relaxing all three is a coherent implementation, but it is one this
-  spec does not describe, and which of the readings is meant changes what the test asserts.
-- H12's second clause, "suite totals for every prior oracle unchanged". A test cannot assert
+- H6's message. §4 requires exit 2, the offending name and the outcomes present; D3 shows the
+  shape with the verb name substituted. Asserted by containment, not as an exact string, so
+  the wording stays the implementer's.
+- H9's "zero-count `EventDiff`". Read as the event counts, not the cell count -- see the
+  docstring of ``test_h9_absent_event_gets_a_zero_count_event_diff``. The frozen M6 oracle
+  forces this reading; an EventDiff with no cells would fail ``test_a9_counts_add_up_property``.
+
+Still not mapped, and reported rather than adapted:
+
+- H12's third clause, "suite totals for every prior oracle unchanged". A test cannot assert
   the totals of the suite that contains it; that clause is the acceptance command's job. The
-  fixture clause is mapped below.
+  two fixture clauses are mapped below.
+- §2's "``build_survival_report`` remains permissive" is not separately asserted. §4 pins only
+  ``multi_diff`` (H9), and once H13 routes ``cell_table`` through ``competing_set`` an absent
+  event is no longer a key on the cell table's ``CIFCurve``, so ``_cif_at`` raises
+  ``SurvivalError`` there rather than returning zero. That path is unreachable from the CLI,
+  which now refuses first, and what "permissive" should mean at that boundary is not stated.
 """
 
 from __future__ import annotations
@@ -116,6 +110,10 @@ M4_COLUMNS = [
 
 HORIZON = 10.0
 TOL = 1e-12
+
+# The S13 typo, and the outcomes the mock-agent pair actually produces.
+ABSENT = "voilated"
+MOCK_OUTCOMES = ("completed", "timeout", "violated")
 
 # The S13 blocker's cell: 5 completed ending at t=1, 5 violated ending at t=3.
 COMPLETED_T = 1.0
@@ -536,6 +534,101 @@ def test_h5_build_survival_report_exposes_no_competing_set_override() -> None:
     assert overrides == [], overrides
 
 
+# ---------- H6: the CLI validates event names, in all three verbs ----------
+
+
+@pytest.mark.parametrize("verb", ["diff", "check", "report"])
+def test_h6_every_verb_refuses_an_event_absent_from_the_runs(
+    mock_pair: tuple[Path, str, str], tmp_path: Path, verb: str
+) -> None:
+    root, a, b = mock_pair
+    argv = ["--store", str(root), verb, a, b, "--event", ABSENT]
+    if verb == "report":
+        argv += ["--x", "tool_fail_rate", "--y", "task_id", "--out", str(tmp_path / "out")]
+    code, out, err = run_cli(argv)
+    assert code == 2, out + err
+    assert "Traceback" not in out + err, out + err
+    assert ABSENT in out + err, out + err
+    for present in MOCK_OUTCOMES:
+        assert present in out + err, (present, out + err)
+    assert verb in out + err, out + err
+
+
+@pytest.mark.parametrize("verb", ["diff", "check", "report"])
+def test_h6_every_verb_still_accepts_a_known_event(
+    mock_pair: tuple[Path, str, str], tmp_path: Path, verb: str
+) -> None:
+    """The control for the refusal above: the same argv with the name spelled correctly gets
+    through, so the refusal is about the name and not about the flag."""
+    root, a, b = mock_pair
+    argv = ["--store", str(root), verb, a, b, "--event", "violated"]
+    if verb == "report":
+        argv += ["--x", "tool_fail_rate", "--y", "task_id", "--out", str(tmp_path / "out")]
+    code, out, err = run_cli(argv)
+    assert code == 0, out + err
+
+
+def test_h6_refuses_when_only_one_of_several_events_is_absent(
+    mock_pair: tuple[Path, str, str],
+) -> None:
+    """"any --event name absent from it" -- a known companion does not license the typo."""
+    root, a, b = mock_pair
+    code, out, err = run_cli(
+        ["--store", str(root), "diff", a, b, "--event", "violated", "--event", ABSENT]
+    )
+    assert code == 2, out + err
+    assert ABSENT in out + err, out + err
+
+
+def test_h6_report_refuses_before_it_writes_anything(
+    mock_pair: tuple[Path, str, str], tmp_path: Path
+) -> None:
+    """D3: the check runs before any work. A refused report leaves no output directory behind."""
+    root, a, b = mock_pair
+    out_dir = tmp_path / "out"
+    code, out, err = run_cli(
+        ["--store", str(root), "report", a, b, "--event", ABSENT,
+         "--x", "tool_fail_rate", "--y", "task_id", "--out", str(out_dir)]
+    )
+    assert code == 2, out + err
+    assert not out_dir.exists() or not any(out_dir.iterdir()), sorted(out_dir.iterdir())
+
+
+def _two_outcome_rows(with_timeout: bool) -> list[tuple[dict[str, Any], str | None, float | None]]:
+    """Two cells of completed/violated; ``with_timeout`` adds a third outcome to one of them."""
+    rows: list[tuple[dict[str, Any], str | None, float | None]] = []
+    for label, n_violated in (("x", 5), ("y", 2)):
+        config = {"task": label, "level": "one"}
+        rows += [(config, "completed", COMPLETED_T)] * (10 - n_violated)
+        rows += [(config, "violated", VIOLATED_T)] * n_violated
+        if with_timeout:
+            rows += [(config, "timeout", TIMEOUT_T)] * 3
+    return rows
+
+
+def test_h6_single_run_report_validates_against_the_run_it_loaded(tmp_path: Path) -> None:
+    """"the frames they loaded" -- an outcome only the second run produced is in the pair's
+    competing set and not in the single run's, and the two forms differ accordingly."""
+    root = tmp_path / "store"
+    write_run(root, "run-a", _two_outcome_rows(with_timeout=False))
+    write_run(root, "run-b", _two_outcome_rows(with_timeout=True))
+
+    code, out, err = run_cli(
+        ["--store", str(root), "report", "run-a", "run-b", "--event", "timeout",
+         "--x", "task", "--out", str(tmp_path / "pair")]
+    )
+    assert code == 0, out + err
+
+    code, out, err = run_cli(
+        ["--store", str(root), "report", "run-a", "--event", "timeout",
+         "--x", "task", "--out", str(tmp_path / "single")]
+    )
+    assert code == 2, out + err
+    assert "timeout" in out + err, out + err
+    for present in ("completed", "violated"):
+        assert present in out + err, (present, out + err)
+
+
 # ---------- H7: check refuses an unknown event ----------
 
 
@@ -581,6 +674,71 @@ def test_h8_check_still_fails_cleanly_on_two_known_events(mock_pair: tuple[Path,
     assert code == 1, out + err
     assert "Traceback" not in out + err, out + err
     assert "FAIL" in out, out
+
+
+# ---------- H9: multi_diff stays permissive ----------
+
+
+def _absent_event_pair() -> tuple[pd.DataFrame, pd.DataFrame]:
+    return (
+        _three_outcome_run({"x": (4, 3, 3), "y": (6, 2, 2)}),
+        _three_outcome_run({"x": (3, 4, 3), "y": (5, 3, 2)}),
+    )
+
+
+def test_h9_multi_diff_does_not_raise_on_an_event_absent_from_the_data() -> None:
+    a, b = _absent_event_pair()
+    result = multi_diff(a, b, events=[ABSENT])
+    assert result.events == (ABSENT,)
+    assert ABSENT in result.by_event
+
+
+def test_h9_absent_event_gets_a_zero_count_event_diff() -> None:
+    """"Zero-count" is the event counts, not the cell count. The frozen M6 oracle asserts
+    ``n_safer + n_worse + n_unchanged == len(cells) == len(common)`` for every requested event
+    (tests/test_m6_multi.py:730-741), and ``test_a15_check_on_synthetic_cases`` asserts on a
+    result for ``violated`` over a pair containing none -- so an absent event keeps one
+    unchanged cell per common config hash and zeroes the numerators rather than emptying the
+    frame."""
+    a, b = _absent_event_pair()
+    event = multi_diff(a, b, events=[ABSENT]).by_event[ABSENT]
+    assert (event.n_safer, event.n_worse) == (0, 0)
+    assert len(event.cells) == 2
+    assert event.n_unchanged == len(event.cells)
+    assert list(event.cells["events_a"]) == [0, 0]
+    assert list(event.cells["events_b"]) == [0, 0]
+    assert list(event.cells["rate_a"]) == [0.0, 0.0]
+    assert list(event.cells["rate_b"]) == [0.0, 0.0]
+    assert list(event.cells["delta"]) == [0.0, 0.0]
+    assert list(event.cells["verdict"]) == ["unchanged", "unchanged"]
+    # n_a / n_b stay the real cell sizes: the episodes were observed, the event was not.
+    assert list(event.cells["n_a"]) == [10, 10]
+    assert list(event.cells["n_b"]) == [10, 10]
+
+
+def test_h9_an_absent_event_does_not_disturb_a_present_one() -> None:
+    """Requesting the typo alongside a real event leaves that event's CIFs untouched. Only the
+    rates are compared: ``q`` is a property of the BH family, which grew by two tests."""
+    a, b = _absent_event_pair()
+    alone = multi_diff(a, b, events=["violated"]).by_event["violated"].cells
+    beside = multi_diff(a, b, events=["violated", ABSENT]).by_event["violated"].cells
+    assert list(alone["config_hash"]) == list(beside["config_hash"])
+    for column in ("rate_a", "rate_b", "delta"):
+        for h, one, two in zip(alone["config_hash"], alone[column], beside[column], strict=True):
+            assert abs(float(one) - float(two)) <= TOL, (h, column, one, two)
+
+
+def test_h9_multi_diff_stays_permissive_when_every_requested_event_is_absent() -> None:
+    """The case the CLI now refuses outright, pinned at the library boundary: nothing raises,
+    and the result is honestly empty of events rather than empty of cells."""
+    a, b = _absent_event_pair()
+    result = multi_diff(a, b, events=[ABSENT, "alsonotthere"])
+    assert result.events == (ABSENT, "alsonotthere")
+    for name in result.events:
+        event = result.by_event[name]
+        assert (event.n_safer, event.n_worse) == (0, 0)
+        assert len(event.cells) == 2
+        assert list(event.cells["events_a"]) == [0, 0]
 
 
 # ---------- H10 / H11: a zero-n cell is a hole, not a measured zero ----------
