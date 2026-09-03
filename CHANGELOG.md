@@ -7,3 +7,4 @@ S3.1: fixture provenance keyed on last manifest-touching commit.
 M5: Kaplan–Meier, Aalen–Johansen, Wilson, cell survival table.
 M6: run diff — Fisher/BH, paired McNemar, log-rank, MDE.
 M2: grid / sobol / scenarios samplers, axis typing, SweepSpec, TOML loader, tool-reliability preset.
+M3: local executor — seed derivation, plan/pair/resume, pre-flight, batched runs, timeout, caps.
