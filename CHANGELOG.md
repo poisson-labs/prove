@@ -12,3 +12,4 @@ M7: report — delta heatmap, worst-cells table, MDE honesty block, markdown/SVG
 M3: modal backend — image spec, parallel map, infra retry, cost guard, parity with local.
 M10: CLI — sweep, diff, report, check, inspect, runs; keyless mock-agent quickstart.
 M6: multi-event diff — per-event CIF comparison, single BH family, trade detection, max_mde_unchanged.
+M7: multi-event report — per-event panels on a shared scale, trade line and marker, max_mde_unchanged honesty, saturation marker, forest plot, single-run survival report.
