@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -727,7 +728,7 @@ def test_i11c_hypothesis_distance_from_neutral_is_monotone(theme: str) -> None:
         for side in (lambda dl: dl > 0, lambda dl: dl < 0):
             ordered = sorted((abs(dl), fills[config_hash({"k": i, "row": 0})]) for i, dl in enumerate(deltas) if side(dl))
             dists = [rgb_distance(f, neutral) for _, f in ordered]
-            assert all(b >= a - 1e-9 for a, b in zip(dists, dists[1:], strict=True)), (theme, ordered)
+            assert all(b >= a - 1e-9 for a, b in pairwise(dists)), (theme, ordered)
 
     check()
 
