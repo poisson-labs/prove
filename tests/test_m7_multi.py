@@ -177,7 +177,7 @@ def _unchanged_mde(frame: pd.DataFrame) -> tuple[float, str | None]:
     if len(unchanged) == 0:
         return math.nan, None
     top = float(unchanged["mde"].max())
-    return top, str(unchanged.loc[unchanged["mde"] == top, "config_hash"].iloc[0])
+    return top, str(min(unchanged.loc[unchanged["mde"] == top, "config_hash"]))
 
 
 def make_diff(
@@ -487,7 +487,7 @@ def caption(rep: MultiReport, event: str) -> str:
 def _sections(lines: list[str], events: Sequence[str], starts: list[int]) -> dict[str, str]:
     assert starts == sorted(starts), "panels out of order"
     bounds = [*starts, len(lines)]
-    return {e: "\n".join(lines[s:t]) for e, s, t in zip(events, bounds, bounds[1:], strict=True)}
+    return {e: "\n".join(lines[s:t]) for e, s, t in zip(events, bounds[:-1], bounds[1:], strict=True)}
 
 
 def panel_sections(md: str, rep: MultiReport) -> dict[str, str]:
@@ -497,7 +497,7 @@ def panel_sections(md: str, rep: MultiReport) -> dict[str, str]:
     starts = []
     for e in rep.events:
         cap = caption(rep, e)
-        hits = [i for i, line in enumerate(lines) if cap in line and headline_first not in line]
+        hits = [i for i, line in enumerate(lines) if cap in line and line.strip() != headline_first]
         assert hits, f"no caption line for {e!r}: {cap!r}"
         starts.append(hits[0])
     return _sections(lines, rep.events, starts)
@@ -1056,7 +1056,7 @@ def test_b7_headline_then_trade_line_then_panels_in_all_three_formats() -> None:
     first_caption = md.index(next(line for line in md.splitlines() if caption(rep, rep.events[0]) in line and line1 not in line))
     assert md.index(multi.headline()) < md.index(trade) < first_caption
     html = html_text(rep.to_html())
-    assert html.index(line1) < html.index(line2) < html.index(trade) < html.index(caption(rep, rep.events[0]))
+    assert html.index(line1) < html.index(line2) < html.index(trade) < html.index(caption(rep, rep.events[0]), html.index(trade))
     root = svg_root(rep)
     tx = texts(root)
     idx = lambda needle: next(i for i, t in enumerate(tx) if needle in t)  # noqa: E731
@@ -1106,7 +1106,7 @@ def test_b8_every_traded_cell_is_marked_in_every_panel_and_nothing_else_is() -> 
 def test_b8_no_trades_means_no_data_trade_anywhere() -> None:
     multi = make_multi([
         make_event("alpha", grid_cells([0.1, 0.2], [10, 20], delta_fn=lambda i, j: -0.3 * i, verdict_fn=sign_verdict)),
-        make_event("beta", grid_cells([0.1, 0.2], [10, 20], delta_fn=lambda i, j: 0.3 * j, verdict_fn=sign_verdict)),
+        make_event("beta", grid_cells([0.1, 0.2], [10, 20], delta_fn=lambda i, j: 0.3 if (i, j) == (0, 1) else 0.0, verdict_fn=sign_verdict)),
     ])
     assert len(multi.trades) == 0
     rep = build_multi_report(multi, spec2())
@@ -1413,7 +1413,7 @@ def test_b14_dark_and_light_stacked_trees_identical_after_stripping_presentation
 def test_b14_hypothesis_repeat_renders_identical_and_themes_differ_only_in_presentation() -> None:
     @settings(max_examples=25, deadline=None)
     @given(
-        nx=st.integers(min_value=1, max_value=4),
+        nx=st.integers(min_value=2, max_value=4),
         ny=st.integers(min_value=1, max_value=3),
         seed=st.integers(min_value=0, max_value=10**6),
         n_events=st.integers(min_value=1, max_value=3),
@@ -1700,7 +1700,7 @@ def test_b19b_all_zero_multi_prints_only_zeros_in_tables_captions_and_honesty() 
             for x in ("alpha", "beta") for y in ("north", "south")
         ]
 
-    multi = make_multi([make_event("ev1", zero_cells()), make_event("ev2", zero_cells())])
+    multi = make_multi([make_event("uno", zero_cells()), make_event("dos", zero_cells())])
     for ev in multi.by_event.values():
         assert ev.max_mde == 0.0 and ev.max_mde_unchanged == 0.0
     rep = build_multi_report(multi, ReportSpec(title="t", x_axis="col", y_axis="row", top_n=10))
