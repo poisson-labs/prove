@@ -1,10 +1,10 @@
 import argparse
 
-from momus import __version__
+from proofload import __version__
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="momus")
+    parser = argparse.ArgumentParser(prog="proofload")
     parser.add_argument("--version", action="version", version=__version__)
     try:
         parser.parse_args(argv)

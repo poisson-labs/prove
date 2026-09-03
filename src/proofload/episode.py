@@ -1,4 +1,4 @@
-"""The Episode contract: the one data type user code returns to Momus."""
+"""The Episode contract: the one data type user code returns to Proofload."""
 
 from __future__ import annotations
 

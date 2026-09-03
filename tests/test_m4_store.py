@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from hypothesis import given, strategies as st
-from momus import Episode
-from momus.store import (
+from proofload import Episode
+from proofload.store import (
     DuplicateEpisode, EpisodeRecord, InvalidConfig, MetaNotSerializable,
     RunManifest, SchemaMismatch, Store, StoreError, config_hash,
 )
@@ -62,7 +62,7 @@ def test_manifest_defaults():
     m = _manifest()
     assert m.status == "partial" and m.schema_version == 1
     assert m.retain_traces_for is None
-    assert m.momus_version and m.created_at.endswith("Z")
+    assert m.proofload_version and m.created_at.endswith("Z")
 @pytest.mark.parametrize("field", ["target_id", "t_unit"])
 def test_manifest_requires(field):
     with pytest.raises(ValueError):

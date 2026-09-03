@@ -9,8 +9,8 @@ NETWORK_MODULES = {"requests", "httpx", "urllib", "socket"}
 
 
 def test_import_and_version():
-    import momus
-    assert isinstance(momus.__version__, str) and momus.__version__
+    import proofload
+    assert isinstance(proofload.__version__, str) and proofload.__version__
 
 
 def test_core_import_pulls_no_extras():
@@ -18,23 +18,23 @@ def test_core_import_pulls_no_extras():
         if name.split(".")[0] in EXTRAS_BANNED_FROM_CORE:
             del sys.modules[name]
     import importlib
-    import momus
-    importlib.reload(momus)
+    import proofload
+    importlib.reload(proofload)
     loaded = {n.split(".")[0] for n in sys.modules}
     assert not loaded & EXTRAS_BANNED_FROM_CORE
 
 
 def test_cli_version_via_entrypoint():
-    import momus
-    r = subprocess.run(["momus", "--version"], capture_output=True, text=True)
-    assert r.returncode == 0 and momus.__version__ in r.stdout
+    import proofload
+    r = subprocess.run(["proofload", "--version"], capture_output=True, text=True)
+    assert r.returncode == 0 and proofload.__version__ in r.stdout
 
 
 def test_cli_version_via_module():
-    import momus
-    r = subprocess.run([sys.executable, "-m", "momus", "--version"],
+    import proofload
+    r = subprocess.run([sys.executable, "-m", "proofload", "--version"],
                        capture_output=True, text=True)
-    assert r.returncode == 0 and momus.__version__ in r.stdout
+    assert r.returncode == 0 and proofload.__version__ in r.stdout
 
 
 def test_pyproject_extras_exact():
@@ -65,7 +65,7 @@ def test_license_is_mit():
 
 
 def test_no_network_imports_in_core():
-    for py in (ROOT / "src" / "momus").rglob("*.py"):
+    for py in (ROOT / "src" / "proofload").rglob("*.py"):
         src = py.read_text()
         for mod in NETWORK_MODULES:
             assert f"import {mod}" not in src and f"from {mod}" not in src, (py, mod)

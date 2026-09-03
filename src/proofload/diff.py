@@ -1,6 +1,6 @@
 """M6: compare two runs cell by cell with multiple-comparison correction and an MDE.
 
-Reads censored frames from ``momus.survival.censor`` (six columns are used: ``config_hash``,
+Reads censored frames from ``proofload.survival.censor`` (six columns are used: ``config_hash``,
 ``config``, ``replicate_index``, ``t``, ``observed``, ``horizon``) and returns a
 ``DiffResult``. ``delta = rate_b - rate_a``: negative is *safer* only when ``event`` names a
 failure. If ``event`` names a success, safer and worse invert; nothing here is clever
@@ -20,7 +20,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from scipy import stats
 
-from momus.store import RunManifest
+from proofload.store import RunManifest
 
 Method = Literal["fisher_bh", "mcnemar_bh", "logrank_bh"]
 
@@ -327,7 +327,7 @@ def diff(
 ) -> DiffResult:
     """Diff two censored frames cell by cell.
 
-    a, b are censored frames from momus.survival.censor(). Manifests are required for
+    a, b are censored frames from proofload.survival.censor(). Manifests are required for
     pairing and unit checks; if omitted, unpaired and unchecked.
     """
     if method not in _METHODS:

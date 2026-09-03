@@ -1,7 +1,7 @@
 """Oracle for M6: run diff with Fisher/BH, paired McNemar, log-rank, and MDE.
 
 Golden tests (I1, I2, I8, I10, I12, I17, I18) run on the committed Go1 fixture through
-``go1_store``; frames are produced with ``momus.survival.censor``. Oracle tests (I3, I6,
+``go1_store``; frames are produced with ``proofload.survival.censor``. Oracle tests (I3, I6,
 I7, I9) import ``statsmodels`` / ``lifelines`` with ``pytest.importorskip`` in the test
 body and run hypothesis on an inner function, so a missing dev extra is a clean skip.
 I4 is a seeded Monte Carlo. I11-I14 and I16 use small synthetic censored frames built
@@ -40,7 +40,7 @@ from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from scipy.stats import fisher_exact
 
-from momus.diff import (
+from proofload.diff import (
     DiffError,
     DiffResult,
     NotPairable,
@@ -49,8 +49,8 @@ from momus.diff import (
     diff,
     mde_two_proportion,
 )
-from momus.store import RunManifest, Store, config_hash
-from momus.survival import censor
+from proofload.store import RunManifest, Store, config_hash
+from proofload.survival import censor
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"

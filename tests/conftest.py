@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from momus.store import Store
+from proofload.store import Store
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 

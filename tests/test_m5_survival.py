@@ -33,8 +33,8 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from momus.store import Store, config_hash
-from momus.survival import (
+from proofload.store import Store, config_hash
+from proofload.survival import (
     CIFCurve,
     KMCurve,
     SurvivalError,

@@ -17,8 +17,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from momus import __version__
-from momus.episode import Episode
+from proofload import __version__
+from proofload.episode import Episode
 
 
 class StoreError(Exception):
@@ -151,7 +151,7 @@ class RunManifest:
     retain_traces_for: tuple[str, ...] | None = None
     status: Literal["partial", "complete"] = "partial"
     created_at: str = field(default_factory=_now_iso_utc)
-    momus_version: str = field(default_factory=lambda: __version__)
+    proofload_version: str = field(default_factory=lambda: __version__)
     schema_version: int = _SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -176,7 +176,7 @@ class RunManifest:
             ),
             "status": self.status,
             "created_at": self.created_at,
-            "momus_version": self.momus_version,
+            "proofload_version": self.proofload_version,
             "schema_version": self.schema_version,
         }
 
@@ -194,7 +194,7 @@ class RunManifest:
             retain_traces_for=None if retain is None else tuple(retain),
             status=d.get("status", "partial"),
             created_at=d.get("created_at", _now_iso_utc()),
-            momus_version=d.get("momus_version", __version__),
+            proofload_version=d.get("proofload_version", __version__),
             schema_version=d.get("schema_version", _SCHEMA_VERSION),
         )
 
