@@ -16,9 +16,9 @@ Two reading notes for Session B, recorded here so the oracle is not re-litigated
   prompt path is exercised under either reading of the non-TTY rule (section 3 says any
   non-TTY stdin without ``--yes`` exits 2; I4 says a piped ``y`` proceeds). I5 uses a plain,
   empty ``StringIO``, which both readings refuse with a message naming ``--yes``.
-- The local backend's manifest never records ``environment["import_path"]`` (only the Modal
-  backend's does), so the reproduction snippet's import line is only checked for shape; the
-  ``rollout(<config JSON>, seed=<seed>)`` line is checked exactly.
+- Since the M10 multi-event amendment the local backend records ``environment["import_path"]``
+  like the Modal backend, so the reproduction snippet's import line is checked exactly on a
+  local run, as the ``rollout(<config JSON>, seed=<seed>)`` line always was.
 """
 
 from __future__ import annotations
@@ -702,19 +702,22 @@ def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> Non
 def test_i9_diff_markdown_summary_line(go1_store: Store) -> None:
     r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell"])
     assert r.code == 0, r.text
-    summary = [line for line in r.lines if "n_safer=60" in line]
+    summary = [line for line in r.lines if "60 safer" in line and "0 worse" in line]
     assert summary, r.out
-    assert "n_worse=0" in summary[0] and "fisher_bh" in summary[0], summary[0]
+    assert summary[0].startswith("fell:"), summary[0]
+    assert "fisher_bh" in r.out, r.out
 
 
 def test_i9_diff_json(go1_store: Store) -> None:
     r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--format", "json"])
     assert r.code == 0, r.text
     data = json.loads(r.out)
-    assert data["n_safer"] == 60 and data["n_worse"] == 0
+    assert data["events"] == ["fell"] and data["inferred"] is False
+    fell = data["by_event"]["fell"]
+    assert fell["n_safer"] == 60 and fell["n_worse"] == 0
     assert data["method"] == "fisher_bh" and data["q"] == 0.05
     assert data["paired"] is True
-    assert len(data["cells"]) == go1_store.read("go1-v0")["config_hash"].nunique() == 400
+    assert len(fell["cells"]) == go1_store.read("go1-v0")["config_hash"].nunique() == 400
 
 
 def test_i9_diff_json_honours_q(go1_store: Store) -> None:
@@ -732,7 +735,8 @@ def test_i9_diff_methods_all_json_keys(go1_store: Store) -> None:
     assert r.code == 0, r.text
     data = json.loads(r.out)
     assert set(data) == METHODS
-    assert data["fisher_bh"]["n_safer"] == 60 and data["fisher_bh"]["n_worse"] == 0
+    fell = data["fisher_bh"]["by_event"]["fell"]
+    assert fell["n_safer"] == 60 and fell["n_worse"] == 0
     for method in METHODS:
         assert data[method]["method"] == method
 
@@ -798,8 +802,8 @@ def test_i11_report_writes_exactly_three_files(go1_store: Store, tmp_path: Path)
     assert {p.name for p in out.iterdir()} == REPORT_FILES
     ET.fromstring((out / "heatmap.svg").read_text())
     md = (out / "report.md").read_text()
-    assert GO1_HEADLINE_PREFIX in md
-    assert GO1_HEADLINE_PREFIX in r.out
+    assert "fell: 60 safer, 0 worse" in md and "fisher_bh" in md
+    assert "fell: 60 safer, 0 worse" in r.out
     for name in REPORT_FILES:
         assert name in r.out, name
     assert NEUTRAL_FILL["light"] in (out / "receipt.html").read_text()
@@ -922,10 +926,8 @@ def test_i14_check_fixture_passes(go1_store: Store) -> None:
     r = run_cli(["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell"])
     assert r.code == 0, r.text
     assert "PASS" in r.out and "FAIL" not in r.out
-    m = HEADLINE_RE.search(r.out)
-    assert m, r.out
-    assert (int(m.group(1)), int(m.group(2)), int(m.group(3))) == (60, 400, 0)
-    assert m.group(4) == "fisher_bh"
+    assert "fell: 60 safer, 0 worse" in r.out, r.out
+    assert "fisher_bh" in r.out and "over 400 tests" in r.out, r.out
 
 
 def test_i14_check_fail_on_any_fails_the_fixture(go1_store: Store) -> None:
@@ -941,9 +943,8 @@ def test_i14_check_significantly_worse_cell_fails(tmp_path: Path) -> None:
     r = run_cli(["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell"])
     assert_clean_refusal(r, 1)
     assert "FAIL" in r.out and "PASS" not in r.out
-    m = HEADLINE_RE.search(r.out)
-    assert m, r.out
-    assert (int(m.group(1)), int(m.group(2)), int(m.group(3))) == (0, 2, 1)
+    assert "fell: 0 safer, 1 worse" in r.out, r.out
+    assert "over 2 tests" in r.out, r.out
 
 
 def test_i14_check_safer_direction_passes_by_default(tmp_path: Path) -> None:
@@ -1023,7 +1024,8 @@ def test_i15_snippet_round_trips_config_and_seed(mock_runs: MockRuns) -> None:
     blocks, snippet = inspect_blocks(r.out, set(rows["config_hash"]))
     assert len(blocks) == 1
     row = next(rows.itertuples(index=False))
-    assert any(line.startswith("from ") and " import " in line for line in snippet), snippet
+    assert f"from {MOCK_MODULE} import rollout" in snippet, snippet
+    assert "your_module" not in r.out, snippet
     calls = [m for line in snippet for m in [SNIPPET_CALL_RE.search(line)] if m]
     assert len(calls) == 1, snippet
     assert json.loads(calls[0].group(2)) == row.config
