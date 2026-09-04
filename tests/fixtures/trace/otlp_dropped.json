@@ -1,0 +1,76 @@
+[
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000001",
+    "name": "good one",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "chat"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000002",
+    "name": "good two",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "chat"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "name": "no span id",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": []
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000001",
+    "name": "duplicate of good one",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "chat"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000005",
+    "name": "ends before it starts",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000500000000",
+    "endTimeUnixNano": "1756900000000000000",
+    "attributes": []
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000006",
+    "name": "unparseable start",
+    "kind": 1,
+    "startTimeUnixNano": "yesterday",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": []
+  }
+]

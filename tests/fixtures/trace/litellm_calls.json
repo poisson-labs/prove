@@ -1,0 +1,103 @@
+[
+  {
+    "model": "gpt-4o-mini",
+    "start_time": "2026-09-03T12:00:00+00:00",
+    "end_time": "2026-09-03T12:00:00.640000+00:00",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hi"
+      }
+    ],
+    "response_obj": {
+      "id": "chatcmpl-1",
+      "object": "chat.completion",
+      "model": "gpt-4o-mini-2024-07-18",
+      "choices": [
+        {
+          "index": 0,
+          "finish_reason": "stop",
+          "message": {
+            "role": "assistant",
+            "content": "hello"
+          },
+          "logprobs": {
+            "content": [
+              {
+                "token": "hello",
+                "logprob": -0.05,
+                "top_logprobs": []
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 9,
+        "completion_tokens": 1,
+        "total_tokens": 10
+      }
+    }
+  },
+  {
+    "model": "claude-sonnet-5",
+    "start_time": "2026-09-03T12:00:01+00:00",
+    "end_time": "2026-09-03T12:00:02.250000+00:00",
+    "standard_logging_object": {
+      "id": "chatcmpl-2",
+      "call_type": "completion",
+      "model": "claude-sonnet-5",
+      "status": "success",
+      "prompt_tokens": 40,
+      "completion_tokens": 12,
+      "total_tokens": 52,
+      "messages": [
+        {
+          "role": "user",
+          "content": "plan the refund"
+        }
+      ],
+      "response": {
+        "choices": [
+          {
+            "message": {
+              "role": "assistant",
+              "content": "1. lookup order"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "model": "gpt-4o-mini",
+    "start_time": "2026-09-03T12:00:03+00:00",
+    "end_time": "2026-09-03T12:00:03.100000+00:00",
+    "messages": [
+      {
+        "role": "user",
+        "content": "done?"
+      }
+    ],
+    "response_obj": {
+      "id": "chatcmpl-3",
+      "object": "chat.completion",
+      "model": "gpt-4o-mini-2024-07-18",
+      "choices": [
+        {
+          "index": 0,
+          "finish_reason": "stop",
+          "message": {
+            "role": "assistant",
+            "content": "yes"
+          }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 5,
+        "completion_tokens": 1,
+        "total_tokens": 6
+      }
+    }
+  }
+]

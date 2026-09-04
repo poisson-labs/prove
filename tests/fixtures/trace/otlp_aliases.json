@@ -1,0 +1,60 @@
+[
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000015",
+    "name": "execute_tool search",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "search"
+        }
+      },
+      {
+        "key": "code.filepath",
+        "value": {
+          "stringValue": "agent/tools.py"
+        }
+      },
+      {
+        "key": "code.function.name",
+        "value": {
+          "stringValue": "search"
+        }
+      },
+      {
+        "key": "code.line.number",
+        "value": {
+          "intValue": "41"
+        }
+      },
+      {
+        "key": "gen_ai.usage.input_tokens",
+        "value": {
+          "intValue": "7"
+        }
+      },
+      {
+        "key": "gen_ai.usage.output_tokens",
+        "value": {
+          "intValue": "3"
+        }
+      },
+      {
+        "key": "proofload.run_id",
+        "value": {
+          "stringValue": "r-aliases"
+        }
+      }
+    ]
+  }
+]

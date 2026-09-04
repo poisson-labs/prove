@@ -1,0 +1,151 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "airline-agent"
+            }
+          },
+          {
+            "key": "proofload.run_id",
+            "value": {
+              "stringValue": "r-2026-09-03-a"
+            }
+          },
+          {
+            "key": "proofload.episode",
+            "value": {
+              "stringValue": "cfg-7:seed-3"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "opentelemetry.instrumentation.openai_v2",
+            "version": "2.0.0",
+            "attributes": [
+              {
+                "key": "scope.flavor",
+                "value": {
+                  "stringValue": "hand-built"
+                }
+              }
+            ]
+          },
+          "spans": [
+            {
+              "traceId": "5b8efff798038103d269b633813fc60c",
+              "spanId": "b7ad6b7169203331",
+              "name": "invoke_agent planner",
+              "kind": 1,
+              "startTimeUnixNano": "1756900000000000000",
+              "endTimeUnixNano": "1756900001000000000",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "invoke_agent"
+                  }
+                },
+                {
+                  "key": "gen_ai.agent.name",
+                  "value": {
+                    "stringValue": "planner"
+                  }
+                },
+                {
+                  "key": "code.file.path",
+                  "value": {
+                    "stringValue": "agent/planner.py"
+                  }
+                },
+                {
+                  "key": "code.function.name",
+                  "value": {
+                    "stringValue": "plan"
+                  }
+                },
+                {
+                  "key": "code.line.number",
+                  "value": {
+                    "intValue": "88"
+                  }
+                }
+              ],
+              "status": {
+                "code": "STATUS_CODE_OK"
+              }
+            },
+            {
+              "traceId": "5b8efff798038103d269b633813fc60c",
+              "spanId": "0af7651916cd43dd",
+              "parentSpanId": "b7ad6b7169203331",
+              "name": "chat gpt-4o-2024-08-06",
+              "kind": 3,
+              "startTimeUnixNano": "1756900000100000000",
+              "endTimeUnixNano": "1756900000912000000",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "chat"
+                  }
+                },
+                {
+                  "key": "gen_ai.system",
+                  "value": {
+                    "stringValue": "openai"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "gpt-4o-2024-08-06"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.input_tokens",
+                  "value": {
+                    "intValue": "1200"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.output_tokens",
+                  "value": {
+                    "intValue": "85"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.temperature",
+                  "value": {
+                    "doubleValue": 0.2
+                  }
+                },
+                {
+                  "key": "gen_ai.request.stop_sequences",
+                  "value": {
+                    "arrayValue": {
+                      "values": [
+                        {
+                          "stringValue": "END"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "status": {
+                "code": "STATUS_CODE_UNSET"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

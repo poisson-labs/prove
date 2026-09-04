@@ -1,0 +1,263 @@
+[
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000001",
+    "name": "execute_tool search_catalog",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "search_catalog"
+        }
+      }
+    ],
+    "status": {
+      "code": "STATUS_CODE_ERROR",
+      "message": "boom"
+    }
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000002",
+    "name": "embeddings text-embedding-3-small",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "embeddings"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000003",
+    "name": "SELECT orders",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "db.system",
+        "value": {
+          "stringValue": "postgresql"
+        }
+      },
+      {
+        "key": "db.query.text",
+        "value": {
+          "stringValue": "SELECT 1"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000004",
+    "name": "GET",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "http.request.method",
+        "value": {
+          "stringValue": "GET"
+        }
+      },
+      {
+        "key": "url.full",
+        "value": {
+          "stringValue": "https://example.test/inventory"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000005",
+    "name": "fetch",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "url.full",
+        "value": {
+          "stringValue": "https://example.test/prices"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000006",
+    "name": "mystery",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "custom.flag",
+        "value": {
+          "stringValue": "yes"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000007",
+    "name": "frobnicate widget",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "frobnicate"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000008",
+    "name": "text_completion davinci",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "text_completion"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "0000000000000009",
+    "name": "generate_content gemini",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "generate_content"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "000000000000000a",
+    "name": "retrieval docs",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "retrieval"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "000000000000000b",
+    "name": "create_agent",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "create_agent"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "000000000000000c",
+    "name": "invoke_workflow",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "invoke_workflow"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "000000000000000d",
+    "name": "plan",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "plan"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "5b8efff798038103d269b633813fc60c",
+    "spanId": "000000000000000e",
+    "name": "execute_tool read_page",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "read_page"
+        }
+      },
+      {
+        "key": "error.type",
+        "value": {
+          "stringValue": "TimeoutError"
+        }
+      }
+    ],
+    "status": {
+      "code": "STATUS_CODE_ERROR"
+    }
+  }
+]
