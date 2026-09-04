@@ -68,6 +68,7 @@ from proofload.report import (
 from proofload.sampler import SamplerError, SweepSpec
 from proofload.store import RunManifest, Store, StoreError
 from proofload.survival import SurvivalError, cell_table, competing_set
+from proofload.trace import Span, Trace, TraceValidationError
 
 __all__ = ["main"]
 
@@ -78,7 +79,6 @@ _DEFAULT_METHOD = "fisher_bh"
 _DEFAULT_Q = 0.05
 _METHODS: tuple[str, ...] = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 _REPORT_FILES = ("report.md", "heatmap.svg", "receipt.html")
-_TRACE_SCHEMA = "proofload.trace/1"
 _SNIPPET_MARKER = "# reproduce one episode"
 _MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
 _DIFF_ONLY_FLAGS = ("method", "methods", "q")
@@ -823,14 +823,21 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
 # ---------- inspect / runs ----------
 
 
-def _trace_steps(meta: Any) -> list[Any] | None:
+def _trace_spans(meta: Any) -> tuple[Span, ...] | None:
+    """The stored trace's spans in ``ordered()`` order, or None when there is no readable one.
+
+    The schema check *is* ``from_dict``: a trace it rejects is an absent trace, printed the
+    same way -- no trace block and no error.
+    """
     if not isinstance(meta, Mapping):
         return None
     trace = meta.get("trace")
-    if not isinstance(trace, Mapping) or trace.get("schema") != _TRACE_SCHEMA:
+    if not isinstance(trace, Mapping):
         return None
-    steps = trace.get("steps")
-    return list(steps) if isinstance(steps, list) else None
+    try:
+        return Trace.from_dict(trace).ordered()
+    except (TraceValidationError, TypeError):
+        return None
 
 
 def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
@@ -854,14 +861,14 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
         io.out.write(f"seed: {row.seed}\n")
         io.out.write(f"replicate_index: {row.replicate_index}\n")
         io.out.write(f"t: {row.t}\n")
-        steps = _trace_steps(row.meta)
-        if steps:
-            for i, step in enumerate(steps):
-                get = step.get if isinstance(step, Mapping) else (lambda _k, _d=None: _d)
-                error = get("error")
+        spans = _trace_spans(row.meta)
+        if spans:
+            for j, span in enumerate(spans):
+                duration = span.duration_ms
                 io.out.write(
-                    f"  {i} {get('kind', '-')} {get('name', '-')} {get('latency_ms', '-')} "
-                    f"{'-' if error in (None, '') else error}\n"
+                    f"  {j} {span.kind or '-'} {span.name or '-'} "
+                    f"{'-' if duration is None else duration} "
+                    f"{'-' if span.error in (None, '') else span.error}\n"
                 )
         io.out.write("\n")
 

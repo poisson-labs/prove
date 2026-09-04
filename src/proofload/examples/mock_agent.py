@@ -20,10 +20,16 @@ from collections.abc import Mapping
 from typing import Any
 
 from proofload.episode import Episode
+from proofload.trace import Span, Trace
 
 HORIZON = 20
-TRACE_SCHEMA = "proofload.trace/1"
 T_UNIT = "tool_calls"
+
+#: Simulated wall clock. A simulation gets simulated time: reading the real clock would let two
+#: consecutive spans tie on ``start_ns``, and the mock would stop being a pure function of
+#: ``(cfg, seed)``. A later session that wants the mock to dogfood ``record()`` injects a fake
+#: clock through the same helper T17 pins.
+MOCK_EPOCH_NS = 1_700_000_000_000_000_000
 
 _MAX_CONSECUTIVE_FAILURES = 3
 _TOOL_ERROR = "ToolError"
@@ -91,7 +97,8 @@ def _walk(cfg: Mapping[str, Any], seed: int, *, retry: bool) -> Episode:
     task_id = str(cfg.get("task_id", _DEFAULT_TASK))
     tools = _tools_for(task_id)
     rng = random.Random(seed)
-    steps: list[dict[str, Any]] = []
+    spans: list[Span] = []
+    start_ns = MOCK_EPOCH_NS
     done = 0
     consecutive = 0
     outcome = "timeout"
@@ -103,16 +110,21 @@ def _walk(cfg: Mapping[str, Any], seed: int, *, retry: bool) -> Episode:
             attempts = 2
             failed = second < rate
         latency_ms = round(5.0 + 45.0 * jitter + 30.0 * (attempts - 1), 1)
-        steps.append(
-            {
-                "i": i,
-                "kind": "tool",
-                "name": tools[done],
-                "latency_ms": latency_ms,
-                "error": _TOOL_ERROR if failed else None,
-                "attempts": attempts,
-            }
+        end_ns = start_ns + round(latency_ms * 1_000_000)
+        spans.append(
+            Span(
+                span_id=f"{i:016x}",
+                parent_id=None,
+                kind="tool",
+                name=tools[done],
+                start_ns=start_ns,
+                end_ns=end_ns,
+                error=_TOOL_ERROR if failed else None,
+                code=None,
+                attrs={"attempts": attempts},
+            )
         )
+        start_ns = end_ns
         if failed:
             consecutive += 1
             if consecutive >= _MAX_CONSECUTIVE_FAILURES:
@@ -124,8 +136,10 @@ def _walk(cfg: Mapping[str, Any], seed: int, *, retry: bool) -> Episode:
             if done == len(tools):
                 outcome = "completed"
                 break
-    trace = {"schema": TRACE_SCHEMA, "task_id": task_id, "outcome": outcome, "steps": steps}
-    return Episode(outcome=outcome, t=len(steps), horizon=HORIZON, meta={"trace": trace})
+    trace = Trace(spans=tuple(spans), source="record").to_dict()
+    return Episode(
+        outcome=outcome, t=len(spans), horizon=HORIZON, meta={"trace": trace, "task_id": task_id}
+    )
 
 
 def rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
