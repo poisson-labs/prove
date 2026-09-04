@@ -269,7 +269,7 @@ def assert_block_is_row(block: list[str], row: Any) -> None:
 
 def assert_trace_lines(block: list[str], row: Any) -> None:
     trace = row.meta["trace"]
-    steps = trace["steps"]
+    steps = trace["spans"]
     step_lines = [line for line in block if STEP_LINE_RE.match(line)]
     assert len(step_lines) == len(steps) == int(row.t), "\n".join(block)
     for j, step in enumerate(steps):
@@ -1147,9 +1147,12 @@ def test_i18_episode_shape_and_trace() -> None:
                 assert float(ep.t).is_integer() and 0 <= ep.t <= MOCK_HORIZON
                 trace = ep.meta["trace"]
                 assert trace["schema"] == TRACE_SCHEMA
-                assert len(trace["steps"]) == int(ep.t)
-                for step in trace["steps"]:
-                    assert {"kind", "name", "latency_ms", "error"} <= set(step), step
+                assert len(trace["spans"]) == int(ep.t)
+                for step in trace["spans"]:
+                    assert set(step) == {
+                        "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
+                        "input", "output", "tokens", "confidence", "error", "code", "attrs",
+                    }, step
 
 
 def test_i18_patched_violates_less_in_every_cell_and_strictly_in_half() -> None:
