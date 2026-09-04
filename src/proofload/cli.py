@@ -865,9 +865,12 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
         if spans:
             for j, span in enumerate(spans):
                 duration = span.duration_ms
+                # Tab-delimited: a span name and an error message are free text and OTel
+                # spells names like "invoke_agent planner", so a space cannot be the column
+                # separator without shifting every column after it.
                 io.out.write(
-                    f"  {j} {span.kind or '-'} {span.name or '-'} "
-                    f"{'-' if duration is None else duration} "
+                    f"  {j}\t{span.kind or '-'}\t{span.name or '-'}\t"
+                    f"{'-' if duration is None else duration}\t"
                     f"{'-' if span.error in (None, '') else span.error}\n"
                 )
         io.out.write("\n")

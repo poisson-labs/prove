@@ -16,3 +16,4 @@ M7: multi-event report — per-event panels on a shared scale, trade line and ma
 M10: multi-event CLI — inferred events, repeatable --event, check requires explicit events, single-run report, forest flag, readable receipt, local import_path.
 Fix: competing set is constructed in one place; check refuses unknown events; zero-n cells render as holes.
 M12: proofload.trace/1 schema with span parentage, wall-clock timing and code location; from_otel and from_litellm converters; record() and @step; inspect and the mock agent read and write the new shape.
+Fix: inspect emits tab-delimited trace columns, so a span name or error message containing spaces cannot shift them; proofload.record aliases proofload.trace.record.
