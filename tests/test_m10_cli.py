@@ -82,7 +82,7 @@ HEADLINE_RE = re.compile(
     r"(\d+) of (\d+) cells safer, (\d+) worse \((\S+), BH q<([^,]+), (paired|unpaired)\)\."
 )
 RUN_ID_LINE_RE = re.compile(r"^run_id: (\S+)$")
-STEP_LINE_RE = re.compile(r"^\s*\d+\s+\S+\s+\S+\s+\S+")
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # five tab-delimited columns
 SNIPPET_CALL_RE = re.compile(r"(\w+)\((\{.*\}),\s*seed=(\d+)\)")
 SNIPPET_MARKER = "# reproduce one episode"
 NETWORK_MODULES = {"requests", "httpx", "urllib", "socket"}
@@ -272,10 +272,12 @@ def assert_trace_lines(block: list[str], row: Any) -> None:
     steps = trace["spans"]
     step_lines = [line for line in block if STEP_LINE_RE.match(line)]
     assert len(step_lines) == len(steps) == int(row.t), "\n".join(block)
+    columns = [line.split("\t") for line in step_lines]
     for j, step in enumerate(steps):
-        kind, name = re.escape(str(step["kind"])), re.escape(str(step["name"]))
-        pattern = re.compile(rf"^\s*(?:{j}|{j + 1})\s+{kind}\s+{name}(?:\s|$)")
-        assert any(pattern.match(line) for line in step_lines), (j, step, step_lines)
+        want = (str(step["kind"]), str(step["name"]))
+        assert any(
+            int(cols[0]) in (j, j + 1) and (cols[1], cols[2]) == want for cols in columns
+        ), (j, step, step_lines)
 
 
 # ---------- fixtures ----------

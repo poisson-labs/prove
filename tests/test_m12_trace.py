@@ -110,7 +110,7 @@ CLOCK_ATTRS = ("time_ns", "perf_counter_ns")
 AGENT_ID = "b7ad6b7169203331"
 CHAT_ID = "0af7651916cd43dd"
 EPOCH = 1_756_900_000_000_000_000
-STEP_LINE_RE = re.compile(r"^\s*\d+\s+\S+\s+\S+\s+\S+")  # the same five-column shape M10 I15 reads
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # the same five columns M10 I15 reads, tab-delimited
 
 # The section 3 example span, as a dict. Tests copy it with dict(...) before mutating.
 SPAN_A: dict[str, Any] = {
@@ -1507,7 +1507,7 @@ def test_t30_inspect_prints_ordered_spans_with_duration_ms_in_the_fourth_column(
         step_lines = [line for line in block if STEP_LINE_RE.match(line)]
         assert len(step_lines) == len(spans) == int(row.t), "\n".join(block)
         for j, (line, span) in enumerate(zip(step_lines, spans, strict=True)):
-            cols = line.split()
+            cols = line.split("\t")
             assert int(cols[0]) in (j, j + 1), line
             assert cols[1] == span.kind and cols[2] == span.name, (line, span)
             assert span.duration_ms is not None and float(cols[3]) == span.duration_ms, (line, span)
