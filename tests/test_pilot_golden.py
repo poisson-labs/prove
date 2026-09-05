@@ -75,8 +75,8 @@ re-litigated. Session B builds to these.**
   ``record()`` spans never pass through it, and the rollout cannot stamp them itself (it is
   never told the run id or the episode id, and P12 forbids the private import that would
   find them); ``_merge_capture`` merges the two traces without stamping. That fact is pinned
-  in one test of its own, so that should the spec choose otherwise exactly that test moves,
-  and the change it would need is named there.
+  in one test of its own; spec section 3 was amended to this reading after Session A.
+  P12 (amended the same day) admits ``proofload.store.Store`` for ``numbers.py``'s CLI entry.
 - **``numbers.numbers(store, run_id, *, paired_with=None)``** returns one dict. The three
   numbers, the kind histogram (all seven ``KINDS`` keys, zeros included) and the shares are
   over the ok rows' stored traces. ``contract`` counts ok rows that decode as an ``Episode``
@@ -160,8 +160,8 @@ BOUNDARY_VALUE = "container"
 ENV_LINE = "ENV GOLDEN_PILOT_BOUNDARY=container"
 SUITE_VAR = "GOLDEN_PILOT_SUITE"
 MODEL_VAR = "GOLDEN_PILOT_MODEL"
-ALLOWED_IMPORTS = frozenset({"Episode", "record", "collect", "step", "Trace"})
-ALLOWED_MODULES = frozenset({"proofload", "proofload.episode", "proofload.trace"})
+ALLOWED_IMPORTS = frozenset({"Episode", "record", "collect", "step", "Trace", "Store"})  # Store: numbers.py's CLI entry (P12, amended)
+ALLOWED_MODULES = frozenset({"proofload", "proofload.episode", "proofload.trace", "proofload.store"})
 PILOT_FILES = (
     "README.md", "requirements.txt", "fetch_suite.py", "suite.py", "sandbox.py", "agent.py",
     "numbers.py", "pilot.toml", "smoke.toml", "make_toml.py", "Dockerfile",
@@ -1453,7 +1453,7 @@ def test_p12_nothing_under_src_proofload_imports_examples() -> None:
         assert "golden_pilot" not in path.read_text(encoding="utf-8"), path
 
 
-def test_p12_golden_pilot_imports_only_episode_record_collect_step_and_trace_from_proofload() -> None:
+def test_p12_golden_pilot_imports_only_episode_record_collect_step_trace_and_store_from_proofload() -> None:
     files = pilot_python_files()
     assert files, ROOT
     used: set[str] = set()
