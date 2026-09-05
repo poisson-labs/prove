@@ -32,6 +32,7 @@ of our own. An unknown name, a missing SDK or an instrumentor that raises all yi
 
 from __future__ import annotations
 
+import heapq
 import json
 import logging
 import os
@@ -111,7 +112,10 @@ class Recorder:
         self._run_id = run_id
         self._episode_id = episode_id
         self._lock = threading.Lock()
-        self._spans: list[dict[str, Any]] = []
+        # A bounded max-heap on start time, at most ``max_spans`` entries, keyed so the
+        # latest-started span sits on top and is the one evicted when an earlier one arrives.
+        self._kept: list[tuple[int, int, dict[str, Any]]] = []
+        self._seq = 0
         self._dropped = 0
         self._warned = False
 
@@ -122,7 +126,7 @@ class Recorder:
         untouched, so switching capture on cannot disturb a rollout that records its own trace.
         """
         with self._lock:
-            spans = list(self._spans)
+            spans = [m for _, _, m in sorted(self._kept, key=lambda e: (-e[0], -e[1]))]
             dropped = self._dropped
         if not spans and not dropped:
             return None
@@ -140,18 +144,6 @@ class Recorder:
 
     def _take(self, span: ReadableSpan) -> None:
         """One ended span, from the collector. Never raises: this runs inside ``on_end``."""
-        with self._lock:
-            if len(self._spans) >= self._spec.max_spans:
-                self._dropped += 1
-                if not self._warned:
-                    self._warned = True
-                    _LOG.warning(
-                        "capture: episode %s hit max_spans=%d; later spans are dropped "
-                        "and counted in the trace",
-                        self._episode_id,
-                        self._spec.max_spans,
-                    )
-                return
         try:
             mapping = _span_mapping(span, content=self._spec.content)
         except Exception:  # noqa: BLE001 - one unconvertible span is never fatal
@@ -159,8 +151,27 @@ class Recorder:
             with self._lock:
                 self._dropped += 1
             return
+        start = mapping.get("startTimeUnixNano")
         with self._lock:
-            self._spans.append(mapping)
+            self._seq += 1
+            entry = (-(start if isinstance(start, int) else 0), -self._seq, mapping)
+            if len(self._kept) < self._spec.max_spans:
+                heapq.heappush(self._kept, entry)
+                return
+            # Full. The cap is in start order (C10): the earliest-started spans are kept, so
+            # a capped trace keeps its root and loses its deepest spans. Spans end
+            # innermost-first, and a cap applied in end order would keep the leaves.
+            if self._kept and entry > self._kept[0]:
+                heapq.heapreplace(self._kept, entry)
+            self._dropped += 1
+            if not self._warned:
+                self._warned = True
+                _LOG.warning(
+                    "capture: episode %s hit max_spans=%d; the latest-started spans are "
+                    "dropped and counted in the trace",
+                    self._episode_id,
+                    self._spec.max_spans,
+                )
 
 
 class _Bucket:

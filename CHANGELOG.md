@@ -20,3 +20,4 @@ Fix: inspect emits tab-delimited trace columns, so a span name or error message 
 M12: episode stamper — proofload.otel.EpisodeStamper tags every span with proofload.run_id and proofload.episode from a per-context episode() block, behind the [agent] extra.
 M12: kind ladder extended — fetch_response and execute_task mapped; openinference.span.kind and traceloop.span.kind typed as a rung below gen_ai.operation.name.
 M3: in-process trace capture — the executor activates the instrumentors named in the sweep file, stamps every span with its episode, and carries the trace into Episode.meta.
+Fix: max_spans keeps the earliest-started spans and drops the deepest, so a capped trace keeps its root.
