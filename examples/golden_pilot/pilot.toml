@@ -1,6 +1,6 @@
 # Written by examples/golden_pilot/make_toml.py from suite.load(); regenerate rather than
 # edit the task_id axis by hand, so the sweep and the suite cannot drift apart.
-target_id = "golden-pilot/gpt-4o-mini@v0"
+target_id = "golden-pilot/gpt-4o-mini-2024-07-18@v0"
 t_unit = "tool_calls"
 replicates = 32
 
@@ -197,8 +197,13 @@ secrets = ["golden-pilot"]
 # and nothing enforces it -- it is arithmetic you do from the smoke before you launch. If
 # three arms do not fit, drop replicates to 16 for all three before cutting task_id, because
 # 32 seeds per case is the finding.
-# est_seconds_per_episode = <seconds per episode, measured by the smoke>
-# max_cost = <USD of Modal compute you will not exceed; the sweep refuses above it>
+# Measured by the smoke 20260905T175316Z-8708 (20/20 ok, 5 easiest tasks, 1.05 tool calls
+# per episode): wall p50 3.2s, p90 5.4s, max 10.7s; 241 tokens in, 212 out. Those are a
+# floor -- the full 164 include the repair loops the smoke never triggered -- so 8.0 is p90
+# with headroom, and 5.0 guards MODAL COMPUTE at ~4x the resulting estimate. Model spend is
+# not capped by anything here: watch it on the provider's billing page.
+est_seconds_per_episode = 8.0
+max_cost = 5.0
 
 [modal.image]
 dockerfile = "examples/golden_pilot/Dockerfile"

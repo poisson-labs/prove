@@ -1,6 +1,6 @@
 # Written by examples/golden_pilot/make_toml.py from suite.load(); regenerate rather than
 # edit the task_id axis by hand, so the sweep and the suite cannot drift apart.
-target_id = "golden-pilot/gpt-4o-mini@v0"
+target_id = "golden-pilot/gpt-4o-mini-2024-07-18@v0"
 t_unit = "tool_calls"
 replicates = 2
 
