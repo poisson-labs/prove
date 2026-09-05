@@ -45,6 +45,12 @@ SMOKE_TASKS = 5
 DEFAULT_MODEL = "gpt-4o-mini"
 DOCKERFILE = "examples/golden_pilot/Dockerfile"
 
+#: The Modal secret the container reads ``OPENAI_API_KEY`` and ``GOLDEN_PILOT_MODEL`` out of.
+#: The sweep file carries the name and nothing else: the values live in the Modal workspace,
+#: are mounted on the remote function by name, and never pass through proofload. Rename it
+#: here and regenerate rather than editing either TOML by hand.
+SECRET_NAME = "golden-pilot"
+
 #: The two ``[modal]`` numbers the smoke fills in by hand. This file writes them as comments,
 #: so regenerating over a sized ``pilot.toml`` would throw away the only automated guard on a
 #: 10,496-episode run -- and the README tells you to regenerate whenever the model changes,
@@ -77,6 +83,10 @@ concurrency = 16
 batch_size = 64
 episode_timeout = 120.0
 infra_retries = 2
+# Names only, never values: create the secret once with
+# `modal secret create {secret} OPENAI_API_KEY=<your-key> GOLDEN_PILOT_MODEL=<model>` and
+# this line mounts it on the remote function.
+secrets = ["{secret}"]
 # Filled from the smoke, before the sized run and never after (spec section 3).
 #
 # max_cost guards MODAL COMPUTE ONLY: estimate_cost is jobs x est_seconds_per_episode x the
@@ -102,6 +112,7 @@ def render(task_ids: list[str], *, replicates: int, model: str) -> str:
         temperatures=", ".join(repr(float(value)) for value in TEMPERATURES),
         instrument=INSTRUMENTOR,
         dockerfile=DOCKERFILE,
+        secret=SECRET_NAME,
     )
 
 

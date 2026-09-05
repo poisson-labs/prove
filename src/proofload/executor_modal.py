@@ -16,6 +16,7 @@ off to ``run_with_mapper``. Core ``proofload`` imports and runs without ``modal`
 from __future__ import annotations
 
 import importlib.metadata
+import re
 import time
 import traceback
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -159,6 +160,59 @@ class ModalTarget:
             raise ValueError("ModalTarget: image must be an ImageSpec")
 
 
+# A Modal secret is named here and never read here: the value stays in the Modal workspace,
+# so "no Proofload output can carry it" is structural rather than a filter over strings
+# (ADR-030). The bounds below are Proofload's own and deliberately narrower than whatever
+# Modal accepts; widening them is a one-constant change.
+_SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_SECRET_NAME_MAX = 64
+_SECRET_CREATE_FORM = "modal secret create <name> KEY=VALUE"
+
+
+def _secret_names(value: object) -> tuple[str, ...]:
+    """``[modal] secrets`` -> a tuple of names; ValueError on anything else.
+
+    A bare ``str`` is refused rather than iterated: ``"golden-pilot"`` silently becoming
+    twelve one-character names is the worst available reading of a typo. No message below
+    repeats an entry, because the likeliest malformed entry is a pasted credential and a
+    refusal that echoed one would put it in the terminal, the shell history and the CI log.
+    """
+    if isinstance(value, str) or not isinstance(value, (list, tuple)):
+        raise ValueError(
+            "ModalOptions: secrets must be a list of Modal secret names, "
+            f"got {type(value).__name__}"
+        )
+    names: list[str] = []
+    for position, entry in enumerate(value):
+        where = f"secrets[{position}]"
+        if not isinstance(entry, str):
+            raise ValueError(f"ModalOptions: {where} must be a name, got {type(entry).__name__}")
+        if "=" in entry:
+            raise ValueError(
+                f"ModalOptions: {where} looks like KEY=VALUE. secrets holds the names of "
+                f"secrets that already exist in your Modal workspace; create one with "
+                f"`{_SECRET_CREATE_FORM}` and list <name> here"
+            )
+        if not entry:
+            raise ValueError(f"ModalOptions: {where} is empty")
+        if len(entry) > _SECRET_NAME_MAX:
+            raise ValueError(
+                f"ModalOptions: {where} is {len(entry)} characters, over the "
+                f"{_SECRET_NAME_MAX} a secret name may have"
+            )
+        if any(char.isspace() for char in entry):
+            raise ValueError(f"ModalOptions: {where} contains whitespace")
+        if _SECRET_NAME_RE.match(entry) is None:
+            raise ValueError(
+                f"ModalOptions: {where} is not a secret name: letters, digits, '.', '_' and "
+                "'-' only, starting with a letter or a digit"
+            )
+        if entry in names:
+            raise ValueError(f"ModalOptions: {where} repeats a name already listed")
+        names.append(entry)
+    return tuple(names)
+
+
 @dataclass(frozen=True)
 class ModalOptions:
     concurrency: int = 16
@@ -169,6 +223,12 @@ class ModalOptions:
     max_cost: float | None = None
     est_seconds_per_episode: float | None = None
     app_name: str = "proofload"
+    # The names of Modal secrets mounted on the remote function, never their values. Last and
+    # defaulted, so every existing keyword construction and comparison is untouched.
+    secrets: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "secrets", _secret_names(self.secrets))
 
 
 _DEFAULT_OPTIONS = ModalOptions()
@@ -365,6 +425,7 @@ def _open_run(
         modal_app=options.app_name,
         concurrency=options.concurrency,
         import_path=import_path,
+        secrets=list(options.secrets),
     )
     if p.spec.capture is not None:
         environment["capture"] = _capture_record(
@@ -622,6 +683,12 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
     estimate = estimate_cost(p, options, image)
     gpu = "none" if image.gpu is None else image.gpu
     timeout = "none" if options.episode_timeout is None else f"{options.episode_timeout:g}s"
+    mounts = (
+        "Secrets: none"
+        if not options.secrets
+        else f"Secrets: {', '.join(options.secrets)} · mounted by name; "
+        "proofload never reads the values"
+    )
     cost = (
         "Cost: unknown (no estimate)"
         if estimate is None
@@ -633,8 +700,10 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
         f"Backend: {_BACKEND} · target: {spec.target_id} · t_unit: {spec.t_unit}",
         f"Image: python {image.python} · {len(image.pip)} pip · gpu: {gpu} · "
         f"import: {target.import_path}",
+        f"Target: {target.import_path} · resolved inside the container, not on this machine",
         f"Containers: up to {options.concurrency} · batch: {options.batch_size} · "
         f"episode timeout: {timeout}",
+        mounts,
         cost,
         f"MDE at N={spec.replicates} (worst case, rate 0.5): {mde:.4f}",
     ]
@@ -760,8 +829,10 @@ def run_modal(
 
     Builds the app, the image from ``target.image``, and one function with the outer timeout
     (``episode_timeout × batch_size + 60``), ``retries=0`` (retries are ours, so attempts are
-    counted and recorded) and ``max_containers=concurrency``; then ``run_with_mapper`` does the
-    rest. The cost guard fires before the app starts.
+    counted and recorded), ``max_containers=concurrency`` and the named secrets of
+    ``options.secrets`` mounted on that function; then ``run_with_mapper`` does the rest. The
+    cost guard fires before the app starts. A secret is looked up by name in the caller's Modal
+    workspace: no value is read on this machine, and none is attached to the image (ADR-030).
     """
     try:
         import modal
@@ -773,6 +844,7 @@ def run_modal(
     _check_cost(p, options, target.image)
     image = _build_image(modal, target.image)
     app = modal.App(options.app_name)
+    secrets = [modal.Secret.from_name(name) for name in options.secrets]
     remote = app.function(
         image=image,
         gpu=target.image.gpu,
@@ -780,6 +852,7 @@ def run_modal(
         retries=0,
         max_containers=options.concurrency,
         serialized=True,
+        secrets=secrets,
     )(_container_batch)
     mapper = _ModalMapper(
         remote,

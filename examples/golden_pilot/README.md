@@ -27,35 +27,35 @@ call; they are not the boundary.
 
 Every command below runs `--backend modal`. There is no local path.
 
-> **Known blocker — read this before booking time.** As of the S18 build, `proofload sweep`
-> cannot launch this pilot on *either* backend. `cli.py` resolves `--target` before it
-> branches on the backend, so the launching process imports `golden_pilot.agent` on your
-> laptop, where the boundary variable is correctly absent, and the refusal fires there:
+> **The two S18 blockers are fixed** by the M3 modal launch amendment (S19). Both were in
+> core, and the pilot was the first user to hit either; neither was patched from here.
+>
+> **Launching no longer imports the target.** `sweep --backend modal` checks that `--target`
+> has the shape `module:attr` and leaves the import to the container, which is the only place
+> `golden_pilot.agent` can be imported at all. `--backend local` still resolves, so the
+> boundary refusal is still what a local sweep gets — now as a clean exit 2 naming the path
+> rather than a traceback:
 >
 > ```
-> RuntimeError: golden_pilot.agent executes model-generated code and imports only inside
-> the isolation boundary: ... is not set.
+> error: cannot resolve --target 'golden_pilot.agent:rollout': golden_pilot.agent executes
+> model-generated code and imports only inside the isolation boundary:
+> GOLDEN_PILOT_BOUNDARY=container is not set. ...
 > ```
 >
-> The resolved callable is only ever used by the local backend; the Modal path passes the
-> import path as a string and resolves it inside the container. So the fix is one line in
-> core — resolve on the local branch only — or one sentence in the spec. It is deliberately
-> not patched from inside the pilot: weakening the import-time refusal, or moving it to first
-> call, is the thing spec section 3 chose against. See the S18 Session B devlog entry for the
-> three candidate resolutions.
+> **What that costs, stated plainly.** The modal branch no longer catches a typo in
+> `--target` before the pre-flight. A well-shaped path naming a module that does not exist is
+> accepted here, the image is built, and every batch fails at import in seconds, leaving a
+> complete run whose every row is `error = "infra: ...ModuleNotFoundError..."`. The
+> pre-flight's `Target:` line prints the path you typed and says it will be resolved in the
+> container; read it before you answer the prompt. A local import was never the check that
+> mattered — your laptop is not the image, and this target cannot be imported on it anyway.
 >
-> **And a second one, independent of the first.** There is no way for `OPENAI_API_KEY` to
-> reach the container. `executor_modal.py` builds the remote function with `image`, `gpu`,
-> `timeout`, `retries`, `max_containers` and `serialized` — no `secrets=`, no `env=` — and
-> neither `ImageSpec` nor `ModalOptions` carries one. The `modal secret create` step below is
-> therefore inert today: the secret exists, and nothing attaches it. Baking a key into the
-> `Dockerfile` is not the answer — that is a credential in the repository. This wants a
-> `secrets` field on `ImageSpec` or `ModalOptions` and one argument at `app.function(...)`.
->
-> Both gaps are in core, and the pilot is a user (spec section 6), so neither is patched from
-> here. They are, between them, the most useful thing this phase has produced so far: the
-> first user that needed a credential in a container found that Proofload cannot put one
-> there.
+> **And the credential reaches the container, by name.** `[modal] secrets = ["golden-pilot"]`
+> in both sweep files mounts that Modal secret on the remote function. The name is the whole
+> of what Proofload holds: the values live in your Modal workspace, so no pre-flight,
+> manifest, progress line or traceback can carry one. Nothing is baked into the `Dockerfile`
+> either: its three `ENV` lines are `GOLDEN_PILOT_BOUNDARY`, `PYTHONUNBUFFERED` and
+> `GOLDEN_PILOT_SUITE`, and no credential is among them.
 
 ## Setup
 
@@ -67,10 +67,13 @@ python examples/golden_pilot/fetch_suite.py          # HumanEval, once, by hand 
 python examples/golden_pilot/make_toml.py            # regenerates pilot.toml and smoke.toml
 ```
 
-**The third line is not optional.** `golden_pilot` is not a package and is not installed —
-the wheel ships `src/proofload` only, and `examples/` is deliberately outside it. Nothing in
-`proofload` puts it on the path, so `--target golden_pilot.agent:rollout` cannot be resolved
-without it. Run everything below from the repository root with that variable set.
+**The third line is not optional**, even though nothing here imports the agent any more.
+`golden_pilot` is not a package and is not installed — the wheel ships `src/proofload` only,
+and `examples/` is deliberately outside it. The Modal image is built with
+`Image.add_local_python_source("golden_pilot")`, which finds the package's source files
+through the local import system in order to ship them, so the launching process has to be
+able to *locate* it. Locating is not importing, and the boundary refusal does not fire. Run
+everything below from the repository root with that variable set.
 
 `fetch_suite.py` is the only thing here that touches the network, and nothing calls it for
 you. The suite lands at `suite/HumanEval.jsonl.gz`, is not committed, and is pinned by
@@ -93,8 +96,19 @@ which names the model the agent calls.
 modal secret create golden-pilot OPENAI_API_KEY=<your-key> GOLDEN_PILOT_MODEL=gpt-4o-mini
 ```
 
-Create it, but read the second blocker above first: nothing in Proofload attaches a Modal
-secret to the function yet, so this step does not reach the container until that is fixed.
+Create it before the smoke. `[modal] secrets = ["golden-pilot"]`, which `make_toml.py`
+writes into both sweep files, is what mounts it on the function. Proofload never checks that
+the secret exists — the pre-flight is computed without an account — so a misspelled name is
+Modal's error. Observed once against a real workspace: it raises `NotFoundError` as the app
+starts, before any container runs and before the run is created in the store, in half a
+second and at the cost of no episodes. If you rename the secret, change
+`SECRET_NAME` in `make_toml.py` and regenerate: the name lives in the sweep files, not in a
+flag, so what a run mounts is committed and diffable.
+
+**Put a name in that list, never a value.** An entry containing `=` is refused before
+anything runs, which catches pasting a whole `KEY=VALUE` pair; a pasted value that happens to
+look like a name cannot be told apart from one, and Modal's not-found error quotes back the
+name it was given.
 
 **The model name lives in two places and they must agree.** `GOLDEN_PILOT_MODEL` is what the
 requests carry; `target_id` in the sweep files is what the manifest records. If you change

@@ -186,6 +186,10 @@ concurrency = 16
 batch_size = 64
 episode_timeout = 120.0
 infra_retries = 2
+# Names only, never values: create the secret once with
+# `modal secret create golden-pilot OPENAI_API_KEY=<your-key> GOLDEN_PILOT_MODEL=<model>` and
+# this line mounts it on the remote function.
+secrets = ["golden-pilot"]
 # Filled from the smoke, before the sized run and never after (spec section 3).
 #
 # max_cost guards MODAL COMPUTE ONLY: estimate_cost is jobs x est_seconds_per_episode x the

@@ -494,9 +494,15 @@ class _Progress:
 
 
 def _resolve_target(target: str) -> Any:
+    """Import the local branch's rollout, turning any refusal at import into exit 2.
+
+    A module that raises at import because it is outside the boundary it demands -- the golden
+    pilot's agent, on a laptop -- raises RuntimeError, which is a refusal of this target and
+    not a bug in proofload, so it exits 2 naming the path like the other three.
+    """
     try:
         return resolve(target)
-    except (ValueError, ImportError, AttributeError) as exc:
+    except (ValueError, ImportError, AttributeError, RuntimeError) as exc:
         raise _Refusal(f"cannot resolve --target {target!r}: {exc}") from exc
 
 
@@ -521,7 +527,7 @@ def _modal_config(ns: argparse.Namespace, spec_path: Path) -> tuple[ModalTarget,
         raise _Refusal(f"[modal.{ns.image}]: {exc}") from exc
     try:
         options = ModalOptions(**scalars)
-    except TypeError as exc:
+    except (TypeError, ValueError) as exc:
         raise _Refusal(f"[modal]: {exc}") from exc
 
     overrides = {
@@ -567,7 +573,13 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             raise _Refusal(f"{names} only applies to --backend modal")
     spec_path = Path(ns.spec)
     spec = SweepSpec.load(spec_path)
-    rollout = _resolve_target(ns.target)
+    if ns.backend == "modal":
+        # The container is the resolver: this machine only checks the path's shape, which
+        # ModalTarget does. A target importable solely inside its image -- the case the Modal
+        # backend exists for -- must not be imported here (ADR-029).
+        target, options = _modal_config(ns, spec_path)
+    else:
+        rollout = _resolve_target(ns.target)
     store = Store(root)
     p: Plan = plan(
         spec,
@@ -580,7 +592,6 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     )
 
     if ns.backend == "modal":
-        target, options = _modal_config(ns, spec_path)
         io.out.write(preflight_modal(p, target, options))
     else:
         io.out.write(preflight(p))

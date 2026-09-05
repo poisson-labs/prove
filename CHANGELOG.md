@@ -26,3 +26,4 @@ M3: a timed-out episode keeps its trace — the child drains a snapshot of its c
 Fix: the drain pipe is created beside the outcome pipe on every timed call, capture or not, and a Modal errored result whose meta is not a mapping is refused like an invalid episode instead of being stored without it.
 M3: a crashed episode keeps its trace — the error payload takes the dict form on both backends, complete up to the raise with the failing span marked, truncated None.
 Pilot: golden-suite agent under examples/golden_pilot — HumanEval at 32 seeds through the full loop, chat completions only, own-span paths scrubbed; the first real integration's span count, dropped and other share recorded.
+M3/M10: sweep --backend modal no longer imports the target locally; [modal] secrets mounts named Modal secrets on the function, names recorded in the manifest, values never read.
