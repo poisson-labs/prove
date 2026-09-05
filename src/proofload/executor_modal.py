@@ -18,12 +18,13 @@ from __future__ import annotations
 import importlib.metadata
 import time
 import traceback
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from proofload._resolve import resolve, split_import_path
+from proofload.capture import CaptureSpec, CaptureStatus, install
 from proofload.diff import mde_two_proportion
 from proofload.episode import Episode
 from proofload.executor import (
@@ -33,7 +34,12 @@ from proofload.executor import (
     RunSummary,
     _call_in_process,
     _call_with_timeout,
+    _capture_line,
+    _capture_probe,
+    _capture_record,
+    _CaptureCall,
     _environment,
+    _episode_id,
     _mp_context,
 )
 from proofload.store import EpisodeRecord, RunManifest, Store, StoreError
@@ -208,8 +214,47 @@ def _resolve_rollout(import_path: str) -> Any:
     return resolve(import_path)
 
 
+_CAPTURE_FIELDS = ("instrument", "content", "max_span_bytes", "max_spans")
+
+
+def _capture_payload(spec: CaptureSpec | None, run_id: str) -> dict[str, Any] | None:
+    """The ``capture`` argument of ``worker_batch``: the four ``CaptureSpec`` fields as
+    JSON-native values, plus the run id. The id rides ``_MapItem`` to the container and then
+    travels inside this dict, because ``Job`` is not extended and there is no other route."""
+    if spec is None:
+        return None
+    return {
+        "run_id": run_id,
+        "instrument": list(spec.instrument),
+        "content": spec.content,
+        "max_span_bytes": spec.max_span_bytes,
+        "max_spans": spec.max_spans,
+    }
+
+
+def _capture_request(payload: Mapping[str, Any] | None) -> tuple[CaptureSpec | None, str]:
+    """The inverse, inside the container: the run id off the front, the spec from the rest."""
+    if payload is None:
+        return None, ""
+    fields = {name: payload[name] for name in _CAPTURE_FIELDS if name in payload}
+    return CaptureSpec(**fields), str(payload.get("run_id", ""))
+
+
+def _capture_status(status: CaptureStatus) -> dict[str, Any]:
+    return {
+        "requested": status.requested,
+        "active": status.active,
+        "reason": status.reason,
+        "instrumented": list(status.instrumented),
+    }
+
+
 def worker_batch(
-    jobs: Sequence[Job], import_path: str, episode_timeout: float | None
+    jobs: Sequence[Job],
+    import_path: str,
+    episode_timeout: float | None,
+    *,
+    capture: dict[str, Any] | None = None,
 ) -> list[Result]:
     """Run one batch. This is the code inside the container: pure Python, no modal import.
 
@@ -219,26 +264,49 @@ def worker_batch(
     (a fork-and-join per episode, the local backend's mechanics). Anything that fails outside
     a single episode (a resolve failure, a bad timeout) raises, so the whole batch is an infra
     failure rather than N identical episode errors.
+
+    ``capture`` is the sweep's ``[capture]`` table plus the run id. It is keyword-only with a
+    None default because nine existing call sites pass three positional arguments. What
+    actually happened in the container comes back on every result at
+    ``backend_meta["capture"]``: the host cannot know, and a manifest that claimed to would
+    be lying.
     """
     if episode_timeout is not None and episode_timeout <= 0:
         raise ValueError(f"episode_timeout must be > 0 when given, got {episode_timeout}")
     rollout = _resolve_rollout(import_path)
     ctx = _mp_context() if episode_timeout is not None else None
+    capture_spec, run_id = _capture_request(capture)
+    status: CaptureStatus | None = None
+    if capture_spec is not None:
+        # With a timeout each episode is a forked child, so the provider goes in there (C1)
+        # and one probe child measures what those children will get.
+        status = _capture_probe(capture_spec) if ctx is not None else install(capture_spec)
     results: list[Result] = []
-    for config, seed, i, _config_hash, _replicate_index in jobs:
+    for config, seed, i, config_hash, replicate_index in jobs:
         fresh = dict(config)
+        call = (
+            None
+            if capture_spec is None
+            else _CaptureCall(
+                spec=capture_spec,
+                run_id=run_id,
+                episode_id=_episode_id(config_hash, replicate_index),
+            )
+        )
         t0 = time.perf_counter()
         if ctx is None:
-            outcome = _call_in_process(rollout, fresh, seed)
+            outcome = _call_in_process(rollout, fresh, seed, call)
         else:
             assert episode_timeout is not None
-            outcome = _call_with_timeout(rollout, fresh, seed, episode_timeout, ctx)
+            outcome = _call_with_timeout(rollout, fresh, seed, episode_timeout, ctx, call)
         wall_time = time.perf_counter() - t0
         kind, payload = outcome
         if kind == "ok":
             result: dict[str, Any] = dict(payload)
             result["wall_time"] = wall_time
             result["backend_meta"] = {"i": i}
+            if status is not None:
+                result["backend_meta"]["capture"] = _capture_status(status)
             results.append(result)
         elif kind == _TIMEOUT_ERROR:
             results.append(_TIMEOUT_ERROR)
@@ -281,6 +349,20 @@ def _open_run(
         concurrency=options.concurrency,
         import_path=import_path,
     )
+    if p.spec.capture is not None:
+        environment["capture"] = _capture_record(
+            p.spec.capture,
+            CaptureStatus(
+                requested=True,
+                active=False,
+                reason=(
+                    "the host installs nothing for a Modal run; the container may not even "
+                    "hold the packages. Each batch records what happened at "
+                    "backend_meta['capture']"
+                ),
+                instrumented=(),
+            ),
+        )
     store.create_run(
         RunManifest(
             run_id=p.run_id,
@@ -520,6 +602,9 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
         cost,
         f"MDE at N={spec.replicates} (worst case, rate 0.5): {mde:.4f}",
     ]
+    capture_line = _capture_line(spec.capture)
+    if capture_line is not None:
+        lines.append(capture_line)
     if p.resumed:
         lines.append(f"Resuming {p.run_id}: {p.already_stored} stored, {len(p.pairs)} to run")
     return "\n".join(lines) + "\n"
@@ -562,7 +647,7 @@ def _outer_timeout(options: ModalOptions) -> int:
     return int(min(max(seconds, 1.0), _MAX_OUTER_TIMEOUT_S))
 
 
-_MapItem = tuple[int, list[Job], str, float | None]
+_MapItem = tuple[int, list[Job], str, float | None, dict[str, Any] | None]
 _MapOutput = tuple[int, list[Result] | None, str | None]
 
 
@@ -570,10 +655,11 @@ def _container_batch(item: _MapItem) -> _MapOutput:
     """The Modal function body. The batch index travels inside the item and comes back inside
     the output, because ``order_outputs=False`` loses position. A failure of the batch as a
     whole (a resolve error, for one) comes back as ``(k, None, traceback)`` so it keeps its
-    index; only a container death loses it."""
-    k, jobs, import_path, episode_timeout = item
+    index; only a container death loses it. The capture request rides the item too: it is the
+    only way the run id reaches ``worker_batch`` without extending ``Job``."""
+    k, jobs, import_path, episode_timeout, capture = item
     try:
-        return k, worker_batch(jobs, import_path, episode_timeout), None
+        return k, worker_batch(jobs, import_path, episode_timeout, capture=capture), None
     except Exception:
         return k, None, traceback.format_exc()
 
@@ -587,16 +673,23 @@ class _ModalMapper:
     matters, and only once retries are exhausted).
     """
 
-    def __init__(self, remote: Any, import_path: str, episode_timeout: float | None) -> None:
+    def __init__(
+        self,
+        remote: Any,
+        import_path: str,
+        episode_timeout: float | None,
+        capture: dict[str, Any] | None = None,
+    ) -> None:
         self.remote = remote
         self.import_path = import_path
         self.episode_timeout = episode_timeout
+        self.capture = capture
 
     def __call__(
         self, batches: Sequence[Sequence[Job]]
     ) -> Iterator[tuple[int, list[Result] | BaseException]]:
         items: list[_MapItem] = [
-            (k, [tuple(job) for job in jobs], self.import_path, self.episode_timeout)  # type: ignore[misc]
+            (k, [tuple(job) for job in jobs], self.import_path, self.episode_timeout, self.capture)  # type: ignore[misc]
             for k, jobs in enumerate(batches)
         ]
         seen: set[int] = set()
@@ -652,7 +745,12 @@ def run_modal(
         max_containers=options.concurrency,
         serialized=True,
     )(_container_batch)
-    mapper = _ModalMapper(remote, target.import_path, options.episode_timeout)
+    mapper = _ModalMapper(
+        remote,
+        target.import_path,
+        options.episode_timeout,
+        _capture_payload(p.spec.capture, p.run_id),
+    )
     with app.run():
         return run_with_mapper(
             p, mapper, store, options=options, image=target.image, on_progress=on_progress

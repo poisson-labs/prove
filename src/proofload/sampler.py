@@ -22,12 +22,14 @@ from typing import Any, Literal
 
 from scipy.stats import qmc
 
+from proofload.capture import CaptureSpec
 from proofload.store import InvalidConfig, config_hash
 
 AxisType = Literal["continuous", "categorical"]
 
 _AXIS_TYPES: tuple[str, ...] = ("continuous", "categorical")
 _TOOL_RELIABILITY_RATES: tuple[float, ...] = (0.0, 0.05, 0.10, 0.20, 0.30)
+_CAPTURE_FIELDS: tuple[str, ...] = ("instrument", "content", "max_span_bytes", "max_spans")
 
 
 class SamplerError(Exception):
@@ -154,6 +156,44 @@ def infer_axis_types(configs: Sequence[Mapping[str, Any]]) -> dict[str, AxisType
 # ---------- SweepSpec ----------
 
 
+def _positive_int(table: Mapping[str, Any], name: str, default: int) -> int:
+    value = table.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise SamplerError(f"[capture].{name} must be an int >= 1, got {value!r}")
+    return value
+
+
+def _capture_table(table: Any) -> CaptureSpec | None:
+    """The optional ``[capture]`` table of a sweep file, as a ``CaptureSpec``.
+
+    An empty ``instrument`` list is a request, not a no-op: a target that emits spans through
+    the OpenTelemetry API itself needs no instrumentor.
+    """
+    if table is None:
+        return None
+    if not isinstance(table, Mapping):
+        raise SamplerError("[capture] must be a table")
+    unknown = sorted(set(table) - set(_CAPTURE_FIELDS))
+    if unknown:
+        raise SamplerError(
+            f"[capture] has unknown field(s): {', '.join(unknown)}; "
+            f"the fields are {', '.join(_CAPTURE_FIELDS)}"
+        )
+    instrument = table.get("instrument", [])
+    if not isinstance(instrument, list) or not all(isinstance(n, str) for n in instrument):
+        raise SamplerError("[capture].instrument must be a list of instrumentor names")
+    content = table.get("content", False)
+    if not isinstance(content, bool):
+        raise SamplerError(f"[capture].content must be true or false, got {content!r}")
+    defaults = CaptureSpec()
+    return CaptureSpec(
+        instrument=tuple(instrument),
+        content=content,
+        max_span_bytes=_positive_int(table, "max_span_bytes", defaults.max_span_bytes),
+        max_spans=_positive_int(table, "max_spans", defaults.max_spans),
+    )
+
+
 @dataclass(frozen=True)
 class SweepSpec:
     configs: tuple[dict[str, Any], ...]
@@ -163,6 +203,11 @@ class SweepSpec:
     t_unit: str
     retain_traces_for: tuple[str, ...] | None = None
     duplicates_dropped: int = 0
+    #: The ``[capture]`` table, when the sweep file has one. It rides the spec but is
+    #: deliberately absent from ``to_dict()``: that dict is the sweep's identity in
+    #: ``manifest.environment["sweep"]``, and asking for a trace is not part of what makes two
+    #: sweeps the same sweep. The manifest records the request at ``environment["capture"]``.
+    capture: CaptureSpec | None = None
 
     @classmethod
     def build(
@@ -174,6 +219,7 @@ class SweepSpec:
         t_unit: str,
         axis_types: Mapping[str, AxisType] | None = None,
         retain_traces_for: Sequence[str] | None = None,
+        capture: CaptureSpec | None = None,
     ) -> SweepSpec:
         if isinstance(replicates, bool) or not isinstance(replicates, int) or replicates < 1:
             raise SamplerError(f"replicates must be an int >= 1, got {replicates!r}")
@@ -215,6 +261,7 @@ class SweepSpec:
             t_unit=t_unit,
             retain_traces_for=retain,
             duplicates_dropped=dropped,
+            capture=capture,
         )
 
     @classmethod
@@ -278,6 +325,7 @@ class SweepSpec:
             t_unit=data["t_unit"],
             axis_types=axis_types,
             retain_traces_for=retain,
+            capture=_capture_table(data.get("capture")),
         )
 
     def cells(self) -> list[str]:

@@ -12,6 +12,7 @@ M3 mints the four manifest fields no other module owns: ``run_id``, ``run_salt``
 from __future__ import annotations
 
 import hashlib
+import logging
 import multiprocessing
 import os
 import platform
@@ -25,16 +26,21 @@ from multiprocessing.connection import Connection
 from typing import Any
 
 from proofload import __version__
+from proofload.capture import CaptureSpec, CaptureStatus, Recorder, capture, install
 from proofload.diff import mde_two_proportion
 from proofload.episode import Episode
 from proofload.sampler import SweepSpec
 from proofload.store import EpisodeRecord, RunManifest, Store, StoreError
+from proofload.trace import OTEL_SEMCONV_VERSION, Trace, TraceValidationError, merge
 
 Rollout = Callable[[Mapping[str, Any], int], Episode]
+
+_LOG = logging.getLogger(__name__)
 
 _TIMEOUT_ERROR = "timeout"
 _POLL_STEP_S = 0.05
 _JOIN_GRACE_S = 5.0
+_PROBE_TIMEOUT_S = 60.0
 
 
 class ExecutorError(Exception):
@@ -182,6 +188,21 @@ def plan(
     )
 
 
+def _capture_line(spec: CaptureSpec | None) -> str | None:
+    """The one ``Capture:`` line of the pre-flight, or None when nothing was requested.
+
+    ADR-027 turns on only what the user named, so the pre-flight names it back to them before
+    the prompt. Building this line activates nothing.
+    """
+    if spec is None:
+        return None
+    named = ", ".join(spec.instrument) if spec.instrument else "none (OTel API only)"
+    return (
+        f"Capture: on · instrument: {named} · content: {'on' if spec.content else 'off'} · "
+        f"max {spec.max_spans} spans/episode"
+    )
+
+
 def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
     """Text block describing the run. Non-interactive; M10 prints it and asks."""
     spec = p.spec
@@ -194,6 +215,9 @@ def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
         f"Cost: {cost_estimate if cost_estimate is not None else '$0 (local)'}",
         f"MDE at N={spec.replicates} (worst case, rate 0.5): {mde:.4f}",
     ]
+    capture_line = _capture_line(spec.capture)
+    if capture_line is not None:
+        lines.append(capture_line)
     if p.resumed:
         lines.append(f"Resuming {p.run_id}: {p.already_stored} stored, {len(p.pairs)} to run")
     return "\n".join(lines) + "\n"
@@ -205,22 +229,96 @@ def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
 _Outcome = tuple[str, Any]
 
 
-def _classify(result: Any) -> _Outcome:
-    if isinstance(result, Episode):
-        return ("ok", result.to_dict())
-    return ("error", f"rollout returned {type(result).__name__}, expected Episode")
+def _episode_id(config_hash: str, replicate_index: int) -> str:
+    """The value stamped as ``proofload.episode``. One spelling, both backends."""
+    return f"{config_hash}:{replicate_index}"
 
 
-def _call_in_process(rollout: Rollout, config: dict[str, Any], seed: int) -> _Outcome:
+@dataclass(frozen=True)
+class _CaptureCall:
+    """What one episode needs to capture: the request and the two routing keys."""
+
+    spec: CaptureSpec
+    run_id: str
+    episode_id: str
+
+
+def _merge_capture(meta: dict[str, Any], captured: dict[str, Any]) -> None:
+    """Land the captured trace in ``meta["trace"]``, never at the cost of the episode.
+
+    Absent: attach. A valid ``proofload.trace/1`` dict: merge. A ``span_id`` collision: keep
+    the rollout's trace, drop the capture, warn once — rewriting span ids to dodge the
+    collision would violate M12's "``parent_id`` is never rewritten", and an errored row is
+    far worse than a missing trace. Anything else in ``meta["trace"]``: leave it exactly as
+    the rollout wrote it.
+    """
+    existing = meta.get("trace")
+    if existing is None:
+        meta["trace"] = captured
+        return
     try:
-        return _classify(rollout(config, seed))
+        own = Trace.from_dict(existing)
+    except TraceValidationError as exc:
+        _LOG.warning("capture: meta['trace'] is not a trace dict, keeping it as written: %s", exc)
+        return
+    try:
+        merged = merge(own, Trace.from_dict(captured))
+    except TraceValidationError as exc:
+        _LOG.warning("capture: keeping the rollout's own trace, dropping the capture: %s", exc)
+        return
+    meta["trace"] = merged.to_dict()
+
+
+def _classify(result: Any, recorder: Recorder | None = None) -> _Outcome:
+    if not isinstance(result, Episode):
+        return ("error", f"rollout returned {type(result).__name__}, expected Episode")
+    episode_dict = result.to_dict()
+    if recorder is not None:
+        try:
+            captured = recorder.to_meta()
+            if captured is not None:
+                _merge_capture(episode_dict["meta"], captured)
+        except Exception as exc:  # noqa: BLE001 - a capture never errors an ok episode
+            _LOG.warning("capture: dropping the capture for this episode: %r", exc)
+    return ("ok", episode_dict)
+
+
+def _call_in_process(
+    rollout: Rollout,
+    config: dict[str, Any],
+    seed: int,
+    capture_call: _CaptureCall | None = None,
+) -> _Outcome:
+    """The one funnel every execution path goes through.
+
+    Local-no-timeout calls this in the caller's process, local-with-timeout inside the forked
+    child, and both ``worker_batch`` branches the same two ways. Capture is installed here, so
+    on the forking paths it is installed in the child and never in the forking parent (C1),
+    and the trace is merged before the outcome tuple is built and therefore before anything
+    is pickled.
+    """
+    if capture_call is None:
+        try:
+            return _classify(rollout(config, seed))
+        except Exception:
+            return ("error", traceback.format_exc())
+    install(capture_call.spec)  # once per process; inert and memoized after the first call
+    try:
+        with capture(capture_call.run_id, capture_call.episode_id) as recorder:
+            return _classify(rollout(config, seed), recorder)
     except Exception:
         return ("error", traceback.format_exc())
 
 
-def _child_main(conn: Connection, rollout: Rollout, config: dict[str, Any], seed: int) -> None:
+def _child_main(
+    conn: Connection,
+    rollout: Rollout,
+    config: dict[str, Any],
+    seed: int,
+    capture_call: _CaptureCall | None = None,
+) -> None:
     try:
-        outcome = _call_in_process(rollout, config, seed)
+        outcome = _call_in_process(rollout, config, seed, capture_call)
     except BaseException:  # noqa: BLE001 - the child must always report
         outcome = ("error", traceback.format_exc())
     try:
@@ -229,11 +327,70 @@ def _child_main(conn: Connection, rollout: Rollout, config: dict[str, Any], seed
         conn.close()
 
 
+def _probe_main(conn: Connection, spec: CaptureSpec) -> None:
+    try:
+        status = install(spec)
+    except BaseException:  # noqa: BLE001 - the child must always report
+        status = CaptureStatus(
+            requested=True, active=False, reason=traceback.format_exc(), instrumented=()
+        )
+    try:
+        conn.send(status)
+    finally:
+        conn.close()
+
+
+def _capture_probe(spec: CaptureSpec) -> CaptureStatus:
+    """What ``install()`` will do in the episode children, measured by doing it in one.
+
+    A forking path must not install in the parent (C1), so the host cannot learn the status by
+    installing. It learns it by forking one throwaway child that installs exactly as every
+    episode child will, from the same inherited state. Reporting the request alone would leave
+    the manifest saying ``active=False`` for a run whose rows all carry traces.
+    """
+    ctx = _mp_context()
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    proc = ctx.Process(target=_probe_main, args=(child_conn, spec))
+    proc.start()
+    child_conn.close()
+    deadline = time.perf_counter() + _PROBE_TIMEOUT_S
+    reported: Any = None
+    try:
+        while reported is None:
+            if parent_conn.poll(_POLL_STEP_S):
+                reported = parent_conn.recv()
+            elif not proc.is_alive() or time.perf_counter() > deadline:
+                break
+    except EOFError:
+        reported = None
+    finally:
+        parent_conn.close()
+        if proc.is_alive():
+            proc.terminate()
+        proc.join(_JOIN_GRACE_S)
+        proc.close()
+    if isinstance(reported, CaptureStatus):
+        return reported
+    return CaptureStatus(
+        requested=True,
+        active=False,
+        reason="the capture probe child reported nothing",
+        instrumented=(),
+    )
+
+
 def _call_with_timeout(
-    rollout: Rollout, config: dict[str, Any], seed: int, timeout: float, ctx: Any
+    rollout: Rollout,
+    config: dict[str, Any],
+    seed: int,
+    timeout: float,
+    ctx: Any,
+    capture_call: _CaptureCall | None = None,
 ) -> _Outcome:
     parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_main, args=(child_conn, rollout, config, seed))
+    proc = ctx.Process(
+        target=_child_main, args=(child_conn, rollout, config, seed, capture_call)
+    )
     proc.start()
     child_conn.close()
     deadline = time.perf_counter() + timeout
@@ -297,6 +454,25 @@ def _environment(spec: SweepSpec) -> dict[str, Any]:
     }
 
 
+def _capture_record(spec: CaptureSpec, status: CaptureStatus) -> dict[str, Any]:
+    """``manifest.environment["capture"]``: the request and what became of it, once per run.
+
+    This is also where M12 §3's semconv pin lands in the run manifest, which until now was
+    owned by nobody. The ``[capture]`` table itself is deliberately not part of
+    ``SweepSpec.to_dict()``: a capture request is not what makes two sweeps the same sweep.
+    """
+    return {
+        "requested": status.requested,
+        "active": status.active,
+        "reason": status.reason,
+        "instrumented": list(status.instrumented),
+        "semconv": OTEL_SEMCONV_VERSION,
+        "content": spec.content,
+        "max_span_bytes": spec.max_span_bytes,
+        "max_spans": spec.max_spans,
+    }
+
+
 def _record(p: Plan, pair: Pair, index: int, outcome: _Outcome, wall_time: float) -> EpisodeRecord:
     kind, payload = outcome
     backend_meta = {"i": index}
@@ -353,14 +529,24 @@ def run_local(
     if p.resumed:
         if existing is None:
             raise ExecutorError(f"resumed run {p.run_id!r} is not in the store")
-    else:
-        if existing is not None:
-            raise ExecutorError(
-                f"run {p.run_id!r} already exists; plan with resume= to continue it"
-            )
+    elif existing is not None:
+        raise ExecutorError(f"run {p.run_id!r} already exists; plan with resume= to continue it")
+
+    # Capture, before the manifest is written and after the run is known to be startable. With
+    # a timeout every episode runs in a forked child, so the provider must be installed there:
+    # a provider set here would make the child's set_tracer_provider a refused no-op (C1).
+    ctx = _mp_context() if episode_timeout is not None else None
+    capture_spec = p.spec.capture
+    capture_status: CaptureStatus | None = None
+    if capture_spec is not None:
+        capture_status = _capture_probe(capture_spec) if ctx is not None else install(capture_spec)
+
+    if not p.resumed:
         environment = _environment(p.spec)
         if p.import_path is not None:
             environment["import_path"] = p.import_path
+        if capture_spec is not None and capture_status is not None:
+            environment["capture"] = _capture_record(capture_spec, capture_status)
         store.create_run(
             RunManifest(
                 run_id=p.run_id,
@@ -374,7 +560,6 @@ def run_local(
             )
         )
 
-    ctx = _mp_context() if episode_timeout is not None else None
     total = len(p.pairs)
     batch: list[EpisodeRecord] = []
     n_ok = n_errored = n_timeout = 0
@@ -390,12 +575,23 @@ def run_local(
     try:
         for index, pair in enumerate(p.pairs):
             config = dict(pair.config)
+            call = (
+                None
+                if capture_spec is None
+                else _CaptureCall(
+                    spec=capture_spec,
+                    run_id=p.run_id,
+                    episode_id=_episode_id(pair.config_hash, pair.replicate_index),
+                )
+            )
             t0 = time.perf_counter()
             if ctx is None:
-                outcome = _call_in_process(rollout, config, pair.seed)
+                outcome = _call_in_process(rollout, config, pair.seed, call)
             else:
                 assert episode_timeout is not None
-                outcome = _call_with_timeout(rollout, config, pair.seed, episode_timeout, ctx)
+                outcome = _call_with_timeout(
+                    rollout, config, pair.seed, episode_timeout, ctx, call
+                )
             wall_time = time.perf_counter() - t0
             batch.append(_record(p, pair, index, outcome, wall_time))
             executed += 1
