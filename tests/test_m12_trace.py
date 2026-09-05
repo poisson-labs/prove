@@ -104,6 +104,10 @@ OTEL_KIND_MAP_SPEC = {
     "create_agent": "agent",
     "invoke_workflow": "agent",
     "plan": "agent",
+    # Added 2026-09-04 after the kind-ratio spike: both are emitted by
+    # opentelemetry-util-genai 1.1b0 and were landing in "other".
+    "fetch_response": "llm",
+    "execute_task": "agent",
 }
 CLOCK_ATTRS = ("time_ns", "perf_counter_ns")
 
