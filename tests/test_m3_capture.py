@@ -64,7 +64,7 @@ import sys
 import time
 import traceback
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, ExitStack
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -552,6 +552,23 @@ def child_capture_spans(
         "stream_untouched": stream_untouched,
         "logs": sink.records,
     }
+
+
+def child_nested_capture(spec_kwargs: dict[str, Any], depth: int) -> dict[str, Any]:
+    """One capture block holding a chain of ``depth`` nested spans, ``depth-0`` outermost.
+    Each start waits for the wall clock to tick, so start times are strictly increasing."""
+    from proofload.capture import CaptureSpec, capture, install
+
+    status = install(CaptureSpec(**spec_kwargs))
+    tracer = _tracer()
+    with capture(RUN_ID, "cfg-7:1") as recorder:
+        with ExitStack() as stack:
+            for i in range(depth):
+                tick = time.time_ns()
+                while time.time_ns() == tick:
+                    pass
+                stack.enter_context(tracer.start_as_current_span(f"depth-{i}"))
+    return {"status": status_dict(status), "meta": recorder.to_meta()}
 
 
 def child_sequential_captures() -> dict[str, Any]:
@@ -1147,6 +1164,18 @@ def test_c10_spans_beyond_max_spans_are_dropped_and_counted() -> None:
     trace = Trace.from_dict(r["meta"])
     assert len(trace.spans) == 3 and trace.dropped == 2, r["meta"]
     assert names(r["meta"]) == ["s0", "s1", "s2"]
+
+
+def test_c10_max_spans_keeps_the_earliest_started_spans_and_drops_the_deepest() -> None:
+    """Spans end innermost-first, so a cap applied as spans end keeps the leaves and loses the
+    root. C10 (amended 2026-09-05) caps in start order: the root and its first descendants
+    survive, the deepest spans are the ones dropped."""
+    r = isolated(child_nested_capture, {"max_spans": 3}, 5)
+    trace = Trace.from_dict(r["meta"])
+    assert len(trace.spans) == 3 and trace.dropped == 2, r["meta"]
+    assert names(r["meta"]) == ["depth-0", "depth-1", "depth-2"]
+    assert [s.name for s in trace.roots()] == ["depth-0"]
+    assert trace.children(trace.roots()[0].span_id)[0].name == "depth-1"
 
 
 # ---------- C11: two episodes in one process stay apart ----------
