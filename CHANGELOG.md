@@ -25,3 +25,4 @@ M4: Store.read(meta=False) and Store.read(keys=) project and filter at the Parqu
 M3: a timed-out episode keeps its trace — the child drains a snapshot of its closed and open spans on SIGTERM, proofload.trace/1 gains truncated, errored rows carry meta, retention never strips an errored row, and inspect selects by error as well as outcome.
 Fix: the drain pipe is created beside the outcome pipe on every timed call, capture or not, and a Modal errored result whose meta is not a mapping is refused like an invalid episode instead of being stored without it.
 M3: a crashed episode keeps its trace — the error payload takes the dict form on both backends, complete up to the raise with the failing span marked, truncated None.
+Pilot: golden-suite agent under examples/golden_pilot — HumanEval at 32 seeds through the full loop, chat completions only, own-span paths scrubbed; the first real integration's span count, dropped and other share recorded.

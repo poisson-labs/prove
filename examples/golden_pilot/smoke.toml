@@ -1,0 +1,42 @@
+# Written by examples/golden_pilot/make_toml.py from suite.load(); regenerate rather than
+# edit the task_id axis by hand, so the sweep and the suite cannot drift apart.
+target_id = "golden-pilot/gpt-4o-mini@v0"
+t_unit = "tool_calls"
+replicates = 2
+
+[axes.task_id]
+type = "categorical"
+values = [
+  "HumanEval/0",
+  "HumanEval/1",
+  "HumanEval/2",
+  "HumanEval/3",
+  "HumanEval/4",
+]
+
+[axes.temperature]
+type = "continuous"
+values = [0.0, 0.7]
+
+[capture]
+instrument = ["openai"]
+content = false
+
+[modal]
+concurrency = 16
+batch_size = 64
+episode_timeout = 120.0
+infra_retries = 2
+# Filled from the smoke, before the sized run and never after (spec section 3).
+#
+# max_cost guards MODAL COMPUTE ONLY: estimate_cost is jobs x est_seconds_per_episode x the
+# container rate, and it knows nothing about tokens. The $50 cap is model spend plus compute
+# and nothing enforces it -- it is arithmetic you do from the smoke before you launch. If
+# three arms do not fit, drop replicates to 16 for all three before cutting task_id, because
+# 32 seeds per case is the finding.
+# est_seconds_per_episode = <seconds per episode, measured by the smoke>
+# max_cost = <USD of Modal compute you will not exceed; the sweep refuses above it>
+
+[modal.image]
+dockerfile = "examples/golden_pilot/Dockerfile"
+local_packages = ["golden_pilot"]

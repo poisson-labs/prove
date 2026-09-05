@@ -1,0 +1,15 @@
+# The pilot's contract. examples/golden_pilot is not a package extra and is not in the wheel.
+#
+# openai is pinned below 2 deliberately: opentelemetry-instrumentation-openai-v2 hard-imports
+# httpx, and openai 2.x ships httpx2, so the instrumentation cannot even import against a
+# current openai. Verified 2026-09-04 and again 2026-09-05.
+openai<2
+
+# The one instrumentor the pilot names, pinned exactly: it wraps chat.completions.create and
+# embeddings.create only, and client.responses.create emits zero spans. Re-test that gap on
+# every bump -- it is the kind that closes without an announcement (spec section 0, gap 1).
+opentelemetry-instrumentation-openai-v2==2.4b0
+
+# Proofload itself, with the extra that carries opentelemetry-sdk. Install it from this
+# checkout (`pip install -e .[agent]`); the Modal image ships the source instead.
+proofload[agent]
