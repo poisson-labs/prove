@@ -8,6 +8,11 @@ tiny CPU rollout, so container time stays well under a minute once the image is 
 The rollout is the ``proofload_live_rollout`` fixture package next to this file; pytest puts
 this directory on ``sys.path`` (no ``__init__.py`` here), so the package is importable locally
 and shippable through ``ImageSpec.local_packages``.
+
+L15 (the S19 modal launch amendment) lives here too, behind a third gate:
+``PROOFLOAD_MODAL_LIVE_SECRET=1``, set by whoever created the Modal secret
+``proofload-live-test`` with ``PROOFLOAD_LIVE_SECRET=present``. No session creates that
+secret. The rollout is ``rollout_secret`` in the same fixture package.
 """
 
 import os
@@ -23,6 +28,9 @@ from proofload.store import Store
 LIVE = os.environ.get("PROOFLOAD_MODAL_LIVE") == "1"
 HAS_CREDENTIALS = bool(os.environ.get("MODAL_TOKEN_ID")) or (Path.home() / ".modal.toml").is_file()
 SALT = "live-parity-salt"
+LIVE_SECRET = os.environ.get("PROOFLOAD_MODAL_LIVE_SECRET") == "1"
+SECRET_NAME = "proofload-live-test"
+SECRET_SALT = "live-secret-salt"
 
 pytestmark = [
     pytest.mark.skipif(not LIVE, reason="set PROOFLOAD_MODAL_LIVE=1 to run the live Modal test"),
@@ -79,3 +87,57 @@ def test_i19_run_modal_matches_run_local_under_shared_salt(tmp_path: Path) -> No
     assert manifest.backend == "modal"
     assert manifest.run_salt == SALT
     assert manifest.status == "complete"
+
+
+# ---------- L15: live mount (opt-in, third gate) ----------
+
+
+def _l15_gate() -> str | None:
+    """The first unmet gate, in order, so the skip reason names what to set next."""
+    if not LIVE:
+        return "set PROOFLOAD_MODAL_LIVE=1 to run the live Modal test"
+    if not HAS_CREDENTIALS:
+        return "no Modal credentials (MODAL_TOKEN_ID or ~/.modal.toml)"
+    if not LIVE_SECRET:
+        return (
+            f"set PROOFLOAD_MODAL_LIVE_SECRET=1 once the Modal secret {SECRET_NAME} exists "
+            "(created by hand with PROOFLOAD_LIVE_SECRET=present)"
+        )
+    return None
+
+
+L15_SKIP = _l15_gate()
+
+
+@pytest.mark.skipif(L15_SKIP is not None, reason=L15_SKIP or "")
+def test_l15_named_secret_is_mounted_on_the_function(tmp_path: Path) -> None:
+    pytest.importorskip("modal")
+    from proofload.executor_modal import ImageSpec, ModalOptions, ModalTarget, run_modal
+
+    spec = SweepSpec.build([{"x": 0.1}], replicates=2, target_id="live@test", t_unit="steps")
+    assert spec.total_rollouts() == 2
+
+    store = Store(tmp_path / "modal")
+    p = plan(spec, store, run_salt=SECRET_SALT, backend="modal")
+    image = ImageSpec(
+        python="3.11",
+        pip=("numpy", "pandas", "scipy", "pyarrow"),
+        local_packages=("proofload_live_rollout",),
+    )
+    target = ModalTarget(import_path="proofload_live_rollout:rollout_secret", image=image)
+    options = ModalOptions(
+        concurrency=2,
+        batch_size=2,
+        episode_timeout=None,
+        app_name="proofload-live-test",
+        secrets=(SECRET_NAME,),
+    )
+    t0 = time.perf_counter()
+    summary = run_modal(p, target, store, options=options)
+    print(f"run_modal wall time: {time.perf_counter() - t0:.1f}s")
+
+    assert summary.complete is True
+    df = store.read(p.run_id)
+    assert len(df) == 2
+    assert df["outcome"].tolist() == ["present", "present"]
+    assert store.manifest(p.run_id).environment["secrets"] == [SECRET_NAME]
