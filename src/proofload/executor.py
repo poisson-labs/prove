@@ -16,6 +16,7 @@ import logging
 import multiprocessing
 import os
 import platform
+import signal
 import sys
 import time
 import traceback
@@ -23,9 +24,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from multiprocessing.connection import Connection
+from types import FrameType
 from typing import Any
 
 from proofload import __version__
+from proofload import capture as capture_module
 from proofload.capture import CaptureSpec, CaptureStatus, Recorder, capture, install
 from proofload.diff import mde_two_proportion
 from proofload.episode import Episode
@@ -40,6 +43,8 @@ _LOG = logging.getLogger(__name__)
 _TIMEOUT_ERROR = "timeout"
 _POLL_STEP_S = 0.05
 _JOIN_GRACE_S = 5.0
+#: How long the parent waits, after SIGTERM, for the child's handler to drain its snapshot.
+_DRAIN_GRACE_S = 2.0
 _PROBE_TIMEOUT_S = 60.0
 
 
@@ -225,7 +230,8 @@ def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
 
 # ---------- per-episode execution ----------
 
-# Outcome of one rollout call: ("ok", episode_dict) | ("error", text) | ("timeout", None)
+# Outcome of one rollout call: ("ok", episode_dict) | ("error", text) | ("timeout", payload),
+# where the timeout payload is the trace dict the terminated child drained, or None.
 _Outcome = tuple[str, Any]
 
 
@@ -310,13 +316,43 @@ def _call_in_process(
         return ("error", traceback.format_exc())
 
 
+def _arm_drain(drain: Connection) -> None:
+    """Install the child's SIGTERM handler: snapshot, send on the drain pipe, ``os._exit``.
+
+    Only a child with a capture call gets one (C3: a run that did not ask keeps the default
+    disposition, and this is the only place the child's signal state is touched). The handler
+    runs between two bytecodes of whatever the rollout was doing, so it never returns into it
+    -- no ``finally`` blocks, no ``atexit``; the rollout is the thing that hung -- and never
+    raises: whatever fails inside it, the parent sees the pipe close and records
+    ``("timeout", None)``, exactly as before ADR-028.
+    """
+
+    def handler(signum: int, frame: FrameType | None) -> None:
+        payload: Any = None
+        try:
+            payload = capture_module._snapshot(_TIMEOUT_ERROR)
+        except BaseException:  # noqa: BLE001 - the drain is best effort
+            payload = None
+        try:
+            drain.send((_TIMEOUT_ERROR, payload))
+        except BaseException:  # noqa: BLE001 - nothing arriving is today's outcome
+            pass
+        finally:
+            os._exit(1)
+
+    signal.signal(signal.SIGTERM, handler)
+
+
 def _child_main(
     conn: Connection,
     rollout: Rollout,
     config: dict[str, Any],
     seed: int,
     capture_call: _CaptureCall | None = None,
+    drain: Connection | None = None,
 ) -> None:
+    if capture_call is not None and drain is not None:
+        _arm_drain(drain)
     try:
         outcome = _call_in_process(rollout, config, seed, capture_call)
     except BaseException:  # noqa: BLE001 - the child must always report
@@ -379,6 +415,22 @@ def _capture_probe(spec: CaptureSpec) -> CaptureStatus:
     )
 
 
+def _drain(conn: Connection) -> dict[str, Any] | None:
+    """The trace the terminated child sent on the drain pipe inside ``_DRAIN_GRACE_S``, or None.
+
+    ``poll`` returns on data or on EOF -- the handler's ``os._exit`` closes the child's end --
+    so only a child that ignores the signal, or hangs inside its own snapshot, costs the grace;
+    both then end at the parent's ``kill()`` as today.
+    """
+    try:
+        if not conn.poll(_DRAIN_GRACE_S):
+            return None
+        kind, payload = conn.recv()
+    except Exception:  # noqa: BLE001 - EOF or a half-written pickle: no trace, as today
+        return None
+    return payload if kind == _TIMEOUT_ERROR and isinstance(payload, dict) else None
+
+
 def _call_with_timeout(
     rollout: Rollout,
     config: dict[str, Any],
@@ -388,11 +440,21 @@ def _call_with_timeout(
     capture_call: _CaptureCall | None = None,
 ) -> _Outcome:
     parent_conn, child_conn = ctx.Pipe(duplex=False)
+    # The drain: a second pipe, because the outcome pipe may be mid-send when SIGTERM lands and
+    # two writers on one pipe interleave. Only a child with a capture call installs the handler
+    # that writes to it, so only that child gets one: a run that did not ask keeps S15's path.
+    drain_parent: Connection | None = None
+    drain_child: Connection | None = None
+    if capture_call is not None:
+        drain_parent, drain_child = ctx.Pipe(duplex=False)
     proc = ctx.Process(
-        target=_child_main, args=(child_conn, rollout, config, seed, capture_call)
+        target=_child_main,
+        args=(child_conn, rollout, config, seed, capture_call, drain_child),
     )
     proc.start()
     child_conn.close()
+    if drain_child is not None:
+        drain_child.close()  # or poll() never sees EOF and the grace is always paid in full
     deadline = time.perf_counter() + timeout
     outcome: _Outcome | None = None
     try:
@@ -414,12 +476,19 @@ def _call_with_timeout(
         parent_conn.close()
         if proc.is_alive():
             proc.terminate()
+            timed_out = outcome is not None and outcome[0] == _TIMEOUT_ERROR
+            if drain_parent is not None and timed_out:
+                # SIGTERM is in flight: the child's handler snapshots, sends and exits, so the
+                # join right after is immediate. Nothing inside the grace is today's outcome.
+                outcome = (_TIMEOUT_ERROR, _drain(drain_parent))
             proc.join(_JOIN_GRACE_S)
             if proc.is_alive():
                 proc.kill()
                 proc.join()
         else:
             proc.join(_JOIN_GRACE_S)
+        if drain_parent is not None:
+            drain_parent.close()
         proc.close()
     return outcome
 
@@ -487,6 +556,9 @@ def _record(p: Plan, pair: Pair, index: int, outcome: _Outcome, wall_time: float
             backend_meta=backend_meta,
         )
     error = _TIMEOUT_ERROR if kind == _TIMEOUT_ERROR else str(payload)
+    # A terminated child that drained its snapshot: the payload is the trace dict, and it
+    # rides the errored row's meta exactly where an ok row's trace rides.
+    meta = {"trace": payload} if kind == _TIMEOUT_ERROR and isinstance(payload, dict) else None
     return EpisodeRecord.errored(
         run_id=p.run_id,
         config=pair.config,
@@ -495,6 +567,7 @@ def _record(p: Plan, pair: Pair, index: int, outcome: _Outcome, wall_time: float
         error=error,
         wall_time=wall_time,
         backend_meta=backend_meta,
+        meta=meta,
     )
 
 

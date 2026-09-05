@@ -203,7 +203,9 @@ Job = tuple[dict[str, Any], int, int, str, int]
 """``(config, seed, i, config_hash, replicate_index)``; ``i`` is the position in ``p.pairs``."""
 
 Result = dict[str, Any] | str
-"""``episode.to_dict()`` merged with ``wall_time`` and ``backend_meta``, or an error string."""
+"""``episode.to_dict()`` merged with ``wall_time`` and ``backend_meta``, an error string, or --
+for a timed-out job whose child drained its trace -- ``{"error": "timeout", "meta": {...}}``,
+exactly those two keys."""
 
 Mapper = Callable[[Sequence[Sequence[Job]]], Iterator[tuple[int, list[Result] | BaseException]]]
 """Given batches, yields ``(batch_index, results-or-exception)`` in completion order. An
@@ -261,7 +263,9 @@ def worker_batch(
     ``import_path`` is resolved once per call; the rollout is called once per job with a fresh
     ``dict(config)``. One ``Result`` per job, in job order: the episode dict, the traceback text
     of a raising rollout, ``"rollout returned <type>, expected Episode"``, or ``"timeout"``
-    (a fork-and-join per episode, the local backend's mechanics). Anything that fails outside
+    (a fork-and-join per episode, the local backend's mechanics) -- as
+    ``{"error": "timeout", "meta": {"trace": ...}}`` when the terminated child drained the
+    snapshot of its spans, which only a child with capture does. Anything that fails outside
     a single episode (a resolve failure, a bad timeout) raises, so the whole batch is an infra
     failure rather than N identical episode errors.
 
@@ -309,7 +313,13 @@ def worker_batch(
                 result["backend_meta"]["capture"] = _capture_status(status)
             results.append(result)
         elif kind == _TIMEOUT_ERROR:
-            results.append(_TIMEOUT_ERROR)
+            # The dict form, exactly two keys, only when the terminated child drained a trace;
+            # the bare string otherwise, as the frozen I3 test sees it without capture.
+            results.append(
+                {"error": _TIMEOUT_ERROR, "meta": {"trace": payload}}
+                if isinstance(payload, dict)
+                else _TIMEOUT_ERROR
+            )
         else:
             results.append(str(payload))
     return results
@@ -378,16 +388,27 @@ def _open_run(
 
 
 def _record(p: Plan, job: Job, result: Result, attempt: int) -> EpisodeRecord:
+    """A string is an error without meta, a dict with ``"error"`` is one with it, and any
+    other dict is an episode."""
     config, seed, i, _config_hash, replicate_index = job
-    if isinstance(result, str):
+    if isinstance(result, str) or "error" in result:
+        meta: Mapping[str, Any] | None = None
+        if isinstance(result, str):
+            error = result
+        else:
+            error = str(result["error"])
+            carried = result.get("meta")
+            if isinstance(carried, Mapping):
+                meta = carried
         return EpisodeRecord.errored(
             run_id=p.run_id,
             config=config,
             seed=seed,
             replicate_index=replicate_index,
-            error=result,
+            error=error,
             wall_time=0.0,
             backend_meta={"i": i, "attempt": attempt},
+            meta=meta,
         )
     backend_meta = dict(result.get("backend_meta") or {})
     backend_meta.setdefault("i", i)

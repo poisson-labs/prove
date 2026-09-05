@@ -269,7 +269,10 @@ class EpisodeRecord:
         error: str,
         wall_time: float,
         backend_meta: Mapping[str, Any] | None = None,
+        meta: Mapping[str, Any] | None = None,
     ) -> EpisodeRecord:
+        """An errored row. ``meta`` carries what such a row can still say -- the truncated
+        trace of an episode the executor terminated -- and is empty when nothing was kept."""
         return cls(
             run_id=run_id,
             config_hash=config_hash(config),
@@ -280,7 +283,7 @@ class EpisodeRecord:
             t=None,
             horizon=None,
             confidence=None,
-            meta={},
+            meta={} if meta is None else dict(meta),
             error=error,
             wall_time=wall_time,
             backend_meta={} if backend_meta is None else dict(backend_meta),
@@ -364,7 +367,9 @@ class Store:
                 raise DuplicateEpisode(f"duplicate (config_hash, replicate_index) in batch: {key}")
             seen.add(key)
             meta = dict(r.meta)
-            if retain is not None and r.outcome not in retain:
+            # Retention is a policy over outcomes and an errored row has none: its trace -- the
+            # snapshot of the episode that hung -- is kept whatever ``retain_traces_for`` says.
+            if retain is not None and r.error is None and r.outcome not in retain:
                 meta.pop(_TRACE_KEY, None)
             rows.append(
                 {

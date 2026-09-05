@@ -22,3 +22,4 @@ M12: kind ladder extended — fetch_response and execute_task mapped; openinfere
 M3: in-process trace capture — the executor activates the instrumentors named in the sweep file, stamps every span with its episode, and carries the trace into Episode.meta.
 Fix: max_spans keeps the earliest-started spans and drops the deepest, so a capped trace keeps its root.
 M4: Store.read(meta=False) and Store.read(keys=) project and filter at the Parquet reader and Store.count reads the footers; diff, report, check and runs never decode meta, and inspect decodes only the rows it prints.
+M3: a timed-out episode keeps its trace — the child drains a snapshot of its closed and open spans on SIGTERM, proofload.trace/1 gains truncated, errored rows carry meta, retention never strips an errored row, and inspect selects by error as well as outcome.

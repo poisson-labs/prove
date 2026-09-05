@@ -152,7 +152,14 @@ _SPAN_FIELDS: tuple[str, ...] = (
     "attrs",
 )
 _SPAN_KEYS = frozenset(_SPAN_FIELDS)
-_TRACE_FIELDS: tuple[str, ...] = ("schema", "source", "source_version", "dropped", "spans")
+_TRACE_FIELDS: tuple[str, ...] = (
+    "schema",
+    "source",
+    "source_version",
+    "dropped",
+    "spans",
+    "truncated",
+)
 _TRACE_KEYS = frozenset(_TRACE_FIELDS)
 _CODE_KEYS = frozenset({"filepath", "function", "lineno"})
 
@@ -338,6 +345,12 @@ class Trace:
     source: str
     source_version: str | None = None
     dropped: int = 0
+    #: ADR-028: why the forest stops where it does. ``"timeout"`` on the snapshot the executor
+    #: drains from an episode it terminated; None on every trace a converter or the recorder
+    #: builds. A trace-level fact, not a span-level one: a snapshot with no open span is
+    #: otherwise indistinguishable from a complete trace, and a trace is meant to be readable
+    #: without its row.
+    truncated: str | None = None
 
     __hash__ = None  # type: ignore[assignment]
 
@@ -358,6 +371,10 @@ class Trace:
             raise TraceValidationError("source_version must be a str or None")
         if not _is_int(self.dropped) or self.dropped < 0:
             raise TraceValidationError(f"dropped must be a non-negative int, got {self.dropped!r}")
+        if self.truncated is not None and not isinstance(self.truncated, str):
+            raise TraceValidationError(
+                f"truncated must be a str or None, got {type(self.truncated).__name__}"
+            )
         by_id: dict[str, Span] = {}
         for span in spans:
             if span.span_id in by_id:
@@ -399,6 +416,7 @@ class Trace:
             "source_version": self.source_version,
             "dropped": self.dropped,
             "spans": [span.to_dict() for span in self.spans],
+            "truncated": self.truncated,
         }
 
     @classmethod
@@ -417,6 +435,7 @@ class Trace:
             source=checked["source"],
             source_version=checked["source_version"],
             dropped=checked["dropped"],
+            truncated=checked["truncated"],
         )
 
 
@@ -438,7 +457,16 @@ def merge(*traces: Trace) -> Trace:
     # because a trace that does not record its vocabulary is uninterpretable later.
     versions = {trace.source_version for trace in traces if trace.source_version is not None}
     version = versions.pop() if len(versions) == 1 else None
-    return Trace(spans=tuple(spans), source="mixed", source_version=version, dropped=dropped)
+    # A cut anywhere is a cut of the whole: the first reason among the inputs, in argument
+    # order, and never one the inputs did not carry.
+    truncated = next((trace.truncated for trace in traces if trace.truncated is not None), None)
+    return Trace(
+        spans=tuple(spans),
+        source="mixed",
+        source_version=version,
+        dropped=dropped,
+        truncated=truncated,
+    )
 
 
 # ---------- recording (tier 3 -- the floor, not the path) ----------

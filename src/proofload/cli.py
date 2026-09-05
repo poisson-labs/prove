@@ -68,7 +68,7 @@ from proofload.report import (
 from proofload.sampler import SamplerError, SweepSpec
 from proofload.store import RunManifest, Store, StoreError
 from proofload.survival import SurvivalError, cell_table, competing_set
-from proofload.trace import Span, Trace, TraceValidationError
+from proofload.trace import Trace, TraceValidationError
 
 __all__ = ["main"]
 
@@ -824,8 +824,8 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
 # ---------- inspect / runs ----------
 
 
-def _trace_spans(meta: Any) -> tuple[Span, ...] | None:
-    """The stored trace's spans in ``ordered()`` order, or None when there is no readable one.
+def _stored_trace(meta: Any) -> Trace | None:
+    """The row's stored trace, or None when there is no readable one.
 
     The schema check *is* ``from_dict``: a trace it rejects is an absent trace, printed the
     same way -- no trace block and no error.
@@ -836,7 +836,7 @@ def _trace_spans(meta: Any) -> tuple[Span, ...] | None:
     if not isinstance(trace, Mapping):
         return None
     try:
-        return Trace.from_dict(trace).ordered()
+        return Trace.from_dict(trace)
     except (TraceValidationError, TypeError):
         return None
 
@@ -847,14 +847,24 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
     # Select on the narrow frame; decode ``meta`` only for the rows that survive selection.
     df = store.read(ns.run, meta=False)
     where = _parse_pairs(ns.where, "--where")
-    rows = df[df["outcome"] == ns.event]
+    # An event is an outcome or an error. "timeout" is the executor's error and may also be a
+    # target's outcome (the mock agent's); both kinds print under one --event, told apart by
+    # the block's shape.
+    rows = df[(df["outcome"] == ns.event) | (df["error"] == ns.event)]
     for key, value in where.items():
-        rows = rows[[isinstance(cfg, Mapping) and cfg.get(key) == value for cfg in rows["config"]]]
+        # Labels, not a boolean list: ``rows[[]]`` on an empty selection is a column selection,
+        # and the sort below then raises on the columns it no longer has.
+        keep = [
+            label
+            for label, cfg in zip(rows.index, rows["config"], strict=True)
+            if isinstance(cfg, Mapping) and cfg.get(key) == value
+        ]
+        rows = rows.loc[keep]
     rows = rows.sort_values(["config_hash", "replicate_index"], kind="stable")
     if ns.limit is not None:
         rows = rows.head(max(ns.limit, 0))
     if rows.empty:
-        io.out.write(f"no rows with outcome {ns.event!r} in run {ns.run}\n")
+        io.out.write(f"no rows with outcome or error {ns.event!r} in run {ns.run}\n")
         return 0
     selected = [
         (str(h), int(i))
@@ -870,10 +880,20 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
         io.out.write(f"config: {json.dumps(row.config, sort_keys=True)}\n")
         io.out.write(f"seed: {row.seed}\n")
         io.out.write(f"replicate_index: {row.replicate_index}\n")
-        io.out.write(f"t: {row.t}\n")
-        spans = _trace_spans(row.meta)
-        if spans:
-            for j, span in enumerate(spans):
+        if isinstance(row.error, str):
+            # The errored row: no outcome and no time, its error where the ok row's t: line
+            # stands. The ok row keeps the shape M10's I15/I16 pin.
+            io.out.write("outcome: -\n")
+            io.out.write("t: -\n")
+            io.out.write(f"error: {row.error}\n")
+        else:
+            io.out.write(f"t: {row.t}\n")
+        trace = _stored_trace(row.meta)
+        if trace is not None:
+            if trace.truncated is not None:
+                # Begins with a letter, so it can never read as a span line.
+                io.out.write(f"trace: truncated ({trace.truncated})\n")
+            for j, span in enumerate(trace.ordered()):
                 duration = span.duration_ms
                 # Tab-delimited: a span name and an error message are free text and OTel
                 # spells names like "invoke_agent planner", so a space cannot be the column

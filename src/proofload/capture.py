@@ -28,6 +28,12 @@ ADR-027: only instrumentors the user named are activated, resolved through the
 ``opentelemetry_instrumentor`` entry-point group. No auto-discovery, no import hook, no wrapper
 of our own. An unknown name, a missing SDK or an instrumentor that raises all yield
 ``CaptureStatus(active=False, reason=...)`` and the run proceeds.
+
+The timed-out episode (ADR-028): the collector also remembers the live spans of each open
+episode from ``on_start`` to ``on_end``, and the private ``_snapshot(reason)`` hands the
+executor's ``SIGTERM`` handler the episode as it stands -- every closed span, then every open
+one with no end -- as a trace marked ``truncated=reason``. Every lock on that path is
+re-entrant, because the handler runs inside whatever the rollout's thread was doing.
 """
 
 from __future__ import annotations
@@ -47,7 +53,8 @@ from typing import TYPE_CHECKING, Any
 from proofload.trace import Trace, from_otel
 
 if TYPE_CHECKING:  # imports for typing only; the runtime import lives in install()
-    from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
+    from opentelemetry.context import Context
+    from opentelemetry.sdk.trace import ReadableSpan, Span, TracerProvider
 
 __all__ = ["CaptureSpec", "CaptureStatus", "Recorder", "capture", "install"]
 
@@ -71,6 +78,9 @@ _TRUNCATION_MARKER = "<proofload: {n} bytes over max_span_bytes, value dropped>"
 
 # ---------- process state: one provider, one collector, one status ----------
 
+#: Guards ``install()`` alone and is never taken on the snapshot path, so it can stay plain.
+#: The locks the executor's SIGTERM handler can meet are the collector's and the recorder's,
+#: and those are re-entrant.
 _LOCK = threading.Lock()
 _STATUS: CaptureStatus | None = None
 _BUCKET: _Bucket | None = None
@@ -104,20 +114,29 @@ class Recorder:
 
     Spans arrive already converted to the flat mapping ``from_otel`` reads, on the thread that
     ended them, so no ``ReadableSpan`` is held past ``on_end`` and nothing that crosses a pipe
-    is anything but JSON-native.
+    is anything but JSON-native. The live ``Span`` objects still open are held too, keyed by
+    span id, so ``_snapshot`` can read them as they stand when the executor terminates the
+    episode.
     """
 
     def __init__(self, spec: CaptureSpec, run_id: str, episode_id: str) -> None:
         self._spec = spec
         self._run_id = run_id
         self._episode_id = episode_id
-        self._lock = threading.Lock()
+        # Re-entrant, not plain: the executor's SIGTERM handler snapshots from inside whatever
+        # the rollout's thread was doing, which may be this recorder's own ``_take``.
+        self._lock = threading.RLock()
         # A bounded max-heap on start time, at most ``max_spans`` entries, keyed so the
         # latest-started span sits on top and is the one evicted when an earlier one arrives.
         self._kept: list[tuple[int, int, dict[str, Any]]] = []
         self._seq = 0
         self._dropped = 0
         self._warned = False
+        # The episode's open spans, the live SDK objects, keyed by span id. ``on_end`` hands
+        # the collector a fresh ``ReadableSpan``, never the object ``on_start`` saw, so
+        # identity cannot key this: an ``id(span)`` registry never shrinks, and every closed
+        # span then reaches ``from_otel`` twice.
+        self._live: dict[int, Span] = {}
 
     def to_meta(self) -> dict[str, Any] | None:
         """``Trace.to_dict()`` for the episode just closed, or None if nothing was captured.
@@ -125,34 +144,74 @@ class Recorder:
         None is rule zero: a capture with zero spans and zero drops must leave ``meta``
         untouched, so switching capture on cannot disturb a rollout that records its own trace.
         """
+        return self._trace([], None)
+
+    def _snapshot(self, reason: str) -> dict[str, Any] | None:
+        """The episode as it stands: every closed span, then every open one, cut with ``reason``.
+
+        The executor's drain, run from its SIGTERM handler: each open span is read in one pass
+        (see ``_span_mapping``) and no lock but the re-entrant one is taken. Open spans are
+        exempt from ``max_spans`` -- the one open at the kill is usually the latest-started,
+        which the cap would drop first, and it is the span the user wants -- so they are
+        appended after the capped closed spans. An open span that cannot be read is dropped
+        and counted, never raised. Rule zero still holds: nothing captured, no trace.
+        """
+        with self._lock:
+            live = list(self._live.values())
+        open_spans: list[dict[str, Any]] = []
+        unreadable = 0
+        for span in live:
+            try:
+                open_spans.append(_span_mapping(span, content=self._spec.content, live=True))
+            except Exception:  # noqa: BLE001 - one unreadable span never loses the snapshot
+                unreadable += 1
+        return self._trace(open_spans, reason, unreadable)
+
+    def _trace(
+        self, open_spans: list[dict[str, Any]], truncated: str | None, unreadable: int = 0
+    ) -> dict[str, Any] | None:
         with self._lock:
             spans = [m for _, _, m in sorted(self._kept, key=lambda e: (-e[0], -e[1]))]
-            dropped = self._dropped
+            dropped = self._dropped + unreadable
+        spans.extend(open_spans)  # after the cap, never inside it
         if not spans and not dropped:
             return None
         trace = from_otel(spans)
         if self._spec.content:
             trace = _apply_budget(trace, self._spec.max_span_bytes)
-        if dropped:
-            trace = Trace(
-                spans=trace.spans,
-                source=trace.source,
-                source_version=trace.source_version,
-                dropped=trace.dropped + dropped,
-            )
+        if dropped or truncated is not None:
+            trace = replace(trace, dropped=trace.dropped + dropped, truncated=truncated)
         return trace.to_dict()
+
+    def _track(self, span: Span) -> None:
+        """One started span, from the collector: open until ``_take`` sees it end."""
+        context = span.get_span_context()
+        if context is None:
+            return
+        with self._lock:
+            self._live[context.span_id] = span
+
+    def _forget(self, span_id: int | None) -> None:
+        if span_id is not None:
+            self._live.pop(span_id, None)
 
     def _take(self, span: ReadableSpan) -> None:
         """One ended span, from the collector. Never raises: this runs inside ``on_end``."""
+        context = span.get_span_context()
+        span_id = None if context is None else context.span_id
         try:
             mapping = _span_mapping(span, content=self._spec.content)
         except Exception:  # noqa: BLE001 - one unconvertible span is never fatal
             _LOG.warning("capture: dropping a span that could not be read")
             with self._lock:
+                self._forget(span_id)
                 self._dropped += 1
             return
         start = mapping.get("startTimeUnixNano")
         with self._lock:
+            # One lock hold moves the span from open to closed, so a snapshot taken under the
+            # same lock sees it in exactly one of the two.
+            self._forget(span_id)
             self._seq += 1
             entry = (-(start if isinstance(start, int) else 0), -self._seq, mapping)
             if len(self._kept) < self._spec.max_spans:
@@ -181,13 +240,15 @@ class _Bucket:
     back off the span at ``on_end`` — not by a second ``ContextVar``. That is thread-safe
     without a context, reuses exactly what M12 shipped, and makes a fire-and-forget span that
     closes after its episode ended fall on the floor instead of leaking into the next row.
+    ``on_start`` routes the same way, one processor later than the stamper, so the open-span
+    registry is per episode and goes away with the recorder when the episode closes.
     """
 
     def __init__(self, spec: CaptureSpec, run_id_key: str, episode_key: str) -> None:
         self.spec = spec
         self._run_id_key = run_id_key
         self._episode_key = episode_key
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # re-entrant: see Recorder
         self._open: dict[tuple[str, str], Recorder] = {}
 
     def open(self, key: tuple[str, str], recorder: Recorder) -> None:
@@ -198,14 +259,31 @@ class _Bucket:
         with self._lock:
             self._open.pop(key, None)
 
-    def take(self, span: ReadableSpan) -> None:
-        attrs: Mapping[str, Any] = span.attributes or {}
-        run_id = attrs.get(self._run_id_key)
-        episode_id = attrs.get(self._episode_key)
-        if not isinstance(run_id, str) or not isinstance(episode_id, str):
-            return  # belongs to no rollout: dropped, never repaired (M12 T33)
+    def only(self) -> Recorder | None:
+        """The one open episode, or None when there is none or more than one to choose from."""
         with self._lock:
-            recorder = self._open.get((run_id, episode_id))
+            if len(self._open) != 1:
+                return None
+            return next(iter(self._open.values()))
+
+    def _route(self, attrs: Mapping[str, Any] | None) -> Recorder | None:
+        stamped: Mapping[str, Any] = attrs or {}
+        run_id = stamped.get(self._run_id_key)
+        episode_id = stamped.get(self._episode_key)
+        if not isinstance(run_id, str) or not isinstance(episode_id, str):
+            return None  # belongs to no rollout: dropped, never repaired (M12 T33)
+        with self._lock:
+            return self._open.get((run_id, episode_id))
+
+    def start(self, span: Span) -> None:
+        """A span just started, stamped already: the stamper registers before this collector.
+        A live span's ``get`` is a plain dict read and takes no SDK lock."""
+        recorder = self._route(span.attributes)
+        if recorder is not None:
+            recorder._track(span)
+
+    def take(self, span: ReadableSpan) -> None:
+        recorder = self._route(span.attributes)
         if recorder is not None:
             recorder._take(span)
 
@@ -254,6 +332,23 @@ def capture(run_id: str, episode_id: str) -> Iterator[Recorder]:
             yield recorder
     finally:
         bucket.close(key)
+
+
+def _snapshot(reason: str) -> dict[str, Any] | None:
+    """The executor's drain: the one open episode's spans, closed and open, cut with ``reason``.
+
+    Private on purpose -- ``capture`` stays at five public symbols -- and reached by the
+    executor's ``SIGTERM`` handler from the child that owns the spans. With no collector, or
+    with anything but exactly one open episode, it answers None and the row keeps the bare
+    ``("timeout", None)`` it had before ADR-028.
+    """
+    bucket = _BUCKET
+    if bucket is None:
+        return None
+    recorder = bucket.only()
+    if recorder is None:
+        return None
+    return recorder._snapshot(reason)
 
 
 # ---------- installation ----------
@@ -360,6 +455,9 @@ def _collecting_processor(bucket: _Bucket) -> Any:
     from opentelemetry.sdk.trace import SpanProcessor
 
     class _Collector(SpanProcessor):
+        def on_start(self, span: Span, parent_context: Context | None = None) -> None:
+            bucket.start(span)
+
         def on_end(self, span: ReadableSpan) -> None:
             bucket.take(span)
 
@@ -385,27 +483,62 @@ def _is_content(key: str) -> bool:
     )
 
 
-def _span_mapping(span: ReadableSpan, *, content: bool) -> dict[str, Any]:
-    """One finished span as the flat span mapping ``from_otel`` consumes.
+def _live_attributes(attributes: Mapping[str, Any] | None) -> list[tuple[str, Any]]:
+    """A live span's attributes, copied in one pass without iterating them.
+
+    The SDK hands a live span's attributes out as a proxy over ``BoundedAttributes``, whose
+    ``__iter__`` takes a plain lock that the rollout's thread holds inside ``set_attribute`` --
+    exactly where a signal may land. ``copy()`` on that class is a bare ``dict.copy()``,
+    lock-free and atomic under the GIL, so it is the read. A copy that fails is an empty one.
+    """
+    if not attributes:
+        return []
+    copier = getattr(attributes, "copy", None)
+    try:
+        copied = dict(copier()) if callable(copier) else dict(attributes)
+    except Exception:  # noqa: BLE001 - torn: the attributes are dropped, the span is not
+        return []
+    return list(copied.items())
+
+
+def _span_mapping(span: ReadableSpan, *, content: bool, live: bool = False) -> dict[str, Any]:
+    """One span as the flat span mapping ``from_otel`` consumes.
 
     Hand-rolled and standard-library-only on purpose: the OTLP encoder the stamper oracle uses
     lives in the ``dev`` extra, and making it a runtime dependency would put protobuf in the
     ``agent`` extra for nothing.
+
+    ``live=True`` reads a span that has not ended -- the executor's snapshot -- as it stands:
+    ``endTimeUnixNano`` is None whatever the object says by now, the attributes are taken in
+    one pass, and an attribute whose value cannot be coerced is dropped alone. Everything else
+    is the same mapping, so the closed spans of a snapshot are byte-identical to a normal
+    close's.
     """
     context = span.get_span_context()
     parent = span.parent
+    if live:
+        attributes: list[dict[str, Any]] = []
+        for key, value in _live_attributes(span.attributes):
+            if not content and _is_content(key):
+                continue
+            try:
+                attributes.append({"key": key, "value": _attribute_value(value)})
+            except Exception:  # noqa: BLE001 - a torn attribute is a dropped attribute
+                continue
+    else:
+        attributes = [
+            {"key": key, "value": _attribute_value(value)}
+            for key, value in (span.attributes or {}).items()
+            if content or not _is_content(key)
+        ]
     mapping: dict[str, Any] = {
         # A span with no context has no id: from_otel drops it as ``no_span_id`` and counts it.
         "spanId": "" if context is None else format(context.span_id, "016x"),
         "parentSpanId": None if parent is None else format(parent.span_id, "016x"),
         "name": span.name,
         "startTimeUnixNano": span.start_time,
-        "endTimeUnixNano": span.end_time,
-        "attributes": [
-            {"key": key, "value": _attribute_value(value)}
-            for key, value in (span.attributes or {}).items()
-            if content or not _is_content(key)
-        ],
+        "endTimeUnixNano": None if live else span.end_time,
+        "attributes": attributes,
     }
     status = span.status
     if status is not None and status.status_code is not None:
@@ -458,9 +591,4 @@ def _apply_budget(trace: Trace, max_span_bytes: int) -> Trace:
         changed = True
     if not changed:
         return trace
-    return Trace(
-        spans=tuple(spans),
-        source=trace.source,
-        source_version=trace.source_version,
-        dropped=trace.dropped,
-    )
+    return replace(trace, spans=tuple(spans))
