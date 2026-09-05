@@ -23,6 +23,10 @@ env/
 .coverage
 htmlcov/
 
+# Run stores. The default store root is ./proofload-runs; a sized pilot arm is 10,496
+# episodes of Parquet with a trace on every row.
+proofload-runs/
+
 # Session notes
 notes
 
