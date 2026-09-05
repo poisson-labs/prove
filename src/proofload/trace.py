@@ -101,7 +101,37 @@ OTEL_KIND_MAP: Mapping[str, str] = MappingProxyType(
         "create_agent": "agent",
         "invoke_workflow": "agent",
         "plan": "agent",
+        # Emitted by opentelemetry-util-genai and previously unmapped: fetch_response
+        # retrieves a previously created response, execute_task is a framework's unit of
+        # agent work. Both were landing in "other" (kind-ratio spike, 2026-09-04).
+        "fetch_response": "llm",
+        "execute_task": "agent",
     }
+)
+
+#: Conventions that are not OpenTelemetry's but carry most real agent instrumentation. They
+#: are consulted only when no recognized ``gen_ai.operation.name`` is present, and neither key
+#: is lifted, so the original value stays in ``attrs``. Values are matched lowercased because
+#: the two conventions disagree on case.
+_VENDOR_KIND_MAPS: tuple[tuple[str, Mapping[str, str]], ...] = (
+    (
+        "openinference.span.kind",
+        MappingProxyType(
+            {
+                "llm": "llm",
+                "tool": "tool",
+                "retriever": "retrieval",
+                "embedding": "retrieval",
+                "reranker": "retrieval",
+                "agent": "agent",
+                "chain": "agent",
+            }
+        ),
+    ),
+    (
+        "traceloop.span.kind",
+        MappingProxyType({"tool": "tool", "agent": "agent", "workflow": "agent", "task": "agent"}),
+    ),
 )
 
 _LOG = logging.getLogger(__name__)
@@ -780,6 +810,27 @@ def _otel_error(raw: Mapping[str, Any], error_type: Any) -> tuple[str | None, st
     return "STATUS_CODE_ERROR", None
 
 
+def _vendor_kind(attrs: Mapping[str, Any]) -> str | None:
+    """The kind a non-OTel convention claims, or None. Never invents a kind for a value
+    outside the tables -- an unknown one falls through to the rest of the ladder."""
+    for key, table in _VENDOR_KIND_MAPS:
+        value = attrs.get(key)
+        if isinstance(value, str):
+            kind = table.get(value.strip().lower())
+            if kind is not None:
+                return kind
+    return None
+
+
+def _transport_kind(attrs: Mapping[str, Any]) -> str:
+    """The last two rungs: what the span talked to, when nothing said what it was."""
+    if "db.system" in attrs:
+        return "db"
+    if "http.request.method" in attrs or "url.full" in attrs:
+        return "http"
+    return "other"
+
+
 def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
     flat = {**inherited, **_flatten_attributes(raw.get("attributes"))}
     attrs: dict[str, Any] = {}
@@ -797,12 +848,7 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
     else:
         if operation_name is not None:
             attrs[_ORIGINAL_OPERATION] = operation_name
-        if "db.system" in attrs:
-            kind = "db"
-        elif "http.request.method" in attrs or "url.full" in attrs:
-            kind = "http"
-        else:
-            kind = "other"
+        kind = _vendor_kind(attrs) or _transport_kind(attrs)
 
     name = lifted["gen_ai.tool.name"] or lifted["gen_ai.request.model"] or raw.get("name")
 

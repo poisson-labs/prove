@@ -18,3 +18,4 @@ Fix: competing set is constructed in one place; check refuses unknown events; ze
 M12: proofload.trace/1 schema with span parentage, wall-clock timing and code location; from_otel and from_litellm converters; record() and @step; inspect and the mock agent read and write the new shape.
 Fix: inspect emits tab-delimited trace columns, so a span name or error message containing spaces cannot shift them; proofload.record aliases proofload.trace.record.
 M12: episode stamper — proofload.otel.EpisodeStamper tags every span with proofload.run_id and proofload.episode from a per-context episode() block, behind the [agent] extra.
+M12: kind ladder extended — fetch_response and execute_task mapped; openinference.span.kind and traceloop.span.kind typed as a rung below gen_ai.operation.name.
