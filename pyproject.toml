@@ -13,10 +13,10 @@ dependencies = ["numpy", "pandas", "scipy", "pyarrow"]
 
 [project.optional-dependencies]
 modal = ["modal"]
-agent = ["litellm"]
+agent = ["litellm", "opentelemetry-sdk"]
 viz = ["matplotlib"]
-all = ["modal", "litellm", "matplotlib"]
-dev = ["pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels"]
+all = ["modal", "litellm", "matplotlib", "opentelemetry-sdk"]
+dev = ["pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "opentelemetry-exporter-otlp-proto-common"]
 
 [project.scripts]
 proofload = "proofload.cli:main"
