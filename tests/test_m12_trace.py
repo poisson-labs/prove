@@ -80,7 +80,7 @@ SPAN_KEYS = frozenset(
         "input", "output", "tokens", "confidence", "error", "code", "attrs",
     }
 )
-TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans"})
+TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated"})
 CODE_KEYS = frozenset({"filepath", "function", "lineno"})
 LIFTED_KEYS = (
     "gen_ai.request.model",
@@ -157,6 +157,7 @@ def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
         "source_version": OTEL_SEMCONV_VERSION_SPEC,
         "dropped": 0,
         "spans": [dict(s) for s in spans],
+        "truncated": None,
     }
     d.update(overrides)
     return d
@@ -497,7 +498,7 @@ def test_t5_span_to_dict_has_exactly_the_thirteen_keys() -> None:
     assert "latency_ms" not in full and "i" not in full
 
 
-def test_t5_trace_to_dict_has_exactly_the_five_keys() -> None:
+def test_t5_trace_to_dict_has_exactly_the_six_keys() -> None:
     from proofload.trace import Span, Trace
 
     assert set(Trace(spans=(), source="record").to_dict()) == TRACE_KEYS
