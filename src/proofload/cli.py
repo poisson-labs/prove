@@ -355,9 +355,10 @@ def _parse_pairs(items: Sequence[str], flag: str) -> dict[str, Any]:
 
 
 def _load_pair(store: Store, a: str, b: str) -> tuple[Any, Any, RunManifest, RunManifest]:
-    """Raw frames and manifests. Nothing is censored here: ``multi_diff`` censors per event."""
+    """Narrow frames and manifests. Nothing is censored here: ``multi_diff`` censors per
+    event. Nothing downstream reads ``meta``, so it is never decoded on this path."""
     ma, mb = store.manifest(a), store.manifest(b)
-    return store.read(a), store.read(b), ma, mb
+    return store.read(a, meta=False), store.read(b, meta=False), ma, mb
 
 
 def _outcome_counts(*frames: Any) -> str:
@@ -729,7 +730,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
 
     store = Store(root)
     manifest = store.manifest(run)
-    df = store.read(run)
+    df = store.read(run, meta=False)
     _require_known_events("report", ns.event, df)
     inferred = ns.event is None
     if inferred:
@@ -843,7 +844,8 @@ def _trace_spans(meta: Any) -> tuple[Span, ...] | None:
 def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     store = Store(root)
     manifest = store.manifest(ns.run)
-    df = store.read(ns.run)
+    # Select on the narrow frame; decode ``meta`` only for the rows that survive selection.
+    df = store.read(ns.run, meta=False)
     where = _parse_pairs(ns.where, "--where")
     rows = df[df["outcome"] == ns.event]
     for key, value in where.items():
@@ -854,6 +856,14 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
     if rows.empty:
         io.out.write(f"no rows with outcome {ns.event!r} in run {ns.run}\n")
         return 0
+    selected = [
+        (str(h), int(i))
+        for h, i in zip(rows["config_hash"], rows["replicate_index"], strict=True)
+    ]
+    rows = store.read(ns.run, keys=selected)
+    # The keyed read promises sorted rows and nothing more; sorting again is the no-op that
+    # keeps this loop's order the store's, whatever read(keys=) does later.
+    rows = rows.sort_values(["config_hash", "replicate_index"], kind="stable")
 
     for row in rows.itertuples(index=False):
         io.out.write(f"config_hash: {row.config_hash}\n")
@@ -894,7 +904,7 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
     lines = [header]
     for run_id in store.runs():
         m = store.manifest(run_id)
-        rows = str(len(store.read(run_id)))
+        rows = str(store.count(run_id))
         lines.append((run_id, m.status, m.backend, m.target_id, m.t_unit, rows))
     widths = [max(len(line[i]) for line in lines) for i in range(len(header))]
     for line in lines:

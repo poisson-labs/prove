@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 import os
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,6 +64,7 @@ _SCHEMA = pa.schema(
     ]
 )
 _JSON_COLUMNS = ("config", "meta", "backend_meta")
+_META_COLUMNS = ("meta", "backend_meta")
 
 
 # ---------- canonical config ----------
@@ -404,13 +405,25 @@ class Store:
 
     # -- read --
 
-    def _read_table(self, run_id: str, columns: list[str] | None = None) -> pa.Table:
+    def _read_table(
+        self,
+        run_id: str,
+        columns: list[str] | None = None,
+        hashes: Sequence[str] | None = None,
+    ) -> pa.Table:
+        """Every part concatenated, projected to ``columns`` and, when ``hashes`` is given,
+        filtered to those ``config_hash`` values at the reader. Both go to Parquet: a projected
+        column's bytes are never read, and a filtered row never reaches pandas."""
         parts = self._parts(run_id)
         if not parts:
             table = _SCHEMA.empty_table()
             return table.select(columns) if columns is not None else table
+        filters = None if hashes is None else [("config_hash", "in", list(hashes))]
         return pa.concat_tables(
-            [pq.read_table(p, schema=_SCHEMA, columns=columns) for p in parts]
+            [
+                pq.read_table(p, schema=_SCHEMA, columns=columns, filters=filters)
+                for p in parts
+            ]
         )
 
     def _existing_keys(self, run_id: str) -> set[tuple[str, int]]:
@@ -419,19 +432,64 @@ class Store:
         reps = table.column("replicate_index").to_pylist()
         return {(str(h), int(r)) for h, r in zip(hashes, reps, strict=True)}
 
-    def read(self, run_id: str) -> pd.DataFrame:
+    def read(
+        self,
+        run_id: str,
+        *,
+        meta: bool = True,
+        keys: Iterable[tuple[str, int]] | None = None,
+    ) -> pd.DataFrame:
+        """The run's rows, every part concatenated, sorted by ``(config_hash, replicate_index)``.
+
+        ``meta=True``: the thirteen columns, ``config``, ``meta`` and ``backend_meta`` decoded.
+        ``meta=False``: the eleven columns that are not ``meta``/``backend_meta``, ``config``
+        decoded; the two JSON columns are projected away at the Parquet reader and never
+        decoded. ``keys``: only the rows whose ``(config_hash, replicate_index)`` is in the set;
+        the hash half is pushed to the reader as an ``in`` predicate, the pair is masked here.
+        Unknown keys are absent, duplicates harmless; an empty ``keys`` is an empty frame with
+        the requested columns and touches no part.
+        """
         manifest = self.manifest(run_id)
         if manifest.schema_version != _SCHEMA_VERSION:
             raise SchemaMismatch(
                 f"run {run_id!r} has schema_version {manifest.schema_version}, "
                 f"this build reads {_SCHEMA_VERSION}"
             )
-        df: pd.DataFrame = self._read_table(run_id).to_pandas()
+        columns = [c for c in _SCHEMA.names if meta or c not in _META_COLUMNS]
+        wanted = None if keys is None else {(str(h), int(i)) for h, i in keys}
+        if wanted is not None and not wanted:
+            # pyarrow rejects an empty `in` list, and nothing could match anyway.
+            table = _SCHEMA.empty_table().select(columns)
+        else:
+            hashes = None if wanted is None else sorted({h for h, _ in wanted})
+            table = self._read_table(run_id, columns=columns, hashes=hashes)
+        df: pd.DataFrame = table.to_pandas()
+        if wanted is not None:
+            # An array, not a list: on an empty frame ``df[[]]`` is a column selection.
+            mask = np.fromiter(
+                (
+                    (str(h), int(i)) in wanted
+                    for h, i in zip(df["config_hash"], df["replicate_index"], strict=True)
+                ),
+                dtype=bool,
+                count=len(df),
+            )
+            df = df[mask]
         df = df.sort_values(["config_hash", "replicate_index"], kind="stable")
         df = df.reset_index(drop=True)
         for col in _JSON_COLUMNS:
-            df[col] = pd.Series([json.loads(s) for s in df[col]], index=df.index, dtype=object)
+            if col in df.columns:
+                df[col] = pd.Series(
+                    [json.loads(s) for s in df[col]], index=df.index, dtype=object
+                )
         return df
+
+    def count(self, run_id: str) -> int:
+        """The number of stored rows, summed from each part's Parquet footer. No row data is
+        read: this is never ``len()`` of a narrow read. An unknown run raises ``StoreError``
+        through ``manifest()``; a half-written ``.tmp`` part is not a part."""
+        self.manifest(run_id)
+        return sum(int(pq.read_metadata(p).num_rows) for p in self._parts(run_id))
 
     def missing(
         self, run_id: str, expected: Iterable[tuple[str, int]]
