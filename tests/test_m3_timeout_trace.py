@@ -43,6 +43,13 @@ Conventions this oracle fixes where the spec is silent, recorded so they are not
   3 and section 5 can be read differently; the "no rows" message is pinned to the words
   ``no rows`` and the event name, not to its wording.
 - The wall-clock bounds are the only timing assertions, and every one is an upper bound.
+
+E13 and E14 (added after Session B, under Session A authority) pin two deviations back to the
+spec: a Modal dict-form result whose ``meta`` is absent or not a Mapping raises
+``ModalBackendError`` naming the job, as an invalid episode does, instead of being stored
+without it; and the drain pipe is created beside the outcome pipe on every
+``_call_with_timeout`` call, capture call or not, counted through a context wrapper that
+records each ``Pipe()`` and the connections handed to the child.
 """
 
 from __future__ import annotations
@@ -60,6 +67,7 @@ import traceback
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack
 from io import StringIO
+from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Any
 
@@ -74,7 +82,9 @@ import proofload.executor as executor
 import proofload.executor_modal as executor_modal
 from proofload.episode import Episode
 from proofload.executor import plan, run_local
-from proofload.executor_modal import Job, Mapper, ModalOptions, Result, run_with_mapper, worker_batch
+from proofload.executor_modal import (
+    Job, Mapper, ModalBackendError, ModalOptions, Result, run_with_mapper, worker_batch,
+)
 from proofload.sampler import SweepSpec
 from proofload.store import EpisodeRecord, RunManifest, Store
 from proofload.trace import OTEL_SEMCONV_VERSION, Span, Trace, TraceValidationError, merge
@@ -1244,6 +1254,85 @@ def test_e11_merging_a_record_trace_with_a_truncated_capture_yields_the_reason_a
         assert merged.dropped == 0
         assert by_name(merged)[SPAN_OPEN["name"]].end_ns is None
         assert Trace.from_dict(json.loads(json.dumps(merged.to_dict()))) == merged
+
+
+# ---------- E13: a dict-form result with a bad meta is refused, never stored bare ----------
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [{"error": REASON, "meta": ["not", "a", "mapping"]}, {"error": REASON, "meta": "text"}, {"error": REASON, "meta": None}, {"error": REASON}],
+    ids=["list", "str", "none", "absent"],
+)
+def test_e13_a_dict_form_result_whose_meta_is_not_a_mapping_raises_naming_the_job_and_stores_nothing(tmp_path: Path, bad: dict[str, Any]) -> None:
+    store = Store(tmp_path / "store")
+    p = plan(SweepSpec.load(write(tmp_path / "sweep.toml", sweep_toml(capture=None))), store, backend="modal", run_salt=SALT)
+    jobs = jobs_of(p)
+    episodes = worker_batch(jobs, PLAIN_PATH, None)
+    forms: list[Result] = [episodes[0], episodes[1], dict(bad), episodes[3]]
+
+    def mapper(batches: Sequence[Sequence[Job]]) -> Iterator[tuple[int, list[Result] | BaseException]]:
+        yield 0, list(forms)
+
+    with pytest.raises(ModalBackendError) as info:
+        run_with_mapper(p, mapper, store, options=ModalOptions())
+    assert re.search(r"\bjob 2\b", str(info.value)), str(info.value)
+    assert store.count(p.run_id) == 0, "a batch with a malformed result was stored"
+
+
+# ---------- E14: the drain pipe exists whether or not the handler does ----------
+
+
+class CountingContext:
+    """The fork context with every ``Pipe()`` and the ``args`` of every ``Process()`` recorded."""
+
+    def __init__(self, ctx: Any) -> None:
+        self._ctx = ctx
+        self.pipes: list[bool] = []
+        self.child_args: list[tuple[Any, ...]] = []
+
+    def Pipe(self, duplex: bool = True) -> Any:  # noqa: N802 - the multiprocessing spelling
+        self.pipes.append(duplex)
+        return self._ctx.Pipe(duplex=duplex)
+
+    def Process(self, *args: Any, **kwargs: Any) -> Any:  # noqa: N802 - the multiprocessing spelling
+        self.child_args.append(tuple(kwargs.get("args", ())))
+        return self._ctx.Process(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._ctx, name)
+
+
+def child_count_pipes(target: str, config: dict[str, Any], seed: int, timeout: float, with_capture: bool) -> dict[str, Any]:
+    """One ``_call_with_timeout`` call on a counting context; the episode child installs, this one never does."""
+    from proofload.capture import CaptureSpec
+
+    counting = CountingContext(executor._mp_context())
+    call = (
+        executor._CaptureCall(spec=CaptureSpec(), run_id=RUN_ID, episode_id=EPISODE)
+        if with_capture
+        else None
+    )
+    kind, payload = executor._call_with_timeout(_resolve(target), dict(config), seed, timeout, counting, call)
+    return {
+        "kind": kind,
+        "outcome": payload.get("outcome") if isinstance(payload, dict) else payload,
+        "pipes": counting.pipes,
+        "connections_per_child": [sum(isinstance(a, Connection) for a in args) for args in counting.child_args],
+        "sdk_provider_in_this_process": _global_provider_is_sdk(),
+    }
+
+
+@needs_fork
+@pytest.mark.parametrize("with_capture", [False, True], ids=["no-capture", "capture"])
+def test_e14_the_drain_pipe_is_created_beside_the_outcome_pipe_with_or_without_a_capture_call(with_capture: bool) -> None:
+    target = HANG_PATH if with_capture else PLAIN_PATH
+    config = {"role": "a"}  # completes: the pipes are counted on an ok episode
+    r = isolated(child_count_pipes, target, config, 7, 30.0, with_capture)
+    assert r["kind"] == "ok" and r["outcome"] == _outcome(config, 7), r
+    assert r["pipes"] == [False, False], r["pipes"]  # the outcome pipe and the drain, both duplex=False
+    assert r["connections_per_child"] == [2], r["connections_per_child"]  # both child ends handed to the child
+    assert r["sdk_provider_in_this_process"] is False
 
 
 # ---------- E12: the public surface is unchanged ----------
