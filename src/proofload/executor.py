@@ -230,8 +230,11 @@ def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
 
 # ---------- per-episode execution ----------
 
-# Outcome of one rollout call: ("ok", episode_dict) | ("error", text) | ("timeout", payload),
-# where the timeout payload is the trace dict the terminated child drained, or None.
+# Outcome of one rollout call: ("ok", episode_dict) | ("error", payload) | ("timeout", payload).
+# Two payload shapes for the two errored kinds, read kind first: the timeout payload is the
+# trace dict the terminated child drained, or None; the error payload is the traceback text
+# (or "rollout returned <type>, expected Episode"), or -- with a capture call and a trace --
+# {"error": text, "meta": {"trace": trace_dict}}, exactly those two keys.
 _Outcome = tuple[str, Any]
 
 
@@ -275,9 +278,32 @@ def _merge_capture(meta: dict[str, Any], captured: dict[str, Any]) -> None:
     meta["trace"] = merged.to_dict()
 
 
+def _errored(text: str, recorder: Recorder | None) -> str | dict[str, Any]:
+    """The error payload: the two-key dict when the recorder holds a trace, the text otherwise.
+
+    ``text`` is already in hand -- ``format_exc()`` runs before this is called -- so a
+    ``to_meta()`` that raises can neither replace it nor turn one error into another; it is
+    guarded exactly as ``_classify`` guards the ok row. Rule zero (``to_meta()`` is None: no
+    span, no drops) is the text too, never a dict with an empty meta.
+    """
+    if recorder is None:
+        return text
+    try:
+        captured = recorder.to_meta()
+    except Exception as exc:  # noqa: BLE001 - a capture never turns one error into another
+        _LOG.warning("capture: dropping the capture for this errored episode: %r", exc)
+        return text
+    if captured is None:
+        return text
+    return {"error": text, "meta": {"trace": captured}}
+
+
 def _classify(result: Any, recorder: Recorder | None = None) -> _Outcome:
     if not isinstance(result, Episode):
-        return ("error", f"rollout returned {type(result).__name__}, expected Episode")
+        # The capture block completed normally and the recorder is full: the same payload a
+        # raise takes, around the existing text.
+        text = f"rollout returned {type(result).__name__}, expected Episode"
+        return ("error", _errored(text, recorder))
     episode_dict = result.to_dict()
     if recorder is not None:
         try:
@@ -311,8 +337,16 @@ def _call_in_process(
     install(capture_call.spec)  # once per process; inert and memoized after the first call
     try:
         with capture(capture_call.run_id, capture_call.episode_id) as recorder:
-            return _classify(rollout(config, seed), recorder)
-    except Exception:
+            try:
+                return _classify(rollout(config, seed), recorder)
+            except Exception:
+                # Caught inside the block: the rollout's own spans have already ended (their
+                # ``with`` blocks ran before the exception reached here), the recorder is in
+                # scope and its bucket is still open. The traceback first -- nothing that runs
+                # after it may replace what the user needs -- then the trace, if there is one.
+                text = traceback.format_exc()
+                return ("error", _errored(text, recorder))
+    except Exception:  # capture() itself failed to open or close: the text, as today
         return ("error", traceback.format_exc())
 
 
@@ -557,10 +591,21 @@ def _record(p: Plan, pair: Pair, index: int, outcome: _Outcome, wall_time: float
             wall_time=wall_time,
             backend_meta=backend_meta,
         )
-    error = _TIMEOUT_ERROR if kind == _TIMEOUT_ERROR else str(payload)
-    # A terminated child that drained its snapshot: the payload is the trace dict, and it
-    # rides the errored row's meta exactly where an ok row's trace rides.
-    meta = {"trace": payload} if kind == _TIMEOUT_ERROR and isinstance(payload, dict) else None
+    meta: dict[str, Any] | None
+    if kind == _TIMEOUT_ERROR:
+        # A terminated child that drained its snapshot: the payload is the trace dict, and it
+        # rides the errored row's meta exactly where an ok row's trace rides.
+        error = _TIMEOUT_ERROR
+        meta = {"trace": payload} if isinstance(payload, dict) else None
+    elif kind == "error" and isinstance(payload, dict):
+        # A rollout that raised, or returned the wrong thing, under capture: the two-key dict,
+        # its trace complete up to the failure. The kind was read first, so a timeout's bare
+        # trace dict never reaches this branch.
+        error = str(payload["error"])
+        meta = payload["meta"]
+    else:
+        error = str(payload)
+        meta = None
     return EpisodeRecord.errored(
         run_id=p.run_id,
         config=pair.config,

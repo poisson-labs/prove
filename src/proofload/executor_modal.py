@@ -204,8 +204,10 @@ Job = tuple[dict[str, Any], int, int, str, int]
 
 Result = dict[str, Any] | str
 """``episode.to_dict()`` merged with ``wall_time`` and ``backend_meta``, an error string, or --
-for a timed-out job whose child drained its trace -- ``{"error": "timeout", "meta": {...}}``,
-exactly those two keys."""
+for an errored job that kept its trace -- ``{"error": <text>, "meta": {"trace": ...}}``, exactly
+those two keys, whatever the error was: ``"timeout"`` for a child that drained on SIGTERM, the
+traceback text or ``"rollout returned <type>, expected Episode"`` for a rollout that crashed
+under capture."""
 
 Mapper = Callable[[Sequence[Sequence[Job]]], Iterator[tuple[int, list[Result] | BaseException]]]
 """Given batches, yields ``(batch_index, results-or-exception)`` in completion order. An
@@ -263,11 +265,12 @@ def worker_batch(
     ``import_path`` is resolved once per call; the rollout is called once per job with a fresh
     ``dict(config)``. One ``Result`` per job, in job order: the episode dict, the traceback text
     of a raising rollout, ``"rollout returned <type>, expected Episode"``, or ``"timeout"``
-    (a fork-and-join per episode, the local backend's mechanics) -- as
-    ``{"error": "timeout", "meta": {"trace": ...}}`` when the terminated child drained the
-    snapshot of its spans, which only a child with capture does. Anything that fails outside
-    a single episode (a resolve failure, a bad timeout) raises, so the whole batch is an infra
-    failure rather than N identical episode errors.
+    (a fork-and-join per episode, the local backend's mechanics). An error rides as
+    ``{"error": <text>, "meta": {"trace": ...}}`` when the episode kept a trace, which only an
+    episode with capture does: the terminated child drained the snapshot of its spans, or the
+    rollout raised (or returned the wrong thing) after emitting spans. Anything that fails
+    outside a single episode (a resolve failure, a bad timeout) raises, so the whole batch is
+    an infra failure rather than N identical episode errors.
 
     ``capture`` is the sweep's ``[capture]`` table plus the run id. It is keyword-only with a
     None default because nine existing call sites pass three positional arguments. What
@@ -320,6 +323,10 @@ def worker_batch(
                 if isinstance(payload, dict)
                 else _TIMEOUT_ERROR
             )
+        elif kind == "error" and isinstance(payload, dict):
+            # An error that kept its trace: the two-key dict is the Result it already is. The
+            # kind was read first, so a timeout's bare trace dict never lands here.
+            results.append(payload)
         else:
             results.append(str(payload))
     return results
