@@ -389,7 +389,8 @@ def _open_run(
 
 def _record(p: Plan, job: Job, result: Result, attempt: int) -> EpisodeRecord:
     """A string is an error without meta, a dict with ``"error"`` is one with it, and any
-    other dict is an episode."""
+    other dict is an episode. A dict with ``"error"`` whose meta is not a mapping is refused
+    (E13), as an invalid episode dict is."""
     config, seed, i, _config_hash, replicate_index = job
     if isinstance(result, str) or "error" in result:
         meta: Mapping[str, Any] | None = None
@@ -398,8 +399,15 @@ def _record(p: Plan, job: Job, result: Result, attempt: int) -> EpisodeRecord:
         else:
             error = str(result["error"])
             carried = result.get("meta")
-            if isinstance(carried, Mapping):
-                meta = carried
+            if not isinstance(carried, Mapping):
+                # The dict form is exactly {"error", "meta"} with a mapping meta. Anything else
+                # is a malformed worker result, refused like an invalid episode dict: a row
+                # stored without the meta it carried is the silent loss S16 exists to end.
+                raise ModalBackendError(
+                    f"worker returned an errored result with a non-mapping meta for job {i}: "
+                    f"{type(carried).__name__}"
+                )
+            meta = carried
         return EpisodeRecord.errored(
             run_id=p.run_id,
             config=config,

@@ -345,13 +345,15 @@ def _arm_drain(drain: Connection) -> None:
 
 def _child_main(
     conn: Connection,
+    drain: Connection,
     rollout: Rollout,
     config: dict[str, Any],
     seed: int,
     capture_call: _CaptureCall | None = None,
-    drain: Connection | None = None,
 ) -> None:
-    if capture_call is not None and drain is not None:
+    # The drain pipe always arrives (E14); only a child with a capture call arms the handler
+    # that writes to it, so a run that did not ask keeps the default SIGTERM disposition (C3).
+    if capture_call is not None:
         _arm_drain(drain)
     try:
         outcome = _call_in_process(rollout, config, seed, capture_call)
@@ -441,20 +443,19 @@ def _call_with_timeout(
 ) -> _Outcome:
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     # The drain: a second pipe, because the outcome pipe may be mid-send when SIGTERM lands and
-    # two writers on one pipe interleave. Only a child with a capture call installs the handler
-    # that writes to it, so only that child gets one: a run that did not ask keeps S15's path.
-    drain_parent: Connection | None = None
-    drain_child: Connection | None = None
-    if capture_call is not None:
-        drain_parent, drain_child = ctx.Pipe(duplex=False)
+    # two writers on one pipe interleave. Created beside the outcome pipe on every call, capture
+    # call or not (E14): the handler that writes to it exists only with a capture call, and a
+    # handler whose channel might not exist is a state that costs an afternoon the first time
+    # the two conditions are computed slightly differently. The pipe is cheap; only the handler
+    # and the parent's poll below are gated on the capture call.
+    drain_parent, drain_child = ctx.Pipe(duplex=False)
     proc = ctx.Process(
         target=_child_main,
-        args=(child_conn, rollout, config, seed, capture_call, drain_child),
+        args=(child_conn, drain_child, rollout, config, seed, capture_call),
     )
     proc.start()
     child_conn.close()
-    if drain_child is not None:
-        drain_child.close()  # or poll() never sees EOF and the grace is always paid in full
+    drain_child.close()  # or poll() never sees EOF and the grace is always paid in full
     deadline = time.perf_counter() + timeout
     outcome: _Outcome | None = None
     try:
@@ -477,9 +478,11 @@ def _call_with_timeout(
         if proc.is_alive():
             proc.terminate()
             timed_out = outcome is not None and outcome[0] == _TIMEOUT_ERROR
-            if drain_parent is not None and timed_out:
+            if capture_call is not None and timed_out:
                 # SIGTERM is in flight: the child's handler snapshots, sends and exits, so the
                 # join right after is immediate. Nothing inside the grace is today's outcome.
+                # Polled only when a handler exists to write: a run without [capture] still
+                # returns within timeout + _JOIN_GRACE_S even for a child that ignores SIGTERM.
                 outcome = (_TIMEOUT_ERROR, _drain(drain_parent))
             proc.join(_JOIN_GRACE_S)
             if proc.is_alive():
@@ -487,8 +490,7 @@ def _call_with_timeout(
                 proc.join()
         else:
             proc.join(_JOIN_GRACE_S)
-        if drain_parent is not None:
-            drain_parent.close()
+        drain_parent.close()
         proc.close()
     return outcome
 

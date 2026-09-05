@@ -23,3 +23,4 @@ M3: in-process trace capture — the executor activates the instrumentors named 
 Fix: max_spans keeps the earliest-started spans and drops the deepest, so a capped trace keeps its root.
 M4: Store.read(meta=False) and Store.read(keys=) project and filter at the Parquet reader and Store.count reads the footers; diff, report, check and runs never decode meta, and inspect decodes only the rows it prints.
 M3: a timed-out episode keeps its trace — the child drains a snapshot of its closed and open spans on SIGTERM, proofload.trace/1 gains truncated, errored rows carry meta, retention never strips an errored row, and inspect selects by error as well as outcome.
+Fix: the drain pipe is created beside the outcome pipe on every timed call, capture or not, and a Modal errored result whose meta is not a mapping is refused like an invalid episode instead of being stored without it.
