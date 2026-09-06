@@ -48,6 +48,9 @@ import openai
 from proofload import Episode, record
 from proofload.trace import Trace, collect
 
+from . import HORIZON as HORIZON
+from . import OUTCOMES as OUTCOMES
+from . import T_UNIT as T_UNIT
 from . import sandbox, suite
 
 BOUNDARY_VAR = "GOLDEN_PILOT_BOUNDARY"
@@ -60,14 +63,6 @@ if os.environ.get(BOUNDARY_VAR) != BOUNDARY_VALUE:
         f"examples/golden_pilot/Dockerfile sets it for the Modal image; the local backend is "
         f"unsupported for this suite, so run the sweep with --backend modal."
     )
-
-#: Exactly these, exactly one per episode, in this order. Never ``timeout`` (S16 section 5
-#: gave that string to the executor's errored rows), never ``error``, never empty.
-OUTCOMES = ("passed", "failed_assertion", "timed_out", "crashed")
-
-#: What ``t`` counts, and the budget it counts against.
-T_UNIT = "tool_calls"
-HORIZON = 6
 
 #: Backoff between the attempt and each of its three retries. Read at call time.
 BACKOFF_S = (1.0, 2.0, 4.0)

@@ -23,15 +23,21 @@ returns one JSON-native dict (spec sections 0 and 3):
 Read it from the shell after each arm::
 
     python -m golden_pilot.numbers <store> <run-id> [--paired-with <run-id>]
-    python examples/golden_pilot/numbers.py <store> <run-id>      # also works
 
-**This file is called numbers.py, which is a standard-library module name.** Run as a script,
-Python puts this directory first on ``sys.path`` and ``import numbers`` then finds *this* file
--- and numpy imports ``numbers``, so ``proofload.store`` would fail with a baffling traceback
-from inside numpy. :func:`main` drops that path entry before it imports ``Store``, and the
-module-level imports here are deliberately numpy-free so nothing is loaded before it can. The
-name is fixed by spec section 2; the shadowing is not, so do not move the ``Store`` import
-back up to the top.
+**The ``-m`` form is the only one**, and it is what the README uses. This module reads the
+outcome vocabulary from its package with ``from . import ...``, which needs a parent package,
+so ``python examples/golden_pilot/numbers.py`` -- which used to work -- now raises
+``ImportError`` at import. That is the price of one definition of the vocabulary instead of
+two (spec S22 section 2), and it is paid here because this module is the one that cannot
+import ``agent``.
+
+**This file is called numbers.py, which is a standard-library module name.** Under the
+dropped script form, Python put this directory first on ``sys.path`` and ``import numbers``
+then found *this* file -- and numpy imports ``numbers``, so ``proofload.store`` would fail
+with a baffling traceback from inside numpy. :func:`main` still drops that path entry before
+it imports ``Store``, now as belt and braces, and the module-level imports here stay
+deliberately numpy-free so nothing is loaded before it can. The name is fixed by spec
+section 2; the shadowing is not, so do not move the ``Store`` import back up to the top.
 
 ``timed_out`` (the agent spent its budget) and ``timeout`` (Proofload cut a hung episode) are
 different facts and are reported apart -- the first as an outcome, the second in the errored
@@ -51,15 +57,10 @@ from typing import TYPE_CHECKING, Any
 from proofload import Episode
 from proofload.trace import Trace
 
+from . import FAILURE_EVENTS, OUTCOMES, T_UNIT
+
 if TYPE_CHECKING:  # the runtime import lives in main(): see the module docstring
     from proofload.store import Store
-
-#: The pilot's outcomes, and the three that are failure events (``passed`` absorbs).
-OUTCOMES = ("passed", "failed_assertion", "timed_out", "crashed")
-FAILURE_EVENTS = ("failed_assertion", "timed_out", "crashed")
-
-#: What ``t`` is declared in, checked against the run manifest.
-T_UNIT = "tool_calls"
 
 #: Proofload's span kinds, spelled here rather than imported: P12 holds the pilot to five
 #: names plus ``Store`` from ``proofload``, and ``KINDS`` is not one of them. A kind the core
