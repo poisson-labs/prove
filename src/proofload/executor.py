@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import multiprocessing
 import os
 import platform
@@ -21,7 +22,7 @@ import sys
 import time
 import traceback
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from multiprocessing.connection import Connection
 from types import FrameType
@@ -58,6 +59,10 @@ class NotResumable(ExecutorError):
 
 class PairMismatch(ExecutorError):
     """The run named by ``pair_with=`` cannot be paired with this spec."""
+
+
+class UnderpoweredDesign(ExecutorError):
+    """The design cannot resolve an effect as small as the caller accepts."""
 
 
 # ---------- identity ----------
@@ -195,6 +200,23 @@ def plan(
 
 # ---------- power ----------
 
+#: The largest minimum detectable effect a sweep may carry without saying so on the command
+#: line. A policy choice, stated rather than derived: the MDE at base rate 0.5 is roughly
+#: ``1.98 / sqrt(N)``, so 0.20 is about a hundred replicates per cell, and below that a cell
+#: cannot see a twenty-point move. It refuses **both** designs this project has actually run --
+#: S18 and the Go1 sweep, both N=32, both 0.3251 -- and a default that let those through would
+#: be calibrated to let everything through. Go1 still produced a real finding, because its
+#: effects were enormous, and that is the case ``--max-mde`` exists for: it proceeds under
+#: ``--max-mde 0.35``, which states on the command line that it was only ever looking for
+#: effects bigger than thirty-five points.
+#:
+#: Deliberately not readable from the environment: a threshold set once in a shell profile is a
+#: threshold nobody ever sees again, which is the defect this gate exists to fix.
+DEFAULT_MAX_MDE: float = 0.20
+
+#: The bisection for the suggested replicate count never needs to look past this.
+_N_SEARCH_LIMIT = 1 << 62
+
 
 def preflight_mde(spec: SweepSpec) -> float:
     """The design's minimum detectable effect, at base rate 0.5, in event-rate points.
@@ -214,6 +236,75 @@ def preflight_mde(spec: SweepSpec) -> float:
     do not exist before the run.
     """
     return mde_two_proportion(0.5, spec.replicates, spec.replicates)
+
+
+def _smallest_n_reaching(spec: SweepSpec, max_mde: float) -> int:
+    """The fewest replicates whose MDE is at or below ``max_mde``, by bisection on N.
+
+    Through ``preflight_mde`` on a throwaway spec, so the count the refusal suggests cannot
+    drift from the number that refused the design. The bracket is doubled first rather than
+    fixed: a small enough accepted value needs more replicates than any constant ceiling would
+    allow, and a suggestion clipped at a ceiling would be a lie.
+    """
+    lo, hi = 2, 2
+    while preflight_mde(replace(spec, replicates=hi)) > max_mde and hi < _N_SEARCH_LIMIT:
+        lo, hi = hi + 1, hi * 2
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if preflight_mde(replace(spec, replicates=mid)) <= max_mde:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
+def _offered_override(mde: float) -> float:
+    """The ``--max-mde`` value the refusal tells the reader to paste, and it has to work.
+
+    Rounded **up** at four decimals, which is the precision the pre-flight prints. Rounding to
+    nearest is the trap: the true MDE at N=32 is 0.32510999..., the pre-flight shows 0.3251,
+    and ``--max-mde 0.3251`` refuses the same design again. A message whose one instruction
+    does not work is the whole interaction failing.
+    """
+    offered = math.ceil(mde * 1e4) / 1e4
+    # ``mde * 1e4`` can round down across a four-decimal boundary; the offer has to clear the
+    # gate, so it is checked rather than argued.
+    return offered if offered >= mde else offered + 1e-4
+
+
+def check_power(p: Plan, *, max_mde: float | None = None) -> None:
+    """Refuse a design that cannot resolve an effect as small as the caller accepts.
+
+    Raises ``UnderpoweredDesign`` when ``preflight_mde(p.spec)`` exceeds the accepted value;
+    ``max_mde=None`` means ``DEFAULT_MAX_MDE``. **Equality passes**: a design that exactly
+    meets what the caller accepts is accepted. On the passing path it returns None and does
+    nothing at all -- it never prints, never touches the store, and never mutates the plan.
+
+    M10 calls it after the pre-flight block is written and before the prompt, so a reader who
+    gets the refusal has already been shown the number it is about, and ``--yes`` skips only
+    the prompt. Nothing is in the store when it fires: ``plan`` mints a run id and writes
+    nothing, so the refusal is exit 2 and not exit 3. If a later change makes ``plan`` write,
+    this ordering has to move.
+
+    The range check on ``max_mde`` lives here rather than in the CLI, by exact analogy with
+    M6's ``0 < q < 1``: the CLI parses a float and decides nothing statistical.
+    """
+    accepted = DEFAULT_MAX_MDE if max_mde is None else float(max_mde)
+    if not 0.0 < accepted < 1.0:
+        raise ExecutorError(
+            f"--max-mde must be greater than 0 and less than 1, got {accepted!r}"
+        )
+    mde = preflight_mde(p.spec)
+    if mde <= accepted:
+        return
+    n = p.spec.replicates
+    raise UnderpoweredDesign(
+        f"underpowered design: this sweep can only detect a change of {mde * 100:.1f} points "
+        f"or more in a cell's failure rate (MDE {mde:.4f} at N={n}), and you accepted "
+        f"{accepted * 100:.1f} points (--max-mde {accepted:.4f}). "
+        f"N={_smallest_n_reaching(p.spec, accepted)} replicates would reach {accepted:.4f}; "
+        f"--max-mde {_offered_override(mde):.4f} accepts this design as it stands."
+    )
 
 
 def _capture_line(spec: CaptureSpec | None) -> str | None:
