@@ -1307,10 +1307,11 @@ def test_v22b_the_family_depends_on_the_event_set_on_the_mock_pair(mock_pair: Mo
     two = mock_serve_json(mock_pair, "violated", "timeout")
     assert one.code == 0 and two.code == 0, one.err + two.err
     s1, s2 = strict_loads(one.out), strict_loads(two.out)
-    assert (s1["diff"]["n_tests"], s2["diff"]["n_tests"]) == (15, 30)
+    # the quickstart grid is 9 cells (S23), so one event is 9 tests and two events are 18
+    assert (s1["diff"]["n_tests"], s2["diff"]["n_tests"]) == (9, 18)
     q1, q2 = structure_q(s1), structure_q(s2)
     shared = [k for k in q1 if k in q2]
-    assert len(shared) == 15, len(shared)
+    assert len(shared) == 9, len(shared)
     assert max(abs(q1[k] - q2[k]) for k in shared) > 1e-9
 
 

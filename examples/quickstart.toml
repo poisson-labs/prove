@@ -1,5 +1,7 @@
 # Proofload quickstart: the keyless mock agent over the tool-reliability preset shape.
-# 3 tasks x 5 tool failure rates x 16 replicates = 240 rollouts. No API key, no network.
+# 3 tasks x 3 tool failure rates x 100 replicates = 900 rollouts. No API key, no network.
+# N=100 clears the pre-flight power gate on its own: MDE 0.1932 at base rate 0.5,
+# under the 0.20 default, so no --max-mde is needed to run it.
 #
 #   proofload sweep examples/quickstart.toml --target proofload.examples.mock_agent:rollout --yes
 #   proofload sweep examples/quickstart.toml --target proofload.examples.mock_agent:rollout_patched --pair-with <run_a> --yes
@@ -7,7 +9,7 @@
 
 target_id = "mock-agent@v0"
 t_unit = "tool_calls"
-replicates = 16
+replicates = 100
 
 [axes.task_id]
 type = "categorical"
@@ -15,4 +17,4 @@ values = ["search", "checkout", "refund"]
 
 [axes.tool_fail_rate]
 type = "continuous"
-values = [0.0, 0.3, 0.45, 0.5, 0.55]
+values = [0.0, 0.3, 0.55]

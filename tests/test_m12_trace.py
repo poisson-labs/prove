@@ -72,7 +72,7 @@ DROP_REASONS_SPEC = ("no_span_id", "duplicate_span_id", "bad_timestamps", "unpar
 OTEL_SEMCONV_VERSION_SPEC = "1.42.0"
 LOGGER_NAME = "proofload.trace"
 MOCK_EPOCH_NS_SPEC = 1_700_000_000_000_000_000
-QUICKSTART_REPLICATES = 16
+QUICKSTART_REPLICATES = 100
 
 SPAN_KEYS = frozenset(
     {
@@ -1390,7 +1390,7 @@ def test_t29_mock_agent_traces_decode_and_are_deterministic() -> None:
     from proofload.trace import Trace
 
     cells = SweepSpec.load(QUICKSTART).configs
-    assert len(cells) == 15
+    assert len(cells) == 9  # the quickstart grid, S23: 3 tasks x 3 tool_fail_rate values
     for cfg in cells:
         for seed in range(QUICKSTART_REPLICATES):
             for fn in (mock_agent.rollout, mock_agent.rollout_patched):

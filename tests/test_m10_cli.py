@@ -68,8 +68,8 @@ METHODS = {"fisher_bh", "mcnemar_bh", "logrank_bh"}
 REPORT_FILES = {"report.md", "heatmap.svg", "receipt.html"}
 SUMMARY_FIELDS = ("n_ok", "n_errored", "n_timeout", "wall_time", "stopped_by", "complete")
 
-QUICKSTART_CELLS = 15
-QUICKSTART_REPLICATES = 16
+QUICKSTART_CELLS = 9
+QUICKSTART_REPLICATES = 100
 QUICKSTART_ROWS = QUICKSTART_CELLS * QUICKSTART_REPLICATES
 QUICKSTART_TARGET_ID = "mock-agent@v0"
 QUICKSTART_T_UNIT = "tool_calls"
@@ -1125,7 +1125,7 @@ def test_i18_quickstart_toml_shape() -> None:
     assert spec.t_unit == QUICKSTART_T_UNIT
     assert dict(spec.axis_types) == {"task_id": "categorical", "tool_fail_rate": "continuous"}
     assert len({cfg["task_id"] for cfg in spec.configs}) == 3
-    assert len({cfg["tool_fail_rate"] for cfg in spec.configs}) == 5
+    assert len({cfg["tool_fail_rate"] for cfg in spec.configs}) == 3
 
 
 def test_i18_rollout_is_deterministic_in_cfg_and_seed() -> None:

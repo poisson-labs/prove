@@ -1601,27 +1601,39 @@ def test_b16_manifest_supplies_run_identity_only_when_given() -> None:
 # ---------- B17: mock-agent golden ----------
 
 
-def test_b17_quickstart_pair_reads_timeout_first_with_two_trades(quickstart: dict[str, Any]) -> None:
+#: The trade count is a property of the rebalanced quickstart grid (S23: 3 tasks x 3
+#: tool_fail_rate values x N=100), read off it and not chosen. Before S23 the grid was 15
+#: cells at N=16 and traded two cells; the grid moved because the old one could not clear the
+#: pre-flight power gate, and this golden moved with it. The panel order did not move: M7
+#: orders panels itself (worst first), so it is still timeout then violated even though
+#: ``multi.events`` now infers violated first.
+QUICKSTART_TRADES = 1
+QUICKSTART_PANEL_ORDER = ["timeout", "violated"]
+
+
+def test_b17_quickstart_pair_reads_timeout_first_with_one_trade(quickstart: dict[str, Any]) -> None:
     multi: MultiDiffResult = quickstart["multi"]
     assert multi.inferred and multi.non_event == "completed"
-    assert len(multi.trades) == 2, (
-        f"salt {QUICKSTART_SALT} gave {len(multi.trades)} trades: the mock-agent golden is salt-specific"
+    assert len(multi.trades) == QUICKSTART_TRADES, (
+        f"salt {QUICKSTART_SALT} gave {len(multi.trades)} trades: the mock-agent golden is "
+        f"salt-specific and grid-specific"
     )
     rep = build_multi_report(
         multi, ReportSpec(title="quickstart", x_axis="tool_fail_rate", y_axis="task_id"),
         manifests=(quickstart["ma"], quickstart["mb"]),
     )
-    assert rep.events == ("timeout", "violated")
+    assert rep.events == tuple(QUICKSTART_PANEL_ORDER)
     assert rep.trade_line is not None and "timeout" in rep.trade_line and "violated" in rep.trade_line
     assert rep.trade_line == multi.trade_line()
     assert rep.inference_line == multi.to_markdown().splitlines()[0]
     assert rep.inference_line is not None and rep.inference_line.startswith("events: ")
     groups = panel_groups(svg_root(rep))
-    assert [g.attrib["data-panel"] for g in groups] == ["timeout", "violated"]
+    assert [g.attrib["data-panel"] for g in groups] == QUICKSTART_PANEL_ORDER
     traded = set(multi.trades["config_hash"])
+    assert len(traded) == QUICKSTART_TRADES
     for g in groups:
         marks = _traded_hashes(g)
-        assert len(marks) == 2 and set(marks) == traded
+        assert len(marks) == QUICKSTART_TRADES and set(marks) == traded
     md, svg_text, html = visible_texts(rep)
     for text in (md, svg_text, html):
         assert rep.inference_line in text and rep.trade_line in text
