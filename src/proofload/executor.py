@@ -104,6 +104,11 @@ class Plan:
     resumed: bool
     already_stored: int
     import_path: str | None = None
+    #: What the launcher said it accepts as a minimum detectable effect, or None for "nothing
+    #: was said". Set at plan time and read by the runners, exactly as ``import_path`` is: a
+    #: value the CLI supplies purely so the manifest can record it. ``check_power`` reads it
+    #: and never writes it.
+    max_mde_accepted: float | None = None
 
 
 def _all_keys(spec: SweepSpec) -> list[tuple[str, int]]:
@@ -126,6 +131,7 @@ def plan(
     pair_with: str | None = None,
     resume: str | None = None,
     import_path: str | None = None,
+    max_mde_accepted: float | None = None,
 ) -> Plan:
     """Build the ordered list of (config, replicate, seed) pairs for a run.
 
@@ -134,6 +140,8 @@ def plan(
     run_salt, pair_with, resume are mutually exclusive; none -> new salt.
     import_path, when given, is recorded at manifest.environment["import_path"] by
     run_local, matching the Modal backend; the executor still receives the callable.
+    max_mde_accepted rides the plan the same way, for manifest.environment["max_mde_accepted"];
+    None means the launcher said nothing and the runners record DEFAULT_MAX_MDE.
     """
     options = (("run_salt", run_salt), ("pair_with", pair_with), ("resume", resume))
     given = [name for name, value in options if value is not None]
@@ -195,6 +203,7 @@ def plan(
         resumed=resumed,
         already_stored=already_stored,
         import_path=import_path,
+        max_mde_accepted=max_mde_accepted,
     )
 
 
@@ -664,6 +673,17 @@ class RunSummary:
     n_infra_failed: int = 0
 
 
+def _accepted_mde(p: Plan) -> float:
+    """What ``manifest.environment["max_mde_accepted"]`` records, on either backend.
+
+    Every launched run carries one, because the claim is about the run and not about whether a
+    flag was typed: no flag means the default was in force, and that is what is recorded. Both
+    backends build ``environment`` separately, which is why this is a function and not two
+    literals -- the modal path is the one likely to be missed.
+    """
+    return DEFAULT_MAX_MDE if p.max_mde_accepted is None else p.max_mde_accepted
+
+
 def _environment(spec: SweepSpec) -> dict[str, Any]:
     return {
         "python": sys.version,
@@ -777,6 +797,7 @@ def run_local(
 
     if not p.resumed:
         environment = _environment(p.spec)
+        environment["max_mde_accepted"] = _accepted_mde(p)
         if p.import_path is not None:
             environment["import_path"] = p.import_path
         if capture_spec is not None and capture_status is not None:

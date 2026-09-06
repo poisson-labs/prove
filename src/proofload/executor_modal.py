@@ -32,6 +32,7 @@ from proofload.executor import (
     ExecutorError,
     Plan,
     RunSummary,
+    _accepted_mde,
     _call_in_process,
     _call_with_timeout,
     _capture_line,
@@ -426,6 +427,7 @@ def _open_run(
         concurrency=options.concurrency,
         import_path=import_path,
         secrets=list(options.secrets),
+        max_mde_accepted=_accepted_mde(p),
     )
     if p.spec.capture is not None:
         environment["capture"] = _capture_record(
