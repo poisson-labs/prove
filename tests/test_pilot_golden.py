@@ -1,4 +1,18 @@
-"""S18 -- the golden suite pilot: the oracle for P1-P13.
+"""S18 -- the golden suite pilot: the oracle for P1-P13, amended by S22 and carrying Q1-Q13.
+
+**S22 adds ``api_error``**, a fifth outcome for *the agent could not reach the model*, told
+apart from ``crashed`` (*the agent's own code could not continue*). Written from "Proofload
+-- Spec S22 Pilot api_error Outcome" section 4; P1, P2, P3, P8, P9 and P12 were amended for
+it first, in their own commit.
+
+**Three modules of core are imported here that the pilot may not import**:
+``proofload.diff.multi_diff`` and ``proofload.survival.competing_set`` for Q10, and
+``proofload.cli`` for Q9's ``inspect``. That is a *test* importing core, not the pilot
+importing core; P12 is not weakened by it, and the two tests that check the pilot's own
+import list (``test_p12_golden_pilot_imports_only_*`` and
+``test_p12_nothing_under_src_proofload_names_*``) read the pilot tree, never this file.
+The spec's section 6 names the first two; ``cli`` is the third, and Q9 is stated over
+``inspect``, which is a CLI verb and exists nowhere else.
 
 Written from "Proofload -- Spec S18 Golden Suite Pilot (Phase 3.5)" section 4. Session B
 builds ``examples/golden_pilot/`` against this file and does not edit it. Nothing under
@@ -102,6 +116,7 @@ import ast
 import dataclasses
 import importlib
 import importlib.metadata
+import io
 import json
 import math
 import multiprocessing
@@ -121,10 +136,13 @@ from typing import Any
 import pytest
 
 import proofload
+from proofload import cli
+from proofload.diff import multi_diff
 from proofload.episode import Episode
 from proofload.executor import plan, run_local
 from proofload.sampler import SweepSpec
 from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
+from proofload.survival import competing_set
 from proofload.trace import KINDS, Span, Trace
 
 openai = pytest.importorskip("openai", reason="the pilot's agent speaks through the openai SDK")
@@ -460,6 +478,7 @@ def scenario(name: str) -> tuple[str, int, tuple[Reply, ...]]:
         "garbage": (HE2, 12, (GARBAGE, GARBAGE)),
         "api_error_after_two_calls": (HE2, 13, (*steps(("run_tests", canonical(HE2)), ("run_tests", canonical(HE2))), FIVE_HUNDRED)),
         "crash_after_two_calls": (HE2, 14, (*steps(("run_tests", canonical(HE2)), ("run_tests", canonical(HE2))), GARBAGE, GARBAGE)),
+        "api_error_at_repair_turn": (HE2, 15, (GARBAGE, FIVE_HUNDRED)),
         "hang": (BAD_TASK, 31, steps(("run_tests", bad("hangs")), ("submit", canonical(BAD_TASK)))),
     }
     return table[name]
@@ -1597,6 +1616,758 @@ def test_p13_the_dockerfile_sets_the_boundary_and_nothing_else_under_the_pilot_o
 def test_p13_the_agent_reads_the_boundary_from_the_environment_at_import() -> None:
     source = (ROOT / "agent.py").read_text(encoding="utf-8")
     assert BOUNDARY_VAR in source and "Dockerfile" in source and "RuntimeError" in source
+
+
+# ---------- S22: Q1-Q13, `api_error` as a first-class pilot outcome ----------
+#
+# One plain assertion per invariant. The seven S12 oracle defects all lived inside clever
+# helpers, so this block repeats itself where a helper would have been shorter.
+
+API_TEXT_MARKERS = ("api error", "apierror", "infra:")  # what an API-error message can contain
+VOCABULARY = ("OUTCOMES", "FAILURE_EVENTS", "T_UNIT", "HORIZON")
+AGENT_IMPORTS = {"OUTCOMES", "T_UNIT", "HORIZON"}  # spec S22 section 2
+NUMBERS_IMPORTS = {"OUTCOMES", "FAILURE_EVENTS", "T_UNIT"}
+
+
+@pytest.fixture
+def pilot_package(pilot_env: None) -> Any:
+    return importlib.import_module("golden_pilot")
+
+
+def parsed(path: Path) -> ast.Module:
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def parents_of(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    """Every node's parent. Q6 and Q13 ask what a name is *used as*, which needs the parent."""
+    out: dict[ast.AST, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            out[child] = node
+    return out
+
+
+def assigned_names(tree: ast.AST) -> set[str]:
+    """Every name this module binds by assignment, at any depth."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        elif isinstance(node, ast.AugAssign):
+            targets = [node.target]
+        else:
+            continue
+        for target in targets:
+            for sub in ast.walk(target):
+                if isinstance(sub, ast.Name):
+                    names.add(sub.id)
+    return names
+
+
+def relative_imports(tree: ast.AST) -> set[str]:
+    """The names a module pulls in with ``from . import ...``."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module is None:
+            names.update(alias.name for alias in node.names)
+    return names
+
+
+def string_constants_compared(tree: ast.AST) -> list[str]:
+    """Every string literal this module compares, tests membership of, or prefix-matches.
+
+    The three shapes a text discriminator can take: ``x == "..."`` / ``x in ("...",)``
+    (``ast.Compare``), ``x.startswith("...")`` and its family, and ``re.match("...", x)``.
+    """
+    found: list[str] = []
+    text_methods = {
+        "startswith", "endswith", "removeprefix", "removesuffix", "find", "index",
+        "count", "split", "partition",
+    }
+    regex_calls = {"match", "search", "fullmatch", "findall", "sub", "compile"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare):
+            for operand in [node.left, *node.comparators]:
+                found.extend(
+                    sub.value for sub in ast.walk(operand)
+                    if isinstance(sub, ast.Constant) and isinstance(sub.value, str)
+                )
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr in text_methods | regex_calls:
+                for arg in node.args:
+                    found.extend(
+                        sub.value for sub in ast.walk(arg)
+                        if isinstance(sub, ast.Constant) and isinstance(sub.value, str)
+                    )
+    return found
+
+
+def api_text_literals(tree: ast.AST) -> list[str]:
+    """Those of them that read like an API-error message: the Addendum 1 filter's shape."""
+    return [
+        text
+        for text in string_constants_compared(tree)
+        if any(marker in text.lower() for marker in API_TEXT_MARKERS)
+    ]
+
+
+# ---------- Q1, Q2: one definition of the vocabulary ----------
+
+
+def test_q1_the_five_outcomes_live_in_one_place_and_both_consumers_import_that_place(
+    pilot_package: Any, agent: Any, numbers_module: Any
+) -> None:
+    """Identity, not equality: an equal re-spelled copy in ``numbers.py`` must fail here.
+
+    Two modules that each spell ``("passed", ...)`` compile two distinct tuple objects, so
+    ``is`` separates the import from the copy where ``==`` cannot. It does not separate them
+    for ``T_UNIT`` or ``HORIZON``: CPython interns the string and caches the small int, so
+    ``is`` on those is vacuously true for a re-spelled copy too. The next test carries them.
+    """
+    assert pilot_package.OUTCOMES == OUTCOMES
+    assert isinstance(pilot_package.OUTCOMES, tuple)
+    assert agent.OUTCOMES is pilot_package.OUTCOMES
+    assert numbers_module.OUTCOMES is pilot_package.OUTCOMES
+    assert numbers_module.FAILURE_EVENTS is pilot_package.FAILURE_EVENTS
+    assert agent.T_UNIT == pilot_package.T_UNIT == T_UNIT
+    assert numbers_module.T_UNIT == pilot_package.T_UNIT
+    assert agent.HORIZON == pilot_package.HORIZON == HORIZON
+
+
+def test_q1_neither_consumer_assigns_a_vocabulary_name_and_both_import_it_from_the_package() -> None:
+    """The half of Q1 that identity cannot carry, for the interned ``T_UNIT`` and ``HORIZON``.
+
+    The rule stated in prose, so a later reader does not have to reconstruct it from the
+    ``ast`` walk: **the package defines the vocabulary and nobody else binds those names.**
+    ``agent.py`` and ``numbers.py`` each reach it with ``from . import ...`` and neither
+    assigns ``OUTCOMES``, ``FAILURE_EVENTS``, ``T_UNIT`` or ``HORIZON`` anywhere.
+    """
+    package = parsed(ROOT / "__init__.py")
+    assert set(VOCABULARY) <= assigned_names(package), sorted(assigned_names(package))
+
+    agent_tree = parsed(ROOT / "agent.py")
+    assert set(VOCABULARY) & assigned_names(agent_tree) == set(), sorted(assigned_names(agent_tree) & set(VOCABULARY))
+    assert AGENT_IMPORTS <= relative_imports(agent_tree), sorted(relative_imports(agent_tree))
+
+    numbers_tree = parsed(ROOT / "numbers.py")
+    assert set(VOCABULARY) & assigned_names(numbers_tree) == set(), sorted(assigned_names(numbers_tree) & set(VOCABULARY))
+    assert NUMBERS_IMPORTS <= relative_imports(numbers_tree), sorted(relative_imports(numbers_tree))
+
+
+def test_q2_failure_events_is_every_outcome_but_passed_in_the_outcome_order(pilot_package: Any) -> None:
+    assert set(pilot_package.FAILURE_EVENTS) == set(pilot_package.OUTCOMES) - {"passed"}
+    assert pilot_package.FAILURE_EVENTS == tuple(o for o in pilot_package.OUTCOMES if o != "passed")
+    assert pilot_package.FAILURE_EVENTS == FAILURE_EVENTS
+
+
+def test_q2_failure_events_is_derived_from_outcomes_and_not_spelled_out() -> None:
+    """The rule in prose: **``FAILURE_EVENTS`` is computed from ``OUTCOMES``, never written.**
+
+    An equal four-tuple of literals satisfies the test above and is exactly the mutant --
+    it is a third spelling of the vocabulary, and a sixth outcome lands in it or not by
+    whoever remembers. So the assignment's right-hand side must mention ``OUTCOMES`` and
+    must contain no outcome name as a literal.
+    """
+    package = parsed(ROOT / "__init__.py")
+    values = [
+        node.value
+        for node in ast.walk(package)
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        and any(isinstance(t, ast.Name) and t.id == "FAILURE_EVENTS" for t in ast.walk(node) if isinstance(t, ast.Name))
+        and node.value is not None
+    ]
+    assert len(values) == 1, values
+    value = values[0]
+    mentions = {n.id for n in ast.walk(value) if isinstance(n, ast.Name)}
+    assert "OUTCOMES" in mentions, sorted(mentions)
+    literals = [
+        n.value for n in ast.walk(value)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in OUTCOMES
+    ]
+    assert literals == ["passed"], literals  # the one name it may spell is the one it removes
+
+
+# ---------- Q3, Q4: the two boundaries ----------
+
+
+def test_q3_a_5xx_that_survives_every_retry_at_the_ordinary_turn_is_an_api_error(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    run = play(agent, monkeypatch, "api_error")
+    assert run.episode.outcome == "api_error", run.episode
+    assert run.episode.meta["retries"] == 3
+    assert len(run.requests) == 4, [q.turn for q in run.requests]  # the attempt and three retries
+    reason = run.episode.meta["crash_reason"]
+    assert isinstance(reason, str) and ("500" in reason or "InternalServerError" in reason), reason
+
+
+def test_q3_a_5xx_that_survives_every_retry_at_the_repair_turn_is_an_api_error_too(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The second of the two ``content is None`` sites, tested apart from the first.
+
+    The mutant this exists for moves only the ordinary turn and leaves the repair turn
+    ``crashed``. The episode below reaches the repair turn on an unparseable reply and then
+    cannot reach the model at all: the same failure, one turn later.
+    """
+    run = play(agent, monkeypatch, "api_error_at_repair_turn")
+    assert run.episode.outcome == "api_error", run.episode
+    assert run.episode.meta["retries"] == 3
+    assert len(run.requests) == 1 + 4, [q.turn for q in run.requests]  # the garbage reply, then the repair turn's four
+    reason = run.episode.meta["crash_reason"]
+    assert isinstance(reason, str) and ("500" in reason or "InternalServerError" in reason), reason
+
+
+def test_q4_two_unparseable_replies_are_crashed_and_never_an_api_error(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The model was reached twice and replied unusably twice; the failure is the agent's.
+
+    ``_PARSE_FAILURE`` is private to ``agent.py`` and the spec states its name but not its
+    text, so this pins the property that matters instead of the string: the reason is one
+    fixed constant -- the same on two different parse-failure episodes, at different turn
+    counts -- and it is not the API-error text.
+    """
+    run = play(agent, monkeypatch, "garbage")
+    assert run.episode.outcome == "crashed", run.episode
+    assert run.episode.meta["retries"] == 0
+    later = play(agent, monkeypatch, "crash_after_two_calls")
+    assert later.episode.outcome == "crashed", later.episode
+    reason, other = run.episode.meta["crash_reason"], later.episode.meta["crash_reason"]
+    assert isinstance(reason, str) and reason == other, (reason, other)
+    assert "pars" in reason.lower(), reason
+    assert not any(marker in reason.lower() for marker in API_TEXT_MARKERS), reason
+
+
+# ---------- Q5: `retries` is not the discriminator ----------
+
+
+class FlakyModel:
+    """A scripted model whose turn ``n`` 5xxs its first ``flaky[n]`` attempts, then answers.
+
+    ``ScriptedModel`` is stateless on purpose (P5, P10): every request at a turn gets that
+    turn's one reply, which cannot express "fail twice, then succeed". Q5 needs exactly that,
+    so this one counts attempts per turn. It delegates to a ``ScriptedModel`` for the reply
+    and for the recording, so its requests still reach ``ALL_REQUESTS`` and P11's last test.
+    Nothing but Q5 uses it.
+    """
+
+    def __init__(self, script: Script, flaky: Mapping[int, int]) -> None:
+        self.inner = ScriptedModel(script)
+        self.flaky = dict(flaky)
+        self.attempts: dict[int, int] = {}
+        self.transport = httpx.MockTransport(self.handle)
+
+    @property
+    def requests(self) -> list[Request]:
+        return self.inner.requests
+
+    def client(self) -> Any:
+        return openai.OpenAI(
+            api_key="oracle-key-never-sent",
+            base_url=DISCARD_URL,
+            http_client=httpx.Client(transport=self.transport),
+            max_retries=0,
+        )
+
+    def handle(self, request: Any) -> Any:
+        body = bytes(request.content)
+        try:
+            data = json.loads(body) if body else {}
+        except ValueError:
+            data = {}
+        messages = data.get("messages") if isinstance(data, Mapping) else None
+        messages = messages if isinstance(messages, list) else []
+        turn = sum(1 for m in messages if isinstance(m, Mapping) and m.get("role") == "assistant")
+        response = self.inner.handle(request)  # records the request whatever we answer with
+        seen = self.attempts.get(turn, 0)
+        self.attempts[turn] = seen + 1
+        if seen < self.flaky.get(turn, 0):
+            return httpx.Response(500, json={"error": {"message": "scripted upstream failure", "type": "server_error"}})
+        return response
+
+
+def test_q5_two_retries_then_a_parse_failure_is_crashed_with_two_retries(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``meta["retries"] == 2`` and the outcome is ``crashed``: retries do not decide.
+
+    Turn 0 5xxs twice, succeeds on the third attempt and spends a tool call. Turns 1 and 2
+    are unparseable. A build that read the API case off a non-zero ``retries`` calls this
+    ``api_error``; the model was reached three times, so it is ``crashed``.
+    """
+    script: Script = {(HE2, 41): (*steps(("run_tests", canonical(HE2))), GARBAGE, GARBAGE)}
+    model = FlakyModel(script, {0: 2})
+    monkeypatch.setattr(agent, "client_factory", model.client)
+    episode = agent.rollout({"task_id": HE2, "temperature": 0.0}, 41)
+    assert episode.outcome == "crashed", episode
+    assert episode.meta["retries"] == 2, episode.meta["retries"]
+    assert episode.t == 1, episode.t
+    assert len(model.requests) == 3 + 1 + 1, [q.turn for q in model.requests]
+
+
+def test_q5_two_successful_retries_then_an_exhausted_turn_is_an_api_error_with_five_retries(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``meta["retries"] == 5`` and the outcome is ``api_error``: the same number, told apart.
+
+    Turn 0 5xxs twice and then succeeds; turn 1 exhausts the attempt and all three backoffs.
+    Read off ``retries`` the two Q5 episodes are indistinguishable in kind -- both non-zero,
+    neither three -- and ``outcome`` is the only thing that separates them.
+    """
+    script: Script = {(HE2, 42): (*steps(("run_tests", canonical(HE2))), FIVE_HUNDRED)}
+    model = FlakyModel(script, {0: 2})
+    monkeypatch.setattr(agent, "client_factory", model.client)
+    episode = agent.rollout({"task_id": HE2, "temperature": 0.0}, 42)
+    assert episode.outcome == "api_error", episode
+    assert episode.meta["retries"] == 5, episode.meta["retries"]
+    assert episode.t == 1, episode.t
+    assert len(model.requests) == 3 + 4, [q.turn for q in model.requests]
+
+
+# ---------- Q6: `crash_reason` is not the discriminator either ----------
+
+
+def test_q6_agent_py_writes_crash_reason_and_carries_it_and_never_reads_its_text() -> None:
+    """The rule in prose, because the ``ast`` walk below is not self-explaining.
+
+    **``crash_reason`` is written and it is carried, and that is all.** Every occurrence of
+    the name in ``agent.py`` is either an assignment target or a value inside a dict display
+    -- the ``meta`` dict. It is never the object of an attribute access, never an argument to
+    a call, never an operand of a comparison or a membership test. The outcome label is the
+    discriminator now (spec S22 section 3), and an ADR that says where a value is built means
+    a test fails when it is built elsewhere.
+
+    ``ast``, never a substring scan: ``"crash_reason" in source`` cannot tell an assignment
+    from a ``.startswith`` and would have to be either blind or wrong.
+    """
+    tree = parsed(ROOT / "agent.py")
+    parents = parents_of(tree)
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Name) and node.id == "crash_reason"):
+            continue
+        if isinstance(node.ctx, ast.Store):
+            continue
+        parent = parents.get(node)
+        where = f"line {node.lineno}, inside {type(parent).__name__}"
+        assert isinstance(node.ctx, ast.Load), where
+        assert isinstance(parent, ast.Dict) and any(v is node for v in parent.values), where
+
+
+def test_q6_agent_py_compares_no_string_that_reads_like_an_api_error_message() -> None:
+    """The other half: nothing in the module prefix-matches or compares API-error text.
+
+    A discriminator does not need the variable -- ``error.startswith("API error")`` reads the
+    same fact off a different name. This looks for the literal instead of for the variable.
+    """
+    tree = parsed(ROOT / "agent.py")
+    assert api_text_literals(tree) == [], api_text_literals(tree)
+
+
+# ---------- Q7: `t` is unchanged, and nothing raises ----------
+
+
+@pytest.mark.parametrize("name", ["api_error", "api_error_at_repair_turn", "api_error_after_two_calls"])
+def test_q7_an_api_error_episode_counts_the_calls_it_made_and_keeps_the_horizon(agent: Any, monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    run = play(agent, monkeypatch, name)
+    episode = run.episode
+    assert isinstance(episode, Episode), type(episode)
+    assert episode.outcome == "api_error", episode
+    assert 0 <= episode.t <= HORIZON and float(episode.t).is_integer(), episode.t
+    assert episode.horizon == HORIZON
+    assert episode.meta["task_id"] == scenario(name)[0]
+
+
+def test_q7_the_rollout_still_returns_an_episode_for_a_5xx_a_garbage_reply_and_a_hang(agent: Any, fast_sandbox: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    for name, expected in (("api_error", "api_error"), ("garbage", "crashed"), ("hang", "passed")):
+        run = play(agent, monkeypatch, name)
+        assert isinstance(run.episode, Episode), (name, type(run.episode))
+        assert run.episode.outcome == expected, (name, run.episode.outcome)
+        assert run.episode.horizon == HORIZON, name
+
+
+def test_q7_the_outcome_is_none_fallback_is_still_crashed_and_is_pinned_statically() -> None:
+    """The rule in prose: **the loop exiting with no outcome set is our bug, not the API's.**
+
+    ``_loop`` is ``while outcome is None``, so every exit either sets an outcome or breaks
+    having set one: the ``Episode(outcome=... else "crashed")`` default is unreachable by
+    construction, and routing it to ``api_error`` changes nothing any script can observe.
+    That leaves one instrument. This reads the default off the ``Episode`` call itself and
+    fails if the fallback names the new outcome -- the only way this mutant can be caught, and
+    the reason it is written as a static check rather than as a scripted episode.
+    """
+    tree = parsed(ROOT / "agent.py")
+    calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Episode"
+    ]
+    assert len(calls) == 1, calls
+    outcome_arg = [kw.value for kw in calls[0].keywords if kw.arg == "outcome"]
+    assert len(outcome_arg) == 1, calls[0].keywords
+    literals = {
+        n.value for n in ast.walk(outcome_arg[0])
+        if isinstance(n, ast.Constant) and isinstance(n.value, str)
+    }
+    assert literals == {"crashed"}, literals
+
+
+# ---------- Q9: no collision with the executor's error strings ----------
+
+RUN_Q9 = "pilot-q9"
+INFRA_API_ERROR = "infra: API error after 3 retries: APIConnectionError: connection reset"
+
+
+@pytest.fixture(scope="module")
+def q9_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """One cell: an ``api_error`` ok row, a ``passed`` ok row, and two errored rows -- one of
+    which carries API-error text in its *error* string. That row is the trap: it is Proofload
+    failing to observe, it has no outcome, and ``--event api_error`` must not reach it."""
+    root = tmp_path_factory.mktemp("pilot-q9-store")
+    store = Store(root)
+    store.create_run(
+        RunManifest(run_id=RUN_Q9, target_id=TARGET_ID, t_unit=T_UNIT, run_salt="q9-salt", axis_types=AXIS_TYPES, backend="local", environment={})
+    )
+    rows = [
+        ok_row(RUN_Q9, "c0", 0, 900, "api_error", 1, episode_trace(RUN_Q9, "c0", 0, tools=1, llms=1)),
+        ok_row(RUN_Q9, "c0", 1, 901, "passed", 2, episode_trace(RUN_Q9, "c0", 1, tools=2, llms=2)),
+        errored_row(RUN_Q9, "c0", 2, 902, INFRA_API_ERROR, None),
+        errored_row(RUN_Q9, "c0", 3, 903, TIMEOUT_ERROR, None),
+    ]
+    assert store.append(RUN_Q9, rows) == 4
+    return root
+
+
+def test_q9_no_outcome_collides_with_the_executors_error_strings(agent: Any) -> None:
+    for name in FORBIDDEN_OUTCOMES:
+        assert name not in agent.OUTCOMES
+    assert "api_error" not in FORBIDDEN_OUTCOMES
+    assert not any(o.startswith("infra: ") for o in agent.OUTCOMES), agent.OUTCOMES
+
+
+def inspected(root: Path, event: str) -> str:
+    out, err = io.StringIO(), io.StringIO()
+    code = cli.main(["--store", str(root), "inspect", RUN_Q9, "--event", event], stdout=out, stderr=err)
+    assert code == 0, (code, out.getvalue(), err.getvalue())
+    return out.getvalue()
+
+
+def test_q9_inspect_on_the_new_event_selects_the_outcome_rows_and_no_errored_row(q9_root: Path) -> None:
+    """``inspect --event NAME`` reads outcomes and errors under one flag (M10), and the store
+    here holds an errored row whose *error* spells API-error text. Selection is by the whole
+    string, so it does not match, and an errored row is never counted as an episode that
+    reached a terminal outcome. The errored rows are reachable, under their own strings.
+    """
+    text = inspected(q9_root, "api_error")
+    assert [line for line in text.splitlines() if line.startswith("seed: ")] == ["seed: 900"], text
+    assert "error:" not in text and "outcome: -" not in text, text  # the errored row's shape
+    assert INFRA_API_ERROR not in text, text
+
+    still_errored = inspected(q9_root, TIMEOUT_ERROR)
+    assert [line for line in still_errored.splitlines() if line.startswith("seed: ")] == ["seed: 903"], still_errored
+    assert "outcome: -" in still_errored and f"error: {TIMEOUT_ERROR}" in still_errored, still_errored
+
+    infra = inspected(q9_root, INFRA_API_ERROR)
+    assert [line for line in infra.splitlines() if line.startswith("seed: ")] == ["seed: 902"], infra
+
+
+# ---------- Q10: the CIF correction, measured ----------
+
+RUN_PRE = "pilot-pre-s22"
+RUN_POST = "pilot-post-s22"
+Q10_HORIZON = 6.0
+#: Per cell, the episodes as (outcome, t); ``API`` is the one an S18 agent labelled ``crashed``
+#: and an S22 agent labels ``api_error``. c0 has API failures and no true crash, c1 has both,
+#: c2 has neither -- the three cases Q10 distinguishes.
+Q10_LAYOUT: dict[str, list[tuple[str, float]]] = {
+    "c0": [("passed", 3), ("API", 2), ("failed_assertion", 4), ("API", 5), ("passed", 6)],
+    "c1": [("crashed", 1), ("API", 3), ("passed", 2), ("timed_out", 6)],
+    "c2": [("passed", 2), ("crashed", 3), ("failed_assertion", 1), ("timed_out", 6)],
+}
+Q10_WITH_API = ("c0", "c1")
+Q10_WITHOUT_API = ("c2",)
+
+
+def q10_rows(run_id: str, api_label: str) -> list[EpisodeRecord]:
+    """The same episodes twice, differing only in what the API failures are called."""
+    out = []
+    for cell, episodes in Q10_LAYOUT.items():
+        for k, (outcome, t) in enumerate(episodes):
+            out.append(
+                EpisodeRecord(
+                    run_id=run_id, config_hash=CELL_HASH[cell], config=dict(CELLS[cell]),
+                    seed=5000 + k, replicate_index=k,
+                    outcome=api_label if outcome == "API" else outcome,
+                    t=float(t), horizon=Q10_HORIZON, confidence=None, meta={}, error=None,
+                    wall_time=1.0, backend_meta={},
+                )
+            )
+    return out
+
+
+@pytest.fixture(scope="module")
+def q10_frames(tmp_path_factory: pytest.TempPathFactory) -> tuple[Any, Any]:
+    store = Store(tmp_path_factory.mktemp("pilot-q10-store"))
+    for run_id, label in ((RUN_PRE, "crashed"), (RUN_POST, "api_error")):
+        store.create_run(
+            RunManifest(run_id=run_id, target_id=TARGET_ID, t_unit=T_UNIT, run_salt="q10-salt", axis_types=AXIS_TYPES, backend="local", environment={})
+        )
+        assert store.append(run_id, q10_rows(run_id, label)) == sum(len(v) for v in Q10_LAYOUT.values())
+    return store.read(RUN_PRE), store.read(RUN_POST)
+
+
+def test_q10_the_competing_set_gains_the_new_name_and_nothing_else(q10_frames: tuple[Any, Any]) -> None:
+    pre, post = q10_frames
+    assert competing_set(pre) == ("crashed", "failed_assertion", "passed", "timed_out")
+    assert competing_set(post) == ("api_error", "crashed", "failed_assertion", "passed", "timed_out")
+    assert len(competing_set(pre)) == 4 and len(competing_set(post)) == 5
+
+
+def test_q10_the_crashed_cif_stops_absorbing_the_api_failures_by_exactly_their_own_cif(q10_frames: tuple[Any, Any]) -> None:
+    """The correction, in the numbers, over the same episodes under the two labellings.
+
+    Aalen-Johansen's cause-``k`` incidence is a sum of ``S(t-) * d_k(t) / n(t)``. Relabelling
+    moves mass between causes and touches neither ``S`` nor ``n``, so the ``crashed``
+    incidence has to fall by exactly the ``api_error`` incidence -- in a cell that had an API
+    failure -- and not move at all in a cell that had none. Both frames are diffed against
+    themselves, which is how a cumulative incidence is read out of ``multi_diff``: ``rate_a``
+    is the estimate at the horizon and the comparison is beside the point here.
+
+    The drop is compared with a tolerance and the no-change case with ``==``. The second is a
+    bit-identical computation and must be exact; the first is a sum re-associated across two
+    causes, where real-arithmetic equality does not oblige floating point to agree bitwise.
+    """
+    pre, post = q10_frames
+    before = {str(r.config_hash): float(r.rate_a) for r in multi_diff(pre, pre, events=("crashed",)).by_event["crashed"].cells.itertuples()}
+    after = multi_diff(post, post, events=("crashed", "api_error"))
+    crashed = {str(r.config_hash): float(r.rate_a) for r in after.by_event["crashed"].cells.itertuples()}
+    api = {str(r.config_hash): float(r.rate_a) for r in after.by_event["api_error"].cells.itertuples()}
+
+    for cell in Q10_WITH_API:
+        h = CELL_HASH[cell]
+        assert api[h] > 0.0, (cell, api[h])
+        assert crashed[h] < before[h], (cell, crashed[h], before[h])
+        assert before[h] - crashed[h] == pytest.approx(api[h], abs=1e-12), (cell, before[h], crashed[h], api[h])
+    for cell in Q10_WITHOUT_API:
+        h = CELL_HASH[cell]
+        assert api[h] == 0.0, (cell, api[h])
+        assert crashed[h] == before[h], (cell, crashed[h], before[h])
+
+
+# ---------- Q11: numbers.py over all five outcomes ----------
+
+RUN_Q11 = "pilot-q11"
+RUN_Q11B = "pilot-q11-prime"
+
+
+def q11_rows() -> list[EpisodeRecord]:
+    """Two cells, every outcome once, ``api_error`` twice, and one errored row.
+
+    ok rows (cell, k, seed, outcome, t, tools, llms):
+      c0 0 700 passed            2  2 2
+      c0 1 701 failed_assertion  3  3 3
+      c0 2 702 api_error         1  1 1
+      c1 0 710 timed_out         6  6 6
+      c1 1 711 crashed           0  0 1
+      c1 2 712 api_error         0  0 1
+    errored: c1 k3 seed 713, "timeout", with a truncated trace.
+    """
+    a = RUN_Q11
+    return [
+        ok_row(a, "c0", 0, 700, "passed", 2, episode_trace(a, "c0", 0, tools=2, llms=2)),
+        ok_row(a, "c0", 1, 701, "failed_assertion", 3, episode_trace(a, "c0", 1, tools=3, llms=3)),
+        ok_row(a, "c0", 2, 702, "api_error", 1, episode_trace(a, "c0", 2, tools=1, llms=1)),
+        ok_row(a, "c1", 0, 710, "timed_out", 6, episode_trace(a, "c1", 0, tools=6, llms=6)),
+        ok_row(a, "c1", 1, 711, "crashed", 0, episode_trace(a, "c1", 1, tools=0, llms=1)),
+        ok_row(a, "c1", 2, 712, "api_error", 0, episode_trace(a, "c1", 2, tools=0, llms=1)),
+        errored_row(a, "c1", 3, 713, TIMEOUT_ERROR, timeout_trace(a, "c1", 3)),
+    ]
+
+
+def q11_rows_prime() -> list[EpisodeRecord]:
+    """The same six triples, one outcome changed: c0 k2 is ``passed`` where A was ``api_error``."""
+    b = RUN_Q11B
+    small = episode_trace(b, "c0", 0, tools=1, llms=1)
+    return [
+        ok_row(b, "c0", 0, 700, "passed", 1, small),
+        ok_row(b, "c0", 1, 701, "failed_assertion", 1, small),
+        ok_row(b, "c0", 2, 702, "passed", 1, small),
+        ok_row(b, "c1", 0, 710, "timed_out", 1, small),
+        ok_row(b, "c1", 1, 711, "crashed", 1, small),
+        ok_row(b, "c1", 2, 712, "api_error", 1, small),
+    ]
+
+
+@pytest.fixture(scope="module")
+def q11_numbers(numbers_module: Any, tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    store = Store(tmp_path_factory.mktemp("pilot-q11-store"))
+    for run_id, rows in ((RUN_Q11, q11_rows()), (RUN_Q11B, q11_rows_prime())):
+        store.create_run(
+            RunManifest(run_id=run_id, target_id=TARGET_ID, t_unit=T_UNIT, run_salt="q11-salt", axis_types=AXIS_TYPES, backend="local", environment={})
+        )
+        assert store.append(run_id, rows) == len(rows)
+    out = numbers_module.numbers(store, RUN_Q11, paired_with=RUN_Q11B)
+    assert isinstance(out, dict)
+    return out
+
+
+def test_q11_contract_survival_counts_an_api_error_row_as_surviving(q11_numbers: dict[str, Any]) -> None:
+    """The mutant: ``numbers.py`` keeping a four-name ``OUTCOMES`` of its own. Every row here
+    is well-formed, so anything but a clean sweep means the two ``api_error`` rows failed the
+    ``outcome in OUTCOMES`` clause."""
+    contract = q11_numbers["contract"]
+    assert (contract["rows"], contract["survived"], contract["failed"]) == (6, 6, 0), contract
+    assert contract["without_llm_spans"] == 0, contract
+
+
+def test_q11_zero_n_is_over_the_four_failure_events(q11_numbers: dict[str, Any]) -> None:
+    zero_n = q11_numbers["zero_n"]
+    assert zero_n["cells"] == 2
+    assert list(zero_n["events"]) == list(FAILURE_EVENTS) == ["failed_assertion", "timed_out", "crashed", "api_error"]
+    # c0 produced failed_assertion and api_error -> holes on timed_out, crashed.
+    # c1 produced timed_out, crashed and api_error -> holes on failed_assertion.
+    expected = {
+        (CELL_HASH["c0"], "timed_out"), (CELL_HASH["c0"], "crashed"),
+        (CELL_HASH["c1"], "failed_assertion"),
+    }
+    holes = {(str(cell), str(event)) for cell, event in zero_n["holes"]}
+    assert holes == expected, sorted(holes ^ expected)
+    assert zero_n["count"] == 3 == 2 * len(FAILURE_EVENTS) - 5, zero_n["count"]
+
+
+def test_q11_the_errored_split_span_census_and_kind_histogram_are_unchanged_in_shape(q11_numbers: dict[str, Any]) -> None:
+    n = q11_numbers
+    assert (n["rows"], n["ok_rows"], n["errored_rows"]) == (7, 6, 1)
+    # spans per ok row: 5 7 3 | 13 2 2  (root + tools + llms)
+    assert n["spans"] == 5 + 7 + 3 + 13 + 2 + 2 == 32
+    assert n["dropped"] == 0
+    assert n["kinds"] == {"llm": 14, "tool": 12, "retrieval": 0, "db": 0, "http": 0, "agent": 6, "other": 0}
+    assert set(n["kinds"]) == set(KINDS) and sum(n["kinds"].values()) == n["spans"]
+    assert n["other_share"] == 0.0
+    assert n["tool_share"] == approx(Fraction(12, 32))
+    assert n["errored"] == {
+        "rows": 1, "rate": approx(Fraction(1, 7)), "by_error": {TIMEOUT_ERROR: 1},
+        "with_trace": 1, "without_trace": 0,
+    }, n["errored"]
+
+
+def test_q11_agreement_and_kappa_are_unchanged_in_shape_over_five_labels(q11_numbers: dict[str, Any]) -> None:
+    pairing = q11_numbers["pairing"]
+    assert pairing["paired_with"] == RUN_Q11B
+    assert pairing["triples"] == 6
+    # Six shared triples, all at temperature 0.0 except c1's, which CELLS puts at 0.0 as well;
+    # c0 k2 is the one disagreement (api_error vs passed) -> 5/6.
+    assert pairing["agreement"]["all"] == approx(Fraction(5, 6))
+    # A: passed 1, failed_assertion 1, api_error 2, timed_out 1, crashed 1
+    # A': passed 2, failed_assertion 1, timed_out 1, crashed 1, api_error 1
+    # p_e = (1*2 + 1*1 + 2*1 + 1*1 + 1*1) / 36 = 7/36; p_o = 30/36
+    kappa = (Fraction(30, 36) - Fraction(7, 36)) / (1 - Fraction(7, 36))
+    assert kappa == Fraction(23, 29)
+    assert pairing["kappa"]["all"] == approx(kappa)
+    assert set(pairing) >= {"paired_with", "triples", "agreement", "kappa"}
+    assert set(pairing["agreement"]) == {"all", "by_temperature"}
+    assert set(pairing["kappa"]) == {"all", "by_temperature"}
+
+
+# ---------- Q12: the README says it ----------
+
+FENCE_SENTENCE = "A nonzero api_error CIF is a fact about the run and never a finding about the agent."
+TESTING_VERBS = ("diff", "report", "check")
+
+
+def readme_sections() -> dict[str, str]:
+    """``## `` headings to their bodies, keyed by the heading text."""
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    sections: dict[str, str] = {}
+    heading = ""
+    for line in text.splitlines():
+        if line.startswith("## "):
+            heading = line[3:].strip()
+            sections[heading] = ""
+        elif heading:
+            sections[heading] += line + "\n"
+    return sections
+
+
+def section(prefix: str) -> str:
+    matches = [body for head, body in readme_sections().items() if head.startswith(prefix)]
+    assert len(matches) == 1, (prefix, sorted(readme_sections()))
+    return matches[0]
+
+
+def flattened(text: str) -> str:
+    """Backticks and emphasis markers dropped, whitespace collapsed: the prose, not the markup.
+
+    ``_`` is left alone deliberately -- stripping it would turn ``api_error`` into ``apierror``
+    and the pin would stop being about the name.
+    """
+    return " ".join(text.replace("`", "").replace("*", "").split())
+
+
+def readme_commands() -> list[str]:
+    """The ``proofload`` commands in section 3's fenced block, continuations joined."""
+    body = section("3.")
+    inside = False
+    joined: list[str] = []
+    pending = ""
+    for line in body.splitlines():
+        if line.strip().startswith("```"):
+            inside = not inside
+            continue
+        if not inside:
+            continue
+        pending += " " + line.strip().removesuffix("\\").strip()
+        if not line.rstrip().endswith("\\"):
+            joined.append(" ".join(pending.split()))
+            pending = ""
+    return [c for c in joined if c.startswith("proofload ")]
+
+
+def test_q12_section_1s_confirmation_line_names_all_five_outcomes() -> None:
+    body = flattened(section("1."))
+    assert "outcome should be one of" in body, body[-400:]
+    clause = body.split("outcome should be one of", 1)[1]
+    for name in OUTCOMES:
+        assert name in clause[: clause.index("numbers.py")], (name, clause[:300])
+
+
+def test_q12_each_of_the_four_testing_commands_names_the_new_event() -> None:
+    """Deliberately a text pin, and the README's correctness is what is under test.
+
+    Section 3's commands were wrong about ``--method`` for weeks and an outside reader
+    concluded from them that the tool assumes independence, because nothing tested them. A
+    later edit that trips this test is amended to the new correct text under Session A
+    authority. It is never reverted, and this pin is never loosened to stop it firing.
+    """
+    commands = [c for c in readme_commands() if c.split()[1] in TESTING_VERBS]
+    assert len(commands) == 4, commands
+    for command in commands:
+        for event in FAILURE_EVENTS:
+            assert f"--event {event}" in command, (event, command)
+
+
+def test_q12_the_readme_carries_the_interpretive_fence_verbatim() -> None:
+    assert flattened(FENCE_SENTENCE) in flattened((ROOT / "README.md").read_text(encoding="utf-8"))
+
+
+# ---------- Q13: the Addendum 1 filter is gone, and never arrives ----------
+
+
+def test_q13_no_pilot_module_branches_on_a_crash_reason_prefix_or_on_api_error_text() -> None:
+    """The rule in prose: **the label is the discriminator and the text is not.**
+
+    S18's pre-registration excluded API-error crashes by matching a ``crash_reason`` prefix.
+    That stopgap is retired by this packet, not kept, and nothing under the pilot implements
+    it after it: no module compares, prefix-matches or regexes a string that reads like an
+    API-error message. Two definitions of one condition drift, which is the whole reason the
+    label exists.
+    """
+    files = pilot_python_files()
+    assert files, ROOT
+    offenders = {str(path): api_text_literals(parsed(path)) for path in files}
+    assert not {k: v for k, v in offenders.items() if v}, {k: v for k, v in offenders.items() if v}
+
+
+def test_q13_numbers_py_does_not_mention_crash_reason_at_all() -> None:
+    tree = parsed(ROOT / "numbers.py")
+    names = [n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == "crash_reason"]
+    literals = [
+        n.value for n in ast.walk(tree)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value == "crash_reason"
+    ]
+    attributes = [n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr == "crash_reason"]
+    assert (names, literals, attributes) == ([], [], []), (names, literals, attributes)
 
 
 # ---------- P11, last: every request this process ever sent ----------
