@@ -568,6 +568,12 @@ class _Progress:
         if decile > self.decile:
             self.decile = decile
             self.out.write(f"{done}/{total}\n")
+            # Flushed for the same reason ``serve`` flushes its URL: stdout is block buffered
+            # when it is a pipe, so an unflushed decile arrives with the summary at the end,
+            # and progress that only appears once the run is over is not progress. This is the
+            # non-TTY branch, which is CI and every ``| tee`` -- exactly where a long sweep is
+            # watched through a pipe.
+            self.out.flush()
 
     def finish(self) -> None:
         if self.dirty:
