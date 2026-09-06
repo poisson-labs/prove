@@ -127,6 +127,9 @@ MODAL_EXPORTS = [
 EXECUTOR_PUBLIC = frozenset({
     "ExecutorError", "NotResumable", "Pair", "PairMismatch", "Plan", "RunSummary",
     "derive_seed", "new_run_id", "new_run_salt", "plan", "preflight", "run_local",
+    # S23: the power gate. DEFAULT_MAX_MDE is a constant and not a defined object, so it
+    # does not reach _defined(); these three do.
+    "UnderpoweredDesign", "check_power", "preflight_mde",
 })
 MODAL_PUBLIC = frozenset({
     "CostGuard", "ImageSpec", "ModalBackendError", "ModalNotInstalled", "ModalOptions",

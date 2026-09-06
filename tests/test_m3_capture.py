@@ -1214,12 +1214,21 @@ def capture_lines(out: str) -> tuple[list[str], list[int]]:
     return lines, [i for i, line in enumerate(lines) if line.startswith("Capture:")]
 
 
+#: These fixtures are two-cell plumbing grids, not powered designs: N is 1, 2 or 4 and
+#: the MDE saturates at 0.5. S23 gates a sweep on that number, so every end-to-end
+#: invocation here states what it accepts. The flag is the honest answer -- these runs
+#: really can only see a fifty-point move -- and it is what the gate exists to make
+#: people say out loud.
+PLUMBING_MAX_MDE = ("--max-mde", "0.5")
+
+
 def test_c12_preflight_prints_one_capture_line_before_the_prompt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.syspath_prepend(str(register_fake_instrumentors(tmp_path / "fake")))
     toml = write(tmp_path / "sweep.toml", mock_toml(capture={"instrument": [FAKE_INSTRUMENTOR]}))
     out, err = StringIO(), StringIO()
     code = cli.main(
-        ["--store", str(tmp_path / "store"), "sweep", str(toml), "--target", MOCK_ROLLOUT],
+        ["--store", str(tmp_path / "store"), "sweep", str(toml), "--target", MOCK_ROLLOUT,
+         *PLUMBING_MAX_MDE],
         stdout=out, stderr=err, stdin=TtyStringIO("n\n"),
     )
     assert code == 2 and "Traceback" not in out.getvalue() + err.getvalue()
@@ -1235,7 +1244,8 @@ def test_c12_preflight_prints_one_capture_line_before_the_prompt(tmp_path: Path,
 def test_c12_yes_does_not_suppress_the_capture_line(tmp_path: Path) -> None:
     fake = register_fake_instrumentors(tmp_path / "fake")
     toml = write(tmp_path / "sweep.toml", mock_toml(capture={"instrument": [FAKE_INSTRUMENTOR]}, replicates=1))
-    argv = ["--store", str(tmp_path / "store"), "sweep", str(toml), "--target", MOCK_ROLLOUT, "--yes"]
+    argv = ["--store", str(tmp_path / "store"), "sweep", str(toml), "--target", MOCK_ROLLOUT, "--yes",
+            *PLUMBING_MAX_MDE]
     r = isolated(child_cli, argv, str(fake))
     assert r["code"] == 0, r["out"] + r["err"]
     lines, found = capture_lines(r["out"])
@@ -1260,7 +1270,8 @@ def test_c12_the_modal_preflight_prints_the_capture_line_too(tmp_path: Path, mon
     toml = write(tmp_path / "sweep.toml", mock_toml(capture={"instrument": [FAKE_INSTRUMENTOR]}, replicates=1))
     out, err = StringIO(), StringIO()
     code = cli.main(
-        ["--store", str(tmp_path / "store"), "sweep", str(toml), "--target", MOCK_ROLLOUT, "--backend", "modal", "--yes"],
+        ["--store", str(tmp_path / "store"), "sweep", str(toml), "--target", MOCK_ROLLOUT, "--backend", "modal", "--yes",
+         *PLUMBING_MAX_MDE],
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0 and len(calls) == 1, out.getvalue() + err.getvalue()

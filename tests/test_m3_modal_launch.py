@@ -492,17 +492,25 @@ def _with_modal_key(tables: str, line: str) -> str:
     return tables.replace("[modal]\n", f"[modal]\n{line}\n", 1)
 
 
+#: These fixtures are two-cell plumbing grids, not powered designs: N is 1, 2 or 4 and
+#: the MDE saturates at 0.5. S23 gates a sweep on that number, so every end-to-end
+#: invocation here states what it accepts. The flag is the honest answer -- these runs
+#: really can only see a fifty-point move -- and it is what the gate exists to make
+#: people say out loud.
+PLUMBING_MAX_MDE = ("--max-mde", "0.5")
+
+
 def _modal_argv(tmp_path: Path, sweep_path: Path, *extra: str, target: str = WELL_SHAPED) -> list[str]:
     return [
         "--store", str(tmp_path / "store"), "sweep", str(sweep_path),
-        "--target", target, "--backend", "modal", "--yes", *extra,
+        "--target", target, "--backend", "modal", "--yes", *PLUMBING_MAX_MDE, *extra,
     ]
 
 
 def _local_argv(tmp_path: Path, sweep_path: Path, target: str) -> list[str]:
     return [
         "--store", str(tmp_path / "store"), "sweep", str(sweep_path),
-        "--target", target, "--backend", "local", "--yes",
+        "--target", target, "--backend", "local", "--yes", *PLUMBING_MAX_MDE,
     ]
 
 
