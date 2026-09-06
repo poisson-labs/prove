@@ -1,0 +1,778 @@
+"""S23 -- the power gate: the oracle for W1-W12.
+
+Written from "Proofload -- Spec S23 Power Gate" section 4. Session B builds
+``src/proofload/executor.py``, ``executor_modal.py`` and ``cli.py`` against this file and does
+not edit it. ``examples/quickstart.toml`` was rebalanced in step zero and is not Session B's.
+
+**What the packet is.** ``MDE at N=32 (worst case, rate 0.5): 0.3251`` printed before a single
+S18 episode ran, was accurate to 1.6 points against the realised per-cell maximum, and was read
+twice and acted on zero times. A louder warning is not the fix -- ``--yes`` is on every command
+in the pilot README, so the prompt was never a gate either. The number gets a threshold, the
+threshold fires before any spend, and clearing it costs a number rather than a shrug.
+
+No network, no backend, no dollar. The Modal half of W8 goes through ``run_with_mapper`` with an
+in-process mapper, which is how the M3 modal oracle reaches that path without ``modal``
+installed.
+
+**The four S23 names are reached through the module** -- ``executor.check_power``, not
+``check_power`` -- for one reason: before Session B builds them, a ``from ... import`` of a name
+that does not exist yet is a *collection* error, and pytest abandons the whole run on one. That
+would leave the entire suite unrunnable for as long as this file sits frozen and unbuilt, which
+is exactly the window in which someone wants to run it. Qualified, this file collects, its own
+tests fail, and every other test in the repo still reports. The names that already exist
+(``Plan``, ``plan``, ``preflight``, ``ExecutorError``) are imported normally.
+
+**Conventions this oracle fixes where the spec is silent, recorded so they are not
+re-litigated. Session B builds to these.**
+
+- **The seam that carries the accepted value to the manifest is ``Plan.max_mde_accepted``**, a
+  field with a default of ``None`` set through ``plan(..., max_mde_accepted=...)``. Spec section
+  2 states ``check_power``'s signature and section 3 states where the value lands; nothing states
+  how it gets there. ``Plan.import_path`` is the exact precedent: a value the CLI supplies purely
+  so the runners can put it in ``environment``, read by nothing else. W11 forbids ``check_power``
+  *mutating* the plan, which this does not -- the CLI builds the plan with it. **Measured:** the
+  obvious alternative, a keyword on ``run_local`` / ``run_with_mapper`` / ``run_modal``, breaks
+  ten frozen tests whose fakes double those signatures (``CapturedRunModal`` and friends in the
+  M10 and M3-modal-launch oracles) for no gain. When ``None``, both runners record
+  ``DEFAULT_MAX_MDE``: that is the threshold that was in force, and W8 requires every launched
+  run to carry one.
+- **A resume inherits by the CLI resolving the effective threshold, not by skipping the gate.**
+  Spec section 3 says ``check_power`` is skipped on a resume whose manifest still covers the
+  design, but ``check_power`` takes no store and so cannot read a manifest. Instead ``_cmd_sweep``
+  passes ``max_mde=ns.max_mde`` when given, else ``manifest.environment["max_mde_accepted"]`` on a
+  resume, else ``None``; ``check_power`` then compares against the *current* design exactly as it
+  always does. That keeps the comparison in M3 (section 6: the CLI decides nothing statistical),
+  and it is why a resume whose design grew is still refused (W9).
+- **``cli.py`` imports ``DEFAULT_MAX_MDE``; it does not define one.** Spec section 6 forbids
+  putting the constant in ``cli.py`` "beside ``_DEFAULT_METHOD``" -- that is a prohibition on a
+  second *definition*, which would be a threshold that can drift from M3's. The CLI needs the
+  value for one non-statistical purpose: deciding what to record when no flag was passed. It
+  imports M3's single definition, makes no comparison of its own, and never calls
+  ``preflight_mde`` (guarded below beside W2).
+- **``--max-mde``'s range is enforced in M3, not in the CLI**, by exact analogy with ``--q``:
+  ``0.0 < q < 1.0`` lives in ``diff.py`` and reaches the user as a ``DiffError`` at exit 2. So an
+  out-of-range ``--max-mde`` is an ``ExecutorError`` from ``check_power``. W6 says "refused at
+  exit 2 before planning"; ``plan()`` writes nothing, so the observable fact is *before anything
+  is written*, and that is what is asserted here. A non-float is argparse's, also exit 2.
+- **The suggested override in the refusal message must itself clear the gate** (W4, last
+  clause). This is not decoration: at N=32 the true MDE is 0.32510999..., the pre-flight prints
+  it as ``0.3251``, and ``--max-mde 0.3251`` *refuses*. A message telling the reader to paste a
+  number that does not work is the packet's usability failing at its one interaction. Round the
+  suggestion up at four decimals, or print it with more; either satisfies this.
+
+**Three findings from the step-zero pass, recorded here because they contradict the spec.**
+
+1. **No test pinned ``worst case``.** Spec section 6 says the M3 local and modal oracles pin the
+   pre-flight text including that label. They do not: both match the line with
+   ``MDE at N=\\d+[^:]*:``, which swallows either label, and the string appears in no test in the
+   repo. Verified by making the W10 edit in ``src/`` and running the M3 and M10 oracles unchanged.
+   W10 below is therefore the only guard the label has ever had.
+2. **The quickstart's headline is pinned nowhere.** M10's I20 asserts ``worse == 0 and safer >=
+   1``, never a cell count. ``8 of 15 cells safer`` lives in the vault's renders and in no test.
+3. **Four oracles pinned the quickstart grid, not one.** M10 (cells, replicates, axis width),
+   M12 (its own second copy of both), M13 (the BH family size) and M7 (the mock-agent trade
+   golden). Spec section 3 expected M10 and explicitly not M7. All four moved in step zero.
+"""
+
+from __future__ import annotations
+
+import ast
+import io
+import math
+import re
+from collections.abc import Iterator, Sequence
+from pathlib import Path
+
+import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+import proofload
+from proofload import cli
+from proofload.diff import mde_two_proportion
+import proofload.executor as executor
+from proofload.executor import ExecutorError, Plan, plan, preflight
+from proofload.executor_modal import (
+    Job,
+    ModalOptions,
+    Result as ModalResult,
+    preflight_modal,
+    run_with_mapper,
+    worker_batch,
+)
+from proofload.sampler import SweepSpec
+from proofload.store import RunManifest, Store
+
+PACKAGE = Path(proofload.__file__).resolve().parent
+REPO = PACKAGE.parents[1]
+EXECUTOR = PACKAGE / "executor.py"
+EXECUTOR_MODAL = PACKAGE / "executor_modal.py"
+QUICKSTART = REPO / "examples" / "quickstart.toml"
+
+MOCK_ROLLOUT = "proofload.examples.mock_agent:rollout"
+MOCK_PATCHED = "proofload.examples.mock_agent:rollout_patched"
+
+#: Spec section 3. Stated in the spec, so it may be a constant here (standing rule 1).
+EXPECTED_DEFAULT = 0.20
+
+#: The Go1 design, N=32 -- one of the two this project has actually run, and one of the two the
+#: default is calibrated to refuse (spec section 3, W12).
+GO1_REPLICATES = 32
+GO1_MU = [round(0.05 * k, 2) for k in range(1, 21)]
+GO1_PUSH = [10.0 * k for k in range(1, 21)]
+GO1_TARGET = "go1-g2-converged@20260813T155006Z"
+
+#: A design that clears the default (W12's second half). The spec names 105; it is not the
+#: bisection answer (that is 93, below) and nothing here depends on which it is.
+CLEARING_REPLICATES = 105
+
+MDE_LINE = re.compile(r"MDE at N=(\d+) \(base rate 0\.5\): ([0-9]*\.?[0-9]+)")
+
+
+# ---------- helpers ----------
+
+
+def spec_at(replicates: int, *, cells: int = 4, target_id: str = "gate@v0") -> SweepSpec:
+    return SweepSpec.build(
+        [{"x": float(i)} for i in range(cells)],
+        replicates=replicates,
+        target_id=target_id,
+        t_unit="tool_calls",
+    )
+
+
+def go1_spec() -> SweepSpec:
+    return SweepSpec.build(
+        [{"mu": mu, "push_pct_bw": push} for mu in GO1_MU for push in GO1_PUSH],
+        replicates=GO1_REPLICATES,
+        target_id=GO1_TARGET,
+        t_unit="seconds",
+    )
+
+
+def smallest_n_reaching(max_mde: float) -> int:
+    """The bisection W4 describes, written out here so the test does not trust the build's."""
+    lo, hi = 2, 100_000
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if executor.preflight_mde(spec_at(mid)) <= max_mde:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
+class Result:
+    def __init__(self, code: int, out: str, err: str) -> None:
+        self.code, self.out, self.err = code, out, err
+
+    @property
+    def text(self) -> str:
+        return self.out + self.err
+
+
+def run_cli(argv: Sequence[str]) -> Result:
+    out, err = io.StringIO(), io.StringIO()
+    code = cli.main(list(argv), stdout=out, stderr=err, stdin=io.StringIO())
+    return Result(code, out.getvalue(), err.getvalue())
+
+
+def sweep_argv(root: Path, spec_path: Path, target: str, *extra: str) -> list[str]:
+    return ["--store", str(root), "sweep", str(spec_path), "--target", target, "--yes", *extra]
+
+
+def write_spec(path: Path, spec_toml: str) -> Path:
+    path.write_text(spec_toml, encoding="utf-8")
+    return path
+
+
+def underpowered_toml(replicates: int = 16) -> str:
+    """The quickstart's old shape: three tasks, three rates, too few replicates to resolve."""
+    return (
+        'target_id = "mock-agent@v0"\n'
+        't_unit = "tool_calls"\n'
+        f"replicates = {replicates}\n\n"
+        "[axes.task_id]\n"
+        'type = "categorical"\n'
+        'values = ["search", "checkout"]\n\n'
+        "[axes.tool_fail_rate]\n"
+        'type = "continuous"\n'
+        "values = [0.0, 0.55]\n"
+    )
+
+
+def store_is_untouched(root: Path) -> bool:
+    """No run exists, by both readings: the store's own listing and the directory tree."""
+    if not root.exists():
+        return True
+    if Store(root).runs():
+        return False
+    return not [p for p in root.iterdir() if p.is_dir()]
+
+
+def run_id_of(r: Result) -> str:
+    last = r.out.strip().splitlines()[-1]
+    assert last.startswith("run_id: "), r.text
+    return last.split()[-1]
+
+
+def parsed(path: Path) -> ast.Module:
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def enclosing_functions(tree: ast.Module) -> dict[ast.AST, str]:
+    """Every node mapped to the name of the ``def`` it sits inside, for W2."""
+    out: dict[ast.AST, str] = {}
+
+    def walk(node: ast.AST, name: str | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else name
+            if inner is not None:
+                out[child] = inner
+            walk(child, inner)
+
+    walk(tree, None)
+    return out
+
+
+def in_process_mapper(
+    batches: Sequence[Sequence[Job]],
+) -> Iterator[tuple[int, list[ModalResult] | BaseException]]:
+    """The M3 modal oracle's shape: every batch run here, in submission order, no modal import."""
+    for index, jobs in enumerate(batches):
+        yield index, worker_batch(jobs, MOCK_ROLLOUT, None)
+
+
+# ---------- W1: one statistic, and it is the one already computed ----------
+
+
+@pytest.mark.parametrize("replicates", [2, 3, 8, 16, 32, 64, 93, 100, 105, 256, 1000])
+def test_w1_preflight_mde_is_mde_two_proportion_at_base_rate_one_half(replicates: int) -> None:
+    assert executor.preflight_mde(spec_at(replicates)) == mde_two_proportion(0.5, replicates, replicates)
+
+
+def saturation_ceiling() -> int:
+    """The largest N whose MDE is still the saturated 0.5, found rather than written."""
+    n = 2
+    while executor.preflight_mde(spec_at(n + 1)) == executor.preflight_mde(spec_at(n)) and n < 1000:
+        n += 1
+    return n
+
+
+@given(a=st.integers(min_value=2, max_value=1000), b=st.integers(min_value=2, max_value=1000))
+@settings(deadline=None, max_examples=60)
+def test_w1_preflight_mde_never_rises_with_replicates(a: int, b: int) -> None:
+    lo, hi = min(a, b), max(a, b)
+    assert executor.preflight_mde(spec_at(hi)) <= executor.preflight_mde(spec_at(lo)), (lo, hi)
+
+
+@given(a=st.integers(min_value=11, max_value=1000), b=st.integers(min_value=11, max_value=1000))
+@settings(deadline=None, max_examples=60)
+def test_w1_preflight_mde_is_strictly_decreasing_above_the_saturation_point(a: int, b: int) -> None:
+    """W1 says "strictly decreasing" over 2-1000 and it is not, below N=11.
+
+    ``mde_two_proportion`` returns the largest possible increase when even that is
+    undetectable, so at base rate 0.5 every design with ten or fewer replicates reports exactly
+    0.5 and they are all equal. Strictness holds from the first N that resolves anything, and
+    the flat region is pinned separately below rather than papered over. Nothing the gate does
+    depends on it: 0.5 is refused at every threshold the gate can be given.
+    """
+    lo, hi = min(a, b), max(a, b)
+    if lo == hi:
+        return
+    assert saturation_ceiling() < 11
+    assert executor.preflight_mde(spec_at(hi)) < executor.preflight_mde(spec_at(lo)), (lo, hi)
+
+
+def test_w1_the_statistic_saturates_at_the_largest_possible_increase_for_tiny_designs() -> None:
+    ceiling = saturation_ceiling()
+    assert ceiling == 10, ceiling
+    for n in range(2, ceiling + 1):
+        assert executor.preflight_mde(spec_at(n)) == 0.5, n
+    assert executor.preflight_mde(spec_at(ceiling + 1)) < 0.5
+    # and every one of them is refused, so the flat region never reaches a decision
+    for n in range(2, ceiling + 1):
+        with pytest.raises(executor.UnderpoweredDesign):
+            executor.check_power(_bare_plan(spec_at(n)), max_mde=None)
+
+
+def test_w1_the_default_refuses_both_designs_this_project_has_run() -> None:
+    """Spec section 3's calibration claim, asserted rather than believed. S18 and Go1 are both
+    N=32; a default that passed them would be calibrated to pass everything."""
+    assert executor.DEFAULT_MAX_MDE == EXPECTED_DEFAULT
+    assert executor.preflight_mde(go1_spec()) > executor.DEFAULT_MAX_MDE
+    assert executor.preflight_mde(spec_at(GO1_REPLICATES)) > executor.DEFAULT_MAX_MDE
+
+
+# ---------- W2: one construction ----------
+
+
+def test_w2_mde_two_proportion_is_called_in_exactly_one_place_and_it_is_preflight_mde() -> None:
+    """The rule in prose, because the ``ast`` walk below does not explain itself.
+
+    **The printed line and the gate read the same function.** ``preflight`` computes the value
+    inline today and ``preflight_modal`` would be a second site; after S23 there is exactly one
+    call to ``mde_two_proportion`` across both executor modules, and it is inside
+    ``preflight_mde``. Everything else -- both pre-flight lines, ``check_power``, the suggested N
+    in the refusal -- goes through that function. Spec rule 2: an ADR says where a value is
+    built, so a test fails when it is built elsewhere.
+
+    ``ast`` and not a substring scan: ``"mde_two_proportion" in source`` cannot tell the import
+    from the call, nor a call from a mention in a docstring.
+    """
+    sites: list[tuple[str, int, str]] = []
+    for path in (EXECUTOR, EXECUTOR_MODAL):
+        tree = parsed(path)
+        enclosing = enclosing_functions(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+            if name == "mde_two_proportion":
+                sites.append((path.name, node.lineno, enclosing.get(node, "<module>")))
+    assert len(sites) == 1, sites
+    module, _lineno, enclosing_name = sites[0]
+    assert module == EXECUTOR.name, sites
+    assert enclosing_name == "preflight_mde", sites
+
+
+def test_w2_the_cli_names_no_threshold_of_its_own_and_makes_no_comparison() -> None:
+    """Spec section 6's "one tempting wrong move", guarded rather than trusted.
+
+    **The threshold, the comparison and the message live in M3.** ``cli.py`` may read
+    ``DEFAULT_MAX_MDE`` to decide what to record, and it may pass a float to ``check_power``. It
+    may not bind a threshold of its own -- that is a second definition, free to drift -- and it
+    may not compute the statistic: no call to ``preflight_mde`` or ``mde_two_proportion``
+    anywhere in the module.
+    """
+    tree = parsed(PACKAGE / "cli.py")
+    bound: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets: list[ast.expr] = list(node.targets)
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        for target in targets:
+            bound.update(n.id for n in ast.walk(target) if isinstance(n, ast.Name))
+    assert "DEFAULT_MAX_MDE" not in bound, sorted(n for n in bound if "MDE" in n.upper())
+    called = {
+        (node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", None))
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+    }
+    assert "preflight_mde" not in called and "mde_two_proportion" not in called, sorted(
+        c for c in called if c and "mde" in c.lower()
+    )
+
+
+# ---------- W3: the comparison ----------
+
+
+def test_w3_check_power_passes_below_the_threshold_and_refuses_above_it() -> None:
+    spec = spec_at(GO1_REPLICATES)
+    mde = executor.preflight_mde(spec)
+    p = _bare_plan(spec)
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(p, max_mde=mde / 2)
+    assert executor.check_power(p, max_mde=mde * 2) is None
+
+
+def test_w3_equality_passes(tmp_path: Path) -> None:
+    """``>`` and not ``>=``: a design that exactly meets what the caller accepts is accepted."""
+    spec = spec_at(GO1_REPLICATES)
+    p = plan(spec, Store(tmp_path / "s"))
+    assert executor.check_power(p, max_mde=executor.preflight_mde(spec)) is None
+
+
+def test_w3_max_mde_none_means_the_default(tmp_path: Path) -> None:
+    store = Store(tmp_path / "s")
+    under = plan(spec_at(GO1_REPLICATES), store)
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(under, max_mde=None)
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(under)
+    over = plan(spec_at(CLEARING_REPLICATES), store)
+    assert executor.check_power(over, max_mde=None) is None
+    assert executor.check_power(over) is None
+
+
+def test_w3_underpowered_design_is_an_executor_error() -> None:
+    assert issubclass(executor.UnderpoweredDesign, ExecutorError)
+
+
+@pytest.mark.parametrize("bad", [0.0, -0.1, -1.0, 1.0, 1.5, 2.0])
+def test_w3_an_out_of_range_accepted_value_is_refused_by_the_executor(bad: float, tmp_path: Path) -> None:
+    """M3 owns the range, exactly as M6 owns ``0 < q < 1`` -- see the module docstring."""
+    p = plan(spec_at(CLEARING_REPLICATES), Store(tmp_path / "s"))
+    with pytest.raises(ExecutorError):
+        executor.check_power(p, max_mde=bad)
+
+
+def _bare_plan(spec: SweepSpec) -> Plan:
+    return Plan(
+        spec=spec, run_id="w3-run", run_salt="0" * 16, backend="local",
+        pairs=(), resumed=False, already_stored=0,
+    )
+
+
+def test_w8_the_plan_carries_the_accepted_value_the_way_it_carries_import_path() -> None:
+    """The seam, pinned: a defaulted field, set at plan time, read by the runners only."""
+    import dataclasses
+
+    fields = {f.name: f for f in dataclasses.fields(Plan)}
+    assert "max_mde_accepted" in fields, sorted(fields)
+    assert fields["max_mde_accepted"].default is None
+    assert _bare_plan(spec_at(16)).max_mde_accepted is None
+
+
+# ---------- W4: the message names four facts, and its advice works ----------
+
+
+def refusal_text(spec: SweepSpec, max_mde: float | None) -> str:
+    p = _bare_plan(spec)
+    with pytest.raises(executor.UnderpoweredDesign) as excinfo:
+        executor.check_power(p, max_mde=max_mde)
+    return str(excinfo.value)
+
+
+@pytest.mark.parametrize("replicates", [8, 16, GO1_REPLICATES, 64])
+def test_w4_the_refusal_names_the_mde_the_accepted_value_the_n_and_a_reachable_n(replicates: int) -> None:
+    spec = spec_at(replicates)
+    mde = executor.preflight_mde(spec)
+    message = refusal_text(spec, executor.DEFAULT_MAX_MDE)
+    assert f"{mde:.4f}" in message, message
+    assert f"N={replicates}" in message, message
+    assert f"{executor.DEFAULT_MAX_MDE:.4f}" in message, message
+    suggested = [int(n) for n in re.findall(r"N=(\d+)", message) if int(n) != replicates]
+    assert suggested, message
+    target = smallest_n_reaching(executor.DEFAULT_MAX_MDE)
+    for n in suggested:
+        assert executor.preflight_mde(spec_at(n)) <= executor.DEFAULT_MAX_MDE, (n, message)
+        assert n == target, (n, target, message)
+    assert executor.preflight_mde(spec_at(target - 1)) > executor.DEFAULT_MAX_MDE, target
+
+
+@given(accepted=st.floats(min_value=0.02, max_value=0.9))
+@settings(deadline=None, max_examples=40)
+def test_w4_the_suggested_n_is_the_boundary_at_any_accepted_value(accepted: float) -> None:
+    n = smallest_n_reaching(accepted)
+    assert executor.preflight_mde(spec_at(n)) <= accepted
+    if n > 2:
+        assert executor.preflight_mde(spec_at(n - 1)) > accepted
+
+
+def test_w4_the_override_the_message_suggests_actually_clears_the_gate() -> None:
+    """The clause that is not decoration, and the one the spec's own example gets wrong.
+
+    Section 3's worked message tells the reader ``--max-mde 0.3251 accepts this design as it
+    stands``. It does not: the true MDE at N=32 is 0.32510999..., the pre-flight prints it to
+    four decimals as 0.3251, and 0.3251 < 0.32510999 so the gate refuses again. Whatever value
+    the message names as an override has to pass ``check_power`` on the same design -- round the
+    suggestion up at four decimals, or print more of them.
+    """
+    spec = go1_spec()
+    mde = executor.preflight_mde(spec)
+    assert mde > float(f"{mde:.4f}"), mde  # the rounding this test exists for is real
+    message = refusal_text(spec, executor.DEFAULT_MAX_MDE)
+    offered = [float(v) for v in re.findall(r"--max-mde\s+([0-9]*\.?[0-9]+)", message)]
+    assert offered, message
+    accepted_again = [v for v in offered if v != pytest.approx(executor.DEFAULT_MAX_MDE)]
+    assert accepted_again, message
+    for value in accepted_again:
+        assert executor.check_power(_bare_plan(spec), max_mde=value) is None, (value, mde, message)
+    assert math.ceil(mde * 1e4) / 1e4 >= mde  # the fix the message may take
+
+
+# ---------- W5: --yes does not clear the gate, and nothing is created ----------
+
+
+def test_w5_yes_does_not_clear_the_gate_and_the_store_stays_empty(tmp_path: Path) -> None:
+    spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
+    root = tmp_path / "runs"
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
+    assert r.code == 2, r.text
+    assert "underpowered" in r.err.lower(), r.err
+    assert store_is_untouched(root), sorted(p.name for p in root.iterdir()) if root.exists() else root
+    assert "Traceback" not in r.text, r.text
+
+
+def test_w5_the_refusal_creates_no_manifest_even_beside_an_existing_run(tmp_path: Path) -> None:
+    """The mutant this exists for fires the gate after ``create_run``, leaving a manifest behind."""
+    root = tmp_path / "runs"
+    good = write_spec(tmp_path / "good.toml", underpowered_toml(replicates=CLEARING_REPLICATES))
+    first = run_cli(sweep_argv(root, good, MOCK_ROLLOUT))
+    assert first.code == 0, first.text
+    before = Store(root).runs()
+    assert len(before) == 1
+
+    bad = write_spec(tmp_path / "bad.toml", underpowered_toml())
+    r = run_cli(sweep_argv(root, bad, MOCK_ROLLOUT))
+    assert r.code == 2, r.text
+    assert Store(root).runs() == before, Store(root).runs()
+
+
+# ---------- W6: the flag ----------
+
+
+def test_w6_an_accepted_value_at_or_above_the_computed_mde_proceeds(tmp_path: Path) -> None:
+    spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
+    root = tmp_path / "runs"
+    mde = executor.preflight_mde(SweepSpec.load(spec_path))
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(mde)))
+    assert r.code == 0, r.text
+    assert len(Store(root).runs()) == 1
+
+
+def test_w6_an_accepted_value_below_the_computed_mde_refuses(tmp_path: Path) -> None:
+    spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
+    root = tmp_path / "runs"
+    mde = executor.preflight_mde(SweepSpec.load(spec_path))
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(mde * 0.99)))
+    assert r.code == 2, r.text
+    assert store_is_untouched(root)
+
+
+@pytest.mark.parametrize("value", ["nope", "", "0.5.1"])
+def test_w6_a_non_float_is_refused_at_exit_two_with_nothing_written(value: str, tmp_path: Path) -> None:
+    spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
+    root = tmp_path / "runs"
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", value))
+    assert r.code == 2, r.text
+    assert store_is_untouched(root)
+
+
+@pytest.mark.parametrize("value", ["0", "0.0", "-0.2", "1", "1.0", "1.5"])
+def test_w6_a_value_outside_the_open_unit_interval_is_refused_with_nothing_written(value: str, tmp_path: Path) -> None:
+    spec_path = write_spec(tmp_path / "clear.toml", underpowered_toml(replicates=CLEARING_REPLICATES))
+    root = tmp_path / "runs"
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", value))
+    assert r.code == 2, r.text
+    assert store_is_untouched(root), Store(root).runs()
+
+
+# ---------- W7: the gate is ordered after the description ----------
+
+
+def test_w7_the_refusal_follows_the_complete_preflight_block_on_stdout(tmp_path: Path) -> None:
+    """A reader who gets the refusal has already been shown the number it is about.
+
+    The mutant this exists for runs the gate before the pre-flight is written, so the reader is
+    told the design is underpowered and never shown the MDE line, the cell count or the cost.
+    """
+    spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
+    root = tmp_path / "runs"
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
+    assert r.code == 2, r.text
+    spec = SweepSpec.load(spec_path)
+    for token in ("Sweep:", "Backend: local", "Cost:", f"N={spec.replicates}"):
+        assert token in r.out, (token, r.out)
+    found = MDE_LINE.search(r.out)
+    assert found, r.out
+    assert int(found.group(1)) == spec.replicates
+    assert float(found.group(2)) == pytest.approx(executor.preflight_mde(spec), abs=5e-5)
+    assert "underpowered" in r.err.lower() and "underpowered" not in r.out.lower(), r.text
+
+
+# ---------- W8: the accepted value is recorded, on both backends ----------
+
+
+def test_w8_a_launched_local_run_records_the_accepted_value(tmp_path: Path) -> None:
+    spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
+    root = tmp_path / "runs"
+    mde = executor.preflight_mde(SweepSpec.load(spec_path))
+    accepted = math.ceil(mde * 1e4) / 1e4
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(accepted)))
+    assert r.code == 0, r.text
+    environment = Store(root).manifest(run_id_of(r)).environment
+    assert environment["max_mde_accepted"] == pytest.approx(accepted)
+
+
+def test_w8_a_run_that_clears_the_default_records_the_default(tmp_path: Path) -> None:
+    spec_path = write_spec(tmp_path / "clear.toml", underpowered_toml(replicates=CLEARING_REPLICATES))
+    root = tmp_path / "runs"
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
+    assert r.code == 0, r.text
+    environment = Store(root).manifest(run_id_of(r)).environment
+    assert environment["max_mde_accepted"] == pytest.approx(executor.DEFAULT_MAX_MDE)
+
+
+def test_w8_the_modal_path_records_it_too(tmp_path: Path) -> None:
+    """The one likely to be missed: both backends build ``environment`` separately (spec section 8)."""
+    store = Store(tmp_path / "runs")
+    spec = spec_at(CLEARING_REPLICATES, cells=2, target_id="mock-agent@v0")
+    accepted = 0.25
+    p = plan(
+        spec, store, backend="modal", import_path=MOCK_ROLLOUT, max_mde_accepted=accepted
+    )
+    run_with_mapper(p, in_process_mapper, store, options=ModalOptions(batch_size=8))
+    assert store.manifest(p.run_id).environment["max_mde_accepted"] == pytest.approx(accepted)
+
+
+def test_w8_the_other_environment_keys_are_unchanged_and_no_manifest_field_is_added(tmp_path: Path) -> None:
+    import dataclasses
+
+    spec_path = write_spec(tmp_path / "clear.toml", underpowered_toml(replicates=CLEARING_REPLICATES))
+    root = tmp_path / "runs"
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
+    assert r.code == 0, r.text
+    environment = Store(root).manifest(run_id_of(r)).environment
+    assert {"python", "platform", "proofload_version", "sweep", "import_path"} <= set(environment)
+    assert "max_mde_accepted" in environment
+    fields = {f.name for f in dataclasses.fields(RunManifest)}
+    assert "max_mde_accepted" not in fields, sorted(fields)
+
+
+# ---------- W9: a resume inherits; a pair does not ----------
+
+
+def launched_underpowered(root: Path, spec_path: Path, accepted: float, *extra: str) -> Result:
+    return run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(accepted), *extra))
+
+
+def test_w9_a_resume_inherits_the_accepted_value_without_the_flag(tmp_path: Path) -> None:
+    spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
+    root = tmp_path / "runs"
+    spec = SweepSpec.load(spec_path)
+    accepted = math.ceil(executor.preflight_mde(spec) * 1e4) / 1e4
+    first = launched_underpowered(root, spec_path, accepted, "--max-rollouts", "4")
+    assert first.code == 0, first.text
+    run_id = run_id_of(first)
+
+    resumed = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--resume", run_id))
+    assert resumed.code == 0, resumed.text
+    assert Store(root).manifest(run_id).status == "complete"
+
+
+def test_w9_a_resume_is_refused_when_the_recorded_value_no_longer_covers_the_design(tmp_path: Path) -> None:
+    """A resumed run's spec may differ: ``plan`` checks target_id, t_unit and axis_types, never
+    ``replicates``. So the recorded value is compared against the *current* design."""
+    root = tmp_path / "runs"
+    started = write_spec(tmp_path / "a.toml", underpowered_toml(replicates=64))
+    accepted = math.ceil(executor.preflight_mde(SweepSpec.load(started)) * 1e4) / 1e4
+    first = launched_underpowered(root, started, accepted, "--max-rollouts", "4")
+    assert first.code == 0, first.text
+    run_id = run_id_of(first)
+
+    grown = write_spec(tmp_path / "b.toml", underpowered_toml(replicates=8))
+    assert executor.preflight_mde(SweepSpec.load(grown)) > accepted
+    resumed = run_cli(sweep_argv(root, grown, MOCK_ROLLOUT, "--resume", run_id))
+    assert resumed.code == 2, resumed.text
+    assert "underpowered" in resumed.err.lower(), resumed.err
+
+
+def test_w9_pair_with_does_not_inherit(tmp_path: Path) -> None:
+    """A paired arm is a different run making its own claim, and the flag is one word."""
+    spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
+    root = tmp_path / "runs"
+    accepted = math.ceil(executor.preflight_mde(SweepSpec.load(spec_path)) * 1e4) / 1e4
+    first = launched_underpowered(root, spec_path, accepted)
+    assert first.code == 0, first.text
+    run_a = run_id_of(first)
+
+    paired = run_cli(sweep_argv(root, spec_path, MOCK_PATCHED, "--pair-with", run_a))
+    assert paired.code == 2, paired.text
+    assert "underpowered" in paired.err.lower(), paired.err
+    assert Store(root).runs() == [run_a], Store(root).runs()
+
+    with_flag = run_cli(sweep_argv(root, spec_path, MOCK_PATCHED, "--pair-with", run_a, "--max-mde", repr(accepted)))
+    assert with_flag.code == 0, with_flag.text
+
+
+# ---------- W10: the label no longer claims a worst case ----------
+
+
+def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path: Path) -> None:
+    """The label the spec says three oracles pinned. None of them did -- see the module
+    docstring, finding 1 -- so this is the only guard it has."""
+    from proofload.executor_modal import ImageSpec, ModalTarget
+
+    spec = spec_at(GO1_REPLICATES, cells=2)
+    p = plan(spec, Store(tmp_path / "s"))
+    local = preflight(p)
+    modal = preflight_modal(
+        plan(spec, Store(tmp_path / "s2"), backend="modal"),
+        ModalTarget(import_path=MOCK_ROLLOUT, image=ImageSpec()),
+        ModalOptions(),
+    )
+    for text in (local, modal):
+        found = MDE_LINE.search(text)
+        assert found, text
+        assert int(found.group(1)) == GO1_REPLICATES
+        assert float(found.group(2)) == pytest.approx(executor.preflight_mde(spec), abs=5e-5)
+        assert "worst case" not in text, text
+
+
+def test_w10_worst_case_appears_in_neither_executor_module() -> None:
+    for path in (EXECUTOR, EXECUTOR_MODAL):
+        assert "worst case" not in path.read_text(encoding="utf-8"), path
+
+
+# ---------- W11: the gate decides and does nothing else ----------
+
+
+def test_w11_check_power_prints_nothing_on_either_path(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    store = Store(tmp_path / "s")
+    assert executor.check_power(plan(spec_at(CLEARING_REPLICATES), store), max_mde=executor.DEFAULT_MAX_MDE) is None
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(plan(spec_at(GO1_REPLICATES), store), max_mde=executor.DEFAULT_MAX_MDE)
+    captured = capsys.readouterr()
+    assert (captured.out, captured.err) == ("", ""), captured
+
+
+def test_w11_check_power_touches_neither_the_store_nor_the_plan(tmp_path: Path) -> None:
+    import dataclasses
+
+    root = tmp_path / "s"
+    store = Store(root)
+    p = plan(spec_at(GO1_REPLICATES), store)
+    before = dataclasses.asdict(p)
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(p, max_mde=executor.DEFAULT_MAX_MDE)
+    assert dataclasses.asdict(p) == before
+    assert store_is_untouched(root)
+
+
+def test_w11_the_preflights_still_return_text_and_still_raise_nothing(tmp_path: Path) -> None:
+    """They describe; the gate decides. An underpowered design still renders its block."""
+    p = plan(spec_at(GO1_REPLICATES, cells=2), Store(tmp_path / "s"))
+    text = preflight(p)
+    assert isinstance(text, str) and text.endswith("\n") and "Sweep:" in text
+
+
+# ---------- W12: golden, on the two designs this project has run ----------
+
+
+def test_w12_the_go1_design_is_refused_at_the_default(tmp_path: Path) -> None:
+    spec = go1_spec()
+    assert spec.replicates == GO1_REPLICATES and len(spec.configs) == 400
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(_bare_plan(spec), max_mde=None)
+
+
+def test_w12_the_go1_design_passes_at_its_own_mde_and_not_at_the_printed_rounding() -> None:
+    """Both halves come from ``preflight_mde``. The second is spec section 3's example, and it
+    is wrong: ``--max-mde 0.3251`` is what the message tells the reader to paste and it refuses.
+    See ``test_w4_the_override_the_message_suggests_actually_clears_the_gate``."""
+    spec = go1_spec()
+    mde = executor.preflight_mde(spec)
+    assert executor.check_power(_bare_plan(spec), max_mde=mde) is None
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(_bare_plan(spec), max_mde=float(f"{mde:.4f}"))
+    assert executor.check_power(_bare_plan(spec), max_mde=math.ceil(mde * 1e4) / 1e4) is None
+
+
+def test_w12_a_design_at_the_clearing_replicate_count_passes_at_the_default() -> None:
+    spec = spec_at(CLEARING_REPLICATES)
+    assert executor.preflight_mde(spec) <= executor.DEFAULT_MAX_MDE
+    assert executor.check_power(_bare_plan(spec), max_mde=None) is None
+
+
+def test_w12_the_rebalanced_quickstart_clears_its_own_gate_with_no_flag() -> None:
+    """Spec section 9's acceptance clause, and the reason step zero rebalanced the grid rather
+    than teaching a stranger to pass an override on the first command they ever run."""
+    spec = SweepSpec.load(QUICKSTART)
+    assert executor.preflight_mde(spec) <= executor.DEFAULT_MAX_MDE, (spec.replicates, executor.preflight_mde(spec))
+    assert executor.check_power(_bare_plan(spec), max_mde=None) is None
