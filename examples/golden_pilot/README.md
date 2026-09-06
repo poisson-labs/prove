@@ -164,10 +164,16 @@ arms; that number is pinned at 120.0 by the oracle, so raising it is a spec chan
 config tweak.
 
 Confirm the smoke's rows before spending anything: `n_errored` should be 0, every ok row's
-outcome should be one of `passed`, `failed_assertion`, `timed_out`, `crashed`, and
-`numbers.py` should report `contract.failed == 0` and a non-empty kind histogram with `llm`
-and `tool` both present. An empty `llm` count means the instrumentor did not activate in the
-container, and nothing downstream is worth running until it does.
+outcome should be one of `passed`, `failed_assertion`, `timed_out`, `crashed`, `api_error` —
+`crashed` is the agent's own code giving up on a reply that would not parse, and `api_error`
+is the agent never reaching the model at all — and `numbers.py` should report
+`contract.failed == 0` and a non-empty kind histogram with `llm` and `tool` both present. An
+empty `llm` count means the instrumentor did not activate in the container, and nothing
+downstream is worth running until it does.
+
+A smoke with a nonzero `api_error` count is telling you about the provider, not about the
+agent: check the key, the balance and the base URL before reading anything else, because an
+arm that cannot reach the model still produces a full set of well-formed rows.
 
 ## 2. The three arms
 
@@ -193,8 +199,18 @@ system message. The prediction, stated here before the run: `failed_assertion` f
 
 ## 3. Diff, report, check, inspect
 
-Every command names the three failure events explicitly; `passed` is the absorbing state and
+Every command names the four failure events explicitly; `passed` is the absorbing state and
 nothing here infers an event set.
+
+`api_error` is one of the four because it is terminal and absorbing, so it belongs in the
+competing set: an episode that died at the API could not have gone on to fail an assertion,
+and leaving it out would put that mass back into the `crashed` incidence. Membership is a
+statement about competing-risk correctness and nothing else.
+
+**A nonzero `api_error` CIF is a fact about the run and never a finding about the agent.** It
+is a property of the provider, so it should be at or near zero in all three arms and
+comparable across them; a material difference between arms is a reason to distrust the run,
+not a result to report.
 
 **Every command below also passes `--method mcnemar_bh`, and on these runs that is not
 optional.** A′ and B are both launched with `--pair-with <A>`, so all three arms share a run
@@ -205,14 +221,14 @@ can answer, and discards the whole reason `--pair-with` and shared seeds exist.
 
 ```bash
 proofload diff   <A> <A'> --method mcnemar_bh \
-  --event failed_assertion --event timed_out --event crashed
+  --event failed_assertion --event timed_out --event crashed --event api_error
 proofload diff   <A> <B>  --method mcnemar_bh \
-  --event failed_assertion --event timed_out --event crashed
+  --event failed_assertion --event timed_out --event crashed --event api_error
 proofload report <A> <B>  --method mcnemar_bh \
-  --event failed_assertion --event timed_out --event crashed \
+  --event failed_assertion --event timed_out --event crashed --event api_error \
   --x temperature --y task_id --out notes/log/pilot-report
 proofload check  <A> <B>  --method mcnemar_bh \
-  --event failed_assertion --event timed_out --event crashed
+  --event failed_assertion --event timed_out --event crashed --event api_error
 proofload inspect <A> --event failed_assertion --where temperature=0.0 --limit 5
 ```
 
