@@ -1075,7 +1075,7 @@ def test_i16_inspect_without_trace_prints_rows_and_no_step_lines(tmp_path: Path)
 # ---------- I17: runs ----------
 
 
-def test_i17_runs_lists_every_run_sorted_with_six_fields(mock_runs: MockRuns, tmp_path: Path) -> None:
+def test_i17_runs_lists_every_run_sorted_with_seven_fields(mock_runs: MockRuns, tmp_path: Path) -> None:
     empty = run_cli(["--store", str(tmp_path / "empty"), "runs"])
     assert empty.code == 0, empty.text
     header_lines = len(empty.lines)
@@ -1090,7 +1090,7 @@ def test_i17_runs_lists_every_run_sorted_with_six_fields(mock_runs: MockRuns, tm
     run_lines = r.lines[header_lines:]
     for line, run_id in zip(run_lines, expected, strict=True):
         fields = line.split()
-        assert len(fields) == 6, line
+        assert len(fields) == 7, line
         manifest = store.manifest(run_id)
         assert fields[0] == run_id
         assert fields[1] == manifest.status
@@ -1098,6 +1098,7 @@ def test_i17_runs_lists_every_run_sorted_with_six_fields(mock_runs: MockRuns, tm
         assert fields[3] == manifest.target_id
         assert fields[4] == manifest.t_unit
         assert int(fields[5]) == len(store.read(run_id))
+        assert int(fields[6]) == store.tally(run_id).no_outcome
     assert [line.split()[0] for line in run_lines] == sorted(expected)
 
 

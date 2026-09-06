@@ -72,10 +72,11 @@ STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # the M10 oracle's I15 re
 
 PUBLIC_STORE_METHODS = {
     "create_run", "manifest", "mark_complete", "runs", "append", "read", "missing", "count",
+    "tally",
 }
 PUBLIC_STORE_SYMBOLS = {
     "StoreError", "SchemaMismatch", "DuplicateEpisode", "MetaNotSerializable", "InvalidConfig",
-    "RunManifest", "EpisodeRecord", "Store", "config_hash",
+    "RunManifest", "EpisodeRecord", "Store", "config_hash", "RunTally",
 }
 
 # The keyed run: four cells x three replicates over three parts, appended out of key order,
@@ -746,12 +747,16 @@ def test_r8_runs_on_go1_prints_each_run_with_12800_rows(go1_store: Store) -> Non
     assert not r.err
     lines = [line for line in r.out.splitlines() if line.strip()]
     assert lines[0] == f"store: {GO1_ROOT}"
-    assert lines[1].split() == ["run_id", "status", "backend", "target_id", "t_unit", "rows"]
+    assert lines[1].split() == [
+        "run_id", "status", "backend", "target_id", "t_unit", "rows", "no_outcome",
+    ]
     rows = {line.split()[0]: line.split() for line in lines[2:]}
     assert list(rows) == list(GO1_RUNS)
     for run_id in GO1_RUNS:
         m = go1_store.manifest(run_id)
-        assert rows[run_id] == [run_id, m.status, m.backend, m.target_id, m.t_unit, str(GO1_ROWS)]
+        assert rows[run_id] == [
+            run_id, m.status, m.backend, m.target_id, m.t_unit, str(GO1_ROWS), "0",
+        ]
 
 
 # ---------- R9: the public surface ----------
@@ -774,7 +779,7 @@ def test_r9_count_takes_a_run_id_and_nothing_else() -> None:
     assert params["run_id"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
 
 
-def test_r9_store_public_methods_are_exactly_the_eight() -> None:
+def test_r9_store_public_methods_are_exactly_the_nine() -> None:
     methods = {
         name for name, _ in inspect.getmembers(Store, inspect.isfunction)
         if not name.startswith("_")

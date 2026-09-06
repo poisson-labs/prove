@@ -86,7 +86,7 @@ ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 V22B_SALT = "00112233445566778899aabbccddeeff"
 
-SCHEMA = "proofload.viewpair/1"
+SCHEMA = "proofload.viewpair/2"
 HOST = "127.0.0.1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 GO1_EVENTS = ("fell", "survived")
@@ -101,13 +101,13 @@ CSP = (
 )
 CONTENT_TYPE = "text/html; charset=utf-8"
 TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "view", "headline", "trade_line", "fence", "panels",
+    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
     "unverified", "heatmap_svg",
 )
 ARM_KEYS = (
     "role", "run_id", "target_id", "backend", "status", "created_at", "run_salt", "t_unit",
     "proofload_version", "schema_version", "retain_traces_for", "axis_types", "environment",
-    "rows_stored",
+    "rows_stored", "tally",
 )
 VIEW_KEYS = ("title", "x_axis", "y_axis", "fixed", "theme", "top_n", "forest", "bound", "sign_convention")
 PANEL_KEYS = (
@@ -115,8 +115,9 @@ PANEL_KEYS = (
     "x_values", "y_values", "cells", "worst_header", "worst_rows", "worst_hashes",
 )
 CELL_KEYS = (
-    "coords", "config_hash", "n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta",
-    "stat", "p", "q", "mde", "verdict", "config", "text",
+    "coords", "config_hash", "n_a", "n_b", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
+    "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
+    "config", "config_text", "text",
 )
 FLOAT_KINDS = {
     "rate_a": "pp1", "rate_b": "pp1", "delta": "pp1", "stat": "sig3", "p": "sig3", "q": "sig3",
@@ -131,23 +132,12 @@ SERVE_FLAGS = {
 }
 UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
     (
-        "errored_rows_per_cell",
-        "n_a and n_b count rows with a non-null outcome. A cell that ran 32 replicates and "
-        "errored 20 is indistinguishable here from one that ran 12. The MDE reflects the "
-        "smaller n; nothing on this page says why it is small.",
-        "M6 · B.6",
-    ),
-    (
-        "hole_cause",
-        "A hole is a cell with no comparable data. Whether it was never sampled, was sampled "
-        "and wholly errored, or exists in one run only is not recoverable from this diff.",
-        "M6 · B.6",
-    ),
-    (
-        "run_error_totals",
-        "rows_stored is every row in the store, errored rows included. How many errored is "
-        "counted at run time and not persisted, so this page cannot separate them.",
-        "M3/M4 · B.6",
+        "outcome_labels",
+        "with_outcome and no_outcome count rows by whether the executor stored an outcome. A "
+        "row whose outcome is a label such as crashed is a row with an outcome: nothing on "
+        "this page reads what an outcome means, and a run every one of whose episodes ended "
+        "in the same label shows no_outcome 0.",
+        "B.1",
     ),
     (
         "status_basis",
@@ -847,7 +837,8 @@ def build_pair(root: Path, a: str, b: str, spec: ReportSpec, events: Sequence[st
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     structure = viewer().build_structure(
         report, multi, manifest_a=ma, manifest_b=mb,
-        rows_a=store.count(a), rows_b=store.count(b), store_root=str(root),
+        rows_a=store.count(a), rows_b=store.count(b),
+        tally_a=store.tally(a), tally_b=store.tally(b), store_root=str(root),
     )
     return Built(store, a, b, multi, report, structure, viewer().render_html(structure))
 
@@ -1182,6 +1173,7 @@ def test_v16_integer_fields_have_no_text_entry_and_match_m6(go1: Built) -> None:
 def test_v16_the_page_prints_no_float_except_through_m7s_strings(go1: Built) -> None:
     from proofload.report import _provenance_lines
 
+    # ``config_text`` values (viewpair/2) are structure strings and are already walked.
     allowed = list(walk_strings(go1.structure)) + _provenance_lines(go1.structure["diff"])
     allowed.append(str(go1.structure["pair"]["created_at_gap_s"]))
     stray = [
@@ -1347,7 +1339,7 @@ def test_v23_a_fix_slices_the_grid_against_m7_and_not_m6(go1: Built, go1_store: 
         assert len(hashes) < len(m6_rows(sliced.multi, panel["event"]))
 
 
-def test_v24_cell_keys_are_the_sixteen_and_no_episode_level_key_anywhere(go1: Built) -> None:
+def test_v24_cell_keys_are_the_twenty_one_and_no_episode_level_key_anywhere(go1: Built) -> None:
     for panel in go1.structure["panels"]:
         for cell in panel["cells"]:
             assert tuple(cell) == CELL_KEYS, tuple(cell)
@@ -1383,9 +1375,9 @@ def test_v27_the_select_lists_every_cell_grouped_by_event_in_grid_order(go1: Bui
     selects = go1_dom.find("select")
     assert len(selects) == 1, len(selects)
     groups = [g for g in selects[0].children if g.tag == "optgroup"]
-    assert [g.attrs.get("label") for g in groups] == list(go1.report.events)
+    assert [g.attrs.get("label") for g in groups] == [*go1.report.events, "holes"]
     index = index_of(go1.page)
-    for group, panel in zip(groups, go1.structure["panels"], strict=True):
+    for group, panel in zip(groups[:-1], go1.structure["panels"], strict=True):
         values = [o.attrs.get("value") for o in group.children if o.tag == "option"]
         assert values == [key_of(panel["event"], c["config_hash"]) for c in panel["cells"]]
         assert all(v in index for v in values)
@@ -1432,7 +1424,7 @@ def test_v30_help_lists_serve_and_serve_help_lists_exactly_the_eleven_flags() ->
     assert "--port" not in r.out
 
 
-def test_v31_the_six_unverified_entries_in_order_rendered_uncollapsed_above_the_svg(go1: Built, go1_dom: Dom) -> None:
+def test_v31_the_four_unverified_entries_in_order_rendered_uncollapsed_above_the_svg(go1: Built, go1_dom: Dom) -> None:
     entries = go1.structure["unverified"]
     assert [(e["id"], e["statement"], e["blocked_by"]) for e in entries] == list(UNVERIFIED)
     assert all(tuple(e) == ("id", "statement", "blocked_by") for e in entries)
@@ -1488,7 +1480,8 @@ def test_v32_created_at_gap_is_null_when_a_timestamp_does_not_parse(go1: Built, 
     broken = replace(ma, created_at="not a timestamp")
     structure = viewer().build_structure(
         go1.report, go1.multi, manifest_a=broken, manifest_b=mb,
-        rows_a=GO1_ROWS, rows_b=GO1_ROWS, store_root=str(GO1_ROOT),
+        rows_a=GO1_ROWS, rows_b=GO1_ROWS,
+        tally_a=go1_store.tally(GO1_A), tally_b=go1_store.tally(GO1_B), store_root=str(GO1_ROOT),
     )
     assert structure["pair"]["created_at_gap_s"] is None
     assert structure["pair"]["a"]["created_at"] == "not a timestamp"
@@ -1503,7 +1496,8 @@ def test_v32_each_arm_carries_its_own_salt(go1: Built, go1_store: Store) -> None
     other = replace(mb, run_salt="candidate-only-salt")
     structure = viewer().build_structure(
         go1.report, go1.multi, manifest_a=ma, manifest_b=other,
-        rows_a=GO1_ROWS, rows_b=GO1_ROWS, store_root=str(GO1_ROOT),
+        rows_a=GO1_ROWS, rows_b=GO1_ROWS,
+        tally_a=go1_store.tally(GO1_A), tally_b=go1_store.tally(GO1_B), store_root=str(GO1_ROOT),
     )
     assert structure["pair"]["a"]["run_salt"] == ma.run_salt
     assert structure["pair"]["b"]["run_salt"] == "candidate-only-salt"
@@ -1760,8 +1754,8 @@ def test_v41_environment_renders_inside_one_closed_details_and_nowhere_else(go1:
 
 def test_v40_an_unknown_schema_is_refused_naming_both_values(go1: Built) -> None:
     structure = json.loads(json.dumps(go1.structure, allow_nan=False))
-    structure["schema"] = "proofload.viewpair/2"
+    structure["schema"] = "proofload.viewpair/1"
     with pytest.raises(viewer().ViewerError) as info:
         viewer().render_html(structure)
-    assert "proofload.viewpair/2" in str(info.value)
+    assert "proofload.viewpair/1" in str(info.value)
     assert SCHEMA in str(info.value)
