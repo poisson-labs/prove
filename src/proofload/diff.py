@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -26,6 +27,11 @@ from proofload.survival import aalen_johansen, competing_set
 Method = Literal["fisher_bh", "mcnemar_bh", "logrank_bh"]
 
 _METHODS: tuple[str, ...] = ("fisher_bh", "mcnemar_bh", "logrank_bh")
+# The methods that read the correspondence between the two arms. Written once because the
+# refusal and the warning are the same predicate seen from its two sides: a method in here
+# needs pairing and refuses without it, a method outside it discards pairing and warns when
+# there was pairing to discard.
+_PAIRED_METHODS: tuple[str, ...] = ("mcnemar_bh",)
 _REQUIRED = ("config_hash", "config", "replicate_index", "t", "observed", "horizon")
 
 CELLS_COLUMNS = (
@@ -92,6 +98,14 @@ class UnitMismatch(DiffError):
 
 class NotPairable(DiffError):
     """A paired method was requested but the runs are not pairable."""
+
+
+class UnpairedAnalysis(UserWarning):
+    """The two runs are pairable and the requested method compares them as independent
+    samples. A warning and never a refusal: which test to run is the caller's decision, and
+    the correspondence is discarded, not misused. A ``UserWarning`` subclass so a CI that
+    wants a gate can spell it ``-W error::proofload.diff.UnpairedAnalysis`` without turning
+    every other warning in the process into an error."""
 
 
 class UnknownEvent(DiffError):
@@ -371,27 +385,7 @@ def diff(
     _validate_frame(a, "a")
     _validate_frame(b, "b")
 
-    if manifest_a is not None and manifest_b is not None:
-        if manifest_a.t_unit != manifest_b.t_unit:
-            raise UnitMismatch(
-                f"t_unit differs: {manifest_a.t_unit!r} (a) vs {manifest_b.t_unit!r} (b)"
-            )
-        paired = manifest_a.run_salt == manifest_b.run_salt
-    else:
-        paired = False
-    if method == "mcnemar_bh" and not paired:
-        if manifest_a is None or manifest_b is None:
-            raise NotPairable("mcnemar_bh needs both manifests to establish pairing")
-        raise NotPairable(
-            f"mcnemar_bh needs matching run_salt; got {manifest_a.run_salt!r} vs "
-            f"{manifest_b.run_salt!r}"
-        )
-    if manifest_a is not None:
-        t_unit = manifest_a.t_unit
-    elif manifest_b is not None:
-        t_unit = manifest_b.t_unit
-    else:
-        t_unit = "unknown"
+    paired, t_unit = _pairing(method, manifest_a, manifest_b)
 
     horizon = min(_frame_horizon(a, "a"), _frame_horizon(b, "b"))
     a_t, truncated_a = _truncate(a, horizon)
@@ -745,7 +739,12 @@ def _validate_raw(df: pd.DataFrame, label: str) -> None:
 def _pairing(
     method: str, manifest_a: RunManifest | None, manifest_b: RunManifest | None
 ) -> tuple[bool, str]:
-    """(paired, t_unit) with the S5 guards, raised before any event is tested."""
+    """(paired, t_unit) with the S5 guards, raised before any event is tested.
+
+    The one place ``paired`` is decided, for both entry points. It is also the only place
+    that sees ``paired`` and ``method`` together before any cell exists, which is why the
+    unpaired-analysis warning is raised here and not per cell.
+    """
     if manifest_a is not None and manifest_b is not None:
         if manifest_a.t_unit != manifest_b.t_unit:
             raise UnitMismatch(
@@ -754,12 +753,32 @@ def _pairing(
         paired = manifest_a.run_salt == manifest_b.run_salt
     else:
         paired = False
-    if method == "mcnemar_bh" and not paired:
+    if method in _PAIRED_METHODS and not paired:
         if manifest_a is None or manifest_b is None:
             raise NotPairable("mcnemar_bh needs both manifests to establish pairing")
         raise NotPairable(
             f"mcnemar_bh needs matching run_salt; got {manifest_a.run_salt!r} vs "
             f"{manifest_b.run_salt!r}"
+        )
+    if paired and method not in _PAIRED_METHODS:
+        # Never a switch. The same command running a different test depending on whether two
+        # runs happen to share a salt would make the statistic a property of run provenance
+        # rather than of the request, and a reader of the output could not tell which was
+        # run without going back to the manifests. It says what was discarded and what the
+        # alternative is spelled; the choice stays the caller's. No claim about power: that
+        # depends on how far the two arms agree episode by episode, which is a fact about
+        # the data and not about the salt.
+        assert manifest_a is not None  # implied by paired; narrows the type for run_salt
+        warnings.warn(
+            f"{method} compares two pairable runs as independent samples: both manifests "
+            f"carry run_salt {manifest_a.run_salt!r}, so every episode has a counterpart "
+            "at the same (config_hash, replicate_index). Pass method='mcnemar_bh' to test "
+            "that correspondence; whether it buys power depends on how far the two arms "
+            "agree episode by episode.",
+            UnpairedAnalysis,
+            # 3, not survival.py's 2: this is one frame deeper than the public function, so
+            # 3 lands on the caller of diff/multi_diff -- the line the reader has to change.
+            stacklevel=3,
         )
     if manifest_a is not None:
         return paired, manifest_a.t_unit
