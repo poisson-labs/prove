@@ -33,8 +33,11 @@ Two literals the spec leaves to the oracle, recorded here rather than buried in 
   initially-selected cell is pinned as the ``<option selected>`` of the picker.
 
 Also recorded: the six ``unverified`` statements are the spec's table cells with their
-Markdown code spans (backticks) removed, and V21 accepts either "given" or "not inferred" as
-the event line's wording, which section 3.4 describes but does not fix.
+Markdown code spans (backticks) removed, and the event line's wording is pinned to the
+literal ``given by --event, not inferred`` (section 3.4, fixed at close-out).
+
+V41 (environment inside a closed ``<details>``) was added at close-out after the mutation
+pass rendered it outside and nothing caught it.
 """
 
 from __future__ import annotations
@@ -167,6 +170,7 @@ UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
     ),
 )
 HOLE_MESSAGE = "No comparable data for this cell."
+EVENT_LINE_LITERAL = "given by --event, not inferred"
 INDEX_ID = "proofload-cells"
 
 CLIENT_BAN = {"urllib", "requests", "httpx", "socket"}
@@ -1270,7 +1274,7 @@ def test_v21_the_event_line_names_every_event_first_and_says_the_set_was_given(g
     assert "<svg" not in region
     for event in GO1_EVENTS:
         assert re.search(rf"\b{event}\b", region), event
-    assert "given" in region or "not inferred" in region, region[-800:]
+    assert EVENT_LINE_LITERAL in region, region[-800:]
     assert go1.report.inference_line is None
     assert go1.structure["diff"]["inferred"] is False
 
@@ -1738,6 +1742,20 @@ def test_v39_trade_line_appears_when_present_and_leaves_no_empty_element_when_nu
     assert empties == [], [(n.tag, n.attrs) for n in empties]
     outside = [n for n in dom.nodes if not n.inside("svg") and n.tag != "svg"]
     assert not any("trade" in n.classes() or "trade" in n.attrs.get("id", "") for n in outside)
+
+
+def test_v41_environment_renders_inside_one_closed_details_and_nowhere_else(go1: Built, go1_dom: Dom) -> None:
+    details = [n for n in go1_dom.find("details") if not n.inside("svg")]
+    assert len(details) == 1, len(details)
+    assert "open" not in details[0].attrs, details[0].attrs
+    inside = details[0].deep_text()
+    outside = html_unescape(excised(go1.page, DETAILS_RE))
+    for key in ("a", "b"):
+        environment = go1.structure["pair"][key]["environment"]
+        for value in walk_strings(environment):
+            assert value in inside, (key, value)
+        sentinel = environment["source_manifest"]
+        assert sentinel not in outside, (key, sentinel)
 
 
 def test_v40_an_unknown_schema_is_refused_naming_both_values(go1: Built) -> None:
