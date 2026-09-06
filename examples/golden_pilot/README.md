@@ -196,14 +196,37 @@ system message. The prediction, stated here before the run: `failed_assertion` f
 Every command names the three failure events explicitly; `passed` is the absorbing state and
 nothing here infers an event set.
 
+**Every command below also passes `--method mcnemar_bh`, and on these runs that is not
+optional.** A′ and B are both launched with `--pair-with <A>`, so all three arms share a run
+salt and every episode has a counterpart at the same `(task_id, temperature, seed)`. The
+default method is `fisher_bh`, which compares the two arms as independent samples and throws
+that correspondence away. Running the default here answers a weaker question than the data
+can answer, and discards the whole reason `--pair-with` and shared seeds exist.
+
 ```bash
-proofload diff   <A> <A'> --event failed_assertion --event timed_out --event crashed
-proofload diff   <A> <B>  --event failed_assertion --event timed_out --event crashed
-proofload report <A> <B>  --event failed_assertion --event timed_out --event crashed \
+proofload diff   <A> <A'> --method mcnemar_bh \
+  --event failed_assertion --event timed_out --event crashed
+proofload diff   <A> <B>  --method mcnemar_bh \
+  --event failed_assertion --event timed_out --event crashed
+proofload report <A> <B>  --method mcnemar_bh \
+  --event failed_assertion --event timed_out --event crashed \
   --x temperature --y task_id --out notes/log/pilot-report
-proofload check  <A> <B>  --event failed_assertion --event timed_out --event crashed
+proofload check  <A> <B>  --method mcnemar_bh \
+  --event failed_assertion --event timed_out --event crashed
 proofload inspect <A> --event failed_assertion --where temperature=0.0 --limit 5
 ```
+
+`inspect` takes no `--method`; it selects rows and runs no test.
+
+**The flag is also a check on the arms.** `mcnemar_bh` refuses rather than degrading quietly:
+a pair whose run salts differ raises `NotPairable` before a single cell is tested, so a
+command that runs at all is a command whose two arms really are paired. Whether pairing then
+buys power is a property of the data and not of the flag. It helps to the degree the two arms
+agree episode by episode, which is exactly what §4's Cohen's kappa measures — and it is not
+guaranteed: on the Go1 fixture the same comparison gave 60 safer cells under Fisher and 55
+under McNemar, because shared seeds there did not make the two policies' outcomes concordant.
+Read kappa out of §4 before you read the diff. If it is near zero, write that down; do not
+quietly report the unpaired number instead.
 
 `check` is the golden suite becoming a gate: it fails if B is significantly worse on any
 named event. 164 rows on a heatmap is tall but legible; `--where temperature=0.0` and
