@@ -46,8 +46,9 @@ re-litigated. Session B builds to these.**
   block is unparseable. The candidate handed to ``sandbox.run_tests`` is that complete
   source; ``run_tests(candidate, golden)`` takes a ``suite.Golden``.
 - **Retries and backoff.** "Retried three times" is four requests: the attempt and three
-  retries, then ``crashed`` with ``meta["retries"] == 3``. The delays are the module-level
-  tuple ``golden_pilot.agent.BACKOFF_S`` of three seconds values, read at call time; the
+  retries, then ``api_error`` with ``meta["retries"] == 3`` -- ``crashed`` before S22, and
+  section 3 of that spec is where it moved. The delays are the module-level tuple
+  ``golden_pilot.agent.BACKOFF_S`` of three seconds values, read at call time; the
   tests set it to zeros. ``meta["tokens"]`` sums ``prompt_tokens`` / ``completion_tokens``
   over the replies the episode received.
 - **The sandbox knobs.** ``golden_pilot.sandbox.WALL_CLOCK_S`` is ``10.0`` and is read at
@@ -84,7 +85,7 @@ re-litigated. Session B builds to these.**
   ``tool_calls``, a ``meta["trace"]`` that decodes with ``truncated is None`` and both stamps
   on every llm span. ``errored.by_error`` is keyed by the error text's last line, so a
   traceback keys as ``RuntimeError: boom`` and S16's row as ``timeout``. ``zero_n`` counts
-  ``(cell, event)`` holes over the run's distinct configs and the three failure events, cells
+  ``(cell, event)`` holes over the run's distinct configs and the four failure events, cells
   keyed by ``config_hash``. ``pairing`` matches ok rows of the two runs on
   ``(task_id, temperature, seed)``, strata keyed by ``str(temperature)``, and is ``None``
   without ``paired_with``. The exact key set is in ``test_p9_*``. ``Store.read`` hands back a
@@ -145,11 +146,11 @@ needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="capture installs in 
 if str(ROOT.parent) not in sys.path:
     sys.path.insert(0, str(ROOT.parent))  # `import golden_pilot` from examples/ (or the shadow tree)
 
-OUTCOMES = ("passed", "failed_assertion", "timed_out", "crashed")
+OUTCOMES = ("passed", "failed_assertion", "timed_out", "crashed", "api_error")
 FORBIDDEN_OUTCOMES = ("timeout", "error", "")
 T_UNIT = "tool_calls"
 HORIZON = 6
-FAILURE_EVENTS = ("failed_assertion", "timed_out", "crashed")
+FAILURE_EVENTS = ("failed_assertion", "timed_out", "crashed", "api_error")
 MODEL = "fake-model"
 DISCARD_URL = "http://127.0.0.1:9/v1"  # the discard port: a bypassed transport is refused locally
 INSTRUMENTOR = "openai"  # pinned from entry_points(group="opentelemetry_instrumentor"), see the docstring
@@ -457,7 +458,8 @@ def scenario(name: str) -> tuple[str, int, tuple[Reply, ...]]:
         "timed_out": (HE0, 21, steps(*(("run_tests", wrong(HE0)),) * HORIZON)),
         "api_error": (HE2, 11, (FIVE_HUNDRED,)),
         "garbage": (HE2, 12, (GARBAGE, GARBAGE)),
-        "crash_after_two_calls": (HE2, 13, (*steps(("run_tests", canonical(HE2)), ("run_tests", canonical(HE2))), FIVE_HUNDRED)),
+        "api_error_after_two_calls": (HE2, 13, (*steps(("run_tests", canonical(HE2)), ("run_tests", canonical(HE2))), FIVE_HUNDRED)),
+        "crash_after_two_calls": (HE2, 14, (*steps(("run_tests", canonical(HE2)), ("run_tests", canonical(HE2))), GARBAGE, GARBAGE)),
         "hang": (BAD_TASK, 31, steps(("run_tests", bad("hangs")), ("submit", canonical(BAD_TASK)))),
     }
     return table[name]
@@ -637,7 +639,7 @@ def capture_run(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 # ---------- P1: the contract ----------
 
 
-def test_p1_outcomes_is_exactly_the_four_names_in_the_spec_order(agent: Any) -> None:
+def test_p1_outcomes_is_exactly_the_five_names_in_the_spec_order(agent: Any) -> None:
     assert agent.OUTCOMES == OUTCOMES
     assert isinstance(agent.OUTCOMES, tuple)
 
@@ -649,7 +651,7 @@ def test_p1_t_unit_and_horizon_are_the_spec_constants(agent: Any) -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["passed", "passed_after_tests", "failed_assertion", "failed_after_tests", "timed_out", "api_error", "garbage", "crash_after_two_calls"],
+    ["passed", "passed_after_tests", "failed_assertion", "failed_after_tests", "timed_out", "api_error", "garbage", "api_error_after_two_calls", "crash_after_two_calls"],
 )
 def test_p1_every_scripted_path_returns_an_episode_inside_the_contract(agent: Any, monkeypatch: pytest.MonkeyPatch, name: str) -> None:
     task_id, _, _ = scenario(name)
@@ -698,9 +700,9 @@ def test_p2_horizon_run_tests_turns_with_no_submit_is_timed_out_at_horizon(agent
     assert run.episode.meta["crash_reason"] is None
 
 
-def test_p2_three_5xx_replies_crash_naming_the_api_error_with_three_retries(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_p2_three_5xx_replies_are_an_api_error_naming_it_with_three_retries(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     run = play(agent, monkeypatch, "api_error")
-    assert run.episode.outcome == "crashed" and run.episode.t == 0, run.episode
+    assert run.episode.outcome == "api_error" and run.episode.t == 0, run.episode
     assert run.episode.meta["retries"] == 3
     assert len(run.requests) == 4, [q.turn for q in run.requests]  # the attempt and three retries
     reason = run.episode.meta["crash_reason"]
@@ -734,12 +736,23 @@ def test_p3_t_counts_tool_calls_with_the_terminating_submit_included(agent: Any,
     assert play(agent, monkeypatch, "timed_out").episode.t == HORIZON
 
 
-def test_p3_a_crashed_episode_counts_the_calls_made_before_the_crash(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    run = play(agent, monkeypatch, "crash_after_two_calls")
-    assert run.episode.outcome == "crashed" and run.episode.t == 2, run.episode
+def test_p3_an_api_error_episode_counts_the_calls_made_before_the_failure(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    run = play(agent, monkeypatch, "api_error_after_two_calls")
+    assert run.episode.outcome == "api_error" and run.episode.t == 2, run.episode
     assert run.episode.meta["retries"] == 3
     assert len(run.requests) == 2 + 4, [q.turn for q in run.requests]
     assert run.episode.meta["tokens"] == {"in": prompt_tokens(0) + prompt_tokens(1), "out": completion_tokens(0) + completion_tokens(1)}
+    assert len(tool_spans(trace_of(run.episode))) == 2
+
+
+def test_p3_a_crashed_episode_counts_the_calls_made_before_the_parse_failure(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    # S22 moved the 5xx script above to ``api_error``, which would have left P3 with no
+    # ``crashed`` episode that made a tool call first. This is that episode: two run_tests
+    # turns, then a reply and its repair turn that neither parse.
+    run = play(agent, monkeypatch, "crash_after_two_calls")
+    assert run.episode.outcome == "crashed" and run.episode.t == 2, run.episode
+    assert run.episode.meta["retries"] == 0
+    assert len(run.requests) == 2 + 2, [q.turn for q in run.requests]
     assert len(tool_spans(trace_of(run.episode))) == 2
 
 
@@ -926,9 +939,18 @@ def test_p7_the_rollouts_own_record_spans_carry_no_stamps_on_the_s15_surface(cap
 def test_p8_no_outcome_is_timeout_error_or_empty(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     for name in FORBIDDEN_OUTCOMES:
         assert name not in agent.OUTCOMES
+    # S22 re-check of the name list. ``api_error`` *contains* ``error``, so the exclusion
+    # has to be of the whole name: a guard spelled as a substring test would reject the
+    # fifth outcome. The two readings are pinned apart, and which outcome separates them.
+    assert set(agent.OUTCOMES) & set(FORBIDDEN_OUTCOMES) == set(), agent.OUTCOMES
+    substring_hits = [o for o in agent.OUTCOMES if any(f and f in o for f in FORBIDDEN_OUTCOMES)]
+    assert substring_hits == ["api_error"], substring_hits
+    seen = set()
     for name in ("passed", "failed_assertion", "timed_out", "api_error", "garbage"):
         outcome = play(agent, monkeypatch, name).episode.outcome
         assert outcome not in FORBIDDEN_OUTCOMES and outcome in OUTCOMES, (name, outcome)
+        seen.add(outcome)
+    assert seen == set(OUTCOMES), sorted(seen ^ set(OUTCOMES))  # the five scripts reach the five names
 
 
 def test_p8_the_mini_suite_loads_with_unique_ids_stable_across_two_loads(suite: Any) -> None:
@@ -1264,20 +1286,24 @@ def test_p9_the_errored_row_rate_split_by_text_and_by_trace_presence(numbers_a: 
     assert (errored["with_trace"], errored["without_trace"]) == (2, 1), errored
 
 
-def test_p9_zero_n_holes_over_cells_and_the_three_failure_events(numbers_a: dict[str, Any]) -> None:
+def test_p9_zero_n_holes_over_cells_and_the_four_failure_events(numbers_a: dict[str, Any]) -> None:
     zero_n = numbers_a["zero_n"]
     assert zero_n["cells"] == 4
     assert list(zero_n["events"]) == list(FAILURE_EVENTS)
-    # c0: nothing but passed -> 3 holes; c1: failed_assertion only -> 2; c2: timed_out and
-    # crashed -> 1; c3: "timeout" is not an event -> 3.  3 + 2 + 1 + 3 = 9
+    # Recomputed by hand over the four events of S22, from the ok-row outcomes rows_a()
+    # spells: c0 {passed}, c1 {failed_assertion, passed}, c2 {timed_out, passed, crashed},
+    # c3 {"timeout", passed}. No cell produced an api_error, so every cell holes on it.
+    # c0: 4 holes; c1: 3; c2: 2; c3: "timeout" is not an event -> 4.  4 + 3 + 2 + 4 = 13,
+    # and cells x events - holes = 4 x 4 - 13 = 3, the three (cell, event) pairs seen.
     expected = {
-        (CELL_HASH["c0"], "failed_assertion"), (CELL_HASH["c0"], "timed_out"), (CELL_HASH["c0"], "crashed"),
-        (CELL_HASH["c1"], "timed_out"), (CELL_HASH["c1"], "crashed"),
-        (CELL_HASH["c2"], "failed_assertion"),
-        (CELL_HASH["c3"], "failed_assertion"), (CELL_HASH["c3"], "timed_out"), (CELL_HASH["c3"], "crashed"),
+        (CELL_HASH["c0"], "failed_assertion"), (CELL_HASH["c0"], "timed_out"), (CELL_HASH["c0"], "crashed"), (CELL_HASH["c0"], "api_error"),
+        (CELL_HASH["c1"], "timed_out"), (CELL_HASH["c1"], "crashed"), (CELL_HASH["c1"], "api_error"),
+        (CELL_HASH["c2"], "failed_assertion"), (CELL_HASH["c2"], "api_error"),
+        (CELL_HASH["c3"], "failed_assertion"), (CELL_HASH["c3"], "timed_out"), (CELL_HASH["c3"], "crashed"), (CELL_HASH["c3"], "api_error"),
     }
+    assert len(expected) == 4 * len(FAILURE_EVENTS) - 3 == 13
     holes = {(str(cell), str(event)) for cell, event in zero_n["holes"]}
-    assert holes == expected and zero_n["count"] == 9 == len(zero_n["holes"]), sorted(holes ^ expected)
+    assert holes == expected and zero_n["count"] == 13 == len(zero_n["holes"]), sorted(holes ^ expected)
 
 
 def test_p9_pairing_agreement_and_kappa_against_the_second_run(numbers_a: dict[str, Any]) -> None:
@@ -1451,6 +1477,20 @@ def test_p12_nothing_under_src_proofload_imports_examples() -> None:
             top = (module or "").split(".")[0]
             assert top not in ("examples", "golden_pilot"), (path, module)
         assert "golden_pilot" not in path.read_text(encoding="utf-8"), path
+
+
+def test_p12_nothing_under_src_proofload_names_the_pilots_api_error_outcome() -> None:
+    """Q8, first half. ``api_error`` is a pilot outcome and core never learns the name.
+
+    A source scan and not an ``ast`` walk, deliberately: the invariant is about the
+    *string*, so a mention in a docstring, a comment or a hard-coded branch is a violation
+    on the same footing as an identifier. Core stays a tool that reads whatever outcome a
+    target emits; the moment it spells one of the pilot's, it has a favourite.
+    """
+    files = sorted(p for p in PACKAGE.rglob("*.py") if "__pycache__" not in p.parts)
+    assert files
+    offenders = [str(p) for p in files if "api_error" in p.read_text(encoding="utf-8")]
+    assert not offenders, offenders
 
 
 def test_p12_golden_pilot_imports_only_episode_record_collect_step_trace_and_store_from_proofload() -> None:
