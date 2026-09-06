@@ -26,7 +26,6 @@ from typing import Any
 
 from proofload._resolve import resolve, split_import_path
 from proofload.capture import CaptureSpec, CaptureStatus, install
-from proofload.diff import mde_two_proportion
 from proofload.episode import Episode
 from proofload.executor import (
     _TIMEOUT_ERROR,
@@ -42,6 +41,7 @@ from proofload.executor import (
     _environment,
     _episode_id,
     _mp_context,
+    preflight_mde,
 )
 from proofload.store import EpisodeRecord, RunManifest, Store, StoreError
 
@@ -679,7 +679,7 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
     spec = p.spec
     image = target.image
     total = spec.total_rollouts()
-    mde = mde_two_proportion(0.5, spec.replicates, spec.replicates)
+    mde = preflight_mde(spec)
     estimate = estimate_cost(p, options, image)
     gpu = "none" if image.gpu is None else image.gpu
     timeout = "none" if options.episode_timeout is None else f"{options.episode_timeout:g}s"
@@ -705,7 +705,7 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
         f"episode timeout: {timeout}",
         mounts,
         cost,
-        f"MDE at N={spec.replicates} (worst case, rate 0.5): {mde:.4f}",
+        f"MDE at N={spec.replicates} (base rate 0.5): {mde:.4f}",
     ]
     capture_line = _capture_line(spec.capture)
     if capture_line is not None:

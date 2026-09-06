@@ -193,6 +193,29 @@ def plan(
     )
 
 
+# ---------- power ----------
+
+
+def preflight_mde(spec: SweepSpec) -> float:
+    """The design's minimum detectable effect, at base rate 0.5, in event-rate points.
+
+    **The one construction.** Both pre-flight lines read this function, and so does everything
+    S23 builds on it, so a change to the statistic cannot move the printed number without
+    moving whatever is compared against it (W2). It was computed inline in ``preflight`` and
+    ``preflight_modal`` would have been a second site.
+
+    Base rate 0.5 is the right design-time anchor: it needs no data, and there is none before
+    the run. It is **not** an upper bound over the cells. ``mde_two_proportion`` guards a rate
+    of exactly 0 with ``0.5/n`` and returns the largest possible increase when even that is
+    undetectable, so cells at extreme base rates exceed this value -- measured on the Go1
+    fixture, the realised per-cell maximum was 0.34 against this function's 0.3251, 1.6 points
+    higher. That gap is why the printed line no longer calls itself the largest case; anyone
+    tempted to make it exact should note that an exact number needs the base rates, and those
+    do not exist before the run.
+    """
+    return mde_two_proportion(0.5, spec.replicates, spec.replicates)
+
+
 def _capture_line(spec: CaptureSpec | None) -> str | None:
     """The one ``Capture:`` line of the pre-flight, or None when nothing was requested.
 
@@ -212,13 +235,13 @@ def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
     """Text block describing the run. Non-interactive; M10 prints it and asks."""
     spec = p.spec
     total = spec.total_rollouts()
-    mde = mde_two_proportion(0.5, spec.replicates, spec.replicates)
+    mde = preflight_mde(spec)
     lines = [
         f"Sweep: {len(spec.axis_types)} axes · {len(spec.configs)} cells · "
         f"N={spec.replicates} → {total} rollouts",
         f"Backend: {p.backend} · target: {spec.target_id} · t_unit: {spec.t_unit}",
         f"Cost: {cost_estimate if cost_estimate is not None else '$0 (local)'}",
-        f"MDE at N={spec.replicates} (worst case, rate 0.5): {mde:.4f}",
+        f"MDE at N={spec.replicates} (base rate 0.5): {mde:.4f}",
     ]
     capture_line = _capture_line(spec.capture)
     if capture_line is not None:
