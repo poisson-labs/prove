@@ -54,7 +54,15 @@ from proofload.diff import (
     infer_events,
     multi_diff,
 )
-from proofload.executor import ExecutorError, Plan, RunSummary, plan, preflight, run_local
+from proofload.executor import (
+    ExecutorError,
+    Plan,
+    RunSummary,
+    check_power,
+    plan,
+    preflight,
+    run_local,
+)
 from proofload.executor_modal import (
     ImageSpec,
     ModalOptions,
@@ -178,6 +186,12 @@ def _build_parser(io: _IO) -> _Parser:
     sweep.add_argument("--episode-timeout", type=float, metavar="S", help="per-episode timeout")
     sweep.add_argument("--max-rollouts", type=int, metavar="N", help="stop after N rollouts")
     sweep.add_argument("--batch-size", type=int, metavar="N", help="rows per store part")
+    sweep.add_argument(
+        "--max-mde",
+        type=float,
+        metavar="FLOAT",
+        help="largest minimum detectable effect you accept for this design (default 0.20)",
+    )
     sweep.add_argument("--yes", action="store_true", help="skip the pre-flight prompt")
     modal = sweep.add_argument_group("modal only (override the [modal] table)")
     modal.add_argument("--concurrency", type=int, metavar="N", help="max containers")
@@ -642,6 +656,25 @@ def _modal_config(ns: argparse.Namespace, spec_path: Path) -> tuple[ModalTarget,
     return target, options
 
 
+def _recorded_max_mde(store: Store, resume: str | None) -> float | None:
+    """The accepted value a resumed run already recorded, or None when there is none.
+
+    A resume is the same run and inherits its own admission; re-litigating it would train
+    people to pass the flag reflexively. ``--pair-with`` is not read here, deliberately: a
+    paired arm is a different run making its own claim, and the flag is one word.
+
+    Read defensively. A run id that is not in the store is ``plan``'s refusal to make and not
+    this helper's, and a run stored before the gate existed has no such key.
+    """
+    if resume is None:
+        return None
+    try:
+        recorded = store.manifest(resume).environment.get("max_mde_accepted")
+    except StoreError:
+        return None
+    return float(recorded) if isinstance(recorded, (int, float)) else None
+
+
 def _confirm(ns: argparse.Namespace, io: _IO) -> None:
     """Prompt once, read exactly one line; anything but y/yes declines. Never hang in CI."""
     if ns.yes:
@@ -679,12 +712,19 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         pair_with=ns.pair_with,
         resume=ns.resume,
         import_path=ns.target,
+        max_mde_accepted=(
+            ns.max_mde if ns.max_mde is not None else _recorded_max_mde(store, ns.resume)
+        ),
     )
 
+    # Describe, then decide, then ask. The reader who gets the refusal has already been shown
+    # the MDE line it is about, and `--yes` skips only the prompt: the threshold, the
+    # comparison and the message all live in M3 (spec S23 sections 3 and 6).
     if ns.backend == "modal":
         io.out.write(preflight_modal(p, target, options))
     else:
         io.out.write(preflight(p))
+    check_power(p, max_mde=p.max_mde_accepted)
     _confirm(ns, io)
 
     state.run_id = p.run_id
