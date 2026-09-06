@@ -153,8 +153,12 @@ def _call(
 ) -> tuple[str | None, str | None, int]:
     """One model turn: ``(reply text, error text, retries made)``.
 
-    The attempt and three retries, then the episode crashes. ``BACKOFF_S`` and the model name
-    are read here, at call time, so a caller may replace either.
+    The attempt and three retries, then ``(None, error, retries)`` and the episode ends
+    ``api_error``. **No content is returned on exactly one condition** -- an
+    ``openai.APIError`` with the backoffs spent -- so the caller needs no flag and no sentinel
+    to recognise it. Anything outside that exception tree propagates and the executor stores
+    an errored row, as before. ``BACKOFF_S`` and the model name are read here, at call time,
+    so a caller may replace either.
     """
     backoff = BACKOFF_S
     retries = 0
@@ -247,7 +251,11 @@ def _loop(cfg: Mapping[str, Any], seed: int, *, require_tests: bool) -> Episode:
                 content, error, made = _call(client, messages, temperature, seed, tokens)
                 retries += made
                 if content is None:
-                    outcome, crash_reason = "crashed", error
+                    # `_call` returns no content on one condition only: an openai.APIError
+                    # that outlived the attempt and all three backoffs. The model was never
+                    # reached, which is not the same failure as our code giving up on what it
+                    # sent back (spec S22 section 3).
+                    outcome, crash_reason = "api_error", error
                     break
                 messages.append({"role": "assistant", "content": content})
                 call = _parse(content)
@@ -257,11 +265,14 @@ def _loop(cfg: Mapping[str, Any], seed: int, *, require_tests: bool) -> Episode:
                     content, error, made = _call(client, messages, temperature, seed, tokens)
                     retries += made
                     if content is None:
-                        outcome, crash_reason = "crashed", error
+                        # The same failure one turn later, and it gets the same label.
+                        outcome, crash_reason = "api_error", error
                         break
                     messages.append({"role": "assistant", "content": content})
                     call = _parse(content)
                     if call is None:
+                        # Reached twice and unusable twice: the model answered, and the
+                        # failure is this loop's handling of what came back. Stays `crashed`.
                         outcome, crash_reason = "crashed", _PARSE_FAILURE
                         break
                 tool, code = call
@@ -286,6 +297,10 @@ def _loop(cfg: Mapping[str, Any], seed: int, *, require_tests: bool) -> Episode:
                 outcome = "passed" if result.passed else "failed_assertion"
 
     return Episode(
+        # The loop is `while outcome is None`, so this default is unreachable: it can only
+        # fire if the loop exited without setting one, which is this module being wrong and
+        # not the API being unreachable. It stays `crashed` and does not follow the two sites
+        # above (spec S22 section 3).
         outcome=outcome if outcome is not None else "crashed",
         t=t,
         horizon=HORIZON,

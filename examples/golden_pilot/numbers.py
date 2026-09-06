@@ -137,7 +137,7 @@ def _agreement(pairs: list[tuple[str, str]]) -> float | None:
 
 
 def _kappa(pairs: list[tuple[str, str]]) -> float | None:
-    """Cohen's kappa over the four outcomes. None when nothing paired.
+    """Cohen's kappa over the outcome vocabulary. None when nothing paired.
 
     Chance agreement is the product of the two runs' marginals. When both runs used one label
     throughout, chance agreement is 1 and kappa is undefined (0/0); the convention here is

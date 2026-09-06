@@ -13,9 +13,18 @@ side-effect free, and already imported by every module in the tree.
 """
 
 #: Exactly these, exactly one per episode, in this order. Never ``timeout`` (S16 section 5
-#: gave that string to the executor's errored rows), never ``error``, never empty.
+#: gave that string to the executor's errored rows), never ``error``, never empty -- and note
+#: that ``api_error`` *contains* ``error`` and is excluded by neither, because the exclusion
+#: is of the whole name and not of a substring.
+#:
+#: ``crashed`` is **the agent's own code could not continue**: a reply that did not parse
+#: after its repair turn. ``api_error`` is **the agent could not reach the model**: an
+#: ``openai.APIError`` that survived the attempt and all three backoffs. They were one label
+#: until S22. ``diff`` reads the episode frame narrow and never touches ``meta``, so a
+#: distinction that lives in ``meta["crash_reason"]`` cannot be seen by anything downstream;
+#: the label is the only place it can live.
 OUTCOMES: tuple[str, ...] = (
-    "passed", "failed_assertion", "timed_out", "crashed",
+    "passed", "failed_assertion", "timed_out", "crashed", "api_error",
 )
 
 #: The competing risks: every outcome but the absorbing one. **Derived, never spelled** -- a
