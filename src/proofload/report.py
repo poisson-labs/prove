@@ -231,6 +231,7 @@ class Report:
     n_worse: int
     n_unchanged: int
     n_absent: int
+    n_present: int
     _bound: float = field(default=0.05, repr=False, compare=False)
     _event: str = field(default="", repr=False, compare=False)
     _methods: tuple[DiffResult, ...] = field(default=(), repr=False, compare=False)
@@ -546,6 +547,7 @@ def _build_panel(
         n_worse=n_worse,
         n_unchanged=n_unchanged,
         n_absent=n_absent,
+        n_present=len(present),
         _bound=bound if bound is not None else _bound_for(cells_t, spec.color_max),
         _event=event,
         _methods=methods,

@@ -1,8 +1,10 @@
 """M10: the command line.
 
-Six verbs over the built modules: ``sweep`` runs a plan on a backend after a pre-flight
-prompt; ``diff``, ``report`` and ``check`` operate on stored runs; ``inspect`` dumps the
-``(config, seed)`` pairs behind an event plus a reproduction snippet; ``runs`` lists the store.
+Seven verbs over the built modules: ``sweep`` runs a plan on a backend after a pre-flight
+prompt; ``diff``, ``report``, ``check`` and ``serve`` operate on stored runs; ``inspect`` dumps
+the ``(config, seed)`` pairs behind an event plus a reproduction snippet; ``runs`` lists the
+store. ``serve`` is the one verb that binds a socket: a loopback listener holding one page
+built before the bind, which writes nothing and dies with the process.
 This module computes nothing and decides nothing statistical: it parses arguments, calls
 M2–M7, and renders their results. Every number it prints is a field on a ``RunSummary``,
 ``MultiDiffResult``, ``MultiReport``, ``SurvivalReport``, ``RunManifest`` or a store frame.
@@ -69,6 +71,7 @@ from proofload.sampler import SamplerError, SweepSpec
 from proofload.store import RunManifest, Store, StoreError
 from proofload.survival import SurvivalError, cell_table, competing_set
 from proofload.trace import Trace, TraceValidationError
+from proofload.viewer import _HOST, ViewerError, build_structure, render_html, serve_page
 
 __all__ = ["main"]
 
@@ -83,11 +86,14 @@ _SNIPPET_MARKER = "# reproduce one episode"
 _MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
 _DIFF_ONLY_FLAGS = ("method", "methods", "q")
 _RUN_ONLY_FLAGS = ("horizon",)
-_REFUSABLE = (SamplerError, ExecutorError, DiffError, ReportError, StoreError, SurvivalError)
+_REFUSABLE = (
+    SamplerError, ExecutorError, DiffError, ReportError, StoreError, SurvivalError, ViewerError,
+)
 _REPORT_FORMS = (
     "report A B --x AXIS [...]  (two run ids: diff report) or "
     "report RUN --x AXIS [...]  (one run id: survival report)"
 )
+_SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a diff view)"
 
 
 # ---------- streams, exits, parser ----------
@@ -231,6 +237,32 @@ def _build_parser(io: _IO) -> _Parser:
     _add_event_argument(check_p, "required: a gate never infers its events")
     _add_method_arguments(check_p, defaults=True)
     check_p.add_argument("--fail-on", choices=("worse", "any"), default="worse")
+
+    serve_p = sub.add_parser(
+        "serve", help="serve a read-only page for one run pair on an ephemeral loopback port"
+    )
+    serve_p.add_argument(
+        "runs", nargs="+", metavar="RUN", help="the baseline and the candidate, in that order"
+    )
+    _add_event_argument(serve_p, "required: a viewer never infers its event")
+    _add_method_arguments(serve_p, defaults=True)
+    serve_p.add_argument("--x", required=True, metavar="AXIS", help="config key on the x axis")
+    serve_p.add_argument("--y", metavar="AXIS", help="config key on the y axis")
+    serve_p.add_argument(
+        "--fix", action="append", default=[], metavar="KEY=VALUE", help="pin a config key"
+    )
+    serve_p.add_argument("--theme", choices=("dark", "light"), default="dark")
+    serve_p.add_argument("--top-n", type=int, default=10, metavar="N", help="worst cells listed")
+    serve_p.add_argument(
+        "--forest",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help="single-axis diff panels: forest plot, strip, or forest for categorical axes",
+    )
+    serve_p.add_argument("--title", metavar="TEXT")
+    serve_p.add_argument(
+        "--json", action="store_true", help="print the structure to stdout and exit; bind nothing"
+    )
 
     inspect_p = sub.add_parser("inspect", help="dump the (config, seed) pairs behind an event")
     inspect_p.add_argument("run", metavar="RUN")
@@ -416,6 +448,24 @@ def _require_known_events(
             f'{verb}: event "{missing[0]}" does not appear in {where}. '
             f"Present: {', '.join(present)}."
         )
+
+
+def _missing_event_refusal(store: Store, a: str, b: str, verb: str, because: str) -> _Refusal:
+    """The refusal ``check`` and ``serve`` share, written once.
+
+    Both verbs refuse to infer, for the same reason at two volumes: a gate whose meaning moves
+    when a new outcome appears is not a gate, and a picture of the same defect is worse. The
+    sentence differs by one clause and the suggestion is identical, so the paragraph lives here
+    and each verb supplies its own middle.
+    """
+    fa, fb, _, _ = _load_pair(store, a, b)
+    try:
+        suggestion = ", ".join(infer_events(fa, fb)[0])
+    except Exception:  # noqa: BLE001 - the refusal must print whatever happens here
+        suggestion = "(could not infer)"
+    return _Refusal(
+        f"{verb} requires --event; {because} Inferred events for this pair: {suggestion}."
+    )
 
 
 def _run_diffs(
@@ -807,14 +857,12 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
 def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     store = Store(root)
     if ns.event is None:
-        fa, fb, _, _ = _load_pair(store, ns.a, ns.b)
-        try:
-            suggestion = ", ".join(infer_events(fa, fb)[0])
-        except Exception:  # noqa: BLE001 - the refusal must print whatever happens here
-            suggestion = "(could not infer)"
-        raise _Refusal(
-            "check requires --event; a gate whose meaning changes when a new outcome appears "
-            f"is not a gate. Inferred events for this pair: {suggestion}."
+        raise _missing_event_refusal(
+            store,
+            ns.a,
+            ns.b,
+            "check",
+            "a gate whose meaning changes when a new outcome appears is not a gate.",
         )
     multi, _, _ = _run_diffs(
         store,
@@ -830,6 +878,73 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     _write_summary(io, multi)
     io.out.write("PASS\n" if passed else "FAIL\n")
     return 0 if passed else 1
+
+
+def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
+    """``_report_pair`` up to the report, then a structure instead of three files.
+
+    The structure is complete before anything binds, so every refusal happens with no listening
+    socket in existence, and ``--json`` returns having bound nothing at all. Nothing on this
+    path writes to the store, to the cwd, or to a temp file.
+    """
+    runs: list[str] = list(ns.runs)
+    if len(runs) != 2:
+        raise _Refusal(f"serve takes two run ids, got {len(runs)}: {_SERVE_FORM}")
+    a, b = runs[0], runs[1]
+    store = Store(root)
+    if ns.event is None:
+        raise _missing_event_refusal(
+            store,
+            a,
+            b,
+            "serve",
+            "a picture whose meaning changes when a new outcome appears is worse than a table "
+            "with the same defect.",
+        )
+    fixed = _parse_pairs(ns.fix, "--fix")
+    multi, _, manifests = _run_diffs(
+        store,
+        a,
+        b,
+        verb="serve",
+        events=ns.event,
+        method=ns.method,
+        q=ns.q,
+        all_methods=False,
+    )
+    spec = ReportSpec(
+        title=ns.title if ns.title else f"{a} vs {b}: {', '.join(multi.events)}",
+        x_axis=ns.x,
+        y_axis=ns.y,
+        fixed=fixed,
+        theme=ns.theme,
+        top_n=ns.top_n,
+        forest=ns.forest,
+    )
+    report = build_multi_report(multi, spec, manifests=manifests)
+    structure = build_structure(
+        report,
+        multi,
+        manifest_a=manifests[0],
+        manifest_b=manifests[1],
+        rows_a=store.count(a),
+        rows_b=store.count(b),
+        store_root=str(root),
+    )
+    if ns.json:
+        io.out.write(json.dumps(structure, indent=2, sort_keys=False, allow_nan=False) + "\n")
+        return 0
+
+    def announce(srv: Any) -> None:
+        # The only line this verb writes, and only once the socket is up: an ephemeral port
+        # nobody is told about is a page nobody can open. Flushed because stdout is block
+        # buffered when it is a pipe, and a URL that arrives when the server is killed is a
+        # URL nobody was handed.
+        io.out.write(f"http://{_HOST}:{srv.server_address[1]}/\n")
+        io.out.flush()
+
+    serve_page(render_html(structure), on_bind=announce)
+    return 0
 
 
 # ---------- inspect / runs ----------
@@ -949,6 +1064,7 @@ _VERBS: dict[str, Callable[[argparse.Namespace, _IO, Path, _State], int]] = {
     "diff": _cmd_diff,
     "report": _cmd_report,
     "check": _cmd_check,
+    "serve": _cmd_serve,
     "inspect": _cmd_inspect,
     "runs": _cmd_runs,
 }
