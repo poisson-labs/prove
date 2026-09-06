@@ -36,8 +36,12 @@ Literals the spec leaves to the oracle, pinned here rather than buried in a test
 - ``DRILL_LABELS``: the drill-down rows are ``rows (a/b)`` and ``no outcome (a/b)`` and follow
   ``n (a/b)``; the script's ``order`` list, which carries keys and not labels, gains the four
   cell keys ``rows_a, rows_b, no_outcome_a, no_outcome_b`` right after ``n_a, n_b``.
-- ``COVERAGE_LINE``: the exact ``coverage:`` line of ``to_markdown``; the ``## coverage`` table
-  prints a comparable row's cause as ``None`` through ``_md_cell``.
+- ``coverage_block``: ``MultiDiffResult.to_markdown()`` is UNCHANGED (A20 in the M6 oracle
+  requires a diff with errored rows to render identically to one without); the ``diff``
+  verb's text output appends the block instead, after the markdown and after the
+  ``--methods all`` table, the way ``_method_table`` already is: the exact ``coverage:``
+  line, a ``## coverage`` heading and the table over ``COVERAGE_COLUMNS`` in ``_md_cell``
+  style, a comparable row's cause printed ``None``.
 - ``NONE_TEXT``: the Holes table prints ``none`` for a null coords or hash.
 - R8's Go1 row literal is ``"0"``: Go1 has no errored rows.
 
@@ -822,6 +826,25 @@ def md_cell(value: Any) -> str:
     return str(value)
 
 
+def coverage_block(frame: pd.DataFrame) -> str:
+    """What ``diff``'s text output appends after the markdown: the summary line, one blank
+    line, ``## coverage``, one blank line, the table over ``COVERAGE_COLUMNS``."""
+    header = "| " + " | ".join(COVERAGE_COLUMNS) + " |"
+    rule = "|" + "|".join("---" for _ in COVERAGE_COLUMNS) + "|"
+    rows = [
+        "| " + " | ".join(md_cell(row[c]) for c in COVERAGE_COLUMNS) + " |"
+        for row in frame.to_dict(orient="records")
+    ]
+    return "\n".join([coverage_line(frame), "", "## coverage", "", header, rule, *rows]) + "\n"
+
+
+def diff_argv(root: Path, *extra: str) -> list[str]:
+    argv = ["--store", str(root), "diff", SYN_A, SYN_B]
+    for e in SYN_EVENTS:
+        argv += ["--event", e]
+    return argv + list(extra)
+
+
 def selected_cell(b: Built) -> dict[str, Any]:
     dom = parse_html(b.page)
     chosen = [o.attrs["value"] for o in dom.find("option") if "selected" in o.attrs]
@@ -854,6 +877,14 @@ def syn_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     write_run(store, SYN_A, A_CELLS, fail_share=2)
     write_run(store, SYN_B, B_CELLS, fail_share=4)
     return root
+
+
+@pytest.fixture(scope="module")
+def syn_multi(syn_root: Path) -> MultiDiffResult:
+    """M6's result alone, for the M6/M10 clauses that need no report or structure."""
+    store = Store(syn_root)
+    ma, mb = store.manifest(SYN_A), store.manifest(SYN_B)
+    return multi_diff(store.read(SYN_A), store.read(SYN_B), events=list(SYN_EVENTS), manifest_a=ma, manifest_b=mb)
 
 
 @pytest.fixture(scope="module")
@@ -1150,10 +1181,7 @@ def test_e10_the_column_sums_are_the_frame_totals(syn: Built) -> None:
 
 
 def test_e10_through_the_cli_the_sums_are_the_store_tallies(syn: Built) -> None:
-    argv = ["--store", str(syn.root), "diff", SYN_A, SYN_B]
-    for e in SYN_EVENTS:
-        argv += ["--event", e]
-    r = run_cli(argv + ["--method", "fisher_bh", "--format", "json"])
+    r = run_cli(diff_argv(syn.root, "--method", "fisher_bh", "--format", "json"))
     assert r.code == 0, r.text
     records = json.loads(r.out)["coverage"]
     assert records
@@ -1212,29 +1240,23 @@ def test_e12_a_hand_built_result_has_no_coverage_and_to_json_carries_null_or_rec
     json.dumps(syn.multi.to_json(), allow_nan=False)
 
 
-def test_e12_to_markdown_carries_the_coverage_line_and_section_iff_coverage_is_set(syn: Built) -> None:
-    frame = coverage_of(syn)
-    with_cov = syn.multi.to_markdown().splitlines()
-    without = hand_built_multi(syn.multi).to_markdown().splitlines()
-    assert with_cov[0] == without[0]
-    method_at = next(i for i, line in enumerate(with_cov) if line.startswith("method="))
-    assert with_cov[method_at + 1] == coverage_line(frame)
-    assert not any(line.startswith("coverage:") for line in without)
-    headings = [line for line in with_cov if line.startswith("## ")]
-    assert headings[-1] == "## coverage"
-    assert "## coverage" not in without
-    section = with_cov[with_cov.index("## coverage") + 2 :]
-    assert section[0] == "| " + " | ".join(COVERAGE_COLUMNS) + " |"
-    assert section[1] == "|" + "|".join("---" for _ in COVERAGE_COLUMNS) + "|"
-    rows = [line for line in section[2:] if line.startswith("| ")]
-    assert len(rows) == len(frame)
-    mixed = coverage_row(syn, COMPARABLE_WITH_ERRORS)
-    expected = "| " + " | ".join(
-        md_cell(mixed[c]) if c != "cause" else "None" for c in COVERAGE_COLUMNS
-    ) + " |"
-    assert expected in rows
-    both = coverage_row(syn, ("err-both", 2.0, P))
-    assert "| " + " | ".join(md_cell(both[c]) for c in COVERAGE_COLUMNS) + " |" in rows
+def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(syn_root: Path, syn_multi: MultiDiffResult) -> None:
+    frame = syn_multi.coverage
+    assert frame is not None
+    md = syn_multi.to_markdown()
+    assert md == hand_built_multi(syn_multi).to_markdown()
+    assert "coverage" not in md
+    block = coverage_block(frame)
+    r = run_cli(diff_argv(syn_root, "--method", "fisher_bh"))
+    assert r.code == 0, r.text
+    assert r.out == md + "\n" + block
+    every = run_cli(diff_argv(syn_root, "--methods", "all"))
+    assert every.code == 0, every.text
+    assert every.out.startswith(md) and every.out.endswith("\n" + block)
+    assert every.out.count("## coverage") == 1
+    mixed = frame[frame["config_hash"] == hash_of(COMPARABLE_WITH_ERRORS)].iloc[0]
+    assert "| " + " | ".join(md_cell(mixed[c]) if c != "cause" else "None" for c in COVERAGE_COLUMNS) + " |" in block
+    assert "no_outcome_both |" in block
 
 
 def test_e27_a_only_and_wholly_errored_is_only_a(syn: Built) -> None:
