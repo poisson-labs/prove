@@ -55,6 +55,12 @@ _SATURATION_LEGEND = "both 0% / both 100%"
 _SMALL_N = 16  # the survival coverage line counts cells below this
 _TRADE_STYLE = f".trade{{fill:{_FAILED}}}"
 
+# The two causes only a grid can have, beside M6's five: a coordinate in the axis product no
+# row exists for, and one that more than one non-comparable coverage row maps to. Written
+# once here; M6 writes the other five.
+_GRID_CAUSES = ("unsampled", "multiple")
+_UNSAMPLED, _MULTIPLE = _GRID_CAUSES
+
 Mode = Literal["diff", "rate"]
 
 
@@ -202,6 +208,7 @@ class Cell:
     q: float
     verdict: str
     mde: float
+    hole_cause: str | None = None
 
 
 @dataclass(frozen=True)
@@ -387,14 +394,60 @@ def _diff_cell(coords: tuple[object, ...], r: dict[str, Any]) -> Cell:
     )
 
 
-def _absent(coords: tuple[object, ...]) -> Cell:
-    return Cell(coords, None, False, 0, 0, 0.0, 0.0, 0.0, 1.0, 1.0, "absent", 0.0)
+_Holes = Mapping[tuple[object, ...], tuple[str | None, str]]
+
+
+def _absent(coords: tuple[object, ...], holes: _Holes | None = None) -> Cell:
+    """A grid coordinate with no comparable cell.
+
+    ``holes`` maps coordinates to the coverage row that explains them. Without it -- a
+    single-event report, or a ``MultiDiffResult`` whose ``coverage`` is ``None`` -- the cause
+    is *not recorded*, which is ``None`` and never ``"unsampled"``.
+    """
+    if holes is None:
+        return Cell(coords, None, False, 0, 0, 0.0, 0.0, 0.0, 1.0, 1.0, "absent", 0.0)
+    config_hash, cause = holes.get(coords, (None, _UNSAMPLED))
+    return Cell(coords, config_hash, False, 0, 0, 0.0, 0.0, 0.0, 1.0, 1.0, "absent", 0.0, cause)
+
+
+def _hole_map(
+    multi: MultiDiffResult, spec: ReportSpec
+) -> dict[tuple[object, ...], tuple[str | None, str]] | None:
+    """Coordinates -> (config_hash, cause) for the non-comparable coverage rows this slice keeps.
+
+    ``spec.fixed`` is applied exactly as ``_axes`` applies it, or a ``--fix`` would attach the
+    wrong cell's cause to a hole. Two rows on one coordinate are ``"multiple"`` with no hash,
+    never the ``AxisError`` ``_grid`` raises for two *present* cells: a report that rendered
+    yesterday must still render.
+    """
+    if multi.coverage is None:
+        return None
+    by_coords: dict[tuple[object, ...], list[dict[str, Any]]] = {}
+    for row in multi.coverage.to_dict(orient="records"):
+        if row["comparable"]:
+            continue
+        config = row["config"]
+        if not all(config.get(k) == v for k, v in spec.fixed.items()):
+            continue
+        coords: tuple[object, ...] = (config.get(spec.x_axis),)
+        if spec.y_axis is not None:
+            coords = coords + (config.get(spec.y_axis),)
+        by_coords.setdefault(coords, []).append(row)
+    return {
+        coords: (
+            (str(rows[0]["config_hash"]), str(rows[0]["cause"]))
+            if len(rows) == 1
+            else (None, _MULTIPLE)
+        )
+        for coords, rows in by_coords.items()
+    }
 
 
 def _grid(
     rows: list[dict[str, Any]],
     spec: ReportSpec,
     to_cell: Callable[[tuple[object, ...], dict[str, Any]], Cell],
+    holes: _Holes | None = None,
 ) -> tuple[tuple[Cell, ...], tuple[object, ...], tuple[object, ...]]:
     kept, x_values, y_values = _axes(rows, spec)
     by_coords: dict[tuple[object, ...], dict[str, Any]] = {}
@@ -413,7 +466,7 @@ def _grid(
         for x in x_values:
             coords = (x,) if spec.y_axis is None else (x, y)
             row = by_coords.get(coords)
-            cells.append(to_cell(coords, row) if row is not None else _absent(coords))
+            cells.append(to_cell(coords, row) if row is not None else _absent(coords, holes))
     return tuple(cells), x_values, y_values
 
 
@@ -740,7 +793,10 @@ def build_multi_report(
         )
     )
     rows_by_event = {e: _rows_of(multi.by_event[e].cells) for e in order}
-    grids = {e: _grid(rows_by_event[e], spec, _diff_cell) for e in order}
+    # One hole map for every panel: each event's cells carry the same ``common``, so the grid
+    # and its holes are identical across panels.
+    holes = _hole_map(multi, spec)
+    grids = {e: _grid(rows_by_event[e], spec, _diff_cell, holes) for e in order}
     all_cells = [c for e in order for c in grids[e][0]]
     bound = _bound_for(all_cells, spec.color_max)
     trades = frozenset(str(h) for h in multi.trades["config_hash"])

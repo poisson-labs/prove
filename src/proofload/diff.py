@@ -44,6 +44,24 @@ CELLS_COLUMNS = (
     "verdict",
     "mde",
 )
+COVERAGE_COLUMNS = (
+    "config_hash",
+    "config",
+    "rows_a",
+    "rows_b",
+    "no_outcome_a",
+    "no_outcome_b",
+    "comparable",
+    "cause",
+)
+
+# Why a non-comparable cell is a hole. The order is the precedence the cause is decided by:
+# presence before errors, so a cell A ran and wholly errored that B never ran is ``only_a`` --
+# the first thing a reader needs is that one arm has no rows at all, and ``no_outcome_a`` sits
+# beside it in the same row for the rest. Written once here; M7 adds the two grid-only causes.
+_CAUSES = ("only_a", "only_b", "no_outcome_both", "no_outcome_a", "no_outcome_b")
+_ONLY_A, _ONLY_B, _NO_OUTCOME_BOTH, _NO_OUTCOME_A, _NO_OUTCOME_B = _CAUSES
+
 SUMMARY_FIELDS = (
     "method",
     "paired",
@@ -558,6 +576,7 @@ class MultiDiffResult:
     trades: pd.DataFrame
     inferred: bool
     non_event: str | None
+    coverage: pd.DataFrame | None = None
 
     def _ordered_events(self) -> list[str]:
         return sorted(
@@ -657,6 +676,14 @@ class MultiDiffResult:
             {col: _native(value) for col, value in record.items()}
             for record in self.trades.to_dict(orient="records")
         ]
+        out["coverage"] = (
+            None
+            if self.coverage is None
+            else [
+                {col: _native(value) for col, value in record.items()}
+                for record in self.coverage.to_dict(orient="records")
+            ]
+        )
         out["headline"] = self.headline()
         out["trade_line"] = self.trade_line()
         return out
@@ -754,6 +781,65 @@ def _truncate_raw(df: pd.DataFrame, h: float) -> tuple[pd.DataFrame, int]:
     return out, count
 
 
+def _cause(rows_a: int, rows_b: int, no_outcome_a: int, no_outcome_b: int) -> str:
+    """Section 0.3's five rules, in order. Presence is decided before errors: a cell A ran and
+    wholly errored that B never ran is ``only_a``, with ``no_outcome_a == rows_a`` beside it in
+    the same row. The counts are always carried; the cause names the first reason, not the
+    only one."""
+    if rows_a == 0:
+        return _ONLY_B
+    if rows_b == 0:
+        return _ONLY_A
+    with_a = rows_a - no_outcome_a
+    with_b = rows_b - no_outcome_b
+    if with_a == 0 and with_b == 0:
+        return _NO_OUTCOME_BOTH
+    if with_a == 0:
+        return _NO_OUTCOME_A
+    return _NO_OUTCOME_B
+
+
+def _coverage(a: pd.DataFrame, b: pd.DataFrame, common: Sequence[str]) -> pd.DataFrame:
+    """One row per ``config_hash`` in a union b, over the RAW frames, sorted by hash.
+
+    Built before the null-outcome filter and before truncation, or a cell wholly errored in
+    both arms -- which is in neither valid hash set and therefore in neither ``dropped_a`` nor
+    ``dropped_b`` -- would appear nowhere, which is the defect this frame exists to fix.
+
+    ``comparable`` is membership in the same ``common`` the cells are built from, never
+    ``rows_a > 0 and rows_b > 0``: a wholly-errored cell has rows in both arms and is not
+    comparable. ``config`` comes from A when A has a row for the hash, else from B.
+    """
+    groups_a = {str(k): g for k, g in a.groupby("config_hash", sort=False)}
+    groups_b = {str(k): g for k, g in b.groupby("config_hash", sort=False)}
+    comparable = set(common)
+    records: list[dict[str, Any]] = []
+    for h in sorted(set(groups_a) | set(groups_b)):
+        in_a, in_b = h in groups_a, h in groups_b
+        rows_a = int(len(groups_a[h])) if in_a else 0
+        rows_b = int(len(groups_b[h])) if in_b else 0
+        no_a = int(groups_a[h]["outcome"].isna().sum()) if in_a else 0
+        no_b = int(groups_b[h]["outcome"].isna().sum()) if in_b else 0
+        source = groups_a[h] if in_a else groups_b[h]
+        seen = h in comparable
+        records.append(
+            {
+                "config_hash": h,
+                "config": source["config"].iloc[0],
+                "rows_a": rows_a,
+                "rows_b": rows_b,
+                "no_outcome_a": no_a,
+                "no_outcome_b": no_b,
+                "comparable": seen,
+                "cause": None if seen else _cause(rows_a, rows_b, no_a, no_b),
+            }
+        )
+    frame = pd.DataFrame.from_records(records, columns=list(COVERAGE_COLUMNS))
+    for col in ("config", "cause"):
+        frame[col] = frame[col].astype(object)
+    return frame
+
+
 def _indicator_frame(cell: pd.DataFrame, observed: NDArray[np.bool_]) -> pd.DataFrame:
     return pd.DataFrame(
         {"replicate_index": cell["replicate_index"].to_numpy(), "observed": observed}
@@ -813,6 +899,11 @@ def multi_diff(
     dropped_b = len(hashes_b - hashes_a)
     groups_a = {str(k): g for k, g in a_t.groupby("config_hash", sort=False)}
     groups_b = {str(k): g for k, g in b_t.groupby("config_hash", sort=False)}
+
+    # Coverage is grouped from the RAW frames, not from a_t / b_t: a cell whose every row
+    # errored is absent from both valid hash sets, so grouping the filtered frames would lose
+    # exactly the holes this answers for.
+    coverage = _coverage(a, b, common)
 
     # The competing set for Aalen-Johansen is every terminal outcome present in either run,
     # not just the events asked for: a row that ended in the non-event is absorbed, not
@@ -931,4 +1022,5 @@ def multi_diff(
         trades=trades,
         inferred=inferred,
         non_event=non_event,
+        coverage=coverage,
     )

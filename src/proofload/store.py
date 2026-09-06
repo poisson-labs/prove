@@ -46,6 +46,14 @@ _TRACE_KEY = "trace"
 _PART_PREFIX = "part-"
 _PART_SUFFIX = ".parquet"
 
+# The two error marks ``tally`` partitions no-outcome rows on, written here because
+# ``executor`` imports this module and not the reverse. They are one vocabulary across three
+# modules, not three constants that happen to agree: the S21 oracle pins them equal to
+# ``executor._TIMEOUT_ERROR`` and ``executor_modal._INFRA_PREFIX``, so a change to any one of
+# them is a cross-module change (ADR-037).
+_TIMEOUT_MARK = "timeout"
+_INFRA_MARK = "infra: "
+
 _SCHEMA = pa.schema(
     [
         pa.field("run_id", pa.string(), nullable=False),
@@ -290,6 +298,42 @@ class EpisodeRecord:
         )
 
 
+# ---------- RunTally ----------
+
+
+@dataclass(frozen=True)
+class RunTally:
+    """How a run's stored rows divide into rows with an outcome and rows without one.
+
+    Derived from the rows at read time, never persisted and never a manifest field: a
+    ``RunSummary`` counts one invocation, so a run stopped at ``max_rollouts`` and resumed
+    would carry the second call's numbers over the whole run -- wrong on exactly the runs
+    where the question matters. The rows are the only record that survives a resume
+    (ADR-034).
+
+    ``rows == with_outcome + no_outcome`` and ``no_outcome == timed_out + infra + other``,
+    always. An empty run is six zeros.
+    """
+
+    rows: int
+    with_outcome: int
+    no_outcome: int
+    timed_out: int
+    infra: int
+    other: int
+
+    def to_dict(self) -> dict[str, int]:
+        """The six fields, in this order."""
+        return {
+            "rows": self.rows,
+            "with_outcome": self.with_outcome,
+            "no_outcome": self.no_outcome,
+            "timed_out": self.timed_out,
+            "infra": self.infra,
+            "other": self.other,
+        }
+
+
 # ---------- Store ----------
 
 
@@ -495,6 +539,51 @@ class Store:
         through ``manifest()``; a half-written ``.tmp`` part is not a part."""
         self.manifest(run_id)
         return sum(int(pq.read_metadata(p).num_rows) for p in self._parts(run_id))
+
+    def tally(self, run_id: str) -> RunTally:
+        """The run's rows counted by whether an outcome was stored.
+
+        A projected read of the ``outcome`` and ``error`` columns of every part: never
+        ``len()`` of a wider read, never a manifest field. ``config``, ``meta`` and
+        ``backend_meta`` are projected away at the Parquet reader and never decoded, so a run
+        whose JSON columns are unreadable still tallies.
+
+        This reads row data, so it checks ``schema_version`` as ``read()`` does, where
+        ``count()`` -- which reads footers only -- does not. An unknown run raises
+        ``StoreError`` through ``manifest()``; a half-written ``.tmp`` part is not a part.
+
+        A row with no outcome is errored whatever its ``error`` says: exactly the timeout mark
+        is ``timed_out``, the infra prefix is ``infra``, and everything else is ``other`` --
+        including a row a foreign writer produced with neither an outcome nor an error, which
+        ``EpisodeRecord`` forbids and a Parquet part does not.
+        """
+        manifest = self.manifest(run_id)
+        if manifest.schema_version != _SCHEMA_VERSION:
+            raise SchemaMismatch(
+                f"run {run_id!r} has schema_version {manifest.schema_version}, "
+                f"this build reads {_SCHEMA_VERSION}"
+            )
+        table = self._read_table(run_id, columns=["outcome", "error"])
+        outcomes = table.column("outcome").to_pylist()
+        errors = table.column("error").to_pylist()
+        with_outcome = timed_out = infra = 0
+        for outcome, error in zip(outcomes, errors, strict=True):
+            if outcome is not None:
+                with_outcome += 1
+            elif error == _TIMEOUT_MARK:
+                timed_out += 1
+            elif error is not None and error.startswith(_INFRA_MARK):
+                infra += 1
+        rows = len(outcomes)
+        no_outcome = rows - with_outcome
+        return RunTally(
+            rows=rows,
+            with_outcome=with_outcome,
+            no_outcome=no_outcome,
+            timed_out=timed_out,
+            infra=infra,
+            other=no_outcome - timed_out - infra,
+        )
 
     def missing(
         self, run_id: str, expected: Iterable[tuple[str, int]]

@@ -44,10 +44,13 @@ if TYPE_CHECKING:
 from proofload import __version__
 from proofload._resolve import resolve
 from proofload.diff import (
+    _CAUSES,
+    COVERAGE_COLUMNS,
     DiffError,
     EventInferenceError,
     MultiDiffResult,
     UnknownEvent,
+    _md_cell,
     infer_events,
     multi_diff,
 )
@@ -505,6 +508,37 @@ def _method_table(results: Sequence[MultiDiffResult]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _coverage_block(multi: MultiDiffResult) -> str:
+    """The coverage facts ``diff``'s text output appends, after the markdown and after the
+    ``--methods all`` table, exactly as ``_method_table`` already is.
+
+    Not part of ``to_markdown()``: A20 requires a diff whose rows errored to render identically
+    to one whose rows did not, so ``to_markdown()`` keeps meaning "the statistical result" and
+    the coverage facts reach the reader of ``diff`` here instead (spec S21 section 3.2). The
+    ``_md_cell`` style and the column order are M6's, imported rather than restated.
+    """
+    frame = multi.coverage
+    if frame is None:  # never from ``multi_diff``; a hand-built result says nothing.
+        return ""
+    holes = frame[~frame["comparable"]]
+    counts = {cause: int((holes["cause"] == cause).sum()) for cause in _CAUSES}
+    cols = list(COVERAGE_COLUMNS)
+    lines = [
+        f"coverage: holes={len(holes)} (only_a={counts['only_a']}, only_b={counts['only_b']}, "
+        f"no_outcome_a={counts['no_outcome_a']}, no_outcome_b={counts['no_outcome_b']}, "
+        f"no_outcome_both={counts['no_outcome_both']}), "
+        f"no_outcome a={int(frame['no_outcome_a'].sum())} b={int(frame['no_outcome_b'].sum())}",
+        "",
+        "## coverage",
+        "",
+        "| " + " | ".join(cols) + " |",
+        "|" + "|".join("---" for _ in cols) + "|",
+    ]
+    for record in frame.to_dict(orient="records"):
+        lines.append("| " + " | ".join(_md_cell(record[col]) for col in cols) + " |")
+    return "\n".join(lines) + "\n"
+
+
 def _write_summary(io: _IO, multi: MultiDiffResult) -> None:
     """Inference line when inferred, the headline, and the trade line when present."""
     if multi.inferred:
@@ -696,6 +730,9 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
     io.out.write(primary.to_markdown())
     if others:
         io.out.write("\n" + _method_table([primary, *others.values()]))
+    coverage = _coverage_block(primary)
+    if coverage:
+        io.out.write("\n" + coverage)
     return 0
 
 
@@ -929,6 +966,8 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         manifest_b=manifests[1],
         rows_a=store.count(a),
         rows_b=store.count(b),
+        tally_a=store.tally(a),
+        tally_b=store.tally(b),
         store_root=str(root),
     )
     if ns.json:
@@ -1046,12 +1085,16 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
 def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     store = Store(root)
     io.out.write(f"store: {root}\n")
-    header = ("run_id", "status", "backend", "target_id", "t_unit", "rows")
+    # ``no_outcome``, never ``errored``: the number says whether the executor stored an
+    # outcome, not whether the run was healthy. A run whose every episode ended in the same
+    # outcome label prints 0 here, correctly, and that is the right next question to ask.
+    header = ("run_id", "status", "backend", "target_id", "t_unit", "rows", "no_outcome")
     lines = [header]
     for run_id in store.runs():
         m = store.manifest(run_id)
         rows = str(store.count(run_id))
-        lines.append((run_id, m.status, m.backend, m.target_id, m.t_unit, rows))
+        no_outcome = str(store.tally(run_id).no_outcome)
+        lines.append((run_id, m.status, m.backend, m.target_id, m.t_unit, rows, no_outcome))
     widths = [max(len(line[i]) for line in lines) for i in range(len(header))]
     for line in lines:
         cells = (cell.ljust(w) for cell, w in zip(line, widths, strict=True))
