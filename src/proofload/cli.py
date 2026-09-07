@@ -45,6 +45,7 @@ from proofload import __version__
 from proofload._resolve import resolve
 from proofload.diff import (
     _CAUSES,
+    _CENSORED,
     COVERAGE_COLUMNS,
     DiffError,
     EventInferenceError,
@@ -553,6 +554,40 @@ def _coverage_block(multi: MultiDiffResult) -> str:
     return "\n".join(lines) + "\n"
 
 
+#: Section 3.4's other branch, when nothing was rejected. The MDE lines are already above it.
+_NO_INTERVAL_LINE = (
+    "intervals: none (nothing significant; the MDE lines above are the honest bound)\n"
+)
+
+
+def _interval_block(multi: MultiDiffResult) -> str:
+    """The interval facts ``diff``'s text output appends after the coverage block.
+
+    **The family is named.** ``alpha*`` belongs to the flat BH family ``multi_diff`` runs, one
+    pass across every cell and every event. The layered report introduces a nested family with
+    a different level, and a bare ``alpha*`` on the page would be the one number a reader could
+    not attribute to either.
+
+    **The arithmetic is shown and none of it is done here.** ``q``, ``n_rejected``, ``n_tests``,
+    ``alpha_star``, ``interval_level`` and both counts are all fields; this module reads them
+    and formats them. That includes the percentage: ``interval_level * 100`` would be a second
+    derivation of a printed number, indistinguishable to any rule that has to stay robust from
+    recovering ``alpha*`` as ``1 - interval_level`` or ``R`` as ``alpha_star * n_tests / q``.
+    The ``%`` format spec renders it with no arithmetic at all, and ``:g`` on ``alpha*`` keeps
+    a level like 4.2e-05 -- 1200 cells and one rejection -- from printing as ``0.0000``.
+    """
+    if multi.intervals is None or multi.interval_level is None or multi.alpha_star is None:
+        return _NO_INTERVAL_LINE
+    constructed = [b for b in multi.intervals["basis"] if b != _CENSORED]
+    basis = constructed[0] if constructed else _CENSORED
+    return (
+        f"intervals: {multi.interval_level:.4%} (alpha* = {multi.alpha_star:g} = "
+        f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family), basis {basis}\n"
+        f"  interval excludes zero, verdict unchanged: {multi.n_interval_only} cells\n"
+        f"  verdict significant, interval covers zero: {multi.n_verdict_only} cells\n"
+    )
+
+
 def _write_summary(io: _IO, multi: MultiDiffResult) -> None:
     """Inference line when inferred, the headline, and the trade line when present."""
     if multi.inferred:
@@ -779,6 +814,7 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
     coverage = _coverage_block(primary)
     if coverage:
         io.out.write("\n" + coverage)
+    io.out.write("\n" + _interval_block(primary))
     return 0
 
 

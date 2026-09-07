@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import math
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from scipy import stats
+from scipy.optimize import brentq
 
 from proofload.store import RunManifest
 from proofload.survival import aalen_johansen, competing_set
@@ -60,6 +61,45 @@ COVERAGE_COLUMNS = (
     "comparable",
     "cause",
 )
+
+INTERVAL_COLUMNS = (
+    "event",
+    "config_hash",
+    "config",
+    "ci_lo",
+    "ci_hi",
+    "basis",
+)
+
+# The three bases an interval row may carry, written once here the way ``_CAUSES`` is.
+# ``censored`` is a forward guard and not a live branch: ``_truncate_raw`` censors at the
+# horizon, the horizon is >= every retained event time, and Aalen-Johansen there collapses to
+# the naive proportion, so nothing ``multi_diff`` can be handed reaches it today. It stays
+# because a later change to truncation or to the estimator would otherwise put a binomial
+# interval on censored data silently, which is the class of number this tool exists to find.
+INTERVAL_BASES = ("score_rd", "score_rd_paired", "censored")
+_SCORE_RD, _SCORE_RD_PAIRED, _CENSORED = INTERVAL_BASES
+
+# ADR-052: which interval is built follows the requested ``method`` and never ``paired``. Two
+# runs that happen to share a run salt must not get a different number from two that do not, or
+# the statistic becomes a property of run provenance rather than of the request.
+_BASIS_BY_METHOD: Mapping[str, str] = {
+    "fisher_bh": _SCORE_RD,
+    "logrank_bh": _SCORE_RD,
+    "mcnemar_bh": _SCORE_RD_PAIRED,
+}
+
+# ADR-050, per cell per arm. The score statistic is binomial, so an interval is constructed
+# only where the Aalen-Johansen incidence equals the naive proportion.
+_CIF_EQUALITY_TOLERANCE = 1e-12
+
+# Bisection steps per endpoint. The bracket starts at most 2 wide, so 64 halvings put it at
+# 1e-19 -- past double precision, which is the point: the loop stops because the bracket has
+# collapsed to adjacent floats, not because a tolerance was guessed.
+_INVERSION_STEPS = 64
+
+# scipy refuses an rtol below 4 * eps.
+_ROOT_RTOL = 4.0 * float(np.finfo(np.float64).eps)
 
 # Why a non-comparable cell is a hole. The order is the precedence the cause is decided by:
 # presence before errors, so a cell A ran and wholly errored that B never ran is ``only_a`` --
@@ -198,7 +238,16 @@ def _fisher(ea: int, na: int, eb: int, nb: int) -> tuple[float, float]:
     return float(res[0]), float(res[1])
 
 
-def _mcnemar(cell_a: pd.DataFrame, cell_b: pd.DataFrame, config_hash: str) -> tuple[float, float]:
+def _discordant(
+    cell_a: pd.DataFrame, cell_b: pd.DataFrame, config_hash: str
+) -> tuple[int, int, int]:
+    """``(b, c, pairs)``: ``b`` observed in a only, ``c`` in b only, over the joined pairs.
+
+    Split out of ``_mcnemar`` so S24's paired interval can reach the same three numbers the
+    test was computed from. An unmatched replicate is dropped by the inner join rather than
+    mispaired, and the duplicate guard is here because it is a fact about pairing, not about
+    the binomial that follows.
+    """
     for label, cell in (("a", cell_a), ("b", cell_b)):
         if cell["replicate_index"].duplicated().any():
             raise NotPairable(
@@ -213,8 +262,11 @@ def _mcnemar(cell_a: pd.DataFrame, cell_b: pd.DataFrame, config_hash: str) -> tu
     )
     oa = joined["observed_a"].to_numpy(dtype=bool)
     ob = joined["observed_b"].to_numpy(dtype=bool)
-    b = int(np.sum(oa & ~ob))
-    c = int(np.sum(~oa & ob))
+    return int(np.sum(oa & ~ob)), int(np.sum(~oa & ob)), int(len(joined))
+
+
+def _mcnemar(cell_a: pd.DataFrame, cell_b: pd.DataFrame, config_hash: str) -> tuple[float, float]:
+    b, c, _ = _discordant(cell_a, cell_b, config_hash)
     if b + c == 0:
         return float(b - c), 1.0
     p = float(stats.binomtest(min(b, c), b + c, 0.5).pvalue)
@@ -571,6 +623,16 @@ class MultiDiffResult:
     inferred: bool
     non_event: str | None
     coverage: pd.DataFrame | None = None
+    # S24. All six defaulted: M7's oracles build this result by hand from keywords, and an
+    # undefaulted field breaks every one of them. ``n_rejected`` is the family's BH rejection
+    # count -- the single derivation of ADR-049's R -- and ``alpha_star`` is q * R / n_tests;
+    # both are carried so ``cli.py`` can print the arithmetic without doing any of it.
+    intervals: pd.DataFrame | None = None
+    interval_level: float | None = None
+    alpha_star: float | None = None
+    n_rejected: int = 0
+    n_interval_only: int = 0
+    n_verdict_only: int = 0
 
     def _ordered_events(self) -> list[str]:
         return sorted(
@@ -678,6 +740,19 @@ class MultiDiffResult:
                 for record in self.coverage.to_dict(orient="records")
             ]
         )
+        out["intervals"] = (
+            None
+            if self.intervals is None
+            else [
+                {col: _native(value) for col, value in record.items()}
+                for record in self.intervals.to_dict(orient="records")
+            ]
+        )
+        out["interval_level"] = self.interval_level
+        out["alpha_star"] = self.alpha_star
+        out["n_rejected"] = self.n_rejected
+        out["n_interval_only"] = self.n_interval_only
+        out["n_verdict_only"] = self.n_verdict_only
         out["headline"] = self.headline()
         out["trade_line"] = self.trade_line()
         return out
@@ -865,6 +940,95 @@ def _indicator_frame(cell: pd.DataFrame, observed: NDArray[np.bool_]) -> pd.Data
     )
 
 
+def _build_intervals(
+    rows: Sequence[Mapping[str, Any]],
+    groups_a: Mapping[str, pd.DataFrame],
+    groups_b: Mapping[str, pd.DataFrame],
+    *,
+    method: str,
+    q: float,
+    n_rejected: int,
+    n_tests: int,
+) -> tuple[pd.DataFrame | None, float | None, float | None, int, int]:
+    """``(intervals, interval_level, alpha_star, n_interval_only, n_verdict_only)``.
+
+    Called after the BH pass and after ``by_event``, because the level cannot be known before
+    ``R``. ``n_rejected`` is that ``R``: the count of hypotheses BH rejected over the **flat
+    family** ``multi_diff`` runs, one pass across every cell and every event. It arrives as an
+    argument rather than being recounted here, so it has exactly one derivation.
+
+    ``R == 0`` returns early rather than falling through with ``alpha_star == 0.0``: a
+    bisection at zero would run to its step count and hand back ``(-1, 1)`` on every cell,
+    which is true, worthless, and the output section 0.3 exists to prevent. The MDE lines are
+    already the right object for that run.
+    """
+    if n_rejected == 0:
+        return None, None, None, 0, 0
+    alpha_star = q * n_rejected / n_tests
+    interval_level = 1.0 - q * n_rejected / n_tests
+    wanted = _BASIS_BY_METHOD[method]
+    records: list[dict[str, Any]] = []
+    n_interval_only = 0
+    n_verdict_only = 0
+    for row in rows:
+        # ADR-050, both arms. A cell that passes in one arm and fails in the other is censored.
+        comparable = (
+            abs(row["rate_a"] - row["events_a"] / row["n_a"]) <= _CIF_EQUALITY_TOLERANCE
+            and abs(row["rate_b"] - row["events_b"] / row["n_b"]) <= _CIF_EQUALITY_TOLERANCE
+        )
+        ci_lo: float | None
+        ci_hi: float | None
+        if not comparable:
+            ci_lo, ci_hi, basis = None, None, _CENSORED
+        elif wanted == _SCORE_RD_PAIRED:
+            cell_a, cell_b = groups_a[row["config_hash"]], groups_b[row["config_hash"]]
+            hit_a = np.asarray(cell_a["outcome"].to_numpy(dtype=object) == row["event"], dtype=bool)
+            hit_b = np.asarray(cell_b["outcome"].to_numpy(dtype=object) == row["event"], dtype=bool)
+            pair_b, pair_c, pairs = _discordant(
+                _indicator_frame(cell_a, hit_a), _indicator_frame(cell_b, hit_b), row["config_hash"]
+            )
+            if pairs == 0:
+                # No replicate index is shared, so the paired test saw nothing and rejects no
+                # delta at any alpha. The inversion of a test with no information is the whole
+                # parameter space, and that is what is reported -- not ``censored``, which
+                # means the incidence is not a proportion, and not a refusal, because
+                # ``_mcnemar`` already scored this cell p=1.0 rather than raising.
+                ci_lo, ci_hi, basis = -1.0, 1.0, _SCORE_RD_PAIRED
+            else:
+                ci_lo, ci_hi = interval_rd_paired(pair_b, pair_c, pairs, alpha=alpha_star)
+                basis = _SCORE_RD_PAIRED
+        else:
+            ci_lo, ci_hi = interval_rd(
+                row["events_a"], row["n_a"], row["events_b"], row["n_b"], alpha=alpha_star
+            )
+            basis = _SCORE_RD
+        if ci_lo is not None and ci_hi is not None:
+            # Counted, never reconciled. Neither number changes a verdict, a q or a check();
+            # section 0.6 has the direction of every expected disagreement and why none of them
+            # is a bug, and log-rank is expected to produce both.
+            excludes_zero = ci_lo > 0.0 or ci_hi < 0.0
+            if row["verdict"] == "unchanged" and excludes_zero:
+                n_interval_only += 1
+            elif row["verdict"] != "unchanged" and not excludes_zero:
+                n_verdict_only += 1
+        records.append(
+            {
+                "event": row["event"],
+                "config_hash": row["config_hash"],
+                "config": row["config"],
+                "ci_lo": ci_lo,
+                "ci_hi": ci_hi,
+                "basis": basis,
+            }
+        )
+    frame = pd.DataFrame.from_records(records, columns=list(INTERVAL_COLUMNS))
+    # object, not float: ``None`` on a censored row must stay ``None`` and not become NaN,
+    # because ``ci_lo is None`` is the contract for that state.
+    for col in ("config", "ci_lo", "ci_hi", "basis"):
+        frame[col] = frame[col].astype(object)
+    return frame, interval_level, alpha_star, n_interval_only, n_verdict_only
+
+
 def multi_diff(
     a: pd.DataFrame,
     b: pd.DataFrame,
@@ -1008,6 +1172,16 @@ def multi_diff(
         )
         verdicts[k] = dict(zip(cells["config_hash"], cells["verdict"], strict=True))
 
+    # S24, after the BH pass and after ``by_event``: the level cannot be known before R.
+    # R is read from the rows the BH pass wrote -- the count of hypotheses it rejected, not the
+    # safer/worse sum, which drops a rejected cell whose delta is exactly zero. On Go1 under
+    # log-rank those two differ by 196 to 88.
+    n_tests = len(common) * len(event_set)
+    n_rejected = sum(1 for r in rows if r["q"] < q)
+    intervals, interval_level, alpha_star, n_interval_only, n_verdict_only = _build_intervals(
+        rows, groups_a, groups_b, method=method, q=q, n_rejected=n_rejected, n_tests=n_tests
+    )
+
     trade_rows: list[dict[str, Any]] = []
     for h in common:
         safer = tuple(k for k in event_set if verdicts[k][h] == "safer")
@@ -1033,7 +1207,7 @@ def multi_diff(
         q=float(q),
         t_unit=t_unit,
         horizon=float(horizon),
-        n_tests=len(common) * len(event_set),
+        n_tests=n_tests,
         n_not_comparable=dropped_a + dropped_b,
         dropped_a=dropped_a,
         dropped_b=dropped_b,
@@ -1042,4 +1216,166 @@ def multi_diff(
         inferred=inferred,
         non_event=non_event,
         coverage=coverage,
+        intervals=intervals,
+        interval_level=interval_level,
+        alpha_star=alpha_star,
+        n_rejected=n_rejected,
+        n_interval_only=n_interval_only,
+        n_verdict_only=n_verdict_only,
     )
+
+
+# ---------- S24: the interval on the delta ----------
+
+
+def _require_arm(events: int, n: int, label: str) -> None:
+    if n <= 0:
+        raise DiffError(f"n_{label} must be positive, got {n}")
+    if not 0 <= events <= n:
+        raise DiffError(f"events_{label} must be in [0, {n}], got {events}")
+
+
+def _require_pairs(b: int, c: int, n: int) -> None:
+    if n <= 0:
+        raise DiffError(f"n must be positive, got {n}")
+    if b < 0 or c < 0 or b + c > n:
+        raise DiffError(f"discordant counts must satisfy 0 <= b + c <= n, got b={b}, c={c}, n={n}")
+
+
+def _require_alpha(alpha: float) -> None:
+    if not 0.0 < alpha < 1.0:
+        raise DiffError(f"alpha must be in (0, 1), got {alpha}")
+
+
+def _maximise(slope: Callable[[float], float], lo: float, hi: float) -> float:
+    """The stationary point of a concave log-likelihood on ``[lo, hi]``, from its derivative.
+
+    Section 0.1 leaves the constrained MLE's route open between a Farrington-Manning cubic and
+    a one-dimensional maximisation along the constrained line, because a mistranscribed cubic
+    is a silent statistical bug no reviewer catches by reading. This is the maximisation. Every
+    term of both log-likelihoods below is concave, so ``slope`` is strictly decreasing and the
+    root is unique -- which is what makes a bracketed root find correct here rather than merely
+    convergent, and why no cubic needs transcribing.
+    """
+    if hi - lo <= 1e-15:
+        return lo
+    inset = min(1e-12, (hi - lo) / 4.0)
+    left, right = lo + inset, hi - inset
+    if slope(left) <= 0.0:
+        return lo
+    if slope(right) >= 0.0:
+        return hi
+    return float(brentq(slope, left, right, xtol=1e-15, rtol=_ROOT_RTOL))
+
+
+def score_p_rd(
+    events_a: int, n_a: int, events_b: int, n_b: int, *, delta: float = 0.0
+) -> float:
+    """Two-sided p-value of the Miettinen-Nurminen score test of ``H0: p_b - p_a == delta``.
+
+    The variance is evaluated at the constrained MLEs under the null and carries the
+    ``N / (N - 1)`` factor that distinguishes Miettinen-Nurminen from Mee. Exactly ``1.0`` at
+    ``delta == p_b_hat - p_a_hat``, where the constrained MLEs coincide with the unconstrained
+    ones and the numerator is zero.
+    """
+    _require_arm(events_a, n_a, "a")
+    _require_arm(events_b, n_b, "b")
+    rate_a = _maximise(
+        lambda rate: (
+            (events_a / rate if events_a else 0.0)
+            - ((n_a - events_a) / (1.0 - rate) if n_a - events_a else 0.0)
+            + (events_b / (rate + delta) if events_b else 0.0)
+            - ((n_b - events_b) / (1.0 - rate - delta) if n_b - events_b else 0.0)
+        ),
+        max(0.0, -delta),
+        min(1.0, 1.0 - delta),
+    )
+    rate_b = rate_a + delta
+    excess = events_b / n_b - events_a / n_a - delta
+    pooled = n_a + n_b
+    variance = (rate_a * (1.0 - rate_a) / n_a + rate_b * (1.0 - rate_b) / n_b) * (
+        pooled / (pooled - 1.0)
+    )
+    if variance <= 0.0:
+        # Both constrained rates are on a boundary, so the null pins the data exactly. The
+        # delta is either the only one consistent with it or impossible under it; there is no
+        # scale left to measure a departure against.
+        return 1.0 if excess == 0.0 else 0.0
+    return float(2.0 * stats.norm.sf(abs(excess) / math.sqrt(variance)))
+
+
+def score_p_rd_paired(b: int, c: int, n: int, *, delta: float = 0.0) -> float:
+    """Two-sided p-value of Tango's score test of ``H0: p_b - p_a == delta`` over ``n`` pairs
+    with ``b`` discordant one way and ``c`` the other. Exactly ``1.0`` at
+    ``delta == (c - b) / n``.
+
+    The discordant counts and the concordant remainder are a trinomial; the constrained MLE
+    maximises its log-likelihood along ``p_01 - p_10 == delta``.
+    """
+    _require_pairs(b, c, n)
+    concordant = n - b - c
+    discordance = _maximise(
+        lambda psi: (
+            (b / psi if b else 0.0)
+            + (c / (psi + delta) if c else 0.0)
+            - (2.0 * concordant / (1.0 - 2.0 * psi - delta) if concordant else 0.0)
+        ),
+        max(0.0, -delta),
+        (1.0 - delta) / 2.0,
+    )
+    excess = (c - b) - n * delta
+    variance = n * (2.0 * discordance + delta * (1.0 - delta))
+    if variance <= 0.0:
+        return 1.0 if excess == 0.0 else 0.0
+    return float(2.0 * stats.norm.sf(abs(excess) / math.sqrt(variance)))
+
+
+def _endpoint(p_at: Callable[[float], float], point: float, limit: float, alpha: float) -> float:
+    """One end of the acceptance region, between the point estimate and the parameter space's
+    edge. ``p_at`` is 1.0 at ``point`` and falls away from it, so the two bracket a root.
+
+    An endpoint at the limit is **attained, not solved for**: the parameter space ran out
+    before the test started rejecting, which happens exactly when the point estimate is itself
+    at the limit. It is never a bisection that gave up -- the loop below has no early exit.
+    """
+    if p_at(limit) > alpha:
+        return limit
+    inside, outside = point, limit
+    for _ in range(_INVERSION_STEPS):
+        middle = 0.5 * (inside + outside)
+        if p_at(middle) > alpha:
+            inside = middle
+        else:
+            outside = middle
+    return 0.5 * (inside + outside)
+
+
+def interval_rd(
+    events_a: int, n_a: int, events_b: int, n_b: int, *, alpha: float
+) -> tuple[float, float]:
+    """The set of ``delta`` that ``score_p_rd`` does not reject at ``alpha``, by bisection.
+
+    Always contains ``p_b_hat - p_a_hat`` and always lies inside ``[-1.0, 1.0]``. The endpoints
+    solve ``p(delta) == alpha`` and not ``alpha / 2``: ``score_p_rd`` already returns a
+    two-sided p-value.
+    """
+    _require_arm(events_a, n_a, "a")
+    _require_arm(events_b, n_b, "b")
+    _require_alpha(alpha)
+
+    def p_at(delta: float) -> float:
+        return score_p_rd(events_a, n_a, events_b, n_b, delta=delta)
+
+    point = events_b / n_b - events_a / n_a
+    return (_endpoint(p_at, point, -1.0, alpha), _endpoint(p_at, point, 1.0, alpha))
+
+
+def interval_rd_paired(b: int, c: int, n: int, *, alpha: float) -> tuple[float, float]:
+    """``interval_rd``'s paired twin, inverting ``score_p_rd_paired``."""
+    _require_pairs(b, c, n)
+    _require_alpha(alpha)
+
+    def p_at(delta: float) -> float:
+        return score_p_rd_paired(b, c, n, delta=delta)
+
+    return (_endpoint(p_at, (c - b) / n, -1.0, alpha), _endpoint(p_at, (c - b) / n, 1.0, alpha))
