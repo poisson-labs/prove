@@ -83,6 +83,7 @@ from proofload.sampler import SamplerError, SweepSpec
 from proofload.store import RunManifest, Store, StoreError
 from proofload.survival import SurvivalError, cell_table, competing_set
 from proofload.trace import Trace, TraceValidationError
+from proofload.tree import DEFAULT_PERMUTATIONS, DEFAULT_SEED, RootResult, omnibus
 from proofload.viewer import _HOST, ViewerError, build_structure, render_html, serve_page
 
 __all__ = ["main"]
@@ -211,6 +212,21 @@ def _build_parser(io: _IO) -> _Parser:
     _add_method_arguments(diff_p, defaults=True)
     diff_p.add_argument("--methods", choices=("all",), help="also run the other two methods")
     diff_p.add_argument("--format", choices=("md", "json"), default="md")
+    omnibus_group = diff_p.add_argument_group("the omnibus over the whole family")
+    omnibus_group.add_argument(
+        "--permutations",
+        type=int,
+        default=DEFAULT_PERMUTATIONS,
+        metavar="N",
+        help=f"within-cell permutations behind the omnibus (default {DEFAULT_PERMUTATIONS})",
+    )
+    omnibus_group.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED,
+        metavar="N",
+        help=f"permutation seed (default {DEFAULT_SEED})",
+    )
 
     report_p = sub.add_parser(
         "report",
@@ -496,9 +512,19 @@ def _run_diffs(
     method: str,
     q: float,
     all_methods: bool,
-) -> tuple[MultiDiffResult, dict[str, Any], tuple[RunManifest, RunManifest]]:
+) -> tuple[
+    MultiDiffResult,
+    dict[str, Any],
+    tuple[RunManifest, RunManifest],
+    tuple[pd.DataFrame, pd.DataFrame],
+]:
     """The primary diff first (so a refusal fires before extra work), then the other two on
-    the same event set."""
+    the same event set.
+
+    The raw frames come back beside the result because M14's root consumes both: it rebuilds
+    the cell view from the frames and checks it against the diff, and reading the pair a second
+    time here would be a second read free to disagree with the first.
+    """
     fa, fb, ma, mb = _load_pair(store, a, b)
     _require_known_events(verb, events, fa, fb)
     primary = _multi(fa, fb, ma, mb, events=events, method=method, q=q)
@@ -507,7 +533,7 @@ def _run_diffs(
         for other in _METHODS:
             if other != method:
                 others[other] = _multi(fa, fb, ma, mb, events=primary.events, method=other, q=q)
-    return primary, others, (ma, mb)
+    return primary, others, (ma, mb), (fa, fb)
 
 
 def _method_table(results: Sequence[MultiDiffResult]) -> str:
@@ -586,6 +612,46 @@ def _interval_block(multi: MultiDiffResult) -> str:
         f"  interval excludes zero, verdict unchanged: {multi.n_interval_only} cells\n"
         f"  verdict significant, interval covers zero: {multi.n_verdict_only} cells\n"
     )
+
+
+def _omnibus_block(dual_root: RootResult) -> str:
+    """M14's root, the block ``diff``'s text output appends after the interval block.
+
+    **The family is named and the null is quoted.** The root tests the sharp "no cell changed"
+    over the same cells x events family the flat analysis runs; the other null -- the same
+    shift everywhere -- is not tested here and is not printed here either.
+
+    **Every number is a field and none of them is computed here.** That includes the last
+    line's complement: ``n_cells - n_informative_cells`` is exactly the arithmetic this module
+    must not do, indistinguishable to any robust rule from recovering a count the result
+    already carries, so ``RootResult`` carries ``n_uninformative_cells`` and this reads it.
+    ``:g`` throughout, so a p-value at the 1/4001 floor prints as 0.00024994 rather than 0.0000.
+
+    The informative line's tail says what is true under **both** schemes: a cell no exchange
+    can move contributes the same number under every draw. "identical across arms in every
+    episode" is the pair-swap reading of that and is false under arm label, where a cell whose
+    two arms agree is still informative if its own outcomes vary.
+    """
+    lines = [
+        f"omnibus: {dual_root.headline()}",
+        f"  min-p of location and dispersion; {dual_root.n_permutations} within-cell "
+        f"permutations, {dual_root.scheme}, seed {dual_root.seed}",
+    ]
+    for event in dual_root.events:
+        lines.append(
+            f"  location    {event}: mean delta {dual_root.location[event]:g}, "
+            f"p = {dual_root.p_location[event]:g}"
+        )
+    for event in dual_root.events:
+        lines.append(
+            f"  dispersion  {event}: rms delta {dual_root.dispersion[event]:g}, "
+            f"p = {dual_root.p_dispersion[event]:g}"
+        )
+    lines.append(
+        f"  informative cells: {dual_root.n_informative_cells} of {dual_root.n_cells}; "
+        f"{dual_root.n_uninformative_cells} unchanged by every exchange"
+    )
+    return "\n".join(lines) + "\n"
 
 
 def _write_summary(io: _IO, multi: MultiDiffResult) -> None:
@@ -792,7 +858,7 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
 
 
 def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    primary, others, _ = _run_diffs(
+    primary, others, _, frames = _run_diffs(
         Store(root),
         ns.a,
         ns.b,
@@ -802,10 +868,20 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         q=ns.q,
         all_methods=ns.methods == "all",
     )
+    # The root refuses an empty family (M14's O13), and ``diff`` on a pair with no comparable
+    # cell exits 0 today. Turning that into exit 2 is a change to a path no test pins and it is
+    # not this packet's to make, so the block is skipped there and the verb keeps its exit
+    # code. Deleting this guard is the whole of the amendment when the exit code is settled.
+    wanted = primary.n_tests > 0
     if ns.format == "json":
         payload: Any = primary.to_json()
         if others:
+            # ``--methods all`` keeps its three-method shape. Where an omnibus key belongs in a
+            # payload keyed by method is a spec question this packet does not answer, and
+            # answering it by hand here would freeze the answer in a golden.
             payload = {primary.method: payload, **{m: d.to_json() for m, d in others.items()}}
+        elif wanted:
+            payload = {**payload, "omnibus": _diff_root(ns, primary, frames).to_json()}
         io.out.write(json.dumps(payload, indent=2) + "\n")
         return 0
     io.out.write(primary.to_markdown())
@@ -815,7 +891,20 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
     if coverage:
         io.out.write("\n" + coverage)
     io.out.write("\n" + _interval_block(primary))
+    if wanted:
+        io.out.write("\n" + _omnibus_block(_diff_root(ns, primary, frames)))
     return 0
+
+
+def _diff_root(
+    ns: argparse.Namespace,
+    multi: MultiDiffResult,
+    frames: tuple[pd.DataFrame, pd.DataFrame],
+) -> RootResult:
+    """``omnibus`` on the pair ``multi`` was computed from, with the two flags that move it."""
+    return omnibus(
+        frames[0], frames[1], multi, n_permutations=ns.permutations, seed=ns.seed
+    )
 
 
 def _prepare_out_dir(ns: argparse.Namespace, default: str) -> Path:
@@ -865,7 +954,7 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
     method = _DEFAULT_METHOD if ns.method is None else ns.method
     q = _DEFAULT_Q if ns.q is None else ns.q
 
-    multi, others, manifests = _run_diffs(
+    multi, others, manifests, _ = _run_diffs(
         Store(root),
         a,
         b,
@@ -983,7 +1072,7 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             "check",
             "a gate whose meaning changes when a new outcome appears is not a gate.",
         )
-    multi, _, _ = _run_diffs(
+    multi, _, _, _ = _run_diffs(
         store,
         ns.a,
         ns.b,
@@ -1021,7 +1110,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             "with the same defect.",
         )
     fixed = _parse_pairs(ns.fix, "--fix")
-    multi, _, manifests = _run_diffs(
+    multi, _, manifests, _ = _run_diffs(
         store,
         a,
         b,
