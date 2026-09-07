@@ -1241,6 +1241,22 @@ def test_e12_a_hand_built_result_has_no_coverage_and_to_json_carries_null_or_rec
 
 
 def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(syn_root: Path, syn_multi: MultiDiffResult) -> None:
+    """S21's property: ``to_markdown()`` carries no coverage, and ``diff``'s text output appends
+    the coverage block after the markdown and after the ``--methods all`` table.
+
+    **Narrowed 2026-09-07, from whole-stream equality to a prefix and an ordering.** The two
+    assertions below read ``r.out == md + "\n" + block`` and ``every.out.endswith(...)``, which
+    pinned not just this block's content and position but *everything that follows it* -- and
+    so this packet owned, by accident, every later packet's right to add to the same stream.
+    S24's interval block appends after coverage per its section 3.4 and was refused by that,
+    with nothing wrong on either side.
+
+    What S21 owns is the block's exact content and its position relative to what precedes it:
+    immediately after the markdown with the single-method invocation, and after the method table
+    under ``--methods all``. Both are still asserted exactly. What follows the block is not
+    S21's to say. The whole-stream form was the only such site in the suite -- ``test_m4_read``
+    compares two runs of the same command and is unaffected.
+    """
     frame = syn_multi.coverage
     assert frame is not None
     md = syn_multi.to_markdown()
@@ -1249,10 +1265,13 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     block = coverage_block(frame)
     r = run_cli(diff_argv(syn_root, "--method", "fisher_bh"))
     assert r.code == 0, r.text
-    assert r.out == md + "\n" + block
+    assert r.out.startswith(md + "\n" + block), r.out
     every = run_cli(diff_argv(syn_root, "--methods", "all"))
     assert every.code == 0, every.text
-    assert every.out.startswith(md) and every.out.endswith("\n" + block)
+    assert every.out.startswith(md), every.out
+    # > and not >=: the method table sits between the markdown and the block, so the block
+    # cannot begin where the markdown ends.
+    assert every.out.index("\n" + block) > len(md), every.out
     assert every.out.count("## coverage") == 1
     mixed = frame[frame["config_hash"] == hash_of(COMPARABLE_WITH_ERRORS)].iloc[0]
     assert "| " + " | ".join(md_cell(mixed[c]) if c != "cause" else "None" for c in COVERAGE_COLUMNS) + " |" in block
