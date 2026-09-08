@@ -45,3 +45,6 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "calibration: a rejection rate over sharp-null resamples (S25 section A, the slow lane); deselected only by typing -m \"not calibration\", never by configuration",
+]

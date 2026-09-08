@@ -1105,6 +1105,7 @@ def test_the_one_pair_per_cell_fixture_is_invisible_to_dispersion_and_rejected_b
 # ---------- O10: calibration on sharp-null resamples ----------
 
 
+@pytest.mark.calibration
 @pytest.mark.parametrize("method", ("mcnemar_bh", "fisher_bh"))
 def test_o10_the_root_is_calibrated_on_sharp_null_resamples_of_go1(go1: Any, method: str) -> None:
     """**What this test is and is not.** A permutation test is exact under the sharp null by
