@@ -84,15 +84,21 @@ from proofload.store import RunManifest, Store, StoreError
 from proofload.survival import SurvivalError, cell_table, competing_set
 from proofload.trace import Trace, TraceValidationError
 from proofload.tree import (
+    DEFAULT_DEPTH,
     DEFAULT_MAX_GROUP_MDE,
     DEFAULT_PERMUTATIONS,
     DEFAULT_SEED,
+    DEPTHS,
     TASK_FAMILY_KEYS,
     TRACE_GROUPINGS,
     WHOLE_GRID,
+    Bound,
+    CellFamily,
+    CellResult,
     FaultLines,
     Grouping,
     GroupResult,
+    Leaves,
     RootResult,
     TreeResult,
     tree,
@@ -254,6 +260,16 @@ def _build_parser(io: _IO) -> _Parser:
         metavar="FLOAT",
         help="largest group-level minimum detectable effect you accept "
         f"(default {DEFAULT_MAX_GROUP_MDE:g}, the constant sweep's --max-mde uses)",
+    )
+    fault_group.add_argument(
+        "--depth",
+        type=int,
+        choices=DEPTHS,
+        default=DEFAULT_DEPTH,
+        metavar="N",
+        help=f"levels the procedure tests: 2 stops at the fault lines, 3 adds the cells under "
+        f"each rejecting one (default {DEFAULT_DEPTH}). The bound is computed from this and the "
+        "grouping's shape, never from what rejected",
     )
 
     report_p = sub.add_parser(
@@ -762,6 +778,100 @@ def _fault_lines_block(nested: TreeResult) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _cells_head(leaves: Leaves, bound: Bound) -> str:
+    """The null in quotes and what tested it, or the first reason nothing did.
+
+    **A level that was not tested is stated, not omitted**, and it is stated without a
+    conditional: the gate is the procedure and the claim is not, so nothing here says "given the
+    group rejected". The reasons are the module's, in the module's order -- the configuration
+    before the root, the root before the level.
+    """
+    if leaves.tested:
+        return (
+            f'cells: "{leaves.null}" tested by BH within each of {leaves.n_families:g} '
+            f"rejecting groups at q {leaves.q:g}: {leaves.n_rejected:g} of "
+            f"{leaves.n_tests:g} rejected"
+        )
+    if leaves.reason == "depth":
+        return f"cells: not tested: depth {bound.depth_configured:g}"
+    if leaves.reason == "root_not_rejected":
+        return "cells: not tested: the root did not reject"
+    return "cells: not tested: no group rejected"
+
+
+def _cells_family(family: CellFamily) -> str:
+    """One rejected group's family: how many tests were in it, how many it could name, and what
+    its cells could not have seen.
+
+    The two MDEs are fields for the same reason every other number on every other block is: a
+    median computed here would be arithmetic on a tree field, and ``CellFamily`` carries both.
+    """
+    return (
+        f"  {family.key}={family.label}  {family.n_tests:g} tests, "
+        f"{family.n_rejected:g} rejected; cell MDE median {family.mde_median:g} "
+        f"/ max {family.mde_max:g}"
+    )
+
+
+def _cells_leaf(leaf: CellResult) -> str:
+    """One named cell: its config, its event, and three numbers.
+
+    ``delta``, ``q_within`` and ``mde`` -- never ``p`` alone, which a reader would compare to
+    ``q``; never the flat family's ``q``, which is a verdict from a different selection; never
+    an interval and never a rate. Naming a cell says *this configuration's outcome rate moved*,
+    which is what the grid analysis has said since S3; the second vocabulary is as forbidden
+    here as on a group line.
+    """
+    config = ", ".join(f"{key}={value}" for key, value in leaf.config.items())
+    return (
+        f"    {config}  {leaf.event}: delta {leaf.delta:g}, "
+        f"q {leaf.q_within:g}, MDE {leaf.mde:g}"
+    )
+
+
+def _cells_block(nested: TreeResult) -> str:
+    """Level 3, the block ``diff``'s text output appends after the fault-lines block.
+
+    Its head sits at column 0 and every other line is indented, which is what ends the
+    fault-lines block above it: F15 and F20 read that block's last ``n_groups`` lines as the
+    group lines, and a head indented two spaces would be swallowed by both.
+
+    One family line per family in ``families`` order, and under each, one line per **rejected**
+    cell in the family's own row order -- never ordered by result. A cell that did not reject is
+    in the JSON and not here: the family line's counts and MDEs are what it contributes.
+    """
+    lines = [_cells_head(nested.leaves, nested.bound)]
+    for family in nested.leaves.families:
+        lines.append(_cells_family(family))
+        for leaf in family.cells:
+            if leaf.rejects:
+                lines.append(_cells_leaf(leaf))
+    return "\n".join(lines) + "\n"
+
+
+def _bound_block(bound: Bound) -> str:
+    """The error rate the whole procedure controls at, and the assumption it rests on.
+
+    The head line spells out which set the number is over -- there are two universal bounds in
+    the source over two different sets, and this is the one over the findings a reader acts on.
+    Every number is a field printed with ``:g``; the ``2`` and the ``x``s are text around four
+    of them, and no arithmetic happens here.
+
+    The second line is the assumption, and it is on the block rather than in a footnote because
+    the condition the source states is one this tree's construction does not give: a group's
+    statistic aggregates its own cells, so a null cell's p is not independent of its ancestors'.
+    """
+    lines = [
+        f"bound: depth {bound.depth:g} ({bound.depth_configured:g} configured); "
+        f"outer-nodes false discovery rate at most {bound.bound:g} = "
+        f"2 x {bound.depth:g} x {bound.q:g} x {bound.delta_star:g}",
+        "  Yekutieli (2008) Corollary A.2, which assumes each p-value is independent of its "
+        "ancestors; this tree's group and root statistics aggregate their own cells, so that "
+        "assumption is not established here",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _write_summary(io: _IO, multi: MultiDiffResult) -> None:
     """Inference line when inferred, the headline, and the trade line when present."""
     if multi.inferred:
@@ -1008,6 +1118,10 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         io.out.write(_omnibus_block(nested.root))
         io.out.write("\n")
         io.out.write(_fault_lines_block(nested))
+        io.out.write("\n")
+        io.out.write(_cells_block(nested))
+        io.out.write("\n")
+        io.out.write(_bound_block(nested.bound))
     return 0
 
 
@@ -1019,9 +1133,11 @@ def _diff_tree(
 ) -> TreeResult:
     """``tree`` on the pair ``multi`` was computed from, with the four flags that move it.
 
-    The two new ones are passed through untouched: ``--by`` is verbatim and case-sensitive, and
-    the range check on ``--max-group-mde`` lives in ``tree.py`` by the analogy M6's ``0 < q < 1``
-    and S23's ``check_power`` already set. This module parses a float and decides nothing.
+    The three new ones are passed through untouched: ``--by`` is verbatim and case-sensitive,
+    and the range checks on ``--max-group-mde`` and ``--depth`` live in ``tree.py`` by the
+    analogy M6's ``0 < q < 1`` and S23's ``check_power`` already set. Argparse's ``choices``
+    refuses a depth this parser was not offered, which is the parser's own refusal and not the
+    check: this module parses an int and a float and decides nothing.
     """
     return tree(
         frames[0],
@@ -1033,6 +1149,7 @@ def _diff_tree(
         n_permutations=ns.permutations,
         seed=ns.seed,
         max_group_mde=ns.max_group_mde,
+        depth=ns.depth,
     )
 
 

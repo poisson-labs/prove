@@ -136,10 +136,56 @@ DEFAULT_MAX_GROUP_MDE: float = DEFAULT_MAX_MDE
 #: family, and the whole-grid rung already offers one hypothesis.
 MIN_RESOLVABLE_GROUPS: int = 2
 
+#: ADR-021's shape, spec S27 section 3.9: the fewest groups that make Level 2 a family rather
+#: than the root restated. One constant, three readers -- the resolver's one-group refusal in
+#: ``_consider``, the gate in ``_fault_lines``, and the depth reduction in ``_depth`` -- where
+#: the first two were a literal ``< 2`` and ``> 1`` before this packet and the third would have
+#: been a third site. Distinct from ``MIN_RESOLVABLE_GROUPS`` above, which is how many of a
+#: grouping's groups must resolve the accepted effect for the grouping to be *admitted*: the
+#: two are 2 for different reasons and move independently.
+MIN_FAMILY_GROUPS: int = 2
+
 #: A label sorts numerically only when every label in the grouping is a plain number. The
 #: pattern is deliberately narrower than ``float()``: ``nan`` and ``inf`` parse and do not
 #: order, so a grouping carrying one sorts lexically like any other set of names.
 _NUMERIC_LABEL = re.compile(r"[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?")
+
+
+# ---------- S27: Level 3, and the bound the tree controls at ----------
+
+#: How many levels the procedure tests: ``2`` stops at the fault lines, ``3`` adds the cells
+#: under each rejecting one. There is no ``1`` -- a one-level tree is ``omnibus`` and P4.1's
+#: block, and a bound over a single hypothesis tested at ``q`` is a number that is true and
+#: confuses (spec S27 section 0.9 item 4).
+DEFAULT_DEPTH: int = 3
+DEPTHS: tuple[int, ...] = (2, 3)
+
+#: Yekutieli (2008), *Hierarchical False Discovery Rate-Controlling Methodology*, JASA
+#: 103(481):309-316, section 2.1.1: the smallest multiplicative factor satisfying his
+#: inequality (1), which he computes as "slightly below 1.44" at a discovery count of four
+#: under uniform p-values. A universal constant, chosen before any data and independent of the
+#: tree's shape or of anything measured on it. Typed once, here, and read in one function.
+DELTA_STAR: float = 1.44
+
+#: The set the printed bound is over. Yekutieli's Corollary A.2 bounds the **outer-nodes**
+#: error rate -- the discoveries that are not parents to other discoveries, which is exactly
+#: what this report puts in front of a reader: the cells it names, the fault lines under which
+#: it could name none, and the root when it could name nothing below. His other universal bound
+#: is over the full tree, is depth-free and smaller, and is over a set padded with every
+#: finding's ancestors; it is not printed. Carried on the structure so the JSON says which
+#: error rate the number is (ADR-062).
+BOUND_DISCOVERIES: str = "outer_nodes"
+
+#: The null every leaf is tested against, quoted on the block exactly as the root's and the
+#: group's are.
+CELL_NULL: str = "this cell did not change"
+
+#: Why Level 3 was not tested, the more fundamental fact first: the procedure's configuration
+#: before the root, and the root before the level. The **first** that applies is the one
+#: stated, which is P4.2's precedence for ``FaultLines.reason`` extended by one (spec S27
+#: section 3.3). Read in order by ``_leaves_reason``; reordering this tuple reorders the
+#: precedence, which is the point of stating it once.
+LEAVES_NOT_TESTED_REASONS: tuple[str, ...] = ("depth", "root_not_rejected", "no_group_rejected")
 
 
 class TreeError(DiffError):
@@ -627,6 +673,22 @@ def _require_knobs(n_permutations: Any, seed: Any) -> None:
         raise TreeError(f"seed must be an int, got {seed!r}")
 
 
+def _require_depth(value: Any) -> int:
+    """``--depth`` is refused here and not in ``cli.py``, by the analogy M6's ``0 < q < 1`` and
+    ``_require_max_group_mde`` already set: the CLI parses an int and decides nothing.
+
+    Called before the rebuild, so a depth outside ``DEPTHS`` costs milliseconds at any number
+    of permutations. ``bool`` is an ``int`` to Python and is refused anyway, and a ``"3"`` or a
+    ``3.0`` is refused rather than coerced -- a string that happens to parse is a typo, never a
+    depth.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TreeError(f"depth must be an int, got {value!r}")
+    if value not in DEPTHS:
+        raise TreeError(f"depth must be one of {DEPTHS}, got {value}")
+    return value
+
+
 def _require_agreement(
     multi: MultiDiffResult,
     common: Sequence[str],
@@ -1034,12 +1096,188 @@ class FaultLines:
 
 
 @dataclass(frozen=True)
+class CellResult:
+    """One leaf: one ``(cell, event)`` under a group that rejected at Level 2.
+
+    Every number but ``q_within`` and ``rejects`` is the flat family's own row, read from
+    ``multi.by_event[event].cells`` and never recomputed (draft ADR-071). ``p`` is whichever
+    test the grid analysis ran on that cell -- Fisher exact, exact McNemar or log-rank -- so a
+    reader finds the same p on the heatmap; ``delta`` is that row's Aalen-Johansen difference
+    at the horizon and not the root's proportion difference; ``mde`` is ADR-018's smallest
+    detectable *increase* from arm A's rate, capped at the headroom, so one cell reads one MDE
+    across the two surfaces. On a cell at ceiling that cap **is** the headroom and is not a
+    power number (spec S27 section 0.5); the honesty block says so and the row does not carry a
+    second MDE.
+
+    **No interval, no per-group level, and no flat-family verdict or ``q``.** The nested and the
+    flat rejected sets differ in both directions on a real axis, so a flat ``q`` beside a nested
+    verdict is the two-thresholds contradiction ADR-060 forbids; the flat verdict for the same
+    cell stays where it is, on the grid.
+    """
+
+    config_hash: str
+    config: Mapping[str, Any]
+    #: The requested event this row tests, one of ``RootResult.events``.
+    event: str
+    #: The label of the group whose family this row is in.
+    group: str
+    n_a: int
+    n_b: int
+    events_a: int
+    events_b: int
+    delta: float
+    p: float
+    #: BH over this family's cells x events at ``q`` -- not the flat family's ``q``.
+    q_within: float
+    rejects: bool
+    mde: float
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "config_hash": self.config_hash,
+            "config": {str(key): _native(value) for key, value in self.config.items()},
+            "event": self.event,
+            "group": self.group,
+            "n_a": int(self.n_a),
+            "n_b": int(self.n_b),
+            "events_a": int(self.events_a),
+            "events_b": int(self.events_b),
+            "delta": float(self.delta),
+            "p": float(self.p),
+            "q_within": float(self.q_within),
+            "rejects": bool(self.rejects),
+            "mde": float(self.mde),
+        }
+
+
+@dataclass(frozen=True)
+class CellFamily:
+    """The leaves under one rejected group: its ``C_g`` cells x the family's ``K`` events.
+
+    **One family per rejected group**, never one family over the union of the rejecting groups'
+    cells -- the two give different rejected sets on every Go1 axis, in both directions (spec
+    S27 section 0.6). Every test is in it, a leaf at p exactly 1 included: a degenerate leaf is
+    a hypothesis in the family and not an exclusion, because Tarone's procedure and discrete BH
+    are not built and the leak is ``n_tests``, printed rather than recovered.
+
+    ``mde_median`` and ``mde_max`` over the family's own ``cells.mde`` are carried so the family
+    line can say what its leaves could not see without ``cli.py`` computing a median.
+    """
+
+    label: str
+    key: str
+    n_tests: int
+    n_rejected: int
+    #: ``(config_hash, event)`` per rejected leaf, in row order and never in verdict order.
+    rejected: tuple[tuple[str, str], ...]
+    mde_median: float
+    mde_max: float
+    #: In sorted-hash order, with the events in ``RootResult.events`` order under each hash --
+    #: the flat family's own row order, never by result (S26 section 5's rule, one level down).
+    cells: tuple[CellResult, ...]
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "label": self.label,
+            "key": self.key,
+            "n_tests": int(self.n_tests),
+            "n_rejected": int(self.n_rejected),
+            "rejected": [[config_hash, event] for config_hash, event in self.rejected],
+            "mde_median": float(self.mde_median),
+            "mde_max": float(self.mde_max),
+            "cells": [cell.to_json() for cell in self.cells],
+        }
+
+
+@dataclass(frozen=True)
+class Leaves:
+    """Level 3: the flat family's own per-cell tests, re-corrected under a fault line.
+
+    Tested when the configured depth is 3 and at least one group rejected at Level 2 -- or,
+    under the one-group collapse, when the root rejected, where the one family is the flat
+    family bit for bit (spec S27 section 3.4).
+
+    **No conditional claim.** "Given the group rejected, these cells are reliable at q" is
+    false: if the global null holds and the gate passes by chance, the false discovery
+    proportion among the leaves is high. The unconditional outer-nodes bound beside this
+    structure is the only statement the procedure supports, so nothing here, in the JSON or on
+    the block says or implies otherwise, and there is no per-family rate or level for such a
+    claim to live in as a number. A level that was not tested is stated, not omitted, and no
+    ``q_within`` is computed for one: a number that exists invites reading.
+    """
+
+    tested: bool
+    #: ``None`` when tested; else the first of ``LEAVES_NOT_TESTED_REASONS`` that applies.
+    reason: str | None
+    null: str
+    q: float
+    n_families: int
+    #: The sum over the families, ``sum(C_g * K)``; 0 when the level was not tested.
+    n_tests: int
+    n_rejected: int
+    #: In ``FaultLines.rejected_groups`` order; ``()`` when the level was not tested.
+    families: tuple[CellFamily, ...]
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "tested": bool(self.tested),
+            "reason": self.reason,
+            "null": self.null,
+            "q": float(self.q),
+            "n_families": int(self.n_families),
+            "n_tests": int(self.n_tests),
+            "n_rejected": int(self.n_rejected),
+            "families": [family.to_json() for family in self.families],
+        }
+
+
+@dataclass(frozen=True)
+class Bound:
+    """The error rate the whole procedure controls at, computed from the tree's depth.
+
+    Yekutieli's Corollary A.2 (draft ADR-062). ``depth`` is the number of levels of the tree the
+    procedure **runs**: the configured depth, reduced by one only by the one-group collapse,
+    which changes the procedure by shape before any delta is read. It is never the depth
+    *reached* -- read off what a run found, the bound would be a random variable whose value
+    depends on the outcomes it bounds, so a reader comparing two reports would learn which one
+    rejected from its bound, and it would understate the error rate after a chance stop.
+
+    ``discoveries`` names the set the number is over, because there are two universal bounds in
+    the source over two different sets. The bound rests on a condition the source states and
+    this tree does not give -- a p-value independent of its ancestors', where a group's p
+    aggregates its own cells -- so it is printed as the rule's number under the rule's
+    assumption, with the assumption on the block. No cap: a bound above 1 prints as computed and
+    says nothing, which at that ``q`` is the truth.
+    """
+
+    depth_configured: int
+    depth: int
+    q: float
+    delta_star: float
+    bound: float
+    discoveries: str
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "depth_configured": int(self.depth_configured),
+            "depth": int(self.depth),
+            "q": float(self.q),
+            "delta_star": float(self.delta_star),
+            "bound": float(self.bound),
+            "discoveries": self.discoveries,
+        }
+
+
+@dataclass(frozen=True)
 class TreeResult:
-    """The root, the grouping it was cut by, and the fault lines under it -- from one draw."""
+    """The root, the grouping it was cut by, the fault lines under it, the cells under those,
+    and the bound the whole procedure controls at -- from one draw."""
 
     root: RootResult
     grouping: Grouping
     fault_lines: FaultLines
+    leaves: Leaves
+    bound: Bound
 
     def to_json(self) -> dict[str, Any]:
         """Native types throughout, lists for tuples, and a payload that survives a round trip.
@@ -1051,6 +1289,8 @@ class TreeResult:
             "root": self.root.to_json(),
             "grouping": self.grouping.to_json(),
             "fault_lines": self.fault_lines.to_json(),
+            "leaves": self.leaves.to_json(),
+            "bound": self.bound.to_json(),
         }
 
 
@@ -1211,7 +1451,7 @@ def _consider(
     """
     partition = _partition(request.table, key)
     labels = _ordered_labels(partition)
-    if len(labels) < 2:
+    if len(labels) < MIN_FAMILY_GROUPS:
         return Refusal(
             key=key,
             rung=rung,
@@ -1529,7 +1769,7 @@ def _fault_lines(
     position = {h: index for index, h in enumerate(design.hashes)}
     observed_block = observed[None, :, :]
     n_events = len(root.events)
-    tested = bool(root.rejects and grouping.n_groups > 1)
+    tested = bool(root.rejects and grouping.n_groups >= MIN_FAMILY_GROUPS)
     rows_by_label = {
         label: np.array([position[h] for h in grouping.groups[label]], dtype=np.int64)
         for label in grouping.labels
@@ -1614,6 +1854,164 @@ def _fault_lines(
     )
 
 
+# ---------- S27: Level 3, on the flat family's own per-cell tests ----------
+
+
+def _flat_rows(multi: MultiDiffResult) -> dict[str, dict[str, Mapping[str, Any]]]:
+    """``multi_diff``'s per-cell rows, per event, indexed by hash.
+
+    The whole of Level 3's input beside the partition. Nothing here draws a permutation,
+    touches the root's stream or reads ``units``: the third level is the grid analysis's own
+    per-cell test, scoped -- which is what "leaves are 32 against 32" means operationally, and
+    is checkable bit for bit against ``cells``.
+    """
+    return {
+        event: {
+            str(record["config_hash"]): record
+            for record in multi.by_event[event].cells.to_dict(orient="records")
+        }
+        for event in multi.events
+    }
+
+
+def _family(
+    flat: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    events: Sequence[str],
+    grouping: Grouping,
+    label: str,
+    q: float,
+) -> CellFamily:
+    """One rejected group's ``C_g x K`` leaves, BH-corrected within that family alone.
+
+    Rows in the flat family's own order -- sorted hash, events under each hash -- so the
+    correction is over an array a reader can reproduce from ``cells``, and so the one-group
+    collapse's ``bh`` call is over the same array ``multi_diff`` built, in the same order, which
+    is what makes its ``q_within`` equal ``cells.q`` bit for bit rather than nearly.
+    """
+    rows = [
+        (config_hash, event, flat[event][config_hash])
+        for config_hash in sorted(grouping.groups[label])
+        for event in events
+    ]
+    adjusted = bh(np.array([float(row["p"]) for _, _, row in rows], dtype=np.float64), q)
+    cells = tuple(
+        CellResult(
+            config_hash=config_hash,
+            config=row["config"],
+            event=event,
+            group=label,
+            n_a=int(row["n_a"]),
+            n_b=int(row["n_b"]),
+            events_a=int(row["events_a"]),
+            events_b=int(row["events_b"]),
+            delta=float(row["delta"]),
+            p=float(row["p"]),
+            q_within=float(value),
+            rejects=bool(float(value) < q),
+            mde=float(row["mde"]),
+        )
+        for (config_hash, event, row), value in zip(rows, adjusted, strict=True)
+    )
+    mdes = [cell.mde for cell in cells]
+    return CellFamily(
+        label=label,
+        key=grouping.key,
+        n_tests=len(cells),
+        n_rejected=sum(1 for cell in cells if cell.rejects),
+        rejected=tuple((cell.config_hash, cell.event) for cell in cells if cell.rejects),
+        mde_median=float(np.median(mdes)),
+        mde_max=max(mdes),
+        cells=cells,
+    )
+
+
+def _leaves_reason(
+    root: RootResult, fault_lines: FaultLines, depth_configured: int
+) -> str | None:
+    """The first entry of ``LEAVES_NOT_TESTED_REASONS`` that applies, or ``None`` when tested.
+
+    Stated in the tuple's order rather than by a chain of ``if``s, so the precedence lives in
+    one place: the procedure's configuration first, then the root, then the level. A grouping
+    that collapsed reaches none of them -- Level 2 is not a level there and the root's verdict
+    is the gate (spec S27 section 3.4).
+    """
+    applies = {
+        "depth": depth_configured < DEFAULT_DEPTH,
+        "root_not_rejected": not root.rejects,
+        "no_group_rejected": fault_lines.tested and fault_lines.n_rejected_groups == 0,
+    }
+    return next((reason for reason in LEAVES_NOT_TESTED_REASONS if applies[reason]), None)
+
+
+def _leaves(
+    multi: MultiDiffResult,
+    root: RootResult,
+    grouping: Grouping,
+    fault_lines: FaultLines,
+    depth_configured: int,
+) -> Leaves:
+    """Level 3: the cells under each rejecting fault line, and nowhere else.
+
+    **The gate, then the family, then the fields.** No ``CellResult`` exists for a cell under a
+    group that did not reject and no ``q_within`` is computed for an untested level: the printed
+    set is where a builder who ignores the gate differs, and a number that exists would be read.
+
+    Under the one-group collapse Level 2 is not a level, the labels are the grouping's own one,
+    and the family is every common cell x event corrected together -- the flat family, bit for
+    bit, which is what makes the collapse a two-level tree rather than a special case.
+    """
+    reason = _leaves_reason(root, fault_lines, depth_configured)
+    families: tuple[CellFamily, ...] = ()
+    if reason is None:
+        flat = _flat_rows(multi)
+        labels = fault_lines.rejected_groups if fault_lines.tested else grouping.labels
+        families = tuple(
+            _family(flat, root.events, grouping, label, root.q) for label in labels
+        )
+    return Leaves(
+        tested=reason is None,
+        reason=reason,
+        null=CELL_NULL,
+        q=float(root.q),
+        n_families=len(families),
+        n_tests=sum(family.n_tests for family in families),
+        n_rejected=sum(family.n_rejected for family in families),
+        families=families,
+    )
+
+
+def _depth(depth_configured: int, grouping: Grouping) -> int:
+    """The number of levels the procedure runs: the configured depth, less the collapse.
+
+    The third reader of ``MIN_FAMILY_GROUPS``. The reduction is decided by the grouping's
+    **shape** -- one group is the root restated, so the tree the procedure runs is root ->
+    cells -- and the shape is fixed before any delta is read, which is why a moved pair and its
+    unmoved twin print the same depth. It is not "depth reached": a root that fails to reject,
+    or a Level 2 that rejects nothing, leaves this alone.
+    """
+    collapsed = grouping.n_groups < MIN_FAMILY_GROUPS
+    return depth_configured - int(collapsed)
+
+
+def _bound(depth_configured: int, depth: int, q: float) -> Bound:
+    """Yekutieli's outer-nodes bound, minted here and nowhere else (draft ADR-062).
+
+    The literal ``2`` beside the constant is his (A.7): a rejected outer node has at most one
+    rejected ancestor per level, so ``R_Full + |J| <= 2 * R_Full <= 2 * L * R_Outer`` and the
+    families tested are at most the discoveries plus one per level. The other two true numbers
+    -- his depth-free full-tree bound, and his approximation (5), which is a function of the
+    observed discovery counts -- are not computed here or anywhere.
+    """
+    return Bound(
+        depth_configured=depth_configured,
+        depth=depth,
+        q=q,
+        delta_star=DELTA_STAR,
+        bound=2 * depth * q * DELTA_STAR,
+        discoveries=BOUND_DISCOVERIES,
+    )
+
+
 def tree(
     a: pd.DataFrame,
     b: pd.DataFrame,
@@ -1625,18 +2023,27 @@ def tree(
     n_permutations: int = DEFAULT_PERMUTATIONS,
     seed: int = DEFAULT_SEED,
     max_group_mde: float | None = None,
+    depth: int = DEFAULT_DEPTH,
 ) -> TreeResult:
-    """One rebuild, one agreement check, one draw: the root, the grouping, and the fault lines.
+    """One rebuild, one agreement check, one draw: the root, the grouping, the fault lines, the
+    cells under the rejecting ones, and the bound the whole procedure controls at.
 
     The root comes from the whole design; the grouping is resolved from the root's units and the
-    manifests, **before the draw**, so a refused ``--by`` or an out-of-range ``--max-group-mde``
-    costs milliseconds at any number of permutations; and every group's statistics are row slices
-    of the same observed and permuted deltas the root was calibrated by.
+    manifests, **before the draw**, so a refused ``--by``, an out-of-range ``--max-group-mde`` or
+    a depth outside ``DEPTHS`` costs milliseconds at any number of permutations; and every
+    group's statistics are row slices of the same observed and permuted deltas the root was
+    calibrated by.
 
     ``tree(...).root`` is byte-equal to ``omnibus(...)`` on the same inputs and knobs -- the same
     function builds both -- so a caller who wants only the root need not choose between them and
     ``cli.py`` prints both blocks from one draw.
+
+    **``depth`` reaches Level 3 and the bound and nothing above them.** One draw serves all three
+    levels, so the root, the grouping and the fault lines are byte-identical at either depth;
+    and the bound is computed from the argument and the grouping's shape, never from what the
+    run reached.
     """
+    depth_configured = _require_depth(depth)
     scheme, common, design, codes, counts, observed = _prepared(
         a, b, multi, n_permutations=n_permutations, seed=seed
     )
@@ -1662,17 +2069,27 @@ def tree(
         n_permutations=n_permutations,
         seed=seed,
     )
+    fault_lines = _fault_lines(root, grouping, design, observed, permuted)
     return TreeResult(
         root=root,
         grouping=grouping,
-        fault_lines=_fault_lines(root, grouping, design, observed, permuted),
+        fault_lines=fault_lines,
+        leaves=_leaves(multi, root, grouping, fault_lines, depth_configured),
+        bound=_bound(depth_configured, _depth(depth_configured, grouping), float(root.q)),
     )
 
 __all__ = [
+    "BOUND_DISCOVERIES",
+    "CELL_NULL",
+    "DEFAULT_DEPTH",
     "DEFAULT_MAX_GROUP_MDE",
     "DEFAULT_PERMUTATIONS",
     "DEFAULT_SEED",
+    "DELTA_STAR",
+    "DEPTHS",
     "GROUP_NULL",
+    "LEAVES_NOT_TESTED_REASONS",
+    "MIN_FAMILY_GROUPS",
     "MIN_RESOLVABLE_GROUPS",
     "NOT_TESTED_REASONS",
     "REFUSAL_REASONS",
@@ -1685,9 +2102,13 @@ __all__ = [
     "WHOLE_GRID",
     "WHOLE_GRID_KEY",
     "WHOLE_GRID_LABEL",
+    "Bound",
+    "CellFamily",
+    "CellResult",
     "FaultLines",
     "GroupResult",
     "Grouping",
+    "Leaves",
     "Refusal",
     "RootResult",
     "Scheme",
