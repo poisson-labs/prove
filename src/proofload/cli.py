@@ -83,7 +83,20 @@ from proofload.sampler import SamplerError, SweepSpec
 from proofload.store import RunManifest, Store, StoreError
 from proofload.survival import SurvivalError, cell_table, competing_set
 from proofload.trace import Trace, TraceValidationError
-from proofload.tree import DEFAULT_PERMUTATIONS, DEFAULT_SEED, RootResult, omnibus
+from proofload.tree import (
+    DEFAULT_MAX_GROUP_MDE,
+    DEFAULT_PERMUTATIONS,
+    DEFAULT_SEED,
+    TASK_FAMILY_KEYS,
+    TRACE_GROUPINGS,
+    WHOLE_GRID,
+    FaultLines,
+    Grouping,
+    GroupResult,
+    RootResult,
+    TreeResult,
+    tree,
+)
 from proofload.viewer import _HOST, ViewerError, build_structure, render_html, serve_page
 
 __all__ = ["main"]
@@ -226,6 +239,21 @@ def _build_parser(io: _IO) -> _Parser:
         default=DEFAULT_SEED,
         metavar="N",
         help=f"permutation seed (default {DEFAULT_SEED})",
+    )
+    fault_group = diff_p.add_argument_group("the fault lines under the omnibus")
+    fault_group.add_argument(
+        "--by",
+        metavar="KEY",
+        help="grouping for the fault lines: an axis both runs declare, "
+        f"{'/'.join(TASK_FAMILY_KEYS)}, {' or '.join(TRACE_GROUPINGS)} (unsupported until "
+        f"Phase 5.2), or {WHOLE_GRID}. Omitted: resolved in a stated order and named either way",
+    )
+    fault_group.add_argument(
+        "--max-group-mde",
+        type=float,
+        metavar="FLOAT",
+        help="largest group-level minimum detectable effect you accept "
+        f"(default {DEFAULT_MAX_GROUP_MDE:g}, the constant sweep's --max-mde uses)",
     )
 
     report_p = sub.add_parser(
@@ -654,6 +682,86 @@ def _omnibus_block(dual_root: RootResult) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _fault_lines_head(cut: Grouping, fault: FaultLines) -> str:
+    """The grouping, the rung that resolved it, and the shape it was admitted on.
+
+    Every number is a field printed with ``:g`` and none of them is computed here -- that is why
+    ``Grouping`` carries ``size_min``, ``size_median``, ``size_max``, ``alpha_floor`` and
+    ``n_resolvable_groups`` rather than leaving them to be derived. No percentage either: a
+    ``* 100`` is arithmetic, so the accepted effect prints as ``0.2`` and the executor is the
+    only place that says "points".
+    """
+    return (
+        f"fault lines: grouping {cut.key} ({cut.resolved_by}), {cut.n_groups:g} groups; "
+        f"cells per group min {cut.size_min:g} / median {cut.size_median:g} / "
+        f"max {cut.size_max:g}; {fault.n_degenerate_groups:g} degenerate; "
+        f"{cut.n_resolvable_groups:g} of {cut.n_groups:g} groups resolve "
+        f"{cut.max_group_mde:g} at alpha {cut.alpha_floor:g}"
+    )
+
+
+def _fault_lines_null(fault: FaultLines) -> str:
+    """The null in quotes, and either what tested it or why nothing did.
+
+    **A level that was not tested is stated, not omitted**, and it is stated without a
+    conditional: the gate is the procedure and the claim is not, so nothing here says "given the
+    root rejected". The root's reason wins over the level's shape when both apply.
+    """
+    if fault.tested:
+        return (
+            f'  "{fault.null}" tested by BH across {fault.n_groups:g} groups at '
+            f"q {fault.q:g}: {fault.n_rejected_groups:g} rejected"
+        )
+    if fault.reason == "one_group":
+        return f'  "{fault.null}" not tested: one group is the whole family restated'
+    return f'  "{fault.null}" not tested: the root did not reject'
+
+
+def _fault_lines_group(key: str, group: GroupResult) -> str:
+    """One group: what it holds, what could move in it, and -- when tested -- its verdict.
+
+    The counts and the design numbers print whether or not the level was tested; the p-values
+    print only when they exist, because there is no such thing as a p-value for a level nobody
+    tested and a number that exists would be read.
+    """
+    line = (
+        f"  {key}={group.label}  {group.n_cells:g} cells, "
+        f"{group.n_informative_cells:g} informative, "
+        f"{group.n_uninformative_cells:g} unchanged by every exchange; "
+        f"{group.n_a:g} units in a, {group.n_b:g} in b; group MDE {group.mde:g}"
+    )
+    if group.n_discordant is not None:
+        line = f"{line}; {group.n_discordant:g} discordant pairs"
+    if group.p_group is None or group.q_group is None:
+        return line
+    verdict = "rejected" if group.rejects else "not rejected"
+    return f"{line}; p {group.p_group:g}, q {group.q_group:g}: {verdict}"
+
+
+def _fault_lines_block(nested: TreeResult) -> str:
+    """Level 2, the block ``diff``'s text output appends after the omnibus block.
+
+    **Which kind of work moved, never where anything broke.** The second vocabulary is forbidden
+    on the first Level 2 byte this project prints, and no line here reaches for it.
+
+    The block is its first line plus every following line indented two spaces, and it is never
+    the tail of stdout: P4.3 appends after it. The chain comes first so the grouping a reader
+    might have expected is accounted for before any verdict; the group lines come last, one per
+    group in label order, never ordered by result -- an ordering by verdict is a rendering choice
+    and a pre-registration hazard here.
+    """
+    lines = [_fault_lines_head(nested.grouping, nested.fault_lines)]
+    for refusal in nested.grouping.refused:
+        lines.append(
+            f"  refused {refusal.key} ({refusal.rung}): {refusal.reason}; {refusal.detail} "
+            f"next: {refusal.next_rung}"
+        )
+    lines.append(_fault_lines_null(nested.fault_lines))
+    for group in nested.fault_lines.groups:
+        lines.append(_fault_lines_group(nested.grouping.key, group))
+    return "\n".join(lines) + "\n"
+
+
 def _write_summary(io: _IO, multi: MultiDiffResult) -> None:
     """Inference line when inferred, the headline, and the trade line when present."""
     if multi.inferred:
@@ -858,7 +966,7 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
 
 
 def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    primary, others, _, frames = _run_diffs(
+    primary, others, manifests, frames = _run_diffs(
         Store(root),
         ns.a,
         ns.b,
@@ -876,12 +984,13 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
     if ns.format == "json":
         payload: Any = primary.to_json()
         if others:
-            # ``--methods all`` keeps its three-method shape. Where an omnibus key belongs in a
-            # payload keyed by method is a spec question this packet does not answer, and
-            # answering it by hand here would freeze the answer in a golden.
+            # ``--methods all`` keeps its three-method shape (draft ADR-070): the scheme follows
+            # the method, so one omnibus and one tree beside three method objects would claim
+            # one test across three. The per-method shape is three draws and is not built.
             payload = {primary.method: payload, **{m: d.to_json() for m, d in others.items()}}
         elif wanted:
-            payload = {**payload, "omnibus": _diff_root(ns, primary, frames).to_json()}
+            nested = _diff_tree(ns, primary, frames, manifests)
+            payload = {**payload, "omnibus": nested.root.to_json(), "tree": nested.to_json()}
         io.out.write(json.dumps(payload, indent=2) + "\n")
         return 0
     io.out.write(primary.to_markdown())
@@ -892,18 +1001,38 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         io.out.write("\n" + coverage)
     io.out.write("\n" + _interval_block(primary))
     if wanted:
-        io.out.write("\n" + _omnibus_block(_diff_root(ns, primary, frames)))
+        # One call, one draw: the omnibus block and the fault-lines block are two renderings of
+        # one ``TreeResult`` rather than two permutation streams that happen to share a seed.
+        nested = _diff_tree(ns, primary, frames, manifests)
+        io.out.write("\n")
+        io.out.write(_omnibus_block(nested.root))
+        io.out.write("\n")
+        io.out.write(_fault_lines_block(nested))
     return 0
 
 
-def _diff_root(
+def _diff_tree(
     ns: argparse.Namespace,
     multi: MultiDiffResult,
     frames: tuple[pd.DataFrame, pd.DataFrame],
-) -> RootResult:
-    """``omnibus`` on the pair ``multi`` was computed from, with the two flags that move it."""
-    return omnibus(
-        frames[0], frames[1], multi, n_permutations=ns.permutations, seed=ns.seed
+    manifests: tuple[RunManifest, RunManifest],
+) -> TreeResult:
+    """``tree`` on the pair ``multi`` was computed from, with the four flags that move it.
+
+    The two new ones are passed through untouched: ``--by`` is verbatim and case-sensitive, and
+    the range check on ``--max-group-mde`` lives in ``tree.py`` by the analogy M6's ``0 < q < 1``
+    and S23's ``check_power`` already set. This module parses a float and decides nothing.
+    """
+    return tree(
+        frames[0],
+        frames[1],
+        multi,
+        manifest_a=manifests[0],
+        manifest_b=manifests[1],
+        by=ns.by,
+        n_permutations=ns.permutations,
+        seed=ns.seed,
+        max_group_mde=ns.max_group_mde,
     )
 
 

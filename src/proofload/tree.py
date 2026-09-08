@@ -35,9 +35,9 @@ cell view with ``diff.py``'s own helpers and refuses if the rebuild disagrees.
 
 from __future__ import annotations
 
-import math
+import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 import numpy as np
@@ -50,7 +50,11 @@ from proofload.diff import (
     MultiDiffResult,
     _native,
     _truncate_raw,
+    bh,
+    mde_two_proportion,
 )
+from proofload.executor import DEFAULT_MAX_MDE, _offered_override
+from proofload.store import RunManifest
 
 Scheme = Literal["pair_swap", "arm_label"]
 
@@ -92,11 +96,78 @@ _CODE_COLUMN = "_root_code"
 _REBUILD_COLUMNS = ("n_a", "n_b", "events_a", "events_b")
 
 
+# ---------- S26: the resolver's vocabulary ----------
+
+#: Draft ADR-068, amending ADR-043. The rungs the resolver walks, in order. A tuple and not a
+#: chain of ``if``s, with the trace slot already in it, so Phase 6's kind-grouping lands by
+#: filling one function body and moving no entry (F1, F5).
+RUNG_ORDER: tuple[str, ...] = ("requested", "trace", "axis", "task_family", "whole_grid")
+
+#: The names the trace rung owns and refuses today. Phase 5.2 emits ``kind``; until it does,
+#: both are known-but-unsupported and fall back through a recorded refusal rather than raising.
+TRACE_GROUPINGS: tuple[str, ...] = ("kind", "step_kind")
+
+#: Draft ADR-061's order. Read from the configs, not from ``axis_types``: the rung exists for an
+#: imported run whose manifest declares fewer axes than its configs carry.
+TASK_FAMILY_KEYS: tuple[str, ...] = ("task_family", "task_id", "task")
+
+#: What ``--by`` types to ask for the whole grid; the key the resolved grouping reports.
+WHOLE_GRID: str = "grid"
+WHOLE_GRID_KEY: str = "whole_grid"
+WHOLE_GRID_LABEL: str = "all"
+
+#: Every reason a rung may give. Phase 6 adds to this tuple; nothing dispatches on it.
+REFUSAL_REASONS: tuple[str, ...] = ("unsupported", "underpowered", "one_group", "not_shared")
+
+#: What is not tested, when the level was not tested. The root's reason wins over the level's
+#: shape: the gate is evaluated before the grouping's cardinality and the more fundamental fact
+#: is the one stated (spec S26 section 3.4; the oracle's module docstring fixes the precedence).
+NOT_TESTED_REASONS: tuple[str, ...] = ("root_not_rejected", "one_group")
+
+#: The null every group is tested against, quoted on the block exactly as the root's is.
+GROUP_NULL: str = "no cell in the group changed"
+
+#: ADR-021's shape: one constant, two readers. The grouping gate and the sweep gate hold the
+#: **same object**, so the two cannot drift apart; re-typing ``0.20`` here would be the second
+#: site (F26). It moves only through ``--max-group-mde``.
+DEFAULT_MAX_GROUP_MDE: float = DEFAULT_MAX_MDE
+
+#: Draft ADR-067. Fewer than two groups that could each answer is one hypothesis dressed as a
+#: family, and the whole-grid rung already offers one hypothesis.
+MIN_RESOLVABLE_GROUPS: int = 2
+
+#: A label sorts numerically only when every label in the grouping is a plain number. The
+#: pattern is deliberately narrower than ``float()``: ``nan`` and ``inf`` parse and do not
+#: order, so a grouping carrying one sorts lexically like any other set of names.
+_NUMERIC_LABEL = re.compile(r"[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?")
+
+
 class TreeError(DiffError):
     """A refusal by the nested family.
 
     Subclasses ``DiffError`` so ``cli``'s ``_REFUSABLE`` already maps it to exit 2 without a
     change to ``cli.py``.
+    """
+
+
+class UnknownGrouping(TreeError):
+    """``--by`` named something no rung owns.
+
+    Not a trace grouping, not an axis either manifest declares, not a task-family key the
+    configs carry, and not ``WHOLE_GRID``. Refused outright and **never** a fallback: ADR-043
+    flagged the silent-but-stated fallback as its own hazard, and draft ADR-068 closes it by
+    refusing the names nothing can build a grouping from while letting the known-but-unsupported
+    ones fall through with a row (F6).
+    """
+
+
+class TraceGroupingUnsupported(TreeError):
+    """The named stub. Raised by the trace rung for every name in ``TRACE_GROUPINGS``.
+
+    Caught by the resolver and recorded as a refusal, never propagated to the caller: a
+    ``--by kind`` today produces one row at the trace rung and resolution continues, which is
+    exactly the path Phase 5.2 replaces with a resolution. Nothing downstream of the resolver
+    changes shape when it does (F5).
     """
 
 
@@ -201,6 +272,12 @@ class _Design:
     in_a: NDArray[np.bool_]
     in_b: NDArray[np.bool_]
     ragged: bool
+    #: Per cell, under the scheme in force: whether some exchange could move it, and how many
+    #: matched pairs differ (``None`` under ``arm_label``). Carried per cell rather than only
+    #: as a total because S26's groups are row slices of exactly these cells and their counts
+    #: must sum back to the root's (F12).
+    informative: NDArray[np.bool_]
+    discordant: NDArray[np.int64] | None
     n_informative_cells: int
     n_discordant: int | None
 
@@ -300,22 +377,26 @@ def _design(
     """
     per_cell: list[tuple[NDArray[np.int16], NDArray[np.int16]]] = []
     configs: list[Any] = []
-    informative = 0
-    discordant = 0
+    informative: list[bool] = []
+    discordant: list[int] = []
     for h in common:
         cell_a, cell_b = groups_a[h], groups_b[h]
         configs.append(cell_a["config"].iloc[0])
         if scheme == "pair_swap":
             codes_a, codes_b = _matched(cell_a, cell_b, h)
             differ = int(np.sum(codes_a != codes_b))
-            discordant += differ
-            informative += int(differ > 0)
+            discordant.append(differ)
+            informative.append(differ > 0)
         else:
             codes_a = cell_a[_CODE_COLUMN].to_numpy(dtype=np.int16)
             codes_b = cell_b[_CODE_COLUMN].to_numpy(dtype=np.int16)
             pooled = np.concatenate([codes_a, codes_b])
-            informative += int(bool(np.any(pooled != pooled[0])))
+            informative.append(bool(np.any(pooled != pooled[0])))
         per_cell.append((codes_a, codes_b))
+    informative_flags = np.array(informative, dtype=np.bool_)
+    discordant_counts = (
+        np.array(discordant, dtype=np.int64) if scheme == "pair_swap" else None
+    )
 
     n_a = np.array([len(x) for x, _ in per_cell], dtype=np.int64)
     n_b = np.array([len(y) for _, y in per_cell], dtype=np.int64)
@@ -352,12 +433,30 @@ def _design(
         in_a=in_a,
         in_b=in_b,
         ragged=ragged,
-        n_informative_cells=informative,
-        n_discordant=discordant if scheme == "pair_swap" else None,
+        informative=informative_flags,
+        discordant=discordant_counts,
+        n_informative_cells=int(informative_flags.sum()),
+        n_discordant=None if discordant_counts is None else int(discordant_counts.sum()),
     )
 
 
 # ---------- the exchange, and the one place a stream is constructed ----------
+
+
+def _observed(
+    design: _Design, codes: Sequence[int]
+) -> tuple[tuple[NDArray[np.int64], NDArray[np.int64]], NDArray[np.float64]]:
+    """``((events_a, events_b), observed deltas)`` -- ``(C, K)`` twice, and no draw at all.
+
+    Split out of ``_draw`` for S26: the grouping is resolved from the design's per-arm unit
+    counts *before* a permutation exists, so a refused ``--by`` or an out-of-range
+    ``--max-group-mde`` returns in milliseconds at ``n_permutations = 10**6`` rather than after
+    the block is allocated (F6, F30). Nothing here touches the stream, so moving it out cannot
+    move a single permuted byte.
+    """
+    pooled = design.scheme == "arm_label"
+    counts = _counts(design, design.left, design.left if pooled else design.right, codes)
+    return counts, _deltas(design, counts)
 
 
 def _draw(
@@ -366,12 +465,8 @@ def _draw(
     *,
     n_permutations: int,
     seed: int,
-) -> tuple[
-    tuple[NDArray[np.int64], NDArray[np.int64]],
-    NDArray[np.float64],
-    NDArray[np.float64],
-]:
-    """``((events_a, events_b), observed deltas, permuted deltas)`` -- ``(C, K)`` and ``(B, C, K)``.
+) -> NDArray[np.float64]:
+    """The ``(B, C, K)`` permuted deltas.
 
     **The single construction site of the permutation stream** (draft ADR-058). One
     ``default_rng(seed)``, consumed permutation-major, never stored: P4.2's per-group pass gets
@@ -390,9 +485,6 @@ def _draw(
     """
     rng = np.random.default_rng(seed)
     n_cells, width = design.left.shape
-    pooled = design.scheme == "arm_label"
-    counts = _counts(design, design.left, design.left if pooled else design.right, codes)
-    observed = _deltas(design, counts)
     permuted = np.empty((n_permutations, n_cells, len(codes)), dtype=np.float64)
     for b in range(n_permutations):
         if design.scheme == "pair_swap":
@@ -414,7 +506,7 @@ def _draw(
             left = rng.permuted(design.left, axis=1)
             right = left
         permuted[b] = _deltas(design, _counts(design, left, right, codes))
-    return counts, observed, permuted
+    return permuted
 
 
 def _counts(
@@ -445,19 +537,36 @@ def _deltas(
     return out
 
 
-def _statistics(deltas: NDArray[np.float64]) -> NDArray[np.float64]:
-    """``(..., C, K)`` deltas to ``(..., 2K)`` extremeness, location first then dispersion.
+def _statistics(
+    deltas: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """``(..., C, K)`` deltas to ``(signed mean, RMS, extremeness)`` -- ``(..., K)`` twice and
+    ``(..., 2K)`` once, location first then dispersion in the last.
 
     ``|mean|`` and RMS rather than ``|sum|`` and the sum of squares: at a fixed ``C`` per
     family each is a monotone transform of the plan's statistic, so every p-value is the sum's,
     and the number a reader sees is a per-cell movement rather than one that scales with the
     grid. **Unweighted**, and there is nowhere else a weight could enter: this is the one place
     the deltas become a statistic.
+
+    It returns the *signed* mean and the RMS beside the extremeness because after S26 this is
+    also where the **reported** ``location`` and ``dispersion`` come from, at the root and at
+    every group alike (ADR-066, spec S26 section 3.4). Computing the reported field a second
+    time beside the tested one is S25 M15's split, and closing it by construction is what makes
+    the drift case fail loudly rather than quietly: every reduction that makes a statistic --
+    every ``mean``, ``sqrt`` and ``average`` -- lives in this function and its callers hand it a
+    bare array or a row slice of one, nothing else.
+
+    Callers slice the **deltas**, never these statistics: a group's location is a mean over its
+    own ``C_g`` cells, and a row slice of the root's mean would be a mean over ``C``.
     """
     n_cells = deltas.shape[-2]
-    location = np.abs(deltas.sum(axis=-2) / n_cells)
-    dispersion = np.sqrt((deltas * deltas).sum(axis=-2) / n_cells)
-    return np.concatenate([location, dispersion], axis=-1)
+    signed: NDArray[np.float64] = deltas.sum(axis=-2) / n_cells
+    root_mean_square: NDArray[np.float64] = np.sqrt((deltas * deltas).sum(axis=-2) / n_cells)
+    extremeness: NDArray[np.float64] = np.concatenate(
+        [np.abs(signed), root_mean_square], axis=-1
+    )
+    return signed, root_mean_square, extremeness
 
 
 # ---------- the calibration ----------
@@ -575,6 +684,88 @@ def _require_agreement(
 # ---------- the public function ----------
 
 
+def _prepared(
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    multi: MultiDiffResult,
+    *,
+    n_permutations: int,
+    seed: int,
+) -> tuple[
+    Scheme,
+    tuple[str, ...],
+    _Design,
+    list[int],
+    tuple[NDArray[np.int64], NDArray[np.int64]],
+    NDArray[np.float64],
+]:
+    """Everything that can refuse, then the design and the observed counts -- and no draw.
+
+    Shared by ``omnibus`` and ``tree`` so the two build one design from one rebuild under one
+    guard, and so S26's resolver can read the per-arm unit counts before a permutation exists.
+    """
+    _require_knobs(n_permutations, seed)
+    if multi.n_tests == 0:
+        raise TreeError(
+            "the family is empty: multi_diff found no comparable cell, so there is no "
+            "hypothesis for the root to test"
+        )
+    scheme = SCHEME_BY_METHOD[multi.method]
+    common, groups_a, groups_b, codebook = _rebuild(a, b, multi.horizon)
+    if not common:
+        raise TreeError(
+            f"the rebuild found no common cell but the diff tested {multi.n_tests}; "
+            "the frames are not the pair this diff was computed from"
+        )
+    _require_agreement(multi, common, groups_a, groups_b, codebook)
+    design = _design(scheme, common, groups_a, groups_b)
+    # A requested event nobody ran gets a code no outcome carries, so its incidence is zero in
+    # both arms rather than an error -- the posture ``multi_diff`` already takes.
+    codes = [codebook.get(event, _PAD) for event in multi.events]
+    counts, observed = _observed(design, codes)
+    return scheme, tuple(common), design, codes, counts, observed
+
+
+def _root(
+    multi: MultiDiffResult,
+    scheme: Scheme,
+    common: Sequence[str],
+    design: _Design,
+    units: pd.DataFrame,
+    observed: NDArray[np.float64],
+    permuted: NDArray[np.float64],
+    *,
+    n_permutations: int,
+    seed: int,
+) -> RootResult:
+    """The ``RootResult`` for one draw. The reported statistics and the tested ones are the
+    same two arrays, read off one ``_statistics`` call (ADR-066)."""
+    n_events = len(multi.events)
+    observed_block = observed[None, :, :]
+    location, dispersion, observed_statistics = _statistics(observed_block)
+    _, _, permuted_statistics = _statistics(permuted)
+    p_statistics, omnibus_p = _min_p(observed_statistics[0], permuted_statistics)
+    return RootResult(
+        events=tuple(multi.events),
+        method=multi.method,
+        scheme=scheme,
+        q=float(multi.q),
+        n_cells=len(common),
+        n_informative_cells=design.n_informative_cells,
+        n_uninformative_cells=len(common) - design.n_informative_cells,
+        n_discordant=design.n_discordant,
+        n_permutations=n_permutations,
+        seed=seed,
+        units=units,
+        location={e: float(location[0][i]) for i, e in enumerate(multi.events)},
+        dispersion={e: float(dispersion[0][i]) for i, e in enumerate(multi.events)},
+        p_location={e: float(p_statistics[i]) for i, e in enumerate(multi.events)},
+        p_dispersion={e: float(p_statistics[n_events + i]) for i, e in enumerate(multi.events)},
+        p_omnibus=float(omnibus_p),
+        rejects=bool(omnibus_p < multi.q),
+    )
+
+
 def omnibus(
     a: pd.DataFrame,
     b: pd.DataFrame,
@@ -591,54 +782,20 @@ def omnibus(
     a caller who passes ``n_permutations = 10**6`` and a mismatched pair gets the refusal in
     milliseconds rather than after the block is allocated.
     """
-    _require_knobs(n_permutations, seed)
-    if multi.n_tests == 0:
-        raise TreeError(
-            "the family is empty: multi_diff found no comparable cell, so there is no "
-            "hypothesis for the root to test"
-        )
-    scheme = SCHEME_BY_METHOD[multi.method]
-    common, groups_a, groups_b, codebook = _rebuild(a, b, multi.horizon)
-    if not common:
-        raise TreeError(
-            f"the rebuild found no common cell but the diff tested {multi.n_tests}; "
-            "the frames are not the pair this diff was computed from"
-        )
-    _require_agreement(multi, common, groups_a, groups_b, codebook)
-
-    design = _design(scheme, common, groups_a, groups_b)
-    # A requested event nobody ran gets a code no outcome carries, so its incidence is zero in
-    # both arms rather than an error -- the posture ``multi_diff`` already takes.
-    codes = [codebook.get(event, _PAD) for event in multi.events]
-    counts, observed, permuted = _draw(
-        design, codes, n_permutations=n_permutations, seed=seed
+    scheme, common, design, codes, counts, observed = _prepared(
+        a, b, multi, n_permutations=n_permutations, seed=seed
     )
-
-    n_events = len(multi.events)
-    observed_statistics = _statistics(observed[None, :, :])[0]
-    permuted_statistics = _statistics(permuted)
-    p_statistics, omnibus_p = _min_p(observed_statistics, permuted_statistics)
-    return RootResult(
-        events=tuple(multi.events),
-        method=multi.method,
-        scheme=scheme,
-        q=float(multi.q),
-        n_cells=len(common),
-        n_informative_cells=design.n_informative_cells,
-        n_uninformative_cells=len(common) - design.n_informative_cells,
-        n_discordant=design.n_discordant,
+    permuted = _draw(design, codes, n_permutations=n_permutations, seed=seed)
+    return _root(
+        multi,
+        scheme,
+        common,
+        design,
+        _units(design, multi.events, counts),
+        observed,
+        permuted,
         n_permutations=n_permutations,
         seed=seed,
-        units=_units(design, multi.events, counts),
-        location={e: float(np.mean(observed[:, i])) for i, e in enumerate(multi.events)},
-        dispersion={
-            e: math.sqrt(float(np.mean(observed[:, i] * observed[:, i])))
-            for i, e in enumerate(multi.events)
-        },
-        p_location={e: float(p_statistics[i]) for i, e in enumerate(multi.events)},
-        p_dispersion={e: float(p_statistics[n_events + i]) for i, e in enumerate(multi.events)},
-        p_omnibus=float(omnibus_p),
-        rejects=bool(omnibus_p < multi.q),
     )
 
 
@@ -679,14 +836,866 @@ def _units(
     return frame
 
 
+
+# ---------- S26: the grouping, the refusal chain, and the fault lines ----------
+
+
+@dataclass(frozen=True)
+class Refusal:
+    """One row of the chain: what a rung would not group by, why, and what came next.
+
+    ``n_groups`` and ``n_resolvable_groups`` are the power rule's findings and are ``None``
+    where the rule never ran -- an unsupported name has no partition, and a key one manifest
+    does not declare is not a grouping of this pair. ``offered_max_group_mde`` is set only for
+    ``underpowered``: it is the value that admits the grouping when pasted back, and offering
+    one for a refusal a threshold cannot lift would be an instruction that does not work.
+    """
+
+    key: str
+    rung: str
+    reason: str
+    detail: str
+    next_rung: str
+    n_groups: int | None
+    n_resolvable_groups: int | None
+    offered_max_group_mde: float | None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "rung": self.rung,
+            "reason": self.reason,
+            "detail": self.detail,
+            "next_rung": self.next_rung,
+            "n_groups": None if self.n_groups is None else int(self.n_groups),
+            "n_resolvable_groups": (
+                None if self.n_resolvable_groups is None else int(self.n_resolvable_groups)
+            ),
+            "offered_max_group_mde": (
+                None
+                if self.offered_max_group_mde is None
+                else float(self.offered_max_group_mde)
+            ),
+        }
+
+
+@dataclass(frozen=True)
+class Grouping:
+    """Which grouping Level 2 tests, which rung resolved it, and every refusal on the way.
+
+    Draft ADR-061: the key, the rung, the group count, the cells-per-group distribution and the
+    chain are stated **every time**, including when the grouping is the one requested. Every
+    field a reader needs is carried rather than derived, so ``cli.py`` prints and computes
+    nothing (F21): ``size_min``, ``size_median``, ``size_max``, ``alpha_floor`` and
+    ``n_resolvable_groups`` are all here for that reason.
+
+    The whole object is a function of the grouping's **shape** -- unit counts per arm and group
+    cardinality -- and of nothing measured, so a grouping is admitted or refused before a single
+    delta is read (F7). That is B.7's pre-registration discipline at the level that most invites
+    choosing after the fact.
+    """
+
+    key: str
+    resolved_by: str
+    requested: str | None
+    labels: tuple[str, ...]
+    groups: Mapping[str, tuple[str, ...]]
+    n_groups: int
+    group_sizes: tuple[int, ...]
+    size_min: int
+    size_median: float
+    size_max: int
+    alpha_floor: float
+    max_group_mde: float
+    group_mde: tuple[float, ...]
+    n_resolvable_groups: int
+    refused: tuple[Refusal, ...]
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "resolved_by": self.resolved_by,
+            "requested": self.requested,
+            "labels": list(self.labels),
+            "groups": {label: list(hashes) for label, hashes in self.groups.items()},
+            "n_groups": int(self.n_groups),
+            "group_sizes": [int(size) for size in self.group_sizes],
+            "size_min": int(self.size_min),
+            "size_median": float(self.size_median),
+            "size_max": int(self.size_max),
+            "alpha_floor": float(self.alpha_floor),
+            "max_group_mde": float(self.max_group_mde),
+            "group_mde": [float(value) for value in self.group_mde],
+            "n_resolvable_groups": int(self.n_resolvable_groups),
+            "refused": [refusal.to_json() for refusal in self.refused],
+        }
+
+
+@dataclass(frozen=True)
+class GroupResult:
+    """One group's row of the fault lines: what it holds, what moved, and whether it rejects.
+
+    The counts and the design numbers are present whether or not the level was tested; every
+    ``p_*``, ``q_group`` and ``rejects`` is ``None`` when it was not. No p-value is computed for
+    an untested level, because a number that exists invites reading (spec S26 section 3.4).
+
+    ``degenerate`` is about what the exchange **could** move, not about what it did: a group with
+    informative cells can still sit at p exactly 1 (Go1's push 140 and 160, one informative cell
+    each) and is not degenerate. Flagging degeneracy from ``p == 1`` or from a zero delta is the
+    mutant F16 exists to catch.
+    """
+
+    label: str
+    key: str
+    cells: tuple[str, ...]
+    n_cells: int
+    n_informative_cells: int
+    n_uninformative_cells: int
+    n_discordant: int | None
+    n_a: int
+    n_b: int
+    mde: float
+    degenerate: bool
+    location: Mapping[str, float]
+    dispersion: Mapping[str, float]
+    p_location: Mapping[str, float] | None
+    p_dispersion: Mapping[str, float] | None
+    p_group: float | None
+    q_group: float | None
+    rejects: bool | None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "label": self.label,
+            "key": self.key,
+            "cells": list(self.cells),
+            "n_cells": int(self.n_cells),
+            "n_informative_cells": int(self.n_informative_cells),
+            "n_uninformative_cells": int(self.n_uninformative_cells),
+            "n_discordant": None if self.n_discordant is None else int(self.n_discordant),
+            "n_a": int(self.n_a),
+            "n_b": int(self.n_b),
+            "mde": float(self.mde),
+            "degenerate": bool(self.degenerate),
+            "location": {k: float(v) for k, v in self.location.items()},
+            "dispersion": {k: float(v) for k, v in self.dispersion.items()},
+            "p_location": (
+                None
+                if self.p_location is None
+                else {k: float(v) for k, v in self.p_location.items()}
+            ),
+            "p_dispersion": (
+                None
+                if self.p_dispersion is None
+                else {k: float(v) for k, v in self.p_dispersion.items()}
+            ),
+            "p_group": None if self.p_group is None else float(self.p_group),
+            "q_group": None if self.q_group is None else float(self.q_group),
+            "rejects": None if self.rejects is None else bool(self.rejects),
+        }
+
+
+@dataclass(frozen=True)
+class FaultLines:
+    """Level 2: which kind of work moved, and nothing about where anything broke.
+
+    Draft ADR-069. Tested only when the root rejected and the grouping has more than one group;
+    corrected by BH across **every** group at ``q``, degenerate ones included, because excluding
+    the hopeless ones is Tarone's procedure and discrete BH's and neither is built -- the leak is
+    ``n_degenerate_groups``, printed rather than recovered.
+
+    **No conditional claim.** The gate is the procedure; the claim is not. Nothing here, in the
+    JSON or on the block says or implies "given the root rejected, the fault lines are controlled
+    at q". A level that was not tested is stated, not omitted.
+    """
+
+    tested: bool
+    reason: str | None
+    null: str
+    q: float
+    n_groups: int
+    n_degenerate_groups: int
+    n_rejected_groups: int
+    rejected_groups: tuple[str, ...]
+    groups: tuple[GroupResult, ...]
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "tested": bool(self.tested),
+            "reason": self.reason,
+            "null": self.null,
+            "q": float(self.q),
+            "n_groups": int(self.n_groups),
+            "n_degenerate_groups": int(self.n_degenerate_groups),
+            "n_rejected_groups": int(self.n_rejected_groups),
+            "rejected_groups": list(self.rejected_groups),
+            "groups": [group.to_json() for group in self.groups],
+        }
+
+
+@dataclass(frozen=True)
+class TreeResult:
+    """The root, the grouping it was cut by, and the fault lines under it -- from one draw."""
+
+    root: RootResult
+    grouping: Grouping
+    fault_lines: FaultLines
+
+    def to_json(self) -> dict[str, Any]:
+        """Native types throughout, lists for tuples, and a payload that survives a round trip.
+
+        Self-contained (ADR-033): the tree carries its own root rather than pointing at a
+        sibling key of whatever mapping ``cli.py`` composes around it.
+        """
+        return {
+            "root": self.root.to_json(),
+            "grouping": self.grouping.to_json(),
+            "fault_lines": self.fault_lines.to_json(),
+        }
+
+
+@dataclass(frozen=True)
+class _CellTable:
+    """The per-cell facts the resolver reads: a hash, a config, and the units each arm ran.
+
+    Units, not cells (spec S26 section 8 trap 3): under pair swap the unit is the matched pair
+    and under arm label it is the episode, so ``n_a`` is scheme-dependent and the group MDE with
+    it. The resolver follows the root rather than re-deciding.
+    """
+
+    hashes: tuple[str, ...]
+    configs: tuple[Mapping[str, Any], ...]
+    n_a: NDArray[np.int64]
+    n_b: NDArray[np.int64]
+
+
+@dataclass(frozen=True)
+class _Request:
+    """What every rung is handed. ``frames`` is unread today and is what the trace rung will
+    read in Phase 6; ``seen`` and ``refused`` carry the chain so a key refused once is skipped
+    by every later rung without a second row a reader cannot tell from a second refusal."""
+
+    requested: str | None
+    manifest_a: RunManifest
+    manifest_b: RunManifest
+    table: _CellTable
+    q: float
+    max_group_mde: float
+    frames: Any
+    seen: set[str] = field(default_factory=set)
+    refused: list[Refusal] = field(default_factory=list)
+
+
+def _require_max_group_mde(value: Any) -> float:
+    """S23 W6 one level down, and the range check lives here rather than in ``cli.py``.
+
+    By exact analogy with M6's ``0 < q < 1`` and ``check_power``: the CLI parses a float and
+    decides nothing statistical (F8). A string is refused rather than coerced -- ``float("0.3")``
+    would succeed and turn a typo into a threshold.
+    """
+    if value is None:
+        return DEFAULT_MAX_GROUP_MDE
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TreeError(f"--max-group-mde must be a float, got {value!r}")
+    accepted = float(value)
+    if not 0.0 < accepted < 1.0:
+        raise TreeError(
+            f"--max-group-mde must be greater than 0 and less than 1, got {accepted!r}"
+        )
+    return accepted
+
+
+def _cell_table(units: pd.DataFrame) -> _CellTable:
+    """One row per comparable cell, de-duplicated from ``units`` over the first event.
+
+    The per-arm unit counts are a property of the cell and not of the event, so any event's rows
+    give the same table; the first is taken rather than summed, which would double-count a
+    two-event family.
+    """
+    if units.empty:
+        raise TreeError("the root's units are empty, so there is nothing to group")
+    rows = units[units["event"] == units["event"].iloc[0]]
+    return _CellTable(
+        hashes=tuple(str(h) for h in rows["config_hash"]),
+        configs=tuple(rows["config"]),
+        n_a=rows["n_a"].to_numpy(dtype=np.int64),
+        n_b=rows["n_b"].to_numpy(dtype=np.int64),
+    )
+
+
+def _partition(table: _CellTable, key: str) -> dict[str, list[int]]:
+    """``str(value) -> cell indices`` for one config key, over every comparable cell.
+
+    A common cell whose config lacks the key is a corrupt pair, not a grouping question, and is
+    refused rather than dropped into a group of its own (spec S26 section 3.3).
+    """
+    out: dict[str, list[int]] = {}
+    for index, config in enumerate(table.configs):
+        if key not in config:
+            raise TreeError(
+                f"cell {table.hashes[index]} carries no {key!r} in its config, but {key!r} is a "
+                "grouping of this pair; the two runs are not the same design"
+            )
+        out.setdefault(str(config[key]), []).append(index)
+    return out
+
+
+def _ordered_labels(partition: Mapping[str, Sequence[int]]) -> tuple[str, ...]:
+    """Numerically where every label is a plain number, lexically otherwise, always total."""
+    labels = list(partition)
+    if labels and all(_NUMERIC_LABEL.fullmatch(label) for label in labels):
+        return tuple(sorted(labels, key=float))
+    return tuple(sorted(labels))
+
+
+def _group_mdes(
+    table: _CellTable, partition: Mapping[str, Sequence[int]], labels: Sequence[str], alpha: float
+) -> tuple[float, ...]:
+    """S23's minimum detectable effect on each group, at the family's floor.
+
+    Base rate 0.5 because it is ``preflight_mde``'s anchor, needs no data and keeps the rule a
+    function of the grouping's shape. ``alpha`` is ``q / G``, the threshold BH applies to the
+    smallest p among ``G`` -- the only threshold a single moved group can be held to, which is
+    the sparse alternative Level 2 exists for.
+    """
+    return tuple(
+        mde_two_proportion(
+            0.5,
+            int(table.n_a[partition[label]].sum()),
+            int(table.n_b[partition[label]].sum()),
+            alpha=alpha,
+        )
+        for label in labels
+    )
+
+
+# ---------- S26: the rungs ----------
+
+
+def _underpowered_detail(
+    *,
+    n_resolvable: int,
+    n_groups: int,
+    accepted: float,
+    mde: float,
+    n_a: int,
+    n_b: int,
+    alpha: float,
+    offered: float,
+) -> str:
+    """S23's message shape one level down: three facts and one instruction.
+
+    The MDE named is the ``MIN_RESOLVABLE_GROUPS``-th smallest -- the one that has to come down
+    for the grouping to be admitted -- with the units of the group that carries it, so the
+    offered override and the number it is derived from are the same number. The instruction is
+    checked rather than argued: ``_offered_override`` rounds up, because rounding to nearest is
+    the trap that makes a message whose one instruction refuses the same grouping again.
+    """
+    return (
+        f"{n_resolvable} of {n_groups} groups can resolve a change of {accepted * 100:.1f} "
+        f"points in a group's event rate (group MDE {mde:.4f} at {n_a} and {n_b} units per arm, "
+        f"alpha {alpha:.3g} = q/{n_groups}), and you accepted {accepted * 100:.1f} points "
+        f"(--max-group-mde {accepted:.4f}). --max-group-mde {offered:.4f} admits this grouping "
+        f"as it stands."
+    )
+
+
+def _consider(
+    request: _Request, key: str, *, rung: str, next_rung: str, resolved_by: str
+) -> Grouping | Refusal:
+    """One candidate key, judged on shape alone: a ``Grouping`` or the row that says why not.
+
+    Nothing here reads a delta. The partition, the per-arm unit counts and the group count are
+    the whole input, which is what makes ``Grouping`` byte-identical on a pair and on its
+    unmoved twin (F7).
+    """
+    partition = _partition(request.table, key)
+    labels = _ordered_labels(partition)
+    if len(labels) < 2:
+        return Refusal(
+            key=key,
+            rung=rung,
+            reason="one_group",
+            detail=(
+                f"the grouping has one group over {len(request.table.hashes)} cells, which is "
+                "the whole family restated rather than a family of groups."
+            ),
+            next_rung=next_rung,
+            n_groups=len(labels),
+            n_resolvable_groups=None,
+            offered_max_group_mde=None,
+        )
+    alpha_floor = request.q / len(labels)
+    mdes = _group_mdes(request.table, partition, labels, alpha_floor)
+    resolvable = sum(1 for value in mdes if value <= request.max_group_mde)
+    if resolvable < MIN_RESOLVABLE_GROUPS:
+        order = sorted(range(len(labels)), key=lambda index: mdes[index])
+        pivot = order[MIN_RESOLVABLE_GROUPS - 1]
+        rows = partition[labels[pivot]]
+        return Refusal(
+            key=key,
+            rung=rung,
+            reason="underpowered",
+            detail=_underpowered_detail(
+                n_resolvable=resolvable,
+                n_groups=len(labels),
+                accepted=request.max_group_mde,
+                mde=mdes[pivot],
+                n_a=int(request.table.n_a[rows].sum()),
+                n_b=int(request.table.n_b[rows].sum()),
+                alpha=alpha_floor,
+                offered=_offered_override(mdes[pivot]),
+            ),
+            next_rung=next_rung,
+            n_groups=len(labels),
+            n_resolvable_groups=resolvable,
+            offered_max_group_mde=_offered_override(mdes[pivot]),
+        )
+    return _grouping(request, key, resolved_by, partition, labels, alpha_floor, mdes, resolvable)
+
+
+def _grouping(
+    request: _Request,
+    key: str,
+    resolved_by: str,
+    partition: Mapping[str, Sequence[int]],
+    labels: Sequence[str],
+    alpha_floor: float,
+    mdes: Sequence[float],
+    resolvable: int,
+) -> Grouping:
+    """The resolved grouping, with ``refused`` left empty for the walker to fill."""
+    groups = {
+        label: tuple(sorted(request.table.hashes[index] for index in partition[label]))
+        for label in labels
+    }
+    sizes = tuple(len(groups[label]) for label in labels)
+    return Grouping(
+        key=key,
+        resolved_by=resolved_by,
+        requested=request.requested,
+        labels=tuple(labels),
+        groups=groups,
+        n_groups=len(sizes),
+        group_sizes=sizes,
+        size_min=min(sizes),
+        size_median=float(np.median(sizes)),
+        size_max=max(sizes),
+        alpha_floor=alpha_floor,
+        max_group_mde=request.max_group_mde,
+        group_mde=tuple(float(value) for value in mdes),
+        n_resolvable_groups=resolvable,
+        refused=(),
+    )
+
+
+def _trace_refusal(key: str) -> Refusal:
+    """The stub's one row. Recorded at the **trace** rung whoever asked for it, because the rung
+    that could not answer is the fact worth stating, and Phase 5.2 replaces this row with a
+    resolution at that same rung."""
+    return Refusal(
+        key=key,
+        rung="trace",
+        reason="unsupported",
+        detail=(
+            "grouping by a trace attribute is not supported until Phase 5.2 emits it; the "
+            "resolver continues at the next rung."
+        ),
+        next_rung="axis",
+        n_groups=None,
+        n_resolvable_groups=None,
+        offered_max_group_mde=None,
+    )
+
+
+def _rung_requested(request: _Request) -> Grouping | Refusal | None:
+    """``--by``, checked by whichever owner the name has, and refused outright when it has none.
+
+    A name in ``TRACE_GROUPINGS`` is handed to the trace rung's check by falling through to it,
+    so the row that comes back names the rung that could not answer -- the stub's slot is the
+    fact, and Phase 5.2 replaces that row with a resolution at that same rung. Every other name
+    is checked here, and a requested grouping that passes reads ``resolved_by == "requested"``
+    (ADR-043's *including when it is the one requested*) -- except ``WHOLE_GRID``, which is the
+    whole-grid rung answering and says so.
+    """
+    name = request.requested
+    if name is None or name in request.seen or name in TRACE_GROUPINGS:
+        return None
+    if name == WHOLE_GRID:
+        return _whole_grid(request)
+    declared_a = name in request.manifest_a.axis_types
+    declared_b = name in request.manifest_b.axis_types
+    if declared_a or declared_b:
+        if not (declared_a and declared_b):
+            missing = "b" if declared_a else "a"
+            return Refusal(
+                key=name,
+                rung="requested",
+                reason="not_shared",
+                detail=(
+                    f"run {missing} does not declare {name!r} as an axis, so the two runs share "
+                    "no grouping by it."
+                ),
+                next_rung="trace",
+                n_groups=None,
+                n_resolvable_groups=None,
+                offered_max_group_mde=None,
+            )
+        return _consider(
+            request, name, rung="requested", next_rung="trace", resolved_by="requested"
+        )
+    if name in TASK_FAMILY_KEYS and _carried_by_every_cell(request, name):
+        return _consider(
+            request, name, rung="requested", next_rung="trace", resolved_by="requested"
+        )
+    raise UnknownGrouping(
+        f"--by {name}: no rung groups by that. Name a trace grouping "
+        f"({', '.join(TRACE_GROUPINGS)}, unsupported until Phase 5.2), an axis both runs "
+        f"declare ({', '.join(_shared_axes(request)) or 'none'}), a task-family key the configs "
+        f"carry ({', '.join(TASK_FAMILY_KEYS)}), or {WHOLE_GRID}."
+    )
+
+
+def _rung_trace(request: _Request) -> Grouping | Refusal | None:
+    """Phase 6 fills this body and moves no entry in ``RUNG_ORDER``.
+
+    It reads nothing today -- not ``request.frames``, which is what it will read -- and offers
+    nothing unless a trace grouping was asked for, in which case it raises the named stub and the
+    walker records the row. Without a ``--by`` no row of the chain is ever at this rung.
+    """
+    name = request.requested
+    if name is None or name in request.seen or name not in TRACE_GROUPINGS:
+        return None
+    raise TraceGroupingUnsupported(name)
+
+
+def _rung_axis(request: _Request) -> Grouping | Refusal | None:
+    """The sweep's declared axes, in **arm A's** declared order, intersected with arm B's.
+
+    Not sorted, not by group count, not the union (F29). Declared order is the rule until a
+    measured substrate shows it choosing the wrong passing axis, and A's order is the one a
+    reader of the baseline manifest can predict.
+    """
+    candidates = [key for key in request.manifest_a.axis_types if key not in request.seen]
+    if not candidates:
+        return None
+    key = candidates[0]
+    next_rung = "axis" if candidates[1:] else "task_family"
+    if key not in request.manifest_b.axis_types:
+        return Refusal(
+            key=key,
+            rung="axis",
+            reason="not_shared",
+            detail=(
+                f"run b does not declare {key!r} as an axis, so the two runs share no grouping "
+                "by it."
+            ),
+            next_rung=next_rung,
+            n_groups=None,
+            n_resolvable_groups=None,
+            offered_max_group_mde=None,
+        )
+    return _consider(request, key, rung="axis", next_rung=next_rung, resolved_by="axis")
+
+
+def _carried_by_every_cell(request: _Request, key: str) -> bool:
+    return all(key in config for config in request.table.configs)
+
+
+def _shared_axes(request: _Request) -> list[str]:
+    return [key for key in request.manifest_a.axis_types if key in request.manifest_b.axis_types]
+
+
+def _rung_task_family(request: _Request) -> Grouping | Refusal | None:
+    """The task-family keys, read from the **configs** rather than from ``axis_types``.
+
+    Vacuous on every store this project has: the task key is a declared axis everywhere, so the
+    axis rung tries and refuses it first and this rung skips it without a second row. It exists
+    for an imported run whose manifest was written after the fact and declares fewer axes than
+    its configs carry (draft ADR-061), and F10's fixture is what keeps it from being dead code.
+    """
+    candidates = [
+        key
+        for key in TASK_FAMILY_KEYS
+        if key not in request.seen and _carried_by_every_cell(request, key)
+    ]
+    if not candidates:
+        return None
+    key = candidates[0]
+    next_rung = "task_family" if candidates[1:] else "whole_grid"
+    return _consider(
+        request, key, rung="task_family", next_rung=next_rung, resolved_by="task_family"
+    )
+
+
+def _whole_grid(request: _Request) -> Grouping:
+    """One group over every comparable cell. This rung never refuses, which is what guarantees
+    the resolver always finds a grouping and lets every rung above it fall through."""
+    partition = {WHOLE_GRID_LABEL: list(range(len(request.table.hashes)))}
+    labels = (WHOLE_GRID_LABEL,)
+    mdes = _group_mdes(request.table, partition, labels, request.q)
+    return _grouping(
+        request,
+        WHOLE_GRID_KEY,
+        "whole_grid",
+        partition,
+        labels,
+        request.q,
+        mdes,
+        sum(1 for value in mdes if value <= request.max_group_mde),
+    )
+
+
+_RUNGS: Mapping[str, Any] = {
+    "requested": _rung_requested,
+    "trace": _rung_trace,
+    "axis": _rung_axis,
+    "task_family": _rung_task_family,
+    "whole_grid": _whole_grid,
+}
+
+
+def resolve_grouping(
+    requested: str | None,
+    *,
+    manifest_a: RunManifest,
+    manifest_b: RunManifest,
+    units: pd.DataFrame,
+    q: float,
+    max_group_mde: float | None = None,
+    frames: tuple[pd.DataFrame, pd.DataFrame] | None = None,
+) -> Grouping:
+    """Walk ``RUNG_ORDER`` until a rung offers a grouping, recording every refusal on the way.
+
+    Each rung returns a ``Grouping`` (resolved, stop), a ``Refusal`` (record it, try again) or
+    ``None`` (nothing to offer here, go on). A rung that refuses is re-entered so it can pass
+    over a second candidate of its own -- the axis rung refuses one axis and reaches the next --
+    and the key it refused is in the chain, so no later rung says the same thing twice.
+
+    ``frames`` is unread: it is what the trace rung will read in Phase 6, and the resolver's
+    output is identical whether it is passed or not.
+    """
+    request = _Request(
+        requested=requested,
+        manifest_a=manifest_a,
+        manifest_b=manifest_b,
+        table=_cell_table(units),
+        q=float(q),
+        max_group_mde=_require_max_group_mde(max_group_mde),
+        frames=frames,
+    )
+    for rung in RUNG_ORDER:
+        while True:
+            try:
+                outcome = _RUNGS[rung](request)
+            except TraceGroupingUnsupported as unsupported:
+                outcome = _trace_refusal(str(unsupported))
+            if not isinstance(outcome, Refusal):
+                break
+            request.refused.append(outcome)
+            request.seen.add(outcome.key)
+        if isinstance(outcome, Grouping):
+            return replace(outcome, refused=tuple(request.refused))
+    raise TreeError(  # pragma: no cover - the whole-grid rung never returns anything else
+        "no rung offered a grouping, which the whole-grid rung is there to make impossible"
+    )
+
+
+# ---------- S26: Level 2, on the root's own draws ----------
+
+
+def _fault_lines(
+    root: RootResult,
+    grouping: Grouping,
+    design: _Design,
+    observed: NDArray[np.float64],
+    permuted: NDArray[np.float64],
+) -> FaultLines:
+    """Every group's statistics from row slices of the root's own observed and permuted deltas.
+
+    **Slice the deltas, not the statistics.** A group's location is a mean over its own ``C_g``
+    cells; a row slice of the root's mean would be a mean over ``C`` and would be wrong by a
+    constant that varies with the grouping (F12).
+
+    **The draws are the root's.** The permuted block is the one ``_draw`` built, grouped
+    afterwards, so a group's p is comparable to the root's and to every other group's and no
+    second stream exists. A Level 2 that drew its own ``(C_g, W)`` block from the same seed gets
+    different bits, which F13 pins from the surface.
+
+    **BH over all G, then the gate, then the fields.** ``q_group`` is ``diff.bh`` over every
+    group's p with ``m`` the group count; the gate decides whether any of it is computed at all,
+    and when it does not, every p-field is ``None`` and nothing is calculated.
+    """
+    position = {h: index for index, h in enumerate(design.hashes)}
+    observed_block = observed[None, :, :]
+    n_events = len(root.events)
+    tested = bool(root.rejects and grouping.n_groups > 1)
+    rows_by_label = {
+        label: np.array([position[h] for h in grouping.groups[label]], dtype=np.int64)
+        for label in grouping.labels
+    }
+
+    measured: list[dict[str, Any]] = []
+    for index, label in enumerate(grouping.labels):
+        rows = rows_by_label[label]
+        group_observed = observed_block[:, rows, :]
+        location, dispersion, extremeness = _statistics(group_observed)
+        informative = int(design.informative[rows].sum())
+        record: dict[str, Any] = {
+            "label": label,
+            "cells": grouping.groups[label],
+            "n_cells": len(rows),
+            "n_informative_cells": informative,
+            "n_uninformative_cells": len(rows) - informative,
+            "n_discordant": (
+                None if design.discordant is None else int(design.discordant[rows].sum())
+            ),
+            "n_a": int(design.n_a[rows].sum()),
+            "n_b": int(design.n_b[rows].sum()),
+            "mde": grouping.group_mde[index],
+            "degenerate": informative == 0,
+            "location": {e: float(location[0][k]) for k, e in enumerate(root.events)},
+            "dispersion": {e: float(dispersion[0][k]) for k, e in enumerate(root.events)},
+            "p_location": None,
+            "p_dispersion": None,
+            "p_group": None,
+        }
+        if tested:
+            group_permuted = permuted[:, rows, :]
+            _, _, permuted_extremeness = _statistics(group_permuted)
+            p_statistics, p_group = _min_p(extremeness[0], permuted_extremeness)
+            record["p_location"] = {
+                e: float(p_statistics[k]) for k, e in enumerate(root.events)
+            }
+            record["p_dispersion"] = {
+                e: float(p_statistics[n_events + k]) for k, e in enumerate(root.events)
+            }
+            record["p_group"] = float(p_group)
+        measured.append(record)
+
+    adjusted: list[float | None] = [None] * len(measured)
+    if tested:
+        raw = np.array([record["p_group"] for record in measured], dtype=np.float64)
+        adjusted = [float(value) for value in bh(raw, root.q)]
+    groups = tuple(
+        GroupResult(
+            label=record["label"],
+            key=grouping.key,
+            cells=record["cells"],
+            n_cells=record["n_cells"],
+            n_informative_cells=record["n_informative_cells"],
+            n_uninformative_cells=record["n_uninformative_cells"],
+            n_discordant=record["n_discordant"],
+            n_a=record["n_a"],
+            n_b=record["n_b"],
+            mde=record["mde"],
+            degenerate=record["degenerate"],
+            location=record["location"],
+            dispersion=record["dispersion"],
+            p_location=record["p_location"],
+            p_dispersion=record["p_dispersion"],
+            p_group=record["p_group"],
+            q_group=q_group,
+            rejects=None if q_group is None else bool(q_group < root.q),
+        )
+        for record, q_group in zip(measured, adjusted, strict=True)
+    )
+    rejected = tuple(group.label for group in groups if group.rejects)
+    return FaultLines(
+        tested=tested,
+        reason=None if tested else ("root_not_rejected" if not root.rejects else "one_group"),
+        null=GROUP_NULL,
+        q=float(root.q),
+        n_groups=grouping.n_groups,
+        n_degenerate_groups=sum(1 for group in groups if group.degenerate),
+        n_rejected_groups=len(rejected),
+        rejected_groups=rejected,
+        groups=groups,
+    )
+
+
+def tree(
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    multi: MultiDiffResult,
+    *,
+    manifest_a: RunManifest,
+    manifest_b: RunManifest,
+    by: str | None = None,
+    n_permutations: int = DEFAULT_PERMUTATIONS,
+    seed: int = DEFAULT_SEED,
+    max_group_mde: float | None = None,
+) -> TreeResult:
+    """One rebuild, one agreement check, one draw: the root, the grouping, and the fault lines.
+
+    The root comes from the whole design; the grouping is resolved from the root's units and the
+    manifests, **before the draw**, so a refused ``--by`` or an out-of-range ``--max-group-mde``
+    costs milliseconds at any number of permutations; and every group's statistics are row slices
+    of the same observed and permuted deltas the root was calibrated by.
+
+    ``tree(...).root`` is byte-equal to ``omnibus(...)`` on the same inputs and knobs -- the same
+    function builds both -- so a caller who wants only the root need not choose between them and
+    ``cli.py`` prints both blocks from one draw.
+    """
+    scheme, common, design, codes, counts, observed = _prepared(
+        a, b, multi, n_permutations=n_permutations, seed=seed
+    )
+    units = _units(design, multi.events, counts)
+    grouping = resolve_grouping(
+        by,
+        manifest_a=manifest_a,
+        manifest_b=manifest_b,
+        units=units,
+        q=multi.q,
+        max_group_mde=max_group_mde,
+        frames=(a, b),
+    )
+    permuted = _draw(design, codes, n_permutations=n_permutations, seed=seed)
+    root = _root(
+        multi,
+        scheme,
+        common,
+        design,
+        units,
+        observed,
+        permuted,
+        n_permutations=n_permutations,
+        seed=seed,
+    )
+    return TreeResult(
+        root=root,
+        grouping=grouping,
+        fault_lines=_fault_lines(root, grouping, design, observed, permuted),
+    )
+
 __all__ = [
+    "DEFAULT_MAX_GROUP_MDE",
     "DEFAULT_PERMUTATIONS",
     "DEFAULT_SEED",
+    "GROUP_NULL",
+    "MIN_RESOLVABLE_GROUPS",
+    "NOT_TESTED_REASONS",
+    "REFUSAL_REASONS",
     "ROOT_STATISTICS",
+    "RUNG_ORDER",
     "SCHEME_BY_METHOD",
+    "TASK_FAMILY_KEYS",
+    "TRACE_GROUPINGS",
     "UNITS_COLUMNS",
+    "WHOLE_GRID",
+    "WHOLE_GRID_KEY",
+    "WHOLE_GRID_LABEL",
+    "FaultLines",
+    "GroupResult",
+    "Grouping",
+    "Refusal",
     "RootResult",
     "Scheme",
+    "TraceGroupingUnsupported",
     "TreeError",
+    "TreeResult",
+    "UnknownGrouping",
     "omnibus",
+    "resolve_grouping",
+    "tree",
 ]
