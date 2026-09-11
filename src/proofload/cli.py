@@ -116,7 +116,9 @@ _METHODS: tuple[str, ...] = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 _REPORT_FILES = ("report.md", "heatmap.svg", "receipt.html")
 _SNIPPET_MARKER = "# reproduce one episode"
 _MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
-_DIFF_ONLY_FLAGS = ("method", "methods", "q")
+_DIFF_ONLY_FLAGS = (
+    "method", "methods", "q", "permutations", "seed", "by", "max_group_mde", "depth",
+)
 _RUN_ONLY_FLAGS = ("horizon",)
 _REFUSABLE = (
     SamplerError, ExecutorError, DiffError, ReportError, StoreError, SurvivalError, ViewerError,
@@ -231,46 +233,7 @@ def _build_parser(io: _IO) -> _Parser:
     _add_method_arguments(diff_p, defaults=True)
     diff_p.add_argument("--methods", choices=("all",), help="also run the other two methods")
     diff_p.add_argument("--format", choices=("md", "json"), default="md")
-    omnibus_group = diff_p.add_argument_group("the omnibus over the whole family")
-    omnibus_group.add_argument(
-        "--permutations",
-        type=int,
-        default=DEFAULT_PERMUTATIONS,
-        metavar="N",
-        help=f"within-cell permutations behind the omnibus (default {DEFAULT_PERMUTATIONS})",
-    )
-    omnibus_group.add_argument(
-        "--seed",
-        type=int,
-        default=DEFAULT_SEED,
-        metavar="N",
-        help=f"permutation seed (default {DEFAULT_SEED})",
-    )
-    fault_group = diff_p.add_argument_group("the fault lines under the omnibus")
-    fault_group.add_argument(
-        "--by",
-        metavar="KEY",
-        help="grouping for the fault lines: an axis both runs declare, "
-        f"{'/'.join(TASK_FAMILY_KEYS)}, {' or '.join(TRACE_GROUPINGS)} (unsupported until "
-        f"Phase 5.2), or {WHOLE_GRID}. Omitted: resolved in a stated order and named either way",
-    )
-    fault_group.add_argument(
-        "--max-group-mde",
-        type=float,
-        metavar="FLOAT",
-        help="largest group-level minimum detectable effect you accept "
-        f"(default {DEFAULT_MAX_GROUP_MDE:g}, the constant sweep's --max-mde uses)",
-    )
-    fault_group.add_argument(
-        "--depth",
-        type=int,
-        choices=DEPTHS,
-        default=DEFAULT_DEPTH,
-        metavar="N",
-        help=f"levels the procedure tests: 2 stops at the fault lines, 3 adds the cells under "
-        f"each rejecting one (default {DEFAULT_DEPTH}). The bound is computed from this and the "
-        "grouping's shape, never from what rejected",
-    )
+    _add_tree_arguments(diff_p, defaults=True)
 
     report_p = sub.add_parser(
         "report",
@@ -285,6 +248,7 @@ def _build_parser(io: _IO) -> _Parser:
     report_p.add_argument(
         "--methods", choices=("all",), help="add the method comparison table (diff report only)"
     )
+    _add_tree_arguments(report_p, defaults=False)
     report_p.add_argument("--x", required=True, metavar="AXIS", help="config key on the x axis")
     report_p.add_argument("--y", metavar="AXIS", help="config key on the y axis")
     report_p.add_argument(
@@ -373,6 +337,54 @@ def _add_method_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None
     p.add_argument("--method", choices=_METHODS, default=_DEFAULT_METHOD if defaults else None)
     p.add_argument(
         "--q", type=float, default=_DEFAULT_Q if defaults else None, help="BH false discovery rate"
+    )
+
+
+def _add_tree_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None:
+    """The five flags that move the tree, in the two groups ``diff`` has always printed, with one
+    help text for every verb that takes them. Without defaults the namespace keeps ``None`` for a
+    flag the user did not pass -- the help text still states M14's value -- so the single-run
+    report can name the diff-only flags it was given and a pair can put M14's constants in by
+    name."""
+    omnibus_group = p.add_argument_group("the omnibus over the whole family")
+    omnibus_group.add_argument(
+        "--permutations",
+        type=int,
+        default=DEFAULT_PERMUTATIONS if defaults else None,
+        metavar="N",
+        help=f"within-cell permutations behind the omnibus (default {DEFAULT_PERMUTATIONS})",
+    )
+    omnibus_group.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED if defaults else None,
+        metavar="N",
+        help=f"permutation seed (default {DEFAULT_SEED})",
+    )
+    fault_group = p.add_argument_group("the fault lines under the omnibus")
+    fault_group.add_argument(
+        "--by",
+        metavar="KEY",
+        help="grouping for the fault lines: an axis both runs declare, "
+        f"{'/'.join(TASK_FAMILY_KEYS)}, {' or '.join(TRACE_GROUPINGS)} (unsupported until "
+        f"Phase 5.2), or {WHOLE_GRID}. Omitted: resolved in a stated order and named either way",
+    )
+    fault_group.add_argument(
+        "--max-group-mde",
+        type=float,
+        metavar="FLOAT",
+        help="largest group-level minimum detectable effect you accept "
+        f"(default {DEFAULT_MAX_GROUP_MDE:g}, the constant sweep's --max-mde uses)",
+    )
+    fault_group.add_argument(
+        "--depth",
+        type=int,
+        choices=DEPTHS,
+        default=DEFAULT_DEPTH if defaults else None,
+        metavar="N",
+        help=f"levels the procedure tests: 2 stops at the fault lines, 3 adds the cells under "
+        f"each rejecting one (default {DEFAULT_DEPTH}). The bound is computed from this and the "
+        "grouping's shape, never from what rejected",
     )
 
 
@@ -1200,7 +1212,7 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
     method = _DEFAULT_METHOD if ns.method is None else ns.method
     q = _DEFAULT_Q if ns.q is None else ns.q
 
-    multi, others, manifests, _ = _run_diffs(
+    multi, others, manifests, frames = _run_diffs(
         Store(root),
         a,
         b,
@@ -1220,12 +1232,29 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
         top_n=ns.top_n,
         forest=ns.forest,
     )
-    report = build_multi_report(multi, spec, manifests=manifests)
+    nested: TreeResult | None = None
+    if multi.n_tests > 0:
+        # ``report`` parses the five tree flags with no default so the single-run form can refuse
+        # one that was given; here an absent knob becomes M14's constant, by name. They go on a
+        # copy of the namespace, because ``_diff_tree`` reads its knobs off ``ns`` and ``diff``
+        # shares it, and the parsed namespace keeps telling absent from given. An empty family
+        # grows no tree: M7's axis check refuses it below with the message it has always had.
+        knobs = argparse.Namespace(**vars(ns))
+        for name, constant in (
+            ("permutations", DEFAULT_PERMUTATIONS),
+            ("seed", DEFAULT_SEED),
+            ("depth", DEFAULT_DEPTH),
+        ):
+            if getattr(knobs, name) is None:
+                setattr(knobs, name, constant)
+        nested = _diff_tree(knobs, multi, frames, manifests)
+    # One tree for both builds: the light receipt renders the same draw, never a second one.
+    report = build_multi_report(multi, spec, manifests=manifests, tree=nested)
     receipt = (
         report
         if spec.theme == "light"
         else build_multi_report(
-            multi, dataclasses.replace(spec, theme="light"), manifests=manifests
+            multi, dataclasses.replace(spec, theme="light"), manifests=manifests, tree=nested
         )
     )
     _write_summary(io, multi)
@@ -1234,7 +1263,10 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
 
 
 def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
-    given = [f"--{name}" for name in _DIFF_ONLY_FLAGS if getattr(ns, name) is not None]
+    # Each named as it was typed: --max-group-mde, not the namespace's max_group_mde.
+    given = [
+        f"--{name.replace('_', '-')}" for name in _DIFF_ONLY_FLAGS if getattr(ns, name) is not None
+    ]
     if given:
         raise _Refusal(
             f"{', '.join(given)}: diff-only flag{'s' if len(given) > 1 else ''}; "

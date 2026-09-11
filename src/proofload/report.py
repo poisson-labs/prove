@@ -2,11 +2,12 @@
 
 Three public entry points share one private panel builder: ``build_report`` (one
 ``DiffResult``), ``build_multi_report`` (a ``MultiDiffResult``: one panel per event on a
-shared colour bound, headline and trade line first), and ``build_survival_report`` (one run,
+shared colour bound, headline and trade line first, and -- handed M14's ``TreeResult`` -- the
+layered report's four sections before the figure), and ``build_survival_report`` (one run,
 one rate panel per event from an M5 cell table). M7 computes no statistics. Every number it
-prints is a field on the diff result, on the cell table, on the curve it is handed, or on
-the ``RunManifest``. One private formatting helper does every float-to-string conversion;
-that helper is the whole defence for byte determinism and for the no ``-0.0`` rule.
+prints is a field on the diff result, on the tree, on the cell table, on the curve it is
+handed, or on the ``RunManifest``. One private formatting helper does every float-to-string
+conversion; that helper is the whole defence for byte determinism and for the no ``-0.0`` rule.
 
 Sign convention: ``delta = rate_b - rate_a``; negative is *safer* only when ``event`` names
 a failure. The event is printed in the provenance and the legend so a reader can check.
@@ -18,7 +19,7 @@ import html as _html
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from xml.sax.saxutils import escape as _xml_escape
 
 import pandas as pd
@@ -27,6 +28,9 @@ from proofload import __version__
 from proofload.diff import DiffResult, EventDiff, MultiDiffResult
 from proofload.store import RunManifest
 from proofload.survival import CIFCurve, KMCurve
+
+if TYPE_CHECKING:
+    from proofload.tree import Bound, Leaves, RootResult, TreeResult
 
 Theme = Literal["dark", "light"]
 
@@ -272,6 +276,7 @@ class MultiReport:
     bound: float
     provenance: dict[str, object]
     _method_rows: tuple[tuple[str, ...], ...] = field(default=(), repr=False, compare=False)
+    tree: TreeResult | None = None
 
     def to_markdown(self) -> str:
         return _render_multi_markdown(self)
@@ -778,14 +783,38 @@ def _multi_method_rows(
     return tuple(rows)
 
 
+def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
+    """A tree is rendered beside the diff it was grown from or not at all, I18's shape one object
+    over: its events and its cell count must be the family's. Checked before anything is built."""
+    if tuple(tree.root.events) != tuple(multi.events):
+        raise ComparisonMismatch(
+            f"the tree is over events {list(tree.root.events)}; the diff is over "
+            f"{list(multi.events)}"
+        )
+    if tree.root.n_cells * len(tree.root.events) != multi.n_tests:
+        raise ComparisonMismatch(
+            f"the tree is over {tree.root.n_cells} cells x {len(tree.root.events)} events; the "
+            f"diff is over {multi.n_tests} tests"
+        )
+
+
 def build_multi_report(
     multi: MultiDiffResult,
     spec: ReportSpec,
     *,
     manifests: tuple[RunManifest, RunManifest] | None = None,
+    tree: TreeResult | None = None,
 ) -> MultiReport:
-    """One panel per event on a shared colour bound; headline and trade line come first."""
+    """One panel per event on a shared colour bound; headline and trade line come first.
+
+    With ``tree`` the markdown and the receipt also carry the layered report -- the omnibus, the
+    fault lines, the cells and the bound -- between the headline block and the figure. The SVG
+    never changes, and without a tree every byte is what it was. A tree grown on another pair
+    is refused before anything is built.
+    """
     _validate_spec(spec)
+    if tree is not None:
+        _check_tree(multi, tree)
     order = tuple(
         sorted(
             multi.events,
@@ -857,6 +886,7 @@ def build_multi_report(
         bound=bound,
         provenance=provenance,
         _method_rows=_multi_method_rows(multi, spec.comparison),
+        tree=tree,
     )
 
 
@@ -1457,6 +1487,8 @@ def _render_multi_markdown(rep: MultiReport) -> str:
     parts += [rep.headline, ""]
     if rep.trade_line is not None:
         parts += [rep.trade_line, ""]
+    if rep.tree is not None:
+        parts += _tree_markdown(rep.tree)
     parts += ["![delta heatmaps](heatmap.svg)", ""]
     for e in rep.events:
         panel = rep.panels[e]
@@ -1504,6 +1536,236 @@ def _render_survival_markdown(rep: SurvivalReport) -> str:
         "",
     ]
     return "\n".join(parts)
+
+
+# ---------- the layered report: four sections from a TreeResult ----------
+
+#: What an untested level prints, by the reason's name (draft ADR-073). The keys are M14's three
+#: P4.3 reasons and its two P4.2 reasons, ``root_not_rejected`` serving both levels. Precedence is
+#: M14's and nothing here orders or re-derives it: a level's ``reason`` is looked up, never
+#: inferred from what rejected. ``{configured}`` is the one number an untested reason carries, put
+#: in after ``_fmt`` has formatted it.
+_NOT_TESTED: dict[str, str] = {
+    "depth": "depth {configured} configured",
+    "root_not_rejected": "the root did not reject",
+    "no_group_rejected": "no group rejected",
+    "one_group": "one group is the whole family restated",
+}
+
+#: What the leaf row's MDE column means, said once on the page as S27 section 3.1 promised: free
+#: text with no number in it.
+_LEAF_MDE_MEANING = (
+    "MDE is ADR-018's smallest detectable increase from arm A's rate, capped at the headroom, "
+    "so on a cell at ceiling it reads the headroom and is not a power number."
+)
+
+#: The bound's assumption, beside the number rather than in a footnote: the condition the source
+#: states is one this tree's construction does not give.
+_BOUND_ASSUMPTION = (
+    "Yekutieli (2008) Corollary A.2 assumes each p-value is independent of its ancestors; this "
+    "tree's group and root statistics aggregate their own cells, so that assumption is not "
+    "established here."
+)
+
+#: One item of a tree section: a line, or a table as ``(header, rows)``.
+_TreeItem = str | tuple[list[str], list[list[str]]]
+
+
+def _tree_markdown(tree: TreeResult) -> list[str]:
+    """The four sections as markdown parts for ``_render_multi_markdown`` to extend with: each
+    heading, then each line or table, every one followed by a blank line.
+
+    This function and ``_tree_html`` are the roots of the closure the S28 oracle's R11 reads
+    (draft ADR-075). Every function either reaches, ``_fmt`` and M7's three table and line
+    helpers excepted, does no arithmetic and formats no number itself; a rendering function
+    added later joins the closure through these two or is unguarded.
+    """
+    parts: list[str] = []
+    for heading, items in _tree_sections(tree):
+        parts.extend([f"## {heading}", ""])
+        for item in items:
+            parts.extend([item if isinstance(item, str) else _md_table(*item), ""])
+    return parts
+
+
+def _tree_html(tree: TreeResult) -> list[str]:
+    """The same four sections as receipt elements, one per line: an ``<h2>``, then a ``<p>`` per
+    line through ``_html_lines`` and a table per table through ``_html_table``, escaped like
+    every other element of the receipt and carrying no style of their own."""
+    parts: list[str] = []
+    for heading, items in _tree_sections(tree):
+        parts.append(f"<h2>{_html.escape(heading)}</h2>")
+        for item in items:
+            parts.append(
+                f"<p>{_html_lines(item)}</p>" if isinstance(item, str) else _html_table(*item)
+            )
+    return parts
+
+
+def _tree_sections(tree: TreeResult) -> list[tuple[str, list[_TreeItem]]]:
+    """The layered report as four headed sections, in the order a reader acts on them. Every
+    number is a field of the tree through ``_fmt`` under the kind S28 section 3.6 assigns;
+    nothing here computes, sorts or ranks."""
+    return [
+        ("Omnibus", _omnibus_items(tree.root)),
+        ("Fault lines", _fault_lines_items(tree)),
+        ("Cells", _cells_items(tree.leaves, tree.bound)),
+        ("Bound", _bound_items(tree.bound)),
+    ]
+
+
+def _omnibus_items(root: RootResult) -> list[_TreeItem]:
+    """The root's own headline, verbatim; how the omnibus was drawn; one row per event in the
+    root's order; the informative line, whose complement is a field."""
+    rows = [
+        [
+            event,
+            _fmt(root.location[event], "pp1"),
+            _fmt(root.p_location[event], "sig3"),
+            _fmt(root.dispersion[event], "pp1"),
+            _fmt(root.p_dispersion[event], "sig3"),
+        ]
+        for event in root.events
+    ]
+    return [
+        root.headline(),
+        f"min-p of location and dispersion; {_fmt(root.n_permutations, 'int')} within-cell "
+        f"permutations, {root.scheme}, seed {_fmt(root.seed, 'int')}",
+        (["event", "mean delta (pp)", "p", "rms delta (pp)", "p"], rows),
+        f"informative cells: {_fmt(root.n_informative_cells, 'int')} of "
+        f"{_fmt(root.n_cells, 'int')}; {_fmt(root.n_uninformative_cells, 'int')} unchanged by "
+        "every exchange",
+    ]
+
+
+def _fault_lines_items(tree: TreeResult) -> list[_TreeItem]:
+    """Level 2: the grouping and the shape it was admitted on; every refused key in chain order
+    with its detail verbatim, which already carries the value a reader would paste back; the
+    null and what tested it, or why nothing did; one row per group in label order, never
+    ordered by result. The discordant column exists only under pair swap and the p, q and
+    verdict columns only when the level was tested: a column that does not exist cannot be read.
+    """
+    grouping, fault = tree.grouping, tree.fault_lines
+    items: list[_TreeItem] = [
+        f"grouping {grouping.key} ({grouping.resolved_by}), {_fmt(grouping.n_groups, 'int')} "
+        f"groups; cells per group min {_fmt(grouping.size_min, 'int')} / median "
+        f"{_fmt(grouping.size_median, 'num')} / max {_fmt(grouping.size_max, 'int')}; "
+        f"{_fmt(fault.n_degenerate_groups, 'int')} degenerate; "
+        f"{_fmt(grouping.n_resolvable_groups, 'int')} of {_fmt(grouping.n_groups, 'int')} "
+        f"groups resolve {_fmt(grouping.max_group_mde, 'pp0')}pp at alpha "
+        f"{_fmt(grouping.alpha_floor, 'sig3')}"
+    ]
+    for refusal in grouping.refused:
+        items.append(
+            f"refused {refusal.key} ({refusal.rung}): {refusal.reason}; {refusal.detail} "
+            f"next: {refusal.next_rung}"
+        )
+    if fault.tested:
+        items.append(
+            f'"{fault.null}" tested by BH across {_fmt(fault.n_groups, "int")} groups at q '
+            f'{_fmt(fault.q, "sig3")}: {_fmt(fault.n_rejected_groups, "int")} rejected'
+        )
+    else:
+        items.append(f'"{fault.null}" not tested: {_not_tested(fault.reason, tree.bound)}')
+    pair_swap = tree.root.scheme == "pair_swap"
+    header = [
+        grouping.key,
+        "cells",
+        "informative",
+        "unchanged by every exchange",
+        "units (a/b)",
+        "group MDE (pp)",
+    ]
+    if pair_swap:
+        header.append("discordant pairs")
+    if fault.tested:
+        header.extend(["p", "q", "verdict"])
+    rows: list[list[str]] = []
+    for group in fault.groups:
+        row = [
+            group.label,
+            _fmt(group.n_cells, "int"),
+            _fmt(group.n_informative_cells, "int"),
+            _fmt(group.n_uninformative_cells, "int"),
+            f"{_fmt(group.n_a, 'int')}/{_fmt(group.n_b, 'int')}",
+            f"{_fmt(group.mde, 'pp1')}pp",
+        ]
+        if pair_swap:
+            row.append(_fmt(group.n_discordant, "int"))
+        if fault.tested:
+            row.extend(
+                [
+                    _fmt(group.p_group, "sig3"),
+                    _fmt(group.q_group, "sig3"),
+                    "rejected" if group.rejects else "not rejected",
+                ]
+            )
+        rows.append(row)
+    items.append((header, rows))
+    return items
+
+
+def _cells_items(leaves: Leaves, bound: Bound) -> list[_TreeItem]:
+    """Level 3: the null and what tested it, or the one reason nothing did and nothing else; what
+    the MDE column means; then per family, in the tree's order, its line and under it one row
+    per rejected cell in the family's own order. Every key of a cell's config is named, not the
+    figure's axes: the tree is over the whole family and ``--fix`` slices only the figure."""
+    if not leaves.tested:
+        return [f"not tested: {_not_tested(leaves.reason, bound)}"]
+    items: list[_TreeItem] = [
+        f'"{leaves.null}" tested by BH within each of {_fmt(leaves.n_families, "int")} '
+        f'rejecting groups at q {_fmt(leaves.q, "sig3")}: {_fmt(leaves.n_rejected, "int")} of '
+        f'{_fmt(leaves.n_tests, "int")} rejected'
+    ]
+    if leaves.families:
+        items.append(_LEAF_MDE_MEANING)
+    for family in leaves.families:
+        items.append(
+            f"{family.key}={family.label}: {_fmt(family.n_tests, 'int')} tests, "
+            f"{_fmt(family.n_rejected, 'int')} rejected; cell MDE median "
+            f"{_fmt(family.mde_median, 'pp0')}pp / max {_fmt(family.mde_max, 'pp0')}pp"
+        )
+        rows = [
+            [
+                _config_text(leaf.config),
+                leaf.event,
+                _fmt(leaf.delta, "pp1"),
+                _fmt(leaf.q_within, "sig3"),
+                f"{_fmt(leaf.mde, 'pp0')}pp",
+            ]
+            for leaf in family.cells
+            if leaf.rejects
+        ]
+        if rows:
+            items.append((["cell", "event", "delta (pp)", "q", "MDE"], rows))
+    return items
+
+
+def _config_text(config: Mapping[str, Any]) -> str:
+    """A cell as ``key=value`` over every key of its config, in the config's own order."""
+    return ", ".join(f"{key}={value}" for key, value in config.items())
+
+
+def _bound_items(bound: Bound) -> list[_TreeItem]:
+    """The rule's number with every term of the rule beside it -- the ``2`` and the ``x`` are text
+    around four fields -- then the assumption the source's corollary rests on."""
+    return [
+        f"depth {_fmt(bound.depth, 'int')} ({_fmt(bound.depth_configured, 'int')} configured); "
+        f"outer-nodes false discovery rate at most {_fmt(bound.bound, 'sig3')} = "
+        f"2 x {_fmt(bound.depth, 'int')} x {_fmt(bound.q, 'sig3')} x "
+        f"{_fmt(bound.delta_star, 'sig3')}",
+        _BOUND_ASSUMPTION,
+    ]
+
+
+def _not_tested(reason: str | None, bound: Bound) -> str:
+    """The sentence an untested level prints, by its reason's name. A reason with no sentence
+    here raises rather than printing a string nobody wrote a sentence for."""
+    try:
+        sentence = _NOT_TESTED[str(reason)]
+    except KeyError:
+        raise ReportError(f"no sentence for the untested reason {reason!r}") from None
+    return sentence.replace("{configured}", _fmt(bound.depth_configured, "int"))
 
 
 # ---------- HTML ----------
@@ -1602,6 +1864,8 @@ def _render_multi_html(rep: MultiReport) -> str:
     parts.append(f"<p>{_html_lines(rep.headline)}</p>")
     if rep.trade_line is not None:
         parts.append(f'<p class="trade">{_html.escape(rep.trade_line)}</p>')
+    if rep.tree is not None:
+        parts += _tree_html(rep.tree)
     parts.append(_html_figure(rep.to_svg()))
     for e in rep.events:
         panel = rep.panels[e]
