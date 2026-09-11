@@ -298,6 +298,11 @@ CHECK_STDOUT_SHA256 = "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4b
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
 SERVE_STRUCTURE_SHA256 = "f58750a091af8da170f2f89484ae4076f5951c8ace2852bcf882e8b70ddc837d"
+#: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
+#: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
+#: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
+#: ``schema`` set back to this literal; on the bare tree that projection is the identity.
+TREE_LESS_SCHEMA = "proofload.viewpair/2"
 PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e77719f9"
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
 COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee5fa"
@@ -1940,7 +1945,8 @@ def test_r19_diff_py_check_serve_the_column_digests_the_regression_fixtures_and_
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
     assert code == 0 and err == "", err
     structure = json.loads(out)
-    normalised = json.dumps({**structure, "pair": {**structure["pair"], "store_root": "<store>"}}, sort_keys=True)
+    tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
+    normalised = json.dumps({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}, sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
     store = Store(GO1_ROOT)
     a, b, ma, mb = store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), store.manifest(GO1_A), store.manifest(GO1_B)
@@ -1965,7 +1971,7 @@ def test_r19_diff_py_check_serve_the_column_digests_the_regression_fixtures_and_
 
 
 def test_r20_the_four_h2s_sit_after_the_headline_and_before_the_figure_every_table_has_a_thead_and_the_sections_set_no_style(every_pair: Any) -> None:
-    for name, r, result, _ in every_pair:
+    for name, r, _result, _ in every_pair:
         lines = r.html.splitlines()
         start, end = html_bounds(r.html)
         before = lines[:start]

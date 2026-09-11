@@ -271,6 +271,11 @@ CHECK_STDOUT_SHA256 = "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4b
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
 SERVE_STRUCTURE_SHA256 = "f58750a091af8da170f2f89484ae4076f5951c8ace2852bcf882e8b70ddc837d"
+#: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
+#: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
+#: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
+#: ``schema`` set back to this literal; on the bare tree that projection is the identity.
+TREE_LESS_SCHEMA = "proofload.viewpair/2"
 PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e77719f9"
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
 COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee5fa"
@@ -282,10 +287,11 @@ E14_SHA256 = {
     "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
 }
 #: The two frozen oracles' bytes: L20's "untouched", in a form a scratch copy can check. Minted at
-#: ``6fd3b9c``; re-minted by S28's retrofit commit, which narrowed both files' E14 clause (draft ADR-074).
+#: ``6fd3b9c``; re-minted by S28's retrofit commit, which narrowed both files' E14 clause, and again
+#: by S29's, which narrowed both files' ``serve --json`` digest to the tree-less projection (draft ADR-074).
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "242905c68a04d2ddcae1e3ffc22de7262d8eadcebfc5ac2a5ba30b6b22811d71",
-    "tests/test_s26_fault_lines.py": "314eda1c1517d2ebb59ea80ea89dd6c58cd030ac316453670ef22232b62a0d99",
+    "tests/test_s25_root.py": "8025226d8721a1c5ae73ab079600513747dcd771f58274838170fbdd81c9c71b",
+    "tests/test_s26_fault_lines.py": "1b9faf00c7c50ea98f400446992ab53017ed79396ec8a9fb8b1df2289dfc14bd",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -1752,7 +1758,8 @@ def test_l20_check_and_serve_on_go1_print_the_same_bytes_and_structure() -> None
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
     assert code == 0 and err == "", err
     structure = json.loads(out)
-    normalised = json.dumps({**structure, "pair": {**structure["pair"], "store_root": "<store>"}}, sort_keys=True)
+    tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
+    normalised = json.dumps({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}, sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
 
 

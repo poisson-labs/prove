@@ -219,6 +219,11 @@ CHECK_EXIT = 0
 #: pin the machine's absolute path.
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
 SERVE_STRUCTURE_SHA256 = "f58750a091af8da170f2f89484ae4076f5951c8ace2852bcf882e8b70ddc837d"
+#: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
+#: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
+#: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
+#: ``schema`` set back to this literal; on the bare tree that projection is the identity.
+TREE_LESS_SCHEMA = "proofload.viewpair/2"
 
 #: Restated from S24's oracle rather than imported, so two frozen oracles do not couple. ``PAIR``
 #: is ``multi_diff(go1-v0, go1-v1, events=("fell", "survived"), method="fisher_bh")``;
@@ -1402,13 +1407,17 @@ def test_o14_and_o23_check_on_go1_prints_the_same_bytes_and_exits_the_same() -> 
 
 
 def test_o23_serve_json_on_go1_prints_the_same_structure() -> None:
-    """``serve`` gains nothing. ``pair.store_root`` is the one value that follows the argv, so it
-    is normalised before the digest; everything else in the structure is pinned as it was."""
+    """Narrowed for S29 (spec S29 section 3.7, draft ADR-074): ``serve`` now computes M14's tree
+    and ``proofload.viewpair/3`` carries it under one new top-level key, ``tree``. The surface
+    S25 owned is everything else: the structure with ``tree`` removed and ``schema`` set back to
+    the ``/2`` literal, ``pair.store_root`` normalised as before, digests to the value minted on
+    the bare tree. Narrowed, not deleted."""
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
     assert code == 0 and err == "", err
     structure = json.loads(out)
     assert structure["pair"]["store_root"] == str(GO1_ROOT)
-    normalised = json.dumps({**structure, "pair": {**structure["pair"], "store_root": "<store>"}}, sort_keys=True)
+    tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
+    normalised = json.dumps({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}, sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
 
 

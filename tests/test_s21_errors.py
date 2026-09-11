@@ -2,7 +2,7 @@
 
 Invariants E1-E27 map one test function each (several map more). Nothing here is built when
 this file is written: ``RunTally``, ``Store.tally``, ``COVERAGE_COLUMNS``, ``Cell.hole_cause``
-and ``proofload.viewpair/2`` are reached through module attributes inside the tests, so
+and ``proofload.viewpair/3`` are reached through module attributes inside the tests, so
 collection never touches them.
 
 What is asserted where:
@@ -83,6 +83,8 @@ from proofload.diff import DiffResult, MultiDiffResult, multi_diff
 from proofload.episode import Episode
 from proofload.report import MultiReport, ReportSpec, build_multi_report, build_report
 from proofload.store import EpisodeRecord, RunManifest, SchemaMismatch, Store, StoreError, config_hash
+from proofload.tree import TreeResult
+from proofload.tree import tree as grow_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
@@ -102,8 +104,8 @@ E14_SHA256 = {
     "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
 }
 
-SCHEMA = "proofload.viewpair/2"
-RETIRED_SCHEMA = "proofload.viewpair/1"
+SCHEMA = "proofload.viewpair/3"
+RETIRED_SCHEMA = "proofload.viewpair/2"
 HOST = "127.0.0.1"
 
 TALLY_FIELDS = ("rows", "with_outcome", "no_outcome", "timed_out", "infra", "other")
@@ -128,7 +130,7 @@ PROVENANCE_KEYS = (
 
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
-    "unverified", "heatmap_svg",
+    "tree", "unverified", "heatmap_svg",
 )
 ARM_KEYS = (
     "role", "run_id", "target_id", "backend", "status", "created_at", "run_salt", "t_unit",
@@ -150,6 +152,9 @@ FLOAT_KINDS = {
     "mde": "pp0",
 }
 FORBIDDEN_KEYS = {"episode", "seed", "replicate_index", "trace", "meta"}
+#: E16's one carve-out, by path (spec S29 section 0.3): the permutation seed M14's frozen
+#: ``RootResult.to_json()`` names ``seed``, carried verbatim under ``tree``.
+SEED_CARVE_OUT = "tree.root.seed"
 UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
     (
         "outcome_labels",
@@ -371,6 +376,18 @@ def walk_keys(value: Any) -> Iterator[str]:
     elif isinstance(value, list):
         for v in value:
             yield from walk_keys(v)
+
+
+def walk_key_paths(value: Any, path: str = "") -> Iterator[tuple[str, str]]:
+    """Every dict key at every depth as ``(dotted path, key)``; a list index is not part of the path."""
+    if isinstance(value, dict):
+        for k, v in value.items():
+            here = f"{path}.{k}" if path else str(k)
+            yield here, str(k)
+            yield from walk_key_paths(v, here)
+    elif isinstance(value, list):
+        for v in value:
+            yield from walk_key_paths(v, path)
 
 
 def walk_strings(value: Any) -> Iterator[str]:
@@ -733,21 +750,26 @@ class Built:
     events: tuple[str, ...]
     multi: MultiDiffResult
     report: MultiReport
+    tree: TreeResult
     structure: dict[str, Any]
     page: str
 
 
 def built(root: Path, a: str, b: str, spec: ReportSpec, events: Sequence[str]) -> Built:
+    """S29 (``proofload.viewpair/3``) makes M14's tree a required input to assembly, so the
+    fixture grows it on the frames it already reads, at M14's defaults, and passes ``tree=``."""
     store = Store(root)
     ma, mb = store.manifest(a), store.manifest(b)
-    multi = multi_diff(store.read(a), store.read(b), events=list(events), manifest_a=ma, manifest_b=mb)
+    fa, fb = store.read(a), store.read(b)
+    multi = multi_diff(fa, fb, events=list(events), manifest_a=ma, manifest_b=mb)
+    nested = grow_tree(fa, fb, multi, manifest_a=ma, manifest_b=mb)
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     structure = viewer().build_structure(
-        report, multi, manifest_a=ma, manifest_b=mb,
+        report, multi, tree=nested, manifest_a=ma, manifest_b=mb,
         rows_a=store.count(a), rows_b=store.count(b),
         tally_a=store.tally(a), tally_b=store.tally(b), store_root=str(root),
     )
-    return Built(root, store, a, b, spec, tuple(events), multi, report, structure, viewer().render_html(structure))
+    return Built(root, store, a, b, spec, tuple(events), multi, report, nested, structure, viewer().render_html(structure))
 
 
 def coverage_of(b: Built) -> pd.DataFrame:
@@ -1383,7 +1405,7 @@ def test_e14_every_absent_rect_still_says_absent_and_provenance_gains_no_key(syn
 # ---------- E15-E18: the structure ----------
 
 
-def test_e15_schema_is_viewpair_2_and_the_top_level_keys_are_the_eleven(builts: tuple[Built, Built]) -> None:
+def test_e15_schema_is_viewpair_3_and_the_top_level_keys_are_the_twelve(builts: tuple[Built, Built]) -> None:
     for b in builts:
         assert b.structure["schema"] == SCHEMA == viewer().SCHEMA
         assert tuple(b.structure) == TOP_LEVEL_KEYS
@@ -1448,7 +1470,11 @@ def test_e16_text_keys_are_still_the_seven_floats_and_forbidden_keys_appear_nowh
         for panel in b.structure["panels"]:
             for cell in panel["cells"]:
                 assert set(cell["text"]) == set(FLOAT_KINDS)
-        assert not FORBIDDEN_KEYS & set(walk_keys(b.structure))
+        # Narrowed for S29 (spec S29 section 0.3, draft ADR-074), exactly as M13's V24: the structure
+        # walk carves out the one path ``tree.root.seed``, M14's name for the permutation seed; the
+        # page-index walk is not narrowed, because the tree's regions add nothing to the index.
+        hits = {path for path, key in walk_key_paths(b.structure) if key in FORBIDDEN_KEYS}
+        assert hits <= {SEED_CARVE_OUT}, hits
         assert not FORBIDDEN_KEYS & set(walk_keys(strict_loads(parse_html(b.page).script_json(INDEX_ID))))
 
 
@@ -1723,7 +1749,7 @@ def test_e23_two_builds_are_equal_and_the_structure_and_holes_are_json_strict(bu
 # ---------- E24-E26: the CLI ----------
 
 
-def test_e24_serve_json_on_go1_prints_the_eleven_keys_both_tallies_and_no_holes_binding_nothing(go1_serve_json: Served, go1_store: Store) -> None:
+def test_e24_serve_json_on_go1_prints_the_twelve_keys_both_tallies_and_no_holes_binding_nothing(go1_serve_json: Served, go1_store: Store) -> None:
     r = go1_serve_json.result
     assert r.code == 0, r.err
     assert go1_serve_json.calls == []
