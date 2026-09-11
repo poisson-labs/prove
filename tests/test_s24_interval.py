@@ -111,6 +111,7 @@ from proofload import cli
 from proofload import diff as diff_mod
 from proofload.diff import CELLS_COLUMNS, multi_diff
 from proofload.episode import Episode
+from proofload.report import ReportSpec, build_multi_report
 from proofload.store import EpisodeRecord, RunManifest, Store
 
 PACKAGE = Path(proofload.__file__).resolve().parent
@@ -1067,15 +1068,48 @@ def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
         assert list(go1_pair.by_event[event].cells.columns) == list(CELLS_COLUMNS)
 
 
+def e14_builder_digests() -> dict[str, str]:
+    """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
+    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    store = Store(GO1_ROOT)
+    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", diff_mod.UnpairedAnalysis)
+        multi = multi_diff(
+            store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), events=["fell"],
+            manifest_a=ma, manifest_b=mb,
+        )
+    title = f"{GO1_A} vs {GO1_B}: fell"
+    report = build_multi_report(
+        multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw"), manifests=(ma, mb)
+    )
+    receipt = build_multi_report(
+        multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw", theme="light"),
+        manifests=(ma, mb),
+    )
+    return {
+        "report.md": hashlib.sha256(report.to_markdown().encode("utf-8")).hexdigest(),
+        "receipt.html": hashlib.sha256(receipt.to_html().encode("utf-8")).hexdigest(),
+    }
+
+
 def test_c14_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_path: Path) -> None:
     """The three digests S21's E14 pins, restated rather than imported so two frozen oracles do
     not couple. ``report`` renders through ``MultiDiffResult``; if S24 leaks a byte into
-    ``to_markdown``, the receipt or the heatmap, one of these three moves."""
+    ``to_markdown``, the receipt or the heatmap, one of these three moves.
+
+    Narrowed for S28 (draft ADR-074, spec S28 section 3.8): ``report`` on a pair now renders the
+    layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
+    are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
+    digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
+    ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
+    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    for name, digest in E14_SHA256.items():
-        assert hashlib.sha256((out / name).read_bytes()).hexdigest() == digest, name
+    assert hashlib.sha256((out / "heatmap.svg").read_bytes()).hexdigest() == E14_SHA256["heatmap.svg"]
+    for name, digest in e14_builder_digests().items():
+        assert digest == E14_SHA256[name], name
 
 
 # ---------- C15: the BH family does not move ----------

@@ -128,6 +128,7 @@ from proofload import cli
 from proofload import diff as diff_mod
 from proofload.diff import multi_diff
 from proofload.episode import Episode
+from proofload.report import ReportSpec, build_multi_report
 from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
 
 PACKAGE = Path(proofload.__file__).resolve().parent
@@ -1354,15 +1355,42 @@ def test_o14_the_s24_column_digests_and_the_coverage_digest_are_unchanged(go1: A
     assert sha256_of_text(pair.coverage.to_json(orient="records")) == COVERAGE_SHA256
 
 
-def test_o14_and_o23_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_path: Path) -> None:
+def e14_builder_digests(go1: Any) -> dict[str, str]:
+    """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
+    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    a, b, ma, mb = go1
+    multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="fisher_bh")
+    title = f"{GO1_A} vs {GO1_B}: fell"
+    report = build_multi_report(
+        multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw"), manifests=(ma, mb)
+    )
+    receipt = build_multi_report(
+        multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw", theme="light"),
+        manifests=(ma, mb),
+    )
+    return {
+        "report.md": sha256_of_text(report.to_markdown()),
+        "receipt.html": sha256_of_text(receipt.to_html()),
+    }
+
+
+def test_o14_and_o23_the_go1_report_still_reproduces_the_three_digests_s21_minted(go1: Any, tmp_path: Path) -> None:
     """E14's three digests, restated. ``report`` renders through ``MultiDiffResult`` and the root
     reaches no other verb (O23); if a byte leaks into ``to_markdown``, the receipt or the heatmap,
-    one of these three moves."""
+    one of these three moves.
+
+    Narrowed for S28 (draft ADR-074, spec S28 section 3.8): ``report`` on a pair now renders the
+    layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
+    are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
+    digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
+    ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
+    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    for name, digest in E14_SHA256.items():
-        assert hashlib.sha256((out / name).read_bytes()).hexdigest() == digest, name
+    assert hashlib.sha256((out / "heatmap.svg").read_bytes()).hexdigest() == E14_SHA256["heatmap.svg"]
+    for name, digest in e14_builder_digests(go1).items():
+        assert digest == E14_SHA256[name], name
 
 
 def test_o14_and_o23_check_on_go1_prints_the_same_bytes_and_exits_the_same() -> None:

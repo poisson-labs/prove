@@ -1328,12 +1328,37 @@ def test_e13_a_result_without_coverage_and_a_single_event_report_leave_hole_caus
     assert all(c.hole_cause is None and c.config_hash is None for c in single.cells if not c.present)
 
 
+def e14_builder_digests() -> dict[str, str]:
+    """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
+    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    store = Store(GO1_ROOT)
+    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
+    multi = multi_diff(
+        store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), events=["fell"],
+        manifest_a=ma, manifest_b=mb,
+    )
+    spec = ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw")
+    report = build_multi_report(multi, spec, manifests=(ma, mb))
+    receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
+    return {
+        "report.md": hashlib.sha256(report.to_markdown().encode("utf-8")).hexdigest(),
+        "receipt.html": hashlib.sha256(receipt.to_html().encode("utf-8")).hexdigest(),
+    }
+
+
 def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree(tmp_path: Path) -> None:
+    """Narrowed for S28 (draft ADR-074, spec S28 section 3.8): ``report`` on a pair now renders the
+    layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
+    are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
+    digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
+    ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
+    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
     out = tmp_path / "report"
     r = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert r.code == 0, r.text
-    for name, digest in E14_SHA256.items():
-        assert sha256_of(out / name) == digest, name
+    assert sha256_of(out / "heatmap.svg") == E14_SHA256["heatmap.svg"]
+    for name, digest in e14_builder_digests().items():
+        assert digest == E14_SHA256[name], name
 
 
 def test_e14_the_synthetic_report_is_byte_identical_with_coverage_replaced_by_none(syn: Built) -> None:

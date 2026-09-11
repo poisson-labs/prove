@@ -159,6 +159,7 @@ from proofload import cli
 from proofload import diff as diff_mod
 from proofload.diff import multi_diff
 from proofload.episode import Episode
+from proofload.report import ReportSpec, build_multi_report
 from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
 
 PACKAGE = Path(proofload.__file__).resolve().parent
@@ -280,10 +281,11 @@ E14_SHA256 = {
     "heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
     "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
 }
-#: The two frozen oracles' bytes at ``6fd3b9c``: L20's "untouched", in a form a scratch copy can check.
+#: The two frozen oracles' bytes: L20's "untouched", in a form a scratch copy can check. Minted at
+#: ``6fd3b9c``; re-minted by S28's retrofit commit, which narrowed both files' E14 clause (draft ADR-074).
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "6fc8d764fc8d019b31a5d5b06456d74f867aee667af49e5dca7a774b01bd5749",
-    "tests/test_s26_fault_lines.py": "be5be43082ee3523fc39c4c6b400b1afcd1a9d363cc6b160b2dd99fd61c42253",
+    "tests/test_s25_root.py": "242905c68a04d2ddcae1e3ffc22de7262d8eadcebfc5ac2a5ba30b6b22811d71",
+    "tests/test_s26_fault_lines.py": "314eda1c1517d2ebb59ea80ea89dd6c58cd030ac316453670ef22232b62a0d99",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -1710,12 +1712,38 @@ def test_l20_the_s24_column_digests_and_the_coverage_digest_are_unchanged(go1: A
     assert sha256_of_text(pair.coverage.to_json(orient="records")) == COVERAGE_SHA256
 
 
-def test_l20_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_path: Path) -> None:
+def e14_builder_digests(go1: Any) -> dict[str, str]:
+    """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
+    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    a, b, ma, mb = go1
+    multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="fisher_bh")
+    title = f"{GO1_A} vs {GO1_B}: fell"
+    report = build_multi_report(
+        multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw"), manifests=(ma, mb)
+    )
+    receipt = build_multi_report(
+        multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw", theme="light"),
+        manifests=(ma, mb),
+    )
+    return {
+        "report.md": sha256_of_text(report.to_markdown()),
+        "receipt.html": sha256_of_text(receipt.to_html()),
+    }
+
+
+def test_l20_the_go1_report_still_reproduces_the_three_digests_s21_minted(go1: Any, tmp_path: Path) -> None:
+    """Narrowed for S28 (draft ADR-074, spec S28 section 3.8): ``report`` on a pair now renders the
+    layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
+    are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
+    digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
+    ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
+    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    for name, digest in E14_SHA256.items():
-        assert hashlib.sha256((out / name).read_bytes()).hexdigest() == digest, name
+    assert hashlib.sha256((out / "heatmap.svg").read_bytes()).hexdigest() == E14_SHA256["heatmap.svg"]
+    for name, digest in e14_builder_digests(go1).items():
+        assert digest == E14_SHA256[name], name
 
 
 def test_l20_check_and_serve_on_go1_print_the_same_bytes_and_structure() -> None:
