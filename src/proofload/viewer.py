@@ -1,13 +1,16 @@
 """M13: the viewer. A versioned structure for one run pair, a renderer over it, and a server.
 
 Three halves that never reach back into each other. ``build_structure`` assembles
-``proofload.viewpair/2`` -- identity and run tallies, diff parameters, panels, cells, holes
-and what could not be verified -- from M6's result, M7's report, the two ``RunManifest``s and
-the two ``RunTally``s. ``render_html`` turns that structure, and nothing else, into one page.
+``proofload.viewpair/3`` -- identity and run tallies, diff parameters, panels, cells, holes,
+M14's layered report and what could not be verified -- from M6's result, M7's report, M14's
+tree, the two ``RunManifest``s and the two ``RunTally``s. ``render_html`` turns that structure,
+and nothing else, into one page.
 ``serve_page`` holds the page on an ephemeral loopback port until Ctrl-C.
 
 **It renders, it does not compute.** Every rate, delta, p, q, MDE, verdict, count and colour
-bound comes from M6 and M7 already formatted by M7's own ``_fmt``; reading a stored field off a
+bound comes from M6, M7 and M14 already formatted by M7's own ``_fmt``; the tree rides
+verbatim with a ``text`` member beside every float the page prints, so the renderer reads
+``text`` and never a raw number; reading a stored field off a
 manifest and printing it is rendering. ``build_structure`` performs exactly one arithmetic
 operation, the ``created_at`` gap, computed once here so no consumer recomputes it;
 ``render_html`` performs none.
@@ -43,14 +46,16 @@ if TYPE_CHECKING:
     from proofload.diff import MultiDiffResult
     from proofload.report import Cell, MultiReport, Report, ReportSpec
     from proofload.store import RunManifest, RunTally
+    from proofload.tree import TreeResult
 
 __all__ = ["ViewerError", "build_structure", "render_html", "serve_page"]
 
 # The version bumps whenever a key set changes, because this structure's consumers pin key
 # sets -- its own oracle does. ``/2`` adds the per-arm tally, four coverage integers and
-# ``config_text`` per cell, and the top-level ``holes`` list. Nothing migrates because nothing
-# stores a structure: ``--json`` prints to stdout and the page is a snapshot (ADR-036).
-SCHEMA = "proofload.viewpair/2"
+# ``config_text`` per cell, and the top-level ``holes`` list; ``/3`` adds ``tree``, M14's
+# layered report carried verbatim. Nothing migrates because nothing stores a structure:
+# ``--json`` prints to stdout and the page is a snapshot (ADR-036).
+SCHEMA = "proofload.viewpair/3"
 
 _HOST = "127.0.0.1"
 _CONTENT_TYPE = "text/html; charset=utf-8"
@@ -78,6 +83,49 @@ _FLOAT_KINDS: dict[str, str] = {
     "q": "sig3",
     "mde": "pp0",
 }
+# M14's tree, one row per (object, field) the page prints, keyed by the object's dotted path in
+# ``TreeResult.to_json()`` with list indices dropped. The table is S28 section 3.6's, restated
+# here rather than imported: ``report.py`` calls ``_fmt`` with a kind at each site and has no
+# table to import, and importing one would make this module's build depend on that one.
+# ``config`` is this module's own row -- a leaf's config value is spelled the way the
+# drill-down already spells it, through ``_config_text``, so every token on the page is a
+# string the structure carries (V16's rule, one object over).
+_TREE_KINDS: dict[str, dict[str, str]] = {
+    "root": {
+        "p_omnibus": "sig3",
+        "p_location": "sig3",
+        "p_dispersion": "sig3",
+        "q": "sig3",
+        "location": "pp1",
+        "dispersion": "pp1",
+    },
+    "grouping": {
+        "alpha_floor": "sig3",
+        "max_group_mde": "pp0",
+        "size_median": "num",
+        "group_mde": "pp1",
+    },
+    "fault_lines": {"q": "sig3"},
+    "fault_lines.groups": {
+        "mde": "pp1",
+        "location": "pp1",
+        "dispersion": "pp1",
+        "p_location": "sig3",
+        "p_dispersion": "sig3",
+        "p_group": "sig3",
+        "q_group": "sig3",
+    },
+    "leaves": {"q": "sig3"},
+    "leaves.families": {"mde_median": "pp0", "mde_max": "pp0"},
+    "leaves.families.cells": {
+        "delta": "pp1",
+        "q_within": "sig3",
+        "mde": "pp0",
+        "config": "coord",
+    },
+    "bound": {"bound": "sig3", "q": "sig3", "delta_star": "sig3"},
+}
+
 _N_FIELDS = ("n_a", "n_b")
 _EVENT_FIELDS = ("events_a", "events_b")
 
@@ -351,10 +399,78 @@ def _holes(
     return entries
 
 
+def _tree_text(raw: Any, kind: str) -> Any:
+    """M7's rendering of one tree field, shaped like the field.
+
+    A mapping keyed by event gets a mapping over the same keys, a list gets a list of the same
+    length, a scalar gets one string, and a config gets ``_config_text``'s coordinate rendering
+    -- the spelling the drill-down already uses for a config value. The raw float is canonical
+    and this is its text; no second formatter exists to drift from ``_fmt``.
+    """
+    if kind == "coord":
+        return _config_text(raw)
+    if isinstance(raw, dict):
+        return {key: _fmt(value, kind) for key, value in raw.items()}
+    if isinstance(raw, list):
+        return [_fmt(value, kind) for value in raw]
+    return _fmt(raw, kind)
+
+
+def _tree_payload(raw: Any, path: str = "") -> Any:
+    """``TreeResult.to_json()`` decorated, never rewritten.
+
+    Every key, in order, with two additions and no other change: a non-finite float becomes
+    ``null`` with its spelling kept in ``text`` (``_finite``'s rule, as the cells have it), and
+    every object the kind table names gains a ``text`` member whose keys are exactly that
+    object's printed floats. A field that is ``None`` prints nothing and gets no entry;
+    ``root.units`` is named by no row and gets none, because the page never prints a unit.
+    Removing every ``text`` at every depth gives ``to_json()`` back (invariant W2), which is
+    what makes the tree on the page and the tree in the JSON one object.
+    """
+    if isinstance(raw, dict):
+        out: dict[str, Any] = {}
+        for key, value in raw.items():
+            child = f"{path}.{key}" if path else str(key)
+            out[key] = _tree_payload(value, child)
+        kinds = _TREE_KINDS.get(path)
+        if kinds is not None:
+            out["text"] = {
+                field: _tree_text(raw[field], kind)
+                for field, kind in kinds.items()
+                if raw.get(field) is not None
+            }
+        return out
+    if isinstance(raw, list):
+        return [_tree_payload(value, path) for value in raw]
+    if isinstance(raw, float):
+        return _finite(raw)
+    return raw
+
+
+def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
+    """A tree is carried beside the diff it was grown from or not at all.
+
+    I18's shape at the assembly boundary, and M7's ``_check_tree`` one module over: the tree's
+    events must be the family's, and its units -- one per cell per event -- must be the family's
+    tests. Checked before anything is assembled, so a mismatched pair costs no page.
+    """
+    if tuple(tree.root.events) != tuple(multi.events):
+        raise ViewerError(
+            f"the tree is over events {list(tree.root.events)}; this pair's diff is over "
+            f"{list(multi.events)}"
+        )
+    if len(tree.root.units) != multi.n_tests:
+        raise ViewerError(
+            f"the tree carries {len(tree.root.units)} cell-event units; this pair's diff is "
+            f"over {multi.n_tests} tests"
+        )
+
+
 def build_structure(
     report: MultiReport,
     multi: MultiDiffResult,
     *,
+    tree: TreeResult,
     manifest_a: RunManifest,
     manifest_b: RunManifest,
     rows_a: int,
@@ -367,8 +483,13 @@ def build_structure(
 
     Pure: equal inputs give an equal dict. Reads no file, opens no socket, writes nothing, and
     derives no statistic -- every number here is already a field on M6's result, M7's report,
-    a stored manifest or a ``RunTally``. The single exception is ``pair.created_at_gap_s``.
+    M14's tree, a stored manifest or a ``RunTally``. The single exception is
+    ``pair.created_at_gap_s``.
+
+    ``tree`` is required: a structure that could be built without one could serve a page whose
+    honesty block is missing the bound, and ADR-033's rule is together or not at all.
     """
+    _check_tree(multi, tree)
     spec = report.spec
     coverage = {
         str(record["config_hash"]): record
@@ -408,6 +529,7 @@ def build_structure(
         "trade_line": report.trade_line,
         "fence": _EPISTEMIC_FENCE,
         "panels": panels,
+        "tree": _tree_payload(tree.to_json()),
         "unverified": [
             {"id": name, "statement": statement, "blocked_by": blocked}
             for name, statement, blocked in _UNVERIFIED
@@ -550,6 +672,232 @@ def _holes_html(holes: Sequence[Mapping[str, Any]]) -> list[str]:
     return parts
 
 
+# ---------- the tree on the page ----------
+
+#: What an untested level prints, by the reason's name. Four keys, and a reason this mapping
+#: does not carry raises rather than printing a sentence nobody wrote. M14's three reason tuples
+#: are never named here and never iterated for display order: precedence is M14's and is pinned
+#: there, so a renderer that read a tuple would couple presentation to precedence and the next
+#: person to reorder it for the page would "fix" M14's own guard (draft ADR-073).
+_NOT_TESTED_SENTENCES: dict[str, str] = {
+    "depth": "depth {configured} configured",
+    "root_not_rejected": "the root did not reject",
+    "no_group_rejected": "no group rejected",
+    "one_group": "one group is the whole family restated",
+}
+
+#: What the leaf row's MDE column means, said once on the page: free text with no number in it.
+_LEAF_MDE_MEANING = (
+    "MDE is ADR-018's smallest detectable increase from arm A's rate, capped at the headroom, "
+    "so on a cell at ceiling it reads the headroom and is not a power number."
+)
+
+#: The bound's assumption, beside the number rather than in a footnote.
+_BOUND_ASSUMPTION = (
+    "Yekutieli (2008) Corollary A.2 assumes each p-value is independent of its ancestors; this "
+    "tree's group and root statistics aggregate their own cells, so that assumption is not "
+    "established here."
+)
+
+_OMNIBUS_HEADING = "Omnibus"
+_FAULT_LINES_HEADING = "Fault lines"
+_CELLS_HEADING = "Cells"
+_OMNIBUS_HEADER = ["event", "mean delta (pp)", "p", "rms delta (pp)", "p"]
+_GROUP_HEADER_TAIL = [
+    "cells",
+    "informative",
+    "unchanged by every exchange",
+    "units (a/b)",
+    "group MDE (pp)",
+]
+_DISCORDANT_HEADER = "discordant pairs"
+_TESTED_HEADER_TAIL = ["p", "q", "verdict"]
+_CELLS_HEADER = ["cell", "event", "delta (pp)", "q", "MDE"]
+_PAIR_SWAP = "pair_swap"
+
+
+def _not_tested_text(reason: Any, bound: Mapping[str, Any]) -> str:
+    """The sentence an untested level prints, looked up by its reason's name."""
+    try:
+        sentence = _NOT_TESTED_SENTENCES[str(reason)]
+    except KeyError:
+        raise ViewerError(
+            f"no sentence for the untested reason {reason!r}; this renderer prints the four "
+            f"reasons {sorted(_NOT_TESTED_SENTENCES)} and does not invent a fifth"
+        ) from None
+    return sentence.replace("{configured}", str(bound["depth_configured"]))
+
+
+def _paragraph(text: str) -> str:
+    return f"<p>{_lines_html(text)}</p>"
+
+
+def _omnibus_html(root: Mapping[str, Any]) -> list[str]:
+    """The root's own headline verbatim, how the omnibus was drawn, one row per event in the
+    root's order, and the informative line whose complement is a field and not a subtraction."""
+    text = root["text"]
+    rows = [
+        [
+            str(event),
+            text["location"][event],
+            text["p_location"][event],
+            text["dispersion"][event],
+            text["p_dispersion"][event],
+        ]
+        for event in root["events"]
+    ]
+    method_line = (
+        f"min-p of location and dispersion; {root['n_permutations']} within-cell permutations, "
+        f"{root['scheme']}, seed {root['seed']}"
+    )
+    informative = (
+        f"informative cells: {root['n_informative_cells']} of {root['n_cells']}; "
+        f"{root['n_uninformative_cells']} unchanged by every exchange"
+    )
+    return [
+        f"<h2>{_OMNIBUS_HEADING}</h2>",
+        _paragraph(str(root["headline"])),
+        _paragraph(method_line),
+        _html_table(_OMNIBUS_HEADER, rows),
+        _paragraph(informative),
+    ]
+
+
+def _bound_html(bound: Mapping[str, Any]) -> str:
+    """The rule's number with every term of the rule beside it -- the ``2`` and the ``x`` are
+    text around four fields -- then the assumption the source's corollary rests on.
+
+    One paragraph, the last block of the honesty section: V19's rules hold for it as they do
+    for a panel's, because it is the second number of that block and not a footnote.
+    """
+    text = bound["text"]
+    rule = (
+        f"depth {bound['depth']} ({bound['depth_configured']} configured); outer-nodes false "
+        f"discovery rate at most {text['bound']} = 2 x {bound['depth']} x {text['q']} x "
+        f"{text['delta_star']}"
+    )
+    return _paragraph("\n".join((rule, _BOUND_ASSUMPTION)))
+
+
+def _fault_lines_html(tree: Mapping[str, Any]) -> list[str]:
+    """Level 2: the grouping and the shape it was admitted on; every refused key in chain order
+    with its detail verbatim; the null and what tested it, or why nothing did; one row per group
+    in label order, never ordered by result.
+
+    The discordant column exists only under pair swap and the p, q and verdict columns only
+    when the level was tested: a column that does not exist cannot be read.
+    """
+    grouping, fault, root = tree["grouping"], tree["fault_lines"], tree["root"]
+    grouping_text = grouping["text"]
+    head = (
+        f"grouping {grouping['key']} ({grouping['resolved_by']}), {grouping['n_groups']} groups; "
+        f"cells per group min {grouping['size_min']} / median {grouping_text['size_median']} / "
+        f"max {grouping['size_max']}; {fault['n_degenerate_groups']} degenerate; "
+        f"{grouping['n_resolvable_groups']} of {grouping['n_groups']} groups resolve "
+        f"{grouping_text['max_group_mde']}pp at alpha {grouping_text['alpha_floor']}"
+    )
+    parts = [f"<h2>{_FAULT_LINES_HEADING}</h2>", _paragraph(head)]
+    for refusal in grouping["refused"]:
+        parts.append(
+            _paragraph(
+                f"refused {refusal['key']} ({refusal['rung']}): {refusal['reason']}; "
+                f"{refusal['detail']} next: {refusal['next_rung']}"
+            )
+        )
+    if fault["tested"]:
+        null = (
+            f"\"{fault['null']}\" tested by BH across {fault['n_groups']} groups at q "
+            f"{fault['text']['q']}: {fault['n_rejected_groups']} rejected"
+        )
+    else:
+        null = (
+            f"\"{fault['null']}\" not tested: "
+            f"{_not_tested_text(fault['reason'], tree['bound'])}"
+        )
+    parts.append(_paragraph(null))
+    pair_swap = root["scheme"] == _PAIR_SWAP
+    header = [str(grouping["key"]), *_GROUP_HEADER_TAIL]
+    if pair_swap:
+        header.append(_DISCORDANT_HEADER)
+    if fault["tested"]:
+        header.extend(_TESTED_HEADER_TAIL)
+    rows = []
+    for group in fault["groups"]:
+        group_text = group["text"]
+        row = [
+            str(group["label"]),
+            str(group["n_cells"]),
+            str(group["n_informative_cells"]),
+            str(group["n_uninformative_cells"]),
+            f"{group['n_a']}/{group['n_b']}",
+            f"{group_text['mde']}pp",
+        ]
+        if pair_swap:
+            row.append(str(group["n_discordant"]))
+        if fault["tested"]:
+            row.append(group_text["p_group"])
+            row.append(group_text["q_group"])
+            row.append("rejected" if group["rejects"] else "not rejected")
+        rows.append(row)
+    parts.append(_html_table(header, rows))
+    return parts
+
+
+def _leaf_config(leaf: Mapping[str, Any]) -> str:
+    """A leaf as ``key=value`` over every key of its config, in the config's own order.
+
+    Every key, not the figure's axes: the tree is over the whole family and ``--fix`` slices
+    only the figure. The value is the structure's own coordinate text, exactly as the
+    drill-down spells it, so no token on this page is a number nothing carries as a string.
+    """
+    shown = leaf["text"]["config"]
+    return ", ".join(
+        f"{name}={shown[name] if isinstance(shown.get(name), str) else _scalar_text(value)}"
+        for name, value in leaf["config"].items()
+    )
+
+
+def _cells_html(leaves: Mapping[str, Any], bound: Mapping[str, Any]) -> list[str]:
+    """Level 3: the null and what tested it, or the one reason nothing did and nothing else;
+    what the MDE column means; then per family, in the tree's order, its line and under it one
+    row per rejected cell in the family's own order."""
+    parts = [f"<h2>{_CELLS_HEADING}</h2>"]
+    if not leaves["tested"]:
+        parts.append(_paragraph(f"not tested: {_not_tested_text(leaves['reason'], bound)}"))
+        return parts
+    head = (
+        f"\"{leaves['null']}\" tested by BH within each of {leaves['n_families']} rejecting "
+        f"groups at q {leaves['text']['q']}: {leaves['n_rejected']} of {leaves['n_tests']} "
+        "rejected"
+    )
+    parts.append(_paragraph(head))
+    if leaves["families"]:
+        parts.append(_paragraph(_LEAF_MDE_MEANING))
+    for family in leaves["families"]:
+        family_text = family["text"]
+        parts.append(
+            _paragraph(
+                f"{family['key']}={family['label']}: {family['n_tests']} tests, "
+                f"{family['n_rejected']} rejected; cell MDE median "
+                f"{family_text['mde_median']}pp / max {family_text['mde_max']}pp"
+            )
+        )
+        rows = [
+            [
+                _leaf_config(leaf),
+                str(leaf["event"]),
+                leaf["text"]["delta"],
+                leaf["text"]["q_within"],
+                f"{leaf['text']['mde']}pp",
+            ]
+            for leaf in family["cells"]
+            if leaf["rejects"]
+        ]
+        if rows:
+            parts.append(_html_table(_CELLS_HEADER, rows))
+    return parts
+
+
 def _index_key(event: str, config_hash: str) -> str:
     return f"{event} {config_hash}"
 
@@ -686,10 +1034,11 @@ def render_html(structure: Mapping[str, Any]) -> str:
     """The whole document as one string, from the structure alone.
 
     Never sees a ``MultiReport``, a ``DiffResult`` or a ``DataFrame``, and derives nothing: the
-    ``created_at`` gap it prints was computed once during assembly. The honesty and unverified
-    blocks sit above the figure -- a real sweep's heatmap is taller than a screen, so below it
-    is below the fold -- and the only collapsible thing on the page is the runs' own
-    ``environment``.
+    ``created_at`` gap it prints was computed once during assembly, and every tree number it
+    prints was formatted once there. The honesty and unverified blocks sit above the figure --
+    a real sweep's heatmap is taller than a screen, so below it is below the fold -- and so do
+    the tree's own four regions, for the same reason; the only collapsible thing on the page is
+    the runs' own ``environment``.
     """
     schema = structure.get("schema")
     if schema != SCHEMA:
@@ -697,10 +1046,16 @@ def render_html(structure: Mapping[str, Any]) -> str:
             f"unknown structure schema {schema!r}; this renderer reads {SCHEMA!r} only and "
             "does not attempt a best-effort render"
         )
+    if "tree" not in structure:
+        raise ViewerError(
+            "this structure carries no tree; a page whose honesty block cannot state the bound "
+            "is not a page this renderer will draw, and the two ship together or not at all"
+        )
     pair = structure["pair"]
     view = structure["view"]
     diff = structure["diff"]
     panels = structure["panels"]
+    tree = structure["tree"]
     title = str(view["title"])
 
     parts = [
@@ -720,6 +1075,10 @@ def render_html(structure: Mapping[str, Any]) -> str:
     parts.append("<h2>Events</h2>")
     parts.append(f"<p>Events: {_html.escape(events)} ({_EVENT_LINE_TAIL}).</p>")
 
+    # The omnibus is the first result on the page: the ladder's rung three, above the flat
+    # family's rung two, because it is the headline of the layered report.
+    parts.extend(_omnibus_html(tree["root"]))
+
     parts.append("<h2>Result</h2>")
     parts.append(f"<p>{_lines_html(str(structure['headline']))}</p>")
     if structure["trade_line"] is not None:
@@ -729,8 +1088,14 @@ def render_html(structure: Mapping[str, Any]) -> str:
     for panel in panels:
         parts.append(f"<h3>{_html.escape(str(panel['event']))}</h3>")
         parts.append(f"<p>{_lines_html(str(panel['honesty']))}</p>")
+    # The bound is the second number of the honesty block, not a footnote: what this run could
+    # not have seen, then what the whole procedure controls at, on one screen.
+    parts.append(_bound_html(tree["bound"]))
 
     parts.extend(_unverified_html(structure["unverified"]))
+
+    parts.extend(_fault_lines_html(tree))
+    parts.extend(_cells_html(tree["leaves"], tree["bound"]))
 
     svg = str(structure["heatmap_svg"]).rstrip("\n")
     parts.append("<h2>Heatmap</h2>")

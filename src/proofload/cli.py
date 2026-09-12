@@ -288,6 +288,12 @@ def _build_parser(io: _IO) -> _Parser:
     )
     _add_event_argument(serve_p, "required: a viewer never infers its event")
     _add_method_arguments(serve_p, defaults=True)
+    # ``serve`` takes the five tree flags through the helper ``report`` already uses, with
+    # ``defaults=True``: like ``diff`` and unlike ``report``, it takes two runs, has no
+    # single-run form to refuse, and so needs no ``None`` to tell an unset flag from M14's own
+    # value. The helper keeps ``diff``'s two argument groups, so ``diff --help``'s layout is
+    # unchanged and ``serve --help`` gains the same two headings.
+    _add_tree_arguments(serve_p, defaults=True)
     serve_p.add_argument("--x", required=True, metavar="AXIS", help="config key on the x axis")
     serve_p.add_argument("--y", metavar="AXIS", help="config key on the y axis")
     serve_p.add_argument(
@@ -1388,7 +1394,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             "with the same defect.",
         )
     fixed = _parse_pairs(ns.fix, "--fix")
-    multi, _, manifests, _ = _run_diffs(
+    multi, _, manifests, frames = _run_diffs(
         store,
         a,
         b,
@@ -1408,9 +1414,15 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         forest=ns.forest,
     )
     report = build_multi_report(multi, spec, manifests=manifests)
+    # After the report and before the structure: M7's axis check refuses an unknown ``--x``
+    # first, so no refusal spends a tree, and every tree refusal -- an unknown ``--by``, an
+    # out-of-range ``--max-group-mde`` -- still fires before anything binds. One call, one
+    # draw, on the frames ``_run_diffs`` already read.
+    nested = _diff_tree(ns, multi, frames, manifests)
     structure = build_structure(
         report,
         multi,
+        tree=nested,
         manifest_a=manifests[0],
         manifest_b=manifests[1],
         rows_a=store.count(a),
