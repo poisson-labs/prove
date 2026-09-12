@@ -246,8 +246,43 @@ FIRST_LINE_NUMERIC_FIELDS = ("n_groups", "size_min", "size_median", "size_max", 
 #: ``omnibus(go1-v0, go1-v1, events=("fell",), method="fisher_bh", B=4000, seed=0).to_json()``
 #: with the five p-driven keys removed, ``json.dumps(sort_keys=True)``, sha256.
 F28_OMNIBUS_SHA256 = "03e7984ba22978e20386197f836fb60e0d32032a5b17a8bce400483e3e87296e"
-#: ``src/proofload/diff.py``'s bytes, unchanged since cd5f177 (checked with ``git diff --exit-code``).
-DIFF_PY_SHA256 = "2653f31f91b1d28ea6a49950f67d76cd3ae6f4213d71d3c10378f3379aff73e0"
+#: ``src/proofload/diff.py``'s bytes outside ``DIFF_PY_EXCLUDED``'s regions, unchanged since
+#: cd5f177 there (``git diff --exit-code``, narrowed).
+DIFF_PY_SHA256 = "21b34aa7ed834afd26a2a09a561e5e68f98c1ff045e9e7807d2c4b76e0cbc3f7"
+
+#: **A27's re-freeze, 2026-09-12 -- ``diff.py`` is no longer pinned whole** (ADR-077). The digest
+#: above is over the file with ``DIFF_PY_EXCLUDED``'s AST regions removed, whole lines, so the clause
+#: keeps its original meaning -- *the builder touched nothing but the region its spec put in scope* --
+#: across a packet that moves the region, instead of being re-minted over bytes nobody can read off
+#: anything that exists. The region is ``diff.py::_pairing``, which carries C18's unpaired-analysis
+#: message restatement; ``_coverage`` is A22's and is minted by A22's own Session A, where the
+#: exclusion and its cover land together. This file is one of four carriers of this digest and is not
+#: otherwise in A27's scope: measured, the message restatement reddens all four, and narrowing only
+#: the two oracles A27 re-freezes would leave this one red from A27's build until A22.
+#: ADR-077's record, one per pinned file, one entry per excluded region, six fields beside the
+#: digest because a narrowed guard that does not say what it stopped guarding is a weaker guard
+#: dressed as a better one. ``region`` is the qualified name resolved against the pinned file's own
+#: AST at call time -- exactly one definition or the clause refuses, never a line span, so a region
+#: that grows or shrinks moves its boundary with it and decorators stay guarded. ``cover`` is the
+#: oracle file and test ids that carry the region behaviourally, asserted to exist through the same
+#: resolver so deleting a cover turns this clause red rather than leaving a silent hole; naming
+#: another oracle by relative path rather than importing it is what ``FROZEN_ORACLE_SHA256`` already
+#: does, and it keeps the two files uncoupled.
+DIFF_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
+    {
+        "region": ("_pairing",),
+        "owner": "A27",
+        "cover": ("tests/test_s28_report.py", ("test_r21_the_unpaired_warning_states_the_cells_it_matched_and_names_coverage", "test_r21_paired_is_still_salt_equality_and_mcnemar_still_refuses_and_runs_where_it_did")),
+        "minted_at": "101028c",
+        "blind_spot": (
+            "The excluded region also holds the three things C18 keeps out of this packet -- "
+            "paired's salt equality, the NotPairable raises and the t_unit guard -- so the digest "
+            "no longer sees them move. The cover is R21's pair rather than its message clause "
+            "alone, for that reason; nothing in this file would notice."
+        ),
+        "retire_at": "A28",
+    },
+)
 #: S25's O14/O23 digests, restated rather than imported so two frozen oracles do not couple.
 MULTI_JSON_SHA256 = {
     "fisher_bh": "d67805f9499cea490cc18f09bcb744413a665616a6bb270d01cd12fef14fce69",
@@ -577,6 +612,48 @@ def partition_by(units: pd.DataFrame, key: str, event: str) -> dict[str, list[st
     for h, config in zip(rows["config_hash"].astype(str), rows["config"], strict=True):
         out.setdefault(str(config[key]), []).append(h)
     return {label: sorted(hashes) for label, hashes in out.items()}
+
+
+# ---------- ADR-077: the region-exclusion resolver (A27's, restated) ----------
+
+
+def resolve_region(tree: ast.Module, qualified: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:
+    """ADR-077's boundary: a qualified name resolved against the pinned file's own AST.
+
+    Walks the module's direct children for the first segment and that node's children for the
+    next, and refuses on anything but exactly one match -- ADR-072's collision discipline moved
+    from names to definitions. Restated rather than imported, as this file's digests are.
+    """
+    node: ast.AST = tree
+    definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
+    for segment in qualified.split("."):
+        matches = [
+            child
+            for child in ast.iter_child_nodes(node)
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and child.name == segment
+        ]
+        assert len(matches) == 1, (qualified, segment, len(matches))
+        definition = matches[0]
+        node = definition
+    assert definition is not None, qualified
+    return definition
+
+
+def digest_excluding(path: Path, regions: Sequence[str]) -> str:
+    """The file's sha256 with each region's ``lineno``..``end_lineno`` removed, whole lines.
+
+    ``lineno`` is the ``def`` line and a decorator sits above it, so decorators stay guarded and
+    one added or changed is caught.
+    """
+    source = path.read_bytes()
+    spans = [(n.lineno, n.end_lineno) for n in (resolve_region(ast.parse(source), q) for q in regions)]
+    kept = [
+        line
+        for index, line in enumerate(source.decode().splitlines(keepends=True), start=1)
+        if not any(low <= index <= high for low, high in spans)
+    ]
+    return hashlib.sha256("".join(kept).encode()).hexdigest()
 
 
 # ---------- fixtures ----------
@@ -1951,10 +2028,18 @@ def test_f28_serve_json_on_go1_prints_the_same_structure() -> None:
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
 
 
-def test_f28_diff_py_is_byte_untouched() -> None:
+def test_f28_diff_py_is_byte_untouched_outside_the_excluded_region() -> None:
     """``git diff --exit-code cd5f177 -- src/proofload/diff.py`` is Session B's acceptance; the
-    same fact as a digest of the file's bytes, which a scratch copy without ``.git`` can check."""
-    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
+    same fact as a digest of the file's bytes, which a scratch copy without ``.git`` can check --
+    narrowed by A27 to everything outside ``DIFF_PY_EXCLUDED``'s regions, and asserting the whole
+    file no longer matches so the narrowing cannot silently become a no-op."""
+    assert digest_excluding(DIFF_SOURCE, [q for record in DIFF_PY_EXCLUDED for q in record["region"]]) == DIFF_PY_SHA256
+    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() != DIFF_PY_SHA256
+    for record in DIFF_PY_EXCLUDED:
+        cover = REPO / record["cover"][0]
+        assert cover.exists(), record["cover"]
+        for test_id in record["cover"][1]:
+            resolve_region(ast.parse(cover.read_bytes()), test_id)
 
 
 def test_f28_omnibus_on_go1_minus_the_p_driven_keys_digests_to_the_value_minted_on_the_bare_tree(go1: Any, go1_trees: Any) -> None:
@@ -2026,3 +2111,28 @@ def test_f30_refusals_fire_before_any_permutation_is_drawn(go1: Any, go1_trees: 
     with pytest.raises(tree().TreeError):
         grown(frames[0], frames[1], multi, ma, mb, **knobs)
     assert time.perf_counter() - started < REFUSAL_BUDGET_SECONDS
+
+
+def test_f28_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_adr_077_field() -> None:
+    """ADR-077's retirement duty, as the mechanical check the entry defines.
+
+    Step 1 is the grep for ``_PY_EXCLUDED`` under ``tests/``, one hit per live exclusion because
+    the record is a module constant named for the file it narrows. **Counted over files, not
+    lines**, and that is an amendment ADR-077 is owed rather than a reading of it: the entry says
+    ``grep -rn`` returns two after A27, which is wrong twice over -- it holds only for a one-line
+    record, and A27 narrows four carriers rather than two. Six fields make it a multi-line literal,
+    so ``grep -rn`` returns many and ``grep -rl`` returns the files the entry means. Measured at
+    ``101028c``: **0** files against twelve ``_PY_SHA256`` lines over six clauses in four files;
+    **four** after A27, every carrier of ``DIFF_PY_SHA256``. Asserting the file list here is what
+    makes a fifth exclusion, minted anywhere in ``tests/`` without a re-freeze packet behind it,
+    fail rather than accumulate -- Q1's named failure mode is exclusions piling up unretired.
+    A27's own retirement sweep discharges empty: nothing carried an exclusion at ``101028c``, so
+    there was no orphan to file.
+    """
+    hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if "_PY_EXCLUDED" in path.read_text(encoding="utf-8"))
+    assert hits == ["test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py"], hits
+    for record in DIFF_PY_EXCLUDED:
+        assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at"}, sorted(record)
+        assert record["minted_at"] == "101028c" and record["retire_at"] == "A28"
+        assert len(record["blind_spot"].split()) >= 20, record["region"]
+    assert [record["region"] for record in DIFF_PY_EXCLUDED] == [("_pairing",)]

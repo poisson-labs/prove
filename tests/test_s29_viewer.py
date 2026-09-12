@@ -127,6 +127,38 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
 - **The mismatch check (W16)** refuses a tree whose ``root.events`` is not ``multi.events`` or
   whose ``root.n_cells`` is not the flat family's cell count, naming the mismatch.
 
+**A27's re-freeze, 2026-09-12 — what this pass added and what it stopped guarding.**
+
+- **The BH-shaped hostile pair** (``hgroup-a``/``hgroup-b``) is this packet's one new fixture and
+  is built identically in both re-frozen oracles, deliberately: built twice with different shapes
+  it would give the two files two different power shapes to measure one guard against, and the two
+  oracles would then disagree about what an admitted grouping is. Its constants and its measured
+  shape are restated in both files and asserted in both, never imported.
+- **The hostile-label guard is new coverage over already-correct behaviour**, so it is green
+  before and after (standing rule 12's category). What makes it non-vacuous is measured rather
+  than argued: mutant 31b -- the group label emitted unescaped in the fault-lines table -- was
+  applied on a copy and is caught by this guard **alone** in this file, every other test in the
+  file surviving it. The round-trip clauses are not what catch it: ``model()``/``table_of``
+  unescape, so a raw cell also equals the value. The source-text and table-count clauses are.
+- **``diff.py`` is no longer pinned whole** (ADR-077). One region is excluded, ``_pairing``,
+  recorded in ``DIFF_PY_EXCLUDED`` with the entry's six fields including what it stopped guarding.
+  The region is **this packet's own** -- C18's message restatement lives in it -- and it is not in
+  ADR-077's plan for A27, which has A27 narrowing at ``_coverage`` for A22 on the stated basis that
+  *A27's build does not touch ``diff.py``*. C18's message fix makes that false, measured: a copy
+  carrying the restatement moves the whole-file digest, and a ``_coverage``-only exclusion does not
+  hold across it. ``_coverage`` is **not** minted here. It moves to A22's Session A, where the
+  exclusion and the ``tests/test_a22_pandas3.py`` cover it names land in one commit, which is
+  ADR-077's own escape hatch for a packet that does touch the file -- and which keeps the
+  cover-exists assertion below unconditional, rather than carving a named exception into the cover
+  rule on the first packet to use it.
+- **All four carriers of this digest are narrowed here, not two.** Measured on a copy carrying the
+  restatement: every one of the four ``DIFF_PY_SHA256`` clauses goes red on the message change, so
+  narrowing only the two oracles this packet re-freezes would leave ``test_s26_fault_lines.py``
+  (F28) and ``test_s27_leaves.py`` (L20) red from this build until A22. The handoff excluded those
+  two to avoid S27's ``FROZEN_ORACLE_SHA256`` cascade; the cascade is one literal, read off a file
+  this packet itself wrote, and costs no red. A27 narrows all four and re-mints that literal after
+  the ``s26`` edit.
+
 **Spec text this oracle could not use as written, each resolved here and reported.**
 
 - Section 3.7's and the handoff's "the whole suite is green on that commit alone" cannot hold
@@ -313,9 +345,37 @@ GO1_PAGE_2_SHA256 = {
     "go1": "d2c06b223618456e578c78bcdad6ed7b2e3a3052ab7136eec918173e2659deb6",
     "go1-two-events": "c16ec78a00db98b528b55dc2f969d0a1eb518cbf7f6c445cc017a86308eafd36",
 }
-#: W20. ``diff.py`` unchanged since cd5f177; ``tree.py`` unchanged since aed3f11; ``report.py`` as
-#: S28's build left it at f4e2845. Bytes, so a scratch copy without ``.git`` can check.
-DIFF_PY_SHA256 = "2653f31f91b1d28ea6a49950f67d76cd3ae6f4213d71d3c10378f3379aff73e0"
+#: W20, narrowed by A27 under ADR-077. ``diff.py`` is no longer pinned whole: the digest below is
+#: over the file with the AST regions named in ``DIFF_PY_EXCLUDED`` removed, whole lines, so the
+#: clause keeps its original meaning -- *the builder touched nothing but the region its spec put in
+#: scope* -- across a packet that moves the region, instead of being re-minted over bytes nobody can
+#: read off anything that exists. Minted at ``101028c``; measured identical on a copy carrying A22
+#: section 2's replacement and A27's own message restatement, and red on an edit anywhere else in
+#: the file. ``tree.py`` unchanged since aed3f11; ``report.py`` as S28's build left it at f4e2845,
+#: both still whole-file. Bytes, so a scratch copy without ``.git`` can check.
+DIFF_PY_SHA256 = "21b34aa7ed834afd26a2a09a561e5e68f98c1ff045e9e7807d2c4b76e0cbc3f7"
+#: ADR-077's record, one per pinned file, one entry per excluded region, six fields beside the
+#: digest because a narrowed guard that does not say what it stopped guarding is a weaker guard
+#: dressed as a better one. ``region`` is the qualified name resolved against the pinned file's own
+#: AST at call time -- exactly one definition or the clause refuses, never a line span, so a region
+#: that grows or shrinks moves its boundary with it and decorators stay guarded. ``cover`` is the
+#: oracle file and test ids that carry the region behaviourally, asserted to exist through the same
+#: resolver so deleting a cover turns this clause red rather than leaving a silent hole.
+DIFF_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
+    {
+        "region": ("_pairing",),
+        "owner": "A27",
+        "cover": ("tests/test_s28_report.py", ("test_r21_the_unpaired_warning_states_the_cells_it_matched_and_names_coverage", "test_r21_paired_is_still_salt_equality_and_mcnemar_still_refuses_and_runs_where_it_did")),
+        "minted_at": "101028c",
+        "blind_spot": (
+            "The excluded region also holds the three things C18 keeps out of this packet -- "
+            "paired's salt equality, the NotPairable raises and the t_unit guard -- so the digest "
+            "no longer sees them move. The cover is R21's pair rather than its message clause alone, "
+            "for that reason; nothing in this oracle would notice."
+        ),
+        "retire_at": "A28",
+    },
+)
 TREE_PY_SHA256 = "ed79603e8e34d4c0a8b965d81252cd454debac0e948a62aa83e683865a003556"
 REPORT_PY_SHA256 = "3eb97d5572380c0054b810208ae090f468949280a6a4656aacc104ebdf3a5ad2"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
@@ -378,6 +438,35 @@ VOCABULARY_VALUES = ("given the root", "where it broke")
 HOSTILE = "".join(["<", "/script><img src=x onerror=", chr(34), "alert(1)", chr(34), ">&", chr(34)])
 HOSTILE_TABLE = "".join(["<", "/table><script>alert(1)</script>&", chr(34)])
 HOSTILE_VALUES = (HOSTILE, HOSTILE_TABLE)
+#: A27's BH-shaped hostile pair, the one fixture R17 and W14 share, restated byte-identically in
+#: ``tests/test_s28_report.py`` so the two oracles cannot disagree about what an admitted grouping
+#: is. The grouping key ``task`` takes the two hostile strings as its values and ``cell`` supplies
+#: the cells inside each group, so the axis rung reaches ``task`` and the power rule **admits** it
+#: instead of refusing it ``underpowered`` and collapsing to ``whole_grid`` -- which is what the
+#: two-cell hostile and vocabulary pairs do, and why no group label has ever carried a hostile
+#: value (section 6's amendment; mutant 31b). Measured at ``101028c``: two groups of eight cells at
+#: N=32 is 256 units per arm per group, whose group MDE is 0.1347 against the 0.20 default at the
+#: two-group floor alpha = q/2 = 0.025, so both groups resolve. 128 units per arm would read 0.1883
+#: and still admit; the margin is taken so a later power-rule change cannot quietly return this
+#: fixture to the collapse it exists to escape, and ``HOSTILE_GROUP_ADMITTED`` below is what makes
+#: such a return loud rather than quiet. Arm b is moved in every cell of both groups, by different
+#: amounts, so both groups reject, each becomes a family, and both values reach a group label, a
+#: family line and a leaf config cell.
+HOSTILE_GROUP_TYPES = {"task": "categorical", "cell": "categorical"}
+HOSTILE_GROUP_CELLS = 8
+HOSTILE_GROUP_N = 32
+HOSTILE_GROUP_BASE = 2
+HOSTILE_GROUP_EXTRA = (14, 8)
+#: A27. The admitted grouping as both oracles read it: (key, resolved_by, n_groups,
+#: n_resolvable_groups). ``whole_grid`` in either of the first two is the collapse this fixture
+#: exists to avoid, and asserting this tuple is what stops the guard below going vacuous.
+HOSTILE_GROUP_ADMITTED = ("task", "axis", 2, 2)
+#: A27. What the admitted axis makes testable, measured at ``101028c``: both groups rejected, one
+#: family per group, every leaf rejected.
+HOSTILE_GROUP_REJECTED_GROUPS = 2
+HOSTILE_GROUP_FAMILIES = 2
+HOSTILE_GROUP_TESTS = 16
+HOSTILE_GROUP_REJECTED = 16
 
 BIND_TIMEOUT_S = 15.0
 
@@ -495,6 +584,23 @@ def two_value_cells(values: Sequence[str], moved: bool) -> dict[Any, list[str]]:
     """Two cells, one ``task`` value each, at N=8; arm b moved in every replicate so the root
     rejects, the grouping collapses and both leaves are named."""
     return {(("task", v), ("temp", 0.0)): (["fail"] * 8 if moved else ["ok"] * 8) for v in values}
+
+
+def hostile_group_cells() -> tuple[dict[Any, list[str]], dict[Any, list[str]]]:
+    """A27's BH-shaped hostile pair: ``task`` takes the two hostile values and is the grouping,
+    ``cell`` supplies eight cells inside each group at N=32. Arm b is moved in every cell of both
+    groups, by a different amount per group, so the root rejects, the axis is admitted rather than
+    refused underpowered, both groups reject and every leaf rejects."""
+    a: dict[Any, list[str]] = {}
+    b: dict[Any, list[str]] = {}
+    for index, value in enumerate(HOSTILE_VALUES):
+        for c in range(HOSTILE_GROUP_CELLS):
+            key = (("task", value), ("cell", f"c{c}"))
+            row = ["fail"] * HOSTILE_GROUP_BASE + ["ok"] * (HOSTILE_GROUP_N - HOSTILE_GROUP_BASE)
+            a[key], b[key] = list(row), list(row)
+            for r in range(HOSTILE_GROUP_BASE, HOSTILE_GROUP_BASE + HOSTILE_GROUP_EXTRA[index]):
+                b[key][r] = "fail"
+    return a, b
 
 
 # ---------- the CLI, tripwired ----------
@@ -1003,6 +1109,45 @@ def closure(module: ast.Module, name: str) -> list[ast.AST]:
     return list(seen.values())
 
 
+def resolve_region(tree: ast.Module, qualified: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:
+    """ADR-077's boundary: a qualified name resolved against the pinned file's own AST.
+
+    Walks the module's direct children for the first segment and that node's children for the
+    next, and refuses on anything but exactly one match -- ADR-072's collision discipline moved
+    from names to definitions. Restated rather than imported, as the frozen oracles' digests are.
+    """
+    node: ast.AST = tree
+    definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
+    for segment in qualified.split("."):
+        matches = [
+            child
+            for child in ast.iter_child_nodes(node)
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            and child.name == segment
+        ]
+        assert len(matches) == 1, (qualified, segment, len(matches))
+        definition = matches[0]
+        node = definition
+    assert definition is not None, qualified
+    return definition
+
+
+def digest_excluding(path: Path, regions: Sequence[str]) -> str:
+    """The file's sha256 with each region's ``lineno``..``end_lineno`` removed, whole lines.
+
+    ``lineno`` is the ``def`` line and a decorator sits above it, so decorators stay guarded and
+    one added or changed is caught.
+    """
+    source = path.read_bytes()
+    spans = [(n.lineno, n.end_lineno) for n in (resolve_region(ast.parse(source), q) for q in regions)]
+    kept = [
+        line
+        for index, line in enumerate(source.decode().splitlines(keepends=True), start=1)
+        if not any(low <= index <= high for low, high in spans)
+    ]
+    return hashlib.sha256("".join(kept).encode()).hexdigest()
+
+
 def referenced_names(nodes: Sequence[ast.AST]) -> set[str]:
     return {n.id for fn in nodes for n in ast.walk(fn) if isinstance(n, ast.Name)}
 
@@ -1153,6 +1298,9 @@ def synth_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     write_run(store, "vocab-b", salt=SALT, axis_types=AXES_TYPES_TASK_FIRST, cells=two_value_cells(VOCABULARY_VALUES, True))
     write_run(store, "hostile-a", salt=SALT, axis_types=AXES_TYPES_TASK_FIRST, cells=two_value_cells(HOSTILE_VALUES, False))
     write_run(store, "hostile-b", salt=SALT, axis_types=AXES_TYPES_TASK_FIRST, cells=two_value_cells(HOSTILE_VALUES, True))
+    hg_a, hg_b = hostile_group_cells()
+    write_run(store, "hgroup-a", salt=SALT, axis_types=HOSTILE_GROUP_TYPES, cells=hg_a)
+    write_run(store, "hgroup-b", salt=SALT, axis_types=HOSTILE_GROUP_TYPES, cells=hg_b)
     return root
 
 
@@ -1801,6 +1949,37 @@ def test_w14_hostile_task_values_render_as_text_in_the_cells_region_and_ride_ver
     assert sum(line.count("<table>") for line in lines) == sum(line.count("</table>") for line in lines)
 
 
+def test_w14_a_hostile_value_in_a_group_label_renders_as_text_on_a_pair_whose_grouping_admits_the_axis(synth_root: Path) -> None:
+    """Section 3.2's 2026-09-12 invariant, the one A27 gives a fixture and a test.
+
+    The first assertion is the precondition and is not decoration: on every other pair in this
+    oracle the grouping collapses to ``whole_grid`` and the one label reads ``all``, which is why
+    mutant 31b survived S29. If a later power-rule change returns this fixture to the collapse,
+    that assertion fails here rather than the guard below passing over a label that carries
+    nothing. The round-trip clauses alone do not separate an escaped cell from a raw one -- an
+    unescaped ``</table><script>...`` is also what ``html.unescape`` returns -- so the parsed-DOM
+    and table-balance clauses are what carry the safety claim, and the round-trip carries the
+    correctness one: the value the page shows is the value the structure holds.
+    """
+    p = pair("hostile-group", synth_root, "hgroup-a", "hgroup-b", ("fail",), "cell", "task")
+    grouping = p.structure["tree"]["grouping"]
+    assert (grouping["key"], grouping["resolved_by"], grouping["n_groups"], grouping["n_resolvable_groups"]) == HOSTILE_GROUP_ADMITTED
+    assert grouping["labels"] == list(HOSTILE_VALUES)
+    assert p.structure["tree"]["fault_lines"]["n_rejected_groups"] == HOSTILE_GROUP_REJECTED_GROUPS
+    assert (p.tree.leaves.n_families, p.tree.leaves.n_tests, p.tree.leaves.n_rejected) == (HOSTILE_GROUP_FAMILIES, HOSTILE_GROUP_TESTS, HOSTILE_GROUP_REJECTED)
+    label_cells = [row[0] for _, rows in tables_of(region(p, "Fault lines")) for row in rows]
+    assert label_cells == list(HOSTILE_VALUES), label_cells
+    family_lines = [line for line in lines_of(region(p, "Cells")) if line.startswith("task=")]
+    assert [line.startswith(f"task={value}: ") for line, value in zip(family_lines, HOSTILE_VALUES, strict=True)] == [True, True], family_lines
+    dom = parse_html(p.page)
+    scripts = dom.find("script")
+    assert len(scripts) == 3 and all(n.attrs.get("id") in ("proofload-cells", "proofload-holes", None) for n in scripts), [n.attrs for n in scripts]
+    assert not any("onerror" in n.attrs for n in dom.nodes)
+    assert dom.find("img") == []
+    guarded = region_lines(p.page, "Fault lines") + region_lines(p.page, "Cells")
+    assert sum(line.count("<table>") for line in guarded) == sum(line.count("</table>") for line in guarded) == HOSTILE_GROUP_FAMILIES + 1
+
+
 # ---------- W15: strict JSON ----------
 
 
@@ -1834,6 +2013,28 @@ def test_w16_a_tree_from_another_pair_is_refused_with_viewer_error_naming_the_ev
     assert "event" in message or "cell" in message, message
     _, same_events = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), method="mcnemar_bh")
     assert m.build_structure(go1.report, go1.multi, tree=same_events, **kwargs)["tree"]["root"]["scheme"] == "pair_swap"
+
+
+def test_w16_a_tree_whose_cells_are_another_pairs_is_refused_at_the_same_arity_and_the_message_names_a_cell(every_pair: list[Pair]) -> None:
+    """Section 4 W16's second clause, amended 2026-09-12: the ``(event, config_hash)`` multiset,
+    not the arity. The crossed pair is this oracle's own vocabulary and hostile pairs -- same one
+    event, two cells each, different ``task`` values and so different hashes -- measured at
+    ``101028c`` as **accepted** by the arity clause, which is the hole. The second assertion is
+    what keeps the first from passing for the wrong reason: the arity is equal, so a refusal here
+    cannot be the old clause firing."""
+    m = viewer()
+    pairs = by_name(every_pair)
+    vocab, hostile = pairs["vocab"], pairs["hostile"]
+    store = Store(vocab.root)
+    kwargs = dict(manifest_a=store.manifest(vocab.a), manifest_b=store.manifest(vocab.b), rows_a=store.count(vocab.a), rows_b=store.count(vocab.b), tally_a=store.tally(vocab.a), tally_b=store.tally(vocab.b), store_root=str(vocab.root))
+    assert tuple(hostile.tree.root.events) == tuple(vocab.multi.events)
+    assert len(hostile.tree.root.units) == vocab.multi.n_tests == len(vocab.tree.root.units)
+    with pytest.raises(m.ViewerError) as info:
+        m.build_structure(vocab.report, vocab.multi, tree=hostile.tree, **kwargs)
+    message = str(info.value)
+    absent = sorted(set(hostile.tree.root.units["config_hash"]) - set(vocab.tree.root.units["config_hash"]))
+    assert any(h in message for h in absent), (message, absent)
+    assert m.build_structure(vocab.report, vocab.multi, tree=vocab.tree, **kwargs)["tree"]["grouping"]["labels"] == ["all"]
 
 
 # ---------- W18: golden, Go1 ----------
@@ -1914,8 +2115,14 @@ def e14_builder_digests() -> dict[str, str]:
     return {"report.md": sha256_of_text(report.to_markdown()), "receipt.html": sha256_of_text(receipt.to_html())}
 
 
-def test_w20_diff_tree_report_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
-    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
+def test_w20_diff_outside_the_excluded_regions_tree_report_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
+    assert digest_excluding(DIFF_SOURCE, [q for record in DIFF_PY_EXCLUDED for q in record["region"]]) == DIFF_PY_SHA256
+    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() != DIFF_PY_SHA256
+    for record in DIFF_PY_EXCLUDED:
+        cover = REPO / record["cover"][0]
+        assert cover.exists(), record["cover"]
+        for test_id in record["cover"][1]:
+            resolve_region(ast.parse(cover.read_bytes()), test_id)
     assert hashlib.sha256(TREE_SOURCE.read_bytes()).hexdigest() == TREE_PY_SHA256
     assert hashlib.sha256(REPORT_SOURCE.read_bytes()).hexdigest() == REPORT_PY_SHA256
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
@@ -1950,3 +2157,27 @@ def test_w20_the_viewers_import_partition_and_v17s_closure_clauses_are_unchanged
     assert len(arithmetic) == 1 and isinstance(arithmetic[0], ast.BinOp) and isinstance(arithmetic[0].op, ast.Sub), [ast.dump(n)[:60] for n in arithmetic]
     assert arithmetic[0] in total_seconds_operands(build_nodes)
     assert format_calls(module) == [] and not FLOAT_SPEC_RE.search(source) and not HEX_RE.search(source)
+
+
+def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_adr_077_field() -> None:
+    """ADR-077's retirement duty, as the mechanical check the entry defines.
+
+    Step 1 is the grep for ``_PY_EXCLUDED`` under ``tests/``, one hit per live exclusion because
+    the record is a module constant named for the file it narrows. **Counted over files, not
+    lines**, and that is an amendment ADR-077 is owed rather than a reading of it: the entry says
+    ``grep -rn`` returns two after A27, which holds only for a one-line record. Six fields make it
+    a multi-line literal, so ``grep -rn`` returns 23 and ``grep -rl`` returns the two the entry
+    means. Measured at ``101028c``: **0** files against twelve ``_PY_SHA256`` lines over six
+    clauses in four files; **two** after A27, this file and the other oracle A27 re-freezes.
+    Asserting the file list here is what makes a third exclusion, minted anywhere in ``tests/``
+    without a re-freeze packet behind it, fail rather than accumulate -- Q1's named failure mode is
+    exclusions piling up unretired. A27's own retirement sweep discharges empty: nothing carried
+    an exclusion at ``101028c``, so there was no orphan to file.
+    """
+    hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if "_PY_EXCLUDED" in path.read_text(encoding="utf-8"))
+    assert hits == ["test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py"], hits
+    for record in DIFF_PY_EXCLUDED:
+        assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at"}, sorted(record)
+        assert record["minted_at"] == "101028c" and record["retire_at"] == "A28"
+        assert len(record["blind_spot"].split()) >= 20, record["region"]
+    assert [record["region"] for record in DIFF_PY_EXCLUDED] == [("_pairing",)]
