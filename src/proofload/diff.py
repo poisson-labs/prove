@@ -843,13 +843,25 @@ def _pairing(
         # alternative is spelled; the choice stays the caller's. No claim about power: that
         # depends on how far the two arms agree episode by episode, which is a fact about
         # the data and not about the salt.
+        #
+        # C18's message half, A27. The sentence used to promise a counterpart for every
+        # episode, which the page it is printed beside can contradict: ``coverage`` lists
+        # the cells one arm ran and the other did not, and a pair with two of those still
+        # reports ``paired``. The correspondence the salt supports is the one over the cells
+        # the comparison matched, so that is what this says, and it points at ``coverage``
+        # for the rest rather than carrying a count -- there is none to carry here, which is
+        # the whole reason the warning is raised before any cell exists. Whether the matched
+        # rows are counterparts at all is a separate question and still unchecked; C18 keeps
+        # it, and this restatement narrows the claim rather than answering it.
         assert manifest_a is not None  # implied by paired; narrows the type for run_salt
         warnings.warn(
             f"{method} compares two pairable runs as independent samples: both manifests "
-            f"carry run_salt {manifest_a.run_salt!r}, so every episode has a counterpart "
-            "at the same (config_hash, replicate_index). Pass method='mcnemar_bh' to test "
-            "that correspondence; whether it buys power depends on how far the two arms "
-            "agree episode by episode.",
+            f"carry run_salt {manifest_a.run_salt!r}, which claims a counterpart at the "
+            "same (config_hash, replicate_index) across the cells this comparison matched. "
+            "Which cells those are is not settled here -- see coverage for the cells one "
+            "arm ran and the other did not. Pass method='mcnemar_bh' to test that "
+            "correspondence; whether it buys power depends on how far the two arms agree "
+            "episode by episode.",
             UnpairedAnalysis,
             # 3, not survival.py's 2: this is one frame deeper than the public function, so
             # 3 lands on the caller of diff/multi_diff -- the line the reader has to change.

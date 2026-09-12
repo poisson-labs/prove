@@ -25,6 +25,7 @@ from __future__ import annotations
 import html as _html
 import json
 import math
+from collections import Counter
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import TYPE_CHECKING, Any
@@ -453,6 +454,18 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     I18's shape at the assembly boundary, and M7's ``_check_tree`` one module over: the tree's
     events must be the family's, and its units -- one per cell per event -- must be the family's
     tests. Checked before anything is assembled, so a mismatched pair costs no page.
+
+    S29 amendment 5, built in A27: the third clause compares the ``(event, config_hash)``
+    multiset and not only its size. Arity alone accepts a tree grown on a different pair that
+    happens to have the same events and the same number of cells -- measured on this oracle's
+    own vocabulary and hostile pairs, whose ``task`` values and so whose hashes are disjoint --
+    and a page assembled from one would carry another pair's cells under this pair's identity.
+    A multiset rather than a set, because a cell repeated in one side and not the other is the
+    same defect. The arity clause runs first, so by the time the multiset is compared the two
+    totals are equal and a difference has a cell on each side to name; ``none`` is spelled
+    anyway rather than indexed, because a refusal that raises ``IndexError`` from inside its
+    own message is worse than the mismatch it was reporting. One cell each way and not the
+    whole list: a Go1-sized mismatch is 656 hashes, and one is enough to name the other pair.
     """
     if tuple(tree.root.events) != tuple(multi.events):
         raise ViewerError(
@@ -463,6 +476,28 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
         raise ViewerError(
             f"the tree carries {len(tree.root.units)} cell-event units; this pair's diff is "
             f"over {multi.n_tests} tests"
+        )
+    carried = Counter(
+        (str(event), str(config_hash))
+        for event, config_hash in zip(
+            tree.root.units["event"], tree.root.units["config_hash"], strict=True
+        )
+    )
+    tested = Counter(
+        (str(event), str(config_hash))
+        for event in multi.events
+        for config_hash in multi.by_event[event].cells["config_hash"]
+    )
+    if carried != tested:
+        only_tree = sorted(key for key in carried if carried[key] != tested[key])
+        only_diff = sorted(key for key in tested if tested[key] != carried[key])
+        in_tree = ", ".join(f"{event}/{h}" for event, h in only_tree[:1]) or "none"
+        in_diff = ", ".join(f"{event}/{h}" for event, h in only_diff[:1]) or "none"
+        raise ViewerError(
+            f"the tree's cells are not this pair's: {in_tree} is in the tree and not in "
+            f"this diff, {in_diff} is in this diff and not in the tree; the tree carries "
+            f"{sum(carried.values())} cell-event units and this pair's diff tests "
+            f"{sum(tested.values())}"
         )
 
 
