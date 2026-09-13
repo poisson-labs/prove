@@ -1,13 +1,20 @@
 # The pilot's contract. examples/golden_pilot is not a package extra and is not in the wheel.
 #
-# openai is pinned below 2 deliberately: opentelemetry-instrumentation-openai-v2 hard-imports
-# httpx, and openai 2.x ships httpx2, so the instrumentation cannot even import against a
-# current openai. Verified 2026-09-04 and again 2026-09-05.
-openai<2
+# openai is capped below 3, not below 2. The mechanism the old comment named is real and the
+# version it named was wrong by one major: opentelemetry-instrumentation-openai-v2 hard-imports
+# httpx (openai_v2/utils.py:23, `from httpx import URL`), and it is openai 3 that drops httpx
+# for httpx2 -- 1.109.1, 2.0.0, 2.9.0, 2.20.0 and 2.54.0 all require httpx<1, so no openai 2.x
+# ever shipped httpx2. The floor is litellm 1.100.1's own `openai>=2.20`, which is above
+# verifiers 0.3.1's `>=2.9.0`, so one number satisfies both and litellm needs no bound here.
+# Re-test the ceiling when the instrumentor bumps: it lifts the day that hard import goes.
+# Measured 2026-09-12 and installed 2026-09-13 (openai 2.54.0, httpx 0.28.1).
+openai>=2.20,<3
 
 # The one instrumentor the pilot names, pinned exactly: it wraps chat.completions.create and
 # embeddings.create only, and client.responses.create emits zero spans. Re-test that gap on
 # every bump -- it is the kind that closes without an announcement (spec section 0, gap 1).
+# Re-measured on openai 2.54.0, 2026-09-13: the gap has not closed -- still zero spans on
+# responses, and one chat span carrying the same nine attributes it carried on 1.109.1.
 opentelemetry-instrumentation-openai-v2==2.4b0
 
 # Proofload itself, with the extra that carries opentelemetry-sdk. Install it from this
