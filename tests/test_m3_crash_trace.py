@@ -108,7 +108,7 @@ SNIPPET_MARKER = "# reproduce one episode"
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # the M10 oracle's I15 regex, verbatim
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-S16_ORACLE_SHA256 = "850ffb3c22308f31fd86ef5a58c5e178f74f3185a83e3e4f0526601abaf9d07e"  # 38 tests
+S16_ORACLE_SHA256 = "256298e6a296f464cd3212ebdf3839a4d61faeed579ff54332fb84fcd6956187"  # 38 tests; re-minted by M11a Session A over the amended E12
 
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated"})
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
@@ -978,10 +978,13 @@ def test_k8_the_transport_aliases_and_signatures_are_untouched() -> None:
     assert set(Episode(outcome="fell", t=1.0, horizon=HORIZON).to_dict()) == set(EPISODE_FIELDS)
     assert tuple(f.name for f in dataclasses.fields(executor.RunSummary)) == SUMMARY_FIELDS
     params = list(inspect.signature(worker_batch).parameters.values())
-    assert [p.name for p in params] == ["jobs", "import_path", "episode_timeout", "capture"]
+    # M11a: ``chaos`` rides beside ``capture``, keyword-only, default None (Spec M11 section 0.1)
+    assert [p.name for p in params] == ["jobs", "import_path", "episode_timeout", "capture", "chaos"]
     assert params[3].kind is params[3].KEYWORD_ONLY and params[3].default is None
+    assert params[4].kind is params[4].KEYWORD_ONLY and params[4].default is None
     call = inspect.signature(executor._call_in_process).parameters
-    assert list(call) == ["rollout", "config", "seed", "capture_call"] and call["capture_call"].default is None
+    assert list(call) == ["rollout", "config", "seed", "capture_call", "chaos_call"]
+    assert call["capture_call"].default is None and call["chaos_call"].default is None
     meta = inspect.signature(EpisodeRecord.errored).parameters["meta"]
     assert meta.kind is meta.KEYWORD_ONLY and meta.default is None
 
