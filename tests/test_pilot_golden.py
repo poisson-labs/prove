@@ -108,6 +108,64 @@ re-litigated. Session B builds to these.**
 - **The refusal** in ``rollout_patched`` is a ``submit`` tool span (kind ``tool``) that costs
   one ``t``; the result appended to the conversation after a ``run_tests`` call is a message
   of at most 500 characters (P6, as written: the whole appended message, not only the reason).
+
+**A24 -- openai 2, W1-W8.** "Proofload -- Spec A22 pandas 3 Port" section 4's ``W`` block. The
+packet moves ``[agent]``, ``[all]`` and the pilot's ``requirements.txt`` from ``openai<2`` to
+``openai>=2.20,<3``: no openai 2.x ever shipped ``httpx2``, the instrumentor's hard import of
+``httpx`` bites at openai **3**, and the pin was wrong by one major version. This file is A24's
+oracle; there is no separate A24 test file (spec section 11).
+
+**This oracle's claim spans two environments, and Session A can only reach one of them**
+(Master Action List section 18 standing rule 15). The cells are the *installed* SDK, because
+that is what the packet ranges over:
+
+- **openai 1.109.1** -- the venv on Session A's commit. Every one of W1-W8 is asserted here.
+- **openai 2.x** -- reachable only after Session B's ``pip install -e '.[dev,agent]'``. Every
+  one of W1-W8 is asserted there too.
+
+Eight invariants, eight ids, both cells: **8 + 8 = 16 over two cells against the oracle's own
+8**, so no invariant is cell-specific and none is asserted in one cell only. What differs is
+which of them the **bare** tree satisfies, and that difference is the classified red set below.
+**The gap, named rather than resolved by dropping anything:** W6 and W7 are *asserted* in both
+cells but Session A can only *measure* the openai 1.109.1 one, because measuring the other
+means performing the reinstall that is Session B's first act. Spec section 10 Q5 -- "has the
+instrumentor's ``responses`` gap closed?" -- is therefore answered here for openai 1.109.1
+only (**it has not**: zero spans, measured 2026-09-13), and its openai 2 half is owed by
+Session B, from this same clause, before it touches a source file.
+
+**A24 is a retrofit packet** (standing rule 12). On Session A's commit, before the build and
+before the venv is reinstalled, the classified red set is **W1, W2 and W3** -- three, not the
+five spec section 7.3 predicted. W6 and W7 are green here, and are named below with W4, W5 and
+W8 as **green before and after**, so their green is not read as evidence the build did
+anything. Section 7.3 reasoned about W6 and W7 only from *is the instrumentor installed*
+(red if yes, skipped if no) and never from *what the clause asserts*; both are preservation
+clauses of exactly W8's kind -- W6 pins the measured equality of the instrumentor's attribute
+set across openai 1.109.1 and 2.54.0 (spec section 3.7), and W7 pins an absence measured on
+1.109.1 that section 10 Q5 asks to be re-measured on 2. Filing either as a red would halt
+Session B on a test that passes, which section 7.3 says of W8 in as many words.
+
+- **Red (a source edit clears two; an install clears one).** **W1** -- the pilot's
+  ``requirements.txt`` still says ``openai<2``; cleared by Session B editing the file.
+  **W2** -- ``pyproject.toml`` still pins ``openai<2`` in ``[agent]`` and ``[all]``; cleared
+  the same way. **W3** -- **environmental**: it reads ``importlib.metadata.version("openai")``
+  and is a statement about the machine, not about the repo. **No source edit can clear it**;
+  it clears when the venv is reinstalled, and a builder who goes looking for the file that
+  makes it green will not find one (spec section 10 Q6).
+- **Green before and after.** **W4**, **W5** -- unchanged from ``101028c``; they exist to stop
+  the bump moving the request path. **W6**, **W7** -- measured green on openai 1.109.1, see
+  above. **W8** -- the error path, the only clause that measures it: ``agent.py:174`` catches
+  ``openai.APIError`` and ``:176`` formats ``type(exc).__name__``, and
+  ``RateLimitError`` -> ``APIStatusError`` -> ``APIError`` is what makes that base-class catch
+  reach a 429 at all. Its value is on the far side of the reinstall: S22's whole ``api_error``
+  classification, and before it S18's addendum-1 filter on
+  ``crash_reason.startswith("API error")``, rest on that hierarchy surviving to openai 2.
+
+**Two tests are renamed by the amendment**, because their old names assert the opposite of
+what they now say and a stale name is what gets re-litigated:
+``test_p11_requirements_pin_openai_below_2_and_name_the_instrumentor_and_proofload`` ->
+``test_w1_requirements_pin_openai_2_and_name_the_instrumentor_and_proofload``, and
+``test_p11_the_installed_openai_is_below_2`` -> ``test_w3_the_installed_openai_is_major_2``.
+Session B reproduces the red set under the **new** ids.
 """
 
 from __future__ import annotations
@@ -287,6 +345,10 @@ def tool_reply(tool: str, code: str) -> Reply:
 
 GARBAGE = Reply("garbage", text="I believe the function is correct as written, so nothing more is needed here.")
 FIVE_HUNDRED = Reply("status", status=500)
+#: W8. The 429 sits beside the 500 because the only API failure this project ever measured at
+#: scale was a 429 -- ``insufficient_quota``, the S18 abort, 2,048 rows -- and the SDK raises a
+#: *different* ``APIError`` subclass for it than for the 500 the oracle already scripts.
+FOUR_TWENTY_NINE = Reply("status", status=429)
 
 
 def fenced(tool: str, code: str) -> str:
@@ -478,6 +540,7 @@ def scenario(name: str) -> tuple[str, int, tuple[Reply, ...]]:
         "failed_after_tests": (HE2, 25, steps(("run_tests", wrong(HE2)), ("submit", wrong(HE2)))),
         "timed_out": (HE0, 21, steps(*(("run_tests", wrong(HE0)),) * HORIZON)),
         "api_error": (HE2, 11, (FIVE_HUNDRED,)),
+        "rate_limited": (HE2, 16, (FOUR_TWENTY_NINE,)),  # W8
         "garbage": (HE2, 12, (GARBAGE, GARBAGE)),
         "api_error_after_two_calls": (HE2, 13, (*steps(("run_tests", canonical(HE2)), ("run_tests", canonical(HE2))), FIVE_HUNDRED)),
         "crash_after_two_calls": (HE2, 14, (*steps(("run_tests", canonical(HE2)), ("run_tests", canonical(HE2))), GARBAGE, GARBAGE)),
@@ -640,6 +703,115 @@ def child_capture_run(store_root: str, toml_path: str) -> dict[str, Any]:
     }
 
 
+#: W6, W7. The probe's base URL, deliberately **portless**. The attribute set W6 pins is the
+#: *instrumentor's*; ``server.port`` is the base URL's. A probe pointed at ``DISCARD_URL``
+#: measures ten attributes, nine of them the instrumentor's and the tenth the oracle's own
+#: choice of port. ``.invalid`` is reserved (RFC 2606) and never resolves, so a bypassed
+#: transport fails here as loudly as it does at the discard port.
+PROBE_URL = "http://discard.invalid/v1"
+
+#: W6. The nine measured on instrumentor 2.4b0 against openai 1.109.1 **and** 2.54.0 (spec
+#: section 3.7), from one *bare* ``chat.completions.create``. The pilot's own call passes
+#: ``max_tokens``, ``seed`` and ``temperature``, each of which adds a ``gen_ai.request.*`` key;
+#: the probe passes none of them, so what is pinned is the set the instrumentor derives and not
+#: the set the caller happened to ask for.
+INSTRUMENTOR_ATTRIBUTES = [
+    "gen_ai.operation.name",
+    "gen_ai.provider.name",
+    "gen_ai.request.model",
+    "gen_ai.response.finish_reasons",
+    "gen_ai.response.id",
+    "gen_ai.response.model",
+    "gen_ai.usage.input_tokens",
+    "gen_ai.usage.output_tokens",
+    "server.address",
+]
+
+
+def probe_transport() -> Any:
+    """A transport answering both verbs. ``responses`` succeeds rather than 404s, so W7
+    measures the instrumentor's silence on a call that *worked*: an instrumented call that
+    raises would still emit a span, and a 404 would let W7 pass for the wrong reason."""
+
+    def handle(request: Any) -> Any:
+        if request.url.path.endswith("/chat/completions"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "chatcmpl-probe-0",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": MODEL,
+                    "choices": [
+                        {"index": 0, "message": {"role": "assistant", "content": "one turn"}, "finish_reason": "stop"}
+                    ],
+                    "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                },
+            )
+        if request.url.path.endswith("/responses"):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "resp-probe-0",
+                    "object": "response",
+                    "created_at": 0,
+                    "model": MODEL,
+                    "status": "completed",
+                    "output": [],
+                    "parallel_tool_calls": False,
+                    "tool_choice": "auto",
+                    "tools": [],
+                },
+            )
+        return httpx.Response(404, json={"error": {"message": f"the probe scripts two verbs, not {request.url.path}"}})
+
+    return httpx.MockTransport(handle)
+
+
+def child_instrumented_spans(verb: str) -> list[dict[str, Any]]:
+    """One instrumented call through ``probe_transport``, and the spans it finished.
+
+    Child-only, like every other capture path in this file: the pytest process never installs a
+    provider and never imports ``opentelemetry`` at module level (M12's T27 purges
+    ``opentelemetry*`` earlier in the suite)."""
+    from opentelemetry import trace as ot_trace
+    from opentelemetry.instrumentation.openai_v2 import OpenAIInstrumentor
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    ot_trace.set_tracer_provider(provider)
+    OpenAIInstrumentor().instrument(tracer_provider=provider)
+    client = openai.OpenAI(
+        api_key="oracle-key-never-sent",
+        base_url=PROBE_URL,
+        http_client=httpx.Client(transport=probe_transport()),
+        max_retries=0,
+    )
+    if verb == "chat":
+        client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": "one turn"}])
+    else:
+        client.responses.create(model=MODEL, input="one turn")
+    return [{"name": span.name, "attributes": sorted(span.attributes or {})} for span in exporter.get_finished_spans()]
+
+
+def instrumentor_or_skip() -> None:
+    """W6, W7's gate. A **skip is not a green**: without the instrumentor these two say nothing,
+    which is why spec section 7.3 names skipped and red as the two states it expected. Spec
+    section 10 Q6's point, one clause over: an absent instrumentor and a wrong openai must not
+    look the same in the red set, so W3 fails on the version and these two skip on the import."""
+    pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
+    pytest.importorskip(
+        "opentelemetry.instrumentation.openai_v2",
+        reason="the instrumentor tests need opentelemetry-instrumentation-openai-v2",
+    )
+    if not FORK_AVAILABLE:
+        pytest.skip("the instrumentor installs a global provider, so it installs in a child")
+
+
 @pytest.fixture(scope="module")
 def capture_run(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     """One run under real autoinstrumentation, shared by the two P7 tests that read it."""
@@ -730,6 +902,31 @@ def test_p2_three_5xx_replies_are_an_api_error_naming_it_with_three_retries(agen
     reason = run.episode.meta["crash_reason"]
     assert isinstance(reason, str) and ("500" in reason or "InternalServerError" in reason), reason
     assert run.episode.meta["tokens"] == {"in": 0, "out": 0}
+
+
+def test_w8_a_scripted_429_is_an_api_error_after_three_retries_naming_the_rate_limit(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A24 W8. Green before and after, and the only clause of the packet that measures the
+    error path at all: W6 measures the success path and W7 an absence. ``agent.py:174`` catches
+    ``openai.APIError``, the SDK base class, and ``:176`` formats ``type(exc).__name__`` into
+    ``meta["crash_reason"]`` -- so S22's whole ``api_error`` classification, and before it S18's
+    addendum-1 filter on ``crash_reason.startswith("API error")``, rest on
+    ``RateLimitError`` -> ``APIStatusError`` -> ``APIError`` surviving the bump to openai 2. The
+    429 is scripted rather than the 500 because a 429 is a *different* ``APIError`` subclass,
+    and because the only API failure this project measured at scale was one."""
+    run = play(agent, monkeypatch, "rate_limited")
+    assert run.episode.outcome == "api_error" and run.episode.t == 0, run.episode
+    assert run.episode.meta["retries"] == 3
+    assert len(run.requests) == 4, [q.turn for q in run.requests]  # the attempt and three retries
+    reason = run.episode.meta["crash_reason"]
+    assert isinstance(reason, str) and reason.startswith("API error after 3 retries: RateLimitError: "), reason
+    assert "429" in reason, reason
+    caught = [
+        ast.unparse(node.type)
+        for node in ast.walk(parsed(ROOT / "agent.py"))
+        if isinstance(node, ast.ExceptHandler) and node.type is not None
+    ]
+    assert "openai.APIError" in caught, caught
+    assert openai.APIError in openai.RateLimitError.__mro__, openai.RateLimitError.__mro__
 
 
 def test_p2_two_unparseable_replies_crash_naming_the_parse_failure(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1412,10 +1609,16 @@ def test_p10_rollout_patched_accepts_submit_after_run_tests_and_is_otherwise_ide
     assert plain.episode.to_dict()["meta"]["tokens"] == patched.episode.to_dict()["meta"]["tokens"]
 
 
-# ---------- P11: chat completions only, openai < 2 ----------
+# ---------- P11 / A24 W1-W7: chat completions only, openai 2 ----------
 
 
-def test_p11_requirements_pin_openai_below_2_and_name_the_instrumentor_and_proofload() -> None:
+def test_w1_requirements_pin_openai_2_and_name_the_instrumentor_and_proofload() -> None:
+    """A24 W1, amending P11's first clause. **Red on Session A's commit**: the file still says
+    ``openai<2``. The boundary moved by one major version and not by a whole ecosystem -- no
+    openai 2.x ever shipped ``httpx2`` (1.109.1, 2.0.0, 2.9.0, 2.20.0 and 2.54.0 all require
+    ``httpx<1``), and the instrumentor's hard ``from httpx import URL`` bites at openai 3.0.0.
+    So 2.54.0 is admitted, 3.0.0 is not, and 1.109.1 -- the version the original pin was read
+    against -- is now excluded rather than required."""
     from packaging.requirements import Requirement
     from packaging.version import Version
 
@@ -1433,17 +1636,66 @@ def test_p11_requirements_pin_openai_below_2_and_name_the_instrumentor_and_proof
     assert "openai" in by_name, lines
     openai_spec = by_name["openai"].specifier
     assert str(openai_spec), "openai is unpinned"
-    assert Version("2.0.0") not in openai_spec and Version("2.4.0") not in openai_spec, str(openai_spec)
-    assert Version("1.109.1") in openai_spec, str(openai_spec)  # the version the spike and the pin were read against
+    assert Version("2.20.0") in openai_spec and Version("2.54.0") in openai_spec, str(openai_spec)
+    assert Version("1.109.1") not in openai_spec, str(openai_spec)
+    assert Version("3.0.0") not in openai_spec, str(openai_spec)
     assert "opentelemetry-instrumentation-openai-v2" in by_name, sorted(by_name)
     assert any("proofload" in line for line in lines), lines
 
 
-def test_p11_the_installed_openai_is_below_2() -> None:
+def test_w2_pyproject_agent_and_all_carry_openai_2_and_leave_litellm_unbounded() -> None:
+    """A24 W2. **Red on Session A's commit**: both extras still say ``openai<2``. ``litellm``
+    stays unbounded, as C12 left it -- the floor here is litellm 1.100.1's own ``openai>=2.20``,
+    which is above verifiers 0.3.1's ``>=2.9.0``, so one number satisfies both and litellm needs
+    no bound of its own."""
+    from packaging.requirements import Requirement
+    from packaging.version import Version
+
+    extras = tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["optional-dependencies"]
+    for name in ("agent", "all"):
+        by_name = {Requirement(d).name.lower(): Requirement(d) for d in extras[name]}
+        assert "openai" in by_name, (name, sorted(by_name))
+        spec = by_name["openai"].specifier
+        assert Version("2.20.0") in spec, (name, str(spec))
+        assert Version("3.0.0") not in spec, (name, str(spec))
+        assert "litellm" in by_name, (name, sorted(by_name))
+        assert not str(by_name["litellm"].specifier), (name, str(by_name["litellm"].specifier))
+
+
+def test_w3_the_installed_openai_is_major_2() -> None:
+    """A24 W3, amending P11's second clause. **Red on Session A's commit, and no source edit
+    clears it** -- it is a statement about the machine, not about the repo, and it goes green
+    when the venv is reinstalled. It is kept in that uncomfortable shape because the pin it
+    guards is a claim about what is *installed* beside the instrumentor, which no file-reading
+    test can make (spec section 10 Q6). It fails on the **version**; W6 and W7 skip on the
+    **import**, so an absent instrumentor and a wrong SDK never look the same in the red set."""
     from packaging.version import Version
 
     installed = Version(importlib.metadata.version("openai"))
-    assert installed.major < 2, installed
+    assert installed.major == 2, installed
+
+
+def test_w6_one_scripted_chat_completion_emits_one_span_with_the_nine_attributes() -> None:
+    """A24 W6. **Green before and after** -- it pins the measured *equality* of the
+    instrumentor's span across openai 1.109.1 and 2.54.0 (spec section 3.7), so a later
+    instrumentor bump that changes the attribute set is caught here and not in a stored trace.
+    Measured green on 1.109.1, 2026-09-13; its openai 2 half is Session B's, after the
+    reinstall."""
+    instrumentor_or_skip()
+    spans = isolated(child_instrumented_spans, "chat")
+    assert len(spans) == 1, spans
+    assert spans[0]["name"] == f"chat {MODEL}", spans[0]["name"]
+    assert spans[0]["attributes"] == INSTRUMENTOR_ATTRIBUTES, spans[0]["attributes"]
+
+
+def test_w7_a_scripted_responses_call_emits_no_span_at_all() -> None:
+    """A24 W7, and spec section 10 Q5's measurement. **Green before and after**: the gap the
+    pilot's comment names, measured against openai 1.109.1 on 2026-09-04 and re-measured here
+    2026-09-13 -- still zero. Q5's other half is openai 2, which only the reinstall reaches, so
+    Session B owes that measurement from this clause. **If the gap has closed, this test is
+    inverted and the pilot's comment and README gap 1 are amended -- not deleted.**"""
+    instrumentor_or_skip()
+    assert isolated(child_instrumented_spans, "responses") == [], "the instrumentor now traces responses"
 
 
 def test_p11_the_requests_of_a_full_episode_go_to_chat_completions_only(agent: Any, monkeypatch: pytest.MonkeyPatch) -> None:
