@@ -72,6 +72,11 @@ _SCHEMA = pa.schema(
     ]
 )
 _JSON_COLUMNS = ("config", "meta", "backend_meta")
+#: Every nullable ``pa.string()`` field of ``_SCHEMA``, spelled out rather than derived from it:
+#: a field added to the schema must be added here by hand, and A22's V5 is what fails until it
+#: is. Derived, the assertion would follow the schema silently and A7 would inherit a read path
+#: whose nulls are NaN under ``row.trace is not None``.
+_NULLABLE_STRING_COLUMNS = ("outcome", "error")
 _META_COLUMNS = ("meta", "backend_meta")
 
 
@@ -497,6 +502,10 @@ class Store:
         the hash half is pushed to the reader as an ``in`` predicate, the pair is masked here.
         Unknown keys are absent, duplicates harmless; an empty ``keys`` is an empty frame with
         the requested columns and touches no part.
+
+        A stored null in a string column reads back as ``None``, on every pandas this package
+        supports: ``pyarrow`` gives a ``str`` column with ``NaN`` from pandas 3 on, and the
+        nullable ones are rebuilt as ``object`` below.
         """
         manifest = self.manifest(run_id)
         if manifest.schema_version != _SCHEMA_VERSION:
@@ -526,6 +535,11 @@ class Store:
             df = df[mask]
         df = df.sort_values(["config_hash", "replicate_index"], kind="stable")
         df = df.reset_index(drop=True)
+        for col in _NULLABLE_STRING_COLUMNS:
+            if col in df.columns:
+                df[col] = pd.Series(
+                    df[col].to_numpy(dtype=object, na_value=None), index=df.index, dtype=object
+                )
         for col in _JSON_COLUMNS:
             if col in df.columns:
                 df[col] = pd.Series(
