@@ -164,6 +164,16 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   two to avoid S27's ``FROZEN_ORACLE_SHA256`` cascade; the cascade is one literal, read off a file
   this packet itself wrote, and costs no red. A27 narrows all four and re-mints that literal after
   the ``s26`` edit.
+- **A28's retrofit, 2026-09-13.** ``SCHEMA`` moves to ``proofload.viewpair/4`` and ``/3`` joins
+  the retired set (W12); the tree key set gains ``agreement`` (W12); both ``diff.py`` exclusions
+  are retired and ``DIFF_PY_SHA256`` is whole-file again; ``REPORT_PY_SHA256`` is narrowed at
+  ``_check_tree`` and ``REPORT_PY_EXCLUDED`` minted, owner A28, ``retire_at`` empty;
+  ``TREE_PY_SHA256`` stays whole-file under spec A28 section 10 Q2 (b) and ADR-078, red from
+  Session B's build until a second Session A commit re-mints it off the shipped bytes; W16's
+  same-events acceptance is re-grown under another ``seed`` rather than another method, because
+  section 10 Q5 (b) makes a ``mcnemar_bh`` tree beside a ``fisher_bh`` diff a refusal. The
+  sweep counts module-level ``*_PY_EXCLUDED`` constants by AST, not by text. The classified red
+  set is in Handoff A28.
 
 **Spec text this oracle could not use as written, each resolved here and reported.**
 
@@ -262,9 +272,10 @@ QUICKSTART_SALT = "0000000000000015"
 
 # ---------- spec sections 2, 3.1, 3.2, 3.3: the literals ----------
 
-#: W1. The schema, and the one it retires.
-SCHEMA = "proofload.viewpair/3"
+#: W1. The schema, the one W17's tree-less projection is minted at, and the two ``render_html`` refuses.
+SCHEMA = "proofload.viewpair/4"
 RETIRED_SCHEMA = "proofload.viewpair/2"
+RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3")
 #: W1. The twelve top-level keys, in order (section 3.1).
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
@@ -351,66 +362,48 @@ GO1_PAGE_2_SHA256 = {
     "go1": "d2c06b223618456e578c78bcdad6ed7b2e3a3052ab7136eec918173e2659deb6",
     "go1-two-events": "c16ec78a00db98b528b55dc2f969d0a1eb518cbf7f6c445cc017a86308eafd36",
 }
-#: W20, narrowed by A27 under ADR-077. ``diff.py`` is no longer pinned whole: the digest below is
-#: over the file with the AST regions named in ``DIFF_PY_EXCLUDED`` removed, whole lines, so the
-#: clause keeps its original meaning -- *the builder touched nothing but the region its spec put in
-#: scope* -- across a packet that moves the region, instead of being re-minted over bytes nobody can
-#: read off anything that exists. Minted at ``101028c``; measured identical on a copy carrying A22
-#: section 2's replacement and A27's own message restatement, and red on an edit anywhere else in
-#: the file. ``tree.py`` unchanged since aed3f11; ``report.py`` as S28's build left it at f4e2845,
-#: both still whole-file. Bytes, so a scratch copy without ``.git`` can check.
-DIFF_PY_SHA256 = "105f1aa6b6e499d935227c1dca0ed8e1ead7204bb159c00a7aa02d12fa71f675"
-#: **A22's retrofit, 2026-09-13 -- a second live region, ``diff.py::_coverage``** (ADR-077). The
-#: digest above is over the file with **both** excluded regions removed, re-minted at ``4b3c6ae``
-#: off the shipped file: a read, not a prediction. ADR-077 permits two exclusions on one file when
-#: they are adjacent rather than overlapping, and these are -- measured at ``4b3c6ae``, ``_pairing``
-#: is lines 814-874 and ``_coverage`` 908-946, disjoint, and the clause below asserts the
-#: disjointness rather than assuming it. ``_coverage`` is A22's own: it carries the ``cause``
-#: rebuild that makes a stored null survive pandas 3 in the printed coverage block, and its cover
-#: lands in the same commit. Measured: ``105f1aa6...`` on the bare tree and on a copy carrying A22
-#: section 2's replacement, identical, while the ``_pairing``-only digest moves ``21b34aa7...`` ->
-#: ``b4a82174...`` and the whole file moves ``0438c2f5...`` -> ``d2b0ef59...``; a comment appended
-#: outside both regions is still caught.
-#: ADR-077's record, one per pinned file, one entry per excluded region, six fields beside the
-#: digest because a narrowed guard that does not say what it stopped guarding is a weaker guard
-#: dressed as a better one. ``region`` is the qualified name resolved against the pinned file's own
-#: AST at call time -- exactly one definition or the clause refuses, never a line span, so a region
-#: that grows or shrinks moves its boundary with it and decorators stay guarded. ``cover`` is the
-#: oracle file and test ids that carry the region behaviourally, asserted to exist through the same
-#: resolver so deleting a cover turns this clause red rather than leaving a silent hole.
-DIFF_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
+#: W20. ``diff.py`` whole again. **A28's retrofit, 2026-09-13 -- both exclusions retired** (ADR-077's
+#: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted
+#: ``4b3c6ae``) both named ``A28`` as their retiring packet; both owners have landed and A28 rewrites
+#: all four carriers, so the value is a read off the shipped file at ``38e8df9`` (byte-identical at
+#: ``03d7ed2``): the whole-file sha256, never a prediction. Bytes, so a scratch copy without ``.git``
+#: can check.
+DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695dbe5"
+#: W20. ``tree.py`` **whole-file, deliberately, under spec A28 section 10 Q2 (b) and ADR-078.** A28's
+#: build adds module-level names to this file -- ``import hashlib``, ``import json``,
+#: ``AGREEMENT_SCHEMA`` and two functions absent at ``38e8df9`` -- which a qualified-name exclusion
+#: cannot cover: measured, narrowed at ``_require_agreement`` + ``TreeResult`` it is ``a5bac2e9...``
+#: before the build and ``73df7726...`` after, red on the build it would be minted for. So this is
+#: the value at ``38e8df9``, green on Session A's commit, red from Session B's build until a second
+#: Session A commit re-mints it whole-file off the shipped bytes, with the behavioural cover
+#: (``tests/test_a28_agreement.py`` G2, G5, G6, G7) already frozen. No ``TREE_PY_EXCLUDED`` is minted.
+TREE_PY_SHA256 = "ed79603e8e34d4c0a8b965d81252cd454debac0e948a62aa83e683865a003556"
+#: W20, narrowed by A28 under ADR-077: ``report.py``'s bytes outside ``report.py::_check_tree``,
+#: minted at ``38e8df9`` and measured identical on a copy carrying the digest and knob clauses,
+#: because every line A28 adds to this file sits inside that one definition (ADR-078's clean case).
+#: Green on Session A's commit and on the build; red on an edit anywhere else in the file.
+REPORT_PY_SHA256 = "31979f718a5eb2312787c8590ad44b328dd015d85ddd8cb1913ccf41d096908e"
+#: ADR-077's record for that region: the entry's six fields plus ``lines``, the region's lines over
+#: the file's lines at mint (ADR-077 Q2, lean (b)). ``cover`` is the A28 oracle's report-side
+#: refusal tests, asserted to exist through the resolver; ``retire_at`` is empty (spec A28 D5), so
+#: the first re-freeze after A28 finds it and files the row.
+REPORT_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
     {
-        "region": ("_pairing",),
-        "owner": "A27",
-        "cover": ("tests/test_s28_report.py", ("test_r21_the_unpaired_warning_states_the_cells_it_matched_and_names_coverage", "test_r21_paired_is_still_salt_equality_and_mcnemar_still_refuses_and_runs_where_it_did")),
-        "minted_at": "101028c",
+        "region": ("_check_tree",),
+        "owner": "A28",
+        "cover": ("tests/test_a28_agreement.py", ("test_g11_the_report_refuses_c16s_crossed_tree_with_comparison_mismatch", "test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_unchanged", "test_g22_the_report_refuses_a_tree_grown_under_another_method_or_q_naming_both_values")),
+        "minted_at": "38e8df9",
         "blind_spot": (
-            "The excluded region also holds the three things C18 keeps out of this packet -- "
-            "paired's salt equality, the NotPairable raises and the t_unit guard -- so the digest "
-            "no longer sees them move. The cover is R21's pair rather than its message clause alone, "
-            "for that reason; nothing in this oracle would notice."
+            "The excluded region also holds the events clause, the arity clause and both "
+            "ComparisonMismatch messages, so the digest no longer sees either message move or a "
+            "clause deleted. G12 is the cover for the messages and it is asserted by substring, not "
+            "by digest; G11 and G22 are the cover for the two clauses A28 adds. Nothing else in this "
+            "oracle would notice."
         ),
-        "retire_at": "A28",
-    },
-    {
-        "region": ("_coverage",),
-        "owner": "A22",
-        "cover": ("tests/test_a22_pandas3.py", ("test_v9_coverage_cause_is_none_on_every_comparable_row_and_a_named_cause_on_every_hole", "test_v10_the_coverage_block_prints_none_and_never_nan", "test_v11_the_diff_json_payload_dumps_with_allow_nan_false", "test_v12_no_astype_is_applied_to_the_cause_column_in_diff_py")),
-        "minted_at": "4b3c6ae",
-        "blind_spot": (
-            "On pandas 2 the excluded region's only live guard is V12, the source-structural one: "
-            "V9-V11 are green before and after there, because a from_records column keeps None on "
-            "pandas 2 whatever its null pattern. COVERAGE_SHA256, the output digest over this very "
-            "frame carried at five sites, cannot see the change at all -- measured e02aae9a... on "
-            "the bare tree and on a copy carrying A22 section 2's replacement, under pandas 2.3.3 "
-            "and 3.0.5 alike, because to_json(orient='records') renders None and NaN in an object "
-            "column as the same null. Nothing in this oracle would notice either."
-        ),
-        "retire_at": "A28",
+        "retire_at": "",
+        "lines": "786-798 of 1896",
     },
 )
-TREE_PY_SHA256 = "ed79603e8e34d4c0a8b965d81252cd454debac0e948a62aa83e683865a003556"
-REPORT_PY_SHA256 = "3eb97d5572380c0054b810208ae090f468949280a6a4656aacc104ebdf3a5ad2"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4bf14e3b1"
 CHECK_EXIT = 0
@@ -1165,6 +1158,29 @@ def resolve_region(tree: ast.Module, qualified: str) -> ast.FunctionDef | ast.As
     return definition
 
 
+# ---------- ADR-077: the retirement sweep (A28, restated) ----------
+
+
+def excluded_constants(path: Path) -> list[str]:
+    """Module-level constants named ``*_PY_EXCLUDED`` -- ADR-077's step-1 sweep as an AST read.
+
+    A text grep for the suffix counts a file from its prose and from the sweep line itself once
+    its record is gone; a name on a module-level assignment is what "the record is a module
+    constant named for the file it narrows" means. Restated rather than imported.
+    """
+    names: list[str] = []
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target: ast.expr | None = node.targets[0]
+        elif isinstance(node, ast.AnnAssign):
+            target = node.target
+        else:
+            target = None
+        if isinstance(target, ast.Name) and target.id.endswith("_PY_EXCLUDED"):
+            names.append(target.id)
+    return names
+
+
 def digest_excluding(path: Path, regions: Sequence[str]) -> str:
     """The file's sha256 with each region's ``lineno``..``end_lineno`` removed, whole lines.
 
@@ -1917,11 +1933,12 @@ def test_w12_build_structure_without_tree_is_a_type_error_and_render_html_refuse
             go1.report, go1.multi, manifest_a=ma, manifest_b=mb, rows_a=store.count(GO1_A), rows_b=store.count(GO1_B),
             tally_a=store.tally(GO1_A), tally_b=store.tally(GO1_B), store_root=str(GO1_ROOT),
         )
-    retired = {k: v for k, v in json.loads(json.dumps(go1.structure, allow_nan=False)).items() if k != "tree"}
-    retired["schema"] = RETIRED_SCHEMA
-    with pytest.raises(m.ViewerError) as info:
-        m.render_html(retired)
-    assert RETIRED_SCHEMA in str(info.value) and SCHEMA in str(info.value)
+    for retired_schema in RETIRED_SCHEMAS:
+        retired = {k: v for k, v in json.loads(json.dumps(go1.structure, allow_nan=False)).items() if k != "tree"}
+        retired["schema"] = retired_schema
+        with pytest.raises(m.ViewerError) as info:
+            m.render_html(retired)
+        assert retired_schema in str(info.value) and SCHEMA in str(info.value), retired_schema
     headless = {k: v for k, v in json.loads(json.dumps(go1.structure, allow_nan=False)).items() if k != "tree"}
     with pytest.raises(m.ViewerError) as info:
         m.render_html(headless)
@@ -1930,7 +1947,7 @@ def test_w12_build_structure_without_tree_is_a_type_error_and_render_html_refuse
 
 def test_w12_every_pairs_serve_json_carries_the_tree_with_no_flag(every_pair: list[Pair]) -> None:
     for p in every_pair:
-        assert "tree" in p.structure and set(p.structure["tree"]) == {"root", "grouping", "fault_lines", "leaves", "bound"}, p.name
+        assert "tree" in p.structure and set(p.structure["tree"]) == {"root", "grouping", "fault_lines", "leaves", "bound", "agreement"}, p.name
         assert p.structure["tree"]["bound"]["bound"] > 0, p.name
 
 
@@ -2044,8 +2061,11 @@ def test_w16_a_tree_from_another_pair_is_refused_with_viewer_error_naming_the_ev
         m.build_structure(go1.report, go1.multi, tree=axes_tree, **kwargs)
     message = str(info.value).lower()
     assert "event" in message or "cell" in message, message
-    _, same_events = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), method="mcnemar_bh")
-    assert m.build_structure(go1.report, go1.multi, tree=same_events, **kwargs)["tree"]["root"]["scheme"] == "pair_swap"
+    # A28: re-grown under another seed rather than another method -- section 10 Q5 (b) makes a
+    # mcnemar_bh tree beside a fisher_bh diff a refusal, and the point here is that the same events
+    # and the same cells are accepted whatever knob the digest ignores.
+    _, same_events = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), seed=7)
+    assert m.build_structure(go1.report, go1.multi, tree=same_events, **kwargs)["tree"]["root"]["seed"] == 7
 
 
 def test_w16_a_tree_whose_cells_are_another_pairs_is_refused_at_the_same_arity_and_the_message_names_a_cell(every_pair: list[Pair]) -> None:
@@ -2148,16 +2168,16 @@ def e14_builder_digests() -> dict[str, str]:
     return {"report.md": sha256_of_text(report.to_markdown()), "receipt.html": sha256_of_text(receipt.to_html())}
 
 
-def test_w20_diff_outside_the_excluded_regions_tree_report_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
-    assert digest_excluding(DIFF_SOURCE, [q for record in DIFF_PY_EXCLUDED for q in record["region"]]) == DIFF_PY_SHA256
-    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() != DIFF_PY_SHA256
-    for record in DIFF_PY_EXCLUDED:
+def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_whole_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
+    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
+    assert digest_excluding(REPORT_SOURCE, [q for record in REPORT_PY_EXCLUDED for q in record["region"]]) == REPORT_PY_SHA256
+    assert hashlib.sha256(REPORT_SOURCE.read_bytes()).hexdigest() != REPORT_PY_SHA256
+    for record in REPORT_PY_EXCLUDED:
         cover = REPO / record["cover"][0]
         assert cover.exists(), record["cover"]
         for test_id in record["cover"][1]:
             resolve_region(ast.parse(cover.read_bytes()), test_id)
     assert hashlib.sha256(TREE_SOURCE.read_bytes()).hexdigest() == TREE_PY_SHA256
-    assert hashlib.sha256(REPORT_SOURCE.read_bytes()).hexdigest() == REPORT_PY_SHA256
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
     assert code == CHECK_EXIT and err == "" and sha256_of_text(out) == CHECK_STDOUT_SHA256, (code, err)
     out_dir = tmp_path / "report"
@@ -2215,19 +2235,27 @@ def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     *adjacent* case and not its refused *overlapping* one, so the spans are asserted disjoint here
     rather than assumed. Neither exclusion is retirable yet: both name ``A28`` as their retiring
     packet, and A22 is not it.
+
+    **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired, one ``report.py`` exclusion
+    minted.** ``_pairing`` and ``_coverage`` both named ``A28``; both owners have landed and A28
+    rewrites every carrier, so ``DIFF_PY_SHA256`` is whole-file again. ``REPORT_PY_EXCLUDED`` is
+    this packet's own, owner A28, ``retire_at`` empty (spec A28 D5), seven fields -- the entry's six
+    plus ``lines`` (ADR-077 Q2, lean (b)). The sweep now finds this file alone, **counted over
+    module-level constants named ``*_PY_EXCLUDED`` by AST and not by text**, because the text grep
+    the entry describes counts the three former carriers from their docstrings and sweep lines
+    once their records are gone (measured). ``TREE_PY_EXCLUDED`` is not minted (section 10 Q2 (b)).
     """
-    hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if "_PY_EXCLUDED" in path.read_text(encoding="utf-8"))
-    assert hits == ["test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py"], hits
-    for record in DIFF_PY_EXCLUDED:
-        assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at"}, sorted(record)
-        assert record["retire_at"] == "A28"
+    hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if excluded_constants(path))
+    assert hits == ["test_s29_viewer.py"], hits
+    assert excluded_constants(REPO / "tests" / "test_s29_viewer.py") == ["REPORT_PY_EXCLUDED"]
+    for record in REPORT_PY_EXCLUDED:
+        assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at", "lines"}, sorted(record)
+        assert record["owner"] == "A28" and record["minted_at"] == "38e8df9" and record["retire_at"] == ""
         assert len(record["blind_spot"].split()) >= 20, record["region"]
-    assert [(record["region"], record["owner"], record["minted_at"]) for record in DIFF_PY_EXCLUDED] == [
-        (("_pairing",), "A27", "101028c"),
-        (("_coverage",), "A22", "4b3c6ae"),
-    ]
+        assert re.fullmatch(r"\d+-\d+ of \d+", record["lines"]), record["lines"]
+    assert [record["region"] for record in REPORT_PY_EXCLUDED] == [("_check_tree",)]
     spans = sorted(
         (node.lineno, node.end_lineno)
-        for node in (resolve_region(ast.parse(DIFF_SOURCE.read_bytes()), q) for record in DIFF_PY_EXCLUDED for q in record["region"])
+        for node in (resolve_region(ast.parse(REPORT_SOURCE.read_bytes()), q) for record in REPORT_PY_EXCLUDED for q in record["region"])
     )
     assert all(earlier[1] < later[0] for earlier, later in zip(spans, spans[1:])), spans
