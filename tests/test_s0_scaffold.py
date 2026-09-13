@@ -4,6 +4,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from packaging.requirements import Requirement
+
 ROOT = Path(__file__).resolve().parents[1]
 EXTRAS_BANNED_FROM_CORE = {"modal", "litellm", "matplotlib"}
 NETWORK_CLIENT_MODULES = {"requests", "httpx", "urllib", "socket"}
@@ -47,9 +49,16 @@ def test_pyproject_extras_exact():
 
 
 def test_pyproject_core_deps_are_math_only():
+    """C13, closed by A22. The parser was ``d.split("[")[0].split(">")[0].split("=")[0]`` plus a
+    ``.strip().lower()``, which strips neither ``<`` nor ``~=`` nor ``!=``: ``pandas>=2,<3``
+    survived it only because ``>`` happens to come first, and the ``pandas<3`` half alone would
+    not have. ``Requirement(d).name`` is the PEP 508 read, with ``packaging`` declared in
+    ``[dev]`` rather than leaned on through pytest. **Green before and after** -- the assertion's
+    value does not change under either parser for either spelling, so C13 has no build half. The
+    negative that makes it non-vacuous is V13 in ``tests/test_a22_pandas3.py``, over a synthetic
+    list the old parser fails."""
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    core = {d.split("[")[0].split(">")[0].split("=")[0].strip().lower()
-            for d in data["project"]["dependencies"]}
+    core = {Requirement(d).name.lower() for d in data["project"]["dependencies"]}
     assert core == {"numpy", "pandas", "scipy", "pyarrow"}
 
 

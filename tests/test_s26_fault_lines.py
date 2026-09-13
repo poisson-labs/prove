@@ -248,17 +248,29 @@ FIRST_LINE_NUMERIC_FIELDS = ("n_groups", "size_min", "size_median", "size_max", 
 F28_OMNIBUS_SHA256 = "03e7984ba22978e20386197f836fb60e0d32032a5b17a8bce400483e3e87296e"
 #: ``src/proofload/diff.py``'s bytes outside ``DIFF_PY_EXCLUDED``'s regions, unchanged since
 #: cd5f177 there (``git diff --exit-code``, narrowed).
-DIFF_PY_SHA256 = "21b34aa7ed834afd26a2a09a561e5e68f98c1ff045e9e7807d2c4b76e0cbc3f7"
+DIFF_PY_SHA256 = "105f1aa6b6e499d935227c1dca0ed8e1ead7204bb159c00a7aa02d12fa71f675"
+#: **A22's retrofit, 2026-09-13 -- a second live region, ``diff.py::_coverage``** (ADR-077). The
+#: digest above is over the file with **both** excluded regions removed, re-minted at ``4b3c6ae``
+#: off the shipped file: a read, not a prediction. ADR-077 permits two exclusions on one file when
+#: they are adjacent rather than overlapping, and these are -- measured at ``4b3c6ae``, ``_pairing``
+#: is lines 814-874 and ``_coverage`` 908-946, disjoint, and the clause below asserts the
+#: disjointness rather than assuming it. ``_coverage`` is A22's own: it carries the ``cause``
+#: rebuild that makes a stored null survive pandas 3 in the printed coverage block, and its cover
+#: lands in the same commit. Measured: ``105f1aa6...`` on the bare tree and on a copy carrying A22
+#: section 2's replacement, identical, while the ``_pairing``-only digest moves ``21b34aa7...`` ->
+#: ``b4a82174...`` and the whole file moves ``0438c2f5...`` -> ``d2b0ef59...``; a comment appended
+#: outside both regions is still caught.
 
 #: **A27's re-freeze, 2026-09-12 -- ``diff.py`` is no longer pinned whole** (ADR-077). The digest
 #: above is over the file with ``DIFF_PY_EXCLUDED``'s AST regions removed, whole lines, so the clause
 #: keeps its original meaning -- *the builder touched nothing but the region its spec put in scope* --
 #: across a packet that moves the region, instead of being re-minted over bytes nobody can read off
-#: anything that exists. The region is ``diff.py::_pairing``, which carries C18's unpaired-analysis
-#: message restatement; ``_coverage`` is A22's and is minted by A22's own Session A, where the
-#: exclusion and its cover land together. This file is one of four carriers of this digest and is not
-#: otherwise in A27's scope: measured, the message restatement reddens all four, and narrowing only
-#: the two oracles A27 re-freezes would leave this one red from A27's build until A22.
+#: anything that exists. A27's region is ``diff.py::_pairing``, which carries C18's unpaired-analysis
+#: message restatement; ``_coverage`` is A22's and was minted by A22's own Session A at ``4b3c6ae``,
+#: where the exclusion and its cover landed together. This file is one of four carriers of this
+#: digest and is not otherwise in A27's scope: measured, the message restatement reddens all
+#: four, and narrowing only the two oracles A27 re-freezes would leave this one red from
+#: A27's build until A22.
 #: ADR-077's record, one per pinned file, one entry per excluded region, six fields beside the
 #: digest because a narrowed guard that does not say what it stopped guarding is a weaker guard
 #: dressed as a better one. ``region`` is the qualified name resolved against the pinned file's own
@@ -279,6 +291,22 @@ DIFF_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
             "paired's salt equality, the NotPairable raises and the t_unit guard -- so the digest "
             "no longer sees them move. The cover is R21's pair rather than its message clause "
             "alone, for that reason; nothing in this file would notice."
+        ),
+        "retire_at": "A28",
+    },
+    {
+        "region": ("_coverage",),
+        "owner": "A22",
+        "cover": ("tests/test_a22_pandas3.py", ("test_v9_coverage_cause_is_none_on_every_comparable_row_and_a_named_cause_on_every_hole", "test_v10_the_coverage_block_prints_none_and_never_nan", "test_v11_the_diff_json_payload_dumps_with_allow_nan_false", "test_v12_no_astype_is_applied_to_the_cause_column_in_diff_py")),
+        "minted_at": "4b3c6ae",
+        "blind_spot": (
+            "On pandas 2 the excluded region's only live guard is V12, the source-structural one: "
+            "V9-V11 are green before and after there, because a from_records column keeps None on "
+            "pandas 2 whatever its null pattern. COVERAGE_SHA256, the output digest over this very "
+            "frame carried at five sites, cannot see the change at all -- measured e02aae9a... on "
+            "the bare tree and on a copy carrying A22 section 2's replacement, under pandas 2.3.3 "
+            "and 3.0.5 alike, because to_json(orient='records') renders None and NaN in an object "
+            "column as the same null. Nothing in this oracle would notice either."
         ),
         "retire_at": "A28",
     },
@@ -2128,11 +2156,27 @@ def test_f28_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     fail rather than accumulate -- Q1's named failure mode is exclusions piling up unretired.
     A27's own retirement sweep discharges empty: nothing carried an exclusion at ``101028c``, so
     there was no orphan to file.
+
+    **A22's retrofit, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
+    existing record constant, not a fifth carrier. The per-record assertions now pin ``owner`` and
+    ``minted_at`` per entry rather than one shared literal, because ``_coverage`` is minted at
+    ``4b3c6ae`` and ``_pairing`` at ``101028c``. Two live regions on one file is ADR-077's
+    *adjacent* case and not its refused *overlapping* one, so the spans are asserted disjoint here
+    rather than assumed. Neither exclusion is retirable yet: both name ``A28`` as their retiring
+    packet, and A22 is not it.
     """
     hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if "_PY_EXCLUDED" in path.read_text(encoding="utf-8"))
     assert hits == ["test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py"], hits
     for record in DIFF_PY_EXCLUDED:
         assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at"}, sorted(record)
-        assert record["minted_at"] == "101028c" and record["retire_at"] == "A28"
+        assert record["retire_at"] == "A28"
         assert len(record["blind_spot"].split()) >= 20, record["region"]
-    assert [record["region"] for record in DIFF_PY_EXCLUDED] == [("_pairing",)]
+    assert [(record["region"], record["owner"], record["minted_at"]) for record in DIFF_PY_EXCLUDED] == [
+        (("_pairing",), "A27", "101028c"),
+        (("_coverage",), "A22", "4b3c6ae"),
+    ]
+    spans = sorted(
+        (node.lineno, node.end_lineno)
+        for node in (resolve_region(ast.parse(DIFF_SOURCE.read_bytes()), q) for record in DIFF_PY_EXCLUDED for q in record["region"])
+    )
+    assert all(earlier[1] < later[0] for earlier, later in zip(spans, spans[1:])), spans

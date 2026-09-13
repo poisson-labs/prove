@@ -151,6 +151,12 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   ADR-077's own escape hatch for a packet that does touch the file -- and which keeps the
   cover-exists assertion below unconditional, rather than carving a named exception into the cover
   rule on the first packet to use it.
+- **A22's retrofit, 2026-09-13: the second region landed as planned above.**
+  ``diff.py::_coverage`` is now a live exclusion beside ``_pairing`` in this same record, owned
+  by A22, minted at ``4b3c6ae``, covered by ``tests/test_a22_pandas3.py``'s V9-V12, retiring at
+  ``A28``. ``DIFF_PY_SHA256`` is re-minted over the file with both regions removed -- a read off
+  the shipped file, not a prediction -- and the two spans are measured disjoint (``_pairing``
+  814-874, ``_coverage`` 908-946), which is ADR-077's permitted *adjacent* case.
 - **All four carriers of this digest are narrowed here, not two.** Measured on a copy carrying the
   restatement: every one of the four ``DIFF_PY_SHA256`` clauses goes red on the message change, so
   narrowing only the two oracles this packet re-freezes would leave ``test_s26_fault_lines.py``
@@ -353,7 +359,18 @@ GO1_PAGE_2_SHA256 = {
 #: section 2's replacement and A27's own message restatement, and red on an edit anywhere else in
 #: the file. ``tree.py`` unchanged since aed3f11; ``report.py`` as S28's build left it at f4e2845,
 #: both still whole-file. Bytes, so a scratch copy without ``.git`` can check.
-DIFF_PY_SHA256 = "21b34aa7ed834afd26a2a09a561e5e68f98c1ff045e9e7807d2c4b76e0cbc3f7"
+DIFF_PY_SHA256 = "105f1aa6b6e499d935227c1dca0ed8e1ead7204bb159c00a7aa02d12fa71f675"
+#: **A22's retrofit, 2026-09-13 -- a second live region, ``diff.py::_coverage``** (ADR-077). The
+#: digest above is over the file with **both** excluded regions removed, re-minted at ``4b3c6ae``
+#: off the shipped file: a read, not a prediction. ADR-077 permits two exclusions on one file when
+#: they are adjacent rather than overlapping, and these are -- measured at ``4b3c6ae``, ``_pairing``
+#: is lines 814-874 and ``_coverage`` 908-946, disjoint, and the clause below asserts the
+#: disjointness rather than assuming it. ``_coverage`` is A22's own: it carries the ``cause``
+#: rebuild that makes a stored null survive pandas 3 in the printed coverage block, and its cover
+#: lands in the same commit. Measured: ``105f1aa6...`` on the bare tree and on a copy carrying A22
+#: section 2's replacement, identical, while the ``_pairing``-only digest moves ``21b34aa7...`` ->
+#: ``b4a82174...`` and the whole file moves ``0438c2f5...`` -> ``d2b0ef59...``; a comment appended
+#: outside both regions is still caught.
 #: ADR-077's record, one per pinned file, one entry per excluded region, six fields beside the
 #: digest because a narrowed guard that does not say what it stopped guarding is a weaker guard
 #: dressed as a better one. ``region`` is the qualified name resolved against the pinned file's own
@@ -372,6 +389,22 @@ DIFF_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
             "paired's salt equality, the NotPairable raises and the t_unit guard -- so the digest "
             "no longer sees them move. The cover is R21's pair rather than its message clause alone, "
             "for that reason; nothing in this oracle would notice."
+        ),
+        "retire_at": "A28",
+    },
+    {
+        "region": ("_coverage",),
+        "owner": "A22",
+        "cover": ("tests/test_a22_pandas3.py", ("test_v9_coverage_cause_is_none_on_every_comparable_row_and_a_named_cause_on_every_hole", "test_v10_the_coverage_block_prints_none_and_never_nan", "test_v11_the_diff_json_payload_dumps_with_allow_nan_false", "test_v12_no_astype_is_applied_to_the_cause_column_in_diff_py")),
+        "minted_at": "4b3c6ae",
+        "blind_spot": (
+            "On pandas 2 the excluded region's only live guard is V12, the source-structural one: "
+            "V9-V11 are green before and after there, because a from_records column keeps None on "
+            "pandas 2 whatever its null pattern. COVERAGE_SHA256, the output digest over this very "
+            "frame carried at five sites, cannot see the change at all -- measured e02aae9a... on "
+            "the bare tree and on a copy carrying A22 section 2's replacement, under pandas 2.3.3 "
+            "and 3.0.5 alike, because to_json(orient='records') renders None and NaN in an object "
+            "column as the same null. Nothing in this oracle would notice either."
         ),
         "retire_at": "A28",
     },
@@ -2165,19 +2198,36 @@ def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     Step 1 is the grep for ``_PY_EXCLUDED`` under ``tests/``, one hit per live exclusion because
     the record is a module constant named for the file it narrows. **Counted over files, not
     lines**, and that is an amendment ADR-077 is owed rather than a reading of it: the entry says
-    ``grep -rn`` returns two after A27, which holds only for a one-line record. Six fields make it
-    a multi-line literal, so ``grep -rn`` returns 23 and ``grep -rl`` returns the two the entry
-    means. Measured at ``101028c``: **0** files against twelve ``_PY_SHA256`` lines over six
-    clauses in four files; **two** after A27, this file and the other oracle A27 re-freezes.
-    Asserting the file list here is what makes a third exclusion, minted anywhere in ``tests/``
+    ``grep -rn`` returns two after A27, which is wrong twice over -- it holds only for a one-line
+    record, and A27 narrows four carriers rather than two. Six fields make it a multi-line literal,
+    so ``grep -rn`` returns many and ``grep -rl`` returns the files the entry means. Measured at
+    ``101028c``: **0** files against twelve ``_PY_SHA256`` lines over six clauses in four files;
+    **four** after A27, every carrier of ``DIFF_PY_SHA256``. Asserting the file list here is what
+    makes a fifth exclusion, minted anywhere in ``tests/``
     without a re-freeze packet behind it, fail rather than accumulate -- Q1's named failure mode is
     exclusions piling up unretired. A27's own retirement sweep discharges empty: nothing carried
     an exclusion at ``101028c``, so there was no orphan to file.
+
+    **A22's retrofit, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
+    existing record constant, not a fifth carrier. The per-record assertions now pin ``owner`` and
+    ``minted_at`` per entry rather than one shared literal, because ``_coverage`` is minted at
+    ``4b3c6ae`` and ``_pairing`` at ``101028c``. Two live regions on one file is ADR-077's
+    *adjacent* case and not its refused *overlapping* one, so the spans are asserted disjoint here
+    rather than assumed. Neither exclusion is retirable yet: both name ``A28`` as their retiring
+    packet, and A22 is not it.
     """
     hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if "_PY_EXCLUDED" in path.read_text(encoding="utf-8"))
     assert hits == ["test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py"], hits
     for record in DIFF_PY_EXCLUDED:
         assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at"}, sorted(record)
-        assert record["minted_at"] == "101028c" and record["retire_at"] == "A28"
+        assert record["retire_at"] == "A28"
         assert len(record["blind_spot"].split()) >= 20, record["region"]
-    assert [record["region"] for record in DIFF_PY_EXCLUDED] == [("_pairing",)]
+    assert [(record["region"], record["owner"], record["minted_at"]) for record in DIFF_PY_EXCLUDED] == [
+        (("_pairing",), "A27", "101028c"),
+        (("_coverage",), "A22", "4b3c6ae"),
+    ]
+    spans = sorted(
+        (node.lineno, node.end_lineno)
+        for node in (resolve_region(ast.parse(DIFF_SOURCE.read_bytes()), q) for record in DIFF_PY_EXCLUDED for q in record["region"])
+    )
+    assert all(earlier[1] < later[0] for earlier, later in zip(spans, spans[1:])), spans
