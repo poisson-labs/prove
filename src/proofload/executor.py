@@ -11,6 +11,7 @@ M3 mints the four manifest fields no other module owns: ``run_id``, ``run_salt``
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import math
@@ -21,7 +22,7 @@ import signal
 import sys
 import time
 import traceback
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from multiprocessing.connection import Connection
@@ -31,6 +32,15 @@ from typing import Any
 from proofload import __version__
 from proofload import capture as capture_module
 from proofload.capture import CaptureSpec, CaptureStatus, Recorder, capture, install
+from proofload.chaos import (
+    ChaosError,
+    ChaosSpec,
+    ChaosStatus,
+    FaultRecord,
+    _installed_hooks,
+    injecting,
+)
+from proofload.chaos import install as chaos_install
 from proofload.diff import mde_two_proportion
 from proofload.episode import Episode
 from proofload.sampler import SweepSpec
@@ -375,6 +385,13 @@ class _CaptureCall:
     episode_id: str
 
 
+@dataclass(frozen=True)
+class _ChaosCall:
+    """What one episode needs to inject: the declared fault, which is a run constant."""
+
+    spec: ChaosSpec
+
+
 def _merge_capture(meta: dict[str, Any], captured: dict[str, Any]) -> None:
     """Land the captured trace in ``meta["trace"]``, never at the cost of the episode.
 
@@ -443,6 +460,7 @@ def _call_in_process(
     config: dict[str, Any],
     seed: int,
     capture_call: _CaptureCall | None = None,
+    chaos_call: _ChaosCall | None = None,
 ) -> _Outcome:
     """The one funnel every execution path goes through.
 
@@ -451,15 +469,31 @@ def _call_in_process(
     on the forking paths it is installed in the child and never in the forking parent (C1),
     and the trace is merged before the outcome tuple is built and therefore before anything
     is pickled.
+
+    Injection is scoped here too, *inside* the capture block, so a span the recorder opened is
+    already current when a call is intercepted and the fault can be stamped on it. A
+    ``ChaosError`` is the one exception that is not turned into an errored episode: a run that
+    could not apply the fault it declared is not a measurement of anything, so it propagates
+    and the run fails as a run.
     """
+    if chaos_call is not None:
+        # Memoized, so this is inert in a forked child, which inherited the parent's patched
+        # client along with its memo. It is not inert under ``spawn``, where the child has
+        # its own interpreter: without it the block would open over an unpatched client and
+        # the faulted arm would run as a second control arm.
+        chaos_install(chaos_call.spec)
+    chaos_scope: contextlib.AbstractContextManager[list[FaultRecord]] = (
+        contextlib.nullcontext([]) if chaos_call is None else injecting(chaos_call.spec, seed)
+    )
     if capture_call is None:
-        try:
-            return _classify(rollout(config, seed))
-        except Exception:
-            return ("error", traceback.format_exc())
+        with chaos_scope:
+            try:
+                return _classify(rollout(config, seed))
+            except Exception:
+                return ("error", traceback.format_exc())
     install(capture_call.spec)  # once per process; inert and memoized after the first call
     try:
-        with capture(capture_call.run_id, capture_call.episode_id) as recorder:
+        with capture(capture_call.run_id, capture_call.episode_id) as recorder, chaos_scope:
             try:
                 return _classify(rollout(config, seed), recorder)
             except Exception:
@@ -469,6 +503,8 @@ def _call_in_process(
                 # after it may replace what the user needs -- then the trace, if there is one.
                 text = traceback.format_exc()
                 return ("error", _errored(text, recorder))
+    except ChaosError:
+        raise
     except Exception:  # capture() itself failed to open or close: the text, as today
         return ("error", traceback.format_exc())
 
@@ -507,13 +543,14 @@ def _child_main(
     config: dict[str, Any],
     seed: int,
     capture_call: _CaptureCall | None = None,
+    chaos_call: _ChaosCall | None = None,
 ) -> None:
     # The drain pipe always arrives (E14); only a child with a capture call arms the handler
     # that writes to it, so a run that did not ask keeps the default SIGTERM disposition (C3).
     if capture_call is not None:
         _arm_drain(drain)
     try:
-        outcome = _call_in_process(rollout, config, seed, capture_call)
+        outcome = _call_in_process(rollout, config, seed, capture_call, chaos_call)
     except BaseException:  # noqa: BLE001 - the child must always report
         outcome = ("error", traceback.format_exc())
     try:
@@ -597,6 +634,7 @@ def _call_with_timeout(
     timeout: float,
     ctx: Any,
     capture_call: _CaptureCall | None = None,
+    chaos_call: _ChaosCall | None = None,
 ) -> _Outcome:
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     # The drain: a second pipe, because the outcome pipe may be mid-send when SIGTERM lands and
@@ -608,7 +646,7 @@ def _call_with_timeout(
     drain_parent, drain_child = ctx.Pipe(duplex=False)
     proc = ctx.Process(
         target=_child_main,
-        args=(child_conn, drain_child, rollout, config, seed, capture_call),
+        args=(child_conn, drain_child, rollout, config, seed, capture_call, chaos_call),
     )
     proc.start()
     child_conn.close()
@@ -712,6 +750,24 @@ def _capture_record(spec: CaptureSpec, status: CaptureStatus) -> dict[str, Any]:
     }
 
 
+def _chaos_record(spec: ChaosSpec, status: ChaosStatus, hooks: Sequence[str]) -> dict[str, Any]:
+    """``manifest.environment["chaos"]`` and ``backend_meta["chaos"]``: the request, and what
+    the process that made the calls actually armed.
+
+    ``hooks`` is what distinguishes the two: the ``none`` arm asks for injection, installs
+    nothing and runs under an unpatched client, and a record that did not say so would make
+    the control arm indistinguishable from a faulted arm that failed to arm.
+    """
+    return {
+        "requested": status.requested,
+        "fault": status.fault,
+        "rate": status.rate,
+        "steps": list(spec.steps),
+        "engine_version": status.engine_version,
+        "hooks": list(hooks),
+    }
+
+
 def _record(p: Plan, pair: Pair, index: int, outcome: _Outcome, wall_time: float) -> EpisodeRecord:
     kind, payload = outcome
     backend_meta = {"i": index}
@@ -795,6 +851,16 @@ def run_local(
     if capture_spec is not None:
         capture_status = _capture_probe(capture_spec) if ctx is not None else install(capture_spec)
 
+    # Injection is armed here, before the manifest exists, because its two front refusals --
+    # an unknown fault name, and a faulted arm in a process with no client loaded -- are
+    # reasons the run must not start at all. Unlike capture, the hooks go in *this* process
+    # even with a timeout: a forked child inherits the patched client, and the target is
+    # resolved before this point on both paths.
+    chaos_spec = p.spec.chaos
+    chaos_status: ChaosStatus | None = None
+    if chaos_spec is not None:
+        chaos_status = chaos_install(chaos_spec)
+
     if not p.resumed:
         environment = _environment(p.spec)
         environment["max_mde_accepted"] = _accepted_mde(p)
@@ -802,6 +868,8 @@ def run_local(
             environment["import_path"] = p.import_path
         if capture_spec is not None and capture_status is not None:
             environment["capture"] = _capture_record(capture_spec, capture_status)
+        if chaos_spec is not None and chaos_status is not None:
+            environment["chaos"] = _chaos_record(chaos_spec, chaos_status, _installed_hooks())
         store.create_run(
             RunManifest(
                 run_id=p.run_id,
@@ -839,13 +907,14 @@ def run_local(
                     episode_id=_episode_id(pair.config_hash, pair.replicate_index),
                 )
             )
+            chaos_call = None if chaos_spec is None else _ChaosCall(spec=chaos_spec)
             t0 = time.perf_counter()
             if ctx is None:
-                outcome = _call_in_process(rollout, config, pair.seed, call)
+                outcome = _call_in_process(rollout, config, pair.seed, call, chaos_call)
             else:
                 assert episode_timeout is not None
                 outcome = _call_with_timeout(
-                    rollout, config, pair.seed, episode_timeout, ctx, call
+                    rollout, config, pair.seed, episode_timeout, ctx, call, chaos_call
                 )
             wall_time = time.perf_counter() - t0
             batch.append(_record(p, pair, index, outcome, wall_time))

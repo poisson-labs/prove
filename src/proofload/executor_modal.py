@@ -26,6 +26,9 @@ from typing import Any
 
 from proofload._resolve import resolve, split_import_path
 from proofload.capture import CaptureSpec, CaptureStatus, install
+from proofload.chaos import ChaosSpec, ChaosStatus, _installed_hooks
+from proofload.chaos import install as chaos_install
+from proofload.chaos_catalog import ENGINE_VERSION as CATALOG_VERSION
 from proofload.episode import Episode
 from proofload.executor import (
     _TIMEOUT_ERROR,
@@ -39,6 +42,8 @@ from proofload.executor import (
     _capture_probe,
     _capture_record,
     _CaptureCall,
+    _chaos_record,
+    _ChaosCall,
     _environment,
     _episode_id,
     _mp_context,
@@ -305,6 +310,19 @@ def _capture_request(payload: Mapping[str, Any] | None) -> tuple[CaptureSpec | N
     return CaptureSpec(**fields), str(payload.get("run_id", ""))
 
 
+_CHAOS_FIELDS: tuple[str, ...] = ("fault", "rate", "steps")
+
+
+def _chaos_request(payload: Mapping[str, Any] | None) -> ChaosSpec | None:
+    """The ``[chaos]`` table as it crosses into the container: three JSON-native fields."""
+    if payload is None:
+        return None
+    fields = {name: payload[name] for name in _CHAOS_FIELDS if name in payload}
+    if "steps" in fields:
+        fields["steps"] = tuple(fields["steps"])
+    return ChaosSpec(**fields)
+
+
 def _capture_status(status: CaptureStatus) -> dict[str, Any]:
     return {
         "requested": status.requested,
@@ -320,6 +338,7 @@ def worker_batch(
     episode_timeout: float | None,
     *,
     capture: dict[str, Any] | None = None,
+    chaos: dict[str, Any] | None = None,
 ) -> list[Result]:
     """Run one batch. This is the code inside the container: pure Python, no modal import.
 
@@ -338,12 +357,21 @@ def worker_batch(
     actually happened in the container comes back on every result at
     ``backend_meta["capture"]``: the host cannot know, and a manifest that claimed to would
     be lying.
+
+    ``chaos`` rides beside it, the sweep's ``[chaos]`` table as three JSON-native fields, and
+    comes back the same way at ``backend_meta["chaos"]``. Arming it is the batch's first act:
+    a refused injection raises out of the whole batch rather than producing N episodes that
+    quietly measure the control arm twice.
     """
     if episode_timeout is not None and episode_timeout <= 0:
         raise ValueError(f"episode_timeout must be > 0 when given, got {episode_timeout}")
     rollout = _resolve_rollout(import_path)
     ctx = _mp_context() if episode_timeout is not None else None
     capture_spec, run_id = _capture_request(capture)
+    chaos_spec = _chaos_request(chaos)
+    chaos_status: ChaosStatus | None = None
+    if chaos_spec is not None:
+        chaos_status = chaos_install(chaos_spec)
     status: CaptureStatus | None = None
     if capture_spec is not None:
         # With a timeout each episode is a forked child, so the provider goes in there (C1)
@@ -361,12 +389,15 @@ def worker_batch(
                 episode_id=_episode_id(config_hash, replicate_index),
             )
         )
+        chaos_call = None if chaos_spec is None else _ChaosCall(spec=chaos_spec)
         t0 = time.perf_counter()
         if ctx is None:
-            outcome = _call_in_process(rollout, fresh, seed, call)
+            outcome = _call_in_process(rollout, fresh, seed, call, chaos_call)
         else:
             assert episode_timeout is not None
-            outcome = _call_with_timeout(rollout, fresh, seed, episode_timeout, ctx, call)
+            outcome = _call_with_timeout(
+                rollout, fresh, seed, episode_timeout, ctx, call, chaos_call
+            )
         wall_time = time.perf_counter() - t0
         kind, payload = outcome
         if kind == "ok":
@@ -375,6 +406,10 @@ def worker_batch(
             result["backend_meta"] = {"i": i}
             if status is not None:
                 result["backend_meta"]["capture"] = _capture_status(status)
+            if chaos_spec is not None and chaos_status is not None:
+                result["backend_meta"]["chaos"] = _chaos_record(
+                    chaos_spec, chaos_status, _installed_hooks()
+                )
             results.append(result)
         elif kind == _TIMEOUT_ERROR:
             # The dict form, exactly two keys, only when the terminated child drained a trace;
@@ -442,6 +477,21 @@ def _open_run(
                 ),
                 instrumented=(),
             ),
+        )
+    if p.spec.chaos is not None:
+        # The host arms nothing: the hooks belong to the process that makes the calls, and
+        # that is a container. The manifest carries the request, and every result carries
+        # what the container actually armed at ``backend_meta["chaos"]``.
+        environment["chaos"] = _chaos_record(
+            p.spec.chaos,
+            ChaosStatus(
+                requested=True,
+                fault=p.spec.chaos.fault,
+                rate=p.spec.chaos.rate,
+                steps=p.spec.chaos.steps,
+                engine_version=None if p.spec.chaos.fault == "none" else CATALOG_VERSION,
+            ),
+            (),
         )
     store.create_run(
         RunManifest(
