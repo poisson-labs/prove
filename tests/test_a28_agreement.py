@@ -51,16 +51,20 @@ bind (section 10 Q10 (a)): one environment, one cell.
 - **A ``mcnemar_bh`` Go1** shows the digest is scheme-blind, not how far ``units`` and ``cells``
   can drift apart.
 
-**Mutants** (spec section 7.4, plus two for Q5 (b)): 1 viewer digest clause deleted -> G10 alone;
-2 report digest clause deleted -> G11 alone; 3 ``_require_agreement`` stops raising -> G5 alone;
-4 mint from ``cells`` instead of the rebuilt tuples -> survives by construction; 5 sort dropped ->
-G3; 6 ``AGREEMENT_SCHEMA`` dropped from the payload -> G17's literals alone; 7 separator join
-instead of ``json.dumps`` -> survives today (no fixture carries the separator); 8 ``SCHEMA`` left
-at ``/3`` -> G9; 9 field carried but not serialised -> G7, G8; 10 digest compared to itself ->
-G10, G11; 11 digest clause before the multiset clause -> G12 alone; 12 digest widened with
-``multi.method`` -> G17's method half alone; 13 viewer knob clause deleted -> G21 alone; 14 report
-knob clause deleted -> G22 alone. The measured table is in the devlog entry for this freeze
-(``log/proofload-devlog.md``, 2026-09-13) and summarised in the Master Action List A28 row.
+**Mutants, measured over the whole suite on copies of the shadow shim** (spec section 7.4's
+twelve plus 13 and 14 for Q5 (b); control 1866 passed with W20's whole-file ``tree.py`` clause the
+one expected red, present in every row and not counted): 1 viewer digest clause deleted -> G10, G13;
+2 report digest clause deleted -> G11, G13; 3 ``_require_agreement`` stops raising -> G5, and S25's
+O13, S26's F30 and S27's L24, which already pinned that refusal -- the spec's "G5 alone" holds in
+this file only; 4 mint from ``cells`` instead of the rebuilt tuples -> survives by construction, as
+predicted; 5 sort dropped -> every render refuses, 18 failures and 131 fixture errors; 6
+``AGREEMENT_SCHEMA`` dropped -> G16, G17; 7 separator join instead of ``json.dumps`` -> G16, G17,
+**not** the survivor the spec predicted, because G17 pins values of the JSON form; 8 ``SCHEMA``
+left at ``/3`` -> G9 and the seven schema literals of M13, S21 and S29; 9 field carried but not
+serialised -> G7, G8, G9, L10, W12; 10 digest compared to itself -> G10, G11, G13; 11 digest clause
+before the multiset clause -> G12 and W16, nothing else; 12 digest widened with ``multi.method`` ->
+G17, G21, G22; 13 viewer knob clause deleted -> G21 alone; 14 report knob clause deleted -> G22
+alone. The table is in the devlog entry for this freeze (``log/proofload-devlog.md``, 2026-09-13).
 
 Restated rather than imported, as every frozen oracle's helpers are: the AST resolver, the
 closure and arithmetic scans, the store builders and the two-value cells.
