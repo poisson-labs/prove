@@ -942,7 +942,7 @@ def _coverage(a: pd.DataFrame, b: pd.DataFrame, common: Sequence[str]) -> pd.Dat
         )
     frame = pd.DataFrame.from_records(records, columns=list(COVERAGE_COLUMNS))
     for col in ("config", "cause"):
-        frame[col] = frame[col].astype(object)
+        frame[col] = pd.Series([r[col] for r in records], index=frame.index, dtype=object)
     return frame
 
 
