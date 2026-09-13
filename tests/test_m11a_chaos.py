@@ -1,4 +1,4 @@
-"""M11a -- the injection seam, the keying and the carrier: the oracle for M11a-1 to M11a-32.
+"""M11a -- the injection seam, the keying and the carrier: the oracle for M11a-1 to M11a-33.
 
 Written from "Proofload -- Spec M11 Injection Adapter" section 4 (as revised 2026-09-13, D1
 reversed: no ``agentchaos-sdk`` dependency, the hook and the applier are M11's own, the fault
@@ -94,8 +94,10 @@ any ``import httpx`` in ``src/proofload`` at any nesting level (an AST walk, not
 Measured on this oracle's shadow shim: a shim that imported ``httpx`` inside ``install()`` and
 read ``time.time_ns()`` turned all three red on the whole suite; one that reaches the client
 through ``sys.modules["httpx"]`` (the client the target already loaded) and reads
-``trace._span_clock()`` passes all three and this file. What a faulted arm does when ``httpx``
-is not loaded at ``install()`` is not asserted here and is reported as a spec gap.
+``trace._span_clock()`` passes all three and this file. A faulted arm whose process has not
+loaded ``httpx`` by ``install()`` has no LLM client to inject into and is refused with
+``ChaosError`` before the manifest exists (M11a-33, section 3.8 as amended 2026-09-13); the
+``none`` arm still installs.
 
 **Standing rule 12 -- the classified red set, measured on this commit.** Pristine
 ``git clone`` of ``7b61bf5`` at a UUID-free path, venv built from the repo venv's ``pip
@@ -103,13 +105,13 @@ freeze`` with ``--no-deps``, collection 1846 = the repo's 1846; the copy lacks t
 ``examples/golden_pilot/suite/HumanEval.jsonl.gz`` so it skips 5 where the repo skips 3.
 Bare-tree baseline: **4 failed / 1837 passed / 5 skipped** -- the four are A22's own
 classified reds on pandas 2.3.3 (``test_a22_pandas3.py`` V5, V12, V14, V15), whose build has
-not landed. With this file and the amendments below, 1886 collected: **47 failed / 1834 passed
+not landed. With this file and the amendments below, 1887 collected: **48 failed / 1834 passed
 / 5 skipped**, and nothing outside the following is red.
 
-- ``tests/test_m11a_chaos.py``: all 40, because ``proofload.chaos`` and
+- ``tests/test_m11a_chaos.py``: all 41, because ``proofload.chaos`` and
   ``proofload.chaos_catalog`` do not exist -- 11 as ``ModuleNotFoundError`` in the test body,
-  21 as the same error reported by a forked child (``Failed: isolated child_* failed``), and 8
-  by the assertion the missing build leaves unmet (``SamplerError`` not raised, the signatures
+  21 as the same error reported by a forked child (``Failed: isolated child_* failed``), one as
+  the same error in a subprocess (M11a-33), and 8 by the assertion the missing build leaves unmet (``SamplerError`` not raised, the signatures
   still four-wide, no ``chaos`` key on the manifest, no ``NOTICE``, the literal counted zero
   times, the paired run's outcomes ``None``).
 - ``tests/test_m3_crash_trace.py::test_k8_the_transport_aliases_and_signatures_are_untouched``,
@@ -1322,6 +1324,54 @@ def test_m11a_23b_the_seam_imports_with_no_client_library_present() -> None:
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert set(json.loads(r.stdout)) == FAULT_NAMES
+
+
+def _blocked_client_run(script: str) -> dict[str, Any]:
+    """Run ``script`` in a fresh interpreter with ``httpx`` and ``openai`` unimportable."""
+    code = (
+        "import json, sys, traceback\n"
+        "for name in ('httpx', 'openai'):\n"
+        "    sys.modules[name] = None\n"
+        "out = {}\n"
+        "try:\n" + "".join(f"    {line}\n" for line in script.splitlines()) +
+        "except Exception as exc:\n"
+        "    out['raised'] = type(exc).__name__\n"
+        "    out['message'] = str(exc)\n"
+        "print(json.dumps(out))\n"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_m11a_33_a_faulted_arm_refuses_when_no_client_is_loaded(tmp_path: Path) -> None:
+    faulted = _blocked_client_run(
+        "from proofload.chaos import ChaosSpec, install\n"
+        "install(ChaosSpec(fault='llm_error_single'))\n"
+        "out['raised'] = None\n"
+    )
+    assert faulted["raised"] == "ChaosError", faulted
+    assert "httpx" in faulted["message"], faulted
+    control = _blocked_client_run(
+        "import dataclasses\n"
+        "from proofload.chaos import ChaosSpec, install\n"
+        "out.update(dataclasses.asdict(install(ChaosSpec())))\n"
+    )
+    assert control == {"requested": True, "fault": "none", "rate": 1.0, "steps": [], "engine_version": None}, control
+    store_root = tmp_path / "store"
+    toml = write(tmp_path / "sweep.toml", sweep_toml(chaos={"fault": "llm_error_single"}, replicates=1))
+    run = _blocked_client_run(
+        "from proofload.episode import Episode\n"
+        "from proofload.executor import plan, run_local\n"
+        "from proofload.sampler import SweepSpec\n"
+        "from proofload.store import Store\n"
+        f"store = Store({str(store_root)!r})\n"
+        f"p = plan(SweepSpec.load({str(toml)!r}), store, run_salt={SALT!r})\n"
+        "run_local(p, lambda cfg, seed: Episode(outcome='survived', t=1.0, horizon=1.0), store)\n"
+        "out['raised'] = None\n"
+    )
+    assert run["raised"] == "ChaosError" and "httpx" in run["message"], run
+    assert Store(store_root).runs() == []
 
 
 # ---------- M11a-24: the paired run ----------
