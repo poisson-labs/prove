@@ -785,7 +785,21 @@ def _multi_method_rows(
 
 def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     """A tree is rendered beside the diff it was grown from or not at all, I18's shape one object
-    over: its events and its cell count must be the family's. Checked before anything is built."""
+    over: its events and its cell count must be the family's. Checked before anything is built.
+
+    A28 appends two clauses and rewords none, because the two it follows exist to *name* what
+    differs and a digest can name nothing (spec A28 section 10 Q4). The **agreement digest**
+    closes C16: two pairs over the same events with the same cell count and the same config
+    grid, differing only in what happened, pass the arity clause and are refused here. The
+    **knob clause** follows it because the digest is scheme-blind and q-blind by construction
+    (section 3.3), so a ``mcnemar_bh`` tree would otherwise render happily beside a
+    ``fisher_bh`` diff. ``agreement_digest`` is imported inside the function: ``tree.py``
+    imports ``diff``, ``executor`` and ``store`` and not ``report``, so a module-level import
+    would not be a cycle today, but it would be M7 depending on M14 -- and W20 pins that
+    ``report.py`` imports ``proofload.tree`` under ``TYPE_CHECKING`` only.
+    """
+    from proofload.tree import agreement_digest
+
     if tuple(tree.root.events) != tuple(multi.events):
         raise ComparisonMismatch(
             f"the tree is over events {list(tree.root.events)}; the diff is over "
@@ -795,6 +809,16 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
         raise ComparisonMismatch(
             f"the tree is over {tree.root.n_cells} cells x {len(tree.root.events)} events; the "
             f"diff is over {multi.n_tests} tests"
+        )
+    if tree.agreement != agreement_digest(multi):
+        raise ComparisonMismatch(
+            "the tree's agreement digest is not this diff's; the tree was grown from a "
+            "different pair with the same family shape, so nothing above can be named"
+        )
+    if tree.root.method != multi.method or tree.root.q != multi.q:
+        raise ComparisonMismatch(
+            f"the tree was grown under {tree.root.method} at q = {tree.root.q:g}; this diff is "
+            f"{multi.method} at q = {multi.q:g}"
         )
 
 
