@@ -587,10 +587,14 @@ class Store:
                         there is no ``meta`` column to hold it.
         ``"envelope"``  one further column, ``trace``, holding the envelope dict or ``None``,
                         and a ``meta`` (where read) with no ``"trace"`` key. The observation
-                        bodies are projected away at the Parquet reader and never decoded --
-                        and on a part written *before* A7 the envelope can only come from
-                        ``meta``, so that part alone pays meta's decode. The saving is per
-                        part, not per run.
+                        bodies are projected away at the Parquet reader and never decoded.
+                        ``meta`` is decoded only when the run holds a part written *before*
+                        A7, whose envelope can come from nowhere else -- and then for the
+                        whole run, not only that part, because every part is read under one
+                        projection. A run resumed across the A7 boundary therefore pays
+                        meta's decode on its post-A7 rows too; that is the only way a mixed
+                        run exists, and reading each part under its own schema is what would
+                        make the saving per part.
         ``"none"``      no trace anywhere: both columns projected away, and a pre-A7 row's
                         ``meta["trace"]`` stripped, so the two layouts stay indistinguishable.
 
@@ -668,7 +672,14 @@ class Store:
     def _has_pre_split_part(self, run_id: str) -> bool:
         """Whether any part of this run was written before A7 -- read off each part's own
         Parquet footer and never off the manifest, because the fallback is presence-of-column
-        and a run resumed across the A7 boundary holds parts of both kinds."""
+        and a run resumed across the A7 boundary holds parts of both kinds.
+
+        Per run and not per row, which is the conservative half of the trade: one pre-A7 part
+        makes the whole run's envelope read decode ``meta``. Splitting it per part means
+        reading each part under its own schema instead of one concatenation under ``_SCHEMA``,
+        which is a change to ``_read_table``'s shape and to where the sort and the key mask
+        run; A9 is the packet that should want it, and nothing before then reads a mixed run.
+        """
         return any(_TRACE_KEY not in pq.read_schema(p).names for p in self._parts(run_id))
 
     def _reassemble(self, df: pd.DataFrame) -> None:
