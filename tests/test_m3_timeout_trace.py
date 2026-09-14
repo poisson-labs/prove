@@ -122,9 +122,11 @@ TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans"
 TRACE_FIELDS = ("spans", "source", "source_version", "dropped", "truncated")
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
-    "ATTRIBUTE_ALIASES", "DROP_REASONS", "KINDS", "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION",
-    "SCHEMA", "SOURCES", "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
-    "collect", "from_litellm", "from_otel", "merge", "record", "step",
+    # A7 (spec section 7.1): four mints, in trace.py's own order -- constants, classes, functions.
+    "ATTRIBUTE_ALIASES", "DROP_REASONS", "KINDS", "LOGPROBS_KEY", "OBSERVATION_KEYS",
+    "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "SCHEMA", "SOURCES",
+    "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
+    "assemble", "collect", "from_litellm", "from_otel", "merge", "record", "split", "step",
 ]
 OTEL_EXPORTS = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
 MODAL_EXPORTS = [

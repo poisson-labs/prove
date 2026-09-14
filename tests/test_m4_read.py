@@ -732,8 +732,14 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     store.append("r1", [_rec()])
     fresh = pq.read_schema(next((tmp_path / "r1" / "episodes").glob("part-*.parquet")))
     golden = pq.read_schema(GO1_ROOT / "go1-v0" / "episodes" / "part-00000.parquet")
-    assert fresh.equals(golden), f"\n{fresh}\n!=\n{golden}"
-    assert fresh.names == THIRTEEN
+    # A7 (spec section 3.1, 7.1): the on-disk schema is the Go1 golden's thirteen fields plus
+    # ``trace`` and ``trace_obs``, both nullable strings, appended in that order. Amended from
+    # ``fresh.equals(golden)`` / ``fresh.names == THIRTEEN``; the golden comparison is kept.
+    expected = golden.append(pa.field("trace", pa.string(), nullable=True)).append(
+        pa.field("trace_obs", pa.string(), nullable=True)
+    )
+    assert fresh.equals(expected), f"\n{fresh}\n!=\n{expected}"
+    assert fresh.names == THIRTEEN + ["trace", "trace_obs"]
     golden_manifest = json.loads((GO1_ROOT / "go1-v0" / "manifest.json").read_text())
     assert set(store.manifest("r1").to_dict()) == set(golden_manifest)
 
@@ -764,7 +770,11 @@ def test_r8_runs_on_go1_prints_each_run_with_12800_rows(go1_store: Store) -> Non
 
 def test_r9_read_gains_exactly_meta_and_keys_keyword_only() -> None:
     params = inspect.signature(Store.read).parameters
-    assert list(params) == ["self", "run_id", "meta", "keys"]
+    # A7 (spec section 2, 7.1): ``trace=`` is appended last, keyword-only, default None. Four
+    # names to five; ``meta`` and ``keys`` keep their kind and default.
+    assert list(params) == ["self", "run_id", "meta", "keys", "trace"]
+    assert params["trace"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["trace"].default is None
     assert params["run_id"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert params["run_id"].default is inspect.Parameter.empty
     assert params["meta"].kind is inspect.Parameter.KEYWORD_ONLY

@@ -1016,8 +1016,12 @@ def test_c7_rule_zero_the_mock_agent_trace_is_byte_identical_with_capture_on_and
     assert len(stored_on) == 24 and set(stored_on) == set(stored_off)
     for key in stored_off:
         assert stored_on[key] == stored_off[key], key
-        meta = json.loads(stored_on[key])
-        assert meta["trace"]["source"] == "record" and Trace.from_dict(meta["trace"]).dropped == 0
+    # A7 (spec section 3.2, P7-2): the trace is stored beside ``meta``, not inside it, so the
+    # rollout's own trace is read back through the store's full read, where ``meta["trace"]`` is
+    # reassembled. Amended from a ``json.loads`` of the raw ``meta`` cell, which no longer carries
+    # the key; the raw byte identity above is rule zero's own clause and is unchanged.
+    for row in Store(tmp_path / "on").read(on["run_id"]).itertuples(index=False):
+        assert row.meta["trace"]["source"] == "record" and Trace.from_dict(row.meta["trace"]).dropped == 0
     assert not warnings_under_proofload(on["logs"]), on["logs"]
 
 

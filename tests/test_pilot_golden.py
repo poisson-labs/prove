@@ -257,9 +257,11 @@ STEP_NS = 10_000_000
 # S17's measure of "what S17 left them": every public name each module defines itself, and
 # the __all__ lists, copied verbatim from tests/test_m3_crash_trace.py.
 TRACE_EXPORTS = [
-    "ATTRIBUTE_ALIASES", "DROP_REASONS", "KINDS", "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION",
-    "SCHEMA", "SOURCES", "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
-    "collect", "from_litellm", "from_otel", "merge", "record", "step",
+    # A7 (spec section 7.1): four mints, in trace.py's own order -- constants, classes, functions.
+    "ATTRIBUTE_ALIASES", "DROP_REASONS", "KINDS", "LOGPROBS_KEY", "OBSERVATION_KEYS",
+    "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "SCHEMA", "SOURCES",
+    "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
+    "assemble", "collect", "from_litellm", "from_otel", "merge", "record", "split", "step",
 ]
 OTEL_EXPORTS = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
 MODAL_EXPORTS = [

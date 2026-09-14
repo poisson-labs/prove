@@ -108,14 +108,16 @@ SNIPPET_MARKER = "# reproduce one episode"
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # the M10 oracle's I15 regex, verbatim
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-S16_ORACLE_SHA256 = "256298e6a296f464cd3212ebdf3839a4d61faeed579ff54332fb84fcd6956187"  # 38 tests; re-minted by M11a Session A over the amended E12
+S16_ORACLE_SHA256 = "c42ef229c89415d8d534e95070b58cc2162ac4cbe4e30c5f3e8377b824f3879a"  # 38 tests; re-minted by A7 Session A over the amended TRACE_EXPORTS (E12)
 
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated"})
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
-    "ATTRIBUTE_ALIASES", "DROP_REASONS", "KINDS", "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION",
-    "SCHEMA", "SOURCES", "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
-    "collect", "from_litellm", "from_otel", "merge", "record", "step",
+    # A7 (spec section 7.1): four mints, in trace.py's own order -- constants, classes, functions.
+    "ATTRIBUTE_ALIASES", "DROP_REASONS", "KINDS", "LOGPROBS_KEY", "OBSERVATION_KEYS",
+    "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "SCHEMA", "SOURCES",
+    "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
+    "assemble", "collect", "from_litellm", "from_otel", "merge", "record", "split", "step",
 ]
 OTEL_EXPORTS = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
 MODAL_EXPORTS = [
