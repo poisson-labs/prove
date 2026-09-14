@@ -23,6 +23,7 @@ from typing import Any, Literal
 from scipy.stats import qmc
 
 from proofload.capture import CaptureSpec
+from proofload.chaos import ChaosSpec
 from proofload.store import InvalidConfig, config_hash
 
 AxisType = Literal["continuous", "categorical"]
@@ -30,6 +31,7 @@ AxisType = Literal["continuous", "categorical"]
 _AXIS_TYPES: tuple[str, ...] = ("continuous", "categorical")
 _TOOL_RELIABILITY_RATES: tuple[float, ...] = (0.0, 0.05, 0.10, 0.20, 0.30)
 _CAPTURE_FIELDS: tuple[str, ...] = ("instrument", "content", "max_span_bytes", "max_spans")
+_CHAOS_FIELDS: tuple[str, ...] = ("fault", "rate", "steps")
 
 
 class SamplerError(Exception):
@@ -194,6 +196,40 @@ def _capture_table(table: Any) -> CaptureSpec | None:
     )
 
 
+def _chaos_table(table: Any) -> ChaosSpec | None:
+    """The optional ``[chaos]`` table of a sweep file, as a ``ChaosSpec``.
+
+    Validated by field name the way ``[capture]`` is, and -- like ``[capture]`` -- it rides
+    the spec without entering ``to_dict()``: an injection request is not what makes two
+    sweeps the same sweep, and keeping it out of the sweep's identity is what lets the
+    faulted arm and the ``none`` arm derive the same seeds and pair under ``diff``.
+
+    The fault *name* is not checked here. ``chaos.install`` owns the vocabulary and refuses
+    an unknown name before the run exists; a second gate in the sampler would be a second
+    copy of the catalogue's membership rule.
+    """
+    if table is None:
+        return None
+    if not isinstance(table, Mapping):
+        raise SamplerError("[chaos] must be a table")
+    unknown = sorted(set(table) - set(_CHAOS_FIELDS))
+    if unknown:
+        raise SamplerError(
+            f"[chaos] has unknown field(s): {', '.join(unknown)}; "
+            f"the fields are {', '.join(_CHAOS_FIELDS)}"
+        )
+    fault = table.get("fault", "none")
+    if not isinstance(fault, str) or not fault:
+        raise SamplerError(f"[chaos].fault must be a non-empty fault name, got {fault!r}")
+    rate = table.get("rate", 1.0)
+    if isinstance(rate, bool) or not isinstance(rate, (int, float)) or not 0.0 <= rate <= 1.0:
+        raise SamplerError(f"[chaos].rate must be a number in [0, 1], got {rate!r}")
+    steps = table.get("steps", [])
+    if not isinstance(steps, list) or not all(isinstance(name, str) for name in steps):
+        raise SamplerError(f"[chaos].steps must be a list of step names, got {steps!r}")
+    return ChaosSpec(fault=fault, rate=float(rate), steps=tuple(steps))
+
+
 @dataclass(frozen=True)
 class SweepSpec:
     configs: tuple[dict[str, Any], ...]
@@ -208,6 +244,11 @@ class SweepSpec:
     #: ``manifest.environment["sweep"]``, and asking for a trace is not part of what makes two
     #: sweeps the same sweep. The manifest records the request at ``environment["capture"]``.
     capture: CaptureSpec | None = None
+    #: The ``[chaos]`` table, when the sweep file has one. It rides the spec and is absent
+    #: from ``to_dict()`` for the same reason ``capture`` is, and for one more: the whole of
+    #: D2 is that an injected fault must not touch ``config_hash``, because that is what
+    #: ``derive_seed`` reads and what makes two arms the same episode at the same seed.
+    chaos: ChaosSpec | None = None
 
     @classmethod
     def build(
@@ -220,6 +261,7 @@ class SweepSpec:
         axis_types: Mapping[str, AxisType] | None = None,
         retain_traces_for: Sequence[str] | None = None,
         capture: CaptureSpec | None = None,
+        chaos: ChaosSpec | None = None,
     ) -> SweepSpec:
         if isinstance(replicates, bool) or not isinstance(replicates, int) or replicates < 1:
             raise SamplerError(f"replicates must be an int >= 1, got {replicates!r}")
@@ -262,6 +304,7 @@ class SweepSpec:
             retain_traces_for=retain,
             duplicates_dropped=dropped,
             capture=capture,
+            chaos=chaos,
         )
 
     @classmethod
@@ -326,6 +369,7 @@ class SweepSpec:
             axis_types=axis_types,
             retain_traces_for=retain,
             capture=_capture_table(data.get("capture")),
+            chaos=_chaos_table(data.get("chaos")),
         )
 
     def cells(self) -> list[str]:

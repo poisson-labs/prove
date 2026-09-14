@@ -1367,6 +1367,8 @@ def test_e12_the_transport_aliases_and_episode_are_untouched() -> None:
     assert tuple(f.name for f in dataclasses.fields(Episode)) == EPISODE_FIELDS
     assert set(Episode(outcome="fell", t=1.0, horizon=HORIZON).to_dict()) == set(EPISODE_FIELDS)
     params = list(inspect.signature(worker_batch).parameters.values())
-    assert [p.name for p in params] == ["jobs", "import_path", "episode_timeout", "capture"]
+    # M11a: ``chaos`` rides beside ``capture``, keyword-only, default None (Spec M11 section 0.1)
+    assert [p.name for p in params] == ["jobs", "import_path", "episode_timeout", "capture", "chaos"]
     assert params[3].kind is params[3].KEYWORD_ONLY and params[3].default is None
+    assert params[4].kind is params[4].KEYWORD_ONLY and params[4].default is None
     assert (PACKAGE / "capture.py").is_file(), f"{PACKAGE / 'capture.py'} does not exist"

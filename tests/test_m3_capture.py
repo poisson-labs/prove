@@ -1074,8 +1074,10 @@ def test_c8_worker_batch_keeps_three_positional_parameters_and_adds_only_capture
     for p in params[:3]:
         assert p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD), p
     added = params[3:]
-    assert [p.name for p in added] == ["capture"], [p.name for p in added]
-    assert added[0].kind is added[0].KEYWORD_ONLY and added[0].default is None, added[0]
+    # M11a: the rule is one keyword-only, None-defaulted parameter per seam (Spec M11 section 0.1)
+    assert [p.name for p in added] == ["capture", "chaos"], [p.name for p in added]
+    for p in added:
+        assert p.kind is p.KEYWORD_ONLY and p.default is None, p
 
 
 def test_c8_job_result_outcome_mapper_and_from_episode_are_unchanged() -> None:
