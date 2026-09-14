@@ -23,7 +23,7 @@ ENV PYTHONUNBUFFERED=1
 # the checkout's source and pip-installs proofload's own runtime requirements on top of this
 # image, so a PyPI copy here would shadow the code under test.
 RUN pip install --no-cache-dir \
-      "openai<2" \
+      "openai>=2.20,<3" \
       "opentelemetry-instrumentation-openai-v2==2.4b0" \
       "opentelemetry-sdk"
 

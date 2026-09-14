@@ -35,6 +35,8 @@ cell view with ``diff.py``'s own helpers and refuses if the rebuild disagrees.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -94,6 +96,11 @@ _CODE_COLUMN = "_root_code"
 #: else on ``cells`` -- the rates, the Aalen-Johansen delta, the test statistic, p, q, the
 #: verdict, the MDE -- belongs to the flat family and is none of the root's business.
 _REBUILD_COLUMNS = ("n_a", "n_b", "events_a", "events_b")
+
+#: The tag inside the agreement digest's hashed payload (spec A28 section 3.2). Not a
+#: compatibility promise and never a sibling key (section 10 Q9): it is ``/1`` so that a later
+#: change to the canonical form is visible, and no consumer may compare digests across tags.
+AGREEMENT_SCHEMA = "proofload.agreement/1"
 
 
 # ---------- S26: the resolver's vocabulary ----------
@@ -689,13 +696,56 @@ def _require_depth(value: Any) -> int:
     return value
 
 
+def _agreement_of(rows: Sequence[tuple[str, str, int, int, int, int]]) -> str:
+    """The canonical form, written here and nowhere else (spec A28 section 3.2, invariant G16).
+
+    One line per ``(event, cell)`` carrying the four rebuild integers, sorted, JSON-serialised
+    behind ``AGREEMENT_SCHEMA``, sha256, hex. **JSON and not a separator-joined string** because
+    an ``event`` is an outcome value read off stored data and this project's own fixtures put
+    adversarial strings into axis values on purpose; a delimiter-joined line is ambiguous the
+    moment a value contains the delimiter, and two different rebuilds could then mint one digest.
+    **Sorted** because the mint walks ``common`` x ``multi.events`` and the recomputation walks
+    ``multi.events`` x ``cells`` in row order, and sorting is the only thing that makes one
+    function's output checkable by the other's.
+    """
+    canonical = sorted(
+        [str(event), str(config_hash), int(n_a), int(n_b), int(events_a), int(events_b)]
+        for event, config_hash, n_a, n_b, events_a, events_b in rows
+    )
+    payload = json.dumps([AGREEMENT_SCHEMA, canonical], separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def agreement_digest(multi: MultiDiffResult) -> str:
+    """The agreement digest recomputed from a diff alone, in the tree's own canonical form.
+
+    The check side of the pair ``_require_agreement`` mints. It reads the four rebuild columns
+    off ``cells`` rather than off the frames, which is the whole point: a renderer holds a diff
+    and a tree and nothing else, and this is how it asks whether the second was grown from the
+    first. Covers the cell set, the event set and the four episode counts per cell per event,
+    and nothing else -- not the method, not ``q``, not the horizon or any permutation knob
+    (spec A28 section 3.3), which is why both renderers carry a second, separate knob clause.
+    """
+    rows: list[tuple[str, str, int, int, int, int]] = []
+    for event in multi.events:
+        cells = multi.by_event[event].cells
+        for row in zip(
+            cells["config_hash"],
+            *(cells[column] for column in _REBUILD_COLUMNS),
+            strict=True,
+        ):
+            n_a, n_b, events_a, events_b = (int(value) for value in row[1:])
+            rows.append((str(event), str(row[0]), n_a, n_b, events_a, events_b))
+    return _agreement_of(rows)
+
+
 def _require_agreement(
     multi: MultiDiffResult,
     common: Sequence[str],
     groups_a: Mapping[str, pd.DataFrame],
     groups_b: Mapping[str, pd.DataFrame],
     codebook: Mapping[Any, int],
-) -> None:
+) -> str:
     """The rebuild guard: episode counts recomputed from the frames must equal ``cells``.
 
     The root is a *second* construction of something ``multi_diff`` already built, and this is
@@ -706,7 +756,16 @@ def _require_agreement(
     claim to have counted from the same frames. When it does, the caller handed the root a
     different pair than the diff, and the refusal names the first mismatching cell in
     sorted-hash order.
+
+    **And it mints the agreement digest** (spec A28 section 10 Q3 (a)), over the tuples it
+    rebuilt from the frames rather than over ``cells`` -- the two are equal by the time this
+    returns, so the values are identical and the difference is what the field *means* to a
+    consumer: under this mint the tree says *I recomputed these counts from the episodes and
+    they matched*, not *here is a hash of the diff I was handed*. It is minted here for the
+    same reason the comparison lives here at all: this is the one place the two sides are
+    already known to agree, and neither renderer can establish that on its own.
     """
+    rows: list[tuple[str, str, int, int, int, int]] = []
     by_hash: dict[str, dict[str, tuple[int, ...]]] = {}
     for event in multi.events:
         cells = multi.by_event[event].cells
@@ -741,6 +800,8 @@ def _require_agreement(
                     f"{_REBUILD_COLUMNS} is {rebuilt} from the frames and {recorded_row} on "
                     "cells; the frames are not the pair this diff was computed from"
                 )
+            rows.append((str(event), str(h), *rebuilt))
+    return _agreement_of(rows)
 
 
 # ---------- the public function ----------
@@ -760,6 +821,7 @@ def _prepared(
     list[int],
     tuple[NDArray[np.int64], NDArray[np.int64]],
     NDArray[np.float64],
+    str,
 ]:
     """Everything that can refuse, then the design and the observed counts -- and no draw.
 
@@ -779,13 +841,13 @@ def _prepared(
             f"the rebuild found no common cell but the diff tested {multi.n_tests}; "
             "the frames are not the pair this diff was computed from"
         )
-    _require_agreement(multi, common, groups_a, groups_b, codebook)
+    agreement = _require_agreement(multi, common, groups_a, groups_b, codebook)
     design = _design(scheme, common, groups_a, groups_b)
     # A requested event nobody ran gets a code no outcome carries, so its incidence is zero in
     # both arms rather than an error -- the posture ``multi_diff`` already takes.
     codes = [codebook.get(event, _PAD) for event in multi.events]
     counts, observed = _observed(design, codes)
-    return scheme, tuple(common), design, codes, counts, observed
+    return scheme, tuple(common), design, codes, counts, observed, agreement
 
 
 def _root(
@@ -844,7 +906,7 @@ def omnibus(
     a caller who passes ``n_permutations = 10**6`` and a mismatched pair gets the refusal in
     milliseconds rather than after the block is allocated.
     """
-    scheme, common, design, codes, counts, observed = _prepared(
+    scheme, common, design, codes, counts, observed, _agreement = _prepared(
         a, b, multi, n_permutations=n_permutations, seed=seed
     )
     permuted = _draw(design, codes, n_permutations=n_permutations, seed=seed)
@@ -1278,6 +1340,10 @@ class TreeResult:
     fault_lines: FaultLines
     leaves: Leaves
     bound: Bound
+    #: The rebuild this tree's own construction verified, as a content digest (spec A28). No
+    #: default and last, so nothing can hand-build a partial result: a tree that carries one is
+    #: a tree whose four rebuild columns were recomputed from the frames and matched the diff's.
+    agreement: str
 
     def to_json(self) -> dict[str, Any]:
         """Native types throughout, lists for tuples, and a payload that survives a round trip.
@@ -1291,6 +1357,7 @@ class TreeResult:
             "fault_lines": self.fault_lines.to_json(),
             "leaves": self.leaves.to_json(),
             "bound": self.bound.to_json(),
+            "agreement": self.agreement,
         }
 
 
@@ -2044,7 +2111,7 @@ def tree(
     run reached.
     """
     depth_configured = _require_depth(depth)
-    scheme, common, design, codes, counts, observed = _prepared(
+    scheme, common, design, codes, counts, observed, agreement = _prepared(
         a, b, multi, n_permutations=n_permutations, seed=seed
     )
     units = _units(design, multi.events, counts)
@@ -2076,9 +2143,11 @@ def tree(
         fault_lines=fault_lines,
         leaves=_leaves(multi, root, grouping, fault_lines, depth_configured),
         bound=_bound(depth_configured, _depth(depth_configured, grouping), float(root.q)),
+        agreement=agreement,
     )
 
 __all__ = [
+    "AGREEMENT_SCHEMA",
     "BOUND_DISCOVERIES",
     "CELL_NULL",
     "DEFAULT_DEPTH",
@@ -2116,6 +2185,7 @@ __all__ = [
     "TreeError",
     "TreeResult",
     "UnknownGrouping",
+    "agreement_digest",
     "omnibus",
     "resolve_grouping",
     "tree",

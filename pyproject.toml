@@ -13,9 +13,9 @@ dependencies = ["numpy", "pandas>=2", "scipy", "pyarrow"]
 
 [project.optional-dependencies]
 modal = ["modal"]
-agent = ["litellm", "openai<2", "opentelemetry-sdk"]
+agent = ["litellm", "openai>=2.20,<3", "opentelemetry-sdk"]
 viz = ["matplotlib"]
-all = ["modal", "litellm", "openai<2", "matplotlib", "opentelemetry-sdk"]
+all = ["modal", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
 dev = ["pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common"]
 
 [project.scripts]

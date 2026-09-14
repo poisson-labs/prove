@@ -104,8 +104,8 @@ E14_SHA256 = {
     "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
 }
 
-SCHEMA = "proofload.viewpair/3"
-RETIRED_SCHEMA = "proofload.viewpair/2"
+SCHEMA = "proofload.viewpair/4"
+RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 
 TALLY_FIELDS = ("rows", "with_outcome", "no_outcome", "timed_out", "infra", "other")
@@ -1405,7 +1405,7 @@ def test_e14_every_absent_rect_still_says_absent_and_provenance_gains_no_key(syn
 # ---------- E15-E18: the structure ----------
 
 
-def test_e15_schema_is_viewpair_3_and_the_top_level_keys_are_the_twelve(builts: tuple[Built, Built]) -> None:
+def test_e15_schema_is_viewpair_4_and_the_top_level_keys_are_the_twelve(builts: tuple[Built, Built]) -> None:
     for b in builts:
         assert b.structure["schema"] == SCHEMA == viewer().SCHEMA
         assert tuple(b.structure) == TOP_LEVEL_KEYS

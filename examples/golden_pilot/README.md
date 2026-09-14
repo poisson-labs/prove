@@ -294,4 +294,4 @@ coin flips, at each temperature. Publish figures and that record, never raw trac
 | `pilot.toml` | 164 tasks × 2 temperatures × 32 replicates |
 | `smoke.toml` | the same shape over 5 tasks at 2 replicates |
 | `Dockerfile` | the Modal image, and the only place the boundary variable is set |
-| `requirements.txt` | the contract: `openai<2`, the instrumentor, `proofload[agent]` |
+| `requirements.txt` | the contract: `openai>=2.20,<3`, the instrumentor, `proofload[agent]` |

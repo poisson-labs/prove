@@ -54,9 +54,12 @@ __all__ = ["ViewerError", "build_structure", "render_html", "serve_page"]
 # The version bumps whenever a key set changes, because this structure's consumers pin key
 # sets -- its own oracle does. ``/2`` adds the per-arm tally, four coverage integers and
 # ``config_text`` per cell, and the top-level ``holes`` list; ``/3`` adds ``tree``, M14's
-# layered report carried verbatim. Nothing migrates because nothing stores a structure:
+# layered report carried verbatim; ``/4`` adds ``agreement`` inside ``tree`` -- the digest of the
+# rebuild the tree's own construction verified, so a consumer holding this payload can check that
+# the tree is the tree of the pair beside it (A28). The twelve top-level keys do not move: the
+# digest is inside ``tree``, not beside it. Nothing migrates because nothing stores a structure:
 # ``--json`` prints to stdout and the page is a snapshot (ADR-036).
-SCHEMA = "proofload.viewpair/3"
+SCHEMA = "proofload.viewpair/4"
 
 _HOST = "127.0.0.1"
 _CONTENT_TYPE = "text/html; charset=utf-8"
@@ -466,7 +469,22 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     anyway rather than indexed, because a refusal that raises ``IndexError`` from inside its
     own message is worse than the mismatch it was reporting. One cell each way and not the
     whole list: a Go1-sized mismatch is 656 hashes, and one is enough to name the other pair.
+
+    A28 appends two more and rewords none of the three above. The **agreement digest** closes
+    C16, which the multiset clause cannot: two pairs over the same events, the same cell count
+    and the same config grid -- so the same ``(event, config_hash)`` multiset -- differing only
+    in what happened, are accepted by all three clauses above and refused by this one. Its
+    message names neither a cell nor a count because at that point there is no cell and no
+    count that differs, which is also why it runs *last*: placed ahead of the multiset clause it
+    still refuses, and the refusal simply stops naming the cell that would have been named.
+    The **knob clause** follows it because the digest covers the cell set, the event set and the
+    four episode counts and nothing else (spec A28 section 3.3), so a tree grown under another
+    method or at another ``q`` passes it. ``agreement_digest`` is imported inside the function:
+    W20 pins that this module's body imports ``proofload.tree`` nowhere and that this closure
+    applies exactly one arithmetic node, and a function-level import and a compare move neither.
     """
+    from proofload.tree import agreement_digest
+
     if tuple(tree.root.events) != tuple(multi.events):
         raise ViewerError(
             f"the tree is over events {list(tree.root.events)}; this pair's diff is over "
@@ -498,6 +516,16 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
             f"this diff, {in_diff} is in this diff and not in the tree; the tree carries "
             f"{sum(carried.values())} cell-event units and this pair's diff tests "
             f"{sum(tested.values())}"
+        )
+    if tree.agreement != agreement_digest(multi):
+        raise ViewerError(
+            "the tree's agreement digest is not this pair's; the tree was grown from a "
+            "different pair with the same family shape, so nothing above can be named"
+        )
+    if tree.root.method != multi.method or tree.root.q != multi.q:
+        raise ViewerError(
+            f"the tree was grown under {tree.root.method} at q = {tree.root.q:g}; this pair's "
+            f"diff is {multi.method} at q = {multi.q:g}"
         )
 
 
