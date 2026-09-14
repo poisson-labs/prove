@@ -377,7 +377,7 @@ DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695db
 #: the value at ``38e8df9``, green on Session A's commit, red from Session B's build until a second
 #: Session A commit re-mints it whole-file off the shipped bytes, with the behavioural cover
 #: (``tests/test_a28_agreement.py`` G2, G5, G6, G7) already frozen. No ``TREE_PY_EXCLUDED`` is minted.
-TREE_PY_SHA256 = "ed79603e8e34d4c0a8b965d81252cd454debac0e948a62aa83e683865a003556"
+TREE_PY_SHA256 = "7f9a4f08052eb5a7ec043c970a949e779bad968bde83762fadffa3aeebd1176f"
 #: W20, narrowed by A28 under ADR-077: ``report.py``'s bytes outside ``report.py::_check_tree``,
 #: minted at ``38e8df9`` and measured identical on a copy carrying the digest and knob clauses,
 #: because every line A28 adds to this file sits inside that one definition (ADR-078's clean case).
