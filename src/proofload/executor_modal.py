@@ -47,6 +47,7 @@ from proofload.executor import (
     _environment,
     _episode_id,
     _mp_context,
+    _with_capture_envelope,
     preflight_mde,
 )
 from proofload.store import EpisodeRecord, RunManifest, Store, StoreError
@@ -507,7 +508,25 @@ def _open_run(
     )
 
 
-def _record(p: Plan, job: Job, result: Result, attempt: int) -> EpisodeRecord:
+def _batch_capture_active(payload: Sequence[Result]) -> bool:
+    """Whether capture was active in the container that ran this batch.
+
+    The host cannot know: it is the container that installs, and what happened there comes back
+    on ``backend_meta["capture"]``. A batch is one map item in one container, so the flag is the
+    batch's and not the row's -- which is what makes it readable at all, since an errored result
+    carries no ``backend_meta`` and the ok results beside it are what say so.
+    """
+    for result in payload:
+        if isinstance(result, Mapping):
+            capture = (result.get("backend_meta") or {}).get("capture")
+            if isinstance(capture, Mapping):
+                return bool(capture.get("active"))
+    return False
+
+
+def _record(
+    p: Plan, job: Job, result: Result, attempt: int, *, capture_active: bool = False
+) -> EpisodeRecord:
     """A string is an error without meta, a dict with ``"error"`` is one with it, and any
     other dict is an episode. A dict with ``"error"`` whose meta is not a mapping is refused
     (E13), as an invalid episode dict is."""
@@ -528,15 +547,18 @@ def _record(p: Plan, job: Job, result: Result, attempt: int) -> EpisodeRecord:
                     f"{type(carried).__name__}"
                 )
             meta = carried
-        return EpisodeRecord.errored(
-            run_id=p.run_id,
-            config=config,
-            seed=seed,
-            replicate_index=replicate_index,
-            error=error,
-            wall_time=0.0,
-            backend_meta={"i": i, "attempt": attempt},
-            meta=meta,
+        return _with_capture_envelope(
+            EpisodeRecord.errored(
+                run_id=p.run_id,
+                config=config,
+                seed=seed,
+                replicate_index=replicate_index,
+                error=error,
+                wall_time=0.0,
+                backend_meta={"i": i, "attempt": attempt},
+                meta=meta,
+            ),
+            capture_active,
         )
     backend_meta = dict(result.get("backend_meta") or {})
     backend_meta.setdefault("i", i)
@@ -545,14 +567,17 @@ def _record(p: Plan, job: Job, result: Result, attempt: int) -> EpisodeRecord:
         episode = Episode.from_dict(result)
     except Exception as exc:
         raise ModalBackendError(f"worker returned an invalid episode for job {i}: {exc}") from exc
-    return EpisodeRecord.from_episode(
-        episode,
-        run_id=p.run_id,
-        config=config,
-        seed=seed,
-        replicate_index=replicate_index,
-        wall_time=float(result.get("wall_time", 0.0)),
-        backend_meta=backend_meta,
+    return _with_capture_envelope(
+        EpisodeRecord.from_episode(
+            episode,
+            run_id=p.run_id,
+            config=config,
+            seed=seed,
+            replicate_index=replicate_index,
+            wall_time=float(result.get("wall_time", 0.0)),
+            backend_meta=backend_meta,
+        ),
+        capture_active,
     )
 
 
@@ -665,8 +690,9 @@ def run_with_mapper(
             if attempts[k] > 1:
                 n_infra_retried += 1
             records: list[EpisodeRecord] = []
+            batch_capture = _batch_capture_active(payload)
             for job, result in zip(batch, payload, strict=True):
-                record = _record(p, job, result, attempts[k])
+                record = _record(p, job, result, attempts[k], capture_active=batch_capture)
                 records.append(record)
                 if record.error is None:
                     n_ok += 1

@@ -768,18 +768,53 @@ def _chaos_record(spec: ChaosSpec, status: ChaosStatus, hooks: Sequence[str]) ->
     }
 
 
-def _record(p: Plan, pair: Pair, index: int, outcome: _Outcome, wall_time: float) -> EpisodeRecord:
+def _empty_envelope() -> dict[str, Any]:
+    """D9's zero-span envelope: *capture ran and this episode emitted nothing*, which is a
+    different fact from *capture never ran* and has to be stored as one.
+
+    Constructed and never spelled as a literal. ``Trace.to_dict()``'s key set is exact in both
+    directions and ``Store.append`` validates what arrives with ``from_dict``, so a hand-written
+    dict would be rejected outright the moment ``Trace`` gains a field -- landing the row in
+    exactly the both-columns-null state it has to be distinguishable from.
+    """
+    return Trace(spans=(), source="otel", source_version=OTEL_SEMCONV_VERSION).to_dict()
+
+
+def _with_capture_envelope(record: EpisodeRecord, active: bool) -> EpisodeRecord:
+    """Attach the empty envelope to a row that ran under active capture and carries no trace.
+
+    Rule zero (C7) is untouched: this runs on the built row, after ``_merge_capture`` has
+    already declined to write an empty capture over a rollout's own trace. Inside ``_classify``
+    it would break that; here it cannot.
+    """
+    if not active or "trace" in record.meta:
+        return record
+    return replace(record, meta={**record.meta, "trace": _empty_envelope()})
+
+
+def _record(
+    p: Plan,
+    pair: Pair,
+    index: int,
+    outcome: _Outcome,
+    wall_time: float,
+    *,
+    capture_active: bool = False,
+) -> EpisodeRecord:
     kind, payload = outcome
     backend_meta = {"i": index}
     if kind == "ok":
-        return EpisodeRecord.from_episode(
-            Episode.from_dict(payload),
-            run_id=p.run_id,
-            config=pair.config,
-            seed=pair.seed,
-            replicate_index=pair.replicate_index,
-            wall_time=wall_time,
-            backend_meta=backend_meta,
+        return _with_capture_envelope(
+            EpisodeRecord.from_episode(
+                Episode.from_dict(payload),
+                run_id=p.run_id,
+                config=pair.config,
+                seed=pair.seed,
+                replicate_index=pair.replicate_index,
+                wall_time=wall_time,
+                backend_meta=backend_meta,
+            ),
+            capture_active,
         )
     meta: dict[str, Any] | None
     if kind == _TIMEOUT_ERROR:
@@ -796,15 +831,18 @@ def _record(p: Plan, pair: Pair, index: int, outcome: _Outcome, wall_time: float
     else:
         error = str(payload)
         meta = None
-    return EpisodeRecord.errored(
-        run_id=p.run_id,
-        config=pair.config,
-        seed=pair.seed,
-        replicate_index=pair.replicate_index,
-        error=error,
-        wall_time=wall_time,
-        backend_meta=backend_meta,
-        meta=meta,
+    return _with_capture_envelope(
+        EpisodeRecord.errored(
+            run_id=p.run_id,
+            config=pair.config,
+            seed=pair.seed,
+            replicate_index=pair.replicate_index,
+            error=error,
+            wall_time=wall_time,
+            backend_meta=backend_meta,
+            meta=meta,
+        ),
+        capture_active,
     )
 
 
@@ -917,7 +955,16 @@ def run_local(
                     rollout, config, pair.seed, episode_timeout, ctx, call, chaos_call
                 )
             wall_time = time.perf_counter() - t0
-            batch.append(_record(p, pair, index, outcome, wall_time))
+            batch.append(
+                _record(
+                    p,
+                    pair,
+                    index,
+                    outcome,
+                    wall_time,
+                    capture_active=capture_status is not None and capture_status.active,
+                )
+            )
             executed += 1
             if outcome[0] == "ok":
                 n_ok += 1

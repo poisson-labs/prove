@@ -19,6 +19,7 @@ import pyarrow.parquet as pq
 
 from proofload import __version__
 from proofload.episode import Episode
+from proofload.trace import Trace, TraceValidationError, assemble, split
 
 
 class StoreError(Exception):
@@ -69,6 +70,13 @@ _SCHEMA = pa.schema(
         pa.field("error", pa.string(), nullable=True),
         pa.field("wall_time", pa.float64(), nullable=False),
         pa.field("backend_meta", pa.string(), nullable=False),
+        # A7: the trace, split in two and appended. ``trace`` is the envelope -- the span
+        # forest with no content -- and ``trace_obs`` the observation bodies it was carrying,
+        # keyed by span id. Appended, never inserted, and ``schema_version`` stays 1: the
+        # fallback for a part written before A7 is presence-of-column (ADR-047), so there is
+        # nothing for a version to select.
+        pa.field("trace", pa.string(), nullable=True),
+        pa.field("trace_obs", pa.string(), nullable=True),
     ]
 )
 _JSON_COLUMNS = ("config", "meta", "backend_meta")
@@ -76,8 +84,13 @@ _JSON_COLUMNS = ("config", "meta", "backend_meta")
 #: a field added to the schema must be added here by hand, and A22's V5 is what fails until it
 #: is. Derived, the assertion would follow the schema silently and A7 would inherit a read path
 #: whose nulls are NaN under ``row.trace is not None``.
-_NULLABLE_STRING_COLUMNS = ("outcome", "error")
+_NULLABLE_STRING_COLUMNS = ("outcome", "error", "trace", "trace_obs")
 _META_COLUMNS = ("meta", "backend_meta")
+#: The two columns the split writes. Not in ``_META_COLUMNS``: ``meta=`` and ``trace=`` are
+#: orthogonal knobs and folding these two names into that constant would silently couple them
+#: (it gives the right projection for "full" and "none" and the wrong one for "envelope").
+_TRACE_COLUMNS = ("trace", "trace_obs")
+_TRACE_MODES = ("full", "envelope", "none")
 
 
 # ---------- canonical config ----------
@@ -144,6 +157,47 @@ def _jsonable(x: Any, path: str, label: str) -> Any:
 
 def _encode_json(m: Mapping[str, Any], label: str) -> str:
     return json.dumps(_jsonable(m, "", label), sort_keys=True, separators=(",", ":"))
+
+
+def _resolve_trace_mode(trace: str | None, *, meta: bool) -> str:
+    """The read's trace mode, resolved from ``trace=`` and ``meta=`` and nothing else.
+
+    ``trace=None`` is every call site written before A7: ``"full"`` where ``meta`` is read and
+    ``"none"`` where it is not, so each keeps its exact behaviour without being edited.
+    """
+    if trace is None:
+        return "full" if meta else "none"
+    if trace not in _TRACE_MODES:
+        raise ValueError(
+            f"trace must be one of {', '.join(_TRACE_MODES)} or None, got {trace!r}"
+        )
+    if trace == "full" and not meta:
+        # Refused rather than quietly downgraded: the full read puts the reassembled trace in
+        # the meta column, meta=False projects that column away, and a caller who asked for
+        # both has a bug that a silent "none" would hide.
+        raise ValueError(
+            "read(meta=False, trace='full') is refused: the full read reassembles the trace "
+            "into the meta column and meta=False projects that column away. Use "
+            "trace='envelope' for the trace without meta, or meta=True."
+        )
+    return trace
+
+
+def _legacy_envelope(meta: Any) -> dict[str, Any] | None:
+    """The envelope of a row written before the split, computed from ``meta["trace"]`` at read.
+
+    A trace ``from_dict`` rejects is an absent trace, the same posture ``append`` and
+    ``inspect`` already take: no error, no envelope.
+    """
+    if not isinstance(meta, Mapping):
+        return None
+    stored = meta.get(_TRACE_KEY)
+    if not isinstance(stored, Mapping):
+        return None
+    try:
+        return split(Trace.from_dict(stored))[0]
+    except TraceValidationError:
+        return None
 
 
 def _now_iso_utc() -> str:
@@ -416,10 +470,27 @@ class Store:
                 raise DuplicateEpisode(f"duplicate (config_hash, replicate_index) in batch: {key}")
             seen.add(key)
             meta = dict(r.meta)
-            # Retention is a policy over outcomes and an errored row has none: its trace -- the
-            # snapshot of the episode that hung -- is kept whatever ``retain_traces_for`` says.
-            if retain is not None and r.error is None and r.outcome not in retain:
-                meta.pop(_TRACE_KEY, None)
+            # A7: the trace leaves ``meta`` here, at the one site every stored trace passes
+            # through, and nothing downstream splits it again. The pop is unconditional --
+            # retention decides only whether the two columns are written beside it, never
+            # whether the key goes (A22's V7 pins that on an invalid trace too). Retention is a
+            # policy over outcomes and an errored row has none, so its trace -- the snapshot of
+            # the episode that hung -- is kept whatever ``retain_traces_for`` says.
+            stored = meta.pop(_TRACE_KEY, None)
+            envelope_json: str | None = None
+            obs_json: str | None = None
+            keep = retain is None or r.error is not None or r.outcome in retain
+            if stored is not None and keep:
+                try:
+                    envelope, obs = split(Trace.from_dict(stored))
+                except TraceValidationError:
+                    # Keep the user's value untouched, one layer down from ``_merge_capture``:
+                    # a trace this cannot read is stored exactly as it was written, both
+                    # columns stay null, and ``append`` does not raise.
+                    meta[_TRACE_KEY] = stored
+                else:
+                    envelope_json = _encode_json(envelope, _TRACE_KEY)
+                    obs_json = None if not obs else _encode_json(obs, "trace_obs")
             rows.append(
                 {
                     "run_id": r.run_id,
@@ -435,6 +506,8 @@ class Store:
                     "error": r.error,
                     "wall_time": float(r.wall_time),
                     "backend_meta": _encode_json(r.backend_meta, "backend_meta"),
+                    "trace": envelope_json,
+                    "trace_obs": obs_json,
                 }
             )
 
@@ -492,6 +565,7 @@ class Store:
         *,
         meta: bool = True,
         keys: Iterable[tuple[str, int]] | None = None,
+        trace: Literal["full", "envelope", "none"] | None = None,
     ) -> pd.DataFrame:
         """The run's rows, every part concatenated, sorted by ``(config_hash, replicate_index)``.
 
@@ -503,6 +577,23 @@ class Store:
         Unknown keys are absent, duplicates harmless; an empty ``keys`` is an empty frame with
         the requested columns and touches no part.
 
+        ``trace=`` selects how much of the trace is presented, and is orthogonal to ``meta=``:
+        ``meta=`` says only whether the ``meta`` column is read. ``None`` resolves to ``"full"``
+        when ``meta=True`` and ``"none"`` when ``meta=False``, so every call written before A7
+        keeps its behaviour.
+
+        ``"full"``      the same columns as ever, with the trace reassembled into
+                        ``meta["trace"]`` where one is stored. Refused with ``meta=False``:
+                        there is no ``meta`` column to hold it.
+        ``"envelope"``  one further column, ``trace``, holding the envelope dict or ``None``,
+                        and a ``meta`` (where read) with no ``"trace"`` key. The observation
+                        bodies are projected away at the Parquet reader and never decoded --
+                        and on a part written *before* A7 the envelope can only come from
+                        ``meta``, so that part alone pays meta's decode. The saving is per
+                        part, not per run.
+        ``"none"``      no trace anywhere: both columns projected away, and a pre-A7 row's
+                        ``meta["trace"]`` stripped, so the two layouts stay indistinguishable.
+
         A stored null in a string column reads back as ``None``, on every pandas this package
         supports: ``pyarrow`` gives a ``str`` column with ``NaN`` from pandas 3 on, and the
         nullable ones are rebuilt as ``object`` below.
@@ -513,14 +604,31 @@ class Store:
                 f"run {run_id!r} has schema_version {manifest.schema_version}, "
                 f"this build reads {_SCHEMA_VERSION}"
             )
-        columns = [c for c in _SCHEMA.names if meta or c not in _META_COLUMNS]
+        mode = _resolve_trace_mode(trace, meta=meta)
+        # The projection is computed from the resolved mode and ``meta=`` separately. Adding the
+        # two new names to ``_META_COLUMNS`` instead happens to give the right answer for
+        # "full" and "none" and the wrong one for "envelope", and it couples two knobs the
+        # interface defines as independent.
+        columns = [
+            c
+            for c in _SCHEMA.names
+            if c not in _TRACE_COLUMNS and (meta or c not in _META_COLUMNS)
+        ]
+        needed = set(columns)
+        if mode == "full":
+            needed.update(_TRACE_COLUMNS)
+        elif mode == "envelope":
+            needed.add(_TRACE_KEY)
+            if not meta and self._has_pre_split_part(run_id):
+                needed.add("meta")
+        stored_columns = [c for c in _SCHEMA.names if c in needed]
         wanted = None if keys is None else {(str(h), int(i)) for h, i in keys}
         if wanted is not None and not wanted:
             # pyarrow rejects an empty `in` list, and nothing could match anyway.
-            table = _SCHEMA.empty_table().select(columns)
+            table = _SCHEMA.empty_table().select(stored_columns)
         else:
             hashes = None if wanted is None else sorted({h for h, _ in wanted})
-            table = self._read_table(run_id, columns=columns, hashes=hashes)
+            table = self._read_table(run_id, columns=stored_columns, hashes=hashes)
         df: pd.DataFrame = table.to_pandas()
         if wanted is not None:
             # An array, not a list: on an empty frame ``df[[]]`` is a column selection.
@@ -545,7 +653,48 @@ class Store:
                 df[col] = pd.Series(
                     [json.loads(s) for s in df[col]], index=df.index, dtype=object
                 )
-        return df
+        if mode == "full":
+            self._reassemble(df)
+        elif mode == "envelope":
+            df[_TRACE_KEY] = self._envelopes(df)
+        if mode != "full" and "meta" in df.columns:
+            # "envelope" and "none" both present a ``meta`` without the key, so a caller cannot
+            # tell a pre-A7 row from a post-A7 one by what ``meta`` still carries.
+            for value in df["meta"]:
+                if isinstance(value, dict):
+                    value.pop(_TRACE_KEY, None)
+        return df[columns + ([_TRACE_KEY] if mode == "envelope" else [])]
+
+    def _has_pre_split_part(self, run_id: str) -> bool:
+        """Whether any part of this run was written before A7 -- read off each part's own
+        Parquet footer and never off the manifest, because the fallback is presence-of-column
+        and a run resumed across the A7 boundary holds parts of both kinds."""
+        return any(_TRACE_KEY not in pq.read_schema(p).names for p in self._parts(run_id))
+
+    def _reassemble(self, df: pd.DataFrame) -> None:
+        """Put each stored trace back where every consumer already reads it, ``meta["trace"]``.
+
+        A row whose ``trace`` column is null keeps whatever ``meta`` holds: on a pre-A7 part
+        that is the trace itself, whole and needing no reassembly; on a post-A7 row it is either
+        nothing or the invalid value ``append`` left exactly as it was written.
+        """
+        for envelope_json, obs_json, value in zip(
+            df[_TRACE_KEY], df["trace_obs"], df["meta"], strict=True
+        ):
+            if envelope_json is None or not isinstance(value, dict):
+                continue
+            obs = None if obs_json is None else json.loads(obs_json)
+            value[_TRACE_KEY] = assemble(json.loads(envelope_json), obs).to_dict()
+
+    def _envelopes(self, df: pd.DataFrame) -> pd.Series:
+        """Each row's envelope: decoded from the ``trace`` column where the part has one, and
+        split out of ``meta`` at read time where it does not."""
+        metas: Any = df["meta"] if "meta" in df.columns else [None] * len(df)
+        out = [
+            json.loads(envelope_json) if envelope_json is not None else _legacy_envelope(value)
+            for envelope_json, value in zip(df[_TRACE_KEY], metas, strict=True)
+        ]
+        return pd.Series(out, index=df.index, dtype=object)
 
     def count(self, run_id: str) -> int:
         """The number of stored rows, summed from each part's Parquet footer. No row data is

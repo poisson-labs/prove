@@ -39,6 +39,8 @@ __all__ = [
     "ATTRIBUTE_ALIASES",
     "DROP_REASONS",
     "KINDS",
+    "LOGPROBS_KEY",
+    "OBSERVATION_KEYS",
     "OTEL_KIND_MAP",
     "OTEL_SEMCONV_VERSION",
     "SCHEMA",
@@ -48,11 +50,13 @@ __all__ = [
     "SpanHandle",
     "Trace",
     "TraceValidationError",
+    "assemble",
     "collect",
     "from_litellm",
     "from_otel",
     "merge",
     "record",
+    "split",
     "step",
 ]
 
@@ -73,6 +77,71 @@ DROP_REASONS: tuple[str, ...] = (
 #: The one place the semantic-convention pin is written (ADR-024). The GenAI conventions are
 #: badged Development, so a stored trace records which vocabulary it was read under.
 OTEL_SEMCONV_VERSION = "1.42.0"
+
+#: A21's surrogate field. An observation value like any other, and a member of
+#: ``OBSERVATION_KEYS``: written here so the name a sweep declares and the name the split routes
+#: on are the same string.
+LOGPROBS_KEY = "proofload.logprobs"
+
+#: The four prefix families of the observation table: a key *under* one of these is an
+#: observation value, whatever follows the prefix. They are kept apart from the exact members
+#: because no membership test can express them -- see ``_ObservationKeys``.
+_OBSERVATION_PREFIXES: tuple[str, ...] = (
+    "gen_ai.prompt.",
+    "gen_ai.completion.",
+    "llm.input_messages.",
+    "llm.output_messages.",
+)
+
+
+class _ObservationKeys(frozenset[str]):
+    """The observation table as one object: exact members *and* prefix families.
+
+    A plain ``frozenset`` carries the eight exact keys and silently loses the four prefix rows,
+    because a prefix rule is ``str.startswith`` and a set tests identity. Keeping the prefixes
+    in a second private constant would work inside this module and hand every other reader of
+    the public name an incomplete rule -- and the rule is the whole point, since it decides what
+    leaves the envelope. So the set answers ``in`` for both, and stays a ``frozenset`` so the
+    public annotation, ``isinstance`` and every set operation still hold.
+
+    ``in`` is therefore wider than iteration: the members are the exact keys, and a prefixed key
+    is a member by the rule rather than by enumeration. Set algebra (``&``, ``<=``) reads the
+    members only, which is what a caller asking *which exact keys are these* means.
+    """
+
+    __slots__ = ()
+
+    def __contains__(self, key: object) -> bool:
+        if super().__contains__(key):
+            return True
+        return isinstance(key, str) and key.startswith(_OBSERVATION_PREFIXES)
+
+
+#: Every attribute key whose value is observation content rather than envelope structure. These
+#: leave the envelope at the store boundary so it stays bounded by step count alone (ADR-047).
+#: The two routing stamps (``proofload.run_id``, ``proofload.episode``) are never observation
+#: values whatever their size, and are not here.
+OBSERVATION_KEYS: frozenset[str] = _ObservationKeys(
+    {
+        # GenAI semconv
+        "gen_ai.input.messages",
+        "gen_ai.output.messages",
+        "gen_ai.tool.call.arguments",
+        "gen_ai.tool.call.result",
+        # Traceloop
+        "traceloop.entity.input",
+        "traceloop.entity.output",
+        # OpenInference: the span's ``kind`` decides the class, never the membership
+        "input.value",
+        "output.value",
+        # Proofload
+        LOGPROBS_KEY,
+    }
+)
+
+#: The two span fields that carry observation content. Named rather than derived, because they
+#: are the only two of the span's fields that are content: every other one is structure.
+_OBSERVATION_FIELDS: tuple[str, ...] = ("input", "output")
 
 ATTRIBUTE_ALIASES: Mapping[str, str] = MappingProxyType(
     {
@@ -467,6 +536,64 @@ def merge(*traces: Trace) -> Trace:
         dropped=dropped,
         truncated=truncated,
     )
+
+
+# ---------- the storage split (A7) ----------
+
+
+def split(trace: Trace) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A trace's envelope and its observation bodies, as two JSON-native dicts.
+
+    The envelope is a trace dict whose spans carry no ``input``, no ``output`` and no attribute
+    whose key is in ``OBSERVATION_KEYS``; everything else about the trace is unchanged, so the
+    envelope's size is bounded by step count and not by content (ADR-047). The bodies are keyed
+    by ``span_id``, hold only the sub-keys that had a value, and carry no entry at all for a
+    span that had none.
+
+    Neither the span key set nor the trace key set is spelled here: the envelope starts as
+    ``trace.to_dict()`` and only the content fields are cleared, so a field added to ``Span``
+    later rides through both directions without this function being touched.
+    """
+    envelope = trace.to_dict()
+    bodies: dict[str, Any] = {}
+    for span in envelope["spans"]:
+        body: dict[str, Any] = {}
+        for name in _OBSERVATION_FIELDS:
+            if span[name] is not None:
+                body[name] = span[name]
+                span[name] = None
+        # Routed by key and never by value: an observation attribute whose value is None is
+        # still observation content, and leaving it behind puts a content key in the envelope.
+        moved = {key: value for key, value in span["attrs"].items() if key in OBSERVATION_KEYS}
+        if moved:
+            body["attrs"] = moved
+            span["attrs"] = {
+                key: value for key, value in span["attrs"].items() if key not in OBSERVATION_KEYS
+            }
+        if body:
+            bodies[span["span_id"]] = body
+    return envelope, bodies
+
+
+def assemble(envelope: Mapping[str, Any], obs: Mapping[str, Any] | None) -> Trace:
+    """The inverse of ``split``: ``assemble(*split(t)).to_dict() == t.to_dict()`` for every valid
+    ``t``. ``obs=None`` and ``obs={}`` are the same input and both mean no span had one."""
+    bodies: Mapping[str, Any] = {} if obs is None else obs
+    restored = dict(envelope)
+    spans: list[dict[str, Any]] = []
+    for raw in restored.get("spans", ()):
+        span = dict(raw)
+        span_id = span.get("span_id")
+        body = bodies.get(span_id) if isinstance(span_id, str) else None
+        if body:
+            for name in _OBSERVATION_FIELDS:
+                if name in body:
+                    span[name] = body[name]
+            if "attrs" in body:
+                span["attrs"] = {**span.get("attrs", {}), **body["attrs"]}
+        spans.append(span)
+    restored["spans"] = spans
+    return Trace.from_dict(restored)
 
 
 # ---------- recording (tier 3 -- the floor, not the path) ----------
