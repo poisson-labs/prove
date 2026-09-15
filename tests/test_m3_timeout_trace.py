@@ -116,15 +116,18 @@ AFTER_KEY = "oracle.after"
 EPOCH = 1_756_900_000_000_000_000
 TRUNCATED_LINE = f"trace: truncated ({REASON})"
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # the M10 oracle's I15 regex, verbatim
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 regex, verbatim (nine columns since A8a)
+STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
-TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated"})
-TRACE_FIELDS = ("spans", "source", "source_version", "dropped", "truncated")
+TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
+TRACE_FIELDS = ("spans", "source", "source_version", "dropped", "truncated", "alias_map_version")  # A8a: the seventh field
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
-    # A7 (spec section 7.1): four mints, in trace.py's own order -- constants, classes, functions.
-    "ATTRIBUTE_ALIASES", "DROP_REASONS", "KINDS", "LOGPROBS_KEY", "OBSERVATION_KEYS",
-    "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "SCHEMA", "SOURCES",
+    # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
+    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY -- in trace.py's own order: constants, classes,
+    # functions, each sorted. 25 names; FAULT_KEY / FAULT_POSITION_KEY are not A8a's (section 10 Q3).
+    "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
+    "OBSERVATION_KEYS", "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES",
     "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
     "assemble", "collect", "from_litellm", "from_otel", "merge", "record", "split", "step",
 ]
@@ -159,6 +162,14 @@ SPAN_CLOSED: dict[str, Any] = {
     "error": None,
     "code": None,
     "attrs": dict(STAMPS),
+    "operation": None,
+    "step_name": None,
+    "outcome": None,
+    "outcome_by": None,
+    "attempt": None,
+    "gate": None,
+    "truncated": None,
+    "bytes_original": None,
 }
 SPAN_OPEN: dict[str, Any] = {
     "span_id": OPEN_ID,
@@ -174,6 +185,14 @@ SPAN_OPEN: dict[str, Any] = {
     "error": None,
     "code": None,
     "attrs": dict(STAMPS),
+    "operation": None,
+    "step_name": None,
+    "outcome": None,
+    "outcome_by": None,
+    "attempt": None,
+    "gate": None,
+    "truncated": None,
+    "bytes_original": None,
 }
 
 
@@ -315,7 +334,7 @@ def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
 
 
 def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
-    """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028."""
+    """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028 plus A8a's ``alias_map_version``."""
     d: dict[str, Any] = {
         "schema": "proofload.trace/1",
         "source": "otel",
@@ -323,6 +342,7 @@ def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
         "dropped": 0,
         "spans": [dict(s) for s in spans],
         "truncated": None,
+        "alias_map_version": None,
     }
     d.update(overrides)
     return d
@@ -657,6 +677,14 @@ def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
                 "error": draw(st.none() | st.text(min_size=1, max_size=10)),
                 "code": draw(code_dicts),
                 "attrs": draw(json_objects),
+                "operation": None,
+                "step_name": None,
+                "outcome": None,
+                "outcome_by": None,
+                "attempt": None,
+                "gate": None,
+                "truncated": None,
+                "bytes_original": None,
             }
         )
     return spans
@@ -678,9 +706,9 @@ def test_e1_truncated_is_the_sixth_field_a_str_or_none_defaulting_to_none() -> N
         Trace.from_dict(trace_dict(truncated=3))
 
 
-def test_e1_to_dict_emits_exactly_the_six_keys() -> None:
+def test_e1_to_dict_emits_exactly_the_seven_keys() -> None:
     bare = Trace(spans=(), source="record").to_dict()
-    assert set(bare) == TRACE_KEYS and bare["truncated"] is None
+    assert set(bare) == TRACE_KEYS and bare["truncated"] is None and bare["alias_map_version"] is None
     d = Trace(
         spans=(Span.from_dict(SPAN_CLOSED),), source="otel", source_version="1.42.0", dropped=2, truncated=REASON
     ).to_dict()
@@ -1161,6 +1189,7 @@ def test_e9_inspect_selects_the_timed_out_row_by_error_and_prints_its_truncated_
     # Exactly one truncated line, before the span lines, and never a span line itself.
     truncated_at = [i for i, line in enumerate(block) if line == TRUNCATED_LINE]
     assert len(truncated_at) == 1, "\n".join(block)
+    assert STEP_LINE_RE.match(STEP_LINE_SAMPLE), "STEP_LINE_RE matches nothing; a negative use below would be vacuous"
     assert not STEP_LINE_RE.match(TRUNCATED_LINE)
     step_at = [i for i, line in enumerate(block) if STEP_LINE_RE.match(line)]
     trace = Trace.from_dict(slow["meta"]["trace"])
@@ -1211,6 +1240,7 @@ def test_e9_a_timed_out_row_without_a_trace_prints_its_error_and_no_trace_lines(
     block = blocks[0]
     assert_block_is_row(block, bare_timeout_run.timed_out)
     assert block.count(f"error: {REASON}") == 1, "\n".join(block)
+    assert STEP_LINE_RE.match(STEP_LINE_SAMPLE), "STEP_LINE_RE matches nothing; a negative use below would be vacuous"
     assert "trace: truncated" not in r.out and not step_columns(block), "\n".join(block)
 
 
@@ -1221,6 +1251,7 @@ def test_e9_an_event_matching_neither_outcome_nor_error_prints_the_no_rows_messa
     assert "Traceback" not in r.text and not r.err.strip(), r.text
     assert "no rows" in r.out and "no-such-event" in r.out, r.out
     assert SNIPPET_MARKER not in r.out
+    assert STEP_LINE_RE.match(STEP_LINE_SAMPLE), "STEP_LINE_RE matches nothing; a negative use below would be vacuous"
     assert not [line for line in r.out.splitlines() if STEP_LINE_RE.match(line)], r.out
 
 

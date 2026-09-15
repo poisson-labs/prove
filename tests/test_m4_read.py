@@ -68,7 +68,7 @@ POISON = "not json"
 MOCK_ROLLOUT = "proofload.examples.mock_agent:rollout"
 MOCK_SALT = "m4-read-oracle"
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # the M10 oracle's I15 regex, verbatim
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 regex, verbatim (nine columns since A8a)
 
 PUBLIC_STORE_METHODS = {
     "create_run", "manifest", "mark_complete", "runs", "append", "read", "missing", "count",

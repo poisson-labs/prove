@@ -223,10 +223,12 @@ OBSERVATION_PREFIXES = ("gen_ai.prompt.", "gen_ai.completion.", "llm.input_messa
 PREFIXED_KEYS = tuple(prefix + "0.content" for prefix in OBSERVATION_PREFIXES)
 #: Attributes that are not observation content and must stay in the envelope.
 PLAIN_KEYS = ("attempts", "otel.trace_id", "proofload.run_id", "tool.retries")
-TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated"})
+TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 SPAN_KEYS = frozenset({
     "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
     "input", "output", "tokens", "confidence", "error", "code", "attrs",
+    # A8a: the eight verdict fields (spec A8a section 3.1)
+    "operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original",
 })
 KINDS_SPEC = ("llm", "tool", "retrieval", "db", "http", "agent", "other")
 SCHEMA_SPEC = "proofload.trace/1"
@@ -397,7 +399,8 @@ def observation_trace(seed: int) -> Trace:
 
 
 def mock_style_trace(k: int) -> Trace:
-    """The mock quickstart's shape: root tool spans, no observation value, ``attrs={"attempts"}``."""
+    """The mock quickstart's shape: root tool spans, no observation value, one plain attribute
+    (the mock itself emits ``attrs={"tries": n}`` since A8a; this fixture's key is its own)."""
     return Trace(spans=tuple(span(i, attrs={"attempts": 1 + (i + k) % 2}) for i in range(3)), source="record")
 
 
@@ -774,8 +777,9 @@ code_dicts = st.none() | st.fixed_dictionaries({
 
 @st.composite
 def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
-    """Span dicts over A7's thirteen keys, parents drawn over earlier ids, ``input``/``output``
-    present or absent, attributes mixing observation keys (exact and prefixed) with plain ones."""
+    """Span dicts over the twenty-one keys (A7's thirteen plus A8a's eight at their ``None``
+    default), parents drawn over earlier ids, ``input``/``output`` present or absent, attributes
+    mixing observation keys (exact and prefixed) with plain ones."""
     ids = draw(st.lists(hex_ids, min_size=0, max_size=6, unique=True))
     spans: list[dict[str, Any]] = []
     for i, sid in enumerate(ids):
@@ -795,6 +799,14 @@ def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
             "error": draw(st.none() | st.text(min_size=1, max_size=10)),
             "code": draw(code_dicts),
             "attrs": draw(attr_maps),
+            "operation": None,
+            "step_name": None,
+            "outcome": None,
+            "outcome_by": None,
+            "attempt": None,
+            "gate": None,
+            "truncated": None,
+            "bytes_original": None,
         })
     return spans
 
@@ -802,7 +814,7 @@ def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
 def trace_dict(spans: Sequence[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
     d: dict[str, Any] = {
         "schema": SCHEMA_SPEC, "source": "otel", "source_version": OTEL_SEMCONV_VERSION,
-        "dropped": 0, "spans": [dict(s) for s in spans], "truncated": None,
+        "dropped": 0, "spans": [dict(s) for s in spans], "truncated": None, "alias_map_version": None,
     }
     d.update(overrides)
     return d
@@ -930,14 +942,15 @@ GARBAGE_RUN = "garbage"
 GARBAGE_TRACES: dict[str, Any] = {
     "list": ["step-a", "step-b"],
     "dict": {"schema": "not/proofload", "steps": []},
-    "seven-keys": {"schema": SCHEMA_SPEC, "source": "otel", "source_version": None, "dropped": 0, "spans": [], "truncated": None, "alias_map_version": "1"},
+    # A8a: was a seven-key dict carrying ``alias_map_version``, which A8a makes a valid key; an unknown key stays garbage under both schemas.
+    "unknown-key": {"schema": SCHEMA_SPEC, "source": "otel", "source_version": None, "dropped": 0, "spans": [], "truncated": None, "steps": []},
 }
 
 
 @pytest.fixture(scope="module")
 def garbage_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, dict[int, Any]]:
     """P7-9: three rows whose ``meta["trace"]`` is present and not a valid trace dict -- a list, a
-    dict under another schema, and a seven-key dict ``Trace.from_dict`` rejects at A7."""
+    dict under another schema, and a dict with an unknown key ``Trace.from_dict`` rejects."""
     store = Store(tmp_path_factory.mktemp("a7-garbage"))
     store.create_run(manifest(GARBAGE_RUN))
     by_k = dict(enumerate(GARBAGE_TRACES.values()))

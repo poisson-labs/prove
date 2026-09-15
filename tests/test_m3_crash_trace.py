@@ -105,17 +105,20 @@ POISON = "the oracle broke Trace.to_dict in this child"
 NO_HANG_TIMEOUT_S = 30.0  # the fork path with nothing to terminate: every rollout here returns at once
 EPOCH = 1_756_900_000_000_000_000
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # the M10 oracle's I15 regex, verbatim
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 regex, verbatim (nine columns since A8a)
+STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-S16_ORACLE_SHA256 = "c42ef229c89415d8d534e95070b58cc2162ac4cbe4e30c5f3e8377b824f3879a"  # 38 tests; re-minted by A7 Session A over the amended TRACE_EXPORTS (E12)
+S16_ORACLE_SHA256 = "d90402b4b61b43436c709656e8356e9e778c9f5ec87e60d2c1928e9f71be4eaa"  # 38 tests; re-minted by A8a Session A over the amended file (seven keys, nine columns, 25 exports)
 
-TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated"})
+TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
-    # A7 (spec section 7.1): four mints, in trace.py's own order -- constants, classes, functions.
-    "ATTRIBUTE_ALIASES", "DROP_REASONS", "KINDS", "LOGPROBS_KEY", "OBSERVATION_KEYS",
-    "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "SCHEMA", "SOURCES",
+    # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
+    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY -- in trace.py's own order: constants, classes,
+    # functions, each sorted. 25 names; FAULT_KEY / FAULT_POSITION_KEY are not A8a's (section 10 Q3).
+    "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
+    "OBSERVATION_KEYS", "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES",
     "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
     "assemble", "collect", "from_litellm", "from_otel", "merge", "record", "split", "step",
 ]
@@ -173,6 +176,14 @@ def _stored_span(
         "error": error,
         "code": None,
         "attrs": dict(STAMPS),
+        "operation": None,
+        "step_name": None,
+        "outcome": None,
+        "outcome_by": None,
+        "attempt": None,
+        "gate": None,
+        "truncated": None,
+        "bytes_original": None,
     }
 
 
@@ -317,7 +328,7 @@ def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
 
 
 def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
-    """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028."""
+    """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028 plus A8a's ``alias_map_version``."""
     d: dict[str, Any] = {
         "schema": "proofload.trace/1",
         "source": "otel",
@@ -325,6 +336,7 @@ def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
         "dropped": 0,
         "spans": [dict(s) for s in spans],
         "truncated": None,
+        "alias_map_version": None,
     }
     d.update(overrides)
     return d
@@ -948,6 +960,7 @@ def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_i
     trace = Trace.from_dict(crashed["meta"]["trace"])
     assert len(trace.spans) == 3, trace
     assert all(i > block.index(error_lines[0]) for i in step_at), text
+    assert STEP_LINE_RE.match(STEP_LINE_SAMPLE), "STEP_LINE_RE matches nothing; a negative use below would be vacuous"
     assert not [line for line in error_text.splitlines() if STEP_LINE_RE.match(line)], error_text
     columns = [block[i].split("\t") for i in step_at]
     assert [cols[0].strip() for cols in columns] == ["0", "1", "2"]

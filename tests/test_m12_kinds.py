@@ -119,7 +119,7 @@ def test_t36_an_unrecognized_vendor_value_falls_through_the_rest_of_the_ladder()
     assert with_http.spans[0].kind == "http"
 
 
-# ---------- T37: the standard outranks the vendors, and neither key is lifted ----------
+# ---------- T37: the standard outranks the vendors, and both keys are lifted (A8a) ----------
 
 
 def test_t37_gen_ai_operation_name_wins_over_a_conflicting_vendor_kind() -> None:
@@ -141,7 +141,10 @@ def test_t37_gen_ai_operation_name_wins_over_a_conflicting_vendor_kind() -> None
     assert tr.spans[0].kind == "llm"
 
 
-def test_t37_vendor_keys_survive_in_attrs_with_their_original_spelling() -> None:
+def test_t37_vendor_keys_are_lifted_into_operation_and_do_not_survive_in_attrs() -> None:
+    """A8a inverts the shipped rule (spec A8a section 3.5): ``openinference.span.kind`` and
+    ``traceloop.span.kind`` are lifted, the value lands in ``operation`` stripped and lowercased,
+    the kind ladder still reads it, and the key never survives in ``attrs`` (T20)."""
     from proofload.trace import from_otel
 
     payload = [
@@ -153,9 +156,11 @@ def test_t37_vendor_keys_survive_in_attrs_with_their_original_spelling() -> None
     tr = from_otel(payload)
     assert tr.dropped == 0 and len(tr.spans) == 3
     by_id = {s.span_id: s for s in tr.spans}
-    assert by_id["000000000000000a"].attrs["openinference.span.kind"] == "TOOL"
-    assert by_id["000000000000000a"].attrs["tool.name"] == "search"
-    assert by_id["000000000000000b"].attrs["traceloop.span.kind"] == "workflow"
-    # Present even when it did not decide the kind.
-    assert by_id["000000000000000c"].attrs["openinference.span.kind"] == "LLM"
-    assert by_id["000000000000000c"].kind == "llm"
+    a, b, c = by_id["000000000000000a"], by_id["000000000000000b"], by_id["000000000000000c"]
+    assert "openinference.span.kind" not in a.attrs and a.attrs["tool.name"] == "search"
+    assert (a.kind, a.operation) == ("tool", "tool")
+    assert "traceloop.span.kind" not in b.attrs
+    assert (b.kind, b.operation) == ("agent", "workflow")
+    # The standard still decides the kind and names the operation; the vendor key is lifted, not kept.
+    assert "openinference.span.kind" not in c.attrs
+    assert (c.kind, c.operation) == ("llm", "chat")

@@ -78,9 +78,11 @@ SPAN_KEYS = frozenset(
     {
         "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
         "input", "output", "tokens", "confidence", "error", "code", "attrs",
+        # A8a (spec section 3.1): the eight verdict fields, appended in this order, None-defaulted.
+        "operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original",
     }
 )
-TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated"})
+TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 CODE_KEYS = frozenset({"filepath", "function", "lineno"})
 LIFTED_KEYS = (
     "gen_ai.request.model",
@@ -92,6 +94,15 @@ LIFTED_KEYS = (
     "code.function.name",
     "code.line.number",
     "error.type",
+    # A8a (spec section 3.5): the carriers lifted into the eight new fields.
+    "openinference.span.kind",
+    "traceloop.span.kind",
+    "graph.node.name",
+    "proofload.step_name",
+    "proofload.outcome",
+    "proofload.outcome_by",
+    "proofload.attempt",
+    "proofload.gate",
 )
 OTEL_KIND_MAP_SPEC = {
     "chat": "llm",
@@ -114,7 +125,8 @@ CLOCK_ATTRS = ("time_ns", "perf_counter_ns")
 AGENT_ID = "b7ad6b7169203331"
 CHAT_ID = "0af7651916cd43dd"
 EPOCH = 1_756_900_000_000_000_000
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # the same five columns M10 I15 reads, tab-delimited
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the same nine columns M10 I15 reads, tab-delimited (A8a)
+STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 # The section 3 example span, as a dict. Tests copy it with dict(...) before mutating.
 SPAN_A: dict[str, Any] = {
@@ -131,6 +143,14 @@ SPAN_A: dict[str, Any] = {
     "error": None,
     "code": {"filepath": "agent/planner.py", "function": "plan", "lineno": 88},
     "attrs": {"gen_ai.system": "openai", "proofload.run_id": "r-2026-09-03-a"},
+    "operation": None,
+    "step_name": None,
+    "outcome": None,
+    "outcome_by": None,
+    "attempt": None,
+    "gate": None,
+    "truncated": None,
+    "bytes_original": None,
 }
 SPAN_B: dict[str, Any] = {
     "span_id": AGENT_ID,
@@ -146,6 +166,14 @@ SPAN_B: dict[str, Any] = {
     "error": None,
     "code": None,
     "attrs": {},
+    "operation": None,
+    "step_name": None,
+    "outcome": None,
+    "outcome_by": None,
+    "attempt": None,
+    "gate": None,
+    "truncated": None,
+    "bytes_original": None,
 }
 
 
@@ -158,6 +186,7 @@ def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
         "dropped": 0,
         "spans": [dict(s) for s in spans],
         "truncated": None,
+        "alias_map_version": None,
     }
     d.update(overrides)
     return d
@@ -239,6 +268,14 @@ def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
                 "error": draw(st.none() | st.text(min_size=1, max_size=10)),
                 "code": draw(code_dicts),
                 "attrs": draw(json_objects),
+                "operation": None,
+                "step_name": None,
+                "outcome": None,
+                "outcome_by": None,
+                "attempt": None,
+                "gate": None,
+                "truncated": None,
+                "bytes_original": None,
             }
         )
     return spans
@@ -485,20 +522,21 @@ def test_t5_duration_ms_is_derived_exactly() -> None:
     assert open_span.duration_ms is None
 
 
-def test_t5_span_to_dict_has_exactly_the_thirteen_keys() -> None:
+def test_t5_span_to_dict_has_exactly_the_twenty_one_keys() -> None:
     from proofload.trace import Span
 
     full = Span.from_dict(SPAN_A).to_dict()
     assert set(full) == SPAN_KEYS
     sparse = Span(span_id=CHAT_ID, parent_id=None, kind="tool", name="x", start_ns=EPOCH, end_ns=None).to_dict()
     assert set(sparse) == SPAN_KEYS
-    for key in ("parent_id", "end_ns", "input", "output", "tokens", "confidence", "error", "code"):
+    for key in ("parent_id", "end_ns", "input", "output", "tokens", "confidence", "error", "code",
+                "operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original"):
         assert sparse[key] is None, key
     assert sparse["attrs"] == {}
     assert "latency_ms" not in full and "i" not in full
 
 
-def test_t5_trace_to_dict_has_exactly_the_six_keys() -> None:
+def test_t5_trace_to_dict_has_exactly_the_seven_keys() -> None:
     from proofload.trace import Span, Trace
 
     assert set(Trace(spans=(), source="record").to_dict()) == TRACE_KEYS
@@ -1224,13 +1262,14 @@ def test_t23_kind_map_and_fallbacks() -> None:
     assert all(s.parent_id is None for s in tr.spans)
 
 
-def test_t23_unrecognized_operation_name_lands_in_other_and_is_preserved() -> None:
+def test_t23_unrecognized_operation_name_lands_in_other_and_is_preserved_as_operation() -> None:
     from proofload.trace import from_otel
 
     tr = from_otel(load_fixture("otlp_kinds.json"))
     span = {s.span_id: s for s in tr.spans}["0000000000000007"]
     assert span.kind == "other"
-    assert "frobnicate" in list(span.attrs.values()), dict(span.attrs)
+    # A8a (spec section 3.1, P8-16): the unrecognised operation has a field; the stash key is retired.
+    assert span.operation == "frobnicate" and "proofload.original_operation" not in span.attrs, dict(span.attrs)
 
 
 # ---------- T24: from_litellm ----------
@@ -1420,7 +1459,7 @@ def test_t29_mock_agent_per_step_shape_from_section_3() -> None:
         assert later.start_ns == earlier.end_ns, (earlier, later)  # cumulative simulated latency
     for span in tr.spans:
         assert span.code is None
-        assert set(span.attrs) == {"attempts"} and span.attrs["attempts"] in (1, 2)
+        assert set(span.attrs) == {"tries"} and span.attrs["tries"] in (1, 2)  # A8a: the mock's rename (spec section 3.13)
         assert span.error in (None, "ToolError")
         assert span.name in mock_agent._TASKS["checkout"]
 
@@ -1466,6 +1505,7 @@ def test_t30_inspect_prints_no_trace_lines_and_no_error_for_a_rejected_trace_dic
     lines = out.getvalue().splitlines()
     assert any(line.startswith("config_hash: ") for line in lines), out.getvalue()
     assert "seed: 1" in lines
+    assert STEP_LINE_RE.match(STEP_LINE_SAMPLE), "STEP_LINE_RE matches nothing; a negative use below would be vacuous"
     assert [line for line in lines if STEP_LINE_RE.match(line)] == [], out.getvalue()
 
 

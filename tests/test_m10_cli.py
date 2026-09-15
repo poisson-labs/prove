@@ -82,7 +82,8 @@ HEADLINE_RE = re.compile(
     r"(\d+) of (\d+) cells safer, (\d+) worse \((\S+), BH q<([^,]+), (paired|unpaired)\)\."
 )
 RUN_ID_LINE_RE = re.compile(r"^run_id: (\S+)$")
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){4}$")  # five tab-delimited columns
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # nine tab-delimited columns (A8a: step_name, attempt, outcome, gate after error)
+STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 SNIPPET_CALL_RE = re.compile(r"(\w+)\((\{.*\}),\s*seed=(\d+)\)")
 SNIPPET_MARKER = "# reproduce one episode"
 NETWORK_MODULES = {"requests", "httpx", "urllib", "socket"}
@@ -1069,6 +1070,7 @@ def test_i16_inspect_without_trace_prints_rows_and_no_step_lines(tmp_path: Path)
     assert len(blocks) == 5
     for block, row in zip(blocks, rows.itertuples(index=False), strict=True):
         assert_block_is_row(block, row)
+        assert STEP_LINE_RE.match(STEP_LINE_SAMPLE), "STEP_LINE_RE matches nothing; a negative use below would be vacuous"
         assert not [line for line in block if STEP_LINE_RE.match(line)], block
 
 
@@ -1155,6 +1157,8 @@ def test_i18_episode_shape_and_trace() -> None:
                     assert set(step) == {
                         "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
                         "input", "output", "tokens", "confidence", "error", "code", "attrs",
+                        # A8a: the eight verdict fields (spec section 3.1)
+                        "operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original",
                     }, step
 
 
