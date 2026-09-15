@@ -17,3 +17,15 @@ Hand-built payload dicts for `tests/test_m12_trace.py`, written from the shapes 
 - `litellm_calls.json` — three LiteLLM logging payloads. `start_time` / `end_time` are stored as
   ISO-8601 strings and converted to `datetime` by the test before `from_litellm` sees them.
   The first carries logprobs and no confidence. Used by T24 and T27.
+- `otlp_loop.json` — **A8a's fixture** (spec A8a §6), a flat span list of sixteen spans: `graph.node.{id,name,parent_id}`
+  on the loop spans; `proofload.attempt` 1 and 2 on two spans sharing `step_name` `lookup` and a
+  third of that name with no counter; three `check` spans under one parent with no counter at all
+  (P8-5); an `openinference.span.kind` of `GUARDRAIL`, of `EVALUATOR`, and a span *named*
+  `guardrail` whose kind attribute is `TOOL`; `proofload.gate = "declared"` and `"emitted"` on the
+  wire, each beside a `proofload.step_name`; `proofload.outcome` / `proofload.outcome_by` on the two
+  counted attempts; a `gen_ai.operation.name` conflicting with a vendor kind; one
+  `traceloop.span.kind`; one unrecognised operation spelled with case and whitespace; and one status
+  of each of `OK`, `UNSET`, `ERROR`. Used by `tests/test_a8a_span_schema.py` (P8-4, P8-5, P8-6,
+  P8-14, P8-16). **A8b extends this file** with the two over-limit spans A6 §6 lists (a 3 × limit
+  `gen_ai.tool.call.result` and a 2 × limit non-observation attribute); they are not here because
+  A8a names no byte threshold.

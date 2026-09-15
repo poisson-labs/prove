@@ -1,0 +1,516 @@
+[
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000001",
+    "name": "invoke_agent planner",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000000000000",
+    "endTimeUnixNano": "1756900000900000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "invoke_agent"
+        }
+      },
+      {
+        "key": "gen_ai.agent.name",
+        "value": {
+          "stringValue": "planner"
+        }
+      },
+      {
+        "key": "graph.node.id",
+        "value": {
+          "stringValue": "n1"
+        }
+      },
+      {
+        "key": "graph.node.name",
+        "value": {
+          "stringValue": "plan"
+        }
+      }
+    ],
+    "status": {
+      "code": "STATUS_CODE_UNSET"
+    }
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000002",
+    "name": "execute_tool lookup_order",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000010000000",
+    "endTimeUnixNano": "1756900000100000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "lookup_order"
+        }
+      },
+      {
+        "key": "graph.node.id",
+        "value": {
+          "stringValue": "n2"
+        }
+      },
+      {
+        "key": "graph.node.name",
+        "value": {
+          "stringValue": "lookup"
+        }
+      },
+      {
+        "key": "graph.node.parent_id",
+        "value": {
+          "stringValue": "n1"
+        }
+      },
+      {
+        "key": "proofload.attempt",
+        "value": {
+          "intValue": "1"
+        }
+      },
+      {
+        "key": "proofload.outcome",
+        "value": {
+          "stringValue": "pass"
+        }
+      },
+      {
+        "key": "proofload.outcome_by",
+        "value": {
+          "stringValue": "code"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001",
+    "status": {
+      "code": "STATUS_CODE_OK"
+    }
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000003",
+    "name": "execute_tool lookup_order",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000110000000",
+    "endTimeUnixNano": "1756900000200000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "lookup_order"
+        }
+      },
+      {
+        "key": "graph.node.id",
+        "value": {
+          "stringValue": "n3"
+        }
+      },
+      {
+        "key": "graph.node.name",
+        "value": {
+          "stringValue": "lookup"
+        }
+      },
+      {
+        "key": "graph.node.parent_id",
+        "value": {
+          "stringValue": "n1"
+        }
+      },
+      {
+        "key": "proofload.attempt",
+        "value": {
+          "intValue": "2"
+        }
+      },
+      {
+        "key": "proofload.outcome",
+        "value": {
+          "stringValue": "fail"
+        }
+      },
+      {
+        "key": "proofload.outcome_by",
+        "value": {
+          "stringValue": "llm"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001",
+    "status": {
+      "code": "STATUS_CODE_ERROR",
+      "message": "lookup failed"
+    }
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000004",
+    "name": "execute_tool lookup_order",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000210000000",
+    "endTimeUnixNano": "1756900000300000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "lookup_order"
+        }
+      },
+      {
+        "key": "graph.node.id",
+        "value": {
+          "stringValue": "n4"
+        }
+      },
+      {
+        "key": "graph.node.name",
+        "value": {
+          "stringValue": "lookup"
+        }
+      },
+      {
+        "key": "graph.node.parent_id",
+        "value": {
+          "stringValue": "n1"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000005",
+    "name": "invoke_agent verifier",
+    "kind": 1,
+    "startTimeUnixNano": "1756900001000000000",
+    "endTimeUnixNano": "1756900001900000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "invoke_agent"
+        }
+      },
+      {
+        "key": "graph.node.id",
+        "value": {
+          "stringValue": "n5"
+        }
+      },
+      {
+        "key": "graph.node.name",
+        "value": {
+          "stringValue": "verify"
+        }
+      }
+    ]
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000006",
+    "name": "execute_tool run_tests",
+    "kind": 1,
+    "startTimeUnixNano": "1756900001010000000",
+    "endTimeUnixNano": "1756900001100000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "run_tests"
+        }
+      },
+      {
+        "key": "graph.node.id",
+        "value": {
+          "stringValue": "n6"
+        }
+      },
+      {
+        "key": "graph.node.name",
+        "value": {
+          "stringValue": "check"
+        }
+      },
+      {
+        "key": "graph.node.parent_id",
+        "value": {
+          "stringValue": "n5"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000005"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000007",
+    "name": "execute_tool run_tests",
+    "kind": 1,
+    "startTimeUnixNano": "1756900001110000000",
+    "endTimeUnixNano": "1756900001200000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "run_tests"
+        }
+      },
+      {
+        "key": "graph.node.id",
+        "value": {
+          "stringValue": "n7"
+        }
+      },
+      {
+        "key": "graph.node.name",
+        "value": {
+          "stringValue": "check"
+        }
+      },
+      {
+        "key": "graph.node.parent_id",
+        "value": {
+          "stringValue": "n5"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000005"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000008",
+    "name": "execute_tool run_tests",
+    "kind": 1,
+    "startTimeUnixNano": "1756900001210000000",
+    "endTimeUnixNano": "1756900001300000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "execute_tool"
+        }
+      },
+      {
+        "key": "gen_ai.tool.name",
+        "value": {
+          "stringValue": "run_tests"
+        }
+      },
+      {
+        "key": "graph.node.id",
+        "value": {
+          "stringValue": "n8"
+        }
+      },
+      {
+        "key": "graph.node.name",
+        "value": {
+          "stringValue": "check"
+        }
+      },
+      {
+        "key": "graph.node.parent_id",
+        "value": {
+          "stringValue": "n5"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000005"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000009",
+    "name": "content_filter",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000310000000",
+    "endTimeUnixNano": "1756900000320000000",
+    "attributes": [
+      {
+        "key": "openinference.span.kind",
+        "value": {
+          "stringValue": "GUARDRAIL"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "000000000000000a",
+    "name": "score_answer",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000330000000",
+    "endTimeUnixNano": "1756900000340000000",
+    "attributes": [
+      {
+        "key": "openinference.span.kind",
+        "value": {
+          "stringValue": "EVALUATOR"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "000000000000000b",
+    "name": "guardrail",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000350000000",
+    "endTimeUnixNano": "1756900000360000000",
+    "attributes": [
+      {
+        "key": "openinference.span.kind",
+        "value": {
+          "stringValue": "TOOL"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "000000000000000c",
+    "name": "policy_check",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000370000000",
+    "endTimeUnixNano": "1756900000380000000",
+    "attributes": [
+      {
+        "key": "proofload.gate",
+        "value": {
+          "stringValue": "declared"
+        }
+      },
+      {
+        "key": "proofload.step_name",
+        "value": {
+          "stringValue": "policy"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "000000000000000d",
+    "name": "pre_commit_hook",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000390000000",
+    "endTimeUnixNano": "1756900000400000000",
+    "attributes": [
+      {
+        "key": "proofload.gate",
+        "value": {
+          "stringValue": "emitted"
+        }
+      },
+      {
+        "key": "proofload.step_name",
+        "value": {
+          "stringValue": "hook"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "000000000000000e",
+    "name": "chat gpt-4o",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000410000000",
+    "endTimeUnixNano": "1756900000500000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": "chat"
+        }
+      },
+      {
+        "key": "gen_ai.request.model",
+        "value": {
+          "stringValue": "gpt-4o"
+        }
+      },
+      {
+        "key": "openinference.span.kind",
+        "value": {
+          "stringValue": "TOOL"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "000000000000000f",
+    "name": "workflow main",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000510000000",
+    "endTimeUnixNano": "1756900000600000000",
+    "attributes": [
+      {
+        "key": "traceloop.span.kind",
+        "value": {
+          "stringValue": "workflow"
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  },
+  {
+    "traceId": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "spanId": "0000000000000010",
+    "name": "frobnicate",
+    "kind": 1,
+    "startTimeUnixNano": "1756900000610000000",
+    "endTimeUnixNano": "1756900000620000000",
+    "attributes": [
+      {
+        "key": "gen_ai.operation.name",
+        "value": {
+          "stringValue": " Frobnicate "
+        }
+      }
+    ],
+    "parentSpanId": "0000000000000001"
+  }
+]
