@@ -19,6 +19,15 @@ untested while the prep ran.
   the junk cells land in ``coverage`` as ``no_outcome_both``. K8 keyed on the wrong name would
   pass on a broken run and fail on a correct one.
 
+**The spend guard is not here, because there is no longer one in the container.** A
+per-episode ceiling was built and then dropped: sized low enough to make ``episodes × ceiling``
+fit the cap it would have killed legitimate episodes, and sized safely it bounded nothing. The
+cap is a launch gate (``scripts/tau2_t4_budget.py``) and a project-level spend limit at the
+provider, and neither is assertable from here. What the attempt measured -- that
+``litellm.max_budget`` is inert on τ²'s call shape, because litellm accounts for a call only
+when the result ``isinstance(result, dict) and "content" in result`` -- is recorded in the
+pre-registration and the devlog, not pinned as a test of behaviour nothing depends on.
+
 The τ²-facing tests need the benchmark, which is not installed outside the image; they are
 skipped at *function* level with the reason printed, never at module level, so the count moves
 visibly when the environment changes (MAL §18 rule 13).
@@ -37,7 +46,6 @@ EXAMPLES = REPO_ROOT / "examples"
 if str(EXAMPLES) not in sys.path:
     sys.path.insert(0, str(EXAMPLES))
 
-from tau2_pilot import budget as budget_module  # noqa: E402,F401
 from tau2_pilot import guardrail as g  # noqa: E402
 from tau2_pilot import synthetic  # noqa: E402
 
@@ -219,7 +227,16 @@ def d0_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[object, object]:
     from proofload.sampler import SweepSpec
     from proofload.store import Store
 
-    spec = dataclasses.replace(SweepSpec.load(T4_TOML), replicates=2)
+    # **capture=None is load-bearing and must stay.** The committed sweep file asks for
+    # capture, and ``install()`` owns the process's TracerProvider permanently -- there is no
+    # ``remove_span_processor`` and ``set_tracer_provider`` refuses a second call (capture.py,
+    # C2a). A fixture that installed one here would poison every later capture test in the same
+    # process: measured, ``test_m3_capture.py`` goes 47 passed -> 16 failed when this file runs
+    # before it, and the full suite only passes because ``m3`` sorts before ``t4``. This fixture
+    # is about the junk cells; the capture path is exercised by the D0 CLI run in the README,
+    # and by ``test_sweep_file_asks_for_content_capture`` reading the file rather than running it.
+    spec = dataclasses.replace(SweepSpec.load(T4_TOML), replicates=2, capture=None)
+    assert spec.capture is None
     store = Store(tmp_path_factory.mktemp("d0"))
     plan_a = plan(spec, store, run_salt="00" * 8)
     run_local(plan_a, synthetic.rollout, store, batch_size=8)
@@ -263,62 +280,6 @@ def test_junk_cells_never_reach_the_tree(d0_pair) -> None:  # type: ignore[no-un
     assert {cfg["task_family"] for cfg in configs} == set(_sweep_script().FAMILIES)
     # They have rows in both arms -- which is why "rows in both" is not the comparability test.
     assert set(holes["rows_a"]) == {2} and set(holes["rows_b"]) == {2}
-
-
-# ---------- the spend guard ----------
-
-
-def test_episode_budget_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(budget_module.BUDGET_VAR, raising=False)
-    assert budget_module.episode_budget() == budget_module.DEFAULT_EPISODE_BUDGET_USD
-    monkeypatch.setenv(budget_module.BUDGET_VAR, "0.5")
-    assert budget_module.episode_budget() == 0.5
-    for bad in ("", "  ", "not-a-number", "0", "-1"):
-        monkeypatch.setenv(budget_module.BUDGET_VAR, bad)
-        assert budget_module.episode_budget() == budget_module.DEFAULT_EPISODE_BUDGET_USD
-
-
-def test_the_ceiling_clears_the_worst_episode_measured() -> None:
-    """$0.0246 is the most expensive of the twenty smoke episodes, by ``meta.cost_tau2``. A
-    ceiling under it would kill legitimate episodes; K5 would then discard the arm, loudly, for
-    a reason that is ours and not the substrate's."""
-    assert budget_module.DEFAULT_EPISODE_BUDGET_USD > 0.0246 * 2
-
-
-@pytest.mark.skipif(
-    __import__("importlib.util", fromlist=["util"]).find_spec("litellm") is None,
-    reason="litellm is not installed; the budget guard is only assertable where litellm is",
-)
-def test_litellms_own_budget_is_inert_until_the_guard_supplies_the_accounting() -> None:
-    """The measurement the guard exists because of, pinned so a litellm upgrade cannot undo it
-    silently: with ``max_budget`` set and no accounting, τ²'s call shape leaves
-    ``_current_cost`` at zero and the pre-call check never fires. litellm adds a call's cost
-    only when the result ``isinstance(result, dict) and "content" in result``, and τ² gets
-    ``ModelResponse`` objects whose agent turns are tool calls with ``content=None``."""
-    import litellm
-
-    from tests.helpers_t4 import mock_openai_server
-
-    saved = (litellm.callbacks, litellm.max_budget, litellm._current_cost)
-    try:
-        litellm.callbacks = []
-        litellm.max_budget = 0.01
-        litellm._current_cost = 0.0
-        with mock_openai_server() as base_url:
-            for _ in range(4):
-                litellm.completion(
-                    model="openai/gpt-4.1-mini-2025-04-14",
-                    messages=[{"role": "user", "content": "hi"}],
-                    temperature=0.0,
-                    api_base=base_url,
-                    api_key="sk-not-a-real-key",
-                )
-        assert litellm._current_cost == 0.0, (
-            "litellm now accounts for this call shape itself; the guard's own accounting would "
-            "double count and DEFAULT_EPISODE_BUDGET_USD must be re-derived"
-        )
-    finally:
-        litellm.callbacks, litellm.max_budget, litellm._current_cost = saved
 
 
 # ---------- τ² conformance: only assertable where the benchmark is installed ----------
@@ -370,26 +331,6 @@ def test_tau2_stores_no_system_message_so_the_proof_has_to_be_ours() -> None:
     fields = set(SimulationRun.model_fields)
     assert "system_prompt" not in fields
     assert not any("system" in name for name in fields)
-
-
-@pytest.mark.skipif(
-    __import__("importlib.util", fromlist=["util"]).find_spec("litellm") is None,
-    reason="litellm is not installed; the budget guard is only assertable where litellm is",
-)
-def test_reset_zeroes_the_accumulator_between_episodes() -> None:
-    """Modal reuses containers, so ``batch_size = 1`` is one episode *at a time*, not one
-    episode ever. Without this the ceiling is a per-container running total and the third or
-    fourth episode of every warm container is refused for a reason that is ours."""
-    import litellm
-
-    saved = litellm._current_cost
-    try:
-        litellm._current_cost = 0.5
-        budget_module.reset()
-        assert litellm._current_cost == 0.0
-        assert budget_module.spent() == 0.0
-    finally:
-        litellm._current_cost = saved
 
 
 def test_the_patched_class_is_built_once_per_base() -> None:

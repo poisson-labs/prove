@@ -7,15 +7,21 @@ document. This is the cap as a gate: it reads what T.4 has already spent -- from
 ``meta.cost_tau2``, which is litellm's own per-episode figure -- adds a projection for the arm
 about to launch, and exits nonzero if the total would pass ``--cap``. Run it before every arm.
 
-**What it cannot do.** It gates at *arm* granularity: once an arm is launched nothing here can
-stop it, and a single arm's projection being wrong is a whole arm of overspend. Two things
-narrow that. ``tau2_pilot.budget`` caps what one container may spend, so a runaway episode is
-bounded rather than unbounded. And the projection self-calibrates: before arm A it uses the
-provider's list price, which is a 2.2x upper bound on what the smoke actually paid; after arm A
-it uses arm A's own measured mean with a safety factor, which is the honest number for A' and B.
+**What it cannot do, stated first because it is the important half.** It gates at *arm*
+granularity: once an arm is launched nothing here can stop it, and a single arm's projection
+being wrong is a whole arm of overspend. **A launch gate is not a stop.** There is deliberately
+no per-container ceiling beside it: one was built and dropped, because a ceiling low enough to
+make ``episodes x ceiling`` fit the cap sits at or under the most expensive *legitimate* episode
+measured and would kill real episodes and bias the arm, while a ceiling high enough not to do
+that bounds nothing worth bounding.
 
-**The only stop that binds unconditionally is a spend limit on the provider's own project.**
-It is not in this repository and this script does not claim to replace it.
+**The only stop that binds is a project-level spend limit at the provider.** It is an account
+setting, it is not in this repository, no session sets it, and it is owed before arm A. This
+script does not claim to replace it.
+
+The projection self-calibrates: before arm A it uses the provider's list price, which has been a
+2.2x overestimate on every measurement so far; after arm A it can use arm A's own measured mean
+with a safety factor, which is the honest number for A' and B.
 
     python scripts/tau2_t4_budget.py --arm A
     python scripts/tau2_t4_budget.py --arm B --cap 150
@@ -50,7 +56,7 @@ LIST_ANCHOR_USD = (
 #: conversation length, and B's whole point is that it changes what the agent says.
 SAFETY = 1.25
 
-DEFAULT_CAP_USD = 150.0
+DEFAULT_CAP_USD = 175.0
 DEFAULT_SPEC = REPO_ROOT / "examples" / "tau2_pilot" / "t4.toml"
 
 #: The sweep file's ``target_id``: how a stored run is recognised as T.4's rather than another

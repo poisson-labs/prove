@@ -29,6 +29,9 @@ resolves `config.effective_agent` by that name and no τ² file is edited.
 pre-registration lists — `task`, `audio_native_config` and `audio_taps_dir` ride along on every
 path — so the factory takes `**kwargs`, the way τ²'s own `create_llm_agent` does.
 
+**Nothing in the container caps spend.** See *Spend* below: the cap is a launch gate and a
+project-level limit at the provider, and the wrapper carries no budget of its own.
+
 **Every row carries the proof, in both arms.** τ²'s `SimulationRun` has no field for the system
 message and its `messages` are the orchestrator's trajectory, so the guardrail cannot be read
 back out of a stored conversation. `rollout` hashes the prompt the agent it just built will
@@ -112,18 +115,24 @@ arm ran and the other did not and is **0** here; a wholly-errored cell has rows 
 
 ## Spend
 
-`estimate_cost` guards Modal compute and has never seen a token (C20), so the cap is enforced in
-two places and neither is Proofload's `--max-cost`:
+`estimate_cost` guards Modal compute and has never seen a token (C20), so the cap is not
+Proofload's `--max-cost` and is not anything in the container:
 
 ```bash
 python scripts/tau2_t4_budget.py --arm A          # refuses if the cap cannot cover this arm
 ```
 
 The gate reads what T.4 has already spent from the store's own `meta.cost_tau2` and projects the
-arm about to launch at the provider's list price; `tau2_pilot.budget` caps what one container
-may spend at `$0.060`, about 2.4× the most expensive episode measured. **Neither is a limit the
-provider enforces** — that is a spend limit on the OpenAI project, and it is the only stop that
-binds unconditionally.
+arm about to launch at the provider's list price. **It gates at arm granularity: once an arm is
+launched nothing here stops it, and a launch gate is not a stop.**
+
+**The only stop that binds is a project-level spend limit at the provider.** It is an account
+setting, no session sets it, and it is owed before arm A.
+
+There is deliberately **no per-container ceiling**. One was built and dropped: sized low enough
+to make `episodes × ceiling` fit the cap it lands at $0.023, at or under the most expensive
+*legitimate* episode measured ($0.0246), and would have killed real episodes and biased the arm;
+sized safely it bounded nothing worth bounding.
 
 **gpt-4.1-mini list price, read at source 2026-09-14** from
 <https://developers.openai.com/api/docs/pricing> (a 301 from `platform.openai.com/docs/pricing`):
@@ -131,6 +140,12 @@ binds unconditionally.
 `gpt-4.1-mini` alias; the run pins the `-2025-04-14` snapshot and the table carries one price for
 both. Those rates reproduce both anchors: 54,046 in / 1,023 out is **$0.0233** at list, and the
 $0.10/M cached-read rate is what the 67–87 % cache solve used.
+
+**The spread at 6,600 episodes is $73 measured against $153 at list**, and list has been a 2.2×
+overestimate on every measurement so far. The cap is **$175**. K1 watches the *measured* number —
+`meta.cost_tau2` is litellm's own cache-aware figure — against $175 / 6,600 = **$0.0265** per
+episode in arm A; the list figure is what the launch gate refuses on, and it is a bound, not a
+forecast.
 
 ## Reproduce
 
@@ -215,12 +230,14 @@ Runs `20260913T113444Z-d44e` (A) and `20260913T113537Z-a06a` (A′), 10 episodes
    `Completions.create`. Measured the same day: the span *is* produced, because
    `with_raw_response` binds `completions.create` through the class attribute and wrapt's
    descriptor is what it gets, provided the client is built after `instrument()`.
-8. **`litellm.max_budget` is inert on this call shape.** litellm adds a call's cost only when
-   the result `isinstance(result, dict) and "content" in result`; τ²'s results are
-   `ModelResponse` objects whose agent turns are tool calls with `content=None`. Ten calls at
-   $0.0233 left `_current_cost` at `0.0` and a $0.05 budget never fired. `tau2_pilot.budget`
-   supplies the accounting; the stop then fires, about **two calls late**, because litellm runs
-   success callbacks on a thread pool. Pinned by a test.
+8. **`litellm.max_budget` is inert on this call shape** — recorded because the next person to
+   reach for it will assume otherwise. litellm adds a call's cost only when the result
+   `isinstance(result, dict) and "content" in result`; τ²'s results are `ModelResponse` objects
+   whose agent turns are tool calls with `content=None`. Ten calls at $0.0233 left
+   `_current_cost` at `0.0` and a $0.05 budget never fired: a run that merely set it would have
+   carried a guard that looked installed and was not. With the accounting supplied the stop does
+   fire, about **two calls late**, because litellm runs success callbacks on a thread pool.
+   Measured 2026-09-14; nothing here depends on it, since the per-container ceiling was dropped.
 9. **`(cfg, seed)` does not fix the episode.** τ² passes the seed to both models as OpenAI's
    `seed` request parameter, which is best-effort; at temperature 0 on 10 paired episodes, seven
    reproduced their outcome, two reproduced their step count and none reproduced their token

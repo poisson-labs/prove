@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import sys
 import time
 import traceback
 from collections.abc import Mapping, Sequence
@@ -56,7 +55,6 @@ from proofload import Episode
 from . import DOMAIN as DOMAIN
 from . import MAX_ERRORS, MAX_STEPS, OUTCOMES
 from . import T_UNIT as T_UNIT
-from . import budget as budget_module
 from .guardrail import GUARDRAIL, GUARDRAIL_SHA256, PATCHED_AGENT_NAME, guardrail_factory
 
 #: The pinned models, one per side of the conversation. They are constants and not defaults of
@@ -255,18 +253,12 @@ def _run(cfg: Mapping[str, Any], seed: int, agent_name: str) -> Episode:
     task = _TASKS[task_id]
     agent_model = _model(AGENT_MODEL_VAR, AGENT_MODEL)
     user_model = _model(USER_MODEL_VAR, USER_MODEL)
-    budget = budget_module.install()
-    # Per EPISODE, not per container: Modal reuses containers, so the accumulator has to be
-    # zeroed here or the ceiling becomes a running total over every episode the container
-    # has ever served. See ``budget.reset``.
-    budget_module.reset()
     if agent_name == PATCHED_AGENT_NAME:
         _register_guardrail_agent()
 
     arm_meta: dict[str, Any] = {
         "agent": agent_name,
         "guardrail_sha256": GUARDRAIL_SHA256 if agent_name == PATCHED_AGENT_NAME else None,
-        "budget": budget.to_meta(),
     }
 
     run_config = TextRunConfig(
@@ -297,10 +289,7 @@ def _run(cfg: Mapping[str, Any], seed: int, agent_name: str) -> Episode:
         simulation = run_simulation(orchestrator)
     except Exception:
         # τ²'s own name for a simulation that died rather than finished: the label
-        # tau2.runner.controller.make_infra_failure_sim assigns in exactly this case. A budget
-        # stop lands here too, and is told apart by ``stop_reason`` rather than by a new
-        # outcome: the outcome vocabulary is τ²'s plus nothing, and an arm that hits its
-        # ceiling is an arm K5 should discard, which is what an instrument-side label does.
+        # tau2.runner.controller.make_infra_failure_sim assigns in exactly this case.
         elapsed = time.perf_counter() - started
         messages = list(getattr(orchestrator, "trajectory", None) or ())
         return Episode(
@@ -317,11 +306,9 @@ def _run(cfg: Mapping[str, Any], seed: int, agent_name: str) -> Episode:
                 "reward_breakdown": {},
                 "reward_note": None,
                 "termination_reason": None,
-                "stop_reason": _stop_reason(),
                 "error": traceback.format_exc()[-MESSAGE_CAP:],
                 "tokens": _usage(messages),
                 "cost_tau2": {"agent": None, "user": None},
-                "cost_litellm": budget_module.spent(),
                 "duration_s": elapsed,
                 "tau2_version": _TAU2_VERSION,
                 "tau2_commit": os.environ.get("TAU2_COMMIT"),
@@ -352,16 +339,11 @@ def _run(cfg: Mapping[str, Any], seed: int, agent_name: str) -> Episode:
             "reward_breakdown": _breakdown(reward_info),
             "reward_note": str(note) if note is not None else None,
             "termination_reason": reason,
-            "stop_reason": None,
             "error": None,
             "tokens": _usage(messages),
             # LiteLLM's own dollar figure for the same episode, kept beside the token counts so
             # the price table used to turn tokens into dollars can be checked against it.
             "cost_tau2": {"agent": simulation.agent_cost, "user": simulation.user_cost},
-            # The same episode as the *budget* accounted for it, which is the number the
-            # ceiling was compared against. Kept beside cost_tau2 so a disagreement between the
-            # guard's arithmetic and τ²'s is visible rather than assumed away.
-            "cost_litellm": budget_module.spent(),
             "duration_s": float(simulation.duration),
             "tau2_version": _TAU2_VERSION,
             "tau2_commit": os.environ.get("TAU2_COMMIT"),
@@ -369,20 +351,6 @@ def _run(cfg: Mapping[str, Any], seed: int, agent_name: str) -> Episode:
             **_shape(messages),
         },
     )
-
-
-def _stop_reason() -> str | None:
-    """``"episode_budget_exceeded"`` when the guard is what ended the episode, else None.
-
-    Read from litellm's exception type rather than from the message text: the class is public
-    and the wording is not.
-    """
-    exc = sys.exc_info()[1]
-    while exc is not None:
-        if type(exc).__name__ == "BudgetExceededError":
-            return "episode_budget_exceeded"
-        exc = exc.__cause__ or exc.__context__
-    return None
 
 
 def rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
