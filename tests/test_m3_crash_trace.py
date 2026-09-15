@@ -109,7 +109,7 @@ STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 re
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-S16_ORACLE_SHA256 = "d90402b4b61b43436c709656e8356e9e778c9f5ec87e60d2c1928e9f71be4eaa"  # 38 tests; re-minted by A8a Session A over the amended file (seven keys, nine columns, 25 exports)
+S16_ORACLE_SHA256 = "00f637a7f4fb5b2dc95319525eec59d3e1bded2b81252e1bdaff5e9f6029ece6"  # 38 tests; re-minted by A8a Session A over the amended file (seven keys, nine columns, 25 exports)
 
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})

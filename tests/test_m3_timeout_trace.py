@@ -717,20 +717,20 @@ def test_e1_to_dict_emits_exactly_the_seven_keys() -> None:
     assert d["spans"] == [SPAN_CLOSED]
 
 
-def test_e1_from_dict_rejects_a_five_key_dict_naming_truncated() -> None:
-    five = trace_dict(SPAN_CLOSED)
-    del five["truncated"]
-    assert len(five) == 5
+def test_e1_from_dict_rejects_a_six_key_dict_naming_truncated() -> None:
+    six = trace_dict(SPAN_CLOSED)
+    del six["truncated"]
+    assert len(six) == 6  # A8a: seven keys less truncated
     with pytest.raises(TraceValidationError) as info:
-        Trace.from_dict(five)
+        Trace.from_dict(six)
     assert "truncated" in str(info.value)
 
 
-def test_e1_from_dict_rejects_a_seventh_key_naming_it() -> None:
-    seven = trace_dict(SPAN_CLOSED, reason=REASON)
-    assert len(seven) == 7
+def test_e1_from_dict_rejects_an_eighth_key_naming_it() -> None:
+    eight = trace_dict(SPAN_CLOSED, reason=REASON)
+    assert len(eight) == 8  # A8a: seven keys plus the stray one
     with pytest.raises(TraceValidationError) as info:
-        Trace.from_dict(seven)
+        Trace.from_dict(eight)
     assert "reason" in str(info.value)
     # Neither direction has an optional key: the six-key dict with the reason set reads back.
     assert Trace.from_dict(trace_dict(SPAN_CLOSED, SPAN_OPEN, truncated=REASON)).truncated == REASON

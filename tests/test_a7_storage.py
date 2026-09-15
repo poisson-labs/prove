@@ -1271,7 +1271,7 @@ def test_p7_10_every_verb_exits_0_on_go1_and_the_mock_pair_and_go1s_bytes_are_un
     rows = store.read(mock_pair.a, trace="full")
     violated = rows[rows["outcome"] == MOCK_EVENT]
     assert len(violated) >= 1
-    step_lines = [line for line in r.out.splitlines() if line.startswith("  ") and line.count("\t") == 4]
+    step_lines = [line for line in r.out.splitlines() if line.startswith("  ") and line.count("\t") == 8]  # nine columns since A8a
     assert len(step_lines) == int(sum(len(row.meta["trace"]["spans"]) for row in violated.itertuples(index=False)))
 
 
