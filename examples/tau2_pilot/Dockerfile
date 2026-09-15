@@ -1,6 +1,6 @@
 # The Modal image for the τ²-bench pilot.
 #
-# Five things live here and nowhere else.
+# Seven things live here and nowhere else.
 #
 # 1. THE PIN. τ²-bench is not on PyPI (the name `tau2` there is an unrelated package), so it is
 #    installed from its own repository at one commit. Everything the benchmark decides -- the
@@ -71,9 +71,33 @@
 #    aiohttp==3.8.3, which has no cp312 wheel and whose Cython-generated C does not compile
 #    against the 3.12 C API -- plus build-essential in the image to attempt the compile. On
 #    3.11 a wheel exists, so 2024.10 is the only thing needed.
+#
+# 7. THE CAPTURE PATH, AND THE VARIABLE THAT IS NOT IN THE SWEEP FILE.
+#    The sweep file's [capture] table names the "openai" instrumentor; the instrumentor and the
+#    OpenTelemetry SDK are not in proofload's core requirements (they are in the [agent] extra,
+#    and the Modal backend installs core only), so they are installed here.
+#
+#    The pilot calls the provider through LiteLLM, not the openai SDK directly, and LiteLLM's
+#    OpenAI handler goes through `openai_client.chat.completions.with_raw_response.create`
+#    rather than `Completions.create`, which is the symbol the instrumentor wraps. MEASURED
+#    2026-09-14 against litellm 1.80.0 + openai 2.54.0 + the instrumentor at 2.4b0, with a local
+#    mock server and no provider spend: the span IS produced. `with_raw_response` resolves
+#    `completions.create` through the class attribute at construction time, so wrapt's descriptor
+#    is what it binds, provided the client is built after instrument() -- which it is, because
+#    LiteLLM builds its clients lazily on the first call and the executor installs capture before
+#    the rollout.
+#
+#    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT IS REQUIRED AND IS NOT THE SWEEP FILE'S
+#    content FLAG. Measured the same day: with [capture].content = true and this variable unset,
+#    the span carries gen_ai.request.* and gen_ai.response.* and NO message content at all --
+#    the instrumentor never emits it. Proofload's flag decides what capture KEEPS of what it is
+#    given; this variable decides what the instrumentor GIVES. Two gates, both needed, and the
+#    one that is silent when wrong is this one. It is set here rather than left to the launching
+#    environment (C22's shape) precisely so it is committed and diffable.
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1
+ENV OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
 # τ² logs the whole conversation through loguru at INFO. The container's stderr is not the
 # measurement; the store is.
 ENV LOGURU_LEVEL=ERROR
@@ -110,9 +134,25 @@ open('/tmp/tau2-requirements.txt','w').write('\n'.join(d['project']['dependencie
  && pip install --no-cache-dir -r /tmp/tau2-requirements.txt "websockets>=13.0" "pydantic<2.12" \
  && pip install --no-cache-dir --no-deps --ignore-requires-python /opt/tau2-bench
 
+# The capture path (note 7). Pinned exactly, the same pin the golden pilot carries: the
+# instrumentor is a beta package and its span shape is what A8b's limit will be measured on.
+RUN pip install --no-cache-dir \
+      "opentelemetry-instrumentation-openai-v2==2.4b0" \
+      "opentelemetry-sdk"
+
 # Fail the build, not the first batch, if the pinned copy cannot import or cannot find its data.
 RUN python -c "\
 from tau2.registry import registry; \
 tasks = registry.get_tasks_loader('airline')(); \
 assert len(tasks) == 50, 'airline is not 50 tasks: ' + str(len(tasks)); \
 print('airline ok: ' + str(len(tasks)) + ' tasks')"
+
+# Fail the build if the capture path cannot be assembled: the instrumentor resolves through the
+# entry-point group proofload.capture reads, and the SDK imports. A run whose [capture] table is
+# inert reports active=False on every row and is only noticed afterwards.
+RUN python -c "\
+from importlib.metadata import entry_points; \
+names = {e.name for e in entry_points(group='opentelemetry_instrumentor')}; \
+assert 'openai' in names, 'no openai instrumentor entry point: ' + str(sorted(names)); \
+import opentelemetry.sdk.trace; \
+print('capture ok: openai instrumentor + sdk')"

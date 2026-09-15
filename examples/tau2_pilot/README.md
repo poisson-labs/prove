@@ -1,14 +1,39 @@
 # The τ²-bench pilot
 
-A Proofload rollout wrapper over **sierra-research/tau2-bench** (τ³), airline domain, and the
-ten-episode measurement it exists to make. This is step one of T.4 and it is **not a sweep**:
-there is no pair, no diff, no report and no finding here. What it produces is the number nothing
-else can supply — what one τ² episode costs, how long it takes, and whether the same
-`(cfg, seed)` gives the same outcome twice.
+A Proofload rollout wrapper over **sierra-research/tau2-bench** (τ³), airline domain: the
+ten-episode measurement it was built for, and the two arms of the T.4 run it now carries.
+
+**Nothing here has run as a sweep.** The ten-episode pair below is the only τ² data, and it is
+discovery. The T.4 confirmation — `t4.toml`, three arms, 2,200 episodes each — is
+pre-registered and not launched.
 
 τ² is **not forked and not patched**. It is installed from a pinned commit inside the image and
-used through three public entry points: `registry.get_tasks_loader`, `build_text_orchestrator`
-and `run_simulation`. Nothing in `src/proofload` changed and no test moved.
+used through public entry points: `registry.get_tasks_loader`, `build_text_orchestrator`,
+`run_simulation`, and — for arm B — `registry.register_agent_factory`. Nothing in
+`src/proofload` changed.
+
+## The two arms
+
+| entry point | arm | what differs |
+|---|---|---|
+| `tau2_pilot.rollout:rollout` | A, A′ | nothing: τ²'s stock `llm_agent` |
+| `tau2_pilot.rollout:rollout_patched` | B | one policy-adherence paragraph after the domain policy |
+
+The paragraph is `tau2_pilot.guardrail.GUARDRAIL`, fixed before any arm runs, 421 bytes,
+sha256 **`fce8dcd12119b7e6c2ea288e14a60c4cd9dcc1bca0f8bbaffb0847e5cfc85156`**. It reaches τ²
+as a subclass of `LLMAgent` whose `system_prompt` property appends it, registered under the
+name `tau2_pilot_guardrail` through τ²'s own public `register_agent_factory`; `build_agent`
+resolves `config.effective_agent` by that name and no τ² file is edited.
+
+**`build_agent` calls a factory with seven keyword arguments**, not the five the
+pre-registration lists — `task`, `audio_native_config` and `audio_taps_dir` ride along on every
+path — so the factory takes `**kwargs`, the way τ²'s own `create_llm_agent` does.
+
+**Every row carries the proof, in both arms.** τ²'s `SimulationRun` has no field for the system
+message and its `messages` are the orchestrator's trajectory, so the guardrail cannot be read
+back out of a stored conversation. `rollout` hashes the prompt the agent it just built will
+send and stores `meta["system_prompt_sha256"]` and `meta["guardrail_in_system_prompt"]` beside
+`meta["agent"]`. That is what K7 is read from.
 
 ## The three decisions, and why
 
@@ -33,6 +58,79 @@ budget τ² itself enforces, so `t <= horizon` holds by construction and needs n
 got. Wall seconds would have needed a horizon we invented. Both pins are asserted against
 `tau2.config` at import, so a re-pin that moves them fails loudly instead of silently rescaling
 every stored `t`.
+
+## The T.4 sweep file
+
+`t4.toml` is **generated, never hand-written**: `scripts/tau2_t4_sweep.py` reads τ²'s own
+`tasks.json` at the pin, applies the pre-registration's mechanical family rule to each task's
+`evaluation_criteria.actions`, and writes the file with the design's numbers recomputed from
+`proofload.diff.mde_two_proportion` in its header.
+
+```bash
+python scripts/tau2_t4_sweep.py --tasks <tau2-checkout>/data/tau2/domains/airline/tasks.json
+python scripts/tau2_t4_sweep.py --tasks <...>/tasks.json --check   # exits 1 if the file drifted
+```
+
+The rule gives **`no_write` 24 / `modify_in_place` 14 / `cancel_or_book` 12**, which is not the
+21 / 16 / 13 the pre-registration's hand-read table prints; ten of the fifty tasks move. The
+rule is what was pre-registered, so the script is right and the table is a correction. The
+binding family is therefore 12 cells rather than 13, and N rises from 40 to **44** — the least
+replicate count at which the resolver admits every family at `--max-group-mde 0.10`.
+
+Three cells per arm are junk and are declared: `SweepSpec.load` refuses a file with no
+`[axes.*]` table, so the required `[axes.task_family]` grid produces three configs carrying no
+`task_id`. The wrapper raises `KeyError`, the executor records an errored row, and `multi_diff`
+filters `outcome.notna()` before pairing, so they never reach the tree.
+
+## D0: the junk-cell shape, confirmed by running it
+
+`synthetic.py` is the wrapper's shape with no τ², no model and no money. Run the pair and read
+the coverage before spending anything:
+
+```bash
+export PYTHONPATH="$PWD/examples${PYTHONPATH:+:$PYTHONPATH}"
+export PROOFLOAD_STORE=$(mktemp -d)
+python scripts/tau2_t4_sweep.py --tasks <...>/tasks.json --replicates 8 --out /tmp/d0.toml
+proofload sweep /tmp/d0.toml --target tau2_pilot.synthetic:rollout \
+  --backend local --max-mde 0.60 --yes
+proofload sweep /tmp/d0.toml --target tau2_pilot.synthetic:rollout_patched \
+  --backend local --max-mde 0.60 --pair-with <A> --yes
+proofload diff <A> <B> --event unsolved --method mcnemar_bh --q 0.05 \
+  --by task_family --max-group-mde 0.30 --depth 3 --methods all
+```
+
+Measured 2026-09-14: `n_errored` 24 = 3N per arm; `n_tests=50`; `coverage: holes=3 … 
+no_outcome_both=3`; the fault-lines rung resolves on `task_family` with 3 groups; the synthetic
+patch's effect lands in `no_write` alone.
+
+**K8 must be read from `coverage`, not from `n_not_comparable`.** That field counts cells one
+arm ran and the other did not and is **0** here; a wholly-errored cell has rows in both arms.
+
+**`report --x task_family` is refused** — two free axes. The forms that render are
+`--x task_family --y task_id` and `--x task_id --fix 'task_family="no_write"'`, and a string
+`--fix` value has to carry its TOML quotes.
+
+## Spend
+
+`estimate_cost` guards Modal compute and has never seen a token (C20), so the cap is enforced in
+two places and neither is Proofload's `--max-cost`:
+
+```bash
+python scripts/tau2_t4_budget.py --arm A          # refuses if the cap cannot cover this arm
+```
+
+The gate reads what T.4 has already spent from the store's own `meta.cost_tau2` and projects the
+arm about to launch at the provider's list price; `tau2_pilot.budget` caps what one container
+may spend at `$0.060`, about 2.4× the most expensive episode measured. **Neither is a limit the
+provider enforces** — that is a spend limit on the OpenAI project, and it is the only stop that
+binds unconditionally.
+
+**gpt-4.1-mini list price, read at source 2026-09-14** from
+<https://developers.openai.com/api/docs/pricing> (a 301 from `platform.openai.com/docs/pricing`):
+**$0.40 / $0.10 / $1.60** per million tokens, input / cached input / output. The page prices the
+`gpt-4.1-mini` alias; the run pins the `-2025-04-14` snapshot and the table carries one price for
+both. Those rates reproduce both anchors: 54,046 in / 1,023 out is **$0.0233** at list, and the
+$0.10/M cached-read rate is what the 67–87 % cache solve used.
 
 ## Reproduce
 
@@ -104,7 +202,26 @@ Runs `20260913T113444Z-d44e` (A) and `20260913T113537Z-a06a` (A′), 10 episodes
    is why this domain was chosen — but it is deterministic, not correct, and a finding that lands
    on `COMMUNICATE` rather than `DB` inherits that. `meta["reward_breakdown"]` keeps the two
    apart on every row, so which half moved is answerable after the fact.
-6. **`(cfg, seed)` does not fix the episode.** τ² passes the seed to both models as OpenAI's
+6. **`[capture].content = true` is necessary and not sufficient.** Measured 2026-09-14
+   against litellm 1.80.0, openai 2.54.0 and `opentelemetry-instrumentation-openai-v2` 2.4b0,
+   with a local mock server and no provider spend: the instrumentor emits
+   `gen_ai.input.messages` / `gen_ai.output.messages` **only** when
+   `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` is `SPAN_ONLY` or `SPAN_AND_EVENT`.
+   Proofload's flag decides what capture *keeps*; that variable decides what the instrumentor
+   *gives*. With the flag on and the variable unset the span carries `gen_ai.request.*` and
+   `gen_ai.response.*` and no content at all, silently. The Dockerfile sets it.
+7. **LiteLLM does not call the symbol the instrumentor wraps — and the span appears anyway.**
+   `litellm.llms.openai.openai` calls `chat.completions.with_raw_response.create`, not
+   `Completions.create`. Measured the same day: the span *is* produced, because
+   `with_raw_response` binds `completions.create` through the class attribute and wrapt's
+   descriptor is what it gets, provided the client is built after `instrument()`.
+8. **`litellm.max_budget` is inert on this call shape.** litellm adds a call's cost only when
+   the result `isinstance(result, dict) and "content" in result`; τ²'s results are
+   `ModelResponse` objects whose agent turns are tool calls with `content=None`. Ten calls at
+   $0.0233 left `_current_cost` at `0.0` and a $0.05 budget never fired. `tau2_pilot.budget`
+   supplies the accounting; the stop then fires, about **two calls late**, because litellm runs
+   success callbacks on a thread pool. Pinned by a test.
+9. **`(cfg, seed)` does not fix the episode.** τ² passes the seed to both models as OpenAI's
    `seed` request parameter, which is best-effort; at temperature 0 on 10 paired episodes, seven
    reproduced their outcome, two reproduced their step count and none reproduced their token
    count. Pairing on this substrate buys much less than pairing on a deterministic one.

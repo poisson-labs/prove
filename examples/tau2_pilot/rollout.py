@@ -1,4 +1,10 @@
-"""``rollout(cfg, seed) -> Episode`` over one unmodified τ²-bench airline task.
+"""``rollout`` and ``rollout_patched``: one unmodified τ²-bench airline task, two arms.
+
+``rollout`` is arm A and A′; ``rollout_patched`` is arm B, the same episode with one
+policy-adherence paragraph appended after the domain policy (``guardrail.py``). The patch
+reaches τ² through ``registry.register_agent_factory``, which is public at the pin and is
+what ``build_agent`` resolves ``config.effective_agent`` through -- **no τ² file is edited,
+and the two arms differ in one identifier.**
 
 This is the whole surface Proofload sees. τ²-bench is not forked and not patched: it is
 installed from a pinned commit inside the image (``examples/tau2_pilot/Dockerfile``) and used
@@ -6,7 +12,15 @@ through the three public entry points its own README documents --
 ``registry.get_tasks_loader``, ``build_text_orchestrator`` and ``run_simulation``. The
 benchmark computes the verdict; this module reads it.
 
-``cfg`` carries one axis, ``task_id``. ``seed`` is the episode's seed and it reaches the
+``cfg`` carries ``task_id`` and, for the T.4 sweep, ``task_family``. **``task_family`` is
+read by nothing here on purpose**: it is a declared grouping key, not an input, and a
+rollout that branched on it would make the two families different systems. The three junk
+configs the sweep file's required ``[axes.task_family]`` grid produces carry no ``task_id``
+at all; ``cfg["task_id"]`` raises ``KeyError`` on them, the executor records an errored row
+with no outcome, and ``diff`` drops the cell as non-comparable. That is the declared
+``n_errored = 3N`` per arm, and K8 is the check that it stayed three.
+
+``seed`` is the episode's seed and it reaches the
 provider: τ²'s ``Orchestrator.initialize`` calls ``set_seed`` on both the agent and the user
 simulator, and ``LLMConfigMixin.set_seed`` writes it into ``llm_args["seed"]``, which LiteLLM
 passes through as the OpenAI ``seed`` request parameter. Both sides of the conversation
@@ -21,13 +35,16 @@ used is ``infrastructure_error`` -- τ²'s own name for this case, the one
 
 from __future__ import annotations
 
+import hashlib
 import os
+import sys
 import time
 import traceback
 from collections.abc import Mapping, Sequence
 from importlib import metadata
 from typing import Any
 
+from tau2.agent.llm_agent import LLMAgent
 from tau2.config import DEFAULT_MAX_ERRORS, DEFAULT_MAX_STEPS
 from tau2.data_model.simulation import TerminationReason, TextRunConfig
 from tau2.registry import registry
@@ -39,6 +56,8 @@ from proofload import Episode
 from . import DOMAIN as DOMAIN
 from . import MAX_ERRORS, MAX_STEPS, OUTCOMES
 from . import T_UNIT as T_UNIT
+from . import budget as budget_module
+from .guardrail import GUARDRAIL, GUARDRAIL_SHA256, PATCHED_AGENT_NAME, guardrail_factory
 
 #: The pinned models, one per side of the conversation. They are constants and not defaults of
 #: the image, so the pin is committed and diffable; ``target_id`` in the sweep file names the
@@ -179,16 +198,80 @@ def _outcome(reward: float, reason: str) -> str:
     return _TERMINATED[reason]
 
 
-def rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """One τ² airline task, once, at ``seed``. Never raises for anything τ² or the model did."""
+#: The stock τ² agent, arm A's. Named rather than spelled at the call site so the two arms
+#: differ in exactly one identifier.
+STOCK_AGENT_NAME = "llm_agent"
+
+
+def _register_guardrail_agent() -> None:
+    """Register arm B's factory with τ², once per container.
+
+    ``register_agent_factory`` raises ``ValueError`` on a duplicate name, and the executor may
+    call the rollout many times in one process, so the guard is a lookup rather than a
+    try/except: a genuine name collision -- somebody else registering ``tau2_pilot_guardrail``
+    -- must still raise, and swallowing ``ValueError`` would hide it.
+    """
+    if registry.get_agent_factory(PATCHED_AGENT_NAME) is not None:
+        return
+    registry.register_agent_factory(
+        lambda tools, domain_policy, **kwargs: guardrail_factory(
+            LLMAgent, tools, domain_policy, **kwargs
+        ),
+        PATCHED_AGENT_NAME,
+    )
+
+
+def _prompt_proof(orchestrator: Any) -> dict[str, Any]:
+    """What the agent this episode actually built will send, as two facts on the row.
+
+    **This exists because K7 cannot be read the way the pre-registration states it.** K7 says
+    to read "the system message of every stored conversation": τ²'s ``SimulationRun`` has no
+    such field -- ``messages`` is ``Orchestrator.get_trajectory()``, which carries user,
+    assistant and tool messages and no ``SystemMessage`` -- and the wrapper stores counts, not
+    text. So the proof is taken here, from the agent τ² just built, and stored per row:
+    whether the guardrail is in the prompt, and the prompt's digest, which is what tells arm A's
+    rows from arm B's without storing either prompt.
+    """
+    agent = getattr(orchestrator, "agent", None)
+    try:
+        prompt = agent.system_prompt
+    except Exception:  # noqa: BLE001 - a proof that cannot be taken is recorded as absent
+        return {"system_prompt_sha256": None, "guardrail_in_system_prompt": None}
+    text = prompt if isinstance(prompt, str) else str(prompt)
+    return {
+        "system_prompt_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "guardrail_in_system_prompt": GUARDRAIL in text,
+    }
+
+
+def _run(cfg: Mapping[str, Any], seed: int, agent_name: str) -> Episode:
+    """One τ² airline task, once, at ``seed``, under ``agent_name``.
+
+    Arm A and arm B differ here in one argument and nowhere else: the same task, the same
+    models, the same temperature, the same ``TextRunConfig`` fields, the same seed. Never
+    raises for anything τ² or the model did.
+    """
     task_id = str(cfg["task_id"])
     task = _TASKS[task_id]
     agent_model = _model(AGENT_MODEL_VAR, AGENT_MODEL)
     user_model = _model(USER_MODEL_VAR, USER_MODEL)
+    budget = budget_module.install()
+    # Per EPISODE, not per container: Modal reuses containers, so the accumulator has to be
+    # zeroed here or the ceiling becomes a running total over every episode the container
+    # has ever served. See ``budget.reset``.
+    budget_module.reset()
+    if agent_name == PATCHED_AGENT_NAME:
+        _register_guardrail_agent()
+
+    arm_meta: dict[str, Any] = {
+        "agent": agent_name,
+        "guardrail_sha256": GUARDRAIL_SHA256 if agent_name == PATCHED_AGENT_NAME else None,
+        "budget": budget.to_meta(),
+    }
 
     run_config = TextRunConfig(
         domain=DOMAIN,
-        agent="llm_agent",
+        agent=agent_name,
         llm_agent=agent_model,
         llm_args_agent={"temperature": TEMPERATURE},
         user="user_simulator",
@@ -204,16 +287,20 @@ def rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
         seed=seed,
         # Deterministic rather than τ²'s uuid4, so two episodes at the same (cfg, seed) differ
         # in their timings and in nothing else. It is an identifier, and nothing in τ² branches
-        # on it.
-        simulation_id=f"tau2-pilot-{DOMAIN}-{task_id}-{seed}",
+        # on it. The arm is in it so arm A and arm B do not share a simulation id.
+        simulation_id=f"tau2-pilot-{DOMAIN}-{agent_name}-{task_id}-{seed}",
     )
+    arm_meta.update(_prompt_proof(orchestrator))
 
     started = time.perf_counter()
     try:
         simulation = run_simulation(orchestrator)
     except Exception:
         # τ²'s own name for a simulation that died rather than finished: the label
-        # tau2.runner.controller.make_infra_failure_sim assigns in exactly this case.
+        # tau2.runner.controller.make_infra_failure_sim assigns in exactly this case. A budget
+        # stop lands here too, and is told apart by ``stop_reason`` rather than by a new
+        # outcome: the outcome vocabulary is τ²'s plus nothing, and an arm that hits its
+        # ceiling is an arm K5 should discard, which is what an instrument-side label does.
         elapsed = time.perf_counter() - started
         messages = list(getattr(orchestrator, "trajectory", None) or ())
         return Episode(
@@ -230,12 +317,15 @@ def rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
                 "reward_breakdown": {},
                 "reward_note": None,
                 "termination_reason": None,
+                "stop_reason": _stop_reason(),
                 "error": traceback.format_exc()[-MESSAGE_CAP:],
                 "tokens": _usage(messages),
                 "cost_tau2": {"agent": None, "user": None},
+                "cost_litellm": budget_module.spent(),
                 "duration_s": elapsed,
                 "tau2_version": _TAU2_VERSION,
                 "tau2_commit": os.environ.get("TAU2_COMMIT"),
+                **arm_meta,
                 **_shape(messages),
             },
         )
@@ -262,14 +352,49 @@ def rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
             "reward_breakdown": _breakdown(reward_info),
             "reward_note": str(note) if note is not None else None,
             "termination_reason": reason,
+            "stop_reason": None,
             "error": None,
             "tokens": _usage(messages),
             # LiteLLM's own dollar figure for the same episode, kept beside the token counts so
             # the price table used to turn tokens into dollars can be checked against it.
             "cost_tau2": {"agent": simulation.agent_cost, "user": simulation.user_cost},
+            # The same episode as the *budget* accounted for it, which is the number the
+            # ceiling was compared against. Kept beside cost_tau2 so a disagreement between the
+            # guard's arithmetic and τ²'s is visible rather than assumed away.
+            "cost_litellm": budget_module.spent(),
             "duration_s": float(simulation.duration),
             "tau2_version": _TAU2_VERSION,
             "tau2_commit": os.environ.get("TAU2_COMMIT"),
+            **arm_meta,
             **_shape(messages),
         },
     )
+
+
+def _stop_reason() -> str | None:
+    """``"episode_budget_exceeded"`` when the guard is what ended the episode, else None.
+
+    Read from litellm's exception type rather than from the message text: the class is public
+    and the wording is not.
+    """
+    exc = sys.exc_info()[1]
+    while exc is not None:
+        if type(exc).__name__ == "BudgetExceededError":
+            return "episode_budget_exceeded"
+        exc = exc.__cause__ or exc.__context__
+    return None
+
+
+def rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
+    """Arm A and A′: τ²'s stock ``llm_agent``, unpatched."""
+    return _run(cfg, seed, STOCK_AGENT_NAME)
+
+
+def rollout_patched(cfg: Mapping[str, Any], seed: int) -> Episode:
+    """Arm B: the same episode with one policy-adherence paragraph after the domain policy.
+
+    The only difference from ``rollout`` is ``agent_name``. τ² is unforked: the patched agent
+    reaches it through ``registry.register_agent_factory``, which ``build_agent`` resolves by
+    name, and no τ² file is read differently because of it.
+    """
+    return _run(cfg, seed, PATCHED_AGENT_NAME)
