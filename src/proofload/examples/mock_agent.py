@@ -104,12 +104,12 @@ def _walk(cfg: Mapping[str, Any], seed: int, *, retry: bool) -> Episode:
     outcome = "timeout"
     for i in range(HORIZON):
         first, second, jitter = rng.random(), rng.random(), rng.random()
-        attempts = 1
+        tries = 1
         failed = first < rate
         if failed and retry:
-            attempts = 2
+            tries = 2
             failed = second < rate
-        latency_ms = round(5.0 + 45.0 * jitter + 30.0 * (attempts - 1), 1)
+        latency_ms = round(5.0 + 45.0 * jitter + 30.0 * (tries - 1), 1)
         end_ns = start_ns + round(latency_ms * 1_000_000)
         spans.append(
             Span(
@@ -121,7 +121,7 @@ def _walk(cfg: Mapping[str, Any], seed: int, *, retry: bool) -> Episode:
                 end_ns=end_ns,
                 error=_TOOL_ERROR if failed else None,
                 code=None,
-                attrs={"attempts": attempts},
+                attrs={"tries": tries},
             )
         )
         start_ns = end_ns

@@ -532,6 +532,8 @@ def _span_mapping(span: ReadableSpan, *, content: bool, live: bool = False) -> d
             if content or not _is_content(key)
         ]
     mapping: dict[str, Any] = {
+        # The OTel trace id a user's own collector keys on; from_otel keeps it in attrs.
+        "traceId": "" if context is None else format(context.trace_id, "032x"),
         # A span with no context has no id: from_otel drops it as ``no_span_id`` and counts it.
         "spanId": "" if context is None else format(context.span_id, "016x"),
         "parentSpanId": None if parent is None else format(parent.span_id, "016x"),

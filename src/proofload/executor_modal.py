@@ -555,14 +555,14 @@ def _record(
                 replicate_index=replicate_index,
                 error=error,
                 wall_time=0.0,
-                backend_meta={"i": i, "attempt": attempt},
+                backend_meta={"i": i, "infra_attempt": attempt},
                 meta=meta,
             ),
             capture_active,
         )
     backend_meta = dict(result.get("backend_meta") or {})
     backend_meta.setdefault("i", i)
-    backend_meta["attempt"] = attempt
+    backend_meta["infra_attempt"] = attempt
     try:
         episode = Episode.from_dict(result)
     except Exception as exc:
@@ -590,7 +590,7 @@ def _infra_record(p: Plan, job: Job, exc: BaseException, attempt: int) -> Episod
         replicate_index=replicate_index,
         error=f"{_INFRA_PREFIX}{exc!r}",
         wall_time=0.0,
-        backend_meta={"i": i, "attempt": attempt},
+        backend_meta={"i": i, "infra_attempt": attempt},
     )
 
 

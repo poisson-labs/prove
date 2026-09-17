@@ -45,7 +45,13 @@ from proofload.diff import mde_two_proportion
 from proofload.episode import Episode
 from proofload.sampler import SweepSpec
 from proofload.store import EpisodeRecord, RunManifest, Store, StoreError
-from proofload.trace import OTEL_SEMCONV_VERSION, Trace, TraceValidationError, merge
+from proofload.trace import (
+    ALIAS_MAP_VERSION,
+    OTEL_SEMCONV_VERSION,
+    Trace,
+    TraceValidationError,
+    merge,
+)
 
 Rollout = Callable[[Mapping[str, Any], int], Episode]
 
@@ -744,6 +750,7 @@ def _capture_record(spec: CaptureSpec, status: CaptureStatus) -> dict[str, Any]:
         "reason": status.reason,
         "instrumented": list(status.instrumented),
         "semconv": OTEL_SEMCONV_VERSION,
+        "alias_map_version": ALIAS_MAP_VERSION,
         "content": spec.content,
         "max_span_bytes": spec.max_span_bytes,
         "max_spans": spec.max_spans,
@@ -776,8 +783,17 @@ def _empty_envelope() -> dict[str, Any]:
     directions and ``Store.append`` validates what arrives with ``from_dict``, so a hand-written
     dict would be rejected outright the moment ``Trace`` gains a field -- landing the row in
     exactly the both-columns-null state it has to be distinguishable from.
+
+    Stamped exactly as ``from_otel([])`` stamps its trace -- both pins -- because it stands in
+    for a capture that normalised zero spans, and a captured row should not read as unstamped
+    only because the episode emitted nothing.
     """
-    return Trace(spans=(), source="otel", source_version=OTEL_SEMCONV_VERSION).to_dict()
+    return Trace(
+        spans=(),
+        source="otel",
+        source_version=OTEL_SEMCONV_VERSION,
+        alias_map_version=ALIAS_MAP_VERSION,
+    ).to_dict()
 
 
 def _with_capture_envelope(record: EpisodeRecord, active: bool) -> EpisodeRecord:

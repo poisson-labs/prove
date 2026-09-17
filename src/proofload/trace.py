@@ -36,13 +36,16 @@ from types import MappingProxyType
 from typing import Any
 
 __all__ = [
+    "ALIAS_MAP_VERSION",
     "ATTRIBUTE_ALIASES",
     "DROP_REASONS",
+    "GATE",
     "KINDS",
     "LOGPROBS_KEY",
     "OBSERVATION_KEYS",
     "OTEL_KIND_MAP",
     "OTEL_SEMCONV_VERSION",
+    "OUTCOME_BY",
     "SCHEMA",
     "SOURCES",
     "Collector",
@@ -74,9 +77,30 @@ DROP_REASONS: tuple[str, ...] = (
     "unparseable",
 )
 
+#: Who judged a span's ``outcome`` (ADR-053). A span whose emitter does not say carries None,
+#: never a guess.
+OUTCOME_BY: tuple[str, ...] = ("code", "llm", "self", "human")
+
+#: How a span came to be a gate (ADR-074). ``"emitted"``: the target's own instrumentation marked
+#: the span as a check its control flow consulted. ``"declared"``: the sweep's manifest names the
+#: step as one -- which is why a span arriving with ``proofload.gate = "declared"`` is refused.
+GATE: tuple[str, ...] = ("emitted", "declared")
+
 #: The one place the semantic-convention pin is written (ADR-024). The GenAI conventions are
 #: badged Development, so a stored trace records which vocabulary it was read under.
 OTEL_SEMCONV_VERSION = "1.42.0"
+
+#: Which alias map a stored ``from_otel`` trace was normalised under (CAP1). ``source_version``
+#: names a *core* semconv release; the GenAI conventions live in
+#: ``open-telemetry/semantic-conventions-genai``, which has no release, and the operation list
+#: this module reads was taken at commit ``94f432d7``. What identifies the vocabulary is the map,
+#: so the map gets the version.
+#:
+#: Bumped, with a visible diff, by any change to ``ATTRIBUTE_ALIASES``, ``OTEL_KIND_MAP``,
+#: ``_VENDOR_KIND_MAPS``, ``_LIFTED_KEYS``, ``OBSERVATION_KEYS`` or ``CONTENT_KEYS``. The rule binds
+#: from A8a forward: A7's observation keys, A8a's lifts and A8b's content keys are not bumps but
+#: the state this value is first minted against.
+ALIAS_MAP_VERSION: str = "1"
 
 #: A21's surrogate field. An observation value like any other, and a member of
 #: ``OBSERVATION_KEYS``: written here so the name a sweep declares and the name the split routes
@@ -179,9 +203,10 @@ OTEL_KIND_MAP: Mapping[str, str] = MappingProxyType(
 )
 
 #: Conventions that are not OpenTelemetry's but carry most real agent instrumentation. They
-#: are consulted only when no recognized ``gen_ai.operation.name`` is present, and neither key
-#: is lifted, so the original value stays in ``attrs``. Values are matched lowercased because
-#: the two conventions disagree on case.
+#: decide ``kind`` only when no recognized ``gen_ai.operation.name`` is present. Both keys are
+#: lifted -- the value lands in ``operation`` -- so the ladder reads them from the lifted values,
+#: never from ``attrs``. Values are matched lowercased because the two conventions disagree on
+#: case.
 _VENDOR_KIND_MAPS: tuple[tuple[str, Mapping[str, str]], ...] = (
     (
         "openinference.span.kind",
@@ -219,6 +244,14 @@ _SPAN_FIELDS: tuple[str, ...] = (
     "error",
     "code",
     "attrs",
+    "operation",
+    "step_name",
+    "outcome",
+    "outcome_by",
+    "attempt",
+    "gate",
+    "truncated",
+    "bytes_original",
 )
 _SPAN_KEYS = frozenset(_SPAN_FIELDS)
 _TRACE_FIELDS: tuple[str, ...] = (
@@ -228,6 +261,7 @@ _TRACE_FIELDS: tuple[str, ...] = (
     "dropped",
     "spans",
     "truncated",
+    "alias_map_version",
 )
 _TRACE_KEYS = frozenset(_TRACE_FIELDS)
 _CODE_KEYS = frozenset({"filepath", "function", "lineno"})
@@ -243,13 +277,29 @@ _LIFTED_KEYS: tuple[str, ...] = (
     "code.function.name",
     "code.line.number",
     "error.type",
+    # A8a: the carriers of the eight span fields. graph.node.id and graph.node.parent_id are
+    # deliberately absent -- they stay in attrs, because parent_id already carries parentage.
+    "openinference.span.kind",
+    "traceloop.span.kind",
+    "graph.node.name",
+    "proofload.step_name",
+    "proofload.outcome",
+    "proofload.outcome_by",
+    "proofload.attempt",
+    "proofload.gate",
 )
 
-#: An unrecognized operation name, and an ``error.type`` on a span whose status is not an
-#: error, travel under keys of Proofload's own: the keys they arrived under are lifted, and
-#: T20 bans a lifted key from ``attrs``. Dropping them instead would be silent data loss.
-_ORIGINAL_OPERATION = "proofload.original_operation"
+#: An ``error.type`` on a span whose status is not an error travels under a key of Proofload's
+#: own: the key it arrived under is lifted, T20 bans a lifted key from ``attrs``, and no span
+#: field holds it. Dropping it instead would be silent data loss. (An unrecognized operation
+#: name needed the same stash until A8a gave it ``operation``.)
 _ORIGINAL_ERROR_TYPE = "proofload.error_type"
+
+#: The two attributes ``_otel_span`` writes rather than reads: the OTel trace id a user's own
+#: collector keys on, and the raw span status, which separates an instrumentor that sets ``OK``
+#: from one that never sets a status. Neither is a field, because nothing groups by either.
+_OTEL_TRACE_ID = "otel.trace_id"
+_OTEL_STATUS_CODE = "otel.status_code"
 
 _HEX_RE = re.compile(r"\A[0-9a-fA-F]+\Z")
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -329,6 +379,26 @@ class Span:
     error: str | None = None
     code: Mapping[str, Any] | None = None
     attrs: Mapping[str, Any] = field(default_factory=dict)
+    # A8a's eight. None on every one means *not recorded*, and no other default exists: a
+    # reader asks ``is None``, never a truth test, because an empty-string outcome and an
+    # unrecorded one are different facts (ADR-039).
+    #: The source operation name, stripped and lowercased, never checked against a vocabulary.
+    operation: str | None = None
+    #: The logical step this span is an execution of (ADR-055). Never derived from ``name``.
+    step_name: str | None = None
+    #: The verdict a judge recorded, as a free label (ADR-039). None is never a pass.
+    outcome: str | None = None
+    #: Who judged ``outcome``: one of ``OUTCOME_BY``. Set only beside an ``outcome``.
+    outcome_by: str | None = None
+    #: Which try of ``step_name`` this is, from 1 (ADR-054, ADR-075). Read from an emitted
+    #: counter, never derived from ordering, name repetition or nesting.
+    attempt: int | None = None
+    #: One of ``GATE`` when the span is a check the control flow consulted (ADR-074).
+    gate: str | None = None
+    #: ``"observation"`` when an observation value of this span was cut. A8a ships no writer.
+    truncated: str | None = None
+    #: The cut values' original byte lengths, summed; set only beside ``truncated``.
+    bytes_original: int | None = None
 
     __hash__ = None  # type: ignore[assignment]
 
@@ -375,6 +445,43 @@ class Span:
         if not isinstance(self.attrs, Mapping):
             raise TraceValidationError("attrs must be a mapping")
         object.__setattr__(self, "attrs", dict(self.attrs))
+        # The free-text four: a str or None, and nothing else is checked. ``operation`` in
+        # particular is never held to a vocabulary (D7) -- that is what ``kind`` is for.
+        for label, value in (
+            ("operation", self.operation),
+            ("step_name", self.step_name),
+            ("outcome", self.outcome),
+            ("truncated", self.truncated),
+        ):
+            if value is not None and not isinstance(value, str):
+                raise TraceValidationError(
+                    f"{label} must be a str or None, got {type(value).__name__}"
+                )
+        if self.outcome_by is not None:
+            if self.outcome_by not in OUTCOME_BY:
+                raise TraceValidationError(
+                    f"outcome_by {self.outcome_by!r} is not one of {', '.join(OUTCOME_BY)}"
+                )
+            if self.outcome is None:
+                raise TraceValidationError(
+                    "outcome_by is set but outcome is None: nobody judged a verdict that was "
+                    "not recorded"
+                )
+        if self.attempt is not None and not (_is_int(self.attempt) and self.attempt >= 1):
+            raise TraceValidationError(
+                f"attempt must be an int >= 1 or None, got {self.attempt!r}"
+            )
+        if self.gate is not None and self.gate not in GATE:
+            raise TraceValidationError(f"gate {self.gate!r} is not one of {', '.join(GATE)}")
+        if self.bytes_original is not None:
+            if not (_is_int(self.bytes_original) and self.bytes_original >= 1):
+                raise TraceValidationError(
+                    f"bytes_original must be an int >= 1 or None, got {self.bytes_original!r}"
+                )
+            if self.truncated is None:
+                raise TraceValidationError(
+                    "bytes_original is set but truncated is None: nothing was cut"
+                )
 
     @property
     def duration_ms(self) -> float | None:
@@ -398,6 +505,14 @@ class Span:
             "error": self.error,
             "code": None if self.code is None else dict(self.code),
             "attrs": dict(self.attrs),
+            "operation": self.operation,
+            "step_name": self.step_name,
+            "outcome": self.outcome,
+            "outcome_by": self.outcome_by,
+            "attempt": self.attempt,
+            "gate": self.gate,
+            "truncated": self.truncated,
+            "bytes_original": self.bytes_original,
         }
 
     @classmethod
@@ -418,8 +533,11 @@ class Trace:
     #: drains from an episode it terminated; None on every trace a converter or the recorder
     #: builds. A trace-level fact, not a span-level one: a snapshot with no open span is
     #: otherwise indistinguishable from a complete trace, and a trace is meant to be readable
-    #: without its row.
+    #: without its row. A span's ``truncated`` is a different field with a different meaning.
     truncated: str | None = None
+    #: ``ALIAS_MAP_VERSION`` on a trace ``from_otel`` built; None on the recorder's and
+    #: ``from_litellm``'s, which read no alias map. Merges exactly as ``source_version`` does.
+    alias_map_version: str | None = None
 
     __hash__ = None  # type: ignore[assignment]
 
@@ -443,6 +561,11 @@ class Trace:
         if self.truncated is not None and not isinstance(self.truncated, str):
             raise TraceValidationError(
                 f"truncated must be a str or None, got {type(self.truncated).__name__}"
+            )
+        if self.alias_map_version is not None and not isinstance(self.alias_map_version, str):
+            raise TraceValidationError(
+                "alias_map_version must be a str or None, "
+                f"got {type(self.alias_map_version).__name__}"
             )
         by_id: dict[str, Span] = {}
         for span in spans:
@@ -486,6 +609,7 @@ class Trace:
             "dropped": self.dropped,
             "spans": [span.to_dict() for span in self.spans],
             "truncated": self.truncated,
+            "alias_map_version": self.alias_map_version,
         }
 
     @classmethod
@@ -505,6 +629,7 @@ class Trace:
             source_version=checked["source_version"],
             dropped=checked["dropped"],
             truncated=checked["truncated"],
+            alias_map_version=checked["alias_map_version"],
         )
 
 
@@ -526,6 +651,9 @@ def merge(*traces: Trace) -> Trace:
     # because a trace that does not record its vocabulary is uninterpretable later.
     versions = {trace.source_version for trace in traces if trace.source_version is not None}
     version = versions.pop() if len(versions) == 1 else None
+    # The alias map is the same kind of pin, so the same rule, never the first-wins rule below.
+    maps = {trace.alias_map_version for trace in traces if trace.alias_map_version is not None}
+    alias_map_version = maps.pop() if len(maps) == 1 else None
     # A cut anywhere is a cut of the whole: the first reason among the inputs, in argument
     # order, and never one the inputs did not carry.
     truncated = next((trace.truncated for trace in traces if trace.truncated is not None), None)
@@ -535,6 +663,7 @@ def merge(*traces: Trace) -> Trace:
         source_version=version,
         dropped=dropped,
         truncated=truncated,
+        alias_map_version=alias_map_version,
     )
 
 
@@ -601,13 +730,19 @@ def assemble(envelope: Mapping[str, Any], obs: Mapping[str, Any] | None) -> Trac
 
 @dataclass
 class SpanHandle:
-    """The mutable handle a ``record()`` block yields. Assignments land on the closed span."""
+    """The mutable handle a ``record()`` block yields. Assignments land on the closed span.
+
+    The handle carries what is known *after* the block runs -- results, and a verdict is one.
+    What is known before it opens (``step_name``, ``attempt``, ``gate``) is ``record()``'s.
+    """
 
     input: Any | None = None
     output: Any | None = None
     tokens: Mapping[str, int] | None = None
     confidence: float | None = None
     error: str | None = None
+    outcome: str | None = None
+    outcome_by: str | None = None
 
 
 class Collector:
@@ -671,6 +806,9 @@ def _span(
     span_input: Any | None,
     attrs: Mapping[str, Any] | None,
     code: Mapping[str, Any] | None,
+    step_name: str | None = None,
+    attempt: int | None = None,
+    gate: str | None = None,
 ) -> Iterator[SpanHandle]:
     handle = SpanHandle(input=span_input)
     collector = _COLLECTOR.get()
@@ -708,6 +846,13 @@ def _span(
                 error=handle.error,
                 code=None if code is None else dict(code),
                 attrs=dict(attrs or {}),
+                # Hand-written on purpose, like the rest of this call: a field left out here
+                # stays None with no error, so each of the five is spelled.
+                step_name=step_name,
+                attempt=attempt,
+                gate=gate,
+                outcome=handle.outcome,
+                outcome_by=handle.outcome_by,
             )
         except TraceValidationError as exc:
             # An unknown kind, or a handle assignment the schema cannot hold. The recorder has
@@ -726,8 +871,22 @@ def record(
     *,
     input: Any | None = None,
     attrs: Mapping[str, Any] | None = None,
+    step_name: str | None = None,
+    attempt: int | None = None,
+    gate: str | None = None,
 ) -> contextlib.AbstractContextManager[SpanHandle]:
     """Record one span for a call nothing else can see. A no-op outside ``collect()``.
+
+    ``step_name``, ``attempt`` and ``gate`` are what the caller knows when the span opens: which
+    logical step this is, which try of it (from 1, and only if the caller counted), and whether
+    the step is a check the control flow consults (``gate="emitted"``). A verdict is known only
+    after the block runs, so it goes on the handle: ``handle.outcome`` and
+    ``handle.outcome_by``, the latter one of ``OUTCOME_BY`` and only beside an outcome.
+
+    **A value the schema refuses loses the span, and never raises.** An ``attempt`` of 0, a
+    ``gate`` outside ``GATE``, or ``handle.outcome_by = "robot"`` is logged at WARNING on the
+    ``proofload.trace`` logger and the span is dropped -- the same no-crash rule as an unknown
+    ``kind``, because a recorder must never displace the rollout's own result.
 
     The code location comes from ``sys._getframe``: ``inspect.stack()`` opens and reads the
     caller's source file on every call, which a recorder on a hot tool path cannot afford.
@@ -738,10 +897,12 @@ def record(
         "function": frame.f_code.co_qualname,
         "lineno": frame.f_lineno,
     }
-    return _span(kind, name, input, attrs, code)
+    return _span(kind, name, input, attrs, code, step_name, attempt, gate)
 
 
-def _decorate(fn: Callable[..., Any], kind: str, name: str | None) -> Callable[..., Any]:
+def _decorate(
+    fn: Callable[..., Any], kind: str, name: str | None, step_name: str | None = None
+) -> Callable[..., Any]:
     raw_name = getattr(fn, "__qualname__", None) or getattr(fn, "__name__", None)
     qualname = raw_name if isinstance(raw_name, str) else "<callable>"
     span_name = qualname if name is None else name
@@ -759,33 +920,40 @@ def _decorate(fn: Callable[..., Any], kind: str, name: str | None) -> Callable[.
 
         @functools.wraps(fn)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-            with _span(kind, span_name, None, None, code):
+            with _span(kind, span_name, None, None, code, step_name):
                 return await fn(*args, **kwargs)
 
         return async_wrapper
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        with _span(kind, span_name, None, None, code):
+        with _span(kind, span_name, None, None, code, step_name):
             return fn(*args, **kwargs)
 
     return wrapper
 
 
 def step(
-    kind: str | Callable[..., Any] = "tool", name: str | None = None
+    kind: str | Callable[..., Any] = "tool",
+    name: str | None = None,
+    *,
+    step_name: str | None = None,
 ) -> Callable[..., Any]:
     """Sugar over ``record()``. Usable bare (``@step``) or called (``@step(kind="db")``).
 
     The bare form arrives with the decorated function as the first positional argument, so
     ``callable(kind)`` is handled explicitly -- get this wrong and the bare form returns a
     partial and the user's tool stops being callable.
+
+    ``step_name`` is the only one of ``record()``'s three new arguments a decorator takes: the
+    decorated function *is* the step, while an attempt and a gate are facts about one call that
+    a decorator cannot see.
     """
     if callable(kind):
         return _decorate(kind, "tool", None)
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-        return _decorate(fn, kind, name)
+        return _decorate(fn, kind, name, step_name)
 
     return decorator
 
@@ -950,12 +1118,26 @@ def _iter_otel_spans(
             yield span, {}
 
 
+def _status_code(raw: Mapping[str, Any]) -> str:
+    """``"OK"``, ``"UNSET"`` or ``"ERROR"``: the span's raw status, in either spelling OTLP/JSON
+    uses (``STATUS_CODE_OK`` or the enum's integer). A span that carries no status is ``UNSET``,
+    which is OpenTelemetry's own default and not an inference."""
+    status = raw.get("status")
+    code = status.get("code") if isinstance(status, Mapping) else None
+    if (isinstance(code, str) and "ERROR" in code) or (_as_int(code) == 2):
+        return "ERROR"
+    if (isinstance(code, str) and code.strip().upper() in ("OK", "STATUS_CODE_OK")) or (
+        _as_int(code) == 1
+    ):
+        return "OK"
+    return "UNSET"
+
+
 def _otel_error(raw: Mapping[str, Any], error_type: Any) -> tuple[str | None, str | None]:
     """``(error, unclaimed error.type)`` -- section 3 maps ``error`` from an ERROR status only."""
     status = raw.get("status")
-    code = status.get("code") if isinstance(status, Mapping) else None
     message = status.get("message") if isinstance(status, Mapping) else None
-    is_error = (isinstance(code, str) and "ERROR" in code) or (_as_int(code) == 2)
+    is_error = _status_code(raw) == "ERROR"
     if not is_error:
         return None, None if error_type is None else str(error_type)
     if isinstance(message, str) and message:
@@ -965,11 +1147,16 @@ def _otel_error(raw: Mapping[str, Any], error_type: Any) -> tuple[str | None, st
     return "STATUS_CODE_ERROR", None
 
 
-def _vendor_kind(attrs: Mapping[str, Any]) -> str | None:
+def _vendor_kind(lifted: Mapping[str, Any]) -> str | None:
     """The kind a non-OTel convention claims, or None. Never invents a kind for a value
-    outside the tables -- an unknown one falls through to the rest of the ladder."""
+    outside the tables -- an unknown one falls through to the rest of the ladder.
+
+    Reads the *lifted* values: both vendor keys are in ``_LIFTED_KEYS`` and have already left
+    ``attrs`` by the time the ladder runs, so passing ``attrs`` here would send every
+    OpenInference and Traceloop span to ``"other"`` with no error.
+    """
     for key, table in _VENDOR_KIND_MAPS:
-        value = attrs.get(key)
+        value = lifted.get(key)
         if isinstance(value, str):
             kind = table.get(value.strip().lower())
             if kind is not None:
@@ -995,17 +1182,17 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
             continue  # the source spelled the canonical key too; the deprecated one loses
         attrs[canonical] = value
     lifted = {key: attrs.pop(key, None) for key in _LIFTED_KEYS}
+    source_id = _first(raw, "spanId", "span_id")
+    label = source_id if isinstance(source_id, str) and source_id else "<no id>"
 
-    operation = lifted["gen_ai.operation.name"]
-    operation_name = None if operation is None else str(operation)
+    source_operation = lifted["gen_ai.operation.name"]
+    operation_name = None if source_operation is None else str(source_operation)
     if operation_name is not None and operation_name in OTEL_KIND_MAP:
         kind = OTEL_KIND_MAP[operation_name]
     else:
-        if operation_name is not None:
-            attrs[_ORIGINAL_OPERATION] = operation_name
-        kind = _vendor_kind(attrs) or _transport_kind(attrs)
+        kind = _vendor_kind(lifted) or _transport_kind(attrs)
 
-    name = lifted["gen_ai.tool.name"] or lifted["gen_ai.request.model"] or raw.get("name")
+    name =lifted["gen_ai.tool.name"] or lifted["gen_ai.request.model"] or raw.get("name")
 
     tokens: dict[str, int] = {}
     for field_name, token_key in (
@@ -1030,8 +1217,14 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
     if unclaimed_error_type is not None:
         attrs[_ORIGINAL_ERROR_TYPE] = unclaimed_error_type
 
+    trace_id = _decode_id(_first(raw, "traceId", "trace_id"))
+    if trace_id is not None:
+        attrs[_OTEL_TRACE_ID] = trace_id
+    attrs[_OTEL_STATUS_CODE] = _status_code(raw)
+
+    outcome = _carried_str(label, "proofload.outcome", lifted["proofload.outcome"])
     return Span(
-        span_id=_decode_id(_first(raw, "spanId", "span_id")) or "",
+        span_id=_decode_id(source_id) or "",
         parent_id=_decode_id(_first(raw, "parentSpanId", "parent_span_id")),
         kind=kind,
         name=str(name) if name is not None else "",
@@ -1041,7 +1234,105 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
         code=code,
         tokens=tokens or None,
         attrs=attrs,
+        operation=_operation(lifted),
+        step_name=_step_name(label, lifted),
+        outcome=outcome,
+        outcome_by=_outcome_by(label, lifted["proofload.outcome_by"], outcome),
+        attempt=_attempt(label, lifted["proofload.attempt"]),
+        gate=_gate(label, lifted),
     )
+
+
+# ---------- A8a's carriers: one reader per field; a refused value is logged, not guessed ----------
+
+
+def _carried_str(label: str, key: str, value: Any) -> str | None:
+    if value is None or isinstance(value, str):
+        return value
+    _LOG.warning("OTel span %s: %s = %r is not a string; left unrecorded", label, key, value)
+    return None
+
+
+def _operation(lifted: Mapping[str, Any]) -> str | None:
+    """The source operation name, verbatim but for ``strip().lower()``: the GenAI key when
+    present, else OpenInference's span kind, else Traceloop's. Held to no vocabulary (D7)."""
+    for key in ("gen_ai.operation.name", "openinference.span.kind", "traceloop.span.kind"):
+        value = lifted[key]
+        if value is not None:
+            return str(value).strip().lower()
+    return None
+
+
+def _step_name(label: str, lifted: Mapping[str, Any]) -> str | None:
+    """``graph.node.name``, else ``proofload.step_name`` (ADR-055). Never the span's name."""
+    for key in ("graph.node.name", "proofload.step_name"):
+        if lifted[key] is not None:
+            return _carried_str(label, key, lifted[key])
+    return None
+
+
+def _outcome_by(label: str, value: Any, outcome: str | None) -> str | None:
+    if value is None:
+        return None
+    if value not in OUTCOME_BY:
+        _LOG.warning(
+            "OTel span %s: proofload.outcome_by = %r is not one of %s; left unrecorded",
+            label,
+            value,
+            ", ".join(OUTCOME_BY),
+        )
+        return None
+    if outcome is None:
+        _LOG.warning(
+            "OTel span %s: proofload.outcome_by = %r arrived with no outcome; left unrecorded",
+            label,
+            value,
+        )
+        return None
+    return str(value)
+
+
+def _attempt(label: str, value: Any) -> int | None:
+    """``proofload.attempt`` as the adapter wrote it: already 1-based, never re-based here."""
+    if value is None:
+        return None
+    attempt = _as_int(value)
+    if attempt is None or attempt < 1:
+        _LOG.warning(
+            "OTel span %s: proofload.attempt = %r is not an int >= 1; left unrecorded", label, value
+        )
+        return None
+    return attempt
+
+
+def _gate(label: str, lifted: Mapping[str, Any]) -> str | None:
+    """``"emitted"`` for an OpenInference guardrail span or a span carrying
+    ``proofload.gate = "emitted"``; otherwise None. Never inferred from the span's name.
+
+    ``EVALUATOR`` is not a gate marker: an evaluator scores and may not gate, so the allowlist
+    starts at one entry (spec A8a section 10 Q6). And a ``"declared"`` gate comes from the
+    sweep's manifest, never from a span, so one arriving on the wire is dropped and logged.
+    """
+    gate: str | None = None
+    vendor = lifted["openinference.span.kind"]
+    if isinstance(vendor, str) and vendor.strip().lower() == "guardrail":
+        gate = "emitted"
+    wire = lifted["proofload.gate"]
+    if wire == "emitted":
+        gate = "emitted"
+    elif wire == "declared":
+        _LOG.warning(
+            "OTel span %s: proofload.gate = 'declared' dropped; a declared gate comes from the "
+            "manifest, not from a span",
+            label,
+        )
+    elif wire is not None:
+        _LOG.warning(
+            "OTel span %s: proofload.gate = %r is not a value a span may carry; left unrecorded",
+            label,
+            wire,
+        )
+    return gate
 
 
 def _cyclic_span_ids(spans: Iterable[Span]) -> set[str]:
@@ -1112,6 +1403,7 @@ def from_otel(payload: Mapping[str, Any] | Iterable[Mapping[str, Any]]) -> Trace
         source="otel",
         source_version=OTEL_SEMCONV_VERSION,
         dropped=dropped,
+        alias_map_version=ALIAS_MAP_VERSION,
     )
 
 

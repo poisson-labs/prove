@@ -1524,10 +1524,17 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
                 # Tab-delimited: a span name and an error message are free text and OTel
                 # spells names like "invoke_agent planner", so a space cannot be the column
                 # separator without shifting every column after it.
+                # Nine columns: A8a's four after error, each "-" when not recorded. operation,
+                # outcome_by, truncated and bytes_original are not printed: a row reader shows
+                # what a person reading a failed episode asks for, not every field.
                 io.out.write(
                     f"  {j}\t{span.kind or '-'}\t{span.name or '-'}\t"
                     f"{'-' if duration is None else duration}\t"
-                    f"{'-' if span.error in (None, '') else span.error}\n"
+                    f"{'-' if span.error in (None, '') else span.error}\t"
+                    f"{'-' if span.step_name is None else span.step_name}\t"
+                    f"{'-' if span.attempt is None else span.attempt}\t"
+                    f"{'-' if span.outcome is None else span.outcome}\t"
+                    f"{'-' if span.gate is None else span.gate}\n"
                 )
         io.out.write("\n")
 
