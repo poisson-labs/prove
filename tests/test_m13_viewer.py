@@ -105,7 +105,7 @@ CSP = (
 CONTENT_TYPE = "text/html; charset=utf-8"
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
-    "tree", "unverified", "heatmap_svg",
+    "intervals", "tree", "unverified", "heatmap_svg",
 )
 ARM_KEYS = (
     "role", "run_id", "target_id", "backend", "status", "created_at", "run_salt", "t_unit",
@@ -160,9 +160,11 @@ UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
         None,
     ),
     (
-        "paired_basis",
-        "paired is true when the two manifests carry the same run_salt. Matching salts do not "
-        "prove the two runs consumed their seeds identically.",
+        "seed_identity_basis",
+        "seed_identity_match is true when both manifests carry the same run_salt and every row "
+        "this comparison matched stores the same seed in both arms at the same (config_hash, "
+        "replicate_index). It compares the seeds that were stored, not what the target did with "
+        "them.",
         None,
     ),
 )
@@ -1639,7 +1641,8 @@ def test_v36_worst_tables_are_m7s_and_the_first_worst_cell_is_selected(go1: Buil
     for panel, (header, rows) in zip(go1.structure["panels"], receipt, strict=True):
         assert panel["worst_header"] == header
         assert panel["worst_rows"] == rows
-        axes = len(header) - 8
+        # P-1: the flat panel's worst table gains a trailing ``interval (pp)`` column when M6 built intervals.
+        axes = len(header) - (9 if header[-1] == "interval (pp)" else 8)
         by_coords = {c["coords"]: c["config_hash"] for c in panel["cells"]}
         expected_hashes = [
             by_coords[", ".join(f"{axis}={value}" for axis, value in zip(header[:axes], row[:axes], strict=True))]

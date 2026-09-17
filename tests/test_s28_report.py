@@ -177,6 +177,14 @@ is in Handoff P4.4a's *Session A's grep report* section, not here.
   and R19's sweep finds ``test_s29_viewer.py`` alone, the carrier of A28's own
   ``report.py::_check_tree`` exclusion. The sweep counts module-level ``*_PY_EXCLUDED``
   constants by AST rather than by text, because the text grep counts this very docstring.
+- **P-1's retrofit, 2026-09-17 (P-1 section 7.2).** ``KIND_TABLE`` gains ``RootResult.p_floor``
+  under ``sig3`` and R4's layout set requires it (the floor line prints in every omnibus
+  rendering); R21 is renamed and restated -- ``seed_identity_match`` is the salt plus the stored
+  seeds on every matched row, and the ``overlap`` fixture now stores the same seed in both arms
+  (``seed_of``; C49, it was 24 of 24 matched rows apart); ``E14_SHA256``'s markdown and receipt,
+  ``E14_WITH_TREE_SHA256``, ``CHECK_STDOUT_SHA256`` and ``SERVE_STRUCTURE_SHA256`` are re-minted
+  off P-1 Session A's shadow shim; ``DIFF_PY_SHA256`` stays whole-file at A28's value, red from
+  Session B's build until Session A's post-build commit (ADR-078).
 
 **Spec text this oracle could not use as written, each resolved here and reported.**
 
@@ -231,7 +239,7 @@ from proofload import cli
 from proofload import diff as diff_mod
 from proofload.diff import multi_diff
 from proofload.episode import Episode
-from proofload.store import EpisodeRecord, RunManifest, Store
+from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
 
 PACKAGE = Path(proofload.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -298,7 +306,7 @@ KIND_TABLE = (
     ("RootResult", "p_omnibus", "sig3"), ("RootResult", "p_location", "sig3"), ("RootResult", "p_dispersion", "sig3"),
     ("RootResult", "q", "sig3"), ("RootResult", "location", "pp1"), ("RootResult", "dispersion", "pp1"),
     ("RootResult", "n_cells", "int"), ("RootResult", "n_informative_cells", "int"), ("RootResult", "n_uninformative_cells", "int"),
-    ("RootResult", "n_permutations", "int"), ("RootResult", "seed", "int"), ("RootResult", "n_discordant", "int"),
+    ("RootResult", "n_permutations", "int"), ("RootResult", "p_floor", "sig3"), ("RootResult", "seed", "int"), ("RootResult", "n_discordant", "int"),
     ("Grouping", "alpha_floor", "sig3"), ("Grouping", "max_group_mde", "pp0"), ("Grouping", "size_min", "int"),
     ("Grouping", "size_max", "int"), ("Grouping", "n_groups", "int"), ("Grouping", "n_resolvable_groups", "int"),
     ("Grouping", "size_median", "num"),
@@ -323,15 +331,15 @@ BOUND_RULE_LITERAL = "2"
 #: R2. S21's three E14 digests, restated (tree-less builder for two, the CLI for the SVG).
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 E14_SHA256 = {
-    "report.md": "cc1157e3ec709f6ebc55409a77bb3207c73c864e659c0d7e82f3394aafdc57cb",
-    "heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
-    "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
+    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
+    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
 }
 #: R2, second clause: the CLI's ``report.md`` and ``receipt.html`` on the E14 argv **with** the
 #: tree at the default knobs, minted on Session A's shim (module docstring).
 E14_WITH_TREE_SHA256 = {
-    "report.md": "ef0a396302370d11010695a7b80b3848e1e68f6e6481b74bb88a3f0db209c555",
-    "receipt.html": "c12b4f503ae8eccf6be413d71655e160ff0aac8cdcddcc6e3edf9e5aa944a8cd",
+    "report.md": "85f5dcba4dfcbc96cdcf5f33c49e82ba82fb16371285753f70cdf975dc108186",
+    "receipt.html": "0f2e162eb1409c6c2e6885f76326c6fedf40d1e8091b2605b388e8f8c4c55826",
 }
 #: R19. S27 L20's other digests, restated rather than imported so two frozen oracles do not couple.
 #: **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
@@ -341,12 +349,12 @@ E14_WITH_TREE_SHA256 = {
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
 DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695dbe5"
-F28_OMNIBUS_SHA256 = "03e7984ba22978e20386197f836fb60e0d32032a5b17a8bce400483e3e87296e"
+F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
-CHECK_STDOUT_SHA256 = "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4bf14e3b1"
+CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
-SERVE_STRUCTURE_SHA256 = "f58750a091af8da170f2f89484ae4076f5951c8ace2852bcf882e8b70ddc837d"
+SERVE_STRUCTURE_SHA256 = "6c4a8124d550494791a5c102332cfda6636fe3cf32a5382cea02debcf11fa651"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
@@ -478,15 +486,26 @@ def manifest(run_id: str, salt: str, axis_types: Mapping[str, str]) -> RunManife
     )
 
 
+def seed_of(key: tuple[tuple[str, Any], ...], replicate_index: int) -> int:
+    """A stored seed that is a function of ``(config, replicate_index)`` and never of the cell's
+    position in its dict. **C49 (P-1 section 7.3), fixed in P-1 Session A's retrofit.** The old
+    ``1000 * index + k`` seeded by dict position, and ``overlap_cells`` enumerates a ``task`` set
+    shifted by one per arm, so the same ``(config_hash, replicate_index)`` carried a different seed
+    in the two arms -- 24 of 24 matched rows disagreed, measured at ``a626cd3`` -- while
+    ``mcnemar_bh`` ran on them: C18's own blindness, inside a fixture. Green before and after on
+    the bare tree (nothing reads a stored seed there), so its green is not evidence."""
+    return 1000 * (int(config_hash(dict(key))[:6], 16) % 100_000) + replicate_index
+
+
 def write_run(store: Store, run_id: str, *, salt: str, axis_types: Mapping[str, str], cells: Mapping[tuple[tuple[str, Any], ...], Sequence[str]]) -> None:
     """A complete synthetic run over multi-key configs, one episode per outcome (S27's, restated)."""
     store.create_run(manifest(run_id, salt, axis_types))
     records = []
-    for index, (key, outcomes) in enumerate(cells.items()):
+    for key, outcomes in cells.items():
         for k, outcome in enumerate(outcomes):
             t = HORIZON if outcome in NON_EVENTS else EVENT_T
             records.append(EpisodeRecord.from_episode(
-                Episode(outcome=outcome, t=t, horizon=HORIZON), run_id=run_id, config=dict(key), seed=1000 * index + k,
+                Episode(outcome=outcome, t=t, horizon=HORIZON), run_id=run_id, config=dict(key), seed=seed_of(key, k),
                 replicate_index=k, wall_time=0.0,
             ))
     store.append(run_id, records)
@@ -575,7 +594,8 @@ def overlap_cells(shift: int) -> dict[Any, list[str]]:
     """C18's partially-overlapping pair: the same salt and a ``task`` set shifted by one, which is
     what a sweep-file edit that moves an axis value produces. Three cells are matched, one is in
     arm a alone and one in arm b alone, so ``coverage`` lists cells with no counterpart while the
-    pair is still ``paired`` -- the page the warning's old sentence contradicted."""
+    pair still shares its salt and, since P-1's fixture fix, its seeds on every matched row -- the
+    page the warning's old sentence contradicted."""
     return {
         (("task", f"t{i}"), ("temp", 0.0)): (["fail"] * 2 + ["ok"] * 6 if shift else ["ok"] * 8)
         for i in range(shift, shift + 4)
@@ -894,7 +914,7 @@ def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[s
     by_structure: dict[str, list[tuple[str, str]]] = {}
     for structure, name, kind in KIND_TABLE:
         by_structure.setdefault(structure, []).append((name, kind))
-    layout_root = {"location", "dispersion", "p_location", "p_dispersion", "n_cells", "n_informative_cells", "n_uninformative_cells", "n_permutations", "seed"}
+    layout_root = {"location", "dispersion", "p_location", "p_dispersion", "n_cells", "n_informative_cells", "n_uninformative_cells", "n_permutations", "p_floor", "seed"}
     for name, kind in by_structure["RootResult"]:
         add(root, name, kind, need=name in layout_root)
     for name, kind in by_structure["Grouping"]:
@@ -1317,7 +1337,10 @@ def test_r2_the_tree_less_builder_reproduces_s21s_three_digests_and_the_svg_stil
     ``multi`` and spec renders S21's bytes -- markdown, SVG, light receipt -- bit for bit, and
     the CLI's ``heatmap.svg`` still digests to S21's literal (spec section 3.3: the SVG never
     changes). A builder who touches the SVG, the panel honesty or the worst-cells table fails
-    here alone."""
+    here alone. **Re-minted by P-1 Session A, all three:** the SVG carries the headline's second
+    line as its subtitle (``<text x="24" y="54">``), so D1's token -- ``unpaired)`` for
+    ``fisher_bh`` -- moves it too; P-1 section 5's *the SVG's bytes do not move* was wrong and is
+    reported as a spec correction. The colour cells and the geometry are untouched."""
     report = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=False)
     light = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=False, theme="light")
     assert sha256_of_text(report.to_markdown()) == E14_SHA256["report.md"]
@@ -2103,10 +2126,11 @@ def test_r17_the_markdown_carries_a_hostile_group_label_verbatim_and_keeps_its_c
 def test_r21_the_unpaired_warning_states_the_cells_it_matched_and_names_coverage(synth_root: Path) -> None:
     """C18's message half, and only the message half.
 
-    The warning is raised in ``diff._pairing``, which runs **before any cell exists**, so the
-    restated sentence cannot carry a count and this clause does not ask for one. What it asks for
-    is that the claim's subject stops being every episode: the pair below is ``paired`` with two
-    cells that have no counterpart at all, measured, and ``coverage`` on the same page lists them,
+    The warning was raised in ``diff._pairing`` before any cell existed, so A27's sentence could
+    not carry a count and this clause did not ask for one; P-1 moves it after the matching and it
+    carries the matched-row count (P-1 Y4 pins that). What this clause asks for is that the claim's
+    subject stops being every episode: the pair below shares its seeds on every matched row (C49,
+    ``seed_of``) with two cells that have no counterpart at all, measured, and ``coverage`` on the same page lists them,
     so a sentence promising a counterpart for every episode is contradicted by the page it is
     printed beside. The restatement scopes the correspondence to the cells the comparison matched
     and names ``coverage`` as where the rest are, which is reachable without a count.
@@ -2120,7 +2144,7 @@ def test_r21_the_unpaired_warning_states_the_cells_it_matched_and_names_coverage
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = multi_diff(fa, fb, events=["fail"], method="fisher_bh", q=Q, manifest_a=ma, manifest_b=mb)
-    assert (result.paired, result.dropped_a, result.dropped_b, result.n_tests) == (True, 1, 1, 3)
+    assert (result.seed_identity_match, result.dropped_a, result.dropped_b, result.n_tests) == (True, 1, 1, 3)
     assert int((~result.coverage["comparable"]).sum()) == 2 and sorted(set(result.coverage.loc[~result.coverage["comparable"], "cause"])) == ["only_a", "only_b"]
     raised = [w for w in caught if w.category is diff_mod.UnpairedAnalysis]
     assert len(raised) == 1, [w.category for w in caught]
@@ -2130,14 +2154,17 @@ def test_r21_the_unpaired_warning_states_the_cells_it_matched_and_names_coverage
     assert ma.run_salt in message and "mcnemar_bh" in message, message
 
 
-def test_r21_paired_is_still_salt_equality_and_mcnemar_still_refuses_and_runs_where_it_did(synth_root: Path) -> None:
-    """The three things C18 keeps for its own packet, pinned here as **unchanged**.
+def test_r21_seed_identity_is_the_salt_plus_the_stored_seeds_and_mcnemar_refuses_and_runs_where_it_did(synth_root: Path) -> None:
+    """The three things C18 kept for its own packet, which P-1 was, **restated after it**.
 
-    They are in scope for this oracle and out of scope for this build, which is not a contradiction
-    but the point: ``DIFF_PY_EXCLUDED``'s ``_pairing`` region stops the byte digest seeing them
-    move, so the cover has to. ``paired`` stays salt equality even where the salt is the only
-    evidence and the rows disagree; ``mcnemar_bh`` still refuses on differing salts and still runs
-    on equal ones; a ``t_unit`` mismatch still raises before either question is asked.
+    Until P-1 this test pinned ``paired`` as salt equality *even where the salt is the only evidence
+    and the rows disagree* -- and this very fixture was such a pair (C49: 24 of 24 matched rows
+    carried different seeds, by dict position). Now ``seed_identity_match`` is the salt plus the
+    stored seed on every matched row (P-1 section 3.1), the fixture stores the same seed in both
+    arms (``seed_of``), so it is ``True`` under ``fisher_bh`` and under ``mcnemar_bh``; the
+    salt-differing pair is ``False``; ``mcnemar_bh`` still refuses on differing salts and still runs
+    on this pair; a ``t_unit`` mismatch still raises before either question is asked. The
+    seed-disagreeing case is P-1's own Y3/Y5, minted deliberately rather than inherited.
     """
     store = Store(synth_root)
     fa, fb = store.read("overlap-a", meta=False), store.read("overlap-b", meta=False)
@@ -2145,9 +2172,9 @@ def test_r21_paired_is_still_salt_equality_and_mcnemar_still_refuses_and_runs_wh
     ea, eb = store.read("empty-a", meta=False), store.read("empty-b", meta=False)
     mea, meb = store.manifest("empty-a"), store.manifest("empty-b")
     assert ma.run_salt == mb.run_salt and mea.run_salt != meb.run_salt
-    assert quiet_multi_diff(fa, fb, ma, mb, events=("fail",), method="fisher_bh").paired is True
-    assert quiet_multi_diff(ea, eb, mea, meb, events=("fail",), method="fisher_bh").paired is False
-    assert quiet_multi_diff(fa, fb, ma, mb, events=("fail",), method="mcnemar_bh").paired is True
+    assert quiet_multi_diff(fa, fb, ma, mb, events=("fail",), method="fisher_bh").seed_identity_match is True
+    assert quiet_multi_diff(ea, eb, mea, meb, events=("fail",), method="fisher_bh").seed_identity_match is False
+    assert quiet_multi_diff(fa, fb, ma, mb, events=("fail",), method="mcnemar_bh").seed_identity_match is True
     with pytest.raises(diff_mod.NotPairable):
         multi_diff(ea, eb, events=["fail"], method="mcnemar_bh", q=Q, manifest_a=mea, manifest_b=meb)
     with pytest.raises(diff_mod.UnitMismatch):

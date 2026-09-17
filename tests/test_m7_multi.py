@@ -184,7 +184,8 @@ def make_diff(
     cells: list[dict[str, Any]],
     *,
     method: str = "fisher_bh",
-    paired: bool = False,
+    seed_identity_match: bool = False,
+    unpaired_analysis: bool = False,
     q: float = 0.05,
     event: str = "fell",
     t_unit: str = "steps",
@@ -198,7 +199,8 @@ def make_diff(
     return DiffResult(
         cells=frame,
         method=method,  # type: ignore[arg-type]
-        paired=paired,
+        seed_identity_match=seed_identity_match,
+        unpaired_analysis=unpaired_analysis,
         q=q,
         event=event,
         t_unit=t_unit,
@@ -237,7 +239,8 @@ def make_multi(
     events: Sequence[EventDiff],
     *,
     method: str = "fisher_bh",
-    paired: bool = False,
+    seed_identity_match: bool = False,
+    unpaired_analysis: bool = False,
     q: float = 0.05,
     t_unit: str = "steps",
     horizon: float = 10.0,
@@ -275,7 +278,8 @@ def make_multi(
         events=names,
         by_event=by_event,
         method=method,  # type: ignore[arg-type]
-        paired=paired,
+        seed_identity_match=seed_identity_match,
+        unpaired_analysis=unpaired_analysis,
         q=q,
         t_unit=t_unit,
         horizon=horizon,
@@ -708,7 +712,17 @@ def test_b1_regression_fixture_is_present_and_is_the_s8_output() -> None:
 
 
 def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_report: Report) -> None:
+    """The S8 bytes are a record of what ``report`` said at S3 and are not rewritten (P-1 section
+    3.2). What P-1 moved in them, and only that, is mapped onto the record before the comparison:
+    the headline's last token states the requested method's pairing (ADR-052, C1), the Methods
+    row's second column reads ``unpaired`` for ``fisher_bh``, and the provenance list carries
+    ``seed identity match`` and ``unpaired analysis`` where ``paired`` stood. Everything else
+    outside the honesty block is byte-identical to the S8 output."""
     frozen = (REGRESSION_DIR / "report.md").read_text(encoding="utf-8")
+    assert frozen.count("(fisher_bh, BH q<0.05, paired).") == frozen.count("| fisher_bh | paired |") == frozen.count("- paired: true\n") == 1
+    frozen = frozen.replace("(fisher_bh, BH q<0.05, paired).", "(fisher_bh, BH q<0.05, unpaired).")
+    frozen = frozen.replace("| fisher_bh | paired |", "| fisher_bh | unpaired |")
+    frozen = frozen.replace("- paired: true\n", "- seed identity match: true\n- unpaired analysis: true\n")
     assert strip_honesty(golden_report.to_markdown()) == strip_honesty(frozen)
 
 
@@ -1447,14 +1461,15 @@ def test_b14_hypothesis_repeat_renders_identical_and_themes_differ_only_in_prese
 
 
 def test_b15_provenance_carries_the_multi_fields_and_run_ids_only_with_manifests() -> None:
-    multi = two_event_multi(paired=True, inferred=True, non_event="completed", t_unit="tool_calls", horizon=50.0)
+    multi = two_event_multi(seed_identity_match=True, unpaired_analysis=True, inferred=True, non_event="completed", t_unit="tool_calls", horizon=50.0)
     bare = build_multi_report(multi, spec2())
-    for key in ("n_tests", "events", "inferred", "non_event", "method", "paired", "q", "horizon", "t_unit"):
+    for key in ("n_tests", "events", "inferred", "non_event", "method", "seed_identity_match", "unpaired_analysis", "q", "horizon", "t_unit"):
         assert key in bare.provenance, key
     assert bare.provenance["n_tests"] == multi.n_tests == 12
     assert sorted(bare.provenance["events"]) == sorted(multi.events)  # type: ignore[arg-type]
     assert bare.provenance["inferred"] is True and bare.provenance["non_event"] == "completed"
-    assert bare.provenance["method"] == "fisher_bh" and bare.provenance["paired"] is True
+    assert bare.provenance["method"] == "fisher_bh" and bare.provenance["seed_identity_match"] is True
+    assert bare.provenance["unpaired_analysis"] is True and "paired" not in bare.provenance
     assert bare.provenance["q"] == 0.05 and bare.provenance["horizon"] == 50.0
     assert bare.provenance["t_unit"] == "tool_calls"
     assert "run_id_a" not in bare.provenance and "run_id_b" not in bare.provenance

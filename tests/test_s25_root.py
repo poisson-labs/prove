@@ -205,20 +205,20 @@ OMNIBUS_INFORMATIVE_LINE = re.compile(r"^  informative cells: (\d+) of (\d+); (\
 #: never a diff of two renders. ``multi_diff(go1-v0, go1-v1, events=("fell",), method=...)``,
 #: ``json.dumps(to_json(), sort_keys=True)``.
 MULTI_JSON_SHA256 = {
-    "fisher_bh": "d67805f9499cea490cc18f09bcb744413a665616a6bb270d01cd12fef14fce69",
-    "mcnemar_bh": "65cc948aa69c891250bb323ba2740408fdfdbf38aeb4f84e69bb2720c7225541",
-    "logrank_bh": "b8811b787928b1f11ece081820b5b9f732a1f5d12a8543fcf4b6421d07f41e29",
+    "fisher_bh": "c284e029ea858e3f50a9ee6ca3b55a1abc61a1b08a1fe213e393939c6e0872b8",
+    "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
+    "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
 #: ``check go1-v0 go1-v1 --event fell``: stdout digest and exit code, bare tree.
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
-CHECK_STDOUT_SHA256 = "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4bf14e3b1"
+CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 #: ``serve go1-v0 go1-v1 --event fell --x mu --y push_pct_bw --json``, bare tree. The structure
 #: echoes the ``--store`` path as ``pair.store_root``, so the digest is of the parsed structure with
 #: that one value replaced by ``<store>`` and re-serialised with sorted keys; the raw bytes would
 #: pin the machine's absolute path.
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
-SERVE_STRUCTURE_SHA256 = "f58750a091af8da170f2f89484ae4076f5951c8ace2852bcf882e8b70ddc837d"
+SERVE_STRUCTURE_SHA256 = "6c4a8124d550494791a5c102332cfda6636fe3cf32a5382cea02debcf11fa651"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
@@ -236,9 +236,9 @@ FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d004
 #: ``report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw``.
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 E14_SHA256 = {
-    "report.md": "cc1157e3ec709f6ebc55409a77bb3207c73c864e659c0d7e82f3394aafdc57cb",
-    "heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
-    "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
+    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
+    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
 }
 
 #: Synthetic vocabularies. Non-events end at the horizon; events end at ``EVENT_T``.
@@ -302,6 +302,17 @@ def manifest(run_id: str, salt: str) -> RunManifest:
     )
 
 
+def seed_of(config: Mapping[str, Any], replicate_index: int) -> int:
+    """A seed that is a function of ``(config, replicate_index)`` and never of the cell's position
+    in its dict. **C49 (P-1 section 7.3), fixed in P-1 Session A's retrofit.** The old
+    ``1000 * index + k`` seeded by dict position and ``replicate_index`` counted from
+    ``replicate_start``, so O21's pair stored a different seed at the same
+    ``(config_hash, replicate_index)`` in its two arms -- 16 of 48 matched rows disagreed, measured
+    at ``a626cd3`` -- while ``mcnemar_bh`` ran on it. Green before and after on the bare tree
+    (nothing reads a stored seed there), so its green is not evidence."""
+    return 1000 * (int(config_hash(config)[:6], 16) % 100_000) + replicate_index
+
+
 def raw_frame(
     run_id: str,
     cells: Mapping[str, Sequence[str | None]],
@@ -315,17 +326,18 @@ def raw_frame(
     Replicate indices count from ``replicate_start[task]`` (default 0)."""
     starts = dict(replicate_start or {})
     rows: list[dict[str, Any]] = []
-    for index, (task, outcomes) in enumerate(cells.items()):
+    for task, outcomes in cells.items():
         config = {"task": task}
         for k, outcome in enumerate(outcomes):
             errored = outcome is None
+            replicate_index = starts.get(task, 0) + k
             rows.append(
                 {
                     "run_id": run_id,
                     "config_hash": config_hash(config),
                     "config": config,
-                    "seed": 1000 * index + k,
-                    "replicate_index": starts.get(task, 0) + k,
+                    "seed": seed_of(config, replicate_index),
+                    "replicate_index": replicate_index,
                     "outcome": outcome,
                     "t": math.nan if errored else (horizon if outcome in NON_EVENTS else event_t),
                     "horizon": math.nan if errored else horizon,
@@ -915,12 +927,12 @@ def test_o6_the_scheme_table_is_the_spec_table_and_every_root_follows_it(
 def test_o6_the_pairable_pair_and_its_unpairable_twin_give_identical_json(synth_root: Path) -> None:
     """ADR-052's twin, S24's C12 construction restated. ``moved-b`` and ``moved-b-unpaired`` hold
     identical episodes and differ only in ``run_salt``, so the two diffs below see the same frames
-    and differ only in ``paired``. A root that dispatched on ``paired`` would take pair swap on
+    and differ only in ``seed_identity_match`` (``paired`` until P-1). A root that dispatched on it would take pair swap on
     the first and arm label on the second, and the ``scheme`` field alone would separate the two
     payloads."""
     paired_multi, paired_root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=300, seed=GOLDEN_SEED)
     unpaired_multi, unpaired_root = store_root(synth_root, "moved-a", "moved-b-unpaired", events=("fail",), method="fisher_bh", n_permutations=300, seed=GOLDEN_SEED)
-    assert paired_multi.paired is True and unpaired_multi.paired is False
+    assert paired_multi.seed_identity_match is True and unpaired_multi.seed_identity_match is False
     assert paired_root.n_informative_cells > 0
     assert json_bytes(paired_root) == json_bytes(unpaired_root)
     assert paired_root.scheme == "arm_label"
@@ -1200,7 +1212,8 @@ def test_o11_more_permutations_move_only_the_p_driven_fields(go1: Any) -> None:
     few = tree().omnibus(a, b, multi, n_permutations=100, seed=GOLDEN_SEED).to_json()
     many = tree().omnibus(a, b, multi, n_permutations=400, seed=GOLDEN_SEED).to_json()
     assert few["n_permutations"] == 100 and many["n_permutations"] == 400
-    assert without(few, (*P_DRIVEN_KEYS, "n_permutations")) == without(many, (*P_DRIVEN_KEYS, "n_permutations"))
+    # ``p_floor`` is ``1 / (n_permutations + 1)`` (P-1), so it moves with ``n_permutations`` and is excluded beside it.
+    assert without(few, (*P_DRIVEN_KEYS, "n_permutations", "p_floor")) == without(many, (*P_DRIVEN_KEYS, "n_permutations", "p_floor"))
 
 
 # ---------- O12: multi-event ----------
@@ -1665,7 +1678,9 @@ def test_o21_unmatched_replicates_are_dropped_by_the_join_and_not_mispaired() ->
     the matched pair, so ``units`` sees 16 of them while ``cells`` counts 32 episodes per arm. The
     event counts are over the joined pairs only -- a's fails sit at ``0..7`` and are all outside
     the join, b's at ``16..19`` and all inside it -- and ``n_discordant`` counts joined pairs that
-    differ."""
+    differ. The two arms store the same seed at every matched ``(config_hash, replicate_index)``
+    since P-1 Session A's retrofit (C49; ``seed_of``): before it 16 of 48 matched rows disagreed and
+    ``mcnemar_bh`` ran on them anyway."""
     a = raw_frame("um-a", {"u": ["fail"] * 8 + ["ok"] * 24, "v": ["fail"] * 3 + ["ok"] * 29})
     b = raw_frame("um-b", {"u": ["fail"] * 4 + ["ok"] * 28, "v": ["fail"] * 9 + ["ok"] * 23}, replicate_start={"u": 16})
     multi = quiet_multi_diff(a, b, manifest("um-a", SALT), manifest("um-b", SALT), events=("fail",), method="mcnemar_bh")

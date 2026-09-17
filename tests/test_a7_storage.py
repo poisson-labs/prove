@@ -284,18 +284,18 @@ OUT_PLACEHOLDER = "<out>"
 #: changed what a consumer sees.
 GO1_VERB_SHA256 = {
     "runs": "0c9a8e63beb07be3c4b370e02d93ac33672b77430fe7381da5063f91c182a4b1",
-    "diff": "fc1440cad9c1b42413214bf7f13a7b4c1ad53e649550698545c5e37d06e4c870",
-    "diff --format json": "be4f08b4268d7e8735126b8997e0be4d254b8f4f9eded746050d9ae5c1b24216",
-    "check": "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4bf14e3b1",
+    "diff": "7849924e1ff36e6a9a2afc338a876bf312d3a5188f069e3e6cdb40693e226d8a",
+    "diff --format json": "fd2a622c4bfc75bd768b5fcc2c6453e97e8b552a603cfb8ac7717af89ce8be43",
+    "check": "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417",
     "report A": "13976b7c8ba0022d285fc6d882901a209e9df8004cc0a42c072d75df20661615",
     "report A/report.md": "3e040459a10022b74898c3e1b1900413343e2b1cb8d728afdf4dd8a2bd7354c6",
     "report A/heatmap.svg": "e6020ec87eae771a66d8847888de06f2355cd810209e39c25d1c7a6584400851",
     "report A/receipt.html": "e5a84051dae646e33f237baf1a748a4d4db04a1a2a5db084ff6b57b72cd6bcdb",
-    "report A B": "26592371f63d96d1da217bc3722840165fecf7487d74523f6a06ee3a592409a1",
-    "report A B/report.md": "ef0a396302370d11010695a7b80b3848e1e68f6e6481b74bb88a3f0db209c555",
-    "report A B/heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
-    "report A B/receipt.html": "c12b4f503ae8eccf6be413d71655e160ff0aac8cdcddcc6e3edf9e5aa944a8cd",
-    "serve --json": "24bb8e2256955315543c608df0ee2c5d1928df64e1e9a86a296f2650be66246b",
+    "report A B": "a597669edbcba109c45e2cf02299c397e30d2033ba79e92f298d274c0a06436d",
+    "report A B/report.md": "85f5dcba4dfcbc96cdcf5f33c49e82ba82fb16371285753f70cdf975dc108186",
+    "report A B/heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
+    "report A B/receipt.html": "0f2e162eb1409c6c2e6885f76326c6fedf40d1e8091b2605b388e8f8c4c55826",
+    "serve --json": "4f05dd61b3a79a28789888bbaac6c98b7da0acc0400a0562ea94dc4de23abf67",
     "inspect": "5e2905ec3c2c8e87e6a0032b82a3ed544fc5bd68557688896c1fa717b648d052",
 }
 GO1_EVENT = "fell"

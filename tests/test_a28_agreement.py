@@ -117,7 +117,7 @@ RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3")
 #: G9. The twelve top-level keys, in order, unchanged: the digest is inside ``tree``, not beside it.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
-    "tree", "unverified", "heatmap_svg",
+    "intervals", "tree", "unverified", "heatmap_svg",
 )
 #: G7. ``TreeResult``'s six fields in order and ``to_json()``'s six keys in the same order.
 TREE_RESULT_FIELDS = ("root", "grouping", "fault_lines", "leaves", "bound", "agreement")
@@ -149,9 +149,17 @@ RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
 #: ``diff.py`` digest, which after retirement assert the sweep from files carrying no exclusion.
 ADR_077_FIELDS = frozenset({"region", "owner", "cover", "minted_at", "blind_spot", "retire_at"})
 LINES_FIELD = "lines"
-LINES_RE = re.compile(r"^(\d+)-(\d+) of (\d+)$")
+LINES_RE = re.compile(r"^(?P<spans>\d+-\d+(?:, \d+-\d+)*) of (?P<total>\d+)$")
 OWNER = "A28"
 MINTED_AT = "38e8df9"
+#: G18, per record since P-1's retrofit (2026-09-17): ``(owner, minted_at, cover file)`` for every
+#: exclusion record the carrier may hold. ``TREE_PY_EXCLUDED`` is P-1's (spec P-1 section 7.4,
+#: ADR-077's clean case at ``("RootResult", "_root")``), covered by the P-1 oracle, so the cover
+#: is no longer always this file and ``lines`` may carry two spans.
+RECORD_OWNERS = {
+    "REPORT_PY_EXCLUDED": ("A28", "38e8df9", "test_a28_agreement.py"),
+    "TREE_PY_EXCLUDED": ("P-1", "a626cd3", "test_p1_payload.py"),
+}
 EXCLUSION_CARRIER = "test_s29_viewer.py"
 FORMER_CARRIERS = ("test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py")
 PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REPORT_SOURCE, "DIFF_PY_EXCLUDED": DIFF_SOURCE}
@@ -604,7 +612,7 @@ def test_g8_the_payload_survives_a_json_round_trip_on_every_fixture(every_fixtur
         assert list(json.loads(text)) == list(TREE_RESULT_FIELDS), g.name
 
 
-def test_g9_the_schema_is_viewpair_4_the_twelve_keys_stand_and_render_html_refuses_both_retired_schemas_naming_both(crossed: dict[str, Grown]) -> None:
+def test_g9_the_schema_is_viewpair_4_the_thirteen_keys_stand_and_render_html_refuses_both_retired_schemas_naming_both(crossed: dict[str, Grown]) -> None:
     """``/3``'s half is the sole catch for mutant 8 inside this file."""
     m = viewer()
     assert m.SCHEMA == SCHEMA
@@ -807,18 +815,25 @@ def test_g18_every_exclusion_record_this_packet_mints_carries_adr_077s_fields_an
     name, so it holds under either answer to section 10 Q2: six fields plus the region's lines over
     the file's lines at mint (ADR-077 Q2 lean (b)); owner ``A28``; ``retire_at`` empty (D5); every
     cover exists and every test id resolves through the resolver; every region resolves to exactly
-    one node of the pinned file; regions on one file disjoint."""
+    one node of the pinned file; regions on one file disjoint.
+
+    **Amended by P-1's retrofit, 2026-09-17** (a site the P-1 spec's section 7.2 did not list; found
+    by the shadow shim's whole-suite control): the carrier now holds two records, and owner, mint
+    and cover are asserted per record through ``RECORD_OWNERS`` -- A28's ``report.py::_check_tree``
+    covered by this file, P-1's ``tree.py`` regions covered by ``tests/test_p1_payload.py`` -- and
+    ``lines`` may list one span per region (ADR-077 Q2 (b))."""
     records = exclusion_constants(TESTS / EXCLUSION_CARRIER)
     assert records and set(records) <= set(PINNED_BY_CONSTANT), sorted(records)
     for constant, entries in records.items():
         pinned = parsed(PINNED_BY_CONSTANT[constant])
+        owner, minted_at, cover_name = RECORD_OWNERS[constant]
         spans: list[tuple[int, int]] = []
         for record in entries:
             assert set(record) == ADR_077_FIELDS | {LINES_FIELD}, sorted(record)
-            assert record["owner"] == OWNER and record["minted_at"] == MINTED_AT and record["retire_at"] == ""
+            assert record["owner"] == owner and record["minted_at"] == minted_at and record["retire_at"] == ""
             assert len(record["blind_spot"].split()) >= 20, record["region"]
             cover = REPO / record["cover"][0]
-            assert cover.exists() and cover.name == Path(__file__).name, record["cover"]
+            assert cover.exists() and cover.name == cover_name, record["cover"]
             assert record["cover"][1], record["region"]
             for test_id in record["cover"][1]:
                 resolve_region(parsed(cover), test_id)
@@ -827,8 +842,10 @@ def test_g18_every_exclusion_record_this_packet_mints_carries_adr_077s_fields_an
                 spans.append((node.lineno, node.end_lineno or node.lineno))
             match = LINES_RE.match(record[LINES_FIELD])
             assert match, record[LINES_FIELD]
-            low, high, total = (int(m) for m in match.groups())
-            assert 1 <= low <= high <= total, record[LINES_FIELD]
+            total = int(match.group("total"))
+            for span in match.group("spans").split(", "):
+                low, high = (int(m) for m in span.split("-"))
+                assert 1 <= low <= high <= total, record[LINES_FIELD]
         spans.sort()
         assert all(earlier[1] < later[0] for earlier, later in zip(spans, spans[1:])), spans
 

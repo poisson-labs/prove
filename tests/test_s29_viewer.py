@@ -174,6 +174,18 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   section 10 Q5 (b) makes a ``mcnemar_bh`` tree beside a ``fisher_bh`` diff a refusal. The
   sweep counts module-level ``*_PY_EXCLUDED`` constants by AST, not by text. The classified red
   set is in Handoff A28.
+- **P-1's retrofit, 2026-09-17 (P-1 section 7.2, 7.4).** The payload root is thirteen keys,
+  ``intervals`` after ``panels``; ``_TREE_KINDS["root"]`` gains ``p_floor``; the honesty band is
+  ``2n + 2`` lines with the flat family's interval paragraph before the bound (W5); the fault-lines
+  block gains the group floor line after the null line iff the level was tested (W9, W11);
+  ``TREE_PY_SHA256`` is **narrowed** at ``("RootResult", "_root")`` and ``TREE_PY_EXCLUDED`` minted,
+  owner P-1 -- ADR-077's clean case, measured identical on the bare tree and on P-1's prototype;
+  ``DIFF_PY_SHA256`` and ``REPORT_PY_SHA256`` stay as A28 left them, green on Session A's commit and
+  red from Session B's build until Session A's post-build commit re-mints both whole-file and
+  retires ``REPORT_PY_EXCLUDED`` (ADR-078); ``SERVE_STRUCTURE_SHA256``, ``TREE_LESS_KEYS_SHA256``,
+  ``GO1_PAGE_2_SHA256``, ``CHECK_STDOUT_SHA256`` and the E14 markdown and receipt digests are
+  re-minted off P-1 Session A's shadow shim, built to P-1 section 3's verbatim strings. The
+  classified red set is in ``tests/test_p1_payload.py``'s module docstring.
 
 **Spec text this oracle could not use as written, each resolved here and reported.**
 
@@ -279,7 +291,7 @@ RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3")
 #: W1. The twelve top-level keys, in order (section 3.1).
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
-    "tree", "unverified", "heatmap_svg",
+    "intervals", "tree", "unverified", "heatmap_svg",
 )
 #: The keys the tree does not touch (W4, W13, W17).
 TREE_LESS_KEYS = ("panels", "holes", "unverified", "heatmap_svg", "diff", "view")
@@ -305,7 +317,7 @@ REASON_TUPLE_NAMES = ("LEAVES_NOT_TESTED_REASONS", "NOT_TESTED_REASONS", "REFUSA
 #: W1, W3. The kind table (section 3.2) as this oracle's literal, keyed by the object's dotted
 #: path with list indices dropped, plus the ``config`` row the module docstring explains.
 TREE_KINDS: dict[str, dict[str, str]] = {
-    "root": {"p_omnibus": "sig3", "p_location": "sig3", "p_dispersion": "sig3", "q": "sig3", "location": "pp1", "dispersion": "pp1"},
+    "root": {"p_floor": "sig3", "p_omnibus": "sig3", "p_location": "sig3", "p_dispersion": "sig3", "q": "sig3", "location": "pp1", "dispersion": "pp1"},
     "grouping": {"alpha_floor": "sig3", "max_group_mde": "pp0", "size_median": "num", "group_mde": "pp1"},
     "fault_lines": {"q": "sig3"},
     "fault_lines.groups": {"mde": "pp1", "location": "pp1", "dispersion": "pp1", "p_location": "sig3", "p_dispersion": "sig3", "p_group": "sig3", "q_group": "sig3"},
@@ -340,27 +352,27 @@ RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
 #: W17, W20. S25's O23 digest restated as narrowed: ``serve --json`` on Go1 with ``tree`` removed
 #: and ``schema`` set to ``/2``, ``store_root`` normalised.
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
-SERVE_STRUCTURE_SHA256 = "f58750a091af8da170f2f89484ae4076f5951c8ace2852bcf882e8b70ddc837d"
+SERVE_STRUCTURE_SHA256 = "6c4a8124d550494791a5c102332cfda6636fe3cf32a5382cea02debcf11fa651"
 #: W4, W17. Minted on the bare tree at f4e2845 through ``serve --json`` on each pair's argv below
 #: (``scratchpad/s29/mint.py``): the six tree-less keys, ``json.dumps(sort_keys=True)``, sha256.
 TREE_LESS_KEYS_SHA256 = {
-    "go1": "7235b6b5185a1303d78c9b7723a0efd291c92564e730416e549a8e227dbe89fd",
-    "go1-two-events": "5effdde4cc25ff29fcb0c24b5785986a385bca0a2f4b61a8f823a54fadb74df9",
-    "axes": "1edd207ffadb6ad6a7a3e6eed77e64df5b75391d9366301b12ee0bf5d1877a8f",
-    "identical": "dd1e9bbda056d2f3c6c7342a2d144cd1b4b7ce21e87e746adf62d5e680b53891",
-    "bh": "73ed987edee0cbec618ef5f26d759ce460298a6f88c7cee189015d0a098333e5",
-    "gate": "79943189de5279045c738700f36594a2ed124c2d6c8736dddce9fb5e152cda7c",
-    "multi-event": "f53927692dd853cbcf2525bbbee8d91076f75a34706c30464978a329bbfc890e",
-    "one-value": "04832fdb2a40321d85bb905d814f4cc34afc2ae670e2185866a9c144ddabb068",
-    "three-key": "eae27894234d5b623dd3deb65e132502541e15c8b202edfa9eb595eb3ab6a3fc",
-    "vocab": "786e4230d838501b4b3de227b967765d1f2879f08391a027f68ad1e1c722de60",
-    "hostile": "7e9d0c4d05eae203202daf9b3eaa6906efcc879fbe931e29edf3817935bbd91f",
+    "go1": "33f94ee226637176b322105bbfd292bd86cd763213d0e9783f528eca7cd19c24",
+    "go1-two-events": "978439fb600402f0f496fcc13520e4af25ee55d07e4e6c7617479adaac60691a",
+    "axes": "914ef1307c02752a1c1ec18f5e95b185fed45d6f0273d1be8166c021368933aa",
+    "identical": "3a649cb1cac668077285b4b34f6cf17321a96418bbd8f278427e4f442b65adf8",
+    "bh": "b62f5f433cb8d603d91d1c6ddb30a4fab65a8734582d0df4d46837c99a1c1b44",
+    "gate": "cdcee3939dfb04b8b4967e243ce586d3797f831e81289af412519f2ebbd7cc17",
+    "multi-event": "c40622f5fe7e286977517de939deccd4d640bf971ce9494914d0bc941ef3ed3f",
+    "one-value": "bdbf0265e80609180b71f0281ce402c6c78c7e4b839bbb40a6c6dc3c6c843f39",
+    "three-key": "15f2587c9b95002156685502dd4273b41a68eef4346e7220e2f145254319efb4",
+    "vocab": "381a34c070d18cc36d29e54a82bb88942ae875dc88da50e34379ed3f8a214949",
+    "hostile": "998e8a8f97e41cc545509a8ac5f6bacc40d7dc4258a8a5a06035b32f9d19823d",
 }
 #: W4. The ``/2`` page on Go1, ``str(GO1_ROOT)`` replaced by ``<store>``, sha256, minted on the bare
 #: tree at f4e2845 from the structure ``serve --json`` printed.
 GO1_PAGE_2_SHA256 = {
-    "go1": "d2c06b223618456e578c78bcdad6ed7b2e3a3052ab7136eec918173e2659deb6",
-    "go1-two-events": "c16ec78a00db98b528b55dc2f969d0a1eb518cbf7f6c445cc017a86308eafd36",
+    "go1": "47b37fd06a7a4cba6337600d53e2af10a2dd4acc21b3d7157699158f74c015c0",
+    "go1-two-events": "646ebfe55438fcd228f881bbe4e29d7061bd68348523f2ba3a7b3cd8798b640b",
 }
 #: W20. ``diff.py`` whole again. **A28's retrofit, 2026-09-13 -- both exclusions retired** (ADR-077's
 #: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted
@@ -369,15 +381,35 @@ GO1_PAGE_2_SHA256 = {
 #: ``03d7ed2``): the whole-file sha256, never a prediction. Bytes, so a scratch copy without ``.git``
 #: can check.
 DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695dbe5"
-#: W20. ``tree.py`` **whole-file, deliberately, under spec A28 section 10 Q2 (b) and ADR-078.** A28's
-#: build adds module-level names to this file -- ``import hashlib``, ``import json``,
-#: ``AGREEMENT_SCHEMA`` and two functions absent at ``38e8df9`` -- which a qualified-name exclusion
-#: cannot cover: measured, narrowed at ``_require_agreement`` + ``TreeResult`` it is ``a5bac2e9...``
-#: before the build and ``73df7726...`` after, red on the build it would be minted for. So this is
-#: the value at ``38e8df9``, green on Session A's commit, red from Session B's build until a second
-#: Session A commit re-mints it whole-file off the shipped bytes, with the behavioural cover
-#: (``tests/test_a28_agreement.py`` G2, G5, G6, G7) already frozen. No ``TREE_PY_EXCLUDED`` is minted.
-TREE_PY_SHA256 = "7f9a4f08052eb5a7ec043c970a949e779bad968bde83762fadffa3aeebd1176f"
+#: W20, **narrowed by P-1 Session A under ADR-077 (P-1 section 7.4, the clean case)**: ``tree.py``'s
+#: bytes outside ``RootResult`` and ``_root``, minted at ``a626cd3`` and measured identical on the
+#: P-1 prototype, because P-1's one ``tree.py`` edit -- the ``p_floor`` field, its ``to_json`` key and
+#: its single assignment site -- sits inside those two definitions. Green on Session A's commit and
+#: on the build; red on an edit anywhere else in the file. A28's whole-file ``7f9a4f08...`` (A28
+#: section 10 Q2 (b)) is replaced by this narrowed value and re-minted by nobody. A28's history
+#: stays in the module docstring.
+TREE_PY_SHA256 = "83ec34949bf21026cd26a8f39f749740851f4ebf994146dccf7c23aeb7919b43"
+#: ADR-077's record for the two regions (P-1 section 7.4): ``cover`` is the P-1 oracle's Y16 and
+#: Y18 tests, asserted to exist through the resolver; ``retire_at`` is empty because no queued
+#: packet re-freezes W20 after P-1; ``lines`` are the two spans over the file's lines at mint
+#: (ADR-077 Q2, lean (b)).
+TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
+    {
+        "region": ("RootResult", "_root"),
+        "owner": "P-1",
+        "cover": ("tests/test_p1_payload.py", ("test_y16_p_floor_is_one_over_b_plus_one_sits_after_n_permutations_and_bounds_every_permutation_p", "test_y16_on_go1_at_the_default_b_p_omnibus_equals_p_floor_exactly", "test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key")),
+        "minted_at": "a626cd3",
+        "blind_spot": (
+            "The two excluded regions also hold RootResult.headline(), to_json()'s eighteen existing "
+            "keys and the seventeen keyword arguments _root already passes, so this digest no longer "
+            "sees a key renamed, the headline reworded or rejects recomputed inside them. S25's "
+            "O-family, F28_OMNIBUS_SHA256 (re-minted by P-1 to cover the new field) and P-1's Y16 are "
+            "what catch those."
+        ),
+        "retire_at": "",
+        "lines": "228-303, 853-890 of 2192",
+    },
+)
 #: W20, narrowed by A28 under ADR-077: ``report.py``'s bytes outside ``report.py::_check_tree``,
 #: minted at ``38e8df9`` and measured identical on a copy carrying the digest and knob clauses,
 #: because every line A28 adds to this file sits inside that one definition (ADR-078's clean case).
@@ -405,15 +437,15 @@ REPORT_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
     },
 )
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
-CHECK_STDOUT_SHA256 = "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4bf14e3b1"
+CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 #: W20. S21's E14 digests as S28's retrofit left them: the SVG through the CLI, the markdown and
 #: the light receipt through the tree-less builder.
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 E14_SHA256 = {
-    "report.md": "cc1157e3ec709f6ebc55409a77bb3207c73c864e659c0d7e82f3394aafdc57cb",
-    "heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
-    "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
+    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
+    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
 }
 
 #: W9, W10, W18. Golden Go1 (S26 F13, S27 L7, S28 R18).
@@ -1406,8 +1438,8 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
 # ---------- W1: literals ----------
 
 
-def test_w1_the_schema_the_twelve_keys_and_the_signatures_are_the_literals(go1: Pair) -> None:
-    """``viewer.SCHEMA``; the twelve keys in order on ``--json`` and on ``build_structure``'s
+def test_w1_the_schema_the_thirteen_keys_and_the_signatures_are_the_literals(go1: Pair) -> None:
+    """``viewer.SCHEMA``; the thirteen keys in order (P-1's ``intervals`` after ``panels``) on ``--json`` and on ``build_structure``'s
     return; ``build_structure`` takes ``tree`` as a required keyword between ``multi`` and
     ``manifest_a`` and its other parameters are unchanged; ``render_html`` and ``serve_page``
     keep their signatures."""
@@ -1584,15 +1616,19 @@ def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted
 
 def test_w5_the_h2_sequence_and_the_bound_paragraphs_position(every_pair: list[Pair]) -> None:
     """The ``<h2>`` sequence is exactly the thirteen in order; the bound ``<p>`` is the last line of
-    *Honesty*, after the last panel's ``<h3>`` and its paragraph, before the first ``<svg>``,
-    outside ``<details>``, with no hidden ancestor; *Fault lines* and *Cells* precede the ``<svg>``."""
+    *Honesty*, after the last panel's ``<h3>``, its paragraph and (P-1, ADR-060) the flat family's
+    one interval paragraph, before the first ``<svg>``, outside ``<details>``, with no hidden
+    ancestor; *Fault lines* and *Cells* precede the ``<svg>``. **Amended by P-1 Session A**: the
+    honesty band is ``2n + 2`` lines, the interval ``<p>`` sits immediately before the bound
+    ``<p>`` (P-1 section 10 Q4, before) and carries the first interval line."""
     for p in every_pair:
         assert h2_sequence(p.page) == list(H2_SEQUENCE), (p.name, h2_sequence(p.page))
         honesty = region_lines(p.page, "Honesty")
         assert honesty[-1] == bound_line(p.page), (p.name, honesty[-1][:80])
         panels = p.structure["panels"]
-        assert len(honesty) == 2 * len(panels) + 1, (p.name, len(honesty))
-        assert honesty[-2].startswith("<p>") and honesty[-3] == f"<h3>{html_mod.escape(panels[-1]['event'])}</h3>", (p.name, honesty[-3:])
+        assert len(honesty) == 2 * len(panels) + 2, (p.name, len(honesty))
+        assert honesty[-2].startswith("<p>") and html_mod.escape(p.structure["intervals"]["lines"][0]) in honesty[-2], (p.name, honesty[-2][:120])
+        assert honesty[-3].startswith("<p>") and honesty[-4] == f"<h3>{html_mod.escape(panels[-1]['event'])}</h3>", (p.name, honesty[-4:])
         assert len(bound_lines(p.page)) == 2, (p.name, bound_lines(p.page))
         dom = parse_html(p.page)
         svg = dom.find("svg")[0].index
@@ -1748,7 +1784,11 @@ def assert_fault_lines(p: Pair) -> None:
         assert "not tested" in null and "the root did not reject" in null, (p.name, null)
     else:
         assert fault["reason"] == "one_group" and "not tested" in null and "one group is the whole family restated" in null, (p.name, null)
-    assert len(lines) == 2 + len(grouping["refused"]), (p.name, lines)
+    if fault["tested"]:
+        # P-1 (C33 (b)): the group floor line follows the null line iff the level was tested.
+        floor = lines[2 + len(grouping["refused"])]
+        assert floor.startswith("group p floor ") and root["text"]["p_floor"] in floor and has(floor, str(root["n_permutations"])) and "not a measurement" in floor, (p.name, floor)
+    assert len(lines) == (3 if fault["tested"] else 2) + len(grouping["refused"]), (p.name, lines)
     assert len(tables) == 1, (p.name, len(tables))
     header, rows = tables[0]
     width = group_row_width(p)
@@ -2168,7 +2208,7 @@ def e14_builder_digests() -> dict[str, str]:
     return {"report.md": sha256_of_text(report.to_markdown()), "receipt.html": sha256_of_text(receipt.to_html())}
 
 
-def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_whole_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
+def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_result_and_root_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
     assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
     assert digest_excluding(REPORT_SOURCE, [q for record in REPORT_PY_EXCLUDED for q in record["region"]]) == REPORT_PY_SHA256
     assert hashlib.sha256(REPORT_SOURCE.read_bytes()).hexdigest() != REPORT_PY_SHA256
@@ -2177,7 +2217,13 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_whole_check_and_
         assert cover.exists(), record["cover"]
         for test_id in record["cover"][1]:
             resolve_region(ast.parse(cover.read_bytes()), test_id)
-    assert hashlib.sha256(TREE_SOURCE.read_bytes()).hexdigest() == TREE_PY_SHA256
+    assert digest_excluding(TREE_SOURCE, [q for record in TREE_PY_EXCLUDED for q in record["region"]]) == TREE_PY_SHA256
+    assert hashlib.sha256(TREE_SOURCE.read_bytes()).hexdigest() != TREE_PY_SHA256
+    for record in TREE_PY_EXCLUDED:
+        cover = REPO / record["cover"][0]
+        assert cover.exists(), record["cover"]
+        for test_id in record["cover"][1]:
+            resolve_region(ast.parse(cover.read_bytes()), test_id)
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
     assert code == CHECK_EXIT and err == "" and sha256_of_text(out) == CHECK_STDOUT_SHA256, (code, err)
     out_dir = tmp_path / "report"
@@ -2244,18 +2290,31 @@ def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     module-level constants named ``*_PY_EXCLUDED`` by AST and not by text**, because the text grep
     the entry describes counts the three former carriers from their docstrings and sweep lines
     once their records are gone (measured). ``TREE_PY_EXCLUDED`` is not minted (section 10 Q2 (b)).
+
+    **P-1's retrofit, 2026-09-17: ``TREE_PY_EXCLUDED`` minted beside ``REPORT_PY_EXCLUDED``** (P-1
+    section 7.4). Still one file, now two record constants on it, so the sweep asserts the pair by
+    name; the per-record assertions are per record (owner A28 at ``38e8df9``; owner P-1 at
+    ``a626cd3``), and ``lines`` may carry two spans because ADR-077 Q2 (b)'s form lists every span
+    the record excludes. ``REPORT_PY_EXCLUDED`` is retirable -- A28 is done and P-1 is the first
+    re-freeze to reach its carrier -- and P-1 section 7.4 retires it in Session A's post-build
+    commit, when ``REPORT_PY_SHA256`` becomes whole-file off the built ``report.py``; until then it
+    stays, so this sweep will move once more.
     """
     hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if excluded_constants(path))
     assert hits == ["test_s29_viewer.py"], hits
-    assert excluded_constants(REPO / "tests" / "test_s29_viewer.py") == ["REPORT_PY_EXCLUDED"]
-    for record in REPORT_PY_EXCLUDED:
-        assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at", "lines"}, sorted(record)
-        assert record["owner"] == "A28" and record["minted_at"] == "38e8df9" and record["retire_at"] == ""
-        assert len(record["blind_spot"].split()) >= 20, record["region"]
-        assert re.fullmatch(r"\d+-\d+ of \d+", record["lines"]), record["lines"]
+    # Module order: ``TREE_PY_EXCLUDED`` sits beside ``TREE_PY_SHA256``, which precedes the report pair.
+    assert excluded_constants(REPO / "tests" / "test_s29_viewer.py") == ["TREE_PY_EXCLUDED", "REPORT_PY_EXCLUDED"]
+    for constant, owner, minted_at in ((REPORT_PY_EXCLUDED, "A28", "38e8df9"), (TREE_PY_EXCLUDED, "P-1", "a626cd3")):
+        for record in constant:
+            assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at", "lines"}, sorted(record)
+            assert record["owner"] == owner and record["minted_at"] == minted_at and record["retire_at"] == ""
+            assert len(record["blind_spot"].split()) >= 20, record["region"]
+            assert re.fullmatch(r"\d+-\d+(, \d+-\d+)* of \d+", record["lines"]), record["lines"]
     assert [record["region"] for record in REPORT_PY_EXCLUDED] == [("_check_tree",)]
-    spans = sorted(
-        (node.lineno, node.end_lineno)
-        for node in (resolve_region(ast.parse(REPORT_SOURCE.read_bytes()), q) for record in REPORT_PY_EXCLUDED for q in record["region"])
-    )
-    assert all(earlier[1] < later[0] for earlier, later in zip(spans, spans[1:])), spans
+    assert [record["region"] for record in TREE_PY_EXCLUDED] == [("RootResult", "_root")]
+    for source, constant in ((REPORT_SOURCE, REPORT_PY_EXCLUDED), (TREE_SOURCE, TREE_PY_EXCLUDED)):
+        spans = sorted(
+            (node.lineno, node.end_lineno)
+            for node in (resolve_region(ast.parse(source.read_bytes()), q) for record in constant for q in record["region"])
+        )
+        assert all(earlier[1] < later[0] for earlier, later in zip(spans, spans[1:])), spans

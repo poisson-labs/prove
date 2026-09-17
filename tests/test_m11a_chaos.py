@@ -1395,7 +1395,7 @@ def test_m11a_24_two_arms_from_one_sweep_file_pair_under_diff(tmp_path: Path) ->
     manifest_a, manifest_b = store.manifest(a["run_id"]), store.manifest(b["run_id"])
     assert manifest_a.run_salt == manifest_b.run_salt == SALT
     result = diff(censor(frame_a, "fell"), censor(frame_b, "fell"), event="fell", method="mcnemar_bh", manifest_a=manifest_a, manifest_b=manifest_b)
-    assert result.paired is True and result.dropped_a == 0 and result.dropped_b == 0, result.to_markdown()
+    assert result.seed_identity_match is True and result.dropped_a == 0 and result.dropped_b == 0, result.to_markdown()
 
 
 # ---------- M11a-25, M11a-29, M11a-30: the applier ----------

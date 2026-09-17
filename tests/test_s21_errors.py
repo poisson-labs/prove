@@ -59,7 +59,7 @@ import inspect
 import json
 import re
 import shutil
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from html import unescape as html_unescape
 from html.parser import HTMLParser
@@ -99,9 +99,9 @@ GO1_TALLY = (12_800, 12_800, 0, 0, 0, 0)
 #   proofload --store tests/fixtures/go1 report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 E14_SHA256 = {
-    "report.md": "cc1157e3ec709f6ebc55409a77bb3207c73c864e659c0d7e82f3394aafdc57cb",
-    "heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
-    "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
+    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
+    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
 }
 
 SCHEMA = "proofload.viewpair/4"
@@ -119,18 +119,18 @@ CAUSES = ("only_a", "only_b", "no_outcome_both", "no_outcome_a", "no_outcome_b")
 GRID_CAUSES = ("unsampled", "multiple")
 ALL_CAUSES = CAUSES + GRID_CAUSES
 MULTI_FIELDS = (
-    "events", "by_event", "method", "paired", "q", "t_unit", "horizon", "n_tests",
+    "events", "by_event", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon", "n_tests",
     "n_not_comparable", "dropped_a", "dropped_b", "truncated", "trades", "inferred", "non_event",
 )
 PROVENANCE_KEYS = (
-    "events", "inferred", "non_event", "n_tests", "method", "paired", "q", "t_unit", "horizon",
+    "events", "inferred", "non_event", "n_tests", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon",
     "n_not_comparable", "dropped_a", "dropped_b", "truncated", "n_absent", "proofload_version",
     "run_id_a", "run_id_b", "run_salt",
 )
 
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
-    "tree", "unverified", "heatmap_svg",
+    "intervals", "tree", "unverified", "heatmap_svg",
 )
 ARM_KEYS = (
     "role", "run_id", "target_id", "backend", "status", "created_at", "run_salt", "t_unit",
@@ -178,9 +178,11 @@ UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
         None,
     ),
     (
-        "paired_basis",
-        "paired is true when the two manifests carry the same run_salt. Matching salts do not "
-        "prove the two runs consumed their seeds identically.",
+        "seed_identity_basis",
+        "seed_identity_match is true when both manifests carry the same run_salt and every row "
+        "this comparison matched stores the same seed in both arms at the same (config_hash, "
+        "replicate_index). It compares the seeds that were stored, not what the target did with "
+        "them.",
         None,
     ),
 )
@@ -648,6 +650,18 @@ def syn_manifest(run_id: str, note: str = "built by test_s21_errors") -> RunMani
     )
 
 
+def seed_of(config: Mapping[str, Any], replicate_index: int) -> int:
+    """A stored seed that is a function of ``(config, replicate_index)`` and never of the cell's
+    position in its dict. **C49's fourth fixture, found by P-1 Session A and fixed in its
+    retrofit** (the spec's section 7.3 names three): ``write_run`` seeded ``1000 * index + k`` by
+    dict position, and the synthetic pair's two arms enumerate different cell sets (``only_a`` and
+    ``only_b`` holes are the point of the pair), so the same ``(config_hash, replicate_index)``
+    carried a different seed in the two arms -- 16 of 99 matched rows disagreed, measured on the
+    P-1 prototype, and ``diff --methods all`` (E12) refused under ``mcnemar_bh``. Green before and
+    after on the bare tree (nothing reads a stored seed there), so its green is not evidence."""
+    return 1000 * (int(config_hash(config)[:6], 16) % 100_000) + replicate_index
+
+
 def write_run(
     store: Store,
     run_id: str,
@@ -660,7 +674,7 @@ def write_run(
     errors cycle through ``ERRORS``. Replicate indices run 0.. over both kinds."""
     store.create_run(syn_manifest(run_id))
     records = []
-    for index, ((task, level, variant), (n_ok, n_err)) in enumerate(cells.items()):
+    for (task, level, variant), (n_ok, n_err) in cells.items():
         config = syn_config(task, level, variant)
         fails = n_ok // fail_share
         for k in range(n_ok):
@@ -671,14 +685,14 @@ def write_run(
             )
             records.append(
                 EpisodeRecord.from_episode(
-                    episode, run_id=run_id, config=config, seed=1000 * index + k,
+                    episode, run_id=run_id, config=config, seed=seed_of(config, k),
                     replicate_index=k, wall_time=0.0,
                 )
             )
         for j in range(n_err):
             records.append(
                 EpisodeRecord.errored(
-                    run_id=run_id, config=config, seed=1000 * index + n_ok + j,
+                    run_id=run_id, config=config, seed=seed_of(config, n_ok + j),
                     replicate_index=n_ok + j, error=ERRORS[j % len(ERRORS)], wall_time=0.0,
                 )
             )
@@ -823,7 +837,8 @@ def hand_built_multi(multi: MultiDiffResult) -> MultiDiffResult:
 def hand_built_diff(multi: MultiDiffResult, event: str) -> DiffResult:
     ev = multi.by_event[event]
     return DiffResult(
-        cells=ev.cells, method=multi.method, paired=multi.paired, q=multi.q, event=event,
+        cells=ev.cells, method=multi.method, seed_identity_match=multi.seed_identity_match,
+        unpaired_analysis=multi.unpaired_analysis, q=multi.q, event=event,
         t_unit=multi.t_unit, horizon=multi.horizon, n_safer=ev.n_safer, n_worse=ev.n_worse,
         n_unchanged=ev.n_unchanged, n_not_comparable=multi.n_not_comparable, max_mde=ev.max_mde,
         dropped_a=multi.dropped_a, dropped_b=multi.dropped_b, truncated=multi.truncated,
@@ -1405,7 +1420,7 @@ def test_e14_every_absent_rect_still_says_absent_and_provenance_gains_no_key(syn
 # ---------- E15-E18: the structure ----------
 
 
-def test_e15_schema_is_viewpair_4_and_the_top_level_keys_are_the_twelve(builts: tuple[Built, Built]) -> None:
+def test_e15_schema_is_viewpair_4_and_the_top_level_keys_are_the_thirteen(builts: tuple[Built, Built]) -> None:
     for b in builts:
         assert b.structure["schema"] == SCHEMA == viewer().SCHEMA
         assert tuple(b.structure) == TOP_LEVEL_KEYS
@@ -1749,7 +1764,7 @@ def test_e23_two_builds_are_equal_and_the_structure_and_holes_are_json_strict(bu
 # ---------- E24-E26: the CLI ----------
 
 
-def test_e24_serve_json_on_go1_prints_the_twelve_keys_both_tallies_and_no_holes_binding_nothing(go1_serve_json: Served, go1_store: Store) -> None:
+def test_e24_serve_json_on_go1_prints_the_thirteen_keys_both_tallies_and_no_holes_binding_nothing(go1_serve_json: Served, go1_store: Store) -> None:
     r = go1_serve_json.result
     assert r.code == 0, r.err
     assert go1_serve_json.calls == []

@@ -245,7 +245,7 @@ FIRST_LINE_NUMERIC_FIELDS = ("n_groups", "size_min", "size_median", "size_max", 
 #: F28. Minted on the bare tree at 082c87d (11502ba plus the marker retrofit), 2026-09-07:
 #: ``omnibus(go1-v0, go1-v1, events=("fell",), method="fisher_bh", B=4000, seed=0).to_json()``
 #: with the five p-driven keys removed, ``json.dumps(sort_keys=True)``, sha256.
-F28_OMNIBUS_SHA256 = "03e7984ba22978e20386197f836fb60e0d32032a5b17a8bce400483e3e87296e"
+F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 #: ``src/proofload/diff.py``'s bytes, whole, unchanged since cd5f177 (``git diff --exit-code``).
 #: **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
 #: A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted ``4b3c6ae``) both named
@@ -256,15 +256,15 @@ F28_OMNIBUS_SHA256 = "03e7984ba22978e20386197f836fb60e0d32032a5b17a8bce400483e3e
 DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695dbe5"
 #: S25's O14/O23 digests, restated rather than imported so two frozen oracles do not couple.
 MULTI_JSON_SHA256 = {
-    "fisher_bh": "d67805f9499cea490cc18f09bcb744413a665616a6bb270d01cd12fef14fce69",
-    "mcnemar_bh": "65cc948aa69c891250bb323ba2740408fdfdbf38aeb4f84e69bb2720c7225541",
-    "logrank_bh": "b8811b787928b1f11ece081820b5b9f732a1f5d12a8543fcf4b6421d07f41e29",
+    "fisher_bh": "c284e029ea858e3f50a9ee6ca3b55a1abc61a1b08a1fe213e393939c6e0872b8",
+    "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
+    "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
-CHECK_STDOUT_SHA256 = "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4bf14e3b1"
+CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
-SERVE_STRUCTURE_SHA256 = "f58750a091af8da170f2f89484ae4076f5951c8ace2852bcf882e8b70ddc837d"
+SERVE_STRUCTURE_SHA256 = "6c4a8124d550494791a5c102332cfda6636fe3cf32a5382cea02debcf11fa651"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
@@ -276,9 +276,9 @@ COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee
 FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 E14_SHA256 = {
-    "report.md": "cc1157e3ec709f6ebc55409a77bb3207c73c864e659c0d7e82f3394aafdc57cb",
-    "heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
-    "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
+    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
+    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
 }
 
 #: Golden labels on Go1 (step zero item 6). ``str(value)`` of the config floats.

@@ -138,7 +138,8 @@ def make_diff(
     cells: list[dict[str, Any]],
     *,
     method: str = "fisher_bh",
-    paired: bool = False,
+    seed_identity_match: bool = False,
+    unpaired_analysis: bool = False,
     q: float = 0.05,
     event: str = "fell",
     t_unit: str = "steps",
@@ -156,7 +157,8 @@ def make_diff(
     return DiffResult(
         cells=frame,
         method=method,  # type: ignore[arg-type]
-        paired=paired,
+        seed_identity_match=seed_identity_match,
+        unpaired_analysis=unpaired_analysis,
         q=q,
         event=event,
         t_unit=t_unit,
@@ -491,7 +493,8 @@ def test_i4_counts_and_headline_agree() -> None:
         delta_fn=lambda i, j: (i - 1) * 0.2,
         verdict_fn=lambda i, j, dl: "safer" if dl < 0 else "worse" if dl > 0 else "unchanged",
         skip={(0.3, 30)},
-        paired=True,
+        seed_identity_match=True,
+        unpaired_analysis=True,
     )
     report = build_report(d, spec2())
     present = present_cells(report)
@@ -500,7 +503,8 @@ def test_i4_counts_and_headline_agree() -> None:
         assert count == sum(c.verdict == verdict for c in present)
     safer, n_present, worse, method, q_text, pairing = _parse_headline(report)
     assert (safer, n_present, worse) == (report.n_safer, len(present), report.n_worse)
-    assert method == d.method and pairing == "paired"
+    # P-1 (ADR-052): the token is the requested method's pairing, never the runs' seed identity.
+    assert method == d.method == "fisher_bh" and pairing == "unpaired"
     assert q_text == _sig3(d.q)
     assert report.headline in report.to_markdown() and html_escape(report.headline) in report.to_html()
 
@@ -968,7 +972,7 @@ def test_i16_generated_at_and_manifests_are_omitted_not_invented(golden_diff: Di
     assert with_runs.provenance["run_id_a"] == "go1-v0" and with_runs.provenance["run_id_b"] == "go1-v1"
     assert with_runs.provenance["run_salt"] == golden_frames["ma"].run_salt
     assert "go1-v0" in with_runs.to_markdown() and "go1-v0" not in bare.to_markdown()
-    for key in ("event", "t_unit", "horizon", "method", "paired", "q", "n_not_comparable", "dropped_a", "dropped_b", "truncated", "n_absent", "proofload_version"):
+    for key in ("event", "t_unit", "horizon", "method", "seed_identity_match", "unpaired_analysis", "q", "n_not_comparable", "dropped_a", "dropped_b", "truncated", "n_absent", "proofload_version"):
         assert key in bare.provenance, key
     assert bare.provenance["event"] == "fell" and bare.provenance["n_absent"] == 0
 

@@ -94,7 +94,8 @@ CELLS_COLUMNS = [
 ]
 SUMMARY_FIELDS = [
     "method",
-    "paired",
+    "seed_identity_match",
+    "unpaired_analysis",
     "q",
     "event",
     "t_unit",
@@ -127,8 +128,20 @@ def _manifest(run_id: str = "r", *, run_salt: str = "salt", t_unit: str = "secon
     )
 
 
+def _seed_of(h: str, replicate_index: int) -> int:
+    """A stored seed that is a function of ``(config_hash, replicate_index)``. **C49 (P-1 section
+    7.3), added in P-1 Session A's retrofit**: ``_cframe`` carried no ``seed`` column at all, so
+    ``mcnemar_bh`` ran on every I6 pair with nothing to establish the pairing on -- C18's blindness
+    inside a fixture. Two arms built by ``_cframe`` now store the same seed at the same
+    ``(config_hash, replicate_index)``, which is what a stored pair from one sweep does. Green
+    before and after on the bare tree (nothing reads the column there), so its green is not
+    evidence."""
+    return 1000 * (int(h[:6], 16) % 100_000) + replicate_index
+
+
 def _cframe(cells: dict[str, list[tuple]], *, horizon: float = 5.0) -> pd.DataFrame:
-    """Censored frame from {cell label: [(t, observed) or (t, observed, replicate_index)]}."""
+    """Censored frame from {cell label: [(t, observed) or (t, observed, replicate_index)]}, with
+    the stored ``seed`` a censored store frame carries (C49)."""
     records = []
     for label, rows in cells.items():
         config = {"cell": label}
@@ -144,9 +157,10 @@ def _cframe(cells: dict[str, list[tuple]], *, horizon: float = 5.0) -> pd.DataFr
                     "t": float(t),
                     "observed": bool(observed),
                     "horizon": float(horizon),
+                    "seed": _seed_of(h, int(rep)),
                 }
             )
-    columns = ["config_hash", "config", "replicate_index", "t", "observed", "horizon"]
+    columns = ["config_hash", "config", "replicate_index", "t", "observed", "horizon", "seed"]
     df = pd.DataFrame.from_records(records, columns=columns)
     df["observed"] = df["observed"].astype(bool)
     return df
@@ -224,7 +238,7 @@ def test_i1_golden_sixty_safer_zero_worse(golden: DiffResult) -> None:
     assert len(golden.cells) == CELLS and golden.n_not_comparable == 0
     assert golden.method == "fisher_bh" and golden.q == Q and golden.event == EVENT
     assert golden.t_unit == "seconds" and golden.horizon == 5.0
-    assert golden.paired is True
+    assert golden.seed_identity_match is True
     assert list(golden.cells.columns) == CELLS_COLUMNS
 
 
@@ -339,7 +353,7 @@ def test_i6_mcnemar_matches_statsmodels() -> None:
         a = _one_cell([(1.0, o) for o in obs_a])
         b = _one_cell([(1.0, o) for o in obs_b])
         result = _paired("mcnemar_bh", a, b)
-        assert result.paired is True
+        assert result.seed_identity_match is True
         bb = sum(1 for x, y in zip(obs_a, obs_b, strict=True) if x and not y)
         cc = sum(1 for x, y in zip(obs_a, obs_b, strict=True) if (not x) and y)
         both = sum(1 for x, y in zip(obs_a, obs_b, strict=True) if x and y)
@@ -609,15 +623,17 @@ def test_i13_unpaired_methods_run_with_different_salts_and_report_it(method: str
         a, a.copy(), event=EVENT, method=method,
         manifest_a=_manifest("a", run_salt="s1"), manifest_b=_manifest("b", run_salt="s2"),
     )
-    assert result.paired is False
+    assert result.seed_identity_match is False
     without = diff(a, a.copy(), event=EVENT, method=method)
-    assert without.paired is False
+    assert without.seed_identity_match is False
 
 
-def test_i13_paired_flag_true_when_salts_match() -> None:
+def test_i13_seed_identity_match_true_when_salts_and_stored_seeds_match() -> None:
+    """P-1: the flag is seed identity, not salt equality -- ``_cframe`` stores a seed and both arms
+    carry the same one at each ``(config_hash, replicate_index)`` (C49)."""
     a = _one_cell([(1.0, True), (5.0, False)])
-    assert _paired("fisher_bh", a, a.copy()).paired is True
-    assert _paired("mcnemar_bh", a, a.copy()).paired is True
+    assert _paired("fisher_bh", a, a.copy()).seed_identity_match is True
+    assert _paired("mcnemar_bh", a, a.copy()).seed_identity_match is True
 
 
 # ---------- I14: horizon truncation ----------
@@ -666,7 +682,7 @@ def test_i15_to_markdown_has_header_and_summary(golden: DiffResult) -> None:
         assert col in header, col
     summary = [line for line in lines if not line.lstrip().startswith("|")]
     joined = " ".join(summary)
-    for token in ("n_safer", "n_worse", "max_mde", "method", "paired"):
+    for token in ("n_safer", "n_worse", "max_mde", "method", "seed_identity_match", "unpaired_analysis"):
         assert token in joined, token
     assert str(golden.n_safer) in joined and golden.method in joined
 
@@ -712,7 +728,7 @@ def test_i17_capture_paired_and_logrank_counts(
 ) -> None:
     mcnemar = _fixture_diff(frames, manifests, "mcnemar_bh")
     logrank = _fixture_diff(frames, manifests, "logrank_bh")
-    assert mcnemar.paired is True and mcnemar.method == "mcnemar_bh"
+    assert mcnemar.seed_identity_match is True and mcnemar.method == "mcnemar_bh"
     assert logrank.method == "logrank_bh"
     captured = {
         "event": EVENT,

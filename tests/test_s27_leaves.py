@@ -259,7 +259,7 @@ COLLIDING_NAMES_AT_BASE = frozenset({
 EVENT_COLLISION_LINE = 1318
 
 #: L20. F28's digests restated rather than imported, so two frozen oracles do not couple.
-F28_OMNIBUS_SHA256 = "03e7984ba22978e20386197f836fb60e0d32032a5b17a8bce400483e3e87296e"
+F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 #: **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
 #: A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted ``4b3c6ae``) both named
 #: ``A28`` as their retiring packet; both owners have landed and A28 rewrites all four carriers, so
@@ -268,15 +268,15 @@ F28_OMNIBUS_SHA256 = "03e7984ba22978e20386197f836fb60e0d32032a5b17a8bce400483e3e
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
 DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695dbe5"
 MULTI_JSON_SHA256 = {
-    "fisher_bh": "d67805f9499cea490cc18f09bcb744413a665616a6bb270d01cd12fef14fce69",
-    "mcnemar_bh": "65cc948aa69c891250bb323ba2740408fdfdbf38aeb4f84e69bb2720c7225541",
-    "logrank_bh": "b8811b787928b1f11ece081820b5b9f732a1f5d12a8543fcf4b6421d07f41e29",
+    "fisher_bh": "c284e029ea858e3f50a9ee6ca3b55a1abc61a1b08a1fe213e393939c6e0872b8",
+    "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
+    "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
-CHECK_STDOUT_SHA256 = "d8409ba0180546e115453f6d799a248b3528a49fd716179d90e98da4bf14e3b1"
+CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
-SERVE_STRUCTURE_SHA256 = "f58750a091af8da170f2f89484ae4076f5951c8ace2852bcf882e8b70ddc837d"
+SERVE_STRUCTURE_SHA256 = "6c4a8124d550494791a5c102332cfda6636fe3cf32a5382cea02debcf11fa651"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
@@ -288,9 +288,9 @@ COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee
 FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 E14_SHA256 = {
-    "report.md": "cc1157e3ec709f6ebc55409a77bb3207c73c864e659c0d7e82f3394aafdc57cb",
-    "heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
-    "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
+    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
+    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
 }
 #: The two frozen oracles' bytes: L20's "untouched", in a form a scratch copy can check. Minted at
 #: ``6fd3b9c``; re-minted by S28's retrofit commit, which narrowed both files' E14 clause, and again
@@ -302,8 +302,8 @@ E14_SHA256 = {
 #: which is why ADR-077 does not narrow an oracle-pins-oracle digest. ``test_s25_root.py`` is untouched and
 #: nothing pins this file, so the cascade is one literal deep and terminates here (measured).
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "8025226d8721a1c5ae73ab079600513747dcd771f58274838170fbdd81c9c71b",
-    "tests/test_s26_fault_lines.py": "9a207d8024eca047ce42169d0583579c2c4f5fe4ce744f6b6b0cc5851415f450",
+    "tests/test_s25_root.py": "3e17f2e977fc390c8eadab49ee188800cc66603d4deb36a0fc9167f37eb559ac",
+    "tests/test_s26_fault_lines.py": "9eb6301c735e5ccd18b57a0b2bdbc4ef27088fff01c897a935d6b3cef6c0d47d",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"

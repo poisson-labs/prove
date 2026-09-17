@@ -261,16 +261,20 @@ def test_u8_the_warning_never_switches_the_test() -> None:
         )
 
 
-def test_u9_paired_stays_a_reported_fact_beside_the_unpaired_method() -> None:
-    """The warning reads ``paired``; it does not replace it or restate it. ``paired`` is a
-    fact about the two *runs* -- they share a salt -- and not about the test that ran, and
-    the headline prints it next to the method that discarded it. A reader who knows the
-    difference can see both; a reader who does not is exactly who the warning is for."""
+def test_u9_the_headline_states_the_request_and_seed_identity_is_a_field_beside_it() -> None:
+    """**Inverted by P-1 (ADR-052; Master Action List C1).** Until P-1 this test pinned the
+    defect: the headline printed ``paired`` next to the method that discarded the pairing, and
+    this docstring called that something a reader could see. It was a fact about the *runs*
+    printed where the reader reads about the *analysis*. Now the headline's last token is the
+    requested method's pairing -- ``unpaired`` for ``fisher_bh`` however the runs were produced --
+    and the runs' seed identity is a field, ``seed_identity_match``, with ``unpaired_analysis``
+    beside it saying the identity was there and the request discarded it. The warning is the
+    same fact a third time, on stderr, for the reader who reads nothing else."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UnpairedAnalysis)
         result = multi("fisher_bh")
-    assert result.paired is True
-    assert "fisher_bh" in result.headline() and result.headline().endswith("paired)")
+    assert result.seed_identity_match is True and result.unpaired_analysis is True
+    assert "fisher_bh" in result.headline() and result.headline().endswith("unpaired)")
 
 
 def test_u10_unpaired_analysis_is_a_user_warning() -> None:
@@ -339,8 +343,13 @@ def test_u15_only_m6_names_the_category() -> None:
 
 def test_u16_a_cli_diff_warns_and_the_artifact_is_unchanged_by_it(tmp_path: Path) -> None:
     """End to end: the CLI's diff on a pairable pair raises the warning, and the warning is
-    out of band. Nothing it says reaches the streams the CLI was given, so the bytes a reader
-    tees to a file do not depend on whether two runs shared a salt."""
+    out of band: nothing it says reaches the streams the CLI was given, and ``mcnemar_bh`` is
+    named on neither. **Narrowed by P-1.** This docstring once said the bytes a reader tees to a
+    file do not depend on whether two runs shared a salt; that was already false of
+    ``to_markdown()``'s ``paired=True`` and is now deliberately false of
+    ``seed_identity_match=True, unpaired_analysis=True`` (C24: the fact reaches every artifact).
+    What still holds, and what this pins, is that the warning's own sentence stays off the
+    streams and the CLI names the alternative method nowhere (U14)."""
     store = Store(tmp_path)
     write_run(store, "run-a", SALT, fails=2)
     write_run(store, "run-b", SALT, fails=4)

@@ -121,7 +121,8 @@ REGRESSION_STR_KEYS = ("config_hash", "verdict")
 TRADES_COLUMNS = ["config_hash", "config", "safer_events", "worse_events"]
 MULTI_SCALAR_FIELDS = [
     "method",
-    "paired",
+    "seed_identity_match",
+    "unpaired_analysis",
     "q",
     "t_unit",
     "horizon",
@@ -479,7 +480,10 @@ def test_a1_golden_summary_matches_regression_fixture(golden: DiffResult, regres
     assert golden.dropped_a == regression["dropped_a"] and golden.dropped_b == regression["dropped_b"]
     assert golden.truncated == regression["truncated"]
     assert golden.max_mde == regression["max_mde"]
-    assert golden.paired is regression["paired"]
+    # The S3 record's ``paired`` was salt equality; P-1's ``seed_identity_match`` is the salt plus the
+    # stored seeds on every matched row, and on Go1 (12,800 matched, 0 differ) the two coincide.
+    assert golden.seed_identity_match is regression["paired"] is True
+    assert golden.unpaired_analysis is True
     assert golden.horizon == regression["horizon"] and golden.t_unit == regression["t_unit"]
     assert golden.q == regression["q_threshold"] and golden.method == regression["method"]
     assert len(golden.cells) == regression["n_cells"]
@@ -602,7 +606,7 @@ def test_a5_single_event_via_multi_matches_diff(golden: DiffResult, multi_fell: 
     assert multi_fell.n_tests == CELLS
     assert len(ev.cells) == CELLS and multi_fell.n_not_comparable == 0
     assert list(ev.cells.columns) == CELLS_COLUMNS
-    assert multi_fell.method == "fisher_bh" and multi_fell.paired is True
+    assert multi_fell.method == "fisher_bh" and multi_fell.seed_identity_match is True
     assert multi_fell.q == Q and multi_fell.t_unit == "seconds" and multi_fell.horizon == HORIZON
     assert multi_fell.inferred is False and multi_fell.non_event is None
 
@@ -768,7 +772,8 @@ def _assert_headline(result: MultiDiffResult) -> None:
     assert result.method in paren
     assert f"q<{result.q}" in paren or f"q<{result.q:g}" in paren, paren
     assert re.search(rf"\b{result.n_tests}\b", paren), paren
-    if result.paired:
+    # P-1 (ADR-052): the token states the requested method's pairing, never the runs' seed identity.
+    if result.method == "mcnemar_bh":
         assert "paired" in paren and "unpaired" not in paren
     else:
         assert "unpaired" in paren
@@ -777,7 +782,7 @@ def _assert_headline(result: MultiDiffResult) -> None:
 def test_a10_headline_on_fixture(multi_fell: MultiDiffResult) -> None:
     printed, paren = _headline_counts(multi_fell.headline())
     assert printed == [(EVENT, PUBLISHED_SAFER, PUBLISHED_WORSE)]
-    assert "fisher_bh" in paren and "400" in paren and "paired" in paren and "unpaired" not in paren
+    assert "fisher_bh" in paren and "400" in paren and "unpaired" in paren
     _assert_headline(multi_fell)
 
 
@@ -790,7 +795,7 @@ def test_a10_headline_orders_worse_then_safer_then_name(headline_case: MultiDiff
     printed, paren = _headline_counts(headline_case.headline())
     assert [e for e, _, _ in printed] == ["x", "y", "z"]
     assert printed == [("x", 0, 2), ("y", 1, 0), ("z", 1, 0)]
-    assert headline_case.paired is False and "unpaired" in paren
+    assert headline_case.seed_identity_match is False and "unpaired" in paren
     assert re.search(r"\b15\b", paren) and headline_case.n_tests == 15
     _assert_headline(headline_case)
 
@@ -1069,7 +1074,7 @@ def test_a17_mcnemar_runs_when_paired() -> None:
     a = _raw({"c": _cell(timeout=12, violated=2)})
     b = _raw({"c": _cell(timeout=4, violated=6)})
     result = _multi(a, b, ["timeout", "violated"], method="mcnemar_bh")
-    assert result.paired is True and result.method == "mcnemar_bh"
+    assert result.seed_identity_match is True and result.method == "mcnemar_bh"
     assert result.n_tests == 2
 
 
@@ -1078,8 +1083,8 @@ def test_a17_unpaired_methods_run_with_different_salts(method: str) -> None:
     a = _raw({"c": _cell(timeout=12, violated=2)})
     b = _raw({"c": _cell(timeout=4, violated=6)})
     result = _multi(a, b, ["timeout", "violated"], method=method, salt_a="s1", salt_b="s2")
-    assert result.paired is False
-    assert _multi(a, b, ["timeout", "violated"], method=method, manifests=False).paired is False
+    assert result.seed_identity_match is False
+    assert _multi(a, b, ["timeout", "violated"], method=method, manifests=False).seed_identity_match is False
 
 
 # ---------- A18: unit and horizon guards ----------

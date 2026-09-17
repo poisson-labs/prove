@@ -719,7 +719,7 @@ def test_i9_diff_json(go1_store: Store) -> None:
     fell = data["by_event"]["fell"]
     assert fell["n_safer"] == 60 and fell["n_worse"] == 0
     assert data["method"] == "fisher_bh" and data["q"] == 0.05
-    assert data["paired"] is True
+    assert data["seed_identity_match"] is True and data["unpaired_analysis"] is True and "paired" not in data
     assert len(fell["cells"]) == go1_store.read("go1-v0")["config_hash"].nunique() == 400
 
 
@@ -749,7 +749,7 @@ def test_i9_diff_methods_all_markdown_has_method_table(go1_store: Store) -> None
     assert r.code == 0, r.text
     for method in METHODS:
         assert method in r.out, method
-    for column in ("paired", "safer", "worse", "unchanged", "max_mde"):
+    for column in ("pairing", "safer", "worse", "unchanged", "max_mde"):
         assert column in r.out, column
 
 
@@ -785,7 +785,8 @@ def test_i10_mcnemar_on_paired_runs_works(mock_runs: MockRuns) -> None:
         ]
     )
     assert r.code == 0, r.text
-    assert json.loads(r.out)["paired"] is True
+    payload = json.loads(r.out)
+    assert payload["seed_identity_match"] is True and payload["unpaired_analysis"] is False and "paired" not in payload
 
 
 # ---------- I11: report files ----------
@@ -1255,7 +1256,8 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     tail = re.search(r"over (\d+) tests, (paired|unpaired)\)", md)
     assert tail, md
     assert int(tail.group(1)) == QUICKSTART_CELLS
-    assert tail.group(2) == "paired"
+    # P-1 (ADR-052): the quickstart diffs under the default fisher_bh, and the token states the request.
+    assert tail.group(2) == "unpaired"
     assert Store(tmp_path / "proofload-runs").runs() == sorted([run_a, run_b])
 
 

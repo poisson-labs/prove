@@ -172,10 +172,10 @@ INTERVAL_LINE = re.compile(
 #: a diff of two renders. ``PAIR`` is ``multi_diff(go1-v0, go1-v1, events=("fell", "survived"),
 #: method="fisher_bh")``; ``FELL_LOGRANK`` is the same pair at ``events=("fell",)`` and
 #: ``method="logrank_bh"``.
-PAIR_MARKDOWN_SHA256 = "b6e3494a5de57c031792b41e22a66fe3537d9cdd0721f9f49d88ae8fcaad59e7"
+PAIR_MARKDOWN_SHA256 = "c4307336f43850388686742ce04c65acba664e1c504b079f1eea76b7062c37f5"
 PAIR_HEADLINE = (
     "survived: 0 safer, 60 worse · fell: 60 safer, 0 worse\n"
-    "(aalen_johansen + fisher_bh, BH q<0.05 over 800 tests, paired)"
+    "(aalen_johansen + fisher_bh, BH q<0.05 over 800 tests, unpaired)"
 )
 PAIR_TRADE_LINE = (
     "Trade: fell fell in 60 cells where survived rose. "
@@ -185,10 +185,10 @@ PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
 COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee5fa"
 
-FELL_LOGRANK_MARKDOWN_SHA256 = "8bc1c7bdd18d7009c8f97d96957c72eecec27efa0a4566d89a6931a833f1421f"
+FELL_LOGRANK_MARKDOWN_SHA256 = "6ffbb64ecbc8e6ead6aa415aaba0a10de49a5fe99ee7e8a81aba4bd60579991f"
 FELL_LOGRANK_HEADLINE = (
     "fell: 88 safer, 0 worse\n"
-    "(aalen_johansen + logrank_bh (cause-specific), BH q<0.05 over 400 tests, paired)"
+    "(aalen_johansen + logrank_bh (cause-specific), BH q<0.05 over 400 tests, unpaired)"
 )
 FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
 
@@ -197,9 +197,9 @@ FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d004
 #: ``report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw``.
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 E14_SHA256 = {
-    "report.md": "cc1157e3ec709f6ebc55409a77bb3207c73c864e659c0d7e82f3394aafdc57cb",
-    "heatmap.svg": "3954321ec392b4438e02b295b117000088c1886c2eba225f8d7997a2cac374eb",
-    "receipt.html": "974fa0a9b4ef1f81afceac39ff81f3ffe2423ae0a1d5cd84409e7e251dc15ad3",
+    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
+    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
 }
 
 #: Step zero, measurement 2, restated as a constant so C2's fixture cannot be swapped for one
@@ -898,7 +898,7 @@ def test_c11_the_two_counts_are_not_interchangeable_on_this_fixture(go1_pair: An
 def test_c12_the_same_frames_give_the_same_interval_pairable_or_not(synth_root: Path) -> None:
     """ADR-052, and the trap it was written for. ``moved-b`` and ``moved-b-unpaired`` hold
     identical episodes and differ only in ``run_salt``, so the two diffs below see the same
-    tables and differ only in ``paired``.
+    tables and differ only in ``seed_identity_match`` (``paired`` until P-1).
 
     Two runs that happen to share a run salt must not get a different number from two that do
     not, or the statistic becomes a property of run provenance rather than of the request, and a
@@ -908,7 +908,7 @@ def test_c12_the_same_frames_give_the_same_interval_pairable_or_not(synth_root: 
     """
     paired = synth_diff(synth_root, "moved-a", "moved-b", "fisher_bh")
     unpaired = synth_diff(synth_root, "moved-a", "moved-b-unpaired", "fisher_bh")
-    assert paired.paired is True and unpaired.paired is False
+    assert paired.seed_identity_match is True and unpaired.seed_identity_match is False
     left = paired.intervals.sort_values(["event", "config_hash"]).reset_index(drop=True)
     right = unpaired.intervals.sort_values(["event", "config_hash"]).reset_index(drop=True)
     assert list(left["basis"]) == list(right["basis"]) == ["score_rd"] * len(left)
@@ -925,7 +925,7 @@ def test_c12_the_paired_method_takes_the_paired_basis_on_the_very_same_frames(
     never reached without pairing."""
     fisher = synth_diff(synth_root, "moved-a", "moved-b", "fisher_bh")
     mcnemar = synth_diff(synth_root, "moved-a", "moved-b", "mcnemar_bh")
-    assert fisher.paired is True and mcnemar.paired is True
+    assert fisher.seed_identity_match is True and mcnemar.seed_identity_match is True
     assert set(fisher.intervals["basis"]) == {"score_rd"}
     assert set(mcnemar.intervals["basis"]) == {"score_rd_paired"}
 
@@ -1029,9 +1029,13 @@ def test_c17_every_basis_on_every_frame_is_drawn_from_that_tuple(
 
 
 def test_c14_the_go1_markdown_is_byte_identical_to_the_bare_tree(go1_pair: Any) -> None:
-    """``to_markdown()`` does not gain a byte. It is the cheapest surface in the repo to break
+    """``to_markdown()`` gains nothing from S24. It is the cheapest surface in the repo to break
     and the dearest to re-baseline, and S21 held the same line for ``coverage``. A digest minted
-    before the build exists, never a diff of two renders."""
+    before the build exists, never a diff of two renders. **Re-minted by P-1 Session A** off its
+    shadow shim: the parameter line now reads ``seed_identity_match=True, unpaired_analysis=True``
+    where ``paired=True`` stood and the headline ends ``unpaired)`` (P-1 section 3.3); S24 section
+    0.8's *does not gain a byte* was S24's rule for S24's packet and P-1 retires it (P-1 section 8).
+    The interval block's bytes, which S24 owns, are asserted unchanged by P-1's own Y11."""
     assert sha256_of_text(go1_pair.to_markdown()) == PAIR_MARKDOWN_SHA256
 
 
@@ -1042,10 +1046,11 @@ def test_c14_the_go1_logrank_markdown_is_byte_identical_too(go1_fell_logrank: An
 def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
     go1_pair: Any, go1_fell_logrank: Any
 ) -> None:
-    """``headline()``, ``trade_line()`` and ``check()`` gain nothing. The literals are the ones
-    the bare tree produces, including ``headline()``'s ``paired`` after the method that
-    discarded it -- an open item in Rollout Plan Phase 2, pinned here as *current wording* so
-    S24 cannot be what moves it."""
+    """``headline()``, ``trade_line()`` and ``check()`` gain nothing from S24. The literals are
+    the ones the tree produces. **P-1 moved the headline's last token** to the requested method's
+    pairing (ADR-052) -- ``unpaired`` under ``fisher_bh`` and ``logrank_bh`` however the runs were
+    produced -- which is the Rollout Plan Phase 2 item this docstring once pinned as *current
+    wording* so that S24 could not be what moved it; P-1 was."""
     assert go1_pair.headline() == PAIR_HEADLINE
     assert go1_pair.trade_line() == PAIR_TRADE_LINE
     assert go1_pair.check() is False and go1_pair.check("any") is False
@@ -1117,11 +1122,11 @@ def test_c14_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_pa
 
 def test_c15_the_family_its_q_and_its_pairing_are_unchanged(go1_pair: Any) -> None:
     """S24 adds an interval around a number that is already there. It does not retest, rescope
-    or reweight anything: ``n_tests`` is the same 800, ``q`` the same 0.05, ``paired`` the same
+    or reweight anything: ``n_tests`` is the same 800, ``q`` the same 0.05, ``seed_identity_match`` (``paired`` until P-1) the same
     ``True``, and ``coverage`` the same frame S21 built."""
     assert go1_pair.n_tests == 800
     assert go1_pair.q == 0.05
-    assert go1_pair.paired is True
+    assert go1_pair.seed_identity_match is True
     assert go1_pair.truncated == 0
     assert len(go1_pair.coverage) == 400
     assert sha256_of_text(go1_pair.coverage.to_json(orient="records")) == COVERAGE_SHA256
@@ -1144,7 +1149,7 @@ def test_c15_to_json_gains_the_six_keys_and_keeps_every_key_it_had(go1_pair: Any
     bare tree emitted is still there."""
     payload = go1_pair.to_json()
     for key in (
-        "method", "paired", "q", "t_unit", "horizon", "n_tests", "n_not_comparable",
+        "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon", "n_tests", "n_not_comparable",
         "dropped_a", "dropped_b", "truncated", "inferred", "non_event",
         "events", "by_event", "trades", "coverage", "headline", "trade_line",
     ):
@@ -1162,7 +1167,7 @@ def test_c15_a_hand_built_result_still_constructs_without_any_new_field(go1_pair
     them. Rebuilt here from the fields that existed before this packet, and the result must
     carry the absent-interval state rather than a half-populated one."""
     before = (
-        "events", "by_event", "method", "paired", "q", "t_unit", "horizon", "n_tests",
+        "events", "by_event", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon", "n_tests",
         "n_not_comparable", "dropped_a", "dropped_b", "truncated", "trades", "inferred",
         "non_event",
     )
