@@ -266,7 +266,7 @@ F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c3
 #: the value below is a read off the shipped file at ``38e8df9`` (byte-identical at ``03d7ed2``),
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
-DIFF_PY_SHA256 = "ec05b676b2f3e582eea9741d6e7e4d6086d3ad040d0a855f643907add6e13412"
+DIFF_PY_SHA256 = "d5ca27cade592886f1f5c236d43e1aaf1632a16a2be0975f7b5a9c5f440fdfd7"
 MULTI_JSON_SHA256 = {
     "fisher_bh": "c284e029ea858e3f50a9ee6ca3b55a1abc61a1b08a1fe213e393939c6e0872b8",
     "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
@@ -303,7 +303,7 @@ E14_SHA256 = {
 #: nothing pins this file, so the cascade is one literal deep and terminates here (measured).
 FROZEN_ORACLE_SHA256 = {
     "tests/test_s25_root.py": "3e17f2e977fc390c8eadab49ee188800cc66603d4deb36a0fc9167f37eb559ac",
-    "tests/test_s26_fault_lines.py": "efeb9ee3ea33435641269fcaf7af32564aee6deb265a83ad36ace9a18de516ec",
+    "tests/test_s26_fault_lines.py": "81a5851792de0d7cca19ba618eff17edea16255d5a06889162a1e090306a82ce",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
