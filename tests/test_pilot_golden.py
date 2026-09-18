@@ -248,8 +248,9 @@ WALL_CLOCK_S = 10.0
 FAST_WALL_CLOCK_S = 1.0
 HANG_SLACK_S = 8.0  # interpreter start, the kill and the join, on top of the wall clock; an upper bound only
 HANG_SLEEP_S = 30.0  # what the fixture candidate sleeps; only the wall clock ends it
-CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
-CONTENT_PREFIXES = ("gen_ai.prompt", "gen_ai.completion")
+#: A8b: test-local, and narrower than the public ``trace.CONTENT_KEYS``; renamed so neither shadows it.
+GENAI_CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
+GENAI_CONTENT_PREFIXES = ("gen_ai.prompt", "gen_ai.completion")
 SALT = "golden-pilot-oracle-salt"
 EPOCH = 1_756_900_000_000_000_000
 STEP_NS = 10_000_000
@@ -258,12 +259,16 @@ STEP_NS = 10_000_000
 # the __all__ lists, copied verbatim from tests/test_m3_crash_trace.py.
 TRACE_EXPORTS = [
     # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
-    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY -- in trace.py's own order: constants, classes,
-    # functions, each sorted. 25 names; FAULT_KEY / FAULT_POSITION_KEY are not A8a's (section 10 Q3).
-    "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
-    "OBSERVATION_KEYS", "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES",
+    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants --
+    # CONTENT_KEYS, OBSERVATION_HEAD_BYTES, OBSERVATION_LIMIT_BYTES, OBSERVATION_TAIL_BYTES,
+    # TRUNCATED_KEY -- and two functions, finalize and truncate_observations. trace.py's own
+    # order: constants, classes, functions, each sorted. 32 names.
+    "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
+    "OBSERVATION_HEAD_BYTES", "OBSERVATION_KEYS", "OBSERVATION_LIMIT_BYTES", "OBSERVATION_TAIL_BYTES",
+    "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES", "TRUNCATED_KEY",
     "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
-    "assemble", "collect", "from_litellm", "from_otel", "merge", "record", "split", "step",
+    "assemble", "collect", "finalize", "from_litellm", "from_otel", "merge", "record", "split", "step",
+    "truncate_observations",
 ]
 OTEL_EXPORTS = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
 MODAL_EXPORTS = [
@@ -1134,7 +1139,7 @@ def test_p7_with_the_instrumentor_every_row_holds_one_stamped_codeless_llm_span_
             assert span.attrs.get(RUN_ID_KEY) == r["run_id"], (span.name, span.attrs)
             assert span.attrs.get(EPISODE_KEY) == episode_id, (span.name, span.attrs)
             assert span.code is None, span
-            assert not any(k in CONTENT_KEYS or k.startswith(CONTENT_PREFIXES) for k in span.attrs), sorted(span.attrs)
+            assert not any(k in GENAI_CONTENT_KEYS or k.startswith(GENAI_CONTENT_PREFIXES) for k in span.attrs), sorted(span.attrs)
         own = [s for s in trace.spans if s.kind != "llm"]
         assert [s.kind for s in trace.ordered() if s.kind != "llm"] == ["agent", "tool", "tool"], own
         for span in own:

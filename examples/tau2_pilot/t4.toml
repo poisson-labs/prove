@@ -251,8 +251,8 @@ task_id = "49"
 # Capture, on and asking for content. CAP2 measured 2026-09-14 that every one of the
 # 21,499 observation values the store holds is 15-16 bytes, because the only substrate
 # that ever captured content ran content = false. This run is the first realistic
-# agentic payload the capture path will see, and A8b's max_span_bytes is untested until
-# it does.
+# agentic payload the capture path will see, and A8b's max_observation_bytes is
+# untested until it does.
 #
 # content = true is NECESSARY AND NOT SUFFICIENT. Measured 2026-09-14 against litellm
 # 1.80.0 + openai 2.54.0 + opentelemetry-instrumentation-openai-v2 2.4b0: the
@@ -261,13 +261,14 @@ task_id = "49"
 # SPAN_AND_EVENT) in the container. Proofload's content flag decides what it KEEPS; that
 # variable decides what the instrumentor EMITS. The Dockerfile sets it.
 #
-# max_span_bytes stays at the shipped default. It is the number under test: an airline
-# turn's message list is far over it, so the value is replaced by a marker that records
-# the value's own byte length -- which is the measurement, at a bounded storage cost.
+# max_observation_bytes stays at the shipped default. It is the number under test: an
+# airline turn's message list is far over it, so the value is stored as its head and
+# its tail, with bytes_original recording its whole byte length -- which is the
+# measurement, at a bounded storage cost.
 [capture]
 instrument = ["openai"]
 content = true
-max_span_bytes = 8192
+max_observation_bytes = 8192
 max_spans = 1000
 
 [modal]

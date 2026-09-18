@@ -124,12 +124,16 @@ TRACE_FIELDS = ("spans", "source", "source_version", "dropped", "truncated", "al
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
     # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
-    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY -- in trace.py's own order: constants, classes,
-    # functions, each sorted. 25 names; FAULT_KEY / FAULT_POSITION_KEY are not A8a's (section 10 Q3).
-    "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
-    "OBSERVATION_KEYS", "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES",
+    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants --
+    # CONTENT_KEYS, OBSERVATION_HEAD_BYTES, OBSERVATION_LIMIT_BYTES, OBSERVATION_TAIL_BYTES,
+    # TRUNCATED_KEY -- and two functions, finalize and truncate_observations. trace.py's own
+    # order: constants, classes, functions, each sorted. 32 names.
+    "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
+    "OBSERVATION_HEAD_BYTES", "OBSERVATION_KEYS", "OBSERVATION_LIMIT_BYTES", "OBSERVATION_TAIL_BYTES",
+    "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES", "TRUNCATED_KEY",
     "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
-    "assemble", "collect", "from_litellm", "from_otel", "merge", "record", "split", "step",
+    "assemble", "collect", "finalize", "from_litellm", "from_otel", "merge", "record", "split", "step",
+    "truncate_observations",
 ]
 OTEL_EXPORTS = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
 MODAL_EXPORTS = [
@@ -328,7 +332,7 @@ def jobs_of(p: Any) -> list[Job]:
 
 
 def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {"run_id": run_id, "instrument": [], "content": False, "max_span_bytes": 8192, "max_spans": 1000}
+    payload: dict[str, Any] = {"run_id": run_id, "instrument": [], "content": False, "max_observation_bytes": 8192, "max_spans": 1000}  # A8b: the renamed transport field
     payload.update(overrides)
     return payload
 

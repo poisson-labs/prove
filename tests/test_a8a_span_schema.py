@@ -159,7 +159,7 @@ LIFTED_CARRIERS = (
     "proofload.step_name", "proofload.outcome", "proofload.outcome_by", "proofload.attempt", "proofload.gate",
 )
 MANIFEST_CAPTURE_KEYS = frozenset({
-    "requested", "active", "reason", "instrumented", "semconv", "alias_map_version", "content", "max_span_bytes", "max_spans",
+    "requested", "active", "reason", "instrumented", "semconv", "alias_map_version", "content", "max_observation_bytes", "max_spans",  # A8b: the key's second move (A8a T4)
 })
 OTLP_FIXTURES = ("otlp_agent_chat.json", "otlp_kinds.json", "otlp_aliases.json", "otlp_dropped.json")
 STEP_LINE_FILES = ("test_m10_cli.py", "test_m12_trace.py", "test_m3_crash_trace.py", "test_m3_timeout_trace.py", "test_m4_read.py")
@@ -173,7 +173,10 @@ A7_SURFACE: dict[str, dict[str, str]] = {
         "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
         "_ObservationKeys": "234e6e2bf19ab9d167fb4a9fd108c6c6e5843ee0730abde04a2b92e5688b7f41",
         "OBSERVATION_KEYS": "0f1224d8e3bfd231b802dc9e642e3d1f09aecaeb95786ed0432659a7f605e98d",
-        "split": "a63f24ba1ff792cce8498003b042529464cb655ef262d516753c5486a113df24",
+        # ``split`` retired from this table by A8b Session A, narrowed and never re-minted (ADR-077 / C19):
+        # A8b widens its loop body, which is the one A7 symbol A8b may edit. Owner: A8b. Cover:
+        # tests/test_a8b_cut_and_cap.py P8-25, which re-asserts every other symbol here byte-identical,
+        # pins split's signature line and confines its edit to the loop. Digest at retirement: a63f24ba...13df24.
         "assemble": "89ec3fc90530156b4a35bfedd2d5fd5da32412bc70b9d66f80be089716e5a1fe",
     },
     "store.py": {
@@ -756,7 +759,7 @@ def test_p8_17_environment_capture_has_the_nine_keys_and_alias_map_version_is_th
     record = _capture_record(CaptureSpec(), CaptureStatus(requested=False, active=False, reason=None, instrumented=()))
     assert set(record) == MANIFEST_CAPTURE_KEYS, sorted(record)
     assert record["alias_map_version"] == ALIAS_MAP_VERSION and record["semconv"] == OTEL_SEMCONV_VERSION
-    assert record["max_span_bytes"] == 8_192  # A8b renames this key; A8a keeps the shipped spelling
+    assert record["max_observation_bytes"] == 8_192  # A8b: the renamed key; A8a kept the shipped spelling
 
 
 # ---------- P8-18: inspect's nine columns ----------

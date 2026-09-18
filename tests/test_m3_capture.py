@@ -88,12 +88,14 @@ MODULE = __name__
 PACKAGE = Path(proofload.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
 RUN_ID_KEY = "proofload.run_id"
 EPISODE_KEY = "proofload.episode"
-CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
+#: A8b: test-local and narrower than the public ``trace.CONTENT_KEYS`` (six prefix families more);
+#: renamed so it cannot shadow it. C9 covers the shipped half only -- the widening is the A8b oracle's P8-10.
+GENAI_CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
 OVERRIDE_MESSAGE = "Overriding of current TracerProvider is not allowed"
 PUBLIC_SURFACE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
-SPEC_FIELDS = ("instrument", "content", "max_span_bytes", "max_spans")
+SPEC_FIELDS = ("instrument", "content", "max_observation_bytes", "max_spans")  # A8b: the rename
 STATUS_FIELDS = ("requested", "active", "reason", "instrumented")
-MANIFEST_KEYS = frozenset({*STATUS_FIELDS, "semconv", "alias_map_version", "content", "max_span_bytes", "max_spans"})  # A8a: + alias_map_version; A8b renames max_span_bytes
+MANIFEST_KEYS = frozenset({*STATUS_FIELDS, "semconv", "alias_map_version", "content", "max_observation_bytes", "max_spans"})  # A8a: + alias_map_version; A8b: the byte field renamed
 TOUCHED_FILES = ("capture.py", "executor.py", "executor_modal.py", "sampler.py", "cli.py")
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 FAKE_INSTRUMENTOR = "oracle-fake"
@@ -911,7 +913,7 @@ def test_c4_the_reason_reaches_the_manifest_and_the_run_proceeds(tmp_path: Path)
 
 def test_c4_the_manifest_records_the_whole_capture_request(tmp_path: Path) -> None:
     fake = register_fake_instrumentors(tmp_path / "fake")
-    table = {"instrument": [FAKE_INSTRUMENTOR], "content": True, "max_span_bytes": 4096, "max_spans": 50}
+    table = {"instrument": [FAKE_INSTRUMENTOR], "content": True, "max_observation_bytes": 4096, "max_spans": 50}
     toml = write(tmp_path / "sweep.toml", sweep_toml(capture=table))
     r = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:otel_rollout", SALT, None, str(fake))
     record = Store(tmp_path / "store").manifest(r["run_id"]).environment["capture"]
@@ -919,7 +921,7 @@ def test_c4_the_manifest_records_the_whole_capture_request(tmp_path: Path) -> No
     assert record["requested"] is True and record["active"] is True and record["reason"] is None, record
     assert record["instrumented"] == [FAKE_INSTRUMENTOR]
     assert record["semconv"] == OTEL_SEMCONV_VERSION
-    assert (record["content"], record["max_span_bytes"], record["max_spans"]) == (True, 4096, 50)
+    assert (record["content"], record["max_observation_bytes"], record["max_spans"]) == (True, 4096, 50)
 
 
 # ---------- C5: every row of a local run carries a stamped trace ----------
@@ -962,7 +964,7 @@ def test_c5_every_row_of_a_local_run_carries_a_stamped_trace(tmp_path: Path, epi
 
 
 def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {"run_id": run_id, "instrument": [], "content": False, "max_span_bytes": 8192, "max_spans": 1000}
+    payload: dict[str, Any] = {"run_id": run_id, "instrument": [], "content": False, "max_observation_bytes": 8192, "max_spans": 1000}  # A8b: the renamed transport field
     payload.update(overrides)
     return payload
 
@@ -1124,7 +1126,7 @@ def test_c9_content_attributes_are_stripped_when_content_is_off() -> None:
     r = isolated(child_capture_spans, {}, [{"name": "chat", "attrs": CONTENT_ATTRS}])
     assert r["status"]["active"] is True
     (span,) = Trace.from_dict(r["meta"]).spans
-    for key in CONTENT_KEYS:
+    for key in GENAI_CONTENT_KEYS:
         assert key not in span.attrs, (key, span.attrs)
     assert span.attrs["server.address"] == "api.example"
     assert span.attrs[RUN_ID_KEY] == RUN_ID and span.attrs[EPISODE_KEY] == "cfg-7:1"
@@ -1133,35 +1135,46 @@ def test_c9_content_attributes_are_stripped_when_content_is_off() -> None:
 def test_c9_content_attributes_survive_when_content_is_on() -> None:
     r = isolated(child_capture_spans, {"content": True}, [{"name": "chat", "attrs": CONTENT_ATTRS}])
     (span,) = Trace.from_dict(r["meta"]).spans
-    for key in CONTENT_KEYS:
+    for key in GENAI_CONTENT_KEYS:
         assert span.attrs[key] == CONTENT_ATTRS[key], (key, span.attrs)
 
 
-# ---------- C10: the size budget, asserted against attrs ----------
+# ---------- C10: the cut (A8b; was the size budget), asserted against attrs ----------
 
 
-def test_c10_an_oversized_span_has_its_offending_attribute_replaced_by_a_marker_in_attrs() -> None:
+def test_c10_an_oversized_observation_value_is_stored_head_and_tail_in_attrs() -> None:
+    """A8b (spec section 7.1 group 4): was ``..._has_its_offending_attribute_replaced_by_a_marker_in_attrs``.
+    The marker, the per-span total and C30's wording are retired; the unit is one observation value
+    and the bounds are the limit's split (ADR-082): 768 + 256 at 1024. The per-span ``<= 1024``
+    clause is deleted, not ported -- the wrapper alone holds 1,024 bytes of content plus its keys."""
     giant = json.dumps([{"role": "user", "content": "x" * 8192}])
+    assert len(giant.encode("utf-8")) == 8225 and giant.isascii()
     attrs = {"gen_ai.input.messages": giant, "gen_ai.output.messages": "[]", "server.address": "api.example"}
-    r = isolated(child_capture_spans, {"content": True, "max_span_bytes": 1024}, [{"name": "chat", "attrs": attrs}])
+    r = isolated(child_capture_spans, {"content": True, "max_observation_bytes": 1024}, [{"name": "chat", "attrs": attrs}])
     (span,) = Trace.from_dict(r["meta"]).spans
-    # from_otel never populates these two; a budget written against them is inert.
+    # from_otel never populates these two on a captured span; the cut itself covers both fields.
     assert span.input is None and span.output is None
-    marker = span.attrs["gen_ai.input.messages"]
-    assert marker != giant, "the offending value was not replaced"
-    lengths = {str(len(giant.encode("utf-8"))), str(len(json.dumps(giant).encode("utf-8")))}
-    assert any(length in json.dumps(marker) for length in lengths), (marker, lengths)
-    assert len(json.dumps(span.attrs).encode("utf-8")) <= 1024, span.attrs
-    # Only the offending value is replaced; small values and the routing stamps survive.
+    wrapper = span.attrs["gen_ai.input.messages"]
+    assert isinstance(wrapper, dict) and set(wrapper) == {"proofload.truncated"}, wrapper
+    cut = wrapper["proofload.truncated"]
+    assert set(cut) == {"head", "tail", "bytes_original"}, sorted(cut)
+    assert cut["head"] == giant[:768] and cut["tail"] == giant[-256:] and cut["bytes_original"] == 8225, cut
+    assert span.truncated == "observation" and span.bytes_original == 8225, (span.truncated, span.bytes_original)
+    # Only the over-limit value is cut; small values and the routing stamps are stored whole.
     assert span.attrs["gen_ai.output.messages"] == "[]" and span.attrs["server.address"] == "api.example"
     assert span.attrs[RUN_ID_KEY] == RUN_ID and span.attrs[EPISODE_KEY] == "cfg-7:1"
 
 
-def test_c10_the_budget_is_inert_when_content_is_off() -> None:
+def test_c10_the_cut_runs_when_content_is_off() -> None:
+    """A8b (spec section 7.1 group 4): was ``test_c10_the_budget_is_inert_when_content_is_off``, whose
+    name stated the behaviour A8b inverts. Spec section 0.4's worked case: A6's absolute constants
+    would store ``"y" * 300`` as both head and tail; the limit's split stores 48 + 16."""
     big = "y" * 300
-    r = isolated(child_capture_spans, {"max_span_bytes": 64}, [{"name": "chat", "attrs": {"big.attribute": big}}])
+    r = isolated(child_capture_spans, {"max_observation_bytes": 64}, [{"name": "chat", "attrs": {"big.attribute": big}}])
     (span,) = Trace.from_dict(r["meta"]).spans
-    assert span.attrs["big.attribute"] == big, span.attrs
+    assert span.attrs["big.attribute"] == {"proofload.truncated": {"head": "y" * 48, "tail": "y" * 16, "bytes_original": 300}}, span.attrs
+    assert 48 + 16 <= 64 < 300
+    assert span.truncated == "observation" and span.bytes_original == 300, (span.truncated, span.bytes_original)
 
 
 def test_c10_spans_beyond_max_spans_are_dropped_and_counted() -> None:
@@ -1308,7 +1321,7 @@ def test_section_2_capture_spec_fields_defaults_and_frozenness() -> None:
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == SPEC_FIELDS
     spec = CaptureSpec()
-    assert (spec.instrument, spec.content, spec.max_span_bytes, spec.max_spans) == ((), False, 8_192, 1_000)
+    assert (spec.instrument, spec.content, spec.max_observation_bytes, spec.max_spans) == ((), False, 8192, None)  # A8b: the rename, and D6's cap off by default
     with pytest.raises(dataclasses.FrozenInstanceError):
         spec.content = True  # type: ignore[misc]
 

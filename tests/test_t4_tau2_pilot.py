@@ -212,7 +212,7 @@ def test_sweep_file_asks_for_content_capture() -> None:
     assert capture is not None
     assert capture.instrument == ("openai",)
     assert capture.content is True
-    assert capture.max_span_bytes == 8192
+    assert capture.max_observation_bytes == 8192  # A8b: rewritten with t4.toml, never without it
 
 
 # ---------- the junk cells, measured rather than read ----------
