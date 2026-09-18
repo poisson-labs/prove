@@ -50,6 +50,7 @@ from proofload.trace import (
     OTEL_SEMCONV_VERSION,
     Trace,
     TraceValidationError,
+    finalize,
     merge,
 )
 
@@ -343,7 +344,7 @@ def _capture_line(spec: CaptureSpec | None) -> str | None:
     named = ", ".join(spec.instrument) if spec.instrument else "none (OTel API only)"
     return (
         f"Capture: on · instrument: {named} · content: {'on' if spec.content else 'off'} · "
-        f"max {spec.max_spans} spans/episode"
+        + ("no span cap" if spec.max_spans is None else f"max {spec.max_spans} spans/episode")
     )
 
 
@@ -752,7 +753,7 @@ def _capture_record(spec: CaptureSpec, status: CaptureStatus) -> dict[str, Any]:
         "semconv": OTEL_SEMCONV_VERSION,
         "alias_map_version": ALIAS_MAP_VERSION,
         "content": spec.content,
-        "max_span_bytes": spec.max_span_bytes,
+        "max_observation_bytes": spec.max_observation_bytes,
         "max_spans": spec.max_spans,
     }
 
@@ -796,14 +797,41 @@ def _empty_envelope() -> dict[str, Any]:
     ).to_dict()
 
 
-def _with_capture_envelope(record: EpisodeRecord, active: bool) -> EpisodeRecord:
-    """Attach the empty envelope to a row that ran under active capture and carries no trace.
+def _finalized(record: EpisodeRecord) -> EpisodeRecord:
+    """``finalize`` over a row's own trace, on its way to the store.
 
-    Rule zero (C7) is untouched: this runs on the built row, after ``_merge_capture`` has
-    already declined to write an empty capture over a rollout's own trace. Inside ``_classify``
-    it would break that; here it cannot.
+    **It never raises.** ``record.meta["trace"]`` is a plain dict that nothing has validated,
+    and A7's P7-9 pins that one which is not a valid trace dict is stored exactly as written,
+    both trace columns null, with ``Store.append`` not raising. ``Trace.from_dict`` here runs
+    one frame before the guard written for it, so the guard has to be here too.
+
+    The record comes back untouched when nothing was cut -- ``truncate_observations`` returns
+    the trace itself in that case -- so a trace that needed no cut is stored byte for byte as
+    it arrived, and no existing run's stored bytes move.
     """
-    if not active or "trace" in record.meta:
+    try:
+        parsed = Trace.from_dict(record.meta["trace"])
+    except Exception:  # noqa: BLE001 - an unreadable trace is stored exactly as written
+        return record
+    cut = finalize(parsed, declaration=None)
+    if cut is parsed:
+        return record
+    return replace(record, meta={**record.meta, "trace": cut.to_dict()})
+
+
+def _with_capture_envelope(record: EpisodeRecord, active: bool) -> EpisodeRecord:
+    """The one funnel every stored row passes through: ``finalize`` over a trace it carries,
+    D9's empty envelope for a row that ran under active capture and carries none.
+
+    The shipped shape returned early on ``"trace" in record.meta`` -- exactly the branch that
+    needs the cut -- so the two branches are separated rather than collapsed. Rule zero (C7) is
+    untouched either way: this runs on the built row, after ``_merge_capture`` has already
+    declined to write an empty capture over a rollout's own trace. Inside ``_classify`` it
+    would break that; here it cannot.
+    """
+    if "trace" in record.meta:
+        return _finalized(record)
+    if not active:
         return record
     return replace(record, meta={**record.meta, "trace": _empty_envelope()})
 

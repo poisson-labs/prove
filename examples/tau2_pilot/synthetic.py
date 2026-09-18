@@ -61,9 +61,9 @@ def _episode(cfg: Mapping[str, Any], seed: int, pass_rate: float, arm: str) -> E
                 span.set_attribute("gen_ai.request.temperature", 0.0)
                 span.set_attribute("gen_ai.request.seed", seed)
                 # The payload grows with the turn, the way a conversation's message list
-                # does, so one episode straddles the 8192-byte budget: the early turns are
-                # kept whole and the late ones are replaced by the marker. A D0 run therefore
-                # exercises both sides of ``_apply_budget`` rather than one.
+                # does, so one episode straddles the 8192-byte limit: the early turns are
+                # stored whole and the late ones as their head, their tail and their original
+                # byte length. A D0 run therefore exercises both sides of the cut, not one.
                 span.set_attribute(
                     "gen_ai.input.messages",
                     f"turn {turn} of task {task_id}: " + "x" * (512 * 6**turn),

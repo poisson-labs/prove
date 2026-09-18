@@ -43,11 +43,16 @@ from collections.abc import Iterator
 from opentelemetry.context import Context
 from opentelemetry.sdk.trace import Span, SpanProcessor
 
+from proofload.trace import _EPISODE_KEY, _RUN_ID_KEY
+
 __all__ = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
 
-#: The two attribute keys M12 deliberately never lifts, written in one place.
-RUN_ID_KEY = "proofload.run_id"
-EPISODE_KEY = "proofload.episode"
+#: The two attribute keys M12 deliberately never lifts. Still written in one place, and that
+#: place is now ``trace.py``: the storage split and the observation cut both have to exclude
+#: them by name, and core cannot import this module, which puts the OTel SDK on the import
+#: graph at module scope. This is where callers read them; that is where they are built.
+RUN_ID_KEY = _RUN_ID_KEY
+EPISODE_KEY = _EPISODE_KEY
 
 _EPISODE: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar(
     "proofload_otel_episode", default=None

@@ -39,7 +39,6 @@ re-entrant, because the handler runs inside whatever the rollout's thread was do
 from __future__ import annotations
 
 import heapq
-import json
 import logging
 import os
 import random
@@ -50,7 +49,12 @@ from dataclasses import dataclass, replace
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
-from proofload.trace import Trace, from_otel
+from proofload.trace import (
+    CONTENT_KEYS,
+    OBSERVATION_LIMIT_BYTES,
+    from_otel,
+    truncate_observations,
+)
 
 if TYPE_CHECKING:  # imports for typing only; the runtime import lives in install()
     from opentelemetry.context import Context
@@ -63,18 +67,6 @@ _LOG = logging.getLogger(__name__)
 #: The group every ``opentelemetry-instrumentation-*`` package registers under. The only place
 #: an instrumentor name is resolved; discovering the group's other members is forbidden.
 _ENTRY_POINT_GROUP = "opentelemetry_instrumentor"
-
-#: Prompt and completion content, which never leaves the process unless ``content`` is on. The
-#: two GenAI semconv keys, plus the vendor spellings M12 already reads traces from.
-_CONTENT_KEYS = frozenset({"gen_ai.input.messages", "gen_ai.output.messages"})
-_CONTENT_PREFIXES = (
-    "gen_ai.prompt",
-    "gen_ai.completion",
-    "traceloop.entity.input",
-    "traceloop.entity.output",
-)
-
-_TRUNCATION_MARKER = "<proofload: {n} bytes over max_span_bytes, value dropped>"
 
 # ---------- process state: one provider, one collector, one status ----------
 
@@ -92,8 +84,12 @@ class CaptureSpec:
 
     instrument: tuple[str, ...] = ()
     content: bool = False
-    max_span_bytes: int = 8_192
-    max_spans: int = 1_000
+    #: The bound on one stored observation value, whether or not ``content`` is on.
+    max_observation_bytes: int = OBSERVATION_LIMIT_BYTES
+    #: The span cap, off by default (D6): ``None`` keeps every closed span. A runaway loop is
+    #: bounded by ``episode_timeout`` and by the horizon, and when neither fires it is a
+    #: finding the trace should show in full rather than a ``dropped`` count.
+    max_spans: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "instrument", tuple(str(name) for name in self.instrument))
@@ -177,8 +173,9 @@ class Recorder:
         if not spans and not dropped:
             return None
         trace = from_otel(spans)
-        if self._spec.content:
-            trace = _apply_budget(trace, self._spec.max_span_bytes)
+        # Unconditional: the cut is a storage bound, not a privacy one, so it runs whether or
+        # not content capture is on. A captured observation never crosses the pipe uncut.
+        trace = truncate_observations(trace, limit=self._spec.max_observation_bytes)
         if dropped or truncated is not None:
             trace = replace(trace, dropped=trace.dropped + dropped, truncated=truncated)
         return trace.to_dict()
@@ -214,7 +211,8 @@ class Recorder:
             self._forget(span_id)
             self._seq += 1
             entry = (-(start if isinstance(start, int) else 0), -self._seq, mapping)
-            if len(self._kept) < self._spec.max_spans:
+            cap = self._spec.max_spans
+            if cap is None or len(self._kept) < cap:
                 heapq.heappush(self._kept, entry)
                 return
             # Full. The cap is in start order (C10): the earliest-started spans are kept, so
@@ -478,9 +476,7 @@ def _attribute_value(value: Any) -> Any:
 
 
 def _is_content(key: str) -> bool:
-    return key in _CONTENT_KEYS or any(
-        key == prefix or key.startswith(prefix + ".") for prefix in _CONTENT_PREFIXES
-    )
+    return key in CONTENT_KEYS
 
 
 def _live_attributes(attributes: Mapping[str, Any] | None) -> list[tuple[str, Any]]:
@@ -549,48 +545,3 @@ def _span_mapping(span: ReadableSpan, *, content: bool, live: bool = False) -> d
             "message": status.description,
         }
     return mapping
-
-
-# ---------- the per-span byte budget (attrs, never input/output) ----------
-
-
-def _json_size(value: Any) -> int:
-    try:
-        return len(json.dumps(value).encode("utf-8"))
-    except (TypeError, ValueError):
-        return len(str(value).encode("utf-8"))
-
-
-def _apply_budget(trace: Trace, max_span_bytes: int) -> Trace:
-    """Replace the oversized values in ``attrs`` with a marker recording their byte length.
-
-    ``from_otel`` never populates ``input``/``output``: a captured prompt arrives as the
-    *attributes* ``gen_ai.input.messages`` and ``gen_ai.output.messages``, so a budget written
-    against those two fields would be inert and would look like it was working. Only the
-    offending values are replaced — small values and the two routing stamps survive, because
-    the stamps are the whole mechanism for attaching a span to its row.
-    """
-    from proofload.otel import EPISODE_KEY, RUN_ID_KEY
-
-    protected = {RUN_ID_KEY, EPISODE_KEY}
-    spans = []
-    changed = False
-    for span in trace.spans:
-        if _json_size(dict(span.attrs)) <= max_span_bytes:
-            spans.append(span)
-            continue
-        attrs = dict(span.attrs)
-        candidates = sorted(
-            (key for key in attrs if key not in protected),
-            key=lambda key: _json_size(attrs[key]),
-            reverse=True,
-        )
-        for key in candidates:
-            if _json_size(attrs) <= max_span_bytes:
-                break
-            attrs[key] = _TRUNCATION_MARKER.format(n=_json_size(attrs[key]))
-        spans.append(replace(span, attrs=attrs))
-        changed = True
-    if not changed:
-        return trace
-    return replace(trace, spans=tuple(spans))

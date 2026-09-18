@@ -285,7 +285,7 @@ def _resolve_rollout(import_path: str) -> Any:
     return resolve(import_path)
 
 
-_CAPTURE_FIELDS = ("instrument", "content", "max_span_bytes", "max_spans")
+_CAPTURE_FIELDS = ("instrument", "content", "max_observation_bytes", "max_spans")
 
 
 def _capture_payload(spec: CaptureSpec | None, run_id: str) -> dict[str, Any] | None:
@@ -298,15 +298,30 @@ def _capture_payload(spec: CaptureSpec | None, run_id: str) -> dict[str, Any] | 
         "run_id": run_id,
         "instrument": list(spec.instrument),
         "content": spec.content,
-        "max_span_bytes": spec.max_span_bytes,
+        "max_observation_bytes": spec.max_observation_bytes,
         "max_spans": spec.max_spans,
     }
 
 
 def _capture_request(payload: Mapping[str, Any] | None) -> tuple[CaptureSpec | None, str]:
-    """The inverse, inside the container: the run id off the front, the spec from the rest."""
+    """The inverse, inside the container: the run id off the front, the spec from the rest.
+
+    **Strict about the field names, and the strictness is the point.** Reading by intersection
+    would drop a key this side does not know -- a retired spelling, or a host one version
+    ahead -- and run the whole batch at the default with no error on either side of the
+    process boundary, while the manifest recorded what the sweep file asked for. That is a
+    wrong measurement rather than a crash, and it is invisible from both ends. The sweep-file
+    parser already refuses an unknown field loudly; this is the same rename one process
+    boundary over, so it refuses one too.
+    """
     if payload is None:
         return None, ""
+    unknown = sorted(set(payload) - {"run_id", *_CAPTURE_FIELDS})
+    if unknown:
+        raise ValueError(
+            f"capture payload has unknown field(s): {', '.join(unknown)}; "
+            f"the fields are {', '.join(_CAPTURE_FIELDS)}"
+        )
     fields = {name: payload[name] for name in _CAPTURE_FIELDS if name in payload}
     return CaptureSpec(**fields), str(payload.get("run_id", ""))
 

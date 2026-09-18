@@ -30,7 +30,7 @@ AxisType = Literal["continuous", "categorical"]
 
 _AXIS_TYPES: tuple[str, ...] = ("continuous", "categorical")
 _TOOL_RELIABILITY_RATES: tuple[float, ...] = (0.0, 0.05, 0.10, 0.20, 0.30)
-_CAPTURE_FIELDS: tuple[str, ...] = ("instrument", "content", "max_span_bytes", "max_spans")
+_CAPTURE_FIELDS: tuple[str, ...] = ("instrument", "content", "max_observation_bytes", "max_spans")
 _CHAOS_FIELDS: tuple[str, ...] = ("fault", "rate", "steps")
 
 
@@ -158,11 +158,25 @@ def infer_axis_types(configs: Sequence[Mapping[str, Any]]) -> dict[str, AxisType
 # ---------- SweepSpec ----------
 
 
-def _positive_int(table: Mapping[str, Any], name: str, default: int) -> int:
-    value = table.get(name, default)
+def _checked_positive_int(value: Any, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise SamplerError(f"[capture].{name} must be an int >= 1, got {value!r}")
     return value
+
+
+def _positive_int(table: Mapping[str, Any], name: str, default: int) -> int:
+    return _checked_positive_int(table.get(name, default), name)
+
+
+def _optional_positive_int(table: Mapping[str, Any], name: str) -> int | None:
+    """``max_spans``'s parse: absent is ``None`` (D6), present is an int >= 1.
+
+    A sibling rather than a widened ``_positive_int``, because ``_positive_int`` called with
+    ``default=None`` falls straight into its own ``not isinstance(value, int)`` and raises on
+    the absent case -- and widening it would change the reachable error set for
+    ``max_observation_bytes``, whose message it shares.
+    """
+    return None if name not in table else _checked_positive_int(table[name], name)
 
 
 def _capture_table(table: Any) -> CaptureSpec | None:
@@ -191,8 +205,10 @@ def _capture_table(table: Any) -> CaptureSpec | None:
     return CaptureSpec(
         instrument=tuple(instrument),
         content=content,
-        max_span_bytes=_positive_int(table, "max_span_bytes", defaults.max_span_bytes),
-        max_spans=_positive_int(table, "max_spans", defaults.max_spans),
+        max_observation_bytes=_positive_int(
+            table, "max_observation_bytes", defaults.max_observation_bytes
+        ),
+        max_spans=_optional_positive_int(table, "max_spans"),
     )
 
 

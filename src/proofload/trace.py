@@ -24,13 +24,14 @@ import contextvars
 import functools
 import inspect
 import itertools
+import json
 import logging
 import re
 import sys
 import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
@@ -38,16 +39,21 @@ from typing import Any
 __all__ = [
     "ALIAS_MAP_VERSION",
     "ATTRIBUTE_ALIASES",
+    "CONTENT_KEYS",
     "DROP_REASONS",
     "GATE",
     "KINDS",
     "LOGPROBS_KEY",
+    "OBSERVATION_HEAD_BYTES",
     "OBSERVATION_KEYS",
+    "OBSERVATION_LIMIT_BYTES",
+    "OBSERVATION_TAIL_BYTES",
     "OTEL_KIND_MAP",
     "OTEL_SEMCONV_VERSION",
     "OUTCOME_BY",
     "SCHEMA",
     "SOURCES",
+    "TRUNCATED_KEY",
     "Collector",
     "Span",
     "SpanHandle",
@@ -55,12 +61,14 @@ __all__ = [
     "TraceValidationError",
     "assemble",
     "collect",
+    "finalize",
     "from_litellm",
     "from_otel",
     "merge",
     "record",
     "split",
     "step",
+    "truncate_observations",
 ]
 
 # ---------- constants ----------
@@ -166,6 +174,85 @@ OBSERVATION_KEYS: frozenset[str] = _ObservationKeys(
 #: The two span fields that carry observation content. Named rather than derived, because they
 #: are the only two of the span's fields that are content: every other one is structure.
 _OBSERVATION_FIELDS: tuple[str, ...] = ("input", "output")
+
+#: The two routing stamps, written here because they are read here. ``split`` and the cut both
+#: have to exclude them by name, and core cannot import ``proofload.otel`` -- that module pulls
+#: in the OTel SDK at import time. ``otel.py`` re-exports these two as its public
+#: ``RUN_ID_KEY`` / ``EPISODE_KEY``, so the strings are still built in exactly one place.
+_RUN_ID_KEY = "proofload.run_id"
+_EPISODE_KEY = "proofload.episode"
+_ROUTING_STAMPS: frozenset[str] = frozenset({_RUN_ID_KEY, _EPISODE_KEY})
+
+#: The wrapper key a cut observation value is stored under (A8b). A value is a wrapper iff it
+#: is a mapping whose *sole* key is this one -- detection is on the key and never on the shape.
+TRUNCATED_KEY = "proofload.truncated"
+
+#: The default bound on one stored observation value, in bytes. **A named default and never a
+#: finding**: CAP2 measured every one of the 21,499 observation values in the store at 15 or 16
+#: bytes, so the corpus can neither confirm nor refute this number, and offers no distribution
+#: to draw a different one from. The measurement is owed from the first content-capturing run.
+OBSERVATION_LIMIT_BYTES: int = 8192
+
+#: The default limit's split, and **not a bound at any other limit** (ADR-082). A cut keeps
+#: ``limit - limit // 4`` bytes of head and ``limit // 4`` of tail, which sum to exactly the
+#: limit at every positive integer limit; these two are what that comes to at the default. An
+#: earlier reading fixed them as absolute constants beside a per-sweep trigger, which made the
+#: cut store 8 KB whatever the sweep asked for, and made head and tail overlap below 8192.
+OBSERVATION_HEAD_BYTES: int = 6144
+OBSERVATION_TAIL_BYTES: int = 2048
+
+#: The six prompt/completion prefix families ``content = false`` strips, dotted. The bare family
+#: names are exact members of ``CONTENT_KEYS`` below, because the shipped rule matched
+#: ``key == prefix`` as well as a descendant and normalising to a trailing dot alone would stop
+#: a bare ``gen_ai.prompt`` being stripped.
+_CONTENT_PREFIXES: tuple[str, ...] = (
+    "gen_ai.prompt.",
+    "gen_ai.completion.",
+    "traceloop.entity.input.",
+    "traceloop.entity.output.",
+    "llm.input_messages.",
+    "llm.output_messages.",
+)
+
+
+class _ContentKeys(frozenset[str]):
+    """``CONTENT_KEYS`` as one object: exact members *and* prefix families, on
+    ``_ObservationKeys``'s shape and for its reason -- a plain ``frozenset`` carries the exact
+    keys and silently loses the families, and the public name would hand every reader half a
+    rule. ``in`` answers both; set algebra reads the exact members.
+    """
+
+    __slots__ = ()
+
+    def __contains__(self, key: object) -> bool:
+        if super().__contains__(key):
+            return True
+        return isinstance(key, str) and key.startswith(_CONTENT_PREFIXES)
+
+
+#: Prompt and completion content, which never leaves the process unless ``content`` is on. The
+#: two GenAI semconv keys, the two Traceloop entity families, the two ``gen_ai`` families and --
+#: added by A8b (ADR-083) -- OpenInference's two flattened-message families, because a default
+#: that strips a prompt in one convention's spelling and keeps it in another's is a gap left by
+#: the order the conventions arrived in, not a default anyone chose.
+#:
+#: Tool arguments and results are **not** here and are retained by default; they are bounded by
+#: the cut, not by the strip. ``input.value`` / ``output.value`` on an ``llm``-kind span are
+#: prompt content under OpenInference and are **not** stripped: this is a key test, called
+#: before a span's ``kind`` exists, and a kind-aware rule is not a membership test. That row is
+#: owed to a later packet and is named rather than silently absent.
+CONTENT_KEYS: frozenset[str] = _ContentKeys(
+    {
+        "gen_ai.input.messages",
+        "gen_ai.output.messages",
+        "gen_ai.prompt",
+        "gen_ai.completion",
+        "traceloop.entity.input",
+        "traceloop.entity.output",
+        "llm.input_messages",
+        "llm.output_messages",
+    }
+)
 
 ATTRIBUTE_ALIASES: Mapping[str, str] = MappingProxyType(
     {
@@ -667,17 +754,174 @@ def merge(*traces: Trace) -> Trace:
     )
 
 
+# ---------- the observation cut (A8b) ----------
+
+
+def _byte_form(value: Any) -> bytes:
+    """One observation value as bytes: a ``str`` is its UTF-8, anything else the UTF-8 of its
+    canonical JSON. A value no encoder can reach falls back to ``str``, which is the posture
+    the retired per-span budget took, kept so one exotic ``record()`` value that no encoder
+    can serialise cannot cost a whole batch at the store boundary.
+    """
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError):
+        return str(value).encode("utf-8")
+
+
+def _is_wrapper(value: Any) -> bool:
+    """A value is already cut iff it is a mapping whose **sole** key is ``TRUNCATED_KEY``.
+
+    On the key, never on the shape: a user observation that happens to be a dict with ``head``,
+    ``tail`` and ``bytes_original`` keys is not a wrapper and is cut like anything else.
+    """
+    return isinstance(value, Mapping) and len(value) == 1 and TRUNCATED_KEY in value
+
+
+def _longest_prefix(raw: bytes, bound: int) -> str:
+    """The longest valid-UTF-8 prefix of ``raw`` no longer than ``bound`` bytes.
+
+    A UTF-8 character is at most four bytes, so a character straddling the bound costs at most
+    three bytes of back-off; the loop decodes strictly rather than with ``errors="ignore"``,
+    which would drop the partial character and can swallow a valid one at some edges.
+    """
+    end = min(bound, len(raw))
+    for n in range(end, max(end - 4, -1), -1):
+        try:
+            return raw[:n].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+    return ""
+
+
+def _longest_suffix(raw: bytes, bound: int) -> str:
+    """The mirror of ``_longest_prefix``: the longest valid suffix is found by *advancing* the
+    start, not by retreating the end."""
+    start = len(raw) - min(bound, len(raw))
+    for begin in range(start, min(start + 4, len(raw) + 1)):
+        try:
+            return raw[begin:].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+    return ""
+
+
+def _wrap(value: Any, limit: int) -> dict[str, Any]:
+    """One over-limit value as its wrapper: head, tail and the original byte length.
+
+    The bounds are the limit's split (ADR-082) -- ``limit - limit // 4`` and ``limit // 4``,
+    which sum to exactly ``limit`` at every positive integer limit -- and not the two module
+    constants, which are that split at the default and bound nothing anywhere else.
+    """
+    raw = _byte_form(value)
+    return {
+        TRUNCATED_KEY: {
+            "head": _longest_prefix(raw, limit - limit // 4),
+            "tail": _longest_suffix(raw, limit // 4),
+            "bytes_original": len(raw),
+        }
+    }
+
+
+def _is_observation(key: str, value: Any) -> bool:
+    """Whether ``split`` routes one attribute out of the envelope.
+
+    Three clauses, and the second is what keeps the store's classification and the child's cut
+    in step at every limit: a value cut at a lowered sweep limit is a small wrapper, well under
+    the module default, and would otherwise ride back into the envelope. The two routing stamps
+    are excluded by name and never by size -- a large stamp is still a stamp.
+    """
+    if key in OBSERVATION_KEYS:
+        return True
+    if key in _ROUTING_STAMPS:
+        return False
+    return _is_wrapper(value) or len(_byte_form(value)) > OBSERVATION_LIMIT_BYTES
+
+
+def _cut_span(span: Span, limit: int) -> Span:
+    """One span's observation values cut, with both span fields recomputed from the wrappers it
+    carries afterwards. The same object back when nothing moved."""
+    fields: dict[str, Any] = {}
+    for name in _OBSERVATION_FIELDS:
+        value = getattr(span, name)
+        if value is not None and not _is_wrapper(value) and len(_byte_form(value)) > limit:
+            fields[name] = _wrap(value, limit)
+    attrs = dict(span.attrs)
+    for key, value in span.attrs.items():
+        if key in _ROUTING_STAMPS or _is_wrapper(value):
+            continue
+        if len(_byte_form(value)) > limit:
+            attrs[key] = _wrap(value, limit)
+    carried = [fields.get(name, getattr(span, name)) for name in _OBSERVATION_FIELDS]
+    carried += list(attrs.values())
+    wrappers = [value for value in carried if _is_wrapper(value)]
+    if not wrappers:
+        return span
+    # Recomputed from the wrappers present, never accumulated: the accumulate spelling is
+    # byte-identical on the first pass and doubles on the second.
+    total = sum(int(value[TRUNCATED_KEY]["bytes_original"]) for value in wrappers)
+    cut = replace(span, **fields, attrs=attrs, truncated="observation", bytes_original=total)
+    return span if cut == span else cut
+
+
+def truncate_observations(trace: Trace, *, limit: int = OBSERVATION_LIMIT_BYTES) -> Trace:
+    """Every observation value over ``limit`` bytes, stored as its head, its tail and its
+    original byte length.
+
+    The unit is **one observation value** -- ``input``, ``output`` and every attribute but the
+    two routing stamps -- and not the span's whole ``attrs`` dict. A value at or under the limit
+    is stored whole; a value already wrapped is never cut again; and the wrapper's head and tail
+    sum to at most the limit, so a cut is always a reduction (ADR-082).
+
+    Idempotent, byte for byte, including each span's ``truncated`` and ``bytes_original``. The
+    trace itself comes back when nothing was cut, so a trace that needs no cut is stored exactly
+    as it arrived.
+    """
+    spans: list[Span] = []
+    changed = False
+    for span in trace.spans:
+        cut = _cut_span(span, limit)
+        changed = changed or cut is not span
+        spans.append(cut)
+    if not changed:
+        return trace
+    return replace(trace, spans=tuple(spans))
+
+
+def finalize(trace: Trace, *, declaration: None, limit: int = OBSERVATION_LIMIT_BYTES) -> Trace:
+    """The one site a stored trace passes through before it is written.
+
+    A8b mints it with ``declaration`` accepting ``None`` only and calls
+    ``truncate_observations``; A10 widens the parameter to ``Declaration | None`` and fills the
+    ``gate="declared"`` stamp in front of the cut. A non-``None`` declaration is **refused**
+    rather than accepted and dropped, so the half that is not built is visible at the call site
+    A10 will change instead of silently doing nothing.
+    """
+    if declaration is not None:
+        raise TypeError(
+            "finalize(declaration=...) is A10's: A8b takes None only, got "
+            f"{type(declaration).__name__}"
+        )
+    return truncate_observations(trace, limit=limit)
+
+
 # ---------- the storage split (A7) ----------
 
 
 def split(trace: Trace) -> tuple[dict[str, Any], dict[str, Any]]:
     """A trace's envelope and its observation bodies, as two JSON-native dicts.
 
-    The envelope is a trace dict whose spans carry no ``input``, no ``output`` and no attribute
-    whose key is in ``OBSERVATION_KEYS``; everything else about the trace is unchanged, so the
-    envelope's size is bounded by step count and not by content (ADR-047). The bodies are keyed
-    by ``span_id``, hold only the sub-keys that had a value, and carry no entry at all for a
-    span that had none.
+    The envelope is a trace dict whose spans carry no ``input``, no ``output`` and no
+    observation attribute; everything else about the trace is unchanged, so the envelope's size
+    is bounded by step count and not by content (ADR-047). The bodies are keyed by ``span_id``,
+    hold only the sub-keys that had a value, and carry no entry at all for a span that had none.
+
+    An attribute is an observation by its key, by already carrying a cut value's wrapper, or by
+    being over ``OBSERVATION_LIMIT_BYTES`` -- A8b widened the third clause in, so an attribute
+    nobody named is still bounded if it is large enough to matter. The two routing stamps are
+    excluded by name whatever their size. ``split`` classifies and moves; it never cuts.
 
     Neither the span key set nor the trace key set is spelled here: the envelope starts as
     ``trace.to_dict()`` and only the content fields are cleared, so a field added to ``Span``
@@ -691,13 +935,17 @@ def split(trace: Trace) -> tuple[dict[str, Any], dict[str, Any]]:
             if span[name] is not None:
                 body[name] = span[name]
                 span[name] = None
-        # Routed by key and never by value: an observation attribute whose value is None is
-        # still observation content, and leaving it behind puts a content key in the envelope.
-        moved = {key: value for key, value in span["attrs"].items() if key in OBSERVATION_KEYS}
+        # An observation attribute whose value is None is still observation content, and
+        # leaving it behind puts a content key in the envelope.
+        moved = {
+            key: value
+            for key, value in span["attrs"].items()
+            if _is_observation(key, value)
+        }
         if moved:
             body["attrs"] = moved
             span["attrs"] = {
-                key: value for key, value in span["attrs"].items() if key not in OBSERVATION_KEYS
+                key: value for key, value in span["attrs"].items() if key not in moved
             }
         if body:
             bodies[span["span_id"]] = body

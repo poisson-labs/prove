@@ -11,3 +11,6 @@ Pre-release. Not yet usable.
 - [Defining outcomes](docs/defining-outcomes.md) — an outcome names what happened
   to the system under test, never what happened to the instrument. The rule, the
   case that taught it, and a checklist to run before the first episode.
+- [What capture stores](docs/what-capture-stores.md) — what `content = false`
+  strips, what it keeps on purpose, and how `max_observation_bytes` bounds one
+  observation value.
