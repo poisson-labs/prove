@@ -45,7 +45,7 @@ from proofload import __version__
 from proofload._resolve import resolve
 from proofload.diff import (
     _CAUSES,
-    _CENSORED,
+    _PAIRED_METHODS,
     COVERAGE_COLUMNS,
     DiffError,
     EventInferenceError,
@@ -76,6 +76,7 @@ from proofload.report import (
     ReportError,
     ReportSpec,
     SurvivalReport,
+    _interval_lines,
     build_multi_report,
     build_survival_report,
 )
@@ -599,13 +600,16 @@ def _run_diffs(
 
 
 def _method_table(results: Sequence[MultiDiffResult]) -> str:
-    header = ("method", "event", "paired", "safer", "worse", "unchanged", "max_mde")
+    header = ("method", "event", "pairing", "safer", "worse", "unchanged", "max_mde")
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     for m in results:
+        # ADR-052: the column states the requested method's pairing, the same fact the headline
+        # states, and never the runs' seed identity -- which is its own field on the result.
+        pairing = "paired" if m.method in _PAIRED_METHODS else "unpaired"
         for e in m.events:
             ev = m.by_event[e]
             lines.append(
-                f"| {m.method} | {e} | {m.paired} | {ev.n_safer} | {ev.n_worse} "
+                f"| {m.method} | {e} | {pairing} | {ev.n_safer} | {ev.n_worse} "
                 f"| {ev.n_unchanged} | {ev.max_mde:.4f} |"
             )
     return "\n".join(lines) + "\n"
@@ -642,38 +646,17 @@ def _coverage_block(multi: MultiDiffResult) -> str:
     return "\n".join(lines) + "\n"
 
 
-#: Section 3.4's other branch, when nothing was rejected. The MDE lines are already above it.
-_NO_INTERVAL_LINE = (
-    "intervals: none (nothing significant; the MDE lines above are the honest bound)\n"
-)
-
-
 def _interval_block(multi: MultiDiffResult) -> str:
     """The interval facts ``diff``'s text output appends after the coverage block.
 
-    **The family is named.** ``alpha*`` belongs to the flat BH family ``multi_diff`` runs, one
-    pass across every cell and every event. The layered report introduces a nested family with
-    a different level, and a bare ``alpha*`` on the page would be the one number a reader could
-    not attribute to either.
-
-    **The arithmetic is shown and none of it is done here.** ``q``, ``n_rejected``, ``n_tests``,
-    ``alpha_star``, ``interval_level`` and both counts are all fields; this module reads them
-    and formats them. That includes the percentage: ``interval_level * 100`` would be a second
-    derivation of a printed number, indistinguishable to any rule that has to stay robust from
-    recovering ``alpha*`` as ``1 - interval_level`` or ``R`` as ``alpha_star * n_tests / q``.
-    The ``%`` format spec renders it with no arithmetic at all, and ``:g`` on ``alpha*`` keeps
-    a level like 4.2e-05 -- 1200 cells and one rejection -- from printing as ``0.0000``.
+    **One formatter, one module over.** P-1 moved the three lines and the ``R == 0`` line to
+    ``report._interval_lines``, so ``report.md``, the receipt, the page's honesty band, the
+    payload and this block print the same strings and none of them rewords the others. What is
+    left here is layout: the second and third lines are indented two spaces, as they have been
+    since S24, and the block's bytes on Go1 are unchanged.
     """
-    if multi.intervals is None or multi.interval_level is None or multi.alpha_star is None:
-        return _NO_INTERVAL_LINE
-    constructed = [b for b in multi.intervals["basis"] if b != _CENSORED]
-    basis = constructed[0] if constructed else _CENSORED
-    return (
-        f"intervals: {multi.interval_level:.4%} (alpha* = {multi.alpha_star:g} = "
-        f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family), basis {basis}\n"
-        f"  interval excludes zero, verdict unchanged: {multi.n_interval_only} cells\n"
-        f"  verdict significant, interval covers zero: {multi.n_verdict_only} cells\n"
-    )
+    lines = _interval_lines(multi)
+    return "\n".join([lines[0], *(f"  {line}" for line in lines[1:])]) + "\n"
 
 
 def _omnibus_block(dual_root: RootResult) -> str:
@@ -698,6 +681,13 @@ def _omnibus_block(dual_root: RootResult) -> str:
         f"omnibus: {dual_root.headline()}",
         f"  min-p of location and dispersion; {dual_root.n_permutations} within-cell "
         f"permutations, {dual_root.scheme}, seed {dual_root.seed}",
+        # C33 (b): every permutation p below is Phipson-Smyth's ``(1 + count) / (B + 1)`` over
+        # the same B, so one field bounds all of them. ``p_floor`` is a field for the same reason
+        # every other number in this block is: the renderer may not compute it (ADR-032), and it
+        # prints under the same ``:g`` as the p beside it, so an at-floor p and its floor are the
+        # same string on the same screen.
+        f"  p floor {dual_root.p_floor:g}: the smallest p {dual_root.n_permutations} "
+        f"permutations can express; a p at the floor is a bound, not a measurement",
     ]
     for event in dual_root.events:
         lines.append(
@@ -791,6 +781,13 @@ def _fault_lines_block(nested: TreeResult) -> str:
             f"next: {refusal.next_rung}"
         )
     lines.append(_fault_lines_null(nested.fault_lines))
+    if nested.fault_lines.tested:
+        # Only where the level was tested: there is no floor under a p nobody drew.
+        lines.append(
+            f"  group p floor {nested.root.p_floor:g}: the same "
+            f"{nested.root.n_permutations} permutations; a group p at the floor is a bound, "
+            "not a measurement"
+        )
     for group in nested.fault_lines.groups:
         lines.append(_fault_lines_group(nested.grouping.key, group))
     return "\n".join(lines) + "\n"

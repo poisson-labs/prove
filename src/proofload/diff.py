@@ -80,9 +80,10 @@ INTERVAL_COLUMNS = (
 INTERVAL_BASES = ("score_rd", "score_rd_paired", "censored")
 _SCORE_RD, _SCORE_RD_PAIRED, _CENSORED = INTERVAL_BASES
 
-# ADR-052: which interval is built follows the requested ``method`` and never ``paired``. Two
-# runs that happen to share a run salt must not get a different number from two that do not, or
-# the statistic becomes a property of run provenance rather than of the request.
+# ADR-052: which interval is built follows the requested ``method`` and never
+# ``seed_identity_match``. Two runs that happen to share their seeds must not get a different
+# number from two that do not, or the statistic becomes a property of run provenance rather than
+# of the request.
 _BASIS_BY_METHOD: Mapping[str, str] = {
     "fisher_bh": _SCORE_RD,
     "logrank_bh": _SCORE_RD,
@@ -110,7 +111,8 @@ _ONLY_A, _ONLY_B, _NO_OUTCOME_BOTH, _NO_OUTCOME_A, _NO_OUTCOME_B = _CAUSES
 
 SUMMARY_FIELDS = (
     "method",
-    "paired",
+    "seed_identity_match",
+    "unpaired_analysis",
     "q",
     "event",
     "t_unit",
@@ -310,7 +312,12 @@ def _logrank(
 class DiffResult:
     cells: pd.DataFrame
     method: Method
-    paired: bool
+    #: The two runs' seed identity: same ``run_salt`` and the same stored ``seed`` on every row
+    #: this comparison matched (``_seed_identity``). A fact about the runs, never about the test.
+    seed_identity_match: bool
+    #: The identity held and the requested method discarded it. Not defaulted: a hand-built
+    #: result that could omit it could claim no unpaired analysis in silence.
+    unpaired_analysis: bool
     q: float
     event: str
     t_unit: str
@@ -332,7 +339,8 @@ class DiffResult:
             f"Diff of `{self.event}` by {self.method} at q={self.q}: "
             f"n_safer={self.n_safer}, n_worse={self.n_worse}, n_unchanged={self.n_unchanged}, "
             f"n_not_comparable={self.n_not_comparable}, max_mde={self.max_mde:.4f}, "
-            f"method={self.method}, paired={self.paired}, t_unit={self.t_unit}, "
+            f"method={self.method}, seed_identity_match={self.seed_identity_match}, "
+            f"unpaired_analysis={self.unpaired_analysis}, t_unit={self.t_unit}, "
             f"horizon={self.horizon}, truncated={self.truncated}, "
             f"dropped_a={self.dropped_a}, dropped_b={self.dropped_b}, "
             f"max_mde_unchanged={self.max_mde_unchanged:.4f}, "
@@ -437,7 +445,7 @@ def diff(
     _validate_frame(a, "a")
     _validate_frame(b, "b")
 
-    paired, t_unit = _pairing(method, manifest_a, manifest_b)
+    pairable, t_unit = _pairing(method, manifest_a, manifest_b)
 
     horizon = min(_frame_horizon(a, "a"), _frame_horizon(b, "b"))
     a_t, truncated_a = _truncate(a, horizon)
@@ -448,6 +456,13 @@ def diff(
     common = sorted(hashes_a & hashes_b)
     dropped_a = len(hashes_a - hashes_b)
     dropped_b = len(hashes_b - hashes_a)
+
+    # After ``common`` and before the first test: the seed check needs the matched rows, and the
+    # warning it raises names their count.
+    seed_identity_match, unpaired_analysis = _seed_identity(
+        method, pairable, a_t, b_t, common,
+        manifest_a.run_salt if manifest_a is not None else None,
+    )
 
     groups_a = {str(k): g for k, g in a_t.groupby("config_hash", sort=False)}
     groups_b = {str(k): g for k, g in b_t.groupby("config_hash", sort=False)}
@@ -513,7 +528,8 @@ def diff(
     return DiffResult(
         cells=cells,
         method=method,
-        paired=paired,
+        seed_identity_match=seed_identity_match,
+        unpaired_analysis=unpaired_analysis,
         q=float(q),
         event=event,
         t_unit=t_unit,
@@ -552,7 +568,8 @@ _MAX_EVENTS = 6
 _TRADES_COLUMNS = ("config_hash", "config", "safer_events", "worse_events")
 _MULTI_SUMMARY_FIELDS = (
     "method",
-    "paired",
+    "seed_identity_match",
+    "unpaired_analysis",
     "q",
     "t_unit",
     "horizon",
@@ -610,7 +627,9 @@ class MultiDiffResult:
     events: tuple[str, ...]
     by_event: Mapping[str, EventDiff]
     method: Method
-    paired: bool
+    #: As ``DiffResult``'s, over the same predicate and the same two entry points.
+    seed_identity_match: bool
+    unpaired_analysis: bool
     q: float
     t_unit: str
     horizon: float
@@ -649,7 +668,11 @@ class MultiDiffResult:
             f"{e}: {self.by_event[e].n_safer} safer, {self.by_event[e].n_worse} worse"
             for e in self._ordered_events()
         ]
-        pairing = "paired" if self.paired else "unpaired"
+        # ADR-052, C24: the headline states the *requested method's* pairing and never the runs'
+        # provenance. A reader reading about the analysis reads a fact about the analysis; the
+        # runs' seed identity is its own field, and ``unpaired_analysis`` beside it says the
+        # identity was there and the request discarded it.
+        pairing = "paired" if self.method in _PAIRED_METHODS else "unpaired"
         return (
             " · ".join(parts)
             + f"\n(aalen_johansen + {self._method_label()}, BH q<{self.q} over "
@@ -684,7 +707,9 @@ class MultiDiffResult:
         if trade is not None:
             lines.append(trade)
         lines.append(
-            f"method={self._method_label()}, paired={self.paired}, q={self.q}, "
+            f"method={self._method_label()}, "
+            f"seed_identity_match={self.seed_identity_match}, "
+            f"unpaired_analysis={self.unpaired_analysis}, q={self.q}, "
             f"t_unit={self.t_unit}, horizon={self.horizon}, n_tests={self.n_tests}, "
             f"n_not_comparable={self.n_not_comparable}, dropped_a={self.dropped_a}, "
             f"dropped_b={self.dropped_b}, truncated={self.truncated}"
@@ -814,64 +839,129 @@ def _validate_raw(df: pd.DataFrame, label: str) -> None:
 def _pairing(
     method: str, manifest_a: RunManifest | None, manifest_b: RunManifest | None
 ) -> tuple[bool, str]:
-    """(paired, t_unit) with the S5 guards, raised before any event is tested.
+    """(manifests_pairable, t_unit) with the S5 guards, raised before any frame work.
 
-    The one place ``paired`` is decided, for both entry points. It is also the only place
-    that sees ``paired`` and ``method`` together before any cell exists, which is why the
-    unpaired-analysis warning is raised here and not per cell.
+    The manifest half of seed identity (ADR-076): both manifests present and carrying the same
+    ``run_salt``. When A23/A26 adds ``seed_derivation`` and ``treatment_axes`` to ``RunManifest``
+    they join this clause and nowhere else (spec P-1 section 0.1 C-3, ADR-084); the key name does
+    not move then and the predicate gains two comparisons.
+
+    The rest of the predicate -- the stored seed on every matched row -- is ``_seed_identity``'s,
+    because it cannot be answered before the frames are filtered and matched. So this function
+    raises the two manifest-level refusals and no longer raises the unpaired-analysis warning:
+    the warning now states a matched-row count, which does not exist here.
     """
     if manifest_a is not None and manifest_b is not None:
         if manifest_a.t_unit != manifest_b.t_unit:
             raise UnitMismatch(
                 f"t_unit differs: {manifest_a.t_unit!r} (a) vs {manifest_b.t_unit!r} (b)"
             )
-        paired = manifest_a.run_salt == manifest_b.run_salt
+        pairable = manifest_a.run_salt == manifest_b.run_salt
     else:
-        paired = False
-    if method in _PAIRED_METHODS and not paired:
+        pairable = False
+    if method in _PAIRED_METHODS and not pairable:
         if manifest_a is None or manifest_b is None:
             raise NotPairable("mcnemar_bh needs both manifests to establish pairing")
         raise NotPairable(
             f"mcnemar_bh needs matching run_salt; got {manifest_a.run_salt!r} vs "
             f"{manifest_b.run_salt!r}"
         )
-    if paired and method not in _PAIRED_METHODS:
-        # Never a switch. The same command running a different test depending on whether two
-        # runs happen to share a salt would make the statistic a property of run provenance
-        # rather than of the request, and a reader of the output could not tell which was
-        # run without going back to the manifests. It says what was discarded and what the
-        # alternative is spelled; the choice stays the caller's. No claim about power: that
-        # depends on how far the two arms agree episode by episode, which is a fact about
-        # the data and not about the salt.
-        #
-        # C18's message half, A27. The sentence used to promise a counterpart for every
-        # episode, which the page it is printed beside can contradict: ``coverage`` lists
-        # the cells one arm ran and the other did not, and a pair with two of those still
-        # reports ``paired``. The correspondence the salt supports is the one over the cells
-        # the comparison matched, so that is what this says, and it points at ``coverage``
-        # for the rest rather than carrying a count -- there is none to carry here, which is
-        # the whole reason the warning is raised before any cell exists. Whether the matched
-        # rows are counterparts at all is a separate question and still unchecked; C18 keeps
-        # it, and this restatement narrows the claim rather than answering it.
-        assert manifest_a is not None  # implied by paired; narrows the type for run_salt
-        warnings.warn(
-            f"{method} compares two pairable runs as independent samples: both manifests "
-            f"carry run_salt {manifest_a.run_salt!r}, which claims a counterpart at the "
-            "same (config_hash, replicate_index) across the cells this comparison matched. "
-            "Which cells those are is not settled here -- see coverage for the cells one "
-            "arm ran and the other did not. Pass method='mcnemar_bh' to test that "
-            "correspondence; whether it buys power depends on how far the two arms agree "
-            "episode by episode.",
-            UnpairedAnalysis,
-            # 3, not survival.py's 2: this is one frame deeper than the public function, so
-            # 3 lands on the caller of diff/multi_diff -- the line the reader has to change.
-            stacklevel=3,
-        )
     if manifest_a is not None:
-        return paired, manifest_a.t_unit
+        return pairable, manifest_a.t_unit
     if manifest_b is not None:
-        return paired, manifest_b.t_unit
-    return paired, "unknown"
+        return pairable, manifest_b.t_unit
+    return pairable, "unknown"
+
+
+def _seed_identity(
+    method: str,
+    pairable: bool,
+    a: pd.DataFrame,
+    b: pd.DataFrame,
+    common: Sequence[str],
+    salt: str | None,
+) -> tuple[bool, bool]:
+    """(seed_identity_match, unpaired_analysis) over the rows the tests read.
+
+    C18, closed. Matching salts claimed a counterpart at the same ``(config_hash,
+    replicate_index)``; nothing checked whether the two arms stored the same seed there, so a pair
+    whose arms consumed different seeds reported ``paired`` and ran ``mcnemar_bh`` on rows that
+    were not counterparts. The claim is now measured: the analysed frames are joined on
+    ``(config_hash, replicate_index)`` within ``common`` and every matched pair's stored ``seed``
+    is compared.
+
+    **A missing ``seed`` column is a declined claim, never a skipped check** (ADR-076 Q1): the
+    predicate is false, ``mcnemar_bh`` -- the one method that needs the claim -- refuses, and the
+    two unpaired methods still run, which is every M6 and M7 oracle's hand-built fixture.
+
+    **The statistic never follows the answer** (ADR-052, ADR-057). For ``fisher_bh`` and
+    ``logrank_bh`` a false predicate is neither a refusal nor a warning: the numbers do not depend
+    on it and the fact reaches every artifact as ``seed_identity_match``. The warning is raised
+    only when the identity holds and the requested method discards it, which is
+    ``unpaired_analysis``.
+
+    A key stored twice in one arm is matched twice. A stored run cannot produce one -- resume is
+    presence-keyed -- and a hand-built frame can; it is counted, not refused.
+    """
+    if not pairable:
+        return False, False
+    for frame, label in ((a, "a"), (b, "b")):
+        if "seed" not in frame.columns:
+            if method in _PAIRED_METHODS:
+                raise NotPairable(
+                    "mcnemar_bh needs the stored seed to establish pairing; "
+                    f"frame {label} has no seed column"
+                )
+            return False, False
+    keys = {str(h) for h in common}
+    columns = ["config_hash", "replicate_index", "seed"]
+    left = a.loc[a["config_hash"].astype(str).isin(keys), columns].copy()
+    right = b.loc[b["config_hash"].astype(str).isin(keys), columns].copy()
+    left["config_hash"] = left["config_hash"].astype(str)
+    right["config_hash"] = right["config_hash"].astype(str)
+    matched = left.merge(right, on=["config_hash", "replicate_index"], suffixes=("_a", "_b"))
+    n_matched = int(len(matched))
+    if n_matched == 0:
+        if method in _PAIRED_METHODS:
+            raise NotPairable(
+                "mcnemar_bh needs matched rows; no (config_hash, replicate_index) is present "
+                "in both runs"
+            )
+        return False, False
+    differ = int((matched["seed_a"] != matched["seed_b"]).sum())
+    if differ:
+        if method in _PAIRED_METHODS:
+            raise NotPairable(
+                f"mcnemar_bh needs matched rows to share their seed; {differ} of {n_matched} "
+                "rows matched at the same (config_hash, replicate_index) carry different seeds"
+            )
+        return False, False
+    if method in _PAIRED_METHODS:
+        return True, False
+    # Never a switch. The same command running a different test depending on how two runs were
+    # produced would make the statistic a property of run provenance rather than of the request
+    # (ADR-052), and a reader of the output could not tell which was run without going back to
+    # the manifests. It says what was discarded and what the alternative is spelled; the choice
+    # stays the caller's. No claim about power: that depends on how far the two arms agree
+    # episode by episode, which is a fact about the data and not about the salt.
+    #
+    # A27's sentence could not carry a count -- it was raised before any cell existed -- and said
+    # instead that which cells were matched "is not settled here". After C18 they are: this runs
+    # after matching, so the count is the subject of the claim and ``coverage`` carries the rest.
+    warnings.warn(
+        f"{method} compares two runs that share their seeds as independent samples: both "
+        f"manifests carry run_salt {salt!r}, and each of the {n_matched} rows this comparison "
+        "matched across its cells stores the same seed in both arms at the same (config_hash, "
+        "replicate_index); the cells one arm ran and the other did not are in coverage. Pass "
+        "method='mcnemar_bh' to test that correspondence; whether it buys power depends on how "
+        "far the two arms agree episode by episode.",
+        UnpairedAnalysis,
+        # 3, not survival.py's 2: this is one frame deeper than the public function, so 3 lands
+        # on the caller of diff/multi_diff -- the line the reader has to change. Unchanged from
+        # ``_pairing``, which sat at the same depth.
+        stacklevel=3,
+    )
+    return True, True
 
 
 def _truncate_raw(df: pd.DataFrame, h: float) -> tuple[pd.DataFrame, int]:
@@ -1068,7 +1158,7 @@ def multi_diff(
         raise DiffError(f"q must be in (0, 1), got {q}")
     _validate_raw(a, "a")
     _validate_raw(b, "b")
-    paired, t_unit = _pairing(method, manifest_a, manifest_b)
+    pairable, t_unit = _pairing(method, manifest_a, manifest_b)
 
     inferred = events is None
     non_event: str | None = None
@@ -1094,6 +1184,13 @@ def multi_diff(
     dropped_b = len(hashes_b - hashes_a)
     groups_a = {str(k): g for k, g in a_t.groupby("config_hash", sort=False)}
     groups_b = {str(k): g for k, g in b_t.groupby("config_hash", sort=False)}
+
+    # After ``common`` and before the first test, over the analysed frames: truncation rewrites
+    # ``t`` and ``outcome`` and never ``seed``, so the check is the same before and after it.
+    seed_identity_match, unpaired_analysis = _seed_identity(
+        method, pairable, a_t, b_t, common,
+        manifest_a.run_salt if manifest_a is not None else None,
+    )
 
     # Coverage is grouped from the RAW frames, not from a_t / b_t: a cell whose every row
     # errored is absent from both valid hash sets, so grouping the filtered frames would lose
@@ -1215,7 +1312,8 @@ def multi_diff(
         events=event_set,
         by_event=by_event,
         method=method,
-        paired=paired,
+        seed_identity_match=seed_identity_match,
+        unpaired_analysis=unpaired_analysis,
         q=float(q),
         t_unit=t_unit,
         horizon=float(horizon),

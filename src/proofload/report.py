@@ -25,7 +25,7 @@ from xml.sax.saxutils import escape as _xml_escape
 import pandas as pd
 
 from proofload import __version__
-from proofload.diff import DiffResult, EventDiff, MultiDiffResult
+from proofload.diff import _CENSORED, _PAIRED_METHODS, DiffResult, EventDiff, MultiDiffResult
 from proofload.store import RunManifest
 from proofload.survival import CIFCurve, KMCurve
 
@@ -213,6 +213,12 @@ class Cell:
     verdict: str
     mde: float
     hole_cause: str | None = None
+    #: S24's interval on this cell's delta, joined by ``(event, config_hash)`` in
+    #: ``build_multi_report``. Appended and defaulted because ``_absent`` builds a ``Cell``
+    #: positionally; ``None`` on a censored row and on every single-event report.
+    ci_lo: float | None = None
+    ci_hi: float | None = None
+    ci_basis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -254,6 +260,7 @@ class Report:
     _mode: Mode = field(default="diff", repr=False, compare=False)
     _forest: bool = field(default=False, repr=False, compare=False)
     _horizon: float = field(default=0.0, repr=False, compare=False)
+    _intervals: bool = field(default=False, repr=False, compare=False)
 
     def to_markdown(self) -> str:
         return _render_markdown(self)
@@ -277,6 +284,9 @@ class MultiReport:
     provenance: dict[str, object]
     _method_rows: tuple[tuple[str, ...], ...] = field(default=(), repr=False, compare=False)
     tree: TreeResult | None = None
+    #: The flat family's interval facts, one formatter (``_interval_lines``) for every surface:
+    #: ``report.md``, the receipt, the page's honesty band, the payload and ``diff`` stdout.
+    interval_lines: tuple[str, ...] = ()
 
     def to_markdown(self) -> str:
         return _render_multi_markdown(self)
@@ -564,6 +574,7 @@ def _build_panel(
     horizon: float = 0.0,
     curves: Mapping[str, tuple[KMCurve, KMCurve]] | None = None,
     grid: tuple[tuple[Cell, ...], tuple[object, ...], tuple[object, ...]] | None = None,
+    intervals: bool = False,
 ) -> Report:
     """The one grid -> Report path. ``bound`` is injected (shared across a multi report) or
     derived from this panel's own cells; ``mode`` picks the diverging or the sequential ramp."""
@@ -615,7 +626,86 @@ def _build_panel(
         _mode=mode,
         _forest=forest,
         _horizon=horizon,
+        _intervals=intervals,
     )
+
+
+#: Section 3.4's other branch, when nothing was rejected. The MDE lines are already above it.
+#: **Moved here from ``cli.py`` by P-1**, text unchanged but for the trailing newline, which the
+#: caller adds: every surface now reads one formatter and none of them rewords it.
+_NO_INTERVAL_LINE = (
+    "intervals: none (nothing significant; the MDE lines above are the honest bound)"
+)
+
+_INTERVAL_COLUMN = "interval (pp)"
+
+
+def _interval_lines(multi: MultiDiffResult) -> tuple[str, ...]:
+    """S24's three interval facts, or the one ``R == 0`` line, unindented and unstyled.
+
+    **One formatter.** ``diff`` stdout, ``report.md``, ``receipt.html``, the page's honesty band
+    and the payload all print these strings; ``cli._interval_block`` indents the second and third
+    by two spaces, which is layout. A second spelling anywhere would be a second derivation of a
+    printed number.
+
+    **The arithmetic is shown and none of it is done here.** ``q``, ``n_rejected``, ``n_tests``,
+    ``alpha_star``, ``interval_level`` and both counts are fields; this reads and formats them.
+    That includes the percentage: ``interval_level * 100`` would be a second derivation,
+    indistinguishable to any robust rule from recovering ``alpha*`` as ``1 - interval_level``.
+    The ``%`` spec renders it with no arithmetic, and ``:g`` on ``alpha*`` keeps a level like
+    4.2e-05 -- 1200 cells and one rejection -- from printing as ``0.0000``.
+    """
+    if multi.intervals is None or multi.interval_level is None or multi.alpha_star is None:
+        return (_NO_INTERVAL_LINE,)
+    constructed = [b for b in multi.intervals["basis"] if b != _CENSORED]
+    basis = constructed[0] if constructed else _CENSORED
+    return (
+        f"intervals: {multi.interval_level:.4%} (alpha* = {multi.alpha_star:g} = "
+        f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family), basis {basis}",
+        f"interval excludes zero, verdict unchanged: {multi.n_interval_only} cells",
+        f"verdict significant, interval covers zero: {multi.n_verdict_only} cells",
+    )
+
+
+def _interval_text(cell: Cell) -> str:
+    """One worst-cells row's interval, in points. A row whose endpoints are ``None`` -- ADR-050's
+    censored basis, or a cell with no interval row -- prints ``censored`` rather than a bracket
+    around nothing."""
+    lo, hi = cell.ci_lo, cell.ci_hi
+    if lo is None or hi is None or lo != lo or hi != hi:
+        return _CENSORED
+    return f"[{_fmt(lo, 'pp1')}, {_fmt(hi, 'pp1')}]"
+
+
+def _interval_index(multi: MultiDiffResult, event: str) -> dict[str, tuple[Any, Any, str]]:
+    """This event's interval rows by ``config_hash``.
+
+    Keyed per event and never across events: two events' intervals on the same cell are different
+    numbers, and a join on ``config_hash`` alone would print one event's interval on the other's
+    row.
+    """
+    if multi.intervals is None:
+        return {}
+    frame = multi.intervals
+    return {
+        str(record["config_hash"]): (record["ci_lo"], record["ci_hi"], str(record["basis"]))
+        for record in frame.loc[frame["event"] == event].to_dict(orient="records")
+    }
+
+
+def _interval_cell(
+    index: Mapping[str, tuple[Any, Any, str]],
+) -> Callable[[tuple[object, ...], dict[str, Any]], Cell]:
+    """``_diff_cell`` with this event's interval attached, for ``_grid``."""
+
+    def make(coords: tuple[object, ...], r: dict[str, Any]) -> Cell:
+        cell = _diff_cell(coords, r)
+        found = index.get(str(r["config_hash"]))
+        if found is None:
+            return cell
+        return replace(cell, ci_lo=found[0], ci_hi=found[1], ci_basis=found[2])
+
+    return make
 
 
 def _worst(
@@ -658,7 +748,7 @@ def _single_headline(diff: DiffResult) -> Callable[[Sequence[Cell], int, int, in
         return (
             f"{n_safer} of {len(present)} cells safer, {n_worse} worse "
             f"({diff.method}, BH q<{_fmt(diff.q, 'sig3')}, "
-            f"{'paired' if diff.paired else 'unpaired'})."
+            f"{'paired' if diff.method in _PAIRED_METHODS else 'unpaired'})."
         )
 
     return headline
@@ -710,7 +800,8 @@ def build_report(
         "t_unit": diff.t_unit,
         "horizon": diff.horizon,
         "method": diff.method,
-        "paired": diff.paired,
+        "seed_identity_match": diff.seed_identity_match,
+        "unpaired_analysis": diff.unpaired_analysis,
         "q": diff.q,
         "n_not_comparable": diff.n_not_comparable,
         "dropped_a": diff.dropped_a,
@@ -766,7 +857,7 @@ def _multi_method_rows(
             ev = m.by_event[e]
             rows.append((
                 f"{_method_label(m.method)} · {e}",
-                "paired" if m.paired else "unpaired",
+                "paired" if m.method in _PAIRED_METHODS else "unpaired",
                 _fmt(ev.n_safer, "int"),
                 _fmt(ev.n_worse, "int"),
                 _fmt(ev.n_unchanged, "int"),
@@ -849,7 +940,12 @@ def build_multi_report(
     # One hole map for every panel: each event's cells carry the same ``common``, so the grid
     # and its holes are identical across panels.
     holes = _hole_map(multi, spec)
-    grids = {e: _grid(rows_by_event[e], spec, _diff_cell, holes) for e in order}
+    # ADR-032: the join is by ``(event, config_hash)``, one index per event, because two events'
+    # intervals on the same cell are different numbers.
+    grids = {
+        e: _grid(rows_by_event[e], spec, _interval_cell(_interval_index(multi, e)), holes)
+        for e in order
+    }
     all_cells = [c for e in order for c in grids[e][0]]
     bound = _bound_for(all_cells, spec.color_max)
     trades = frozenset(str(h) for h in multi.trades["config_hash"])
@@ -859,7 +955,8 @@ def build_multi_report(
         "non_event": multi.non_event,
         "n_tests": multi.n_tests,
         "method": multi.method,
-        "paired": multi.paired,
+        "seed_identity_match": multi.seed_identity_match,
+        "unpaired_analysis": multi.unpaired_analysis,
         "q": multi.q,
         "t_unit": multi.t_unit,
         "horizon": multi.horizon,
@@ -899,6 +996,7 @@ def build_multi_report(
             tiebreak=True,
             horizon=multi.horizon,
             grid=grids[e],
+            intervals=multi.intervals is not None,
         )
     return MultiReport(
         spec=spec,
@@ -911,6 +1009,7 @@ def build_multi_report(
         provenance=provenance,
         _method_rows=_multi_method_rows(multi, spec.comparison),
         tree=tree,
+        interval_lines=_interval_lines(multi),
     )
 
 
@@ -1403,6 +1502,8 @@ def _worst_table_rows(rep: Report) -> list[list[str]]:
                 f"{_fmt(c.mde, 'pp0')}pp",
             ]
         )
+        if rep._intervals:
+            rows[-1].append(_interval_text(c))
     return rows
 
 
@@ -1414,13 +1515,18 @@ _METHOD_HEADER = ["method", "pairing", "safer", "worse", "unchanged", "max MDE",
 
 
 def _worst_header(rep: Report) -> list[str]:
-    return _axes_of(rep.spec) + (_RATE_HEADER_TAIL if rep._mode == "rate" else _WORST_HEADER_TAIL)
+    if rep._mode == "rate":
+        return _axes_of(rep.spec) + _RATE_HEADER_TAIL
+    # When ``R == 0`` M6 built no intervals and there is no column: a column that does not
+    # exist cannot be read (the fault-lines table's rule, one table over).
+    tail = [*_WORST_HEADER_TAIL, _INTERVAL_COLUMN] if rep._intervals else list(_WORST_HEADER_TAIL)
+    return _axes_of(rep.spec) + tail
 
 
 def _method_row(d: DiffResult) -> list[str]:
     return [
         _method_label(d.method),
-        "paired" if d.paired else "unpaired",
+        "paired" if d.method in _PAIRED_METHODS else "unpaired",
         _fmt(d.n_safer, "int"),
         _fmt(d.n_worse, "int"),
         _fmt(d.n_unchanged, "int"),
@@ -1524,6 +1630,12 @@ def _render_multi_markdown(rep: MultiReport) -> str:
             panel.honesty,
             "",
         ]
+    # ADR-060: the flat family's intervals sit in the honesty band, after the last panel's
+    # honesty text and never beside a leaf row. The tree's *Cells* section is above the figure
+    # and two sections away.
+    parts += ["## Intervals", ""]
+    for line in rep.interval_lines:
+        parts += [line, ""]
     if rep._method_rows:
         parts += ["## Methods", "", _md_table(_METHOD_HEADER, rep._method_rows), ""]
     parts += [
@@ -1655,6 +1767,9 @@ def _omnibus_items(root: RootResult) -> list[_TreeItem]:
         root.headline(),
         f"min-p of location and dispersion; {_fmt(root.n_permutations, 'int')} within-cell "
         f"permutations, {root.scheme}, seed {_fmt(root.seed, 'int')}",
+        f"p floor {_fmt(root.p_floor, 'sig3')}: the smallest p "
+        f"{_fmt(root.n_permutations, 'int')} permutations can express; a p at the floor is a "
+        "bound, not a measurement",
         (["event", "mean delta (pp)", "p", "rms delta (pp)", "p"], rows),
         f"informative cells: {_fmt(root.n_informative_cells, 'int')} of "
         f"{_fmt(root.n_cells, 'int')}; {_fmt(root.n_uninformative_cells, 'int')} unchanged by "
@@ -1688,6 +1803,13 @@ def _fault_lines_items(tree: TreeResult) -> list[_TreeItem]:
         items.append(
             f'"{fault.null}" tested by BH across {_fmt(fault.n_groups, "int")} groups at q '
             f'{_fmt(fault.q, "sig3")}: {_fmt(fault.n_rejected_groups, "int")} rejected'
+        )
+        # C33 (b): a group p is drawn from the same permutations the root was, so it has the
+        # same floor. Only where a level was tested -- there is no floor under a p nobody drew.
+        items.append(
+            f"group p floor {_fmt(tree.root.p_floor, 'sig3')}: the same "
+            f"{_fmt(tree.root.n_permutations, 'int')} permutations; a group p at the floor is a "
+            "bound, not a measurement"
         )
     else:
         items.append(f'"{fault.null}" not tested: {_not_tested(fault.reason, tree.bound)}')
@@ -1898,6 +2020,8 @@ def _render_multi_html(rep: MultiReport) -> str:
             _html_table(_worst_header(panel), _worst_table_rows(panel)),
             f"<p>{_html_lines(panel.honesty)}</p>",
         ]
+    parts.append("<h2>Intervals</h2>")
+    parts.extend(f"<p>{_html_lines(line)}</p>" for line in rep.interval_lines)
     if rep._method_rows:
         parts += ["<h2>Methods</h2>", _html_table(_METHOD_HEADER, rep._method_rows)]
     parts += _html_close(rep.provenance)

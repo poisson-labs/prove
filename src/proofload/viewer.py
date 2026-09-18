@@ -1,10 +1,10 @@
 """M13: the viewer. A versioned structure for one run pair, a renderer over it, and a server.
 
 Three halves that never reach back into each other. ``build_structure`` assembles
-``proofload.viewpair/3`` -- identity and run tallies, diff parameters, panels, cells, holes,
-M14's layered report and what could not be verified -- from M6's result, M7's report, M14's
-tree, the two ``RunManifest``s and the two ``RunTally``s. ``render_html`` turns that structure,
-and nothing else, into one page.
+``proofload.viewpair/4`` -- identity and run tallies, diff parameters, panels, cells, holes,
+the flat family's intervals, M14's layered report and what could not be verified -- from M6's
+result, M7's report, M14's tree, the two ``RunManifest``s and the two ``RunTally``s.
+``render_html`` turns that structure, and nothing else, into one page.
 ``serve_page`` holds the page on an ephemeral loopback port until Ctrl-C.
 
 **It renders, it does not compute.** Every rate, delta, p, q, MDE, verdict, count and colour
@@ -56,10 +56,31 @@ __all__ = ["ViewerError", "build_structure", "render_html", "serve_page"]
 # ``config_text`` per cell, and the top-level ``holes`` list; ``/3`` adds ``tree``, M14's
 # layered report carried verbatim; ``/4`` adds ``agreement`` inside ``tree`` -- the digest of the
 # rebuild the tree's own construction verified, so a consumer holding this payload can check that
-# the tree is the tree of the pair beside it (A28). The twelve top-level keys do not move: the
-# digest is inside ``tree``, not beside it. Nothing migrates because nothing stores a structure:
-# ``--json`` prints to stdout and the page is a snapshot (ADR-036).
+# the tree is the tree of the pair beside it (A28) -- and then, behind A28 and under the same
+# version, P-1's thirteenth top-level key ``intervals``, the two provenance keys that replace
+# ``paired`` in the ``diff`` object, and ``p_floor`` inside ``tree.root``.
+#
+# **Two packets on one ``/4``, and why that is honest rather than a broken rule.** The rule above
+# is the one P-1 breaks: A28 had landed and been pushed before P-1 was written, so "lands with
+# A28" was not available. Nothing stores a structure (ADR-036; ``--json`` prints to stdout and
+# the page is a snapshot), the package is private at ``0.0.1`` with no tag, and no published
+# consumer read ``/4`` before P-1 -- so no stored shape can be misread. What keeps the one
+# version honest is ``render_html``'s refusal below: a ``/4`` assembled before ``intervals``
+# joined it is refused by name rather than drawn with a section missing.
 SCHEMA = "proofload.viewpair/4"
+
+#: Which BH family ``intervals.level`` and ``intervals.alpha_star`` belong to. The layered
+#: report introduces a nested family with a different level, so a bare ``alpha*`` on the page
+#: would be the one number a reader could attribute to either.
+#:
+#: **Spelled here rather than imported**, deliberately: the set of names this module may take
+#: from ``report`` is frozen by two oracles (M13 V35, S21 E22) as assembly helpers plus render
+#: helpers, and a shared constant is neither. It must agree with the prose in
+#: ``report._interval_lines`` -- *over the flat BH family* -- which is the one formatter every
+#: surface reads; P-1 Y10 pins this value and Y12 pins that prose, so the pair cannot drift
+#: unnoticed. The escape hatch, if a third spelling ever appears: widen the partition in those
+#: two oracles under their own re-freeze rather than adding a second constant here.
+_INTERVAL_FAMILY = "flat"
 
 _HOST = "127.0.0.1"
 _CONTENT_TYPE = "text/html; charset=utf-8"
@@ -96,6 +117,7 @@ _FLOAT_KINDS: dict[str, str] = {
 # string the structure carries (V16's rule, one object over).
 _TREE_KINDS: dict[str, dict[str, str]] = {
     "root": {
+        "p_floor": "sig3",
         "p_omnibus": "sig3",
         "p_location": "sig3",
         "p_dispersion": "sig3",
@@ -169,9 +191,16 @@ _UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
         None,
     ),
     (
-        "paired_basis",
-        "paired is true when the two manifests carry the same run_salt. Matching salts do not "
-        "prove the two runs consumed their seeds identically.",
+        # Reworded, not added, by P-1: after C18 the stored seeds *are* compared on every matched
+        # row, so the old sentence -- "matching salts do not prove the two runs consumed their
+        # seeds identically" -- no longer describes the check. What stays unverifiable is what
+        # the target did with a seed (ADR-076), which is a finding about the target and not a
+        # roadmap item, so ``blocked_by`` stays ``None``.
+        "seed_identity_basis",
+        "seed_identity_match is true when both manifests carry the same run_salt and every row "
+        "this comparison matched stores the same seed in both arms at the same (config_hash, "
+        "replicate_index). It compares the seeds that were stored, not what the target did with "
+        "them.",
         None,
     ),
 )
@@ -529,6 +558,51 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
         )
 
 
+def _intervals(report: MultiReport, multi: MultiDiffResult) -> dict[str, Any]:
+    """The flat family's intervals as data: M6's fields, M7's one formatter's lines, and one row
+    per M6 interval row in M6's order.
+
+    Always an object, never ``null``: ``R == 0`` is read from ``level: null``, ``rows: []`` and
+    the one line, not from an absent key, because a consumer cannot tell an absent key from an
+    older payload. Each row carries ``event`` **and** ``config_hash``; a panel cell carries
+    ``config_hash``, and the join back is a string equality, which is the only arithmetic-free
+    join there is (ADR-032).
+
+    A ``None`` endpoint gets no ``text`` entry rather than a spelling of nothing, the rule the
+    tree's decoration already uses: a field that prints nothing gets no entry.
+    """
+    rows: list[dict[str, Any]] = []
+    records = [] if multi.intervals is None else multi.intervals.to_dict(orient="records")
+    for record in records:
+        text: dict[str, str] = {}
+        row: dict[str, Any] = {
+            "event": str(record["event"]),
+            "config_hash": str(record["config_hash"]),
+        }
+        for name in ("ci_lo", "ci_hi"):
+            value = record[name]
+            if value is None or value != value:
+                row[name] = None
+                continue
+            row[name] = float(value)
+            text[name] = _fmt(value, "pp1")
+        row["basis"] = str(record["basis"])
+        row["text"] = text
+        rows.append(row)
+    return {
+        "family": _INTERVAL_FAMILY,
+        "q": float(multi.q),
+        "n_tests": int(multi.n_tests),
+        "n_rejected": int(multi.n_rejected),
+        "level": None if multi.interval_level is None else float(multi.interval_level),
+        "alpha_star": None if multi.alpha_star is None else float(multi.alpha_star),
+        "n_interval_only": int(multi.n_interval_only),
+        "n_verdict_only": int(multi.n_verdict_only),
+        "lines": list(report.interval_lines),
+        "rows": rows,
+    }
+
+
 def build_structure(
     report: MultiReport,
     multi: MultiDiffResult,
@@ -592,6 +666,7 @@ def build_structure(
         "trade_line": report.trade_line,
         "fence": _EPISTEMIC_FENCE,
         "panels": panels,
+        "intervals": _intervals(report, multi),
         "tree": _tree_payload(tree.to_json()),
         "unverified": [
             {"id": name, "statement": statement, "blocked_by": blocked}
@@ -817,10 +892,15 @@ def _omnibus_html(root: Mapping[str, Any]) -> list[str]:
         f"informative cells: {root['n_informative_cells']} of {root['n_cells']}; "
         f"{root['n_uninformative_cells']} unchanged by every exchange"
     )
+    floor = (
+        f"p floor {text['p_floor']}: the smallest p {root['n_permutations']} permutations can "
+        "express; a p at the floor is a bound, not a measurement"
+    )
     return [
         f"<h2>{_OMNIBUS_HEADING}</h2>",
         _paragraph(str(root["headline"])),
         _paragraph(method_line),
+        _paragraph(floor),
         _html_table(_OMNIBUS_HEADER, rows),
         _paragraph(informative),
     ]
@@ -878,6 +958,15 @@ def _fault_lines_html(tree: Mapping[str, Any]) -> list[str]:
             f"{_not_tested_text(fault['reason'], tree['bound'])}"
         )
     parts.append(_paragraph(null))
+    if fault["tested"]:
+        # C33 (b), only where the level was tested: there is no floor under a p nobody drew.
+        parts.append(
+            _paragraph(
+                f"group p floor {root['text']['p_floor']}: the same "
+                f"{root['n_permutations']} permutations; a group p at the floor is a bound, "
+                "not a measurement"
+            )
+        )
     pair_swap = root["scheme"] == _PAIR_SWAP
     header = [str(grouping["key"]), *_GROUP_HEADER_TAIL]
     if pair_swap:
@@ -1109,6 +1198,15 @@ def render_html(structure: Mapping[str, Any]) -> str:
             f"unknown structure schema {schema!r}; this renderer reads {SCHEMA!r} only and "
             "does not attempt a best-effort render"
         )
+    # Two shapes cannot share a schema string silently. ``/4`` carries two packets (the comment
+    # above SCHEMA says why), so a ``/4`` assembled before the flat family's intervals joined it
+    # is refused by name rather than drawn with a section missing. The dashboard's stored
+    # fixtures are exactly such structures, which is the point.
+    if "intervals" not in structure:
+        raise ViewerError(
+            "this structure carries no intervals; it was assembled before the flat family's "
+            "intervals joined proofload.viewpair/4 and is not a page this renderer will draw"
+        )
     if "tree" not in structure:
         raise ViewerError(
             "this structure carries no tree; a page whose honesty block cannot state the bound "
@@ -1151,6 +1249,10 @@ def render_html(structure: Mapping[str, Any]) -> str:
     for panel in panels:
         parts.append(f"<h3>{_html.escape(str(panel['event']))}</h3>")
         parts.append(f"<p>{_lines_html(str(panel['honesty']))}</p>")
+    # ADR-060: the flat family's intervals are the last thing in the honesty band before the
+    # bound, and never beside a leaf row -- *Not verified*, *Fault lines* and *Cells* sit between
+    # this paragraph and the first leaf. One paragraph, the lines as M7 formatted them.
+    parts.append(_paragraph("\n".join(str(line) for line in structure["intervals"]["lines"])))
     # The bound is the second number of the honesty block, not a footnote: what this run could
     # not have seen, then what the whole procedure controls at, on one screen.
     parts.append(_bound_html(tree["bound"]))

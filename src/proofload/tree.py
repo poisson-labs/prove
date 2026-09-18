@@ -243,6 +243,13 @@ class RootResult:
     n_uninformative_cells: int
     n_discordant: int | None
     n_permutations: int
+    #: ``1 / (n_permutations + 1)``: the smallest p Phipson-Smyth's ``(1 + count) / (B + 1)`` can
+    #: express over this draw, and so a floor under every permutation p in the tree -- the root's
+    #: two and its omnibus, and each tested group's three. Carried rather than derived, so a
+    #: renderer can label an at-floor p without doing the arithmetic (ADR-032, ADR-086). Not a
+    #: statistic: it reads no row and is fixed before a permutation is drawn, the same kind of
+    #: field as ``n_permutations`` beside it.
+    p_floor: float
     seed: int
     units: pd.DataFrame
     location: Mapping[str, float]
@@ -288,6 +295,7 @@ class RootResult:
             "n_uninformative_cells": int(self.n_uninformative_cells),
             "n_discordant": None if self.n_discordant is None else int(self.n_discordant),
             "n_permutations": int(self.n_permutations),
+            "p_floor": float(self.p_floor),
             "seed": int(self.seed),
             "units": [
                 {column: _native(value) for column, value in record.items()}
@@ -879,6 +887,7 @@ def _root(
         n_uninformative_cells=len(common) - design.n_informative_cells,
         n_discordant=design.n_discordant,
         n_permutations=n_permutations,
+        p_floor=1 / (n_permutations + 1),
         seed=seed,
         units=units,
         location={e: float(location[0][i]) for i, e in enumerate(multi.events)},
