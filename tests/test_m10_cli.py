@@ -400,6 +400,7 @@ def test_i1_verb_help_returns_zero() -> None:
 
 def test_i2_store_flag_beats_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     flag, env = tmp_path / "flag-store", tmp_path / "env-store"
+    flag.mkdir()  # E1: a root with no directory is refused; an empty one lists nothing
     monkeypatch.setenv("PROOFLOAD_STORE", str(env))
     r = run_cli(["--store", str(flag), "runs"])
     assert r.code == 0, r.text
@@ -409,6 +410,7 @@ def test_i2_store_flag_beats_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 def test_i2_env_beats_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     env = tmp_path / "env-store"
+    env.mkdir()  # E1
     monkeypatch.setenv("PROOFLOAD_STORE", str(env))
     monkeypatch.chdir(tmp_path)
     r = run_cli(["runs"])
@@ -420,6 +422,7 @@ def test_i2_env_beats_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_i2_default_is_proofload_runs_in_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PROOFLOAD_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
+    (tmp_path / "proofload-runs").mkdir()  # E1
     r = run_cli(["runs"])
     assert r.code == 0, r.text
     assert "proofload-runs" in r.out
@@ -1079,6 +1082,7 @@ def test_i16_inspect_without_trace_prints_rows_and_no_step_lines(tmp_path: Path)
 
 
 def test_i17_runs_lists_every_run_sorted_with_seven_fields(mock_runs: MockRuns, tmp_path: Path) -> None:
+    (tmp_path / "empty").mkdir()  # E1: an existing empty store still lists its header alone
     empty = run_cli(["--store", str(tmp_path / "empty"), "runs"])
     assert empty.code == 0, empty.text
     header_lines = len(empty.lines)
@@ -1107,6 +1111,7 @@ def test_i17_runs_lists_every_run_sorted_with_seven_fields(mock_runs: MockRuns, 
 
 def test_i17_empty_store_prints_only_the_header(tmp_path: Path) -> None:
     root = tmp_path / "empty"
+    root.mkdir()  # E1
     r = run_cli(["--store", str(root), "runs"])
     assert r.code == 0, r.text
     assert mentions_path(r.out, root)

@@ -1131,12 +1131,15 @@ def test_b8_no_trades_means_no_data_trade_anywhere() -> None:
 
 # ---------- B9: inference line ----------
 
+#: The inference line's marker, a line prefix and never a substring: report.md's Provenance prints ``- inferred: false``, which a bare ``inferred: `` would match.
+INFERENCE_MARKER = "inferred: no event was given, so "
+
 
 def test_b9_inference_line_present_iff_inferred_and_precedes_the_headline() -> None:
     inferred = two_event_multi(inferred=True, non_event="completed")
     rep = build_multi_report(inferred, spec2())
     expected = inferred.to_markdown().splitlines()[0]
-    assert expected.startswith("events: ") and "(inferred;" in expected
+    assert expected.startswith(INFERENCE_MARKER)
     assert rep.inference_line == expected
     md, svg_text, html = visible_texts(rep)
     line1 = inferred.headline().splitlines()[0]
@@ -1147,7 +1150,7 @@ def test_b9_inference_line_present_iff_inferred_and_precedes_the_headline() -> N
     rep2 = build_multi_report(explicit, spec2())
     assert rep2.inference_line is None
     for text in visible_texts(rep2):
-        assert not [line for line in text.splitlines() if line.startswith("events: ") and "(inferred;" in line]
+        assert not [line for line in text.splitlines() if line.startswith(INFERENCE_MARKER)]
 
 
 # ---------- B10: per-panel honesty from per-event fields ----------
@@ -1641,7 +1644,7 @@ def test_b17_quickstart_pair_reads_timeout_first_with_one_trade(quickstart: dict
     assert rep.trade_line is not None and "timeout" in rep.trade_line and "violated" in rep.trade_line
     assert rep.trade_line == multi.trade_line()
     assert rep.inference_line == multi.to_markdown().splitlines()[0]
-    assert rep.inference_line is not None and rep.inference_line.startswith("events: ")
+    assert rep.inference_line is not None and rep.inference_line.startswith(INFERENCE_MARKER)
     groups = panel_groups(svg_root(rep))
     assert [g.attrib["data-panel"] for g in groups] == QUICKSTART_PANEL_ORDER
     traded = set(multi.trades["config_hash"])

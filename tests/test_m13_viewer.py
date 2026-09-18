@@ -70,7 +70,7 @@ import pytest
 
 import proofload
 import proofload.cli as cli
-from proofload.diff import MultiDiffResult, infer_events, multi_diff
+from proofload.diff import MultiDiffResult, multi_diff
 from proofload.episode import Episode
 from proofload.report import MultiReport, ReportSpec, build_multi_report
 from proofload.store import EpisodeRecord, RunManifest, Store
@@ -957,15 +957,15 @@ def hostile(tmp_path_factory: pytest.TempPathFactory) -> Built:
 # ---------- V1-V5: refusals, and nothing binds ----------
 
 
-def test_v1_missing_event_exits_two_names_serve_and_suggests_the_inferred_set(monkeypatch: pytest.MonkeyPatch, go1_store: Store) -> None:
+def test_v1_missing_event_exits_two_names_serve_and_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
-    inferred, _ = infer_events(go1_store.read(GO1_A), go1_store.read(GO1_B))
     r = run_cli(go1_argv("--x", GO1_X))
     assert_clean_refusal(r, 2)
     assert r.err == (
-        "error: serve requires --event; a picture whose meaning changes when a new outcome "
-        f"appears is worse than a table with the same defect. Inferred events for this pair: "
-        f"{', '.join(inferred)}.\n"
+        "error: serve requires --event NAME, which was not given; a picture whose meaning changes when a new outcome "
+        "appears is worse than a table with the same defect. go1-v0 and go1-v1 carry:\n"
+        "  axes: mu, push_pct_bw\n"
+        "  events: fell, survived\n"
     ), r.err
 
 
@@ -987,11 +987,15 @@ def test_v3_wrong_arity_exits_two_naming_the_two_run_form_and_no_single_run_mode
         assert offer not in r.err, r.err
 
 
-def test_v4_missing_x_is_an_argparse_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v4_missing_x_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(go1_argv("--event", "fell"))
     assert_clean_refusal(r, 2)
-    assert "--x" in r.err, r.err
+    assert r.err == (
+        "error: serve requires --x AXIS, which was not given. go1-v0 and go1-v1 carry:\n"
+        "  axes: mu, push_pct_bw\n"
+        "  events: fell, survived\n"
+    ), r.err
 
 
 def test_v4_unknown_x_exits_two_through_axis_error(monkeypatch: pytest.MonkeyPatch) -> None:

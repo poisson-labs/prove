@@ -930,6 +930,10 @@ def test_a13_event_inference_error_is_a_diff_error() -> None:
     assert issubclass(EventInferenceError, DiffError)
 
 
+#: The inference line's marker, a line prefix and never a substring: report.md's Provenance prints ``- inferred: false``, which a bare ``inferred: `` would match.
+INFERENCE_MARKER = "inferred: no event was given, so "
+
+
 def _inference_frames() -> tuple[pd.DataFrame, pd.DataFrame]:
     a = _raw({"c1": _cell(completed=20, violated=8, timeout=4), "c2": _cell(completed=24, violated=6, timeout=2)})
     b = _raw({"c1": _cell(completed=16, violated=12, timeout=4), "c2": _cell(completed=24, violated=6, timeout=2)})
@@ -953,13 +957,13 @@ def test_a14_markdown_prints_inference_line_iff_inferred() -> None:
     a, b = _inference_frames()
     inferred = _multi(a, b, None)
     first = inferred.to_markdown().splitlines()[0]
-    assert first == "events: violated, timeout (inferred; completed treated as non-event)"
+    assert first == "inferred: no event was given, so the event set is violated, timeout; the non-event is completed, the most frequent outcome"
     explicit = _multi(a, b, ["violated", "timeout"])
-    assert "(inferred" not in explicit.to_markdown()
+    assert not [line for line in explicit.to_markdown().splitlines() if line.startswith(INFERENCE_MARKER)]
 
 
 def test_a14_markdown_has_no_inference_line_on_fixture(multi_fell: MultiDiffResult) -> None:
-    assert "(inferred" not in multi_fell.to_markdown()
+    assert not [line for line in multi_fell.to_markdown().splitlines() if line.startswith(INFERENCE_MARKER)]
 
 
 def _assert_json_round_trip(result: MultiDiffResult) -> None:

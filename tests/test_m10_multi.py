@@ -78,6 +78,8 @@ QUICKSTART_BUDGET_S = 30.0
 REPORT_FILES = {"report.md", "heatmap.svg", "receipt.html"}
 MOCK_EVENTS = {"violated", "timeout"}
 NON_EVENT = "completed"
+#: The inference line's marker, a line prefix and never a substring: report.md's Provenance prints ``- inferred: false``, which a bare ``inferred: `` would match.
+INFERENCE_MARKER = "inferred: no event was given, so "
 GO1_HEADLINE = "fell: 60 safer, 0 worse"
 FALLBACK_IMPORT = "from your_module import rollout"
 REAL_IMPORT = f"from {MOCK_MODULE} import rollout"
@@ -495,7 +497,7 @@ def test_c1_single_event_diff_headline_reads_sixty_safer_zero_worse_fisher() -> 
     assert r.code == 0, r.text
     assert GO1_HEADLINE in r.lines, r.out
     assert "fisher_bh" in r.out, r.out
-    assert "(inferred" not in r.out, r.out
+    assert not [line for line in r.out.splitlines() if line.startswith(INFERENCE_MARKER)], r.out
 
 
 # ---------- C2: inference ----------
@@ -505,8 +507,8 @@ def test_c2_no_event_prints_inference_line_first_then_a_headline_naming_both_eve
     r = run_cli(pair_argv(pair, "diff"))
     assert r.code == 0, r.text
     first = r.lines[0]
-    assert first.startswith("events:"), r.out
-    assert "(inferred" in first and NON_EVENT in first, first
+    assert first.startswith(INFERENCE_MARKER), r.out
+    assert NON_EVENT in first, first
     assert "violated" in first and "timeout" in first, first
     headline = [line for line in r.lines[1:] if "violated:" in line and "timeout:" in line]
     assert headline, r.out
@@ -516,7 +518,7 @@ def test_c2_no_event_prints_inference_line_first_then_a_headline_naming_both_eve
 def test_c2_explicit_event_prints_one_event_and_no_inference_line(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "diff", "--event", "violated"))
     assert r.code == 0, r.text
-    assert "(inferred" not in r.out, r.out
+    assert not [line for line in r.out.splitlines() if line.startswith(INFERENCE_MARKER)], r.out
     assert any(line.startswith("violated:") for line in r.lines), r.out
     assert "timeout:" not in r.out, r.out
 
@@ -544,14 +546,14 @@ def test_c4_repeated_events_equal_inference_with_inferred_false(pair: MockPair) 
 def test_c4_repeated_events_print_no_inference_line(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "diff", "--event", "violated", "--event", "timeout"))
     assert r.code == 0, r.text
-    assert "(inferred" not in r.out, r.out
+    assert not [line for line in r.out.splitlines() if line.startswith(INFERENCE_MARKER)], r.out
     assert any("violated:" in line and "timeout:" in line for line in r.lines), r.out
 
 
 # ---------- C5: check refuses inference ----------
 
 
-def test_c5_check_without_event_exits_two_and_suggests_the_inferred_events(pair: MockPair) -> None:
+def test_c5_check_without_event_exits_two_and_lists_the_events_the_runs_carry(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "check"))
     assert_clean_refusal(r, 2)
     assert "requires --event" in r.err, r.text
