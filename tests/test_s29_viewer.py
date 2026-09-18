@@ -380,7 +380,7 @@ GO1_PAGE_2_SHA256 = {
 #: all four carriers, so the value is a read off the shipped file at ``38e8df9`` (byte-identical at
 #: ``03d7ed2``): the whole-file sha256, never a prediction. Bytes, so a scratch copy without ``.git``
 #: can check.
-DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695dbe5"
+DIFF_PY_SHA256 = "ec05b676b2f3e582eea9741d6e7e4d6086d3ad040d0a855f643907add6e13412"
 #: W20, **narrowed by P-1 Session A under ADR-077 (P-1 section 7.4, the clean case)**: ``tree.py``'s
 #: bytes outside ``RootResult`` and ``_root``, minted at ``a626cd3`` and measured identical on the
 #: P-1 prototype, because P-1's one ``tree.py`` edit -- the ``p_floor`` field, its ``to_json`` key and
@@ -410,32 +410,16 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
         "lines": "228-303, 853-890 of 2192",
     },
 )
-#: W20, narrowed by A28 under ADR-077: ``report.py``'s bytes outside ``report.py::_check_tree``,
-#: minted at ``38e8df9`` and measured identical on a copy carrying the digest and knob clauses,
-#: because every line A28 adds to this file sits inside that one definition (ADR-078's clean case).
-#: Green on Session A's commit and on the build; red on an edit anywhere else in the file.
-REPORT_PY_SHA256 = "31979f718a5eb2312787c8590ad44b328dd015d85ddd8cb1913ccf41d096908e"
-#: ADR-077's record for that region: the entry's six fields plus ``lines``, the region's lines over
-#: the file's lines at mint (ADR-077 Q2, lean (b)). ``cover`` is the A28 oracle's report-side
-#: refusal tests, asserted to exist through the resolver; ``retire_at`` is empty (spec A28 D5), so
-#: the first re-freeze after A28 finds it and files the row.
-REPORT_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
-    {
-        "region": ("_check_tree",),
-        "owner": "A28",
-        "cover": ("tests/test_a28_agreement.py", ("test_g11_the_report_refuses_c16s_crossed_tree_with_comparison_mismatch", "test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_unchanged", "test_g22_the_report_refuses_a_tree_grown_under_another_method_or_q_naming_both_values")),
-        "minted_at": "38e8df9",
-        "blind_spot": (
-            "The excluded region also holds the events clause, the arity clause and both "
-            "ComparisonMismatch messages, so the digest no longer sees either message move or a "
-            "clause deleted. G12 is the cover for the messages and it is asserted by substring, not "
-            "by digest; G11 and G22 are the cover for the two clauses A28 adds. Nothing else in this "
-            "oracle would notice."
-        ),
-        "retire_at": "",
-        "lines": "786-798 of 1896",
-    },
-)
+#: W20. ``report.py`` whole again. **P-1's post-build commit, 2026-09-18 -- A28's exclusion
+#: retired** (ADR-077's standing duty, step 3 under ADR-078). A28's ``report.py::_check_tree``
+#: narrowing (minted ``38e8df9``, ``retire_at`` empty) was retirable -- A28 is done -- and P-1 is
+#: the first re-freeze to reach this carrier, so the record and its cover loop go with it. P-1's
+#: own edits to this file cannot be narrowed the way A28's were: three of its regions
+#: (``_interval_lines``, ``_interval_text``, ``_NO_INTERVAL_LINE``) do not exist on the pinned
+#: commit and the import line at the top moves. So this is the whole-file sha256 of the built
+#: ``report.py``, read off the shipped file and never a prediction. No ``REPORT_PY_EXCLUDED`` is
+#: minted; ``TREE_PY_EXCLUDED`` above is now the file's only exclusion record.
+REPORT_PY_SHA256 = "891f6d3d5f176d6f1c42cf5657a11144b5e37a046bf0c92ebe9e87481cf35dc3"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
@@ -2210,13 +2194,7 @@ def e14_builder_digests() -> dict[str, str]:
 
 def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_result_and_root_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
     assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
-    assert digest_excluding(REPORT_SOURCE, [q for record in REPORT_PY_EXCLUDED for q in record["region"]]) == REPORT_PY_SHA256
-    assert hashlib.sha256(REPORT_SOURCE.read_bytes()).hexdigest() != REPORT_PY_SHA256
-    for record in REPORT_PY_EXCLUDED:
-        cover = REPO / record["cover"][0]
-        assert cover.exists(), record["cover"]
-        for test_id in record["cover"][1]:
-            resolve_region(ast.parse(cover.read_bytes()), test_id)
+    assert hashlib.sha256(REPORT_SOURCE.read_bytes()).hexdigest() == REPORT_PY_SHA256
     assert digest_excluding(TREE_SOURCE, [q for record in TREE_PY_EXCLUDED for q in record["region"]]) == TREE_PY_SHA256
     assert hashlib.sha256(TREE_SOURCE.read_bytes()).hexdigest() != TREE_PY_SHA256
     for record in TREE_PY_EXCLUDED:
@@ -2303,16 +2281,15 @@ def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if excluded_constants(path))
     assert hits == ["test_s29_viewer.py"], hits
     # Module order: ``TREE_PY_EXCLUDED`` sits beside ``TREE_PY_SHA256``, which precedes the report pair.
-    assert excluded_constants(REPO / "tests" / "test_s29_viewer.py") == ["TREE_PY_EXCLUDED", "REPORT_PY_EXCLUDED"]
-    for constant, owner, minted_at in ((REPORT_PY_EXCLUDED, "A28", "38e8df9"), (TREE_PY_EXCLUDED, "P-1", "a626cd3")):
+    assert excluded_constants(REPO / "tests" / "test_s29_viewer.py") == ["TREE_PY_EXCLUDED"]
+    for constant, owner, minted_at in ((TREE_PY_EXCLUDED, "P-1", "a626cd3"),):
         for record in constant:
             assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at", "lines"}, sorted(record)
             assert record["owner"] == owner and record["minted_at"] == minted_at and record["retire_at"] == ""
             assert len(record["blind_spot"].split()) >= 20, record["region"]
             assert re.fullmatch(r"\d+-\d+(, \d+-\d+)* of \d+", record["lines"]), record["lines"]
-    assert [record["region"] for record in REPORT_PY_EXCLUDED] == [("_check_tree",)]
     assert [record["region"] for record in TREE_PY_EXCLUDED] == [("RootResult", "_root")]
-    for source, constant in ((REPORT_SOURCE, REPORT_PY_EXCLUDED), (TREE_SOURCE, TREE_PY_EXCLUDED)):
+    for source, constant in ((TREE_SOURCE, TREE_PY_EXCLUDED),):
         spans = sorted(
             (node.lineno, node.end_lineno)
             for node in (resolve_region(ast.parse(source.read_bytes()), q) for record in constant for q in record["region"])

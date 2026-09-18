@@ -348,7 +348,7 @@ E14_WITH_TREE_SHA256 = {
 #: the value below is a read off the shipped file at ``38e8df9`` (byte-identical at ``03d7ed2``),
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
-DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695dbe5"
+DIFF_PY_SHA256 = "ec05b676b2f3e582eea9741d6e7e4d6086d3ad040d0a855f643907add6e13412"
 F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"

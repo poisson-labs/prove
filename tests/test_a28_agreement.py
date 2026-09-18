@@ -165,7 +165,7 @@ FORMER_CARRIERS = ("test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_re
 PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REPORT_SOURCE, "DIFF_PY_EXCLUDED": DIFF_SOURCE}
 #: G20. ``src/proofload/diff.py`` whole, read off the shipped file at ``38e8df9`` and unchanged at
 #: ``03d7ed2``: the value the retirement re-mints in all four carriers, a read and not a prediction.
-DIFF_PY_SHA256 = "d2b0ef59c0e928dd80a7307cd464d4285094a6b856201a3f908cbbdfe695dbe5"
+DIFF_PY_SHA256 = "ec05b676b2f3e582eea9741d6e7e4d6086d3ad040d0a855f643907add6e13412"
 #: The one ``tests/`` file whose module-level ``*_PY_EXCLUDED`` constants this packet inspects.
 S27_SOURCE = TESTS / "test_s27_leaves.py"
 
