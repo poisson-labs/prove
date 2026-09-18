@@ -26,6 +26,7 @@ import argparse
 import dataclasses
 import json
 import os
+import shlex
 import sys
 import tomllib
 import traceback
@@ -250,7 +251,11 @@ def _build_parser(io: _IO) -> _Parser:
         "--methods", choices=("all",), help="add the method comparison table (diff report only)"
     )
     _add_tree_arguments(report_p, defaults=False)
-    report_p.add_argument("--x", required=True, metavar="AXIS", help="config key on the x axis")
+    report_p.add_argument(
+        "--x",
+        metavar="AXIS",
+        help="config key on the x axis (omitted: lists the axes and events the runs carry)",
+    )
     report_p.add_argument("--y", metavar="AXIS", help="config key on the y axis")
     report_p.add_argument(
         "--fix", action="append", default=[], metavar="KEY=VALUE", help="pin a config key"
@@ -295,7 +300,11 @@ def _build_parser(io: _IO) -> _Parser:
     # value. The helper keeps ``diff``'s two argument groups, so ``diff --help``'s layout is
     # unchanged and ``serve --help`` gains the same two headings.
     _add_tree_arguments(serve_p, defaults=True)
-    serve_p.add_argument("--x", required=True, metavar="AXIS", help="config key on the x axis")
+    serve_p.add_argument(
+        "--x",
+        metavar="AXIS",
+        help="config key on the x axis (omitted: lists the axes and events the runs carry)",
+    )
     serve_p.add_argument("--y", metavar="AXIS", help="config key on the y axis")
     serve_p.add_argument(
         "--fix", action="append", default=[], metavar="KEY=VALUE", help="pin a config key"
@@ -315,7 +324,11 @@ def _build_parser(io: _IO) -> _Parser:
 
     inspect_p = sub.add_parser("inspect", help="dump the (config, seed) pairs behind an event")
     inspect_p.add_argument("run", metavar="RUN")
-    inspect_p.add_argument("--event", required=True, metavar="NAME")
+    inspect_p.add_argument(
+        "--event",
+        metavar="NAME",
+        help="outcome or error to dump (omitted: lists the events the run carries)",
+    )
     inspect_p.add_argument(
         "--where", action="append", default=[], metavar="KEY=VALUE", help="filter on config"
     )
@@ -428,6 +441,7 @@ def _dispatch(ns: argparse.Namespace, io: _IO) -> int:
     root = _store_root(ns)
     state = _State()
     try:
+        _check_store(ns, root)
         return _VERBS[ns.verb](ns, io, root, state)
     except _Refusal as exc:
         io.err.write(f"error: {exc}\n")
@@ -452,6 +466,67 @@ def _store_root(ns: argparse.Namespace) -> Path:
     if env:
         return Path(env)
     return Path(_DEFAULT_STORE)
+
+
+_SWEEP_NEXT = "sweep SPEC.toml --target pkg.module:rollout"
+
+
+def _store_source(ns: argparse.Namespace) -> str:
+    """Which of the three places named the store root, in the order ``_store_root`` reads them.
+
+    An empty ``$PROOFLOAD_STORE`` is not a source: ``_store_root`` falls through it to the
+    default, and the clause has to name the resolution that actually happened (D3).
+    """
+    if ns.store:
+        return "it came from --store"
+    if os.environ.get(_ENV_STORE):
+        return f"it came from ${_ENV_STORE}"
+    return f"it is the default, since neither --store nor ${_ENV_STORE} is set"
+
+
+def _no_runs_note(ns: argparse.Namespace, root: Path) -> str:
+    """The empty-store sentence ``runs`` writes to stderr and the read verbs refuse with.
+
+    ``runs`` prints it without the ``error: `` prefix and still exits 0, because an empty
+    listing of a real store is a true answer (D1); the read verbs raise it as a refusal.
+    """
+    quoted = shlex.quote(str(root))
+    return "\n".join(
+        [
+            f"no runs in {root}. No directory under it holds a manifest.json; "
+            f"{_store_source(ns)}.",
+            f"  to write the first run there: proofload --store {quoted} {_SWEEP_NEXT}",
+        ]
+    )
+
+
+def _check_store(ns: argparse.Namespace, root: Path) -> None:
+    """E1: a missing store refuses on every verb that reads it, an empty one on every such verb
+    but ``runs``. ``sweep`` is the verb that creates the store, so it is never gated.
+
+    A path with no directory at it is certainly wrong, because nothing was ever stored there;
+    a directory with no ``manifest.json`` under it can be a fresh project. The exit code is the
+    machine-readable half of that distinction (D1). This reads the store and creates nothing.
+    """
+    if ns.verb == "sweep":
+        return
+    quoted = shlex.quote(str(root))
+    elsewhere = (
+        "  to read another store: "
+        f"proofload --store PATH {ns.verb}, with --store before the verb"
+    )
+    if not root.is_dir():
+        raise _Refusal(
+            "\n".join(
+                [
+                    f"no store at {root}. No directory exists at that path; {_store_source(ns)}.",
+                    f"  to create one there: proofload --store {quoted} {_SWEEP_NEXT}",
+                    elsewhere,
+                ]
+            )
+        )
+    if ns.verb != "runs" and not Store(root).runs():
+        raise _Refusal("\n".join([_no_runs_note(ns, root), elsewhere]))
 
 
 def _work_started(root: Path, state: _State) -> bool:
@@ -547,22 +622,50 @@ def _require_known_events(
         )
 
 
-def _missing_event_refusal(store: Store, a: str, b: str, verb: str, because: str) -> _Refusal:
-    """The refusal ``check`` and ``serve`` share, written once.
+_NEVER_INFERS = {
+    "check": "a gate whose meaning changes when a new outcome appears is not a gate",
+    "serve": (
+        "a picture whose meaning changes when a new outcome appears is worse than a table "
+        "with the same defect"
+    ),
+}
 
-    Both verbs refuse to infer, for the same reason at two volumes: a gate whose meaning moves
-    when a new outcome appears is not a gate, and a picture of the same defect is worse. The
-    sentence differs by one clause and the suggestion is identical, so the paragraph lives here
-    and each verb supplies its own middle.
+
+def _missing_flags_refusal(
+    store: Store, verb: str, runs: Sequence[str], *, x_missing: bool, event_missing: bool
+) -> _Refusal:
+    """E3: what the named runs carry, in place of argparse's bare "arguments are required".
+
+    The two verbs that refuse to infer keep their own clause: a gate whose meaning moves when a
+    new outcome appears is not a gate, and a picture of the same defect is worse. The listing
+    replaces the suggestion they used to end on, because a verb that refuses to infer should not
+    offer an inference as its advice, and the inferred set is a subset of the list (D7).
+
+    Fires after the store state, the arity and the unknown-run refusal, and before any work: it
+    reads the frames of the named runs and calls nothing else (section 3.2.1).
     """
-    fa, fb, _, _ = _load_pair(store, a, b)
-    try:
-        suggestion = ", ".join(infer_events(fa, fb)[0])
-    except Exception:  # noqa: BLE001 - the refusal must print whatever happens here
-        suggestion = "(could not infer)"
-    return _Refusal(
-        f"{verb} requires --event; {because} Inferred events for this pair: {suggestion}."
+    for run in runs:
+        store.manifest(run)
+    frames = [store.read(run, meta=False) for run in runs]
+    axes = sorted({str(key) for frame in frames for config in frame["config"] for key in config})
+    events = list(competing_set(*frames))
+    if verb == "inspect" and "timeout" not in events and store.tally(runs[0]).timed_out:
+        # ``inspect --event`` matches the error column too, and "timeout" is the one error text
+        # a person can type: ``RunTally.timed_out`` counts exactly ``error == "timeout"`` (D9).
+        events = sorted({*events, "timeout"})
+    flags = " and ".join(
+        flag
+        for flag, missing in (("--x AXIS", x_missing), ("--event NAME", event_missing))
+        if missing
     )
+    given = "and neither was given" if x_missing and event_missing else "which was not given"
+    reason = f"; {_NEVER_INFERS[verb]}" if event_missing and verb in _NEVER_INFERS else ""
+    who = f"{runs[0]} and {runs[1]} carry" if len(runs) == 2 else f"{runs[0]} carries"
+    lines = [f"{verb} requires {flags}, {given}{reason}. {who}:"]
+    if verb in ("report", "serve"):
+        lines.append(f"  axes: {', '.join(axes) or 'none stored'}")
+    lines.append(f"  events: {', '.join(events) or 'none stored'}")
+    return _Refusal("\n".join(lines))
 
 
 def _run_diffs(
@@ -1196,11 +1299,15 @@ def _write_report_files(
 def _cmd_report(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     """The positional arity picks the verb: two run ids diff, one run id is a survival report."""
     runs: list[str] = list(ns.runs)
+    if len(runs) not in (1, 2):
+        raise _Refusal(f"report takes one or two run ids, got {len(runs)}: {_REPORT_FORMS}")
+    if ns.x is None:
+        raise _missing_flags_refusal(
+            Store(root), "report", runs, x_missing=True, event_missing=False
+        )
     if len(runs) == 2:
         return _report_pair(ns, io, root, runs[0], runs[1])
-    if len(runs) == 1:
-        return _report_run(ns, io, root, runs[0])
-    raise _Refusal(f"report takes one or two run ids, got {len(runs)}: {_REPORT_FORMS}")
+    return _report_run(ns, io, root, runs[0])
 
 
 def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) -> int:
@@ -1333,7 +1440,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
     )
     if inferred:
         io.out.write(
-            f"events: {', '.join(events)} (inferred; {non_event} treated as non-event)\n"
+            f"inferred: no event was given, so the event set is {', '.join(events)}; "
+            f"the non-event is {non_event}, the most frequent outcome\n"
         )
     io.out.write(
         f"{run}: survival report over {', '.join(events)} at horizon "
@@ -1346,12 +1454,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
 def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     store = Store(root)
     if ns.event is None:
-        raise _missing_event_refusal(
-            store,
-            ns.a,
-            ns.b,
-            "check",
-            "a gate whose meaning changes when a new outcome appears is not a gate.",
+        raise _missing_flags_refusal(
+            store, "check", [ns.a, ns.b], x_missing=False, event_missing=True
         )
     multi, _, _, _ = _run_diffs(
         store,
@@ -1381,14 +1485,9 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         raise _Refusal(f"serve takes two run ids, got {len(runs)}: {_SERVE_FORM}")
     a, b = runs[0], runs[1]
     store = Store(root)
-    if ns.event is None:
-        raise _missing_event_refusal(
-            store,
-            a,
-            b,
-            "serve",
-            "a picture whose meaning changes when a new outcome appears is worse than a table "
-            "with the same defect.",
+    if ns.x is None or ns.event is None:
+        raise _missing_flags_refusal(
+            store, "serve", [a, b], x_missing=ns.x is None, event_missing=ns.event is None
         )
     fixed = _parse_pairs(ns.fix, "--fix")
     multi, _, manifests, frames = _run_diffs(
@@ -1467,6 +1566,10 @@ def _stored_trace(meta: Any) -> Trace | None:
 def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     store = Store(root)
     manifest = store.manifest(ns.run)
+    if ns.event is None:
+        raise _missing_flags_refusal(
+            store, "inspect", [ns.run], x_missing=False, event_missing=True
+        )
     # Select on the narrow frame; decode ``meta`` only for the rows that survive selection.
     df = store.read(ns.run, meta=False)
     where = _parse_pairs(ns.where, "--where")
@@ -1564,6 +1667,8 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
     for line in lines:
         cells = (cell.ljust(w) for cell, w in zip(line, widths, strict=True))
         io.out.write("  ".join(cells).rstrip() + "\n")
+    if len(lines) == 1:
+        io.err.write(_no_runs_note(ns, root) + "\n")
     return 0
 
 

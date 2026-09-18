@@ -699,8 +699,8 @@ class MultiDiffResult:
         lines: list[str] = []
         if self.inferred:
             lines.append(
-                f"events: {', '.join(self.events)} "
-                f"(inferred; {self.non_event} treated as non-event)"
+                f"inferred: no event was given, so the event set is {', '.join(self.events)}; "
+                f"the non-event is {self.non_event}, the most frequent outcome"
             )
         lines.extend(self.headline().splitlines())
         trade = self.trade_line()
