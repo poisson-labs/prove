@@ -972,7 +972,7 @@ def test_i16_generated_at_and_manifests_are_omitted_not_invented(golden_diff: Di
     assert with_runs.provenance["run_id_a"] == "go1-v0" and with_runs.provenance["run_id_b"] == "go1-v1"
     assert with_runs.provenance["run_salt"] == golden_frames["ma"].run_salt
     assert "go1-v0" in with_runs.to_markdown() and "go1-v0" not in bare.to_markdown()
-    for key in ("event", "t_unit", "horizon", "method", "seed_identity_match", "unpaired_analysis", "q", "n_not_comparable", "dropped_a", "dropped_b", "truncated", "n_absent", "proofload_version"):
+    for key in ("event", "t_unit", "horizon", "method", "seed_identity_match", "unpaired_analysis", "q", "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent", "proofload_version"):
         assert key in bare.provenance, key
     assert bare.provenance["event"] == "fell" and bare.provenance["n_absent"] == 0
 

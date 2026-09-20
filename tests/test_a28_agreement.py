@@ -112,8 +112,8 @@ GO1_A, GO1_B = "go1-v0", "go1-v1"
 # ---------- spec sections 2, 3.2, 3.4: the literals ----------
 
 #: G9. The schema this packet moves to, and the two it retires.
-SCHEMA = "proofload.viewpair/4"
-RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3")
+SCHEMA = "proofload.viewpair/5"
+RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3", "proofload.viewpair/4")
 #: G9. The twelve top-level keys, in order, unchanged: the digest is inside ``tree``, not beside it.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",

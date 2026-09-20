@@ -104,7 +104,7 @@ E14_SHA256 = {
     "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
 }
 
-SCHEMA = "proofload.viewpair/4"
+SCHEMA = "proofload.viewpair/5"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 
@@ -122,10 +122,13 @@ MULTI_FIELDS = (
     "events", "by_event", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon", "n_tests",
     "n_not_comparable", "dropped_a", "dropped_b", "truncated", "trades", "inferred", "non_event",
 )
+#: Retrofitted 2026-09-20 (truncation surfacing): ``truncated`` -- the horizon count -- is
+#: ``episodes_censored_at_horizon`` in its slot, and a report built with manifests and no counts carries
+#: each run's recorded byte limit after ``run_salt``.
 PROVENANCE_KEYS = (
     "events", "inferred", "non_event", "n_tests", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon",
-    "n_not_comparable", "dropped_a", "dropped_b", "truncated", "n_absent", "proofload_version",
-    "run_id_a", "run_id_b", "run_salt",
+    "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent", "proofload_version",
+    "run_id_a", "run_id_b", "run_salt", "observation_cap_a", "observation_cap_b",
 )
 
 TOP_LEVEL_KEYS = (

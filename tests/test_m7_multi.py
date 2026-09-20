@@ -715,14 +715,18 @@ def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_r
     """The S8 bytes are a record of what ``report`` said at S3 and are not rewritten (P-1 section
     3.2). What P-1 moved in them, and only that, is mapped onto the record before the comparison:
     the headline's last token states the requested method's pairing (ADR-052, C1), the Methods
-    row's second column reads ``unpaired`` for ``fisher_bh``, and the provenance list carries
-    ``seed identity match`` and ``unpaired analysis`` where ``paired`` stood. Everything else
-    outside the honesty block is byte-identical to the S8 output."""
+    row's second column reads ``unpaired`` for ``fisher_bh``, the provenance list carries
+    ``seed identity match`` and ``unpaired analysis`` where ``paired`` stood, and (truncation
+    surfacing, 2026-09-20) ``episodes censored at horizon`` where ``truncated`` stood. Everything
+    else outside the honesty block is byte-identical to the S8 output."""
     frozen = (REGRESSION_DIR / "report.md").read_text(encoding="utf-8")
     assert frozen.count("(fisher_bh, BH q<0.05, paired).") == frozen.count("| fisher_bh | paired |") == frozen.count("- paired: true\n") == 1
     frozen = frozen.replace("(fisher_bh, BH q<0.05, paired).", "(fisher_bh, BH q<0.05, unpaired).")
     frozen = frozen.replace("| fisher_bh | paired |", "| fisher_bh | unpaired |")
     frozen = frozen.replace("- paired: true\n", "- seed identity match: true\n- unpaired analysis: true\n")
+    # Retrofitted 2026-09-20 (truncation surfacing): the horizon count is named for what it counts.
+    assert frozen.count("- truncated: 0\n") == 1
+    frozen = frozen.replace("- truncated: 0\n", "- episodes censored at horizon: 0\n")
     assert strip_honesty(golden_report.to_markdown()) == strip_honesty(frozen)
 
 
@@ -1480,8 +1484,10 @@ def test_b15_provenance_carries_the_multi_fields_and_run_ids_only_with_manifests
     with_runs = build_multi_report(multi, spec2(), manifests=(_manifest("run-a"), _manifest("run-b")))
     assert with_runs.provenance["run_id_a"] == "run-a" and with_runs.provenance["run_id_b"] == "run-b"
     assert "run-a" in with_runs.to_markdown() and "run-b" in with_runs.to_html()
-    assert {k: v for k, v in with_runs.provenance.items() if not k.startswith("run_")} == {
-        k: v for k, v in bare.provenance.items() if not k.startswith("run_")
+    # Retrofitted 2026-09-20 (truncation surfacing): the manifests also give each run's recorded byte
+    # limit, an ``observation_cap_*`` key beside the ``run_*`` identity ones and no number of the report's.
+    assert {k: v for k, v in with_runs.provenance.items() if not k.startswith(("run_", "observation_"))} == {
+        k: v for k, v in bare.provenance.items() if not k.startswith(("run_", "observation_"))
     }
 
 

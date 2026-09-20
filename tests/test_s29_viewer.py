@@ -285,9 +285,9 @@ QUICKSTART_SALT = "0000000000000015"
 # ---------- spec sections 2, 3.1, 3.2, 3.3: the literals ----------
 
 #: W1. The schema, the one W17's tree-less projection is minted at, and the two ``render_html`` refuses.
-SCHEMA = "proofload.viewpair/4"
+SCHEMA = "proofload.viewpair/5"
 RETIRED_SCHEMA = "proofload.viewpair/2"
-RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3")
+RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3", "proofload.viewpair/4")
 #: W1. The twelve top-level keys, in order (section 3.1).
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",

@@ -88,7 +88,7 @@ ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 V22B_SALT = "00112233445566778899aabbccddeeff"
 
-SCHEMA = "proofload.viewpair/4"
+SCHEMA = "proofload.viewpair/5"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"

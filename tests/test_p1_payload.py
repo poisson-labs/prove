@@ -143,10 +143,15 @@ MULTI_SUMMARY_FIELDS = (
     "n_not_comparable", "dropped_a", "dropped_b", "truncated", "inferred", "non_event",
 )
 #: Y9. ``build_multi_report``'s provenance keys in order; S21's tuple with the two keys in ``paired``'s slot.
+#: **Retrofitted 2026-09-20 (truncation surfacing):** ``truncated`` -- the horizon count -- is
+#: ``episodes_censored_at_horizon`` in its slot, and the run-identity block is followed by each run's
+#: recorded byte limit, its span count and its count of spans stamped as cut, as the CLI passes them.
 MULTI_PROVENANCE_KEYS = (
     "events", "inferred", "non_event", "n_tests", "method", "seed_identity_match", "unpaired_analysis",
-    "q", "t_unit", "horizon", "n_not_comparable", "dropped_a", "dropped_b", "truncated", "n_absent",
+    "q", "t_unit", "horizon", "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent",
     "proofload_version", "run_id_a", "run_id_b", "run_salt",
+    "observation_cap_a", "observation_cap_b", "trace_spans_a", "trace_spans_b",
+    "observation_cut_spans_a", "observation_cut_spans_b",
 )
 #: Y10. Section 3.4's thirteen root keys, ``intervals`` after ``panels``, and the ten interval keys.
 TOP_LEVEL_KEYS = (
@@ -381,8 +386,11 @@ def build_pair(name: str, root: Path, a: str, b: str, *, events: Sequence[str], 
         multi = quiet(lambda: multi_diff(fa, fb, events=list(events), method=method, manifest_a=ma, manifest_b=mb))
         grown = tree(fa, fb, multi, manifest_a=ma, manifest_b=mb, **knobs)
         spec = ReportSpec(title=f"{a} vs {b}: {', '.join(events)}", x_axis=x, y_axis=y)
-        report = build_multi_report(multi, spec, manifests=(ma, mb), tree=grown)
-        light = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb), tree=grown)
+        # Retrofitted 2026-09-20: the CLI hands the builders each run's span counts, read from its
+        # envelopes. Every store this file builds or reads carries no trace, so the counts are (0, 0).
+        counts = ((0, 0), (0, 0))
+        report = build_multi_report(multi, spec, manifests=(ma, mb), tree=grown, observations=counts)
+        light = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb), tree=grown, observations=counts)
         structure = build_structure(
             report, multi, tree=grown, manifest_a=ma, manifest_b=mb, rows_a=store.count(a), rows_b=store.count(b),
             tally_a=store.tally(a), tally_b=store.tally(b), store_root=str(root),
@@ -1165,7 +1173,7 @@ def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_
 
 def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_comment_names_p1_beside_a28() -> None:
     """The grep clause is C34's whole close."""
-    assert viewer_mod.SCHEMA == "proofload.viewpair/4"
+    assert viewer_mod.SCHEMA == "proofload.viewpair/5"
     hits = sorted(path.name for path in SRC.glob("*.py") if "proofload.viewpair/3" in path.read_text(encoding="utf-8"))
     assert hits == [], hits
     lines = VIEWER_SOURCE.read_text(encoding="utf-8").splitlines()
