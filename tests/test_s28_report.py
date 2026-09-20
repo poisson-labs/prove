@@ -279,9 +279,10 @@ CLOSURE_EXCLUDED = ("_fmt", "_md_table", "_html_table", "_html_lines")
 #: R1. ``build_multi_report``'s signature after this packet, and the module's public names
 #: at the base commit: every name bound at module level by a ``def``, ``class`` or assignment
 #: that does not start with an underscore (imports excluded).
+# Re-minted 2026-09-20 (truncation surfacing): ``observations`` joins ``build_multi_report``'s keywords.
 BUILD_MULTI_REPORT_SIGNATURE = (
     "(multi: 'MultiDiffResult', spec: 'ReportSpec', *, manifests: 'tuple[RunManifest, RunManifest] | None' = None, "
-    "tree: 'TreeResult | None' = None) -> 'MultiReport'"
+    "tree: 'TreeResult | None' = None, observations: 'tuple[tuple[int, int], tuple[int, int]] | None' = None) -> 'MultiReport'"
 )
 PUBLIC_NAMES_AT_BASE = (
     "ABSENT_FILL", "AxisError", "Cell", "ComparisonMismatch", "Mode", "MultiReport", "NEUTRAL_FILL", "Report",
@@ -330,16 +331,18 @@ BOUND_RULE_LITERAL = "2"
 
 #: R2. S21's three E14 digests, restated (tree-less builder for two, the CLI for the SVG).
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
+# (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
-    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
     "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
+    "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
 }
 #: R2, second clause: the CLI's ``report.md`` and ``receipt.html`` on the E14 argv **with** the
 #: tree at the default knobs, minted on Session A's shim (module docstring).
 E14_WITH_TREE_SHA256 = {
-    "report.md": "85f5dcba4dfcbc96cdcf5f33c49e82ba82fb16371285753f70cdf975dc108186",
-    "receipt.html": "0f2e162eb1409c6c2e6885f76326c6fedf40d1e8091b2605b388e8f8c4c55826",
+    "report.md": "263eece5428aca20c5727b3a0e550b5e03d1d324f6ab907c93ff866c5f1b0ec5",
+    "receipt.html": "e63abf9f553977a1de0153eccc3fde207cf2869709c89119bc9bc95854ea77ea",
 }
 #: R19. S27 L20's other digests, restated rather than imported so two frozen oracles do not couple.
 #: **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
@@ -354,7 +357,9 @@ CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
-SERVE_STRUCTURE_SHA256 = "6c4a8124d550494791a5c102332cfda6636fe3cf32a5382cea02debcf11fa651"
+# Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
+# schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
+SERVE_STRUCTURE_SHA256 = "aae3498e0d90462f21963011b17f21cdd88083ad2bacb4d78b2702b2594bc9f7"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
@@ -698,15 +703,23 @@ def spec_for(a: str, b: str, events: Sequence[str], x: str, y: str | None, **ext
     return report_module().ReportSpec(title=f"{a} vs {b}: {', '.join(events)}", x_axis=x, y_axis=y, **extra)
 
 
-def built(root: Path, a: str, b: str, *, events: Sequence[str], x: str, y: str | None, with_tree: bool, method: str = "fisher_bh", theme: str = "dark", **knobs: Any) -> Any:
+def counts_of(store: Store, run: str) -> tuple[int, int]:
+    """``(spans, spans stamped as cut)`` over a run's stored envelopes: the count the CLI hands the builders.
+    Added 2026-09-20 (truncation surfacing); restated here and never imported from another test module."""
+    spans = [s for e in store.read(run, meta=False, trace="envelope")["trace"] if isinstance(e, dict) for s in e.get("spans", [])]
+    return len(spans), sum(1 for s in spans if s.get("truncated") == "observation")
+
+
+def built(root: Path, a: str, b: str, *, events: Sequence[str], x: str, y: str | None, with_tree: bool, method: str = "fisher_bh", theme: str = "dark", counted: bool = False, **knobs: Any) -> Any:
     """``build_multi_report`` on a stored pair, with the tree at ``knobs`` or with none."""
     multi, result = store_tree(root, a, b, events=events, method=method, **knobs)
     store = Store(root)
     manifests = (store.manifest(a), store.manifest(b))
     spec = spec_for(a, b, events, x, y, theme=theme)
+    observations = (counts_of(store, a), counts_of(store, b)) if counted else None
     if with_tree:
-        return report_module().build_multi_report(multi, spec, manifests=manifests, tree=result)
-    return report_module().build_multi_report(multi, spec, manifests=manifests)
+        return report_module().build_multi_report(multi, spec, manifests=manifests, tree=result, observations=observations)
+    return report_module().build_multi_report(multi, spec, manifests=manifests, observations=observations)
 
 
 # ---------- the four sections, by index ----------
@@ -1392,14 +1405,14 @@ def _tree_less_for(name: str, synth_root: Path) -> Any:
     if name.startswith("quickstart"):
         return _QUICKSTART_TREE_LESS[name]
     root, a, b, events, x, y, method = _TREE_LESS_ARGS[name]
-    return built(root or synth_root, a, b, events=events, x=x, y=y, with_tree=False, method=method, theme="light")
+    return built(root or synth_root, a, b, events=events, x=x, y=y, with_tree=False, method=method, theme="light", counted=True)
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _quickstart_tree_less(quickstart: tuple[Path, str, str]) -> None:
     root, a, b = quickstart
-    _QUICKSTART_TREE_LESS["quickstart"] = built(root, a, b, events=("violated",), x="tool_fail_rate", y="task_id", with_tree=False, theme="light")
-    _QUICKSTART_TREE_LESS["quickstart-2"] = built(root, a, b, events=("violated", "timeout"), x="tool_fail_rate", y="task_id", with_tree=False, theme="light")
+    _QUICKSTART_TREE_LESS["quickstart"] = built(root, a, b, events=("violated",), x="tool_fail_rate", y="task_id", with_tree=False, theme="light", counted=True)
+    _QUICKSTART_TREE_LESS["quickstart-2"] = built(root, a, b, events=("violated", "timeout"), x="tool_fail_rate", y="task_id", with_tree=False, theme="light", counted=True)
 
 
 def test_r3_the_receipts_stylesheet_and_everything_outside_the_span_is_the_tree_less_renders(every_pair: Any) -> None:

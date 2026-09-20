@@ -858,6 +858,13 @@ class Built:
     page: str
 
 
+def counts_of(store: Store, run: str) -> tuple[int, int]:
+    """``(spans, spans stamped as cut)`` over a run's stored envelopes: the count the CLI hands the builders.
+    Added 2026-09-20 (truncation surfacing); restated here and never imported from another test module."""
+    spans = [s for e in store.read(run, meta=False, trace="envelope")["trace"] if isinstance(e, dict) for s in e.get("spans", [])]
+    return len(spans), sum(1 for s in spans if s.get("truncated") == "observation")
+
+
 def build_pair(root: Path, a: str, b: str, spec: ReportSpec, events: Sequence[str]) -> Built:
     """S29 (``proofload.viewpair/3``) makes M14's tree a required input to assembly, so the
     fixture grows it on the frames it already reads, at M14's defaults, and passes ``tree=``.
@@ -868,7 +875,7 @@ def build_pair(root: Path, a: str, b: str, spec: ReportSpec, events: Sequence[st
     fa, fb = store.read(a), store.read(b)
     multi = multi_diff(fa, fb, events=list(events), manifest_a=ma, manifest_b=mb)
     nested = grow_tree(fa, fb, multi, manifest_a=ma, manifest_b=mb)
-    report = build_multi_report(multi, spec, manifests=(ma, mb))
+    report = build_multi_report(multi, spec, manifests=(ma, mb), observations=(counts_of(store, a), counts_of(store, b)))
     structure = viewer().build_structure(
         report, multi, tree=nested, manifest_a=ma, manifest_b=mb,
         rows_a=store.count(a), rows_b=store.count(b),

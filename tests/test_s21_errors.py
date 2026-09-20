@@ -98,10 +98,12 @@ GO1_TALLY = (12_800, 12_800, 0, 0, 0, 0)
 # E14: minted on the bare tree at b10a146 (2026-09-06) by
 #   proofload --store tests/fixtures/go1 report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
+# (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
-    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
     "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
+    "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
 }
 
 SCHEMA = "proofload.viewpair/5"
@@ -772,6 +774,13 @@ class Built:
     page: str
 
 
+def counts_of(store: Store, run: str) -> tuple[int, int]:
+    """``(spans, spans stamped as cut)`` over a run's stored envelopes: the count the CLI hands the builders.
+    Added 2026-09-20 (truncation surfacing); restated here and never imported from another test module."""
+    spans = [s for e in store.read(run, meta=False, trace="envelope")["trace"] if isinstance(e, dict) for s in e.get("spans", [])]
+    return len(spans), sum(1 for s in spans if s.get("truncated") == "observation")
+
+
 def built(root: Path, a: str, b: str, spec: ReportSpec, events: Sequence[str]) -> Built:
     """S29 (``proofload.viewpair/3``) makes M14's tree a required input to assembly, so the
     fixture grows it on the frames it already reads, at M14's defaults, and passes ``tree=``."""
@@ -780,7 +789,7 @@ def built(root: Path, a: str, b: str, spec: ReportSpec, events: Sequence[str]) -
     fa, fb = store.read(a), store.read(b)
     multi = multi_diff(fa, fb, events=list(events), manifest_a=ma, manifest_b=mb)
     nested = grow_tree(fa, fb, multi, manifest_a=ma, manifest_b=mb)
-    report = build_multi_report(multi, spec, manifests=(ma, mb))
+    report = build_multi_report(multi, spec, manifests=(ma, mb), observations=(counts_of(store, a), counts_of(store, b)))
     structure = viewer().build_structure(
         report, multi, tree=nested, manifest_a=ma, manifest_b=mb,
         rows_a=store.count(a), rows_b=store.count(b),

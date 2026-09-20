@@ -261,9 +261,10 @@ SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a dif
 # Minted at f9b881f, the commit this oracle was frozen against (FR17, FR18). Named for what they
 # pin: none of the names below ends in the suffix the exclusion-record sweeps count.
 DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "6413b54ac9ec58b2961cb1c73cc58227e0cadaf3c164c3267f943e4348cc6b42"
+# Re-minted 2026-09-20 (truncation surfacing): report.py and viewer.py move, because that packet edits both; store.py and tree.py do not.
 UNTOUCHED_FILE_SHA256 = {
-    "report.py": "891f6d3d5f176d6f1c42cf5657a11144b5e37a046bf0c92ebe9e87481cf35dc3",
-    "viewer.py": "5adc302f4ffa36f07a39a8083b965619e40bffdb57457b0ee216b62c4e7a0fe2",
+    "report.py": "5cfdf03bc83ad2288c58f6359c8278788c5ec5ea436b3d8e033ccbfda2411b0c",
+    "viewer.py": "cbd5e7c9524ea34dd6690eeff30b4457d63046a644abdb9f832802618e1dbd5d",
     "store.py": "f6a93dd9e2ac83b87c648b2047a41100366191ed41ff9700315fd9d4266a9370",
     "tree.py": "c0c011a3d194964a16f634d5450354645bb9132e0f47be192070a8daef9a8f3e",
 }
@@ -284,6 +285,7 @@ DIFF_MODULE_NAMES = frozenset(
     "_truncate_raw _unchanged_mde _validate_frame _validate_raw bh diff infer_events interval_rd interval_rd_paired "
     "mde_two_proportion multi_diff score_p_rd score_p_rd_paired".split()
 )
+# Re-minted 2026-09-20 (truncation surfacing): cli.py also imports report._observation_cap, for the limit ``inspect`` prints beside a cut.
 CLI_IMPORTS = frozenset(
     {
         ("__future__", "annotations"), ("_typeshed", "SupportsWrite"), ("argparse", None), ("collections", "Counter"),
@@ -299,7 +301,7 @@ CLI_IMPORTS = frozenset(
         ("proofload.executor_modal", "ImageSpec"), ("proofload.executor_modal", "ModalOptions"),
         ("proofload.executor_modal", "ModalTarget"), ("proofload.executor_modal", "preflight_modal"),
         ("proofload.executor_modal", "run_modal"), ("proofload.report", "MultiReport"), ("proofload.report", "ReportError"),
-        ("proofload.report", "ReportSpec"), ("proofload.report", "SurvivalReport"), ("proofload.report", "_interval_lines"),
+        ("proofload.report", "ReportSpec"), ("proofload.report", "SurvivalReport"), ("proofload.report", "_interval_lines"), ("proofload.report", "_observation_cap"),
         ("proofload.report", "build_multi_report"), ("proofload.report", "build_survival_report"),
         ("proofload.sampler", "SamplerError"), ("proofload.sampler", "SweepSpec"), ("proofload.store", "RunManifest"),
         ("proofload.store", "Store"), ("proofload.store", "StoreError"), ("proofload.survival", "SurvivalError"),

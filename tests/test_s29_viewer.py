@@ -352,27 +352,33 @@ RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
 #: W17, W20. S25's O23 digest restated as narrowed: ``serve --json`` on Go1 with ``tree`` removed
 #: and ``schema`` set to ``/2``, ``store_root`` normalised.
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
-SERVE_STRUCTURE_SHA256 = "6c4a8124d550494791a5c102332cfda6636fe3cf32a5382cea02debcf11fa651"
+# Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
+# schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
+SERVE_STRUCTURE_SHA256 = "aae3498e0d90462f21963011b17f21cdd88083ad2bacb4d78b2702b2594bc9f7"
 #: W4, W17. Minted on the bare tree at f4e2845 through ``serve --json`` on each pair's argv below
 #: (``scratchpad/s29/mint.py``): the six tree-less keys, ``json.dumps(sort_keys=True)``, sha256.
+# Re-minted 2026-09-20 (truncation surfacing): only the ``diff`` key of the six moves (the horizon key renamed in place, six keys appended); the
+# other five are byte-equal to the baseline's for every pair below.
 TREE_LESS_KEYS_SHA256 = {
-    "go1": "33f94ee226637176b322105bbfd292bd86cd763213d0e9783f528eca7cd19c24",
-    "go1-two-events": "978439fb600402f0f496fcc13520e4af25ee55d07e4e6c7617479adaac60691a",
-    "axes": "914ef1307c02752a1c1ec18f5e95b185fed45d6f0273d1be8166c021368933aa",
-    "identical": "3a649cb1cac668077285b4b34f6cf17321a96418bbd8f278427e4f442b65adf8",
-    "bh": "b62f5f433cb8d603d91d1c6ddb30a4fab65a8734582d0df4d46837c99a1c1b44",
-    "gate": "cdcee3939dfb04b8b4967e243ce586d3797f831e81289af412519f2ebbd7cc17",
-    "multi-event": "c40622f5fe7e286977517de939deccd4d640bf971ce9494914d0bc941ef3ed3f",
-    "one-value": "bdbf0265e80609180b71f0281ce402c6c78c7e4b839bbb40a6c6dc3c6c843f39",
-    "three-key": "15f2587c9b95002156685502dd4273b41a68eef4346e7220e2f145254319efb4",
-    "vocab": "381a34c070d18cc36d29e54a82bb88942ae875dc88da50e34379ed3f8a214949",
-    "hostile": "998e8a8f97e41cc545509a8ac5f6bacc40d7dc4258a8a5a06035b32f9d19823d",
+    "go1": "6b0fdadb914c9f9d3864d8df78623746420771ba35492ff1573352143188a22b",
+    "go1-two-events": "d9c96f6d48c8c951ef89c522712004cf1490d75b324715196cbded897474d9e1",
+    "axes": "65981a36e4065d16a6025ddea9e907fcd1125af3b6e2c1defca35aa1a7e4417f",
+    "identical": "41242b890f4614357e0970c4e69a11ff2c6722bbd36e73d7c1a72abf7c171094",
+    "bh": "205de903e5f1fd2e5af036b9bc9efbed82c1213bc2ea57558ef9e84d2328bf11",
+    "gate": "7afa731c9eb7433c0a206c4a872233f7bf30cf24477e48e23e56868d3cf89460",
+    "multi-event": "ef44cac46bc8288337d802a362ffc6cbc4adb3527502355f116a28972d789fe3",
+    "one-value": "00ba86ac27ca7cd307c8eca8ea6dbaf22c1584584f44dadbdfc07aff1b5014a6",
+    "three-key": "0f5923272f7b47b7de751bc064fa9d995d9412203d0ca6b2a0311a295f8728e8",
+    "vocab": "612ee7e405d7930971025aeadd4ba843d2a909c9575b344158ae68f5e5716379",
+    "hostile": "7e812761e9bcb85b61fa6cfd01ea667b72638e96541e5dba138b388a78986194",
 }
 #: W4. The ``/2`` page on Go1, ``str(GO1_ROOT)`` replaced by ``<store>``, sha256, minted on the bare
 #: tree at f4e2845 from the structure ``serve --json`` printed.
+# Re-minted 2026-09-20 (truncation surfacing): the page's provenance list gains the horizon rename and six observation items; each value is the
+# baseline page's plus that change, byte for byte.
 GO1_PAGE_2_SHA256 = {
-    "go1": "47b37fd06a7a4cba6337600d53e2af10a2dd4acc21b3d7157699158f74c015c0",
-    "go1-two-events": "646ebfe55438fcd228f881bbe4e29d7061bd68348523f2ba3a7b3cd8798b640b",
+    "go1": "f8cd5c394a74bc3d4d2bb3ec662dbfa414aec27ee6c29b301859771a34d5937f",
+    "go1-two-events": "aaf677acb5c9f0a2b9780e2e1d9068f9fcd40ea49f3bd0e68d360a63bd6c3d29",
 }
 #: W20. ``diff.py`` whole again. **A28's retrofit, 2026-09-13 -- both exclusions retired** (ADR-077's
 #: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted
@@ -419,17 +425,20 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 #: commit and the import line at the top moves. So this is the whole-file sha256 of the built
 #: ``report.py``, read off the shipped file and never a prediction. No ``REPORT_PY_EXCLUDED`` is
 #: minted; ``TREE_PY_EXCLUDED`` above is now the file's only exclusion record.
-REPORT_PY_SHA256 = "891f6d3d5f176d6f1c42cf5657a11144b5e37a046bf0c92ebe9e87481cf35dc3"
+# Re-minted 2026-09-20 (truncation surfacing): report.py gains the observation block of the provenance list.
+REPORT_PY_SHA256 = "5cfdf03bc83ad2288c58f6359c8278788c5ec5ea436b3d8e033ccbfda2411b0c"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 #: W20. S21's E14 digests as S28's retrofit left them: the SVG through the CLI, the markdown and
 #: the light receipt through the tree-less builder.
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
+# (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
-    "report.md": "7c67c2178f82f97ed3cad5724cb3ba0241d8a1f6b32910bea9fa2e1a6b4884fe",
+    "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
     "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "bd101bd0a111c3df36272614b34574a6a1b9b088bc7ff5c234f82788f8b78261",
+    "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
 }
 
 #: W9, W10, W18. Golden Go1 (S26 F13, S27 L7, S28 R18).
@@ -696,6 +705,13 @@ def store_tree(root: Path, a: str, b: str, *, events: Sequence[str], method: str
     return _TREES[key]
 
 
+def counts_of(store: Store, run: str) -> tuple[int, int]:
+    """``(spans, spans stamped as cut)`` over a run's stored envelopes: the count the CLI hands the builders.
+    Added 2026-09-20 (truncation surfacing); restated here and never imported from another test module."""
+    spans = [s for e in store.read(run, meta=False, trace="envelope")["trace"] if isinstance(e, dict) for s in e.get("spans", [])]
+    return len(spans), sum(1 for s in spans if s.get("truncated") == "observation")
+
+
 @dataclass(frozen=True)
 class Pair:
     name: str
@@ -719,7 +735,7 @@ class Pair:
         store = Store(self.root)
         ma, mb = store.manifest(self.a), store.manifest(self.b)
         spec = ReportSpec(title=f"{self.a} vs {self.b}: {', '.join(self.events)}", x_axis=self.x, y_axis=self.y, fixed=self.fixed)
-        return build_multi_report(self.multi, spec, manifests=(ma, mb))
+        return build_multi_report(self.multi, spec, manifests=(ma, mb), observations=(counts_of(store, self.a), counts_of(store, self.b)))
 
 
 KNOB_FLAGS = {"by": "--by", "depth": "--depth", "n_permutations": "--permutations", "seed": "--seed", "max_group_mde": "--max-group-mde"}
