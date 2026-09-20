@@ -78,6 +78,7 @@ from proofload.report import (
     ReportSpec,
     SurvivalReport,
     _interval_lines,
+    _observation_cap,
     build_multi_report,
     build_survival_report,
 )
@@ -1322,8 +1323,9 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
     method = _DEFAULT_METHOD if ns.method is None else ns.method
     q = _DEFAULT_Q if ns.q is None else ns.q
 
+    store = Store(root)
     multi, others, manifests, frames = _run_diffs(
-        Store(root),
+        store,
         a,
         b,
         verb="report",
@@ -1358,13 +1360,20 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
             if getattr(knobs, name) is None:
                 setattr(knobs, name, constant)
         nested = _diff_tree(knobs, multi, frames, manifests)
+    observations = (_observation_counts(store, a), _observation_counts(store, b))
     # One tree for both builds: the light receipt renders the same draw, never a second one.
-    report = build_multi_report(multi, spec, manifests=manifests, tree=nested)
+    report = build_multi_report(
+        multi, spec, manifests=manifests, tree=nested, observations=observations
+    )
     receipt = (
         report
         if spec.theme == "light"
         else build_multi_report(
-            multi, dataclasses.replace(spec, theme="light"), manifests=manifests, tree=nested
+            multi,
+            dataclasses.replace(spec, theme="light"),
+            manifests=manifests,
+            tree=nested,
+            observations=observations,
         )
     )
     _write_summary(io, multi)
@@ -1424,8 +1433,9 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
         top_n=ns.top_n,
         forest=ns.forest,
     )
+    observations = _observation_counts(store, run)
     report = build_survival_report(
-        cells, spec, events=events, horizon=horizon, manifest=manifest
+        cells, spec, events=events, horizon=horizon, manifest=manifest, observations=observations
     )
     receipt = (
         report
@@ -1436,6 +1446,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
             events=events,
             horizon=horizon,
             manifest=manifest,
+            observations=observations,
         )
     )
     if inferred:
@@ -1509,7 +1520,12 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         top_n=ns.top_n,
         forest=ns.forest,
     )
-    report = build_multi_report(multi, spec, manifests=manifests)
+    report = build_multi_report(
+        multi,
+        spec,
+        manifests=manifests,
+        observations=(_observation_counts(store, a), _observation_counts(store, b)),
+    )
     # After the report and before the structure: M7's axis check refuses an unknown ``--x``
     # first, so no refusal spends a tree, and every tree refusal -- an unknown ``--by``, an
     # out-of-range ``--max-group-mde`` -- still fires before anything binds. One call, one
@@ -1544,6 +1560,24 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
 
 
 # ---------- inspect / runs ----------
+
+
+def _observation_counts(store: Store, run: str) -> tuple[int, int]:
+    """``(spans, spans stamped as cut)`` over the run's stored envelopes.
+
+    The envelope read and nothing else: no observation body is decoded, and on a run written
+    after the split neither is ``meta``. Whether the second number says anything about this run
+    is ``report``'s to decide from the manifest; this counts what is stored.
+    """
+    frame = store.read(run, meta=False, trace="envelope")
+    spans = [
+        span
+        for envelope in frame["trace"]
+        if isinstance(envelope, Mapping)
+        for span in envelope.get("spans", ())
+        if isinstance(span, Mapping)
+    ]
+    return len(spans), sum(1 for span in spans if span.get("truncated") == "observation")
 
 
 def _stored_trace(meta: Any) -> Trace | None:
@@ -1619,14 +1653,37 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
             if trace.truncated is not None:
                 # Begins with a letter, so it can never read as a span line.
                 io.out.write(f"trace: truncated ({trace.truncated})\n")
+            cut = [
+                (j, span)
+                for j, span in enumerate(trace.ordered())
+                if span.truncated == "observation"
+            ]
+            if cut:
+                # Its own line, after the trace-level one: that says why the forest stops, this
+                # says which values in it were bounded and by what. The limit is the run's own
+                # record of it, spelled as recorded, and a size is the value's original length,
+                # not what was over the limit.
+                limits = _observation_cap(manifest)
+                limit = "not recorded" if limits is None else ", ".join(
+                    f"{name}={value}" for name, value in limits.items()
+                )
+                sizes = [
+                    f"span {j}"
+                    if span.bytes_original is None
+                    else f"span {j}: {span.bytes_original} bytes originally"
+                    for j, span in cut
+                ]
+                detail = "; ".join([f"limit {limit}", *sizes])
+                io.out.write(f"observation: cut ({detail})\n")
             for j, span in enumerate(trace.ordered()):
                 duration = span.duration_ms
                 # Tab-delimited: a span name and an error message are free text and OTel
                 # spells names like "invoke_agent planner", so a space cannot be the column
                 # separator without shifting every column after it.
-                # Nine columns: A8a's four after error, each "-" when not recorded. operation,
-                # outcome_by, truncated and bytes_original are not printed: a row reader shows
-                # what a person reading a failed episode asks for, not every field.
+                # Nine columns: A8a's four after error, each "-" when not recorded. operation and
+                # outcome_by are not printed: a row reader shows what a person reading a failed
+                # episode asks for, not every field. A cut is not one of the fields left out; it
+                # is the row's ``observation:`` line, above.
                 io.out.write(
                     f"  {j}\t{span.kind or '-'}\t{span.name or '-'}\t"
                     f"{'-' if duration is None else duration}\t"

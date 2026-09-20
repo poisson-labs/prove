@@ -67,7 +67,13 @@ __all__ = ["ViewerError", "build_structure", "render_html", "serve_page"]
 # consumer read ``/4`` before P-1 -- so no stored shape can be misread. What keeps the one
 # version honest is ``render_html``'s refusal below: a ``/4`` assembled before ``intervals``
 # joined it is refused by name rather than drawn with a section missing.
-SCHEMA = "proofload.viewpair/4"
+#
+# ``/5`` changes the ``diff`` object's key set and nothing else. ``truncated`` -- the count of
+# episodes re-censored at the common horizon, which every page printed with nothing beside it
+# about the observation cut -- is ``episodes_censored_at_horizon`` in its slot, and the run
+# identity is followed by each run's recorded byte limit, its span count and how many of those
+# spans were stamped as cut. A ``/4`` structure is refused by name like the ones before it.
+SCHEMA = "proofload.viewpair/5"
 
 #: Which BH family ``intervals.level`` and ``intervals.alpha_star`` belong to. The layered
 #: report introduces a nested family with a different level, so a bare ``alpha*`` on the page

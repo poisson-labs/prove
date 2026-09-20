@@ -6,7 +6,8 @@ shared colour bound, headline and trade line first, and -- handed M14's ``TreeRe
 layered report's four sections before the figure), and ``build_survival_report`` (one run,
 one rate panel per event from an M5 cell table). M7 computes no statistics. Every number it
 prints is a field on the diff result, on the tree, on the cell table, on the curve it is
-handed, or on the ``RunManifest``. One private formatting helper does every float-to-string
+handed, or on the ``RunManifest``, or is a span count the caller read from a run's stored
+envelopes and handed in. One private formatting helper does every float-to-string
 conversion; that helper is the whole defence for byte determinism and for the no ``-0.0`` rule.
 
 Sign convention: ``delta = rate_b - rate_a``; negative is *safer* only when ``event`` names
@@ -779,16 +780,87 @@ def _run_identity(
         provenance["run_salt"] = manifests[0].run_salt
 
 
+def _observation_cap(manifest: RunManifest) -> dict[str, int] | None:
+    """The byte limits a run recorded for what it captured, as it recorded them.
+
+    Every ``*_bytes`` entry of ``environment["capture"]``, under whatever name the build that
+    wrote the run gave it, or None when the run recorded none. Echoed and never translated: a
+    limit written before the per-value cut bounded a different thing than one written after it,
+    and only the name says which, so no name is spelled here.
+    """
+    capture = manifest.environment.get("capture")
+    if not isinstance(capture, Mapping):
+        return None
+    limits = {
+        str(key): value
+        for key, value in sorted(capture.items(), key=lambda entry: str(entry[0]))
+        if str(key).endswith("_bytes") and isinstance(value, int) and not isinstance(value, bool)
+    }
+    return limits or None
+
+
+def _cuts_counted(manifest: RunManifest) -> bool:
+    """Whether a count of spans stamped as cut can say anything about this run.
+
+    A capture record that carries no per-value limit belongs to a run written before the
+    per-value cut: its spans hold no stamp, so a count over them is a false zero. A run with no
+    capture record at all is countable: a rollout's own trace is stamped whenever it is cut, and
+    one written earlier was never cut.
+    """
+    capture = manifest.environment.get("capture")
+    return not isinstance(capture, Mapping) or "max_observation_bytes" in capture
+
+
+def _run_observations(
+    provenance: dict[str, object],
+    manifests: tuple[RunManifest, RunManifest] | None,
+    observations: tuple[tuple[int, int], tuple[int, int]] | None,
+) -> None:
+    """The observation cut per run: what each run recorded, then what its envelopes hold.
+
+    ``observations`` is ``(spans, spans stamped as cut)`` per run, counted by the caller from the
+    stored envelopes; this module counts nothing. Both blocks need the manifests, because the
+    limit comes from them and so does whether a count is one this module will print.
+    """
+    if manifests is None:
+        return
+    for side, manifest in zip(("a", "b"), manifests, strict=True):
+        provenance[f"observation_cap_{side}"] = _observation_cap(manifest)
+    if observations is None:
+        return
+    for name, at in (("trace_spans", 0), ("observation_cut_spans", 1)):
+        for side, manifest, counts in zip(("a", "b"), manifests, observations, strict=True):
+            provenance[f"{name}_{side}"] = counts[at] if _cuts_counted(manifest) else None
+
+
+def _run_observation(
+    provenance: dict[str, object],
+    manifest: RunManifest | None,
+    observations: tuple[int, int] | None,
+) -> None:
+    """``_run_observations`` for the one run of a survival report; the keys carry no side."""
+    if manifest is None:
+        return
+    provenance["observation_cap"] = _observation_cap(manifest)
+    if observations is not None:
+        counted = _cuts_counted(manifest)
+        provenance["trace_spans"] = observations[0] if counted else None
+        provenance["observation_cut_spans"] = observations[1] if counted else None
+
+
 def build_report(
     diff: DiffResult,
     spec: ReportSpec,
     curves: Mapping[str, tuple[KMCurve, KMCurve]] | None = None,
     manifests: tuple[RunManifest, RunManifest] | None = None,
+    observations: tuple[tuple[int, int], tuple[int, int]] | None = None,
 ) -> Report:
     """Build a report.
 
     curves maps config_hash -> (curve_a, curve_b) for the optional survival panel; manifests
-    supply run identity for the provenance block and are never invented when absent.
+    supply run identity and each run's recorded byte limit for the provenance block and are never
+    invented when absent; observations, given with the manifests, adds each run's span count and
+    how many of those spans were stamped as cut.
     """
     _validate_spec(spec)
     for label, other in spec.comparison.items():
@@ -806,11 +878,12 @@ def build_report(
         "n_not_comparable": diff.n_not_comparable,
         "dropped_a": diff.dropped_a,
         "dropped_b": diff.dropped_b,
-        "truncated": diff.truncated,
+        "episodes_censored_at_horizon": diff.truncated,
         "n_absent": sum(not c.present for c in grid[0]),
         "proofload_version": __version__,
     }
     _run_identity(provenance, manifests)
+    _run_observations(provenance, manifests, observations)
     if spec.generated_at is not None:
         provenance["generated_at"] = spec.generated_at
     return _build_panel(
@@ -919,6 +992,7 @@ def build_multi_report(
     *,
     manifests: tuple[RunManifest, RunManifest] | None = None,
     tree: TreeResult | None = None,
+    observations: tuple[tuple[int, int], tuple[int, int]] | None = None,
 ) -> MultiReport:
     """One panel per event on a shared colour bound; headline and trade line come first.
 
@@ -926,6 +1000,10 @@ def build_multi_report(
     fault lines, the cells and the bound -- between the headline block and the figure. The SVG
     never changes, and without a tree every byte is what it was. A tree grown on another pair
     is refused before anything is built.
+
+    ``manifests`` add each run's identity and recorded byte limit to the provenance block, and
+    ``observations`` -- ``(spans, spans stamped as cut)`` per run, counted by the caller -- adds
+    the counts beside them, ``None`` for a run whose spans cannot be counted.
     """
     _validate_spec(spec)
     if tree is not None:
@@ -963,11 +1041,12 @@ def build_multi_report(
         "n_not_comparable": multi.n_not_comparable,
         "dropped_a": multi.dropped_a,
         "dropped_b": multi.dropped_b,
-        "truncated": multi.truncated,
+        "episodes_censored_at_horizon": multi.truncated,
         "n_absent": sum(not c.present for c in all_cells),
         "proofload_version": __version__,
     }
     _run_identity(provenance, manifests)
+    _run_observations(provenance, manifests, observations)
     if spec.generated_at is not None:
         provenance["generated_at"] = spec.generated_at
 
@@ -1058,8 +1137,13 @@ def build_survival_report(
     events: Sequence[str],
     horizon: float,
     manifest: RunManifest | None = None,
+    observations: tuple[int, int] | None = None,
 ) -> SurvivalReport:
-    """cells = M5 cell_table output; one rate panel per event, F_k(horizon) from its curve."""
+    """cells = M5 cell_table output; one rate panel per event, F_k(horizon) from its curve.
+
+    ``manifest`` adds the run's identity and recorded byte limit to the provenance block, and
+    ``observations`` -- ``(spans, spans stamped as cut)``, counted by the caller -- the counts.
+    """
     _validate_spec(spec)
     event_list = tuple(dict.fromkeys(str(e) for e in events))
     if not event_list:
@@ -1078,6 +1162,7 @@ def build_survival_report(
         provenance["run_id"] = manifest.run_id
         provenance["run_salt"] = manifest.run_salt
         provenance["t_unit"] = manifest.t_unit
+    _run_observation(provenance, manifest, observations)
     if spec.generated_at is not None:
         provenance["generated_at"] = spec.generated_at
 
@@ -1545,6 +1630,16 @@ def _md_table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     return "\n".join(lines)
 
 
+#: What a provenance value of None reads as, by key prefix. The generic reading is ``none``, which
+#: on these keys would say "no cap" and "none cut", the opposite of the fact: the run did not
+#: record a limit, or its spans cannot be counted.
+_UNKNOWN_READING = (
+    ("observation_cap", "not recorded"),
+    ("trace_spans", "not counted"),
+    ("observation_cut_spans", "not counted"),
+)
+
+
 def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
     lines = []
     for key, value in provenance.items():
@@ -1556,8 +1651,12 @@ def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
             shown = "true" if value else "false"
         elif isinstance(value, (list, tuple)):
             shown = ", ".join(str(v) for v in value)
+        elif isinstance(value, Mapping):
+            shown = ", ".join(f"{name}={entry}" for name, entry in value.items())
         elif value is None:
-            shown = "none"
+            shown = next(
+                (word for prefix, word in _UNKNOWN_READING if key.startswith(prefix)), "none"
+            )
         else:
             shown = str(value)
         lines.append(f"- {key.replace('_', ' ')}: {shown}")

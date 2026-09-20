@@ -29,3 +29,15 @@ its trailing `limit // 4` bytes and its original byte length — together never
 more than the limit, at any limit. Lowering it is the supported way to measure
 how large observations really are without storing them: every value's true
 length is still recorded.
+
+**A cut is not silent.** `proofload inspect` prints an `observation: cut (...)`
+line above the span lines of any row whose trace has a cut span, naming each cut
+span by the index it prints under, its values' original size in bytes, and the
+limit the run recorded. `report` and `serve` print, for each run, the byte limit
+it recorded, how many spans its stored traces hold and how many of them were
+stamped as cut, in the provenance list of `report.md`, `receipt.html` and the
+viewer page. The count is over spans, read from the stored envelopes and nothing
+else, and a span with two cut values counts once. A run written before the
+per-value cut recorded its limit under another name and stamped nothing, so its
+counts read `not counted` and never `0`; a run with no capture record reads
+`not recorded` for the limit.
