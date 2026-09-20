@@ -125,12 +125,14 @@ MULTI_FIELDS = (
     "n_not_comparable", "dropped_a", "dropped_b", "truncated", "trades", "inferred", "non_event",
 )
 #: Retrofitted 2026-09-20 (truncation surfacing): ``truncated`` -- the horizon count -- is
-#: ``episodes_censored_at_horizon`` in its slot, and a report built with manifests and no counts carries
-#: each run's recorded byte limit after ``run_salt``.
+#: ``episodes_censored_at_horizon`` in its slot, and a report built with manifests and the counts the CLI hands
+#: the builders (this file's ``built()`` does) carries each run's recorded byte limit, its span count and its count
+#: of spans stamped as cut after ``run_salt``.
 PROVENANCE_KEYS = (
     "events", "inferred", "non_event", "n_tests", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon",
     "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent", "proofload_version",
-    "run_id_a", "run_id_b", "run_salt", "observation_cap_a", "observation_cap_b",
+    "run_id_a", "run_id_b", "run_salt", "observation_cap_a", "observation_cap_b", "trace_spans_a", "trace_spans_b",
+    "observation_cut_spans_a", "observation_cut_spans_b",
 )
 
 TOP_LEVEL_KEYS = (
@@ -1412,7 +1414,8 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
 
 def test_e14_the_synthetic_report_is_byte_identical_with_coverage_replaced_by_none(syn: Built) -> None:
     ma, mb = syn.store.manifest(SYN_A), syn.store.manifest(SYN_B)
-    bare = build_multi_report(replace(syn.multi, coverage=None), syn.spec, manifests=(ma, mb))
+    counts = (counts_of(syn.store, SYN_A), counts_of(syn.store, SYN_B))  # the fixture's own build is handed them
+    bare = build_multi_report(replace(syn.multi, coverage=None), syn.spec, manifests=(ma, mb), observations=counts)
     assert syn.report.to_svg() == bare.to_svg()
     assert syn.report.to_markdown() == bare.to_markdown()
     assert syn.report.to_html() == bare.to_html()

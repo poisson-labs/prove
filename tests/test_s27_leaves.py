@@ -305,9 +305,11 @@ E14_SHA256 = {
 #: ``DIFF_PY_SHA256`` whole-file. Re-minted **after** that edit, off the shipped file -- a read, not a prediction,
 #: which is why ADR-077 does not narrow an oracle-pins-oracle digest. ``test_s25_root.py`` is untouched and
 #: nothing pins this file, so the cascade is one literal deep and terminates here (measured).
+# Re-minted 2026-09-20 (truncation surfacing): both files moved -- their E14 and serve digests, and the dated notes above them --
+# so both values do, read off the two files as they stand and not predicted. Nothing pins this file, so the cascade ends here.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "3e17f2e977fc390c8eadab49ee188800cc66603d4deb36a0fc9167f37eb559ac",
-    "tests/test_s26_fault_lines.py": "81a5851792de0d7cca19ba618eff17edea16255d5a06889162a1e090306a82ce",
+    "tests/test_s25_root.py": "9bb03b2a63fe8e74a35e2a07d2568e52aa2759cd9a03557f6416c765f4660013",
+    "tests/test_s26_fault_lines.py": "ab5ad5d184bcccb516264e5e5d8c7fbae03fe791ad1793ce9e178e68d4fc5e63",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
