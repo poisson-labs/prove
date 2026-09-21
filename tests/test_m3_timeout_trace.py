@@ -119,17 +119,20 @@ SNIPPET_MARKER = "# reproduce one episode"
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 regex, verbatim (nine columns since A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
+#: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
+DECLARED_LIMIT = 8192
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 TRACE_FIELDS = ("spans", "source", "source_version", "dropped", "truncated", "alias_map_version")  # A8a: the seventh field
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
     # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
-    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants --
-    # CONTENT_KEYS, OBSERVATION_HEAD_BYTES, OBSERVATION_LIMIT_BYTES, OBSERVATION_TAIL_BYTES,
-    # TRUNCATED_KEY -- and two functions, finalize and truncate_observations. trace.py's own
-    # order: constants, classes, functions, each sorted. 32 names.
+    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants and two
+    # functions. CD (D8) retires three of A8b's five -- OBSERVATION_HEAD_BYTES and
+    # OBSERVATION_TAIL_BYTES are deleted with the default they described, and
+    # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES, which sorts one place later.
+    # trace.py's own order: constants, classes, functions, each sorted. 30 names.
     "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
-    "OBSERVATION_HEAD_BYTES", "OBSERVATION_KEYS", "OBSERVATION_LIMIT_BYTES", "OBSERVATION_TAIL_BYTES",
+    "OBSERVATION_KEYS", "OBSERVATION_ROUTING_BYTES",
     "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES", "TRUNCATED_KEY",
     "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
     "assemble", "collect", "finalize", "from_litellm", "from_otel", "merge", "record", "split", "step",
@@ -309,6 +312,10 @@ def sweep_toml(
         kind = "continuous" if all(isinstance(v, float) for v in values) else "categorical"
         lines += [f"[axes.{name}]", f'type = "{kind}"', f"values = {json.dumps(values)}", ""]
     if capture is not None:
+        # CD (D1): a [capture] table declares its cap. DECLARED_LIMIT is what these callers were
+        # getting from the dataclass before, so nothing they measure moves.
+        if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
+            capture = {**capture, "max_observation_bytes": DECLARED_LIMIT}
         lines.append("[capture]")
         lines += [f"{key} = {json.dumps(value)}" for key, value in capture.items()]
     return "\n".join(lines) + "\n"
@@ -521,7 +528,7 @@ def child_call_with_timeout(
 
     ctx = executor._mp_context()
     call = (
-        executor._CaptureCall(spec=CaptureSpec(), run_id=RUN_ID, episode_id=EPISODE)
+        executor._CaptureCall(spec=CaptureSpec(max_observation_bytes=DECLARED_LIMIT), run_id=RUN_ID, episode_id=EPISODE)  # CD (D1)
         if with_capture
         else None
     )
@@ -549,6 +556,7 @@ def child_snapshot(
     from proofload import capture as capture_module
     from proofload.capture import CaptureSpec, capture, install
 
+    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
     status = install(CaptureSpec(**spec_kwargs))
     tracer = _tracer()
     with capture(RUN_ID, "cfg-7:0"):
@@ -1346,7 +1354,7 @@ def child_count_pipes(target: str, config: dict[str, Any], seed: int, timeout: f
 
     counting = CountingContext(executor._mp_context())
     call = (
-        executor._CaptureCall(spec=CaptureSpec(), run_id=RUN_ID, episode_id=EPISODE)
+        executor._CaptureCall(spec=CaptureSpec(max_observation_bytes=DECLARED_LIMIT), run_id=RUN_ID, episode_id=EPISODE)  # CD (D1)
         if with_capture
         else None
     )

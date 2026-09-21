@@ -15,7 +15,8 @@ wrapper, or when it is uncut and over the module default; Q5 (a) a low limit is 
 measure-without-storing configuration; Q6 ``t4.toml`` and its assertion were rewritten together in
 the retrofit; Q8 (a) the wrapper has exactly three keys; Q9 (a) two cells.
 
-**Invariant-to-test map** (39 functions, 64 collected ids; the id counts below sum to 64):
+**Invariant-to-test map** (38 functions, 63 collected ids; the id counts below sum to 63; CD
+Session A deleted one P8-26 function and its one id, and moved none of the others):
 
 | Invariant | Tests |
 |---|---|
@@ -31,7 +32,7 @@ the retrofit; Q8 (a) the wrapper has exactly three keys; Q9 (a) two cells.
 | P8-23 | ``test_p8_23_*`` (3 functions, 8 ids), ``test_q5_*`` (1 function, 1 id) |
 | P8-24 | ``test_p8_24_*`` (3 functions, 4 ids) |
 | P8-25 | ``test_p8_25_*`` (2 functions, 2 ids) |
-| P8-26 | ``test_p8_26_*`` (3 functions, 6 ids) |
+| P8-26 | ``test_p8_26_*`` (2 functions, 5 ids) |
 | P8-27 | ``test_p8_27_*`` (2 functions, 2 ids) |
 
 **Cells (standing rule 15).** Every test here runs in both cells, pandas 2.3.3 and 3.0.5, and the
@@ -43,13 +44,26 @@ P8-20's store clauses, which read the ``trace_obs`` column itself; they read it 
 section 3.10, A22 section 3.2).
 
 **Green before and after -- eleven ids, named so their green is not read as coverage** (the other
-fifty-three are red on the bare tree and green on the build): ``test_p8_25_*`` (every
+fifty-two are red on the bare tree and green on the build): ``test_p8_25_*`` (every
 symbol they digest is unchanged on the bare tree; they go red only when the build crosses the A7
 line), the three invalid-trace ids of ``test_p8_26_the_funnel_never_raises_*`` (A7's P7-9 kept
 green while a ``Trace.from_dict`` is added on its path), the ``content-on`` id of
 ``test_p8_10_through_the_recorder_*`` (nothing is stripped with content on, before or after), and the
 five ids of ``test_p8_12_a_bad_value_is_refused_naming_the_field`` (the shipped parser already refuses
 three of them, and refuses ``max_observation_bytes`` as an unknown field, naming it, for another reason).
+
+**Amended 2026-09-20 by CD Session A** ("Proofload -- Spec CD Cap Declaration", section 0.2). Ten
+A8b clauses move and each is named there; what changed in this file is: section 2's export list and
+its two signatures (``limit`` keeps its name, place and keyword-only kind and loses its default,
+widened to ``int | None``); P8-7's two-constant sentence, retired with the constants it described;
+P8-7's "the default limit is 8192 when none is passed", inverted in place under a new name; P8-12's
+``CaptureSpec()``, which now raises; both P8-26 funnel calls, which take the run's limit; and the
+``cut``, ``sweep_toml`` and ``child_capture_spans`` helpers, which declare 8192 rather than
+inheriting it. **One test is deleted**, not amended:
+``test_p8_26_a_run_with_no_capture_table_still_stores_a_rollouts_own_trace_cut``, whose name states
+the behaviour CD's D2 reverses; CD7 in ``tests/test_cd_cap_declaration.py`` replaces it.
+**Untouched and still green:** P8-25 -- ``_is_observation`` is not among the symbols it digests, and
+this packet changes only the constant that function reads.
 
 **Beyond section 4's text, and said so:** ``test_p8_26_the_funnel_cuts_*`` and
 ``test_p8_26_a_run_with_no_capture_table_*`` assert that ``finalize`` is actually wired at the
@@ -110,9 +124,12 @@ MANIFEST_KEYS_SPEC = frozenset({
     "requested", "active", "reason", "instrumented", "semconv", "alias_map_version", "content", "max_observation_bytes", "max_spans",
 })
 NEW_EXPORTS = (
-    "CONTENT_KEYS", "OBSERVATION_HEAD_BYTES", "OBSERVATION_LIMIT_BYTES", "OBSERVATION_TAIL_BYTES", "TRUNCATED_KEY",
-    "finalize", "truncate_observations",
+    # CD (D8): OBSERVATION_HEAD_BYTES and OBSERVATION_TAIL_BYTES are deleted, and
+    # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES -- same value, and a storage-layout
+    # constant rather than a cap. The retired three are pinned absent by CD11.
+    "CONTENT_KEYS", "OBSERVATION_ROUTING_BYTES", "TRUNCATED_KEY", "finalize", "truncate_observations",
 )
+RETIRED_CONSTANTS = ("OBSERVATION_LIMIT_BYTES", "OBSERVATION_HEAD_BYTES", "OBSERVATION_TAIL_BYTES")
 CONTENT_FAMILIES = (
     "gen_ai.prompt", "gen_ai.completion", "traceloop.entity.input", "traceloop.entity.output",
     "llm.input_messages", "llm.output_messages",
@@ -201,10 +218,13 @@ def canonical(trace: Trace) -> str:
     return json.dumps(trace.to_dict(), sort_keys=True)
 
 
-def cut(trace: Trace, limit: int | None = None) -> Trace:
+def cut(trace: Trace, limit: int | None) -> Trace:
+    """CD (D1): ``limit`` is required here because it is required there. The old ``limit=None``
+    sentinel meant *use the module default*; under CD ``None`` means *cut nothing*, so a helper
+    that spells one as the other would hide the very thing this packet is about."""
     from proofload.trace import truncate_observations
 
-    return truncate_observations(trace) if limit is None else truncate_observations(trace, limit=limit)
+    return truncate_observations(trace, limit=limit)
 
 
 def load_fixture(name: str) -> Any:
@@ -272,8 +292,14 @@ def full_traces(store: Store, run_id: str) -> dict[int, Any]:
 
 
 def sweep_toml(capture: dict[str, Any] | None) -> str:
+    """CD (D1): a ``[capture]`` table must declare ``max_observation_bytes``, so the builder writes
+    ``DEFAULT_LIMIT`` for a caller that named no cap -- which is the number those callers were
+    silently getting before. A caller that names one, including a bad one, is left alone, so the
+    refusal tests below still reach the parser with what they wrote."""
     lines = ['target_id = "a8b-oracle@v0"', 't_unit = "steps"', "replicates = 1", "", "[axes.x]", 'type = "continuous"', "values = [0.1]", ""]
     if capture is not None:
+        if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
+            capture = {**capture, "max_observation_bytes": DEFAULT_LIMIT}
         lines.append("[capture]")
         lines += [f"{key} = {json.dumps(value)}" for key, value in capture.items()]
     return "\n".join(lines) + "\n"
@@ -338,6 +364,9 @@ def child_capture_spans(spec_kwargs: dict[str, Any], spans: list[dict[str, Any]]
     through the real recorder -- the only path ``_is_content`` and the child's cut run on."""
     from proofload.capture import CaptureSpec, capture, install
 
+    # CD (D1): CaptureSpec has no default cap, so the harness supplies the one these callers
+    # were getting from the dataclass. A caller that names a cap is left alone.
+    spec_kwargs = {"max_observation_bytes": DEFAULT_LIMIT, **spec_kwargs}
     status = install(CaptureSpec(**spec_kwargs))
     tracer = _tracer()
     with capture(RUN_ID, "cfg-8b:1") as recorder:
@@ -424,30 +453,33 @@ def child_run_local(store_root: str, toml_path: str, target: str, episode_timeou
 # ---------- section 2 and section 10 Q3: the public surface ----------
 
 
-def test_section_2_trace_exports_the_seven_names_and_the_constants_are_the_default_limits_split() -> None:
+def test_section_2_trace_exports_the_five_names_and_the_routing_constant_is_not_a_cap() -> None:
+    """CD (D8), amending A8b section 2 and P8-7's last sentence: the two constants that described the
+    default's split are deleted with the default, and the third is renamed to the job it still has."""
     import proofload.trace as trace_module
 
     assert set(NEW_EXPORTS) <= set(trace_module.__all__), sorted(set(NEW_EXPORTS) - set(trace_module.__all__))
     assert trace_module.TRUNCATED_KEY == TRUNCATED_KEY_SPEC
-    limit = trace_module.OBSERVATION_LIMIT_BYTES
-    assert limit == DEFAULT_LIMIT
-    # P8-7: the two constants are the default's split and nowhere a bound.
-    assert trace_module.OBSERVATION_HEAD_BYTES == limit - limit // 4 == 6144
-    assert trace_module.OBSERVATION_TAIL_BYTES == limit // 4 == 2048
+    assert trace_module.OBSERVATION_ROUTING_BYTES == DEFAULT_LIMIT
+    for name in RETIRED_CONSTANTS:
+        assert not hasattr(trace_module, name), name
+        assert name not in trace_module.__all__, name
 
 
 def test_section_2_the_two_functions_keep_their_specced_signatures() -> None:
-    from proofload.trace import OBSERVATION_LIMIT_BYTES, finalize, truncate_observations
+    """CD (D1) amends A8b section 2's two signatures: ``limit`` keeps its name, its place and its
+    keyword-only kind, and loses its default. What it takes is widened to ``int | None``."""
+    from proofload.trace import finalize, truncate_observations
 
     t = inspect.signature(truncate_observations).parameters
     assert list(t) == ["trace", "limit"] and t["limit"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert t["limit"].default == OBSERVATION_LIMIT_BYTES
+    assert t["limit"].default is inspect.Parameter.empty
     f = inspect.signature(finalize).parameters
     assert list(f) == ["trace", "declaration", "limit"]
     assert f["declaration"].kind is inspect.Parameter.KEYWORD_ONLY and f["limit"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert f["limit"].default == OBSERVATION_LIMIT_BYTES
+    assert f["limit"].default is inspect.Parameter.empty
     big = trace_of(span(1, output="q" * (DEFAULT_LIMIT + 1)))
-    assert canonical(finalize(big, declaration=None)) == canonical(truncate_observations(big))
+    assert canonical(finalize(big, declaration=None, limit=DEFAULT_LIMIT)) == canonical(truncate_observations(big, limit=DEFAULT_LIMIT))
     assert canonical(finalize(big, declaration=None, limit=64)) == canonical(truncate_observations(big, limit=64))
 
 
@@ -548,7 +580,7 @@ def test_p8_7_a_multibyte_character_straddling_either_cut_point_is_backed_off_no
     sits across byte 6144 and another across byte ``L - 2048``."""
     original = cut_fixture_spans()[1].attrs["gen_ai.tool.call.result"]
     assert len(original.encode("utf-8")) == 3 * DEFAULT_LIMIT
-    (s,) = cut(trace_of(cut_fixture_spans()[1])).spans
+    (s,) = cut(trace_of(cut_fixture_spans()[1]), DEFAULT_LIMIT).spans
     inner = s.attrs["gen_ai.tool.call.result"][TRUNCATED_KEY_SPEC]
     assert inner == {"head": "r" * 6143, "tail": "t" * 2046, "bytes_original": 3 * DEFAULT_LIMIT}
     # And the mirror, at a small limit, for two-, three- and four-byte characters at both cut points.
@@ -575,9 +607,16 @@ def test_p8_7_a_span_cut_sets_the_span_field_and_leaves_the_trace_field_alone() 
     assert cut(trace_of(span(1, attrs={"app.big": over})), 64).truncated is None
 
 
-def test_p8_7_the_default_limit_is_8192_when_none_is_passed() -> None:
+def test_p8_7_there_is_no_default_limit_and_the_ratio_holds_at_a_declared_8192() -> None:
+    """CD (D1) inverts this test's shipped half: there is no limit when none is passed, there is a
+    ``TypeError``. What P8-7 says about the cut at 8192 is re-asserted with 8192 declared."""
+    from proofload.trace import truncate_observations
+
     at, over = "k" * DEFAULT_LIMIT, "k" * (DEFAULT_LIMIT + 1)
-    (s,) = cut(trace_of(span(1, attrs={"app.at": at, "app.over": over}))).spans
+    before = trace_of(span(1, attrs={"app.at": at, "app.over": over}))
+    with pytest.raises(TypeError):
+        truncate_observations(before)  # type: ignore[call-arg]
+    (s,) = cut(before, DEFAULT_LIMIT).spans
     assert s.attrs["app.at"] == at and s.attrs["app.over"] == expected_wrapper(over, DEFAULT_LIMIT)
     assert s.bytes_original == DEFAULT_LIMIT + 1
 
@@ -674,7 +713,7 @@ def test_p8_10_the_routing_stamps_are_never_cut_or_moved_whatever_their_size() -
     assert len(fixture_span.attrs[RUN_ID_KEY].encode("utf-8")) > DEFAULT_LIMIT
     huge = {RUN_ID_KEY: "s" * 9000, EPISODE_KEY: "e" * 9000, "app.big": "b" * 9000}
     for before in (trace_of(fixture_span), trace_of(span(1, attrs=huge))):
-        after = cut(before)
+        after = cut(before, DEFAULT_LIMIT)
         (s,) = after.spans
         assert s.attrs[RUN_ID_KEY] == before.spans[0].attrs[RUN_ID_KEY] and s.attrs[EPISODE_KEY] == before.spans[0].attrs[EPISODE_KEY]
         for t in (before, after):
@@ -734,7 +773,7 @@ def test_p8_11_an_over_limit_attribute_outside_the_key_set_leaves_the_envelope_a
     quiet = trace_of(span(3, attrs={"app.note.small": "fine"}))
     store = Store(tmp_path / "store")
     store.create_run(manifest("p8-11"))
-    store.append("p8-11", [rec("p8-11", k=0, meta={"trace": uncut.to_dict()}), rec("p8-11", k=1, meta={"trace": cut(uncut).to_dict()}), rec("p8-11", k=2, meta={"trace": quiet.to_dict()})])
+    store.append("p8-11", [rec("p8-11", k=0, meta={"trace": uncut.to_dict()}), rec("p8-11", k=1, meta={"trace": cut(uncut, DEFAULT_LIMIT).to_dict()}), rec("p8-11", k=2, meta={"trace": quiet.to_dict()})])
     envelopes = envelope_traces(store, "p8-11")
     obs = raw_column(store, "p8-11", "trace_obs")
     for k in (0, 1):
@@ -772,11 +811,15 @@ def test_p8_11_a_wrapper_is_an_observation_at_any_size_and_the_split_never_cuts(
 # ---------- P8-12: the [capture] table ----------
 
 
-def test_p8_12_capture_spec_fields_and_defaults() -> None:
+def test_p8_12_capture_spec_fields_and_the_cap_that_has_no_default() -> None:
+    """CD (D1, D12) amends P8-12: the field-name tuple is unchanged and in ``_CAPTURE_FIELDS`` order,
+    and ``CaptureSpec()`` no longer builds. The other three defaults stand."""
     from proofload.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == CAPTURE_FIELDS_SPEC
-    spec = CaptureSpec()
+    with pytest.raises(TypeError):
+        CaptureSpec()  # type: ignore[call-arg]
+    spec = CaptureSpec(max_observation_bytes=DEFAULT_LIMIT)
     assert (spec.instrument, spec.content, spec.max_observation_bytes, spec.max_spans) == ((), False, 8192, None)
 
 
@@ -786,6 +829,7 @@ def test_p8_12_the_retired_field_is_refused_naming_it_and_an_absent_max_spans_is
     absent = SweepSpec.load(write(tmp_path / "absent.toml", sweep_toml({"instrument": [], "max_observation_bytes": 4096}))).capture
     assert absent is not None and absent.max_spans is None and absent.max_observation_bytes == 4096
     capped = SweepSpec.load(write(tmp_path / "capped.toml", sweep_toml({"instrument": [], "max_spans": 3}))).capture
+    # CD (D1): DEFAULT_LIMIT here is what the builder *declared*, not what the parser supplied.
     assert capped is not None and capped.max_spans == 3 and capped.max_observation_bytes == DEFAULT_LIMIT
 
 
@@ -831,16 +875,16 @@ ROUND_TRIP_TRACES: dict[str, Callable[[], Trace]] = {
 def test_p8_20_assemble_of_split_round_trips_under_at_and_over_the_limit_and_over_wrappers(name: str) -> None:
     t = ROUND_TRIP_TRACES[name]()
     assert assemble(*split(t)).to_dict() == t.to_dict()
-    tc = cut(t)
+    tc = cut(t, DEFAULT_LIMIT)
     # The cut runs before the split, and the round trip is over the **cut** trace.
     assert assemble(*split(tc)).to_dict() == tc.to_dict()
-    assert canonical(cut(assemble(*split(tc)))) == canonical(tc)
+    assert canonical(cut(assemble(*split(tc)), DEFAULT_LIMIT)) == canonical(tc)
 
 
 def test_p8_20_the_round_trip_holds_through_the_store(tmp_path: Path) -> None:
     store = Store(tmp_path / "store")
     store.create_run(manifest("p8-20"))
-    traces = [cut(build()) for build in ROUND_TRIP_TRACES.values()]
+    traces = [cut(build(), DEFAULT_LIMIT) for build in ROUND_TRIP_TRACES.values()]
     store.append("p8-20", [rec("p8-20", k=k, meta={"trace": t.to_dict()}) for k, t in enumerate(traces)])
     full = full_traces(store, "p8-20")
     obs = raw_column(store, "p8-20", "trace_obs")
@@ -984,7 +1028,7 @@ def test_p8_26_the_funnel_never_raises_on_a_trace_it_cannot_read_and_a7s_p7_9_ho
     records = []
     for k, active in enumerate((True, False)):
         record = rec("p8-26", k=k, meta={"trace": garbage, "k": k})
-        out = executor._with_capture_envelope(record, active)
+        out = executor._with_capture_envelope(record, active, DEFAULT_LIMIT)
         assert out.meta == {"trace": garbage, "k": k}, (name, active)
         records.append(out)
     assert store.append("p8-26", records) == 2
@@ -999,22 +1043,20 @@ def test_p8_26_the_funnel_cuts_a_valid_trace_and_leaves_a_small_one_exactly_as_w
     """Beyond section 4's text (module docstring): ``finalize`` is wired, on the branch the shipped
     funnel returns early from. Rule zero (C7) on the other side: nothing over the limit, nothing moves."""
     own = trace_of(span(1, output=OWN_OUTPUT, attrs={"tries": 1}))
-    out = executor._with_capture_envelope(rec("p8-26", k=0, meta={"trace": own.to_dict(), "k": 0}), active)
+    out = executor._with_capture_envelope(rec("p8-26", k=0, meta={"trace": own.to_dict(), "k": 0}), active, DEFAULT_LIMIT)
     assert out.meta["k"] == 0
     (s,) = Trace.from_dict(out.meta["trace"]).spans
     assert s.output == expected_wrapper(OWN_OUTPUT, DEFAULT_LIMIT) and s.truncated == "observation" and s.bytes_original == 3 * DEFAULT_LIMIT
     small = trace_of(span(1, output="fine", attrs={"tries": 1})).to_dict()
-    kept = executor._with_capture_envelope(rec("p8-26", k=1, meta={"trace": small}), active)
+    kept = executor._with_capture_envelope(rec("p8-26", k=1, meta={"trace": small}), active, DEFAULT_LIMIT)
     assert json.dumps(kept.meta["trace"]) == json.dumps(small)
 
 
-def test_p8_26_a_run_with_no_capture_table_still_stores_a_rollouts_own_trace_cut(tmp_path: Path) -> None:
-    """Every stored trace passes through ``finalize`` on its way to the store, capture or not."""
-    toml = write(tmp_path / "sweep.toml", sweep_toml(None))
-    run_id = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:own_trace_rollout", None)
-    (stored,) = full_traces(Store(tmp_path / "store"), run_id).values()
-    (s,) = Trace.from_dict(stored).spans
-    assert s.output == expected_wrapper(OWN_OUTPUT, DEFAULT_LIMIT) and s.bytes_original == 3 * DEFAULT_LIMIT
+# CD (D2) deletes ``test_p8_26_a_run_with_no_capture_table_still_stores_a_rollouts_own_trace_cut``
+# from this slot. Its name states the behaviour the packet reverses -- a run with no ``[capture]``
+# table now stores a rollout's own trace *uncut* -- and A8b's own rule is that such a test is
+# rewritten under a new name rather than amended in place. Its replacement is CD7, in
+# ``tests/test_cd_cap_declaration.py``. ``own_trace_rollout`` above is still used from there.
 
 
 # ---------- P8-27: the retired mechanism leaves nothing behind ----------

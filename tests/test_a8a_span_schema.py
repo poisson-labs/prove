@@ -610,7 +610,7 @@ def test_p8_13_from_otel_stamps_it_and_record_and_litellm_leave_it_none() -> Non
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
     from proofload.capture import CaptureSpec, Recorder
 
-    rec = Recorder(CaptureSpec(), "r-a8a", "cfg:1")
+    rec = Recorder(CaptureSpec(max_observation_bytes=8192), "r-a8a", "cfg:1")  # CD (D1): the cap has no default
     empty = rec._trace([], None)
     assert empty is None  # D9: nothing captured, no envelope from _trace itself
     stamped = rec._trace([flat_span(0x31, "captured")], None)
@@ -756,7 +756,7 @@ def test_p8_17_environment_capture_has_the_nine_keys_and_alias_map_version_is_th
     from proofload.executor import _capture_record
     from proofload.trace import ALIAS_MAP_VERSION, OTEL_SEMCONV_VERSION
 
-    record = _capture_record(CaptureSpec(), CaptureStatus(requested=False, active=False, reason=None, instrumented=()))
+    record = _capture_record(CaptureSpec(max_observation_bytes=8192), CaptureStatus(requested=False, active=False, reason=None, instrumented=()))  # CD (D1)
     assert set(record) == MANIFEST_CAPTURE_KEYS, sorted(record)
     assert record["alias_map_version"] == ALIAS_MAP_VERSION and record["semconv"] == OTEL_SEMCONV_VERSION
     assert record["max_observation_bytes"] == 8_192  # A8b: the renamed key; A8a kept the shipped spelling

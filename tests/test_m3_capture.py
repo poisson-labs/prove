@@ -38,7 +38,8 @@ Conventions the oracle fixes where the spec is silent, recorded so they are not 
   two fakes in a throwaway dist-info under ``tmp_path``, so no instrumentation package is
   installed and nothing is patched.
 - A ``[capture]`` table with ``instrument = []`` still installs the provider and is active:
-  ``install(CaptureSpec())`` with the defaults must capture for C2 to be testable at all, and a
+  ``install(CaptureSpec(max_observation_bytes=...))`` must capture for C2 to be testable at all --
+  CD (D1) took the cap's default away, and this file declares ``DECLARED_LIMIT`` for it -- and a
   target that emits spans through the OTel API itself needs no instrumentor.
 - ``run_local`` learns of the request from the ``[capture]`` table ``SweepSpec.load`` reads.
   The tests drive it from a TOML file only and pin no field name on ``SweepSpec``.
@@ -94,6 +95,10 @@ GENAI_CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
 OVERRIDE_MESSAGE = "Overriding of current TracerProvider is not allowed"
 PUBLIC_SURFACE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 SPEC_FIELDS = ("instrument", "content", "max_observation_bytes", "max_spans")  # A8b: the rename
+#: CD (D1): ``CaptureSpec`` has no default cap and a ``[capture]`` table must declare one. This is
+#: the number every caller in this file was getting from the dataclass before, so what the tests
+#: below measure is unchanged -- it is now declared rather than supplied.
+DECLARED_LIMIT = 8192
 STATUS_FIELDS = ("requested", "active", "reason", "instrumented")
 MANIFEST_KEYS = frozenset({*STATUS_FIELDS, "semconv", "alias_map_version", "content", "max_observation_bytes", "max_spans"})  # A8a: + alias_map_version; A8b: the byte field renamed
 TOUCHED_FILES = ("capture.py", "executor.py", "executor_modal.py", "sampler.py", "cli.py")
@@ -209,6 +214,9 @@ def sweep_toml(
         kind = "continuous" if all(isinstance(v, float) for v in values) else "categorical"
         lines += [f"[axes.{name}]", f'type = "{kind}"', f"values = {json.dumps(values)}", ""]
     if capture is not None:
+        # CD (D1): a [capture] table declares its cap; a caller that named one, or a bad one, is left alone.
+        if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
+            capture = {**capture, "max_observation_bytes": DECLARED_LIMIT}
         lines.append("[capture]")
         lines += [f"{key} = {json.dumps(value)}" for key, value in capture.items()]
     return "\n".join(lines) + "\n"
@@ -496,6 +504,7 @@ def child_install(
 
     from proofload.capture import CaptureSpec, capture, install
 
+    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
     status = install(CaptureSpec(**spec_kwargs))
     second = install(CaptureSpec(**spec_kwargs)) if twice else None
     with capture(RUN_ID, "cfg-7:3") as recorder:
@@ -530,6 +539,7 @@ def child_capture_spans(
     sink = watch_logs()
     from proofload.capture import CaptureSpec, capture, install
 
+    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
     status = install(CaptureSpec(**spec_kwargs))
     tracer = _tracer()
     stream_untouched = None
@@ -561,6 +571,7 @@ def child_nested_capture(spec_kwargs: dict[str, Any], depth: int) -> dict[str, A
     Each start waits for the wall clock to tick, so start times are strictly increasing."""
     from proofload.capture import CaptureSpec, capture, install
 
+    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
     status = install(CaptureSpec(**spec_kwargs))
     tracer = _tracer()
     with capture(RUN_ID, "cfg-7:1") as recorder:
@@ -578,7 +589,7 @@ def child_sequential_captures() -> dict[str, Any]:
     inside the second."""
     from proofload.capture import CaptureSpec, capture, install
 
-    install(CaptureSpec())
+    install(CaptureSpec(max_observation_bytes=DECLARED_LIMIT))  # CD (D1)
     tracer = _tracer()
     with capture(RUN_ID, "cfg-7:0") as first:
         with tracer.start_as_current_span("first-own"):
@@ -1119,7 +1130,8 @@ CONTENT_ATTRS = {
 def test_c9_content_is_off_by_default_in_the_spec() -> None:
     from proofload.capture import CaptureSpec
 
-    assert CaptureSpec().content is False
+    # CD (D1): ``content`` keeps its default; only the cap loses one.
+    assert CaptureSpec(max_observation_bytes=DECLARED_LIMIT).content is False
 
 
 def test_c9_content_attributes_are_stripped_when_content_is_off() -> None:
@@ -1320,7 +1332,9 @@ def test_section_2_capture_spec_fields_defaults_and_frozenness() -> None:
     from proofload.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == SPEC_FIELDS
-    spec = CaptureSpec()
+    with pytest.raises(TypeError):
+        CaptureSpec()  # type: ignore[call-arg]  # CD (D1): the cap has no default
+    spec = CaptureSpec(max_observation_bytes=DECLARED_LIMIT)
     assert (spec.instrument, spec.content, spec.max_observation_bytes, spec.max_spans) == ((), False, 8192, None)  # A8b: the rename, and D6's cap off by default
     with pytest.raises(dataclasses.FrozenInstanceError):
         spec.content = True  # type: ignore[misc]

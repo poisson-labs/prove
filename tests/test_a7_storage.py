@@ -658,6 +658,9 @@ def sweep_toml(*, capture: dict[str, Any] | None, target_id: str, t_unit: str, a
         kind = "continuous" if all(isinstance(v, float) for v in values) else "categorical"
         lines += [f"[axes.{name}]", f'type = "{kind}"', f"values = {json.dumps(list(values))}", ""]
     if capture is not None:
+        # CD (D1): a [capture] table declares its cap; 8192 is what the dataclass used to supply.
+        if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
+            capture = {**capture, "max_observation_bytes": 8192}
         lines.append("[capture]")
         lines += [f"{key} = {json.dumps(value)}" for key, value in capture.items()]
     return "\n".join(lines) + "\n"

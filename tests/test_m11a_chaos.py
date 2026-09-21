@@ -410,6 +410,9 @@ def sweep_toml(
     lines = [f'target_id = "{target_id}"', f't_unit = "{t_unit}"', f"replicates = {replicates}", ""]
     lines += ["[axes.body]", 'type = "categorical"', f"values = {json.dumps(list(bodies))}", ""]
     if capture is not None:
+        # CD (D1): a [capture] table declares its cap; 8192 is what the dataclass used to supply.
+        if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
+            capture = {**capture, "max_observation_bytes": 8192}
         lines.append("[capture]")
         lines += [f"{key} = {json.dumps(value)}" for key, value in capture.items()]
         lines.append("")

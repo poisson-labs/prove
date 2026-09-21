@@ -101,8 +101,14 @@ from proofload.diff import DiffResult, MultiDiffResult, multi_diff
 from proofload.episode import Episode
 from proofload.report import ReportSpec, build_multi_report
 from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.trace import OBSERVATION_LIMIT_BYTES, Span, Trace, truncate_observations
+from proofload.trace import Span, Trace, truncate_observations
 from proofload.viewer import SCHEMA, ViewerError, render_html
+
+#: CD (D8) renames ``OBSERVATION_LIMIT_BYTES`` to ``OBSERVATION_ROUTING_BYTES`` and takes away its
+#: second job: it is the size at which ``split`` moves an unnamed attribute to ``trace_obs``, and
+#: never a cap. The two fixtures below that used it as a *cut* limit now name their own number --
+#: which is what they always meant, and is the value that constant still holds.
+OWN_RUN_CUT_AT = 8192
 
 REPO = Path(__file__).resolve().parent.parent
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
@@ -349,7 +355,7 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
     write_run(root, "legacy", capture=LEGACY_CAPTURE, traces=True)
     rewrite_column(root, "legacy", "trace", to_pre_a8a)
     write_run(root, "bare", capture=None)
-    write_run(root, "own", capture=None, traces=True, cut_at=OBSERVATION_LIMIT_BYTES, big=OWN_BIG)
+    write_run(root, "own", capture=None, traces=True, cut_at=OWN_RUN_CUT_AT, big=OWN_BIG)
     write_run(root, "hz10", capture=None, horizon=10.0)
     write_run(root, "hz5", capture=None, horizon=5.0)
     return root
@@ -532,7 +538,7 @@ def test_z7_a_run_with_no_capture_record_and_no_trace_counts_zero_of_zero(s3: Su
 @pytest.mark.parametrize("surface", ["report.md", "receipt.html", "viewer page"])
 def test_z7_a_rollouts_own_trace_cut_at_the_default_is_counted_though_no_limit_was_recorded(s3: Surfaces, surface: str) -> None:
     labels = s3.texts()[surface]
-    e = expect(OBSERVATION_LIMIT_BYTES, big=OWN_BIG)
+    e = expect(OWN_RUN_CUT_AT, big=OWN_BIG)
     assert e.cut > 0
     assert labels["trace spans b"] == str(e.spans) and labels["observation cut spans b"] == str(e.cut)
 
@@ -692,10 +698,19 @@ def test_z12_the_trace_level_line_and_the_observation_line_are_two_lines_and_the
 # ---------- Z13: the cap, its default and the stored field names are untouched ----------
 
 
-def test_z13_the_cap_and_its_default_are_where_they_were() -> None:
+def test_z13_there_is_no_default_cap_and_the_routing_constant_is_not_one() -> None:
+    """CD (D1, D8) inverts this test in place, keeping Z13's slot. It was frozen on the morning of
+    the day ADR-096 condemned the default: correct for the surfacing packet, whose brief fenced the
+    cap off, and wrong the moment the default went. Nothing about the surfacing packet's own
+    behaviour moves -- the value 8192 is still there, under the name of the job it still does."""
+    import proofload.trace as trace_module
     from proofload.capture import CaptureSpec
 
-    assert OBSERVATION_LIMIT_BYTES == 8192 and CaptureSpec().max_observation_bytes == 8192
+    assert trace_module.OBSERVATION_ROUTING_BYTES == 8192
+    for name in ("OBSERVATION_LIMIT_BYTES", "OBSERVATION_HEAD_BYTES", "OBSERVATION_TAIL_BYTES"):
+        assert not hasattr(trace_module, name), name
+    with pytest.raises(TypeError):
+        CaptureSpec()  # type: ignore[call-arg]
 
 
 def test_z13_the_two_stored_fields_and_the_trace_level_field_keep_their_names() -> None:

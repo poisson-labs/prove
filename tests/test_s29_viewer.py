@@ -426,6 +426,10 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 #: ``report.py``, read off the shipped file and never a prediction. No ``REPORT_PY_EXCLUDED`` is
 #: minted; ``TREE_PY_EXCLUDED`` above is now the file's only exclusion record.
 # Re-minted 2026-09-20 (truncation surfacing): report.py gains the observation block of the provenance list.
+#: CD Session A, 2026-09-20: `report.py` moves in CD Session B -- `_observation_cap` must let the
+#: string "none" through (CD9, and D9's "no change to them" does not hold for it). This literal and
+#: `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]` are the two carriers, both owed to
+#: CD's post-build re-mint. Correct at `1f5491b`; not re-minted here.
 REPORT_PY_SHA256 = "5cfdf03bc83ad2288c58f6359c8278788c5ec5ea436b3d8e033ccbfda2411b0c"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"

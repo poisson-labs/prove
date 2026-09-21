@@ -253,18 +253,21 @@ GENAI_CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
 GENAI_CONTENT_PREFIXES = ("gen_ai.prompt", "gen_ai.completion")
 SALT = "golden-pilot-oracle-salt"
 EPOCH = 1_756_900_000_000_000_000
+#: CD section 7.1a: what every shipped golden-pilot sweep file declares.
+EXAMPLE_CAP = 1024
 STEP_NS = 10_000_000
 
 # S17's measure of "what S17 left them": every public name each module defines itself, and
 # the __all__ lists, copied verbatim from tests/test_m3_crash_trace.py.
 TRACE_EXPORTS = [
     # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
-    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants --
-    # CONTENT_KEYS, OBSERVATION_HEAD_BYTES, OBSERVATION_LIMIT_BYTES, OBSERVATION_TAIL_BYTES,
-    # TRUNCATED_KEY -- and two functions, finalize and truncate_observations. trace.py's own
-    # order: constants, classes, functions, each sorted. 32 names.
+    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants and two
+    # functions. CD (D8) retires three of A8b's five -- OBSERVATION_HEAD_BYTES and
+    # OBSERVATION_TAIL_BYTES are deleted with the default they described, and
+    # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES, which sorts one place later.
+    # trace.py's own order: constants, classes, functions, each sorted. 30 names.
     "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
-    "OBSERVATION_HEAD_BYTES", "OBSERVATION_KEYS", "OBSERVATION_LIMIT_BYTES", "OBSERVATION_TAIL_BYTES",
+    "OBSERVATION_KEYS", "OBSERVATION_ROUTING_BYTES",
     "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES", "TRUNCATED_KEY",
     "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
     "assemble", "collect", "finalize", "from_litellm", "from_otel", "merge", "record", "split", "step",
@@ -665,6 +668,9 @@ def capture_toml(path: Path) -> Path:
         "[capture]",
         f'instrument = ["{INSTRUMENTOR}"]',
         "content = false",
+        # CD (D1, section 7.1a): a [capture] table declares its cap, and the shipped examples
+        # declare 1024 -- 64x headroom over every golden-pilot observation value CAP3 measured.
+        f"max_observation_bytes = {EXAMPLE_CAP}",
     ]
     path.write_text("\n".join(lines) + "\n")
     return path
