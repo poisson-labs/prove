@@ -51,7 +51,6 @@ from typing import TYPE_CHECKING, Any
 
 from proofload.trace import (
     CONTENT_KEYS,
-    OBSERVATION_LIMIT_BYTES,
     from_otel,
     truncate_observations,
 )
@@ -78,14 +77,23 @@ _STATUS: CaptureStatus | None = None
 _BUCKET: _Bucket | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CaptureSpec:
-    """The ``[capture]`` table of the sweep file, as the executor carries it."""
+    """The ``[capture]`` table of the sweep file, as the executor carries it.
+
+    ``kw_only`` (ADR-096) so the required field keeps its place in the declaration order:
+    ``_CAPTURE_FIELDS`` is that order in both the sampler and the Modal transport, and
+    Python would otherwise force a required field in front of the defaulted ones. There is
+    not one positional construction of this class anywhere in the package or its tests, so
+    it costs nothing today and forecloses one that would silently reorder later.
+    """
 
     instrument: tuple[str, ...] = ()
     content: bool = False
-    #: The bound on one stored observation value, whether or not ``content`` is on.
-    max_observation_bytes: int = OBSERVATION_LIMIT_BYTES
+    #: The bound on one stored observation value, whether or not ``content`` is on. Required,
+    #: and supplied by nothing: every run says what it keeps whole, and ``None`` is *keep
+    #: every value whole* (ADR-096, the sweep file's ``"none"``).
+    max_observation_bytes: int | None
     #: The span cap, off by default (D6): ``None`` keeps every closed span. A runaway loop is
     #: bounded by ``episode_timeout`` and by the horizon, and when neither fires it is a
     #: finding the trace should show in full rather than a ``dropped`` count.
@@ -308,6 +316,13 @@ def install(spec: CaptureSpec) -> CaptureStatus:
         return status
 
 
+#: The spec of a recorder nothing feeds. ``capture()`` with no bucket yields a recorder no
+#: collector writes to and whose ``to_meta()`` returns None, so the cap it carries is never
+#: read -- and it is ``None`` rather than a number precisely so that no integer in this
+#: package can be mistaken for a cap that something supplies (ADR-096).
+_INERT_SPEC = CaptureSpec(max_observation_bytes=None)
+
+
 @contextmanager
 def capture(run_id: str, episode_id: str) -> Iterator[Recorder]:
     """Collect the spans of one episode, keyed by ``(run_id, episode_id)``.
@@ -317,7 +332,7 @@ def capture(run_id: str, episode_id: str) -> Iterator[Recorder]:
     and ``to_meta()`` returns None.
     """
     bucket = _BUCKET
-    recorder = Recorder(CaptureSpec() if bucket is None else bucket.spec, run_id, episode_id)
+    recorder = Recorder(_INERT_SPEC if bucket is None else bucket.spec, run_id, episode_id)
     if bucket is None:
         yield recorder
         return

@@ -44,10 +44,8 @@ __all__ = [
     "GATE",
     "KINDS",
     "LOGPROBS_KEY",
-    "OBSERVATION_HEAD_BYTES",
     "OBSERVATION_KEYS",
-    "OBSERVATION_LIMIT_BYTES",
-    "OBSERVATION_TAIL_BYTES",
+    "OBSERVATION_ROUTING_BYTES",
     "OTEL_KIND_MAP",
     "OTEL_SEMCONV_VERSION",
     "OUTCOME_BY",
@@ -187,19 +185,14 @@ _ROUTING_STAMPS: frozenset[str] = frozenset({_RUN_ID_KEY, _EPISODE_KEY})
 #: is a mapping whose *sole* key is this one -- detection is on the key and never on the shape.
 TRUNCATED_KEY = "proofload.truncated"
 
-#: The default bound on one stored observation value, in bytes. **A named default and never a
-#: finding**: CAP2 measured every one of the 21,499 observation values in the store at 15 or 16
-#: bytes, so the corpus can neither confirm nor refute this number, and offers no distribution
-#: to draw a different one from. The measurement is owed from the first content-capturing run.
-OBSERVATION_LIMIT_BYTES: int = 8192
-
-#: The default limit's split, and **not a bound at any other limit** (ADR-082). A cut keeps
-#: ``limit - limit // 4`` bytes of head and ``limit // 4`` of tail, which sum to exactly the
-#: limit at every positive integer limit; these two are what that comes to at the default. An
-#: earlier reading fixed them as absolute constants beside a per-sweep trigger, which made the
-#: cut store 8 KB whatever the sweep asked for, and made head and tail overlap below 8192.
-OBSERVATION_HEAD_BYTES: int = 6144
-OBSERVATION_TAIL_BYTES: int = 2048
+#: The byte size at which ``split`` moves an attribute nobody named out of the envelope and
+#: into ``trace_obs`` (ADR-090). **It decides which column a value is stored in and never
+#: whether a value is cut.** There is no observation cap here or anywhere else in the package:
+#: every run declares its own (ADR-096).
+#:
+#: The value is the one ADR-090's classification was measured at, and it does not move with the
+#: rename: changing the number would be a storage-layout change wearing a rename's clothes.
+OBSERVATION_ROUTING_BYTES: int = 8192
 
 #: The six prompt/completion prefix families ``content = false`` strips, dotted. The bare family
 #: names are exact members of ``CONTENT_KEYS`` below, because the shipped rule matched
@@ -830,14 +823,14 @@ def _is_observation(key: str, value: Any) -> bool:
 
     Three clauses, and the second is what keeps the store's classification and the child's cut
     in step at every limit: a value cut at a lowered sweep limit is a small wrapper, well under
-    the module default, and would otherwise ride back into the envelope. The two routing stamps
+    the routing size, and would otherwise ride back into the envelope. The two routing stamps
     are excluded by name and never by size -- a large stamp is still a stamp.
     """
     if key in OBSERVATION_KEYS:
         return True
     if key in _ROUTING_STAMPS:
         return False
-    return _is_wrapper(value) or len(_byte_form(value)) > OBSERVATION_LIMIT_BYTES
+    return _is_wrapper(value) or len(_byte_form(value)) > OBSERVATION_ROUTING_BYTES
 
 
 def _cut_span(span: Span, limit: int) -> Span:
@@ -866,7 +859,7 @@ def _cut_span(span: Span, limit: int) -> Span:
     return span if cut == span else cut
 
 
-def truncate_observations(trace: Trace, *, limit: int = OBSERVATION_LIMIT_BYTES) -> Trace:
+def truncate_observations(trace: Trace, *, limit: int | None) -> Trace:
     """Every observation value over ``limit`` bytes, stored as its head, its tail and its
     original byte length.
 
@@ -875,10 +868,20 @@ def truncate_observations(trace: Trace, *, limit: int = OBSERVATION_LIMIT_BYTES)
     is stored whole; a value already wrapped is never cut again; and the wrapper's head and tail
     sum to at most the limit, so a cut is always a reduction (ADR-082).
 
-    Idempotent, byte for byte, including each span's ``truncated`` and ``bytes_original``. The
-    trace itself comes back when nothing was cut, so a trace that needs no cut is stored exactly
-    as it arrived.
+    ``limit`` is required and the caller always has one: every run declares what it keeps whole
+    (ADR-096), and ``None`` is a declaration too -- *cut nothing*, either because the sweep said
+    ``"none"`` or because it asked for no capture at all. The trace itself comes back in that
+    case, as it does whenever nothing was cut, so an uncut trace is stored byte for byte as it
+    arrived. ``0`` is not a spelling of *nothing*: a limit below one is refused.
+
+    Idempotent, byte for byte, including each span's ``truncated`` and ``bytes_original``.
     """
+    if limit is None:
+        return trace
+    if limit < 1:
+        raise ValueError(
+            f"truncate_observations(limit=...) must be an int >= 1 or None, got {limit!r}"
+        )
     spans: list[Span] = []
     changed = False
     for span in trace.spans:
@@ -890,7 +893,7 @@ def truncate_observations(trace: Trace, *, limit: int = OBSERVATION_LIMIT_BYTES)
     return replace(trace, spans=tuple(spans))
 
 
-def finalize(trace: Trace, *, declaration: None, limit: int = OBSERVATION_LIMIT_BYTES) -> Trace:
+def finalize(trace: Trace, *, declaration: None, limit: int | None) -> Trace:
     """The one site a stored trace passes through before it is written.
 
     A8b mints it with ``declaration`` accepting ``None`` only and calls
@@ -898,6 +901,10 @@ def finalize(trace: Trace, *, declaration: None, limit: int = OBSERVATION_LIMIT_
     ``gate="declared"`` stamp in front of the cut. A non-``None`` declaration is **refused**
     rather than accepted and dropped, so the half that is not built is visible at the call site
     A10 will change instead of silently doing nothing.
+
+    ``limit`` is the run's own, required and passed down unchanged. A8b left it to a module
+    constant, so every stored row was cut at 8192 whatever its sweep file declared -- the
+    funnel ran on every row of both backends while being described as a backstop for one path.
     """
     if declaration is not None:
         raise TypeError(
@@ -919,7 +926,7 @@ def split(trace: Trace) -> tuple[dict[str, Any], dict[str, Any]]:
     hold only the sub-keys that had a value, and carry no entry at all for a span that had none.
 
     An attribute is an observation by its key, by already carrying a cut value's wrapper, or by
-    being over ``OBSERVATION_LIMIT_BYTES`` -- A8b widened the third clause in, so an attribute
+    being over ``OBSERVATION_ROUTING_BYTES`` -- A8b widened the third clause in, so an attribute
     nobody named is still bounded if it is large enough to matter. The two routing stamps are
     excluded by name whatever their size. ``split`` classifies and moves; it never cuts.
 

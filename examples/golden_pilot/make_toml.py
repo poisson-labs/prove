@@ -77,6 +77,7 @@ values = [{temperatures}]
 [capture]
 instrument = ["{instrument}"]
 content = false
+max_observation_bytes = 1024
 
 [modal]
 concurrency = 16

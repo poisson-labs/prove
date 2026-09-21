@@ -261,10 +261,11 @@ task_id = "49"
 # SPAN_AND_EVENT) in the container. Proofload's content flag decides what it KEEPS; that
 # variable decides what the instrumentor EMITS. The Dockerfile sets it.
 #
-# max_observation_bytes stays at the shipped default. It is the number under test: an
-# airline turn's message list is far over it, so the value is stored as its head and
-# its tail, with bytes_original recording its whole byte length -- which is the
-# measurement, at a bounded storage cost.
+# max_observation_bytes is pinned by the T.4 pre-registration, which registered this
+# value as the number under test; there is no shipped number for it to match, because
+# every sweep now declares its own. An airline turn's message list is far over it, so
+# the value is stored as its head and its tail, with bytes_original recording its whole
+# byte length -- which is the measurement, at a bounded storage cost.
 [capture]
 instrument = ["openai"]
 content = true

@@ -183,6 +183,9 @@ def plan(
             )
         if dict(manifest.axis_types) != dict(spec.axis_types):
             raise NotResumable(f"run {resume!r} has different axis_types than the spec")
+        recorded, declared = _recorded_cap(manifest), _spec_declaration(spec)
+        if (None if recorded is None else recorded[1]) != declared:
+            raise NotResumable(f"run {resume!r} {_reads(recorded)}, spec {_declares(declared)}")
         run_id = resume
         salt = manifest.run_salt
         wanted = store.missing(resume, _all_keys(spec))
@@ -738,6 +741,59 @@ def _environment(spec: SweepSpec) -> dict[str, Any]:
     }
 
 
+def _declaration(spec: CaptureSpec) -> int | str:
+    """What a ``[capture]`` table declared, in the words it declared it in (D9).
+
+    The manifest is a record of the *request*, so a cap of ``None`` -- which is the string the
+    sweep file carried -- goes back to that string rather than to JSON ``null``: the surfacing
+    packet's provenance echo then prints ``none`` without being touched, where a ``null`` would
+    be dropped by its ``*_bytes`` filter or printed in Python's spelling.
+    """
+    return "none" if spec.max_observation_bytes is None else spec.max_observation_bytes
+
+
+def _spec_declaration(spec: SweepSpec) -> int | str | None:
+    """The cap a sweep declared, or ``None`` when it carries no ``[capture]`` table at all.
+
+    Deliberately not ``_declared_limit``: the cut sites are right not to tell the two nothings
+    apart (D5), and the resume gate is right to (D14). A run that recorded *keep every value
+    whole* and a sweep that asked for no capture are two different requests, and continuing one
+    run directory under the other is this packet's own failure mode reached by a flag.
+    """
+    return None if spec.capture is None else _declaration(spec.capture)
+
+
+def _recorded_cap(manifest: RunManifest) -> tuple[str, int | str] | None:
+    """The observation cap a stored run recorded -- the name it used and the value it wrote.
+
+    Read by the ``_bytes`` suffix, the idiom ``report._observation_cap`` already uses one file
+    over and for the same reason: a run written before A8b recorded this same field under a
+    spelling this package has retired, and comparing it as the same field must not put that
+    spelling back. A third spelling reads the same way, and the name travels into the refusal
+    as data rather than as a literal.
+    """
+    capture = manifest.environment.get("capture")
+    if not isinstance(capture, Mapping):
+        return None
+    for key, value in sorted(capture.items(), key=lambda entry: str(entry[0])):
+        if not str(key).endswith("_bytes") or isinstance(value, bool):
+            continue
+        if isinstance(value, (int, str)):
+            return str(key), value
+    return None
+
+
+def _reads(entry: tuple[str, int | str] | None) -> str:
+    """CD-E4's recorded half. A run with no capture record recorded no cap, which is a different
+    fact from a run that recorded one, and is said in different words."""
+    return "recorded no observation cap" if entry is None else f"recorded {entry[0]} {entry[1]!r}"
+
+
+def _declares(value: int | str | None) -> str:
+    """CD-E4's declared half, in the same two shapes."""
+    return "has no [capture] table" if value is None else f"declares {value!r}"
+
+
 def _capture_record(spec: CaptureSpec, status: CaptureStatus) -> dict[str, Any]:
     """``manifest.environment["capture"]``: the request and what became of it, once per run.
 
@@ -753,7 +809,7 @@ def _capture_record(spec: CaptureSpec, status: CaptureStatus) -> dict[str, Any]:
         "semconv": OTEL_SEMCONV_VERSION,
         "alias_map_version": ALIAS_MAP_VERSION,
         "content": spec.content,
-        "max_observation_bytes": spec.max_observation_bytes,
+        "max_observation_bytes": _declaration(spec),
         "max_spans": spec.max_spans,
     }
 
@@ -797,7 +853,18 @@ def _empty_envelope() -> dict[str, Any]:
     ).to_dict()
 
 
-def _finalized(record: EpisodeRecord) -> EpisodeRecord:
+def _declared_limit(spec: SweepSpec) -> int | None:
+    """What the sweep declared, as the cut sites take it: ``None`` when nothing was declared and
+    when ``"none"`` was, an int otherwise. The one place the two are the same thing.
+
+    D6: the mapping exists once and ``executor_modal`` imports it. A field list copied into the
+    Modal transport is how a rename went silently wrong across a process boundary once already
+    (U5), and two copies of a two-case mapping is that shape one size down.
+    """
+    return None if spec.capture is None else spec.capture.max_observation_bytes
+
+
+def _finalized(record: EpisodeRecord, limit: int | None) -> EpisodeRecord:
     """``finalize`` over a row's own trace, on its way to the store.
 
     **It never raises.** ``record.meta["trace"]`` is a plain dict that nothing has validated,
@@ -808,18 +875,25 @@ def _finalized(record: EpisodeRecord) -> EpisodeRecord:
     The record comes back untouched when nothing was cut -- ``truncate_observations`` returns
     the trace itself in that case -- so a trace that needed no cut is stored byte for byte as
     it arrived, and no existing run's stored bytes move.
+
+    ``limit`` is the run's own (D5). A8b wired this site with none, so every stored row of both
+    backends was cut at a module constant whatever its sweep file declared, while the manifest,
+    the receipt and the viewer all reported the declaration. ``None`` is *cut nothing*, which is
+    what a sweep declaring ``"none"`` and a sweep with no ``[capture]`` table both asked for.
     """
     try:
         parsed = Trace.from_dict(record.meta["trace"])
     except Exception:  # noqa: BLE001 - an unreadable trace is stored exactly as written
         return record
-    cut = finalize(parsed, declaration=None)
+    cut = finalize(parsed, declaration=None, limit=limit)
     if cut is parsed:
         return record
     return replace(record, meta={**record.meta, "trace": cut.to_dict()})
 
 
-def _with_capture_envelope(record: EpisodeRecord, active: bool) -> EpisodeRecord:
+def _with_capture_envelope(
+    record: EpisodeRecord, active: bool, limit: int | None
+) -> EpisodeRecord:
     """The one funnel every stored row passes through: ``finalize`` over a trace it carries,
     D9's empty envelope for a row that ran under active capture and carries none.
 
@@ -830,7 +904,7 @@ def _with_capture_envelope(record: EpisodeRecord, active: bool) -> EpisodeRecord
     would break that; here it cannot.
     """
     if "trace" in record.meta:
-        return _finalized(record)
+        return _finalized(record, limit)
     if not active:
         return record
     return replace(record, meta={**record.meta, "trace": _empty_envelope()})
@@ -859,6 +933,7 @@ def _record(
                 backend_meta=backend_meta,
             ),
             capture_active,
+            _declared_limit(p.spec),
         )
     meta: dict[str, Any] | None
     if kind == _TIMEOUT_ERROR:
@@ -887,6 +962,7 @@ def _record(
             meta=meta,
         ),
         capture_active,
+        _declared_limit(p.spec),
     )
 
 

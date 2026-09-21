@@ -44,6 +44,7 @@ from proofload.executor import (
     _CaptureCall,
     _chaos_record,
     _ChaosCall,
+    _declared_limit,
     _environment,
     _episode_id,
     _mp_context,
@@ -322,7 +323,14 @@ def _capture_request(payload: Mapping[str, Any] | None) -> tuple[CaptureSpec | N
             f"capture payload has unknown field(s): {', '.join(unknown)}; "
             f"the fields are {', '.join(_CAPTURE_FIELDS)}"
         )
-    fields = {name: payload[name] for name in _CAPTURE_FIELDS if name in payload}
+    missing = [name for name in _CAPTURE_FIELDS if name not in payload]
+    if missing:
+        raise ValueError(
+            f"capture payload is missing field(s): {', '.join(missing)}; "
+            f"the fields are {', '.join(_CAPTURE_FIELDS)}. There is no default: a "
+            "payload without one of these is a host and a container at different versions."
+        )
+    fields = {name: payload[name] for name in _CAPTURE_FIELDS}
     return CaptureSpec(**fields), str(payload.get("run_id", ""))
 
 
@@ -574,6 +582,7 @@ def _record(
                 meta=meta,
             ),
             capture_active,
+            _declared_limit(p.spec),
         )
     backend_meta = dict(result.get("backend_meta") or {})
     backend_meta.setdefault("i", i)
@@ -593,6 +602,7 @@ def _record(
             backend_meta=backend_meta,
         ),
         capture_active,
+        _declared_limit(p.spec),
     )
 
 

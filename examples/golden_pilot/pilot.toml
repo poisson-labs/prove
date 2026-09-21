@@ -180,6 +180,7 @@ values = [0.0, 0.7]
 [capture]
 instrument = ["openai"]
 content = false
+max_observation_bytes = 1024
 
 [modal]
 concurrency = 16

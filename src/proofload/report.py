@@ -780,21 +780,28 @@ def _run_identity(
         provenance["run_salt"] = manifests[0].run_salt
 
 
-def _observation_cap(manifest: RunManifest) -> dict[str, int] | None:
+def _observation_cap(manifest: RunManifest) -> dict[str, int | str] | None:
     """The byte limits a run recorded for what it captured, as it recorded them.
 
     Every ``*_bytes`` entry of ``environment["capture"]``, under whatever name the build that
     wrote the run gave it, or None when the run recorded none. Echoed and never translated: a
     limit written before the per-value cut bounded a different thing than one written after it,
     and only the name says which, so no name is spelled here.
+
+    A number, or the one word a run may record in a byte field: ADR-096 made *keep every value
+    whole* a declarable state, and ``none`` is how a run records it. Every other string is
+    dropped, as it always was -- ``_UNKNOWN_READING`` below turns a missing entry into ``not
+    recorded``, and a run that declared nothing and a run that declared *whole* must not print
+    the same line.
     """
     capture = manifest.environment.get("capture")
     if not isinstance(capture, Mapping):
         return None
-    limits = {
+    limits: dict[str, int | str] = {
         str(key): value
         for key, value in sorted(capture.items(), key=lambda entry: str(entry[0]))
-        if str(key).endswith("_bytes") and isinstance(value, int) and not isinstance(value, bool)
+        if str(key).endswith("_bytes")
+        and (value == "none" or (isinstance(value, int) and not isinstance(value, bool)))
     }
     return limits or None
 

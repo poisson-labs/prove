@@ -164,19 +164,53 @@ def _checked_positive_int(value: Any, name: str) -> int:
     return value
 
 
-def _positive_int(table: Mapping[str, Any], name: str, default: int) -> int:
-    return _checked_positive_int(table.get(name, default), name)
-
-
 def _optional_positive_int(table: Mapping[str, Any], name: str) -> int | None:
-    """``max_spans``'s parse: absent is ``None`` (D6), present is an int >= 1.
-
-    A sibling rather than a widened ``_positive_int``, because ``_positive_int`` called with
-    ``default=None`` falls straight into its own ``not isinstance(value, int)`` and raises on
-    the absent case -- and widening it would change the reachable error set for
-    ``max_observation_bytes``, whose message it shares.
-    """
+    """``max_spans``'s parse: absent is ``None`` (D6), present is an int >= 1."""
     return None if name not in table else _checked_positive_int(table[name], name)
+
+
+#: CD-E1, the refusal a person meets who has never heard of the field (ADR-096, D4). It names
+#: what the number is, two anchors an order of magnitude apart, the second spelling, the way to
+#: measure it from this target, and the one line that reproduces what a file without it stored.
+#: It names no corpus and no percentile, and recommends no single number: an error that hands
+#: out one value to everyone who meets it has restored by another route the thing ADR-096
+#: refused to ship.
+_CAP_REQUIRED = """[capture].max_observation_bytes is required and has no default.
+It is the largest single observation value -- one prompt, one tool result -- that
+this target stores whole, in bytes; anything larger is stored as its head, its
+tail and its original length. Set it to "none" to store every value whole.
+Sizing it: an LLM agent whose prompt carries a system prompt and tool schemas
+needs tens of thousands of bytes; a target whose observations are scalars is
+served by 1024. To size it from this target, run a short sweep at a low limit
+such as 64 and read `proofload inspect`: every value's true length is recorded,
+though the values themselves are not kept. 8192 is what a sweep file without
+this line stored before this change.
+See docs/what-capture-stores.md."""
+
+#: D3, and exactly this spelling: a string that says what it means, where a large number is
+#: the thing being prevented, ``0`` reads at least as naturally as *cut everything*, ``false``
+#: reads as *no capture*, and TOML's ``inf`` is the one value a JSON manifest cannot carry.
+_NO_CAP = "none"
+
+
+def _capture_cap(table: Mapping[str, Any]) -> int | None:
+    """``[capture].max_observation_bytes``: required, an int >= 1, or ``"none"`` for *whole*.
+
+    The refusal is here rather than at the cut sites because here the run does not exist yet:
+    a person who has to be told is told before anything is written, and a person who declared
+    a number gets it honoured end to end (ADR-096).
+    """
+    if "max_observation_bytes" not in table:
+        raise SamplerError(_CAP_REQUIRED)
+    value = table["max_observation_bytes"]
+    if isinstance(value, str) and value == _NO_CAP:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise SamplerError(
+            "[capture].max_observation_bytes must be an int >= 1 or the string "
+            f'"{_NO_CAP}", got {value!r}'
+        )
+    return value
 
 
 def _capture_table(table: Any) -> CaptureSpec | None:
@@ -201,13 +235,10 @@ def _capture_table(table: Any) -> CaptureSpec | None:
     content = table.get("content", False)
     if not isinstance(content, bool):
         raise SamplerError(f"[capture].content must be true or false, got {content!r}")
-    defaults = CaptureSpec()
     return CaptureSpec(
         instrument=tuple(instrument),
         content=content,
-        max_observation_bytes=_positive_int(
-            table, "max_observation_bytes", defaults.max_observation_bytes
-        ),
+        max_observation_bytes=_capture_cap(table),
         max_spans=_optional_positive_int(table, "max_spans"),
     )
 
