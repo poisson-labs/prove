@@ -430,7 +430,12 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 #: string "none" through (CD9, and D9's "no change to them" does not hold for it). This literal and
 #: `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]` are the two carriers, both owed to
 #: CD's post-build re-mint. Correct at `1f5491b`; not re-minted here.
-REPORT_PY_SHA256 = "5cfdf03bc83ad2288c58f6359c8278788c5ec5ea436b3d8e033ccbfda2411b0c"
+# CD Session B, 2026-09-21: re-minted off the built `report.py` at `234513c`. CD's D9 moves
+# exactly one function, `_observation_cap`, which now lets the declared word `none` through;
+# `test_cd_cap_declaration.py` pins the rest of the file by a digest that excludes it. The
+# other carrier is `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]`, re-minted in
+# the same commit. Before this packet: `5cfdf03b...`.
+REPORT_PY_SHA256 = "4369c1114ba7f2881f3972831101dda30c72ad27f2727d31ba7342959468e746"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0

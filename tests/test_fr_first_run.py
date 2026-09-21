@@ -263,12 +263,15 @@ SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a dif
 DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "6413b54ac9ec58b2961cb1c73cc58227e0cadaf3c164c3267f943e4348cc6b42"
 # Re-minted 2026-09-20 (truncation surfacing): report.py and viewer.py move, because that packet edits both; store.py and tree.py do not.
 # Re-minted again 2026-09-20 (stored-trace read): store.py moves, because that packet edits it; report.py, viewer.py and tree.py do not.
-# CD Session A, 2026-09-20: `report.py` moves again in CD Session B -- D9's "no change to them"
-# does not survive D3's "none" spelling, and `_observation_cap`'s `isinstance(value, int)` filter
-# drops it (CD9). This literal and `test_s29_viewer.py`'s `REPORT_PY_SHA256` are the two carriers
-# and are owed to CD's post-build re-mint. Correct at `46c5ac0`; not re-minted here.
+# CD Session B, 2026-09-21: re-minted off the built `report.py` at `234513c`. D9's "no change to
+# them" did not survive D3's "none" -- `_observation_cap`'s `isinstance(value, int)` filter drops
+# the string -- so that one function lets the word through and nothing else in the file moved,
+# which `test_cd_cap_declaration.py`'s digest over the file OUTSIDE `_observation_cap` is what
+# pins. This literal and `test_s29_viewer.py`'s `REPORT_PY_SHA256` are the two carriers and moved
+# together. The value before this packet was `5cfdf03b...`, correct from the surfacing packet
+# through `46c5ac0`.
 UNTOUCHED_FILE_SHA256 = {
-    "report.py": "5cfdf03bc83ad2288c58f6359c8278788c5ec5ea436b3d8e033ccbfda2411b0c",
+    "report.py": "4369c1114ba7f2881f3972831101dda30c72ad27f2727d31ba7342959468e746",
     "viewer.py": "cbd5e7c9524ea34dd6690eeff30b4457d63046a644abdb9f832802618e1dbd5d",
     "store.py": "6dd8d01e521929317f3f02196889f382fbb8df6d0d314dff0678082955a17dd7",
     "tree.py": "c0c011a3d194964a16f634d5450354645bb9132e0f47be192070a8daef9a8f3e",
