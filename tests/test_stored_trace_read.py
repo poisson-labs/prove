@@ -26,7 +26,7 @@ symbol the spec has not given, and would leave every unmigrated store failing as
 ``Span``'s own comment says ``None`` means on A8a's eight, so a reader asks ``is None`` and reads the truth. It
 is never a zero and never an empty string.
 
-**Invariant-to-test map** (R-numbers are this file's; 48 collected ids):
+**Invariant-to-test map** (R-numbers are this file's; 64 collected ids):
 
 | Invariant | Tests |
 |---|---|
@@ -50,11 +50,12 @@ trace back inside ``meta`` and dropping both trace columns. The expected trace o
 from the same recipe with ``make_trace``, never read off a store, so a broken twin cannot make a test
 vacuous; and R7 counts the span lines it expects, because two silent outputs are equal.
 
-**Green before and after -- 21 of the 48 ids**, named so their green is not read as coverage (the other 27 are
+**Green before and after -- 37 of the 64 ids**, named so their green is not read as coverage (the other 27 are
 red on the bare tree: 17 raise ``missing trace key(s): alias_map_version`` from ``Store.read``, the defect itself, and 10
 fail on what ``inspect`` does or on a ``meta`` or an envelope that comes back unread): R1's fixture precondition; both
-R3 tests (the current shape round-trips today); all ten R4 tests (a near miss raises today and must go on raising, so
-they pin what must NOT change); both R5 tests (``from_dict`` is strict today and must stay so); R8's five (a
+R3 tests (the current shape round-trips today); all twenty-six R4 tests (a near miss raises today and must go on raising,
+so they pin what must NOT change: six mixtures of the two shapes, and each of the six trace keys and thirteen span keys
+the old shape had, missing in turn); both R5 tests (``from_dict`` is strict today and must stay so); R8's five (a
 current-shape trace and something that is no trace, inside ``meta``, are returned as written today, ``inspect`` prints
 no trace lines for the second, and the envelope of the first is the current writer's while the second has none); and
 R9's one (the envelope read of a written column is raw today and must stay raw). R10's second test and every R1, R2,
@@ -389,18 +390,28 @@ def test_r3_the_current_writer_reads_exactly_what_it_wrote(root: Path) -> None:
 # ---------- R4: the tolerance is exactly the old shape ----------
 
 NEAR_MISSES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
-    # trace level
     "six trace keys but spans of twenty-one": lambda e: {k: v for k, v in e.items() if k != "alias_map_version"},
     "seven trace keys but spans of thirteen": lambda e: {**e, "spans": [{k: s[k] for k in A7_SPAN_KEYS} for s in e["spans"]]},
     "the old trace shape and one unknown key": lambda e: {**a7_shape(e), "steps": []},
-    "no spans key": lambda e: {k: v for k, v in a7_shape(e).items() if k != "spans"},
-    "no source key": lambda e: {k: v for k, v in a7_shape(e).items() if k != "source"},
-    # span level, under a trace of the old shape
     "old spans and one unknown span key": lambda e: {**a7_shape(e), "spans": [{**s, "latency_ms": 3} for s in a7_shape(e)["spans"]]},
-    "old spans, one missing a key the old shape had": lambda e: {**a7_shape(e), "spans": [{k: v for k, v in s.items() if k != "kind"} for s in a7_shape(e)["spans"]]},
     "old spans, one with a key the old shape lacked": lambda e: {**a7_shape(e), "spans": [{**a7_shape(e)["spans"][0], "gate": None}, *a7_shape(e)["spans"][1:]]},
     "old spans, one of them the current shape": lambda e: {**a7_shape(e), "spans": [e["spans"][0], *a7_shape(e)["spans"][1:]]},
 }
+# Every key the old shape had, missing in turn: rejected, including the ones a None would have filled
+# validly (source_version, truncated; error, tokens, code, confidence). A reader that tolerated one of
+# those would be wider than the shape A8a replaced, and only a case that drops exactly that key sees it.
+def minus_trace_key(key: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    return lambda e: {n: v for n, v in a7_shape(e).items() if n != key}
+
+
+def minus_span_key(key: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    return lambda e: {**a7_shape(e), "spans": [{n: v for n, v in s.items() if n != key} for s in a7_shape(e)["spans"]]}
+
+
+for _trace_key in A7_TRACE_KEYS:
+    NEAR_MISSES[f"the old trace shape minus {_trace_key}"] = minus_trace_key(_trace_key)
+for _span_key in A7_SPAN_KEYS:
+    NEAR_MISSES[f"old spans, every one minus {_span_key}"] = minus_span_key(_span_key)
 
 
 @pytest.mark.parametrize("name", list(NEAR_MISSES))
