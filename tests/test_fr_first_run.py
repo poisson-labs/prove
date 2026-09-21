@@ -262,10 +262,11 @@ SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a dif
 # pin: none of the names below ends in the suffix the exclusion-record sweeps count.
 DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "6413b54ac9ec58b2961cb1c73cc58227e0cadaf3c164c3267f943e4348cc6b42"
 # Re-minted 2026-09-20 (truncation surfacing): report.py and viewer.py move, because that packet edits both; store.py and tree.py do not.
+# Re-minted again 2026-09-20 (stored-trace read): store.py moves, because that packet edits it; report.py, viewer.py and tree.py do not.
 UNTOUCHED_FILE_SHA256 = {
     "report.py": "5cfdf03bc83ad2288c58f6359c8278788c5ec5ea436b3d8e033ccbfda2411b0c",
     "viewer.py": "cbd5e7c9524ea34dd6690eeff30b4457d63046a644abdb9f832802618e1dbd5d",
-    "store.py": "f6a93dd9e2ac83b87c648b2047a41100366191ed41ff9700315fd9d4266a9370",
+    "store.py": "6dd8d01e521929317f3f02196889f382fbb8df6d0d314dff0678082955a17dd7",
     "tree.py": "c0c011a3d194964a16f634d5450354645bb9132e0f47be192070a8daef9a8f3e",
 }
 MULTI_JSON_KEYS = [
