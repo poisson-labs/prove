@@ -7,7 +7,7 @@ import json
 import math
 import os
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -19,7 +19,7 @@ import pyarrow.parquet as pq
 
 from proofload import __version__
 from proofload.episode import Episode
-from proofload.trace import Trace, TraceValidationError, assemble, split
+from proofload.trace import Span, Trace, TraceValidationError, assemble, split
 
 
 class StoreError(Exception):
@@ -91,6 +91,28 @@ _META_COLUMNS = ("meta", "backend_meta")
 #: (it gives the right projection for "full" and "none" and the wrong one for "envelope").
 _TRACE_COLUMNS = ("trace", "trace_obs")
 _TRACE_MODES = ("full", "envelope", "none")
+#: A trace as a build before A8a stored it: six trace keys, and spans of thirteen. Spelled out as
+#: history and never derived from ``Trace`` or ``Span``, so a field added to either later leaves
+#: this saying what the old writer wrote. A8a added the rest -- ``alias_map_version`` and the
+#: eight span fields -- and ``Trace.from_dict`` demands the exact key set of the current schema.
+_A7_TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated"})
+_A7_SPAN_KEYS = frozenset(
+    {
+        "span_id",
+        "parent_id",
+        "kind",
+        "name",
+        "start_ns",
+        "end_ns",
+        "input",
+        "output",
+        "tokens",
+        "confidence",
+        "error",
+        "code",
+        "attrs",
+    }
+)
 
 
 # ---------- canonical config ----------
@@ -183,11 +205,43 @@ def _resolve_trace_mode(trace: str | None, *, meta: bool) -> str:
     return trace
 
 
+def _a7_trace_as_current(stored: Any) -> Any:
+    """``stored`` as the current schema reads it, when it is exactly a trace as A7 stored it.
+
+    A trace stored before A8a has six keys and spans of thirteen, and ``Trace.from_dict``, which
+    demands the exact key set, rejects it: ``Store.read`` raised on every such row and
+    ``inspect`` exited 3 (measured on the four runs of that age in ``proofload-runs`` that keep
+    their trace in the ``trace`` column; the eight that keep it in ``meta`` on a part before A7
+    read back unvalidated and ``inspect`` printed nothing for them). The store knows what it
+    wrote, so it recognises that shape here and adds what the shape lacked, each ``None``, which
+    is what ``Span`` says a field A8a added means when it is ``None``: not recorded. Never a zero
+    and never a blank.
+
+    Exact, and nothing wider. A trace with a key the old shape did not have, one missing a key it
+    did, one whose spans are not all thirteen keys, and one already in the current shape all come
+    back as they came, so ``from_dict`` says about them what it always said. The recognition is
+    here and not in ``from_dict`` because A8a's P8-1 pins that ``from_dict`` rejects both old
+    shapes, and because a dict handed to it is not a row this store wrote. It reads and never
+    writes: nothing stored is rewritten.
+    """
+    if not isinstance(stored, Mapping) or set(stored) != _A7_TRACE_KEYS:
+        return stored
+    spans = stored["spans"]
+    if not isinstance(spans, (list, tuple)) or not all(
+        isinstance(span, Mapping) and set(span) == _A7_SPAN_KEYS for span in spans
+    ):
+        return stored
+    trace_added = {f.name: None for f in fields(Trace) if f.name not in _A7_TRACE_KEYS}
+    span_added = {f.name: None for f in fields(Span) if f.name not in _A7_SPAN_KEYS}
+    return {**stored, **trace_added, "spans": [{**span, **span_added} for span in spans]}
+
+
 def _legacy_envelope(meta: Any) -> dict[str, Any] | None:
     """The envelope of a row written before the split, computed from ``meta["trace"]`` at read.
 
     A trace ``from_dict`` rejects is an absent trace, the same posture ``append`` and
-    ``inspect`` already take: no error, no envelope.
+    ``inspect`` already take: no error, no envelope. One stored as A7 stored it is not rejected:
+    it is read as the current schema first (``_a7_trace_as_current``).
     """
     if not isinstance(meta, Mapping):
         return None
@@ -195,7 +249,7 @@ def _legacy_envelope(meta: Any) -> dict[str, Any] | None:
     if not isinstance(stored, Mapping):
         return None
     try:
-        return split(Trace.from_dict(stored))[0]
+        return split(Trace.from_dict(_a7_trace_as_current(stored)))[0]
     except TraceValidationError:
         return None
 
@@ -687,15 +741,22 @@ class Store:
 
         A row whose ``trace`` column is null keeps whatever ``meta`` holds: on a pre-A7 part
         that is the trace itself, whole and needing no reassembly; on a post-A7 row it is either
-        nothing or the invalid value ``append`` left exactly as it was written.
+        nothing or the invalid value ``append`` left exactly as it was written. A trace stored as
+        A7 stored it, in either place, is read as the current schema (``_a7_trace_as_current``);
+        anything else is returned, or rejected, as it always was.
         """
         for envelope_json, obs_json, value in zip(
             df[_TRACE_KEY], df["trace_obs"], df["meta"], strict=True
         ):
-            if envelope_json is None or not isinstance(value, dict):
+            if not isinstance(value, dict):
+                continue
+            if envelope_json is None:
+                if _TRACE_KEY in value:
+                    value[_TRACE_KEY] = _a7_trace_as_current(value[_TRACE_KEY])
                 continue
             obs = None if obs_json is None else json.loads(obs_json)
-            value[_TRACE_KEY] = assemble(json.loads(envelope_json), obs).to_dict()
+            envelope = _a7_trace_as_current(json.loads(envelope_json))
+            value[_TRACE_KEY] = assemble(envelope, obs).to_dict()
 
     def _envelopes(self, df: pd.DataFrame) -> pd.Series:
         """Each row's envelope: decoded from the ``trace`` column where the part has one, and
