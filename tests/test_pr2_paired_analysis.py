@@ -628,9 +628,10 @@ def test_pr23_property_the_action_is_the_decimal_comparison_at_any_length(
 ) -> None:
     decl = declaration(cuts=((CUT, str(threshold), comparison),))
     result = analyse(assertion([Pair("i0", str(value), "1")], decl=decl))
-    n11, _, n01, _ = two_by_two(cut_of(result))
-    acted = value >= threshold if comparison == "ge" else value > threshold
-    assert (n11, n01) == ((1, 0) if acted else (0, 1)), (value, threshold, comparison)
+    acted_a = value >= threshold if comparison == "ge" else value > threshold
+    acted_b = Decimal(1) >= threshold if comparison == "ge" else Decimal(1) > threshold
+    expected = {(True, True): (1, 0, 0, 0), (True, False): (0, 1, 0, 0), (False, True): (0, 0, 1, 0), (False, False): (0, 0, 0, 1)}
+    assert two_by_two(cut_of(result)) == expected[(acted_a, acted_b)], (value, threshold, comparison)
 
 
 # ---------- PR24: a tie is action 1 and is counted, per cut and per arm ----------
