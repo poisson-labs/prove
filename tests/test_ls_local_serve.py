@@ -40,7 +40,7 @@ section 7.1 greps: ``TOP_LEVEL_KEYS`` has **six** copies (``test_s29_viewer.py``
 on ``f7af030`` as instructed and the line numbers in the spec were read there.
 
 **Conventions this oracle fixes where the spec is silent or disagrees with itself. Session B builds
-to these; each is put to Taylor before the freeze.**
+to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
 
 - **The Summary region is one ``<p>`` per sentence, one element per line, no table, no list, no
   attribute, no ``<details>``**, in this order: the partial line (if any), the complement line (if
@@ -62,27 +62,27 @@ to these; each is put to Taylor before the freeze.**
   else beyond the payload.
 - **The ``worse`` rows are the panel's ``worse`` cells sorted by ``(-delta, q, mde, config_hash)``**
   -- ``_worst``'s tie-break key -- cut at ``view.top_n``; a sort is not arithmetic.
-- **The complement sentence's second clause names the traded pair, not ``events`` order**: ``The
-  {k} conditions where {worse} rose are the {k} where {safer} fell``, with ``(safer, worse)`` the
-  pair ``trade_line()`` already picks. On Go1 the two readings coincide (``events`` is ``("fell",
-  "survived")`` and ``survived`` is the one that rose); on a pair declared the other way round the
-  spec's literal template would name the wrong event.
+- **The complement sentence's second clause names the traded pair, not ``events`` order** (ruled
+  2026-09-22): ``The {k} conditions where {worse} rose are the {k} where {safer} fell``, with
+  ``(safer, worse)`` the pair ``trade_line()`` picks. On Go1 the two readings coincide.
+- **``build_summary`` takes the trade line as a sixth keyword** (ruled 2026-09-22), so
+  ``summary.complement.line`` *is* ``trade_line()`` and ``plain.py`` composes no complement sentence:
+  one source for one sentence, on every method.
 - **Under complementarity with nothing significant, ``trade_line()`` stays ``None``** (the existing
   first guard runs first) and ``summary.complement`` is ``{"events": [...], "line": None}``: there
   is no traded pair to name. No fixture reaches it.
-- **The non-complementary trade line keeps its first sentence and drops its second**: ``Trade:
-  {safer} fell in {n} cells where {worse} rose.`` Section 0.2 says the line is unchanged except under
-  complementarity and, two lines on, that "moved failures" appears nowhere in ``src/``; only the
-  second can be checked, and D2 is why it wins.
+- **The non-complementary trade line keeps its first sentence and drops its second** (ruled
+  2026-09-22): ``Trade: {safer} fell in {n} cells where {worse} rose.`` Section 0.2 says the line is
+  unchanged except under complementarity and, two lines on, that "moved failures" appears nowhere
+  in ``src/``; only the second can be checked, and D2 is why it wins.
 - **The partial line names each partial run in ``a``, ``b`` order**, one sentence per run joined by
   a space, and ``summary.partial["runs"]`` lists them in that order.
-- **LS2 is pinned over the four texts D9 wraps** -- the title (stacked and per panel), the headline
-  lines (stacked header and panel caption), the trade or complement line, and the legend caption --
-  each identified by content through this oracle's restatement of ``_wrap`` and its budget. The
-  spec's clause reads "every ``<text>``"; measured at step zero, that cannot hold on a box 200 px
-  wide, whose legend swatch *rects* sit at a fixed 46 px pitch and already leave it. The honesty
-  lines also pass the box on the narrow pairs and D9 does not wrap them; whether they join the wrap
-  set is put to Taylor, and is one constant here (``WRAPPED_HONESTY``).
+- **LS2 is pinned over five texts**: the four D9 wraps -- the title (stacked and per panel), the
+  headline lines (stacked header and panel caption), the trade or complement line, the legend caption
+  -- and, ruled 2026-09-22, the honesty lines, each identified by content through this oracle's
+  restatement of ``_wrap`` and its budget. The spec's clause reads "every ``<text>``"; measured at
+  step zero, that cannot hold on a box 200 px wide, whose legend swatch *rects* sit at a fixed 46 px
+  pitch and already leave it; the swatch labels are the named exception.
 - **A wrapped text is drawn as one ``<text>`` per line, the continuation lines carrying
   ``data-wrap="1"`` and the first line not**, so M7's oracle (retrofitted) can read a wrapped
   text back as one, and so a reader of the SVG can tell a wrapped line from a new text.
@@ -98,10 +98,10 @@ to these; each is put to Taylor before the freeze.**
 - **LS16 is pinned as written, six tokens over the whole page.** Measured: the Cells region prints
   ``MDE is ADR-018's smallest detectable increase ...`` on every pair with a rejecting family, so
   LS16 and LS19's "byte-identical apart from the two strings section 3.8 names" cannot both hold.
-  D14's rule (a public page carries no reference a stranger cannot resolve) is read as the intent:
-  the build spells that sentence ``MDE is the smallest detectable increase ...`` (and its twin in
-  ``report.py`` the same), LS19's region digests are taken with the bare spelling normalised to
-  that one, and the choice is put to Taylor.
+  D14's rule (a public page carries no reference a stranger cannot resolve) is the intent, ruled
+  2026-09-22: the build spells that sentence ``MDE is the smallest detectable increase ...`` (and its
+  twin in ``report.py`` the same), and LS19's region digests are taken with the bare spelling
+  normalised to that one.
 - **LS1's "sole catch" is a source clause.** The page's ``<style>`` is ``_html_style(theme)`` plus
   ``_LAYOUT``, so a rule added to the report's stylesheet *does* reach the page and the computed
   style cannot tell the two apart; the spec's "where the page does not read it" is wrong. What
@@ -149,6 +149,7 @@ import ast
 import hashlib
 import html as html_mod
 import json
+import inspect
 import re
 import warnings
 import xml.etree.ElementTree as ET
@@ -264,9 +265,10 @@ TITLE_LINE_H = 18
 BODY_LINE_H = 12
 MIN_BUDGET = 8
 LEGEND_TAIL = "corner notches = trade (safer in one event, worse in another)"
-#: Whether the honesty lines join the wrap set. D9 says no; step zero measured them past the box on
-#: every narrow pair. Put to Taylor; ``True`` moves one clause of LS2 and one of LS3.
-WRAPPED_HONESTY = False
+#: The honesty lines join the wrap set: D9 named four texts, step zero measured the honesty lines
+#: past the box on every narrow pair, and Taylor ruled on 2026-09-22 that they wrap too (a fifth
+#: text, at the caption's 12 px pitch).
+WRAPPED_HONESTY = True
 
 # ---------- section 3.4: the words, verbatim ----------
 
@@ -943,7 +945,7 @@ def expected_layout(p: Pair) -> dict[str, Any]:
             "title": wrap(event, budget(width, left, FONT + 2)),
             "headline": wrap(str(entry["caption"]), budget(width, left, FONT)),
             "caption": wrap(legend_caption(event, trades), budget(width, left, FONT - 2)),
-            "honesty": [line for text in str(entry["honesty"]).splitlines() for line in (wrap(text, budget(width, left, FONT - 2)) if WRAPPED_HONESTY else [text])],
+            "honesty": [wrap(text, budget(width, left, FONT - 2)) if WRAPPED_HONESTY else [text] for text in str(entry["honesty"]).splitlines()],
         }
     return {"width": width, "title": title, "header": header, "panels": panels}
 
@@ -1402,7 +1404,7 @@ def wrapped_texts(p: Pair) -> list[tuple[str, list[str], float, float]]:
         out.append((f"{event}/headline", entry["headline"], float(FONT), left))
         out.append((f"{event}/caption", entry["caption"], FONT - 2.0, left))
         if WRAPPED_HONESTY:
-            out.append((f"{event}/honesty", entry["honesty"], FONT - 2.0, left))
+            out.extend((f"{event}/honesty/{i}", lines, FONT - 2.0, left) for i, lines in enumerate(entry["honesty"]))
     return out
 
 
@@ -1460,7 +1462,7 @@ def test_ls3_the_box_grows_by_the_extra_lines_and_by_nothing_else(all_pairs: lis
             entry = layout["panels"][event]
             growth = TITLE_LINE_H * (len(entry["title"]) - 1) + BODY_LINE_H * (len(entry["headline"]) - 1) + BODY_LINE_H * (len(entry["caption"]) - 1)
             if WRAPPED_HONESTY:
-                growth += BODY_LINE_H * (len(entry["honesty"]) - len(str(next(e for e in p.structure["panels"] if e["event"] == event)["honesty"]).splitlines()))
+                growth += BODY_LINE_H * sum(len(lines) - 1 for lines in entry["honesty"])
             w, h = panel_box(panel)
             assert w == width, (p.name, event, w, width)
             assert h == BARE_PANEL_HEIGHT[p.name][event] + growth, (p.name, event, h, BARE_PANEL_HEIGHT[p.name][event], growth)
@@ -1623,7 +1625,7 @@ def test_ls8_both_structural_refusals_interpolate_the_constant_and_no_source_nam
 ARITHMETIC = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Pow, ast.Mod)
 
 
-def test_ls9_plain_py_computes_nothing() -> None:
+def test_ls9_plain_py_computes_nothing_and_takes_the_six_payload_objects() -> None:
     tree = ast.parse(PLAIN_SOURCE.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.BinOp) and isinstance(node.op, ARITHMETIC):
@@ -1636,6 +1638,8 @@ def test_ls9_plain_py_computes_nothing() -> None:
         if isinstance(node, ast.AugAssign):
             raise AssertionError(ast.dump(node))
     assert set(plain().__all__) == {"CONFIDENCE_THRESHOLDS", "TOO_SMALL_TO_TELL", "build_summary"}
+    params = inspect.signature(plain().build_summary).parameters
+    assert list(params) == ["panels", "view", "pair", "diff", "complement", "trade_line"] and all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in params.values()), list(params)
     assert plain().CONFIDENCE_THRESHOLDS == CONFIDENCE_THRESHOLDS and plain().TOO_SMALL_TO_TELL == TOO_SMALL_TO_TELL
 
 
@@ -1684,8 +1688,8 @@ Q_LADDER = ((0.0005, "very sure"), (0.001, "sure"), (0.005, "sure"), (0.01, "fai
 UNCHANGED_CELL = synthetic_cell(9, 0.9, 0.9, delta=0.0, verdict="unchanged", mde=0.2)
 
 
-def summary_of(panels: list[dict[str, Any]], *, complement: tuple[str, ...] | None = None, pair_obj: dict[str, Any] | None = None, diff_obj: dict[str, Any] | None = None) -> dict[str, Any]:
-    return plain().build_summary(panels=panels, view=VIEW, pair=pair_obj or PAIR_OBJ, diff=diff_obj or DIFF_OBJ, complement=complement)
+def summary_of(panels: list[dict[str, Any]], *, complement: tuple[str, ...] | None = None, trade_line: str | None = None, pair_obj: dict[str, Any] | None = None, diff_obj: dict[str, Any] | None = None) -> dict[str, Any]:
+    return plain().build_summary(panels=panels, view=VIEW, pair=pair_obj or PAIR_OBJ, diff=diff_obj or DIFF_OBJ, complement=complement, trade_line=trade_line)
 
 
 def test_ls10_the_how_sure_label_is_a_function_of_q_alone_with_the_boundaries_closed_above() -> None:
@@ -1820,6 +1824,11 @@ def test_ls13_the_two_event_go1_pair_is_reported_once_and_never_as_a_trade(go1_t
     assert go1_two.multi.trade_line() == GO1_COMPLEMENT_LINE
     assert go1_two.structure["trade_line"] == GO1_COMPLEMENT_LINE
     assert go1_two.structure["summary"]["complement"] == {"events": ["fell", "survived"], "line": GO1_COMPLEMENT_LINE}
+    assert go1_two.structure["summary"]["complement"]["line"] == go1_two.structure["trade_line"]
+    # Ruling 6 (2026-09-22): the sentence has one source. ``plain.py`` carries ``trade_line`` and
+    # composes no complement sentence of its own.
+    assert "complements here" not in PLAIN_SOURCE.read_text(encoding="utf-8")
+    assert "trade_line" in inspect.signature(plain().build_summary).parameters
     lines = summary_lines(go1_two.page)
     assert lines[0] == GO1_COMPLEMENT_LINE, lines[0]
     assert [e["event"] for e in go1_two.structure["summary"]["events"]] == ["survived", "fell"]
