@@ -2,9 +2,10 @@
 Paired Replay" -- invariants PR1 to PR6, PR8 to PR21, and PR56 (the Modal manifest records
 ``infra_retries``).
 
-Written by Session A on 2026-09-21 off ``f7af030``. Session B builds ``src/proofload/paired.py``
-(phase 1's part of it) and one line of ``executor_modal.py`` against this file and does not edit
-it. ``proofload.paired`` is imported inside the test that needs it, so the bare tree fails test by
+Frozen by Session A on 2026-09-21 off ``f7af030``, after Taylor approved the two tables and the
+conventions below (written the same day as ``624ce94``; the freeze changes this docstring only).
+Session B builds ``src/proofload/paired.py`` (phase 1's part of it) and one line of
+``executor_modal.py`` against this file and does not edit it. ``proofload.paired`` is imported inside the test that needs it, so the bare tree fails test by
 test and never at collection.
 
 **What phase 1 is.** Two stored arms are only a pair if they were the same request twice, and the
@@ -93,8 +94,10 @@ invariant, and neither is used:** Go1's two runs carry no trace at all, no item 
 implementation; and the 45/44 arms (``20260915T210140Z-4847`` / ``20260915T211148Z-965d``) carry
 between 6 and 44 spans per episode under one name (none of the 400 episodes carries exactly one),
 with ``input`` null on all 7,369, no ``url.full``, no header attribute and one config axis, so the
-assertion this file pins refuses every one of their 200 pairs as ``retry_or_multicall``. That is the assertion working, and it is phase 2's PR39 that has to
-answer it (filed as a question, not papered over here).
+assertion this file pins refuses every one of their 200 pairs as ``retry_or_multicall``. That is the assertion working. **Ruled 2026-09-21 (spec section
+11.2):** phase 2's PR39 builds its ``PairAssertion`` in test code from the two stored arms and hands
+it to ``analyse``; it does not go through ``assert_pairs``, and PR9's structural rule (``analyse``
+takes a ``PairAssertion`` and nothing else) is unchanged by that.
 
 **Green before and after -- named so their green is not read as coverage.** None. Every test in
 this file is red on the bare tree: PR56's four ids on a Modal manifest with no ``infra_retries``,
