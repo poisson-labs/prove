@@ -1,4 +1,9 @@
-"""LS -- the local serve pass: the oracle for LS1-LS20.
+"""LS -- the local serve pass: the oracle for LS1-LS20 and the ruled LS21.
+
+**Frozen 2026-09-22.** Taylor approved the invariant-to-test table, the mutant-to-test table and the
+conventions below (seven yes); the freeze is this docstring and nothing else. The mutation pass was
+re-run control-first after the freeze; its table is the handoff's. Session B builds against this
+file and does not edit it.
 
 Written from "Prove -- Spec Local Serve Pass" section 4 against ``f7af030`` (2026-09-22), on the
 retrofit commit that moves the schema pins to ``proofload.viewpair/6``, the top-level key tuple to
