@@ -1689,27 +1689,42 @@ def test_pr74_replicates_returns_one_result_per_cut_and_no_public_function_retur
 # ---------- PR75: a prefix comparison is paired on the same draws ----------
 
 
+def step_pattern(i: int, s: str) -> tuple[int, ...]:
+    """Six items disagree at ``j = 2`` in every sweep, so that prefix is over the fallback; the
+    other eighteen lose agreement at ``j = 3`` in one, two or three sweeps, so the step's
+    per-item sums vary and its resample means sit on a fine grid -- two seeds give two
+    intervals, which is what lets the test see which draws the step was taken on."""
+    if i % 4 == 0:
+        return (1, 0, 1, 1, 1)
+    return (1, 1, 0, 1, 1) if int(s[1]) <= i % 4 else (1, 1, 1, 1, 1)
+
+
 def test_pr75_a_step_between_two_prefixes_is_the_paired_bootstrap_on_the_same_resample_indices() -> None:
-    rows = grid(24, ["S1", "S2", "S3"], agree_pattern)
+    rows = grid(24, ["S1", "S2", "S3"], step_pattern)
     r = result_of(assertion(rows, b=500, seed=21))
     steps = r.agree["primary"]["steps"]
     assert list(steps) == ["j2_to_j3", "j3_to_j4", "j4_to_j5"]
-    for key, block in steps.items():
-        m = STEP.fullmatch(key)
-        assert m
-        lower, upper = int(m.group(1)), int(m.group(2))
-        _, clusters, low = reference_agree(rows, lower)
-        _, _, high = reference_agree(rows, upper)
-        d = [h - lo_ for h, lo_ in zip(high, low, strict=True)]
-        lo, hi = cluster_bootstrap(clusters, d, seed=21, b=500)
-        assert block["basis"] == "cluster_bootstrap"
-        assert block["estimate"] == pytest.approx(float(np.mean(d)), abs=1e-12)
-        assert math.isclose(block["lo"], lo, abs_tol=1e-12) and math.isclose(block["hi"], hi, abs_tol=1e-12)
-        # and it is not two intervals compared by overlap
-        a, b = r.agree["primary"][f"j{lower}"], r.agree["primary"][f"j{upper}"]
-        naive = (b["lo"] - a["hi"], b["hi"] - a["lo"])
-        assert not (math.isclose(block["lo"], naive[0], abs_tol=1e-9) and math.isclose(block["hi"], naive[1], abs_tol=1e-9))
-        assert naive[1] - naive[0] > block["hi"] - block["lo"]
+    m = STEP.fullmatch("j2_to_j3")
+    assert m and (int(m.group(1)), int(m.group(2))) == (2, 3)
+    block = steps["j2_to_j3"]
+    _, clusters, low = reference_agree(rows, 2)
+    _, _, high = reference_agree(rows, 3)
+    d = [h - lo_ for h, lo_ in zip(high, low, strict=True)]
+    lo, hi = cluster_bootstrap(clusters, d, seed=21, b=500)
+    other = cluster_bootstrap(clusters, d, seed=22, b=500)
+    assert other != (lo, hi)  # the fixture separates the seeds
+    assert block["basis"] == "cluster_bootstrap"
+    assert block["estimate"] == pytest.approx(float(np.mean(d)), abs=1e-12)
+    assert math.isclose(block["lo"], lo, abs_tol=1e-12) and math.isclose(block["hi"], hi, abs_tol=1e-12)
+    assert not (math.isclose(block["lo"], other[0], abs_tol=1e-12) and math.isclose(block["hi"], other[1], abs_tol=1e-12))
+    # and it is not two intervals compared by overlap
+    a, b = r.agree["primary"]["j2"], r.agree["primary"]["j3"]
+    naive = (b["lo"] - a["hi"], b["hi"] - a["lo"])
+    assert not (math.isclose(block["lo"], naive[0], abs_tol=1e-9) and math.isclose(block["hi"], naive[1], abs_tol=1e-9))
+    assert naive[1] - naive[0] > block["hi"] - block["lo"]
+    # the two later steps have no disagreement to move, and read as exactly zero
+    for key in ("j3_to_j4", "j4_to_j5"):
+        assert steps[key]["estimate"] == 0.0 and steps[key]["basis"] == "cluster_bootstrap"
 
 
 def test_pr75_a_step_whose_endpoint_is_under_the_fallback_is_not_estimated() -> None:
