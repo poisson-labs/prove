@@ -1,11 +1,20 @@
-"""Paired replay, phase 1: the declaration, the canonical request and the pair assertion.
+"""Paired replay: the declaration, the canonical request, the pair assertion, and the per-cut
+paired analysis.
 
 Two stored arms are only a pair if they were *the same request twice*, and this module says so
 before anything compares a number. The declaration is loaded whole and refuses what it does not
 know (PR1-PR8); the request is canonicalised without ever passing a number through ``float``
 (PR11); every matched key is either eligible or excluded with one named cause, and the counts
-reconcile (PR9-PR21). Nothing here computes a rate -- the analysis, the windows and the cost are
-phases 2 and 3 of "Prove -- Spec PR Paired Replay".
+reconcile (PR9-PR21). That is phase 1 of "Prove -- Spec PR Paired Replay".
+
+Phase 2 is ``analyse``: it takes a ``PairAssertion`` and nothing else, and answers one question
+per declared cut -- did the binary action at that cut reproduce? The action is ``value >=
+threshold`` on ``Decimal`` from the stored literal (PR23, PR24); the 2x2, the flip rate and the
+net swing are paired quantities (PR25-PR27); the pooled interval is the percentile cluster
+bootstrap over items the 45/44 note published, with its declared fallback and its design effect
+(PR28-PR34); McNemar is the arm-order check and nothing downstream reads it (PR35, PR36); no
+statistic crosses a cut (PR37); and the outcome fires only against a declared floor (PR38). The
+windows and the cost are phase 3.
 
 The canonicaliser is the part where a silent bug would be invisible and total. A JSON round-trip
 through Python's ``float`` is the obvious implementation and it is wrong: it makes the digest
@@ -26,8 +35,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
+from scipy.stats import beta as _beta
 
+from proofload.diff import _discordant, _mcnemar
 from proofload.store import Store
 from proofload.trace import Trace, TraceValidationError
 
@@ -1074,3 +1087,333 @@ def _block(
         "by_arm": by_arm,
         "reconciles": reconciles,
     }
+
+
+# ---------- the analysis ----------
+
+
+_DIRECTION = "b_minus_a"  # the net swing subtracts the first arm from the second: PR26, ruled
+_FALLBACK_BELOW = 5  # fewer flipping items than this and the bootstrap is not reported: PR31
+_CAN_REJECT_FROM = 6  # a two-sided exact binomial on fewer discordant pairs cannot reach 0.05
+_CONTINGENCY_KEYS: tuple[str, ...] = (
+    "n11",
+    "n10",
+    "n01",
+    "n00",
+    "n",
+    "ties",
+    "arm_order_check",
+)
+_INTERVAL_KEYS: tuple[str, ...] = ("rate_a", "rate_b", "flip_rate", "net_swing")
+
+
+@dataclass(frozen=True)
+class CutResult:
+    name: str
+    threshold: Decimal
+    per_sweep: tuple[Mapping[str, Any], ...]  # 2x2, rates, exact interval, arm-order check
+    pooled: Mapping[str, Any]  # flip rate, net swing, clustered intervals
+    ties: Mapping[str, int]
+    design_effect: Mapping[str, float]
+    outcome: Literal["A", "B", "C"] | None
+
+
+@dataclass(frozen=True)
+class PairedResult:
+    declaration_digest: str
+    cuts: tuple[CutResult, ...]
+
+    def contingency_json(self) -> str:
+        """Per cut and per sweep: the 2x2, ``n``, the ties, and the arm-order check. Every
+        statistic sits under exactly one cut name (PR37); the threshold is its literal text."""
+        payload = {
+            "declaration_digest": self.declaration_digest,
+            "cuts": {
+                c.name: {
+                    "threshold": str(c.threshold),
+                    "per_sweep": {
+                        str(s["sweep"]): {key: s[key] for key in _CONTINGENCY_KEYS}
+                        for s in c.per_sweep
+                    },
+                    "ties": dict(c.ties),
+                }
+                for c in self.cuts
+            },
+        }
+        return json.dumps(_jsonable(payload), indent=2, ensure_ascii=False)
+
+    def intervals_json(self) -> str:
+        """Per cut: the pooled flip rate and net swing with their clustered intervals, the design
+        effect, the per-sweep exact intervals, the ineligibility rate, and the outcome beside the
+        interval it was decided from. The arm-order check is not here (PR36)."""
+        payload = {
+            "declaration_digest": self.declaration_digest,
+            "cuts": {
+                c.name: {
+                    "threshold": str(c.threshold),
+                    "n": dict(c.pooled["n"]),
+                    "flip_rate": dict(c.pooled["flip_rate"]),
+                    "net_swing": dict(c.pooled["net_swing"]),
+                    "design_effect": dict(c.design_effect),
+                    "per_sweep": {
+                        str(s["sweep"]): {key: s[key] for key in _INTERVAL_KEYS}
+                        for s in c.per_sweep
+                    },
+                    "ineligibility_rate": c.pooled["ineligibility_rate"],
+                    "outcome": c.outcome,
+                    "outcome_interval": (
+                        None if c.outcome is None else dict(c.pooled["flip_rate"])
+                    ),
+                }
+                for c in self.cuts
+            },
+        }
+        return json.dumps(_jsonable(payload), indent=2, ensure_ascii=False)
+
+
+def analyse(assertion: PairAssertion) -> PairedResult:
+    """One question per declared cut: did the binary action at that cut reproduce?
+
+    Takes a ``PairAssertion`` and nothing else (PR9). Every number is computed on that cut's
+    eligible pairs alone, in declaration order, and no figure is computed over more than one cut
+    (PR37). The input frames are read and never written.
+    """
+    declaration = assertion.declaration
+    cuts = tuple(_analyse_cut(assertion, cut) for cut in declaration.cuts)
+    return PairedResult(declaration_digest=declaration.digest, cuts=cuts)
+
+
+def _analyse_cut(assertion: PairAssertion, cut: Cut) -> CutResult:
+    declaration = assertion.declaration
+    rows = _actions(assertion.pairs, cut)
+    per_sweep = tuple(_sweep_block(rows, sweep.name) for sweep in declaration.sweeps)
+    ties = {"a": int(rows["tie_a"].sum()), "b": int(rows["tie_b"].sum())}
+    pooled = _pooled(rows, declaration, assertion.counts, cut)
+    return CutResult(
+        name=cut.name,
+        threshold=cut.threshold,
+        per_sweep=per_sweep,
+        pooled=pooled,
+        ties=ties,
+        design_effect=_design_effect(rows),
+        outcome=_outcome(pooled["flip_rate"], declaration.floor),
+    )
+
+
+def _actions(pairs: pd.DataFrame, cut: Cut) -> pd.DataFrame:
+    """The cut's eligible pairs with the action taken in each arm: ``value >= threshold`` on the
+    ``Decimal`` the assertion parsed from the stored literal (PR23). No rounding, no rescaling,
+    no ``float``: a rounding step would move items across the cut and the module would be
+    measuring the rounding. A value equal to the threshold is action 1 and a tie (PR24).
+
+    Rows are put in one canonical order first, so every sum below is the same sum whatever
+    order the frame arrived in (PR29).
+    """
+    columns = ["sweep", "cluster", "config_hash", "replicate_index", "value_a", "value_b"]
+    rows = pairs.loc[pairs["cut"] == cut.name, columns].copy()
+    rows["_order"] = [
+        (str(s), str(c), str(h), int(r))
+        for s, c, h, r in zip(
+            rows["sweep"], rows["cluster"], rows["config_hash"], rows["replicate_index"],
+            strict=True,
+        )
+    ]
+    rows = rows.sort_values("_order", kind="mergesort").drop(columns="_order")
+    rows = rows.reset_index(drop=True)
+    rows["act_a"] = [int(v >= cut.threshold) for v in rows["value_a"]]
+    rows["act_b"] = [int(v >= cut.threshold) for v in rows["value_b"]]
+    rows["tie_a"] = [int(v == cut.threshold) for v in rows["value_a"]]
+    rows["tie_b"] = [int(v == cut.threshold) for v in rows["value_b"]]
+    rows["flip"] = (rows["act_a"] != rows["act_b"]).astype(int)
+    rows["d"] = rows["act_b"] - rows["act_a"]
+    return rows
+
+
+def _sweep_block(rows: pd.DataFrame, sweep: str) -> dict[str, Any]:
+    """One sweep of one cut: the 2x2 (PR25), the arm rates as bare numbers (PR27), the flip
+    rate with its exact two-sided interval (PR33), the net swing (PR26) and McNemar's exact
+    test under ``arm_order_check`` and nowhere else (PR35).
+
+    The discordant counts and the binomial are ``diff``'s own ``_discordant`` and ``_mcnemar``,
+    reused rather than re-derived, so the module adds no second binomial.
+    """
+    sub = rows[rows["sweep"] == sweep]
+    act_a = sub["act_a"].to_numpy(dtype=int)
+    act_b = sub["act_b"].to_numpy(dtype=int)
+    cell_a = pd.DataFrame({"replicate_index": range(len(sub)), "observed": act_a.astype(bool)})
+    cell_b = pd.DataFrame({"replicate_index": range(len(sub)), "observed": act_b.astype(bool)})
+    n10, n01, n = _discordant(cell_a, cell_b, sweep)
+    n11 = int(np.sum((act_a == 1) & (act_b == 1)))
+    n00 = n - n11 - n10 - n01
+    nd = n10 + n01
+    _, p = _mcnemar(cell_a, cell_b, sweep)
+    lo, hi = _exact_two_sided(nd, n)
+    return {
+        "sweep": sweep,
+        "n11": n11,
+        "n10": n10,
+        "n01": n01,
+        "n00": n00,
+        "n": n,
+        "ties": {"a": int(sub["tie_a"].sum()), "b": int(sub["tie_b"].sum())},
+        "rate_a": float((n11 + n10) / n) if n else 0.0,
+        "rate_b": float((n11 + n01) / n) if n else 0.0,
+        "flip_rate": {
+            "estimate": float(nd / n) if n else 0.0,
+            "lo": lo,
+            "hi": hi,
+            "basis": "exact_binomial",
+        },
+        "net_swing": {
+            "estimate": float((n01 - n10) / n) if n else 0.0,
+            "direction": _DIRECTION,
+        },
+        "arm_order_check": {
+            "p": float(p),
+            "n_discordant": nd,
+            "can_reject": nd >= _CAN_REJECT_FROM,
+        },
+    }
+
+
+def _exact_two_sided(k: int, n: int) -> tuple[float, float]:
+    """The two-sided 95% Clopper-Pearson interval on ``k`` of ``n``. ``[0, 1]`` at ``n = 0``."""
+    if n == 0:
+        return 0.0, 1.0
+    lo = 0.0 if k == 0 else float(_beta.ppf(0.025, k, n - k + 1))
+    hi = 1.0 if k == n else float(_beta.ppf(0.975, k + 1, n - k))
+    return lo, hi
+
+
+def _pooled(
+    rows: pd.DataFrame, declaration: Declaration, counts: Mapping[str, Any], cut: Cut
+) -> dict[str, Any]:
+    """The cut over every sweep: ``n`` as items and sweeps and never their product (PR34), the
+    flip rate and the net swing with the item-clustered interval (PR28) or the declared fallback
+    (PR31), and PR22's ineligibility rate read off the assertion's own counts."""
+    groups_flip = _clusters(rows, "flip")
+    groups_d = _clusters(rows, "d")
+    g_count = len(groups_flip)
+    total = int(len(rows))
+    flip_estimate = float(rows["flip"].sum() / total) if total else 0.0
+    swing_estimate = float(rows["d"].sum() / total) if total else 0.0
+    k = int(sum(1 for grp in groups_flip if grp.any()))
+    if k < _FALLBACK_BELOW:
+        # The one-sided exact 95% upper bound on the item-level flip probability; the lower
+        # bound is zero by observation, not by estimation. A percentile bootstrap degenerating
+        # to [0, 0] would read as a precise zero and is not one. A signed quantity has no
+        # one-sided exact bound, so the net swing is not estimated here (ruled 2026-09-22).
+        flip_rate: dict[str, Any] = {
+            "estimate": flip_estimate,
+            "lo": 0.0,
+            "hi": float(_beta.ppf(0.95, k + 1, g_count - k)) if g_count > k else 1.0,
+            "basis": "exact_upper_one_sided",
+            "lower_bound_by_observation": True,
+        }
+        net_swing: dict[str, Any] = {
+            "estimate": swing_estimate,
+            "lo": None,
+            "hi": None,
+            "basis": "not_estimated",
+            "direction": _DIRECTION,
+        }
+    else:
+        seed, b = declaration.bootstrap_seed, declaration.bootstrap_b
+        lo, hi = _cluster_bootstrap(groups_flip, seed, b)
+        slo, shi = _cluster_bootstrap(groups_d, seed, b)
+        flip_rate = {"estimate": flip_estimate, "lo": lo, "hi": hi, "basis": "cluster_bootstrap"}
+        net_swing = {
+            "estimate": swing_estimate,
+            "lo": slo,
+            "hi": shi,
+            "basis": "cluster_bootstrap",
+            "direction": _DIRECTION,
+        }
+    return {
+        "n": {"items": g_count, "sweeps": len(declaration.sweeps)},
+        "flip_rate": flip_rate,
+        "net_swing": net_swing,
+        "ineligibility_rate": _ineligibility_rate(counts, cut),
+    }
+
+
+def _clusters(rows: pd.DataFrame, column: str) -> list[NDArray[np.int64]]:
+    """One array per item, the items in ascending order of the cluster key -- a stable sort,
+    strings as strings -- so the bootstrap's index draw lands on the same item whatever order
+    the rows arrived in (PR29)."""
+    return [
+        grp[column].to_numpy(dtype=np.int64)
+        for _, grp in rows.groupby("cluster", sort=True)
+    ]
+
+
+def _cluster_bootstrap(
+    groups: Sequence[NDArray[np.int64]], seed: int, b: int
+) -> tuple[float, float]:
+    """The percentile cluster bootstrap over items, exactly as ``scripts/repro_r1_agreement.py``
+    published it: a fresh ``default_rng(seed)`` per quantity and per cut, ``B`` resamples of the
+    ``G`` item clusters with replacement as one ``integers(0, G, size=(B, G))`` draw, each
+    resample's per-observation indicators concatenated and averaged, the 2.5th and 97.5th
+    percentiles. Whole items, never observations (PR30). The concatenated mean is taken as the
+    resample's summed indicators over its summed sizes, which is the same number: both sums are
+    exact integers."""
+    rng = np.random.default_rng(seed)
+    g_count = len(groups)
+    sums = np.array([int(grp.sum()) for grp in groups], dtype=np.int64)
+    sizes = np.array([len(grp) for grp in groups], dtype=np.int64)
+    idx = rng.integers(0, g_count, size=(b, g_count))
+    draws = sums[idx].sum(axis=1) / sizes[idx].sum(axis=1)
+    return float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))
+
+
+def _ineligibility_rate(counts: Mapping[str, Any], cut: Cut) -> float:
+    """PR22: ``ineligible / matched`` off the assertion's ``counts["by_cut"]``. An unmatched key
+    is its own count and never enters the rate (PR20). The module computes the rate and chooses
+    no threshold for it."""
+    by_cut = counts.get("by_cut", {})
+    block = by_cut.get(cut.name, {}) if isinstance(by_cut, Mapping) else {}
+    matched = int(block.get("matched", 0))
+    ineligible = int(block.get("ineligible", 0))
+    return float(ineligible / matched) if matched else 0.0
+
+
+def _design_effect(rows: pd.DataFrame) -> dict[str, float]:
+    """PR32: the item-level intraclass correlation, one-way ANOVA ``ICC(1)`` on each item's flip
+    indicators, ``(MSB - MSW) / (MSB + (m0 - 1) MSW)`` clipped at zero, and the design effect
+    ``deff = 1 + (m_bar - 1) icc`` with ``m_bar`` the observations per item. ``m0`` is the ANOVA
+    cluster size, which equals ``m_bar`` on a balanced design; with one observation per item
+    there is no within-item replication to estimate a correlation from, so ``icc`` is zero and
+    ``deff`` is one."""
+    total = int(len(rows))
+    g_count = int(rows["cluster"].nunique()) if total else 0
+    if g_count == 0:
+        return {"icc": 0.0, "m_bar": 0.0, "deff": 1.0}
+    m_bar = total / g_count
+    if g_count < 2 or total <= g_count:
+        return {"icc": 0.0, "m_bar": float(m_bar), "deff": 1.0}
+    y = rows["flip"].astype(float)
+    grand = float(y.mean())
+    by_item = rows.groupby("cluster", sort=True)["flip"]
+    sizes = by_item.size().astype(float)
+    means = by_item.mean()
+    msb = float((sizes * (means - grand) ** 2).sum()) / (g_count - 1)
+    msw = float(((y - rows["cluster"].map(means)) ** 2).sum()) / (total - g_count)
+    m0 = (total - float((sizes**2).sum()) / total) / (g_count - 1)
+    denominator = msb + (m0 - 1) * msw
+    icc = 0.0 if denominator == 0 else max(0.0, (msb - msw) / denominator)
+    return {"icc": float(icc), "m_bar": float(m_bar), "deff": float(1 + (m_bar - 1) * icc)}
+
+
+def _outcome(flip_rate: Mapping[str, Any], floor: Decimal | None) -> Literal["A", "B", "C"] | None:
+    """PR38, only against a declared floor, from the pooled flip-rate interval: **A** when the
+    lower bound is zero and the upper bound is under the floor, **B** when the lower bound leaves
+    zero, **C** when the interval covers both. The upper bound is compared as the exact value
+    of the double it is, against the floor as the literal it was declared as."""
+    if floor is None:
+        return None
+    lo, hi = flip_rate["lo"], flip_rate["hi"]
+    if lo > 0:
+        return "B"
+    if Decimal(hi) < floor:
+        return "A"
+    return "C"
