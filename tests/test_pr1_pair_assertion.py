@@ -5,7 +5,10 @@ Paired Replay" -- invariants PR1 to PR6, PR8 to PR21, and PR56 (the Modal manife
 Frozen by Session A on 2026-09-21 off ``f7af030``, after Taylor approved the two tables and the
 conventions below (written the same day as ``624ce94``; the freeze changes this docstring only).
 Session B builds ``src/proofload/paired.py`` (phase 1's part of it) and one line of
-``executor_modal.py`` against this file and does not edit it. ``proofload.paired`` is imported inside the test that needs it, so the bare tree fails test by
+``executor_modal.py`` against this file and does not edit it. *Retrofit R1, ruled 2026-09-22
+(PR-3 Session A): ``SPEC_PUBLIC_NAMES`` gains ``ReplicateResult`` and ``replicates``, the two
+public names section 2 added with the k-replicate amendment; nothing else in this file moves for
+it, and nothing in the suite pins this file's bytes.* ``proofload.paired`` is imported inside the test that needs it, so the bare tree fails test by
 test and never at collection.
 
 **What phase 1 is.** Two stored arms are only a pair if they were the same request twice, and the
@@ -159,11 +162,13 @@ EXEMPTIONS = ("x-request-id", "date")
 PYTHON = "3.11.7 (main, Feb 12 2026)"
 
 #: The spec's public names (section 2). Anything else public on the module is a spec violation.
+#: Retrofit R1, ruled 2026-09-22 (PR-3 Session A): ``ReplicateResult`` and ``replicates`` join
+#: the set, as section 2 has carried them since the k-replicate amendment of the same day.
 SPEC_PUBLIC_NAMES = frozenset({
     "PairedError", "DeclarationError", "NotAssertable", "NoEligiblePairs",
     "Cut", "SweepPair", "Declaration", "canonical_request", "request_digest",
     "PairAssertion", "assert_pairs", "CutResult", "PairedResult", "analyse",
-    "WindowReport", "windows", "CostReport", "cost",
+    "WindowReport", "windows", "CostReport", "cost", "ReplicateResult", "replicates",
 })
 PHASE_1_NAMES = frozenset({
     "PairedError", "DeclarationError", "NotAssertable", "NoEligiblePairs",
