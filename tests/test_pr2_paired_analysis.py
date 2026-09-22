@@ -2,9 +2,14 @@
 "Prove -- Spec PR Paired Replay" -- invariants PR22 to PR39.
 
 Written by Session A on 2026-09-22 off ``pr1-build`` ``0f1e1e0`` (phase 1 built) plus the Go1
-fixture retrofit. Not frozen until Taylor approves the two tables in the handoff. Session B builds
-phase 2 of ``src/proofload/paired.py`` -- ``CutResult``, ``PairedResult`` and ``analyse`` -- against
-this file and does not edit it. Phase 2's names are read through ``getattr`` inside each test, so
+fixture retrofit ``86c1b4d``, as ``4106e54``. **Frozen 2026-09-22** after Taylor approved the two
+tables in the handoff and the conventions below, and ruled on the sign of the net swing (kept as
+PR26 writes it, the second arm minus the first, and the output labels which way it subtracts), the
+net swing under the fallback (``not_estimated``, null bounds) and spec section 9's
+``PYTHONPATH=src``. The freeze changes this docstring and adds the one ``direction`` assertion the
+sign ruling asks for, in the two net-swing tests. Session B builds phase 2 of
+``src/proofload/paired.py`` -- ``CutResult``, ``PairedResult`` and ``analyse`` -- against this file
+and does not edit it. Phase 2's names are read through ``getattr`` inside each test, so
 the bare tree (phase 1 only) fails test by test on ``AttributeError`` and never at collection.
 
 **What phase 2 is.** ``analyse`` takes a ``PairAssertion`` and nothing else (PR9, already pinned by
@@ -67,15 +72,15 @@ each goes into the spec's change log on the freeze):
   ``flip_rate`` interval the outcome was decided from, ``null`` without a floor). Every number
   is a JSON number; ``threshold`` is the one string. Key order is stable across calls, processes
   and hash seeds.
-- *The sign of the net swing.* PR26 writes ``net_swing = (n01 - n10) / n``, arm A' minus arm A,
-  and Jev's section 5.1 writes the same. The 45/44 note's "+1.0 points, -5.5 to +7.5" is the
-  same interval under A minus A' (arm A solved 90, arm A' 88). **This file pins the formula as
-  written**, so the golden reads ``-0.010`` with ``[-0.075, +0.055]``; the sign is one yes/no in
-  the handoff, and if Taylor rules for the published direction, two assertions flip and nothing
-  else moves.
+- *The sign of the net swing, ruled 2026-09-22.* PR26 writes ``net_swing = (n01 - n10) / n``,
+  the second arm (``b``, arm A') minus the first (``a``, arm A), and Jev's section 5.1 writes the
+  same; the 45/44 note's "+1.0 points, -5.5 to +7.5" is the same interval under A minus A'. **The
+  formula stands as written**, so the golden reads ``-0.010`` with ``[-0.075, +0.055]``, and
+  **every ``net_swing`` mapping -- per sweep, pooled, and in ``intervals_json`` -- carries
+  ``direction: "b_minus_a"``** so a reader never has to guess which way it subtracts.
 
-**Invariant-to-test map** is in the handoff (``log/prove-pr2-session-a/README.md``) and repeated
-in the freeze. Every test name starts ``test_prN_``.
+**Invariant-to-test map** is in the handoff (``log/prove-pr2-session-a/README.md``): 49 functions,
+72 collected ids, PR22 to PR39, approved as written. Every test name starts ``test_prN_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` but two is built in test code,
 frame by frame -- the spec's section 11.2 ruling made that the front door for phase 2, and it is
@@ -674,6 +679,12 @@ def test_pr26_flip_rate_and_net_swing_per_sweep_and_pooled() -> None:
     assert cut.pooled["flip_rate"]["estimate"] == pytest.approx(6 / 20)
     assert cut.pooled["net_swing"]["estimate"] == pytest.approx((3 - 3) / 20)
     assert s1["rate_a"] == pytest.approx(9 / 10) and s1["rate_b"] == pytest.approx(7 / 10)
+    # Ruled 2026-09-22: the output says which way it subtracts, everywhere the swing appears.
+    assert s1["net_swing"]["direction"] == s2["net_swing"]["direction"] == "b_minus_a"
+    assert cut.pooled["net_swing"]["direction"] == "b_minus_a"
+    _, intervals = artifacts(result)
+    assert intervals["cuts"][CUT]["net_swing"]["direction"] == "b_minus_a"
+    assert intervals["cuts"][CUT]["per_sweep"]["S1"]["net_swing"]["direction"] == "b_minus_a"
 
 
 def test_pr26_each_item_contributes_one_indicator_built_from_both_arms() -> None:
@@ -1293,10 +1304,11 @@ def test_pr39_golden_the_task_clustered_interval_is_0_155_to_0_285() -> None:
 @needs_golden
 def test_pr39_golden_the_net_swing_is_one_point_with_the_published_clustered_interval() -> None:
     """The published sentence is "+1.0 points, -5.5 to +7.5" under arm A minus arm A'. PR26 as
-    written is A' minus A, so the same swing and the same interval read with the sign flipped.
-    See the module docstring: the sign is a yes/no in the handoff."""
+    written is A' minus A -- ruled 2026-09-22 to stand -- so the same swing and the same interval
+    read with the sign flipped, and the output says so."""
     swing = golden_cut().pooled["net_swing"]
     assert swing["estimate"] == pytest.approx((21 - 23) / 200)
+    assert swing["direction"] == "b_minus_a"
     assert abs(round(swing["estimate"] * 100, 1)) == 1.0
     assert swing["basis"] == "cluster_bootstrap"
     assert (round(swing["lo"], 3), round(swing["hi"], 3)) == (-0.075, 0.055)
