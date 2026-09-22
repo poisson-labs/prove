@@ -106,7 +106,9 @@ CAPTION_RE = re.compile(r"^(\S+): (\d+) safer, (\d+) worse$")
 HEADLINE_EVENT_RE = re.compile(r"(\S+): (\d+) safer, (\d+) worse")
 COVERAGE_RE = re.compile(r"n=(\d+)\.\.(\d+) per cell, (\d+) cells with n < 16")
 SATURATION_LEGEND = "both 0% / both 100%"
-TRADE_SENTENCE = "The patch moved failures, it did not remove them."
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): the retired tail "The patch moved failures, it did not remove them." leaves every surface
+# (spec LS D2, D10, LS13); a trade line is recognised by its ``Trade:`` head alone.
+TRADE_MARK = "Trade:"
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 HASH_RE = re.compile(r"\b[0-9a-f]{16}\b")
@@ -1091,7 +1093,7 @@ def test_b7_trade_line_absent_when_none() -> None:
     assert rep.trade_line is None
     assert rep.headline == plain.headline()
     for text in visible_texts(rep):
-        assert TRADE_SENTENCE not in text
+        assert TRADE_MARK not in text
         assert plain.headline().splitlines()[0] in text
 
 
@@ -1603,7 +1605,7 @@ def test_b16_no_trade_line_no_method_table_no_delta_or_q_in_the_text() -> None:
     _, rep = _survival_report()
     md, svg_text, html = visible_texts(rep)
     for text in (md, svg_text, html):
-        assert TRADE_SENTENCE not in text and "Trade:" not in text
+        assert TRADE_MARK not in text
         assert re.search(r"\bdelta\b", text, re.IGNORECASE) is None, text[:300]
         assert re.search(r"\bq\b", text) is None, text[:300]
         assert "Worst-powered" not in text

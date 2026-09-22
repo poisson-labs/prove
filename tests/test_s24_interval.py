@@ -177,9 +177,14 @@ PAIR_HEADLINE = (
     "survived: 0 safer, 60 worse · fell: 60 safer, 0 worse\n"
     "(aalen_johansen + fisher_bh, BH q<0.05 over 800 tests, unpaired)"
 )
+#: LS retrofit, 2026-09-22 (local serve pass, Phase A): ``fell`` and ``survived`` are exact complements in all 400 cells and both arms
+#: (spec LS section 3.6, D10, D11), so this pair's trade line is the complement sentence and the retired
+#: "moved failures" sentence appears in no file under ``src/`` (LS13).
 PAIR_TRADE_LINE = (
-    "Trade: fell fell in 60 cells where survived rose. "
-    "The patch moved failures, it did not remove them."
+    "fell and survived are complements here: in all 400 conditions every trial recorded exactly one "
+    "of the two, so each rate is one minus the other and each change is the other's with its sign "
+    "flipped. The 60 conditions where survived rose are the 60 where fell fell: one finding, reported "
+    "twice. Naming one of the two shows it once."
 )
 PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e77719f9"
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"

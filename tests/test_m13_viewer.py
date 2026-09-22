@@ -88,7 +88,8 @@ ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 V22B_SALT = "00112233445566778899aabbccddeeff"
 
-SCHEMA = "proofload.viewpair/5"
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+SCHEMA = "proofload.viewpair/6"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -103,8 +104,9 @@ CSP = (
     "img-src data:; form-action 'none'; base-uri 'none'"
 )
 CONTENT_TYPE = "text/html; charset=utf-8"
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
 TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
+    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
 )
 ARM_KEYS = (
@@ -113,8 +115,9 @@ ARM_KEYS = (
     "rows_stored", "tally",
 )
 VIEW_KEYS = ("title", "x_axis", "y_axis", "fixed", "theme", "top_n", "forest", "bound", "sign_convention")
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``mde_unchanged`` after ``honesty`` (spec LS D4, section 3.5).
 PANEL_KEYS = (
-    "event", "caption", "honesty", "n_safer", "n_worse", "n_unchanged", "n_absent", "n_present",
+    "event", "caption", "honesty", "mde_unchanged", "n_safer", "n_worse", "n_unchanged", "n_absent", "n_present",
     "x_values", "y_values", "cells", "worst_header", "worst_rows", "worst_hashes",
 )
 CELL_KEYS = (
@@ -1414,12 +1417,15 @@ def test_v25_holes_have_no_index_entry_and_the_hole_message_appears_once(hostile
     assert html_unescape(hostile.page).count(HOLE_MESSAGE) == 1
 
 
-def test_v26_pointer_events_none_covers_the_glyph_and_the_notch_and_nothing_else(go1_dom: Dom) -> None:
+def test_v26_pointer_events_none_covers_the_glyph_the_notch_and_the_figures_text_and_nothing_else(go1_dom: Dom) -> None:
+    """LS retrofit, 2026-09-22 (local serve pass, Phase A): the inert set gains the figure's ``<text>`` (spec LS D8, LS1) -- a cell's own
+    label swallowed the click. The ``data-cell`` clause is re-asserted verbatim."""
     rules = css_rules(go1_dom.html_style())
     inert = [s for selectors, decls in rules if decls.get("pointer-events") == "none" for s in selectors]
     assert inert, rules
     assert any("[data-sig]" in s for s in inert), inert
     assert any(last_compound_tag(s) == "path" for s in inert), inert
+    assert any(last_compound_tag(s) == "text" for s in inert), inert
     assert not any("data-cell" in s or "data-mde" in s for s in inert), inert
     cells = [n for n in go1_dom.nodes if "data-cell" in n.attrs]
     assert cells

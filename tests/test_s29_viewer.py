@@ -285,12 +285,14 @@ QUICKSTART_SALT = "0000000000000015"
 # ---------- spec sections 2, 3.1, 3.2, 3.3: the literals ----------
 
 #: W1. The schema, the one W17's tree-less projection is minted at, and the two ``render_html`` refuses.
-SCHEMA = "proofload.viewpair/5"
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key (spec LS D6, LS7, LS8).
+SCHEMA = "proofload.viewpair/6"
 RETIRED_SCHEMA = "proofload.viewpair/2"
-RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3", "proofload.viewpair/4")
-#: W1. The twelve top-level keys, in order (section 3.1).
+RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5")
+#: W1. The fourteen top-level keys, in order: P-1's ``intervals`` after ``panels``, and LS's ``summary``
+#: eighth, after ``trade_line`` (LS retrofit, 2026-09-22 (local serve pass, Phase A)).
 TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
+    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
 )
 #: The keys the tree does not touch (W4, W13, W17).
@@ -327,12 +329,16 @@ TREE_KINDS: dict[str, dict[str, str]] = {
     "bound": {"bound": "sig3", "q": "sig3", "delta_star": "sig3"},
 }
 SCALAR = (bool, int, float, str)
-#: W5. The ``<h2>`` sequence of the page, in document order.
+#: W5. The ``<h2>`` sequence of the page, in document order. LS retrofit, 2026-09-22 (local serve pass, Phase A): ``Summary`` is
+#: inserted first and ``Run pair`` moves to thirteenth, before ``Provenance`` (spec LS D7, LS5).
 H2_SEQUENCE = (
-    "Run pair", "Events", "Omnibus", "Result", "Honesty", "Not verified", "Fault lines", "Cells", "Heatmap", "Cell",
-    "Holes", "Worst cells", "Provenance",
+    "Summary", "Events", "Omnibus", "Result", "Honesty", "Not verified", "Fault lines", "Cells", "Heatmap", "Cell",
+    "Holes", "Worst cells", "Run pair", "Provenance",
 )
 NEW_REGIONS = ("Omnibus", "Fault lines", "Cells")
+#: LS retrofit, 2026-09-22 (local serve pass, Phase A): what ``excised()`` drops to recover the ``/2`` page is the three S29 regions
+#: **and** LS's ``Summary``, which the ``/2`` page never had. ``NEW_REGIONS`` keeps its W19 meaning.
+EXCISED_REGIONS = (*NEW_REGIONS, "Summary")
 #: The three nulls, quoted verbatim on the page (W19).
 ROOT_NULL = "no cell changed"
 GROUP_NULL = "no cell in the group changed"
@@ -383,7 +389,9 @@ GO1_PAGE_2_SHA256 = {
 #: W20. ``diff.py`` whole again. **A28's retrofit, 2026-09-13 -- both exclusions retired** (ADR-077's
 #: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted
 #: ``4b3c6ae``) both named ``A28`` as their retiring packet; both owners have landed and A28 rewrites
-#: all four carriers, so the value is a read off the shipped file at ``38e8df9`` (byte-identical at
+#: every carrier -- five literals, one per file (``test_a28_agreement.py``, ``test_s26_fault_lines.py``,
+#: ``test_s27_leaves.py``, ``test_s28_report.py``, this file); "four" is ``FORMER_CARRIERS``, the set A28
+#: sweeps beside itself (LS retrofit, 2026-09-22 (local serve pass, Phase A)) -- so the value is a read off the shipped file at ``38e8df9`` (byte-identical at
 #: ``03d7ed2``): the whole-file sha256, never a prediction. Bytes, so a scratch copy without ``.git``
 #: can check.
 DIFF_PY_SHA256 = "d5ca27cade592886f1f5c236d43e1aaf1632a16a2be0975f7b5a9c5f440fdfd7"
@@ -878,13 +886,15 @@ def bound_lines(page: str) -> list[str]:
 
 
 def excised(page: str) -> str:
-    """The page with the three new regions (heading line to next ``<h2>``) and the bound line
-    removed, by index and never by the tail (W4)."""
+    """The page with the three new regions and LS's ``Summary`` (heading line to next ``<h2>``) and
+    the bound line removed, by index and never by the tail (W4). After LS the projection is to a
+    page that no longer exists twice over: ``Run pair`` has moved, so ``GO1_PAGE_2_SHA256`` is
+    re-minted off the built page by Phase C (LS retrofit, 2026-09-22 (local serve pass, Phase A))."""
     lines = page.splitlines()
     marks = h2_lines(page)
     drop: set[int] = set()
     for k, (i, heading) in enumerate(marks):
-        if heading in NEW_REGIONS:
+        if heading in EXCISED_REGIONS:
             end = marks[k + 1][0] if k + 1 < len(marks) else len(lines)
             drop.update(range(i, end))
     honesty = [i for i, h in marks if h == "Honesty"]

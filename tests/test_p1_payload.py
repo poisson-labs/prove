@@ -154,8 +154,9 @@ MULTI_PROVENANCE_KEYS = (
     "observation_cut_spans_a", "observation_cut_spans_b",
 )
 #: Y10. Section 3.4's thirteen root keys, ``intervals`` after ``panels``, and the ten interval keys.
+#: LS retrofit, 2026-09-22 (local serve pass, Phase A): fourteen, ``summary`` eighth.
 TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
+    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
 )
 INTERVALS_KEYS = ("family", "q", "n_tests", "n_rejected", "level", "alpha_star", "n_interval_only", "n_verdict_only", "lines", "rows")
@@ -205,18 +206,19 @@ CLI_GROUP_FLOOR_LINE = "  group p floor {p_floor:g}: the same {n_permutations} p
 M7_FLOOR_LINE = "p floor {p_floor}: the smallest p {n_permutations} permutations can express; a p at the floor is a bound, not a measurement"
 M7_GROUP_FLOOR_LINE = "group p floor {p_floor}: the same {n_permutations} permutations; a group p at the floor is a bound, not a measurement"
 #: Y15. Section 3.7's refusal, and the ``tree`` refusal it is modelled on (``viewer.py`` at ``a626cd3``).
+#: LS retrofit, 2026-09-22 (local serve pass, Phase A): the refusal interpolates ``SCHEMA`` (spec LS section 0.1 last row, LS8).
 NO_INTERVALS_REFUSAL = (
     "this structure carries no intervals; it was assembled before the flat family's intervals joined "
-    "proofload.viewpair/4 and is not a page this renderer will draw"
+    "proofload.viewpair/6 and is not a page this renderer will draw"
 )
 NO_TREE_REFUSAL = (
     "this structure carries no tree; a page whose honesty block cannot state the bound is not a page "
     "this renderer will draw, and the two ship together or not at all"
 )
-#: Y13. S29's ``<h2>`` sequence, unchanged by P-1.
+#: Y13. S29's ``<h2>`` sequence, unchanged by P-1; LS retrofit, 2026-09-22 (local serve pass, Phase A): ``Summary`` first, ``Run pair`` thirteenth.
 H2_SEQUENCE = (
-    "Run pair", "Events", "Omnibus", "Result", "Honesty", "Not verified", "Fault lines", "Cells", "Heatmap", "Cell",
-    "Holes", "Worst cells", "Provenance",
+    "Summary", "Events", "Omnibus", "Result", "Honesty", "Not verified", "Fault lines", "Cells", "Heatmap", "Cell",
+    "Holes", "Worst cells", "Run pair", "Provenance",
 )
 #: Y21. Every panel honesty string at ``a626cd3``, byte for byte, measured on the bare tree for Go1 and
 #: for the two minted pairs (no second honesty block and no rewording, D6).
@@ -1173,8 +1175,11 @@ def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_
 
 def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_comment_names_p1_beside_a28() -> None:
     """The grep clause is C34's whole close."""
-    assert viewer_mod.SCHEMA == "proofload.viewpair/5"
-    hits = sorted(path.name for path in SRC.glob("*.py") if "proofload.viewpair/3" in path.read_text(encoding="utf-8"))
+    # LS retrofit, 2026-09-22 (local serve pass, Phase A): the grep is widened from ``/3`` alone to every retired version, because ``/4``
+    # sat in a user-visible refusal for two packets while this clause looked for ``/3`` (spec LS section 0.1).
+    assert viewer_mod.SCHEMA == "proofload.viewpair/6"
+    retired = tuple(f"proofload.viewpair/{n}" for n in (2, 3, 4, 5))
+    hits = sorted(path.name for path in SRC.glob("*.py") if any(r in path.read_text(encoding="utf-8") for r in retired))
     assert hits == [], hits
     lines = VIEWER_SOURCE.read_text(encoding="utf-8").splitlines()
     at = next(i for i, line in enumerate(lines) if line.startswith("SCHEMA = "))

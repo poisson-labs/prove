@@ -262,7 +262,9 @@ EVENT_COLLISION_LINE = 1318
 F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 #: **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
 #: A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted ``4b3c6ae``) both named
-#: ``A28`` as their retiring packet; both owners have landed and A28 rewrites all four carriers, so
+#: ``A28`` as their retiring packet; both owners have landed and A28 rewrites every carrier (five literals, one per file:
+#: ``test_a28_agreement.py``, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``,
+#: ``test_s29_viewer.py``; "four" is ``FORMER_CARRIERS``, the set A28 sweeps beside itself -- LS retrofit, 2026-09-22 (local serve pass, Phase A)), so
 #: the value below is a read off the shipped file at ``38e8df9`` (byte-identical at ``03d7ed2``),
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
