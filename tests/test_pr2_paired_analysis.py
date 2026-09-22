@@ -11,10 +11,18 @@ sign ruling asks for, in the two net-swing tests. Session B builds phase 2 of
 ``src/proofload/paired.py`` -- ``CutResult``, ``PairedResult`` and ``analyse`` -- against this file
 and does not edit it. Phase 2's names are read through ``getattr`` inside each test, so
 the bare tree (phase 1 only) fails test by test on ``AttributeError`` and never at collection.
+*Retrofit R3, ruled 2026-09-22 (PR-3 Session A): ``Cut`` gains ``comparison`` with no default, so
+every cut this file builds carries ``"ge"`` -- the one reading PR23 had, so no pinned number moves
+-- and the PR23 tests take the comparison as a parameter with ``"gt"`` rows beside the ``"ge"``
+ones; PR24 gains one test for the tie under ``"gt"``. Every test in this file is red on the tree
+this retrofit lands on, on ``TypeError`` from the missing field, until Session B builds it.*
 
 **What phase 2 is.** ``analyse`` takes a ``PairAssertion`` and nothing else (PR9, already pinned by
 the PR-1 oracle) and answers one question per declared cut: did the binary action at that cut
-reproduce? The action is ``value >= threshold`` on ``Decimal`` (PR23, PR24); the 2x2, the flip rate
+reproduce? The action is ``value >= threshold`` on ``Decimal`` (PR23, PR24) -- under retrofit R3,
+ruled 2026-09-22, ``value >= threshold`` when the cut declares ``comparison = "ge"`` and
+``value > threshold`` when it declares ``"gt"``, a tie being action 1 under the first and action 0
+under the second and counted per arm under both; the 2x2, the flip rate
 and the net swing are paired quantities (PR25 to PR27); the pooled interval is the percentile
 cluster bootstrap over items that the 45/44 note published, with its declared fallback and its
 design effect (PR28 to PR34); McNemar is the arm-order check and nothing else (PR35, PR36); no
@@ -288,7 +296,7 @@ def counts_for(pairs: pd.DataFrame, excluded: pd.DataFrame, cuts: Sequence[str])
 
 def declaration(
     *,
-    cuts: Sequence[tuple[str, str]] = ((CUT, THRESHOLD),),
+    cuts: Sequence[tuple[str, ...]] = ((CUT, THRESHOLD),),
     sweeps: Sequence[str] = ("S1",),
     b: int = B_SMALL,
     seed: int = SEED,
@@ -297,7 +305,13 @@ def declaration(
 ) -> Any:
     kwargs: dict[str, Any] = {
         "value_key": VALUE_KEY, "cluster_key": "item", "stratum_key": "cut",
-        "cuts": tuple(paired.Cut(name=n, threshold=Decimal(t)) for n, t in cuts),
+        # A cut is ``(name, threshold)`` or ``(name, threshold, comparison)``; the comparison
+        # defaults to ``"ge"`` here, in the helper, because that is the reading every test below
+        # was cut against. The module itself has no default (retrofit R3).
+        "cuts": tuple(
+            paired.Cut(name=c[0], threshold=Decimal(c[1]), comparison=c[2] if len(c) > 2 else "ge")
+            for c in cuts
+        ),
         "sweeps": tuple(paired.SweepPair(name=s, a=f"{s}-a", b=f"{s}-b") for s in sweeps),
         "request_span": REQUEST_SPAN, "model_key": "model", "model_pin": MODEL_PIN,
         "exemptions": ("x-request-id",), "headers": "not_recorded", "retries": "not_recorded",
@@ -544,40 +558,53 @@ def test_pr22_the_module_computes_the_rate_and_chooses_no_threshold_for_it() -> 
     assert mentions == [("ineligibility_rate",)], mentions
 
 
-# ---------- PR23: the action is value >= threshold, on Decimal, from the stored literal ----------
+# ---------- PR23: the action is value >= threshold (ge) or value > threshold (gt), on Decimal ----------
 
 
 @pytest.mark.parametrize(
-    ("literal", "action"),
-    [("0.59", 0), ("0.60", 1), ("0.61", 1), ("0.6", 1), ("0.599", 0), ("0.6000", 1), ("1", 1),
-     ("0", 0)],
+    ("comparison", "literal", "action"),
+    [("ge", "0.59", 0), ("ge", "0.60", 1), ("ge", "0.61", 1), ("ge", "0.6", 1), ("ge", "0.599", 0),
+     ("ge", "0.6000", 1), ("ge", "1", 1), ("ge", "0", 0),
+     # Retrofit R3 (2026-09-22): under ``gt`` the tie does not act, and nothing else moves.
+     ("gt", "0.59", 0), ("gt", "0.60", 0), ("gt", "0.61", 1), ("gt", "0.6", 0), ("gt", "0.599", 0),
+     ("gt", "0.6000", 0), ("gt", "1", 1), ("gt", "0", 0), ("gt", "0.6000000000000000001", 1)],
 )
-def test_pr23_the_action_is_value_at_or_above_the_threshold(literal: str, action: int) -> None:
-    result = analyse(assertion([Pair("i0", literal, HI)]))
+def test_pr23_the_action_is_value_at_or_above_the_threshold(comparison: str, literal: str, action: int) -> None:
+    decl = declaration(cuts=((CUT, THRESHOLD, comparison),))
+    result = analyse(assertion([Pair("i0", literal, HI)], decl=decl))
     n11, _, n01, _ = two_by_two(cut_of(result))
-    assert (n11, n01) == ((1, 0) if action else (0, 1)), (literal, two_by_two(cut_of(result)))
+    assert (n11, n01) == ((1, 0) if action else (0, 1)), (comparison, literal, two_by_two(cut_of(result)))
 
 
 @pytest.mark.parametrize(
-    ("literal", "threshold", "action"),
+    ("comparison", "literal", "threshold", "action"),
     [
         # Named mutant 2, as the spec spells it: an item stored at 0.60 must clear a cut of 0.60.
         # ``float("0.60") >= Decimal("0.60")`` is False, because Python compares the two exactly.
-        ("0.60", "0.60", 1),
+        ("ge", "0.60", "0.60", 1),
         # And as all-float arithmetic hides it: below the cut to Decimal, a tie to a double.
-        ("0.59999999999999999999", "0.60", 0),
-        ("0.6000000000000000001", "0.60000000000000000011", 0),
-        ("0.60000000000000000011", "0.6000000000000000001", 1),
+        ("ge", "0.59999999999999999999", "0.60", 0),
+        ("ge", "0.6000000000000000001", "0.60000000000000000011", 0),
+        ("ge", "0.60000000000000000011", "0.6000000000000000001", 1),
         # 0.1 + 0.2 is the double above 0.3; the literal is not, and is below a cut of 0.3.
-        ("0.29999999999999998", "0.3", 0),
-        ("0.3", "0.30000000000000004", 0),
+        ("ge", "0.29999999999999998", "0.3", 0),
+        ("ge", "0.3", "0.30000000000000004", 0),
+        # Retrofit R3 (2026-09-22), the same literals under ``gt``: the tie at 0.60 does not act,
+        # a float would call ``0.60000000000000000011 > 0.6000000000000000001`` a tie, and it is not.
+        ("gt", "0.60", "0.60", 0),
+        ("gt", "0.60000000000000000011", "0.6000000000000000001", 1),
+        ("gt", "0.6000000000000000001", "0.60000000000000000011", 0),
+        ("gt", "0.30000000000000004", "0.3", 1),
     ],
 )
 def test_pr23_a_literal_a_float_cannot_place_is_placed_by_its_text(
-    literal: str, threshold: str, action: int
+    comparison: str, literal: str, threshold: str, action: int
 ) -> None:
-    assert Decimal(literal) >= Decimal(threshold) if action else Decimal(literal) < Decimal(threshold)
-    decl = declaration(cuts=((CUT, threshold),))
+    if comparison == "ge":
+        assert Decimal(literal) >= Decimal(threshold) if action else Decimal(literal) < Decimal(threshold)
+    else:
+        assert Decimal(literal) > Decimal(threshold) if action else Decimal(literal) <= Decimal(threshold)
+    decl = declaration(cuts=((CUT, threshold, comparison),))
     result = analyse(assertion([Pair("i0", literal, "1")], decl=decl))
     n11, _, n01, _ = two_by_two(cut_of(result))
     assert (n11, n01) == ((1, 0) if action else (0, 1)), (literal, threshold)
@@ -594,14 +621,16 @@ def test_pr23_no_rounding_is_applied_before_the_comparison() -> None:
 @given(
     value=st.decimals(min_value=Decimal(0), max_value=Decimal(1), places=22, allow_nan=False),
     threshold=st.decimals(min_value=Decimal("0.0001"), max_value=Decimal(1), places=22, allow_nan=False),
+    comparison=st.sampled_from(["ge", "gt"]),
 )
 def test_pr23_property_the_action_is_the_decimal_comparison_at_any_length(
-    value: Decimal, threshold: Decimal
+    value: Decimal, threshold: Decimal, comparison: str
 ) -> None:
-    decl = declaration(cuts=((CUT, str(threshold)),))
+    decl = declaration(cuts=((CUT, str(threshold), comparison),))
     result = analyse(assertion([Pair("i0", str(value), "1")], decl=decl))
     n11, _, n01, _ = two_by_two(cut_of(result))
-    assert (n11, n01) == ((1, 0) if value >= threshold else (0, 1)), (value, threshold)
+    acted = value >= threshold if comparison == "ge" else value > threshold
+    assert (n11, n01) == ((1, 0) if acted else (0, 1)), (value, threshold, comparison)
 
 
 # ---------- PR24: a tie is action 1 and is counted, per cut and per arm ----------
@@ -615,6 +644,24 @@ def test_pr24_a_tie_is_action_one_and_is_counted_per_arm() -> None:
     result = analyse(assertion(rows))
     cut = cut_of(result)
     assert two_by_two(cut) == (3, 1, 0, 1)  # every tie acted
+    assert cut.ties == {"a": 3, "b": 2}
+    assert sweep_of(cut)["ties"] == {"a": 3, "b": 2}
+    contingency, _ = artifacts(result)
+    assert contingency["cuts"][CUT]["ties"] == {"a": 3, "b": 2}
+    assert contingency["cuts"][CUT]["per_sweep"]["S1"]["ties"] == {"a": 3, "b": 2}
+
+
+def test_pr24_under_gt_a_tie_is_action_zero_and_is_still_counted_per_arm() -> None:
+    """Retrofit R3 (2026-09-22): the same five pairs as the test above under ``comparison =
+    "gt"``. The ties change side -- 0.60 no longer acts -- and the tie counts do not move, because
+    a tie is a value equal to the threshold whichever way the cut is declared."""
+    rows = [
+        Pair("i0", "0.60", "0.60"), Pair("i1", "0.60", "0.90"), Pair("i2", "0.70", "0.6"),
+        Pair("i3", "0.50", "0.50"), Pair("i4", "0.6000", "0.25"),
+    ]
+    result = analyse(assertion(rows, decl=declaration(cuts=((CUT, THRESHOLD, "gt"),))))
+    cut = cut_of(result)
+    assert two_by_two(cut) == (0, 1, 1, 3)  # no tie acted
     assert cut.ties == {"a": 3, "b": 2}
     assert sweep_of(cut)["ties"] == {"a": 3, "b": 2}
     contingency, _ = artifacts(result)
@@ -1253,7 +1300,7 @@ def golden_assertion(*, b: int = 10_000, seed: int = 20260915) -> Any:
     pairs = pd.DataFrame(records)
     decl = paired.Declaration(
         value_key="reward", cluster_key="task_id", stratum_key="cut",
-        cuts=(paired.Cut(name="solved", threshold=Decimal("1")),),
+        cuts=(paired.Cut(name="solved", threshold=Decimal("1"), comparison="ge"),),
         sweeps=(paired.SweepPair(name="R", a=ARM_A, b=ARM_B),),
         request_span="llm", model_key="model", model_pin="gpt-4.1-mini-2025-04-14",
         exemptions=(), headers="not_recorded", retries="not_recorded",
