@@ -484,6 +484,7 @@ def _open_run(
         image=image.to_dict(),
         modal_app=options.app_name,
         concurrency=options.concurrency,
+        infra_retries=options.infra_retries,
         import_path=import_path,
         secrets=list(options.secrets),
         max_mde_accepted=_accepted_mde(p),
