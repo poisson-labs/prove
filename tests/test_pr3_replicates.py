@@ -6,8 +6,11 @@ and is not here: section 7 lets a Session A cut PR-3 into two files, and this is
 Written by Session A on 2026-09-22 off ``pr2-build`` ``7bb1a3b`` (phases 1 and 2 built) plus the
 two retrofits ruled the same day and committed first on this branch: R1 (``733ac35``, two names
 into the PR-1 oracle's ``SPEC_PUBLIC_NAMES``) and R3 (``fd4266d``, a ``Cut`` declares its
-comparison, ``gt`` or ``ge``, with no default). **Not frozen** until Taylor approves the two
-tables in the handoff. Session B builds phase 3's replicate half of ``src/proofload/paired.py``
+comparison, ``gt`` or ``ge``, with no default). **Frozen 2026-09-22 in one commit over both PR-3
+files, over the reviewed ``ef9f4ef``**, after Taylor approved the four tables in the handoff
+(``log/prove-pr3-session-a/README.md``) and an independent recompute of every hard-coded
+expectation passed (``recompute_expectations.py`` there, 83 of 83). Session B builds phase 3's
+replicate half of ``src/proofload/paired.py``
 -- ``SweepPair.more``, the k-arm assertion, ``ReplicateResult`` and ``replicates`` -- against this
 file and does not edit it. Phase 3's names are read through ``getattr`` inside each test, so the
 bare tree fails test by test and never at collection.

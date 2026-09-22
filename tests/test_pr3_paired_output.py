@@ -4,9 +4,12 @@ replicates packet (PR57 to PR76) is ``tests/test_pr3_replicates.py``; section 7 
 cut PR-3 into the two files and freezes them in one pass.
 
 Written by Session A on 2026-09-22 on ``pr3-oracle`` over the replicates oracle (``9e41c2b``) and
-the ruled retrofit ``6f40d92`` (the two phase-2 artifacts print ``comparison``). **Not frozen**
-until Taylor approves the two tables in the handoff; the freeze is one commit over both files.
-Session B builds phase 3's output half against this file and does not edit it: ``WindowReport``,
+the ruled retrofit ``6f40d92`` (the two phase-2 artifacts print ``comparison``). **Frozen
+2026-09-22 in one commit over both PR-3 files, over the reviewed ``ef9f4ef``**, after Taylor
+approved the four tables in the handoff (``log/prove-pr3-session-a/README.md``) and an
+independent recompute of every hard-coded expectation passed (``recompute_expectations.py``
+there, 83 of 83). Session B builds phase 3's output half against this file and does not edit
+it: ``WindowReport``,
 ``windows``, ``CostReport`` and ``cost`` in ``src/proofload/paired.py``, the ``paired`` verb and
 the ``--paired`` flag in ``cli.py``, and **nothing in ``report.py``**, whose whole-file digest two
 frozen tests pin and this file pins again. Phase 3's names are read through ``getattr`` inside
