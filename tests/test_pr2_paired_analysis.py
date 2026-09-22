@@ -15,7 +15,9 @@ the bare tree (phase 1 only) fails test by test on ``AttributeError`` and never 
 every cut this file builds carries ``"ge"`` -- the one reading PR23 had, so no pinned number moves
 -- and the PR23 tests take the comparison as a parameter with ``"gt"`` rows beside the ``"ge"``
 ones; PR24 gains one test for the tie under ``"gt"``. Every test in this file is red on the tree
-this retrofit lands on, on ``TypeError`` from the missing field, until Session B builds it.*
+this retrofit lands on, on ``TypeError`` from the missing field, until Session B builds it. Ruled
+the same day on the PR-3 Session A report: both artifacts print the cut's ``comparison`` beside
+its ``threshold``, pinned by one line in PR37's nesting test.*
 
 **What phase 2 is.** ``analyse`` takes a ``PairAssertion`` and nothing else (PR9, already pinned by
 the PR-1 oracle) and answers one question per declared cut: did the binary action at that cut
@@ -1166,6 +1168,7 @@ def test_pr37_every_statistic_is_nested_under_exactly_one_cut_name() -> None:
         assert tree["declaration_digest"] == result.declaration_digest
         for name, block in tree["cuts"].items():
             assert block["threshold"] == {CUT: "0.60", "c50": "0.50", "c90": "0.90"}[name]
+            assert block["comparison"] == "ge"  # ruled 2026-09-22: printed beside the threshold (R3)
             for path, _ in walk(block):
                 assert not any(
                     word in p.lower() for p in path for word in ("across", "between_cut", "trend")
