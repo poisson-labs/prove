@@ -891,7 +891,8 @@ def test_i13_fix_on_unknown_key_exits_two_with_axis_error_message(go1_store: Sto
     out = tmp_path / "report"
     r = run_cli(report_argv(out, "--fix", "bogus=1"))
     assert_clean_refusal(r, 2)
-    assert "fixed names unknown config key 'bogus'" in r.text, r.text
+    # LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): the refusal names the flag, not the parameter (spec LS section 3.8 item 4).
+    assert "--fix names unknown config key 'bogus'" in r.text, r.text
     assert not out.exists() or not any(out.iterdir())
 
 

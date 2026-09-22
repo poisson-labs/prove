@@ -390,7 +390,20 @@ def panel_groups(root: ET.Element) -> list[ET.Element]:
 
 
 def texts(root: ET.Element) -> list[str]:
-    return ["".join(e.itertext()) for e in root.iter() if _local(e.tag) == "text"]
+    """Every ``<text>`` in document order. LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): a long title, headline,
+    trade line or legend caption is drawn as several ``<text>`` elements, the continuation lines
+    carrying ``data-wrap="1"`` (spec LS D9, section 3.1 (b)); those are joined back onto their first
+    line with a space, so a text reads as one whatever the box width."""
+    out: list[str] = []
+    for e in root.iter():
+        if _local(e.tag) != "text":
+            continue
+        content = "".join(e.itertext())
+        if e.attrib.get("data-wrap") == "1" and out:
+            out[-1] = f"{out[-1]} {content}"
+        else:
+            out.append(content)
+    return out
 
 
 def strip_presentation(root: ET.Element) -> ET.Element:

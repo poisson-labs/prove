@@ -1795,6 +1795,10 @@ def test_v39_trade_line_appears_when_present_and_leaves_no_empty_element_when_nu
     assert holder, "the trade line is not the direct text of one element outside the SVG"
     without = json.loads(json.dumps(go1.structure, allow_nan=False))
     without["trade_line"] = None
+    # LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): the Summary carries the same sentence as
+    # ``summary.complement.line`` on this pair (spec LS section 3.6), so a structure without the
+    # trade line is one without the complement too.
+    without["summary"]["complement"] = None
     page = viewer().render_html(without)
     dom = parse_html(page)
     assert not [n for n in dom.nodes if trade in n.text and not n.inside("svg")]
