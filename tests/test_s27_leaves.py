@@ -307,8 +307,11 @@ E14_SHA256 = {
 #: nothing pins this file, so the cascade is one literal deep and terminates here (measured).
 # Re-minted 2026-09-20 (truncation surfacing): both files moved -- their E14 and serve digests, and the dated notes above them --
 # so both values do, read off the two files as they stand and not predicted. Nothing pins this file, so the cascade ends here.
+# Re-minted 2026-09-22 (PR-2 Session B's retrofit of O16, ruled: two default_rng sites, tree.py _draw and paired.py
+# _cluster_bootstrap, ADR-058 widened to one stream per estimator): only ``test_s25_root.py`` moved, read off the
+# shipped file and not predicted; ``test_s26_fault_lines.py`` is untouched. Nothing pins this file, so the cascade ends here.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "9bb03b2a63fe8e74a35e2a07d2568e52aa2759cd9a03557f6416c765f4660013",
+    "tests/test_s25_root.py": "2d223a29d8959cd58261289bd40af83a141a5f5e7c076387fb990c1eaa20c277",
     "tests/test_s26_fault_lines.py": "ab5ad5d184bcccb516264e5e5d8c7fbae03fe791ad1793ce9e178e68d4fc5e63",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
