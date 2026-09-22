@@ -82,9 +82,15 @@ the spec's change log on the freeze):
   ``n_lo`` from the interval's upper bound and ``n_hi`` from its lower bound -- **only when the
   declaration carries ``conditioning``**, ``dollars_per_decision`` only when ``cost`` was passed
   with a price, and ``latency_per_decision`` only when ``windows`` was passed. What is absent is
-  absent, never zero (PR7). The two arithmetic rows' values are not pinned here: where the mean
-  recorded input tokens and the per-call median latency come from is ambiguity 4 of the spec
-  session and is one yes/no in the handoff.
+  absent, never zero (PR7). *Ruled 2026-09-22:* the two arithmetic rows read the two inputs the
+  output packet's spec gained the same day. ``dollars_per_decision`` is ``{estimate,
+  mean_input_tokens, price_per_input_token}`` with ``mean_input_tokens = cost.input_tokens /
+  cost.recorded_spans`` and ``estimate = j * mean_input_tokens * price``, the price echoed as its
+  literal; ``latency_per_decision`` is ``{median_call_s, serial_s, at_declared_concurrency_s}``
+  with ``median_call_s`` the median of the per-sweep ``latency_s["median"]`` values
+  ``windows.per_sweep`` carries, ``serial_s = j * median_call_s``, and
+  ``at_declared_concurrency_s = serial_s / concurrency`` when every arm's recorded
+  ``environment["sweeps"][S][arm]["concurrency"]`` is one non-null number, else absent.
 
 **Invariant-to-test map** is in the handoff (``log/prove-pr3-session-a/README.md``). Every test
 name starts ``test_prN_`` or ``test_control_``.
@@ -111,9 +117,9 @@ byte-identity guard.
 
 **Named gaps, not pinned.** An empty cut under ``replicates()`` (ambiguity 7); cause precedence
 on a set broken in two arms (ambiguity 9); the ``MS@j`` observation at ``S > 3`` (ambiguity 5);
-the values of the dollars and latency rows (ambiguity 4); whether the two phase-2 artifacts print
-the cut's comparison beside its threshold (one yes/no in the handoff); a run id shared between
-two different sweeps; the order of ``excluded_by_arm``'s keys.
+a run id shared between two different sweeps; the order of ``excluded_by_arm``'s keys. (The
+dollars and latency values and the ``comparison`` in the phase-2 artifacts were ruled 2026-09-22
+and are pinned.)
 """
 
 from __future__ import annotations
@@ -180,8 +186,11 @@ OTHER = {"ge": "gt", "gt": "ge"}
 
 # PR60: the bytes the pre-amendment build (``7bb1a3b``'s ``src/``) writes for ``pr60_store``
 # through ``assert_pairs`` and ``analyse`` at ``k = 2``, minted by ``mint_pr60.py`` in the
-# handoff with the declaration digest masked and the declaration block dropped (both move with
-# R3, which the ruling accepts). The build must reproduce every one of them.
+# handoff through ``pr60_digests`` below, which masks what later rulings add on top of today's
+# bytes: the declaration digest and block (they move with R3), the ``comparison`` the two
+# artifacts print beside the threshold (ruled 2026-09-22), and the four timing columns phase 3's
+# windows add to ``pairs`` (``TIMING_COLUMNS``). Every other byte is pinned.
+TIMING_COLUMNS = ("start_ns_a", "end_ns_a", "start_ns_b", "end_ns_b")
 PR60_PAIRS_SHA256 = "120c9c73ff9c68f9063b177da266d0f5712184f44238e359d551f3b7fa4f843e"
 PR60_ASSERTION_SHA256 = "1599b827d6274ac7fd149dcba4ad47f43a75414ad4d2592b1b04dd14f7077526"
 PR60_CONTINGENCY_SHA256 = "b4a14e176172f65823ec9276def0b1f9dfb6e1c03dbde6dde13fa2ded2a84809"
@@ -627,11 +636,16 @@ def pr60_digests(store: Store, decl: Any) -> dict[str, str]:
     and the declaration block dropped, exactly as ``mint_pr60.py`` computes them."""
     a = P().assert_pairs(store, decl)
     result = P().analyse(a)
-    mask = re.compile(r'"declaration_digest": "[0-9a-f]{64}"')
+    mask = re.compile(r'"declaration_digest": "[0-9a-f]{64}"|\n *"comparison": "g[te]",?')
     payload = json.loads(a.to_json())
     payload.pop("declaration", None)
     payload.pop("declaration_digest", None)
-    frame = a.pairs.astype(str).to_csv(index=False)
+    for row in payload.get("pairs", []):
+        if isinstance(row, dict):
+            for column in TIMING_COLUMNS:
+                row.pop(column, None)
+    frozen = [c for c in a.pairs.columns if c not in TIMING_COLUMNS]
+    frame = a.pairs[frozen].astype(str).to_csv(index=False)
     return {
         "pairs": hashlib.sha256(frame.encode()).hexdigest(),
         "assertion": hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest(),
@@ -866,17 +880,19 @@ def test_pr60_replicates_returns_an_empty_tuple_when_every_sweep_is_a_pair(tmp_p
     assert replicates(stored) == ()
     assert list(stored.pairs.columns) == [
         "sweep", "cut", "cluster", "config_hash", "replicate_index", "request_digest",
-        "exemptions_exercised", "value_a", "value_b",
+        "exemptions_exercised", "value_a", "value_b", *TIMING_COLUMNS,
     ]
 
 
 def test_pr60_at_k_two_the_frames_and_both_phase_two_artifacts_are_the_bytes_the_pre_amendment_build_wrote(
     tmp_path: Path,
 ) -> None:
-    """Minted on ``7bb1a3b``'s ``src/`` (no ``more``, no ``comparison``) by ``mint_pr60.py``:
-    the ``pairs`` frame, ``pair_assertion.json`` without its declaration block and digest,
-    ``contingency_by_cut.json`` and ``intervals_by_cut.json`` with the digest masked. The
-    declaration digest moves with R3 and only with R3; every other byte is pinned."""
+    """Minted on ``7bb1a3b``'s ``src/`` (no ``more``, no ``comparison``, no timing) by
+    ``mint_pr60.py`` through ``pr60_digests``: the ``pairs`` frame's nine frozen columns,
+    ``pair_assertion.json`` without its declaration block, digest and timing columns,
+    ``contingency_by_cut.json`` and ``intervals_by_cut.json`` with the digest and the
+    ``comparison`` line masked. What the masks cover was ruled in after the mint; every other
+    byte is pinned, so a build that changes a ``k = 2`` byte anywhere else fails here."""
     digests = pr60_digests(pr60_store(tmp_path), store_declaration(sweeps=("S1", "S2"), k=2))
     assert digests == {
         "pairs": PR60_PAIRS_SHA256, "assertion": PR60_ASSERTION_SHA256,
@@ -1807,13 +1823,66 @@ def test_pr76_without_a_price_or_a_cost_report_the_dollar_row_is_absent_not_zero
                 assert not any("dollar" in key or "latency" in key for key in path), path
                 assert value != 0 or path[-1:] == ("n_lo",) or path[-1:] == ("n",), path
     unpriced = paired.CostReport(
-        phases=(), input_tokens=0, output_tokens=0, unrecorded_spans=0,
+        phases=(), input_tokens=0, output_tokens=0, recorded_spans=0, unrecorded_spans=0,
         price_per_input_token=None, dollars=None, token_cap=None, cap_reached=False,
     )
     with_cost = result_of(a, cost=unpriced)
     for rule in RULES:
         for j in (1, 3, 5):
             assert "dollars_per_decision" not in with_cost.cost_framing[rule][f"j{j}"]
+
+
+def test_pr76_the_dollar_row_is_j_times_the_mean_recorded_input_tokens_times_the_price() -> None:
+    """Ruled 2026-09-22: the mean is ``input_tokens / recorded_spans`` off the cost report,
+    never a tokeniser and never a rate card; the price is echoed as its literal."""
+    paired = P()
+    priced = paired.CostReport(
+        phases=(), input_tokens=1_723_267, output_tokens=90_000, recorded_spans=4_500,
+        unrecorded_spans=3, price_per_input_token=Decimal("0.000000042"), dollars=None,
+        token_cap=None, cap_reached=False,
+    )
+    r = result_of(assertion(grid(8, ["S1", "S2"], ms_pattern), conditioning="c"), cost=priced)
+    mean = 1_723_267 / 4_500
+    for rule in RULES:
+        for j in (1, 3, 5):
+            row = r.cost_framing[rule][f"j{j}"]["dollars_per_decision"]
+            assert row["mean_input_tokens"] == pytest.approx(mean, abs=1e-9)
+            assert row["price_per_input_token"] == "0.000000042"
+            assert row["estimate"] == pytest.approx(j * mean * 0.000000042, rel=1e-12), (rule, j)
+    assert r.cost_framing["primary"]["j3"]["dollars_per_decision"]["estimate"] == pytest.approx(
+        3 * r.cost_framing["primary"]["j1"]["dollars_per_decision"]["estimate"], rel=1e-12
+    )
+
+
+def test_pr76_the_latency_row_is_j_times_the_recorded_per_call_median_serial_and_at_the_declared_concurrency() -> None:
+    """Ruled 2026-09-22: the median is the median of the per-sweep medians ``windows`` carries;
+    the concurrency is the arms' recorded one, and with none recorded that row is absent."""
+    paired = P()
+    windows = paired.WindowReport(
+        per_sweep=(
+            {"sweep": "S1", "latency_s": {"median": 0.30, "n": 40}},
+            {"sweep": "S2", "latency_s": {"median": 0.40, "n": 40}},
+            {"sweep": "S3", "latency_s": {"median": 0.338, "n": 40}},
+        ),
+        replay_gap={CUT: {"min": 1.0, "median": 2.0, "max": 3.0}},
+    )
+    rows = grid(8, ["S1", "S2", "S3"], ms_pattern)
+    a = assertion(rows, conditioning="c")
+    r = result_of(a, windows=windows)
+    for rule in RULES:
+        for j in (1, 3, 5):
+            row = r.cost_framing[rule][f"j{j}"]["latency_per_decision"]
+            assert row["median_call_s"] == pytest.approx(0.338)
+            assert row["serial_s"] == pytest.approx(j * 0.338)
+            assert "at_declared_concurrency_s" not in row  # no arm records a concurrency
+    recorded = dataclasses.replace(a, environment={
+        "sweeps": {s: {label: {"concurrency": 4} for label in labels(5)} for s in ("S1", "S2", "S3")},
+        "gaps": [],
+    })
+    row = result_of(recorded, windows=windows).cost_framing["primary"]["j5"]["latency_per_decision"]
+    assert row["at_declared_concurrency_s"] == pytest.approx(5 * 0.338 / 4)
+    without = result_of(recorded)
+    assert "latency_per_decision" not in without.cost_framing["primary"]["j5"]
 
 
 def test_pr76_the_cost_framing_is_per_cut_per_rule_and_per_odd_j_in_the_artifact() -> None:
