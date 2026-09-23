@@ -1,9 +1,11 @@
 """M10: the command line.
 
-Seven verbs over the built modules: ``sweep`` runs a plan on a backend after a pre-flight
+Eight verbs over the built modules: ``sweep`` runs a plan on a backend after a pre-flight
 prompt; ``diff``, ``report``, ``check`` and ``serve`` operate on stored runs; ``inspect`` dumps
 the ``(config, seed)`` pairs behind an event plus a reproduction snippet; ``runs`` lists the
-store. ``serve`` is the one verb that binds a socket: a loopback listener holding one page
+store; ``paired`` asserts that a declaration's arms were the same request replayed and writes
+the paired-replay artifacts, and ``report --paired`` folds the same sections into the report.
+``serve`` is the one verb that binds a socket: a loopback listener holding one page
 built before the bind, which writes nothing and dies with the process.
 This module computes nothing and decides nothing statistical: it parses arguments, calls
 M2–M7, and renders their results. Every number it prints is a field on a ``RunSummary``,
@@ -72,6 +74,17 @@ from proofload.executor_modal import (
     preflight_modal,
     run_modal,
 )
+from proofload.paired import (
+    Declaration,
+    PairedError,
+    _artifact_text,
+    _Bundle,
+    _bundle,
+    _cost_block,
+    _fold_html,
+    _fold_markdown,
+)
+from proofload.paired import cost as paired_cost
 from proofload.report import (
     MultiReport,
     ReportError,
@@ -120,11 +133,12 @@ _REPORT_FILES = ("report.md", "heatmap.svg", "receipt.html")
 _SNIPPET_MARKER = "# reproduce one episode"
 _MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
 _DIFF_ONLY_FLAGS = (
-    "method", "methods", "q", "permutations", "seed", "by", "max_group_mde", "depth",
+    "method", "methods", "q", "permutations", "seed", "by", "max_group_mde", "depth", "paired",
 )
 _RUN_ONLY_FLAGS = ("horizon",)
 _REFUSABLE = (
     SamplerError, ExecutorError, DiffError, ReportError, StoreError, SurvivalError, ViewerError,
+    PairedError,
 )
 _REPORT_FORMS = (
     "report A B --x AXIS [...]  (two run ids: diff report) or "
@@ -279,6 +293,31 @@ def _build_parser(io: _IO) -> _Parser:
     )
     report_p.add_argument("--title", metavar="TEXT")
     report_p.add_argument("--force", action="store_true", help="write into a non-empty --out")
+    report_p.add_argument(
+        "--paired",
+        metavar="DECL",
+        help="a paired-replay declaration (TOML) whose sweep (A, B) is; folds the paired "
+        "sections into the report and writes the artifacts beside it (diff report only)",
+    )
+
+    paired_p = sub.add_parser(
+        "paired",
+        help="assert that a declaration's arms were the same request replayed, then write the "
+        "paired-replay artifacts",
+    )
+    paired_p.add_argument(
+        "--declaration", required=True, metavar="DECL", help="the paired-replay declaration (TOML)"
+    )
+    paired_p.add_argument(
+        "--out", metavar="DIR", help="default ./proofload-paired-<declaration digest prefix>"
+    )
+    paired_p.add_argument("--format", choices=("md", "json"), default="md")
+    paired_p.add_argument(
+        "--cap-check",
+        action="store_true",
+        help="print the cost block and exit 1 at or above the declared token cap; write nothing",
+    )
+    paired_p.add_argument("--force", action="store_true", help="write into a non-empty --out")
 
     check_p = sub.add_parser("check", help="gate on a diff: exit 0 on PASS, 1 on FAIL")
     check_p.add_argument("a", metavar="A", help="run id of the baseline")
@@ -1288,13 +1327,23 @@ def _write_report_files(
     out_dir: Path,
     report: MultiReport | SurvivalReport,
     receipt: MultiReport | SurvivalReport,
+    bundle: _Bundle | None = None,
 ) -> None:
+    """With a paired ``bundle`` the four sections are folded into the rendered strings and the
+    artifacts are written beside the three files; without one every byte is what it was."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "report.md").write_text(report.to_markdown())
+    markdown, page = report.to_markdown(), receipt.to_html()
+    if bundle is not None:
+        markdown, page = _fold_markdown(markdown, bundle), _fold_html(page, bundle)
+    (out_dir / "report.md").write_text(markdown)
     (out_dir / "heatmap.svg").write_text(report.to_svg())
-    (out_dir / "receipt.html").write_text(receipt.to_html())
+    (out_dir / "receipt.html").write_text(page)
     for name in _REPORT_FILES:
         io.out.write(f"{out_dir / name}\n")
+    if bundle is not None:
+        for name, artifact in bundle.artifacts.items():
+            (out_dir / name).write_text(_artifact_text(artifact))
+            io.out.write(f"{out_dir / name}\n")
 
 
 def _cmd_report(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
@@ -1319,6 +1368,7 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
             f"takes its horizon from the two runs ({_REPORT_FORMS})"
         )
     out_dir = _prepare_out_dir(ns, f"./proofload-report-{a}-{b}")
+    declaration = None if ns.paired is None else _paired_declaration(ns.paired, a, b)
     fixed = _parse_pairs(ns.fix, "--fix")
     method = _DEFAULT_METHOD if ns.method is None else ns.method
     q = _DEFAULT_Q if ns.q is None else ns.q
@@ -1377,7 +1427,48 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
         )
     )
     _write_summary(io, multi)
-    _write_report_files(io, out_dir, report, receipt)
+    bundle = None if declaration is None else _bundle(store, declaration)
+    _write_report_files(io, out_dir, report, receipt, bundle)
+    return 0
+
+
+def _paired_declaration(path: str, a: str, b: str) -> Declaration:
+    """``report A B --paired DECL``: ``(A, B)`` must be the declared pair of one of the
+    declaration's sweeps; any other pair is refused by name. The sections then cover every
+    declared sweep, because the replications are the point."""
+    declaration = Declaration.from_toml(path)
+    declared = {(sweep.a, sweep.b): sweep.name for sweep in declaration.sweeps}
+    if (a, b) not in declared:
+        pairs = ", ".join(f"{s.name}: ({s.a}, {s.b})" for s in declaration.sweeps)
+        raise _Refusal(
+            f"--paired: ({a}, {b}) is not the declared pair of any sweep in {path}; the "
+            f"declaration pairs {pairs}"
+        )
+    return declaration
+
+
+def _cmd_paired(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
+    """The assertion, the analysis, the windows, the cost with one phase per declared sweep,
+    and the replicates, written as the five artifacts (six at ``k > 2``). ``--format json``
+    prints the combined payload and writes nothing; ``--cap-check`` prints the cost block alone
+    and exits 1 at or above the declared token cap, the module's one exit-code path."""
+    declaration = Declaration.from_toml(ns.declaration)
+    store = Store(root)
+    if ns.cap_check:
+        report = paired_cost(
+            store, declaration, phases={s.name: s.arms for s in declaration.sweeps}
+        )
+        io.out.write(_artifact_text(_cost_block(declaration, report)) + "\n")
+        return 1 if report.cap_reached else 0
+    if ns.format == "json":
+        io.out.write(_artifact_text(_bundle(store, declaration).payload) + "\n")
+        return 0
+    out_dir = _prepare_out_dir(ns, f"./proofload-paired-{declaration.digest[:12]}")
+    bundle = _bundle(store, declaration)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, artifact in bundle.artifacts.items():
+        (out_dir / name).write_text(_artifact_text(artifact))
+        io.out.write(f"{out_dir / name}\n")
     return 0
 
 
@@ -1737,4 +1828,5 @@ _VERBS: dict[str, Callable[[argparse.Namespace, _IO, Path, _State], int]] = {
     "serve": _cmd_serve,
     "inspect": _cmd_inspect,
     "runs": _cmd_runs,
+    "paired": _cmd_paired,
 }

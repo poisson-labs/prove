@@ -308,7 +308,11 @@ CLI_IMPORTS = frozenset(
         ("proofload.executor", "plan"), ("proofload.executor", "preflight"), ("proofload.executor", "run_local"),
         ("proofload.executor_modal", "ImageSpec"), ("proofload.executor_modal", "ModalOptions"),
         ("proofload.executor_modal", "ModalTarget"), ("proofload.executor_modal", "preflight_modal"),
-        ("proofload.executor_modal", "run_modal"), ("proofload.report", "MultiReport"), ("proofload.report", "ReportError"),
+        ("proofload.executor_modal", "run_modal"),
+        ("proofload.paired", "Declaration"), ("proofload.paired", "PairedError"), ("proofload.paired", "_Bundle"),
+        ("proofload.paired", "_artifact_text"), ("proofload.paired", "_bundle"), ("proofload.paired", "_cost_block"),
+        ("proofload.paired", "_fold_html"), ("proofload.paired", "_fold_markdown"), ("proofload.paired", "cost"),
+        ("proofload.report", "MultiReport"), ("proofload.report", "ReportError"),
         ("proofload.report", "ReportSpec"), ("proofload.report", "SurvivalReport"), ("proofload.report", "_interval_lines"), ("proofload.report", "_observation_cap"),
         ("proofload.report", "build_multi_report"), ("proofload.report", "build_survival_report"),
         ("proofload.sampler", "SamplerError"), ("proofload.sampler", "SweepSpec"), ("proofload.store", "RunManifest"),
@@ -968,6 +972,7 @@ FLAG_SETS = {
     "report": {
         "--event", "--method", "--q", "--methods", "--permutations", "--seed", "--by", "--max-group-mde", "--depth",
         "--x", "--y", "--fix", "--horizon", "--theme", "--top-n", "--forest", "--out", "--title", "--force",
+        "--paired",
     },
     "serve": {
         "--event", "--method", "--q", "--permutations", "--seed", "--by", "--max-group-mde", "--depth",

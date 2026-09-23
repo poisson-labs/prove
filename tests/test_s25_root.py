@@ -33,7 +33,9 @@ they do.
    greater than zero. Every statistic is ``0.0`` and every p ``1.0`` under both.
 3. **O16's blanket ban is red at baseline.** ``capture.py:433`` already constructs
    ``random.Random(os.urandom(32))`` for something that is not a permutation stream. The guard is
-   scoped: ``default_rng`` at exactly one call site across ``src/``, in ``tree.py``; no
+   scoped: ``default_rng`` at exactly one call site across ``src/``, in ``tree.py`` (widened
+   2026-09-22 to the two named sites, ``tree.py`` ``_draw`` and ``paired.py``
+   ``_cluster_bootstrap``, one stream per estimator); no
    ``np.random.seed``, ``RandomState`` or legacy ``np.random.<fn>`` anywhere in ``src/``; no
    ``random.Random``, ``random.seed`` or ``secrets`` in ``tree.py`` or ``diff.py``. The capture
    site is named here as pre-existing and out of scope; naming it beats widening the guard.
@@ -1442,12 +1444,18 @@ def test_o23_serve_json_on_go1_prints_the_same_structure() -> None:
 
 
 def test_o16_default_rng_is_called_in_exactly_one_function_and_it_lives_in_tree_py() -> None:
-    """**The rule, in prose.** Draft ADR-058: one seeded permutation stream per tree, constructed
-    in one function and never stored. P4.2 obtains the same draws by calling that function. A
-    second ``default_rng`` anywhere in the package is a second stream free to disagree with the
-    first, which is the ADR-021 shape this project has shipped twice. Legacy NumPy RNG entry
-    points -- ``np.random.seed``, ``RandomState``, any ``np.random.<fn>`` other than
-    ``default_rng`` -- are global state and are forbidden everywhere in ``src/``."""
+    """**The rule, in prose.** Draft ADR-058, widened 2026-09-22 (Taylor, PR-2 Session B): one
+    seeded stream per estimator, each constructed in one function and never stored. The tree's
+    permutation stream is built in ``tree.py``'s ``_draw`` and P4.2 obtains the same draws by
+    calling that function; the paired replay's item-clustered bootstrap is built in
+    ``paired.py``'s ``_cluster_bootstrap`` from the declared ``bootstrap_seed`` (Prove -- Spec PR
+    Paired Replay, PR29). A ``default_rng`` anywhere else in the package is a second stream free
+    to disagree with one of these, which is the ADR-021 shape this project has shipped twice, and
+    the two named sites are the whole of the allowance. Legacy NumPy RNG entry points --
+    ``np.random.seed``, ``RandomState``, any ``np.random.<fn>`` other than ``default_rng`` -- are
+    global state and are forbidden everywhere in ``src/``. *Retrofit, ruled 2026-09-22: this test
+    read "exactly one site, in tree.py" from ``5143c8d`` until the paired bootstrap landed; the
+    name is kept so the row in the S25 oracle map still resolves.*"""
     sites: list[tuple[str, int, str]] = []
     legacy: list[tuple[str, int, str]] = []
     for path in sorted(PACKAGE.glob("*.py")):
@@ -1468,8 +1476,10 @@ def test_o16_default_rng_is_called_in_exactly_one_function_and_it_lives_in_tree_
                 isinstance(node, ast.Name) and node.id == "RandomState"
             ):
                 legacy.append((path.name, node.lineno, "RandomState"))
-    assert len(sites) == 1, sites
-    assert sites[0][0] == "tree.py" and sites[0][2] != "<module>", sites
+    assert sorted((path, function) for path, _, function in sites) == [
+        ("paired.py", "_cluster_bootstrap"),
+        ("tree.py", "_draw"),
+    ], sites
     assert legacy == [], legacy
 
 
