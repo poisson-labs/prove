@@ -114,3 +114,20 @@ def test_pr61_the_broken_sets_pair_values_are_the_stored_literals(tmp_path: Path
     kept = assertion.pairs[assertion.pairs["cluster"] == BROKEN]
     assert len(kept) == 1
     assert (kept.iloc[0]["value_a"], kept.iloc[0]["value_b"]) == (Decimal("0.62"), Decimal("0.64"))
+
+
+def test_pr61_padding_arms_three_to_k_never_rounds_a_stamp_through_a_float(tmp_path: Path) -> None:
+    """The kept set carries ``None`` for the stamps of arms 3 to 5. A frame column holding a
+    ``None`` beside whole numbers is float64, and ``EPOCH + 500_000`` does not survive a float
+    (it reads ``...499968``), so every stamp on ``pairs`` is a whole ``int`` equal to the stored
+    one, and the padded ones are ``None``."""
+    assertion, _, _ = run(tmp_path, "5")
+    frame = assertion.pairs
+    whole = frame[frame["cluster"] != BROKEN]
+    for label in R.labels(R.K):
+        assert [(type(v), v) for v in whole[f"start_ns_{label}"]] == [(int, R.EPOCH)] * 5, label
+        assert [(type(v), v) for v in whole[f"end_ns_{label}"]] == [(int, R.EPOCH + 500_000)] * 5, label
+    kept = frame[frame["cluster"] == BROKEN].iloc[0]
+    assert (kept["start_ns_a"], kept["end_ns_a"]) == (R.EPOCH, R.EPOCH + 500_000)
+    assert (kept["start_ns_b"], kept["end_ns_b"]) == (R.EPOCH, R.EPOCH + 500_000)
+    assert all(kept[f"{edge}_ns_{label}"] is None for edge in ("start", "end") for label in ("3", "4", "5"))
