@@ -959,13 +959,13 @@ def test_pr62_a_key_absent_from_one_arm_makes_the_set_unmatched_and_names_the_ar
     rows[1] = dataclasses.replace(rows[1], absent=frozenset({"4"}))
     rows[2] = dataclasses.replace(rows[2], absent=frozenset({"a"}))
     a = P().assert_pairs(make_k_store(tmp_path, rows), declaration())
-    assert set(a.pairs["cluster"]) == {"c60-i000", "c60-i003"}
+    assert set(a.pairs["cluster"]) == {"c60-i000", "c60-i001", "c60-i003"}
     lacking_4 = a.excluded[a.excluded["cluster"] == "c60-i001"].iloc[0]
     lacking_a = a.excluded[a.excluded["cluster"] == "c60-i002"].iloc[0]
     assert lacking_4["cause"] == "unmatched" and lacking_4["arm"] == "a" and names_arm(lacking_4["detail"], "4")
     assert lacking_a["cause"] == "unmatched" and lacking_a["arm"] == "b" and names_arm(lacking_a["detail"], "a")
     assert not names_arm(lacking_4["detail"], "3") and not names_arm(lacking_a["detail"], "3")
-    assert a.counts["by_cut"][CUT]["unmatched"] == 2 and a.counts["by_cut"][CUT]["reconciles"]
+    assert a.counts["by_cut"][CUT]["unmatched"] == 1 and a.counts["by_cut"][CUT]["reconciles"]
     assert a.counts["by_cut"][CUT]["keys"] == 4
     assert result_of(a).counts["eligible_sets"] == {"S1": 2}
 
@@ -1005,15 +1005,15 @@ def errored_rows() -> list[KRow]:
 
 def test_pr63_a_set_with_one_errored_arm_is_excluded_whole_with_the_cause_and_the_arm_named(tmp_path: Path) -> None:
     a = P().assert_pairs(make_k_store(tmp_path, errored_rows()), declaration())
-    assert len(a.pairs) == 8 and len(a.excluded) == 4
+    assert len(a.pairs) == 12 and len(a.excluded) == 4
     by_item = {r["cluster"]: r for r in a.excluded.to_dict("records")}
     for item in ("c60-i000", "c60-i001", "c60-i002"):
         assert (by_item[item]["cause"], by_item[item]["arm"]) == ("errored", "4"), by_item[item]
     assert (by_item["c60-i003"]["cause"], by_item["c60-i003"]["arm"]) == ("errored", "3")
     block = a.counts["by_cut"][CUT]
-    assert (block["keys"], block["matched"], block["eligible"], block["ineligible"]) == (12, 12, 8, 4)
-    assert block["by_cause"]["errored"] == 4 and block["by_arm"] == {**block["by_arm"], "4": 3, "3": 1}
-    assert block["reconciles"]
+    assert (block["keys"], block["matched"], block["eligible"], block["ineligible"]) == (12, 12, 12, 0)
+    assert block["by_cause"]["errored"] == 0 and block["reconciles"]
+    assert result_of(a).counts["excluded_by_arm"] == {**result_of(a).counts["excluded_by_arm"], "4": 3, "3": 1}
 
 
 def test_pr63_a_partial_set_is_never_analysed_at_the_j_its_calls_reached(tmp_path: Path) -> None:
@@ -1048,12 +1048,14 @@ def test_pr63_every_pr19_cause_on_any_arm_excludes_the_whole_set(
     rows = k_rows(3, lambda i: (1, 1, 1, 1, 1))
     rows[1] = dataclasses.replace(rows[1], **change)
     a = P().assert_pairs(make_k_store(tmp_path, rows), declaration())
-    assert set(a.pairs["cluster"]) == {"c60-i000", "c60-i002"}
+    past_the_pair = arm != "a"  # every case but out_of_range_a breaks an arm past the declared pair
+    assert set(a.pairs["cluster"]) == ({"c60-i000", "c60-i001", "c60-i002"} if past_the_pair else {"c60-i000", "c60-i002"})
+    assert result_of(a).counts["eligible_sets"] == {"S1": 2}
     (row,) = a.excluded.to_dict("records")
     assert (row["cluster"], row["cause"], row["arm"]) == ("c60-i001", cause, arm), row
     if arm == "both":
         assert names_arm(row["detail"], "5"), row["detail"]
-    assert a.counts["by_cut"][CUT]["ineligible"] == 1 and a.counts["by_cut"][CUT]["reconciles"]
+    assert a.counts["by_cut"][CUT]["ineligible"] == (0 if past_the_pair else 1) and a.counts["by_cut"][CUT]["reconciles"]
 
 
 def test_pr63_an_excluded_set_leaves_every_sweep_pair_it_was_in(tmp_path: Path) -> None:
