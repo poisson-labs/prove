@@ -13,8 +13,17 @@ threshold`` on ``Decimal`` from the stored literal (PR23, PR24); the 2x2, the fl
 net swing are paired quantities (PR25-PR27); the pooled interval is the percentile cluster
 bootstrap over items the 45/44 note published, with its declared fallback and its design effect
 (PR28-PR34); McNemar is the arm-order check and nothing downstream reads it (PR35, PR36); no
-statistic crosses a cut (PR37); and the outcome fires only against a declared floor (PR38). The
-windows and the cost are phase 3.
+statistic crosses a cut (PR37); and the outcome fires only against a declared floor (PR38).
+
+Phase 3 is three more readers and the rendering. ``windows`` reads the timing that rides on
+``pairs`` off the trace envelope and never off ``wall_time`` (PR40-PR46); ``cost`` sums the
+provider's own recorded usage per phase, per sweep and per arm, prices it only against a declared
+price and gates the cap between sweeps (PR7, PR47-PR52); and ``replicates`` reads a sweep of
+``k = 2 + len(more)`` arms -- of which a pair is the case ``k = 2`` -- and answers, per cut and
+under both action rules, how often all ``j`` calls agreed and how often two sweeps' ``j``-call
+majorities agreed, each with the item-clustered interval of PR28 through the one
+``_cluster_bootstrap`` (PR57-PR76). The four rendered sections are folded into the strings
+``report.py`` renders, and ``report.py`` itself is not edited (PR53-PR55, PR77).
 
 The canonicaliser is the part where a silent bug would be invisible and total. A JSON round-trip
 through Python's ``float`` is the obvious implementation and it is wrong: it makes the digest
@@ -27,13 +36,16 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import html as _html
+import itertools
 import json
+import math
 import tomllib
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 import pandas as pd
@@ -65,14 +77,17 @@ class NoEligiblePairs(PairedError):
 
 
 _WORDS: tuple[str, ...] = ("asserted", "not_recorded")
-_CUT_KEYS = frozenset({"name", "threshold"})
-_SWEEP_KEYS = frozenset({"name", "a", "b"})
+_COMPARISONS: tuple[str, ...] = ("gt", "ge")
+_OTHER_COMPARISON: dict[str, str] = {"gt": "ge", "ge": "gt"}
+_CUT_KEYS = frozenset({"name", "threshold", "comparison"})
+_SWEEP_KEYS = frozenset({"name", "a", "b", "more"})
 
 
 @dataclass(frozen=True)
 class Cut:
     name: str
     threshold: Decimal  # from a decimal literal; never parsed through float
+    comparison: Literal["gt", "ge"]  # the action rule, declared with no default (retrofit R3)
 
 
 @dataclass(frozen=True)
@@ -80,6 +95,15 @@ class SweepPair:
     name: str  # the replication's label, e.g. "S1"
     a: str  # run id of arm A
     b: str  # run id of arm A'
+    more: tuple[str, ...] = ()  # arms 3..k in declared order; k = 2 + len(more) (PR57)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "more", tuple(self.more))
+
+    @property
+    def arms(self) -> tuple[str, ...]:
+        """``(a, b, *more)``: the declared order, and the only order a prefix is read in."""
+        return (self.a, self.b, *self.more)
 
 
 @dataclass(frozen=True)
@@ -118,6 +142,7 @@ class Declaration:
         object.__setattr__(self, "cuts", tuple(self.cuts))
         object.__setattr__(self, "sweeps", tuple(self.sweeps))
         object.__setattr__(self, "exemptions", tuple(self.exemptions))
+        _check_replicates(self.sweeps)
 
     @classmethod
     def from_toml(cls, path: str | Path) -> Declaration:
@@ -139,8 +164,15 @@ class Declaration:
             "value_key": self.value_key,
             "cluster_key": self.cluster_key,
             "stratum_key": self.stratum_key,
-            "cuts": [{"name": c.name, "threshold": _text(c.threshold)} for c in self.cuts],
-            "sweeps": [{"name": s.name, "a": s.a, "b": s.b} for s in self.sweeps],
+            "cuts": [
+                {"name": c.name, "threshold": _text(c.threshold), "comparison": c.comparison}
+                for c in self.cuts
+            ],
+            # ``more`` is in the digest (PR59): a widened set of calls cannot be passed off as
+            # the pre-registered one, and an absent ``more`` is the empty one (PR58).
+            "sweeps": [
+                {"name": s.name, "a": s.a, "b": s.b, "more": list(s.more)} for s in self.sweeps
+            ],
             "request_span": self.request_span,
             "model_key": self.model_key,
             "model_pin": self.model_pin,
@@ -164,6 +196,26 @@ def _text(value: Decimal | None) -> str | None:
     """A ``Decimal`` as the literal it was read from, so ``0.30`` and ``0.3`` stay two spellings
     and neither is a binary double."""
     return None if value is None else str(value)
+
+
+def _check_replicates(sweeps: Sequence[SweepPair]) -> None:
+    """PR57, in the constructor and so at load too. Every declared sweep carries the same ``k``,
+    because ``agree@k`` computed at two different ``k`` is two estimands under one name; and no
+    run id repeats inside one sweep's arms, because a call is not its own replicate."""
+    for sweep in sweeps:
+        repeated = sorted({run_id for run_id in sweep.arms if sweep.arms.count(run_id) > 1})
+        if repeated:
+            raise DeclarationError(
+                f"sweep {sweep.name!r} names {', '.join(repeated)} more than once among its "
+                "arms; a call is not its own replicate"
+            )
+    ks = {sweep.name: 2 + len(sweep.more) for sweep in sweeps}
+    if len(set(ks.values())) > 1:
+        described = ", ".join(f"{name} at k = {k}" for name, k in ks.items())
+        raise DeclarationError(
+            f"every declared sweep must carry the same replicate count; this declaration mixes "
+            f"{described}. agree@k at two different k is two estimands under one name."
+        )
 
 
 def _field_specs() -> dict[str, dataclasses.Field[Any]]:
@@ -248,7 +300,11 @@ def _read_cuts(path: Path, tables: Any) -> tuple[Cut, ...]:
             if key not in table:
                 raise DeclarationError(f"{path}: a cut is missing {key}: {table}")
         cuts.append(
-            Cut(name=_str(path, table, "name"), threshold=_decimal(path, table, "threshold"))
+            Cut(
+                name=_str(path, table, "name"),
+                threshold=_decimal(path, table, "threshold"),
+                comparison=_comparison(path, table),
+            )
         )
     names = [c.name for c in cuts]
     duplicated = sorted({n for n in names if names.count(n) > 1})
@@ -267,14 +323,19 @@ def _read_sweeps(path: Path, tables: Any) -> tuple[SweepPair, ...]:
         extra = sorted(set(table) - _SWEEP_KEYS)
         if extra:
             raise DeclarationError(f"{path}: unknown key(s) in a sweep: {', '.join(extra)}")
-        for key in sorted(_SWEEP_KEYS):
+        for key in sorted(_SWEEP_KEYS - {"more"}):
             if key not in table:
                 raise DeclarationError(f"{path}: a sweep is missing {key}: {table}")
+        # PR58: ``more`` is optional and an absent ``more`` is the empty one.
+        more = table.get("more", [])
+        if not isinstance(more, list) or any(not isinstance(v, str) for v in more):
+            raise DeclarationError(f"{path}: more must be a list of run ids, got {more!r}")
         sweeps.append(
             SweepPair(
                 name=_str(path, table, "name"),
                 a=_str(path, table, "a"),
                 b=_str(path, table, "b"),
+                more=tuple(more),
             )
         )
     names = [s.name for s in sweeps]
@@ -297,6 +358,18 @@ def _str(path: Path, table: Mapping[str, Any], key: str) -> str:
     if not isinstance(value, str):
         raise DeclarationError(f"{path}: {key} must be a string, got {value!r}")
     return value
+
+
+def _comparison(path: Path, table: Mapping[str, Any]) -> Literal["gt", "ge"]:
+    """Retrofit R3: ``comparison`` is ``gt`` or ``ge`` and nothing else, as ``headers`` and
+    ``retries`` take only their two words."""
+    value = table["comparison"]
+    if value not in _COMPARISONS:
+        raise DeclarationError(
+            f"{path}: a cut's comparison takes {' or '.join(_COMPARISONS)} and nothing else, "
+            f"got {value!r}"
+        )
+    return cast(Literal["gt", "ge"], value)
 
 
 def _word(path: Path, table: Mapping[str, Any], key: str) -> Any:
@@ -483,6 +556,7 @@ _CAUSES: tuple[str, ...] = (
     "value_out_of_range",
 )
 _ARMS: tuple[str, ...] = ("a", "b", "both")
+_NS = 1_000_000_000
 _HEADER_PREFIX = "http.request.header."
 _TARGET_KEYS: tuple[str, ...] = ("url.full", "http.request.method")
 _PAIRS_COLUMNS: tuple[str, ...] = (
@@ -526,45 +600,63 @@ class _Row:
 
 
 def assert_pairs(store: Store, declaration: Declaration) -> PairAssertion:
-    """Assert that each pair of stored rows was the same request twice.
+    """Assert that each replicate set of stored rows was the same request ``k`` times.
 
     The order of the refusals is the order of what they are about. A declaration that does not
     describe these runs -- strata that overlap, an exemption that names a body field -- is a
-    ``DeclarationError``. A fact about the *run* that cannot be asserted -- the two arms'
-    manifests disagreeing, a header identity with nothing recorded to assert it on, a retry
-    setting the manifest is silent about, one row's seed moving -- is a ``NotAssertable``, never
-    a per-pair exclusion. Everything left is per pair: eligible, or excluded with one named
-    cause, counted, and never repaired.
+    ``DeclarationError``. A fact about the *run* that cannot be asserted -- the arms' manifests
+    disagreeing, a header identity with nothing recorded to assert it on, a retry setting the
+    manifest is silent about, one row's seed moving -- is a ``NotAssertable``, never a per-pair
+    exclusion. Everything left is per set: eligible, or excluded with one named cause, counted,
+    and never repaired.
+
+    A sweep is ``k = 2 + len(more)`` arms, labelled ``a``, ``b``, ``"3"`` .. ``"k"`` in the
+    declared order and no other (PR57, PR64). A set is matched across all ``k`` arms on
+    ``(config_hash, replicate_index)`` (PR62) and is eligible only when every one of its rows is
+    (PR63): all ``k``, or none. The ``k`` values ride on ``pairs`` as ``value_a``, ``value_b``,
+    ``value_3`` .. and the request span's two timestamps as ``start_ns_<label>`` and
+    ``end_ns_<label>`` after them, ``None`` where the span has none; at ``k = 2`` the frame's
+    first nine columns are the ones phase 1 froze (PR60).
     """
+    arm_labels = _arm_labels(declaration)
     arms = {
-        (sweep.name, arm): _read_arm(store, run_id, sweep.name, arm, declaration)
+        (sweep.name, label): _read_arm(store, run_id, sweep.name, label, declaration)
         for sweep in declaration.sweeps
-        for arm, run_id in (("a", sweep.a), ("b", sweep.b))
+        for label, run_id in zip(arm_labels, sweep.arms, strict=True)
     }
     _check_strata(arms.values(), declaration)
     _check_exemptions(arms.values(), declaration)
     environment = _environment(store, declaration)
-    _check_seeds(arms, declaration)
+    _check_seeds(arms, declaration, arm_labels)
 
+    value_columns = _value_columns(arm_labels)
+    timing_columns = _timing_columns(arm_labels)
     pairs: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
     exercised: dict[str, int] = {name.lower(): 0 for name in declaration.exemptions}
     keys_by_cut: dict[Any, int] = {}
     for sweep in declaration.sweeps:
-        rows_a = arms[(sweep.name, "a")]
-        rows_b = arms[(sweep.name, "b")]
-        for key in sorted(set(rows_a) | set(rows_b)):
-            row = rows_a.get(key) or rows_b[key]
+        by_label = {label: arms[(sweep.name, label)] for label in arm_labels}
+        union: set[tuple[str, int]] = set()
+        for rows in by_label.values():
+            union |= set(rows)
+        for key in sorted(union):
+            holders = [label for label in arm_labels if key in by_label[label]]
+            lacking = [label for label in arm_labels if key not in by_label[label]]
+            row = by_label[holders[0]][key]
             keys_by_cut[row.cut] = keys_by_cut.get(row.cut, 0) + 1
-            if key not in rows_a or key not in rows_b:
-                held = "a" if key in rows_a else "b"
-                excluded.append(
-                    _excluded_row(
-                        row, "unmatched", held, f"the key is in arm {held} of {sweep.name} only"
-                    )
-                )
+            if lacking:
+                # PR10's reading of ``arm`` -- the first arm, in declared order, that holds the
+                # key -- and, past a pair, ``detail`` names every arm that lacks it (PR62).
+                holding = f"arm {holders[0]}" if len(holders) == 1 else "arms " + ", ".join(holders)
+                detail = f"the key is in {holding} of {sweep.name} only"
+                if len(arm_labels) > 2:
+                    detail += "; absent from " + ", ".join(f"arm {label}" for label in lacking)
+                excluded.append(_excluded_row(row, "unmatched", holders[0], detail))
                 continue
-            verdict = _judge(rows_a[key], rows_b[key], declaration)
+            verdict = _judge(
+                [by_label[label][key] for label in arm_labels], arm_labels, declaration
+            )
             if verdict.cause is not None:
                 excluded.append(
                     _excluded_row(row, verdict.cause, verdict.arm, verdict.detail)
@@ -581,22 +673,52 @@ def assert_pairs(store: Store, declaration: Declaration) -> PairAssertion:
                     "replicate_index": key[1],
                     "request_digest": verdict.digest,
                     "exemptions_exercised": verdict.exercised,
-                    "value_a": verdict.value_a,
-                    "value_b": verdict.value_b,
+                    **dict(zip(value_columns, verdict.values, strict=True)),
+                    **dict(zip(timing_columns, verdict.timing, strict=True)),
                 }
             )
 
     order = ("sweep", "cut", "cluster", "config_hash", "replicate_index")
     pairs.sort(key=lambda r: tuple(str(r[k]) for k in order))
     excluded.sort(key=lambda r: tuple(str(r[k]) for k in order))
-    counts = _counts(pairs, excluded, keys_by_cut, declaration, exercised)
+    counts = _counts(pairs, excluded, keys_by_cut, declaration, exercised, arm_labels)
+    frame = _frame(pairs, (*_PAIRS_COLUMNS, *value_columns[2:], *timing_columns))
+    for column in timing_columns:
+        # Whole timestamps or ``None``, never a float ``NaN`` standing in for an absent stamp.
+        frame[column] = pd.Series(
+            [_stamp(v) for v in frame[column]], index=frame.index, dtype=object
+        )
     return PairAssertion(
         declaration=declaration,
-        pairs=_frame(pairs, _PAIRS_COLUMNS),
+        pairs=frame,
         excluded=_frame(excluded, _EXCLUDED_COLUMNS),
         environment=environment,
         counts=counts,
     )
+
+
+def _arm_labels(declaration: Declaration) -> tuple[str, ...]:
+    """``a``, ``b``, then ``"3"`` .. ``"k"``: the arms in ``more`` are labelled by their 1-based
+    position in the declared order. Every sweep carries the same ``k`` (PR57)."""
+    k = 2 + len(declaration.sweeps[0].more) if declaration.sweeps else 2
+    return ("a", "b", *(str(i) for i in range(3, k + 1)))
+
+
+def _value_columns(arm_labels: Sequence[str]) -> tuple[str, ...]:
+    return tuple(f"value_{label}" for label in arm_labels)
+
+
+def _timing_columns(arm_labels: Sequence[str]) -> tuple[str, ...]:
+    return tuple(
+        f"{edge}_ns_{label}" for label in arm_labels for edge in ("start", "end")
+    )
+
+
+def _stamp(value: Any) -> int | None:
+    """An epoch-nanosecond stamp as a whole number, or ``None`` when the span carries none."""
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return None
+    return int(value)
 
 
 def _frame(rows: list[dict[str, Any]], columns: Sequence[str]) -> pd.DataFrame:
@@ -745,17 +867,21 @@ def _environment(store: Store, declaration: Declaration) -> dict[str, Any]:
     """
     sweeps: dict[str, dict[str, dict[str, Any]]] = {}
     gaps = ["harness_digest", "client_version"]
+    arm_labels = _arm_labels(declaration)
     for sweep in declaration.sweeps:
         per_arm = {
-            arm: _arm_identity(store, run_id)
-            for arm, run_id in (("a", sweep.a), ("b", sweep.b))
+            label: _arm_identity(store, run_id)
+            for label, run_id in zip(arm_labels, sweep.arms, strict=True)
         }
         differing = sorted(
-            key for key in per_arm["a"] if per_arm["a"][key] != per_arm["b"][key]
+            key
+            for key in per_arm["a"]
+            if any(per_arm[label][key] != per_arm["a"][key] for label in arm_labels[1:])
         )
         if differing:
+            whose = "the two arms'" if len(arm_labels) == 2 else "the arms'"
             raise NotAssertable(
-                f"sweep {sweep.name!r}: the two arms' manifests disagree on "
+                f"sweep {sweep.name!r}: {whose} manifests disagree on "
                 f"{', '.join(differing)}. That is a fact about the run, not about one pair."
             )
         sweeps[sweep.name] = per_arm
@@ -789,8 +915,9 @@ def _check_retries(store: Store, declaration: Declaration) -> None:
     """PR18's manifest half. ``retries = "asserted"`` requires both arms' manifests to record
     ``infra_retries == 0`` (PR56). A manifest that is silent is a refusal, the same rule as
     PR15: silence is never a pass."""
+    arm_labels = _arm_labels(declaration)
     for sweep in declaration.sweeps:
-        for arm, run_id in (("a", sweep.a), ("b", sweep.b)):
+        for arm, run_id in zip(arm_labels, sweep.arms, strict=True):
             environment = store.manifest(run_id).environment
             if "infra_retries" not in environment:
                 raise NotAssertable(
@@ -811,7 +938,7 @@ def _check_headers(store: Store, declaration: Declaration) -> None:
     identity cannot be asserted, and under ``headers = "asserted"`` that is a refusal."""
     for sweep in declaration.sweeps:
         recorded = False
-        for run_id in (sweep.a, sweep.b):
+        for run_id in sweep.arms:
             frame = store.read(run_id, meta=True, trace="full")
             for record in frame.to_dict("records"):
                 meta = record["meta"] if isinstance(record["meta"], Mapping) else {}
@@ -831,19 +958,29 @@ def _check_headers(store: Store, declaration: Declaration) -> None:
             )
 
 
-def _check_seeds(arms: Mapping[tuple[str, str], Any], declaration: Declaration) -> None:
+def _check_seeds(
+    arms: Mapping[tuple[str, str], Any], declaration: Declaration, arm_labels: Sequence[str]
+) -> None:
     """PR17's per-row half. A matched key whose seed moved between the arms is a run-level
-    refusal: the two rows are not the same draw, and that is not a property of one pair."""
+    refusal: the rows are not the same draw, and that is not a property of one pair."""
     for sweep in declaration.sweeps:
-        rows_a = arms[(sweep.name, "a")]
-        rows_b = arms[(sweep.name, "b")]
-        for key in sorted(set(rows_a) & set(rows_b)):
-            if rows_a[key].seed != rows_b[key].seed:
+        by_label = [arms[(sweep.name, label)] for label in arm_labels]
+        common = set(by_label[0])
+        for rows in by_label[1:]:
+            common &= set(rows)
+        for key in sorted(common):
+            seeds = [rows[key].seed for rows in by_label]
+            if len(set(seeds)) > 1:
                 raise NotAssertable(
-                    f"sweep {sweep.name!r}: item {rows_a[key].cluster!r} carries seed "
-                    f"{rows_a[key].seed} in arm a and {rows_b[key].seed} in arm b. The arms are "
-                    "not the same draw."
+                    f"sweep {sweep.name!r}: item {by_label[0][key].cluster!r} carries seed "
+                    f"{_per_arm(arm_labels, seeds)}. The arms are not the same draw."
                 )
+
+
+def _per_arm(arm_labels: Sequence[str], values: Sequence[Any]) -> str:
+    """``X in arm a and Y in arm b``; past a pair the arms are listed with commas."""
+    parts = [f"{value} in arm {label}" for label, value in zip(arm_labels, values, strict=True)]
+    return " and ".join(parts) if len(parts) <= 2 else ", ".join(parts)
 
 
 # ---------- one pair ----------
@@ -856,129 +993,170 @@ class _Verdict:
     detail: str = ""
     digest: str = ""
     exercised: tuple[str, ...] = ()
-    value_a: Decimal | None = None
-    value_b: Decimal | None = None
+    values: tuple[Decimal | None, ...] = ()
+    timing: tuple[int | None, ...] = ()  # start_ns, end_ns per arm, in arm order
 
 
-def _judge(a: _Row, b: _Row, declaration: Declaration) -> _Verdict:
-    """One matched key, in the order of what each check is about: the row, then the request,
-    then the body, then the target, then the measured value. Every test in the oracle builds one
-    failure per pair, so the precedence between two causes on one pair is not pinned; a pair
-    broken in both arms may take either of them."""
-    errored = _which(a.error is not None, b.error is not None)
+def _judge(rows: Sequence[_Row], arm_labels: Sequence[str], declaration: Declaration) -> _Verdict:
+    """One matched key across all ``k`` arms, in the order of what each check is about: the
+    row, then the request, then the body, then the target, then the measured value. A per-arm
+    fact names the failing arm's label; a comparison of the arms reads ``both`` and names the
+    differing arm in ``detail``. Every test in the oracle builds one failure per set, so the
+    precedence between two causes on one set is not pinned; a set broken in two arms may take
+    either of them."""
+    errored = _failing(arm_labels, [r.error is not None for r in rows])
     if errored is not None:
-        return _Verdict("errored", errored, _first_of(a.error, b.error) or "the row errored")
+        return _Verdict(
+            "errored", errored, _first_of(*(r.error for r in rows)) or "the row errored"
+        )
 
-    absent = _which(not a.spans, not b.spans)
+    absent = _failing(arm_labels, [not r.spans for r in rows])
     if absent is not None:
         return _Verdict(
             "no_request_span",
             absent,
             f"no span named {declaration.request_span!r}; the declaration names the request",
         )
-    repeated = _which(len(a.spans) > 1, len(b.spans) > 1)
+    repeated = _failing(arm_labels, [len(r.spans) > 1 for r in rows])
     if repeated is not None:
         return _Verdict(
             "retry_or_multicall",
             repeated,
-            f"{max(len(a.spans), len(b.spans))} spans named {declaration.request_span!r} in one "
+            f"{max(len(r.spans) for r in rows)} spans named {declaration.request_span!r} in one "
             "episode; a repeat is a third draw",
         )
 
-    body_a, body_b = _body(a.spans[0]), _body(b.spans[0])
-    malformed = _which(body_a is None, body_b is None)
+    bodies = [_body(r.spans[0]) for r in rows]
+    malformed = _failing(arm_labels, [body is None for body in bodies])
     if malformed is not None:
         return _Verdict("malformed_body", malformed, "the stored request is not a JSON object")
-    assert body_a is not None and body_b is not None  # noqa: S101 - narrowed by the check above
+    parsed = [body for body in bodies if body is not None]
+    assert len(parsed) == len(rows)  # noqa: S101 - narrowed by the check above
 
-    pin_a = _resolve(body_a, declaration.model_key)
-    pin_b = _resolve(body_b, declaration.model_key)
-    off_pin = _which(not _at_pin(pin_a, declaration), not _at_pin(pin_b, declaration))
+    pins = [_resolve(body, declaration.model_key) for body in parsed]
+    off_pin = _failing(arm_labels, [not _at_pin(pin, declaration) for pin in pins])
     if off_pin is not None:
-        # Asserted, never inherited: the ``both`` case is two arms that agree with each other
-        # and not with the pin, and it is still not a pair at the pinned model.
+        # Asserted, never inherited: the ``both`` case is arms that agree with each other and
+        # not with the pin, and it is still not a pair at the pinned model.
         return _Verdict(
             "model_pin",
             off_pin,
-            f"{declaration.model_key} is {_shown(pin_a)} in arm a and {_shown(pin_b)} in arm b; "
+            f"{declaration.model_key} is "
+            f"{_per_arm(arm_labels, [_shown(pin) for pin in pins])}; "
             f"the pin is {declaration.model_pin!r}",
         )
 
-    leaves_a = dict(_leaves(body_a))
-    leaves_b = dict(_leaves(body_b))
-    only = sorted(set(leaves_a) ^ set(leaves_b))
+    leaves = [dict(_leaves(body)) for body in parsed]
+    only: set[str] = set()
+    for other in leaves[1:]:
+        only |= set(leaves[0]) ^ set(other)
     if only:
         return _Verdict(
             "body_field_absent",
             "both",
-            f"present in one arm and absent in the other: {', '.join(only)}",
+            f"present in one arm and absent in the other: {', '.join(sorted(only))}"
+            + _differing_arms(arm_labels, [set(lv) != set(leaves[0]) for lv in leaves]),
         )
-    canonical_a, canonical_b = canonical_request(a.spans[0].input), canonical_request(
-        b.spans[0].input
-    )
-    if canonical_a != canonical_b:
+    canonicals = [canonical_request(r.spans[0].input) for r in rows]
+    if any(c != canonicals[0] for c in canonicals[1:]):
         moved = sorted(
-            path for path, value in leaves_a.items() if _emit(value) != _emit(leaves_b[path])
+            path
+            for path, value in leaves[0].items()
+            if any(_emit(value) != _emit(other[path]) for other in leaves[1:])
         )
-        return _Verdict("body", "both", f"the arms differ at: {', '.join(moved)}")
+        return _Verdict(
+            "body",
+            "both",
+            f"the arms differ at: {', '.join(moved)}"
+            + _differing_arms(arm_labels, [c != canonicals[0] for c in canonicals]),
+        )
 
-    target_a, target_b = _target_of(a.spans[0]), _target_of(b.spans[0])
-    if target_a != target_b:
-        moved = sorted(key for key in _TARGET_KEYS if target_a[key] != target_b[key])
-        return _Verdict("target", "both", f"the arms differ at: {', '.join(moved)}")
+    targets = [_target_of(r.spans[0]) for r in rows]
+    if any(t != targets[0] for t in targets[1:]):
+        moved = sorted(
+            key for key in _TARGET_KEYS if any(t[key] != targets[0][key] for t in targets[1:])
+        )
+        return _Verdict(
+            "target",
+            "both",
+            f"the arms differ at: {', '.join(moved)}"
+            + _differing_arms(arm_labels, [t != targets[0] for t in targets]),
+        )
 
-    headers_a, headers_b = _headers_of(a.spans[0]), _headers_of(b.spans[0])
+    headers = [_headers_of(r.spans[0]) for r in rows]
     exempt = {name.lower() for name in declaration.exemptions}
+    names: set[str] = set()
+    for recorded in headers:
+        names |= set(recorded)
     differing = sorted(
-        name
-        for name in set(headers_a) | set(headers_b)
-        if headers_a.get(name) != headers_b.get(name)
+        name for name in names if len({h.get(name) for h in headers}) > 1
     )
     unexempted = [name for name in differing if name not in exempt]
     if unexempted:
-        return _Verdict("header", "both", f"the arms differ at: {', '.join(unexempted)}")
+        return _Verdict(
+            "header",
+            "both",
+            f"the arms differ at: {', '.join(unexempted)}"
+            + _differing_arms(
+                arm_labels,
+                [any(h.get(n) != headers[0].get(n) for n in unexempted) for h in headers],
+            ),
+        )
 
-    value_a, missing_a = _value_of(a, declaration)
-    value_b, missing_b = _value_of(b, declaration)
-    absent_value = _which(missing_a, missing_b)
+    read = [_value_of(r, declaration) for r in rows]
+    values = [value for value, _ in read]
+    absent_value = _failing(arm_labels, [missing for _, missing in read])
     if absent_value is not None:
         return _Verdict(
             "value_missing",
             absent_value,
             f"the episode records no {declaration.value_key}",
         )
-    out_of_range = _which(not _in_unit(value_a), not _in_unit(value_b))
+    out_of_range = _failing(arm_labels, [not _in_unit(value) for value in values])
     if out_of_range is not None:
         return _Verdict(
             "value_out_of_range",
             out_of_range,
-            f"{declaration.value_key} is {_shown(value_a)} in arm a and {_shown(value_b)} in "
-            "arm b; the interval is [0, 1]",
+            f"{declaration.value_key} is "
+            f"{_per_arm(arm_labels, [_shown(value) for value in values])}; "
+            "the interval is [0, 1]",
         )
 
     exercised = tuple(
         name.lower() for name in declaration.exemptions if name.lower() in differing
     )
     digest = request_digest(
-        a.spans[0].input,
-        target=target_a,
-        headers=headers_a,
+        rows[0].spans[0].input,
+        target=targets[0],
+        headers=headers[0],
         exemptions=declaration.exemptions,
     )
+    timing = tuple(
+        itertools.chain.from_iterable(
+            (_stamp(r.spans[0].start_ns), _stamp(r.spans[0].end_ns)) for r in rows
+        )
+    )
     return _Verdict(
-        digest=digest, exercised=exercised, value_a=value_a, value_b=value_b
+        digest=digest, exercised=exercised, values=tuple(values), timing=timing
     )
 
 
-def _which(in_a: bool, in_b: bool) -> str | None:
-    """Which arm the failure was found in. ``None`` when neither arm has it."""
-    if in_a and in_b:
-        return "both"
-    if in_a:
-        return "a"
-    if in_b:
-        return "b"
-    return None
+def _failing(arm_labels: Sequence[str], flags: Sequence[bool]) -> str | None:
+    """Which arm the failure was found in: its label alone, ``both`` when more than one arm
+    has it, ``None`` when no arm has it. At ``k = 2`` this is phase 1's reading exactly."""
+    failing = [label for label, flag in zip(arm_labels, flags, strict=True) if flag]
+    if not failing:
+        return None
+    return failing[0] if len(failing) == 1 else "both"
+
+
+def _differing_arms(arm_labels: Sequence[str], flags: Sequence[bool]) -> str:
+    """Past a pair, a comparison cause names the arm that differs from arm ``a`` (PR62's
+    reading for the causes that read ``both``). At ``k = 2`` nothing is added."""
+    if len(arm_labels) == 2:
+        return ""
+    named = [label for label, flag in zip(arm_labels, flags, strict=True) if flag]
+    return " (" + ", ".join(f"arm {label}" for label in named) + ")" if named else ""
 
 
 def _first_of(*values: str | None) -> str | None:
@@ -1040,6 +1218,7 @@ def _counts(
     keys_by_cut: Mapping[Any, int],
     declaration: Declaration,
     exercised: Mapping[str, int],
+    arm_labels: Sequence[str],
 ) -> dict[str, Any]:
     """PR20, read to the letter. ``ineligible`` counts **matched** pairs that failed and
     ``unmatched`` is its own count, though PR10's prose calls an unmatched key ineligible; both
@@ -1047,8 +1226,11 @@ def _counts(
     sweep's union taken on its own, because every sweep replays the same item set."""
     cuts: list[Any] = [c.name for c in declaration.cuts]
     cuts += [cut for cut in keys_by_cut if cut not in cuts]
-    by_cut = {cut: _block(pairs, excluded, keys_by_cut.get(cut, 0), cut) for cut in cuts}
-    total = _block(pairs, excluded, sum(keys_by_cut.values()), None)
+    arms = (*arm_labels, "both")
+    by_cut = {
+        cut: _block(pairs, excluded, keys_by_cut.get(cut, 0), cut, arms) for cut in cuts
+    }
+    total = _block(pairs, excluded, sum(keys_by_cut.values()), None, arms)
     return {
         "total": total,
         "by_cut": by_cut,
@@ -1061,12 +1243,13 @@ def _block(
     excluded: Sequence[Mapping[str, Any]],
     keys: int,
     cut: Any,
+    arms: Sequence[str] = _ARMS,
 ) -> dict[str, Any]:
     kept = [r for r in pairs if cut is None or r["cut"] == cut]
     dropped = [r for r in excluded if cut is None or r["cut"] == cut]
     unmatched = [r for r in dropped if r["cause"] == "unmatched"]
     by_cause = {cause: 0 for cause in _CAUSES}
-    by_arm = {arm: 0 for arm in _ARMS}
+    by_arm = {arm: 0 for arm in arms}
     for row in dropped:
         by_cause[row["cause"]] = by_cause.get(row["cause"], 0) + 1
         by_arm[row["arm"]] = by_arm.get(row["arm"], 0) + 1
@@ -1131,6 +1314,7 @@ class PairedResult:
             "cuts": {
                 c.name: {
                     "threshold": str(c.threshold),
+                    "comparison": c.pooled["comparison"],
                     "per_sweep": {
                         str(s["sweep"]): {key: s[key] for key in _CONTINGENCY_KEYS}
                         for s in c.per_sweep
@@ -1151,6 +1335,7 @@ class PairedResult:
             "cuts": {
                 c.name: {
                     "threshold": str(c.threshold),
+                    "comparison": c.pooled["comparison"],
                     "n": dict(c.pooled["n"]),
                     "flip_rate": dict(c.pooled["flip_rate"]),
                     "net_swing": dict(c.pooled["net_swing"]),
@@ -1200,17 +1385,37 @@ def _analyse_cut(assertion: PairAssertion, cut: Cut) -> CutResult:
     )
 
 
+def _act(value: Decimal, threshold: Decimal, comparison: str) -> int:
+    """The action under the cut's declared rule, on ``Decimal`` from the stored literal (PR23,
+    retrofit R3): ``value >= threshold`` under ``ge`` and ``value > threshold`` under ``gt``."""
+    return int(value >= threshold) if comparison == "ge" else int(value > threshold)
+
+
 def _actions(pairs: pd.DataFrame, cut: Cut) -> pd.DataFrame:
-    """The cut's eligible pairs with the action taken in each arm: ``value >= threshold`` on the
-    ``Decimal`` the assertion parsed from the stored literal (PR23). No rounding, no rescaling,
-    no ``float``: a rounding step would move items across the cut and the module would be
-    measuring the rounding. A value equal to the threshold is action 1 and a tie (PR24).
+    """The cut's eligible pairs with the action taken in each of the declared pair's two arms,
+    on the ``Decimal`` the assertion parsed from the stored literal (PR23) under the cut's
+    declared comparison. No rounding, no rescaling, no ``float``: a rounding step would move
+    items across the cut and the module would be measuring the rounding. A value equal to the
+    threshold is a tie under either rule, counted per arm (PR24); it acts under ``ge`` and not
+    under ``gt``. Arms ``3..k`` are never read here (PR61).
 
     Rows are put in one canonical order first, so every sum below is the same sum whatever
     order the frame arrived in (PR29).
     """
     columns = ["sweep", "cluster", "config_hash", "replicate_index", "value_a", "value_b"]
-    rows = pairs.loc[pairs["cut"] == cut.name, columns].copy()
+    rows = _canonical_rows(pairs, cut, columns)
+    rows["act_a"] = [_act(v, cut.threshold, cut.comparison) for v in rows["value_a"]]
+    rows["act_b"] = [_act(v, cut.threshold, cut.comparison) for v in rows["value_b"]]
+    rows["tie_a"] = [int(v == cut.threshold) for v in rows["value_a"]]
+    rows["tie_b"] = [int(v == cut.threshold) for v in rows["value_b"]]
+    rows["flip"] = (rows["act_a"] != rows["act_b"]).astype(int)
+    rows["d"] = rows["act_b"] - rows["act_a"]
+    return rows
+
+
+def _canonical_rows(pairs: pd.DataFrame, cut: Cut, columns: Sequence[str]) -> pd.DataFrame:
+    """The cut's rows of ``pairs``, the named columns, in the one canonical order (PR29)."""
+    rows = pairs.loc[pairs["cut"] == cut.name, list(columns)].copy()
     rows["_order"] = [
         (str(s), str(c), str(h), int(r))
         for s, c, h, r in zip(
@@ -1219,14 +1424,7 @@ def _actions(pairs: pd.DataFrame, cut: Cut) -> pd.DataFrame:
         )
     ]
     rows = rows.sort_values("_order", kind="mergesort").drop(columns="_order")
-    rows = rows.reset_index(drop=True)
-    rows["act_a"] = [int(v >= cut.threshold) for v in rows["value_a"]]
-    rows["act_b"] = [int(v >= cut.threshold) for v in rows["value_b"]]
-    rows["tie_a"] = [int(v == cut.threshold) for v in rows["value_a"]]
-    rows["tie_b"] = [int(v == cut.threshold) for v in rows["value_b"]]
-    rows["flip"] = (rows["act_a"] != rows["act_b"]).astype(int)
-    rows["d"] = rows["act_b"] - rows["act_a"]
-    return rows
+    return rows.reset_index(drop=True)
 
 
 def _sweep_block(rows: pd.DataFrame, sweep: str) -> dict[str, Any]:
@@ -1330,6 +1528,9 @@ def _pooled(
             "direction": _DIRECTION,
         }
     return {
+        # ``CutResult``'s seven fields are frozen, so the cut's declared comparison rides here
+        # and the two artifact writers print it beside the threshold (ruled 2026-09-22).
+        "comparison": cut.comparison,
         "n": {"items": g_count, "sweeps": len(declaration.sweeps)},
         "flip_rate": flip_rate,
         "net_swing": net_swing,
@@ -1417,3 +1618,987 @@ def _outcome(flip_rate: Mapping[str, Any], floor: Decimal | None) -> Literal["A"
     if Decimal(hi) < floor:
         return "A"
     return "C"
+
+
+# ---------- replications and windows ----------
+
+
+_WINDOW_REPORT_KEYS: tuple[str, ...] = ("per_sweep", "replay_gap")
+
+
+@dataclass(frozen=True)
+class WindowReport:
+    per_sweep: tuple[Mapping[str, Any], ...]  # realized span, claim held/withdrawn, latency
+    replay_gap: Mapping[str, Mapping[str, float] | None]  # per cut: min, median, max
+
+    def to_json(self) -> str:
+        payload = {
+            "per_sweep": [dict(entry) for entry in self.per_sweep],
+            "replay_gap": {
+                name: None if g is None else dict(g) for name, g in self.replay_gap.items()
+            },
+        }
+        return json.dumps(_jsonable(payload), indent=2, ensure_ascii=False)
+
+
+def windows(assertion: PairAssertion) -> WindowReport:
+    """Each sweep is its own window (PR40), read off the timestamps that ride on ``pairs`` --
+    the request span's ``start_ns`` and ``end_ns`` from the trace envelope, never ``wall_time``
+    (PR41) -- and off nothing else, so an excluded set has no window and no pair is dropped on
+    a timing criterion (PR45). A sweep with no usable stamp is ``unavailable`` with the reason
+    named, and never a zero (PR42). With a declared window the claim is ``held`` or
+    ``withdrawn`` and nothing else moves (PR43). The replay gap is per cut (PR44). This is a
+    timing artifact: no rate, no count of flips, no interval (PR46).
+    """
+    declaration = assertion.declaration
+    arm_labels = _arm_labels(declaration)
+    pairs = assertion.pairs
+    per_sweep: list[dict[str, Any]] = []
+    for sweep in declaration.sweeps:
+        rows = pairs[pairs["sweep"] == sweep.name] if len(pairs) else pairs
+        arms: dict[str, dict[str, int | None]] = {}
+        latencies: list[float] = []
+        for label in arm_labels:
+            starts = [s for s in _column(rows, f"start_ns_{label}") if s is not None]
+            ends = [e for e in _column(rows, f"end_ns_{label}") if e is not None]
+            arms[label] = {
+                "first_start_ns": min(starts) if starts else None,
+                "last_end_ns": max(ends) if ends else None,
+            }
+            starts_all = _column(rows, f"start_ns_{label}")
+            ends_all = _column(rows, f"end_ns_{label}")
+            latencies += [
+                (end - start) / _NS
+                for start, end in zip(starts_all, ends_all, strict=True)
+                if start is not None and end is not None
+            ]
+        first = arms["a"]["first_start_ns"]
+        last = arms[arm_labels[-1]]["last_end_ns"]
+        reason: str | None = None
+        if len(rows) == 0:
+            reason = "no eligible replicate set in this sweep"
+        elif first is None:
+            reason = "arm a records no request start_ns on any eligible request span"
+        elif last is None:
+            reason = (
+                f"arm {arm_labels[-1]} records no response end_ns on any eligible request span"
+            )
+        span: float | None = None
+        if reason is None and first is not None and last is not None:
+            span = (last - first) / _NS
+        declared = declaration.declared_window_s
+        claim: str | None = None
+        if span is not None and declared is not None:
+            claim = "held" if span <= declared else "withdrawn"
+        per_sweep.append(
+            {
+                "sweep": sweep.name,
+                "timing": "available" if reason is None else "unavailable",
+                "reason": reason,
+                "arms": arms,
+                "realized_span_s": span,
+                "declared_window_s": declared,
+                "claim": claim,
+                "latency_s": (
+                    {"median": float(np.median(latencies)), "n": len(latencies)}
+                    if latencies
+                    else None
+                ),
+            }
+        )
+    replay_gap: dict[str, dict[str, float] | None] = {}
+    for cut in declaration.cuts:
+        rows = pairs[pairs["cut"] == cut.name] if len(pairs) else pairs
+        gaps = [
+            (b - a) / _NS
+            for a, b in zip(_column(rows, "start_ns_a"), _column(rows, "start_ns_b"), strict=True)
+            if a is not None and b is not None
+        ]
+        replay_gap[cut.name] = (
+            {"min": float(min(gaps)), "median": float(np.median(gaps)), "max": float(max(gaps))}
+            if gaps
+            else None
+        )
+    return WindowReport(per_sweep=tuple(per_sweep), replay_gap=replay_gap)
+
+
+def _column(rows: pd.DataFrame, name: str) -> list[int | None]:
+    """A timing column as whole numbers or ``None``; a frame without it reads as all absent."""
+    if name not in rows.columns:
+        return [None] * len(rows)
+    return [_stamp(v) for v in rows[name]]
+
+
+# ---------- cost ----------
+
+
+_COST_REPORT_KEYS: tuple[str, ...] = (
+    "phases",
+    "input_tokens",
+    "output_tokens",
+    "recorded_spans",
+    "unrecorded_spans",
+    "price_per_input_token",
+    "dollars",
+    "token_cap",
+    "cap_reached",
+)
+
+
+@dataclass(frozen=True)
+class CostReport:
+    phases: tuple[Mapping[str, Any], ...]  # per phase, per sweep, per arm
+    input_tokens: int
+    output_tokens: int
+    recorded_spans: int  # request spans with recorded usage
+    unrecorded_spans: int
+    price_per_input_token: Decimal | None
+    dollars: Decimal | None
+    token_cap: int | None
+    cap_reached: bool
+
+    def to_json(self) -> str:
+        payload = {
+            "phases": [dict(entry) for entry in self.phases],
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "recorded_spans": self.recorded_spans,
+            "unrecorded_spans": self.unrecorded_spans,
+            "price_per_input_token": _literal(self.price_per_input_token),
+            "dollars": _literal(self.dollars),
+            "token_cap": self.token_cap,
+            "cap_reached": self.cap_reached,
+        }
+        return json.dumps(_jsonable(payload), indent=2, ensure_ascii=False)
+
+
+def _literal(value: Decimal | None) -> str | None:
+    """A price or a dollar figure as its literal, never through ``str``, which turns
+    ``0.000000042`` into ``4.2E-8`` and cannot be redone by hand."""
+    return None if value is None else format(value, "f")
+
+
+def cost(
+    store: Store,
+    declaration: Declaration,
+    *,
+    phases: Mapping[str, Sequence[str]],
+) -> CostReport:
+    """The provider's own recorded usage, summed per phase, per sweep and per arm (PR47): every
+    span named ``request_span`` in every stored episode of every run id in ``phases`` -- retries
+    included, because they were paid for -- with a span carrying ``tokens["in"]`` counted as
+    recorded and any other span as unrecorded, never as zero (PR50). Output tokens are totalled
+    with or without a price (PR48); dollars are input tokens times the declared price, the price
+    echoed beside them (PR49), and absent without one (PR7). The cap is cumulative input tokens
+    at or above ``token_cap`` (PR51). A run id in two phases is refused (PR52). The module holds
+    no tokeniser and no rate card.
+    """
+    where = {
+        run_id: (sweep.name, label)
+        for sweep in declaration.sweeps
+        for label, run_id in zip(_arm_labels(declaration), sweep.arms, strict=True)
+    }
+    entries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for phase, run_ids in phases.items():
+        for run_id in run_ids:
+            if run_id in seen:
+                raise PairedError(
+                    f"run {run_id!r} is named in more than one phase; every run is in exactly "
+                    "one, or the sum over phases is not the study total"
+                )
+            seen.add(run_id)
+            sweep_name, arm = where.get(run_id, (None, None))
+            tokens_in = tokens_out = recorded = unrecorded = 0
+            frame = store.read(run_id, meta=True, trace="full")
+            for record in frame.to_dict("records"):
+                meta = record["meta"] if isinstance(record["meta"], Mapping) else {}
+                for span in _request_spans(meta, declaration.request_span):
+                    usage = span.tokens if isinstance(span.tokens, Mapping) else {}
+                    if usage.get("in") is not None:
+                        recorded += 1
+                        tokens_in += int(usage["in"])
+                    else:
+                        unrecorded += 1
+                    if usage.get("out") is not None:
+                        tokens_out += int(usage["out"])
+            entries.append(
+                {
+                    "phase": phase,
+                    "run_id": run_id,
+                    "sweep": sweep_name,
+                    "arm": arm,
+                    "input_tokens": tokens_in,
+                    "output_tokens": tokens_out,
+                    "recorded_spans": recorded,
+                    "unrecorded_spans": unrecorded,
+                }
+            )
+    input_tokens = sum(int(e["input_tokens"]) for e in entries)
+    price = declaration.price_per_input_token
+    return CostReport(
+        phases=tuple(entries),
+        input_tokens=input_tokens,
+        output_tokens=sum(int(e["output_tokens"]) for e in entries),
+        recorded_spans=sum(int(e["recorded_spans"]) for e in entries),
+        unrecorded_spans=sum(int(e["unrecorded_spans"]) for e in entries),
+        price_per_input_token=price,
+        dollars=None if price is None else Decimal(input_tokens) * price,
+        token_cap=declaration.token_cap,
+        cap_reached=declaration.token_cap is not None and input_tokens >= declaration.token_cap,
+    )
+
+
+# ---------- k replicates: agree@j and MS@j ----------
+
+
+_WITHIN_SWEEP = "within_sweep"
+_ACROSS_SWEEPS = "across_sweeps"
+_PER_TEN_THOUSAND = 10000
+
+
+@dataclass(frozen=True)
+class ReplicateResult:
+    name: str  # the cut
+    threshold: Decimal
+    k: int
+    agree: Mapping[str, Mapping[str, Any]]  # rule -> {"j2": {...}, ..., "steps": {...}}
+    majority: Mapping[str, Mapping[str, Any]]  # rule -> {"j1": {...}, "j3": {...}, ...} odd j
+    counts: Mapping[str, Any]  # eligible sets, sweep pairs, per-arm exclusions, ties
+    cost_framing: Mapping[str, Any]  # rule -> per odd j: dollars, latency, per-10,000 with bounds
+
+    def to_json(self) -> str:
+        payload = {
+            "name": self.name,
+            "threshold": str(self.threshold),
+            "comparison": self.counts["rules"]["primary"],
+            "k": self.k,
+            "agree": self.agree,
+            "majority": self.majority,
+            "counts": self.counts,
+            "cost_framing": self.cost_framing,
+        }
+        return json.dumps(_jsonable(payload), indent=2, ensure_ascii=False)
+
+
+def replicates(
+    assertion: PairAssertion,
+    *,
+    cost: CostReport | None = None,
+    windows: WindowReport | None = None,
+) -> tuple[ReplicateResult, ...]:
+    """A second reader of the same ``PairAssertion``, beside ``analyse`` and ``windows``: per
+    cut, and under the cut's declared comparison and the other one (PR70), ``agree@j`` for
+    ``j = 2..k`` -- the rate at which the first ``j`` calls of a replicate set all took one action
+    (PR65, PR66) -- and ``MS@j`` for odd ``j`` -- the rate at which two sweeps' ``j``-call
+    majorities for one item agreed (PR67-PR69). Every interval is PR28's item-clustered bootstrap
+    through ``_cluster_bootstrap`` with a fresh generator per quantity (PR71), with the fallback
+    of PR31 pointed at the top (PR72) and the design effect on that metric's own footing (PR73).
+    A step between two prefixes is paired on the same draws (PR75). The cost framing is emitted
+    whole from ``cost`` and ``windows`` where they were passed (PR76). Returns ``()`` when every
+    sweep is a pair, so PR60 holds by construction.
+    """
+    declaration = assertion.declaration
+    arm_labels = _arm_labels(declaration)
+    k = len(arm_labels)
+    if k == 2:
+        return ()
+    return tuple(
+        _replicate_cut(assertion, cut, arm_labels, cost, windows) for cut in declaration.cuts
+    )
+
+
+def _replicate_cut(
+    assertion: PairAssertion,
+    cut: Cut,
+    arm_labels: Sequence[str],
+    cost: CostReport | None,
+    windows: WindowReport | None,
+) -> ReplicateResult:
+    declaration = assertion.declaration
+    k = len(arm_labels)
+    seed, b = declaration.bootstrap_seed, declaration.bootstrap_b
+    stops = k if k % 2 else k - 1
+    value_columns = _value_columns(arm_labels)
+    rows = _canonical_rows(
+        assertion.pairs, cut, ["sweep", "cluster", "config_hash", "replicate_index", *value_columns]
+    )
+    n_sets = int(len(rows))
+    values = [list(rows[column]) for column in value_columns]
+    clusters = list(rows["cluster"])
+    sweeps = [str(s) for s in rows["sweep"]]
+    set_keys = list(
+        zip(rows["cluster"], rows["config_hash"], rows["replicate_index"], strict=True)
+    )
+    sweep_names = [sweep.name for sweep in declaration.sweeps]
+
+    rules = {"primary": cut.comparison, "sensitivity": _OTHER_COMPARISON[cut.comparison]}
+    agree: dict[str, dict[str, Any]] = {}
+    majority: dict[str, dict[str, Any]] = {}
+    framing: dict[str, dict[str, Any]] = {}
+    for rule, comparison in rules.items():
+        acts = np.array(
+            [[_act(v, cut.threshold, comparison) for v in arm] for arm in values], dtype=np.int64
+        ).T.reshape(n_sets, k)
+        rule_agree: dict[str, Any] = {}
+        by_prefix: dict[int, NDArray[np.int64]] = {}
+        for j in range(2, k + 1):
+            # The prefix is arms 1..j of the declared order, never a per-set subset (PR64).
+            prefix = acts[:, :j]
+            indicator = (prefix.min(axis=1) == prefix.max(axis=1)).astype(np.int64)
+            by_prefix[j] = indicator
+            rule_agree[f"j{j}"] = _metric_block(clusters, indicator, seed, b, _WITHIN_SWEEP)
+        steps: dict[str, Any] = {}
+        for j in range(2, k):
+            both = (
+                rule_agree[f"j{j}"]["basis"] == "cluster_bootstrap"
+                and rule_agree[f"j{j + 1}"]["basis"] == "cluster_bootstrap"
+            )
+            steps[f"j{j}_to_j{j + 1}"] = _step_block(
+                clusters, by_prefix[j + 1] - by_prefix[j], seed, b, both
+            )
+        rule_agree["steps"] = steps
+        agree[rule] = rule_agree
+
+        rule_majority: dict[str, Any] = {}
+        for j in range(1, stops + 1, 2):
+            maj = (2 * acts[:, :j].sum(axis=1) > j).astype(np.int64)
+            obs_clusters, obs = _majority_observations(set_keys, sweeps, maj, sweep_names)
+            rule_majority[f"j{j}"] = _metric_block(obs_clusters, obs, seed, b, _ACROSS_SWEEPS)
+        majority[rule] = rule_majority
+
+        rule_framing: dict[str, Any] = {}
+        for j in range(1, stops + 1, 2):
+            rule_framing[f"j{j}"] = _cost_framing(
+                j, rule_majority[f"j{j}"], declaration, assertion.environment, cost, windows
+            )
+        framing[rule] = rule_framing
+
+    counts = _replicate_counts(
+        assertion, cut, arm_labels, rows, values, set_keys, sweeps, sweep_names, rules, stops
+    )
+    return ReplicateResult(
+        name=cut.name,
+        threshold=cut.threshold,
+        k=k,
+        agree=agree,
+        majority=majority,
+        counts=counts,
+        cost_framing=framing,
+    )
+
+
+def _majority_observations(
+    set_keys: Sequence[tuple[Any, ...]],
+    sweeps: Sequence[str],
+    maj: NDArray[np.int64],
+    sweep_names: Sequence[str],
+) -> tuple[list[Any], list[int]]:
+    """One observation per replicate set and per **unordered** pair of distinct sweeps in which
+    both of that item's sets are eligible (PR67): ``1`` when the two majorities are equal. The
+    cluster is the item; with one sweep there is no observation at all."""
+    by_key: dict[tuple[Any, ...], dict[str, int]] = {}
+    for key, sweep, m in zip(set_keys, sweeps, maj, strict=True):
+        by_key.setdefault(key, {})[sweep] = int(m)
+    obs_clusters: list[Any] = []
+    obs: list[int] = []
+    for key, majorities in by_key.items():
+        for first, second in itertools.combinations(sweep_names, 2):
+            if first in majorities and second in majorities:
+                obs_clusters.append(key[0])
+                obs.append(int(majorities[first] == majorities[second]))
+    return obs_clusters, obs
+
+
+def _metric_block(
+    clusters: Sequence[Any], indicators: Sequence[int], seed: int, b: int, observation: str
+) -> dict[str, Any]:
+    """One k-metric at one prefix under one rule: the mean of the indicator, its interval and
+    its design effect. The interval is PR28's estimator through the one ``_cluster_bootstrap``,
+    drawn afresh from ``bootstrap_seed`` (PR71); when fewer than five item clusters carry a
+    disagreement it is the one-sided exact 95% lower bound on the item-level agreement
+    probability, with the upper bound one by observation (PR72). ``m_bar`` is observations per
+    item for this metric (PR73)."""
+    frame = pd.DataFrame({"cluster": list(clusters), "flip": list(indicators)})
+    if len(frame) == 0:
+        return {
+            "estimate": None,
+            "lo": None,
+            "hi": None,
+            "basis": "not_estimated",
+            "observation": observation,
+            "design_effect": _design_effect(frame),
+        }
+    groups = _clusters(frame, "flip")
+    g_count = len(groups)
+    estimate = float(frame["flip"].sum() / len(frame))
+    k_dis = int(sum(1 for grp in groups if (grp == 0).any()))
+    block: dict[str, Any]
+    if k_dis < _FALLBACK_BELOW:
+        # A percentile bootstrap degenerating to [1, 1] would read as a certainty and is not
+        # one: PR31's reasoning, pointed the other way. At zero disagreeing items the bound is
+        # 0.05 ** (1 / G).
+        block = {
+            "estimate": estimate,
+            "lo": float(_beta.ppf(0.05, g_count - k_dis, k_dis + 1)) if g_count > k_dis else 0.0,
+            "hi": 1.0,
+            "basis": "exact_lower_one_sided",
+            "upper_bound_by_observation": True,
+        }
+    else:
+        lo, hi = _cluster_bootstrap(groups, seed, b)
+        block = {"estimate": estimate, "lo": lo, "hi": hi, "basis": "cluster_bootstrap"}
+    block["observation"] = observation
+    block["design_effect"] = _design_effect(frame)
+    return block
+
+
+def _step_block(
+    clusters: Sequence[Any], d: NDArray[np.int64], seed: int, b: int, both: bool
+) -> dict[str, Any]:
+    """PR75: the difference between two prefixes as one paired quantity, bootstrapped over items
+    on its own per-set differences -- the same resample indices as every other draw from this
+    seed -- and never two intervals compared by overlap. Not estimated when either endpoint is
+    under the fallback."""
+    estimate = float(np.mean(d)) if len(d) else None
+    if not both:
+        return {"estimate": estimate, "lo": None, "hi": None, "basis": "not_estimated"}
+    groups = _clusters(pd.DataFrame({"cluster": list(clusters), "d": list(d)}), "d")
+    lo, hi = _cluster_bootstrap(groups, seed, b)
+    return {"estimate": estimate, "lo": lo, "hi": hi, "basis": "cluster_bootstrap"}
+
+
+def _cost_framing(
+    j: int,
+    ms: Mapping[str, Any],
+    declaration: Declaration,
+    environment: Mapping[str, Any],
+    cost: CostReport | None,
+    windows: WindowReport | None,
+) -> dict[str, Any]:
+    """PR76, per odd ``j``. The per-10,000 figure carries both bounds from the same clustered
+    interval and the declared conditioning in one object, and is not emitted without a
+    conditioning; the dollar row needs a priced cost report with recorded spans; the latency row
+    needs the windows. What is absent is absent, never zero (PR7)."""
+    block: dict[str, Any] = {}
+    if declaration.conditioning is not None and ms["estimate"] is not None:
+        block["per_10000"] = {
+            "n": round(_PER_TEN_THOUSAND * (1 - ms["estimate"])),
+            "n_lo": round(_PER_TEN_THOUSAND * (1 - ms["hi"])),
+            "n_hi": round(_PER_TEN_THOUSAND * (1 - ms["lo"])),
+            "conditioning": declaration.conditioning,
+        }
+    if cost is not None and cost.price_per_input_token is not None and cost.recorded_spans:
+        mean_tokens = cost.input_tokens / cost.recorded_spans
+        block["dollars_per_decision"] = {
+            "estimate": float(j * mean_tokens * float(cost.price_per_input_token)),
+            "mean_input_tokens": float(mean_tokens),
+            "price_per_input_token": format(cost.price_per_input_token, "f"),
+        }
+    if windows is not None:
+        medians = [
+            float(entry["latency_s"]["median"])
+            for entry in windows.per_sweep
+            if isinstance(entry.get("latency_s"), Mapping)
+        ]
+        if medians:
+            median = float(np.median(medians))
+            row: dict[str, Any] = {"median_call_s": median, "serial_s": j * median}
+            concurrency = _declared_concurrency(environment)
+            if concurrency:
+                row["at_declared_concurrency_s"] = j * median / concurrency
+            block["latency_per_decision"] = row
+    return block
+
+
+def _declared_concurrency(environment: Mapping[str, Any]) -> float | None:
+    """The one concurrency every arm's manifest recorded, or ``None`` when any arm is silent or
+    the arms disagree."""
+    sweeps = environment.get("sweeps")
+    if not isinstance(sweeps, Mapping) or not sweeps:
+        return None
+    seen: set[float] = set()
+    for per_arm in sweeps.values():
+        if not isinstance(per_arm, Mapping) or not per_arm:
+            return None
+        for identity in per_arm.values():
+            value = identity.get("concurrency") if isinstance(identity, Mapping) else None
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+                return None
+            seen.add(float(value))
+    return seen.pop() if len(seen) == 1 else None
+
+
+def _replicate_counts(
+    assertion: PairAssertion,
+    cut: Cut,
+    arm_labels: Sequence[str],
+    rows: pd.DataFrame,
+    values: Sequence[Sequence[Decimal]],
+    set_keys: Sequence[tuple[Any, ...]],
+    sweeps: Sequence[str],
+    sweep_names: Sequence[str],
+    rules: Mapping[str, str],
+    stops: int,
+) -> dict[str, Any]:
+    """The cut's counts: items, sweeps, eligible sets per sweep, sweep pairs per item, the
+    exclusions per arm off this cut's rows of ``excluded``, ties per arm over all sweeps (PR24,
+    PR70), the two rules and where the majority curve stops (PR68). No key holds ``G x S``."""
+    present: dict[tuple[Any, ...], set[str]] = {}
+    for key, sweep in zip(set_keys, sweeps, strict=True):
+        present.setdefault(key, set()).add(sweep)
+    excluded = assertion.excluded
+    excluded_rows = excluded[excluded["cut"] == cut.name] if len(excluded) else excluded
+    excluded_by_arm = {label: 0 for label in (*arm_labels, "both")}
+    for arm in excluded_rows["arm"] if len(excluded_rows) else []:
+        excluded_by_arm[str(arm)] = excluded_by_arm.get(str(arm), 0) + 1
+    return {
+        "items": int(rows["cluster"].nunique()) if len(rows) else 0,
+        "sweeps": len(sweep_names),
+        "eligible_sets": {name: int(sum(1 for s in sweeps if s == name)) for name in sweep_names},
+        "sweep_pairs": {
+            f"{first}|{second}": sum(
+                1 for held in present.values() if first in held and second in held
+            )
+            for first, second in itertools.combinations(sweep_names, 2)
+        },
+        "excluded_by_arm": excluded_by_arm,
+        "ties": {
+            label: int(sum(1 for v in arm if v == cut.threshold))
+            for label, arm in zip(arm_labels, values, strict=True)
+        },
+        "rules": dict(rules),
+        "majority_stops_at": stops,
+    }
+
+
+# ---------- the artifacts and the rendered sections ----------
+
+
+_ARTIFACT_NAMES: tuple[str, ...] = (
+    "pair_assertion.json",
+    "contingency_by_cut.json",
+    "intervals_by_cut.json",
+    "windows.json",
+    "cost.json",
+)
+_SIXTH = "replicates_by_cut.json"
+_PAYLOAD_KEYS: dict[str, str] = {
+    "pair_assertion.json": "pair_assertion",
+    "contingency_by_cut.json": "contingency_by_cut",
+    "intervals_by_cut.json": "intervals_by_cut",
+    "windows.json": "windows",
+    "cost.json": "cost",
+    _SIXTH: "replicates_by_cut",
+}
+_FENCE_MD = "> This is empirical evidence under a stated test envelope"
+_FENCE_HTML = "<blockquote>"
+_PROVENANCE_HTML_END = "</ul>\n</body>"
+
+
+@dataclass(frozen=True)
+class _Bundle:
+    """Everything one declaration produces from one store, as the CLI writes and renders it."""
+
+    declaration: Declaration
+    assertion: PairAssertion
+    result: PairedResult
+    windows: WindowReport
+    cost: CostReport
+    replicates: tuple[ReplicateResult, ...]
+    artifacts: Mapping[str, Any]  # file name -> the JSON tree the file carries, in order
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        return {_PAYLOAD_KEYS[name]: tree for name, tree in self.artifacts.items()}
+
+
+def _bundle(store: Store, declaration: Declaration) -> _Bundle:
+    """The assertion, the analysis, the windows, the cost with one phase per declared sweep, and
+    the replicates, in that order; then the five artifacts, six at ``k > 2``."""
+    assertion = assert_pairs(store, declaration)
+    result = analyse(assertion)
+    window_report = windows(assertion)
+    cost_report = cost(
+        store, declaration, phases={sweep.name: sweep.arms for sweep in declaration.sweeps}
+    )
+    replicate_results = replicates(assertion, cost=cost_report, windows=window_report)
+    digest = declaration.digest
+    out: dict[str, Any] = {
+        "pair_assertion.json": json.loads(assertion.to_json()),
+        "contingency_by_cut.json": json.loads(result.contingency_json()),
+        "intervals_by_cut.json": json.loads(result.intervals_json()),
+        "windows.json": {"declaration_digest": digest, **json.loads(window_report.to_json())},
+        "cost.json": {"declaration_digest": digest, **json.loads(cost_report.to_json())},
+    }
+    if replicate_results:
+        out[_SIXTH] = {
+            "declaration_digest": digest,
+            "cuts": {r.name: json.loads(r.to_json()) for r in replicate_results},
+        }
+    return _Bundle(
+        declaration=declaration,
+        assertion=assertion,
+        result=result,
+        windows=window_report,
+        cost=cost_report,
+        replicates=replicate_results,
+        artifacts=out,
+    )
+
+
+def _cost_block(declaration: Declaration, report: CostReport) -> dict[str, Any]:
+    """The ``--cap-check`` block: ``cost.json``'s tree, the digest first."""
+    return {"declaration_digest": declaration.digest, **json.loads(report.to_json())}
+
+
+def _artifact_text(tree: Mapping[str, Any]) -> str:
+    return json.dumps(tree, indent=2, ensure_ascii=False)
+
+
+def _num(value: Any) -> str:
+    """A number as the artifact carries it: the JSON value's own text, a literal verbatim, so
+    every number printed is a byte of an artifact (PR54). The renderer computes nothing."""
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    if value is None:
+        return "none"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return value
+    return json.dumps(_jsonable(value))
+
+
+def _interval(block: Mapping[str, Any]) -> str:
+    if block.get("lo") is None or block.get("hi") is None:
+        return "(not estimated)"
+    basis = str(block.get("basis", "")).replace("_", " ")
+    return f"[{_num(block['lo'])}, {_num(block['hi'])}] ({basis})"
+
+
+def _design(block: Mapping[str, Any]) -> str:
+    d = block.get("design_effect")
+    if not isinstance(d, Mapping):
+        return ""
+    return f"; icc {_num(d['icc'])}, m_bar {_num(d['m_bar'])}, deff {_num(d['deff'])}"
+
+
+def _sections(bundle: _Bundle) -> list[tuple[str, list[str]]]:
+    """The four sections as (title, lines): **Paired replay**, **Replicates** at ``k > 2`` only,
+    **Windows**, **Cost**. Every number is read off the artifact trees, never recomputed
+    (PR54); no verdict word is printed (PR55, PR77); the conditioning is printed verbatim
+    beside every rate where declared, and nothing stands in for it where not."""
+    declaration = bundle.declaration
+    beside = f" -- {declaration.conditioning}" if declaration.conditioning is not None else ""
+    contingency = bundle.artifacts["contingency_by_cut.json"]["cuts"]
+    intervals = bundle.artifacts["intervals_by_cut.json"]["cuts"]
+    sections: list[tuple[str, list[str]]] = []
+
+    lines: list[str] = [
+        "Two stored arms are a pair only when they were the same request twice; the assertion "
+        "ran before any comparison, and every count reconciles in pair_assertion.json.",
+        "",
+    ]
+    for name, c_block in contingency.items():
+        i_block = intervals[name]
+        lines.append(
+            f"### {name} (threshold {_num(c_block['threshold'])}, {c_block['comparison']})"
+        )
+        lines.append("")
+        for sweep_name, sweep in c_block["per_sweep"].items():
+            rates = i_block["per_sweep"][sweep_name]
+            check = sweep["arm_order_check"]
+            lines.append(
+                f"- {sweep_name}: n11 = {_num(sweep['n11'])}, n10 = {_num(sweep['n10'])}, "
+                f"n01 = {_num(sweep['n01'])}, n00 = {_num(sweep['n00'])}, n = {_num(sweep['n'])}; "
+                f"ties a = {_num(sweep['ties']['a'])}, b = {_num(sweep['ties']['b'])}; "
+                f"rate a {_num(rates['rate_a'])}, rate b {_num(rates['rate_b'])}; flip rate "
+                f"{_num(rates['flip_rate']['estimate'])} {_interval(rates['flip_rate'])}, "
+                f"net swing {_num(rates['net_swing']['estimate'])} (b minus a){beside}"
+            )
+            lines.append(
+                f"  arm order check: p = {_num(check['p'])}, n discordant = "
+                f"{_num(check['n_discordant'])}, can reject = {_num(check['can_reject'])}"
+            )
+        n = i_block["n"]
+        flip = i_block["flip_rate"]
+        swing = i_block["net_swing"]
+        lines.append(
+            f"- pooled over {_num(n['items'])} items and {_num(n['sweeps'])} sweeps: flip rate "
+            f"{_num(flip['estimate'])} {_interval(flip)}, net swing {_num(swing['estimate'])} "
+            f"{_interval(swing)} (b minus a){beside}"
+        )
+        lines.append(
+            f"  design effect: icc {_num(i_block['design_effect']['icc'])}, m_bar "
+            f"{_num(i_block['design_effect']['m_bar'])}, deff "
+            f"{_num(i_block['design_effect']['deff'])}; ineligibility rate "
+            f"{_num(i_block['ineligibility_rate'])}"
+        )
+        outcome = i_block["outcome"]
+        lines.append(
+            "  outcome: none without a declared floor."
+            if outcome is None
+            else f"  outcome: {outcome}, decided from the pooled flip rate interval "
+            f"{_interval(i_block['outcome_interval'])}."
+        )
+        lines.append("")
+    sections.append(("Paired replay", lines))
+
+    if _SIXTH in bundle.artifacts:
+        sections.append(("Replicates", _replicates_lines(bundle, beside)))
+
+    w = bundle.artifacts["windows.json"]
+    lines = [
+        "Each sweep is its own window, read from the request spans' timestamps in the trace "
+        "envelope. No pair was dropped on any timing criterion.",
+        "",
+    ]
+    for entry in w["per_sweep"]:
+        declared = entry["declared_window_s"]
+        window_text = (
+            "no declared window" if declared is None else f"declared window {_num(declared)} s"
+        )
+        if entry["timing"] == "available":
+            claim = "" if entry["claim"] is None else f"; claim {entry['claim']}"
+            latency = entry["latency_s"]
+            latency_text = (
+                "; no per-call latency recorded"
+                if latency is None
+                else f"; latency median {_num(latency['median'])} s over {_num(latency['n'])} calls"
+            )
+            lines.append(
+                f"- {entry['sweep']}: timing available; realized span "
+                f"{_num(entry['realized_span_s'])} s; {window_text}{claim}{latency_text}"
+            )
+        else:
+            lines.append(
+                f"- {entry['sweep']}: timing unavailable ({entry['reason']}); {window_text}; "
+                "no span, no claim"
+            )
+    lines.append("")
+    lines.append("Replay gap per cut, arm b's request start minus arm a's, in seconds:")
+    lines.append("")
+    for name, gap in w["replay_gap"].items():
+        if gap is None:
+            lines.append(f"- {name}: no computable gap")
+        else:
+            lines.append(
+                f"- {name}: min {_num(gap['min'])}, median {_num(gap['median'])}, max "
+                f"{_num(gap['max'])}"
+            )
+    lines.append("")
+    sections.append(("Windows", lines))
+
+    c = bundle.artifacts["cost.json"]
+    lines = [
+        "Input tokens are the provider's own recorded usage on every request span, retries "
+        "included; the module holds no tokeniser and no rate card.",
+        "",
+        f"- input tokens: {_num(c['input_tokens'])}",
+        f"- output tokens: {_num(c['output_tokens'])}",
+        f"- recorded spans: {_num(c['recorded_spans'])}",
+        f"- unrecorded spans: {_num(c['unrecorded_spans'])}",
+    ]
+    if c["price_per_input_token"] is None:
+        lines.append("- price per input token: no price declared, so no dollar figure is printed")
+    else:
+        lines.append(f"- price per input token: {_num(c['price_per_input_token'])}")
+        lines.append(f"- dollars: {_num(c['dollars'])} (input tokens times the price)")
+    lines.append(
+        "- token cap: none declared"
+        if c["token_cap"] is None
+        else f"- token cap: {_num(c['token_cap'])}; cap reached: {_num(c['cap_reached'])}"
+    )
+    lines.append("")
+    lines.append(
+        "| phase | run id | sweep | arm | input tokens | output tokens | recorded spans | "
+        "unrecorded spans |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|")
+    for entry in c["phases"]:
+        lines.append(
+            f"| {entry['phase']} | {entry['run_id']} | {_num(entry['sweep'])} | "
+            f"{_num(entry['arm'])} | {_num(entry['input_tokens'])} | "
+            f"{_num(entry['output_tokens'])} | {_num(entry['recorded_spans'])} | "
+            f"{_num(entry['unrecorded_spans'])} |"
+        )
+    lines.append("")
+    lines.append(
+        "The cap is checked between sweeps and never halts a sweep in flight; the worst-case "
+        "overshoot is one sweep."
+    )
+    lines.append("")
+    sections.append(("Cost", lines))
+    return sections
+
+
+def _replicates_lines(bundle: _Bundle, beside: str) -> list[str]:
+    """The **Replicates** section: every number a leaf of ``replicates_by_cut.json`` (PR77)."""
+    cuts = bundle.artifacts[_SIXTH]["cuts"]
+    lines: list[str] = [
+        "Each item was sent k times per sweep. agree@j is the rate at which the first j calls of "
+        "an item in one sweep all took one action, so all j decisions agreed; MS@j is the rate "
+        "at which two sweeps' j-call majority decisions for one item agreed. Both are computed "
+        "under the cut's declared comparison (primary) and under the other one (sensitivity), "
+        "and every interval is the item-clustered bootstrap.",
+        "",
+    ]
+    for name, block in cuts.items():
+        counts = block["counts"]
+        lines.append(
+            f"### {name} (threshold {_num(block['threshold'])}, {block['comparison']}, "
+            f"k = {_num(block['k'])})"
+        )
+        lines.append("")
+        eligible = ", ".join(f"{s} {_num(n)}" for s, n in counts["eligible_sets"].items())
+        pairs = ", ".join(f"{s} {_num(n)}" for s, n in counts["sweep_pairs"].items())
+        ties = ", ".join(f"arm-{label} {_num(n)}" for label, n in counts["ties"].items())
+        lines.append(
+            f"- {_num(counts['items'])} items over {_num(counts['sweeps'])} sweeps; eligible "
+            f"sets per sweep: {eligible}; items with both sets eligible per sweep pair: "
+            f"{pairs or 'none'}; ties per arm: {ties}; the majority curve stops at "
+            f"j = {_num(counts['majority_stops_at'])}"
+        )
+        for rule in ("primary", "sensitivity"):
+            comparison = counts["rules"][rule]
+            lines.append("")
+            lines.append(f"Under the {rule} rule ({comparison}):")
+            lines.append("")
+            for key, entry in block["agree"][rule].items():
+                if key == "steps":
+                    continue
+                lines.append(
+                    f"- agree@{key[1:]}: {_num(entry['estimate'])} {_interval(entry)}"
+                    f"{_design(entry)}{beside}"
+                )
+            for key, step in block["agree"][rule]["steps"].items():
+                low, high = key.split("_to_")
+                lines.append(
+                    f"- step agree@{low[1:]} to agree@{high[1:]}: {_num(step['estimate'])} "
+                    f"{_interval(step)}, paired on the same draws"
+                )
+            for key, entry in block["majority"][rule].items():
+                lines.append(
+                    f"- MS@{key[1:]}: {_num(entry['estimate'])} {_interval(entry)}"
+                    f"{_design(entry)}{beside}"
+                )
+            for key, entry in block["cost_framing"][rule].items():
+                parts: list[str] = []
+                if "per_10000" in entry:
+                    ten = entry["per_10000"]
+                    parts.append(
+                        f"out of 10,000 near-cut decisions, {_num(ten['n'])} decided "
+                        f"differently [{_num(ten['n_lo'])}, {_num(ten['n_hi'])}] -- "
+                        f"{ten['conditioning']}"
+                    )
+                if "dollars_per_decision" in entry:
+                    d = entry["dollars_per_decision"]
+                    parts.append(
+                        f"dollars per decision {_num(d['estimate'])} (mean recorded input "
+                        f"tokens {_num(d['mean_input_tokens'])} at a price of "
+                        f"{_num(d['price_per_input_token'])} per input token)"
+                    )
+                if "latency_per_decision" in entry:
+                    lat = entry["latency_per_decision"]
+                    text = (
+                        f"latency per decision {_num(lat['serial_s'])} s serial (median call "
+                        f"{_num(lat['median_call_s'])} s)"
+                    )
+                    if "at_declared_concurrency_s" in lat:
+                        text += (
+                            f", {_num(lat['at_declared_concurrency_s'])} s at the declared "
+                            "concurrency"
+                        )
+                    parts.append(text)
+                if parts:
+                    lines.append(f"- MS@{key[1:]} cost framing: " + "; ".join(parts))
+        lines.append("")
+    return lines
+
+
+def _provenance_lines(bundle: _Bundle) -> list[tuple[str, str]]:
+    c = bundle.artifacts["cost.json"]
+    declaration = bundle.declaration
+    return [
+        ("declaration digest", declaration.digest),
+        ("bootstrap seed", str(declaration.bootstrap_seed)),
+        ("bootstrap b", str(declaration.bootstrap_b)),
+        ("price per input token", _num(c["price_per_input_token"])),
+        ("input tokens", _num(c["input_tokens"])),
+        ("output tokens", _num(c["output_tokens"])),
+        ("artifacts", ", ".join(bundle.artifacts)),
+    ]
+
+
+def _fold_markdown(text: str, bundle: _Bundle) -> str:
+    """The sections into ``report.md`` before the epistemic fence, and the seven provenance
+    lines after the block's own. ``report.py`` renders the rest and is not edited (PR53)."""
+    parts: list[str] = []
+    for title, lines in _sections(bundle):
+        parts += [f"## {title}", "", *lines]
+    index = text.index(_FENCE_MD)
+    provenance = "".join(f"- {key}: {value}\n" for key, value in _provenance_lines(bundle))
+    folded = text[:index] + "\n".join(parts) + "\n" + text[index:]
+    return folded + ("" if folded.endswith("\n") else "\n") + provenance
+
+
+def _fold_html(text: str, bundle: _Bundle) -> str:
+    """The same sections into ``receipt.html`` as ``<h2>`` sections before the ``<blockquote>``,
+    and the provenance lines into the block's list."""
+    parts: list[str] = []
+    for title, lines in _sections(bundle):
+        parts.append(f"<h2>{_html.escape(title)}</h2>")
+        parts += _html_lines(lines)
+    index = text.index(_FENCE_HTML)
+    folded = text[:index] + "\n".join(parts) + "\n" + text[index:]
+    items = "".join(
+        f"<li>{_html.escape(f'{key}: {value}')}</li>" for key, value in _provenance_lines(bundle)
+    )
+    end = folded.rindex(_PROVENANCE_HTML_END)
+    return folded[:end] + items + folded[end:]
+
+
+def _html_lines(lines: Sequence[str]) -> list[str]:
+    """Markdown-shaped lines as HTML: a heading, a table, a list or a paragraph per block."""
+    out: list[str] = []
+    bullets: list[str] = []
+    table: list[str] = []
+
+    def flush() -> None:
+        if bullets:
+            out.append("<ul>" + "".join(f"<li>{_html.escape(b)}</li>" for b in bullets) + "</ul>")
+            bullets.clear()
+        if table:
+            rows = [
+                [cell.strip() for cell in line.strip().strip("|").split("|")] for line in table
+            ]
+            head = "".join(f"<th>{_html.escape(h)}</th>" for h in rows[0])
+            body = "".join(
+                "<tr>" + "".join(f"<td>{_html.escape(v)}</td>" for v in r) + "</tr>"
+                for r in rows[2:]
+            )
+            out.append(f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>")
+            table.clear()
+
+    for line in lines:
+        if line.startswith("### "):
+            flush()
+            out.append(f"<h3>{_html.escape(line[4:])}</h3>")
+        elif line.startswith("- "):
+            if table:
+                flush()
+            bullets.append(line[2:])
+        elif line.startswith("  ") and bullets:
+            bullets[-1] += " " + line.strip()
+        elif line.startswith("|"):
+            if bullets:
+                flush()
+            table.append(line)
+        elif not line.strip():
+            flush()
+        else:
+            flush()
+            out.append(f"<p>{_html.escape(line)}</p>")
+    flush()
+    return out
