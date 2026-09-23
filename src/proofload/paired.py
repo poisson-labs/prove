@@ -617,6 +617,11 @@ def assert_pairs(store: Store, declaration: Declaration) -> PairAssertion:
     ``value_3`` .. and the request span's two timestamps as ``start_ns_<label>`` and
     ``end_ns_<label>`` after them, ``None`` where the span has none; at ``k = 2`` the frame's
     first nine columns are the ones phase 1 froze (PR60).
+
+    A set that is not whole is excluded from the k-metrics with its cause and the failing arm,
+    and its declared pair is judged on arms ``a`` and ``b`` alone (PR61): when those two are an
+    eligible pair the set stays on ``pairs`` with ``None`` for every value and stamp of arms
+    ``3..k``, so the pair analysis counts it and ``replicates`` does not (retrofit 2026-09-23).
     """
     arm_labels = _arm_labels(declaration)
     arms = {
@@ -645,6 +650,8 @@ def assert_pairs(store: Store, declaration: Declaration) -> PairAssertion:
             lacking = [label for label in arm_labels if key not in by_label[label]]
             row = by_label[holders[0]][key]
             keys_by_cut[row.cut] = keys_by_cut.get(row.cut, 0) + 1
+            held = [by_label[label][key] for label in holders]
+            verdict: _Verdict | None
             if lacking:
                 # PR10's reading of ``arm`` -- the first arm, in declared order, that holds the
                 # key -- and, past a pair, ``detail`` names every arm that lacks it (PR62).
@@ -653,14 +660,19 @@ def assert_pairs(store: Store, declaration: Declaration) -> PairAssertion:
                 if len(arm_labels) > 2:
                     detail += "; absent from " + ", ".join(f"arm {label}" for label in lacking)
                 excluded.append(_excluded_row(row, "unmatched", holders[0], detail))
-                continue
-            verdict = _judge(
-                [by_label[label][key] for label in arm_labels], arm_labels, declaration
-            )
-            if verdict.cause is not None:
-                excluded.append(
-                    _excluded_row(row, verdict.cause, verdict.arm, verdict.detail)
+                verdict = (
+                    _declared_pair(held[:2], arm_labels, declaration)
+                    if holders[:2] == list(arm_labels[:2])
+                    else None
                 )
+            else:
+                verdict = _judge(held, arm_labels, declaration)
+                if verdict.cause is not None:
+                    excluded.append(
+                        _excluded_row(row, verdict.cause, verdict.arm, verdict.detail)
+                    )
+                    verdict = _declared_pair(held[:2], arm_labels, declaration)
+            if verdict is None:
                 continue
             for name in verdict.exercised:
                 exercised[name] += 1
@@ -685,8 +697,10 @@ def assert_pairs(store: Store, declaration: Declaration) -> PairAssertion:
     frame = _frame(pairs, (*_PAIRS_COLUMNS, *value_columns[2:], *timing_columns))
     for column in timing_columns:
         # Whole timestamps or ``None``, never a float ``NaN`` standing in for an absent stamp.
+        # Read off the rows and not off the frame: a column holding a ``None`` beside whole
+        # numbers is float64 in the frame, and a nanosecond stamp does not survive a float.
         frame[column] = pd.Series(
-            [_stamp(v) for v in frame[column]], index=frame.index, dtype=object
+            [_stamp(r[column]) for r in pairs], index=frame.index, dtype=object
         )
     return PairAssertion(
         declaration=declaration,
@@ -694,6 +708,26 @@ def assert_pairs(store: Store, declaration: Declaration) -> PairAssertion:
         excluded=_frame(excluded, _EXCLUDED_COLUMNS),
         environment=environment,
         counts=counts,
+    )
+
+
+def _declared_pair(
+    rows: Sequence[_Row], arm_labels: Sequence[str], declaration: Declaration
+) -> _Verdict | None:
+    """A set excluded from the k-metrics still carries its declared pair when arms ``a`` and
+    ``b`` are an eligible pair on their own (PR61, retrofit 2026-09-23): judged on those two
+    rows alone, the values and stamps of arms ``3..k`` padded with ``None``. At ``k = 2`` the set
+    is the pair, so there is nothing left to keep."""
+    k = len(arm_labels)
+    if k == 2:
+        return None
+    verdict = _judge(rows[:2], arm_labels[:2], declaration)
+    if verdict.cause is not None:
+        return None
+    return dataclasses.replace(
+        verdict,
+        values=(*verdict.values, *(None,) * (k - 2)),
+        timing=(*verdict.timing, *(None,) * (2 * (k - 2))),
     )
 
 
@@ -1223,7 +1257,9 @@ def _counts(
     """PR20, read to the letter. ``ineligible`` counts **matched** pairs that failed and
     ``unmatched`` is its own count, though PR10's prose calls an unmatched key ineligible; both
     are rows of ``excluded`` and both are in ``by_cause``. ``keys`` is summed over sweeps, each
-    sweep's union taken on its own, because every sweep replays the same item set."""
+    sweep's union taken on its own, because every sweep replays the same item set. The counts are
+    of pairs: a set excluded only past its declared pair is an eligible pair here, and its row of
+    ``excluded`` is counted by ``replicates`` instead (retrofit 2026-09-23)."""
     cuts: list[Any] = [c.name for c in declaration.cuts]
     cuts += [cut for cut in keys_by_cut if cut not in cuts]
     arms = (*arm_labels, "both")
@@ -1246,7 +1282,13 @@ def _block(
     arms: Sequence[str] = _ARMS,
 ) -> dict[str, Any]:
     kept = [r for r in pairs if cut is None or r["cut"] == cut]
-    dropped = [r for r in excluded if cut is None or r["cut"] == cut]
+    kept_keys = {(r["sweep"], r["config_hash"], r["replicate_index"]) for r in kept}
+    dropped = [
+        r
+        for r in excluded
+        if (cut is None or r["cut"] == cut)
+        and (r["sweep"], r["config_hash"], r["replicate_index"]) not in kept_keys
+    ]
     unmatched = [r for r in dropped if r["cause"] == "unmatched"]
     by_cause = {cause: 0 for cause in _CAUSES}
     by_arm = {arm: 0 for arm in arms}
@@ -1644,7 +1686,8 @@ class WindowReport:
 def windows(assertion: PairAssertion) -> WindowReport:
     """Each sweep is its own window (PR40), read off the timestamps that ride on ``pairs`` --
     the request span's ``start_ns`` and ``end_ns`` from the trace envelope, never ``wall_time``
-    (PR41) -- and off nothing else, so an excluded set has no window and no pair is dropped on
+    (PR41) -- and off nothing else, so an excluded set has no window, a set kept for its
+    declared pair alone has the stamps of arms ``a`` and ``b`` only, and no pair is dropped on
     a timing criterion (PR45). A sweep with no usable stamp is ``unavailable`` with the reason
     named, and never a zero (PR42). With a declared window the claim is ``held`` or
     ``withdrawn`` and nothing else moves (PR43). The replay gap is per cut (PR44). This is a
@@ -1920,8 +1963,13 @@ def _replicate_cut(
     seed, b = declaration.bootstrap_seed, declaration.bootstrap_b
     stops = k if k % 2 else k - 1
     value_columns = _value_columns(arm_labels)
-    rows = _canonical_rows(
-        assertion.pairs, cut, ["sweep", "cluster", "config_hash", "replicate_index", *value_columns]
+    rows = _whole_sets(
+        _canonical_rows(
+            assertion.pairs,
+            cut,
+            ["sweep", "cluster", "config_hash", "replicate_index", *value_columns],
+        ),
+        value_columns,
     )
     n_sets = int(len(rows))
     values = [list(rows[column]) for column in value_columns]
@@ -1986,6 +2034,16 @@ def _replicate_cut(
         counts=counts,
         cost_framing=framing,
     )
+
+
+def _whole_sets(rows: pd.DataFrame, value_columns: Sequence[str]) -> pd.DataFrame:
+    """All ``k``, or none (PR63): the rows of ``pairs`` that are whole replicate sets. A row
+    kept for its declared pair alone carries ``None`` in arms ``3..k`` and is not read here."""
+    whole = [
+        all(not pd.isna(v) for v in values)
+        for values in zip(*(rows[column] for column in value_columns), strict=True)
+    ]
+    return rows[whole].reset_index(drop=True) if len(rows) else rows
 
 
 def _majority_observations(
