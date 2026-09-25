@@ -172,7 +172,8 @@ INTERVAL_LINE = re.compile(
 #: a diff of two renders. ``PAIR`` is ``multi_diff(go1-v0, go1-v1, events=("fell", "survived"),
 #: method="fisher_bh")``; ``FELL_LOGRANK`` is the same pair at ``events=("fell",)`` and
 #: ``method="logrank_bh"``.
-PAIR_MARKDOWN_SHA256 = "c4307336f43850388686742ce04c65acba664e1c504b079f1eea76b7062c37f5"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the two-event Go1 markdown's trade line is replaced by the complement sentence (fell and survived are complements on every cell, spec LS section 3.6, trade_line()); nothing else in it moves. Read through this test's own measurement on the built tree, not predicted.
+PAIR_MARKDOWN_SHA256 = "e2752b5278166b38601207b6be3a44a7f9df6180afd1462ab5b04eb74da72458"
 PAIR_HEADLINE = (
     "survived: 0 safer, 60 worse · fell: 60 safer, 0 worse\n"
     "(aalen_johansen + fisher_bh, BH q<0.05 over 800 tests, unpaired)"

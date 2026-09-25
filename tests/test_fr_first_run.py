@@ -260,7 +260,8 @@ SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a dif
 
 # Minted at f9b881f, the commit this oracle was frozen against (FR17, FR18). Named for what they
 # pin: none of the names below ends in the suffix the exclusion-record sweeps count.
-DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "6413b54ac9ec58b2961cb1c73cc58227e0cadaf3c164c3267f943e4348cc6b42"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py outside MultiDiffResult.to_markdown gains complementary_events and trade_line()'s complement branch; to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
+DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "927fdaeb6c32b272b6e8edd8b1b6e7e44a62049475c056eee93db93363c0417c"
 # Re-minted 2026-09-20 (truncation surfacing): report.py and viewer.py move, because that packet edits both; store.py and tree.py do not.
 # Re-minted again 2026-09-20 (stored-trace read): store.py moves, because that packet edits it; report.py, viewer.py and tree.py do not.
 # CD Session B, 2026-09-21: re-minted off the built `report.py` at `234513c`. D9's "no change to
@@ -270,9 +271,10 @@ DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "6413b54ac9ec58b2961cb1c73cc58227e0cadaf3c164c
 # pins. This literal and `test_s29_viewer.py`'s `REPORT_PY_SHA256` are the two carriers and moved
 # together. The value before this packet was `5cfdf03b...`, correct from the surfacing packet
 # through `46c5ac0`.
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); the whole-file sha256 of the built file. store.py and tree.py do not move. viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
 UNTOUCHED_FILE_SHA256 = {
-    "report.py": "4369c1114ba7f2881f3972831101dda30c72ad27f2727d31ba7342959468e746",
-    "viewer.py": "cbd5e7c9524ea34dd6690eeff30b4457d63046a644abdb9f832802618e1dbd5d",
+    "report.py": "e7637ed985135f07c075134df51e8e38f3c74676f5462c82f3ab35c182a254d4",
+    "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
     "store.py": "6dd8d01e521929317f3f02196889f382fbb8df6d0d314dff0678082955a17dd7",
     "tree.py": "c0c011a3d194964a16f634d5450354645bb9132e0f47be192070a8daef9a8f3e",
 }

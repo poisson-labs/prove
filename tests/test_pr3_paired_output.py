@@ -146,13 +146,15 @@ GO1_A, GO1_B = "go1-v0", "go1-v1"
 #: pins; W20 takes its markdown and receipt through the builder, so those two are minted here,
 #: the same bytes on two runs). PR53's "the report the same build produces today".
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.md and receipt.html print LS16's respelled Cells sentence ('MDE is the smallest detectable increase', no ADR number) and nothing else new; heatmap.svg is unchanged. Read through this test's own measurement on the built tree, not predicted.
 E14_SHA256 = {
-    "report.md": "263eece5428aca20c5727b3a0e550b5e03d1d324f6ab907c93ff866c5f1b0ec5",
+    "report.md": "69324de1b24bdcf561501e313561ea481e243249a982a3b274e727445a15c370",
     "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "e63abf9f553977a1de0153eccc3fde207cf2869709c89119bc9bc95854ea77ea",
+    "receipt.html": "f5b7342aeb67f1214140bb486b388e9e7a521ffb1d07e2972191b350fa5eb6eb",
 }
 #: ``test_s29_viewer.py``'s and ``test_fr_first_run.py``'s whole-file digest of ``report.py``.
-REPORT_PY_SHA256 = "4369c1114ba7f2881f3972831101dda30c72ad27f2727d31ba7342959468e746"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the local serve pass's build (the wrap, the complement, mde_unchanged, LS16's Cells sentence); phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
+REPORT_PY_SHA256 = "e7637ed985135f07c075134df51e8e38f3c74676f5462c82f3ab35c182a254d4"
 
 EPOCH = 1_790_000_000_000_000_000
 NS = 1_000_000_000

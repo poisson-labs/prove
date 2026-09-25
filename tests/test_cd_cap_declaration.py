@@ -148,13 +148,15 @@ SHIPPED_SWEEP_FILES = (
 T4_CAP = 8192
 
 #: D9: nothing downstream of the manifest is edited. Minted at the dispatch commit ``1f5491b``.
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
 UNTOUCHED_FILE_SHA256 = {
-    "viewer.py": "cbd5e7c9524ea34dd6690eeff30b4457d63046a644abdb9f832802618e1dbd5d",
+    "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
 }
 #: ``report.py`` with ``_observation_cap`` removed, whole lines, at the dispatch commit (CD9). The
 #: whole-file value is ``5cfdf03b...`` and is **not** pinned here: D9's "no change to them" does not
 #: survive D3's ``"none"``, and this is the one region that moves.
-REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "91584856ec2fde2d2506a7a6d164cd79e4ed51709048745f66a3ce744d671d4b"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py outside _observation_cap is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
+REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "35f3ac5a2d78df3a704f59fbec500a81fee0582268075850ea37b70f6957b267"
 #: CD11: ``split``'s envelope/bodies partition over the fixture below, at the dispatch commit.
 SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
 #: CD12: ``examples/tau2_pilot/t4.toml``'s 53 ``config_hash`` values, sorted and joined (D13).

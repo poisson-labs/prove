@@ -360,31 +360,34 @@ RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
-SERVE_STRUCTURE_SHA256 = "aae3498e0d90462f21963011b17f21cdd88083ad2bacb4d78b2702b2594bc9f7"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
 #: W4, W17. Minted on the bare tree at f4e2845 through ``serve --json`` on each pair's argv below
 #: (``scratchpad/s29/mint.py``): the six tree-less keys, ``json.dumps(sort_keys=True)``, sha256.
 # Re-minted 2026-09-20 (truncation surfacing): only the ``diff`` key of the six moves (the horizon key renamed in place, six keys appended); the
 # other five are byte-equal to the baseline's for every pair below.
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): every pair's panels gain mde_unchanged (spec LS section 3.5); on eight pairs heatmap_svg also moves, the honesty lines and the long texts wrapping inside the box (D9, ruling 2 of 2026-09-22), and on go1-two-events the complement sentence replaces the trade line. Read through this test's own measurement on the built tree, not predicted.
 TREE_LESS_KEYS_SHA256 = {
-    "go1": "6b0fdadb914c9f9d3864d8df78623746420771ba35492ff1573352143188a22b",
-    "go1-two-events": "d9c96f6d48c8c951ef89c522712004cf1490d75b324715196cbded897474d9e1",
-    "axes": "65981a36e4065d16a6025ddea9e907fcd1125af3b6e2c1defca35aa1a7e4417f",
-    "identical": "41242b890f4614357e0970c4e69a11ff2c6722bbd36e73d7c1a72abf7c171094",
-    "bh": "205de903e5f1fd2e5af036b9bc9efbed82c1213bc2ea57558ef9e84d2328bf11",
-    "gate": "7afa731c9eb7433c0a206c4a872233f7bf30cf24477e48e23e56868d3cf89460",
-    "multi-event": "ef44cac46bc8288337d802a362ffc6cbc4adb3527502355f116a28972d789fe3",
-    "one-value": "00ba86ac27ca7cd307c8eca8ea6dbaf22c1584584f44dadbdfc07aff1b5014a6",
-    "three-key": "0f5923272f7b47b7de751bc064fa9d995d9412203d0ca6b2a0311a295f8728e8",
-    "vocab": "612ee7e405d7930971025aeadd4ba843d2a909c9575b344158ae68f5e5716379",
-    "hostile": "7e812761e9bcb85b61fa6cfd01ea667b72638e96541e5dba138b388a78986194",
+    "go1": "b310247f33d1941b825f3b9ab79442e3dbf0e2d7fc50fc6778bb7592d3cd91dd",
+    "go1-two-events": "e69716ad568584f30fc9d2d9ead879d5fdb48677867d0a63342697edb7bbc106",
+    "axes": "109a031c0269d0ef609502afaaa76864ae1dcb8e2f884491484acbdbd675da21",
+    "identical": "862bb2fb893045e25a93d111bd5414f6eb35a63ee3c486e076015ab3cc6d5680",
+    "bh": "853f2d8c5c343a5b5c8f9c169b7eac336b61830eb0bd5550d034d057f98a543a",
+    "gate": "dd83c801e924cc47a460e3e329f06e8c6f96b157935cb351a3fec32b2527b62e",
+    "multi-event": "a30b61f65a01e16527b99fff58ffa8899edf2759ac5b168462c49df2a6e4999a",
+    "one-value": "b9cf7d8c6c5bed25d324a8ae1e3343ad73e3c87c93b9fd9ccafeaf25fe9d2e16",
+    "three-key": "8b77b549e4556c6b53abb30c08e8729b8d19f56a528371f93b9c8b002dcfdd92",
+    "vocab": "7c432010fe2bef6e519f6d6609512084fe77407ef8dac8a6f4fc151d0d8fe7d5",
+    "hostile": "0d279a575852324027782918ce2a3d7960ebb418e6832edafa34535ac9b23f23",
 }
 #: W4. The ``/2`` page on Go1, ``str(GO1_ROOT)`` replaced by ``<store>``, sha256, minted on the bare
 #: tree at f4e2845 from the structure ``serve --json`` printed.
 # Re-minted 2026-09-20 (truncation surfacing): the page's provenance list gains the horizon rename and six observation items; each value is the
 # baseline page's plus that change, byte for byte.
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the excised page moves by the build's page order (Run pair below the figure), the pairing line beside 'unpaired' (LS21), the unverified tail respelled and the inert rule in the style; on go1-two-events the complement sentence replaces the trade line and the figure wraps. Read through this test's own measurement on the built tree, not predicted.
 GO1_PAGE_2_SHA256 = {
-    "go1": "f8cd5c394a74bc3d4d2bb3ec662dbfa414aec27ee6c29b301859771a34d5937f",
-    "go1-two-events": "aaf677acb5c9f0a2b9780e2e1d9068f9fcd40ea49f3bd0e68d360a63bd6c3d29",
+    "go1": "ee10014f70e481a7fe86b893bfc1010e3a91c7bae9f40d219fe1d354e6f3bb8a",
+    "go1-two-events": "cf9e9b9f8bd5ffc75d6bce1bc27c6238c09b7c3869f2394dadeaf752e260f115",
 }
 #: W20. ``diff.py`` whole again. **A28's retrofit, 2026-09-13 -- both exclusions retired** (ADR-077's
 #: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted
@@ -394,7 +397,8 @@ GO1_PAGE_2_SHA256 = {
 #: sweeps beside itself (LS retrofit, 2026-09-22 (local serve pass, Phase A)) -- so the value is a read off the shipped file at ``38e8df9`` (byte-identical at
 #: ``03d7ed2``): the whole-file sha256, never a prediction. Bytes, so a scratch copy without ``.git``
 #: can check.
-DIFF_PY_SHA256 = "d5ca27cade592886f1f5c236d43e1aaf1632a16a2be0975f7b5a9c5f440fdfd7"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+DIFF_PY_SHA256 = "7e65b27a2b8b1f4ec9f0de1be9debddff0984820eb4e927a76b8acc6353307b4"
 #: W20, **narrowed by P-1 Session A under ADR-077 (P-1 section 7.4, the clean case)**: ``tree.py``'s
 #: bytes outside ``RootResult`` and ``_root``, minted at ``a626cd3`` and measured identical on the
 #: P-1 prototype, because P-1's one ``tree.py`` edit -- the ``p_floor`` field, its ``to_json`` key and
@@ -443,7 +447,8 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 # `test_cd_cap_declaration.py` pins the rest of the file by a digest that excludes it. The
 # other carrier is `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]`, re-minted in
 # the same commit. Before this packet: `5cfdf03b...`.
-REPORT_PY_SHA256 = "4369c1114ba7f2881f3972831101dda30c72ad27f2727d31ba7342959468e746"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py gains _wrap over the four figure texts and the honesty lines, MultiReport.complement, mde_unchanged beside the honesty text and the Cells sentence respelled (LS16); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
+REPORT_PY_SHA256 = "e7637ed985135f07c075134df51e8e38f3c74676f5462c82f3ab35c182a254d4"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
