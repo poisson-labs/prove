@@ -234,6 +234,21 @@ def svg_root(report: Report) -> ET.Element:
     return ET.fromstring(report.to_svg())
 
 
+def _svg_text_rejoined(svg: str) -> str:
+    """Every ``<text>`` in document order, one per line, a ``data-wrap="1"`` continuation joined back
+    onto the line before with a space. LS retrofit, 2026-09-25 (local serve pass, Phase C)."""
+    out: list[str] = []
+    for e in ET.fromstring(svg).iter():
+        if _local(e.tag) != "text":
+            continue
+        content = "".join(e.itertext())
+        if e.attrib.get("data-wrap") == "1" and out:
+            out[-1] = f"{out[-1]} {content}"
+        else:
+            out.append(content)
+    return "\n".join(out)
+
+
 def cell_rects(root: ET.Element) -> list[ET.Element]:
     return [e for e in root.iter() if _local(e.tag) == "rect" and "data-cell" in e.attrib]
 
@@ -656,6 +671,10 @@ def _check_honesty(report: Report, diff_result: DiffResult) -> None:
     for line in lines:
         assert line in md, line
         assert html_escape(line) in html, line
+    # LS retrofit, 2026-09-25 (local serve pass, Phase C, ruled on Session B's finding): the honesty lines wrap
+    # (ruling 2 of 2026-09-22), so the figure is read as its ``<text>`` runs with each ``data-wrap="1"``
+    # continuation joined back onto the line before by one space, the way M7's multi ``texts()`` reads it.
+    svg = _svg_text_rejoined(svg)
     assert "Worst-powered cell overall" in svg
     assert "Worst-powered unchanged cell" in svg or HONESTY_NONE in svg
 
