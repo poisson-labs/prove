@@ -343,13 +343,19 @@ def _build_parser(io: _IO) -> _Parser:
     serve_p.add_argument(
         "--x",
         metavar="AXIS",
-        help="config key on the x axis (omitted: lists the axes and events the runs carry)",
+        help="required: config key on the x axis (omitted: lists the axes and events the runs "
+        "carry)",
     )
     serve_p.add_argument("--y", metavar="AXIS", help="config key on the y axis")
     serve_p.add_argument(
         "--fix", action="append", default=[], metavar="KEY=VALUE", help="pin a config key"
     )
-    serve_p.add_argument("--theme", choices=("dark", "light"), default="dark")
+    serve_p.add_argument(
+        "--theme",
+        choices=("dark", "light"),
+        default="dark",
+        help="the page's colours (default dark)",
+    )
     serve_p.add_argument("--top-n", type=int, default=10, metavar="N", help="worst cells listed")
     serve_p.add_argument(
         "--forest",
@@ -357,7 +363,9 @@ def _build_parser(io: _IO) -> _Parser:
         default="auto",
         help="single-axis diff panels: forest plot, strip, or forest for categorical axes",
     )
-    serve_p.add_argument("--title", metavar="TEXT")
+    serve_p.add_argument(
+        "--title", metavar="TEXT", help="the page's title (default: the two run ids and the events)"
+    )
     serve_p.add_argument(
         "--json", action="store_true", help="print the structure to stdout and exit; bind nothing"
     )
@@ -394,7 +402,13 @@ def _add_event_argument(p: argparse.ArgumentParser, note: str) -> None:
 def _add_method_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None:
     """``--method`` and ``--q``. Without defaults the namespace keeps ``None`` for a flag the
     user did not pass, so the single-run report can name the diff-only flags it was given."""
-    p.add_argument("--method", choices=_METHODS, default=_DEFAULT_METHOD if defaults else None)
+    p.add_argument(
+        "--method",
+        choices=_METHODS,
+        default=_DEFAULT_METHOD if defaults else None,
+        help="the per-cell test: fisher_bh treats the two runs as separate samples (default), "
+        "mcnemar_bh pairs them on their shared seeds, logrank_bh is cause-specific",
+    )
     p.add_argument(
         "--q", type=float, default=_DEFAULT_Q if defaults else None, help="BH false discovery rate"
     )

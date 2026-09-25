@@ -114,7 +114,8 @@ REPO = Path(__file__).resolve().parent.parent
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 
-NEW_SCHEMA = "proofload.viewpair/5"
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+NEW_SCHEMA = "proofload.viewpair/6"
 EPOCH = 1_756_900_000_000_000_000
 TASKS = ("t0", "t1", "t2", "t3")
 REPLICATES = 8
@@ -143,8 +144,9 @@ NEW_LABELS = (
     "episodes censored at horizon", "observation cap a", "observation cap b", "trace spans a", "trace spans b",
     "observation cut spans a", "observation cut spans b",
 )
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
 TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
+    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
 )
 _A8A_SPAN_KEYS = ("operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original")
@@ -604,7 +606,7 @@ def test_z10_a_single_run_report_over_a_run_written_before_the_cut_says_not_coun
 def test_z11_the_structure_is_a_new_version_because_its_diff_key_set_changed(s1: Surfaces) -> None:
     assert SCHEMA == NEW_SCHEMA and s1.payload["schema"] == NEW_SCHEMA
     with pytest.raises(ViewerError, match="unknown structure schema"):
-        render_html({**s1.payload, "schema": "proofload.viewpair/4"})
+        render_html({**s1.payload, "schema": "proofload.viewpair/5"})  # LS retrofit, 2026-09-22 (local serve pass, Phase A): the newest retired version
 
 
 def test_z11_the_diff_object_is_the_pair_provenance_in_this_order(s1: Surfaces, hz: Surfaces) -> None:

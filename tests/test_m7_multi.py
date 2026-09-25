@@ -106,7 +106,9 @@ CAPTION_RE = re.compile(r"^(\S+): (\d+) safer, (\d+) worse$")
 HEADLINE_EVENT_RE = re.compile(r"(\S+): (\d+) safer, (\d+) worse")
 COVERAGE_RE = re.compile(r"n=(\d+)\.\.(\d+) per cell, (\d+) cells with n < 16")
 SATURATION_LEGEND = "both 0% / both 100%"
-TRADE_SENTENCE = "The patch moved failures, it did not remove them."
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): the retired tail "The patch moved failures, it did not remove them." leaves every surface
+# (spec LS D2, D10, LS13); a trade line is recognised by its ``Trade:`` head alone.
+TRADE_MARK = "Trade:"
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 HASH_RE = re.compile(r"\b[0-9a-f]{16}\b")
@@ -388,7 +390,20 @@ def panel_groups(root: ET.Element) -> list[ET.Element]:
 
 
 def texts(root: ET.Element) -> list[str]:
-    return ["".join(e.itertext()) for e in root.iter() if _local(e.tag) == "text"]
+    """Every ``<text>`` in document order. LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): a long title, headline,
+    trade line or legend caption is drawn as several ``<text>`` elements, the continuation lines
+    carrying ``data-wrap="1"`` (spec LS D9, section 3.1 (b)); those are joined back onto their first
+    line with a space, so a text reads as one whatever the box width."""
+    out: list[str] = []
+    for e in root.iter():
+        if _local(e.tag) != "text":
+            continue
+        content = "".join(e.itertext())
+        if e.attrib.get("data-wrap") == "1" and out:
+            out[-1] = f"{out[-1]} {content}"
+        else:
+            out.append(content)
+    return out
 
 
 def strip_presentation(root: ET.Element) -> ET.Element:
@@ -471,6 +486,10 @@ def panel_kind(report: Report) -> str:
 
 
 def html_text(html: str) -> str:
+    # LS retrofit, 2026-09-25 (local serve pass, Phase C, ruled on Session B's finding): the inline figure's honesty
+    # lines wrap (ruling 2 of 2026-09-22), continuation lines carrying ``data-wrap="1"``; each is joined back onto
+    # the line before with one space, the way ``texts()`` joins them, so a line reads as rendered whatever the box width.
+    html = re.sub(r'</text>\s*<text[^>]*\bdata-wrap="1"[^>]*>', " ", html)
     return html_unescape(re.sub(r"<[^>]+>", " ", html))
 
 
@@ -1091,7 +1110,7 @@ def test_b7_trade_line_absent_when_none() -> None:
     assert rep.trade_line is None
     assert rep.headline == plain.headline()
     for text in visible_texts(rep):
-        assert TRADE_SENTENCE not in text
+        assert TRADE_MARK not in text
         assert plain.headline().splitlines()[0] in text
 
 
@@ -1603,7 +1622,7 @@ def test_b16_no_trade_line_no_method_table_no_delta_or_q_in_the_text() -> None:
     _, rep = _survival_report()
     md, svg_text, html = visible_texts(rep)
     for text in (md, svg_text, html):
-        assert TRADE_SENTENCE not in text and "Trade:" not in text
+        assert TRADE_MARK not in text
         assert re.search(r"\bdelta\b", text, re.IGNORECASE) is None, text[:300]
         assert re.search(r"\bq\b", text) is None, text[:300]
         assert "Worst-powered" not in text

@@ -106,7 +106,8 @@ E14_SHA256 = {
     "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
 }
 
-SCHEMA = "proofload.viewpair/5"
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+SCHEMA = "proofload.viewpair/6"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 
@@ -135,8 +136,9 @@ PROVENANCE_KEYS = (
     "observation_cut_spans_a", "observation_cut_spans_b",
 )
 
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
 TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
+    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
 )
 ARM_KEYS = (
@@ -149,8 +151,9 @@ CELL_KEYS = (
     "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
     "config", "config_text", "text",
 )
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``where`` after ``coords``; ``coords`` keeps its meaning (spec LS section 3.1 (c)).
 HOLE_KEYS = (
-    "coords", "config_hash", "cause", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
+    "coords", "where", "config_hash", "cause", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "config", "config_text",
 )
 COVERAGE_CELL_KEYS = ("rows_a", "rows_b", "no_outcome_a", "no_outcome_b")
@@ -217,7 +220,8 @@ IDENTITY_ROWS = ("with_outcome", "no_outcome", "timed_out", "infra", "other")
 DRILL_LABELS = ("n (a/b)", "rows (a/b)", "no outcome (a/b)")
 ORDER_KEYS_AFTER_N = ("rows_a", "rows_b", "no_outcome_a", "no_outcome_b")
 HOLES_HEADING = "Holes"
-HOLES_HEADER = ["coords", "cause", "config_hash", "rows (a/b)", "no outcome (a/b)"]
+# LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): ``coords`` is ``where`` in the header and the column prints the hole's ``where`` (spec LS D12).
+HOLES_HEADER = ["where", "cause", "config_hash", "rows (a/b)", "no outcome (a/b)"]
 ZERO_HOLES_TEXT = "0 holes"
 HOLES_OPTGROUP = "holes"
 HOLES_ID = "proofload-holes"
@@ -1689,7 +1693,7 @@ def test_e21_with_holes_the_section_is_a_table_of_the_five_headers_and_one_row_p
     assert table_header(following[0]) == HOLES_HEADER
     expected = [
         [
-            h["coords"] if h["coords"] is not None else NONE_TEXT,
+            h["where"],
             h["cause"],
             h["config_hash"] if h["config_hash"] is not None else NONE_TEXT,
             f"{h['rows_a']}/{h['rows_b']}",
@@ -1698,7 +1702,10 @@ def test_e21_with_holes_the_section_is_a_table_of_the_five_headers_and_one_row_p
         for h in syn.structure["holes"]
     ]
     assert table_rows(following[0]) == expected
-    assert any(r[0] == NONE_TEXT for r in expected) and any(r[2] == NONE_TEXT for r in expected)
+    # LS retrofit, 2026-09-22: an off-grid hole is in the fixture (``coords`` None) and its row no
+    # longer prints ``none`` -- ``where`` names its config on the report's axes (spec LS D12).
+    assert any(h["coords"] is None for h in syn.structure["holes"]) and any(r[2] == NONE_TEXT for r in expected)
+    assert not any(r[0] == NONE_TEXT for r in expected)
     assert HOLE_MESSAGE not in following[0].deep_text()
 
 

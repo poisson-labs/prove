@@ -340,18 +340,22 @@ E14_SHA256 = {
 }
 #: R2, second clause: the CLI's ``report.md`` and ``receipt.html`` on the E14 argv **with** the
 #: tree at the default knobs, minted on Session A's shim (module docstring).
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.md and receipt.html print LS16's respelled Cells sentence ('MDE is the smallest detectable increase', no ADR number) and nothing else new. Read through this test's own measurement on the built tree, not predicted.
 E14_WITH_TREE_SHA256 = {
-    "report.md": "263eece5428aca20c5727b3a0e550b5e03d1d324f6ab907c93ff866c5f1b0ec5",
-    "receipt.html": "e63abf9f553977a1de0153eccc3fde207cf2869709c89119bc9bc95854ea77ea",
+    "report.md": "69324de1b24bdcf561501e313561ea481e243249a982a3b274e727445a15c370",
+    "receipt.html": "f5b7342aeb67f1214140bb486b388e9e7a521ffb1d07e2972191b350fa5eb6eb",
 }
 #: R19. S27 L20's other digests, restated rather than imported so two frozen oracles do not couple.
 #: **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
 #: A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted ``4b3c6ae``) both named
-#: ``A28`` as their retiring packet; both owners have landed and A28 rewrites all four carriers, so
+#: ``A28`` as their retiring packet; both owners have landed and A28 rewrites every carrier (five literals, one per file:
+#: ``test_a28_agreement.py``, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``,
+#: ``test_s29_viewer.py``; "four" is ``FORMER_CARRIERS``, the set A28 sweeps beside itself -- LS retrofit, 2026-09-22 (local serve pass, Phase A)), so
 #: the value below is a read off the shipped file at ``38e8df9`` (byte-identical at ``03d7ed2``),
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
-DIFF_PY_SHA256 = "d5ca27cade592886f1f5c236d43e1aaf1632a16a2be0975f7b5a9c5f440fdfd7"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+DIFF_PY_SHA256 = "7e65b27a2b8b1f4ec9f0de1be9debddff0984820eb4e927a76b8acc6353307b4"
 F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
@@ -359,7 +363,8 @@ CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
-SERVE_STRUCTURE_SHA256 = "aae3498e0d90462f21963011b17f21cdd88083ad2bacb4d78b2702b2594bc9f7"
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and

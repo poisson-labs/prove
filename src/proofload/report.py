@@ -288,6 +288,9 @@ class MultiReport:
     #: The flat family's interval facts, one formatter (``_interval_lines``) for every surface:
     #: ``report.md``, the receipt, the page's honesty band, the payload and ``diff`` stdout.
     interval_lines: tuple[str, ...] = ()
+    #: M6's answer to whether the two events are exact complements, carried so the page and the
+    #: payload can say so as data; ``trade_line`` already says it as words.
+    complement: tuple[str, ...] | None = None
 
     def to_markdown(self) -> str:
         return _render_multi_markdown(self)
@@ -361,15 +364,15 @@ def _axes(
     keys = sorted(all_keys)
     for k in spec.fixed:
         if k not in all_keys:
-            raise AxisError(f"fixed names unknown config key {k!r}; known keys: {keys}")
+            raise AxisError(f"--fix names unknown config key {k!r}; known keys: {keys}")
     if spec.x_axis not in all_keys:
-        raise AxisError(f"x_axis {spec.x_axis!r} is not a config key; known keys: {keys}")
+        raise AxisError(f"--x {spec.x_axis!r} is not a config key; known keys: {keys}")
     if spec.y_axis is not None and spec.y_axis not in all_keys:
-        raise AxisError(f"y_axis {spec.y_axis!r} is not a config key; known keys: {keys}")
+        raise AxisError(f"--y {spec.y_axis!r} is not a config key; known keys: {keys}")
     if spec.y_axis == spec.x_axis:
-        raise AxisError(f"x_axis and y_axis are both {spec.x_axis!r}")
+        raise AxisError(f"--x and --y are both {spec.x_axis!r}")
     if spec.x_axis in spec.fixed or (spec.y_axis is not None and spec.y_axis in spec.fixed):
-        raise AxisError("an axis cannot also be pinned in fixed")
+        raise AxisError("an axis cannot also be pinned with --fix")
 
     kept = [r for r in rows if all(r["config"].get(k) == v for k, v in spec.fixed.items())]
     varying = sorted(
@@ -385,8 +388,8 @@ def _axes(
     unpinned = [k for k in varying if k not in named]
     if unpinned:
         raise AxisError(
-            f"{len(varying)} free axes {varying}; pin {unpinned} via fixed=... or name them as "
-            f"x_axis/y_axis"
+            f"{len(varying)} free axes {varying}; pin {unpinned} with --fix KEY=VALUE or name "
+            f"them with --x/--y"
         )
     x_values = _ordered([r["config"].get(spec.x_axis) for r in kept])
     y_values = _ordered([r["config"].get(spec.y_axis) for r in kept]) if spec.y_axis else ()
@@ -1096,6 +1099,7 @@ def build_multi_report(
         _method_rows=_multi_method_rows(multi, spec.comparison),
         tree=tree,
         interval_lines=_interval_lines(multi),
+        complement=multi.complementary_events(),
     )
 
 
@@ -1209,6 +1213,46 @@ def _truncate(text: str, budget: int) -> str:
     return text[: budget - 1] + "…"
 
 
+def _wrap(text: str, budget: int) -> list[str]:
+    """``text`` broken on spaces into lines of at most ``budget`` characters, longest first,
+    never splitting a word shorter than the budget and hard-splitting one that is longer.
+    Returns ``[""]`` for empty text, so a caller's line count is never zero."""
+    if not text:
+        return [""]
+    lines: list[str] = []
+    current = ""
+    for word in text.split(" "):
+        while len(word) > budget:
+            if current:
+                lines.append(current)
+                current = ""
+            lines.append(word[:budget])
+            word = word[budget:]
+        if not current:
+            current = word
+        elif len(current) + 1 + len(word) <= budget:
+            current = f"{current} {word}"
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _wrap_budget(width: int, x: int, font: int) -> int:
+    """How many glyphs of ``font`` fit from ``x`` to 24 px short of the right edge."""
+    return max(8, int((width - x - 24) / (_CHAR_EM * font)))
+
+
+def _running_text(out: list[str], x: int, y: int, lines: list[str], step: int, attrs: str) -> int:
+    """Emit ``lines`` as one ``<text>`` per line, ``step`` px apart; returns the ``y`` after the
+    last."""
+    for k, line in enumerate(lines):
+        mark = ' data-wrap="1"' if k else ""
+        out.append(f'<text x="{x}" y="{y + step * k}"{attrs}{mark}>{_xml_escape(line)}</text>')
+    return y + step * len(lines)
+
+
 def _attr(value: str) -> str:
     return _xml_escape(value, {'"': "&quot;"})
 
@@ -1259,9 +1303,17 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
     cell_h = max(4, min(28, int(560 / rows)))
     font = 11
     left = 96 if rep.spec.y_axis is not None else 24
-    top = 52
-    bottom = 112
     width = left + cols * cell_w + 24
+    title_lines = _wrap(rep.spec.title, _wrap_budget(width, left, font + 2))
+    headline_lines = _wrap(rep.headline, _wrap_budget(width, left, font))
+    caption_lines = _wrap(_legend_caption(rep), _wrap_budget(width, left, font - 2))
+    honesty_lines = [
+        _wrap(line, _wrap_budget(width, left, font - 2)) for line in rep.honesty.splitlines()
+    ]
+    top = 52 + 18 * (len(title_lines) - 1) + 12 * (len(headline_lines) - 1)
+    bottom = (
+        112 + 12 * (len(caption_lines) - 1) + 12 * sum(len(lines) - 1 for lines in honesty_lines)
+    )
     height = top + rows * cell_h + bottom
     label_budget = int(cell_w / (_CHAR_EM * (font - 2)))
     show_cell_labels = cell_w >= 34 and cell_h >= 14
@@ -1271,11 +1323,10 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
 
     out: list[str] = []
     out.append(f'<rect x="0" y="0" width="{width}" height="{height}" fill="{_CANVAS[theme]}"/>')
-    out.append(
-        f'<text x="{left}" y="20" fill="{_TEXT[theme]}" font-size="{font + 2}">'
-        f"{_xml_escape(rep.spec.title)}</text>"
+    y_next = _running_text(
+        out, left, 20, title_lines, 18, f' fill="{_TEXT[theme]}" font-size="{font + 2}"'
     )
-    out.append(f'<text x="{left}" y="38" fill="{_MUTED[theme]}">{_xml_escape(rep.headline)}</text>')
+    _running_text(out, left, y_next, headline_lines, 12, f' fill="{_MUTED[theme]}"')
 
     out.append(f'<g stroke="{_GRID_STROKE[theme]}" stroke-width="1">')
     glyph = 4
@@ -1392,15 +1443,10 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
             out.append(
                 f'<text x="{sx}" y="{ly + 22}" fill="{_MUTED[theme]}">{_xml_escape(label)}</text>'
             )
-    out.append(
-        f'<text x="{lx}" y="{ly + 36}" fill="{_MUTED[theme]}">'
-        f"{_xml_escape(_legend_caption(rep))}</text>"
-    )
-    for k, line in enumerate(rep.honesty.splitlines()):
-        out.append(
-            f'<text x="{lx}" y="{ly + 52 + 12 * k}" fill="{_TEXT[theme]}">'
-            f"{_xml_escape(line)}</text>"
-        )
+    y_next = _running_text(out, lx, ly + 36, caption_lines, 12, f' fill="{_MUTED[theme]}"')
+    y_next = y_next + 4
+    for lines in honesty_lines:
+        y_next = _running_text(out, lx, y_next, lines, 12, f' fill="{_TEXT[theme]}"')
     out.append("</g>")
     return out, width, height
 
@@ -1416,10 +1462,25 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
     left = 120
     axis_w = 480
     right = 140
-    top = 52
-    bottom = 112
     n_rows = len(rep.cells)
     width = left + axis_w + right
+    title_lines = _wrap(rep.spec.title, _wrap_budget(width, left, font + 2))
+    headline_lines = _wrap(rep.headline, _wrap_budget(width, left, font))
+    caption_text = (
+        f"point = delta (rate_b - rate_a, pp) on the shared scale; bracket = ±MDE, the minimum "
+        f"detectable effect from M6, not an interval estimate; event={rep._event}; "
+        f"corner square = significant"
+    )
+    if rep._trades:
+        caption_text += "; row notches = trade"
+    caption_lines = _wrap(caption_text, _wrap_budget(width, left, font - 2))
+    honesty_lines = [
+        _wrap(line, _wrap_budget(width, left, font - 2)) for line in rep.honesty.splitlines()
+    ]
+    top = 52 + 18 * (len(title_lines) - 1) + 12 * (len(headline_lines) - 1)
+    bottom = (
+        112 + 12 * (len(caption_lines) - 1) + 12 * sum(len(lines) - 1 for lines in honesty_lines)
+    )
     height = top + n_rows * row_h + bottom
     x0 = left + axis_w / 2
     scale = (axis_w / 2) / rep._bound
@@ -1427,11 +1488,10 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
 
     out: list[str] = []
     out.append(f'<rect x="0" y="0" width="{width}" height="{height}" fill="{_CANVAS[theme]}"/>')
-    out.append(
-        f'<text x="{left}" y="20" fill="{_TEXT[theme]}" font-size="{font + 2}">'
-        f"{_xml_escape(rep.spec.title)}</text>"
+    y_next = _running_text(
+        out, left, 20, title_lines, 18, f' fill="{_TEXT[theme]}" font-size="{font + 2}"'
     )
-    out.append(f'<text x="{left}" y="38" fill="{_MUTED[theme]}">{_xml_escape(rep.headline)}</text>')
+    _running_text(out, left, y_next, headline_lines, 12, f' fill="{_MUTED[theme]}"')
     out.append(
         f'<line x1="{_fmt(x0, "num")}" y1="{top}" x2="{_fmt(x0, "num")}" '
         f'y2="{top + n_rows * row_h}" stroke="{_MUTED[theme]}" stroke-width="1"/>'
@@ -1491,21 +1551,10 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
 
     ly = top + n_rows * row_h + 44
     out.append(f'<g font-size="{font - 2}">')
-    caption = (
-        f"point = delta (rate_b - rate_a, pp) on the shared scale; bracket = ±MDE, the minimum "
-        f"detectable effect from M6, not an interval estimate; event={rep._event}; "
-        f"corner square = significant"
-    )
-    if rep._trades:
-        caption += "; row notches = trade"
-    out.append(
-        f'<text x="{left}" y="{ly + 36}" fill="{_MUTED[theme]}">{_xml_escape(caption)}</text>'
-    )
-    for k, line in enumerate(rep.honesty.splitlines()):
-        out.append(
-            f'<text x="{left}" y="{ly + 52 + 12 * k}" fill="{_TEXT[theme]}">'
-            f"{_xml_escape(line)}</text>"
-        )
+    y_next = _running_text(out, left, ly + 36, caption_lines, 12, f' fill="{_MUTED[theme]}"')
+    y_next = y_next + 4
+    for lines in honesty_lines:
+        y_next = _running_text(out, left, y_next, lines, 12, f' fill="{_TEXT[theme]}"')
     out.append("</g>")
     return out, width, height
 
@@ -1545,22 +1594,27 @@ def _render_stacked_svg(
     font = 11
     bodies = [(_svg_body(panels[e]), e) for e in events]
     width = max([w for (_, w, _), _ in bodies], default=200)
-    header_h = 36 + 16 * len(header)
+    title_lines = _wrap(spec.title, _wrap_budget(width, 24, font + 2))
+    wrapped = [
+        (line, kind, ' data-wrap="1"' if k else "")
+        for text, kind in header
+        for k, line in enumerate(_wrap(text, _wrap_budget(width, 24, font)))
+    ]
+    header_h = 36 + 18 * (len(title_lines) - 1) + 16 * len(wrapped)
     height = header_h + sum(h for (_, _, h), _ in bodies)
     out = [_svg_start(width, height, font)]
     out.append(f"<style>{_TRADE_STYLE}</style>")
     out.append(f'<rect x="0" y="0" width="{width}" height="{height}" fill="{_CANVAS[theme]}"/>')
-    out.append(
-        f'<text x="24" y="20" fill="{_TEXT[theme]}" font-size="{font + 2}">'
-        f"{_xml_escape(spec.title)}</text>"
+    y_next = _running_text(
+        out, 24, 20, title_lines, 18, f' fill="{_TEXT[theme]}" font-size="{font + 2}"'
     )
-    for k, (line, kind) in enumerate(header):
-        y = 38 + 16 * k
+    for k, (line, kind, mark) in enumerate(wrapped):
+        y = y_next + 16 * k
         if kind == "trade":
-            out.append(f'<text x="24" y="{y}" class="trade">{_xml_escape(line)}</text>')
+            out.append(f'<text x="24" y="{y}" class="trade"{mark}>{_xml_escape(line)}</text>')
         else:
             colour = _MUTED[theme] if kind == "muted" else _TEXT[theme]
-            out.append(f'<text x="24" y="{y}" fill="{colour}">{_xml_escape(line)}</text>')
+            out.append(f'<text x="24" y="{y}" fill="{colour}"{mark}>{_xml_escape(line)}</text>')
     offset = header_h
     for (body, _, h), e in bodies:
         out.append(f'<g data-panel="{_attr(e)}" transform="translate(0 {offset})">')
@@ -1797,7 +1851,7 @@ _NOT_TESTED: dict[str, str] = {
 #: What the leaf row's MDE column means, said once on the page as S27 section 3.1 promised: free
 #: text with no number in it.
 _LEAF_MDE_MEANING = (
-    "MDE is ADR-018's smallest detectable increase from arm A's rate, capped at the headroom, "
+    "MDE is the smallest detectable increase from arm A's rate, capped at the headroom, "
     "so on a cell at ceiling it reads the headroom and is not a power number."
 )
 

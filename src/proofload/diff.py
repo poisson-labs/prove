@@ -679,8 +679,31 @@ class MultiDiffResult:
             f"{self.n_tests} tests, {pairing})"
         )
 
+    def complementary_events(self) -> tuple[str, ...] | None:
+        """The two events' names, in ``events`` order, when they are exact complements: two events,
+        the same cells in both frames, the same ``n_a`` and ``n_b`` per cell, and in every cell and
+        both arms ``events(e1) + events(e2) == n``. Integers throughout; no rate, no tolerance."""
+        if len(self.events) != 2:
+            return None
+        first, second = (self.by_event[e].cells for e in self.events)
+        hashes = [str(h) for h in first["config_hash"]]
+        if sorted(hashes) != sorted(str(h) for h in second["config_hash"]):
+            return None
+        a = first.set_index(first["config_hash"].astype(str))
+        b = second.set_index(second["config_hash"].astype(str))
+        for h in hashes:
+            n_a, n_b = int(a.at[h, "n_a"]), int(a.at[h, "n_b"])
+            if n_a != int(b.at[h, "n_a"]) or n_b != int(b.at[h, "n_b"]):
+                return None
+            if int(a.at[h, "events_a"]) + int(b.at[h, "events_a"]) != n_a:
+                return None
+            if int(a.at[h, "events_b"]) + int(b.at[h, "events_b"]) != n_b:
+                return None
+        return tuple(self.events)
+
     def trade_line(self) -> str | None:
-        """None when ``trades`` is empty; otherwise a count of co-occurrence, not a cause."""
+        """None when ``trades`` is empty; otherwise a count of co-occurrence, not a cause. When the
+        two events are exact complements the trade is guaranteed and the line says so instead."""
         if len(self.trades) == 0:
             return None
         pairs: dict[tuple[str, str], int] = {}
@@ -690,10 +713,18 @@ class MultiDiffResult:
                     pairs[(safer, worse)] = pairs.get((safer, worse), 0) + 1
         (safer, worse), _ = min(pairs.items(), key=lambda kv: (-kv[1], kv[0]))
         n = len(self.trades)
-        return (
-            f"Trade: {safer} fell in {n} {'cell' if n == 1 else 'cells'} where {worse} rose. "
-            "The patch moved failures, it did not remove them."
-        )
+        complement = self.complementary_events()
+        if complement is not None:
+            e1, e2 = complement
+            cells = int(len(self.by_event[e1].cells))
+            return (
+                f"{e1} and {e2} are complements here: in all {cells} conditions every trial "
+                "recorded exactly one of the two, so each rate is one minus the other and each "
+                f"change is the other's with its sign flipped. The {n} conditions where {worse} "
+                f"rose are the {n} where {safer} fell: one finding, reported twice. Naming one of "
+                "the two shows it once."
+            )
+        return f"Trade: {safer} fell in {n} {'cell' if n == 1 else 'cells'} where {worse} rose."
 
     def to_markdown(self) -> str:
         lines: list[str] = []

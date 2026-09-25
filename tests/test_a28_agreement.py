@@ -112,11 +112,12 @@ GO1_A, GO1_B = "go1-v0", "go1-v1"
 # ---------- spec sections 2, 3.2, 3.4: the literals ----------
 
 #: G9. The schema this packet moves to, and the two it retires.
-SCHEMA = "proofload.viewpair/5"
-RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3", "proofload.viewpair/4")
-#: G9. The twelve top-level keys, in order, unchanged: the digest is inside ``tree``, not beside it.
+# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+SCHEMA = "proofload.viewpair/6"
+RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5")
+#: G9. The top-level keys, in order: the digest is inside ``tree``, not beside it. LS retrofit, 2026-09-22 (local serve pass, Phase A): fourteen, ``summary`` eighth.
 TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "fence", "panels",
+    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
 )
 #: G7. ``TreeResult``'s six fields in order and ``to_json()``'s six keys in the same order.
@@ -164,8 +165,11 @@ EXCLUSION_CARRIER = "test_s29_viewer.py"
 FORMER_CARRIERS = ("test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py")
 PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REPORT_SOURCE, "DIFF_PY_EXCLUDED": DIFF_SOURCE}
 #: G20. ``src/proofload/diff.py`` whole, read off the shipped file at ``38e8df9`` and unchanged at
-#: ``03d7ed2``: the value the retirement re-mints in all four carriers, a read and not a prediction.
-DIFF_PY_SHA256 = "d5ca27cade592886f1f5c236d43e1aaf1632a16a2be0975f7b5a9c5f440fdfd7"
+#: ``03d7ed2``: the value the retirement re-mints in every carrier -- five literals, one per file (this
+#: file, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``, ``test_s29_viewer.py``);
+#: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS retrofit, 2026-09-22 (local serve pass, Phase A)) -- a read and not a prediction.
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+DIFF_PY_SHA256 = "7e65b27a2b8b1f4ec9f0de1be9debddff0984820eb4e927a76b8acc6353307b4"
 #: The one ``tests/`` file whose module-level ``*_PY_EXCLUDED`` constants this packet inspects.
 S27_SOURCE = TESTS / "test_s27_leaves.py"
 

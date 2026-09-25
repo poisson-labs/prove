@@ -286,6 +286,7 @@ OUT_PLACEHOLDER = "<out>"
 # report A B/receipt.html and serve --json -- because the provenance list gains the horizon rename and the observation
 # lines and the structure is proofload.viewpair/5. Each is the baseline's output plus that change, byte for byte; the
 # other nine are unchanged.
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): three of the fourteen move: both 'report A B' files, whose Cells section prints LS16's respelled sentence ('MDE is the smallest detectable increase', no ADR number), and 'serve --json', which is proofload.viewpair/6 with the summary key and each panel's mde_unchanged. The other eleven are unchanged. Read through this test's own measurement on the built tree, not predicted.
 GO1_VERB_SHA256 = {
     "runs": "0c9a8e63beb07be3c4b370e02d93ac33672b77430fe7381da5063f91c182a4b1",
     "diff": "7849924e1ff36e6a9a2afc338a876bf312d3a5188f069e3e6cdb40693e226d8a",
@@ -296,10 +297,10 @@ GO1_VERB_SHA256 = {
     "report A/heatmap.svg": "e6020ec87eae771a66d8847888de06f2355cd810209e39c25d1c7a6584400851",
     "report A/receipt.html": "c0ac15e72e730f3cb134de862a3ba67a74b0623c07a12571ea0be4642f9fefa1",
     "report A B": "a597669edbcba109c45e2cf02299c397e30d2033ba79e92f298d274c0a06436d",
-    "report A B/report.md": "263eece5428aca20c5727b3a0e550b5e03d1d324f6ab907c93ff866c5f1b0ec5",
+    "report A B/report.md": "69324de1b24bdcf561501e313561ea481e243249a982a3b274e727445a15c370",
     "report A B/heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "report A B/receipt.html": "e63abf9f553977a1de0153eccc3fde207cf2869709c89119bc9bc95854ea77ea",
-    "serve --json": "fc0745b7fc7334621cfb4673bf844bfc5d6cd3006b03e4a5abd7f8553ddeae91",
+    "report A B/receipt.html": "f5b7342aeb67f1214140bb486b388e9e7a521ffb1d07e2972191b350fa5eb6eb",
+    "serve --json": "725d60142c4322fcdb26242e515636ff9353394c51f61e5b05c8ee240b4e32a7",
     "inspect": "5e2905ec3c2c8e87e6a0032b82a3ed544fc5bd68557688896c1fa717b648d052",
 }
 GO1_EVENT = "fell"
