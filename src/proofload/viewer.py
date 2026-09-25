@@ -1,9 +1,10 @@
 """M13: the viewer. A versioned structure for one run pair, a renderer over it, and a server.
 
-Three halves that never reach back into each other. ``build_structure`` assembles
-``proofload.viewpair/4`` -- identity and run tallies, diff parameters, panels, cells, holes,
-the flat family's intervals, M14's layered report and what could not be verified -- from M6's
-result, M7's report, M14's tree, the two ``RunManifest``s and the two ``RunTally``s.
+Three halves that never reach back into each other. ``build_structure`` assembles the
+versioned structure ``SCHEMA`` -- identity and run tallies, diff parameters, panels, cells, holes,
+the flat family's intervals, M14's layered report, the plain-language summary and what could not
+be verified -- from M6's result, M7's report, M14's tree, the two ``RunManifest``s and the two
+``RunTally``s.
 ``render_html`` turns that structure, and nothing else, into one page.
 ``serve_page`` holds the page on an ephemeral loopback port until Ctrl-C.
 
@@ -30,6 +31,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import TYPE_CHECKING, Any
 
+from proofload.plain import build_summary
 from proofload.report import (
     _EPISTEMIC_FENCE,
     _coord_text,
@@ -73,7 +75,13 @@ __all__ = ["ViewerError", "build_structure", "render_html", "serve_page"]
 # about the observation cut -- is ``episodes_censored_at_horizon`` in its slot, and the run
 # identity is followed by each run's recorded byte limit, its span count and how many of those
 # spans were stamped as cut. A ``/4`` structure is refused by name like the ones before it.
-SCHEMA = "proofload.viewpair/5"
+#
+# ``/6`` adds the eighth top-level key ``summary`` -- the plain-language sentences, built once by
+# ``proofload.plain`` over the payload's own objects so that ``serve``, the dashboard and any
+# later surface say the same words from one source -- and, inside each panel, ``mde_unchanged``
+# after ``honesty`` (the detection limit as a field, not prose) and, inside each hole, ``where``
+# after ``coords``. A ``/5`` structure is refused by name like the ones before it.
+SCHEMA = "proofload.viewpair/6"
 
 #: Which BH family ``intervals.level`` and ``intervals.alpha_star`` belong to. The layered
 #: report introduces a nested family with a different level, so a bare ``alpha*`` on the page
@@ -102,7 +110,8 @@ _EVENT_LINE_TAIL = "given by --event, not inferred"
 _HOLE_MESSAGE = "No comparable data for this cell."
 _HOLES_HEADING = "Holes"
 _HOLES_OPTGROUP = "holes"
-_HOLES_HEADER = ["coords", "cause", "config_hash", "rows (a/b)", "no outcome (a/b)"]
+_HOLES_HEADER = ["where", "cause", "config_hash", "rows (a/b)", "no outcome (a/b)"]
+_OFF_GRID = "off grid: "
 
 # The seven float fields each cell carries raw, and the kind M7 formats each with.
 _FLOAT_KINDS: dict[str, str] = {
@@ -350,12 +359,31 @@ def _cell(
     return out
 
 
+def _mde_unchanged(
+    spec: ReportSpec, present: Sequence[Cell], value: float, cell_hash: str | None
+) -> dict[str, Any]:
+    """The event's detection limit as a field: M6's ``max_mde_unchanged``, M7's rendering of it,
+    and the coordinate of the cell attaining it by the same three-step search ``_honesty`` does.
+    All three ``None`` when no cell is unchanged, which is when the honesty line says so."""
+    unchanged = [c for c in present if c.verdict == "unchanged"]
+    if math.isnan(value) or not unchanged:
+        return {"value": None, "text": None, "where": None}
+    named = [c for c in unchanged if c.config_hash == cell_hash]
+    if not named:
+        named = [c for c in unchanged if c.mde == value]
+    if not named:
+        named = [max(unchanged, key=lambda c: c.mde)]
+    return {"value": float(value), "text": _fmt(value, "pp0"), "where": _coord_text(spec, named[0])}
+
+
 def _panel(
     spec: ReportSpec,
     event: str,
     panel: Report,
     rows: dict[str, dict[str, Any]],
     coverage: Mapping[str, Mapping[str, Any]],
+    max_mde_unchanged: float,
+    max_mde_unchanged_cell: str | None,
 ) -> dict[str, Any]:
     present = [c for c in panel.cells if c.present]
     cells = [
@@ -370,6 +398,7 @@ def _panel(
         "event": event,
         "caption": panel.headline,
         "honesty": panel.honesty,
+        "mde_unchanged": _mde_unchanged(spec, present, max_mde_unchanged, max_mde_unchanged_cell),
         "n_safer": int(panel.n_safer),
         "n_worse": int(panel.n_worse),
         "n_unchanged": int(panel.n_unchanged),
@@ -389,18 +418,35 @@ def _hole(
     config_hash: str | None,
     cause: str,
     coverage: Mapping[str, Mapping[str, Any]],
+    axes: Sequence[str],
 ) -> dict[str, Any]:
     """One hole. A grid coordinate that no coverage row explains -- ``unsampled``, or a
     ``multiple`` that more than one row maps to -- carries no hash, no config and four zeros;
     every other hole carries its coverage row's. A hole never has a ``text`` entry: there is
-    no float to format."""
+    no float to format.
+
+    ``where`` says where the hole is in words the page can print: a grid hole's ``coords``, and
+    an off-grid hole's own config on the report's axes -- the x axis, the y axis and the pinned
+    keys, in that order -- or ``off grid: <config_hash>`` when its config carries none of them.
+    ``coords`` keeps its meaning (a grid coordinate, or ``None``) beside it.
+    """
     row = None if config_hash is None else coverage[config_hash]
     config = None if row is None else row["config"]
-    out: dict[str, Any] = {"coords": coords, "config_hash": config_hash, "cause": cause}
+    config_text = None if config is None else _config_text(config)
+    if coords is not None:
+        where = coords
+    else:
+        named = [] if config_text is None else [
+            f"{axis}={config_text[axis]}" for axis in axes if isinstance(config_text.get(axis), str)
+        ]
+        where = ", ".join(named) if named else f"{_OFF_GRID}{config_hash}"
+    out: dict[str, Any] = {
+        "coords": coords, "where": where, "config_hash": config_hash, "cause": cause
+    }
     for name in _COVERAGE_FIELDS:
         out[name] = 0 if row is None else int(row[name])
     out["config"] = config
-    out["config_text"] = None if config is None else _config_text(config)
+    out["config_text"] = config_text
     return out
 
 
@@ -424,17 +470,20 @@ def _holes(
         if cell.config_hash is not None
     }
     entries: list[dict[str, Any]] = []
+    axes = [*_axes(spec), *(str(key) for key in spec.fixed)]
     for cell in report.panels[report.events[0]].cells:
         if cell.present or cell.hole_cause is None:
             continue
         found = None if cell.config_hash is None else str(cell.config_hash)
-        entries.append(_hole(_coord_text(spec, cell), found, str(cell.hole_cause), coverage))
+        entries.append(_hole(_coord_text(spec, cell), found, str(cell.hole_cause), coverage, axes))
     off_grid = sorted(
         name
         for name, row in coverage.items()
         if not row["comparable"] and name not in on_grid
     )
-    entries.extend(_hole(None, name, str(coverage[name]["cause"]), coverage) for name in off_grid)
+    entries.extend(
+        _hole(None, name, str(coverage[name]["cause"]), coverage, axes) for name in off_grid
+    )
     return entries
 
 
@@ -642,34 +691,47 @@ def build_structure(
     }
     panels = []
     for event in report.events:
+        ev = multi.by_event[event]
         rows = {
             str(record["config_hash"]): record
-            for record in multi.by_event[event].cells.to_dict(orient="records")
+            for record in ev.cells.to_dict(orient="records")
         }
-        panels.append(_panel(spec, event, report.panels[event], rows, coverage))
+        panels.append(
+            _panel(
+                spec, event, report.panels[event], rows, coverage,
+                ev.max_mde_unchanged, ev.max_mde_unchanged_cell,
+            )
+        )
+    pair = {
+        "store_root": store_root,
+        "created_at_gap_s": _gap_seconds(manifest_a.created_at, manifest_b.created_at),
+        "a": _arm(manifest_a, "baseline", rows_a, tally_a),
+        "b": _arm(manifest_b, "candidate", rows_b, tally_b),
+    }
+    diff = dict(report.provenance)
+    view = {
+        "title": spec.title,
+        "x_axis": spec.x_axis,
+        "y_axis": spec.y_axis,
+        "fixed": dict(spec.fixed),
+        "theme": spec.theme,
+        "top_n": int(spec.top_n),
+        "forest": spec.forest,
+        "bound": float(report.bound),
+        "sign_convention": _SIGN_CONVENTION,
+    }
     return {
         "schema": SCHEMA,
-        "pair": {
-            "store_root": store_root,
-            "created_at_gap_s": _gap_seconds(manifest_a.created_at, manifest_b.created_at),
-            "a": _arm(manifest_a, "baseline", rows_a, tally_a),
-            "b": _arm(manifest_b, "candidate", rows_b, tally_b),
-        },
-        "diff": dict(report.provenance),
+        "pair": pair,
+        "diff": diff,
         "holes": _holes(spec, report, coverage),
-        "view": {
-            "title": spec.title,
-            "x_axis": spec.x_axis,
-            "y_axis": spec.y_axis,
-            "fixed": dict(spec.fixed),
-            "theme": spec.theme,
-            "top_n": int(spec.top_n),
-            "forest": spec.forest,
-            "bound": float(report.bound),
-            "sign_convention": _SIGN_CONVENTION,
-        },
+        "view": view,
         "headline": report.headline,
         "trade_line": report.trade_line,
+        "summary": build_summary(
+            panels=panels, view=view, pair=pair, diff=diff, complement=report.complement,
+            trade_line=report.trade_line,
+        ),
         "fence": _EPISTEMIC_FENCE,
         "panels": panels,
         "intervals": _intervals(report, multi),
@@ -749,10 +811,12 @@ def _unverified_html(entries: Sequence[Mapping[str, Any]]) -> list[str]:
     items = []
     for entry in entries:
         blocked = entry["blocked_by"]
+        # ``blocked_by`` stays in the payload for consumers that track which limits have an owner;
+        # the page says the same thing without an id a reader cannot resolve.
         tail = (
-            f" (closed by {_html.escape(str(blocked))})"
+            " (a change is planned that would close this)"
             if blocked is not None
-            else " (nothing on the roadmap closes this)"
+            else " (nothing planned would close this; it is a limit of the instrument)"
         )
         items.append(
             f"<li><strong>{_html.escape(str(entry['id']))}</strong> "
@@ -802,9 +866,18 @@ def _holes_html(holes: Sequence[Mapping[str, Any]]) -> list[str]:
     if not holes:
         parts.append(f"<p>{str(len(holes))} holes</p>")
         return parts
+    on_grid = sum(1 for hole in holes if hole["coords"] is not None)
+    off_grid = sum(1 for hole in holes if hole["coords"] is None)
+    causes = Counter(str(hole["cause"]) for hole in holes)
+    summary = (
+        f"{len(holes)} holes: {on_grid} on the grid, {off_grid} off it (a condition "
+        "whose axis value no comparable condition has, so it is on no heatmap). "
+        + ", ".join(f"{cause} {count}" for cause, count in sorted(causes.items()))
+    )
+    parts.append(f"<p>{_html.escape(summary)}</p>")
     rows = [
         [
-            _scalar_text(hole["coords"]),
+            str(hole["where"]),
             str(hole["cause"]),
             _scalar_text(hole["config_hash"]),
             f"{hole['rows_a']}/{hole['rows_b']}",
@@ -814,6 +887,22 @@ def _holes_html(holes: Sequence[Mapping[str, Any]]) -> list[str]:
     ]
     parts.append(_html_table(_HOLES_HEADER, rows))
     return parts
+
+
+def _summary_html(summary: Mapping[str, Any]) -> list[str]:
+    """The plain register, first on the page and never folded: every sentence is a ``line`` the
+    structure carries, one ``<p>`` each, and nothing here composes one."""
+    lines: list[str] = []
+    if summary["partial"] is not None:
+        lines.append(str(summary["partial"]["line"]))
+    if summary["complement"] is not None and summary["complement"]["line"] is not None:
+        lines.append(str(summary["complement"]["line"]))
+    for entry in summary["events"]:
+        lines.append(str(entry["line"]))
+        lines.extend(str(row["line"]) for row in entry["worse"])
+        lines.append(str(entry["limit"]["line"]))
+    lines.append(str(summary["pointer"]))
+    return ["<h2>Summary</h2>", *(f"<p>{_html.escape(line)}</p>" for line in lines)]
 
 
 # ---------- the tree on the page ----------
@@ -832,7 +921,7 @@ _NOT_TESTED_SENTENCES: dict[str, str] = {
 
 #: What the leaf row's MDE column means, said once on the page: free text with no number in it.
 _LEAF_MDE_MEANING = (
-    "MDE is ADR-018's smallest detectable increase from arm A's rate, capped at the headroom, "
+    "MDE is the smallest detectable increase from arm A's rate, capped at the headroom, "
     "so on a cell at ceiling it reads the headroom and is not a power number."
 )
 
@@ -1178,7 +1267,7 @@ _SCRIPT = """
 # cells a reader clicks first. ``[data-mde]`` is deliberately absent: it exists only in forest
 # mode, where it is a child of ``<g data-cell>`` and is the widest target in the row.
 _LAYOUT = (
-    "[data-sig],svg path{pointer-events:none}"
+    "[data-sig],svg path,svg text{pointer-events:none}"
     "[data-cell]{cursor:pointer}"
     "[data-selected]{outline:2px solid currentColor;outline-offset:1px}"
     "details{margin:12px 0}"
@@ -1211,7 +1300,7 @@ def render_html(structure: Mapping[str, Any]) -> str:
     if "intervals" not in structure:
         raise ViewerError(
             "this structure carries no intervals; it was assembled before the flat family's "
-            "intervals joined proofload.viewpair/4 and is not a page this renderer will draw"
+            f"intervals joined {SCHEMA} and is not a page this renderer will draw"
         )
     if "tree" not in structure:
         raise ViewerError(
@@ -1236,7 +1325,9 @@ def render_html(structure: Mapping[str, Any]) -> str:
         "<body>",
         f"<h1>{_html.escape(title)}</h1>",
     ]
-    parts.extend(_identity_html(pair))
+    # The answer first (LS D7): the plain summary above everything, the run identity beside the
+    # provenance it belongs with, and every region between them in its S29 order.
+    parts.extend(_summary_html(structure["summary"]))
 
     events = ", ".join(str(name) for name in diff["events"])
     parts.append("<h2>Events</h2>")
@@ -1248,6 +1339,9 @@ def render_html(structure: Mapping[str, Any]) -> str:
 
     parts.append("<h2>Result</h2>")
     parts.append(f"<p>{_lines_html(str(structure['headline']))}</p>")
+    # LS21: the plain line beside the word "unpaired", carried by the payload and printed here.
+    if structure["summary"]["pairing"]["line"] is not None:
+        parts.append(f"<p>{_html.escape(str(structure['summary']['pairing']['line']))}</p>")
     if structure["trade_line"] is not None:
         parts.append(f"<p>{_html.escape(str(structure['trade_line']))}</p>")
 
@@ -1306,6 +1400,7 @@ def render_html(structure: Mapping[str, Any]) -> str:
         parts.append(_html_table(panel["worst_header"], panel["worst_rows"]))
 
     parts.append(f"<blockquote>{_html.escape(str(structure['fence']))}</blockquote>")
+    parts.extend(_identity_html(pair))
     parts.append("<h2>Provenance</h2>")
     items = "".join(f"<li>{_html.escape(line[2:])}</li>" for line in _provenance_lines(diff))
     parts.append(f"<ul>{items}</ul>")
