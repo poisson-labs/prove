@@ -486,6 +486,10 @@ def panel_kind(report: Report) -> str:
 
 
 def html_text(html: str) -> str:
+    # LS retrofit, 2026-09-25 (local serve pass, Phase C, ruled on Session B's finding): the inline figure's honesty
+    # lines wrap (ruling 2 of 2026-09-22), continuation lines carrying ``data-wrap="1"``; each is joined back onto
+    # the line before with one space, the way ``texts()`` joins them, so a line reads as rendered whatever the box width.
+    html = re.sub(r'</text>\s*<text[^>]*\bdata-wrap="1"[^>]*>', " ", html)
     return html_unescape(re.sub(r"<[^>]+>", " ", html))
 
 
