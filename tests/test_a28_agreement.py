@@ -169,7 +169,8 @@ PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REP
 #: file, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``, ``test_s29_viewer.py``);
 #: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS retrofit, 2026-09-22 (local serve pass, Phase A)) -- a read and not a prediction.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-DIFF_PY_SHA256 = "7e65b27a2b8b1f4ec9f0de1be9debddff0984820eb4e927a76b8acc6353307b4"
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 #: The one ``tests/`` file whose module-level ``*_PY_EXCLUDED`` constants this packet inspects.
 S27_SOURCE = TESTS / "test_s27_leaves.py"
 

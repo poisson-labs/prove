@@ -156,7 +156,8 @@ UNTOUCHED_FILE_SHA256 = {
 #: whole-file value is ``5cfdf03b...`` and is **not** pinned here: D9's "no change to them" does not
 #: survive D3's ``"none"``, and this is the one region that moves.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py outside _observation_cap is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
-REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "35f3ac5a2d78df3a704f59fbec500a81fee0582268075850ea37b70f6957b267"
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): report.py outside _observation_cap: report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
+REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "2e35cd3468dd170503d4ad3d7ec9fe1846d6349b84a577fc6de5bb60b74e8724"
 #: CD11: ``split``'s envelope/bodies partition over the fixture below, at the dispatch commit.
 SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
 #: CD12: ``examples/tau2_pilot/t4.toml``'s 53 ``config_hash`` values, sorted and joined (D13).
