@@ -741,7 +741,10 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     assert fresh.equals(expected), f"\n{fresh}\n!=\n{expected}"
     assert fresh.names == THIRTEEN + ["trace", "trace_obs"]
     golden_manifest = json.loads((GO1_ROOT / "go1-v0" / "manifest.json").read_text())
-    assert set(store.manifest("r1").to_dict()) == set(golden_manifest)
+    # A10 (spec section 3.3, 7.1 group 1, W4): the manifest's top-level keys are the Go1 golden's
+    # twelve plus ``declared``, which is null for a sweep that declares nothing. Amended from
+    # ``== set(golden_manifest)``; the golden comparison is kept. A23/A26 re-amends this line.
+    assert set(store.manifest("r1").to_dict()) == set(golden_manifest) | {"declared"}
 
 
 # ---------- R8: runs on the Go1 store ----------
