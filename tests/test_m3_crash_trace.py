@@ -121,11 +121,12 @@ TRACE_EXPORTS = [
     # functions. CD (D8) retires three of A8b's five -- OBSERVATION_HEAD_BYTES and
     # OBSERVATION_TAIL_BYTES are deleted with the default they described, and
     # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES, which sorts one place later.
-    # trace.py's own order: constants, classes, functions, each sorted. 30 names.
+    # A10 (spec section 7.1 group 3, W1): Declaration joins, minted in trace.py, among the classes.
+    # trace.py's own order: constants, classes, functions, each sorted. 31 names.
     "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
     "OBSERVATION_KEYS", "OBSERVATION_ROUTING_BYTES",
     "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES", "TRUNCATED_KEY",
-    "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
+    "Collector", "Declaration", "Span", "SpanHandle", "Trace", "TraceValidationError",
     "assemble", "collect", "finalize", "from_litellm", "from_otel", "merge", "record", "split", "step",
     "truncate_observations",
 ]
