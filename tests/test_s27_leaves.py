@@ -319,9 +319,12 @@ E14_SHA256 = {
 # ``SERVE_STRUCTURE_SHA256`` and its dated note; ``test_s26_fault_lines.py`` by Phase A's retrofit (the "five literals" comment
 # on ``DIFF_PY_SHA256``) and by Phase C's re-mint of its ``DIFF_PY_SHA256`` and ``SERVE_STRUCTURE_SHA256``. Read off the two
 # files as they stand after every other re-mint, not predicted. Nothing pins this file, so the cascade ends here.
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, last): only ``test_s26_fault_lines.py`` moved, by this
+# re-mint of its ``DIFF_PY_SHA256`` (off the build at 662ceff) and the dated note above it; ``test_s25_root.py`` is untouched.
+# Read off the file as it stands after every other re-mint, not predicted. Nothing pins this file, so the cascade ends here.
 FROZEN_ORACLE_SHA256 = {
     "tests/test_s25_root.py": "32dae0b55f404f135e631015e010b40541148672ff41fd30b76b10b130dbed05",
-    "tests/test_s26_fault_lines.py": "10ea755493519f1ad2e9bc3e70cf3ad4f78394fb5f2189f56c9d459038ee64f3",
+    "tests/test_s26_fault_lines.py": "b4c940d751988f897abab6fb9f5210faa2c3401f27a5132abb0c6f6a04104e32",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
