@@ -280,9 +280,11 @@ CLOSURE_EXCLUDED = ("_fmt", "_md_table", "_html_table", "_html_lines")
 #: at the base commit: every name bound at module level by a ``def``, ``class`` or assignment
 #: that does not start with an underscore (imports excluded).
 # Re-minted 2026-09-20 (truncation surfacing): ``observations`` joins ``build_multi_report``'s keywords.
+# Re-minted 2026-09-26 (A10): ``declarations`` joins them, keyword-only and last, in the spelling the build uses.
 BUILD_MULTI_REPORT_SIGNATURE = (
     "(multi: 'MultiDiffResult', spec: 'ReportSpec', *, manifests: 'tuple[RunManifest, RunManifest] | None' = None, "
-    "tree: 'TreeResult | None' = None, observations: 'tuple[tuple[int, int], tuple[int, int]] | None' = None) -> 'MultiReport'"
+    "tree: 'TreeResult | None' = None, observations: 'tuple[tuple[int, int], tuple[int, int]] | None' = None, "
+    "declarations: 'tuple[DeclarationCheck | None, DeclarationCheck | None] | None' = None) -> 'MultiReport'"
 )
 PUBLIC_NAMES_AT_BASE = (
     "ABSENT_FILL", "AxisError", "Cell", "ComparisonMismatch", "Mode", "MultiReport", "NEUTRAL_FILL", "Report",
