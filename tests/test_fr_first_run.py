@@ -299,6 +299,7 @@ DIFF_MODULE_NAMES = frozenset(
     "mde_two_proportion multi_diff score_p_rd score_p_rd_paired".split()
 )
 # Re-minted 2026-09-20 (truncation surfacing): cli.py also imports report._observation_cap, for the limit ``inspect`` prints beside a cut.
+# Re-minted 2026-09-26 (A10): cli.py calls steps.declaration_check beside _observation_counts and prints ``inspect``'s declaration block through report._provenance_lines.
 CLI_IMPORTS = frozenset(
     {
         ("__future__", "annotations"), ("_typeshed", "SupportsWrite"), ("argparse", None), ("collections", "Counter"),
@@ -319,8 +320,8 @@ CLI_IMPORTS = frozenset(
         ("proofload.paired", "_fold_html"), ("proofload.paired", "_fold_markdown"), ("proofload.paired", "cost"),
         ("proofload.report", "MultiReport"), ("proofload.report", "ReportError"),
         ("proofload.report", "ReportSpec"), ("proofload.report", "SurvivalReport"), ("proofload.report", "_interval_lines"), ("proofload.report", "_observation_cap"),
-        ("proofload.report", "build_multi_report"), ("proofload.report", "build_survival_report"),
-        ("proofload.sampler", "SamplerError"), ("proofload.sampler", "SweepSpec"), ("proofload.store", "RunManifest"),
+        ("proofload.report", "_provenance_lines"), ("proofload.report", "build_multi_report"), ("proofload.report", "build_survival_report"),
+        ("proofload.sampler", "SamplerError"), ("proofload.sampler", "SweepSpec"), ("proofload.steps", "declaration_check"), ("proofload.store", "RunManifest"),
         ("proofload.store", "Store"), ("proofload.store", "StoreError"), ("proofload.survival", "SurvivalError"),
         ("proofload.survival", "cell_table"), ("proofload.survival", "competing_set"), ("proofload.trace", "Trace"),
         ("proofload.trace", "TraceValidationError"), ("proofload.tree", "Bound"), ("proofload.tree", "CellFamily"),
