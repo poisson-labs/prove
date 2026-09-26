@@ -284,8 +284,11 @@ MULTI_JSON_KEYS = [
     "n_verdict_only", "non_event", "q", "seed_identity_match", "t_unit", "trade_line", "trades", "truncated",
     "unpaired_analysis",
 ]
+# A10 (spec section 7.1 group 5, W9 and ruling 3 of 2026-09-25): DeclaredSetMismatch is the one
+# module-level name diff.py gains; the check itself sits in diff() and multi_diff(), before _pairing.
 DIFF_MODULE_NAMES = frozenset(
-    "CELLS_COLUMNS COVERAGE_COLUMNS DiffError DiffResult EventDiff EventInferenceError INTERVAL_BASES INTERVAL_COLUMNS "
+    "CELLS_COLUMNS COVERAGE_COLUMNS DeclaredSetMismatch DiffError DiffResult EventDiff EventInferenceError INTERVAL_BASES "
+    "INTERVAL_COLUMNS "
     "Method MultiDiffResult NotPairable SUMMARY_FIELDS UnitMismatch UnknownEvent UnpairedAnalysis _BASIS_BY_METHOD "
     "_CAUSES _CENSORED _CIF_EQUALITY_TOLERANCE _EVENT_SUMMARY_FIELDS _INVERSION_STEPS _MAX_EVENTS _METHODS "
     "_MULTI_SUMMARY_FIELDS _NO_OUTCOME_A _NO_OUTCOME_B _NO_OUTCOME_BOTH _ONLY_A _ONLY_B _PAIRED_METHODS _RAW_REQUIRED "
