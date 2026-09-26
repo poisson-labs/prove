@@ -138,6 +138,18 @@ class UnitMismatch(DiffError):
     """The two runs measure ``t`` in different units."""
 
 
+class DeclaredSetMismatch(DiffError):
+    """Two runs declare different, non-empty outcome vocabularies (A10, S22 section 10).
+
+    Raised in ``diff`` and ``multi_diff`` just before ``_pairing``, after the frames are
+    validated and whatever the method: two competing sets are two quantities wearing one name,
+    and a CIF is defined by its competing set. A run declaring outcomes against one declaring
+    none is not refused, and neither are two runs whose observed sets differ while their
+    declared sets agree -- refusing on the observed set fires on provider noise. Not in
+    ``_pairing`` (ADR-084 stands): this is a refusal, not a pairing predicate.
+    """
+
+
 class NotPairable(DiffError):
     """A paired method was requested but the runs are not pairable."""
 
@@ -445,6 +457,20 @@ def diff(
     _validate_frame(a, "a")
     _validate_frame(b, "b")
 
+    if (
+        manifest_a is not None
+        and manifest_b is not None
+        and manifest_a.declared is not None
+        and manifest_b.declared is not None
+        and manifest_a.declared.outcomes
+        and manifest_b.declared.outcomes
+        and manifest_a.declared.outcomes != manifest_b.declared.outcomes
+    ):
+        raise DeclaredSetMismatch(
+            "the runs declare different outcome sets: a declares "
+            f"{', '.join(manifest_a.declared.outcomes)}; b declares "
+            f"{', '.join(manifest_b.declared.outcomes)}"
+        )
     pairable, t_unit = _pairing(method, manifest_a, manifest_b)
 
     horizon = min(_frame_horizon(a, "a"), _frame_horizon(b, "b"))
@@ -1189,6 +1215,20 @@ def multi_diff(
         raise DiffError(f"q must be in (0, 1), got {q}")
     _validate_raw(a, "a")
     _validate_raw(b, "b")
+    if (
+        manifest_a is not None
+        and manifest_b is not None
+        and manifest_a.declared is not None
+        and manifest_b.declared is not None
+        and manifest_a.declared.outcomes
+        and manifest_b.declared.outcomes
+        and manifest_a.declared.outcomes != manifest_b.declared.outcomes
+    ):
+        raise DeclaredSetMismatch(
+            "the runs declare different outcome sets: a declares "
+            f"{', '.join(manifest_a.declared.outcomes)}; b declares "
+            f"{', '.join(manifest_b.declared.outcomes)}"
+        )
     pairable, t_unit = _pairing(method, manifest_a, manifest_b)
 
     inferred = events is None

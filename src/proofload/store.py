@@ -19,7 +19,7 @@ import pyarrow.parquet as pq
 
 from proofload import __version__
 from proofload.episode import Episode
-from proofload.trace import Span, Trace, TraceValidationError, assemble, split
+from proofload.trace import Declaration, Span, Trace, TraceValidationError, assemble, split
 
 
 class StoreError(Exception):
@@ -275,6 +275,11 @@ class RunManifest:
     created_at: str = field(default_factory=_now_iso_utc)
     proofload_version: str = field(default_factory=lambda: __version__)
     schema_version: int = _SCHEMA_VERSION
+    #: What the run's sweep declared it expects -- steps, outcomes, gates -- or ``None`` (A10).
+    #: A thirteenth top-level field and not an ``environment`` entry: ``diff`` reads it as part
+    #: of run identity beside ``t_unit`` and ``run_salt``. A manifest written before A10 has no
+    #: key and reads back ``None``; no ``_SCHEMA_VERSION`` bump, the version gates the rows.
+    declared: Declaration | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.target_id, str) or not self.target_id:
@@ -300,11 +305,13 @@ class RunManifest:
             "created_at": self.created_at,
             "proofload_version": self.proofload_version,
             "schema_version": self.schema_version,
+            "declared": None if self.declared is None else self.declared.to_dict(),
         }
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> RunManifest:
         retain = d.get("retain_traces_for")
+        declared = d.get("declared")
         return cls(
             run_id=d["run_id"],
             target_id=d["target_id"],
@@ -318,6 +325,7 @@ class RunManifest:
             created_at=d.get("created_at", _now_iso_utc()),
             proofload_version=d.get("proofload_version", __version__),
             schema_version=d.get("schema_version", _SCHEMA_VERSION),
+            declared=None if declared is None else Declaration.from_dict(declared),
         )
 
 

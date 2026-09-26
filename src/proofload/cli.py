@@ -92,10 +92,12 @@ from proofload.report import (
     SurvivalReport,
     _interval_lines,
     _observation_cap,
+    _provenance_lines,
     build_multi_report,
     build_survival_report,
 )
 from proofload.sampler import SamplerError, SweepSpec
+from proofload.steps import declaration_check
 from proofload.store import RunManifest, Store, StoreError
 from proofload.survival import SurvivalError, cell_table, competing_set
 from proofload.trace import Trace, TraceValidationError
@@ -1425,9 +1427,15 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
                 setattr(knobs, name, constant)
         nested = _diff_tree(knobs, multi, frames, manifests)
     observations = (_observation_counts(store, a), _observation_counts(store, b))
+    declarations = (_declaration_check(store, a), _declaration_check(store, b))
     # One tree for both builds: the light receipt renders the same draw, never a second one.
     report = build_multi_report(
-        multi, spec, manifests=manifests, tree=nested, observations=observations
+        multi,
+        spec,
+        manifests=manifests,
+        tree=nested,
+        observations=observations,
+        declarations=declarations,
     )
     receipt = (
         report
@@ -1438,6 +1446,7 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
             manifests=manifests,
             tree=nested,
             observations=observations,
+            declarations=declarations,
         )
     )
     _write_summary(io, multi)
@@ -1539,8 +1548,15 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
         forest=ns.forest,
     )
     observations = _observation_counts(store, run)
+    declarations = _declaration_check(store, run)
     report = build_survival_report(
-        cells, spec, events=events, horizon=horizon, manifest=manifest, observations=observations
+        cells,
+        spec,
+        events=events,
+        horizon=horizon,
+        manifest=manifest,
+        observations=observations,
+        declarations=declarations,
     )
     receipt = (
         report
@@ -1552,6 +1568,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
             horizon=horizon,
             manifest=manifest,
             observations=observations,
+            declarations=declarations,
         )
     )
     if inferred:
@@ -1630,6 +1647,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         spec,
         manifests=manifests,
         observations=(_observation_counts(store, a), _observation_counts(store, b)),
+        declarations=(_declaration_check(store, a), _declaration_check(store, b)),
     )
     # After the report and before the structure: M7's axis check refuses an unknown ``--x``
     # first, so no refusal spends a tree, and every tree refusal -- an unknown ``--by``, an
@@ -1667,14 +1685,27 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
 # ---------- inspect / runs ----------
 
 
+def _envelopes(store: Store, run: str) -> pd.DataFrame:
+    """The run's narrow frame with its trace envelopes: the one read the observation counts and
+    the declaration check share. No observation body is decoded, and on a run written after the
+    split neither is ``meta``."""
+    return store.read(run, meta=False, trace="envelope")
+
+
+def _declaration_check(store: Store, run: str) -> Any:
+    """A10: what the run declared against its stored envelopes, or ``None`` when it declared
+    nothing. Typed ``Any`` because ``DeclarationCheck`` is not among this module's imports
+    (FR18 pins them); the builders name the type."""
+    return declaration_check(store.manifest(run), _envelopes(store, run))
+
+
 def _observation_counts(store: Store, run: str) -> tuple[int, int]:
     """``(spans, spans stamped as cut)`` over the run's stored envelopes.
 
-    The envelope read and nothing else: no observation body is decoded, and on a run written
-    after the split neither is ``meta``. Whether the second number says anything about this run
+    The envelope read and nothing else. Whether the second number says anything about this run
     is ``report``'s to decide from the manifest; this counts what is stored.
     """
-    frame = store.read(run, meta=False, trace="envelope")
+    frame = _envelopes(store, run)
     spans = [
         span
         for envelope in frame["trace"]
@@ -1709,6 +1740,13 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
         raise _missing_flags_refusal(
             store, "inspect", [ns.run], x_missing=False, event_missing=True
         )
+    check = _declaration_check(store, ns.run)
+    if check is not None:
+        # A10: what the run declared against what its envelopes hold -- once, before the rows,
+        # in the provenance block's own line form. A run that declared nothing prints nothing.
+        for line in _provenance_lines(check.provenance()):
+            io.out.write(f"{line}\n")
+        io.out.write("\n")
     # Select on the narrow frame; decode ``meta`` only for the rows that survive selection.
     df = store.read(ns.run, meta=False)
     where = _parse_pairs(ns.where, "--where")

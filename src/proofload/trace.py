@@ -53,6 +53,7 @@ __all__ = [
     "SOURCES",
     "TRUNCATED_KEY",
     "Collector",
+    "Declaration",
     "Span",
     "SpanHandle",
     "Trace",
@@ -893,25 +894,106 @@ def truncate_observations(trace: Trace, *, limit: int | None) -> Trace:
     return replace(trace, spans=tuple(spans))
 
 
-def finalize(trace: Trace, *, declaration: None, limit: int | None) -> Trace:
+@dataclass(frozen=True)
+class Declaration:
+    """What a run expects of itself (A10): the steps it expects to execute, the outcome labels
+    its target can emit, and which of those steps are gates.
+
+    Three sorted tuples of distinct non-empty names, ``gates`` a subset of ``steps``, at least
+    one of the three non-empty. Validated at construction -- the ``Span`` posture -- so a
+    declaration read back from a manifest is held to the rules that refused the sweep file, and
+    two spellings of one declaration compare equal in ``diff`` and on ``--resume``. Minted
+    here, in the module ``finalize`` lives in, because this module imports nothing from the
+    package: a ``Declaration`` in ``sampler.py`` would make ``import proofload.trace`` a cycle
+    through ``store.py``.
+    """
+
+    steps: tuple[str, ...] = ()
+    outcomes: tuple[str, ...] = ()
+    gates: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for name in ("steps", "outcomes", "gates"):
+            value = getattr(self, name)
+            if isinstance(value, str) or not isinstance(value, (list, tuple)):
+                raise TraceValidationError(f"{name} must be a list of names, got {value!r}")
+            for item in value:
+                if not isinstance(item, str) or not item:
+                    raise TraceValidationError(
+                        f"{name} holds {item!r}; every entry must be a non-empty string"
+                    )
+            repeated = sorted({item for item in value if value.count(item) > 1})
+            if repeated:
+                raise TraceValidationError(f"{name} repeats {', '.join(repeated)}")
+            object.__setattr__(self, name, tuple(sorted(value)))
+        outside = sorted(set(self.gates) - set(self.steps))
+        if outside:
+            raise TraceValidationError(
+                f"gates {', '.join(outside)} are not among the declared steps"
+            )
+        if not (self.steps or self.outcomes or self.gates):
+            raise TraceValidationError(
+                "declares nothing: name steps, outcomes or gates, or drop the table"
+            )
+
+    def to_dict(self) -> dict[str, list[str]]:
+        """Three plain sorted lists: the shape the manifest carries."""
+        return {
+            "steps": list(self.steps),
+            "outcomes": list(self.outcomes),
+            "gates": list(self.gates),
+        }
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> Declaration:
+        """The inverse of ``to_dict``, validated the same way; an absent list reads as empty."""
+        return cls(
+            steps=d.get("steps", ()), outcomes=d.get("outcomes", ()), gates=d.get("gates", ())
+        )
+
+
+def _stamp_gates(trace: Trace, gates: tuple[str, ...]) -> Trace:
+    """``gate="declared"`` on every span whose ``step_name`` is a declared gate and whose ``gate``
+    is ``None``. ``"emitted"`` is never overwritten (ADR-074's precedence); a span with no step
+    name, or whose step is not a declared gate, is untouched; and the trace itself comes back
+    when nothing was stamped -- ``truncate_observations``'s own idiom, so a run that declares
+    gates and reaches none stores the bytes it would have stored declaring nothing.
+    """
+    spans: list[Span] = []
+    changed = False
+    for span in trace.spans:
+        if span.gate is None and span.step_name is not None and span.step_name in gates:
+            spans.append(replace(span, gate="declared"))
+            changed = True
+        else:
+            spans.append(span)
+    return replace(trace, spans=tuple(spans)) if changed else trace
+
+
+def finalize(trace: Trace, *, declaration: Declaration | None, limit: int | None) -> Trace:
     """The one site a stored trace passes through before it is written.
 
-    A8b mints it with ``declaration`` accepting ``None`` only and calls
-    ``truncate_observations``; A10 widens the parameter to ``Declaration | None`` and fills the
-    ``gate="declared"`` stamp in front of the cut. A non-``None`` declaration is **refused**
-    rather than accepted and dropped, so the half that is not built is visible at the call site
-    A10 will change instead of silently doing nothing.
+    Two steps in a fixed order: the stamp, then the cut. ``gate="declared"`` is stamped on every
+    span whose ``step_name`` is in ``declaration.gates`` and whose ``gate`` is ``None``
+    (``_stamp_gates``), and ``truncate_observations`` then cuts at ``limit``. The two write
+    disjoint fields, so either order gives the same trace; fixing the order is what makes
+    ``finalize`` idempotent as a whole and not only in its cut half (A8b's P8-8, one level up).
+    The trace itself comes back when neither step changed anything.
+
+    A declaration that is neither ``None`` nor a ``Declaration`` is refused, not accepted and
+    dropped: A8b's guard, re-aimed from *this half is A10's* to *this is not a declaration*.
 
     ``limit`` is the run's own, required and passed down unchanged. A8b left it to a module
     constant, so every stored row was cut at 8192 whatever its sweep file declared -- the
     funnel ran on every row of both backends while being described as a backstop for one path.
     """
-    if declaration is not None:
+    if declaration is not None and not isinstance(declaration, Declaration):
         raise TypeError(
-            "finalize(declaration=...) is A10's: A8b takes None only, got "
+            "finalize(declaration=...) takes a Declaration or None, got "
             f"{type(declaration).__name__}"
         )
-    return truncate_observations(trace, limit=limit)
+    stamped = trace if declaration is None else _stamp_gates(trace, declaration.gates)
+    return truncate_observations(stamped, limit=limit)
 
 
 # ---------- the storage split (A7) ----------
