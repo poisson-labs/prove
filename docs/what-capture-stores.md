@@ -62,3 +62,40 @@ else, and a span with two cut values counts once. A run written before the
 per-value cut recorded its limit under another name and stamped nothing, so its
 counts read `not counted` and never `0`; a run with no capture record reads
 `not recorded` for the limit.
+
+**A sweep file may declare what the run expects.** A `[declare]` table names
+the steps the target is expected to execute (`steps`), the outcome labels it
+can emit (`outcomes`) and which of those steps are gates (`gates`, a subset of
+`steps`). Any of the three may be absent; all three empty is refused, and so is
+a duplicate — a repeated name in a hand-written list is a typo, and collapsing
+it would be guessing at what was meant. The declaration is recorded on the
+run's manifest as `declared`. It is not part of the sweep's identity, so a
+declaring arm and a non-declaring arm derive the same seeds and still pair
+under `diff`. On the way to the store, a span whose `step_name` is a declared
+gate and which carries no gate of its own is stamped `gate = "declared"`; a
+span the target itself marked `"emitted"` keeps that.
+
+**What `never reached` means, and what it does not.** For a run that declared,
+`report`, the receipt, `serve` and `inspect` print, against the declaration:
+the declared steps, the declared steps no span in this run carried (`never
+reached`), the observed step names the declaration does not name, the declared
+outcomes, the observed outcomes it does not name, the declared gates, the
+declared gates with no span (`gates never reached`), and the gates the target
+emitted that the declaration does not name. A declared step with no span means
+exactly that: this run's spans did not show it. It does not mean the target
+cannot reach the step; it does not mean the step was not instrumented; it does
+not mean anything is wrong — a sweep whose configs never take the `verify`
+branch reports `never reached: verify` correctly, and that is the finding; and
+it says nothing at all about a run with no declaration, for which the lines do
+not exist and the phrase appears nowhere. A declaration that matches nothing,
+as on a run whose capture was off for the whole run, prints every declared step
+and is not refused. `diff` refuses two runs that declare different, non-empty
+outcome sets, since two competing sets are two quantities wearing one name;
+`--resume` refuses a sweep whose declaration differs from what the run
+recorded, while `--pair-with` does not.
+
+**A misspelled table name is ignored.** The sweep file refuses an unknown field
+inside `[declare]`, as it does inside `[capture]` and `[chaos]`, but not an
+unknown top-level table: a `[declair]` table is read by nothing and refused by
+nothing, exactly as it was before this change. A run that prints no declaration
+block declared nothing as far as the tool can see; check the spelling.

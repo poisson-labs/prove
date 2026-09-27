@@ -398,7 +398,8 @@ GO1_PAGE_2_SHA256 = {
 #: ``03d7ed2``): the whole-file sha256, never a prediction. Bytes, so a scratch copy without ``.git``
 #: can check.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-DIFF_PY_SHA256 = "7e65b27a2b8b1f4ec9f0de1be9debddff0984820eb4e927a76b8acc6353307b4"
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 #: W20, **narrowed by P-1 Session A under ADR-077 (P-1 section 7.4, the clean case)**: ``tree.py``'s
 #: bytes outside ``RootResult`` and ``_root``, minted at ``a626cd3`` and measured identical on the
 #: P-1 prototype, because P-1's one ``tree.py`` edit -- the ``p_floor`` field, its ``to_json`` key and
@@ -448,7 +449,8 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 # other carrier is `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]`, re-minted in
 # the same commit. Before this packet: `5cfdf03b...`.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py gains _wrap over the four figure texts and the honesty lines, MultiReport.complement, mde_unchanged beside the honesty text and the Cells sentence respelled (LS16); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-REPORT_PY_SHA256 = "e7637ed985135f07c075134df51e8e38f3c74676f5462c82f3ab35c182a254d4"
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
+REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0

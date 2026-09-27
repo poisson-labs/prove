@@ -109,7 +109,7 @@ STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 re
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-S16_ORACLE_SHA256 = "c2cf979af75a2f89e122b8e421423cc816e809b3cebf960ccba9407ca4ed5bf9"  # 38 tests; re-minted by CD Session A over the amended file (30 exports, the declared cap in the builder and in both _CaptureCall specs)
+S16_ORACLE_SHA256 = "718bfc0e1b0251799b6fae2e86f84299ee37d9ab5d483183f441943f28a26b16"  # 38 tests; re-minted by A10 Session B over the file A10 Session A amended (TRACE_EXPORTS gains Declaration, 5bb967c)
 
 #: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
 DECLARED_LIMIT = 8192
@@ -121,11 +121,12 @@ TRACE_EXPORTS = [
     # functions. CD (D8) retires three of A8b's five -- OBSERVATION_HEAD_BYTES and
     # OBSERVATION_TAIL_BYTES are deleted with the default they described, and
     # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES, which sorts one place later.
-    # trace.py's own order: constants, classes, functions, each sorted. 30 names.
+    # A10 (spec section 7.1 group 3, W1): Declaration joins, minted in trace.py, among the classes.
+    # trace.py's own order: constants, classes, functions, each sorted. 31 names.
     "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
     "OBSERVATION_KEYS", "OBSERVATION_ROUTING_BYTES",
     "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES", "TRUNCATED_KEY",
-    "Collector", "Span", "SpanHandle", "Trace", "TraceValidationError",
+    "Collector", "Declaration", "Span", "SpanHandle", "Trace", "TraceValidationError",
     "assemble", "collect", "finalize", "from_litellm", "from_otel", "merge", "record", "split", "step",
     "truncate_observations",
 ]

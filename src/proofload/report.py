@@ -31,6 +31,7 @@ from proofload.store import RunManifest
 from proofload.survival import CIFCurve, KMCurve
 
 if TYPE_CHECKING:
+    from proofload.steps import DeclarationCheck
     from proofload.tree import Bound, Leaves, RootResult, TreeResult
 
 Theme = Literal["dark", "light"]
@@ -858,19 +859,48 @@ def _run_observation(
         provenance["observation_cut_spans"] = observations[1] if counted else None
 
 
+def _run_declarations(
+    provenance: dict[str, object],
+    declarations: tuple[DeclarationCheck | None, DeclarationCheck | None] | None,
+) -> None:
+    """A10's eight keys per run, suffixed ``_a`` / ``_b`` like the identity and observation
+    blocks -- and only for a run that declared. A run with no declaration gains no key: not
+    ``None``, not ``[]``. The keys are conditionally present (W8), which is what keeps every
+    frozen output over a declaration-free run byte-identical; and a pair where one side declared
+    says so by carrying that side's keys alone. ``declarations`` is what the caller computed
+    with ``steps.declaration_check``; this module counts nothing.
+    """
+    if declarations is None:
+        return
+    blocks = [None if check is None else check.provenance() for check in declarations]
+    for key in next((list(block) for block in blocks if block is not None), []):
+        for side, block in zip(("a", "b"), blocks, strict=True):
+            if block is not None:
+                provenance[f"{key}_{side}"] = block[key]
+
+
+def _run_declaration(provenance: dict[str, object], check: DeclarationCheck | None) -> None:
+    """``_run_declarations`` for the one run of a survival report; the keys carry no side."""
+    if check is not None:
+        provenance.update(check.provenance())
+
+
 def build_report(
     diff: DiffResult,
     spec: ReportSpec,
     curves: Mapping[str, tuple[KMCurve, KMCurve]] | None = None,
     manifests: tuple[RunManifest, RunManifest] | None = None,
     observations: tuple[tuple[int, int], tuple[int, int]] | None = None,
+    *,
+    declarations: tuple[DeclarationCheck | None, DeclarationCheck | None] | None = None,
 ) -> Report:
     """Build a report.
 
     curves maps config_hash -> (curve_a, curve_b) for the optional survival panel; manifests
     supply run identity and each run's recorded byte limit for the provenance block and are never
     invented when absent; observations, given with the manifests, adds each run's span count and
-    how many of those spans were stamped as cut.
+    how many of those spans were stamped as cut; declarations, one ``DeclarationCheck`` or
+    ``None`` per run, adds the eight declared-expectation lines for each run that declared (A10).
     """
     _validate_spec(spec)
     for label, other in spec.comparison.items():
@@ -894,6 +924,7 @@ def build_report(
     }
     _run_identity(provenance, manifests)
     _run_observations(provenance, manifests, observations)
+    _run_declarations(provenance, declarations)
     if spec.generated_at is not None:
         provenance["generated_at"] = spec.generated_at
     return _build_panel(
@@ -1003,8 +1034,13 @@ def build_multi_report(
     manifests: tuple[RunManifest, RunManifest] | None = None,
     tree: TreeResult | None = None,
     observations: tuple[tuple[int, int], tuple[int, int]] | None = None,
+    declarations: tuple[DeclarationCheck | None, DeclarationCheck | None] | None = None,
 ) -> MultiReport:
     """One panel per event on a shared colour bound; headline and trade line come first.
+
+    ``declarations`` -- one ``DeclarationCheck`` or ``None`` per run, computed by the caller --
+    adds the eight declared-expectation lines to the provenance block for each run that
+    declared, and nothing for one that did not (A10).
 
     With ``tree`` the markdown and the receipt also carry the layered report -- the omnibus, the
     fault lines, the cells and the bound -- between the headline block and the figure. The SVG
@@ -1057,6 +1093,7 @@ def build_multi_report(
     }
     _run_identity(provenance, manifests)
     _run_observations(provenance, manifests, observations)
+    _run_declarations(provenance, declarations)
     if spec.generated_at is not None:
         provenance["generated_at"] = spec.generated_at
 
@@ -1149,11 +1186,14 @@ def build_survival_report(
     horizon: float,
     manifest: RunManifest | None = None,
     observations: tuple[int, int] | None = None,
+    declarations: DeclarationCheck | None = None,
 ) -> SurvivalReport:
     """cells = M5 cell_table output; one rate panel per event, F_k(horizon) from its curve.
 
     ``manifest`` adds the run's identity and recorded byte limit to the provenance block, and
     ``observations`` -- ``(spans, spans stamped as cut)``, counted by the caller -- the counts.
+    ``declarations``, the run's ``DeclarationCheck``, adds the eight declared-expectation lines
+    when the run declared, and nothing when it did not (A10).
     """
     _validate_spec(spec)
     event_list = tuple(dict.fromkeys(str(e) for e in events))
@@ -1174,6 +1214,7 @@ def build_survival_report(
         provenance["run_salt"] = manifest.run_salt
         provenance["t_unit"] = manifest.t_unit
     _run_observation(provenance, manifest, observations)
+    _run_declaration(provenance, declarations)
     if spec.generated_at is not None:
         provenance["generated_at"] = spec.generated_at
 
@@ -1711,7 +1752,8 @@ def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
         elif isinstance(value, bool):
             shown = "true" if value else "false"
         elif isinstance(value, (list, tuple)):
-            shown = ", ".join(str(v) for v in value)
+            # An empty list reads ``none``: "nothing was missed" is a finding (A10).
+            shown = ", ".join(str(v) for v in value) if value else "none"
         elif isinstance(value, Mapping):
             shown = ", ".join(f"{name}={entry}" for name, entry in value.items())
         elif value is None:

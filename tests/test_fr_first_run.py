@@ -261,7 +261,8 @@ SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a dif
 # Minted at f9b881f, the commit this oracle was frozen against (FR17, FR18). Named for what they
 # pin: none of the names below ends in the suffix the exclusion-record sweeps count.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py outside MultiDiffResult.to_markdown gains complementary_events and trade_line()'s complement branch; to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
-DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "927fdaeb6c32b272b6e8edd8b1b6e7e44a62049475c056eee93db93363c0417c"
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py outside MultiDiffResult.to_markdown: diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
+DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "0e1fa8a53987fbe8d2ac9b8fe32b4909341f7da9ffdeb3960972f19c497dcc87"
 # Re-minted 2026-09-20 (truncation surfacing): report.py and viewer.py move, because that packet edits both; store.py and tree.py do not.
 # Re-minted again 2026-09-20 (stored-trace read): store.py moves, because that packet edits it; report.py, viewer.py and tree.py do not.
 # CD Session B, 2026-09-21: re-minted off the built `report.py` at `234513c`. D9's "no change to
@@ -272,10 +273,11 @@ DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "927fdaeb6c32b272b6e8edd8b1b6e7e44a62049475c05
 # together. The value before this packet was `5cfdf03b...`, correct from the surfacing packet
 # through `46c5ac0`.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); the whole-file sha256 of the built file. store.py and tree.py do not move. viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): store.py gains RunManifest.declared, its thirteenth field, in to_dict() and from_dict() (spec A10 W4); report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); the whole-file sha256 of each built file. viewer.py and tree.py do not move. Read through this test's own measurement on the built tree, not predicted.
 UNTOUCHED_FILE_SHA256 = {
-    "report.py": "e7637ed985135f07c075134df51e8e38f3c74676f5462c82f3ab35c182a254d4",
+    "report.py": "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61",
     "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
-    "store.py": "6dd8d01e521929317f3f02196889f382fbb8df6d0d314dff0678082955a17dd7",
+    "store.py": "957c537786c3ef4e5b95abebec03af86bcaa99e8191c6856005f77cfe4159e51",
     "tree.py": "c0c011a3d194964a16f634d5450354645bb9132e0f47be192070a8daef9a8f3e",
 }
 MULTI_JSON_KEYS = [
@@ -284,8 +286,11 @@ MULTI_JSON_KEYS = [
     "n_verdict_only", "non_event", "q", "seed_identity_match", "t_unit", "trade_line", "trades", "truncated",
     "unpaired_analysis",
 ]
+# A10 (spec section 7.1 group 5, W9 and ruling 3 of 2026-09-25): DeclaredSetMismatch is the one
+# module-level name diff.py gains; the check itself sits in diff() and multi_diff(), before _pairing.
 DIFF_MODULE_NAMES = frozenset(
-    "CELLS_COLUMNS COVERAGE_COLUMNS DiffError DiffResult EventDiff EventInferenceError INTERVAL_BASES INTERVAL_COLUMNS "
+    "CELLS_COLUMNS COVERAGE_COLUMNS DeclaredSetMismatch DiffError DiffResult EventDiff EventInferenceError INTERVAL_BASES "
+    "INTERVAL_COLUMNS "
     "Method MultiDiffResult NotPairable SUMMARY_FIELDS UnitMismatch UnknownEvent UnpairedAnalysis _BASIS_BY_METHOD "
     "_CAUSES _CENSORED _CIF_EQUALITY_TOLERANCE _EVENT_SUMMARY_FIELDS _INVERSION_STEPS _MAX_EVENTS _METHODS "
     "_MULTI_SUMMARY_FIELDS _NO_OUTCOME_A _NO_OUTCOME_B _NO_OUTCOME_BOTH _ONLY_A _ONLY_B _PAIRED_METHODS _RAW_REQUIRED "
@@ -296,6 +301,7 @@ DIFF_MODULE_NAMES = frozenset(
     "mde_two_proportion multi_diff score_p_rd score_p_rd_paired".split()
 )
 # Re-minted 2026-09-20 (truncation surfacing): cli.py also imports report._observation_cap, for the limit ``inspect`` prints beside a cut.
+# Re-minted 2026-09-26 (A10): cli.py calls steps.declaration_check beside _observation_counts and prints ``inspect``'s declaration block through report._provenance_lines.
 CLI_IMPORTS = frozenset(
     {
         ("__future__", "annotations"), ("_typeshed", "SupportsWrite"), ("argparse", None), ("collections", "Counter"),
@@ -316,8 +322,8 @@ CLI_IMPORTS = frozenset(
         ("proofload.paired", "_fold_html"), ("proofload.paired", "_fold_markdown"), ("proofload.paired", "cost"),
         ("proofload.report", "MultiReport"), ("proofload.report", "ReportError"),
         ("proofload.report", "ReportSpec"), ("proofload.report", "SurvivalReport"), ("proofload.report", "_interval_lines"), ("proofload.report", "_observation_cap"),
-        ("proofload.report", "build_multi_report"), ("proofload.report", "build_survival_report"),
-        ("proofload.sampler", "SamplerError"), ("proofload.sampler", "SweepSpec"), ("proofload.store", "RunManifest"),
+        ("proofload.report", "_provenance_lines"), ("proofload.report", "build_multi_report"), ("proofload.report", "build_survival_report"),
+        ("proofload.sampler", "SamplerError"), ("proofload.sampler", "SweepSpec"), ("proofload.steps", "declaration_check"), ("proofload.store", "RunManifest"),
         ("proofload.store", "Store"), ("proofload.store", "StoreError"), ("proofload.survival", "SurvivalError"),
         ("proofload.survival", "cell_table"), ("proofload.survival", "competing_set"), ("proofload.trace", "Trace"),
         ("proofload.trace", "TraceValidationError"), ("proofload.tree", "Bound"), ("proofload.tree", "CellFamily"),

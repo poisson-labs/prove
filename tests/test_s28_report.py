@@ -280,9 +280,11 @@ CLOSURE_EXCLUDED = ("_fmt", "_md_table", "_html_table", "_html_lines")
 #: at the base commit: every name bound at module level by a ``def``, ``class`` or assignment
 #: that does not start with an underscore (imports excluded).
 # Re-minted 2026-09-20 (truncation surfacing): ``observations`` joins ``build_multi_report``'s keywords.
+# Re-minted 2026-09-26 (A10): ``declarations`` joins them, keyword-only and last, in the spelling the build uses.
 BUILD_MULTI_REPORT_SIGNATURE = (
     "(multi: 'MultiDiffResult', spec: 'ReportSpec', *, manifests: 'tuple[RunManifest, RunManifest] | None' = None, "
-    "tree: 'TreeResult | None' = None, observations: 'tuple[tuple[int, int], tuple[int, int]] | None' = None) -> 'MultiReport'"
+    "tree: 'TreeResult | None' = None, observations: 'tuple[tuple[int, int], tuple[int, int]] | None' = None, "
+    "declarations: 'tuple[DeclarationCheck | None, DeclarationCheck | None] | None' = None) -> 'MultiReport'"
 )
 PUBLIC_NAMES_AT_BASE = (
     "ABSENT_FILL", "AxisError", "Cell", "ComparisonMismatch", "Mode", "MultiReport", "NEUTRAL_FILL", "Report",
@@ -355,7 +357,8 @@ E14_WITH_TREE_SHA256 = {
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-DIFF_PY_SHA256 = "7e65b27a2b8b1f4ec9f0de1be9debddff0984820eb4e927a76b8acc6353307b4"
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"

@@ -48,6 +48,7 @@ from proofload.executor import (
     _environment,
     _episode_id,
     _mp_context,
+    _spec_declared,
     _with_capture_envelope,
     preflight_mde,
 )
@@ -528,6 +529,7 @@ def _open_run(
             backend=_BACKEND,
             environment=environment,
             retain_traces_for=p.spec.retain_traces_for,
+            declared=_spec_declared(p.spec),
         )
     )
 
@@ -584,6 +586,7 @@ def _record(
             ),
             capture_active,
             _declared_limit(p.spec),
+            _spec_declared(p.spec),
         )
     backend_meta = dict(result.get("backend_meta") or {})
     backend_meta.setdefault("i", i)
@@ -604,6 +607,7 @@ def _record(
         ),
         capture_active,
         _declared_limit(p.spec),
+        _spec_declared(p.spec),
     )
 
 

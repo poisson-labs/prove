@@ -48,6 +48,7 @@ from proofload.store import EpisodeRecord, RunManifest, Store, StoreError
 from proofload.trace import (
     ALIAS_MAP_VERSION,
     OTEL_SEMCONV_VERSION,
+    Declaration,
     Trace,
     TraceValidationError,
     finalize,
@@ -186,6 +187,11 @@ def plan(
         recorded, declared = _recorded_cap(manifest), _spec_declaration(spec)
         if (None if recorded is None else recorded[1]) != declared:
             raise NotResumable(f"run {resume!r} {_reads(recorded)}, spec {_declares(declared)}")
+        if manifest.declared != _spec_declared(spec):
+            raise NotResumable(
+                f"run {resume!r} {_recorded_declaration(manifest.declared)}, "
+                f"spec {_declares_declaration(_spec_declared(spec))}"
+            )
         run_id = resume
         salt = manifest.run_salt
         wanted = store.missing(resume, _all_keys(spec))
@@ -794,6 +800,33 @@ def _declares(value: int | str | None) -> str:
     return "has no [capture] table" if value is None else f"declares {value!r}"
 
 
+def _spec_declared(spec: SweepSpec) -> Declaration | None:
+    """The ``[declare]`` table a sweep carries, or ``None`` (A10).
+
+    Deliberately not ``_declaration``, which is the cap's. Imported by ``executor_modal`` on
+    D6's argument: the mapping from a spec to what the manifest and the funnel take exists once.
+    """
+    return spec.declare
+
+
+def _declaration_text(d: Declaration) -> str:
+    """A declaration as data for a refusal: its three lists, ``-`` for an empty one."""
+    return "; ".join(
+        f"{name} {', '.join(getattr(d, name)) or '-'}" for name in ("steps", "outcomes", "gates")
+    )
+
+
+def _recorded_declaration(d: Declaration | None) -> str:
+    """The resume gate's recorded half, in ``_reads``'s two shapes: a run that recorded no
+    declaration is a different fact from a run that recorded one."""
+    return "recorded no declaration" if d is None else f"recorded {_declaration_text(d)}"
+
+
+def _declares_declaration(d: Declaration | None) -> str:
+    """The resume gate's declared half, in ``_declares``'s two shapes."""
+    return "has no [declare] table" if d is None else f"declares {_declaration_text(d)}"
+
+
 def _capture_record(spec: CaptureSpec, status: CaptureStatus) -> dict[str, Any]:
     """``manifest.environment["capture"]``: the request and what became of it, once per run.
 
@@ -864,7 +897,9 @@ def _declared_limit(spec: SweepSpec) -> int | None:
     return None if spec.capture is None else spec.capture.max_observation_bytes
 
 
-def _finalized(record: EpisodeRecord, limit: int | None) -> EpisodeRecord:
+def _finalized(
+    record: EpisodeRecord, limit: int | None, declaration: Declaration | None
+) -> EpisodeRecord:
     """``finalize`` over a row's own trace, on its way to the store.
 
     **It never raises.** ``record.meta["trace"]`` is a plain dict that nothing has validated,
@@ -872,9 +907,12 @@ def _finalized(record: EpisodeRecord, limit: int | None) -> EpisodeRecord:
     both trace columns null, with ``Store.append`` not raising. ``Trace.from_dict`` here runs
     one frame before the guard written for it, so the guard has to be here too.
 
-    The record comes back untouched when nothing was cut -- ``truncate_observations`` returns
-    the trace itself in that case -- so a trace that needed no cut is stored byte for byte as
-    it arrived, and no existing run's stored bytes move.
+    The record comes back untouched when nothing was stamped and nothing was cut --
+    ``finalize`` returns the trace itself in that case -- so a trace that needed neither is
+    stored byte for byte as it arrived, and no existing run's stored bytes move.
+
+    ``declaration`` is the run's own too (A10): its gates are stamped on the parsed trace inside
+    ``finalize``, after the guard above, so a declaration adds no raise one frame earlier.
 
     ``limit`` is the run's own (D5). A8b wired this site with none, so every stored row of both
     backends was cut at a module constant whatever its sweep file declared, while the manifest,
@@ -885,17 +923,25 @@ def _finalized(record: EpisodeRecord, limit: int | None) -> EpisodeRecord:
         parsed = Trace.from_dict(record.meta["trace"])
     except Exception:  # noqa: BLE001 - an unreadable trace is stored exactly as written
         return record
-    cut = finalize(parsed, declaration=None, limit=limit)
-    if cut is parsed:
+    final = finalize(parsed, declaration=declaration, limit=limit)
+    if final is parsed:
         return record
-    return replace(record, meta={**record.meta, "trace": cut.to_dict()})
+    return replace(record, meta={**record.meta, "trace": final.to_dict()})
 
 
 def _with_capture_envelope(
-    record: EpisodeRecord, active: bool, limit: int | None
+    record: EpisodeRecord,
+    active: bool,
+    limit: int | None,
+    declaration: Declaration | None = None,
 ) -> EpisodeRecord:
     """The one funnel every stored row passes through: ``finalize`` over a trace it carries,
     D9's empty envelope for a row that ran under active capture and carries none.
+
+    ``declaration`` (A10) reaches ``finalize`` through ``_finalized`` the way ``limit`` does.
+    Both backends' call sites pass ``_spec_declared(p.spec)``; it defaults to ``None`` so a
+    caller with three arguments keeps the meaning it had, and the stamp is host-side on Modal
+    because this funnel is.
 
     The shipped shape returned early on ``"trace" in record.meta`` -- exactly the branch that
     needs the cut -- so the two branches are separated rather than collapsed. Rule zero (C7) is
@@ -904,7 +950,7 @@ def _with_capture_envelope(
     would break that; here it cannot.
     """
     if "trace" in record.meta:
-        return _finalized(record, limit)
+        return _finalized(record, limit, declaration)
     if not active:
         return record
     return replace(record, meta={**record.meta, "trace": _empty_envelope()})
@@ -934,6 +980,7 @@ def _record(
             ),
             capture_active,
             _declared_limit(p.spec),
+            _spec_declared(p.spec),
         )
     meta: dict[str, Any] | None
     if kind == _TIMEOUT_ERROR:
@@ -963,6 +1010,7 @@ def _record(
         ),
         capture_active,
         _declared_limit(p.spec),
+        _spec_declared(p.spec),
     )
 
 
@@ -1038,6 +1086,7 @@ def run_local(
                 backend=p.backend,
                 environment=environment,
                 retain_traces_for=p.spec.retain_traces_for,
+                declared=_spec_declared(p.spec),
             )
         )
 

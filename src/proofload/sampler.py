@@ -25,6 +25,7 @@ from scipy.stats import qmc
 from proofload.capture import CaptureSpec
 from proofload.chaos import ChaosSpec
 from proofload.store import InvalidConfig, config_hash
+from proofload.trace import Declaration
 
 AxisType = Literal["continuous", "categorical"]
 
@@ -32,6 +33,7 @@ _AXIS_TYPES: tuple[str, ...] = ("continuous", "categorical")
 _TOOL_RELIABILITY_RATES: tuple[float, ...] = (0.0, 0.05, 0.10, 0.20, 0.30)
 _CAPTURE_FIELDS: tuple[str, ...] = ("instrument", "content", "max_observation_bytes", "max_spans")
 _CHAOS_FIELDS: tuple[str, ...] = ("fault", "rate", "steps")
+_DECLARE_FIELDS: tuple[str, ...] = ("steps", "outcomes", "gates")
 
 
 class SamplerError(Exception):
@@ -277,6 +279,42 @@ def _chaos_table(table: Any) -> ChaosSpec | None:
     return ChaosSpec(fault=fault, rate=float(rate), steps=tuple(steps))
 
 
+def _declare_table(table: Any) -> Declaration | None:
+    """The optional ``[declare]`` table of a sweep file, as a ``Declaration`` (A10).
+
+    Validated by field name the way ``[capture]`` is. The three lists are validated by
+    ``Declaration`` itself -- non-empty names, no duplicates, gates among the steps, not all
+    three empty, sorted at construction -- so a declaration read back from a manifest is held to
+    exactly the rules that refused the sweep file. A duplicate is refused, never collapsed: a
+    repeated name in a hand-written list is a typo, and collapsing it would be inferring what
+    was meant from what was written.
+
+    Like ``[capture]`` and ``[chaos]`` the table rides the spec and stays out of ``to_dict()``:
+    what a run expects of itself is not what makes two sweeps the same sweep, and keeping it out
+    of the sweep's identity is what lets a declaring arm and a non-declaring one derive the same
+    seeds and pair under ``diff``. An unknown *top-level* table is still ignored, as it was: a
+    misspelled ``[declair]`` is read by nothing and refused by nothing.
+    """
+    if table is None:
+        return None
+    if not isinstance(table, Mapping):
+        raise SamplerError("[declare] must be a table")
+    unknown = sorted(set(table) - set(_DECLARE_FIELDS))
+    if unknown:
+        raise SamplerError(
+            f"[declare] has unknown field(s): {', '.join(unknown)}; "
+            f"the fields are {', '.join(_DECLARE_FIELDS)}"
+        )
+    try:
+        return Declaration(
+            steps=table.get("steps", ()),
+            outcomes=table.get("outcomes", ()),
+            gates=table.get("gates", ()),
+        )
+    except ValueError as exc:
+        raise SamplerError(f"[declare] {exc}") from exc
+
+
 @dataclass(frozen=True)
 class SweepSpec:
     configs: tuple[dict[str, Any], ...]
@@ -296,6 +334,12 @@ class SweepSpec:
     #: D2 is that an injected fault must not touch ``config_hash``, because that is what
     #: ``derive_seed`` reads and what makes two arms the same episode at the same seed.
     chaos: ChaosSpec | None = None
+    #: The ``[declare]`` table, when the sweep file has one: the steps, outcomes and gates the
+    #: run expects (A10). It rides the spec and is absent from ``to_dict()`` for ``chaos``'s
+    #: reason: a declaration must not touch ``config_hash``, so a declaring arm and a
+    #: non-declaring arm derive the same seeds and pair under ``diff`` -- the comparison a
+    #: declaration is most wanted for. The manifest records it as ``declared``.
+    declare: Declaration | None = None
 
     @classmethod
     def build(
@@ -309,6 +353,7 @@ class SweepSpec:
         retain_traces_for: Sequence[str] | None = None,
         capture: CaptureSpec | None = None,
         chaos: ChaosSpec | None = None,
+        declare: Declaration | None = None,
     ) -> SweepSpec:
         if isinstance(replicates, bool) or not isinstance(replicates, int) or replicates < 1:
             raise SamplerError(f"replicates must be an int >= 1, got {replicates!r}")
@@ -352,6 +397,7 @@ class SweepSpec:
             duplicates_dropped=dropped,
             capture=capture,
             chaos=chaos,
+            declare=declare,
         )
 
     @classmethod
@@ -417,6 +463,7 @@ class SweepSpec:
             retain_traces_for=retain,
             capture=_capture_table(data.get("capture")),
             chaos=_chaos_table(data.get("chaos")),
+            declare=_declare_table(data.get("declare")),
         )
 
     def cells(self) -> list[str]:

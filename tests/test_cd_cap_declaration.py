@@ -28,14 +28,14 @@ short of a field; D11 the migration is a hard error with no warning release; D12
 becomes ``kw_only``; D13 ``t4.toml``'s value stays 8192 and only its comment moves; D14 ``--resume``
 is gated on the cap and ``--pair-with`` is not.
 
-**Invariant-to-test map** (42 functions, 76 collected ids; the id counts below sum to 76):
+**Invariant-to-test map** (41 functions, 75 collected ids; the id counts below sum to 75):
 
 | Invariant | Tests |
 |---|---|
 | CD1 | ``test_cd1_*`` (3 functions, 3 ids) |
 | CD2 | ``test_cd2_*`` (3 functions, 14 ids) |
 | CD3 | ``test_cd3_*`` (4 functions, 4 ids) |
-| CD4 | ``test_cd4_*`` (4 functions, 5 ids) |
+| CD4 | ``test_cd4_*`` (3 functions, 4 ids; the fourth retired into A10's P10-9, see below) |
 | CD5 | ``test_cd5_*`` (1 function, 3 ids) |
 | CD6 | ``test_cd6_*`` (2 functions, 2 ids) |
 | CD7 | ``test_cd7_*`` (3 functions, 5 ids) |
@@ -51,7 +51,7 @@ and no store read path. Every stored byte it moves travels inside the ``trace`` 
 strings A7 registered in ``store._NULLABLE_STRING_COLUMNS``. Where a test reads a trace column
 directly (CD7's P7-9 half) it reads it raw through ``pyarrow`` and tests nullness with ``is None``,
 never ``pd.isna`` and never a truth test (A8a section 3.10, A22 section 3.2). The map above is
-therefore **76 + 76 = 152 over two cells against twelve invariants**, and no invariant is
+therefore **75 + 75 = 150 over two cells against twelve invariants**, and no invariant is
 missing from either cell.
 
 **Green before and after -- named so their green is not read as coverage.** ``test_cd9_report_py_and_viewer_py_are_byte_untouched``
@@ -156,7 +156,8 @@ UNTOUCHED_FILE_SHA256 = {
 #: whole-file value is ``5cfdf03b...`` and is **not** pinned here: D9's "no change to them" does not
 #: survive D3's ``"none"``, and this is the one region that moves.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py outside _observation_cap is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
-REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "35f3ac5a2d78df3a704f59fbec500a81fee0582268075850ea37b70f6957b267"
+# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): report.py outside _observation_cap: report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
+REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "2e35cd3468dd170503d4ad3d7ec9fe1846d6349b84a577fc6de5bb60b74e8724"
 #: CD11: ``split``'s envelope/bodies partition over the fixture below, at the dispatch commit.
 SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
 #: CD12: ``examples/tau2_pilot/t4.toml``'s 53 ``config_hash`` values, sorted and joined (D13).
@@ -535,13 +536,14 @@ def test_cd4_a_limit_below_one_is_refused_naming_the_parameter(limit: int) -> No
         assert "limit" in str(excinfo.value), str(excinfo.value)
 
 
-def test_cd4_finalizes_a10_guard_is_unchanged() -> None:
-    """A8b's clause, re-asserted: a non-``None`` declaration is refused rather than accepted and
-    dropped, so A10's unbuilt half stays visible at the call site A10 will change."""
-    from proofload.trace import finalize
-
-    with pytest.raises(TypeError, match="A10"):
-        finalize(trace_of(span(1)), declaration=object(), limit=64)  # type: ignore[arg-type]
+# ``test_cd4_finalizes_a10_guard_is_unchanged`` retired into A10's P10-9, 2026-09-25, as a recorded
+# A10 retrofit (spec A10 W2, section 7.1 group 2; Taylor's ruling 2 of 2026-09-25). Reason: it pinned
+# that ``finalize`` refuses any non-``None`` declaration with a message naming A10, which was the
+# clause's job while A10 was unbuilt; A10 builds that half, so ``match="A10"`` is false by design.
+# Owner: A10. Cover: ``tests/test_a10_declared.py`` P10-9, which keeps the guard and re-aims it --
+# ``declaration=object()`` and ``declaration="verify"`` each still raise ``TypeError``, now naming
+# ``Declaration``, and a real ``Declaration`` does not raise. Body at retirement:
+# ``with pytest.raises(TypeError, match="A10"): finalize(trace_of(span(1)), declaration=object(), limit=64)``.
 
 
 # ---------- CD5: what is declared is what the store does, read back through the store ----------
