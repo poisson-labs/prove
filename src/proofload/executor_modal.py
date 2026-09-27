@@ -338,6 +338,14 @@ def _capture_request(payload: Mapping[str, Any] | None) -> tuple[CaptureSpec | N
 _CHAOS_FIELDS: tuple[str, ...] = ("fault", "rate", "steps")
 
 
+def _chaos_payload(spec: ChaosSpec | None) -> dict[str, Any] | None:
+    """The ``chaos`` argument of ``worker_batch``: the three ``ChaosSpec`` fields as JSON-native
+    values. It rides ``_MapItem`` to the container beside the capture request."""
+    if spec is None:
+        return None
+    return {"fault": spec.fault, "rate": spec.rate, "steps": list(spec.steps)}
+
+
 def _chaos_request(payload: Mapping[str, Any] | None) -> ChaosSpec | None:
     """The ``[chaos]`` table as it crosses into the container: three JSON-native fields."""
     if payload is None:
@@ -550,6 +558,28 @@ def _batch_capture_active(payload: Sequence[Result]) -> bool:
     return False
 
 
+def _require_chaos_records(p: Plan, records: Sequence[EpisodeRecord]) -> None:
+    """A chaos run's ok rows each carry ``backend_meta["chaos"]``, or the batch is refused.
+
+    The host arms nothing on a mapper run: the hooks belong to the process that makes the calls,
+    and only that process can say what it armed. An ok row without the record ran in a worker
+    that was never handed the table, so it measured the control arm while the manifest records
+    the fault -- a wrong measurement that reads as a clean one. It is refused before it is
+    stored, whichever mapper produced it. Errored rows carry no ``backend_meta`` from the worker
+    and are not asked for one.
+    """
+    if p.spec.chaos is None:
+        return
+    missing = sum(1 for r in records if r.error is None and "chaos" not in r.backend_meta)
+    if missing:
+        raise ModalBackendError(
+            f"run {p.run_id!r} requested [chaos] (fault {p.spec.chaos.fault!r}), but {missing} "
+            'ok row(s) came back without backend_meta["chaos"], the per-row chaos record: '
+            "the worker that ran them was never handed the chaos table, so they measured the "
+            "control arm. Refused before storing them; a mapper passes chaos= to worker_batch"
+        )
+
+
 def _record(
     p: Plan, job: Job, result: Result, attempt: int, *, capture_active: bool = False
 ) -> EpisodeRecord:
@@ -657,7 +687,8 @@ def run_with_mapper(
     batches are stored one row per job with ``error="infra: <repr>"``. ``max_rollouts`` limits
     submission to the batches up to the one holding the Nth episode; those are all drained and
     stored, then the run is left partial with ``stopped_by="max_rollouts"``. Anything the
-    mapper raises propagates after every batch that arrived has been stored.
+    mapper raises propagates after every batch that arrived has been stored. A batch of a
+    ``[chaos]`` run whose ok rows lack ``backend_meta["chaos"]`` is refused before it is stored.
     """
     _validate_options(options)
     image_spec = ImageSpec() if image is None else image
@@ -730,6 +761,7 @@ def run_with_mapper(
                     n_errored += 1
                     if record.error == _TIMEOUT_ERROR:
                         n_timeout += 1
+            _require_chaos_records(p, records)
             store_batch(records)
         for k in submitted:
             if k not in seen:
@@ -860,7 +892,7 @@ def _outer_timeout(options: ModalOptions) -> int:
     return int(min(max(seconds, 1.0), _MAX_OUTER_TIMEOUT_S))
 
 
-_MapItem = tuple[int, list[Job], str, float | None, dict[str, Any] | None]
+_MapItem = tuple[int, list[Job], str, float | None, dict[str, Any] | None, dict[str, Any] | None]
 _MapOutput = tuple[int, list[Result] | None, str | None]
 
 
@@ -869,10 +901,13 @@ def _container_batch(item: _MapItem) -> _MapOutput:
     the output, because ``order_outputs=False`` loses position. A failure of the batch as a
     whole (a resolve error, for one) comes back as ``(k, None, traceback)`` so it keeps its
     index; only a container death loses it. The capture request rides the item too: it is the
-    only way the run id reaches ``worker_batch`` without extending ``Job``."""
-    k, jobs, import_path, episode_timeout, capture = item
+    only way the run id reaches ``worker_batch`` without extending ``Job``. The chaos request
+    rides beside it for the same reason: the hooks belong to the container, and nothing else
+    crosses the boundary."""
+    k, jobs, import_path, episode_timeout, capture, chaos = item
     try:
-        return k, worker_batch(jobs, import_path, episode_timeout, capture=capture), None
+        results = worker_batch(jobs, import_path, episode_timeout, capture=capture, chaos=chaos)
+        return k, results, None
     except Exception:
         return k, None, traceback.format_exc()
 
@@ -892,17 +927,26 @@ class _ModalMapper:
         import_path: str,
         episode_timeout: float | None,
         capture: dict[str, Any] | None = None,
+        chaos: dict[str, Any] | None = None,
     ) -> None:
         self.remote = remote
         self.import_path = import_path
         self.episode_timeout = episode_timeout
         self.capture = capture
+        self.chaos = chaos
 
     def __call__(
         self, batches: Sequence[Sequence[Job]]
     ) -> Iterator[tuple[int, list[Result] | BaseException]]:
         items: list[_MapItem] = [
-            (k, [tuple(job) for job in jobs], self.import_path, self.episode_timeout, self.capture)  # type: ignore[misc]
+            (
+                k,
+                [tuple(job) for job in jobs],  # type: ignore[misc]
+                self.import_path,
+                self.episode_timeout,
+                self.capture,
+                self.chaos,
+            )
             for k, jobs in enumerate(batches)
         ]
         seen: set[int] = set()
@@ -967,6 +1011,7 @@ def run_modal(
         target.import_path,
         options.episode_timeout,
         _capture_payload(p.spec.capture, p.run_id),
+        _chaos_payload(p.spec.chaos),
     )
     with app.run():
         return run_with_mapper(
