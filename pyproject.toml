@@ -16,7 +16,7 @@ modal = ["modal"]
 agent = ["litellm", "openai>=2.20,<3", "opentelemetry-sdk"]
 viz = ["matplotlib"]
 all = ["modal", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
-dev = ["pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common"]
+dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common"]
 
 [project.scripts]
 proofload = "proofload.cli:main"
@@ -40,7 +40,7 @@ files = ["src"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["pandas", "pandas.*", "pyarrow", "pyarrow.*", "scipy", "scipy.*", "modal", "modal.*"]
+module = ["pandas", "pandas.*", "pyarrow", "pyarrow.*", "scipy", "scipy.*", "modal", "modal.*", "burla", "burla.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
