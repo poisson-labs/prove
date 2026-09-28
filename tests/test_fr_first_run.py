@@ -317,6 +317,7 @@ CLI_IMPORTS = frozenset(
         ("proofload.executor_modal", "ImageSpec"), ("proofload.executor_modal", "ModalOptions"),
         ("proofload.executor_modal", "ModalTarget"), ("proofload.executor_modal", "preflight_modal"),
         ("proofload.executor_modal", "run_modal"),
+        ("proofload.executor_burla", "BurlaOptions"), ("proofload.executor_burla", "preflight_burla"), ("proofload.executor_burla", "run_burla"),
         ("proofload.paired", "Declaration"), ("proofload.paired", "PairedError"), ("proofload.paired", "_Bundle"),
         ("proofload.paired", "_artifact_text"), ("proofload.paired", "_bundle"), ("proofload.paired", "_cost_block"),
         ("proofload.paired", "_fold_html"), ("proofload.paired", "_fold_markdown"), ("proofload.paired", "cost"),
