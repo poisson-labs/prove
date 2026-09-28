@@ -67,6 +67,7 @@ from proofload.executor import (
     preflight,
     run_local,
 )
+from proofload.executor_burla import BurlaOptions, preflight_burla, run_burla
 from proofload.executor_modal import (
     ImageSpec,
     ModalOptions,
@@ -134,6 +135,8 @@ _METHODS: tuple[str, ...] = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 _REPORT_FILES = ("report.md", "heatmap.svg", "receipt.html")
 _SNIPPET_MARKER = "# reproduce one episode"
 _MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
+#: The remote-backend flags a Burla run takes from the command line over its ``[burla]`` table.
+_BURLA_REFUSED_FLAGS = ("concurrency", "app_name")
 _DIFF_ONLY_FLAGS = (
     "method", "methods", "q", "permutations", "seed", "by", "max_group_mde", "depth", "paired",
 )
@@ -220,7 +223,7 @@ def _build_parser(io: _IO) -> _Parser:
     sweep.add_argument(
         "--target", required=True, metavar="pkg.module:rollout", help="import path of the rollout"
     )
-    sweep.add_argument("--backend", choices=("local", "modal"), default="local")
+    sweep.add_argument("--backend", choices=("local", "modal", "burla"), default="local")
     identity = sweep.add_mutually_exclusive_group()
     identity.add_argument("--salt", metavar="HEX", help="run salt for seed derivation")
     identity.add_argument("--pair-with", metavar="RUN_ID", help="inherit that run's salt")
@@ -235,7 +238,10 @@ def _build_parser(io: _IO) -> _Parser:
         help="largest minimum detectable effect you accept for this design (default 0.20)",
     )
     sweep.add_argument("--yes", action="store_true", help="skip the pre-flight prompt")
-    modal = sweep.add_argument_group("modal only (override the [modal] table)")
+    modal = sweep.add_argument_group(
+        "remote backends (override the [modal] table; --infra-retries, --max-cost and "
+        "--est-seconds also override [burla])"
+    )
     modal.add_argument("--concurrency", type=int, metavar="N", help="max containers")
     modal.add_argument("--infra-retries", type=int, metavar="N", help="retries per batch")
     modal.add_argument("--max-cost", type=float, metavar="USD", help="refuse above this estimate")
@@ -1181,12 +1187,38 @@ def _confirm(ns: argparse.Namespace, io: _IO) -> None:
         raise _Refusal("declined at pre-flight; nothing was run")
 
 
+def _burla_config(ns: argparse.Namespace, spec_path: Path) -> BurlaOptions:
+    """``[burla]`` -> BurlaOptions; the flags a Burla run accepts override the table."""
+    try:
+        options = BurlaOptions.from_sweep_file(spec_path)
+        overrides = {
+            name: value
+            for name, value in (
+                ("max_cost", ns.max_cost),
+                ("est_seconds_per_episode", ns.est_seconds),
+                ("infra_retries", ns.infra_retries),
+                ("episode_timeout", ns.episode_timeout),
+                ("max_rollouts", ns.max_rollouts),
+                ("batch_size", ns.batch_size),
+            )
+            if value is not None
+        }
+        return dataclasses.replace(options, **overrides)
+    except (TypeError, ValueError) as exc:
+        raise _Refusal(f"[burla] in {spec_path}: {exc}") from exc
+
+
 def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    if ns.backend != "modal":
+    if ns.backend == "local":
         stray = [name for name in _MODAL_ONLY_FLAGS if getattr(ns, name) is not None]
         if stray or ns.image != "image":
             names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
             raise _Refusal(f"{names} only applies to --backend modal")
+    if ns.backend == "burla":
+        stray = [name for name in _BURLA_REFUSED_FLAGS if getattr(ns, name) is not None]
+        if stray or ns.image != "image":
+            names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
+            raise _Refusal(f"{names} does not apply to --backend burla")
     spec_path = Path(ns.spec)
     spec = SweepSpec.load(spec_path)
     if ns.backend == "modal":
@@ -1195,7 +1227,10 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         # backend exists for -- must not be imported here (ADR-029).
         target, options = _modal_config(ns, spec_path)
     else:
+        # Local and Burla both run this machine's code: Burla's workers run it from the bundle.
         rollout = _resolve_target(ns.target)
+    if ns.backend == "burla":
+        burla_options = _burla_config(ns, spec_path)
     store = Store(root)
     p: Plan = plan(
         spec,
@@ -1215,6 +1250,8 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     # comparison and the message all live in M3 (spec S23 sections 3 and 6).
     if ns.backend == "modal":
         io.out.write(preflight_modal(p, target, options))
+    elif ns.backend == "burla":
+        io.out.write(preflight_burla(p, ns.target, burla_options))
     else:
         io.out.write(preflight(p))
     check_power(p, max_mde=p.max_mde_accepted)
@@ -1225,6 +1262,8 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     summary: RunSummary
     if ns.backend == "modal":
         summary = run_modal(p, target, store, options=options, on_progress=progress)
+    elif ns.backend == "burla":
+        summary = run_burla(p, ns.target, store, options=burla_options, on_progress=progress)
     else:
         summary = run_local(
             p,

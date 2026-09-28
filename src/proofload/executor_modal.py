@@ -471,8 +471,37 @@ def _jobs(p: Plan) -> list[Job]:
     ]
 
 
+_SHARED_FIELDS = (
+    "python",
+    "platform",
+    "proofload_version",
+    "sweep",
+    "infra_retries",
+    "import_path",
+    "max_mde_accepted",
+    "capture",
+    "chaos",
+)
+_MODAL_CAPTURE_REASON = (
+    "the host installs nothing for a Modal run; the container may not even "
+    "hold the packages. Each batch records what happened at "
+    "backend_meta['capture']"
+)
+_WORKER_CAPTURE_REASON = (
+    "the host installs nothing for a {name} run; each batch records what happened in its "
+    "worker at backend_meta['capture']"
+)
+
+
 def _open_run(
-    p: Plan, store: Store, options: ModalOptions, image: ImageSpec, import_path: str | None
+    p: Plan,
+    store: Store,
+    options: ModalOptions,
+    image: ImageSpec,
+    import_path: str | None,
+    *,
+    backend: str = _BACKEND,
+    placement: Mapping[str, Any] | None = None,
 ) -> None:
     """The local backend's run gating, with the modal manifest on fresh runs."""
     existing: RunManifest | None
@@ -489,28 +518,32 @@ def _open_run(
     if existing is not None:
         raise ExecutorError(f"run {p.run_id!r} already exists; plan with resume= to continue it")
     environment = _environment(p.spec)
-    environment.update(
-        image=image.to_dict(),
-        modal_app=options.app_name,
-        concurrency=options.concurrency,
-        infra_retries=options.infra_retries,
-        import_path=import_path,
-        secrets=list(options.secrets),
-        max_mde_accepted=_accepted_mde(p),
-    )
+    if placement is None:
+        environment.update(
+            image=image.to_dict(),
+            modal_app=options.app_name,
+            concurrency=options.concurrency,
+            infra_retries=options.infra_retries,
+            import_path=import_path,
+            secrets=list(options.secrets),
+            max_mde_accepted=_accepted_mde(p),
+        )
+    else:
+        environment.update(
+            infra_retries=options.infra_retries,
+            import_path=import_path,
+            max_mde_accepted=_accepted_mde(p),
+        )
+        environment.update(placement)
     if p.spec.capture is not None:
+        reason = (
+            _MODAL_CAPTURE_REASON
+            if backend == _BACKEND
+            else _WORKER_CAPTURE_REASON.format(name=backend.capitalize())
+        )
         environment["capture"] = _capture_record(
             p.spec.capture,
-            CaptureStatus(
-                requested=True,
-                active=False,
-                reason=(
-                    "the host installs nothing for a Modal run; the container may not even "
-                    "hold the packages. Each batch records what happened at "
-                    "backend_meta['capture']"
-                ),
-                instrumented=(),
-            ),
+            CaptureStatus(requested=True, active=False, reason=reason, instrumented=()),
         )
     if p.spec.chaos is not None:
         # The host arms nothing: the hooks belong to the process that makes the calls, and
@@ -534,7 +567,7 @@ def _open_run(
             t_unit=p.spec.t_unit,
             run_salt=p.run_salt,
             axis_types=dict(p.spec.axis_types),
-            backend=_BACKEND,
+            backend=backend,
             environment=environment,
             retain_traces_for=p.spec.retain_traces_for,
             declared=_spec_declared(p.spec),
@@ -678,6 +711,9 @@ def run_with_mapper(
     options: ModalOptions,
     image: ImageSpec | None = None,
     on_progress: Callable[[int, int], None] | None = None,
+    backend: str = _BACKEND,
+    placement: Mapping[str, Any] | None = None,
+    cost_check: Callable[[Plan], None] | None = None,
 ) -> RunSummary:
     """Execute a plan through ``mapper``; never imports modal.
 
@@ -691,9 +727,32 @@ def run_with_mapper(
     ``[chaos]`` run whose ok rows lack ``backend_meta["chaos"]`` is refused before it is stored.
     """
     _validate_options(options)
+    if backend != _BACKEND and (placement is None or cost_check is None):
+        raise ModalBackendError(
+            f"backend {backend!r} must pass both placement= and cost_check=: without them its "
+            "run would be labelled with Modal's placement fields and priced with Modal's table"
+        )
+    if placement is not None:
+        clash = sorted(set(placement) & set(_SHARED_FIELDS))
+        if clash:
+            raise ModalBackendError(
+                f"placement names shared manifest field(s) {', '.join(clash)}; the runner writes "
+                "those itself, whatever the backend"
+            )
     image_spec = ImageSpec() if image is None else image
-    _check_cost(p, options, image_spec)
-    _open_run(p, store, options, image_spec, getattr(mapper, "import_path", None))
+    if cost_check is None:
+        _check_cost(p, options, image_spec)
+    else:
+        cost_check(p)
+    _open_run(
+        p,
+        store,
+        options,
+        image_spec,
+        getattr(mapper, "import_path", None),
+        backend=backend,
+        placement=placement,
+    )
 
     total = len(p.pairs)
     jobs = _jobs(p)
