@@ -1,7 +1,7 @@
 """The Burla backend's launcher: a script run as ``python -I <this file>``, in its own session.
 
 It imports the standard library and, inside ``main()``, ``burla``: nothing of Prove, Tasks or the
-demo. Burla 1.8.1 ships every local module in the calling process's ``sys.modules`` and refuses
+demo. Burla 1.8.2 ships every local module in the calling process's ``sys.modules`` and refuses
 one that imports local code inside a function, so the one function it is handed is
 ``_bootstrap``, defined here in ``__main__`` and shipped by value with the bundle in its globals.
 

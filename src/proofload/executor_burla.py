@@ -1,6 +1,6 @@
 """The Burla backend: a sweep on a small fixed cluster in the user's own cloud, through Burla.
 
-Burla 1.8.1 ships only the ``.py`` files of the local modules a caller has imported, and refuses
+Burla 1.8.2 ships only the ``.py`` files of the local modules a caller has imported, and refuses
 a call whose shipped code imports a local package inside a function. Prove as it stands trips
 that rule, and Poisson Tasks reads data files beside its own source. So this backend ships its
 own bundle -- a deterministic tarball of the real package folders, data files included -- from a
