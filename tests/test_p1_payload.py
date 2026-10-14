@@ -109,19 +109,19 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload.cli as cli
-import proofload.diff as diff_mod
-import proofload.viewer as viewer_mod
-from proofload.diff import DiffResult, MultiDiffResult, NotPairable, UnpairedAnalysis, diff, multi_diff
-from proofload.episode import Episode
-from proofload.report import ReportSpec, build_multi_report, build_report
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.survival import censor
-from proofload.tree import omnibus, tree
-from proofload.viewer import SCHEMA, ViewerError, build_structure, render_html
+import poisson_prove.cli as cli
+import poisson_prove.diff as diff_mod
+import poisson_prove.viewer as viewer_mod
+from poisson_prove.diff import DiffResult, MultiDiffResult, NotPairable, UnpairedAnalysis, diff, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import ReportSpec, build_multi_report, build_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.survival import censor
+from poisson_prove.tree import omnibus, tree
+from poisson_prove.viewer import SCHEMA, ViewerError, build_structure, render_html
 
 REPO = Path(__file__).resolve().parent.parent
-SRC = REPO / "src" / "proofload"
+SRC = REPO / "src" / "poisson_prove"
 DIFF_SOURCE, REPORT_SOURCE, TREE_SOURCE, VIEWER_SOURCE, CLI_SOURCE = (SRC / f"{n}.py" for n in ("diff", "report", "tree", "viewer", "cli"))
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -149,7 +149,7 @@ MULTI_SUMMARY_FIELDS = (
 MULTI_PROVENANCE_KEYS = (
     "events", "inferred", "non_event", "n_tests", "method", "seed_identity_match", "unpaired_analysis",
     "q", "t_unit", "horizon", "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent",
-    "proofload_version", "run_id_a", "run_id_b", "run_salt",
+    "poisson_prove_version", "run_id_a", "run_id_b", "run_salt",
     "observation_cap_a", "observation_cap_b", "trace_spans_a", "trace_spans_b",
     "observation_cut_spans_a", "observation_cut_spans_b",
 )
@@ -209,7 +209,7 @@ M7_GROUP_FLOOR_LINE = "group p floor {p_floor}: the same {n_permutations} permut
 #: LS retrofit, 2026-09-22 (local serve pass, Phase A): the refusal interpolates ``SCHEMA`` (spec LS section 0.1 last row, LS8).
 NO_INTERVALS_REFUSAL = (
     "this structure carries no intervals; it was assembled before the flat family's intervals joined "
-    "proofload.viewpair/6 and is not a page this renderer will draw"
+    "poisson-prove.viewpair/7 and is not a page this renderer will draw"
 )
 NO_TREE_REFUSAL = (
     "this structure carries no tree; a page whose honesty block cannot state the bound is not a page "
@@ -1177,8 +1177,8 @@ def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_
     """The grep clause is C34's whole close."""
     # LS retrofit, 2026-09-22 (local serve pass, Phase A): the grep is widened from ``/3`` alone to every retired version, because ``/4``
     # sat in a user-visible refusal for two packets while this clause looked for ``/3`` (spec LS section 0.1).
-    assert viewer_mod.SCHEMA == "proofload.viewpair/6"
-    retired = tuple(f"proofload.viewpair/{n}" for n in (2, 3, 4, 5))
+    assert viewer_mod.SCHEMA == "poisson-prove.viewpair/7"
+    retired = tuple(f"proofload.viewpair/{n}" for n in (2, 3, 4, 5, 6))
     hits = sorted(path.name for path in SRC.glob("*.py") if any(r in path.read_text(encoding="utf-8") for r in retired))
     assert hits == [], hits
     lines = VIEWER_SOURCE.read_text(encoding="utf-8").splitlines()

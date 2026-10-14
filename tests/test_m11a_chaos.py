@@ -163,25 +163,25 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import proofload
-import proofload.executor as executor
-import proofload.trace as trace_module
-from proofload.diff import diff
-from proofload.episode import Episode
-from proofload.executor import derive_seed, plan, run_local
-from proofload.executor_modal import Job, ModalOptions, run_with_mapper, worker_batch
-from proofload.sampler import SamplerError, SweepSpec
-from proofload.store import Store, StoreError
-from proofload.survival import censor
-from proofload.trace import Trace
+import poisson_prove
+import poisson_prove.executor as executor
+import poisson_prove.trace as trace_module
+from poisson_prove.diff import diff
+from poisson_prove.episode import Episode
+from poisson_prove.executor import derive_seed, plan, run_local
+from poisson_prove.executor_modal import Job, ModalOptions, run_with_mapper, worker_batch
+from poisson_prove.sampler import SamplerError, SweepSpec
+from poisson_prove.store import Store, StoreError
+from poisson_prove.survival import censor
+from poisson_prove.trace import Trace
 
 openai = pytest.importorskip("openai", reason="the injection oracle drives the openai SDK over a scripted transport")
 
 MODULE = __name__
-PACKAGE = Path(proofload.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
+PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
 ROOT = Path(__file__).resolve().parents[1]
-CHAOS_MODULE = "proofload.chaos"
-CATALOG_MODULE = "proofload.chaos_catalog"
+CHAOS_MODULE = "poisson_prove.chaos"
+CATALOG_MODULE = "poisson_prove.chaos_catalog"
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 
 PUBLIC_SURFACE = ["ChaosError", "ChaosSpec", "ChaosStatus", "FaultRecord", "fault_names", "injecting", "install", "position"]
@@ -194,8 +194,8 @@ RECORD_FIELDS = (
 ENTRY_FIELDS = ("name", "intercept", "action", "target_path", "value")
 MANIFEST_KEYS = frozenset({"requested", "fault", "rate", "steps", "engine_version", "hooks"})
 EXTRAS = {"modal", "agent", "viz", "all", "dev"}
-FAULT_KEY = "proofload.fault"
-FAULT_POSITION_KEY = "proofload.fault.position"
+FAULT_KEY = "poisson_prove.fault"
+FAULT_POSITION_KEY = "poisson_prove.fault.position"
 ATTRIBUTION = ("AgentChaos", "github.com/floritange/AgentChaos", "MIT", "0.1.0")
 SPLIT_FAMILY = ("split", "rsplit", "partition", "rpartition")
 
@@ -978,7 +978,7 @@ def test_m11a_7_the_variate_is_a_pure_function_of_its_triple_across_interpreters
     assert here == [reference_variate(seed, name, attempt) for seed, name, attempt in TRIPLES]
     code = (
         "import json, sys\n"
-        "from proofload.chaos import _variate\n"
+        "from poisson_prove.chaos import _variate\n"
         "print(json.dumps([_variate(s, n, a) for s, n, a in json.loads(sys.argv[1])]))\n"
     )
     env = {**os.environ, "PYTHONHASHSEED": "271828"}
@@ -1320,9 +1320,9 @@ def test_m11a_23b_the_seam_imports_with_no_client_library_present() -> None:
         "import sys\n"
         "for name in ('httpx', 'openai', 'opentelemetry', 'agentchaos', 'loguru'):\n"
         "    sys.modules[name] = None\n"
-        "import proofload.chaos, proofload.chaos_catalog, proofload.executor, proofload.executor_modal, proofload.sampler\n"
+        "import poisson_prove.chaos, poisson_prove.chaos_catalog, poisson_prove.executor, poisson_prove.executor_modal, poisson_prove.sampler\n"
         "import json\n"
-        "print(json.dumps(sorted(proofload.chaos.fault_names())))\n"
+        "print(json.dumps(sorted(poisson_prove.chaos.fault_names())))\n"
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -1349,7 +1349,7 @@ def _blocked_client_run(script: str) -> dict[str, Any]:
 
 def test_m11a_33_a_faulted_arm_refuses_when_no_client_is_loaded(tmp_path: Path) -> None:
     faulted = _blocked_client_run(
-        "from proofload.chaos import ChaosSpec, install\n"
+        "from poisson_prove.chaos import ChaosSpec, install\n"
         "install(ChaosSpec(fault='llm_error_single'))\n"
         "out['raised'] = None\n"
     )
@@ -1357,17 +1357,17 @@ def test_m11a_33_a_faulted_arm_refuses_when_no_client_is_loaded(tmp_path: Path) 
     assert "httpx" in faulted["message"], faulted
     control = _blocked_client_run(
         "import dataclasses\n"
-        "from proofload.chaos import ChaosSpec, install\n"
+        "from poisson_prove.chaos import ChaosSpec, install\n"
         "out.update(dataclasses.asdict(install(ChaosSpec())))\n"
     )
     assert control == {"requested": True, "fault": "none", "rate": 1.0, "steps": [], "engine_version": None}, control
     store_root = tmp_path / "store"
     toml = write(tmp_path / "sweep.toml", sweep_toml(chaos={"fault": "llm_error_single"}, replicates=1))
     run = _blocked_client_run(
-        "from proofload.episode import Episode\n"
-        "from proofload.executor import plan, run_local\n"
-        "from proofload.sampler import SweepSpec\n"
-        "from proofload.store import Store\n"
+        "from poisson_prove.episode import Episode\n"
+        "from poisson_prove.executor import plan, run_local\n"
+        "from poisson_prove.sampler import SweepSpec\n"
+        "from poisson_prove.store import Store\n"
         f"store = Store({str(store_root)!r})\n"
         f"p = plan(SweepSpec.load({str(toml)!r}), store, run_salt={SALT!r})\n"
         "run_local(p, lambda cfg, seed: Episode(outcome='survived', t=1.0, horizon=1.0), store)\n"

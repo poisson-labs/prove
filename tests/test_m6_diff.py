@@ -40,7 +40,7 @@ from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from scipy.stats import fisher_exact
 
-from proofload.diff import (
+from poisson_prove.diff import (
     DiffError,
     DiffResult,
     NotPairable,
@@ -49,8 +49,8 @@ from proofload.diff import (
     diff,
     mde_two_proportion,
 )
-from proofload.store import RunManifest, Store, config_hash
-from proofload.survival import censor
+from poisson_prove.store import RunManifest, Store, config_hash
+from poisson_prove.survival import censor
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"

@@ -55,9 +55,9 @@ from typing import Any
 import httpx
 import pytest
 
-from proofload import chaos
-from proofload.episode import Episode
-from proofload.store import Store, StoreError
+from poisson_prove import chaos
+from poisson_prove.episode import Episode
+from poisson_prove.store import Store, StoreError
 
 MODULE = __name__
 TARGET = f"{MODULE}:rollout"
@@ -233,7 +233,7 @@ def _install_modal_stub(strip_record: bool) -> list[str]:
 
 
 def _sweep(root: str, table: dict[str, Any] | None) -> Any:
-    from proofload.sampler import SweepSpec
+    from poisson_prove.sampler import SweepSpec
 
     text = 'target_id = "mc-oracle@v0"\nt_unit = "steps"\nreplicates = 2\n\n[axes.body]\ntype = "categorical"\nvalues = ["a", "b"]\n'
     if table is not None:
@@ -249,8 +249,8 @@ def _summary(summary: Any) -> dict[str, Any]:
 
 
 def child_local(root: str, episode_timeout: float | None) -> dict[str, Any]:
-    from proofload.executor import plan, run_local
-    from proofload._resolve import resolve
+    from poisson_prove.executor import plan, run_local
+    from poisson_prove._resolve import resolve
 
     store = Store(Path(root) / "store")
     p = plan(_sweep(root, CHAOS), store, backend="local", run_salt=SALT, import_path=TARGET)
@@ -261,8 +261,8 @@ def child_local(root: str, episode_timeout: float | None) -> dict[str, Any]:
 def child_modal(root: str, episode_timeout: float | None, strip_record: bool) -> dict[str, Any]:
     """``run_modal`` as built, with only the ``modal`` package stubbed."""
     shipped = _install_modal_stub(strip_record)
-    from proofload.executor import ExecutorError, plan
-    from proofload.executor_modal import ImageSpec, ModalOptions, ModalTarget, run_modal
+    from poisson_prove.executor import ExecutorError, plan
+    from poisson_prove.executor_modal import ImageSpec, ModalOptions, ModalTarget, run_modal
 
     store = Store(Path(root) / "store")
     p = plan(_sweep(root, CHAOS), store, backend="modal", run_salt=SALT, import_path=TARGET)
@@ -282,8 +282,8 @@ def child_mapper(root: str, table: dict[str, Any] | None, target: str, hands_ove
     """Another backend on the shared orchestration: a plain mapper that runs each batch through
     ``worker_batch`` in this process, handing it the chaos table or (the check's bug, in a new
     backend's shape) forgetting to."""
-    from proofload.executor import ExecutorError, plan
-    from proofload.executor_modal import Job, ModalOptions, run_with_mapper, worker_batch
+    from poisson_prove.executor import ExecutorError, plan
+    from poisson_prove.executor_modal import Job, ModalOptions, run_with_mapper, worker_batch
 
     store = Store(Path(root) / "store")
     spec = _sweep(root, table)
@@ -402,7 +402,7 @@ def test_mc1_a_chaos_sweep_on_the_modal_path_hands_each_rollout_the_chaos_settin
     local_root, local = arms("local", episode_timeout)
     modal_root, modal = arms("modal", episode_timeout)
     assert "refused" not in modal, modal
-    assert modal["modal_file"] == STUB_FILE and modal["shipped"] and set(modal["shipped"]) == {"proofload.executor_modal._container_batch"}, modal
+    assert modal["modal_file"] == STUB_FILE and modal["shipped"] and set(modal["shipped"]) == {"poisson_prove.executor_modal._container_batch"}, modal
     local_rows = rows(local_root, local["run_id"])
     modal_rows = rows(modal_root, modal["run_id"])
     assert len(local_rows) == N_ROWS and all(r["saw"] == CHAOS and r["outcome"] == "fell" for r in local_rows), local_rows  # the reference arm

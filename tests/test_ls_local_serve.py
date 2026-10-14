@@ -168,15 +168,15 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload
-from proofload import cli
-from proofload import diff as diff_mod
-from proofload.diff import multi_diff
-from proofload.episode import Episode
-from proofload.report import _fmt
-from proofload.store import EpisodeRecord, RunManifest, Store
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove import diff as diff_mod
+from poisson_prove.diff import multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import _fmt
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 SRC = PACKAGE
 VIEWER_SOURCE = PACKAGE / "viewer.py"
@@ -191,8 +191,8 @@ GO1_A, GO1_B = "go1-v0", "go1-v1"
 # ---------- spec sections 2, 3.2, 3.3, 3.5: the literals ----------
 
 #: LS7, LS8. The schema, and the four ``render_html`` refuses by name.
-SCHEMA = "proofload.viewpair/6"
-RETIRED_SCHEMAS = tuple(f"proofload.viewpair/{n}" for n in (2, 3, 4, 5))
+SCHEMA = "poisson-prove.viewpair/7"
+RETIRED_SCHEMAS = tuple(f"proofload.viewpair/{n}" for n in (2, 3, 4, 5, 6))
 #: LS7. Fourteen top-level keys, ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
@@ -448,13 +448,13 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
 
 
 def viewer() -> Any:
-    import proofload.viewer as module
+    import poisson_prove.viewer as module
 
     return module
 
 
 def plain() -> Any:
-    import proofload.plain as module
+    import poisson_prove.plain as module
 
     return module
 
@@ -1341,7 +1341,7 @@ def normalised_region(page: str, heading: str) -> str:
     if heading == "Result":
         lines = [line for line in lines if not (line.startswith("<p>Trade:") or "are complements here" in line or "Compared as two separate samples" in line)]
     if heading == "Cell":
-        lines = [line for line in lines if not line.startswith('<script type="application/json" id="proofload-holes">')]
+        lines = [line for line in lines if not re.match(r'<script type="application/json" id="[\w-]+-holes">', line)]
     text = "\n".join(lines)
     for tail in (*RETIRED_TAILS, *NEW_TAILS):
         text = text.replace(html_mod.escape(tail), "")
@@ -1349,6 +1349,15 @@ def normalised_region(page: str, heading: str) -> str:
 
 
 # ---------- LS1: no cell swallows its own click ----------
+
+
+def page_as_0_0_1_wrote_it(page: str) -> str:
+    """PF0 (Q4, section 2.5): the rename changes three things on a page, each put back as 0.0.1 wrote it
+    before the frozen digest is taken: the version line of the provenance list, the version key in the
+    arm table, and the ids of the page's two data blocks, which named the old product."""
+    page = re.sub(r'(id="|getElementById\(")[\w-]+-(cells|holes)"', r'\1proofload-\2"', page)
+    page = page.replace("<td>poisson_prove_version</td>", "<td>proofload_version</td>")
+    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", page)
 
 
 def test_ls1_the_inert_selector_list_names_the_figures_text_beside_the_glyph_and_the_path(every_pair: list[Pair]) -> None:
@@ -1384,7 +1393,7 @@ def test_ls1_every_data_cell_node_stays_clickable_and_every_text_inside_the_figu
 def test_ls1_the_rule_lives_in_the_viewers_layout_and_not_in_the_reports_stylesheet() -> None:
     """Sole catch for a build that adds the rule to ``report._html_style``: the page reads both
     sheets, so only the source can tell them apart."""
-    from proofload.report import _html_style
+    from poisson_prove.report import _html_style
 
     layout = viewer()._LAYOUT
     inert = [rule for rule in layout.split("}") if "pointer-events:none" in rule]
@@ -2010,7 +2019,7 @@ def test_ls18_the_readme_has_a_serve_section_and_the_docs_page_names_the_fourtee
     readme = README.read_text(encoding="utf-8")
     heading = next((line for line in readme.splitlines() if line.startswith("#") and "serve" in line.lower()), None)
     assert heading is not None, "no serve heading in README"
-    assert re.search(r"^\s*proofload\b.*\bserve\b.*--event\b.*--x\b", readme, re.M), "no runnable serve command in README"
+    assert re.search(r"^\s*poisson-prove\b.*\bserve\b.*--event\b.*--x\b", readme, re.M), "no runnable serve command in README"
     assert "docs/reading-a-serve-page.md" in readme
     assert re.search(r"^- \[[^\]]+\]\(docs/reading-a-serve-page\.md\)", readme, re.M), "the docs list does not link the page"
     assert "Pre-release" in readme
@@ -2028,7 +2037,7 @@ def test_ls19_every_dispatch_heading_is_still_on_the_page_and_the_untouched_regi
     for p in all_pairs:
         assert set(h2_sequence(p.page)) == DISPATCH_H2, p.name
         for heading in UNTOUCHED_REGIONS:
-            assert sha(normalised_region(p.page, heading)) == REGION_SHA256[p.name][heading], (p.name, heading)
+            assert sha(page_as_0_0_1_wrote_it(normalised_region(p.page, heading))) == REGION_SHA256[p.name][heading], (p.name, heading)
 
 
 def test_ls19_the_summary_introduces_no_number_the_statistics_view_does_not_carry(all_pairs: list[Pair]) -> None:

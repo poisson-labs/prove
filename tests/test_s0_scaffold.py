@@ -14,8 +14,8 @@ LOOPBACK_SERVER_HOME = "viewer.py"
 
 
 def test_import_and_version():
-    import proofload
-    assert isinstance(proofload.__version__, str) and proofload.__version__
+    import poisson_prove
+    assert isinstance(poisson_prove.__version__, str) and poisson_prove.__version__
 
 
 def test_core_import_pulls_no_extras():
@@ -23,23 +23,23 @@ def test_core_import_pulls_no_extras():
         if name.split(".")[0] in EXTRAS_BANNED_FROM_CORE:
             del sys.modules[name]
     import importlib
-    import proofload
-    importlib.reload(proofload)
+    import poisson_prove
+    importlib.reload(poisson_prove)
     loaded = {n.split(".")[0] for n in sys.modules}
     assert not loaded & EXTRAS_BANNED_FROM_CORE
 
 
 def test_cli_version_via_entrypoint():
-    import proofload
-    r = subprocess.run(["proofload", "--version"], capture_output=True, text=True)
-    assert r.returncode == 0 and proofload.__version__ in r.stdout
+    import poisson_prove
+    r = subprocess.run(["poisson-prove", "--version"], capture_output=True, text=True)
+    assert r.returncode == 0 and poisson_prove.__version__ in r.stdout
 
 
 def test_cli_version_via_module():
-    import proofload
-    r = subprocess.run([sys.executable, "-m", "proofload", "--version"],
+    import poisson_prove
+    r = subprocess.run([sys.executable, "-m", "poisson_prove", "--version"],
                        capture_output=True, text=True)
-    assert r.returncode == 0 and proofload.__version__ in r.stdout
+    assert r.returncode == 0 and poisson_prove.__version__ in r.stdout
 
 
 def test_pyproject_extras_exact():
@@ -117,7 +117,7 @@ def test_no_network_imports_in_core():
     Checked by an ast walk over full dotted import paths, not by substring: ``import
     socketserver`` is not ``import socket``, and ``from http import server`` is ``http.server``.
     """
-    for py in (ROOT / "src" / "proofload").rglob("*.py"):
+    for py in (ROOT / "src" / "poisson_prove").rglob("*.py"):
         assert network_violations(py) == [], py
 
 

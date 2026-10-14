@@ -7,8 +7,8 @@ from typing import Any
 
 import httpx
 
-from proofload import chaos
-from proofload.episode import Episode
+from poisson_prove import chaos
+from poisson_prove.episode import Episode
 
 SCRIPTED = "SCRIPTED-OK"
 HORIZON = 10.0

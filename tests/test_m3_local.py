@@ -39,9 +39,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from proofload.diff import mde_two_proportion
-from proofload.episode import Episode
-from proofload.executor import (
+from poisson_prove.diff import mde_two_proportion
+from poisson_prove.episode import Episode
+from poisson_prove.executor import (
     ExecutorError,
     NotResumable,
     Pair,
@@ -55,8 +55,8 @@ from proofload.executor import (
     preflight,
     run_local,
 )
-from proofload.sampler import SweepSpec
-from proofload.store import Store, config_hash
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import Store, config_hash
 
 HORIZON = 10.0
 CELLS = ({"x": 0.1}, {"x": 0.2}, {"x": 0.3})
@@ -583,7 +583,7 @@ def test_i14_manifest_fields_and_environment(tmp_path: Path) -> None:
     assert dict(m.axis_types) == dict(spec.axis_types)
     assert m.retain_traces_for == spec.retain_traces_for == ("fell",)
     env = dict(m.environment)
-    for key in ("python", "platform", "proofload_version", "sweep"):
+    for key in ("python", "platform", "poisson_prove_version", "sweep"):
         assert key in env, key
     assert isinstance(env["python"], str) and env["python"]
     assert isinstance(env["platform"], str) and env["platform"]

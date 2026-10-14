@@ -40,8 +40,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from proofload.diff import DiffResult, diff
-from proofload.report import (
+from poisson_prove.diff import DiffResult, diff
+from poisson_prove.report import (
     ABSENT_FILL,
     NEUTRAL_FILL,
     AxisError,
@@ -53,8 +53,8 @@ from proofload.report import (
     build_report,
     heatmap,
 )
-from proofload.store import Store, config_hash
-from proofload.survival import cell_table, censor
+from poisson_prove.store import Store, config_hash
+from poisson_prove.survival import cell_table, censor
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLDEN_JSON = ROOT / "tests" / "fixtures" / "go1" / "golden.json"
@@ -361,10 +361,10 @@ def golden_report(golden_diff: DiffResult) -> Report:
 _SUBPROCESS_SCRIPT = """
 import hashlib, sys
 from pathlib import Path
-from proofload.store import Store
-from proofload.survival import censor
-from proofload.diff import diff
-from proofload.report import ReportSpec, build_report
+from poisson_prove.store import Store
+from poisson_prove.survival import censor
+from poisson_prove.diff import diff
+from poisson_prove.report import ReportSpec, build_report
 root = Path(sys.argv[1])
 store = Store(root / "tests" / "fixtures" / "go1")
 a, b = (censor(store.read(r), "fell") for r in ("go1-v0", "go1-v1"))
@@ -969,7 +969,7 @@ def test_i15_round_half_even_and_scientific_threshold() -> None:
 
 
 def test_i16_module_touches_no_filesystem_clock_network_or_rng() -> None:
-    import proofload.report as report_module
+    import poisson_prove.report as report_module
 
     source = Path(report_module.__file__).read_text()
     for banned in ("import os", "from os", "import time", "from time", "import datetime", "from datetime",
@@ -991,7 +991,7 @@ def test_i16_generated_at_and_manifests_are_omitted_not_invented(golden_diff: Di
     assert with_runs.provenance["run_id_a"] == "go1-v0" and with_runs.provenance["run_id_b"] == "go1-v1"
     assert with_runs.provenance["run_salt"] == golden_frames["ma"].run_salt
     assert "go1-v0" in with_runs.to_markdown() and "go1-v0" not in bare.to_markdown()
-    for key in ("event", "t_unit", "horizon", "method", "seed_identity_match", "unpaired_analysis", "q", "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent", "proofload_version"):
+    for key in ("event", "t_unit", "horizon", "method", "seed_identity_match", "unpaired_analysis", "q", "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent", "poisson_prove_version"):
         assert key in bare.provenance, key
     assert bare.provenance["event"] == "fell" and bare.provenance["n_absent"] == 0
 

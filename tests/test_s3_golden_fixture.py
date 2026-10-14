@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from proofload.store import Store
+from poisson_prove.store import Store
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"

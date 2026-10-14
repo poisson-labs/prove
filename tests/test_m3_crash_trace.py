@@ -70,27 +70,27 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload
-import proofload.cli as cli
-import proofload.executor as executor
-import proofload.executor_modal as executor_modal
-from proofload.episode import Episode
-from proofload.executor import plan, run_local
-from proofload.executor_modal import Job, Mapper, ModalOptions, Result, run_with_mapper, worker_batch
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.trace import OTEL_SEMCONV_VERSION, Span, Trace
+import poisson_prove
+import poisson_prove.cli as cli
+import poisson_prove.executor as executor
+import poisson_prove.executor_modal as executor_modal
+from poisson_prove.episode import Episode
+from poisson_prove.executor import plan, run_local
+from poisson_prove.executor_modal import Job, Mapper, ModalOptions, Result, run_with_mapper, worker_batch
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
 HERE = Path(__file__).resolve().parent
-PACKAGE = Path(proofload.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
+PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path needs the fork start method")
 
-RUN_ID_KEY = "proofload.run_id"
-EPISODE_KEY = "proofload.episode"
+RUN_ID_KEY = "poisson_prove.run_id"
+EPISODE_KEY = "poisson_prove.episode"
 RUN_ID = "r-2026-09-05-crash-oracle"
 EPISODE = "cfg-7:1"
 SALT = "crash-oracle-salt"
@@ -109,7 +109,8 @@ STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 re
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-S16_ORACLE_SHA256 = "718bfc0e1b0251799b6fae2e86f84299ee37d9ab5d483183f441943f28a26b16"  # 38 tests; re-minted by A10 Session B over the file A10 Session A amended (TRACE_EXPORTS gains Declaration, 5bb967c)
+# Re-minted by PF0 Session A over the file as its freeze commit moved it (the rename, Q4).
+S16_ORACLE_SHA256 = "0b9a0cc8886494058bdfdd52041008a08843920dbdfb3e2e5f89f11f189d02df"  # 38 tests; re-minted by A10 Session B over the file A10 Session A amended (TRACE_EXPORTS gains Declaration, 5bb967c)
 
 #: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
 DECLARED_LIMIT = 8192
@@ -342,7 +343,7 @@ def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
 def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028 plus A8a's ``alias_map_version``."""
     d: dict[str, Any] = {
-        "schema": "proofload.trace/1",
+        "schema": "poisson-prove.trace/1",
         "source": "otel",
         "source_version": OTEL_SEMCONV_VERSION,
         "dropped": 0,
@@ -453,7 +454,7 @@ def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
 
 def child_call_in_process(target: str, config: dict[str, Any], seed: int, with_capture: bool) -> dict[str, Any]:
     """One ``_call_in_process`` call, with or without a capture call; with one, it installs here."""
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     call = (
         executor._CaptureCall(spec=CaptureSpec(max_observation_bytes=DECLARED_LIMIT), run_id=RUN_ID, episode_id=EPISODE)  # CD (D1)
@@ -1017,9 +1018,9 @@ def test_k8_the_transport_aliases_and_signatures_are_untouched() -> None:
 
 
 def test_k8_no_new_public_symbol_in_the_touched_modules_or_their_neighbours() -> None:
-    import proofload.capture as capture_module
-    import proofload.otel as otel_module
-    import proofload.trace as trace_module
+    import poisson_prove.capture as capture_module
+    import poisson_prove.otel as otel_module
+    import poisson_prove.trace as trace_module
 
     assert _defined(executor) == EXECUTOR_PUBLIC, sorted(_defined(executor) ^ EXECUTOR_PUBLIC)
     assert _defined(executor_modal) == MODAL_PUBLIC, sorted(_defined(executor_modal) ^ MODAL_PUBLIC)

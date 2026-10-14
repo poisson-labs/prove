@@ -7,7 +7,7 @@ compared cell for cell.
 import os
 from typing import Any
 
-from proofload.episode import Episode
+from poisson_prove.episode import Episode
 
 HORIZON = 10.0
 

@@ -10,13 +10,13 @@
             }
           },
           {
-            "key": "proofload.run_id",
+            "key": "poisson_prove.run_id",
             "value": {
               "stringValue": "r-2026-09-03-a"
             }
           },
           {
-            "key": "proofload.episode",
+            "key": "poisson_prove.episode",
             "value": {
               "stringValue": "cfg-7:seed-3"
             }

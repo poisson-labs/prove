@@ -21,19 +21,19 @@ from pathlib import Path
 
 import pytest
 
-from proofload.executor import plan, run_local
-from proofload.sampler import SweepSpec
-from proofload.store import Store
+from poisson_prove.executor import plan, run_local
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import Store
 
-LIVE = os.environ.get("PROOFLOAD_MODAL_LIVE") == "1"
+LIVE = os.environ.get("POISSON_PROVE_MODAL_LIVE") == "1"
 HAS_CREDENTIALS = bool(os.environ.get("MODAL_TOKEN_ID")) or (Path.home() / ".modal.toml").is_file()
 SALT = "live-parity-salt"
-LIVE_SECRET = os.environ.get("PROOFLOAD_MODAL_LIVE_SECRET") == "1"
+LIVE_SECRET = os.environ.get("POISSON_PROVE_MODAL_LIVE_SECRET") == "1"
 SECRET_NAME = "proofload-live-test"
 SECRET_SALT = "live-secret-salt"
 
 pytestmark = [
-    pytest.mark.skipif(not LIVE, reason="set PROOFLOAD_MODAL_LIVE=1 to run the live Modal test"),
+    pytest.mark.skipif(not LIVE, reason="set POISSON_PROVE_MODAL_LIVE=1 to run the live Modal test"),
     pytest.mark.skipif(not HAS_CREDENTIALS, reason="no Modal credentials (MODAL_TOKEN_ID or ~/.modal.toml)"),
 ]
 
@@ -47,7 +47,7 @@ def _outcome_set(store: Store, run_id: str) -> set[tuple[str, int, int, str, flo
 
 def test_i19_run_modal_matches_run_local_under_shared_salt(tmp_path: Path) -> None:
     pytest.importorskip("modal")
-    from proofload.executor_modal import ImageSpec, ModalOptions, ModalTarget, run_modal
+    from poisson_prove.executor_modal import ImageSpec, ModalOptions, ModalTarget, run_modal
     from proofload_live_rollout import rollout
 
     spec = SweepSpec.build(
@@ -95,12 +95,12 @@ def test_i19_run_modal_matches_run_local_under_shared_salt(tmp_path: Path) -> No
 def _l15_gate() -> str | None:
     """The first unmet gate, in order, so the skip reason names what to set next."""
     if not LIVE:
-        return "set PROOFLOAD_MODAL_LIVE=1 to run the live Modal test"
+        return "set POISSON_PROVE_MODAL_LIVE=1 to run the live Modal test"
     if not HAS_CREDENTIALS:
         return "no Modal credentials (MODAL_TOKEN_ID or ~/.modal.toml)"
     if not LIVE_SECRET:
         return (
-            f"set PROOFLOAD_MODAL_LIVE_SECRET=1 once the Modal secret {SECRET_NAME} exists "
+            f"set POISSON_PROVE_MODAL_LIVE_SECRET=1 once the Modal secret {SECRET_NAME} exists "
             "(created by hand with PROOFLOAD_LIVE_SECRET=present)"
         )
     return None
@@ -112,7 +112,7 @@ L15_SKIP = _l15_gate()
 @pytest.mark.skipif(L15_SKIP is not None, reason=L15_SKIP or "")
 def test_l15_named_secret_is_mounted_on_the_function(tmp_path: Path) -> None:
     pytest.importorskip("modal")
-    from proofload.executor_modal import ImageSpec, ModalOptions, ModalTarget, run_modal
+    from poisson_prove.executor_modal import ImageSpec, ModalOptions, ModalTarget, run_modal
 
     spec = SweepSpec.build([{"x": 0.1}], replicates=2, target_id="live@test", t_unit="steps")
     assert spec.total_rollouts() == 2

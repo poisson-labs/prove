@@ -69,12 +69,12 @@ from typing import Any
 
 import pytest
 
-import proofload
-from proofload import _burla_submit, cli, executor, executor_burla, executor_modal
-from proofload.executor import ExecutorError, plan, preflight_mde, run_local
-from proofload.executor_modal import ModalBackendError, ModalOptions, run_with_mapper
-from proofload.sampler import SweepSpec
-from proofload.store import Store, StoreError
+import poisson_prove
+from poisson_prove import _burla_submit, cli, executor, executor_burla, executor_modal
+from poisson_prove.executor import ExecutorError, plan, preflight_mde, run_local
+from poisson_prove.executor_modal import ModalBackendError, ModalOptions, run_with_mapper
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import Store, StoreError
 
 eb = executor_burla
 _ORIGINAL_ARGV = eb._launcher_argv
@@ -85,7 +85,7 @@ LAUNCH = FIXTURES / "launch.py"
 DEAF = FIXTURES / "deaf_launcher.py"
 WORKER = FIXTURES / "worker.py"
 FR_TEST = REPO / "tests" / "test_fr_first_run.py"
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
 PIN = "1.8.1"
@@ -98,7 +98,7 @@ PROBE = "bu_targets.probe:rollout"
 HOSTONLY = "bu_targets.hostonly:rollout"
 DRIFTING = "bu_targets.drifting:rollout"
 USES_HELPER = "bu_targets.uses_helper:rollout"
-WATCH = ["proofload", "bu_targets", "bu_version", "bu_helper", "bu_dirty"]
+WATCH = ["poisson_prove", "bu_targets", "bu_version", "bu_helper", "bu_dirty"]
 CHAOS = {"fault": "llm_empty_single", "rate": 1.0, "steps": ["solve"]}
 RECORD_KEYS = frozenset({"requested", "fault", "rate", "steps", "engine_version", "hooks"})
 FAULTED_HOOKS = ["sync", "async"]
@@ -117,10 +117,10 @@ OPTION_FIELDS = [
     ("infra_retries", 2), ("max_rollouts", None),
 ]
 MODAL_ENV_KEYS = frozenset({
-    "python", "platform", "proofload_version", "sweep", "image", "modal_app", "concurrency",
+    "python", "platform", "poisson_prove_version", "sweep", "image", "modal_app", "concurrency",
     "infra_retries", "import_path", "secrets", "max_mde_accepted",
 })
-SHARED_KEYS = ("python", "platform", "proofload_version", "sweep", "infra_retries", "import_path",
+SHARED_KEYS = ("python", "platform", "poisson_prove_version", "sweep", "infra_retries", "import_path",
                "max_mde_accepted")
 MODAL_ONLY_KEYS = ("image", "modal_app", "concurrency", "secrets")
 # main's capture reason for a Modal run, byte for byte (executor_modal.py at 91d2071).
@@ -158,9 +158,9 @@ RUNNER_PARAMS = [
     ("cost_check", "KEYWORD_ONLY", None),
 ]
 BURLA_IMPORTS = frozenset({
-    ("proofload.executor_burla", "BurlaOptions"),
-    ("proofload.executor_burla", "preflight_burla"),
-    ("proofload.executor_burla", "run_burla"),
+    ("poisson_prove.executor_burla", "BurlaOptions"),
+    ("poisson_prove.executor_burla", "preflight_burla"),
+    ("poisson_prove.executor_burla", "run_burla"),
 })
 BOOTSTRAP_PARAMS = ["k", "jobs", "import_path", "episode_timeout", "capture", "chaos"]
 NETWORK_TOPS = frozenset({"urllib", "requests", "httpx", "socket"})
@@ -508,7 +508,7 @@ def child_local(root: str, target: str, chaos: dict[str, Any] | None, episode_ti
                 capture: bool) -> dict[str, Any]:
     """``run_local`` on the sweep a Burla arm runs, in a fresh interpreter."""
     sys.path.insert(0, str(TARGETS))
-    from proofload._resolve import resolve
+    from poisson_prove._resolve import resolve
 
     spec_path = write_sweep(Path(root), chaos=chaos, capture=capture)
     store = Store(Path(root) / "store")
@@ -641,7 +641,7 @@ def test_r3_another_backend_without_placement_or_cost_check_is_refused(tmp_path:
     _accepted(tmp_path, "both", backend="burla", placement=PLACEMENT, cost_check=check)
 
 
-@pytest.mark.parametrize("field", ["python", "platform", "proofload_version", "sweep", "infra_retries",
+@pytest.mark.parametrize("field", ["python", "platform", "poisson_prove_version", "sweep", "infra_retries",
                                    "import_path", "max_mde_accepted", "capture", "chaos"])
 def test_r3_a_placement_key_naming_a_shared_field_is_refused(tmp_path: Path, field: str) -> None:
     check = lambda plan: None  # noqa: E731
@@ -756,7 +756,7 @@ def local_rows(root: Path, target: str) -> list[dict[str, Any]]:
     spec_path = write_sweep(root, replicates=3)
     store = Store(root / "store")
     p = make_plan(spec_path, store, target, backend="local")
-    from proofload._resolve import resolve
+    from poisson_prove._resolve import resolve
 
     run_local(p, resolve(target), store)
     return stored(store, p.run_id)
@@ -1210,7 +1210,7 @@ def test_w1_the_manifest_records_the_bundle_and_each_packages_version_commit_and
     record = store.manifest(p.run_id).environment["bundle"]
     rebuilt = eb._build_bundle(("bu_targets",))
     assert record["sha256"] == rebuilt.sha256 and record["size"] == len(rebuilt.data)
-    assert record["packages"] == {"proofload": _expected_package("proofload"),
+    assert record["packages"] == {"poisson_prove": _expected_package("poisson_prove"),
                                   "bu_targets": _expected_package("bu_targets")}
 
 
@@ -1829,7 +1829,7 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     assert "grow off" in cluster, cluster
     bundle_line = lines[positions[2]]
     bundle = eb._build_bundle(("bu_targets", "bu_dirty"))
-    for name in ("proofload", "bu_targets", "bu_dirty"):
+    for name in ("poisson_prove", "bu_targets", "bu_dirty"):
         assert name in bundle_line, (name, bundle_line)
     commit = _git(tmp_path / "checkout", "rev-parse", "HEAD")
     assert commit and commit[:7] in bundle_line and bundle.sha256 in bundle_line, bundle_line
@@ -1838,7 +1838,7 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     assert mde_line == f"MDE at N={p.spec.replicates} (base rate 0.5): {preflight_mde(p.spec):.4f}"
     plain = eb.preflight_burla(p, PLAIN, options(tmp_path, packages=("bu_targets",)))
     plain_bundle = next(line for line in plain.splitlines() if line.startswith("Bundle: "))
-    dirty = any(_expected_package(name)["dirty"] for name in ("proofload", "bu_targets"))
+    dirty = any(_expected_package(name)["dirty"] for name in ("poisson_prove", "bu_targets"))
     assert ("uncommitted changes" in plain_bundle) == dirty, (dirty, plain_bundle)
 
 
@@ -1889,7 +1889,7 @@ def test_i1_nothing_imports_burla_at_import_time() -> None:
         "import importlib.util, sys\n"
         f"sys.path.insert(0, {str(FIXTURES)!r})\n"
         "assert importlib.util.find_spec('burla') is not None\n"
-        "import proofload, proofload.cli, proofload.executor_burla\n"
+        "import poisson_prove, poisson_prove.cli, poisson_prove.executor_burla\n"
         "print('burla' in sys.modules)\n"
     )
     done = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
@@ -1977,9 +1977,9 @@ def _cli_imports_constant() -> set[tuple[str | None, str | None]]:
 
 def test_i6_fr18_admits_exactly_the_three_burla_imports_and_cli_imports_them() -> None:
     frozen = _cli_imports_constant()
-    assert {entry for entry in frozen if entry[0] == "proofload.executor_burla"} == BURLA_IMPORTS
+    assert {entry for entry in frozen if entry[0] == "poisson_prove.executor_burla"} == BURLA_IMPORTS
     found: set[tuple[str | None, str | None]] = set()
     for node in ast.walk(ast.parse((PACKAGE / "cli.py").read_text(encoding="utf-8"))):
-        if isinstance(node, ast.ImportFrom) and node.module == "proofload.executor_burla":
+        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.executor_burla":
             found.update((node.module, alias.name) for alias in node.names)
     assert found == BURLA_IMPORTS

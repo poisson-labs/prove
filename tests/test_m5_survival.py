@@ -33,8 +33,8 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from proofload.store import Store, config_hash
-from proofload.survival import (
+from poisson_prove.store import Store, config_hash
+from poisson_prove.survival import (
     CIFCurve,
     KMCurve,
     SurvivalError,

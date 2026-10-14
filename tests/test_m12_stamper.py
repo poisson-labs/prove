@@ -28,13 +28,13 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (  # noqa: E4
     InMemorySpanExporter,
 )
 
-RUN_ID_SPEC = "proofload.run_id"
-EPISODE_SPEC = "proofload.episode"
+RUN_ID_SPEC = "poisson_prove.run_id"
+EPISODE_SPEC = "poisson_prove.episode"
 
 
 def build() -> tuple[Any, InMemorySpanExporter, Any]:
     """A provider with the stamper registered, its exporter, and a tracer. No global state."""
-    from proofload.otel import EpisodeStamper
+    from poisson_prove.otel import EpisodeStamper
 
     provider = TracerProvider(resource=Resource.create({"service.name": "oracle"}))
     provider.add_span_processor(EpisodeStamper())
@@ -68,7 +68,7 @@ def attrs_by_name(exporter: InMemorySpanExporter) -> dict[str, dict[str, Any]]:
 
 
 def test_t31_episode_sets_and_resets_the_context_var() -> None:
-    from proofload.otel import EPISODE_KEY, RUN_ID_KEY, episode
+    from poisson_prove.otel import EPISODE_KEY, RUN_ID_KEY, episode
 
     assert (RUN_ID_KEY, EPISODE_KEY) == (RUN_ID_SPEC, EPISODE_SPEC)
 
@@ -90,7 +90,7 @@ def test_t31_episode_sets_and_resets_the_context_var() -> None:
 
 
 def test_t31_the_context_var_is_reset_even_when_the_block_raises() -> None:
-    from proofload.otel import EPISODE_KEY, RUN_ID_KEY, episode
+    from poisson_prove.otel import EPISODE_KEY, RUN_ID_KEY, episode
 
     _, exporter, tracer = build()
 
@@ -108,7 +108,7 @@ def test_t31_the_context_var_is_reset_even_when_the_block_raises() -> None:
 
 
 def test_t31_nested_episodes_restore_the_enclosing_one() -> None:
-    from proofload.otel import EPISODE_KEY, episode
+    from poisson_prove.otel import EPISODE_KEY, episode
 
     _, exporter, tracer = build()
     with episode("r-a", "outer"):
@@ -127,9 +127,9 @@ def test_t31_nested_episodes_restore_the_enclosing_one() -> None:
 
 
 def test_t32_both_keys_reach_attrs_through_from_otel() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
-    from proofload.otel import EPISODE_KEY, RUN_ID_KEY, episode
+    from poisson_prove.otel import EPISODE_KEY, RUN_ID_KEY, episode
 
     provider, exporter, tracer = build()
     with episode("r-2026-09-04", "cfg-7:seed-3"):
@@ -152,9 +152,9 @@ def test_t32_both_keys_reach_attrs_through_from_otel() -> None:
 
 
 def test_t32_each_episode_gets_its_own_values_in_one_process() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
-    from proofload.otel import EPISODE_KEY, RUN_ID_KEY, episode
+    from poisson_prove.otel import EPISODE_KEY, RUN_ID_KEY, episode
 
     provider, exporter, tracer = build()
     wanted = [("r-a", "cfg-7:seed-3"), ("r-a", "cfg-7:seed-4"), ("r-b", "cfg-2:seed-0")]
@@ -175,9 +175,9 @@ def test_t32_each_episode_gets_its_own_values_in_one_process() -> None:
 
 
 def test_t33_a_span_outside_any_episode_carries_neither_key() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
-    from proofload.otel import EPISODE_KEY, RUN_ID_KEY, episode
+    from poisson_prove.otel import EPISODE_KEY, RUN_ID_KEY, episode
 
     provider, exporter, tracer = build()
     with episode("r-a", "cfg-1:seed-1"):
@@ -201,9 +201,9 @@ def test_t33_a_span_outside_any_episode_carries_neither_key() -> None:
 
 
 def test_t34_two_concurrent_asyncio_episodes_do_not_see_each_other() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
-    from proofload.otel import EPISODE_KEY, RUN_ID_KEY, episode
+    from poisson_prove.otel import EPISODE_KEY, RUN_ID_KEY, episode
 
     provider, exporter, tracer = build()
 

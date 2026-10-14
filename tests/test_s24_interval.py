@@ -106,15 +106,15 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import proofload
-from proofload import cli
-from proofload import diff as diff_mod
-from proofload.diff import CELLS_COLUMNS, multi_diff
-from proofload.episode import Episode
-from proofload.report import ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove import diff as diff_mod
+from poisson_prove.diff import CELLS_COLUMNS, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -1081,6 +1081,14 @@ def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
         assert list(go1_pair.by_event[event].cells.columns) == list(CELLS_COLUMNS)
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
+    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
+    as 0.0.1 wrote it before the frozen digest is taken, so the digest still guards every other byte."""
+    text = re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
+    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+
+
 def e14_builder_digests() -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
@@ -1101,8 +1109,8 @@ def e14_builder_digests() -> dict[str, str]:
         manifests=(ma, mb),
     )
     return {
-        "report.md": hashlib.sha256(report.to_markdown().encode("utf-8")).hexdigest(),
-        "receipt.html": hashlib.sha256(receipt.to_html().encode("utf-8")).hexdigest(),
+        "report.md": hashlib.sha256(as_0_0_1_wrote_it(report.to_markdown()).encode("utf-8")).hexdigest(),
+        "receipt.html": hashlib.sha256(as_0_0_1_wrote_it(receipt.to_html()).encode("utf-8")).hexdigest(),
     }
 
 

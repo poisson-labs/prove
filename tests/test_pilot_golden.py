@@ -193,22 +193,22 @@ from typing import Any
 
 import pytest
 
-import proofload
-from proofload import cli
-from proofload.diff import multi_diff
-from proofload.episode import Episode
-from proofload.executor import plan, run_local
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.survival import competing_set
-from proofload.trace import KINDS, Span, Trace
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove.diff import multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.executor import plan, run_local
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.survival import competing_set
+from poisson_prove.trace import KINDS, Span, Trace
 
 openai = pytest.importorskip("openai", reason="the pilot's agent speaks through the openai SDK")
 httpx = pytest.importorskip("httpx", reason="the scripted model is an httpx.MockTransport")
 
 MODULE = __name__
 HERE = Path(__file__).resolve().parent
-PACKAGE = Path(proofload.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
+PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
 REPO = PACKAGE.parents[1]
 FIXTURES = HERE / "fixtures" / "golden_pilot"
 MINI_SUITE = FIXTURES / "mini_suite.jsonl"
@@ -230,15 +230,15 @@ FAILURE_EVENTS = ("failed_assertion", "timed_out", "crashed", "api_error")
 MODEL = "fake-model"
 DISCARD_URL = "http://127.0.0.1:9/v1"  # the discard port: a bypassed transport is refused locally
 INSTRUMENTOR = "openai"  # pinned from entry_points(group="opentelemetry_instrumentor"), see the docstring
-RUN_ID_KEY = "proofload.run_id"
-EPISODE_KEY = "proofload.episode"
+RUN_ID_KEY = "poisson_prove.run_id"
+EPISODE_KEY = "poisson_prove.episode"
 BOUNDARY_VAR = "GOLDEN_PILOT_BOUNDARY"
 BOUNDARY_VALUE = "container"
 ENV_LINE = "ENV GOLDEN_PILOT_BOUNDARY=container"
 SUITE_VAR = "GOLDEN_PILOT_SUITE"
 MODEL_VAR = "GOLDEN_PILOT_MODEL"
 ALLOWED_IMPORTS = frozenset({"Episode", "record", "collect", "step", "Trace", "Store"})  # Store: numbers.py's CLI entry (P12, amended)
-ALLOWED_MODULES = frozenset({"proofload", "proofload.episode", "proofload.trace", "proofload.store"})
+ALLOWED_MODULES = frozenset({"poisson_prove", "poisson_prove.episode", "poisson_prove.trace", "poisson_prove.store"})
 PILOT_FILES = (
     "README.md", "requirements.txt", "fetch_suite.py", "suite.py", "sandbox.py", "agent.py",
     "numbers.py", "pilot.toml", "smoke.toml", "make_toml.py", "Dockerfile",
@@ -1656,7 +1656,7 @@ def test_w1_requirements_pin_openai_2_and_name_the_instrumentor_and_proofload() 
     assert Version("1.109.1") not in openai_spec, str(openai_spec)
     assert Version("3.0.0") not in openai_spec, str(openai_spec)
     assert "opentelemetry-instrumentation-openai-v2" in by_name, sorted(by_name)
-    assert any("proofload" in line for line in lines), lines
+    assert any("poisson-prove" in line for line in lines), lines
 
 
 def test_w2_pyproject_agent_and_all_carry_openai_2_and_leave_litellm_unbounded() -> None:
@@ -1731,14 +1731,14 @@ def test_p12_the_pilot_tree_has_the_eleven_files_of_section_2() -> None:
 
 
 def test_p12_core_public_surfaces_are_what_s17_left_them() -> None:
-    pytest.importorskip("opentelemetry.sdk", reason="proofload.otel imports the SDK")
-    import proofload.capture as capture_module
-    import proofload.executor as executor_module
-    import proofload.executor_modal as modal_module
-    import proofload.otel as otel_module
-    import proofload.trace as trace_module
+    pytest.importorskip("opentelemetry.sdk", reason="poisson_prove.otel imports the SDK")
+    import poisson_prove.capture as capture_module
+    import poisson_prove.executor as executor_module
+    import poisson_prove.executor_modal as modal_module
+    import poisson_prove.otel as otel_module
+    import poisson_prove.trace as trace_module
 
-    top = {n for n, v in vars(proofload).items() if not n.startswith("_") and not isinstance(v, types.ModuleType)}
+    top = {n for n, v in vars(poisson_prove).items() if not n.startswith("_") and not isinstance(v, types.ModuleType)}
     assert top == INIT_PUBLIC, sorted(top ^ INIT_PUBLIC)
     assert _defined(executor_module) == EXECUTOR_PUBLIC, sorted(_defined(executor_module) ^ EXECUTOR_PUBLIC)
     assert _defined(modal_module) == MODAL_PUBLIC, sorted(_defined(modal_module) ^ MODAL_PUBLIC)
@@ -1790,7 +1790,7 @@ def test_p12_golden_pilot_imports_only_episode_record_collect_step_trace_and_sto
     for path in files:
         for kind, module, names in _imports(path):
             top = (module or "").split(".")[0]
-            if top != "proofload":
+            if top != "poisson_prove":
                 continue
             assert kind == "from", (path, module)  # a bare `import proofload` would reach anything
             assert module in ALLOWED_MODULES, (path, module)
@@ -1805,7 +1805,7 @@ def test_p12_golden_pilot_imports_only_episode_record_collect_step_trace_and_sto
 def test_p12_the_wheel_and_the_extras_are_unchanged() -> None:
     with (REPO / "pyproject.toml").open("rb") as fh:
         pyproject = tomllib.load(fh)
-    assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["src/proofload"]
+    assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["src/poisson_prove"]
     assert set(pyproject["project"]["optional-dependencies"]) == {"modal", "agent", "viz", "all", "dev"}
     assert "openai" not in str(pyproject["project"]["dependencies"])
 
@@ -1852,7 +1852,7 @@ ASSIGNMENT_PATTERNS = (
     re.compile(r"^\s*(export\s+|ENV\s+|set\s+)?" + BOUNDARY_VAR + r"\s*="),  # shell, Dockerfile, TOML, .env at line start
     re.compile(r"(?:^|[\s`'\"(;&|])(?:export|set)\s+" + BOUNDARY_VAR + r"\s*="),  # `export X=...` anywhere, a README included
     re.compile(r"(?:^|[\s`'\"(;&|])(?:-e|--env)[\s=]+" + BOUNDARY_VAR + r"="),  # docker run -e
-    re.compile(BOUNDARY_VAR + r"=\S+\s+\S*(?:proofload|python|pytest)\b"),  # the env-prefix form: `X=container proofload sweep ...`
+    re.compile(BOUNDARY_VAR + r"=\S+\s+\S*(?:poisson-prove|python|pytest)\b"),  # the env-prefix form: `X=container proofload sweep ...`
     re.compile(r"environ\s*\[\s*['\"]" + BOUNDARY_VAR + r"['\"]\s*\]\s*=(?!=)"),  # os.environ[...] =
     re.compile(r"(?:setdefault|putenv)\(\s*['\"]" + BOUNDARY_VAR + r"['\"]"),
     re.compile(r"['\"]" + BOUNDARY_VAR + r"['\"]\s*:\s*['\"]"),  # a dict literal handed to environ.update / env=
@@ -2582,7 +2582,7 @@ def readme_commands() -> list[str]:
         if not line.rstrip().endswith("\\"):
             joined.append(" ".join(pending.split()))
             pending = ""
-    return [c for c in joined if c.startswith("proofload ")]
+    return [c for c in joined if c.startswith("poisson-prove ")]
 
 
 def test_q12_section_1s_confirmation_line_names_all_five_outcomes() -> None:

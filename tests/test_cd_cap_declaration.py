@@ -90,26 +90,26 @@ from typing import Any
 import pyarrow.parquet as pq
 import pytest
 
-import proofload
-import proofload.executor as executor
-from proofload import cli
-from proofload.episode import Episode
-from proofload.executor import NotResumable, plan, run_local
-from proofload.sampler import SamplerError, SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.trace import Span, Trace, assemble, split
+import poisson_prove
+import poisson_prove.executor as executor
+from poisson_prove import cli
+from poisson_prove.episode import Episode
+from poisson_prove.executor import NotResumable, plan, run_local
+from poisson_prove.sampler import SamplerError, SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.trace import Span, Trace, assemble, split
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parent.parent
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 
 RUN_SALT = "cd-oracle-salt"
 HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
-TRUNCATED_KEY = "proofload.truncated"
+TRUNCATED_KEY = "poisson_prove.truncated"
 
 #: D8: the value does not move, only the name and the job the name claims.
 ROUTING_BYTES = 8192
@@ -149,6 +149,8 @@ T4_CAP = 8192
 
 #: D9: nothing downstream of the manifest is edited. Minted at the dispatch commit ``1f5491b``.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes viewer.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 UNTOUCHED_FILE_SHA256 = {
     "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
 }
@@ -157,6 +159,8 @@ UNTOUCHED_FILE_SHA256 = {
 #: survive D3's ``"none"``, and this is the one region that moves.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py outside _observation_cap is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): report.py outside _observation_cap: report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "2e35cd3468dd170503d4ad3d7ec9fe1846d6349b84a577fc6de5bb60b74e8724"
 #: CD11: ``split``'s envelope/bodies partition over the fixture below, at the dispatch commit.
 SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
@@ -430,7 +434,7 @@ def test_cd2_one_is_one(tmp_path: Path) -> None:
 
 def test_cd3_capture_spec_has_no_default_cap_and_is_kw_only() -> None:
     """D1 and D12. Sole catch for a build that moves the default from three places to one."""
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == CAPTURE_FIELDS_SPEC
     (field,) = [f for f in dataclasses.fields(CaptureSpec) if f.name == "max_observation_bytes"]
@@ -505,7 +509,7 @@ def test_cd3_the_samplers_fallback_is_gone() -> None:
 
 def test_cd4_neither_cut_function_has_a_default_limit() -> None:
     """D1: a keyword default is a default. Both are public, and both now raise without one."""
-    from proofload.trace import finalize, truncate_observations
+    from poisson_prove.trace import finalize, truncate_observations
 
     big = trace_of(span(1, output=BIG_VALUE))
     with pytest.raises(TypeError):
@@ -517,7 +521,7 @@ def test_cd4_neither_cut_function_has_a_default_limit() -> None:
 def test_cd4_limit_none_returns_the_trace_itself_at_both() -> None:
     """D3 and D2 share this code path, and ``is`` rather than ``==`` is the point: a trace that is
     not cut is stored byte for byte as it arrived, and ``replace(trace)`` would not be."""
-    from proofload.trace import finalize, truncate_observations
+    from poisson_prove.trace import finalize, truncate_observations
 
     big = trace_of(span(1, output=HUGE_VALUE, attrs={"app.big": HUGE_VALUE}))
     assert truncate_observations(big, limit=None) is big
@@ -527,7 +531,7 @@ def test_cd4_limit_none_returns_the_trace_itself_at_both() -> None:
 @pytest.mark.parametrize("limit", [0, -1])
 def test_cd4_a_limit_below_one_is_refused_naming_the_parameter(limit: int) -> None:
     """``None`` is *no cut*; ``0`` is not a spelling of it (D3), and neither function may read it as one."""
-    from proofload.trace import finalize, truncate_observations
+    from poisson_prove.trace import finalize, truncate_observations
 
     big = trace_of(span(1, output=BIG_VALUE))
     for call in (lambda: truncate_observations(big, limit=limit), lambda: finalize(big, declaration=None, limit=limit)):
@@ -588,7 +592,7 @@ def test_cd6_the_non_monotone_pair_is_gone() -> None:
     keeps 16,384: the funnel re-cuts what the child left whole and skips what the child wrapped.
     Sole catch for a funnel that cuts at any constant, **including one that cuts at
     ``min(declared, OBSERVATION_ROUTING_BYTES)``** -- which would keep the smaller value's 8,192."""
-    from proofload.trace import truncate_observations
+    from poisson_prove.trace import truncate_observations
 
     limit = 16384
     child = truncate_observations(trace_of(span(1, attrs={"mid": MID_VALUE, "big": HUGE_VALUE})), limit=limit)
@@ -601,7 +605,7 @@ def test_cd6_the_non_monotone_pair_is_gone() -> None:
 
 def test_cd6_the_three_routes_agree_byte_for_byte() -> None:
     """Child then funnel, funnel alone (a rollout's own trace), and child alone. One rule, not three."""
-    from proofload.trace import truncate_observations
+    from poisson_prove.trace import truncate_observations
 
     limit = 16384
     before = trace_of(span(1, attrs={"mid": MID_VALUE, "big": HUGE_VALUE}))
@@ -636,7 +640,7 @@ def test_cd7_a_run_with_no_capture_table_stores_a_rollouts_own_trace_uncut(tmp_p
 INVALID_TRACES: dict[str, Any] = {
     "a string": "not a trace",
     "a list": [{"span_id": "1"}],
-    "no spans key": {"schema": "proofload.trace/1", "source": "record"},
+    "no spans key": {"schema": "poisson-prove.trace/1", "source": "record"},
 }
 
 
@@ -665,7 +669,7 @@ def test_cd7_the_funnel_still_never_raises_on_a_trace_it_cannot_read(tmp_path: P
 def test_cd7_declared_limit_maps_both_nothings_to_none() -> None:
     """D6: the mapping from *what the sweep said* to *what the funnel does* exists once, and the two
     ``None``s -- no ``[capture]`` table, and ``"none"`` declared -- are the same thing to it."""
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     spec = SweepSpec.build(
         configs=({"x": 0.1},), axis_types={"x": "continuous"}, replicates=1,
@@ -686,8 +690,8 @@ def test_cd8_a_payload_missing_a_field_is_refused_naming_it(missing: str) -> Non
 
     Under D1 there is no default to fall back to, so an intersection over a short payload would
     build a spec with no cap -- which is the same silent skew the unknown-field check exists for."""
-    from proofload.capture import CaptureSpec
-    from proofload.executor_modal import _capture_payload, _capture_request
+    from poisson_prove.capture import CaptureSpec
+    from poisson_prove.executor_modal import _capture_payload, _capture_request
 
     full = _capture_payload(CaptureSpec(instrument=("openai",), content=True, max_observation_bytes=8192, max_spans=7), "r-cd")
     assert full is not None
@@ -712,8 +716,8 @@ def test_cd8_a_payload_missing_a_field_is_refused_naming_it(missing: str) -> Non
 )
 def test_cd8_the_round_trip_reconstructs_the_spec_exactly(spec_kwargs: dict[str, Any]) -> None:
     """``None`` crosses as JSON ``null`` and comes back as ``None``."""
-    from proofload.capture import CaptureSpec
-    from proofload.executor_modal import _capture_payload, _capture_request
+    from poisson_prove.capture import CaptureSpec
+    from poisson_prove.executor_modal import _capture_payload, _capture_request
 
     spec = CaptureSpec(**spec_kwargs)
     payload = _capture_payload(spec, "r-cd")
@@ -726,9 +730,9 @@ def test_cd8_the_round_trip_reconstructs_the_spec_exactly(spec_kwargs: dict[str,
 def test_cd8_the_shipped_refusals_are_unchanged_and_both_field_tuples_are_equal() -> None:
     """A8b's P8-24, carried through: an unknown key and the retired spelling are still refused, and
     the sampler's copy of the field names still equals the transport's."""
-    from proofload.executor_modal import _CAPTURE_FIELDS as TRANSPORT_FIELDS
-    from proofload.executor_modal import _capture_request
-    from proofload.sampler import _CAPTURE_FIELDS as SAMPLER_FIELDS
+    from poisson_prove.executor_modal import _CAPTURE_FIELDS as TRANSPORT_FIELDS
+    from poisson_prove.executor_modal import _capture_request
+    from poisson_prove.sampler import _CAPTURE_FIELDS as SAMPLER_FIELDS
 
     assert tuple(TRANSPORT_FIELDS) == tuple(SAMPLER_FIELDS) == CAPTURE_FIELDS_SPEC
     full = {"run_id": "r-cd", "instrument": [], "content": False, "max_observation_bytes": 8192, "max_spans": None}
@@ -825,7 +829,7 @@ def provenance_of(doc: str, html: bool) -> dict[str, str]:
 def int_vs_none(declared_runs: dict[str, Any]) -> dict[str, str]:
     """``report`` and ``serve`` over the int-declaring run and the ``"none"``-declaring one, once.
     Three surfaces off one pair, because ``--out`` refuses a directory it has already written."""
-    from proofload.viewer import SCHEMA, render_html
+    from poisson_prove.viewer import SCHEMA, render_html
 
     root, ids, out = declared_runs["root"], declared_runs["ids"], declared_runs["out"]
     base = ["--store", str(root)]
@@ -898,38 +902,14 @@ def test_cd9_a_run_that_declared_none_has_nothing_to_report_cut(tmp_path: Path) 
     assert [line for line in out.splitlines() if line.startswith("observation: cut")] == [], out[:3000]
 
 
-def test_cd9_viewer_py_is_byte_untouched() -> None:
-    """D9's "no change to them", the half that holds: ``viewer.py`` carries no copy of the echo and
-    reads the provenance block ``report.py`` built. Green before and after.
-
-    ``report.py`` is **not** asserted byte-untouched here, and the test below says why."""
-    assert hashlib.sha256((PACKAGE / "viewer.py").read_bytes()).hexdigest() == UNTOUCHED_FILE_SHA256["viewer.py"]
+# PF0 (Q4): test_cd9_viewer_py_is_byte_untouched removed. It pinned the bytes of src/poisson_prove/viewer.py, which the rename
+# changes; no digest of a file this module changes can be frozen honestly before its build
+# exists (front-door spec section 14).
 
 
-def test_cd9_report_py_outside_the_observation_cap_echo_is_the_dispatch_commits() -> None:
-    """One clause moves, and only one (ADR-077's shape, as FR17 pins ``diff.py``).
-
-    ``_observation_cap`` keeps an entry only when ``isinstance(value, int)``, so under D9 the string
-    ``"none"`` never reaches the echo. The surfacing packet chose that filter for a stated reason --
-    its ``_UNKNOWN_READING`` comment says the generic reading ``none`` "would say 'no cap' ... the
-    opposite of the fact" -- and D3 has since made "no cap" a real declarable state whose spelling
-    *is* ``none``. So the filter is right for every value but one, and the change is that one.
-
-    **Two frozen carriers digest ``report.py`` whole-file and go red when Session B edits it:**
-    ``tests/test_fr_first_run.py`` ``UNTOUCHED_FILE_SHA256["report.py"]`` and
-    ``tests/test_s29_viewer.py`` ``REPORT_PY_SHA256`` (both ``5cfdf03b...``). Neither is re-minted
-    here -- they are correct at this commit -- and both are owed to Session A's post-build re-mint.
-    """
-    import ast
-
-    source = (PACKAGE / "report.py").read_bytes()
-    module = ast.parse(source)
-    matches = [n for n in ast.iter_child_nodes(module)
-               if isinstance(n, ast.FunctionDef) and n.name == "_observation_cap"]
-    assert len(matches) == 1, len(matches)
-    lo, hi = matches[0].lineno, matches[0].end_lineno or 0
-    kept = [line for i, line in enumerate(source.decode().splitlines(keepends=True), start=1) if not lo <= i <= hi]
-    assert hashlib.sha256("".join(kept).encode()).hexdigest() == REPORT_OUTSIDE_OBSERVATION_CAP_SHA256
+# PF0 (Q4): test_cd9_report_py_outside_the_observation_cap_echo_is_the_dispatch_commits removed. It pinned the bytes of src/poisson_prove/report.py outside one function, which the rename
+# changes; no digest of a file this module changes can be frozen honestly before its build
+# exists (front-door spec section 14).
 
 
 # ---------- CD10: resume is gated on the cap, and pairing is not ----------
@@ -1014,7 +994,7 @@ def test_cd10_pairing_is_not_gated_and_the_report_prints_both_caps(tmp_path: Pat
 def test_cd11_the_routing_constant_is_exported_and_read_by_is_observation_alone() -> None:
     """D8. The value stays 8192, so ``split`` classifies exactly as ADR-090 measured it and no stored
     byte moves; what changes is the name and the claim the name makes."""
-    import proofload.trace as trace_module
+    import poisson_prove.trace as trace_module
 
     assert trace_module.OBSERVATION_ROUTING_BYTES == ROUTING_BYTES
     assert "OBSERVATION_ROUTING_BYTES" in trace_module.__all__
@@ -1035,7 +1015,7 @@ def test_cd11_the_routing_constant_is_exported_and_read_by_is_observation_alone(
 
 
 def test_cd11_the_three_retired_names_are_out_of_the_public_surface() -> None:
-    import proofload.trace as trace_module
+    import poisson_prove.trace as trace_module
 
     for name in RETIRED_CONSTANTS:
         assert name not in trace_module.__all__, name
@@ -1048,7 +1028,7 @@ def split_fixture() -> Trace:
     wrapper = {TRUNCATED_KEY: {"head": "h" * 100, "tail": "t" * 20, "bytes_original": HUGE_BYTES}}
     attrs = {
         "app.under": "u" * (ROUTING_BYTES - 1), "app.at": "a" * ROUTING_BYTES, "app.over": "o" * (ROUTING_BYTES + 1),
-        "gen_ai.input.messages": "m" * 10, "proofload.run_id": "r" * 9000, "proofload.episode": "e" * 9000,
+        "gen_ai.input.messages": "m" * 10, "poisson_prove.run_id": "r" * 9000, "poisson_prove.episode": "e" * 9000,
         "app.wrapped": wrapper,
     }
     return Trace(spans=(span(1, attrs=attrs),), source="record")
@@ -1059,9 +1039,13 @@ def test_cd11_splits_classification_is_byte_identical_to_the_dispatch_commits() 
     run's limit into ``split`` changes which column stored bytes live in and breaks ``Store.read`` on
     rows written by any other build (ADR-090, closed; spec section 8 trap 5)."""
     envelope, bodies = split(split_fixture())
-    assert sorted(envelope["spans"][0]["attrs"]) == ["app.at", "app.under", "proofload.episode", "proofload.run_id"]
+    assert sorted(envelope["spans"][0]["attrs"]) == ["app.at", "app.under", "poisson_prove.episode", "poisson_prove.run_id"]
     assert sorted(next(iter(bodies.values()))["attrs"]) == ["app.over", "app.wrapped", "gen_ai.input.messages"]
-    digest = hashlib.sha256(json.dumps([envelope, bodies], sort_keys=True).encode()).hexdigest()
+    # PF0 (Q4, section 2.3): the trace schema string and the span key prefix are renamed; with the
+    # two renames undone, the partition is the dispatch commit's byte for byte.
+    as_written = json.dumps([envelope, bodies], sort_keys=True)
+    as_0_0_1 = as_written.replace('"poisson-prove.trace/1"', '"proofload.trace/1"').replace('"poisson_prove.', '"proofload.')
+    digest = hashlib.sha256(as_0_0_1.encode()).hexdigest()
     assert digest == SPLIT_PARTITION_SHA256, digest
     assert assemble(envelope, bodies).to_dict() == split_fixture().to_dict()
 

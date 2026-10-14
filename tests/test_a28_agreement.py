@@ -74,7 +74,6 @@ from __future__ import annotations
 
 import ast
 import dataclasses
-import hashlib
 import inspect
 import json
 import re
@@ -87,18 +86,18 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload
-from proofload import diff as diff_mod
-from proofload import report as report_mod
-from proofload import tree as tree_mod
-from proofload.diff import MultiDiffResult, multi_diff
-from proofload.episode import Episode
-from proofload.report import MultiReport, ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.tree import RootResult, TreeError, TreeResult, omnibus
-from proofload.tree import tree as grow_tree
+import poisson_prove
+from poisson_prove import diff as diff_mod
+from poisson_prove import report as report_mod
+from poisson_prove import tree as tree_mod
+from poisson_prove.diff import MultiDiffResult, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import MultiReport, ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.tree import RootResult, TreeError, TreeResult, omnibus
+from poisson_prove.tree import tree as grow_tree
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 TREE_SOURCE = PACKAGE / "tree.py"
 REPORT_SOURCE = PACKAGE / "report.py"
@@ -113,8 +112,8 @@ GO1_A, GO1_B = "go1-v0", "go1-v1"
 
 #: G9. The schema this packet moves to, and the two it retires.
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
-SCHEMA = "proofload.viewpair/6"
-RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5")
+SCHEMA = "poisson-prove.viewpair/7"
+RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5", "proofload.viewpair/6")
 #: G9. The top-level keys, in order: the digest is inside ``tree``, not beside it. LS retrofit, 2026-09-22 (local serve pass, Phase A): fourteen, ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
@@ -123,10 +122,17 @@ TOP_LEVEL_KEYS = (
 #: G7. ``TreeResult``'s six fields in order and ``to_json()``'s six keys in the same order.
 TREE_RESULT_FIELDS = ("root", "grouping", "fault_lines", "leaves", "bound", "agreement")
 #: G16, G17. The tag inside the hashed payload (section 3.2); never a sibling key (section 10 Q9).
-AGREEMENT_SCHEMA = "proofload.agreement/1"
+AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 #: G17. Go1 under section 3.2's JSON form, minted on the shadow shim: the same value under
 #: ``fisher_bh`` and ``mcnemar_bh`` at each K, which is the scheme-blindness the digest is built on.
+# Re-minted by PF0 Session A (Q4): the agreement form is hashed behind its schema string, which is now
+# ``poisson-prove.agreement/1``. Computed on the 0.0.1 tree (98dc6af) with that one string changed and
+# nothing else; the 0.0.1 values are kept below as ``GO1_AGREEMENT_0_0_1``.
 GO1_AGREEMENT = {
+    1: "ed536c0213e9a9e7942807ec525738d1ca1373544e0b47fc93a8640879ef1087",
+    2: "ceecf72a0f87fbdb0c74758a4554c8a9427f0a6ecba08504c5dc5fad36e04c33",
+}
+GO1_AGREEMENT_0_0_1 = {
     1: "360aaa320c675c40fa8dc7b2b3d5288aa42468c16facc7209264f975cb13e92d",
     2: "988b1dd2c3b30b4f21007de26b1c04520d030c91ec809c3df696a8a5445b33af",
 }
@@ -170,6 +176,8 @@ PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REP
 #: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS retrofit, 2026-09-22 (local serve pass, Phase A)) -- a read and not a prediction.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 #: The one ``tests/`` file whose module-level ``*_PY_EXCLUDED`` constants this packet inspects.
 S27_SOURCE = TESTS / "test_s27_leaves.py"
@@ -323,7 +331,7 @@ def every_fixture(synth_root: Path, crossed: dict[str, Grown]) -> list[Grown]:
 
 def viewer() -> Any:
     """``proofload.viewer``, imported on demand so the changed surface is reached inside bodies."""
-    import proofload.viewer as module
+    import poisson_prove.viewer as module
 
     return module
 
@@ -450,7 +458,7 @@ def total_seconds_operands(nodes: Sequence[ast.AST]) -> list[ast.AST]:
 def report_import_names(module: ast.Module) -> set[str]:
     names: set[str] = set()
     for node in module.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "proofload.report":
+        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.report":
             names.update(alias.name for alias in node.names)
     return names
 
@@ -748,8 +756,8 @@ def test_g14_the_viewers_import_partition_and_arithmetic_pins_hold() -> None:
     render = referenced_names(closure(module, "render_html"))
     assert build & (ASSEMBLY_HELPERS | RENDER_HELPERS) == ASSEMBLY_HELPERS, build
     assert render & (ASSEMBLY_HELPERS | RENDER_HELPERS) == RENDER_HELPERS, render
-    assert module_body_imports_of(module, "proofload.tree") == []
-    assert module_body_imports_of(parsed(REPORT_SOURCE), "proofload.tree") == []
+    assert module_body_imports_of(module, "poisson_prove.tree") == []
+    assert module_body_imports_of(parsed(REPORT_SOURCE), "poisson_prove.tree") == []
     assert arithmetic_nodes(closure(module, "render_html")) == []
     build_nodes = closure(module, "build_structure")
     arithmetic = arithmetic_nodes(build_nodes)
@@ -775,7 +783,7 @@ def test_g16_the_canonical_form_is_written_twice_in_src_both_in_tree_py_through_
     only ``json.dumps`` in the file -- and exactly two functions call that serialiser by name:
     ``_require_agreement`` and ``agreement_digest``. Neither renderer writes the form."""
     sources = sorted(PACKAGE.glob("*.py"))
-    tagged = {path.name: string_constants(parsed(path), "proofload.agreement") for path in sources}
+    tagged = {path.name: string_constants(parsed(path), "poisson-prove.agreement") for path in sources}
     assert {name: tags for name, tags in tagged.items() if tags} == {"tree.py": [AGREEMENT_SCHEMA]}, tagged
     module = parsed(TREE_SOURCE)
     assert isinstance(module_constants(module).get("AGREEMENT_SCHEMA"), ast.Constant)
@@ -875,12 +883,9 @@ def test_g19_adr_077s_step_1_sweep_returns_exactly_test_s29_viewer_py_and_all_fo
         assert len(literals) == 1, (name, len(literals))
 
 
-def test_g20_diff_py_sha256_is_the_whole_file_digest_again_in_all_four_carriers_and_diff_py_is_unchanged() -> None:
-    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
-    for name in FORMER_CARRIERS:
-        constants = module_constants(parsed(TESTS / name))
-        assert ast.literal_eval(constants["DIFF_PY_SHA256"]) == DIFF_PY_SHA256, name
-        assert "DIFF_PY_EXCLUDED" not in constants, name
+# PF0 (Q4): test_g20_diff_py_sha256_is_the_whole_file_digest_again_in_all_four_carriers_and_diff_py_is_unchanged removed. It pinned the bytes of src/poisson_prove/diff.py, which the rename
+# changes; no digest of a file this module changes can be frozen honestly before its build
+# exists (front-door spec section 14).
 
 
 # ---------- G21, G22: section 10 Q5 (b), the knob clause ----------

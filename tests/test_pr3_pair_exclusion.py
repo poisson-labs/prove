@@ -28,7 +28,7 @@ from typing import Any
 import pytest
 
 import test_pr3_replicates as R
-from proofload import paired
+from poisson_prove import paired
 
 GT = ((R.CUT, R.THRESHOLD, "gt"),)
 ERROR = "HTTP 529: <none>"

@@ -157,16 +157,16 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload
-from proofload import cli
-from proofload import diff as diff_mod
-from proofload import executor
-from proofload.diff import multi_diff
-from proofload.episode import Episode
-from proofload.report import ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove import diff as diff_mod
+from poisson_prove import executor
+from poisson_prove.diff import multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -257,6 +257,8 @@ F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c3
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 #: S25's O14/O23 digests, restated rather than imported so two frozen oracles do not couple.
 MULTI_JSON_SHA256 = {
@@ -314,7 +316,7 @@ N_TASKS, AXES_N, AXES_MOVED_CELLS, AXES_MOVED_PAIRS = 164, 8, 20, 2
 
 def tree() -> Any:
     """``proofload.tree``, imported at call time (see the module docstring)."""
-    return importlib.import_module("proofload.tree")
+    return importlib.import_module("poisson_prove.tree")
 
 
 def go1_frames() -> tuple[pd.DataFrame, pd.DataFrame, RunManifest, RunManifest]:
@@ -773,6 +775,19 @@ def property_tree(case: Any) -> Any:
 
 
 # ---------- F1: the literals ----------
+
+
+def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
+    """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
+    arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
+    were written by 0.0.1. Put back as 0.0.1 wrote them before the frozen digest is taken, so the
+    digest still guards everything else."""
+    arms = {
+        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
+        for arm in ("a", "b")
+    }
+    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
+    return {**structure, "pair": {**structure["pair"], **arms}, "diff": {**diff, "proofload_version": "0.0.1"}}
 
 
 def test_f1_the_module_constants_are_the_spec_literals() -> None:
@@ -1884,7 +1899,7 @@ def test_f26_the_threshold_is_imported_from_the_executor_and_never_retyped() -> 
     """ADR-021's shape: one constant, two readers. ``tree.py`` imports ``DEFAULT_MAX_MDE`` from
     ``proofload.executor``; no float constant ``0.2`` appears in ``tree.py`` or ``cli.py``; the
     module's own name is the executor's object."""
-    imported = {alias.name for node in ast.walk(parsed(TREE_SOURCE)) if isinstance(node, ast.ImportFrom) and node.module == "proofload.executor" for alias in node.names}
+    imported = {alias.name for node in ast.walk(parsed(TREE_SOURCE)) if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.executor" for alias in node.names}
     assert "DEFAULT_MAX_MDE" in imported, imported
     for path in (TREE_SOURCE, CLI_SOURCE):
         retyped = [(node.lineno, node.value) for node in ast.walk(parsed(path)) if isinstance(node, ast.Constant) and isinstance(node.value, float) and abs(node.value - 0.2) < 1e-12]
@@ -1940,6 +1955,14 @@ def test_f28_the_s24_column_digests_and_the_coverage_digest_are_unchanged(go1: A
     assert sha256_of_text(pair.coverage.to_json(orient="records")) == COVERAGE_SHA256
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
+    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
+    as 0.0.1 wrote it before the frozen digest is taken, so the digest still guards every other byte."""
+    text = re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
+    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+
+
 def e14_builder_digests(go1: Any) -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
@@ -1954,8 +1977,8 @@ def e14_builder_digests(go1: Any) -> dict[str, str]:
         manifests=(ma, mb),
     )
     return {
-        "report.md": sha256_of_text(report.to_markdown()),
-        "receipt.html": sha256_of_text(receipt.to_html()),
+        "report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())),
+        "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html())),
     }
 
 
@@ -1985,15 +2008,13 @@ def test_f28_serve_json_on_go1_prints_the_same_structure() -> None:
     assert code == 0 and err == "", err
     structure = json.loads(out)
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
-    normalised = json.dumps({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}, sort_keys=True)
+    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
 
 
-def test_f28_diff_py_is_byte_untouched() -> None:
-    """``git diff --exit-code cd5f177 -- src/proofload/diff.py`` is Session B's acceptance; the
-    same fact as a digest of the file's bytes, which a scratch copy without ``.git`` can check --
-    whole-file again since A28 retired A27's and A22's region exclusions (ADR-077)."""
-    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
+# PF0 (Q4): test_f28_diff_py_is_byte_untouched removed. It pinned the bytes of src/poisson_prove/diff.py, which the rename
+# changes; no digest of a file this module changes can be frozen honestly before its build
+# exists (front-door spec section 14).
 
 
 def test_f28_omnibus_on_go1_minus_the_p_driven_keys_digests_to_the_value_minted_on_the_bare_tree(go1: Any, go1_trees: Any) -> None:

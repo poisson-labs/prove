@@ -57,12 +57,12 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload
-import proofload.executor_modal as executor_modal
-from proofload.diff import mde_two_proportion
-from proofload.episode import Episode
-from proofload.executor import ExecutorError, Plan, RunSummary, plan, run_local
-from proofload.executor_modal import (
+import poisson_prove
+import poisson_prove.executor_modal as executor_modal
+from poisson_prove.diff import mde_two_proportion
+from poisson_prove.episode import Episode
+from poisson_prove.executor import ExecutorError, Plan, RunSummary, plan, run_local
+from poisson_prove.executor_modal import (
     CostGuard,
     ImageSpec,
     Job,
@@ -76,8 +76,8 @@ from proofload.executor_modal import (
     run_with_mapper,
     worker_batch,
 )
-from proofload.sampler import SweepSpec
-from proofload.store import Store
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import Store
 
 HORIZON = 10.0
 CELLS = ({"x": 0.1}, {"x": 0.2}, {"x": 0.3})
@@ -339,13 +339,13 @@ def test_i1_imports_succeed_without_modal_and_only_run_modal_raises(
     for name in [n for n in sys.modules if n == "modal" or n.startswith("modal.")]:
         monkeypatch.delitem(sys.modules, name)
     monkeypatch.setitem(sys.modules, "modal", None)
-    monkeypatch.setattr(proofload, "executor_modal", executor_modal, raising=False)
-    monkeypatch.delitem(sys.modules, "proofload.executor_modal")
-    monkeypatch.delitem(sys.modules, "proofload")
+    monkeypatch.setattr(poisson_prove, "executor_modal", executor_modal, raising=False)
+    monkeypatch.delitem(sys.modules, "poisson_prove.executor_modal")
+    monkeypatch.delitem(sys.modules, "poisson_prove")
 
-    pkg = importlib.import_module("proofload")
-    fresh = importlib.import_module("proofload.executor_modal")
-    assert pkg.__version__ == proofload.__version__
+    pkg = importlib.import_module("poisson_prove")
+    fresh = importlib.import_module("poisson_prove.executor_modal")
+    assert pkg.__version__ == poisson_prove.__version__
     assert fresh is not executor_modal
     assert sys.modules["modal"] is None
     assert issubclass(fresh.ModalNotInstalled, fresh.ModalBackendError)
@@ -359,7 +359,7 @@ def test_i1_imports_succeed_without_modal_and_only_run_modal_raises(
     assert fresh.estimate_cost(p, options, target.image) is None
     with pytest.raises(fresh.ModalNotInstalled) as excinfo:
         fresh.run_modal(p, target, store, options=options)
-    assert "pip install proofload[modal]" in str(excinfo.value)
+    assert "pip install \"poisson-prove[modal]\"" in str(excinfo.value)
 
 
 def test_i1_exception_hierarchy() -> None:
@@ -700,7 +700,7 @@ def test_i12_manifest_records_modal_backend_and_environment(tmp_path: Path) -> N
     store = _store(tmp_path)
     spec = _spec()
     p = _modal_plan(spec, store)
-    image = ImageSpec(python="3.11", pip=("numpy",), gpu=None, local_packages=("proofload",))
+    image = ImageSpec(python="3.11", pip=("numpy",), gpu=None, local_packages=("poisson_prove",))
     options = _options(concurrency=3, app_name="proofload-oracle")
     run_with_mapper(p, in_process_mapper, store, options=options, image=image)
     m = store.manifest(p.run_id)
@@ -710,7 +710,7 @@ def test_i12_manifest_records_modal_backend_and_environment(tmp_path: Path) -> N
     assert m.target_id == TARGET and m.t_unit == T_UNIT
     assert m.status == "complete"
     env = dict(m.environment)
-    for key in ("python", "platform", "proofload_version", "sweep", "image", "modal_app", "concurrency", "import_path"):
+    for key in ("python", "platform", "poisson_prove_version", "sweep", "image", "modal_app", "concurrency", "import_path"):
         assert key in env, key
     assert env["image"] == image.to_dict()
     assert env["modal_app"] == "proofload-oracle"

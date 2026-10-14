@@ -43,13 +43,13 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import proofload.cli as cli
-import proofload.store as store_module
-from proofload.episode import Episode
-from proofload.examples.mock_agent import rollout
-from proofload.executor import plan, run_local
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store, StoreError, config_hash
+import poisson_prove.cli as cli
+import poisson_prove.store as store_module
+from poisson_prove.episode import Episode
+from poisson_prove.examples.mock_agent import rollout
+from poisson_prove.executor import plan, run_local
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, StoreError, config_hash
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
@@ -65,7 +65,7 @@ ELEVEN = [c for c in THIRTEEN if c not in ("meta", "backend_meta")]
 JSON_COLUMNS = ("config", "meta", "backend_meta")
 
 POISON = "not json"
-MOCK_ROLLOUT = "proofload.examples.mock_agent:rollout"
+MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_SALT = "m4-read-oracle"
 SNIPPET_MARKER = "# reproduce one episode"
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 regex, verbatim (nine columns since A8a)
@@ -390,7 +390,7 @@ def assert_inspect_prints_exactly(r: Result, rows: pd.DataFrame, hashes: set[str
     assert len(blocks) == len(rows), r.out
     for block, row in zip(blocks, rows.itertuples(index=False), strict=True):
         assert_block_prints_row_with_trace(block, row)
-    assert "from proofload.examples.mock_agent import rollout" in snippet, snippet
+    assert "from poisson_prove.examples.mock_agent import rollout" in snippet, snippet
 
 
 # ---------- R1: the default read is unchanged, and meta=True is the default ----------
@@ -744,7 +744,9 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     # A10 (spec section 3.3, 7.1 group 1, W4): the manifest's top-level keys are the Go1 golden's
     # twelve plus ``declared``, which is null for a sweep that declares nothing. Amended from
     # ``== set(golden_manifest)``; the golden comparison is kept. A23/A26 re-amends this line.
-    assert set(store.manifest("r1").to_dict()) == set(golden_manifest) | {"declared"}
+    # PF0 (Q4): the version key is written as ``poisson_prove_version``; the golden, written by
+    # 0.0.1, keeps ``proofload_version``.
+    assert set(store.manifest("r1").to_dict()) == (set(golden_manifest) - {"proofload_version"}) | {"poisson_prove_version", "declared"}
 
 
 # ---------- R8: runs on the Go1 store ----------

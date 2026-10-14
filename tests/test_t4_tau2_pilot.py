@@ -186,7 +186,7 @@ def test_committed_sweep_file_is_what_the_rule_produces() -> None:
     """The header's own numbers, checked against the file's scenarios. This is the half of
     ``--check`` that does not need a τ² checkout: that the 53 configs are 50 real cells over the
     three families plus the three the required axis grid adds, and that N is the admitted one."""
-    from proofload.sampler import SweepSpec
+    from poisson_prove.sampler import SweepSpec
 
     spec = SweepSpec.load(T4_TOML)
     assert spec.replicates == 44
@@ -206,7 +206,7 @@ def test_committed_sweep_file_is_what_the_rule_produces() -> None:
 
 
 def test_sweep_file_asks_for_content_capture() -> None:
-    from proofload.sampler import SweepSpec
+    from poisson_prove.sampler import SweepSpec
 
     capture = SweepSpec.load(T4_TOML).capture
     assert capture is not None
@@ -223,9 +223,9 @@ def d0_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[object, object]:
     """One D0 pair over the committed sweep file's shape at a small N, on the local backend."""
     import dataclasses
 
-    from proofload.executor import plan, run_local
-    from proofload.sampler import SweepSpec
-    from proofload.store import Store
+    from poisson_prove.executor import plan, run_local
+    from poisson_prove.sampler import SweepSpec
+    from poisson_prove.store import Store
 
     # **capture=None is load-bearing and must stay.** The committed sweep file asks for
     # capture, and ``install()`` owns the process's TracerProvider permanently -- there is no
@@ -257,7 +257,7 @@ def test_junk_cells_never_reach_the_tree(d0_pair) -> None:  # type: ignore[no-un
     """K8, measured. The three appear in ``coverage`` as ``no_outcome_both`` and in
     ``n_not_comparable`` as **nothing**: that field counts cells one arm ran and the other did
     not, and both arms ran these."""
-    from proofload.diff import multi_diff
+    from poisson_prove.diff import multi_diff
 
     store, (a, b) = d0_pair
     result = multi_diff(

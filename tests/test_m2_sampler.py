@@ -28,7 +28,7 @@ import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from proofload.sampler import (
+from poisson_prove.sampler import (
     SamplerError,
     SweepSpec,
     grid,
@@ -37,7 +37,7 @@ from proofload.sampler import (
     scenarios,
     sobol,
 )
-from proofload.store import Store, config_hash
+from poisson_prove.store import Store, config_hash
 
 GO1_TOML = """\
 target_id = "go1-g2-converged@20260813T155006Z"

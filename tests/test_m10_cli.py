@@ -42,23 +42,23 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload
-import proofload.cli as cli
-from proofload.episode import Episode
-from proofload.executor import RunSummary, plan, preflight
-from proofload.executor_modal import ImageSpec, ModalOptions, ModalTarget
-from proofload.report import NEUTRAL_FILL
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store
+import poisson_prove
+import poisson_prove.cli as cli
+from poisson_prove.episode import Episode
+from poisson_prove.executor import RunSummary, plan, preflight
+from poisson_prove.executor_modal import ImageSpec, ModalOptions, ModalTarget
+from poisson_prove.report import NEUTRAL_FILL
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
 QUICKSTART = ROOT / "examples" / "quickstart.toml"
-CLI_SOURCE = ROOT / "src" / "proofload" / "cli.py"
-EXAMPLES_DIR = ROOT / "src" / "proofload" / "examples"
+CLI_SOURCE = ROOT / "src" / "poisson_prove" / "cli.py"
+EXAMPLES_DIR = ROOT / "src" / "poisson_prove" / "examples"
 MOCK_AGENT_SOURCE = EXAMPLES_DIR / "mock_agent.py"
 
-MOCK_MODULE = "proofload.examples.mock_agent"
+MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 RAISING = f"{__name__}:always_raises"
@@ -74,7 +74,7 @@ QUICKSTART_ROWS = QUICKSTART_CELLS * QUICKSTART_REPLICATES
 QUICKSTART_TARGET_ID = "mock-agent@v0"
 QUICKSTART_T_UNIT = "tool_calls"
 MOCK_HORIZON = 20.0
-TRACE_SCHEMA = "proofload.trace/1"
+TRACE_SCHEMA = "poisson-prove.trace/1"
 QUICKSTART_BUDGET_S = 30.0
 
 GO1_HEADLINE_PREFIX = "60 of 400 cells safer, 0 worse (fisher_bh, BH q<0.05, "
@@ -379,7 +379,7 @@ def test_i1_help_lists_the_six_verbs() -> None:
 def test_i1_version_prints_package_version() -> None:
     r = run_cli(["--version"])
     assert r.code == 0, r.text
-    assert proofload.__version__ in r.out
+    assert poisson_prove.__version__ in r.out
 
 
 def test_i1_unknown_verb_returns_two_with_message_on_stderr() -> None:
@@ -401,7 +401,7 @@ def test_i1_verb_help_returns_zero() -> None:
 def test_i2_store_flag_beats_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     flag, env = tmp_path / "flag-store", tmp_path / "env-store"
     flag.mkdir()  # E1: a root with no directory is refused; an empty one lists nothing
-    monkeypatch.setenv("PROOFLOAD_STORE", str(env))
+    monkeypatch.setenv("POISSON_PROVE_STORE", str(env))
     r = run_cli(["--store", str(flag), "runs"])
     assert r.code == 0, r.text
     assert mentions_path(r.out, flag)
@@ -411,28 +411,28 @@ def test_i2_store_flag_beats_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_i2_env_beats_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     env = tmp_path / "env-store"
     env.mkdir()  # E1
-    monkeypatch.setenv("PROOFLOAD_STORE", str(env))
+    monkeypatch.setenv("POISSON_PROVE_STORE", str(env))
     monkeypatch.chdir(tmp_path)
     r = run_cli(["runs"])
     assert r.code == 0, r.text
     assert mentions_path(r.out, env)
-    assert "proofload-runs" not in r.out
+    assert "prove-runs" not in r.out
 
 
 def test_i2_default_is_proofload_runs_in_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("PROOFLOAD_STORE", raising=False)
+    monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "proofload-runs").mkdir()  # E1
+    (tmp_path / "prove-runs").mkdir()  # E1
     r = run_cli(["runs"])
     assert r.code == 0, r.text
-    assert "proofload-runs" in r.out
+    assert "prove-runs" in r.out
 
 
 def test_i2_resolved_store_is_the_one_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     flag, env = tmp_path / "flag-store", tmp_path / "env-store"
     write_run(Store(flag), "only-in-flag", salt="s", fell_per_cell={1.0: 4})
     write_run(Store(env), "only-in-env", salt="s", fell_per_cell={1.0: 4})
-    monkeypatch.setenv("PROOFLOAD_STORE", str(env))
+    monkeypatch.setenv("POISSON_PROVE_STORE", str(env))
     via_flag = run_cli(["--store", str(flag), "runs"])
     via_env = run_cli(["runs"])
     assert "only-in-flag" in via_flag.out and "only-in-env" not in via_flag.out
@@ -581,7 +581,7 @@ def test_i7_modal_absent_exits_two_with_install_hint(store_root: Path, modal_abs
         ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--backend", "modal", "--yes"]
     )
     assert_clean_refusal(r, 2)
-    assert "pip install proofload[modal]" in r.text, r.text
+    assert "pip install \"poisson-prove[modal]\"" in r.text, r.text
     assert Store(store_root).runs() == []
 
 
@@ -679,7 +679,7 @@ def test_i7_local_backend_never_calls_run_modal(store_root: Path, captured_run_m
 
 @pytest.mark.parametrize(
     "target",
-    [MOCK_MODULE, "proofload.examples.no_such_module_xyz:rollout", f"{MOCK_MODULE}:no_such_attr"],
+    [MOCK_MODULE, "poisson_prove.examples.no_such_module_xyz:rollout", f"{MOCK_MODULE}:no_such_attr"],
     ids=["no-colon", "missing-module", "missing-attr"],
 )
 def test_i8_unresolvable_target_exits_two_naming_the_path(store_root: Path, target: str) -> None:
@@ -1208,7 +1208,7 @@ def imported_top_level_modules(source: Path) -> set[str]:
 
 def test_i19_mock_agent_imports_only_stdlib_and_proofload() -> None:
     assert MOCK_AGENT_SOURCE.is_file()
-    allowed = set(sys.stdlib_module_names) | {"proofload"}
+    allowed = set(sys.stdlib_module_names) | {"poisson_prove"}
     assert imported_top_level_modules(MOCK_AGENT_SOURCE) <= allowed
 
 
@@ -1237,7 +1237,7 @@ def test_i19_socket_is_never_touched(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("PROOFLOAD_STORE", raising=False)
+    monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
     t0 = time.perf_counter()
     first = run_cli(["sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
@@ -1251,8 +1251,8 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     elapsed = time.perf_counter() - t0
     assert elapsed < QUICKSTART_BUDGET_S, elapsed
 
-    out = tmp_path / f"proofload-report-{run_a}-{run_b}"
-    assert out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
+    (out,) = [p for p in tmp_path.iterdir() if p.name.startswith("prove-report-")]
+    assert re.fullmatch(r"prove-report-.+-vs-.+", out.name) and out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
     assert {p.name for p in out.iterdir()} == REPORT_FILES
     md = (out / "report.md").read_text()
     panel = re.search(r"^## violated: (\d+) safer, (\d+) worse$", md, re.MULTILINE)
@@ -1264,7 +1264,7 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     assert int(tail.group(1)) == QUICKSTART_CELLS
     # P-1 (ADR-052): the quickstart diffs under the default fisher_bh, and the token states the request.
     assert tail.group(2) == "unpaired"
-    assert Store(tmp_path / "proofload-runs").runs() == sorted([run_a, run_b])
+    assert Store(tmp_path / "prove-runs").runs() == sorted([run_a, run_b])
 
 
 # ---------- I21: no statistics in cli.py ----------
@@ -1288,12 +1288,12 @@ def test_i21_cli_does_not_pull_extras() -> None:
 
 
 @pytest.mark.skipif(
-    shutil.which("proofload") is None,
-    reason="needs the installed `proofload` console script on PATH (pip install -e .); "
+    shutil.which("poisson-prove") is None,
+    reason="needs the installed `poisson-prove` console script on PATH (pip install -e .); "
     "the same environment dependency as S0's entrypoint test",
 )
 def test_entrypoint_help_via_subprocess() -> None:
-    r = subprocess.run(["proofload", "--help"], capture_output=True, text=True)
+    r = subprocess.run(["poisson-prove", "--help"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     for verb in VERBS:
         assert verb in r.stdout, verb

@@ -71,23 +71,23 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload.cli as cli
-import proofload.report as report_module
-import proofload.survival as survival
-from proofload.diff import diff, multi_diff
-from proofload.episode import Episode
-from proofload.report import ABSENT_FILL, MultiReport, SurvivalReport
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.survival import censor
+import poisson_prove.cli as cli
+import poisson_prove.report as report_module
+import poisson_prove.survival as survival
+from poisson_prove.diff import diff, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import ABSENT_FILL, MultiReport, SurvivalReport
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.survival import censor
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src" / "proofload"
+SRC = ROOT / "src" / "poisson_prove"
 QUICKSTART = ROOT / "examples" / "quickstart.toml"
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
 REGRESSION_JSON = FIXTURE_DIR / "diff_regression.json"
 REGRESSION_DIR = FIXTURE_DIR / "report_regression"
 
-MOCK_MODULE = "proofload.examples.mock_agent"
+MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"

@@ -258,16 +258,16 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload
-from proofload import cli
-from proofload import diff as diff_mod
-from proofload.diff import multi_diff
-from proofload.episode import Episode
-from proofload.report import MultiReport, ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.tree import tree as grow_tree
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove import diff as diff_mod
+from poisson_prove.diff import multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import MultiReport, ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.tree import tree as grow_tree
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 VIEWER_SOURCE = PACKAGE / "viewer.py"
 CLI_SOURCE = PACKAGE / "cli.py"
@@ -277,7 +277,7 @@ DIFF_SOURCE = PACKAGE / "diff.py"
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 QUICKSTART = REPO / "examples" / "quickstart.toml"
-MOCK_MODULE = "proofload.examples.mock_agent"
+MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
@@ -286,9 +286,9 @@ QUICKSTART_SALT = "0000000000000015"
 
 #: W1. The schema, the one W17's tree-less projection is minted at, and the two ``render_html`` refuses.
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key (spec LS D6, LS7, LS8).
-SCHEMA = "proofload.viewpair/6"
+SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/2"
-RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5")
+RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5", "proofload.viewpair/6")
 #: W1. The fourteen top-level keys, in order: P-1's ``intervals`` after ``panels``, and LS's ``summary``
 #: eighth, after ``trade_line`` (LS retrofit, 2026-09-22 (local serve pass, Phase A)).
 TOP_LEVEL_KEYS = (
@@ -399,6 +399,8 @@ GO1_PAGE_2_SHA256 = {
 #: can check.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 #: W20, **narrowed by P-1 Session A under ADR-077 (P-1 section 7.4, the clean case)**: ``tree.py``'s
 #: bytes outside ``RootResult`` and ``_root``, minted at ``a626cd3`` and measured identical on the
@@ -407,6 +409,8 @@ DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae9604
 #: on the build; red on an edit anywhere else in the file. A28's whole-file ``7f9a4f08...`` (A28
 #: section 10 Q2 (b)) is replaced by this narrowed value and re-minted by nobody. A28's history
 #: stays in the module docstring.
+# PF0 (Q4): no longer asserted. The rename changes tree.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 TREE_PY_SHA256 = "83ec34949bf21026cd26a8f39f749740851f4ebf994146dccf7c23aeb7919b43"
 #: ADR-077's record for the two regions (P-1 section 7.4): ``cover`` is the P-1 oracle's Y16 and
 #: Y18 tests, asserted to exist through the resolver; ``retire_at`` is empty because no queued
@@ -450,6 +454,8 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 # the same commit. Before this packet: `5cfdf03b...`.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py gains _wrap over the four figure texts and the honesty lines, MultiReport.complement, mde_unchanged beside the honesty text and the Cells sentence respelled (LS16); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
@@ -548,14 +554,14 @@ BIND_TIMEOUT_S = 15.0
 
 def viewer() -> Any:
     """``proofload.viewer``, imported on demand so the changed surface is reached inside bodies."""
-    import proofload.viewer as module
+    import poisson_prove.viewer as module
 
     return module
 
 
 def fmt(value: Any, kind: str) -> str:
     """M7's one formatter, reached the way V16 reaches it."""
-    from proofload.report import _fmt
+    from poisson_prove.report import _fmt
 
     return _fmt(value, kind)
 
@@ -1148,7 +1154,7 @@ def tokens_of(its: Sequence[tuple[Any, ...]]) -> list[str]:
 def config_cell(leaf: Mapping[str, Any]) -> str:
     """A leaf's cell as the module docstring fixes it: ``key=value`` over every key, the value
     from ``text.config`` when it is a string and ``_scalar_text`` otherwise."""
-    from proofload.viewer import _scalar_text
+    from poisson_prove.viewer import _scalar_text
 
     shown = leaf["text"]["config"]
     return ", ".join(f"{k}={shown[k] if isinstance(shown.get(k), str) else _scalar_text(v)}" for k, v in leaf["config"].items())
@@ -1310,7 +1316,7 @@ def json_dumps_calls(nodes: Sequence[ast.AST]) -> list[ast.Call]:
 def report_import_names(module: ast.Module) -> set[str]:
     names: set[str] = set()
     for node in module.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "proofload.report":
+        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.report":
             names.update(alias.name for alias in node.names)
     return names
 
@@ -1464,6 +1470,28 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
 # ---------- W1: literals ----------
 
 
+def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
+    """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
+    arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
+    were written by 0.0.1. Put back as 0.0.1 wrote them before the frozen digest is taken, so the
+    digest still guards everything else."""
+    arms = {
+        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
+        for arm in ("a", "b")
+    }
+    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
+    return {**structure, "pair": {**structure["pair"], **arms}, "diff": {**diff, "proofload_version": "0.0.1"}}
+
+
+def page_as_0_0_1_wrote_it(page: str) -> str:
+    """PF0 (Q4, section 2.5): the rename changes three things on a page, each put back as 0.0.1 wrote it
+    before the frozen digest is taken: the version line of the provenance list, the version key in the
+    arm table, and the ids of the page's two data blocks, which named the old product."""
+    page = re.sub(r'(id="|getElementById\(")[\w-]+-(cells|holes)"', r'\1proofload-\2"', page)
+    page = page.replace("<td>poisson_prove_version</td>", "<td>proofload_version</td>")
+    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", page)
+
+
 def test_w1_the_schema_the_thirteen_keys_and_the_signatures_are_the_literals(go1: Pair) -> None:
     """``viewer.SCHEMA``; the thirteen keys in order (P-1's ``intervals`` after ``panels``) on ``--json`` and on ``build_structure``'s
     return; ``build_structure`` takes ``tree`` as a required keyword between ``multi`` and
@@ -1603,7 +1631,7 @@ def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_go
     excised, ``str(GO1_ROOT)`` normalised, digests to the ``/2`` page minted on the bare tree."""
     pairs = by_name(every_pair)
     for name, digest in GO1_PAGE_2_SHA256.items():
-        page = excised(pairs[name].page).replace(str(GO1_ROOT), "<store>")
+        page = excised(page_as_0_0_1_wrote_it(pairs[name].page)).replace(str(GO1_ROOT), "<store>")
         assert sha256_of_text(page) == digest, name
 
 
@@ -1630,11 +1658,11 @@ def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted
     structure = strict_loads(out)
     assert "tree" in structure
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": RETIRED_SCHEMA}
-    normalised = json.dumps({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}, sort_keys=True)
+    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
     pairs = by_name(every_pair)
     for name, digest in TREE_LESS_KEYS_SHA256.items():
-        assert tree_less_digest(pairs[name].structure) == digest, name
+        assert tree_less_digest(structure_as_0_0_1_wrote_it(pairs[name].structure)) == digest, name
 
 
 # ---------- W5: order of the document ----------
@@ -1705,7 +1733,7 @@ def test_w6_the_reasons_read_in_m14s_precedence_on_the_identical_bh_and_grid_fix
     p = pair("go1-grid", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", by="grid")
     assert p.tree.fault_lines.reason == "one_group"
     assert "not tested" in fault_null_line(p) and "one group is the whole family restated" in fault_null_line(p), fault_null_line(p)
-    from proofload.tree import WHOLE_GRID_KEY, WHOLE_GRID_LABEL
+    from poisson_prove.tree import WHOLE_GRID_KEY, WHOLE_GRID_LABEL
 
     assert f"{WHOLE_GRID_KEY}={WHOLE_GRID_LABEL}" in lines_of(region(p, "Cells"))[2], lines_of(region(p, "Cells"))
 
@@ -2050,7 +2078,7 @@ def test_w14_hostile_task_values_render_as_text_in_the_cells_region_and_ride_ver
     assert p.tree.leaves.tested and p.tree.leaves.n_rejected == 2
     dom = parse_html(p.page)
     scripts = dom.find("script")
-    assert len(scripts) == 3 and all(n.attrs.get("id") in ("proofload-cells", "proofload-holes", None) for n in scripts), [n.attrs for n in scripts]
+    assert len(scripts) == 3 and all(n.attrs.get("id") in ("prove-cells", "prove-holes", None) for n in scripts), [n.attrs for n in scripts]
     assert not any("onerror" in n.attrs for n in dom.nodes)
     assert dom.find("img") == []
     lines = p.page.splitlines()
@@ -2089,7 +2117,7 @@ def test_w14_a_hostile_value_in_a_group_label_renders_as_text_on_a_pair_whose_gr
     assert [line.startswith(f"task={value}: ") for line, value in zip(family_lines, HOSTILE_VALUES, strict=True)] == [True, True], family_lines
     dom = parse_html(p.page)
     scripts = dom.find("script")
-    assert len(scripts) == 3 and all(n.attrs.get("id") in ("proofload-cells", "proofload-holes", None) for n in scripts), [n.attrs for n in scripts]
+    assert len(scripts) == 3 and all(n.attrs.get("id") in ("prove-cells", "prove-holes", None) for n in scripts), [n.attrs for n in scripts]
     assert not any("onerror" in n.attrs for n in dom.nodes)
     assert dom.find("img") == []
     guarded = region_lines(p.page, "Fault lines") + region_lines(p.page, "Cells")
@@ -2223,6 +2251,14 @@ def test_w19_the_vocabulary_pair_renders_green_under_the_mask_and_red_without_it
 # ---------- W20: nothing else moves ----------
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
+    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
+    as 0.0.1 wrote it before the frozen digest is taken, so the digest still guards every other byte."""
+    text = re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
+    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+
+
 def e14_builder_digests() -> dict[str, str]:
     """S21's E14 as S28's retrofit left it: the tree-less builder's markdown and light receipt."""
     store = Store(GO1_ROOT)
@@ -2231,14 +2267,12 @@ def e14_builder_digests() -> dict[str, str]:
     spec = ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw")
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
-    return {"report.md": sha256_of_text(report.to_markdown()), "receipt.html": sha256_of_text(receipt.to_html())}
+    return {"report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())), "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html()))}
 
 
 def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_result_and_root_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
-    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
-    assert hashlib.sha256(REPORT_SOURCE.read_bytes()).hexdigest() == REPORT_PY_SHA256
-    assert digest_excluding(TREE_SOURCE, [q for record in TREE_PY_EXCLUDED for q in record["region"]]) == TREE_PY_SHA256
-    assert hashlib.sha256(TREE_SOURCE.read_bytes()).hexdigest() != TREE_PY_SHA256
+    # PF0 (Q4): the digests of diff.py, report.py and tree.py outside its excluded region are no
+    # longer asserted; the rename changes all three files.
     for record in TREE_PY_EXCLUDED:
         cover = REPO / record["cover"][0]
         assert cover.exists(), record["cover"]
@@ -2269,7 +2303,7 @@ def test_w20_the_viewers_import_partition_and_v17s_closure_clauses_are_unchanged
     assert render & (ASSEMBLY_HELPERS | RENDER_HELPERS) == RENDER_HELPERS, render
     for name in ("MultiReport", "Report", "DiffResult", "DataFrame", "TreeResult", "multi", "report"):
         assert name not in render, name
-    assert module_body_imports_of(module, "proofload.tree") == [], module_body_imports_of(module, "proofload.tree")
+    assert module_body_imports_of(module, "poisson_prove.tree") == [], module_body_imports_of(module, "poisson_prove.tree")
     assert arithmetic_nodes(closure(module, "render_html")) == [], [ast.dump(n)[:60] for n in arithmetic_nodes(closure(module, "render_html"))]
     build_nodes = closure(module, "build_structure")
     arithmetic = arithmetic_nodes(build_nodes)

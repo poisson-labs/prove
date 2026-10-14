@@ -3,7 +3,7 @@ run the same plan store the same rows (M3, P6)."""
 
 from typing import Any
 
-from proofload.episode import Episode
+from poisson_prove.episode import Episode
 
 HORIZON = 10.0
 

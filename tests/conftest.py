@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from proofload.store import Store
+from poisson_prove.store import Store
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -25,7 +25,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     import subprocess
     import sys
 
-    from proofload._burla_submit import _PREFIX, _reap
+    from poisson_prove._burla_submit import _PREFIX, _reap
 
     probe = subprocess.run(
         [sys.executable, "-I", "-S", "-c", "import tempfile; print(tempfile.gettempdir())"],

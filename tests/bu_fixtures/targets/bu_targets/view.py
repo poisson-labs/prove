@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from proofload.episode import Episode
+from poisson_prove.episode import Episode
 
 DATA = Path(__file__).resolve().parent / "data" / "table.json"
 
