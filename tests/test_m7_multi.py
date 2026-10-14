@@ -723,9 +723,13 @@ def strip_honesty(text: str) -> str:
 
 def as_0_0_1_wrote_it(text: str) -> str:
     """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
-    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
-    as 0.0.1 wrote it before the comparison, so every other byte is still compared."""
-    return re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
+    in its provenance list. First assert it is there as the rename writes it -- one ``Prove version:``
+    line and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and drop any separate
+    ``written by proofload`` line, so every other byte is still compared."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    return re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
 
 
 def test_b1_regression_fixture_is_present_and_is_the_s8_output() -> None:

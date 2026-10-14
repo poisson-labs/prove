@@ -327,8 +327,8 @@ E14_SHA256 = {
 # Re-minted by PF0 Session A: both files as its freeze commit moved them (the rename, Q4, and the
 # version field put back before their Go1 digests). Read off the two files after every other move.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "84297306221fdb34aff3822ed2283cb1adb5f4b482140d3c3b3e9ad1a1c4498a",
-    "tests/test_s26_fault_lines.py": "8de05bda48e73d9c828459b8cca994b344a7afcb3f21218569b83b6ea7470fa2",
+    "tests/test_s25_root.py": "9c0dd9e6d155f2920be19c40d47de7a1e7fd715294baea1d8e9763bf405bd66e",
+    "tests/test_s26_fault_lines.py": "53fcbc140ab7efbfb159abc70a293b35d398129149cbeac4b869d0677c641604",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -1035,8 +1035,12 @@ def property_tree(case: Any, depth: int) -> Any:
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
     """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
     arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
-    were written by 0.0.1. Put back as 0.0.1 wrote them before the frozen digest is taken, so the
-    digest still guards everything else."""
+    were written by 0.0.1. First assert the new key is there and the old one is not, then put both
+    back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
+    else."""
+    for arm in ("a", "b"):
+        assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
+    assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
     arms = {
         arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
         for arm in ("a", "b")
@@ -1792,11 +1796,17 @@ def test_l20_the_s24_column_digests_and_the_coverage_digest_are_unchanged(go1: A
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
-    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
-    as 0.0.1 wrote it before the frozen digest is taken, so the digest still guards every other byte."""
-    text = re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
-    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
 def e14_builder_digests(go1: Any) -> dict[str, str]:

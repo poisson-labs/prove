@@ -15,8 +15,13 @@ fault, a run from the Modal backend's offline stand-in, and a run in the layout 
 was split into two columns. ``SHA256SUMS`` is every file's digest as written. ``recorded/`` is
 what 0.0.1 printed for the quickstart pair with each method named.
 
-**Lanes.** Every test here is in the fast lane: none takes over ten seconds of setup and call
-except PF0.2's, which is the only test of its invariant.
+**The built wheel.** PF0.1 and PF0.2 share one module fixture: the wheel built from this checkout and
+installed into a throwaway virtual environment of its own, first alone (PF0.1 reads what it adds)
+and then with its dependencies (PF0.2 runs the command it installed). Nothing falls back to the
+environment the suite runs in, and nothing skips: the point is that the command exists.
+
+**Lanes.** Every test here is in the fast lane (ten seconds of setup and call, measured on the
+runner, decides it; PF10 declares the ``slow`` marker).
 
 **Invariant-to-test map**
 
@@ -26,7 +31,7 @@ except PF0.2's, which is the only test of its invariant.
 | PF0.2 ``python -m poisson_prove`` is the command | ``test_pf0_2_*`` |
 | PF0.3 every schema string written is the new one | ``test_pf0_3_*`` |
 | PF0.4 span keys use ``poisson_prove.``; old keys lift; the new key wins | ``test_pf0_4_*`` |
-| PF0.5 the old name is spelled in one module only | ``test_pf0_5_*``, with the readers of PF0.4, PF0.6, PF0.8 and PF0.9 |
+| PF0.5 the old name is spelled in one module only, and every reader goes through it | ``test_pf0_5_*``: two literal checks and one behaviour check with that module made to fail |
 | PF0.6 every read verb reads the 0.0.1 stores and rewrites nothing | ``test_pf0_6_*`` |
 | PF0.7 the 0.0.1 quickstart pair gives what 0.0.1 gave, method named | ``test_pf0_7_*`` |
 | PF0.8 ``POISSON_PROVE_STORE``; ``PROOFLOAD_STORE`` alone is noted, not read | ``test_pf0_8_*`` |
@@ -66,7 +71,8 @@ RECORDED = FIXTURE / "recorded"
 RUNS: dict[str, str] = json.loads((FIXTURE / "runs.json").read_text(encoding="utf-8"))
 QA, QB = RUNS["quickstart_before"], RUNS["quickstart_after"]
 MOCK = "poisson_prove.examples.mock_agent"
-SCRIPT = Path(sys.executable).parent / "poisson-prove"
+#: Section 2.3's note, word for word.
+STORE_VARIABLE_NOTE = "note: PROOFLOAD_STORE is set and no longer read; Prove reads POISSON_PROVE_STORE"
 
 #: The eleven span keys Prove writes, documents or stamps (section 2.3).
 SPAN_KEYS = (
@@ -185,53 +191,81 @@ def new_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str]:
     return store, a, b
 
 
-# ---------- PF0.1 the wheel ----------
+# ---------- PF0.1 and PF0.2: the wheel, installed where nothing else is ----------
 
 
-def test_pf0_1_the_wheel_is_poisson_prove_and_installs_one_package_and_one_script(tmp_path: Path) -> None:
+@dataclass(frozen=True)
+class Installed:
+    wheel: Path
+    venv: Path
+    purelib: Path
+    added_site: frozenset[str]
+    added_bin: frozenset[str]
+
+    @property
+    def python(self) -> Path:
+        return self.venv / "bin" / "python"
+
+    @property
+    def command(self) -> Path:
+        return self.venv / "bin" / "poisson-prove"
+
+
+def install_env() -> dict[str, str]:
+    env = {k: v for k, v in clean_env().items() if k not in ("PYTHONPATH", "VIRTUAL_ENV", "PYTHONHOME")}
+    env.update(UV_PYTHON_PREFERENCE="only-system", UV_PYTHON_DOWNLOADS="never")
+    return env
+
+
+@pytest.fixture(scope="module")
+def installed(tmp_path_factory: pytest.TempPathFactory) -> Installed:
+    """The wheel built from this checkout, installed into a virtual environment of its own: first
+    alone, to see exactly what it adds, then with its dependencies, so its command runs."""
     uv = shutil.which("uv")
-    assert uv is not None, "the wheel is built with uv"
-    env = clean_env(UV_PYTHON_PREFERENCE="only-system", UV_PYTHON_DOWNLOADS="never")
-    dist = tmp_path / "dist"
-    built = subprocess.run([uv, "build", "--wheel", "--out-dir", str(dist), str(ROOT)], env=env, capture_output=True, text=True, timeout=300)
+    assert uv is not None, "the wheel is built and installed with uv"
+    base = tmp_path_factory.mktemp("installed")
+    env = install_env()
+    built = subprocess.run([uv, "build", "--wheel", "--out-dir", str(base / "dist"), str(ROOT)], env=env, capture_output=True, text=True, timeout=600)
     assert built.returncode == 0, built.stderr
-    (wheel,) = dist.glob("*.whl")
-    assert re.fullmatch(r"poisson_prove-[^-]+-py3-none-any\.whl", wheel.name), wheel.name
-
-    venv = tmp_path / "venv"
-    made = subprocess.run([uv, "venv", "--python", sys.executable, str(venv)], env=env, capture_output=True, text=True, timeout=120)
+    (wheel,) = (base / "dist").glob("*.whl")
+    venv = base / "venv"
+    made = subprocess.run([uv, "venv", "--python", sys.executable, str(venv)], env=env, capture_output=True, text=True, timeout=300)
     assert made.returncode == 0, made.stderr
     python = venv / "bin" / "python"
     purelib = Path(subprocess.run([str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], capture_output=True, text=True, check=True).stdout.strip())
     site_before, bin_before = set(os.listdir(purelib)), set(os.listdir(venv / "bin"))
-    installed = subprocess.run([uv, "pip", "install", "--python", str(python), "--no-deps", str(wheel)], env=env, capture_output=True, text=True, timeout=120)
-    assert installed.returncode == 0, installed.stderr
+    alone = subprocess.run([uv, "pip", "install", "--python", str(python), "--no-deps", str(wheel)], env=env, capture_output=True, text=True, timeout=300)
+    assert alone.returncode == 0, alone.stderr
+    added_site = frozenset(set(os.listdir(purelib)) - site_before)
+    added_bin = frozenset(set(os.listdir(venv / "bin")) - bin_before)
+    with_deps = subprocess.run([uv, "pip", "install", "--python", str(python), str(wheel)], env=env, capture_output=True, text=True, timeout=900)
+    assert with_deps.returncode == 0, with_deps.stderr
+    return Installed(wheel, venv, purelib, added_site, added_bin)
 
-    added_site = set(os.listdir(purelib)) - site_before
-    added_bin = set(os.listdir(venv / "bin")) - bin_before
-    (dist_info,) = [name for name in added_site if name.endswith(".dist-info")]
-    assert added_site == {"poisson_prove", dist_info}, added_site
+
+def test_pf0_1_the_wheel_is_poisson_prove_and_installs_one_package_and_one_script(installed: Installed) -> None:
+    assert re.fullmatch(r"poisson_prove-[^-]+-py3-none-any\.whl", installed.wheel.name), installed.wheel.name
+    (dist_info,) = [name for name in installed.added_site if name.endswith(".dist-info")]
+    assert installed.added_site == {"poisson_prove", dist_info}, installed.added_site
     assert re.fullmatch(r"poisson_prove-[^-]+\.dist-info", dist_info), dist_info
-    assert added_bin == {"poisson-prove"}, added_bin
+    assert installed.added_bin == {"poisson-prove"}, installed.added_bin
 
-    metadata = (purelib / dist_info / "METADATA").read_text(encoding="utf-8")
+    metadata = (installed.purelib / dist_info / "METADATA").read_text(encoding="utf-8")
     assert re.search(r"^Name: poisson-prove$", metadata, re.MULTILINE), metadata[:300]
-    record = (purelib / dist_info / "RECORD").read_text(encoding="utf-8")
+    record = (installed.purelib / dist_info / "RECORD").read_text(encoding="utf-8")
     assert "proofload" not in record.lower(), [line for line in record.splitlines() if "proofload" in line.lower()]
-    entry_points = (purelib / dist_info / "entry_points.txt").read_text(encoding="utf-8")
+    entry_points = (installed.purelib / dist_info / "entry_points.txt").read_text(encoding="utf-8")
     scripts = re.search(r"\[console_scripts\]\n((?:.+\n?)*)", entry_points)
     assert scripts is not None, entry_points
     assert [line.split("=")[0].strip() for line in scripts.group(1).splitlines() if line.strip()] == ["poisson-prove"], entry_points
 
-    gone = subprocess.run([str(python), "-I", "-c", "import proofload"], capture_output=True, text=True)
+    gone = subprocess.run([str(installed.python), "-I", "-c", "import proofload"], capture_output=True, text=True, env=install_env())
     assert gone.returncode != 0 and "ModuleNotFoundError" in gone.stderr, gone
 
 
-# ---------- PF0.2 python -m poisson_prove ----------
-
-
-def test_pf0_2_python_dash_m_gives_the_commands_stdout_stderr_and_exit_code(tmp_path: Path) -> None:
-    assert SCRIPT.is_file(), f"no console script at {SCRIPT}; install this checkout"
+def test_pf0_2_python_dash_m_gives_the_installed_commands_stdout_stderr_and_exit_code(installed: Installed, tmp_path: Path) -> None:
+    """The command the wheel installed, against ``python -m poisson_prove`` in the same environment."""
+    assert installed.command.is_file(), installed.command
     cwd = tmp_path / "cwd"
     copy_runs(cwd / "prove-runs", QA, QB)
     corpus: list[list[str]] = [
@@ -249,17 +283,19 @@ def test_pf0_2_python_dash_m_gives_the_commands_stdout_stderr_and_exit_code(tmp_
         ["diff", QA, "no-such-run"],
         ["inspect", QA],
     ]
-    env = clean_env()
+    env = install_env()
 
     def both(argv: list[str]) -> tuple[subprocess.CompletedProcess[str], subprocess.CompletedProcess[str]]:
-        script = subprocess.run([str(SCRIPT), *argv], cwd=cwd, env=env, capture_output=True, text=True, timeout=300)
-        module = subprocess.run([sys.executable, "-m", "poisson_prove", *argv], cwd=cwd, env=env, capture_output=True, text=True, timeout=300)
-        return script, module
+        command = subprocess.run([str(installed.command), *argv], cwd=cwd, env=env, capture_output=True, text=True, timeout=300)
+        module = subprocess.run([str(installed.python), "-m", "poisson_prove", *argv], cwd=cwd, env=env, capture_output=True, text=True, timeout=300)
+        return command, module
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(both, corpus))
-    for argv, (script, module) in zip(corpus, results, strict=True):
-        assert (module.returncode, module.stdout, module.stderr) == (script.returncode, script.stdout, script.stderr), argv
+    for argv, (command, module) in zip(corpus, results, strict=True):
+        assert (module.returncode, module.stdout, module.stderr) == (command.returncode, command.stdout, command.stderr), argv
+    version = results[1][0]
+    assert version.returncode == 0 and version.stdout.startswith("poisson-prove "), version
 
 
 # ---------- PF0.3 schema strings ----------
@@ -297,10 +333,17 @@ def test_pf0_3_serve_json_is_poisson_prove_viewpair_7(new_pair: tuple[Path, str,
     assert "proofload" not in r.out.lower()
 
 
-def test_pf0_3_the_agreement_digest_is_built_over_poisson_prove_agreement_1() -> None:
-    from poisson_prove import tree
+#: The Go1 pair's agreement digest for ``fell``, hashed behind ``poisson-prove.agreement/1``: computed
+#: on the 0.0.1 tree (98dc6af) with that one string changed. Under the old string it is
+#: ``360aaa32...``, the value ``tests/test_a28_agreement.py`` pinned before the rename.
+GO1_FELL_AGREEMENT = "ed536c0213e9a9e7942807ec525738d1ca1373544e0b47fc93a8640879ef1087"
 
-    assert tree.AGREEMENT_SCHEMA == "poisson-prove.agreement/1"
+
+def test_pf0_3_the_agreement_digest_diff_prints_is_built_over_poisson_prove_agreement_1() -> None:
+    go1 = Path(__file__).resolve().parent / "fixtures" / "go1"
+    r = run_cli(["--store", str(go1), "diff", "go1-v0", "go1-v1", "--event", "fell", "--format", "json"])
+    assert r.code == 0, r
+    assert json.loads(r.out)["tree"]["agreement"] == GO1_FELL_AGREEMENT
 
 
 @pytest.fixture(scope="module")
@@ -333,7 +376,8 @@ type = "categorical"
 values = ["short", "long"]
 
 [capture]
-max_observation_bytes = 8192
+max_observation_bytes = 64
+content = true
 
 [chaos]
 fault = "tool_corrupt_single"
@@ -371,6 +415,7 @@ def rollout(cfg, seed):
     for name in ("plan", "solve"):
         with chaos.position(name, 1), tracer.start_as_current_span(f"chat {name}") as span:
             span.set_attribute("gen_ai.operation.name", "chat")
+            span.set_attribute("gen_ai.tool.call.result", "r" * 400)
             client.chat.completions.create(model="pf0-model", messages=[{"role": "user", "content": name}], tools=TOOLS)
     return Episode(outcome="completed", t=2.0, horizon=10.0)
 '''
@@ -385,32 +430,21 @@ def test_pf0_3_a_chaos_run_records_the_catalogue_as_poisson_prove_chaos_catalog_
 # ---------- PF0.4 span keys ----------
 
 
-def test_pf0_4_the_span_key_constants_use_the_poisson_prove_prefix() -> None:
-    from poisson_prove import trace
-
-    assert trace.SCHEMA == "poisson-prove.trace/1"
-    assert trace.LOGPROBS_KEY == "poisson_prove.logprobs"
-    assert trace.TRUNCATED_KEY == "poisson_prove.truncated"
-
-
-def test_pf0_4_the_stamper_keys_use_the_poisson_prove_prefix() -> None:
-    pytest.importorskip("opentelemetry.sdk", reason="the stamper lives behind the [agent] extra")
-    from poisson_prove import otel
-
-    assert otel.RUN_ID_KEY == "poisson_prove.run_id"
-    assert otel.EPISODE_KEY == "poisson_prove.episode"
-
-
 def test_pf0_4_every_span_key_a_capture_and_chaos_run_stores_uses_the_new_prefix(chaos_run: tuple[Path, str]) -> None:
+    """What Prove stamps (the routing keys, the fault) and writes (the cut's wrapper around an
+    observation over the cap), read off the stored rows of a run this build swept."""
     store, run = chaos_run
     keys: set[str] = set()
+    observations = ""
     for part in sorted((store / run).rglob("*.parquet")):
         for row in pq.read_table(part).to_pylist():
             envelope = json.loads(row["trace"])
             for span in envelope["spans"]:
                 keys |= set(span.get("attrs") or {})
+            observations += row["trace_obs"] or ""
     assert {"poisson_prove.run_id", "poisson_prove.episode", "poisson_prove.fault"} <= keys, sorted(keys)
     assert not [k for k in keys if k.startswith("proofload.")], sorted(keys)
+    assert '"poisson_prove.truncated"' in observations and "proofload" not in observations, observations[:300]
 
 
 def otlp_span(attributes: dict[str, Any]) -> dict[str, Any]:
@@ -428,26 +462,56 @@ def otlp_span(attributes: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-LIFTED = {"step_name": "lookup-order", "outcome": "violated", "outcome_by": "code", "attempt": 2, "gate": "emitted"}
+#: One value per specced span key (section 2.3's eleven). The first five become span fields; the
+#: other six stay attributes, under the new prefix.
+FIELD_KEYS: dict[str, Any] = {"step_name": "lookup-order", "outcome": "violated", "outcome_by": "code", "attempt": 2, "gate": "emitted"}
+ATTR_KEYS: dict[str, Any] = {
+    "episode": "c0ffee:0", "error_type": "TimeoutError", "fault": "llm_empty_single",
+    "logprobs": "[-0.25, -1.5]", "run_id": "run-pf0", "truncated": "observation",
+}
+#: Another value for every key, carried under the old prefix beside the new one.
+OTHER_VALUES: dict[str, Any] = {
+    "step_name": "old-step", "outcome": "completed", "outcome_by": "human", "attempt": 5, "gate": "declared",
+    "episode": "old:9", "error_type": "OldError", "fault": "llm_error_single", "logprobs": "[-9.0]",
+    "run_id": "run-old", "truncated": "old",
+}
+
+
+def fields_of(span: Any) -> tuple[Any, ...]:
+    return (span.step_name, span.outcome, span.outcome_by, span.attempt, span.gate)
 
 
 def test_pf0_4_from_otel_lifts_proofload_keys_to_the_same_trace_as_poisson_prove_keys() -> None:
+    """All eleven keys: the five that become fields, and the six that stay attributes under the new
+    prefix, so a span carrying the old keys and one carrying the new give one trace."""
     from poisson_prove.trace import from_otel
 
-    old = from_otel([otlp_span({f"proofload.{k}": v for k, v in LIFTED.items()})])
-    new = from_otel([otlp_span({f"poisson_prove.{k}": v for k, v in LIFTED.items()})])
+    assert sorted({*FIELD_KEYS, *ATTR_KEYS}) == sorted(SPAN_KEYS) == sorted(OTHER_VALUES)
+    values = {**FIELD_KEYS, **ATTR_KEYS}
+    old = from_otel([otlp_span({f"proofload.{k}": v for k, v in values.items()})])
+    new = from_otel([otlp_span({f"poisson_prove.{k}": v for k, v in values.items()})])
     assert old == new
     (span,) = new.spans
-    assert (span.step_name, span.outcome, span.outcome_by, span.attempt, span.gate) == tuple(LIFTED.values()), span
+    assert fields_of(span) == tuple(FIELD_KEYS.values()), span
+    for key, value in ATTR_KEYS.items():
+        assert span.attrs[f"poisson_prove.{key}"] == value, (key, dict(span.attrs))
+    assert not [k for k in span.attrs if k.startswith("proofload.")], dict(span.attrs)
 
 
 def test_pf0_4_with_both_prefixes_on_one_span_the_new_keys_value_is_used() -> None:
+    """All eleven keys, each carried under both prefixes with different values: the new value is
+    the one read, and the old key is not kept."""
     from poisson_prove.trace import from_otel
 
-    other = {"step_name": "old-step", "outcome": "completed", "outcome_by": "human", "attempt": 5, "gate": "declared"}
-    both = {**{f"proofload.{k}": v for k, v in other.items()}, **{f"poisson_prove.{k}": v for k, v in LIFTED.items()}}
+    both = {
+        **{f"proofload.{k}": v for k, v in OTHER_VALUES.items()},
+        **{f"poisson_prove.{k}": v for k, v in {**FIELD_KEYS, **ATTR_KEYS}.items()},
+    }
     (span,) = from_otel([otlp_span(both)]).spans
-    assert (span.step_name, span.outcome, span.outcome_by, span.attempt, span.gate) == tuple(LIFTED.values()), span
+    assert fields_of(span) == tuple(FIELD_KEYS.values()), span
+    for key, value in ATTR_KEYS.items():
+        assert span.attrs[f"poisson_prove.{key}"] == value, (key, dict(span.attrs))
+    assert not [k for k in span.attrs if k.startswith("proofload.")], dict(span.attrs)
 
 
 def test_pf0_4_the_docs_name_only_the_new_span_key_prefix() -> None:
@@ -506,6 +570,214 @@ def test_pf0_5_no_docstring_outside_the_compat_module_names_the_old_name() -> No
         if path.name != "_compat.py"
     }
     assert {name: found for name, found in hits.items() if found} == {}
+
+
+#: Run in a fresh interpreter, so the package is imported once with the compatibility module as the
+#: probe leaves it. ``poisson_prove._compat`` is loaded from its file first and made to fail one of
+#: two ways: ``raise`` replaces every function in it with one that raises and spoils every string it
+#: holds that spells the old name; ``spoil`` rewrites its source so every string literal spelling the
+#: old name, function bodies included, is spoiled, and its functions run on as written, knowing no
+#: old string. Then the package is imported against that module. Each probe reads one kind of old
+#: string through the public surface twice: with the old string there, and with it absent.
+COMPAT_PROBE = r"""
+import ast, importlib.util, io, json, os, re, shutil, sys, types
+
+args = json.loads(sys.argv[1])
+OLD = re.compile(r"proofload|m11-catalog", re.IGNORECASE)
+
+
+class Sabotaged(Exception):
+    pass
+
+
+def spoil(value):
+    if isinstance(value, str):
+        return "<spoiled>" if OLD.search(value) else value
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return type(value)(spoil(v) for v in value)
+    if isinstance(value, dict):
+        return {spoil(k): spoil(v) for k, v in value.items()}
+    return value
+
+
+class Spoiler(ast.NodeTransformer):
+    def visit_Constant(self, node):
+        if isinstance(node.value, str) and OLD.search(node.value):
+            return ast.copy_location(ast.Constant("<spoiled>"), node)
+        return node
+
+
+compat_path = os.path.join(args["src"], "_compat.py")
+if args["sabotage"] == "spoil":
+    compat = types.ModuleType("poisson_prove._compat")
+    compat.__file__ = compat_path
+    tree = ast.fix_missing_locations(Spoiler().visit(ast.parse(open(compat_path, encoding="utf-8").read())))
+    sys.modules["poisson_prove._compat"] = compat
+    exec(compile(tree, compat_path, "exec"), compat.__dict__)
+if args["sabotage"] == "raise":
+    spec = importlib.util.spec_from_file_location("poisson_prove._compat", compat_path)
+    compat = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(compat)
+    for name, value in list(vars(compat).items()):
+        if name.startswith("__") or isinstance(value, (types.ModuleType, type)):
+            continue
+        if isinstance(value, types.FunctionType):
+            def broken(*a, _name=name, **k):
+                raise Sabotaged(_name)
+            setattr(compat, name, broken)
+        else:
+            setattr(compat, name, spoil(value))
+    sys.modules["poisson_prove._compat"] = compat
+
+import pyarrow.parquet as pq
+from poisson_prove import cli
+from poisson_prove.store import Store
+from poisson_prove.trace import Trace, from_otel
+
+work = args["work"]
+
+
+def attempt(read):
+    try:
+        return ["read", read()]
+    except Exception as exc:
+        return ["failed", type(exc).__name__]
+
+
+def run(argv, cwd, variables):
+    here = os.getcwd()
+    saved = {k: os.environ.pop(k) for k in ("PROOFLOAD_STORE", "POISSON_PROVE_STORE") if k in os.environ}
+    os.environ.update(variables)
+    os.chdir(cwd)
+    try:
+        out, err = io.StringIO(), io.StringIO()
+        code = cli.main(argv, stdout=out, stderr=err, stdin=io.StringIO())
+        return [code, out.getvalue(), err.getvalue()]
+    finally:
+        os.chdir(here)
+        for k in variables:
+            os.environ.pop(k, None)
+        os.environ.update(saved)
+
+
+def copy(run_id, dest):
+    shutil.copytree(os.path.join(args["store"], run_id), os.path.join(dest, run_id))
+    return os.path.join(dest, run_id)
+
+
+def edit_manifest(run_dir, change):
+    path = os.path.join(run_dir, "manifest.json")
+    manifest = json.load(open(path, encoding="utf-8"))
+    change(manifest)
+    open(path, "w", encoding="utf-8").write(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
+observed = {}
+
+# A trace stored under the old schema string, and the same trace under a schema nobody reads.
+part = sorted(os.listdir(os.path.join(args["store"], args["qa"], "episodes")))[0]
+stored = json.loads(pq.read_table(os.path.join(args["store"], args["qa"], "episodes", part)).to_pylist()[0]["trace"])
+observed["trace schema"] = {
+    "with": attempt(lambda: len(Trace.from_dict(stored).spans)),
+    "without": attempt(lambda: len(Trace.from_dict({**stored, "schema": "unknown.trace/1"}).spans)),
+}
+
+# The version an old manifest recorded under the old key, and the same manifest with no version key.
+def version(dest, change):
+    edit_manifest(copy(args["qa"], dest), change)
+    return lambda: Store(dest).manifest(args["qa"]).to_dict()["poisson_prove_version"]
+observed["manifest version key"] = {
+    "with": attempt(version(os.path.join(work, "with-version"), lambda m: m.__setitem__("proofload_version", "0.0.1rc7"))),
+    "without": attempt(version(os.path.join(work, "without-version"), lambda m: m.pop("proofload_version"))),
+}
+
+# Span keys under the old prefix, and the same span without them.
+def span(extra):
+    return {
+        "traceId": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a", "spanId": "0000000000000001", "name": "execute_tool lookup",
+        "kind": 1, "startTimeUnixNano": "1756900000000000000", "endTimeUnixNano": "1756900000500000000",
+        "attributes": [{"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}}, *extra],
+        "status": {"code": "STATUS_CODE_UNSET"},
+    }
+def lifted(raw):
+    def read():
+        (one,) = from_otel([raw]).spans
+        return [one.step_name, one.attrs.get("poisson_prove.run_id")]
+    return read
+old_keys = [
+    {"key": "proofload.step_name", "value": {"stringValue": "lookup-order"}},
+    {"key": "proofload.run_id", "value": {"stringValue": "run-pf0"}},
+]
+observed["span keys"] = {"with": attempt(lifted(span(old_keys))), "without": attempt(lifted(span([])))}
+
+# The old store variable, set alone, and no variable set.
+noted = os.path.join(work, "noted")
+copy(args["qa"], os.path.join(noted, "prove-runs"))
+observed["store variable"] = {
+    "with": attempt(lambda: run(["runs"], noted, {"PROOFLOAD_STORE": os.path.join(work, "elsewhere")})),
+    "without": attempt(lambda: run(["runs"], noted, {})),
+}
+
+# The old default store alone in the folder, and an empty folder.
+old_default, empty = os.path.join(work, "old-default"), os.path.join(work, "empty")
+copy(args["qa"], os.path.join(old_default, "proofload-runs"))
+os.makedirs(empty)
+observed["old default store"] = {
+    "with": attempt(lambda: run(["runs"], old_default, {})[0]),
+    "without": attempt(lambda: run(["runs"], empty, {})[0]),
+}
+
+# Who wrote an old pair, and the same pair with no version recorded.
+def writer(store, label):
+    def read():
+        out = os.path.join(work, "report-" + label)
+        code, _, err = run(["--store", store, "report", args["qa"], args["qb"], "--x", "task_id", "--y", "tool_fail_rate", "--out", out], work, {})
+        assert code == 0, err
+        return "written by proofload 0.0.1" in open(os.path.join(out, "report.md"), encoding="utf-8").read()
+    return read
+unversioned = os.path.join(work, "unversioned")
+for run_id in (args["qa"], args["qb"]):
+    edit_manifest(copy(run_id, unversioned), lambda m: m.pop("proofload_version"))
+observed["old run's writer"] = {"with": attempt(writer(args["store"], "with")), "without": attempt(writer(unversioned, "without"))}
+
+print(json.dumps(observed))
+"""
+
+
+def probe_compat(work: Path, *, sabotage: str | None) -> dict[str, Any]:
+    work.mkdir(parents=True)
+    arguments = json.dumps({"src": str(SRC), "store": str(STORE), "qa": QA, "qb": QB, "work": str(work), "sabotage": sabotage})
+    done = subprocess.run([sys.executable, "-c", COMPAT_PROBE, arguments], cwd=work, env=clean_env(), capture_output=True, text=True, timeout=600)
+    assert done.returncode == 0, done.stderr
+    observed: dict[str, Any] = json.loads(done.stdout.strip().splitlines()[-1])
+    return observed
+
+
+def test_pf0_5_with_the_compat_module_failing_no_reader_recognises_an_old_string(tmp_path: Path) -> None:
+    """Section 2.4 item 2, by behaviour: each reader of an old string goes through
+    ``poisson_prove._compat``. Untouched, every reader reads its old string, and reads something
+    else when the old string is absent. With that module failing, either way the probe makes it
+    fail, an old string makes no difference to any reader: each gives what it gives when the
+    string is absent. A reader that recognises an old string on its own, by any spelling and in
+    any part, behaves differently and fails this test."""
+    fixture_before = tree_digest(STORE)
+    readers = probe_compat(tmp_path / "untouched", sabotage=None)
+    untouched = {name: reader["with"] for name, reader in readers.items()}
+    assert untouched["trace schema"][0] == "read" and untouched["trace schema"][1] > 0, readers
+    assert untouched["manifest version key"] == ["read", "0.0.1rc7"], readers
+    assert untouched["span keys"] == ["read", ["lookup-order", "run-pf0"]], readers
+    assert untouched["store variable"][0] == "read", readers
+    code, out, err = untouched["store variable"][1]
+    assert code == 0 and STORE_VARIABLE_NOTE in err.splitlines() and out == readers["store variable"]["without"][1][1], readers
+    assert untouched["old default store"] == ["read", 1], readers
+    assert untouched["old run's writer"] == ["read", True], readers
+    assert {name: reader for name, reader in readers.items() if reader["with"] == reader["without"]} == {}, readers
+    for way in ("raise", "spoil"):
+        sabotaged = probe_compat(tmp_path / way, sabotage=way)
+        assert sorted(sabotaged) == sorted(readers), way
+        still_recognised = {name: reader for name, reader in sabotaged.items() if reader["with"] != reader["without"]}
+        assert still_recognised == {}, (way, still_recognised)
+    assert tree_digest(STORE) == fixture_before
 
 
 # ---------- PF0.6 the 0.0.1 stores are read, never rewritten ----------
@@ -715,16 +987,26 @@ def verb_argv(verb: str, inputs: dict[str, Path], out: Path) -> list[str]:
     }[verb]
 
 
-def test_pf0_8_poisson_prove_store_names_the_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("verb", STORE_VERBS)
+def test_pf0_8_poisson_prove_store_names_the_store_for_every_verb(verb: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set alone, the new variable is the store every verb reads or writes: each exits 0 on a store
+    that holds what it needs, and the working folder, which holds no store, stays empty."""
     store = copy_runs(tmp_path / "elsewhere", QA, QB)
+    write_paired_store(store)
+    inputs = write_inputs(tmp_path / "inputs")
+    (inputs["declaration"]).write_text(PAIRED_DECLARATION, encoding="utf-8")
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     monkeypatch.setenv("POISSON_PROVE_STORE", str(store))
-    r = run_cli(["runs"])
+    before = run_ids(store)
+    r = run_cli(verb_argv(verb, inputs, tmp_path / "out"))
     assert r.code == 0, r
-    assert QA in r.out and QB in r.out, r.out
     assert list(cwd.iterdir()) == []
+    if verb == "runs":
+        assert QA in r.out and QB in r.out, r.out
+    if verb == "sweep":
+        assert len(run_ids(store) - before) == 1
 
 
 @pytest.mark.parametrize("verb", STORE_VERBS)
@@ -738,8 +1020,7 @@ def test_pf0_8_proofload_store_set_alone_is_not_read_and_every_verb_notes_it(ver
     old_before = tree_digest(old)
     r = run_cli(verb_argv(verb, inputs, tmp_path / "out"))
     notes = [line for line in r.err.splitlines() if "PROOFLOAD_STORE" in line]
-    assert len(notes) == 1, r
-    assert notes[0].startswith("note: ") and "POISSON_PROVE_STORE" in notes[0], notes
+    assert notes == [STORE_VARIABLE_NOTE], r
     assert "PROOFLOAD_STORE" not in r.out, r.out
     if verb == "runs":
         assert r.code == 0, r
@@ -823,29 +1104,55 @@ def test_pf0_9_sweep_with_no_store_anywhere_writes_into_prove_runs(tmp_path: Pat
 # ---------- PF0.10 default output folders ----------
 
 
-def slugged(name: str) -> bool:
-    return name == name.lower() and " " not in name and "/" not in name and "proofload" not in name
+#: Two runs whose names need cleaning: capitals and spaces (section 2.3: "names slugged: lowercase,
+#: spaces and / to -"). A run's id is a folder name, so it cannot carry a slash; a slash reaches a
+#: run's name only through a name given to it, which PF2 reads, and PF2 freezes that case. The
+#: target carries capitals, a space and a slash for the names PF2 computes from it.
+SLUG_RUNS = ("Base Line A", "Cand Two B")
+SLUG_TARGET = "Team/Agent X"
 
 
-def test_pf0_10_a_pair_reports_into_prove_report_a_vs_b(new_pair: tuple[Path, str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store, a, b = new_pair
-    monkeypatch.chdir(tmp_path)
-    r = run_cli(["--store", str(store), "report", a, b, "--x", "task_id", "--y", "tool_fail_rate"])
+def write_mock_pair(root: Path, run_ids_: tuple[str, str], target_id: str) -> Path:
+    """The mock agent and its patched form, stored under the two given run ids on shared seeds."""
+    from poisson_prove.examples.mock_agent import rollout, rollout_patched
+    from poisson_prove.store import EpisodeRecord, RunManifest, Store
+
+    store = Store(root)
+    configs = [{"task_id": t, "tool_fail_rate": r} for t in ("search", "refund") for r in (0.3, 0.55)]
+    for run_id, agent in zip(run_ids_, (rollout, rollout_patched), strict=True):
+        store.create_run(RunManifest(
+            run_id=run_id, target_id=target_id, t_unit="tool_calls", run_salt="pf0-slug-salt",
+            axis_types={"task_id": "categorical", "tool_fail_rate": "continuous"}, backend="local", environment={},
+        ))
+        store.append(run_id, [
+            EpisodeRecord.from_episode(agent(cfg, 1000 * i + k), run_id=run_id, config=cfg, seed=1000 * i + k, replicate_index=k, wall_time=0.01)
+            for i, cfg in enumerate(configs)
+            for k in range(20)
+        ])
+        store.mark_complete(run_id)
+    return root
+
+
+def test_pf0_10_a_pair_reports_into_prove_report_a_vs_b_slugged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = write_mock_pair(tmp_path / "store", SLUG_RUNS, SLUG_TARGET)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    r = run_cli(["--store", str(store), "report", *SLUG_RUNS, "--event", "violated", "--x", "task_id", "--y", "tool_fail_rate"])
     assert r.code == 0, r
-    (folder,) = list(tmp_path.iterdir())
-    match = re.fullmatch(r"prove-report-(.+)-vs-(.+)", folder.name)
-    assert match is not None and slugged(folder.name), folder.name
-    assert (folder / "report.md").is_file()
+    assert [p.name for p in cwd.iterdir()] == ["prove-report-base-line-a-vs-cand-two-b"]
+    assert (cwd / "prove-report-base-line-a-vs-cand-two-b" / "report.md").is_file()
 
 
-def test_pf0_10_a_single_run_reports_into_prove_report_run(new_pair: tuple[Path, str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store, a, _ = new_pair
-    monkeypatch.chdir(tmp_path)
-    r = run_cli(["--store", str(store), "report", a, "--x", "task_id", "--y", "tool_fail_rate"])
+def test_pf0_10_a_single_run_reports_into_prove_report_run_slugged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = write_mock_pair(tmp_path / "store", SLUG_RUNS, SLUG_TARGET)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    r = run_cli(["--store", str(store), "report", SLUG_RUNS[0], "--event", "violated", "--x", "task_id", "--y", "tool_fail_rate"])
     assert r.code == 0, r
-    (folder,) = list(tmp_path.iterdir())
-    assert folder.name.startswith("prove-report-") and "-vs-" not in folder.name and slugged(folder.name), folder.name
-    assert (folder / "report.md").is_file()
+    assert [p.name for p in cwd.iterdir()] == ["prove-report-base-line-a"]
+    assert (cwd / "prove-report-base-line-a" / "report.md").is_file()
 
 
 PAIRED_DECLARATION = """\
@@ -938,53 +1245,88 @@ def test_pf0_11_the_modal_backend_without_modal_names_poisson_prove_with_its_ext
     assert 'pip install "poisson-prove[modal]"' in r.err, r.err
 
 
+def formatted_strings(path: Path) -> list[str]:
+    """``path``'s f-strings, each with its replacement fields shown as ``{}``."""
+    return [
+        "".join(part.value if isinstance(part, ast.Constant) else "{}" for part in node.values)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.JoinedStr)
+    ]
+
+
 def test_pf0_11_every_install_hint_in_src_that_names_prove_is_the_quoted_distribution_with_an_extra() -> None:
+    """Over plain strings and f-strings alike. Burla's hint names Burla's own pin and waits for the
+    ``[burla]`` extra (ruled 2026-10-14: PF9 moves it)."""
     hints = sorted({
-        s for path in sorted(SRC.rglob("*.py")) for s in string_constants(path)[1] if "pip install" in s
+        s
+        for path in sorted(SRC.rglob("*.py"))
+        for s in (*string_constants(path)[1], *formatted_strings(path))
+        if "pip install" in s
     })
-    naming_prove = [h for h in hints if "burla==" not in h]
+    naming_prove = [h for h in hints if "burla==" not in h and "burla=={}" not in h]
     assert naming_prove, hints
     for hint in naming_prove:
-        assert re.search(r'pip install "poisson-prove\[[a-z]+\]"', hint), hint
+        assert re.search(r'pip install "poisson-prove\[(?:[a-z]+|\{\})\]"', hint), hint
 
 
 # ---------- PF0.12 an old run's provenance ----------
 
+#: The words sections 2.3 and 2.5 give, by surface (ruled 2026-10-14): the report and the receipt say
+#: who wrote an old run; the page gives Prove's version as the run recorded it.
+WRITTEN_BY_0_0_1 = "written by proofload 0.0.1"
+PAGE_VERSION_0_0_1 = "Prove version: 0.0.1 (as proofload)"
 
-def mentions_old_writer(text: str) -> bool:
-    return any("proofload" in line.lower() and "0.0.1" in line for line in text.splitlines())
+
+def text_of(page: str) -> str:
+    """An HTML document's text with its tags and runs of white space each read as one space."""
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", page)).split())
 
 
-def test_pf0_12_the_report_and_receipt_of_an_old_pair_say_it_was_written_by_proofload_0_0_1(tmp_path: Path) -> None:
+def test_pf0_12_the_report_and_receipt_of_an_old_pair_say_written_by_proofload_0_0_1(tmp_path: Path) -> None:
     out = tmp_path / "report"
     r = run_cli(["--store", str(STORE), "report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(out)])
     assert r.code == 0, r
-    assert mentions_old_writer((out / "report.md").read_text(encoding="utf-8"))
-    receipt = html.unescape(re.sub(r"<[^>]+>", "\n", (out / "receipt.html").read_text(encoding="utf-8")))
-    assert mentions_old_writer(receipt)
+    report = (out / "report.md").read_text(encoding="utf-8")
+    assert WRITTEN_BY_0_0_1 in report and "proofload version:" not in report, report[-1500:]
+    receipt = text_of((out / "receipt.html").read_text(encoding="utf-8"))
+    assert WRITTEN_BY_0_0_1 in receipt and "proofload version:" not in receipt
 
 
-def test_pf0_12_the_report_and_receipt_of_a_new_pair_never_name_proofload(new_pair: tuple[Path, str, str], tmp_path: Path) -> None:
+def test_pf0_12_the_report_and_receipt_of_a_new_pair_give_prove_version_and_never_name_proofload(new_pair: tuple[Path, str, str], tmp_path: Path) -> None:
+    import poisson_prove
+
     store, a, b = new_pair
     out = tmp_path / "report"
     r = run_cli(["--store", str(store), "report", a, b, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(out)])
     assert r.code == 0, r
-    for name in ("report.md", "receipt.html"):
-        assert "proofload" not in (out / name).read_text(encoding="utf-8").lower(), name
+    report = (out / "report.md").read_text(encoding="utf-8")
+    receipt = (out / "receipt.html").read_text(encoding="utf-8")
+    assert f"Prove version: {poisson_prove.__version__}" in report
+    assert f"Prove version: {poisson_prove.__version__}" in text_of(receipt)
+    for name, text in (("report.md", report), ("receipt.html", receipt)):
+        assert "proofload" not in text.lower(), name
 
 
 def served_page(store: Path, a: str, b: str) -> str:
-    """The page ``serve`` holds for ``a`` against ``b``, fetched once over loopback."""
+    """The page ``serve`` holds for ``a`` against ``b``, fetched once over loopback. The address is
+    taken from the first stdout line that carries one, whatever comes before it."""
     proc = subprocess.Popen(
         [sys.executable, "-m", "poisson_prove", "--store", str(store), "serve", a, b, "--x", "task_id", "--y", "tool_fail_rate",
          "--event", "violated"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=clean_env(),
     )
     try:
-        assert proc.stdout is not None
-        first = proc.stdout.readline()
-        url = re.search(r"http://127\.0\.0\.1:\d+/", first)
-        assert url is not None, first
+        assert proc.stdout is not None and proc.stderr is not None
+        seen: list[str] = []
+        url = None
+        while url is None and len(seen) < 200:
+            line = proc.stdout.readline()
+            if not line:
+                proc.wait(timeout=60)
+                raise AssertionError(f"serve ended before printing its address: {seen!r} {proc.stderr.read()!r}")
+            seen.append(line)
+            url = re.search(r"http://127\.0\.0\.1:\d+/", line)
+        assert url is not None, seen
         with urllib.request.urlopen(url.group(0), timeout=60) as response:
             return str(response.read().decode("utf-8"))
     finally:
@@ -992,11 +1334,15 @@ def served_page(store: Path, a: str, b: str) -> str:
         proc.wait(timeout=60)
 
 
-def test_pf0_12_the_page_of_an_old_pair_says_it_was_written_by_proofload_0_0_1() -> None:
-    page = served_page(STORE, QA, QB)
-    assert mentions_old_writer(html.unescape(re.sub(r"<[^>]+>", "\n", page)))
+def test_pf0_12_the_page_of_an_old_pair_gives_prove_version_0_0_1_as_proofload() -> None:
+    page = text_of(served_page(STORE, QA, QB))
+    assert PAGE_VERSION_0_0_1 in page and "proofload version:" not in page
 
 
-def test_pf0_12_the_page_of_a_new_pair_never_names_proofload(new_pair: tuple[Path, str, str]) -> None:
+def test_pf0_12_the_page_of_a_new_pair_gives_prove_version_and_never_names_proofload(new_pair: tuple[Path, str, str]) -> None:
+    import poisson_prove
+
     store, a, b = new_pair
-    assert "proofload" not in served_page(store, a, b).lower()
+    page = served_page(store, a, b)
+    assert f"Prove version: {poisson_prove.__version__}" in text_of(page)
+    assert "proofload" not in page.lower()

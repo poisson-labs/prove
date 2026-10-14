@@ -1044,6 +1044,7 @@ def test_cd11_splits_classification_is_byte_identical_to_the_dispatch_commits() 
     # PF0 (Q4, section 2.3): the trace schema string and the span key prefix are renamed; with the
     # two renames undone, the partition is the dispatch commit's byte for byte.
     as_written = json.dumps([envelope, bodies], sort_keys=True)
+    assert '"poisson-prove.trace/1"' in as_written and '"poisson_prove.' in as_written and "proofload" not in as_written
     as_0_0_1 = as_written.replace('"poisson-prove.trace/1"', '"proofload.trace/1"').replace('"poisson_prove.', '"proofload.')
     digest = hashlib.sha256(as_0_0_1.encode()).hexdigest()
     assert digest == SPLIT_PARTITION_SHA256, digest

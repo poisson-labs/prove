@@ -1473,8 +1473,12 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
     """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
     arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
-    were written by 0.0.1. Put back as 0.0.1 wrote them before the frozen digest is taken, so the
-    digest still guards everything else."""
+    were written by 0.0.1. First assert the new key is there and the old one is not, then put both
+    back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
+    else."""
+    for arm in ("a", "b"):
+        assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
+    assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
     arms = {
         arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
         for arm in ("a", "b")
@@ -1484,12 +1488,19 @@ def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
 
 
 def page_as_0_0_1_wrote_it(page: str) -> str:
-    """PF0 (Q4, section 2.5): the rename changes three things on a page, each put back as 0.0.1 wrote it
-    before the frozen digest is taken: the version line of the provenance list, the version key in the
-    arm table, and the ids of the page's two data blocks, which named the old product."""
-    page = re.sub(r'(id="|getElementById\(")[\w-]+-(cells|holes)"', r'\1proofload-\2"', page)
+    """PF0 (Q4, section 2.5): the rename changes three things on a page: the version entry of the
+    provenance list, the version key in the arm table, and the ids of the page's two data blocks,
+    which named the old product. First assert each is there as the rename writes it (the data
+    blocks are ``prove-cells`` and ``prove-holes``, ruled 2026-10-14), then put each back as 0.0.1
+    wrote it before the frozen digest is taken."""
+    assert 'id="prove-cells"' in page and 'id="prove-holes"' in page and 'getElementById("prove-cells")' in page
+    assert "<td>poisson_prove_version</td>" in page and "proofload-cells" not in page and "proofload-holes" not in page
+    found = re.findall(r"<li>Prove version: [^<]*</li>", page)
+    assert len(found) == 1 and "proofload version:" not in page, found
+    page = re.sub(r'(id="|getElementById\(")prove-(cells|holes)"', r'\1proofload-\2"', page)
     page = page.replace("<td>poisson_prove_version</td>", "<td>proofload_version</td>")
-    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", page)
+    page = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", page)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", page)
 
 
 def test_w1_the_schema_the_thirteen_keys_and_the_signatures_are_the_literals(go1: Pair) -> None:
@@ -2252,11 +2263,17 @@ def test_w19_the_vocabulary_pair_renders_green_under_the_mask_and_red_without_it
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
-    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
-    as 0.0.1 wrote it before the frozen digest is taken, so the digest still guards every other byte."""
-    text = re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
-    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
 def e14_builder_digests() -> dict[str, str]:

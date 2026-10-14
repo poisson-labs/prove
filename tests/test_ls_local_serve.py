@@ -1352,12 +1352,19 @@ def normalised_region(page: str, heading: str) -> str:
 
 
 def page_as_0_0_1_wrote_it(page: str) -> str:
-    """PF0 (Q4, section 2.5): the rename changes three things on a page, each put back as 0.0.1 wrote it
-    before the frozen digest is taken: the version line of the provenance list, the version key in the
-    arm table, and the ids of the page's two data blocks, which named the old product."""
-    page = re.sub(r'(id="|getElementById\(")[\w-]+-(cells|holes)"', r'\1proofload-\2"', page)
+    """PF0 (Q4, section 2.5): the rename changes three things on a page: the version entry of the
+    provenance list, the version key in the arm table, and the ids of the page's two data blocks,
+    which named the old product. First assert each is there as the rename writes it (the data
+    blocks are ``prove-cells`` and ``prove-holes``, ruled 2026-10-14), then put each back as 0.0.1
+    wrote it before the frozen digest is taken."""
+    assert 'id="prove-cells"' in page and 'id="prove-holes"' in page and 'getElementById("prove-cells")' in page
+    assert "<td>poisson_prove_version</td>" in page and "proofload-cells" not in page and "proofload-holes" not in page
+    found = re.findall(r"<li>Prove version: [^<]*</li>", page)
+    assert len(found) == 1 and "proofload version:" not in page, found
+    page = re.sub(r'(id="|getElementById\(")prove-(cells|holes)"', r'\1proofload-\2"', page)
     page = page.replace("<td>poisson_prove_version</td>", "<td>proofload_version</td>")
-    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", page)
+    page = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", page)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", page)
 
 
 def test_ls1_the_inert_selector_list_names_the_figures_text_beside_the_glyph_and_the_path(every_pair: list[Pair]) -> None:
@@ -2037,7 +2044,7 @@ def test_ls19_every_dispatch_heading_is_still_on_the_page_and_the_untouched_regi
     for p in all_pairs:
         assert set(h2_sequence(p.page)) == DISPATCH_H2, p.name
         for heading in UNTOUCHED_REGIONS:
-            assert sha(page_as_0_0_1_wrote_it(normalised_region(p.page, heading))) == REGION_SHA256[p.name][heading], (p.name, heading)
+            assert sha(normalised_region(page_as_0_0_1_wrote_it(p.page), heading)) == REGION_SHA256[p.name][heading], (p.name, heading)
 
 
 def test_ls19_the_summary_introduces_no_number_the_statistics_view_does_not_carry(all_pairs: list[Pair]) -> None:

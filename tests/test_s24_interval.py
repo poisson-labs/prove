@@ -1082,11 +1082,17 @@ def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
-    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
-    as 0.0.1 wrote it before the frozen digest is taken, so the digest still guards every other byte."""
-    text = re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
-    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
 def e14_builder_digests() -> dict[str, str]:

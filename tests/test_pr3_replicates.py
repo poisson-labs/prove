@@ -649,6 +649,7 @@ def pr60_digests(store: Store, decl: Any) -> dict[str, str]:
                 row.pop(column, None)
     frozen = [c for c in a.pairs.columns if c not in TIMING_COLUMNS]
     frame = a.pairs[frozen].astype(str).to_csv(index=False)
+    assert '"poisson_prove_version":' in json.dumps(payload) and '"proofload_version":' not in json.dumps(payload)
     return {
         "pairs": hashlib.sha256(frame.encode()).hexdigest(),
         # PF0 (Q4): each arm's identity echoes the manifest's version under its new key; under the old

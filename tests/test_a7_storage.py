@@ -607,16 +607,27 @@ def sha256_file(path: Path) -> str:
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
-    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
-    as 0.0.1 wrote it before the frozen digest is taken, so the digest still guards every other byte."""
-    text = re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
-    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
     """PF0 (Q4, Q10): the page structure's schema string and its version key, in both arms and in the
-    provenance block, put back as 0.0.1 wrote them before the frozen digest is taken."""
+    provenance block. First assert they are there as the rename writes them, then put them back as
+    0.0.1 wrote them before the frozen digest is taken."""
+    assert structure["schema"] == "poisson-prove.viewpair/7", structure["schema"]
+    for arm in ("a", "b"):
+        assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
+    assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
     arms = {
         arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
         for arm in ("a", "b")
@@ -645,6 +656,8 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
     # PF0 (Q4): the tree's agreement digest is hashed behind the renamed schema string; the 0.0.1 value
     # is put back before the frozen digest is taken.
     as_0_0_1 = norm(r.out)
+    if root == GO1_ROOT:
+        assert GO1_AGREEMENT[1] in as_0_0_1 and GO1_AGREEMENT_0_0_1[1] not in as_0_0_1
     for k, digest in GO1_AGREEMENT.items():
         as_0_0_1 = as_0_0_1.replace(digest, GO1_AGREEMENT_0_0_1[k])
     digests["diff --format json"] = sha256_text(as_0_0_1)
@@ -654,13 +667,19 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
         results[label] = r = run_cli(["--store", store_arg, "report", *runs, "--event", event, "--x", x, "--y", y, "--out", str(out)])
         digests[label] = sha256_text(norm(r.out, out))
         for name in ("report.md", "heatmap.svg", "receipt.html"):
-            text = (out / name).read_text(encoding="utf-8") if (out / name).is_file() else None
-            digests[f"{label}/{name}"] = "" if text is None else sha256_text(as_0_0_1_wrote_it(text))
+            if not (out / name).is_file():
+                digests[f"{label}/{name}"] = ""
+            elif name == "heatmap.svg":
+                digests[f"{label}/{name}"] = sha256_file(out / name)
+            else:
+                digests[f"{label}/{name}"] = sha256_text(as_0_0_1_wrote_it((out / name).read_text(encoding="utf-8")))
     results["serve --json"] = r = run_cli(["--store", store_arg, "serve", a, b, "--event", event, "--x", x, "--y", y, "--json"])
     try:
         structure = json.loads(r.out)
         structure["pair"]["store_root"] = STORE_PLACEHOLDER
         as_0_0_1 = json.dumps(structure_as_0_0_1_wrote_it(structure), sort_keys=True)
+        if root == GO1_ROOT:
+            assert GO1_AGREEMENT[1] in as_0_0_1 and GO1_AGREEMENT_0_0_1[1] not in as_0_0_1
         for k, digest in GO1_AGREEMENT.items():
             as_0_0_1 = as_0_0_1.replace(digest, GO1_AGREEMENT_0_0_1[k])
         digests["serve --json"] = sha256_text(as_0_0_1)

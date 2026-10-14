@@ -968,11 +968,17 @@ def test_pr52_the_cli_phases_are_the_declared_sweeps(tmp_path: Path) -> None:
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
-    in its provenance list, which now names Prove (and, for runs 0.0.1 wrote, says so). It is put back
-    as 0.0.1 wrote it before the frozen digest is taken, so the digest still guards every other byte."""
-    text = re.sub(r"(?m)^- [^:\n]*\bversion: [^\n]*$", "- proofload version: 0.0.1", text)
-    return re.sub(r"<li>[^<:]*\bversion: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
 def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path) -> None:
@@ -982,7 +988,9 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     assert r.code == 0, r.err
     assert sorted(p.name for p in out.iterdir()) == sorted(REPORT_FILES)
     for name, digest in E14_SHA256.items():
-        text = as_0_0_1_wrote_it((out / name).read_text(encoding="utf-8"))
+        text = (out / name).read_text(encoding="utf-8")
+        if name != "heatmap.svg":
+            text = as_0_0_1_wrote_it(text)
         assert hashlib.sha256(text.encode("utf-8")).hexdigest() == digest, name
 
 
