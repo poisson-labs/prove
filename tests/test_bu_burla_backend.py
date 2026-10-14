@@ -88,8 +88,8 @@ FR_TEST = REPO / "tests" / "test_fr_first_run.py"
 PACKAGE = Path(proofload.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
-PIN = "1.8.1"
-INSTALL_HINT = "pip install burla==1.8.1"
+PIN = "1.8.2"
+INSTALL_HINT = "pip install burla==1.8.2"
 HEAD = "http://localhost:5001"
 SALT = "bu-oracle-salt"
 PLAIN = "bu_targets.plain:rollout"

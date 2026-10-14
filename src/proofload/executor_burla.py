@@ -74,7 +74,7 @@ __all__ = [
 ]
 
 _BACKEND = "burla"
-_BURLA_PIN = "1.8.1"
+_BURLA_PIN = "1.8.2"
 _INSTALL_HINT = f"pip install burla=={_BURLA_PIN}"
 #: After the stop's deadline, how long the launcher has to report before the parent sends it
 #: SIGINT, and how long after that before its whole process group is killed.
@@ -90,7 +90,7 @@ class BurlaBackendError(ExecutorError):
 
 
 class BurlaNotInstalled(BurlaBackendError):
-    """``burla==1.8.1`` is not importable by the launcher."""
+    """``burla==1.8.2`` is not importable by the launcher."""
 
 
 class BurlaCostGuard(BurlaBackendError):
@@ -661,7 +661,8 @@ def preflight_burla(p: Plan, import_path: str, options: BurlaOptions) -> str:
         f"idle allowance {options.idle_minutes:g} min · head {options.head_url}",
         _head_line(options, bundle),
         "Worker view: job 0 matches this machine",
-        "Traffic: code, inputs and results go through Burla's relay; "
+        "Traffic: code, inputs and results go through Burla's relay unless the head was started "
+        "with DISABLE_BURLA_RELAY=True; Prove cannot tell from the head whether it was; "
         "the store stays on this machine",
         f"Cost: ~{_usd(estimate)} this run ({options.nodes} × "
         f"${options.usd_per_node_hour:g}/node-hour, {options.price_asof}) · "

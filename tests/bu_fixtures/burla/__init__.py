@@ -15,6 +15,6 @@ from burla._remote_parallel_map import remote_parallel_map
 
 # __init__.py:10 carries the version as a literal. A test that needs the launcher to meet another
 # version writes one into the script; nothing else moves it.
-__version__ = fake_version("1.8.1")
+__version__ = fake_version("1.8.2")
 
 __all__ = ["remote_parallel_map"]
