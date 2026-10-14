@@ -1,0 +1,2638 @@
+{
+  "schema": "proofload.viewpair/6",
+  "pair": {
+    "store_root": "/tmp/prove-0.0.1-stores/work/store",
+    "created_at_gap_s": 6.124989,
+    "a": {
+      "role": "baseline",
+      "run_id": "20261014T035339Z-1add",
+      "target_id": "mock-agent@v0",
+      "backend": "local",
+      "status": "complete",
+      "created_at": "2026-10-14T03:53:39.591064Z",
+      "run_salt": "5cd33a2df543b317",
+      "t_unit": "tool_calls",
+      "proofload_version": "0.0.1",
+      "schema_version": 1,
+      "retain_traces_for": null,
+      "axis_types": {
+        "task_id": "categorical",
+        "tool_fail_rate": "continuous"
+      },
+      "environment": {
+        "import_path": "proofload.examples.mock_agent:rollout",
+        "max_mde_accepted": 0.2,
+        "platform": "macOS-26.3-arm64-arm-64bit",
+        "proofload_version": "0.0.1",
+        "python": "3.11.7 (main, Feb 12 2025, 16:08:13) [Clang 16.0.0 (clang-1600.0.26.6)]",
+        "sweep": {
+          "axis_types": {
+            "task_id": "categorical",
+            "tool_fail_rate": "continuous"
+          },
+          "configs": [
+            {
+              "task_id": "search",
+              "tool_fail_rate": 0.0
+            },
+            {
+              "task_id": "search",
+              "tool_fail_rate": 0.3
+            },
+            {
+              "task_id": "search",
+              "tool_fail_rate": 0.55
+            },
+            {
+              "task_id": "checkout",
+              "tool_fail_rate": 0.0
+            },
+            {
+              "task_id": "checkout",
+              "tool_fail_rate": 0.3
+            },
+            {
+              "task_id": "checkout",
+              "tool_fail_rate": 0.55
+            },
+            {
+              "task_id": "refund",
+              "tool_fail_rate": 0.0
+            },
+            {
+              "task_id": "refund",
+              "tool_fail_rate": 0.3
+            },
+            {
+              "task_id": "refund",
+              "tool_fail_rate": 0.55
+            }
+          ],
+          "duplicates_dropped": 0,
+          "replicates": 100,
+          "retain_traces_for": null,
+          "t_unit": "tool_calls",
+          "target_id": "mock-agent@v0"
+        }
+      },
+      "rows_stored": 900,
+      "tally": {
+        "rows": 900,
+        "with_outcome": 900,
+        "no_outcome": 0,
+        "timed_out": 0,
+        "infra": 0,
+        "other": 0
+      }
+    },
+    "b": {
+      "role": "candidate",
+      "run_id": "20261014T035345Z-8381",
+      "target_id": "mock-agent@v0",
+      "backend": "local",
+      "status": "complete",
+      "created_at": "2026-10-14T03:53:45.716053Z",
+      "run_salt": "5cd33a2df543b317",
+      "t_unit": "tool_calls",
+      "proofload_version": "0.0.1",
+      "schema_version": 1,
+      "retain_traces_for": null,
+      "axis_types": {
+        "task_id": "categorical",
+        "tool_fail_rate": "continuous"
+      },
+      "environment": {
+        "import_path": "proofload.examples.mock_agent:rollout_patched",
+        "max_mde_accepted": 0.2,
+        "platform": "macOS-26.3-arm64-arm-64bit",
+        "proofload_version": "0.0.1",
+        "python": "3.11.7 (main, Feb 12 2025, 16:08:13) [Clang 16.0.0 (clang-1600.0.26.6)]",
+        "sweep": {
+          "axis_types": {
+            "task_id": "categorical",
+            "tool_fail_rate": "continuous"
+          },
+          "configs": [
+            {
+              "task_id": "search",
+              "tool_fail_rate": 0.0
+            },
+            {
+              "task_id": "search",
+              "tool_fail_rate": 0.3
+            },
+            {
+              "task_id": "search",
+              "tool_fail_rate": 0.55
+            },
+            {
+              "task_id": "checkout",
+              "tool_fail_rate": 0.0
+            },
+            {
+              "task_id": "checkout",
+              "tool_fail_rate": 0.3
+            },
+            {
+              "task_id": "checkout",
+              "tool_fail_rate": 0.55
+            },
+            {
+              "task_id": "refund",
+              "tool_fail_rate": 0.0
+            },
+            {
+              "task_id": "refund",
+              "tool_fail_rate": 0.3
+            },
+            {
+              "task_id": "refund",
+              "tool_fail_rate": 0.55
+            }
+          ],
+          "duplicates_dropped": 0,
+          "replicates": 100,
+          "retain_traces_for": null,
+          "t_unit": "tool_calls",
+          "target_id": "mock-agent@v0"
+        }
+      },
+      "rows_stored": 900,
+      "tally": {
+        "rows": 900,
+        "with_outcome": 900,
+        "no_outcome": 0,
+        "timed_out": 0,
+        "infra": 0,
+        "other": 0
+      }
+    }
+  },
+  "diff": {
+    "events": [
+      "timeout",
+      "violated"
+    ],
+    "inferred": false,
+    "non_event": null,
+    "n_tests": 18,
+    "method": "fisher_bh",
+    "seed_identity_match": true,
+    "unpaired_analysis": true,
+    "q": 0.05,
+    "t_unit": "tool_calls",
+    "horizon": 20.0,
+    "n_not_comparable": 0,
+    "dropped_a": 0,
+    "dropped_b": 0,
+    "episodes_censored_at_horizon": 0,
+    "n_absent": 0,
+    "proofload_version": "0.0.1",
+    "run_id_a": "20261014T035339Z-1add",
+    "run_id_b": "20261014T035345Z-8381",
+    "run_salt": "5cd33a2df543b317",
+    "observation_cap_a": null,
+    "observation_cap_b": null,
+    "trace_spans_a": 10525,
+    "trace_spans_b": 11663,
+    "observation_cut_spans_a": 0,
+    "observation_cut_spans_b": 0
+  },
+  "holes": [],
+  "view": {
+    "title": "20261014T035339Z-1add vs 20261014T035345Z-8381: timeout, violated",
+    "x_axis": "task_id",
+    "y_axis": "tool_fail_rate",
+    "fixed": {},
+    "theme": "dark",
+    "top_n": 10,
+    "forest": "auto",
+    "bound": 0.6,
+    "sign_convention": "delta = rate_b - rate_a"
+  },
+  "headline": "timeout: 1 safer, 1 worse \u00b7 violated: 6 safer, 0 worse\n(aalen_johansen + fisher_bh, BH q<0.05 over 18 tests, unpaired)",
+  "trade_line": "Trade: violated fell in 1 cell where timeout rose.",
+  "summary": {
+    "partial": null,
+    "complement": null,
+    "pairing": {
+      "line": "Compared as two separate samples. The runs share their seeds; this test does not use that."
+    },
+    "events": [
+      {
+        "event": "timeout",
+        "line": "timeout: 1 of 9 conditions got worse, 1 got safer, and 7 show no significant change at q = 0.05.",
+        "worse": [
+          {
+            "where": "task_id=refund, tool_fail_rate=0.55",
+            "config_hash": "7b806df50938571e",
+            "before": "16.0",
+            "after": "47.0",
+            "change": "31.0",
+            "confidence": "very sure",
+            "q": "8.08e-06",
+            "line": "task_id=refund, tool_fail_rate=0.55: timeout was 16.0% of trials and is now 47.0%, a rise of 31.0 percentage points. How sure: very sure (q = 8.08e-06)."
+          }
+        ],
+        "limit": {
+          "label": null,
+          "mde": "12",
+          "where": "task_id=checkout, tool_fail_rate=0.55",
+          "line": "The least sensitive condition among those this run did not call a change (task_id=checkout, tool_fail_rate=0.55, n = 100/100) could only have seen a rise of 12pp or more."
+        }
+      },
+      {
+        "event": "violated",
+        "line": "violated: 0 of 9 conditions got worse, 6 got safer, and 3 show no significant change at q = 0.05.",
+        "worse": [],
+        "limit": {
+          "label": null,
+          "mde": "8",
+          "where": "task_id=refund, tool_fail_rate=0",
+          "line": "The least sensitive condition among those this run did not call a change (task_id=refund, tool_fail_rate=0, n = 100/100) could only have seen a rise of 8pp or more."
+        }
+      }
+    ],
+    "pointer": "Every number above is below with the statistics it came from: the omnibus, the honesty block and its bound, the per-condition table, the intervals, and what this comparison could not establish."
+  },
+  "fence": "This is empirical evidence under a stated test envelope, not formal verification. Cells outside the envelope were not tested; cells inside it were tested at the stated replicate count and can only detect effects at or above the reported MDE.",
+  "panels": [
+    {
+      "event": "timeout",
+      "caption": "timeout: 1 safer, 1 worse",
+      "honesty": "Worst-powered unchanged cell (task_id=checkout, tool_fail_rate=0.55, n=100/100) can only detect a 12pp rise. \"1 worse\" is an honest claim only above that.\nWorst-powered cell overall: 19pp (task_id=refund, tool_fail_rate=0.3).",
+      "mde_unchanged": {
+        "value": 0.1175034043463529,
+        "text": "12",
+        "where": "task_id=checkout, tool_fail_rate=0.55"
+      },
+      "n_safer": 1,
+      "n_worse": 1,
+      "n_unchanged": 7,
+      "n_absent": 0,
+      "n_present": 9,
+      "x_values": [
+        "checkout",
+        "refund",
+        "search"
+      ],
+      "y_values": [
+        "0",
+        "0.3",
+        "0.55"
+      ],
+      "cells": [
+        {
+          "coords": "task_id=checkout, tool_fail_rate=0",
+          "config_hash": "dfe7178686aa319c",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08288872108150372,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.0
+          },
+          "config_text": {
+            "task_id": "checkout",
+            "tool_fail_rate": "0"
+          },
+          "text": {
+            "rate_a": "0.0",
+            "rate_b": "0.0",
+            "delta": "0.0",
+            "stat": "nan",
+            "p": "1",
+            "q": "1",
+            "mde": "8"
+          }
+        },
+        {
+          "coords": "task_id=refund, tool_fail_rate=0",
+          "config_hash": "b4a971a744b471f8",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08288872108150372,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.0
+          },
+          "config_text": {
+            "task_id": "refund",
+            "tool_fail_rate": "0"
+          },
+          "text": {
+            "rate_a": "0.0",
+            "rate_b": "0.0",
+            "delta": "0.0",
+            "stat": "nan",
+            "p": "1",
+            "q": "1",
+            "mde": "8"
+          }
+        },
+        {
+          "coords": "task_id=search, tool_fail_rate=0",
+          "config_hash": "c9d973c669310f5d",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08288872108150372,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.0
+          },
+          "config_text": {
+            "task_id": "search",
+            "tool_fail_rate": "0"
+          },
+          "text": {
+            "rate_a": "0.0",
+            "rate_b": "0.0",
+            "delta": "0.0",
+            "stat": "nan",
+            "p": "1",
+            "q": "1",
+            "mde": "8"
+          }
+        },
+        {
+          "coords": "task_id=checkout, tool_fail_rate=0.3",
+          "config_hash": "1ad7c42d72bbb09d",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 1,
+          "events_b": 0,
+          "rate_a": 0.009999999999999995,
+          "rate_b": 0.0,
+          "delta": -0.009999999999999995,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08966714426317596,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.3
+          },
+          "config_text": {
+            "task_id": "checkout",
+            "tool_fail_rate": "0.3"
+          },
+          "text": {
+            "rate_a": "1.0",
+            "rate_b": "0.0",
+            "delta": "-1.0",
+            "stat": "inf",
+            "p": "1",
+            "q": "1",
+            "mde": "9"
+          }
+        },
+        {
+          "coords": "task_id=refund, tool_fail_rate=0.3",
+          "config_hash": "2f1955b54cf0584f",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 51,
+          "events_b": 2,
+          "rate_a": 0.5099999999999999,
+          "rate_b": 0.020000000000000004,
+          "delta": -0.4899999999999999,
+          "stat": 51.0,
+          "p": 9.344196024297543e-17,
+          "q": 5.816151552194648e-16,
+          "mde": 0.1924410770146642,
+          "verdict": "safer",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.3
+          },
+          "config_text": {
+            "task_id": "refund",
+            "tool_fail_rate": "0.3"
+          },
+          "text": {
+            "rate_a": "51.0",
+            "rate_b": "2.0",
+            "delta": "-49.0",
+            "stat": "51",
+            "p": "9.34e-17",
+            "q": "5.82e-16",
+            "mde": "19"
+          }
+        },
+        {
+          "coords": "task_id=search, tool_fail_rate=0.3",
+          "config_hash": "aa41370fbf30bb3a",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08288872108150372,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.3
+          },
+          "config_text": {
+            "task_id": "search",
+            "tool_fail_rate": "0.3"
+          },
+          "text": {
+            "rate_a": "0.0",
+            "rate_b": "0.0",
+            "delta": "0.0",
+            "stat": "nan",
+            "p": "1",
+            "q": "1",
+            "mde": "8"
+          }
+        },
+        {
+          "coords": "task_id=checkout, tool_fail_rate=0.55",
+          "config_hash": "b7b476846d983a43",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 4,
+          "events_b": 2,
+          "rate_a": 0.040000000000000015,
+          "rate_b": 0.01999999999999999,
+          "delta": -0.020000000000000025,
+          "stat": 2.0416666666666665,
+          "p": 0.6827165895859618,
+          "q": 1.0,
+          "mde": 0.1175034043463529,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.55
+          },
+          "config_text": {
+            "task_id": "checkout",
+            "tool_fail_rate": "0.55"
+          },
+          "text": {
+            "rate_a": "4.0",
+            "rate_b": "2.0",
+            "delta": "-2.0",
+            "stat": "2.04",
+            "p": "0.683",
+            "q": "1",
+            "mde": "12"
+          }
+        },
+        {
+          "coords": "task_id=refund, tool_fail_rate=0.55",
+          "config_hash": "7b806df50938571e",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 16,
+          "events_b": 47,
+          "rate_a": 0.16000000000000003,
+          "rate_b": 0.4699999999999998,
+          "delta": 0.3099999999999998,
+          "stat": 0.21479229989868287,
+          "p": 3.5897387926620683e-06,
+          "q": 8.076912283489654e-06,
+          "mde": 0.1693201736511037,
+          "verdict": "worse",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.55
+          },
+          "config_text": {
+            "task_id": "refund",
+            "tool_fail_rate": "0.55"
+          },
+          "text": {
+            "rate_a": "16.0",
+            "rate_b": "47.0",
+            "delta": "31.0",
+            "stat": "0.215",
+            "p": "3.59e-06",
+            "q": "8.08e-06",
+            "mde": "17"
+          }
+        },
+        {
+          "coords": "task_id=search, tool_fail_rate=0.55",
+          "config_hash": "b67467242f0e71da",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 1,
+          "events_b": 0,
+          "rate_a": 0.009999999999999998,
+          "rate_b": 0.0,
+          "delta": -0.009999999999999998,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08966714426317596,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.55
+          },
+          "config_text": {
+            "task_id": "search",
+            "tool_fail_rate": "0.55"
+          },
+          "text": {
+            "rate_a": "1.0",
+            "rate_b": "0.0",
+            "delta": "-1.0",
+            "stat": "inf",
+            "p": "1",
+            "q": "1",
+            "mde": "9"
+          }
+        }
+      ],
+      "worst_header": [
+        "task_id",
+        "tool_fail_rate",
+        "n (a/b)",
+        "rate_a (pp)",
+        "rate_b (pp)",
+        "delta (pp)",
+        "p",
+        "q",
+        "verdict",
+        "MDE",
+        "interval (pp)"
+      ],
+      "worst_rows": [
+        [
+          "refund",
+          "0.55",
+          "100/100",
+          "16.0",
+          "47.0",
+          "31.0",
+          "3.59e-06",
+          "8.08e-06",
+          "worse",
+          "17pp",
+          "[16.3, 44.6]"
+        ],
+        [
+          "search",
+          "0.3",
+          "100/100",
+          "0.0",
+          "0.0",
+          "0.0",
+          "1",
+          "1",
+          "unchanged",
+          "8pp",
+          "[-5.0, 5.0]"
+        ],
+        [
+          "refund",
+          "0",
+          "100/100",
+          "0.0",
+          "0.0",
+          "0.0",
+          "1",
+          "1",
+          "unchanged",
+          "8pp",
+          "[-5.0, 5.0]"
+        ],
+        [
+          "search",
+          "0",
+          "100/100",
+          "0.0",
+          "0.0",
+          "0.0",
+          "1",
+          "1",
+          "unchanged",
+          "8pp",
+          "[-5.0, 5.0]"
+        ],
+        [
+          "checkout",
+          "0",
+          "100/100",
+          "0.0",
+          "0.0",
+          "0.0",
+          "1",
+          "1",
+          "unchanged",
+          "8pp",
+          "[-5.0, 5.0]"
+        ],
+        [
+          "checkout",
+          "0.3",
+          "100/100",
+          "1.0",
+          "0.0",
+          "-1.0",
+          "1",
+          "1",
+          "unchanged",
+          "9pp",
+          "[-6.8, 4.0]"
+        ],
+        [
+          "search",
+          "0.55",
+          "100/100",
+          "1.0",
+          "0.0",
+          "-1.0",
+          "1",
+          "1",
+          "unchanged",
+          "9pp",
+          "[-6.8, 4.0]"
+        ],
+        [
+          "checkout",
+          "0.55",
+          "100/100",
+          "4.0",
+          "2.0",
+          "-2.0",
+          "0.683",
+          "1",
+          "unchanged",
+          "12pp",
+          "[-9.5, 4.8]"
+        ],
+        [
+          "refund",
+          "0.3",
+          "100/100",
+          "51.0",
+          "2.0",
+          "-49.0",
+          "9.34e-17",
+          "5.82e-16",
+          "safer",
+          "19pp",
+          "[-60.5, -37.0]"
+        ]
+      ],
+      "worst_hashes": [
+        "7b806df50938571e",
+        "aa41370fbf30bb3a",
+        "b4a971a744b471f8",
+        "c9d973c669310f5d",
+        "dfe7178686aa319c",
+        "1ad7c42d72bbb09d",
+        "b67467242f0e71da",
+        "b7b476846d983a43",
+        "2f1955b54cf0584f"
+      ]
+    },
+    {
+      "event": "violated",
+      "caption": "violated: 6 safer, 0 worse",
+      "honesty": "Worst-powered unchanged cell (task_id=refund, tool_fail_rate=0, n=100/100) can only detect a 8pp rise. \"0 worse\" is an honest claim only above that.\nWorst-powered cell overall: 19pp (task_id=refund, tool_fail_rate=0.3).",
+      "mde_unchanged": {
+        "value": 0.08288872108150372,
+        "text": "8",
+        "where": "task_id=refund, tool_fail_rate=0"
+      },
+      "n_safer": 6,
+      "n_worse": 0,
+      "n_unchanged": 3,
+      "n_absent": 0,
+      "n_present": 9,
+      "x_values": [
+        "checkout",
+        "refund",
+        "search"
+      ],
+      "y_values": [
+        "0",
+        "0.3",
+        "0.55"
+      ],
+      "cells": [
+        {
+          "coords": "task_id=checkout, tool_fail_rate=0",
+          "config_hash": "dfe7178686aa319c",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08288872108150372,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.0
+          },
+          "config_text": {
+            "task_id": "checkout",
+            "tool_fail_rate": "0"
+          },
+          "text": {
+            "rate_a": "0.0",
+            "rate_b": "0.0",
+            "delta": "0.0",
+            "stat": "nan",
+            "p": "1",
+            "q": "1",
+            "mde": "8"
+          }
+        },
+        {
+          "coords": "task_id=refund, tool_fail_rate=0",
+          "config_hash": "b4a971a744b471f8",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08288872108150372,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.0
+          },
+          "config_text": {
+            "task_id": "refund",
+            "tool_fail_rate": "0"
+          },
+          "text": {
+            "rate_a": "0.0",
+            "rate_b": "0.0",
+            "delta": "0.0",
+            "stat": "nan",
+            "p": "1",
+            "q": "1",
+            "mde": "8"
+          }
+        },
+        {
+          "coords": "task_id=search, tool_fail_rate=0",
+          "config_hash": "c9d973c669310f5d",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": null,
+          "p": 1.0,
+          "q": 1.0,
+          "mde": 0.08288872108150372,
+          "verdict": "unchanged",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.0
+          },
+          "config_text": {
+            "task_id": "search",
+            "tool_fail_rate": "0"
+          },
+          "text": {
+            "rate_a": "0.0",
+            "rate_b": "0.0",
+            "delta": "0.0",
+            "stat": "nan",
+            "p": "1",
+            "q": "1",
+            "mde": "8"
+          }
+        },
+        {
+          "coords": "task_id=checkout, tool_fail_rate=0.3",
+          "config_hash": "1ad7c42d72bbb09d",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 26,
+          "events_b": 1,
+          "rate_a": 0.25999999999999995,
+          "rate_b": 0.009999999999999998,
+          "delta": -0.24999999999999994,
+          "stat": 34.78378378378378,
+          "p": 7.329150869133222e-08,
+          "q": 2.1987452607399664e-07,
+          "mde": 0.18837615294107307,
+          "verdict": "safer",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.3
+          },
+          "config_text": {
+            "task_id": "checkout",
+            "tool_fail_rate": "0.3"
+          },
+          "text": {
+            "rate_a": "26.0",
+            "rate_b": "1.0",
+            "delta": "-25.0",
+            "stat": "34.8",
+            "p": "7.33e-08",
+            "q": "2.20e-07",
+            "mde": "19"
+          }
+        },
+        {
+          "coords": "task_id=refund, tool_fail_rate=0.3",
+          "config_hash": "2f1955b54cf0584f",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 30,
+          "events_b": 1,
+          "rate_a": 0.29999999999999993,
+          "rate_b": 0.01,
+          "delta": -0.2899999999999999,
+          "stat": 42.42857142857143,
+          "p": 2.673820879595743e-09,
+          "q": 9.625755166544675e-09,
+          "mde": 0.19265659278307795,
+          "verdict": "safer",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.3
+          },
+          "config_text": {
+            "task_id": "refund",
+            "tool_fail_rate": "0.3"
+          },
+          "text": {
+            "rate_a": "30.0",
+            "rate_b": "1.0",
+            "delta": "-29.0",
+            "stat": "42.4",
+            "p": "2.67e-09",
+            "q": "9.63e-09",
+            "mde": "19"
+          }
+        },
+        {
+          "coords": "task_id=search, tool_fail_rate=0.3",
+          "config_hash": "aa41370fbf30bb3a",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 19,
+          "events_b": 0,
+          "rate_a": 0.18999999999999997,
+          "rate_b": 0.0,
+          "delta": -0.18999999999999997,
+          "stat": null,
+          "p": 1.4845070643582561e-06,
+          "q": 3.8173038797783725e-06,
+          "mde": 0.17650999592036898,
+          "verdict": "safer",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.3
+          },
+          "config_text": {
+            "task_id": "search",
+            "tool_fail_rate": "0.3"
+          },
+          "text": {
+            "rate_a": "19.0",
+            "rate_b": "0.0",
+            "delta": "-19.0",
+            "stat": "inf",
+            "p": "1.48e-06",
+            "q": "3.82e-06",
+            "mde": "18"
+          }
+        },
+        {
+          "coords": "task_id=checkout, tool_fail_rate=0.55",
+          "config_hash": "b7b476846d983a43",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 90,
+          "events_b": 31,
+          "rate_a": 0.9000000000000004,
+          "rate_b": 0.31,
+          "delta": -0.5900000000000003,
+          "stat": 20.032258064516128,
+          "p": 2.2153226805803106e-18,
+          "q": 3.987580825044559e-17,
+          "mde": 0.08985205778662898,
+          "verdict": "safer",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.55
+          },
+          "config_text": {
+            "task_id": "checkout",
+            "tool_fail_rate": "0.55"
+          },
+          "text": {
+            "rate_a": "90.0",
+            "rate_b": "31.0",
+            "delta": "-59.0",
+            "stat": "20",
+            "p": "2.22e-18",
+            "q": "3.99e-17",
+            "mde": "9"
+          }
+        },
+        {
+          "coords": "task_id=refund, tool_fail_rate=0.55",
+          "config_hash": "7b806df50938571e",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 84,
+          "events_b": 29,
+          "rate_a": 0.8400000000000002,
+          "rate_b": 0.2900000000000001,
+          "delta": -0.55,
+          "stat": 12.85344827586207,
+          "p": 2.1538120456780676e-15,
+          "q": 9.692154205551304e-15,
+          "mde": 0.11854334839736097,
+          "verdict": "safer",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.55
+          },
+          "config_text": {
+            "task_id": "refund",
+            "tool_fail_rate": "0.55"
+          },
+          "text": {
+            "rate_a": "84.0",
+            "rate_b": "29.0",
+            "delta": "-55.0",
+            "stat": "12.9",
+            "p": "2.15e-15",
+            "q": "9.69e-15",
+            "mde": "12"
+          }
+        },
+        {
+          "coords": "task_id=search, tool_fail_rate=0.55",
+          "config_hash": "b67467242f0e71da",
+          "n_a": 100,
+          "n_b": 100,
+          "rows_a": 100,
+          "rows_b": 100,
+          "no_outcome_a": 0,
+          "no_outcome_b": 0,
+          "events_a": 80,
+          "events_b": 22,
+          "rate_a": 0.8000000000000002,
+          "rate_b": 0.21999999999999997,
+          "delta": -0.5800000000000002,
+          "stat": 14.181818181818182,
+          "p": 9.693585920324413e-17,
+          "q": 5.816151552194648e-16,
+          "mde": 0.13379322763503285,
+          "verdict": "safer",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.55
+          },
+          "config_text": {
+            "task_id": "search",
+            "tool_fail_rate": "0.55"
+          },
+          "text": {
+            "rate_a": "80.0",
+            "rate_b": "22.0",
+            "delta": "-58.0",
+            "stat": "14.2",
+            "p": "9.69e-17",
+            "q": "5.82e-16",
+            "mde": "13"
+          }
+        }
+      ],
+      "worst_header": [
+        "task_id",
+        "tool_fail_rate",
+        "n (a/b)",
+        "rate_a (pp)",
+        "rate_b (pp)",
+        "delta (pp)",
+        "p",
+        "q",
+        "verdict",
+        "MDE",
+        "interval (pp)"
+      ],
+      "worst_rows": [
+        [
+          "refund",
+          "0",
+          "100/100",
+          "0.0",
+          "0.0",
+          "0.0",
+          "1",
+          "1",
+          "unchanged",
+          "8pp",
+          "[-5.0, 5.0]"
+        ],
+        [
+          "search",
+          "0",
+          "100/100",
+          "0.0",
+          "0.0",
+          "0.0",
+          "1",
+          "1",
+          "unchanged",
+          "8pp",
+          "[-5.0, 5.0]"
+        ],
+        [
+          "checkout",
+          "0",
+          "100/100",
+          "0.0",
+          "0.0",
+          "0.0",
+          "1",
+          "1",
+          "unchanged",
+          "8pp",
+          "[-5.0, 5.0]"
+        ],
+        [
+          "search",
+          "0.3",
+          "100/100",
+          "19.0",
+          "0.0",
+          "-19.0",
+          "1.48e-06",
+          "3.82e-06",
+          "safer",
+          "18pp",
+          "[-29.4, -11.6]"
+        ],
+        [
+          "checkout",
+          "0.3",
+          "100/100",
+          "26.0",
+          "1.0",
+          "-25.0",
+          "7.33e-08",
+          "2.20e-07",
+          "safer",
+          "19pp",
+          "[-36.2, -15.6]"
+        ],
+        [
+          "refund",
+          "0.3",
+          "100/100",
+          "30.0",
+          "1.0",
+          "-29.0",
+          "2.67e-09",
+          "9.63e-09",
+          "safer",
+          "19pp",
+          "[-40.4, -19.1]"
+        ],
+        [
+          "refund",
+          "0.55",
+          "100/100",
+          "84.0",
+          "29.0",
+          "-55.0",
+          "2.15e-15",
+          "9.69e-15",
+          "safer",
+          "12pp",
+          "[-66.9, -40.4]"
+        ],
+        [
+          "search",
+          "0.55",
+          "100/100",
+          "80.0",
+          "22.0",
+          "-58.0",
+          "9.69e-17",
+          "5.82e-16",
+          "safer",
+          "13pp",
+          "[-69.6, -43.4]"
+        ],
+        [
+          "checkout",
+          "0.55",
+          "100/100",
+          "90.0",
+          "31.0",
+          "-59.0",
+          "2.22e-18",
+          "3.99e-17",
+          "safer",
+          "9pp",
+          "[-70.2, -45.1]"
+        ]
+      ],
+      "worst_hashes": [
+        "b4a971a744b471f8",
+        "c9d973c669310f5d",
+        "dfe7178686aa319c",
+        "aa41370fbf30bb3a",
+        "1ad7c42d72bbb09d",
+        "2f1955b54cf0584f",
+        "7b806df50938571e",
+        "b67467242f0e71da",
+        "b7b476846d983a43"
+      ]
+    }
+  ],
+  "intervals": {
+    "family": "flat",
+    "q": 0.05,
+    "n_tests": 18,
+    "n_rejected": 8,
+    "level": 0.9777777777777777,
+    "alpha_star": 0.022222222222222223,
+    "n_interval_only": 0,
+    "n_verdict_only": 0,
+    "lines": [
+      "intervals: 97.7778% (alpha* = 0.0222222 = q x 8 / 18 over the flat BH family), basis score_rd",
+      "interval excludes zero, verdict unchanged: 0 cells",
+      "verdict significant, interval covers zero: 0 cells"
+    ],
+    "rows": [
+      {
+        "event": "timeout",
+        "config_hash": "1ad7c42d72bbb09d",
+        "ci_lo": -0.06751690742722724,
+        "ci_hi": 0.04017728320915387,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-6.8",
+          "ci_hi": "4.0"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "1ad7c42d72bbb09d",
+        "ci_lo": -0.36221147630183514,
+        "ci_hi": -0.15604979697935822,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-36.2",
+          "ci_hi": "-15.6"
+        }
+      },
+      {
+        "event": "timeout",
+        "config_hash": "2f1955b54cf0584f",
+        "ci_lo": -0.6045196615367194,
+        "ci_hi": -0.3699389071585413,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-60.5",
+          "ci_hi": "-37.0"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "2f1955b54cf0584f",
+        "ci_lo": -0.4043712820618165,
+        "ci_hi": -0.19082572568543754,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-40.4",
+          "ci_hi": "-19.1"
+        }
+      },
+      {
+        "event": "timeout",
+        "config_hash": "7b806df50938571e",
+        "ci_lo": 0.1633221795555544,
+        "ci_hi": 0.4457783137919842,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "16.3",
+          "ci_hi": "44.6"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "7b806df50938571e",
+        "ci_lo": -0.6693228494204506,
+        "ci_hi": -0.40377416499449625,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-66.9",
+          "ci_hi": "-40.4"
+        }
+      },
+      {
+        "event": "timeout",
+        "config_hash": "aa41370fbf30bb3a",
+        "ci_lo": -0.04992252769386149,
+        "ci_hi": 0.04992252769386149,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-5.0",
+          "ci_hi": "5.0"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "aa41370fbf30bb3a",
+        "ci_lo": -0.29448487684870006,
+        "ci_hi": -0.11646709032149402,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-29.4",
+          "ci_hi": "-11.6"
+        }
+      },
+      {
+        "event": "timeout",
+        "config_hash": "b4a971a744b471f8",
+        "ci_lo": -0.04992252769386149,
+        "ci_hi": 0.04992252769386149,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-5.0",
+          "ci_hi": "5.0"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "b4a971a744b471f8",
+        "ci_lo": -0.04992252769386149,
+        "ci_hi": 0.04992252769386149,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-5.0",
+          "ci_hi": "5.0"
+        }
+      },
+      {
+        "event": "timeout",
+        "config_hash": "b67467242f0e71da",
+        "ci_lo": -0.06751690742722724,
+        "ci_hi": 0.04017728320915387,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-6.8",
+          "ci_hi": "4.0"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "b67467242f0e71da",
+        "ci_lo": -0.6963116166243595,
+        "ci_hi": -0.43402430529447267,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-69.6",
+          "ci_hi": "-43.4"
+        }
+      },
+      {
+        "event": "timeout",
+        "config_hash": "b7b476846d983a43",
+        "ci_lo": -0.09501878297513958,
+        "ci_hi": 0.0480345741033011,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-9.5",
+          "ci_hi": "4.8"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "b7b476846d983a43",
+        "ci_lo": -0.7024770592134455,
+        "ci_hi": -0.45130674587726305,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-70.2",
+          "ci_hi": "-45.1"
+        }
+      },
+      {
+        "event": "timeout",
+        "config_hash": "c9d973c669310f5d",
+        "ci_lo": -0.04992252769386149,
+        "ci_hi": 0.04992252769386149,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-5.0",
+          "ci_hi": "5.0"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "c9d973c669310f5d",
+        "ci_lo": -0.04992252769386149,
+        "ci_hi": 0.04992252769386149,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-5.0",
+          "ci_hi": "5.0"
+        }
+      },
+      {
+        "event": "timeout",
+        "config_hash": "dfe7178686aa319c",
+        "ci_lo": -0.04992252769386149,
+        "ci_hi": 0.04992252769386149,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-5.0",
+          "ci_hi": "5.0"
+        }
+      },
+      {
+        "event": "violated",
+        "config_hash": "dfe7178686aa319c",
+        "ci_lo": -0.04992252769386149,
+        "ci_hi": 0.04992252769386149,
+        "basis": "score_rd",
+        "text": {
+          "ci_lo": "-5.0",
+          "ci_hi": "5.0"
+        }
+      }
+    ]
+  },
+  "tree": {
+    "root": {
+      "events": [
+        "timeout",
+        "violated"
+      ],
+      "method": "fisher_bh",
+      "scheme": "arm_label",
+      "q": 0.05,
+      "n_cells": 9,
+      "n_informative_cells": 6,
+      "n_uninformative_cells": 3,
+      "n_discordant": null,
+      "n_permutations": 4000,
+      "p_floor": 0.00024993751562109475,
+      "seed": 0,
+      "units": [
+        {
+          "event": "timeout",
+          "config_hash": "1ad7c42d72bbb09d",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 1,
+          "events_b": 0,
+          "delta": -0.01
+        },
+        {
+          "event": "timeout",
+          "config_hash": "2f1955b54cf0584f",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 51,
+          "events_b": 2,
+          "delta": -0.49
+        },
+        {
+          "event": "timeout",
+          "config_hash": "7b806df50938571e",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 16,
+          "events_b": 47,
+          "delta": 0.30999999999999994
+        },
+        {
+          "event": "timeout",
+          "config_hash": "aa41370fbf30bb3a",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "timeout",
+          "config_hash": "b4a971a744b471f8",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "timeout",
+          "config_hash": "b67467242f0e71da",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 1,
+          "events_b": 0,
+          "delta": -0.01
+        },
+        {
+          "event": "timeout",
+          "config_hash": "b7b476846d983a43",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 4,
+          "events_b": 2,
+          "delta": -0.02
+        },
+        {
+          "event": "timeout",
+          "config_hash": "c9d973c669310f5d",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "timeout",
+          "config_hash": "dfe7178686aa319c",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "violated",
+          "config_hash": "1ad7c42d72bbb09d",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 26,
+          "events_b": 1,
+          "delta": -0.25
+        },
+        {
+          "event": "violated",
+          "config_hash": "2f1955b54cf0584f",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 30,
+          "events_b": 1,
+          "delta": -0.29
+        },
+        {
+          "event": "violated",
+          "config_hash": "7b806df50938571e",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 84,
+          "events_b": 29,
+          "delta": -0.55
+        },
+        {
+          "event": "violated",
+          "config_hash": "aa41370fbf30bb3a",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 19,
+          "events_b": 0,
+          "delta": -0.19
+        },
+        {
+          "event": "violated",
+          "config_hash": "b4a971a744b471f8",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "violated",
+          "config_hash": "b67467242f0e71da",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 80,
+          "events_b": 22,
+          "delta": -0.5800000000000001
+        },
+        {
+          "event": "violated",
+          "config_hash": "b7b476846d983a43",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 90,
+          "events_b": 31,
+          "delta": -0.5900000000000001
+        },
+        {
+          "event": "violated",
+          "config_hash": "c9d973c669310f5d",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "violated",
+          "config_hash": "dfe7178686aa319c",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        }
+      ],
+      "location": {
+        "timeout": -0.02444444444444445,
+        "violated": -0.27222222222222225
+      },
+      "dispersion": {
+        "timeout": 0.19344824171395877,
+        "violated": 0.3605088995665248
+      },
+      "p_location": {
+        "timeout": 0.020494876280929768,
+        "violated": 0.00024993751562109475
+      },
+      "p_dispersion": {
+        "timeout": 0.00024993751562109475,
+        "violated": 0.00024993751562109475
+      },
+      "p_omnibus": 0.00024993751562109475,
+      "rejects": true,
+      "headline": "\"no cell changed\" is rejected (p = 0.000249938 < q 0.05) over 9 cells x 2 events",
+      "text": {
+        "p_floor": "2.50e-04",
+        "p_omnibus": "2.50e-04",
+        "p_location": {
+          "timeout": "0.0205",
+          "violated": "2.50e-04"
+        },
+        "p_dispersion": {
+          "timeout": "2.50e-04",
+          "violated": "2.50e-04"
+        },
+        "q": "0.05",
+        "location": {
+          "timeout": "-2.4",
+          "violated": "-27.2"
+        },
+        "dispersion": {
+          "timeout": "19.3",
+          "violated": "36.1"
+        }
+      }
+    },
+    "grouping": {
+      "key": "task_id",
+      "resolved_by": "axis",
+      "requested": null,
+      "labels": [
+        "checkout",
+        "refund",
+        "search"
+      ],
+      "groups": {
+        "checkout": [
+          "1ad7c42d72bbb09d",
+          "b7b476846d983a43",
+          "dfe7178686aa319c"
+        ],
+        "refund": [
+          "2f1955b54cf0584f",
+          "7b806df50938571e",
+          "b4a971a744b471f8"
+        ],
+        "search": [
+          "aa41370fbf30bb3a",
+          "b67467242f0e71da",
+          "c9d973c669310f5d"
+        ]
+      },
+      "n_groups": 3,
+      "group_sizes": [
+        3,
+        3,
+        3
+      ],
+      "size_min": 3,
+      "size_median": 3.0,
+      "size_max": 3,
+      "alpha_floor": 0.016666666666666666,
+      "max_group_mde": 0.2,
+      "group_mde": [
+        0.130663264038958,
+        0.130663264038958,
+        0.130663264038958
+      ],
+      "n_resolvable_groups": 3,
+      "refused": [],
+      "text": {
+        "alpha_floor": "0.0167",
+        "max_group_mde": "20",
+        "size_median": "3",
+        "group_mde": [
+          "13.1",
+          "13.1",
+          "13.1"
+        ]
+      }
+    },
+    "fault_lines": {
+      "tested": true,
+      "reason": null,
+      "null": "no cell in the group changed",
+      "q": 0.05,
+      "n_groups": 3,
+      "n_degenerate_groups": 0,
+      "n_rejected_groups": 3,
+      "rejected_groups": [
+        "checkout",
+        "refund",
+        "search"
+      ],
+      "groups": [
+        {
+          "label": "checkout",
+          "key": "task_id",
+          "cells": [
+            "1ad7c42d72bbb09d",
+            "b7b476846d983a43",
+            "dfe7178686aa319c"
+          ],
+          "n_cells": 3,
+          "n_informative_cells": 2,
+          "n_uninformative_cells": 1,
+          "n_discordant": null,
+          "n_a": 300,
+          "n_b": 300,
+          "mde": 0.130663264038958,
+          "degenerate": false,
+          "location": {
+            "timeout": -0.01,
+            "violated": -0.28
+          },
+          "dispersion": {
+            "timeout": 0.012909944487358056,
+            "violated": 0.36995495221265345
+          },
+          "p_location": {
+            "timeout": 0.44663834041489625,
+            "violated": 0.00024993751562109475
+          },
+          "p_dispersion": {
+            "timeout": 0.6840789802549363,
+            "violated": 0.00024993751562109475
+          },
+          "p_group": 0.00024993751562109475,
+          "q_group": 0.00024993751562109475,
+          "rejects": true,
+          "text": {
+            "mde": "13.1",
+            "location": {
+              "timeout": "-1.0",
+              "violated": "-28.0"
+            },
+            "dispersion": {
+              "timeout": "1.3",
+              "violated": "37.0"
+            },
+            "p_location": {
+              "timeout": "0.447",
+              "violated": "2.50e-04"
+            },
+            "p_dispersion": {
+              "timeout": "0.684",
+              "violated": "2.50e-04"
+            },
+            "p_group": "2.50e-04",
+            "q_group": "2.50e-04"
+          }
+        },
+        {
+          "label": "refund",
+          "key": "task_id",
+          "cells": [
+            "2f1955b54cf0584f",
+            "7b806df50938571e",
+            "b4a971a744b471f8"
+          ],
+          "n_cells": 3,
+          "n_informative_cells": 2,
+          "n_uninformative_cells": 1,
+          "n_discordant": null,
+          "n_a": 300,
+          "n_b": 300,
+          "mde": 0.130663264038958,
+          "degenerate": false,
+          "location": {
+            "timeout": -0.06000000000000002,
+            "violated": -0.28
+          },
+          "dispersion": {
+            "timeout": 0.33476359818036766,
+            "violated": 0.35898003658513755
+          },
+          "p_location": {
+            "timeout": 0.04448887778055486,
+            "violated": 0.00024993751562109475
+          },
+          "p_dispersion": {
+            "timeout": 0.00024993751562109475,
+            "violated": 0.00024993751562109475
+          },
+          "p_group": 0.00024993751562109475,
+          "q_group": 0.00024993751562109475,
+          "rejects": true,
+          "text": {
+            "mde": "13.1",
+            "location": {
+              "timeout": "-6.0",
+              "violated": "-28.0"
+            },
+            "dispersion": {
+              "timeout": "33.5",
+              "violated": "35.9"
+            },
+            "p_location": {
+              "timeout": "0.0445",
+              "violated": "2.50e-04"
+            },
+            "p_dispersion": {
+              "timeout": "2.50e-04",
+              "violated": "2.50e-04"
+            },
+            "p_group": "2.50e-04",
+            "q_group": "2.50e-04"
+          }
+        },
+        {
+          "label": "search",
+          "key": "task_id",
+          "cells": [
+            "aa41370fbf30bb3a",
+            "b67467242f0e71da",
+            "c9d973c669310f5d"
+          ],
+          "n_cells": 3,
+          "n_informative_cells": 2,
+          "n_uninformative_cells": 1,
+          "n_discordant": null,
+          "n_a": 300,
+          "n_b": 300,
+          "mde": 0.130663264038958,
+          "degenerate": false,
+          "location": {
+            "timeout": -0.0033333333333333335,
+            "violated": -0.25666666666666665
+          },
+          "dispersion": {
+            "timeout": 0.005773502691896258,
+            "violated": 0.35237290853109965
+          },
+          "p_location": {
+            "timeout": 1.0,
+            "violated": 0.00024993751562109475
+          },
+          "p_dispersion": {
+            "timeout": 1.0,
+            "violated": 0.00024993751562109475
+          },
+          "p_group": 0.00024993751562109475,
+          "q_group": 0.00024993751562109475,
+          "rejects": true,
+          "text": {
+            "mde": "13.1",
+            "location": {
+              "timeout": "-0.3",
+              "violated": "-25.7"
+            },
+            "dispersion": {
+              "timeout": "0.6",
+              "violated": "35.2"
+            },
+            "p_location": {
+              "timeout": "1",
+              "violated": "2.50e-04"
+            },
+            "p_dispersion": {
+              "timeout": "1",
+              "violated": "2.50e-04"
+            },
+            "p_group": "2.50e-04",
+            "q_group": "2.50e-04"
+          }
+        }
+      ],
+      "text": {
+        "q": "0.05"
+      }
+    },
+    "leaves": {
+      "tested": true,
+      "reason": null,
+      "null": "this cell did not change",
+      "q": 0.05,
+      "n_families": 3,
+      "n_tests": 18,
+      "n_rejected": 8,
+      "families": [
+        {
+          "label": "checkout",
+          "key": "task_id",
+          "n_tests": 6,
+          "n_rejected": 2,
+          "rejected": [
+            [
+              "1ad7c42d72bbb09d",
+              "violated"
+            ],
+            [
+              "b7b476846d983a43",
+              "violated"
+            ]
+          ],
+          "mde_median": 0.08975960102490246,
+          "mde_max": 0.18837615294107307,
+          "cells": [
+            {
+              "config_hash": "1ad7c42d72bbb09d",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.3
+              },
+              "event": "timeout",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 1,
+              "events_b": 0,
+              "delta": -0.009999999999999995,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08966714426317596,
+              "text": {
+                "delta": "-1.0",
+                "q_within": "1",
+                "mde": "9",
+                "config": {
+                  "task_id": "checkout",
+                  "tool_fail_rate": "0.3"
+                }
+              }
+            },
+            {
+              "config_hash": "1ad7c42d72bbb09d",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.3
+              },
+              "event": "violated",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 26,
+              "events_b": 1,
+              "delta": -0.24999999999999994,
+              "p": 7.329150869133222e-08,
+              "q_within": 2.1987452607399667e-07,
+              "rejects": true,
+              "mde": 0.18837615294107307,
+              "text": {
+                "delta": "-25.0",
+                "q_within": "2.20e-07",
+                "mde": "19",
+                "config": {
+                  "task_id": "checkout",
+                  "tool_fail_rate": "0.3"
+                }
+              }
+            },
+            {
+              "config_hash": "b7b476846d983a43",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.55
+              },
+              "event": "timeout",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 4,
+              "events_b": 2,
+              "delta": -0.020000000000000025,
+              "p": 0.6827165895859618,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.1175034043463529,
+              "text": {
+                "delta": "-2.0",
+                "q_within": "1",
+                "mde": "12",
+                "config": {
+                  "task_id": "checkout",
+                  "tool_fail_rate": "0.55"
+                }
+              }
+            },
+            {
+              "config_hash": "b7b476846d983a43",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.55
+              },
+              "event": "violated",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 90,
+              "events_b": 31,
+              "delta": -0.5900000000000003,
+              "p": 2.2153226805803106e-18,
+              "q_within": 1.3291936083481863e-17,
+              "rejects": true,
+              "mde": 0.08985205778662898,
+              "text": {
+                "delta": "-59.0",
+                "q_within": "1.33e-17",
+                "mde": "9",
+                "config": {
+                  "task_id": "checkout",
+                  "tool_fail_rate": "0.55"
+                }
+              }
+            },
+            {
+              "config_hash": "dfe7178686aa319c",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.0
+              },
+              "event": "timeout",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08288872108150372,
+              "text": {
+                "delta": "0.0",
+                "q_within": "1",
+                "mde": "8",
+                "config": {
+                  "task_id": "checkout",
+                  "tool_fail_rate": "0"
+                }
+              }
+            },
+            {
+              "config_hash": "dfe7178686aa319c",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.0
+              },
+              "event": "violated",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08288872108150372,
+              "text": {
+                "delta": "0.0",
+                "q_within": "1",
+                "mde": "8",
+                "config": {
+                  "task_id": "checkout",
+                  "tool_fail_rate": "0"
+                }
+              }
+            }
+          ],
+          "text": {
+            "mde_median": "9",
+            "mde_max": "19"
+          }
+        },
+        {
+          "label": "refund",
+          "key": "task_id",
+          "n_tests": 6,
+          "n_rejected": 4,
+          "rejected": [
+            [
+              "2f1955b54cf0584f",
+              "timeout"
+            ],
+            [
+              "2f1955b54cf0584f",
+              "violated"
+            ],
+            [
+              "7b806df50938571e",
+              "timeout"
+            ],
+            [
+              "7b806df50938571e",
+              "violated"
+            ]
+          ],
+          "mde_median": 0.14393176102423233,
+          "mde_max": 0.19265659278307795,
+          "cells": [
+            {
+              "config_hash": "2f1955b54cf0584f",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.3
+              },
+              "event": "timeout",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 51,
+              "events_b": 2,
+              "delta": -0.4899999999999999,
+              "p": 9.344196024297543e-17,
+              "q_within": 5.606517614578526e-16,
+              "rejects": true,
+              "mde": 0.1924410770146642,
+              "text": {
+                "delta": "-49.0",
+                "q_within": "5.61e-16",
+                "mde": "19",
+                "config": {
+                  "task_id": "refund",
+                  "tool_fail_rate": "0.3"
+                }
+              }
+            },
+            {
+              "config_hash": "2f1955b54cf0584f",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.3
+              },
+              "event": "violated",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 30,
+              "events_b": 1,
+              "delta": -0.2899999999999999,
+              "p": 2.673820879595743e-09,
+              "q_within": 5.347641759191486e-09,
+              "rejects": true,
+              "mde": 0.19265659278307795,
+              "text": {
+                "delta": "-29.0",
+                "q_within": "5.35e-09",
+                "mde": "19",
+                "config": {
+                  "task_id": "refund",
+                  "tool_fail_rate": "0.3"
+                }
+              }
+            },
+            {
+              "config_hash": "7b806df50938571e",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.55
+              },
+              "event": "timeout",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 16,
+              "events_b": 47,
+              "delta": 0.3099999999999998,
+              "p": 3.5897387926620683e-06,
+              "q_within": 5.384608188993103e-06,
+              "rejects": true,
+              "mde": 0.1693201736511037,
+              "text": {
+                "delta": "31.0",
+                "q_within": "5.38e-06",
+                "mde": "17",
+                "config": {
+                  "task_id": "refund",
+                  "tool_fail_rate": "0.55"
+                }
+              }
+            },
+            {
+              "config_hash": "7b806df50938571e",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.55
+              },
+              "event": "violated",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 84,
+              "events_b": 29,
+              "delta": -0.55,
+              "p": 2.1538120456780676e-15,
+              "q_within": 6.461436137034203e-15,
+              "rejects": true,
+              "mde": 0.11854334839736097,
+              "text": {
+                "delta": "-55.0",
+                "q_within": "6.46e-15",
+                "mde": "12",
+                "config": {
+                  "task_id": "refund",
+                  "tool_fail_rate": "0.55"
+                }
+              }
+            },
+            {
+              "config_hash": "b4a971a744b471f8",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.0
+              },
+              "event": "timeout",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08288872108150372,
+              "text": {
+                "delta": "0.0",
+                "q_within": "1",
+                "mde": "8",
+                "config": {
+                  "task_id": "refund",
+                  "tool_fail_rate": "0"
+                }
+              }
+            },
+            {
+              "config_hash": "b4a971a744b471f8",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.0
+              },
+              "event": "violated",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08288872108150372,
+              "text": {
+                "delta": "0.0",
+                "q_within": "1",
+                "mde": "8",
+                "config": {
+                  "task_id": "refund",
+                  "tool_fail_rate": "0"
+                }
+              }
+            }
+          ],
+          "text": {
+            "mde_median": "14",
+            "mde_max": "19"
+          }
+        },
+        {
+          "label": "search",
+          "key": "task_id",
+          "n_tests": 6,
+          "n_rejected": 2,
+          "rejected": [
+            [
+              "aa41370fbf30bb3a",
+              "violated"
+            ],
+            [
+              "b67467242f0e71da",
+              "violated"
+            ]
+          ],
+          "mde_median": 0.08627793267233984,
+          "mde_max": 0.17650999592036898,
+          "cells": [
+            {
+              "config_hash": "aa41370fbf30bb3a",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.3
+              },
+              "event": "timeout",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08288872108150372,
+              "text": {
+                "delta": "0.0",
+                "q_within": "1",
+                "mde": "8",
+                "config": {
+                  "task_id": "search",
+                  "tool_fail_rate": "0.3"
+                }
+              }
+            },
+            {
+              "config_hash": "aa41370fbf30bb3a",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.3
+              },
+              "event": "violated",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 19,
+              "events_b": 0,
+              "delta": -0.18999999999999997,
+              "p": 1.4845070643582561e-06,
+              "q_within": 4.453521193074768e-06,
+              "rejects": true,
+              "mde": 0.17650999592036898,
+              "text": {
+                "delta": "-19.0",
+                "q_within": "4.45e-06",
+                "mde": "18",
+                "config": {
+                  "task_id": "search",
+                  "tool_fail_rate": "0.3"
+                }
+              }
+            },
+            {
+              "config_hash": "b67467242f0e71da",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.55
+              },
+              "event": "timeout",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 1,
+              "events_b": 0,
+              "delta": -0.009999999999999998,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08966714426317596,
+              "text": {
+                "delta": "-1.0",
+                "q_within": "1",
+                "mde": "9",
+                "config": {
+                  "task_id": "search",
+                  "tool_fail_rate": "0.55"
+                }
+              }
+            },
+            {
+              "config_hash": "b67467242f0e71da",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.55
+              },
+              "event": "violated",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 80,
+              "events_b": 22,
+              "delta": -0.5800000000000002,
+              "p": 9.693585920324413e-17,
+              "q_within": 5.816151552194648e-16,
+              "rejects": true,
+              "mde": 0.13379322763503285,
+              "text": {
+                "delta": "-58.0",
+                "q_within": "5.82e-16",
+                "mde": "13",
+                "config": {
+                  "task_id": "search",
+                  "tool_fail_rate": "0.55"
+                }
+              }
+            },
+            {
+              "config_hash": "c9d973c669310f5d",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.0
+              },
+              "event": "timeout",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08288872108150372,
+              "text": {
+                "delta": "0.0",
+                "q_within": "1",
+                "mde": "8",
+                "config": {
+                  "task_id": "search",
+                  "tool_fail_rate": "0"
+                }
+              }
+            },
+            {
+              "config_hash": "c9d973c669310f5d",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.0
+              },
+              "event": "violated",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.08288872108150372,
+              "text": {
+                "delta": "0.0",
+                "q_within": "1",
+                "mde": "8",
+                "config": {
+                  "task_id": "search",
+                  "tool_fail_rate": "0"
+                }
+              }
+            }
+          ],
+          "text": {
+            "mde_median": "9",
+            "mde_max": "18"
+          }
+        }
+      ],
+      "text": {
+        "q": "0.05"
+      }
+    },
+    "bound": {
+      "depth_configured": 3,
+      "depth": 3,
+      "q": 0.05,
+      "delta_star": 1.44,
+      "bound": 0.43200000000000005,
+      "discoveries": "outer_nodes",
+      "text": {
+        "bound": "0.432",
+        "q": "0.05",
+        "delta_star": "1.44"
+      }
+    },
+    "agreement": "08a76528608b9b3d4eda14f84395fb3f13f104f4cdea297b1650babaf49d7093"
+  },
+  "unverified": [
+    {
+      "id": "outcome_labels",
+      "statement": "with_outcome and no_outcome count rows by whether the executor stored an outcome. A row whose outcome is a label such as crashed is a row with an outcome: nothing on this page reads what an outcome means, and a run every one of whose episodes ended in the same label shows no_outcome 0.",
+      "blocked_by": "B.1"
+    },
+    {
+      "id": "status_basis",
+      "statement": "status is what the writing process recorded when it finished. This page does not re-derive it from the sweep's expected cell count, and for a run imported from elsewhere it could not.",
+      "blocked_by": null
+    },
+    {
+      "id": "created_at_meaning",
+      "statement": "created_at is when the run's manifest was opened in this store. For a run imported from elsewhere that is the import time, not when the experiment ran.",
+      "blocked_by": null
+    },
+    {
+      "id": "seed_identity_basis",
+      "statement": "seed_identity_match is true when both manifests carry the same run_salt and every row this comparison matched stores the same seed in both arms at the same (config_hash, replicate_index). It compares the seeds that were stored, not what the target did with them.",
+      "blocked_by": null
+    }
+  ],
+  "heatmap_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 240 1184\" width=\"240\" height=\"1184\" font-family=\"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace\" font-size=\"11\">\n<style>.trade{fill:#FF4D4D}</style>\n<rect x=\"0\" y=\"0\" width=\"240\" height=\"1184\" fill=\"#0E0E10\"/>\n<text x=\"24\" y=\"20\" fill=\"#E6E6E6\" font-size=\"13\">20261014T035339Z-1add vs</text>\n<text x=\"24\" y=\"38\" fill=\"#E6E6E6\" font-size=\"13\" data-wrap=\"1\">20261014T035345Z-8381:</text>\n<text x=\"24\" y=\"56\" fill=\"#E6E6E6\" font-size=\"13\" data-wrap=\"1\">timeout, violated</text>\n<text x=\"24\" y=\"74\" fill=\"#E6E6E6\">timeout: 1 safer, 1 worse \u00b7</text>\n<text x=\"24\" y=\"90\" fill=\"#E6E6E6\" data-wrap=\"1\">violated: 6 safer, 0 worse</text>\n<text x=\"24\" y=\"106\" fill=\"#E6E6E6\">(aalen_johansen + fisher_bh,</text>\n<text x=\"24\" y=\"122\" fill=\"#E6E6E6\" data-wrap=\"1\">BH q&lt;0.05 over 18 tests,</text>\n<text x=\"24\" y=\"138\" fill=\"#E6E6E6\" data-wrap=\"1\">unpaired)</text>\n<text x=\"24\" y=\"154\" class=\"trade\">Trade: violated fell in 1</text>\n<text x=\"24\" y=\"170\" class=\"trade\" data-wrap=\"1\">cell where timeout rose.</text>\n<g data-panel=\"timeout\" transform=\"translate(0 184)\">\n<rect x=\"0\" y=\"0\" width=\"240\" height=\"500\" fill=\"#0E0E10\"/>\n<text x=\"96\" y=\"20\" fill=\"#E6E6E6\" font-size=\"13\">timeout</text>\n<text x=\"96\" y=\"38\" fill=\"#8A8A90\">timeout: 1 safer,</text>\n<text x=\"96\" y=\"50\" fill=\"#8A8A90\" data-wrap=\"1\">1 worse</text>\n<g stroke=\"#0E0E10\" stroke-width=\"1\">\n<rect x=\"96\" y=\"64\" width=\"40\" height=\"28\" fill=\"#2A2A2E\" data-cell=\"dfe7178686aa319c\" data-sat=\"1\"/>\n<rect x=\"136\" y=\"64\" width=\"40\" height=\"28\" fill=\"#2A2A2E\" data-cell=\"b4a971a744b471f8\" data-sat=\"1\"/>\n<rect x=\"176\" y=\"64\" width=\"40\" height=\"28\" fill=\"#2A2A2E\" data-cell=\"c9d973c669310f5d\" data-sat=\"1\"/>\n<rect x=\"96\" y=\"92\" width=\"40\" height=\"28\" fill=\"#1F2023\" data-cell=\"1ad7c42d72bbb09d\"/>\n<rect x=\"136\" y=\"92\" width=\"40\" height=\"28\" fill=\"#38AF7A\" data-cell=\"2f1955b54cf0584f\"/>\n<rect x=\"176\" y=\"92\" width=\"40\" height=\"28\" fill=\"#2A2A2E\" data-cell=\"aa41370fbf30bb3a\" data-sat=\"1\"/>\n<rect x=\"96\" y=\"120\" width=\"40\" height=\"28\" fill=\"#1F2224\" data-cell=\"b7b476846d983a43\"/>\n<rect x=\"136\" y=\"120\" width=\"40\" height=\"28\" fill=\"#933739\" data-cell=\"7b806df50938571e\" data-trade=\"1\"/>\n<rect x=\"176\" y=\"120\" width=\"40\" height=\"28\" fill=\"#1F2023\" data-cell=\"b67467242f0e71da\"/>\n</g>\n<g fill=\"#FFFFFF\">\n<rect x=\"171\" y=\"93\" width=\"4\" height=\"4\" data-sig=\"1\"/>\n<rect x=\"171\" y=\"121\" width=\"4\" height=\"4\" data-sig=\"1\"/>\n</g>\n<g fill=\"#FFFFFF\">\n<path d=\"M136,120h5v5z M176,148h-5v-5z\"/>\n</g>\n<g fill=\"#E6E6E6\" font-size=\"9\" text-anchor=\"middle\">\n<text x=\"116\" y=\"81\">0.0</text>\n<text x=\"156\" y=\"81\">0.0</text>\n<text x=\"196\" y=\"81\">0.0</text>\n<text x=\"116\" y=\"109\">-1.0</text>\n<text x=\"156\" y=\"109\">-49.0</text>\n<text x=\"196\" y=\"109\">0.0</text>\n<text x=\"116\" y=\"137\">-2.0</text>\n<text x=\"156\" y=\"137\">31.0</text>\n<text x=\"196\" y=\"137\">-1.0</text>\n</g>\n<g fill=\"#8A8A90\" font-size=\"9\">\n<text x=\"116\" y=\"162\" text-anchor=\"middle\">checko\u2026</text>\n<text x=\"156\" y=\"162\" text-anchor=\"middle\">refund</text>\n<text x=\"196\" y=\"162\" text-anchor=\"middle\">search</text>\n<text x=\"90\" y=\"81\" text-anchor=\"end\">0</text>\n<text x=\"90\" y=\"109\" text-anchor=\"end\">0.3</text>\n<text x=\"90\" y=\"137\" text-anchor=\"end\">0.55</text>\n<text x=\"96\" y=\"178\">task_id (rows: tool_fail_rate)</text>\n</g>\n<g font-size=\"9\">\n<rect x=\"96\" y=\"192\" width=\"40\" height=\"10\" fill=\"#3ECF8E\"/>\n<text x=\"96\" y=\"214\" fill=\"#8A8A90\">-60.0</text>\n<rect x=\"142\" y=\"192\" width=\"40\" height=\"10\" fill=\"#2E7758\"/>\n<rect x=\"188\" y=\"192\" width=\"40\" height=\"10\" fill=\"#1F1F22\"/>\n<text x=\"188\" y=\"214\" fill=\"#8A8A90\">0.0</text>\n<rect x=\"234\" y=\"192\" width=\"40\" height=\"10\" fill=\"#8F3638\"/>\n<rect x=\"280\" y=\"192\" width=\"40\" height=\"10\" fill=\"#FF4D4D\"/>\n<text x=\"280\" y=\"214\" fill=\"#8A8A90\">+60.0</text>\n<rect x=\"326\" y=\"192\" width=\"40\" height=\"10\" fill=\"#2A2A2E\"/>\n<text x=\"326\" y=\"214\" fill=\"#8A8A90\">both 0% / both 100%</text>\n<text x=\"96\" y=\"228\" fill=\"#8A8A90\">delta = rate_b -</text>\n<text x=\"96\" y=\"240\" fill=\"#8A8A90\" data-wrap=\"1\">rate_a in pp;</text>\n<text x=\"96\" y=\"252\" fill=\"#8A8A90\" data-wrap=\"1\">event=timeout;</text>\n<text x=\"96\" y=\"264\" fill=\"#8A8A90\" data-wrap=\"1\">negative is safer only</text>\n<text x=\"96\" y=\"276\" fill=\"#8A8A90\" data-wrap=\"1\">if the event is a</text>\n<text x=\"96\" y=\"288\" fill=\"#8A8A90\" data-wrap=\"1\">failure; corner square</text>\n<text x=\"96\" y=\"300\" fill=\"#8A8A90\" data-wrap=\"1\">= significant; blank =</text>\n<text x=\"96\" y=\"312\" fill=\"#8A8A90\" data-wrap=\"1\">no data; corner</text>\n<text x=\"96\" y=\"324\" fill=\"#8A8A90\" data-wrap=\"1\">notches = trade (safer</text>\n<text x=\"96\" y=\"336\" fill=\"#8A8A90\" data-wrap=\"1\">in one event, worse in</text>\n<text x=\"96\" y=\"348\" fill=\"#8A8A90\" data-wrap=\"1\">another)</text>\n<text x=\"96\" y=\"364\" fill=\"#E6E6E6\">Worst-powered</text>\n<text x=\"96\" y=\"376\" fill=\"#E6E6E6\" data-wrap=\"1\">unchanged cell</text>\n<text x=\"96\" y=\"388\" fill=\"#E6E6E6\" data-wrap=\"1\">(task_id=checkout,</text>\n<text x=\"96\" y=\"400\" fill=\"#E6E6E6\" data-wrap=\"1\">tool_fail_rate=0.55,</text>\n<text x=\"96\" y=\"412\" fill=\"#E6E6E6\" data-wrap=\"1\">n=100/100) can only</text>\n<text x=\"96\" y=\"424\" fill=\"#E6E6E6\" data-wrap=\"1\">detect a 12pp rise. \"1</text>\n<text x=\"96\" y=\"436\" fill=\"#E6E6E6\" data-wrap=\"1\">worse\" is an honest</text>\n<text x=\"96\" y=\"448\" fill=\"#E6E6E6\" data-wrap=\"1\">claim only above that.</text>\n<text x=\"96\" y=\"460\" fill=\"#E6E6E6\">Worst-powered cell</text>\n<text x=\"96\" y=\"472\" fill=\"#E6E6E6\" data-wrap=\"1\">overall: 19pp</text>\n<text x=\"96\" y=\"484\" fill=\"#E6E6E6\" data-wrap=\"1\">(task_id=refund,</text>\n<text x=\"96\" y=\"496\" fill=\"#E6E6E6\" data-wrap=\"1\">tool_fail_rate=0.3).</text>\n</g>\n</g>\n<g data-panel=\"violated\" transform=\"translate(0 684)\">\n<rect x=\"0\" y=\"0\" width=\"240\" height=\"500\" fill=\"#0E0E10\"/>\n<text x=\"96\" y=\"20\" fill=\"#E6E6E6\" font-size=\"13\">violated</text>\n<text x=\"96\" y=\"38\" fill=\"#8A8A90\">violated: 6 safer,</text>\n<text x=\"96\" y=\"50\" fill=\"#8A8A90\" data-wrap=\"1\">0 worse</text>\n<g stroke=\"#0E0E10\" stroke-width=\"1\">\n<rect x=\"96\" y=\"64\" width=\"40\" height=\"28\" fill=\"#2A2A2E\" data-cell=\"dfe7178686aa319c\" data-sat=\"1\"/>\n<rect x=\"136\" y=\"64\" width=\"40\" height=\"28\" fill=\"#2A2A2E\" data-cell=\"b4a971a744b471f8\" data-sat=\"1\"/>\n<rect x=\"176\" y=\"64\" width=\"40\" height=\"28\" fill=\"#2A2A2E\" data-cell=\"c9d973c669310f5d\" data-sat=\"1\"/>\n<rect x=\"96\" y=\"92\" width=\"40\" height=\"28\" fill=\"#2C684F\" data-cell=\"1ad7c42d72bbb09d\"/>\n<rect x=\"136\" y=\"92\" width=\"40\" height=\"28\" fill=\"#2E7456\" data-cell=\"2f1955b54cf0584f\"/>\n<rect x=\"176\" y=\"92\" width=\"40\" height=\"28\" fill=\"#295744\" data-cell=\"aa41370fbf30bb3a\"/>\n<rect x=\"96\" y=\"120\" width=\"40\" height=\"28\" fill=\"#3DCC8C\" data-cell=\"b7b476846d983a43\"/>\n<rect x=\"136\" y=\"120\" width=\"40\" height=\"28\" fill=\"#3BC085\" data-cell=\"7b806df50938571e\" data-trade=\"1\"/>\n<rect x=\"176\" y=\"120\" width=\"40\" height=\"28\" fill=\"#3DC98A\" data-cell=\"b67467242f0e71da\"/>\n</g>\n<g fill=\"#FFFFFF\">\n<rect x=\"131\" y=\"93\" width=\"4\" height=\"4\" data-sig=\"1\"/>\n<rect x=\"171\" y=\"93\" width=\"4\" height=\"4\" data-sig=\"1\"/>\n<rect x=\"211\" y=\"93\" width=\"4\" height=\"4\" data-sig=\"1\"/>\n<rect x=\"131\" y=\"121\" width=\"4\" height=\"4\" data-sig=\"1\"/>\n<rect x=\"171\" y=\"121\" width=\"4\" height=\"4\" data-sig=\"1\"/>\n<rect x=\"211\" y=\"121\" width=\"4\" height=\"4\" data-sig=\"1\"/>\n</g>\n<g fill=\"#FFFFFF\">\n<path d=\"M136,120h5v5z M176,148h-5v-5z\"/>\n</g>\n<g fill=\"#E6E6E6\" font-size=\"9\" text-anchor=\"middle\">\n<text x=\"116\" y=\"81\">0.0</text>\n<text x=\"156\" y=\"81\">0.0</text>\n<text x=\"196\" y=\"81\">0.0</text>\n<text x=\"116\" y=\"109\">-25.0</text>\n<text x=\"156\" y=\"109\">-29.0</text>\n<text x=\"196\" y=\"109\">-19.0</text>\n<text x=\"116\" y=\"137\">-59.0</text>\n<text x=\"156\" y=\"137\">-55.0</text>\n<text x=\"196\" y=\"137\">-58.0</text>\n</g>\n<g fill=\"#8A8A90\" font-size=\"9\">\n<text x=\"116\" y=\"162\" text-anchor=\"middle\">checko\u2026</text>\n<text x=\"156\" y=\"162\" text-anchor=\"middle\">refund</text>\n<text x=\"196\" y=\"162\" text-anchor=\"middle\">search</text>\n<text x=\"90\" y=\"81\" text-anchor=\"end\">0</text>\n<text x=\"90\" y=\"109\" text-anchor=\"end\">0.3</text>\n<text x=\"90\" y=\"137\" text-anchor=\"end\">0.55</text>\n<text x=\"96\" y=\"178\">task_id (rows: tool_fail_rate)</text>\n</g>\n<g font-size=\"9\">\n<rect x=\"96\" y=\"192\" width=\"40\" height=\"10\" fill=\"#3ECF8E\"/>\n<text x=\"96\" y=\"214\" fill=\"#8A8A90\">-60.0</text>\n<rect x=\"142\" y=\"192\" width=\"40\" height=\"10\" fill=\"#2E7758\"/>\n<rect x=\"188\" y=\"192\" width=\"40\" height=\"10\" fill=\"#1F1F22\"/>\n<text x=\"188\" y=\"214\" fill=\"#8A8A90\">0.0</text>\n<rect x=\"234\" y=\"192\" width=\"40\" height=\"10\" fill=\"#2A2A2E\"/>\n<text x=\"234\" y=\"214\" fill=\"#8A8A90\">both 0% / both 100%</text>\n<text x=\"96\" y=\"228\" fill=\"#8A8A90\">delta = rate_b -</text>\n<text x=\"96\" y=\"240\" fill=\"#8A8A90\" data-wrap=\"1\">rate_a in pp;</text>\n<text x=\"96\" y=\"252\" fill=\"#8A8A90\" data-wrap=\"1\">event=violated;</text>\n<text x=\"96\" y=\"264\" fill=\"#8A8A90\" data-wrap=\"1\">negative is safer only</text>\n<text x=\"96\" y=\"276\" fill=\"#8A8A90\" data-wrap=\"1\">if the event is a</text>\n<text x=\"96\" y=\"288\" fill=\"#8A8A90\" data-wrap=\"1\">failure; corner square</text>\n<text x=\"96\" y=\"300\" fill=\"#8A8A90\" data-wrap=\"1\">= significant; blank =</text>\n<text x=\"96\" y=\"312\" fill=\"#8A8A90\" data-wrap=\"1\">no data; corner</text>\n<text x=\"96\" y=\"324\" fill=\"#8A8A90\" data-wrap=\"1\">notches = trade (safer</text>\n<text x=\"96\" y=\"336\" fill=\"#8A8A90\" data-wrap=\"1\">in one event, worse in</text>\n<text x=\"96\" y=\"348\" fill=\"#8A8A90\" data-wrap=\"1\">another)</text>\n<text x=\"96\" y=\"364\" fill=\"#E6E6E6\">Worst-powered</text>\n<text x=\"96\" y=\"376\" fill=\"#E6E6E6\" data-wrap=\"1\">unchanged cell</text>\n<text x=\"96\" y=\"388\" fill=\"#E6E6E6\" data-wrap=\"1\">(task_id=refund,</text>\n<text x=\"96\" y=\"400\" fill=\"#E6E6E6\" data-wrap=\"1\">tool_fail_rate=0,</text>\n<text x=\"96\" y=\"412\" fill=\"#E6E6E6\" data-wrap=\"1\">n=100/100) can only</text>\n<text x=\"96\" y=\"424\" fill=\"#E6E6E6\" data-wrap=\"1\">detect a 8pp rise. \"0</text>\n<text x=\"96\" y=\"436\" fill=\"#E6E6E6\" data-wrap=\"1\">worse\" is an honest</text>\n<text x=\"96\" y=\"448\" fill=\"#E6E6E6\" data-wrap=\"1\">claim only above that.</text>\n<text x=\"96\" y=\"460\" fill=\"#E6E6E6\">Worst-powered cell</text>\n<text x=\"96\" y=\"472\" fill=\"#E6E6E6\" data-wrap=\"1\">overall: 19pp</text>\n<text x=\"96\" y=\"484\" fill=\"#E6E6E6\" data-wrap=\"1\">(task_id=refund,</text>\n<text x=\"96\" y=\"496\" fill=\"#E6E6E6\" data-wrap=\"1\">tool_fail_rate=0.3).</text>\n</g>\n</g>\n</svg>\n"
+}

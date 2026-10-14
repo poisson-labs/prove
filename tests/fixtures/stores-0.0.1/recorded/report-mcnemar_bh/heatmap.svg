@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 1184" width="240" height="1184" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11">
+<style>.trade{fill:#FF4D4D}</style>
+<rect x="0" y="0" width="240" height="1184" fill="#0E0E10"/>
+<text x="24" y="20" fill="#E6E6E6" font-size="13">20261014T035339Z-1add vs</text>
+<text x="24" y="38" fill="#E6E6E6" font-size="13" data-wrap="1">20261014T035345Z-8381:</text>
+<text x="24" y="56" fill="#E6E6E6" font-size="13" data-wrap="1">timeout, violated</text>
+<text x="24" y="74" fill="#E6E6E6">timeout: 1 safer, 1 worse ·</text>
+<text x="24" y="90" fill="#E6E6E6" data-wrap="1">violated: 6 safer, 0 worse</text>
+<text x="24" y="106" fill="#E6E6E6">(aalen_johansen + mcnemar_bh,</text>
+<text x="24" y="122" fill="#E6E6E6" data-wrap="1">BH q&lt;0.05 over 18 tests,</text>
+<text x="24" y="138" fill="#E6E6E6" data-wrap="1">paired)</text>
+<text x="24" y="154" class="trade">Trade: violated fell in 1</text>
+<text x="24" y="170" class="trade" data-wrap="1">cell where timeout rose.</text>
+<g data-panel="timeout" transform="translate(0 184)">
+<rect x="0" y="0" width="240" height="500" fill="#0E0E10"/>
+<text x="96" y="20" fill="#E6E6E6" font-size="13">timeout</text>
+<text x="96" y="38" fill="#8A8A90">timeout: 1 safer,</text>
+<text x="96" y="50" fill="#8A8A90" data-wrap="1">1 worse</text>
+<g stroke="#0E0E10" stroke-width="1">
+<rect x="96" y="64" width="40" height="28" fill="#2A2A2E" data-cell="dfe7178686aa319c" data-sat="1"/>
+<rect x="136" y="64" width="40" height="28" fill="#2A2A2E" data-cell="b4a971a744b471f8" data-sat="1"/>
+<rect x="176" y="64" width="40" height="28" fill="#2A2A2E" data-cell="c9d973c669310f5d" data-sat="1"/>
+<rect x="96" y="92" width="40" height="28" fill="#1F2023" data-cell="1ad7c42d72bbb09d"/>
+<rect x="136" y="92" width="40" height="28" fill="#38AF7A" data-cell="2f1955b54cf0584f"/>
+<rect x="176" y="92" width="40" height="28" fill="#2A2A2E" data-cell="aa41370fbf30bb3a" data-sat="1"/>
+<rect x="96" y="120" width="40" height="28" fill="#1F2224" data-cell="b7b476846d983a43"/>
+<rect x="136" y="120" width="40" height="28" fill="#933739" data-cell="7b806df50938571e" data-trade="1"/>
+<rect x="176" y="120" width="40" height="28" fill="#1F2023" data-cell="b67467242f0e71da"/>
+</g>
+<g fill="#FFFFFF">
+<rect x="171" y="93" width="4" height="4" data-sig="1"/>
+<rect x="171" y="121" width="4" height="4" data-sig="1"/>
+</g>
+<g fill="#FFFFFF">
+<path d="M136,120h5v5z M176,148h-5v-5z"/>
+</g>
+<g fill="#E6E6E6" font-size="9" text-anchor="middle">
+<text x="116" y="81">0.0</text>
+<text x="156" y="81">0.0</text>
+<text x="196" y="81">0.0</text>
+<text x="116" y="109">-1.0</text>
+<text x="156" y="109">-49.0</text>
+<text x="196" y="109">0.0</text>
+<text x="116" y="137">-2.0</text>
+<text x="156" y="137">31.0</text>
+<text x="196" y="137">-1.0</text>
+</g>
+<g fill="#8A8A90" font-size="9">
+<text x="116" y="162" text-anchor="middle">checko…</text>
+<text x="156" y="162" text-anchor="middle">refund</text>
+<text x="196" y="162" text-anchor="middle">search</text>
+<text x="90" y="81" text-anchor="end">0</text>
+<text x="90" y="109" text-anchor="end">0.3</text>
+<text x="90" y="137" text-anchor="end">0.55</text>
+<text x="96" y="178">task_id (rows: tool_fail_rate)</text>
+</g>
+<g font-size="9">
+<rect x="96" y="192" width="40" height="10" fill="#3ECF8E"/>
+<text x="96" y="214" fill="#8A8A90">-60.0</text>
+<rect x="142" y="192" width="40" height="10" fill="#2E7758"/>
+<rect x="188" y="192" width="40" height="10" fill="#1F1F22"/>
+<text x="188" y="214" fill="#8A8A90">0.0</text>
+<rect x="234" y="192" width="40" height="10" fill="#8F3638"/>
+<rect x="280" y="192" width="40" height="10" fill="#FF4D4D"/>
+<text x="280" y="214" fill="#8A8A90">+60.0</text>
+<rect x="326" y="192" width="40" height="10" fill="#2A2A2E"/>
+<text x="326" y="214" fill="#8A8A90">both 0% / both 100%</text>
+<text x="96" y="228" fill="#8A8A90">delta = rate_b -</text>
+<text x="96" y="240" fill="#8A8A90" data-wrap="1">rate_a in pp;</text>
+<text x="96" y="252" fill="#8A8A90" data-wrap="1">event=timeout;</text>
+<text x="96" y="264" fill="#8A8A90" data-wrap="1">negative is safer only</text>
+<text x="96" y="276" fill="#8A8A90" data-wrap="1">if the event is a</text>
+<text x="96" y="288" fill="#8A8A90" data-wrap="1">failure; corner square</text>
+<text x="96" y="300" fill="#8A8A90" data-wrap="1">= significant; blank =</text>
+<text x="96" y="312" fill="#8A8A90" data-wrap="1">no data; corner</text>
+<text x="96" y="324" fill="#8A8A90" data-wrap="1">notches = trade (safer</text>
+<text x="96" y="336" fill="#8A8A90" data-wrap="1">in one event, worse in</text>
+<text x="96" y="348" fill="#8A8A90" data-wrap="1">another)</text>
+<text x="96" y="364" fill="#E6E6E6">Worst-powered</text>
+<text x="96" y="376" fill="#E6E6E6" data-wrap="1">unchanged cell</text>
+<text x="96" y="388" fill="#E6E6E6" data-wrap="1">(task_id=checkout,</text>
+<text x="96" y="400" fill="#E6E6E6" data-wrap="1">tool_fail_rate=0.55,</text>
+<text x="96" y="412" fill="#E6E6E6" data-wrap="1">n=100/100) can only</text>
+<text x="96" y="424" fill="#E6E6E6" data-wrap="1">detect a 12pp rise. "1</text>
+<text x="96" y="436" fill="#E6E6E6" data-wrap="1">worse" is an honest</text>
+<text x="96" y="448" fill="#E6E6E6" data-wrap="1">claim only above that.</text>
+<text x="96" y="460" fill="#E6E6E6">Worst-powered cell</text>
+<text x="96" y="472" fill="#E6E6E6" data-wrap="1">overall: 19pp</text>
+<text x="96" y="484" fill="#E6E6E6" data-wrap="1">(task_id=refund,</text>
+<text x="96" y="496" fill="#E6E6E6" data-wrap="1">tool_fail_rate=0.3).</text>
+</g>
+</g>
+<g data-panel="violated" transform="translate(0 684)">
+<rect x="0" y="0" width="240" height="500" fill="#0E0E10"/>
+<text x="96" y="20" fill="#E6E6E6" font-size="13">violated</text>
+<text x="96" y="38" fill="#8A8A90">violated: 6 safer,</text>
+<text x="96" y="50" fill="#8A8A90" data-wrap="1">0 worse</text>
+<g stroke="#0E0E10" stroke-width="1">
+<rect x="96" y="64" width="40" height="28" fill="#2A2A2E" data-cell="dfe7178686aa319c" data-sat="1"/>
+<rect x="136" y="64" width="40" height="28" fill="#2A2A2E" data-cell="b4a971a744b471f8" data-sat="1"/>
+<rect x="176" y="64" width="40" height="28" fill="#2A2A2E" data-cell="c9d973c669310f5d" data-sat="1"/>
+<rect x="96" y="92" width="40" height="28" fill="#2C684F" data-cell="1ad7c42d72bbb09d"/>
+<rect x="136" y="92" width="40" height="28" fill="#2E7456" data-cell="2f1955b54cf0584f"/>
+<rect x="176" y="92" width="40" height="28" fill="#295744" data-cell="aa41370fbf30bb3a"/>
+<rect x="96" y="120" width="40" height="28" fill="#3DCC8C" data-cell="b7b476846d983a43"/>
+<rect x="136" y="120" width="40" height="28" fill="#3BC085" data-cell="7b806df50938571e" data-trade="1"/>
+<rect x="176" y="120" width="40" height="28" fill="#3DC98A" data-cell="b67467242f0e71da"/>
+</g>
+<g fill="#FFFFFF">
+<rect x="131" y="93" width="4" height="4" data-sig="1"/>
+<rect x="171" y="93" width="4" height="4" data-sig="1"/>
+<rect x="211" y="93" width="4" height="4" data-sig="1"/>
+<rect x="131" y="121" width="4" height="4" data-sig="1"/>
+<rect x="171" y="121" width="4" height="4" data-sig="1"/>
+<rect x="211" y="121" width="4" height="4" data-sig="1"/>
+</g>
+<g fill="#FFFFFF">
+<path d="M136,120h5v5z M176,148h-5v-5z"/>
+</g>
+<g fill="#E6E6E6" font-size="9" text-anchor="middle">
+<text x="116" y="81">0.0</text>
+<text x="156" y="81">0.0</text>
+<text x="196" y="81">0.0</text>
+<text x="116" y="109">-25.0</text>
+<text x="156" y="109">-29.0</text>
+<text x="196" y="109">-19.0</text>
+<text x="116" y="137">-59.0</text>
+<text x="156" y="137">-55.0</text>
+<text x="196" y="137">-58.0</text>
+</g>
+<g fill="#8A8A90" font-size="9">
+<text x="116" y="162" text-anchor="middle">checko…</text>
+<text x="156" y="162" text-anchor="middle">refund</text>
+<text x="196" y="162" text-anchor="middle">search</text>
+<text x="90" y="81" text-anchor="end">0</text>
+<text x="90" y="109" text-anchor="end">0.3</text>
+<text x="90" y="137" text-anchor="end">0.55</text>
+<text x="96" y="178">task_id (rows: tool_fail_rate)</text>
+</g>
+<g font-size="9">
+<rect x="96" y="192" width="40" height="10" fill="#3ECF8E"/>
+<text x="96" y="214" fill="#8A8A90">-60.0</text>
+<rect x="142" y="192" width="40" height="10" fill="#2E7758"/>
+<rect x="188" y="192" width="40" height="10" fill="#1F1F22"/>
+<text x="188" y="214" fill="#8A8A90">0.0</text>
+<rect x="234" y="192" width="40" height="10" fill="#2A2A2E"/>
+<text x="234" y="214" fill="#8A8A90">both 0% / both 100%</text>
+<text x="96" y="228" fill="#8A8A90">delta = rate_b -</text>
+<text x="96" y="240" fill="#8A8A90" data-wrap="1">rate_a in pp;</text>
+<text x="96" y="252" fill="#8A8A90" data-wrap="1">event=violated;</text>
+<text x="96" y="264" fill="#8A8A90" data-wrap="1">negative is safer only</text>
+<text x="96" y="276" fill="#8A8A90" data-wrap="1">if the event is a</text>
+<text x="96" y="288" fill="#8A8A90" data-wrap="1">failure; corner square</text>
+<text x="96" y="300" fill="#8A8A90" data-wrap="1">= significant; blank =</text>
+<text x="96" y="312" fill="#8A8A90" data-wrap="1">no data; corner</text>
+<text x="96" y="324" fill="#8A8A90" data-wrap="1">notches = trade (safer</text>
+<text x="96" y="336" fill="#8A8A90" data-wrap="1">in one event, worse in</text>
+<text x="96" y="348" fill="#8A8A90" data-wrap="1">another)</text>
+<text x="96" y="364" fill="#E6E6E6">Worst-powered</text>
+<text x="96" y="376" fill="#E6E6E6" data-wrap="1">unchanged cell</text>
+<text x="96" y="388" fill="#E6E6E6" data-wrap="1">(task_id=refund,</text>
+<text x="96" y="400" fill="#E6E6E6" data-wrap="1">tool_fail_rate=0,</text>
+<text x="96" y="412" fill="#E6E6E6" data-wrap="1">n=100/100) can only</text>
+<text x="96" y="424" fill="#E6E6E6" data-wrap="1">detect a 8pp rise. "0</text>
+<text x="96" y="436" fill="#E6E6E6" data-wrap="1">worse" is an honest</text>
+<text x="96" y="448" fill="#E6E6E6" data-wrap="1">claim only above that.</text>
+<text x="96" y="460" fill="#E6E6E6">Worst-powered cell</text>
+<text x="96" y="472" fill="#E6E6E6" data-wrap="1">overall: 19pp</text>
+<text x="96" y="484" fill="#E6E6E6" data-wrap="1">(task_id=refund,</text>
+<text x="96" y="496" fill="#E6E6E6" data-wrap="1">tool_fail_rate=0.3).</text>
+</g>
+</g>
+</svg>
