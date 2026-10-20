@@ -80,7 +80,30 @@ class PairMismatch(ExecutorError):
 
 
 class UnderpoweredDesign(ExecutorError):
-    """The design cannot resolve an effect as small as the caller accepts."""
+    """The design cannot resolve an effect as small as the caller accepts.
+
+    Carries the numbers the refusal is about, so a caller can name the override it offers
+    without computing anything: ``mde`` (the design's), ``accepted``, ``replicates`` (the
+    design's N), ``replicates_needed`` (the smallest N reaching ``accepted``) and ``offered``
+    (the ``--max-mde`` that admits this design, rounded up).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        mde: float | None = None,
+        accepted: float | None = None,
+        replicates: int | None = None,
+        replicates_needed: int | None = None,
+        offered: float | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.mde = mde
+        self.accepted = accepted
+        self.replicates = replicates
+        self.replicates_needed = replicates_needed
+        self.offered = offered
 
 
 # ---------- identity ----------
@@ -333,12 +356,19 @@ def check_power(p: Plan, *, max_mde: float | None = None) -> None:
     if mde <= accepted:
         return
     n = p.spec.replicates
+    needed = _smallest_n_reaching(p.spec, accepted)
+    offered = _offered_override(mde)
     raise UnderpoweredDesign(
         f"underpowered design: this sweep can only detect a change of {mde * 100:.1f} points "
         f"or more in a cell's failure rate (MDE {mde:.4f} at N={n}), and you accepted "
         f"{accepted * 100:.1f} points (--max-mde {accepted:.4f}). "
-        f"N={_smallest_n_reaching(p.spec, accepted)} replicates would reach {accepted:.4f}; "
-        f"--max-mde {_offered_override(mde):.4f} accepts this design as it stands."
+        f"N={needed} replicates would reach {accepted:.4f}; "
+        f"--max-mde {offered:.4f} accepts this design as it stands.",
+        mde=mde,
+        accepted=accepted,
+        replicates=n,
+        replicates_needed=needed,
+        offered=offered,
     )
 
 
