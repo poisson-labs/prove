@@ -88,8 +88,8 @@ FR_TEST = REPO / "tests" / "test_fr_first_run.py"
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
-PIN = "1.8.1"
-INSTALL_HINT = "pip install burla==1.8.1"
+PIN = "1.8.2"
+INSTALL_HINT = "pip install burla==1.8.2"
 HEAD = "http://localhost:5001"
 SALT = "bu-oracle-salt"
 PLAIN = "bu_targets.plain:rollout"
@@ -1110,11 +1110,11 @@ def test_s6_when_the_parent_dies_the_launcher_cancels_and_exits_within_10_s(fake
     assert not alive(fake.heartbeats()[0]["pid"])
 
 
-def test_s7_a_client_other_than_1_8_1_is_refused_naming_the_pin(fake: Fake, tmp_path: Path) -> None:
-    fake.script(version="1.8.2")
+def test_s7_a_client_other_than_1_8_2_is_refused_naming_the_pin(fake: Fake, tmp_path: Path) -> None:
+    fake.script(version="1.8.1")
     p, store, opts, outcome = burla_run(fake, tmp_path)
     assert isinstance(outcome, eb.BurlaBackendError) and not isinstance(outcome, eb.BurlaNotInstalled), outcome
-    assert PIN in str(outcome) and "1.8.2" in str(outcome)
+    assert PIN in str(outcome) and "1.8.1" in str(outcome)
     assert fake.starts() == [], "remote_parallel_map was called"
 
 
