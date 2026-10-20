@@ -267,7 +267,8 @@ MULTI_JSON_SHA256 = {
     "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
-CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
+# CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
+# checks the facts the digest guarded instead (front-door spec section 14).
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
@@ -459,6 +460,12 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def without_notes(err: str) -> str:
+    """Stderr with the ``note:`` lines removed. Prove's own warning (``UnpairedAnalysis``, on two
+    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line (spec section 5.4)."""
+    return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
+
+
 def block_lines(out: str, head: str) -> list[str]:
     """The line starting with ``head`` and every following line indented by two spaces, as a list;
     ``[]`` when there is no such line. Found by index, never by the tail of stdout."""
@@ -482,19 +489,34 @@ def omnibus_block(out: str) -> list[str]:
 
 def numeric_tokens(line: str) -> list[str]:
     """Every whitespace-, ``=``-, ``,``-, ``:``-, ``;``-, ``(``-, ``)``- or ``/``-separated token
-    that parses as a number, verbatim. Wording-free: the block's numbers are checked as tokens."""
+    that parses as a number, verbatim. Wording-free: the block's numbers are checked as tokens.
+    A comma before three digits is a thousands separator inside a count (spec section 5.4,
+    rule 10), so ``1,312`` is one token."""
     out = []
-    for token in re.split(r"[\s=,:;()/]+", line):
+    for token in re.split(r"[\s=:;()/]+|,(?!\d{3}(?!\d))", line):
         try:
-            float(token)
+            float(token.replace(",", ""))
         except ValueError:
             continue
         out.append(token)
     return out
 
 
-def g(value: Any) -> str:
-    return f"{value:g}"
+# The block's numbers as the command line prints them under rule 10 (spec section 5.4), which
+# replaces ``:g``: counts with thousands separators, an MDE to three decimals, and a p, q or
+# alpha to three decimals or in ``2.3e-08`` form below 0.001.
+
+
+def count(value: Any) -> str:
+    return f"{int(value):,}" if float(value).is_integer() else f"{value:,}"
+
+
+def mde(value: Any) -> str:
+    return f"{value:.3f}"
+
+
+def rule_10_p(value: Any) -> str:
+    return f"{value:.3f}" if value >= 0.001 else f"{value:.1e}"
 
 
 def json_bytes(payload: Mapping[str, Any]) -> str:
@@ -902,12 +924,15 @@ def test_f3_a_requested_key_that_passes_reads_requested_on_the_structure(axes: d
 
 def test_f3_the_block_and_the_json_carry_the_requested_key(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert block, out
     assert "temp" in block[0] and "requested" in block[0], block[0]
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp", "--format", "json"])
-    assert code == 0 and err == "", (out, err)
+    # --json replaces --format json (spec section 5.6).
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp", "--json"])
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["resolved_by"], grouping["requested"], grouping["key"]) == ("requested", "temp", "temp")
 
@@ -1010,7 +1035,8 @@ def test_f6_an_unknown_name_raises_unknown_grouping_before_any_permutation_is_dr
 
 def test_f6_the_cli_maps_an_unknown_grouping_to_exit_two_without_a_traceback(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "nonsense"])
-    assert code == 2, (out, err)
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, (out, err)
     assert "error:" in err and "Traceback" not in out + err, err
     assert "nonsense" in err and "usage:" not in err and "unrecognized" not in err, err
 
@@ -1117,11 +1143,15 @@ def test_f8_the_offered_value_pasted_back_admits_the_refused_grouping(axes: dict
 
 def test_f8_the_block_and_the_json_carry_the_accepted_value(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", "0.6"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
-    assert block and g(0.6) in numeric_tokens(block[0]) and "task" in block[0], block[:1]
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", "0.6", "--format", "json"])
-    assert code == 0 and err == "", (out, err)
+    # The accepted MDE prints to three decimals under rule 10 (spec section 5.4), not ``:g``.
+    assert block and mde(0.6) in numeric_tokens(block[0]) and "task" in block[0], block[:1]
+    # --json replaces --format json (spec section 5.6).
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", "0.6", "--json"])
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["max_group_mde"], grouping["key"], grouping["refused"]) == (0.6, "task", [])
 
@@ -1161,7 +1191,8 @@ def test_f8_an_out_of_range_override_is_refused_before_any_draw_from_tree_and_fr
 @pytest.mark.parametrize("value", ("0", "1", "-0.1", "1.5"))
 def test_f8_the_cli_maps_an_out_of_range_override_to_exit_two(synth_root: Path, value: str) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", value])
-    assert code == 2, (out, err)
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, (out, err)
     assert "error:" in err and "Traceback" not in out + err, err
     assert "usage:" not in err and "unrecognized" not in err, err
 
@@ -1489,11 +1520,12 @@ def test_f15_the_three_cell_identical_pair_states_the_roots_reason_first() -> No
 
 
 def test_f15_the_block_prints_the_grouping_line_and_not_tested_and_no_p(synth_root: Path) -> None:
-    """Every numeric token on an untested group line is a ``:g`` rendering of one of that group's
+    """Every numeric token on an untested group line is a rule-10 rendering of one of that group's
     count or design fields, or its label; a p has nowhere to come from."""
     _, result = store_tree(synth_root, "same-a", "same-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert block, out
     assert "temp" in block[0] and "axis" in block[0], block[0]
@@ -1501,9 +1533,10 @@ def test_f15_the_block_prints_the_grouping_line_and_not_tested_and_no_p(synth_ro
     group_lines = block[-result.grouping.n_groups :]
     for group, line in zip(result.fault_lines.groups, group_lines, strict=True):
         assert group.label in line, (group.label, line)
-        allowed = {group.label, g(group.n_cells), g(group.n_informative_cells), g(group.n_uninformative_cells), g(group.n_a), g(group.n_b), g(group.mde)}
+        # Counts and the MDE print under rule 10 (spec section 5.4), not ``:g``.
+        allowed = {group.label, count(group.n_cells), count(group.n_informative_cells), count(group.n_uninformative_cells), count(group.n_a), count(group.n_b), mde(group.mde)}
         if group.n_discordant is not None:
-            allowed.add(g(group.n_discordant))
+            allowed.add(count(group.n_discordant))
         assert set(numeric_tokens(line)) <= allowed, (line, sorted(set(numeric_tokens(line)) - allowed))
 
 
@@ -1637,7 +1670,8 @@ def test_f18_the_temp_zero_group_rejects_while_the_flat_family_rejects_nothing_i
 
 def test_f18_the_block_shows_both_groups_with_their_verdicts(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert len(block) >= 3, block
     zero, seven = block[-2], block[-1]
@@ -1668,7 +1702,8 @@ def test_f19_no_detail_reason_or_block_line_uses_the_second_vocabulary(every_tre
     for extra in ((), ("--by", "step_kind"), ("--by", "kind"), ("--by", "grid")):
         for pair in (("axes-a", "axes-b"), ("same-a", "same-b")):
             code, out, err = run_cli(["--store", str(synth_root), "diff", *pair, "--event", "fail", *extra])
-            assert code == 0 and err == "", (pair, extra, out, err)
+            # A shared salt now adds one note line on stderr (spec section 5.4).
+            assert code == 0 and without_notes(err) == "", (pair, extra, out, err)
             block = fault_lines_block(out)
             assert block, (pair, extra, out)
             assert f'"{EXPECTED_GROUP_NULL}"' in "\n".join(block), block
@@ -1702,11 +1737,12 @@ def test_f19_no_field_name_and_no_json_key_contains_the_forbidden_substrings(go1
 def test_f20_the_block_follows_the_omnibus_block_and_its_first_line_carries_the_fields(synth_root: Path) -> None:
     """Section 3.6, through ``main()`` with ``StringIO`` streams. The block is found by index and
     is never the tail of stdout (P4.3 appends after it). Every number on the first line is a
-    field under ``:g`` and the key and the rung are named; the wording is free."""
+    field under rule 10 (``:g`` before it) and the key and the rung are named; the wording is free."""
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail"])
     assert code == 0, (out, err)
-    assert err == "", err
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert without_notes(err) == "", err
     lines = out.splitlines()
     omnibus, block = omnibus_block(out), fault_lines_block(out)
     assert omnibus and block, out
@@ -1715,9 +1751,13 @@ def test_f20_the_block_follows_the_omnibus_block_and_its_first_line_carries_the_
     first = block[0]
     assert grouping.key in first and grouping.resolved_by in first, first
     tokens = numeric_tokens(first)
+    # Each field prints under rule 10 (spec section 5.4), not ``:g``: the MDE to three decimals,
+    # alpha as a p-value, the rest as counts.
+    formats = {"max_group_mde": mde, "alpha_floor": rule_10_p}
     for field in FIRST_LINE_NUMERIC_FIELDS:
-        assert g(getattr(grouping, field)) in tokens, (field, g(getattr(grouping, field)), first)
-    assert g(fault_lines.n_degenerate_groups) in tokens, first
+        rendered = formats.get(field, count)(getattr(grouping, field))
+        assert rendered in tokens, (field, rendered, first)
+    assert count(fault_lines.n_degenerate_groups) in tokens, first
 
 
 def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) -> None:
@@ -1725,7 +1765,8 @@ def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) ->
         _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=50, seed=GOLDEN_SEED, by=extra[1] if extra else None)
         assert [(r.key, r.rung, r.reason, r.next_rung) for r in result.grouping.refused] == [expected], extra
         code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", *extra])
-        assert code == 0 and err == "", (extra, out, err)
+        # A shared salt now adds one note line on stderr (spec section 5.4).
+        assert code == 0 and without_notes(err) == "", (extra, out, err)
         block = fault_lines_block(out)
         refused_lines = block[1 : 1 + len(result.grouping.refused)]
         for refusal, line in zip(result.grouping.refused, refused_lines, strict=True):
@@ -1737,15 +1778,17 @@ def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) ->
 def test_f20_one_group_line_per_group_in_labels_order_carrying_counts_p_q_and_the_verdict(synth_root: Path) -> None:
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert result.fault_lines.tested is True
     group_lines = block[-result.grouping.n_groups :]
     for group, line in zip(result.fault_lines.groups, group_lines, strict=True):
         tokens = numeric_tokens(line)
         assert group.label in line, (group.label, line)
-        assert g(group.n_cells) in tokens and g(group.n_informative_cells) in tokens, (group.label, line)
-        assert g(group.p_group) in tokens and g(group.q_group) in tokens, (group.label, line)
+        # Counts, p and q print under rule 10 (spec section 5.4), not ``:g``.
+        assert count(group.n_cells) in tokens and count(group.n_informative_cells) in tokens, (group.label, line)
+        assert rule_10_p(group.p_group) in tokens and rule_10_p(group.q_group) in tokens, (group.label, line)
         if group.rejects:
             assert "rejected" in line and "not rejected" not in line, line
         else:
@@ -1753,8 +1796,10 @@ def test_f20_one_group_line_per_group_in_labels_order_carrying_counts_p_q_and_th
 
 
 def test_f20_by_and_max_group_mde_reach_the_call(synth_root: Path) -> None:
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp", "--max-group-mde", "0.37", "--format", "json"])
-    assert code == 0 and err == "", (out, err)
+    # --json replaces --format json (spec section 5.6).
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp", "--max-group-mde", "0.37", "--json"])
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["requested"], grouping["max_group_mde"], grouping["resolved_by"]) == ("temp", 0.37, "requested")
 
@@ -1765,8 +1810,10 @@ def test_f20_the_json_tree_equals_to_json_after_a_round_trip_and_its_root_equals
     test computes on the same frames with the same knobs, and the root appears twice, equal --
     the CLI-level form of F11."""
     multi, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=300, seed=3)
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--format", "json", "--permutations", "300", "--seed", "3"])
-    assert code == 0 and err == "", (out, err)
+    # --json replaces --format json (spec section 5.6).
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--json", "--permutations", "300", "--seed", "3"])
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
     assert payload["tree"] == json.loads(json.dumps(result.to_json()))
     assert payload["tree"]["root"] == payload["omnibus"]
@@ -1806,7 +1853,8 @@ def test_f22_methods_all_text_prints_the_table_then_the_primary_omnibus_then_the
     the omnibus (S25 section A permits fewer permutations for such a test and asks that it say
     so). One omnibus block and one fault-lines block: the primary's."""
     code, out, err = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", "--permutations", "200"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     assert out.index("| method |") < out.index("omnibus: ") < out.index("fault lines:"), out
     assert out.count("omnibus: ") == 1 and out.count("fault lines:") == 1, out
     assert fault_lines_block(out) and omnibus_block(out), out
@@ -1815,10 +1863,15 @@ def test_f22_methods_all_text_prints_the_table_then_the_primary_omnibus_then_the
 def test_f22_methods_all_json_keeps_exactly_the_three_method_keys_and_carries_no_tree() -> None:
     """``test_i9_diff_methods_all_json_keys`` pins the same key set from the M10 side; a builder
     who emits ``"tree"`` beside three method objects fails both."""
-    code, out, err = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", "--format", "json", "--permutations", "200"])
-    assert code == 0 and err == "", (out, err)
+    # --json replaces --format json (spec section 5.6).
+    code, out, err = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", "--json", "--permutations", "200"])
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
-    assert set(payload) == set(METHODS), sorted(payload)
+    # --json adds schema, verdict, sentence, next and any key ending _note around the keys it
+    # keeps (spec section 5.6).
+    envelope = {"schema", "verdict", "sentence", "next"} | {k for k in payload if k.endswith("_note")}
+    assert set(payload) - envelope == set(METHODS), sorted(payload)
     assert "omnibus" not in payload and "tree" not in payload
 
 
@@ -1828,7 +1881,8 @@ def test_f23_no_comparable_cell_prints_neither_block_emits_neither_key_and_the_a
     code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail"])
     assert code == 0 and err == "", (out, err)
     assert "omnibus:" not in out and "fault lines:" not in out, out
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail", "--format", "json"])
+    # --json replaces --format json (spec section 5.6).
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail", "--json"])
     assert code == 0 and err == "", (out, err)
     payload = json.loads(out)
     assert payload["n_tests"] == 0 and "omnibus" not in payload and "tree" not in payload
@@ -1973,9 +2027,9 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def e14_builder_digests(go1: Any) -> dict[str, str]:
+def e14_builder(go1: Any) -> tuple[Any, Any, Any]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
-    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    ``_report_pair`` builds them: the multi, the dark-theme report and the light-theme receipt."""
     a, b, ma, mb = go1
     multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="fisher_bh")
     title = f"{GO1_A} vs {GO1_B}: fell"
@@ -1986,10 +2040,58 @@ def e14_builder_digests(go1: Any) -> dict[str, str]:
         multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw", theme="light"),
         manifests=(ma, mb),
     )
+    return multi, report, receipt
+
+
+def e14_builder_digests(go1: Any) -> dict[str, str]:
+    """The builder's report markdown, receipt and heatmap, digested."""
+    _, report, receipt = e14_builder(go1)
     return {
         "report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())),
+        # The command line's heatmap now formats its text under rule 10 (spec section 5.4); the
+        # builder's heatmap is unchanged, so the digest moves to it.
+        "heatmap.svg": sha256_of_text(report.to_svg()),
         "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html())),
     }
+
+
+def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
+    """The command line's ``heatmap.svg`` against the builder's, whose bytes keep the frozen digest.
+
+    Rule 10 (spec section 5.4) reformats only the text in the file, so every element and attribute
+    is the builder's. Each cell's label is its delta to three decimals, read from ``cells``; a text
+    the builder prints as a percentage-point number is that number as a fraction; every other text
+    that changed keeps its ``key=value`` facts and its counts; and the notes the builder writes in
+    percentage points carry the worst-powered MDEs to three decimals.
+    """
+    def bare(svg: str) -> str:
+        return re.sub(r">[^<]*<", "><", svg)
+
+    assert bare(cli_svg) == bare(builder_svg)
+    ids = re.findall(r'data-cell="([0-9a-f]+)"', cli_svg)
+    label_group = cli_svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
+    labels = re.findall(r">([^<]*)</text>", label_group)
+    delta = dict(zip(cells["config_hash"], cells["delta"]))
+    assert len(ids) == len(labels) == len(delta), (len(ids), len(labels), len(delta))
+    for short, label in zip(ids, labels):
+        (full,) = [h for h in delta if h.startswith(short)]
+        assert label == f"{delta[full]:.3f}", (short, label, delta[full])
+    number = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+    texts = list(zip(re.findall(r">([^<]*)</text>", builder_svg), re.findall(r">([^<]*)</text>", cli_svg)))
+    for old, new in texts:
+        if old == new:
+            continue
+        if number.fullmatch(old):
+            assert number.fullmatch(new) and abs(float(new) - float(old) / 100) <= 1e-3, (old, new)
+            continue
+        for fact in re.findall(r"\w+=[^\s,;)]+", old):
+            assert fact in new, (fact, new)
+        for count in re.findall(r"(?<![\d.])\d+(?![\d.%]|pp)", old):
+            assert f"{int(count):,}" in new, (count, new)
+    notes = [new for old, new in texts if re.search(r"\d+pp", old)]
+    assert notes, texts
+    for mde in (cells["mde"].max(), cells.loc[cells["verdict"] == "unchanged", "mde"].max()):
+        assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
 
 
 def test_f28_the_go1_report_still_reproduces_the_three_digests_s21_minted(go1: Any, tmp_path: Path) -> None:
@@ -1998,25 +2100,45 @@ def test_f28_the_go1_report_still_reproduces_the_three_digests_s21_minted(go1: A
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
     digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
     ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
-    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
+    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted.
+
+    Moved for rule 10 (spec section 5.4): the command line now prints the heatmap's text as
+    fractions, so its digest moves to the builder's heatmap, and the file the command line writes
+    is checked against that one fact by fact."""
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    assert hashlib.sha256((out / "heatmap.svg").read_bytes()).hexdigest() == E14_SHA256["heatmap.svg"]
     for name, digest in e14_builder_digests(go1).items():
         assert digest == E14_SHA256[name], name
+    # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
+    # checked by its facts rather than a new digest.
+    multi, report, _ = e14_builder(go1)
+    assert_cli_heatmap_is_the_builders_under_rule_10(
+        (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event["fell"].cells
+    )
 
 
-def test_f28_check_on_go1_prints_the_same_bytes_and_exits_the_same() -> None:
+def test_f28_check_on_go1_prints_the_same_bytes_and_exits_the_same(go1: Any) -> None:
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
-    assert code == CHECK_EXIT and err == "", (out, err)
-    assert sha256_of_text(out) == CHECK_STDOUT_SHA256
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == CHECK_EXIT and without_notes(err) == "", (out, err)
+    # The verdict line now comes first, so the stdout digest is replaced by the facts it guarded
+    # (spec sections 5.3 and 14): passed, the gated event, the flat family's counts and its size.
+    a, b, ma, mb = go1
+    multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="fisher_bh")
+    verdicts = multi.by_event["fell"].cells["verdict"]
+    first = out.splitlines()[0]
+    assert first.startswith("passed  ") and "fell" in first, out
+    assert f"{(verdicts == 'safer').sum():,} safer, {(verdicts == 'worse').sum():,} worse" in out, out
+    assert f"{multi.n_tests:,} tests" in out, out
 
 
 def test_f28_serve_json_on_go1_prints_the_same_structure() -> None:
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
-    assert code == 0 and err == "", err
-    structure = json.loads(out)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", err
+    # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
+    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence")}
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
     normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256

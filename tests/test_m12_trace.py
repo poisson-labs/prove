@@ -1519,14 +1519,16 @@ def test_t30_inspect_prints_ordered_spans_with_duration_ms_in_the_fourth_column(
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()
-    last = [line for line in out.getvalue().splitlines() if line.strip()][-1]
-    assert last.startswith("run_id: "), out.getvalue()
-    run_id = last.split(": ", 1)[1]
+    # A sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3); the run is
+    # the one the empty store gained.
+    assert [line for line in out.getvalue().splitlines() if line.strip()], out.getvalue()
+    (run_id,) = Store(root).runs()
 
     df = Store(root).read(run_id)
     rows = df[df["outcome"] == "violated"]
     assert len(rows) >= 1
-    by_key = {(row.config_hash, int(row.seed)): row for row in rows.itertuples(index=False)}
+    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    by_key = {(row.config_hash[:12], int(row.seed)): row for row in rows.itertuples(index=False)}
 
     out, err = StringIO(), StringIO()
     code = cli.main(
@@ -1545,7 +1547,7 @@ def test_t30_inspect_prints_ordered_spans_with_duration_ms_in_the_fourth_column(
     assert len(blocks) == len(rows), out.getvalue()
 
     for block in blocks:
-        config_hash = block[0].split(": ", 1)[1]
+        config_hash = block[0].split(": ", 1)[1][:12]
         seed = int(next(line for line in block if line.startswith("seed: ")).split(": ", 1)[1])
         row = by_key[(config_hash, seed)]
         spans = Trace.from_dict(row.meta["trace"]).ordered()

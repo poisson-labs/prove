@@ -355,8 +355,12 @@ def test_u16_a_cli_diff_warns_and_the_artifact_is_unchanged_by_it(tmp_path: Path
     write_run(store, "run-b", SALT, fails=4)
     argv = ["--store", str(tmp_path), "diff", "run-a", "run-b", "--event", "fail"]
     box: list[Result] = []
-    records = caught(lambda: box.append(run_cli(argv)))
+    caught(lambda: box.append(run_cli(argv)))
     result = box[0]
-    assert len(unpaired_records(records)) == 1, [str(r.message) for r in records]
+    # The warning now reaches the CLI's own stderr as one note line, whose wording is the warning's
+    # (front-door spec section 5.4); outside that line the CLI still names the alternative nowhere.
+    notes = [line for line in result.err.splitlines() if line.startswith("note: ")]
+    assert len(notes) == 1, result.err
     assert result.code == 0, result.err
-    assert "mcnemar_bh" not in result.out + result.err, result.out + result.err
+    rest = "".join(line for line in result.err.splitlines(keepends=True) if not line.startswith("note: "))
+    assert "mcnemar_bh" not in result.out + rest, result.out + rest

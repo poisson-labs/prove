@@ -42,8 +42,11 @@ Deliberately absent, reported to the spec author rather than adapted (see the se
 from __future__ import annotations
 
 import ast
+import importlib.machinery
+import importlib.util
 import json
 import re
+import sys
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import Iterator, Sequence
@@ -90,13 +93,12 @@ N = 32
 HORIZON = 10.0
 N_FILLERS = 6
 
-RUN_ID_LINE_RE = re.compile(r"^run_id: (\S+)$")
 HONESTY_FIRST_RE = re.compile(
-    r'^Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d+)pp rise\. '
+    r'^Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d\.\d{3}) rise\. '
     r'"(\d+) worse" is an honest claim only above that\.$'
 )
 HONESTY_NONE = "No unchanged cells; every cell moved significantly."
-HONESTY_OVERALL_RE = re.compile(r"^Worst-powered cell overall: (\d+)pp \((.*)\)\.$")
+HONESTY_OVERALL_RE = re.compile(r"^Worst-powered cell overall: (\d\.\d{3}) \((.*)\)\.$")
 COMPOUND_RE = re.compile(r"^([a-zA-Z][a-zA-Z0-9-]*|\*)?((?:[.#][\w-]+)*)$")
 VOID_TAGS = {"br", "meta", "img", "hr", "input", "link", "col", "area", "base", "wbr"}
 
@@ -130,17 +132,24 @@ def assert_clean_refusal(r: Result, code: int) -> None:
     assert "Traceback" not in r.text, r.text
 
 
-def run_id_of(r: Result) -> str:
+def run_ids(store: Path) -> set[str]:
+    return set(Store(store).runs())
+
+
+def run_id_of(r: Result, store: Path, before: set[str]) -> str:
+    # A sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3), so the
+    # new run is the one run id the store gained during the sweep.
     assert r.lines, r.text
-    m = RUN_ID_LINE_RE.match(r.lines[-1])
-    assert m, f"stdout does not end with 'run_id: <id>':\n{r.out}"
-    return m.group(1)
+    added = run_ids(store) - before
+    assert len(added) == 1, (sorted(added), r.text)
+    return added.pop()
 
 
 def sweep(store: Path, target: str, *extra: str) -> str:
+    before = run_ids(store)
     r = run_cli(["--store", str(store), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra])
     assert r.code == 0, r.text
-    return run_id_of(r)
+    return run_id_of(r, store, before)
 
 
 def svg_panels(path: Path) -> list[str]:
@@ -464,6 +473,8 @@ def fake_run_modal(
 
 @pytest.fixture
 def modal_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A missing modal package is now refused before the plan, so modal must import here.
+    monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
     monkeypatch.setattr(cli, "run_modal", fake_run_modal)
 
 
@@ -530,8 +541,9 @@ def test_c2_explicit_event_prints_one_event_and_no_inference_line(pair: MockPair
 
 
 def test_c4_repeated_events_equal_inference_with_inferred_false(pair: MockPair) -> None:
-    inferred = run_cli(pair_argv(pair, "diff", "--format", "json"))
-    explicit = run_cli(pair_argv(pair, "diff", "--event", "violated", "--event", "timeout", "--format", "json"))
+    # diff's --format json is now --json (spec section 5.3).
+    inferred = run_cli(pair_argv(pair, "diff", "--json"))
+    explicit = run_cli(pair_argv(pair, "diff", "--event", "violated", "--event", "timeout", "--json"))
     assert inferred.code == 0 and explicit.code == 0, inferred.text + explicit.text
     i, e = json.loads(inferred.out), json.loads(explicit.out)
     assert i["inferred"] is True and i["non_event"] == NON_EVENT
@@ -555,10 +567,12 @@ def test_c4_repeated_events_print_no_inference_line(pair: MockPair) -> None:
 
 def test_c5_check_without_event_exits_two_and_lists_the_events_the_runs_carry(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "check"))
-    assert_clean_refusal(r, 2)
+    # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)
     assert "requires --event" in r.err, r.text
     assert "violated" in r.err and "timeout" in r.err, r.err
-    assert "PASS" not in r.text and "FAIL" not in r.text, r.text
+    # check's verdict is now a first line starting passed or failed (spec section 5.3); none is printed.
+    assert not [line for line in r.text.splitlines() if line.startswith(("passed", "failed"))], r.text
 
 
 # ---------- C6: check gate over several events ----------
@@ -572,21 +586,24 @@ def test_c6_worse_counts_are_a_real_swing() -> None:
 
 def test_c6_check_fails_when_any_named_event_has_a_worse_cell(worse_pair: Path) -> None:
     r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--event", "timeout"])
-    assert_clean_refusal(r, 1)
-    assert "FAIL" in r.out and "PASS" not in r.out, r.out
+    # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
+    assert_clean_refusal(r, 4)
+    assert r.lines[0].startswith("failed") and not [x for x in r.lines if x.startswith("passed")], r.out
 
 
 def test_c6_check_on_the_worse_event_alone_fails(worse_pair: Path) -> None:
     r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated"])
-    assert_clean_refusal(r, 1)
-    assert "FAIL" in r.out and "PASS" not in r.out, r.out
+    # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
+    assert_clean_refusal(r, 4)
+    assert r.lines[0].startswith("failed") and not [x for x in r.lines if x.startswith("passed")], r.out
     assert "violated: 0 safer, 1 worse" in r.out, r.out
 
 
 def test_c6_check_on_the_untouched_event_alone_passes(worse_pair: Path) -> None:
     r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout"])
     assert r.code == 0, r.text
-    assert "PASS" in r.out and "FAIL" not in r.out, r.out
+    # A passed check says passed on its first line (spec section 5.3).
+    assert r.lines[0].startswith("passed") and not [x for x in r.lines if x.startswith("failed")], r.out
     assert "timeout: 0 safer, 0 worse" in r.out, r.out
 
 
@@ -632,7 +649,8 @@ def test_c8_single_event_report_has_the_two_line_honesty_block(tmp_path: Path) -
 
 
 def test_c8_single_event_worst_cells_use_the_multi_tiebreak(tmp_path: Path) -> None:
-    j = run_cli(go1_argv("diff", "--event", "fell", "--format", "json"))
+    # diff's --format json is now --json (spec section 5.3).
+    j = run_cli(go1_argv("diff", "--event", "fell", "--json"))
     assert j.code == 0, j.text
     cells = json.loads(j.out)["by_event"]["fell"]["cells"]
     ordered = sorted(cells, key=lambda c: (-c["delta"], c["q"], c["mde"], c["config_hash"]))
@@ -688,7 +706,8 @@ def test_c9_single_run_report_defaults_to_proofload_report_run(pair: MockPair, t
 def test_c9_diff_only_flags_are_refused_by_name_on_a_single_run(pair: MockPair, tmp_path: Path, flag: tuple[str, str]) -> None:
     out = tmp_path / "refused"
     r = run_cli(run_report_argv(pair, out, *flag))
-    assert_clean_refusal(r, 2)
+    # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)
     assert flag[0] in r.err, r.text
     assert not out.exists() or not any(out.iterdir())
 
@@ -772,7 +791,8 @@ def test_c12_receipt_has_a_bounded_body_a_scrolling_svg_and_wrapping_text(pair: 
     out = tmp_path / "receipt"
     r = run_cli(report_argv(pair, out))
     assert r.code == 0, r.text
-    j = run_cli(pair_argv(pair, "diff", "--format", "json"))
+    # diff's --format json is now --json (spec section 5.3).
+    j = run_cli(pair_argv(pair, "diff", "--json"))
     assert j.code == 0, j.text
     data = json.loads(j.out)
     headline_first = data["headline"].splitlines()[0]
@@ -830,12 +850,13 @@ def test_c13_inspect_on_a_local_run_prints_the_real_import(pair: MockPair) -> No
 
 
 def test_c14_modal_run_records_the_same_import_path_and_inspects_the_same(store_root: Path, modal_in_process: None) -> None:
+    before = run_ids(store_root)
     modal = run_cli([
         "--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT,
         "--backend", "modal", "--yes",
     ])
     assert modal.code == 0, modal.text
-    modal_id = run_id_of(modal)
+    modal_id = run_id_of(modal, store_root, before)
     local_id = sweep(store_root, ROLLOUT)
     store = Store(store_root)
     mm, ml = store.manifest(modal_id), store.manifest(local_id)
@@ -871,14 +892,16 @@ def test_c16_gate_pass_is_zero_and_gate_fail_is_one(worse_pair: Path) -> None:
     passed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout"])
     failed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated"])
     assert passed.code == 0, passed.text
-    assert failed.code == 1 and "Traceback" not in failed.text, failed.text
+    # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
+    assert failed.code == 4 and "Traceback" not in failed.text, failed.text
     fixture = run_cli(go1_argv("check", "--event", "fell", "--fail-on", "any"))
-    assert fixture.code == 1 and "FAIL" in fixture.out, fixture.text
+    assert fixture.code == 4 and fixture.lines[0].startswith("failed"), fixture.text
 
 
 def test_c16_check_without_event_is_a_two(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "check"))
-    assert_clean_refusal(r, 2)
+    # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)
     assert r.err.strip(), "expected a message on stderr"
 
 
@@ -889,7 +912,8 @@ def test_c16_check_without_event_is_a_two(pair: MockPair) -> None:
 )
 def test_c16_single_run_report_with_a_diff_only_flag_is_a_two(pair: MockPair, tmp_path: Path, extra: tuple[str, str]) -> None:
     r = run_cli(run_report_argv(pair, tmp_path / "out", *extra))
-    assert_clean_refusal(r, 2)
+    # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)
     assert r.err.strip(), "expected a message on stderr"
 
 
@@ -906,7 +930,8 @@ def test_c16_report_with_three_positionals_is_a_two_naming_both_forms(pair: Mock
 
 def test_c16_unknown_run_is_still_a_two_and_missing_event_is_not_a_traceback(pair: MockPair) -> None:
     r = run_cli(["--store", str(pair.root), "diff", pair.a, "no-such-run"])
-    assert_clean_refusal(r, 2)
+    # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)
     assert "no-such-run" in r.text, r.text
 
 
@@ -917,12 +942,15 @@ def test_c17_three_quickstart_commands_run_unchanged_under_thirty_seconds(tmp_pa
     monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
     t0 = time.perf_counter()
+    default_store = tmp_path / "prove-runs"
+    before = run_ids(default_store)
     first = run_cli(["sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
     assert first.code == 0, first.text
-    run_a = run_id_of(first)
+    run_a = run_id_of(first, default_store, before)
+    before = run_ids(default_store)
     second = run_cli(["sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", run_a, "--yes"])
     assert second.code == 0, second.text
-    run_b = run_id_of(second)
+    run_b = run_id_of(second, default_store, before)
     third = run_cli(["report", run_a, run_b, "--event", "violated", "--x", "tool_fail_rate", "--y", "task_id"])
     assert third.code == 0, third.text
     elapsed = time.perf_counter() - t0

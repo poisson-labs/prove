@@ -136,6 +136,8 @@ SERVE_FLAGS = {
     "--event", "--x", "--y", "--fix", "--method", "--q", "--theme", "--top-n", "--forest",
     "--title", "--json",
     "--permutations", "--seed", "--by", "--max-group-mde", "--depth",
+    # Every verb also takes the tool's own options after it (spec section 5.4).
+    "--store", "--plain", "--debug",
 }
 #: V24's one carve-out, by path (spec S29 section 0.3): the permutation seed M14's frozen
 #: ``RootResult.to_json()`` names ``seed``, carried verbatim under ``tree``.
@@ -251,11 +253,25 @@ def assert_clean_refusal(r: Result, code: int) -> None:
     assert "Traceback" not in r.text, r.text
 
 
-def run_id_of(r: Result) -> str:
-    assert r.lines, r.text
-    m = re.match(r"^run_id: (\S+)$", r.lines[-1])
-    assert m, f"stdout does not end with 'run_id: <id>':\n{r.out}"
-    return m.group(1)
+def run_id_of(root: Path, before: set[str]) -> str:
+    """The one run a sweep added to the store. A sweep no longer ends with a ``run_id:`` line; it
+    ends with a verdict line (spec section 5.3), so the id is read from the store."""
+    added = set(Store(root).runs()) - before
+    assert len(added) == 1, added
+    return added.pop()
+
+
+def without_notes(err: str) -> str:
+    """Stderr with the ``note:`` lines dropped: Prove's own warnings now reach the CLI's stderr as
+    one ``note:`` line each (spec section 5.4)."""
+    return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
+
+
+def assert_error_then_next(err: str) -> None:
+    """A refusal is one ``error:`` line, then only ``  next:`` lines (spec section 5.4)."""
+    lines = without_notes(err).splitlines()
+    assert lines and lines[0].startswith("error: "), err
+    assert all(line.startswith("  next: ") for line in lines[1:]), err
 
 
 def go1_argv(*extra: str) -> list[str]:
@@ -936,10 +952,10 @@ def mock_pair(tmp_path_factory: pytest.TempPathFactory) -> MockPair:
     root = tmp_path_factory.mktemp("mock-store")
     first = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--salt", V22B_SALT, "--yes"])
     assert first.code == 0, first.text
-    a = run_id_of(first)
+    a = run_id_of(root, set())
     second = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", a, "--yes"])
     assert second.code == 0, second.text
-    return MockPair(root, a, run_id_of(second))
+    return MockPair(root, a, run_id_of(root, {a}))
 
 
 def mock_serve_json(pair: MockPair, *events: str) -> Result:
@@ -970,19 +986,18 @@ def hostile(tmp_path_factory: pytest.TempPathFactory) -> Built:
 def test_v1_missing_event_exits_two_names_serve_and_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(go1_argv("--x", GO1_X))
-    assert_clean_refusal(r, 2)
-    assert r.err == (
-        "error: serve requires --event NAME, which was not given; a picture whose meaning changes when a new outcome "
-        "appears is worse than a table with the same defect. go1-v0 and go1-v1 carry:\n"
-        "  axes: mu, push_pct_bw\n"
-        "  events: fell, survived\n"
-    ), r.err
+    # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr (spec section 5.4).
+    assert_clean_refusal(r, 1)
+    assert_error_then_next(r.err)
+    for fact in ("serve", "--event", "go1-v0", "go1-v1", "mu", "push_pct_bw", "fell", "survived"):
+        assert fact in r.err, (fact, r.err)
 
 
 def test_v2_unknown_event_exits_two_with_the_known_events_sentence_and_the_verb(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(go1_argv("--event", "nope", "--x", GO1_X))
-    assert_clean_refusal(r, 2)
+    # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)
     assert 'serve: event "nope" does not appear in either run. Present: fell, survived.' in r.err, r.err
 
 
@@ -1000,36 +1015,37 @@ def test_v3_wrong_arity_exits_two_naming_the_two_run_form_and_no_single_run_mode
 def test_v4_missing_x_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(go1_argv("--event", "fell"))
-    assert_clean_refusal(r, 2)
-    assert r.err == (
-        "error: serve requires --x AXIS, which was not given. go1-v0 and go1-v1 carry:\n"
-        "  axes: mu, push_pct_bw\n"
-        "  events: fell, survived\n"
-    ), r.err
+    # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr (spec section 5.4).
+    assert_clean_refusal(r, 1)
+    assert_error_then_next(r.err)
+    for fact in ("serve", "--x", "go1-v0", "go1-v1", "mu", "push_pct_bw", "fell", "survived"):
+        assert fact in r.err, (fact, r.err)
 
 
 def test_v4_unknown_x_exits_two_through_axis_error(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(go1_argv("--event", "fell", "--x", "nope"))
-    assert_clean_refusal(r, 2)
-    assert "'nope'" in r.err and "config key" in r.err, r.err
+    # A refusal exits 1, and an error shows no Python repr, so the value is checked bare (spec section 5.4).
+    assert_clean_refusal(r, 1)
+    assert "nope" in r.err and "config key" in r.err, r.err
 
 
+# Each with its exit code: a refusal exits 1, a wrong command line (the run count) exits 2 (spec section 5.2).
 REFUSALS = [
-    go1_argv("--x", GO1_X),
-    go1_argv("--event", "nope", "--x", GO1_X),
-    ["--store", str(GO1_ROOT), "serve", GO1_A, "--event", "fell", "--x", GO1_X],
-    ["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, GO1_A, "--event", "fell", "--x", GO1_X],
-    go1_argv("--event", "fell"),
-    go1_argv("--event", "fell", "--x", "nope"),
+    (go1_argv("--x", GO1_X), 1),
+    (go1_argv("--event", "nope", "--x", GO1_X), 1),
+    (["--store", str(GO1_ROOT), "serve", GO1_A, "--event", "fell", "--x", GO1_X], 2),
+    (["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, GO1_A, "--event", "fell", "--x", GO1_X], 2),
+    (go1_argv("--event", "fell"), 1),
+    (go1_argv("--event", "fell", "--x", "nope"), 1),
 ]
 
 
-@pytest.mark.parametrize("argv", REFUSALS, ids=["no-event", "unknown-event", "one-run", "three-runs", "no-x", "unknown-x"])
-def test_v5_every_refusal_exits_two_without_calling_serve_page(monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
+@pytest.mark.parametrize(("argv", "code"), REFUSALS, ids=["no-event", "unknown-event", "one-run", "three-runs", "no-x", "unknown-x"])
+def test_v5_every_refusal_exits_two_without_calling_serve_page(monkeypatch: pytest.MonkeyPatch, argv: list[str], code: int) -> None:
     calls = tripwire_serve(monkeypatch)
     r = run_cli(argv)
-    assert r.code == 2, r.text
+    assert r.code == code, r.text
     assert calls == [], calls
 
 
@@ -1122,7 +1138,8 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(go1: B
     assert statuses == [200, 200, 200] and missed == 404
     assert dropped is None or dropped.status >= 500, dropped
     assert run.out.getvalue() == f"http://{HOST}:{run.server.server_address[1]}/\n", run.out.getvalue()
-    assert run.err.getvalue() == "", run.err.getvalue()
+    # The unpaired-analysis warning on Go1 is now a note line on stderr (spec section 5.4).
+    assert without_notes(run.err.getvalue()) == "", run.err.getvalue()
     assert (real_out, real_err) == ("", ""), (real_out, real_err)
 
 
@@ -1341,7 +1358,8 @@ def test_v22_n_tests_and_every_q_equal_diff_format_json(go1_serve_json: Result, 
     argv = ["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B]
     for e in events:
         argv += ["--event", e]
-    argv += ["--method", "fisher_bh", "--format", "json"]
+    # --json replaces --format json on diff (spec section 5.6).
+    argv += ["--method", "fisher_bh", "--json"]
     diffed = run_cli(argv)
     assert diffed.code == 0, diffed.err
     payload = json.loads(diffed.out)
@@ -1583,6 +1601,9 @@ def test_v33_json_prints_the_structure_indented_and_strict_and_binds_nothing(go1
     assert r.code == 0, r.err
     assert r.out.startswith('{\n  "schema": ')
     parsed = strict_loads(r.out)
+    # serve --json wraps the structure with verdict and sentence after schema (spec section 5.6).
+    assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
+    parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence")}
     assert parsed == json.loads(json.dumps(go1.structure, allow_nan=False))
     assert parsed["schema"] == SCHEMA
     assert tuple(parsed) == TOP_LEVEL_KEYS, tuple(parsed)
@@ -1730,7 +1751,8 @@ def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(go
         assert run.out.getvalue() == f"http://{HOST}:{port}/\n"
         assert get(run.server, "/").status == 200
     assert run.codes == [0], run.codes
-    assert run.err.getvalue() == ""
+    # The unpaired-analysis warning on Go1 is now a note line on stderr (spec section 5.4).
+    assert without_notes(run.err.getvalue()) == ""
 
 
 def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_traceback(go1: Built, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1752,9 +1774,13 @@ def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_trace
     monkeypatch.setattr(module, "serve_page", wrapped)
     monkeypatch.setattr(cli, "serve_page", wrapped, raising=False)
     r = run_cli(go1_full_argv())
-    assert r.code == 0, r.text
-    assert "Traceback" not in r.text and r.err == "", r.text
-    assert holder and r.out == f"http://{HOST}:{holder[0].server_address[1]}/\n", r.out
+    # Ctrl-C exits 130 and adds one stopped line after the URL line; the Go1 warning is a note line
+    # (spec sections 5.2 and 5.4).
+    assert r.code == 130, r.text
+    assert "Traceback" not in r.text and without_notes(r.err) == "", r.text
+    lines = r.out.splitlines()
+    assert holder and lines[0] == f"http://{HOST}:{holder[0].server_address[1]}/", r.out
+    assert len(lines) == 2 and lines[1].startswith("stopped  "), r.out
     assert holder[0].socket.fileno() == -1
 
 
@@ -1766,8 +1792,9 @@ def test_v38_bind_failure_is_a_viewer_error_and_exit_two(go1: Built, monkeypatch
     with pytest.raises(viewer().ViewerError):
         viewer().serve_page(go1.page, on_bind=lambda server: None)
     r = run_cli(go1_full_argv())
-    assert_clean_refusal(r, 2)
-    assert r.out == "" and r.err.startswith("error:"), r.text
+    # A refusal exits 1; the Go1 warning may come first as a note line (spec sections 5.2 and 5.4).
+    assert_clean_refusal(r, 1)
+    assert r.out == "" and without_notes(r.err).startswith("error:"), r.text
 
 
 def test_v39_fence_headline_captions_and_worst_rows_are_on_the_page(go1: Built) -> None:

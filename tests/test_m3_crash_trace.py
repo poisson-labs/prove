@@ -110,7 +110,8 @@ STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine colu
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
 # Re-minted by PF0 Session A over the file as its freeze commit moved it (the rename, Q4).
-S16_ORACLE_SHA256 = "0b9a0cc8886494058bdfdd52041008a08843920dbdfb3e2e5f89f11f189d02df"  # 38 tests; re-minted by A10 Session B over the file A10 Session A amended (TRACE_EXPORTS gains Declaration, 5bb967c)
+# Re-minted over the file as moved for 12-hex config hashes in inspect text (spec section 5.4, rule 10).
+S16_ORACLE_SHA256 = "cd33a676fdb6b93cd33f5998e5e0b29a5486e1b0b906d3ec199f184940f64207"  # 38 tests; re-minted by A10 Session B over the file A10 Session A amended (TRACE_EXPORTS gains Declaration, 5bb967c)
 
 #: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
 DECLARED_LIMIT = 8192
@@ -915,7 +916,8 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
     blocks: list[list[str]] = []
     current: list[str] | None = None
     for line in body.splitlines():
-        if any(h in line for h in hashes):
+        # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+        if any(h[:12] in line for h in hashes):
             if current is not None:
                 blocks.append(current)
             current = [line]
@@ -928,7 +930,8 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
 
 def assert_block_is_row(block: list[str], row: Any) -> None:
     text = "\n".join(block)
-    assert row.config_hash in block[0], block[0]
+    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    assert row.config_hash[:12] in block[0], block[0]
     assert re.search(rf"\b{row.seed}\b", text), f"seed {row.seed} missing from block:\n{text}"
     found = False
     for line in block:

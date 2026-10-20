@@ -1693,6 +1693,14 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def new_run(store_root: Path, before: set[str]) -> str:
+    """The one run a sweep added. A sweep no longer ends with its run id as the last word of
+    stdout; it ends with a verdict line (spec section 5.3), so the id is read from the store."""
+    added = set(Store(store_root).runs()) - before
+    assert len(added) == 1, added
+    return added.pop()
+
+
 def sweep_argv(root: Path, spec: Path, target: str = PLAIN, *extra: str, backend: str = "burla") -> list[str]:
     return ["--store", str(root / "store"), "sweep", str(spec), "--target", target, "--backend", backend,
             "--salt", "0123456789abcdef", "--max-mde", "0.99", "--yes", *extra]
@@ -1703,12 +1711,13 @@ def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) 
     ledger = tmp_path / "ledgers" / "step.jsonl"
     for flag in (["--concurrency", "2"], ["--app-name", "x"], ["--image", "gpu"]):
         code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, *flag))
-        assert code == 2, (flag, out, err)
+        # A refusal exits 1 (spec section 5.2).
+        assert code == 1, (flag, out, err)
     assert fake.launchers() == [] and not ledger.exists()
     code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, "--max-cost", "7.5", "--est-seconds", "0.002",
                                         "--infra-retries", "3", "--episode-timeout", "30", "--batch-size", "1"))
     assert code == 0, err
-    run_id = out.strip().splitlines()[-1].split()[-1]
+    run_id = new_run(tmp_path / "store", set())
     opened = open_of(ledger, run_id)
     assert opened["max_cost"] == 7.5
     p = make_plan(spec, Store(tmp_path / "other"), PLAIN)
@@ -1720,16 +1729,24 @@ def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) 
     assert {item["episode_timeout"] for item in call["items"]} == {30.0}
     assert {len(item["jobs"]) for item in call["items"]} == {1}
     code, out, err = run_cli(sweep_argv(tmp_path / "capped", spec, PLAIN, "--max-rollouts", "2"))
-    assert code == 0, err
-    assert "stopped_by: max_rollouts" in out
+    # A sweep stopped by --max-rollouts exits 3 and ends with a stopped line instead of the
+    # stopped_by field; the store holds the run, partial, with the two rollouts it kept
+    # (spec sections 5.2 and 5.3).
+    assert code == 3, err
+    assert any(line.startswith("stopped  ") for line in out.splitlines()), out
+    capped = Store(tmp_path / "capped" / "store")
+    (capped_run,) = capped.runs()
+    assert capped.manifest(capped_run).status == "partial" and capped.count(capped_run) == 2
     code, out, err = run_cli(sweep_argv(tmp_path / "local", spec, PLAIN, "--max-cost", "1", backend="local"))
-    assert code == 2, "--backend local changed"
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, "--backend local changed"
 
 
 def test_p1_an_unknown_burla_field_is_a_refusal(fake: Fake, tmp_path: Path) -> None:
     spec = write_sweep(tmp_path, burla=burla_table(nodez=4))
     code, out, err = run_cli(sweep_argv(tmp_path, spec))
-    assert code == 2 and "nodez" in err, err
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1 and "nodez" in err, err
 
 
 def test_p2_the_target_resolves_here_first_with_the_local_refusal(fake: Fake, tmp_path: Path) -> None:
@@ -1737,10 +1754,11 @@ def test_p2_the_target_resolves_here_first_with_the_local_refusal(fake: Fake, tm
     good = write_sweep(tmp_path / "good", burla=burla_table())
     broken = write_sweep(tmp_path / "broken", burla=burla_table(nodez=4))
     local = run_cli(sweep_argv(tmp_path / "good", good, bad, backend="local"))
-    assert local[0] == 2
+    # A refusal exits 1 (spec section 5.2).
+    assert local[0] == 1
     for spec in (good, broken):
         code, out, err = run_cli(sweep_argv(spec.parent, spec, bad))
-        assert (code, err) == (2, local[2]), err
+        assert (code, err) == (1, local[2]), err
     assert fake.launchers() == [] and not (tmp_path / "good" / "ledgers").exists()
 
 
@@ -1791,7 +1809,8 @@ def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake
     monkeypatch.setenv("BU_DRIFT_MARKER", "host-value-4c7e")
     spec = write_sweep(tmp_path / "drift", burla=burla_table())
     code, out, err = run_cli(sweep_argv(spec.parent, spec, DRIFTING))
-    assert code == 2, (out, err)
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, (out, err)
     assert "host-value-4c7e" in out + err and "absent-in-the-worker-view" in out + err
     assert fake.launchers() == [] and not (spec.parent / "ledgers").exists()
     assert Store(spec.parent / "store").runs() == []
@@ -1847,10 +1866,10 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     store_root = tmp_path / "store"
     code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, backend="local"))
     assert code == 0, err
-    local = out.strip().splitlines()[-1].split()[-1]
+    local = new_run(store_root, set())
     code, out, err = run_cli(sweep_argv(tmp_path, spec))
     assert code == 0, err
-    remote = out.strip().splitlines()[-1].split()[-1]
+    remote = new_run(store_root, {local})
     code, out, err = run_cli(["--store", str(store_root), "runs"])
     assert code == 0 and any(line.split()[:3] == [remote, "complete", "burla"] for line in out.splitlines()), out
     assert run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell"])[0] == 0
@@ -1858,7 +1877,8 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     assert run_cli(["--store", str(store_root), "report", local, remote, "--event", "fell", "--x", "cell",
                     "--out", str(tmp_path / "report")])[0] == 0
     assert run_cli(["--store", str(store_root), "serve", local, remote, "--event", "fell", "--x", "cell", "--json"])[0] == 0
-    code, out, err = run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell", "--format", "json"])
+    # --json replaces --format json on diff (spec section 5.6).
+    code, out, err = run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell", "--json"])
     fell = json.loads(out)["by_event"]["fell"]
     assert fell["n_worse"] == 0 and fell["n_safer"] == 0 and fell["n_unchanged"] == 2, fell
     assert comparable(stored(Store(store_root), local)) == comparable(stored(Store(store_root), remote))
@@ -1869,7 +1889,8 @@ def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -
     _seed_ledger(ledger, PRIOR)
     guard = write_sweep(tmp_path / "guard", burla=burla_table(stop_cost=0.3, max_cost=0.3))
     code, out, err = run_cli(sweep_argv(guard.parent, guard))
-    assert code == 2 and str(ledger) in err, err
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1 and str(ledger) in err, err
     fake.script(attempts=[{"hang_after": 1}])
     stop = write_sweep(tmp_path / "stop", replicates=3,
                        burla=burla_table(usd_per_node_hour=360.0, stop_cost=0.3, max_cost=1.0))

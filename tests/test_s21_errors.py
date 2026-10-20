@@ -893,6 +893,93 @@ def coverage_block(frame: pd.DataFrame) -> str:
     return "\n".join([coverage_line(frame), "", "## coverage", "", header, rule, *rows]) + "\n"
 
 
+# The command line prints its text, report.md, receipt.html and the heatmap's labels under rule 10
+# (spec section 5.4), which PF1 changes; the library renderers it calls do not change. So a
+# digest or an exact comparison over what the command line printed or wrote is replaced by two
+# checks: the library's rendering still gives the frozen digest or text, and the printed text
+# carries the same numbers, verdicts and cells as that rendering, each number equal to the
+# library's or to its percentage points read as a fraction, within the coarser of the two printed
+# precisions, and every config hash cut to 12 hex characters (a 12-hex token is a hash, not a
+# number).
+RENDERED_NUMBER = re.compile(r"(?<![\w.])(?![0-9a-f]{12}\b)[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?(?:pp|%)?(?![\w]|\.\d)")
+
+
+def rendered_value(token: str) -> tuple[float, float]:
+    """A printed number and half a unit of its last printed digit."""
+    text = token.replace(",", "").removesuffix("pp").removesuffix("%")
+    m = re.fullmatch(r"[-+]?\d+(?:\.(\d+))?(?:[eE]([-+]?\d+))?", text)
+    assert m, token
+    return float(text), 0.5 * 10.0 ** (int(m.group(2) or 0) - len(m.group(1) or ""))
+
+
+def same_number(library: str, written: str) -> bool:
+    a, half_a = rendered_value(library)
+    w, half_w = rendered_value(written)
+    return abs(w - a) <= max(half_a, half_w) + 1e-12 or abs(w - a / 100) <= max(half_a / 100, half_w) + 1e-12
+
+
+class RenderedUnits(HTMLParser):
+    """The text nodes of an HTML or SVG file in order, each marked when it is a table cell, and
+    every start tag with its attributes (the geometry)."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.units: list[tuple[bool, str]] = []
+        self.tags: list[tuple[str, list[tuple[str, str | None]]]] = []
+        self.open: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag, attrs))
+        self.open.append(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        while self.open and self.open.pop() != tag:
+            pass
+
+    def handle_data(self, data: str) -> None:
+        if data.strip():
+            self.units.append((bool(self.open) and self.open[-1] == "td", data))
+
+
+def rendered_units(text: str, name: str) -> tuple[list[tuple[bool, str]], list[Any]]:
+    if not name.endswith(".md"):
+        parser = RenderedUnits()
+        parser.feed(text)
+        return parser.units, parser.tags
+    lines = text.splitlines()
+    units: list[tuple[bool, str]] = []
+    for i, line in enumerate(lines):
+        header = i + 1 < len(lines) and lines[i + 1].startswith("|---")
+        if line.startswith("|") and not header and not line.startswith("|---"):
+            units += [(True, cell) for cell in line.strip("|").split(" | ")]
+        else:
+            units.append((False, line))
+    return units, []
+
+
+def rendered_problems(library: str, written: str, name: str) -> list[Any]:
+    """Where ``written`` does not carry ``library``'s facts: the same tags and attributes, the same
+    lines or text nodes, the same numbers in each, and the same words in each table cell that
+    holds no number (the verdicts, events and labels)."""
+    lib_units, lib_tags = rendered_units(library, name)
+    out_units, out_tags = rendered_units(written, name)
+    problems: list[Any] = [] if lib_tags == out_tags else ["the tags or their attributes differ"]
+    if len(lib_units) != len(out_units):
+        return [*problems, f"{len(lib_units)} lines or text nodes, not {len(out_units)}"]
+    for (cell, a), (_, w) in zip(lib_units, out_units, strict=True):
+        na, nw = RENDERED_NUMBER.findall(a), RENDERED_NUMBER.findall(w)
+        numbers_agree = len(na) == len(nw) and all(same_number(x, y) for x, y in zip(na, nw, strict=True))
+        if not numbers_agree or (cell and not na and a.strip() != w.strip()):
+            problems.append((a, w))
+    return problems
+
+
+def shortened(text: str) -> str:
+    """``text`` with every 16-hex config hash cut to its first 12 characters, as the command line
+    prints a hash in text (spec section 5.4, rule 10)."""
+    return re.sub(r"\b([0-9a-f]{12})[0-9a-f]{4}\b", r"\1", text)
+
+
 def diff_argv(root: Path, *extra: str) -> list[str]:
     argv = ["--store", str(root), "diff", SYN_A, SYN_B]
     for e in SYN_EVENTS:
@@ -1236,7 +1323,8 @@ def test_e10_the_column_sums_are_the_frame_totals(syn: Built) -> None:
 
 
 def test_e10_through_the_cli_the_sums_are_the_store_tallies(syn: Built) -> None:
-    r = run_cli(diff_argv(syn.root, "--method", "fisher_bh", "--format", "json"))
+    # --json replaces --format json on diff (spec section 5.6).
+    r = run_cli(diff_argv(syn.root, "--method", "fisher_bh", "--json"))
     assert r.code == 0, r.text
     records = json.loads(r.out)["coverage"]
     assert records
@@ -1318,15 +1406,22 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     assert md == hand_built_multi(syn_multi).to_markdown()
     assert "coverage" not in md
     block = coverage_block(frame)
+    # The command line prints the markdown and the block under rule 10 (spec section 5.4): each
+    # printed line carries the library line's numbers and table cells, hashes at 12 hex.
+    md_n, block_n = len(md.splitlines()), len(block.splitlines())
     r = run_cli(diff_argv(syn_root, "--method", "fisher_bh"))
     assert r.code == 0, r.text
-    assert r.out.startswith(md + "\n" + block), r.out
+    head = "".join(r.out.splitlines(keepends=True)[: md_n + 1 + block_n])
+    assert rendered_problems(shortened(md + "\n" + block), head, "diff.md") == [], r.out
     every = run_cli(diff_argv(syn_root, "--methods", "all"))
     assert every.code == 0, every.text
-    assert every.out.startswith(md), every.out
+    lines = every.out.splitlines(keepends=True)
+    assert rendered_problems(shortened(md), "".join(lines[:md_n]), "diff.md") == [], every.out
     # > and not >=: the method table sits between the markdown and the block, so the block
     # cannot begin where the markdown ends.
-    assert every.out.index("\n" + block) > len(md), every.out
+    at = next(i for i, line in enumerate(lines) if line.startswith("coverage: "))
+    assert at > md_n, every.out
+    assert rendered_problems(shortened(block), "".join(lines[at : at + block_n]), "diff.md") == [], every.out
     assert every.out.count("## coverage") == 1
     mixed = frame[frame["config_hash"] == hash_of(COMPARABLE_WITH_ERRORS)].iloc[0]
     assert "| " + " | ".join(md_cell(mixed[c]) if c != "cause" else "None" for c in COVERAGE_COLUMNS) + " |" in block
@@ -1397,7 +1492,7 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def e14_builder_digests() -> dict[str, str]:
+def e14_builder_texts() -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
     store = Store(GO1_ROOT)
@@ -1409,10 +1504,7 @@ def e14_builder_digests() -> dict[str, str]:
     spec = ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw")
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
-    return {
-        "report.md": hashlib.sha256(as_0_0_1_wrote_it(report.to_markdown()).encode("utf-8")).hexdigest(),
-        "receipt.html": hashlib.sha256(as_0_0_1_wrote_it(receipt.to_html()).encode("utf-8")).hexdigest(),
-    }
+    return {"report.md": report.to_markdown(), "receipt.html": receipt.to_html(), "heatmap.svg": report.to_svg()}
 
 
 def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree(tmp_path: Path) -> None:
@@ -1425,9 +1517,14 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
     out = tmp_path / "report"
     r = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert r.code == 0, r.text
-    assert sha256_of(out / "heatmap.svg") == E14_SHA256["heatmap.svg"]
-    for name, digest in e14_builder_digests().items():
-        assert digest == E14_SHA256[name], name
+    texts = e14_builder_texts()
+    # The heatmap's labels are printed under rule 10 by the command line (spec section 5.4): the
+    # frozen digest now holds over the builder's own SVG, and the written file carries its cells,
+    # geometry and numbers.
+    assert rendered_problems(texts["heatmap.svg"], (out / "heatmap.svg").read_text(encoding="utf-8"), "heatmap.svg") == []
+    for name, text in texts.items():
+        normalised = text if name == "heatmap.svg" else as_0_0_1_wrote_it(text)
+        assert hashlib.sha256(normalised.encode("utf-8")).hexdigest() == E14_SHA256[name], name
 
 
 def test_e14_the_synthetic_report_is_byte_identical_with_coverage_replaced_by_none(syn: Built) -> None:
@@ -1805,7 +1902,9 @@ def test_e24_serve_json_on_go1_prints_the_thirteen_keys_both_tallies_and_no_hole
     assert r.code == 0, r.err
     assert go1_serve_json.calls == []
     parsed = strict_loads(r.out)
-    assert tuple(parsed) == TOP_LEVEL_KEYS
+    # serve --json adds verdict and sentence after schema (spec section 5.6).
+    assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
+    assert tuple(k for k in parsed if k not in ("verdict", "sentence")) == TOP_LEVEL_KEYS
     assert parsed["schema"] == SCHEMA
     assert parsed["pair"]["a"]["tally"] == go1_store.tally(GO1_A).to_dict() == dict(zip(TALLY_FIELDS, GO1_TALLY))
     assert parsed["pair"]["b"]["tally"] == go1_store.tally(GO1_B).to_dict() == dict(zip(TALLY_FIELDS, GO1_TALLY))
@@ -1820,6 +1919,9 @@ def test_e24_serve_json_on_the_synthetic_pair_has_holes_with_the_seven_causes(sy
     assert parsed["holes"]
     assert all(h["cause"] in ALL_CAUSES for h in parsed["holes"])
     assert {h["cause"] for h in parsed["holes"]} == set(ALL_CAUSES)
+    # serve --json adds verdict and sentence after schema (spec section 5.6).
+    assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
+    parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence")}
     assert parsed == json.loads(json.dumps(syn.structure, allow_nan=False))
 
 
@@ -1835,8 +1937,9 @@ def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(
         assert [row[0] for row in rows] == store.runs()
         for row in rows:
             assert len(row) == 7, row
-            assert int(row[6]) == store.tally(row[0]).no_outcome, row
-            assert int(row[5]) == store.count(row[0]), row
+            # Counts carry thousands separators in text (spec section 5.4, rule 10).
+            assert row[6] == f"{store.tally(row[0]).no_outcome:,}", row
+            assert row[5] == f"{store.count(row[0]):,}", row
 
 
 def test_e25_a_run_of_three_errored_rows_prints_three(three_root: Path) -> None:

@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.machinery
+import importlib.util
 import json
 import re
 import shutil
@@ -66,7 +68,7 @@ RAISING = f"{__name__}:always_raises"
 VERBS = ("sweep", "diff", "report", "check", "inspect", "runs")
 METHODS = {"fisher_bh", "mcnemar_bh", "logrank_bh"}
 REPORT_FILES = {"report.md", "heatmap.svg", "receipt.html"}
-SUMMARY_FIELDS = ("n_ok", "n_errored", "n_timeout", "wall_time", "stopped_by", "complete")
+DIFF_JSON_ENVELOPE = {"schema", "verdict", "sentence", "next"}
 
 QUICKSTART_CELLS = 9
 QUICKSTART_REPLICATES = 100
@@ -81,7 +83,6 @@ GO1_HEADLINE_PREFIX = "60 of 400 cells safer, 0 worse (fisher_bh, BH q<0.05, "
 HEADLINE_RE = re.compile(
     r"(\d+) of (\d+) cells safer, (\d+) worse \((\S+), BH q<([^,]+), (paired|unpaired)\)\."
 )
-RUN_ID_LINE_RE = re.compile(r"^run_id: (\S+)$")
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # nine tab-delimited columns (A8a: step_name, attempt, outcome, gate after error)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 SNIPPET_CALL_RE = re.compile(r"(\w+)\((\{.*\}),\s*seed=(\d+)\)")
@@ -157,17 +158,23 @@ def assert_clean_refusal(r: Result, code: int) -> None:
     assert "Traceback" not in r.text, r.text
 
 
-def run_id_of(r: Result) -> str:
-    assert r.lines, r.text
-    m = RUN_ID_LINE_RE.match(r.lines[-1])
-    assert m, f"stdout does not end with 'run_id: <id>':\n{r.out}"
-    return m.group(1)
+def new_run_id(root: Path, before: Sequence[str]) -> str:
+    # A sweep's output no longer ends with a run_id line (spec section 5.3): the new run is
+    # the one the store gained.
+    added = set(Store(root).runs()) - set(before)
+    assert len(added) == 1, (sorted(before), sorted(added))
+    return added.pop()
 
 
 def sweep(store: Path, target: str, *extra: str) -> str:
+    before = Store(store).runs()
     r = run_cli(["--store", str(store), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra])
     assert r.code == 0, r.text
-    return run_id_of(r)
+    return new_run_id(store, before)
+
+
+def three_decimals(text: str) -> str:
+    return re.sub(r"\d+\.\d+", lambda m: f"{float(m.group(0)):.3f}", text)
 
 
 def mentions_path(text: str, path: Path) -> bool:
@@ -241,7 +248,8 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
     blocks: list[list[str]] = []
     current: list[str] | None = None
     for line in body.splitlines():
-        if any(h in line for h in hashes):
+        # Text output shows a config_hash at 12 hex characters (spec section 5.6, rule 10).
+        if any(h[:12] in line for h in hashes):
             if current is not None:
                 blocks.append(current)
             current = [line]
@@ -254,7 +262,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
 
 def assert_block_is_row(block: list[str], row: Any) -> None:
     text = "\n".join(block)
-    assert row.config_hash in block[0], block[0]
+    assert row.config_hash[:12] in block[0], block[0]  # 12 hex characters in text (rule 10)
     assert re.search(rf"\b{row.seed}\b", text), f"seed {row.seed} missing from block:\n{text}"
     found = False
     for line in block:
@@ -346,6 +354,11 @@ class CapturedRunModal:
 
 @pytest.fixture
 def captured_run_modal(monkeypatch: pytest.MonkeyPatch) -> CapturedRunModal:
+    # A missing modal package is refused before the plan (spec section 5.2), so the patched
+    # launch seam is reached only when modal imports.
+    monkeypatch.setitem(
+        sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None))
+    )
     captured = CapturedRunModal()
     monkeypatch.setattr(cli, "run_modal", captured)
     return captured
@@ -363,8 +376,13 @@ def modal_absent(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_i1_no_arguments_prints_usage_and_returns_zero() -> None:
     r = run_cli([])
-    assert r.code == 0, r.text
-    assert "usage" in r.text.lower()
+    # No arguments is a wrong command line: exit 2, an error line pointing at --help, nothing
+    # on stdout (spec section 5.2).
+    assert r.code == 2, r.text
+    assert r.out == "", r.out
+    err = r.err.splitlines()
+    assert err and err[0].startswith("error: "), r.err
+    assert any(line.startswith("  next: ") and "poisson-prove --help" in line for line in err[1:]), r.err
     assert "Traceback" not in r.text
 
 
@@ -445,7 +463,7 @@ def test_i2_resolved_store_is_the_one_read(tmp_path: Path, monkeypatch: pytest.M
 def test_i3_sweep_local_end_to_end(store_root: Path) -> None:
     r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
     assert r.code == 0, r.text
-    run_id = run_id_of(r)
+    run_id = new_run_id(store_root, [])
     store = Store(store_root)
     assert store.runs() == [run_id]
     manifest = store.manifest(run_id)
@@ -457,8 +475,13 @@ def test_i3_sweep_local_end_to_end(store_root: Path) -> None:
     assert len(df) == QUICKSTART_ROWS
     assert df["config_hash"].nunique() == QUICKSTART_CELLS
     assert df["outcome"].notna().all(), "the mock agent must not error"
-    for field in SUMMARY_FIELDS:
-        assert field in r.out, f"RunSummary field {field!r} not printed:\n{r.out}"
+    # The end of a sweep is a verdict line plus detail lines, not RunSummary fields (spec
+    # section 5.3): the summary's facts are read from the store and the verdict line by value.
+    tally = store.tally(run_id)
+    assert (tally.with_outcome, tally.no_outcome, tally.timed_out) == (QUICKSTART_ROWS, 0, 0)
+    assert df["error"].isna().all()
+    verdicts = [line for line in r.out.splitlines() if line.startswith("done  ")]
+    assert len(verdicts) == 1 and f"{QUICKSTART_ROWS:,}" in verdicts[0], r.out
 
 
 # ---------- I4: the pre-flight prompt ----------
@@ -470,9 +493,14 @@ def test_i4_declined_prompt_exits_two_and_creates_nothing(store_root: Path) -> N
         ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT],
         stdin=TtyStringIO("n\n"),
     )
-    assert_clean_refusal(r, 2)
-    assert expected.strip() in r.out, r.out
-    assert "Proceed? [y/N]" in r.out
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    # The pre-flight lines follow the plan, not necessarily as one block (spec section 5.3), and
+    # text prints fractions to three decimals (rule 10) where the library's pre-flight keeps full
+    # precision, so both sides are compared with every decimal at three places.
+    out = three_decimals(r.out)
+    for line in expected.strip().splitlines():
+        assert three_decimals(line.strip()) in out, (line, r.out)
+    assert "[y/N]" in r.err  # The question goes to stderr (spec section 5.3).
     assert Store(store_root).runs() == []
 
 
@@ -482,7 +510,7 @@ def test_i4_anything_but_yes_is_a_decline(store_root: Path, answer: str) -> None
         ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT],
         stdin=TtyStringIO(answer),
     )
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert Store(store_root).runs() == []
 
 
@@ -493,8 +521,8 @@ def test_i4_accepted_prompt_runs(store_root: Path, answer: str) -> None:
         stdin=TtyStringIO(answer),
     )
     assert r.code == 0, r.text
-    assert "Proceed? [y/N]" in r.out
-    run_id = run_id_of(r)
+    assert "[y/N]" in r.err  # The question goes to stderr (spec section 5.3).
+    run_id = new_run_id(store_root, [])
     assert Store(store_root).manifest(run_id).status == "complete"
 
 
@@ -506,7 +534,7 @@ def test_i5_non_tty_stdin_without_yes_exits_two_naming_the_flag(store_root: Path
         ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT],
         stdin=StringIO(),
     )
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert "--yes" in r.text, r.text
     assert Store(store_root).runs() == []
 
@@ -537,8 +565,9 @@ def test_i6_resume_completes_a_partial_run(store_root: Path) -> None:
     partial = run_cli(
         ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes", "--max-rollouts", "40"]
     )
-    assert partial.code == 0, partial.text
-    run_id = run_id_of(partial)
+    # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
+    assert partial.code == 3, partial.text
+    run_id = new_run_id(store_root, [])
     store = Store(store_root)
     assert store.manifest(run_id).status == "partial"
     assert len(store.read(run_id)) == 40
@@ -547,7 +576,8 @@ def test_i6_resume_completes_a_partial_run(store_root: Path) -> None:
         ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes", "--resume", run_id]
     )
     assert resumed.code == 0, resumed.text
-    assert run_id_of(resumed) == run_id
+    # The resumed run is the partial one: the store gained no run (spec section 5.3).
+    assert set(store.runs()) - {run_id} == set()
     assert store.runs() == [run_id]
     assert store.manifest(run_id).status == "complete"
     df = store.read(run_id)
@@ -580,7 +610,7 @@ def test_i7_modal_absent_exits_two_with_install_hint(store_root: Path, modal_abs
     r = run_cli(
         ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--backend", "modal", "--yes"]
     )
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert "pip install \"poisson-prove[modal]\"" in r.text, r.text
     assert Store(store_root).runs() == []
 
@@ -599,7 +629,9 @@ def test_i7_table_only_reaches_options_and_image(
     assert isinstance(store, Store)
     assert target == ModalTarget(import_path=ROLLOUT, image=TABLE_IMAGE)
     assert options == TABLE_OPTIONS
-    assert run_id_of(r) == p.run_id
+    # No run_id line ends the output now (spec section 5.3); the patched launch writes no run,
+    # so the planned run's id is checked by value in the output.
+    assert p.run_id in r.out, r.out
 
 
 def test_i7_flags_only_reach_options_with_default_image(
@@ -684,22 +716,24 @@ def test_i7_local_backend_never_calls_run_modal(store_root: Path, captured_run_m
 )
 def test_i8_unresolvable_target_exits_two_naming_the_path(store_root: Path, target: str) -> None:
     r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), "--target", target, "--yes"])
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert target in r.text, r.text
     assert Store(store_root).runs() == []
 
 
 def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> None:
     r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), "--target", RAISING, "--yes"])
-    assert r.code == 0, r.text
-    run_id = run_id_of(r)
+    # A sweep in which every rollout errored exits 3 (spec section 5.2).
+    assert r.code == 3, r.text
+    run_id = new_run_id(store_root, [])
     store = Store(store_root)
     assert store.manifest(run_id).status == "complete"
     df = store.read(run_id)
     assert len(df) == QUICKSTART_ROWS
     assert df["error"].notna().all()
-    assert re.search(rf"n_errored\D+{QUICKSTART_ROWS}\b", r.out), r.out
-    assert re.search(r"n_ok\D+0\b", r.out), r.out
+    # The errored and ok counts are read from the store, not from summary fields (spec section 5.3).
+    tally = store.tally(run_id)
+    assert (tally.no_outcome, tally.with_outcome) == (QUICKSTART_ROWS, 0)
 
 
 # ---------- I9: diff golden ----------
@@ -715,7 +749,7 @@ def test_i9_diff_markdown_summary_line(go1_store: Store) -> None:
 
 
 def test_i9_diff_json(go1_store: Store) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--format", "json"])
+    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--json"])  # --json replaces --format
     assert r.code == 0, r.text
     data = json.loads(r.out)
     assert data["events"] == ["fell"] and data["inferred"] is False
@@ -728,7 +762,7 @@ def test_i9_diff_json(go1_store: Store) -> None:
 
 def test_i9_diff_json_honours_q(go1_store: Store) -> None:
     r = run_cli(
-        ["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--format", "json", "--q", "0.01"]
+        ["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--json", "--q", "0.01"]  # --json replaces --format
     )
     assert r.code == 0, r.text
     assert json.loads(r.out)["q"] == 0.01
@@ -736,11 +770,12 @@ def test_i9_diff_json_honours_q(go1_store: Store) -> None:
 
 def test_i9_diff_methods_all_json_keys(go1_store: Store) -> None:
     r = run_cli(
-        ["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--methods", "all", "--format", "json"]
+        ["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--methods", "all", "--json"]  # --json replaces --format
     )
     assert r.code == 0, r.text
     data = json.loads(r.out)
-    assert set(data) == METHODS
+    # diff --json adds schema, verdict, sentence, next and any *_note key around today's keys.
+    assert {k for k in data if k not in DIFF_JSON_ENVELOPE and not k.endswith("_note")} == METHODS
     fell = data["fisher_bh"]["by_event"]["fell"]
     assert fell["n_safer"] == 60 and fell["n_worse"] == 0
     for method in METHODS:
@@ -761,13 +796,13 @@ def test_i9_diff_methods_all_markdown_has_method_table(go1_store: Store) -> None
 
 def test_i10_unknown_run_exits_two(go1_store: Store) -> None:
     r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "no-such-run", "--event", "fell"])
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert "no-such-run" in r.text, r.text
 
 
 def test_i10_t_unit_mismatch_exits_two_with_unit_mismatch_wording(mock_runs: MockRuns) -> None:
     r = run_cli(["--store", str(mock_runs.root), "diff", "go1-v0", mock_runs.a, "--event", "fell"])
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert "t_unit differs" in r.text, r.text
     assert "seconds" in r.text and QUICKSTART_T_UNIT in r.text
 
@@ -776,7 +811,7 @@ def test_i10_mcnemar_on_unpaired_runs_exits_two_with_not_pairable_wording(mock_r
     r = run_cli(
         ["--store", str(mock_runs.root), "diff", mock_runs.a, mock_runs.c, "--event", "violated", "--method", "mcnemar_bh"]
     )
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert "mcnemar_bh" in r.text and "run_salt" in r.text, r.text
 
 
@@ -784,7 +819,7 @@ def test_i10_mcnemar_on_paired_runs_works(mock_runs: MockRuns) -> None:
     r = run_cli(
         [
             "--store", str(mock_runs.root), "diff", mock_runs.a, mock_runs.b, "--event", "violated",
-            "--method", "mcnemar_bh", "--format", "json",
+            "--method", "mcnemar_bh", "--json",  # --json replaces --format
         ]
     )
     assert r.code == 0, r.text
@@ -865,7 +900,7 @@ def test_i13_existing_non_empty_out_refused_without_writing(go1_store: Store, tm
     out.mkdir()
     (out / "keep.txt").write_text("do not touch\n")
     r = run_cli(report_argv(out))
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert {p.name for p in out.iterdir()} == {"keep.txt"}
     assert (out / "keep.txt").read_text() == "do not touch\n"
 
@@ -890,9 +925,10 @@ def test_i13_force_overwrites_non_empty_out(go1_store: Store, tmp_path: Path) ->
 def test_i13_fix_on_unknown_key_exits_two_with_axis_error_message(go1_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report"
     r = run_cli(report_argv(out, "--fix", "bogus=1"))
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     # LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): the refusal names the flag, not the parameter (spec LS section 3.8 item 4).
-    assert "--fix names unknown config key 'bogus'" in r.text, r.text
+    # Errors show values bare, not as Python reprs, and prose is not pinned (spec section 5.4).
+    assert "--fix" in r.err and "bogus" in r.err, r.text
     assert not out.exists() or not any(out.iterdir())
 
 
@@ -904,7 +940,7 @@ def test_i13_x_equal_to_y_exits_two(go1_store: Store, tmp_path: Path) -> None:
             "--x", "mu", "--y", "mu", "--out", str(out),
         ]
     )
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert not out.exists() or not any(out.iterdir())
 
 
@@ -928,7 +964,7 @@ def test_i13_fix_parses_toml_scalars(go1_store: Store, tmp_path: Path) -> None:
 
 def test_i13_fix_with_bad_toml_scalar_exits_two(go1_store: Store, tmp_path: Path) -> None:
     r = run_cli(report_argv(tmp_path / "report", "--fix", "mu=not a value"))
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
 
 
 # ---------- I14: check exit codes ----------
@@ -937,15 +973,16 @@ def test_i13_fix_with_bad_toml_scalar_exits_two(go1_store: Store, tmp_path: Path
 def test_i14_check_fixture_passes(go1_store: Store) -> None:
     r = run_cli(["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell"])
     assert r.code == 0, r.text
-    assert "PASS" in r.out and "FAIL" not in r.out
+    # check's first stdout line is "passed  ..." or "failed  ..." (spec section 5.3).
+    assert r.out.startswith("passed  ") and not r.out.startswith("failed"), r.out
     assert "fell: 60 safer, 0 worse" in r.out, r.out
     assert "fisher_bh" in r.out and "over 400 tests" in r.out, r.out
 
 
 def test_i14_check_fail_on_any_fails_the_fixture(go1_store: Store) -> None:
     r = run_cli(["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell", "--fail-on", "any"])
-    assert_clean_refusal(r, 1)
-    assert "FAIL" in r.out and "PASS" not in r.out
+    assert_clean_refusal(r, 4)  # A failed check exits 4 (spec section 5.2).
+    assert r.out.startswith("failed  ") and not r.out.startswith("passed"), r.out
 
 
 def test_i14_check_significantly_worse_cell_fails(tmp_path: Path) -> None:
@@ -953,8 +990,8 @@ def test_i14_check_significantly_worse_cell_fails(tmp_path: Path) -> None:
     write_run(store, "syn-a", salt="syn", fell_per_cell={1.0: 0, 2.0: 16})
     write_run(store, "syn-b", salt="syn", fell_per_cell={1.0: 32, 2.0: 16})
     r = run_cli(["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell"])
-    assert_clean_refusal(r, 1)
-    assert "FAIL" in r.out and "PASS" not in r.out
+    assert_clean_refusal(r, 4)  # A failed check exits 4 (spec section 5.2).
+    assert r.out.startswith("failed  ") and not r.out.startswith("passed"), r.out
     assert "fell: 0 safer, 1 worse" in r.out, r.out
     assert "over 2 tests" in r.out, r.out
 
@@ -965,7 +1002,7 @@ def test_i14_check_safer_direction_passes_by_default(tmp_path: Path) -> None:
     write_run(store, "syn-b", salt="syn", fell_per_cell={1.0: 0, 2.0: 16})
     r = run_cli(["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell"])
     assert r.code == 0, r.text
-    assert "PASS" in r.out
+    assert r.out.startswith("passed  "), r.out  # The first line says passed (spec section 5.3).
 
 
 # ---------- I15: inspect ----------
@@ -1056,7 +1093,7 @@ def test_i15_snippet_matches_a_printed_row(mock_runs: MockRuns) -> None:
 
 def test_i15_inspect_unknown_run_exits_two(mock_runs: MockRuns) -> None:
     r = run_cli(["--store", str(mock_runs.root), "inspect", "no-such-run", "--event", "violated"])
-    assert_clean_refusal(r, 2)
+    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
 
 
 # ---------- I16: inspect on a run with no trace ----------
@@ -1105,8 +1142,9 @@ def test_i17_runs_lists_every_run_sorted_with_seven_fields(mock_runs: MockRuns, 
         assert fields[2] == manifest.backend
         assert fields[3] == manifest.target_id
         assert fields[4] == manifest.t_unit
-        assert int(fields[5]) == len(store.read(run_id))
-        assert int(fields[6]) == store.tally(run_id).no_outcome
+        # Counts carry thousands separators in text (rule 10).
+        assert fields[5] == f"{len(store.read(run_id)):,}"
+        assert fields[6] == f"{store.tally(run_id).no_outcome:,}"
     assert [line.split()[0] for line in run_lines] == sorted(expected)
 
 
@@ -1240,12 +1278,13 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
     t0 = time.perf_counter()
+    store_root = tmp_path / "prove-runs"
     first = run_cli(["sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
     assert first.code == 0, first.text
-    run_a = run_id_of(first)
+    run_a = new_run_id(store_root, [])
     second = run_cli(["sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", run_a, "--yes"])
     assert second.code == 0, second.text
-    run_b = run_id_of(second)
+    run_b = new_run_id(store_root, [run_a])
     third = run_cli(["report", run_a, run_b, "--event", "violated", "--x", "tool_fail_rate", "--y", "task_id"])
     assert third.code == 0, third.text
     elapsed = time.perf_counter() - t0

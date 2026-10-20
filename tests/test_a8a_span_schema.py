@@ -773,10 +773,13 @@ def test_p8_18_inspect_prints_nine_columns_the_first_five_unchanged_and_dashes_f
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()
-    run_id = [line for line in out.getvalue().splitlines() if line.strip()][-1].split(": ", 1)[1]
+    # A sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3); the run is
+    # the one the empty store gained.
+    (run_id,) = Store(root).runs()
     df = Store(root).read(run_id)
     rows = df[df["outcome"] == "violated"]
-    by_key = {(row.config_hash, int(row.seed)): row for row in rows.itertuples(index=False)}
+    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    by_key = {(row.config_hash[:12], int(row.seed)): row for row in rows.itertuples(index=False)}
     lines = inspect_lines(root, run_id, "violated")
     blocks: list[list[str]] = []
     for line in lines:
@@ -787,7 +790,7 @@ def test_p8_18_inspect_prints_nine_columns_the_first_five_unchanged_and_dashes_f
     assert len(blocks) == len(rows) >= 1
     checked = 0
     for block in blocks:
-        config_hash = block[0].split(": ", 1)[1]
+        config_hash = block[0].split(": ", 1)[1][:12]
         seed = int(next(line for line in block if line.startswith("seed: ")).split(": ", 1)[1])
         spans = Trace.from_dict(by_key[(config_hash, seed)].meta["trace"]).ordered()
         step_lines = [line for line in block if STEP_LINE_RE.match(line)]

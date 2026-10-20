@@ -252,13 +252,21 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
 
 
 def sweep(root: Path, target: str, *extra: str) -> str:
+    # A sweep no longer ends with a run_id line (its end is a verdict line, spec section 5.3), so
+    # the new run is the one the store gained.
+    before = set(Store(root).runs())
     code, out, err = run_cli(
         ["--store", str(root), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra]
     )
     assert code == 0, out + err
-    last = out.strip().splitlines()[-1]
-    assert last.startswith("run_id: "), out
-    return last.split("run_id: ", 1)[1]
+    added = set(Store(root).runs()) - before
+    assert len(added) == 1, (added, out)
+    return added.pop()
+
+
+def verdict_lines(text: str) -> list[str]:
+    """Lines that begin with check's verdict words (spec section 5.3)."""
+    return [line for line in text.splitlines() if line.startswith(("passed  ", "failed  "))]
 
 
 def rates_by_hash(panel: Any) -> dict[str, float]:
@@ -546,7 +554,8 @@ def test_h6_every_verb_refuses_an_event_absent_from_the_runs(
     if verb == "report":
         argv += ["--x", "tool_fail_rate", "--y", "task_id", "--out", str(tmp_path / "out")]
     code, out, err = run_cli(argv)
-    assert code == 2, out + err
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, out + err
     assert "Traceback" not in out + err, out + err
     assert ABSENT in out + err, out + err
     for present in MOCK_OUTCOMES:
@@ -576,7 +585,8 @@ def test_h6_refuses_when_only_one_of_several_events_is_absent(
     code, out, err = run_cli(
         ["--store", str(root), "diff", a, b, "--event", "violated", "--event", ABSENT]
     )
-    assert code == 2, out + err
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, out + err
     assert ABSENT in out + err, out + err
 
 
@@ -590,7 +600,8 @@ def test_h6_report_refuses_before_it_writes_anything(
         ["--store", str(root), "report", a, b, "--event", ABSENT,
          "--x", "tool_fail_rate", "--y", "task_id", "--out", str(out_dir)]
     )
-    assert code == 2, out + err
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, out + err
     assert not out_dir.exists() or not any(out_dir.iterdir()), sorted(out_dir.iterdir())
 
 
@@ -623,7 +634,8 @@ def test_h6_single_run_report_validates_against_the_run_it_loaded(tmp_path: Path
         ["--store", str(root), "report", "run-a", "--event", "timeout",
          "--x", "task", "--out", str(tmp_path / "single")]
     )
-    assert code == 2, out + err
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, out + err
     assert "timeout" in out + err, out + err
     for present in ("completed", "violated"):
         assert present in out + err, (present, out + err)
@@ -637,7 +649,8 @@ def test_h7_check_refuses_an_event_absent_from_both_runs(
 ) -> None:
     root, a, b = mock_pair
     code, out, err = run_cli(["--store", str(root), "check", a, b, "--event", "voilated"])
-    assert code == 2, out + err
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, out + err
     assert "Traceback" not in out + err, out + err
     assert "voilated" in out + err, out + err
     for present in ("completed", "timeout", "violated"):
@@ -647,9 +660,9 @@ def test_h7_check_refuses_an_event_absent_from_both_runs(
 def test_h7_check_prints_no_verdict_when_it_refuses(mock_pair: tuple[Path, str, str]) -> None:
     root, a, b = mock_pair
     code, out, err = run_cli(["--store", str(root), "check", a, b, "--event", "voilated"])
-    assert code == 2, out + err
-    assert "PASS" not in out + err, out + err
-    assert "FAIL" not in out + err, out + err
+    # A refusal exits 1, and check's verdict is now a passed or failed line (spec sections 5.2, 5.3).
+    assert code == 1, out + err
+    assert verdict_lines(out + err) == [], out + err
 
 
 # ---------- H8: check still passes on a real event ----------
@@ -660,7 +673,8 @@ def test_h8_check_still_passes_on_a_known_event(mock_pair: tuple[Path, str, str]
     code, out, err = run_cli(["--store", str(root), "check", a, b, "--event", "violated"])
     assert code == 0, out + err
     assert "Traceback" not in out + err, out + err
-    assert "PASS" in out, out
+    # check's verdict is the first stdout line, passed or failed (spec section 5.3).
+    assert out.startswith("passed  "), out
     assert "violated" in out, out
 
 
@@ -671,9 +685,10 @@ def test_h8_check_still_fails_cleanly_on_two_known_events(mock_pair: tuple[Path,
     code, out, err = run_cli(
         ["--store", str(root), "check", a, b, "--event", "violated", "--event", "timeout"]
     )
-    assert code == 1, out + err
+    # A failed check exits 4 and says failed on its first stdout line (spec sections 5.2, 5.3).
+    assert code == 4, out + err
     assert "Traceback" not in out + err, out + err
-    assert "FAIL" in out, out
+    assert out.startswith("failed  "), out
 
 
 # ---------- H9: multi_diff stays permissive ----------

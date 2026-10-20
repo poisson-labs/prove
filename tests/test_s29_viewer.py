@@ -302,6 +302,8 @@ SERVE_FLAGS = frozenset({
     "--event", "--x", "--y", "--fix", "--method", "--q", "--theme", "--top-n", "--forest", "--title", "--json",
     "--permutations", "--seed", "--by", "--max-group-mde", "--depth",
 })
+#: The tool's own options, which every verb's parser accepts after the verb too (spec section 5.4).
+GLOBAL_FLAGS = frozenset({"--store", "--plain", "--debug"})
 TREE_FLAGS = ("--permutations", "--seed", "--by", "--max-group-mde", "--depth")
 #: W1. ``build_structure``'s parameters after this packet: (name, kind, required, annotation).
 BUILD_STRUCTURE_PARAMETERS = (
@@ -458,6 +460,7 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
+# No longer asserted: check's stdout changes shape; W20 asserts the facts it guarded (spec section 14).
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 #: W20. S21's E14 digests as S28's retrofit left them: the SVG through the CLI, the markdown and
@@ -794,8 +797,13 @@ def pair(name: str, root: Path, a: str, b: str, events: Sequence[str], x: str, y
     if name not in _PAIRS:
         fixed = dict(fixed or {})
         code, out, err, calls = run_serve(serve_argv(root, a, b, events, x, y, fixed, method, knobs))
-        assert code == 0 and err == "" and calls == [], (name, code, err[-400:], calls)
+        # An unpaired method on runs that share a salt prints one "note: " line (spec section 5.4).
+        assert code == 0 and not [line for line in err.splitlines() if not line.startswith("note: ")] and calls == [], (name, code, err[-400:], calls)
         structure = strict_loads(out)
+        # serve --json leads with the verdict and its sentence after the schema; the page structure
+        # follows unchanged, and it is what this file reads.
+        assert list(structure)[:3] == ["schema", "verdict", "sentence"], list(structure)[:3]
+        structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence")}
         multi, result = store_tree(root, a, b, events=events, method=method, **knobs)
         _PAIRS[name] = Pair(
             name, root, a, b, tuple(events), x, y, fixed, method, dict(knobs), knobs.get("by"),
@@ -1424,11 +1432,14 @@ def quickstart(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str
     root = tmp_path_factory.mktemp("s29-quickstart")
 
     def sweep(target: str, *extra: str) -> str:
+        # A sweep no longer ends in a "run_id:" line (spec section 5.3); the new run is the one
+        # the store gained.
+        before = set(Store(root).runs())
         code, out, err = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra])
         assert code == 0, out + err
-        last = out.strip().splitlines()[-1]
-        assert last.startswith("run_id: "), out
-        return last.split("run_id: ", 1)[1]
+        new = set(Store(root).runs()) - before
+        assert len(new) == 1, out
+        return new.pop()
 
     a = sweep(ROLLOUT, "--salt", QUICKSTART_SALT)
     b = sweep(PATCHED, "--pair-with", a)
@@ -1540,7 +1551,8 @@ def test_w1_serve_help_lists_exactly_the_sixteen_flags_and_no_port() -> None:
     code, out, err = run_cli(["serve", "--help"])
     assert code == 0, err
     flags = set(help_entries(out)) - {"-h"}
-    assert flags == set(SERVE_FLAGS), flags ^ set(SERVE_FLAGS)
+    # serve's own sixteen flags plus the tool's three, accepted after the verb (spec section 5.4).
+    assert flags == set(SERVE_FLAGS) | GLOBAL_FLAGS, flags ^ (set(SERVE_FLAGS) | GLOBAL_FLAGS)
     assert "--port" not in out and "--max-mde" in out
 
 
@@ -1665,8 +1677,11 @@ def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted
     the tree does not touch digest to the values minted at f4e2845 (quickstart excluded: its run
     ids are minted per run)."""
     code, out, err, calls = run_serve(["--store", str(GO1_ROOT), *SERVE_ARGV])
-    assert code == 0 and err == "" and calls == [], err
+    # Go1's runs share a salt, so the unpaired default adds one "note: " line (spec section 5.4).
+    assert code == 0 and not [line for line in err.splitlines() if not line.startswith("note: ")] and calls == [], err
     structure = strict_loads(out)
+    # serve --json leads with the verdict and its sentence; the page structure follows unchanged.
+    structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence")}
     assert "tree" in structure
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": RETIRED_SCHEMA}
     normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
@@ -2005,10 +2020,12 @@ def test_w11_the_five_flags_reach_the_call_on_the_axes_pair(synth_root: Path) ->
 
 def test_w11_out_of_range_depths_and_refused_knobs_exit_2_with_error_on_stderr_and_serve_page_never_called(synth_root: Path) -> None:
     base = ["--store", str(synth_root), "serve", "axes-a", "axes-b", "--event", "fail", "--x", "temp", "--y", "task"]
-    for extra in (["--depth", "1"], ["--depth", "4"], ["--by", "nonsense"], ["--max-group-mde", "2"]):
+    # A depth outside the choices is a wrong command line (exit 2); a knob the command refuses is
+    # a refusal (exit 1) (spec section 5.2).
+    for extra, expected in ((["--depth", "1"], 2), (["--depth", "4"], 2), (["--by", "nonsense"], 1), (["--max-group-mde", "2"], 1)):
         for tail in ([], ["--json"]):
             code, out, err, calls = run_serve([*base, *extra, *tail])
-            assert code == 2, (extra, tail, code, out[:200], err[-300:])
+            assert code == expected, (extra, tail, code, out[:200], err[-300:])
             assert "error:" in err and "Traceback" not in out + err, (extra, err[-300:])
             assert calls == [], (extra, calls)
             assert out == "", (extra, out[:100])
@@ -2296,11 +2313,36 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
         for test_id in record["cover"][1]:
             resolve_region(ast.parse(cover.read_bytes()), test_id)
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
-    assert code == CHECK_EXIT and err == "" and sha256_of_text(out) == CHECK_STDOUT_SHA256, (code, err)
+    # Go1's runs share a salt, so the unpaired default adds one "note: " line on stderr (spec
+    # section 5.4). check's stdout changes shape in PF1 (its verdict line comes first), so its
+    # digest gives way to the facts it guarded: passed, the event gated, its safer and worse
+    # counts, the method, q and the number of tests.
+    assert code == CHECK_EXIT and not [line for line in err.splitlines() if not line.startswith("note: ")], (code, err)
+    store = Store(GO1_ROOT)
+    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
+    gated = quiet_multi_diff(store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), ma, mb, events=("fell",), method="fisher_bh")
+    check_lines = out.splitlines()
+    assert check_lines[0].startswith("passed  ") and "fell" in check_lines[0], out
+    fell = gated.by_event["fell"]
+    assert any(
+        "fell" in line and f"{fell.n_safer:,} safer" in line and f"{fell.n_worse:,} worse" in line for line in check_lines
+    ), out
+    assert any(
+        "aalen_johansen" in line and "fisher_bh" in line and "unpaired" in line
+        and re.search(rf"(?<![\d,.]){gated.n_tests:,}(?![\d,])", line) and re.search(r"(?<![\d.])0\.050?(?!\d)", line)
+        for line in check_lines
+    ), out
     out_dir = tmp_path / "report"
     code, out, err = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out_dir)])
     assert code == 0, out + err
-    assert hashlib.sha256((out_dir / "heatmap.svg").read_bytes()).hexdigest() == E14_SHA256["heatmap.svg"]
+    # The CLI's heatmap labels follow rule 10 (spec section 5.4) and may re-wrap, so its digest
+    # moves; the library's SVG keeps the pinned bytes, and the CLI's colour cells are its, cell
+    # for cell.
+    library_svg = build_multi_report(gated, ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw"), manifests=(ma, mb)).to_svg()
+    assert sha256_of_text(library_svg) == E14_SHA256["heatmap.svg"]
+    cli_svg = (out_dir / "heatmap.svg").read_text(encoding="utf-8")
+    fills = re.compile(r'<rect\b[^>]*\bfill="([^"]*)"')
+    assert fills.findall(cli_svg) == fills.findall(library_svg) and fills.findall(cli_svg)
     for name, digest in e14_builder_digests().items():
         assert digest == E14_SHA256[name], name
 

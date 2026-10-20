@@ -32,6 +32,8 @@ import ast
 import contextlib
 import dataclasses
 import importlib
+import importlib.machinery
+import importlib.util
 import json
 import re
 import sys
@@ -406,6 +408,8 @@ class CapturedRunModal:
 
 @pytest.fixture
 def captured_run_modal(monkeypatch: pytest.MonkeyPatch) -> CapturedRunModal:
+    # A missing modal package is now refused before the plan, so modal must import here.
+    monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
     captured = CapturedRunModal()
     monkeypatch.setattr(cli, "run_modal", captured)
     return captured
@@ -564,7 +568,8 @@ def test_l1_local_branch_still_resolves_and_refuses_the_same_target(
 ) -> None:
     target = _install_refusing_module(tmp_path, monkeypatch)
     r = run_cli(_local_argv(tmp_path, _sweep_file(tmp_path), target))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     assert target in r.text
     assert Store(tmp_path / "store").runs() == []
 
@@ -581,7 +586,8 @@ def test_l2_malformed_shape_is_refused_on_the_modal_branch(
     tmp_path: Path, captured_run_modal: CapturedRunModal, target: str
 ) -> None:
     r = run_cli(_modal_argv(tmp_path, _sweep_file(tmp_path), target=target))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     assert target in r.text
     assert Store(tmp_path / "store").runs() == []
     assert captured_run_modal.calls == []
@@ -730,7 +736,8 @@ def test_l8_a_bare_string_is_refused_naming_the_table(
     tmp_path: Path, captured_run_modal: CapturedRunModal
 ) -> None:
     r = run_cli(_modal_argv(tmp_path, _sweep_file(tmp_path, BARE_STRING_TABLE)))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     assert "[modal]" in r.text
     assert "Traceback" not in r.text
     assert Store(tmp_path / "store").runs() == []
@@ -742,7 +749,8 @@ def test_l8_a_pasted_value_is_refused_with_the_create_form_and_never_echoed(
     canary = token_hex(16)
     table = f'\n[modal]\nsecrets = ["KEY={canary}"]\n'
     r = run_cli(_modal_argv(tmp_path, _sweep_file(tmp_path, table)))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     assert "modal secret create" in r.text
     assert canary not in r.text
     assert Store(tmp_path / "store").runs() == []

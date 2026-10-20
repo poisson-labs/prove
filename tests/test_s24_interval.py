@@ -375,6 +375,12 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def without_notes(err: str) -> str:
+    """Stderr with the ``note:`` lines removed. Prove's own warning (``UnpairedAnalysis``, on two
+    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line (spec section 5.4)."""
+    return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
+
+
 # ---------- C7: the analytic point, the one place the constrained MLE is known ----------
 
 
@@ -1095,9 +1101,9 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def e14_builder_digests() -> dict[str, str]:
+def e14_builder() -> tuple[Any, Any, Any]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
-    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    ``_report_pair`` builds them: the multi, the dark-theme report and the light-theme receipt."""
     store = Store(GO1_ROOT)
     ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
     with warnings.catch_warnings():
@@ -1114,10 +1120,58 @@ def e14_builder_digests() -> dict[str, str]:
         multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw", theme="light"),
         manifests=(ma, mb),
     )
+    return multi, report, receipt
+
+
+def e14_builder_digests() -> dict[str, str]:
+    """The builder's report markdown, receipt and heatmap, digested."""
+    _, report, receipt = e14_builder()
     return {
         "report.md": hashlib.sha256(as_0_0_1_wrote_it(report.to_markdown()).encode("utf-8")).hexdigest(),
+        # The command line's heatmap now formats its text under rule 10 (spec section 5.4); the
+        # builder's heatmap is unchanged, so the digest moves to it.
+        "heatmap.svg": hashlib.sha256(report.to_svg().encode("utf-8")).hexdigest(),
         "receipt.html": hashlib.sha256(as_0_0_1_wrote_it(receipt.to_html()).encode("utf-8")).hexdigest(),
     }
+
+
+def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
+    """The command line's ``heatmap.svg`` against the builder's, whose bytes keep the frozen digest.
+
+    Rule 10 (spec section 5.4) reformats only the text in the file, so every element and attribute
+    is the builder's. Each cell's label is its delta to three decimals, read from ``cells``; a text
+    the builder prints as a percentage-point number is that number as a fraction; every other text
+    that changed keeps its ``key=value`` facts and its counts; and the notes the builder writes in
+    percentage points carry the worst-powered MDEs to three decimals.
+    """
+    def bare(svg: str) -> str:
+        return re.sub(r">[^<]*<", "><", svg)
+
+    assert bare(cli_svg) == bare(builder_svg)
+    ids = re.findall(r'data-cell="([0-9a-f]+)"', cli_svg)
+    label_group = cli_svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
+    labels = re.findall(r">([^<]*)</text>", label_group)
+    delta = dict(zip(cells["config_hash"], cells["delta"]))
+    assert len(ids) == len(labels) == len(delta), (len(ids), len(labels), len(delta))
+    for short, label in zip(ids, labels):
+        (full,) = [h for h in delta if h.startswith(short)]
+        assert label == f"{delta[full]:.3f}", (short, label, delta[full])
+    number = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+    texts = list(zip(re.findall(r">([^<]*)</text>", builder_svg), re.findall(r">([^<]*)</text>", cli_svg)))
+    for old, new in texts:
+        if old == new:
+            continue
+        if number.fullmatch(old):
+            assert number.fullmatch(new) and abs(float(new) - float(old) / 100) <= 1e-3, (old, new)
+            continue
+        for fact in re.findall(r"\w+=[^\s,;)]+", old):
+            assert fact in new, (fact, new)
+        for count in re.findall(r"(?<![\d.])\d+(?![\d.%]|pp)", old):
+            assert f"{int(count):,}" in new, (count, new)
+    notes = [new for old, new in texts if re.search(r"\d+pp", old)]
+    assert notes, texts
+    for mde in (cells["mde"].max(), cells.loc[cells["verdict"] == "unchanged", "mde"].max()):
+        assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
 
 
 def test_c14_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_path: Path) -> None:
@@ -1130,13 +1184,22 @@ def test_c14_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_pa
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
     digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
     ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
-    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
+    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted.
+
+    Moved for rule 10 (spec section 5.4): the command line now prints the heatmap's text as
+    fractions, so its digest moves to the builder's heatmap, and the file the command line writes
+    is checked against that one fact by fact."""
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    assert hashlib.sha256((out / "heatmap.svg").read_bytes()).hexdigest() == E14_SHA256["heatmap.svg"]
     for name, digest in e14_builder_digests().items():
         assert digest == E14_SHA256[name], name
+    # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
+    # checked by its facts rather than a new digest.
+    multi, report, _ = e14_builder()
+    assert_cli_heatmap_is_the_builders_under_rule_10(
+        (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event["fell"].cells
+    )
 
 
 # ---------- C15: the BH family does not move ----------
@@ -1280,7 +1343,8 @@ def test_c18_the_diff_output_prints_the_alpha_star_arithmetic_and_names_the_fami
     result = synth_diff(synth_root, "moved-a", "moved-b", "fisher_bh")
     code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
     assert code == 0, (out, err)
-    assert err == "", err
+    # A shared salt now adds one note line on stderr (spec section 5.4); nothing else is there.
+    assert without_notes(err) == "", err
     match = INTERVAL_LINE.search(out)
     assert match is not None, out
     level, alpha_star, rejections, tests, basis = match.groups()
@@ -1310,7 +1374,8 @@ def test_c18_the_diff_output_prints_the_no_interval_line_when_nothing_was_reject
     after."""
     code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail"])
     assert code == 0, (out, err)
-    assert err == "", err
+    # A shared salt now adds one note line on stderr (spec section 5.4); nothing else is there.
+    assert without_notes(err) == "", err
     assert NO_INTERVAL_LINE in out, out
     assert INTERVAL_LINE.search(out) is None, out
 
@@ -1327,8 +1392,9 @@ def test_c18_the_interval_block_follows_the_coverage_block(synth_root: Path) -> 
 def test_c18_the_json_format_carries_the_fields_and_prints_no_block(synth_root: Path) -> None:
     """``--format json`` renders ``to_json()`` and nothing else. The interval block is text
     output; the JSON payload carries the same facts as fields, which is what a consumer reads."""
+    # --json replaces --format json (spec section 5.6).
     code, out, _ = run_cli(
-        ["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--format", "json"]
+        ["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--json"]
     )
     assert code == 0, out
     assert "intervals: " not in out

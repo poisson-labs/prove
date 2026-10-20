@@ -210,10 +210,12 @@ def store_is_untouched(root: Path) -> bool:
     return not [p for p in root.iterdir() if p.is_dir()]
 
 
-def run_id_of(r: Result) -> str:
-    last = r.out.strip().splitlines()[-1]
-    assert last.startswith("run_id: "), r.text
-    return last.split()[-1]
+def run_id_of(root: Path) -> str:
+    """The run a sweep created. A sweep no longer ends with a ``run_id:`` line (spec section 5.3),
+    so the run is read from the store, which held no run before the sweep."""
+    created = sorted(Store(root).runs())
+    assert len(created) == 1, created
+    return created[0]
 
 
 def parsed(path: Path) -> ast.Module:
@@ -493,7 +495,8 @@ def test_w5_yes_does_not_clear_the_gate_and_the_store_stays_empty(tmp_path: Path
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     assert "underpowered" in r.err.lower(), r.err
     assert store_is_untouched(root), sorted(p.name for p in root.iterdir()) if root.exists() else root
     assert "Traceback" not in r.text, r.text
@@ -510,7 +513,8 @@ def test_w5_the_refusal_creates_no_manifest_even_beside_an_existing_run(tmp_path
 
     bad = write_spec(tmp_path / "bad.toml", underpowered_toml())
     r = run_cli(sweep_argv(root, bad, MOCK_ROLLOUT))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     assert Store(root).runs() == before, Store(root).runs()
 
 
@@ -531,7 +535,8 @@ def test_w6_an_accepted_value_below_the_computed_mde_refuses(tmp_path: Path) -> 
     root = tmp_path / "runs"
     mde = executor.preflight_mde(SweepSpec.load(spec_path))
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(mde * 0.99)))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     assert store_is_untouched(root)
 
 
@@ -549,7 +554,8 @@ def test_w6_a_value_outside_the_open_unit_interval_is_refused_with_nothing_writt
     spec_path = write_spec(tmp_path / "clear.toml", underpowered_toml(replicates=CLEARING_REPLICATES))
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", value))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     assert store_is_untouched(root), Store(root).runs()
 
 
@@ -565,14 +571,16 @@ def test_w7_the_refusal_follows_the_complete_preflight_block_on_stdout(tmp_path:
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
-    assert r.code == 2, r.text
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r.text
     spec = SweepSpec.load(spec_path)
     for token in ("Sweep:", "Backend: local", "Cost:", f"N={spec.replicates}"):
         assert token in r.out, (token, r.out)
     found = MDE_LINE.search(r.out)
     assert found, r.out
     assert int(found.group(1)) == spec.replicates
-    assert float(found.group(2)) == pytest.approx(executor.preflight_mde(spec), abs=5e-5)
+    # The command line prints an MDE to three decimals (spec section 5.4, rule 10).
+    assert found.group(2) == f"{executor.preflight_mde(spec):.3f}"
     assert "underpowered" in r.err.lower() and "underpowered" not in r.out.lower(), r.text
 
 
@@ -586,7 +594,7 @@ def test_w8_a_launched_local_run_records_the_accepted_value(tmp_path: Path) -> N
     accepted = math.ceil(mde * 1e4) / 1e4
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(accepted)))
     assert r.code == 0, r.text
-    environment = Store(root).manifest(run_id_of(r)).environment
+    environment = Store(root).manifest(run_id_of(root)).environment
     assert environment["max_mde_accepted"] == pytest.approx(accepted)
 
 
@@ -595,7 +603,7 @@ def test_w8_a_run_that_clears_the_default_records_the_default(tmp_path: Path) ->
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
     assert r.code == 0, r.text
-    environment = Store(root).manifest(run_id_of(r)).environment
+    environment = Store(root).manifest(run_id_of(root)).environment
     assert environment["max_mde_accepted"] == pytest.approx(executor.DEFAULT_MAX_MDE)
 
 
@@ -618,7 +626,7 @@ def test_w8_the_other_environment_keys_are_unchanged_and_no_manifest_field_is_ad
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
     assert r.code == 0, r.text
-    environment = Store(root).manifest(run_id_of(r)).environment
+    environment = Store(root).manifest(run_id_of(root)).environment
     assert {"python", "platform", "poisson_prove_version", "sweep", "import_path"} <= set(environment)
     assert "max_mde_accepted" in environment
     fields = {f.name for f in dataclasses.fields(RunManifest)}
@@ -638,8 +646,9 @@ def test_w9_a_resume_inherits_the_accepted_value_without_the_flag(tmp_path: Path
     spec = SweepSpec.load(spec_path)
     accepted = math.ceil(executor.preflight_mde(spec) * 1e4) / 1e4
     first = launched_underpowered(root, spec_path, accepted, "--max-rollouts", "4")
-    assert first.code == 0, first.text
-    run_id = run_id_of(first)
+    # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
+    assert first.code == 3, first.text
+    run_id = run_id_of(root)
 
     resumed = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--resume", run_id))
     assert resumed.code == 0, resumed.text
@@ -653,13 +662,15 @@ def test_w9_a_resume_is_refused_when_the_recorded_value_no_longer_covers_the_des
     started = write_spec(tmp_path / "a.toml", underpowered_toml(replicates=64))
     accepted = math.ceil(executor.preflight_mde(SweepSpec.load(started)) * 1e4) / 1e4
     first = launched_underpowered(root, started, accepted, "--max-rollouts", "4")
-    assert first.code == 0, first.text
-    run_id = run_id_of(first)
+    # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
+    assert first.code == 3, first.text
+    run_id = run_id_of(root)
 
     grown = write_spec(tmp_path / "b.toml", underpowered_toml(replicates=8))
     assert executor.preflight_mde(SweepSpec.load(grown)) > accepted
     resumed = run_cli(sweep_argv(root, grown, MOCK_ROLLOUT, "--resume", run_id))
-    assert resumed.code == 2, resumed.text
+    # A refusal exits 1 (spec section 5.2).
+    assert resumed.code == 1, resumed.text
     assert "underpowered" in resumed.err.lower(), resumed.err
 
 
@@ -670,10 +681,11 @@ def test_w9_pair_with_does_not_inherit(tmp_path: Path) -> None:
     accepted = math.ceil(executor.preflight_mde(SweepSpec.load(spec_path)) * 1e4) / 1e4
     first = launched_underpowered(root, spec_path, accepted)
     assert first.code == 0, first.text
-    run_a = run_id_of(first)
+    run_a = run_id_of(root)
 
     paired = run_cli(sweep_argv(root, spec_path, MOCK_PATCHED, "--pair-with", run_a))
-    assert paired.code == 2, paired.text
+    # A refusal exits 1 (spec section 5.2).
+    assert paired.code == 1, paired.text
     assert "underpowered" in paired.err.lower(), paired.err
     assert Store(root).runs() == [run_a], Store(root).runs()
 
