@@ -3,8 +3,8 @@
 The seam sits on the transport, below the target's own code. ``install()`` wraps
 ``httpx.Client.send`` and ``httpx.AsyncClient.send``; ``injecting(spec, seed)`` scopes one
 episode; ``position(name, attempt)`` is the target's own declaration of where it is.
-Everything the applier does is Proofload's -- the vocabulary it addresses is
-``proofload.chaos_catalog``'s, which carries the attribution.
+Everything the applier does is Prove's -- the vocabulary it addresses is
+``poisson_prove.chaos_catalog``'s, which carries the attribution.
 
 **Three properties this module exists to hold.**
 
@@ -43,8 +43,8 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from proofload import chaos_catalog
-from proofload.trace import _span_clock
+from poisson_prove import chaos_catalog
+from poisson_prove.trace import _span_clock
 
 __all__ = [
     "ChaosError",
@@ -60,8 +60,8 @@ __all__ = [
 #: A6 section 3.13's two reserved span attributes. A8a mints the public constants with the
 #: rest of the span vocabulary and its step zero re-points these two literals at them; until
 #: then they live here, module-private, once each in the whole of ``src/``.
-_FAULT_KEY = "proofload.fault"
-_FAULT_POSITION_KEY = "proofload.fault.position"
+_FAULT_KEY = "poisson_prove.fault"
+_FAULT_POSITION_KEY = "poisson_prove.fault.position"
 
 _NONE = "none"
 _CHAT_PATH = "/chat/completions"
@@ -143,7 +143,7 @@ class _Decision:
 _BLOCK: _Block | None = None
 
 _POSITION: contextvars.ContextVar[tuple[str, int] | None] = contextvars.ContextVar(
-    "proofload_chaos_position", default=None
+    "poisson_prove_chaos_position", default=None
 )
 
 _STATUS: ChaosStatus | None = None

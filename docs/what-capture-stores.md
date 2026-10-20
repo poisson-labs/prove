@@ -51,7 +51,7 @@ run reproduces — and it is what `--resume` of a run begun before the change
 requires, since a resume whose declaration differs from what the run recorded is
 refused rather than mixed into one run directory.
 
-**A cut is not silent.** `proofload inspect` prints an `observation: cut (...)`
+**A cut is not silent.** `poisson-prove inspect` prints an `observation: cut (...)`
 line above the span lines of any row whose trace has a cut span, naming each cut
 span by the index it prints under, its values' original size in bytes, and the
 limit the run recorded. `report` and `serve` print, for each run, the byte limit

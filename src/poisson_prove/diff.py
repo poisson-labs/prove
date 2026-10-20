@@ -1,6 +1,6 @@
 """M6: compare two runs cell by cell with multiple-comparison correction and an MDE.
 
-Reads censored frames from ``proofload.survival.censor`` (six columns are used: ``config_hash``,
+Reads censored frames from ``poisson_prove.survival.censor`` (six columns are used: ``config_hash``,
 ``config``, ``replicate_index``, ``t``, ``observed``, ``horizon``) and returns a
 ``DiffResult``. ``delta = rate_b - rate_a``: negative is *safer* only when ``event`` names a
 failure. If ``event`` names a success, safer and worse invert; nothing here is clever
@@ -22,8 +22,8 @@ from numpy.typing import NDArray
 from scipy import stats
 from scipy.optimize import brentq
 
-from proofload.store import RunManifest
-from proofload.survival import aalen_johansen, competing_set
+from poisson_prove.store import RunManifest
+from poisson_prove.survival import aalen_johansen, competing_set
 
 Method = Literal["fisher_bh", "mcnemar_bh", "logrank_bh"]
 
@@ -158,7 +158,7 @@ class UnpairedAnalysis(UserWarning):
     """The two runs are pairable and the requested method compares them as independent
     samples. A warning and never a refusal: which test to run is the caller's decision, and
     the correspondence is discarded, not misused. A ``UserWarning`` subclass so a CI that
-    wants a gate can spell it ``-W error::proofload.diff.UnpairedAnalysis`` without turning
+    wants a gate can spell it ``-W error::poisson_prove.diff.UnpairedAnalysis`` without turning
     every other warning in the process into an error."""
 
 
@@ -447,7 +447,7 @@ def diff(
 ) -> DiffResult:
     """Diff two censored frames cell by cell.
 
-    a, b are censored frames from proofload.survival.censor(). Manifests are required for
+    a, b are censored frames from poisson_prove.survival.censor(). Manifests are required for
     pairing and unit checks; if omitted, unpaired and unchecked.
     """
     if method not in _METHODS:

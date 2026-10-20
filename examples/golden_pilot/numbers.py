@@ -1,6 +1,6 @@
 """What the pilot must come back with: the three numbers and the four checks.
 
-``numbers(store, run_id, paired_with=...)`` reads one run out of a Proofload store and
+``numbers(store, run_id, paired_with=...)`` reads one run out of a Prove store and
 returns one JSON-native dict (spec sections 0 and 3):
 
 * **the three numbers** -- span count, ``dropped``, the ``other`` share -- with the kind
@@ -8,13 +8,13 @@ returns one JSON-native dict (spec sections 0 and 3):
   by what the agent was doing when it failed. The denominator is the whole stored trace, the
   rollout's own ``record()`` spans included -- that is what makes a ``tool`` share exist at
   all, and section 0 asks for the two together. All of it is over the **ok rows'** stored
-  traces: an errored row's trace is a snapshot of an episode Proofload cut short, and mixing
+  traces: an errored row's trace is a snapshot of an episode Prove cut short, and mixing
   it into the integration's span census would report a number nobody could reproduce.
 * **contract survival** -- ok rows that decode as an ``Episode`` with an outcome in
   ``OUTCOMES``, ``0 <= t <= horizon``, the run's declared ``t_unit``, and a trace that
   decodes uncut with both episode stamps on every captured llm span.
 * **the errored-row rate**, split by error text and by whether the row kept a trace. An
-  errored row is Proofload failing to observe, never the agent failing the task: S16's
+  errored row is Prove failing to observe, never the agent failing the task: S16's
   ``timeout`` and S17's traceback are counted here and never as outcomes.
 * **zero-n holes** -- (cell, event) pairs the run never produced, the honesty block's input.
 * **pairing agreement and Cohen's kappa** at the same ``(task_id, temperature, seed)``, per
@@ -33,13 +33,13 @@ import ``agent``.
 
 **This file is called numbers.py, which is a standard-library module name.** Under the
 dropped script form, Python put this directory first on ``sys.path`` and ``import numbers``
-then found *this* file -- and numpy imports ``numbers``, so ``proofload.store`` would fail
+then found *this* file -- and numpy imports ``numbers``, so ``poisson_prove.store`` would fail
 with a baffling traceback from inside numpy. :func:`main` still drops that path entry before
 it imports ``Store``, now as belt and braces, and the module-level imports here stay
 deliberately numpy-free so nothing is loaded before it can. The name is fixed by spec
 section 2; the shadowing is not, so do not move the ``Store`` import back up to the top.
 
-``timed_out`` (the agent spent its budget) and ``timeout`` (Proofload cut a hung episode) are
+``timed_out`` (the agent spent its budget) and ``timeout`` (Prove cut a hung episode) are
 different facts and are reported apart -- the first as an outcome, the second in the errored
 split. Nothing here re-runs anything; it reads the store the arms already wrote.
 """
@@ -54,25 +54,25 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from proofload import Episode
-from proofload.trace import Trace
+from poisson_prove import Episode
+from poisson_prove.trace import Trace
 
 from . import FAILURE_EVENTS, OUTCOMES, T_UNIT
 
 if TYPE_CHECKING:  # the runtime import lives in main(): see the module docstring
-    from proofload.store import Store
+    from poisson_prove.store import Store
 
-#: Proofload's span kinds, spelled here rather than imported: P12 holds the pilot to five
-#: names plus ``Store`` from ``proofload``, and ``KINDS`` is not one of them. A kind the core
+#: Prove's span kinds, spelled here rather than imported: P12 holds the pilot to five
+#: names plus ``Store`` from ``poisson_prove``, and ``KINDS`` is not one of them. A kind the core
 #: grows and this tuple does not still lands in the histogram -- the counter adds the key --
 #: so nothing is lost; what goes stale is the guarantee that every kind appears, zero
-#: included, which is the only reason to write the seven out. Re-read ``proofload.trace``
+#: included, which is the only reason to write the seven out. Re-read ``poisson_prove.trace``
 #: whenever core's vocabulary changes.
 KINDS = ("llm", "tool", "retrieval", "db", "http", "agent", "other")
 
 #: The two attributes the episode stamper writes on every captured span.
-RUN_ID_KEY = "proofload.run_id"
-EPISODE_KEY = "proofload.episode"
+RUN_ID_KEY = "poisson_prove.run_id"
+EPISODE_KEY = "poisson_prove.episode"
 
 
 def _isnull(value: Any) -> bool:
@@ -267,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     here = str(Path(__file__).resolve().parent)
     if sys.path and Path(sys.path[0]).resolve() == Path(here):
         sys.path.pop(0)
-    from proofload.store import Store
+    from poisson_prove.store import Store
 
     parser = argparse.ArgumentParser(description="the three numbers and the four checks")
     parser.add_argument("store", help="the store root the sweep wrote into")

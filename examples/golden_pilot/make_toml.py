@@ -47,7 +47,7 @@ DOCKERFILE = "examples/golden_pilot/Dockerfile"
 
 #: The Modal secret the container reads ``OPENAI_API_KEY`` and ``GOLDEN_PILOT_MODEL`` out of.
 #: The sweep file carries the name and nothing else: the values live in the Modal workspace,
-#: are mounted on the remote function by name, and never pass through proofload. Rename it
+#: are mounted on the remote function by name, and never pass through poisson_prove. Rename it
 #: here and regenerate rather than editing either TOML by hand.
 SECRET_NAME = "golden-pilot"
 

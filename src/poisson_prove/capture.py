@@ -6,7 +6,7 @@ in their sweep file, owns (or joins) the process's ``TracerProvider``, and hands
 one ``Trace.to_dict()`` per episode.
 
 ``opentelemetry`` is imported **lazily, inside** ``install()`` — never at module scope, and
-``proofload.otel`` with it, since that module imports the SDK at import time. ``executor.py``
+``poisson_prove.otel`` with it, since that module imports the SDK at import time. ``executor.py``
 can therefore import this file unconditionally and M12's T27 still holds: a run with no
 ``[capture]`` table imports no OpenTelemetry module at all.
 
@@ -16,7 +16,7 @@ Three facts drive the design, all of them measured (spec §4):
   a refused no-op, so the child captures nothing, silently. ``install()`` verifies it owns —
   or was added to — the global provider and reports ``active=False`` otherwise; on the forking
   paths the executor calls it in the child.
-* **C2** OTel's default ``RandomIdGenerator`` draws from the global ``random``, which Proofload's
+* **C2** OTel's default ``RandomIdGenerator`` draws from the global ``random``, which Prove's
   own seeds collide. The provider this module builds carries an id generator seeded from
   ``os.urandom`` and never touches the global stream.
 * **C2a** Installing a provider is permanent: there is no ``remove_span_processor`` and
@@ -49,7 +49,7 @@ from dataclasses import dataclass, replace
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
-from proofload.trace import (
+from poisson_prove.trace import (
     CONTENT_KEYS,
     from_otel,
     truncate_observations,
@@ -336,7 +336,7 @@ def capture(run_id: str, episode_id: str) -> Iterator[Recorder]:
     if bucket is None:
         yield recorder
         return
-    from proofload.otel import episode  # imported by install(); a sys.modules hit here
+    from poisson_prove.otel import episode  # imported by install(); a sys.modules hit here
 
     key = (run_id, episode_id)
     bucket.open(key, recorder)
@@ -376,7 +376,7 @@ def _install(spec: CaptureSpec) -> tuple[CaptureStatus, _Bucket | None]:
         from opentelemetry import trace as trace_api
         from opentelemetry.sdk.trace import TracerProvider
 
-        from proofload.otel import EPISODE_KEY, RUN_ID_KEY, EpisodeStamper
+        from poisson_prove.otel import EPISODE_KEY, RUN_ID_KEY, EpisodeStamper
     except ImportError as exc:
         return _inactive(f"opentelemetry-sdk is not importable: {exc}"), None
 
@@ -434,7 +434,7 @@ def _activate(names: tuple[str, ...]) -> tuple[tuple[str, ...], str | None]:
 def _new_provider() -> TracerProvider:
     """A provider whose span ids do not come from the global ``random`` (C2).
 
-    A rollout that re-seeds ``random`` between calls — which Proofload's own per-episode seed
+    A rollout that re-seeds ``random`` between calls — which Prove's own per-episode seed
     invites — makes OTel's default generator emit identical span ids, and ``from_otel`` drops
     them as duplicates: measured at 10 spans in, 1 kept.
     """

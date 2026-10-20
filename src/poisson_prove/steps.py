@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from proofload.store import RunManifest
-from proofload.trace import Declaration
+from poisson_prove.store import RunManifest
+from poisson_prove.trace import Declaration
 
 __all__ = ["DeclarationCheck", "declaration_check"]
 

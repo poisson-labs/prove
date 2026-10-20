@@ -8,7 +8,7 @@
 #   tasks.json sha256   ccd8ba737b4cc371415af70151187788f728d6108d0916e73bb4317b40542052
 #   tasks               50
 #
-# The design, recomputed by the generator from proofload.diff.mde_two_proportion:
+# The design, recomputed by the generator from poisson_prove.diff.mde_two_proportion:
 #
 #   no_write         24 cells   1056 pairs  group MDE 0.0702
 #   modify_in_place  14 cells    616 pairs  group MDE 0.0917
@@ -24,10 +24,10 @@
 # The commands (pre-registration §10). The salt is fresh; A' and B pair with A.
 #
 #   export PYTHONPATH="$PWD/examples${PYTHONPATH:+:$PYTHONPATH}"
-#   export PROOFLOAD_STORE=~/code/poisson-labs/proofload-runs
+#   export POISSON_PROVE_STORE=~/code/poisson-labs/prove-runs
 #   export MODAL_IMAGE_BUILDER_VERSION=2024.10        # required; Dockerfile note 6
 #   python scripts/tau2_t4_budget.py --arm A          # the launch gate; see note below
-#   proofload sweep examples/tau2_pilot/t4.toml --target tau2_pilot.rollout:rollout \
+#   poisson-prove sweep examples/tau2_pilot/t4.toml --target tau2_pilot.rollout:rollout \
 #     --backend modal --max-mde 0.2827 --yes
 #
 # THE THREE JUNK CELLS ARE DECLARED. [axes.task_family] is required -- SweepSpec.load

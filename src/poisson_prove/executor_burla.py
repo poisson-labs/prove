@@ -43,15 +43,15 @@ from dataclasses import MISSING, dataclass, fields
 from pathlib import Path
 from typing import Any
 
-from proofload._resolve import split_import_path
-from proofload.executor import (
+from poisson_prove._resolve import split_import_path
+from poisson_prove.executor import (
     ExecutorError,
     Plan,
     RunSummary,
     _capture_line,
     preflight_mde,
 )
-from proofload.executor_modal import (
+from poisson_prove.executor_modal import (
     Job,
     ModalOptions,
     Result,
@@ -60,7 +60,7 @@ from proofload.executor_modal import (
     _jobs,
     run_with_mapper,
 )
-from proofload.store import Store
+from poisson_prove.store import Store
 
 __all__ = [
     "BurlaBackendError",
@@ -383,9 +383,9 @@ def _version(name: str) -> str | None:
 
 
 def _build_bundle(packages: Sequence[str]) -> _Bundle:
-    """``proofload`` and each named package, as a deterministic gzip'd tar: sorted entries,
+    """``poisson_prove`` and each named package, as a deterministic gzip'd tar: sorted entries,
     mtimes and owners zeroed, modes 0644 and 0755, gzip mtime zero, no caches."""
-    names = ["proofload", *[name for name in packages if name != "proofload"]]
+    names = ["poisson_prove", *[name for name in packages if name != "poisson_prove"]]
     raw = io.BytesIO()
     info: dict[str, dict[str, Any]] = {}
     members: list[tuple[str, Path]] = []
@@ -513,7 +513,7 @@ else:
     with tarfile.open(fileobj=io.BytesIO(request["bundle"]), mode="r:gz") as tar:
         tar.extractall(root, filter="data")
     sys.path[:] = [root, *request["stdlib"], *request["site"]]
-module = __import__("proofload.executor_modal", fromlist=["worker_batch"])
+module = __import__("poisson_prove.executor_modal", fromlist=["worker_batch"])
 job, import_path, timeout, capture, chaos = request["args"]
 try:
     result = module.worker_batch([job], import_path, timeout, capture=capture, chaos=chaos)[0]
@@ -552,7 +552,7 @@ def _rehearse(
     # ``lib/pythonX.Y``, which holds ``site-packages`` and no ``lib-dynload``.
     base = sysconfig.get_paths(vars={"base": sys.base_prefix, "platbase": sys.base_exec_prefix})
     paths = sysconfig.get_paths()
-    with tempfile.TemporaryDirectory(prefix="proofload-rehearsal-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="poisson-prove-rehearsal-") as scratch:
         here = _rehearsal_run(
             {"root": None, "paths": list(sys.path), "args": args},
             argv=[sys.executable, "-c", _REHEARSAL],

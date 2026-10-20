@@ -4,16 +4,16 @@
 replacement strings are copied from AgentChaos -- ``github.com/floritange/AgentChaos``,
 the ``agentchaos-sdk`` distribution on PyPI, version ``0.1.0``, read from the installed
 wheel at ``agentchaos/fault_config.py:19``-``:284``. AgentChaos is published under the
-**MIT** licence and Proofload is published under the MIT licence, which is what makes the
+**MIT** licence and Prove is published under the MIT licence, which is what makes the
 copy clean and the attribution mandatory. The repository root's ``NOTICE`` says the same.
 
 **No code is taken and no dependency is carried** (spec M11 D1): the mutation semantics
-behind these names are Proofload's own, in ``proofload.chaos``, and this module imports
+behind these names are Prove's own, in ``poisson_prove.chaos``, and this module imports
 nothing but the standard library.
 
 **The entries carry no state** (D17). Each is a frozen five-field record --
 ``(name, intercept, action, target_path, value)`` -- with no ``probability``, no
-``max_count``, no ``min_count`` and no ``_count``: ``proofload.chaos`` owns the firing
+``max_count``, no ``min_count`` and no ``_count``: ``poisson_prove.chaos`` owns the firing
 decision, so an entry has nothing to count and the exhausted-singleton failure mode is
 unrepresentable rather than guarded against.
 
@@ -33,7 +33,7 @@ __all__: list[str] = []
 
 #: The catalogue revision. It stamps which mutation semantics produced a body, and it bumps
 #: when any entry or any action's semantics change -- never for an unrelated release.
-ENGINE_VERSION = "m11-catalog/1"
+ENGINE_VERSION = "poisson-prove.chaos-catalog/1"
 
 CONTENT_PATH = "$.choices[0].message.content"
 TOOL_CALLS_PATH = "$.choices[0].message.tool_calls"
@@ -138,7 +138,7 @@ _ROWS: dict[str, tuple[_Row, ...]] = {
 }
 
 #: Fault name -> the entries of that scenario, in application order. Read at call time by
-#: ``proofload.chaos``: rebinding this name is how a test reaches an action no shipped entry
+#: ``poisson_prove.chaos``: rebinding this name is how a test reaches an action no shipped entry
 #: uses, and nothing caches it at import.
 CATALOG: dict[str, tuple[FaultEntry, ...]] = {
     name: _entries(name, rows) for name, rows in _ROWS.items()

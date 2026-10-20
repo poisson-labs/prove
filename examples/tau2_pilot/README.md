@@ -10,7 +10,7 @@ pre-registered and not launched.
 τ² is **not forked and not patched**. It is installed from a pinned commit inside the image and
 used through public entry points: `registry.get_tasks_loader`, `build_text_orchestrator`,
 `run_simulation`, and — for arm B — `registry.register_agent_factory`. Nothing in
-`src/proofload` changed.
+`src/poisson_prove` changed.
 
 ## The two arms
 
@@ -67,7 +67,7 @@ every stored `t`.
 `t4.toml` is **generated, never hand-written**: `scripts/tau2_t4_sweep.py` reads τ²'s own
 `tasks.json` at the pin, applies the pre-registration's mechanical family rule to each task's
 `evaluation_criteria.actions`, and writes the file with the design's numbers recomputed from
-`proofload.diff.mde_two_proportion` in its header.
+`poisson_prove.diff.mde_two_proportion` in its header.
 
 ```bash
 python scripts/tau2_t4_sweep.py --tasks <tau2-checkout>/data/tau2/domains/airline/tasks.json
@@ -92,13 +92,13 @@ the coverage before spending anything:
 
 ```bash
 export PYTHONPATH="$PWD/examples${PYTHONPATH:+:$PYTHONPATH}"
-export PROOFLOAD_STORE=$(mktemp -d)
+export POISSON_PROVE_STORE=$(mktemp -d)
 python scripts/tau2_t4_sweep.py --tasks <...>/tasks.json --replicates 8 --out /tmp/d0.toml
-proofload sweep /tmp/d0.toml --target tau2_pilot.synthetic:rollout \
+poisson-prove sweep /tmp/d0.toml --target tau2_pilot.synthetic:rollout \
   --backend local --max-mde 0.60 --yes
-proofload sweep /tmp/d0.toml --target tau2_pilot.synthetic:rollout_patched \
+poisson-prove sweep /tmp/d0.toml --target tau2_pilot.synthetic:rollout_patched \
   --backend local --max-mde 0.60 --pair-with <A> --yes
-proofload diff <A> <B> --event unsolved --method mcnemar_bh --q 0.05 \
+poisson-prove diff <A> <B> --event unsolved --method mcnemar_bh --q 0.05 \
   --by task_family --max-group-mde 0.30 --depth 3 --methods all
 ```
 
@@ -152,17 +152,17 @@ forecast.
 ```bash
 pip install -e '.[modal]'                                  # from the repository root
 export PYTHONPATH="$PWD/examples${PYTHONPATH:+:$PYTHONPATH}"
-export PROOFLOAD_STORE=~/code/poisson-labs/proofload-runs
+export POISSON_PROVE_STORE=~/code/poisson-labs/prove-runs
 export MODAL_IMAGE_BUILDER_VERSION=2024.10                 # required; Dockerfile note 6
 
 # the canary: one episode, proves the image before the ten
-proofload sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
+poisson-prove sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
   --backend modal --max-mde 0.5 --max-rollouts 1 --yes
 
 # run A, then the same ten seeds again
-proofload sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
+poisson-prove sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
   --backend modal --max-mde 0.5 --yes
-proofload sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
+poisson-prove sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
   --backend modal --max-mde 0.5 --pair-with <A> --yes
 ```
 

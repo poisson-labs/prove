@@ -29,7 +29,7 @@ import hashlib
 from collections.abc import Mapping
 from typing import Any
 
-from proofload import Episode
+from poisson_prove import Episode
 
 #: How many "turns" a synthetic episode takes. Constant, so ``t`` carries the only thing D0
 #: needs from it: a value the survival panel can render.

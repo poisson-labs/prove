@@ -1,6 +1,6 @@
 """M12 -- Trace: one immutable schema for what a target actually did.
 
-``proofload.trace/1`` carries a span forest with wall-clock start and end, parentage and
+``poisson-prove.trace/1`` carries a span forest with wall-clock start and end, parentage and
 code location, plus the three ways one gets built: converted from OpenTelemetry spans
 (:func:`from_otel`), converted from LiteLLM call logs (:func:`from_litellm`), or recorded
 explicitly by the user (:func:`collect` / :func:`record` / :func:`step`) for the calls
@@ -35,6 +35,9 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
+
+from poisson_prove._compat import is_retired_trace_schema
+from poisson_prove._compat import span_key as _current_span_key
 
 __all__ = [
     "ALIAS_MAP_VERSION",
@@ -73,7 +76,7 @@ __all__ = [
 # ---------- constants ----------
 
 #: The one place the schema id is written (ADR-024). Every other site reaches it from here.
-SCHEMA = "proofload.trace/1"
+SCHEMA = "poisson-prove.trace/1"
 
 KINDS: tuple[str, ...] = ("llm", "tool", "retrieval", "db", "http", "agent", "other")
 SOURCES: tuple[str, ...] = ("record", "otel", "litellm", "mixed")
@@ -90,7 +93,7 @@ OUTCOME_BY: tuple[str, ...] = ("code", "llm", "self", "human")
 
 #: How a span came to be a gate (ADR-074). ``"emitted"``: the target's own instrumentation marked
 #: the span as a check its control flow consulted. ``"declared"``: the sweep's manifest names the
-#: step as one -- which is why a span arriving with ``proofload.gate = "declared"`` is refused.
+#: step as one -- which is why a span arriving with ``poisson_prove.gate = "declared"`` is refused.
 GATE: tuple[str, ...] = ("emitted", "declared")
 
 #: The one place the semantic-convention pin is written (ADR-024). The GenAI conventions are
@@ -112,7 +115,7 @@ ALIAS_MAP_VERSION: str = "1"
 #: A21's surrogate field. An observation value like any other, and a member of
 #: ``OBSERVATION_KEYS``: written here so the name a sweep declares and the name the split routes
 #: on are the same string.
-LOGPROBS_KEY = "proofload.logprobs"
+LOGPROBS_KEY = "poisson_prove.logprobs"
 
 #: The four prefix families of the observation table: a key *under* one of these is an
 #: observation value, whatever follows the prefix. They are kept apart from the exact members
@@ -150,8 +153,8 @@ class _ObservationKeys(frozenset[str]):
 
 #: Every attribute key whose value is observation content rather than envelope structure. These
 #: leave the envelope at the store boundary so it stays bounded by step count alone (ADR-047).
-#: The two routing stamps (``proofload.run_id``, ``proofload.episode``) are never observation
-#: values whatever their size, and are not here.
+#: The two routing stamps (``poisson_prove.run_id``, ``poisson_prove.episode``) are never
+#: observation values whatever their size, and are not here.
 OBSERVATION_KEYS: frozenset[str] = _ObservationKeys(
     {
         # GenAI semconv
@@ -165,7 +168,7 @@ OBSERVATION_KEYS: frozenset[str] = _ObservationKeys(
         # OpenInference: the span's ``kind`` decides the class, never the membership
         "input.value",
         "output.value",
-        # Proofload
+        # Prove
         LOGPROBS_KEY,
     }
 )
@@ -175,16 +178,16 @@ OBSERVATION_KEYS: frozenset[str] = _ObservationKeys(
 _OBSERVATION_FIELDS: tuple[str, ...] = ("input", "output")
 
 #: The two routing stamps, written here because they are read here. ``split`` and the cut both
-#: have to exclude them by name, and core cannot import ``proofload.otel`` -- that module pulls
+#: have to exclude them by name, and core cannot import ``poisson_prove.otel`` -- that module pulls
 #: in the OTel SDK at import time. ``otel.py`` re-exports these two as its public
 #: ``RUN_ID_KEY`` / ``EPISODE_KEY``, so the strings are still built in exactly one place.
-_RUN_ID_KEY = "proofload.run_id"
-_EPISODE_KEY = "proofload.episode"
+_RUN_ID_KEY = "poisson_prove.run_id"
+_EPISODE_KEY = "poisson_prove.episode"
 _ROUTING_STAMPS: frozenset[str] = frozenset({_RUN_ID_KEY, _EPISODE_KEY})
 
 #: The wrapper key a cut observation value is stored under (A8b). A value is a wrapper iff it
 #: is a mapping whose *sole* key is this one -- detection is on the key and never on the shape.
-TRUNCATED_KEY = "proofload.truncated"
+TRUNCATED_KEY = "poisson_prove.truncated"
 
 #: The byte size at which ``split`` moves an attribute nobody named out of the envelope and
 #: into ``trace_obs`` (ADR-090). **It decides which column a value is stored in and never
@@ -363,18 +366,18 @@ _LIFTED_KEYS: tuple[str, ...] = (
     "openinference.span.kind",
     "traceloop.span.kind",
     "graph.node.name",
-    "proofload.step_name",
-    "proofload.outcome",
-    "proofload.outcome_by",
-    "proofload.attempt",
-    "proofload.gate",
+    "poisson_prove.step_name",
+    "poisson_prove.outcome",
+    "poisson_prove.outcome_by",
+    "poisson_prove.attempt",
+    "poisson_prove.gate",
 )
 
-#: An ``error.type`` on a span whose status is not an error travels under a key of Proofload's
+#: An ``error.type`` on a span whose status is not an error travels under a key of Prove's
 #: own: the key it arrived under is lifted, T20 bans a lifted key from ``attrs``, and no span
 #: field holds it. Dropping it instead would be silent data loss. (An unrecognized operation
 #: name needed the same stash until A8a gave it ``operation``.)
-_ORIGINAL_ERROR_TYPE = "proofload.error_type"
+_ORIGINAL_ERROR_TYPE = "poisson_prove.error_type"
 
 #: The two attributes ``_otel_span`` writes rather than reads: the OTel trace id a user's own
 #: collector keys on, and the raw span status, which separates an instrumentor that sets ``OK``
@@ -490,7 +493,7 @@ class Span:
             raise TraceValidationError("parent_id must be a str or None")
         if self.kind not in KINDS:
             raise TraceValidationError(
-                f"kind {self.kind!r} is not a Proofload span kind; KINDS are {', '.join(KINDS)}"
+                f"kind {self.kind!r} is not a Prove span kind; KINDS are {', '.join(KINDS)}"
             )
         if not isinstance(self.name, str):
             raise TraceValidationError("name must be a str")
@@ -632,7 +635,7 @@ class Trace:
         object.__setattr__(self, "spans", spans)
         if self.source not in SOURCES:
             raise TraceValidationError(
-                f"source {self.source!r} is not a Proofload trace source; "
+                f"source {self.source!r} is not a Prove trace source; "
                 f"SOURCES are {', '.join(SOURCES)}"
             )
         if self.source_version is not None and not isinstance(self.source_version, str):
@@ -697,7 +700,7 @@ class Trace:
     def from_dict(cls, d: Mapping[str, Any]) -> Trace:
         checked = _require_keys(d, _TRACE_KEYS, "trace")
         schema = checked["schema"]
-        if schema != SCHEMA:
+        if schema != SCHEMA and not is_retired_trace_schema(schema):
             raise TraceValidationError(
                 f"schema {schema!r} is not {SCHEMA!r}; this reader reads {SCHEMA!r} only"
             )
@@ -771,7 +774,11 @@ def _is_wrapper(value: Any) -> bool:
     On the key, never on the shape: a user observation that happens to be a dict with ``head``,
     ``tail`` and ``bytes_original`` keys is not a wrapper and is cut like anything else.
     """
-    return isinstance(value, Mapping) and len(value) == 1 and TRUNCATED_KEY in value
+    return (
+        isinstance(value, Mapping)
+        and len(value) == 1
+        and _current_span_key(next(iter(value))) == TRUNCATED_KEY
+    )
 
 
 def _longest_prefix(raw: bytes, bound: int) -> str:
@@ -904,7 +911,7 @@ class Declaration:
     declaration read back from a manifest is held to the rules that refused the sweep file, and
     two spellings of one declaration compare equal in ``diff`` and on ``--resume``. Minted
     here, in the module ``finalize`` lives in, because this module imports nothing from the
-    package: a ``Declaration`` in ``sampler.py`` would make ``import proofload.trace`` a cycle
+    package: a ``Declaration`` in ``sampler.py`` would make ``import poisson_prove.trace`` a cycle
     through ``store.py``.
     """
 
@@ -1115,10 +1122,10 @@ class Collector:
 
 
 _COLLECTOR: contextvars.ContextVar[Collector | None] = contextvars.ContextVar(
-    "proofload_trace_collector", default=None
+    "poisson_prove_trace_collector", default=None
 )
 _STACK: contextvars.ContextVar[tuple[str, ...]] = contextvars.ContextVar(
-    "proofload_trace_stack", default=()
+    "poisson_prove_trace_stack", default=()
 )
 
 
@@ -1222,7 +1229,7 @@ def record(
 
     **A value the schema refuses loses the span, and never raises.** An ``attempt`` of 0, a
     ``gate`` outside ``GATE``, or ``handle.outcome_by = "robot"`` is logged at WARNING on the
-    ``proofload.trace`` logger and the span is dropped -- the same no-crash rule as an unknown
+    ``poisson_prove.trace`` logger and the span is dropped -- the same no-crash rule as an unknown
     ``kind``, because a recorder must never displace the rollout's own result.
 
     The code location comes from ``sys._getframe``: ``inspect.stack()`` opens and reads the
@@ -1517,7 +1524,10 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
         canonical = ATTRIBUTE_ALIASES.get(key, key)
         if canonical != key and canonical in flat:
             continue  # the source spelled the canonical key too; the deprecated one loses
-        attrs[canonical] = value
+        current = _current_span_key(canonical)
+        if current != canonical and current in flat:
+            continue  # the source spelled the current prefix too; the retired one loses
+        attrs[current] = value
     lifted = {key: attrs.pop(key, None) for key in _LIFTED_KEYS}
     source_id = _first(raw, "spanId", "span_id")
     label = source_id if isinstance(source_id, str) and source_id else "<no id>"
@@ -1559,7 +1569,7 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
         attrs[_OTEL_TRACE_ID] = trace_id
     attrs[_OTEL_STATUS_CODE] = _status_code(raw)
 
-    outcome = _carried_str(label, "proofload.outcome", lifted["proofload.outcome"])
+    outcome = _carried_str(label, "poisson_prove.outcome", lifted["poisson_prove.outcome"])
     return Span(
         span_id=_decode_id(source_id) or "",
         parent_id=_decode_id(_first(raw, "parentSpanId", "parent_span_id")),
@@ -1574,8 +1584,8 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
         operation=_operation(lifted),
         step_name=_step_name(label, lifted),
         outcome=outcome,
-        outcome_by=_outcome_by(label, lifted["proofload.outcome_by"], outcome),
-        attempt=_attempt(label, lifted["proofload.attempt"]),
+        outcome_by=_outcome_by(label, lifted["poisson_prove.outcome_by"], outcome),
+        attempt=_attempt(label, lifted["poisson_prove.attempt"]),
         gate=_gate(label, lifted),
     )
 
@@ -1601,8 +1611,8 @@ def _operation(lifted: Mapping[str, Any]) -> str | None:
 
 
 def _step_name(label: str, lifted: Mapping[str, Any]) -> str | None:
-    """``graph.node.name``, else ``proofload.step_name`` (ADR-055). Never the span's name."""
-    for key in ("graph.node.name", "proofload.step_name"):
+    """``graph.node.name``, else ``poisson_prove.step_name`` (ADR-055). Never the span's name."""
+    for key in ("graph.node.name", "poisson_prove.step_name"):
         if lifted[key] is not None:
             return _carried_str(label, key, lifted[key])
     return None
@@ -1613,7 +1623,7 @@ def _outcome_by(label: str, value: Any, outcome: str | None) -> str | None:
         return None
     if value not in OUTCOME_BY:
         _LOG.warning(
-            "OTel span %s: proofload.outcome_by = %r is not one of %s; left unrecorded",
+            "OTel span %s: poisson_prove.outcome_by = %r is not one of %s; left unrecorded",
             label,
             value,
             ", ".join(OUTCOME_BY),
@@ -1621,7 +1631,7 @@ def _outcome_by(label: str, value: Any, outcome: str | None) -> str | None:
         return None
     if outcome is None:
         _LOG.warning(
-            "OTel span %s: proofload.outcome_by = %r arrived with no outcome; left unrecorded",
+            "OTel span %s: poisson_prove.outcome_by = %r arrived with no outcome; left unrecorded",
             label,
             value,
         )
@@ -1630,13 +1640,15 @@ def _outcome_by(label: str, value: Any, outcome: str | None) -> str | None:
 
 
 def _attempt(label: str, value: Any) -> int | None:
-    """``proofload.attempt`` as the adapter wrote it: already 1-based, never re-based here."""
+    """``poisson_prove.attempt`` as the adapter wrote it: already 1-based, never re-based here."""
     if value is None:
         return None
     attempt = _as_int(value)
     if attempt is None or attempt < 1:
         _LOG.warning(
-            "OTel span %s: proofload.attempt = %r is not an int >= 1; left unrecorded", label, value
+            "OTel span %s: poisson_prove.attempt = %r is not an int >= 1; left unrecorded",
+            label,
+            value,
         )
         return None
     return attempt
@@ -1644,7 +1656,7 @@ def _attempt(label: str, value: Any) -> int | None:
 
 def _gate(label: str, lifted: Mapping[str, Any]) -> str | None:
     """``"emitted"`` for an OpenInference guardrail span or a span carrying
-    ``proofload.gate = "emitted"``; otherwise None. Never inferred from the span's name.
+    ``poisson_prove.gate = "emitted"``; otherwise None. Never inferred from the span's name.
 
     ``EVALUATOR`` is not a gate marker: an evaluator scores and may not gate, so the allowlist
     starts at one entry (spec A8a section 10 Q6). And a ``"declared"`` gate comes from the
@@ -1654,18 +1666,19 @@ def _gate(label: str, lifted: Mapping[str, Any]) -> str | None:
     vendor = lifted["openinference.span.kind"]
     if isinstance(vendor, str) and vendor.strip().lower() == "guardrail":
         gate = "emitted"
-    wire = lifted["proofload.gate"]
+    wire = lifted["poisson_prove.gate"]
     if wire == "emitted":
         gate = "emitted"
     elif wire == "declared":
         _LOG.warning(
-            "OTel span %s: proofload.gate = 'declared' dropped; a declared gate comes from the "
+            "OTel span %s: poisson_prove.gate = 'declared' dropped; a declared gate comes from the "
             "manifest, not from a span",
             label,
         )
     elif wire is not None:
         _LOG.warning(
-            "OTel span %s: proofload.gate = %r is not a value a span may carry; left unrecorded",
+            "OTel span %s: poisson_prove.gate = %r is not a value a span may carry; "
+            "left unrecorded",
             label,
             wire,
         )
@@ -1692,7 +1705,7 @@ def _cyclic_span_ids(spans: Iterable[Span]) -> set[str]:
 def from_otel(payload: Mapping[str, Any] | Iterable[Mapping[str, Any]]) -> Trace:
     """Normalize an OTLP/JSON payload, or a flat iterable of span mappings, into a Trace.
 
-    Unusable spans are dropped, counted and logged at WARNING on the ``proofload.trace``
+    Unusable spans are dropped, counted and logged at WARNING on the ``poisson_prove.trace``
     logger, one record per span: data loss is never silent and never fatal.
     """
     spans: list[Span] = []

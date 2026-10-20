@@ -133,7 +133,7 @@ class TestResult:
 
     ``harness_error`` separates *the sandbox broke* from *the candidate failed*. They are
     different facts and the pilot counts them apart: a candidate failure is the episode's
-    outcome, a sandbox failure is Proofload failing to observe and belongs in an errored row
+    outcome, a sandbox failure is Prove failing to observe and belongs in an errored row
     (spec section 3). Without the flag a full disk would be indistinguishable from a wrong
     answer, and would land in the pilot's headline failure event.
     """

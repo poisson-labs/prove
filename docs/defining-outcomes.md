@@ -60,7 +60,7 @@ call failed. Every episode ended `crashed`. And:
   `replicate_index`, all valid;
 - a **trace was attached** to every episode;
 - `t` was inside `[0, horizon]` and the `t_unit` matched the manifest;
-- after S21, `proofload runs` reported **`no_outcome 0`** for that arm — and that
+- after S21, `poisson-prove runs` reported **`no_outcome 0`** for that arm — and that
   number was *correct*: every episode did have an outcome. Its label was
   `crashed`.
 
@@ -105,7 +105,7 @@ So:
 > **A distinction that lives only in `meta` cannot be seen by the analysis. If it
 > matters to the comparison, it has to be in the outcome label.**
 
-You can find the conflation after the fact with `proofload inspect`, if you
+You can find the conflation after the fact with `poisson-prove inspect`, if you
 think to look. You cannot correct for it in the diff, and nothing will tell you
 to look.
 
@@ -166,7 +166,7 @@ recur:
 
 **6. Print the outcome distribution before you diff.**
 One line per label per arm. The dead arm was 100% one label; a glance would have
-caught it. Today this is a `proofload inspect` call or three lines of pandas over
+caught it. Today this is a `poisson-prove inspect` call or three lines of pandas over
 the store — do it anyway, and do it before you look at the comparison.
 
 **7. Decide what you will do if it happens anyway.**

@@ -29,10 +29,10 @@ from multiprocessing.connection import Connection
 from types import FrameType
 from typing import Any
 
-from proofload import __version__
-from proofload import capture as capture_module
-from proofload.capture import CaptureSpec, CaptureStatus, Recorder, capture, install
-from proofload.chaos import (
+from poisson_prove import __version__
+from poisson_prove import capture as capture_module
+from poisson_prove.capture import CaptureSpec, CaptureStatus, Recorder, capture, install
+from poisson_prove.chaos import (
     ChaosError,
     ChaosSpec,
     ChaosStatus,
@@ -40,12 +40,12 @@ from proofload.chaos import (
     _installed_hooks,
     injecting,
 )
-from proofload.chaos import install as chaos_install
-from proofload.diff import mde_two_proportion
-from proofload.episode import Episode
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store, StoreError
-from proofload.trace import (
+from poisson_prove.chaos import install as chaos_install
+from poisson_prove.diff import mde_two_proportion
+from poisson_prove.episode import Episode
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, StoreError
+from poisson_prove.trace import (
     ALIAS_MAP_VERSION,
     OTEL_SEMCONV_VERSION,
     Declaration,
@@ -388,7 +388,7 @@ _Outcome = tuple[str, Any]
 
 
 def _episode_id(config_hash: str, replicate_index: int) -> str:
-    """The value stamped as ``proofload.episode``. One spelling, both backends."""
+    """The value stamped as ``poisson_prove.episode``. One spelling, both backends."""
     return f"{config_hash}:{replicate_index}"
 
 
@@ -411,7 +411,7 @@ class _ChaosCall:
 def _merge_capture(meta: dict[str, Any], captured: dict[str, Any]) -> None:
     """Land the captured trace in ``meta["trace"]``, never at the cost of the episode.
 
-    Absent: attach. A valid ``proofload.trace/1`` dict: merge. A ``span_id`` collision: keep
+    Absent: attach. A valid ``poisson-prove.trace/1`` dict: merge. A ``span_id`` collision: keep
     the rollout's trace, drop the capture, warn once — rewriting span ids to dodge the
     collision would violate M12's "``parent_id`` is never rewritten", and an errored row is
     far worse than a missing trace. Anything else in ``meta["trace"]``: leave it exactly as
@@ -742,7 +742,7 @@ def _environment(spec: SweepSpec) -> dict[str, Any]:
     return {
         "python": sys.version,
         "platform": platform.platform(),
-        "proofload_version": __version__,
+        "poisson_prove_version": __version__,
         "sweep": spec.to_dict(),
     }
 

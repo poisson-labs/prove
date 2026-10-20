@@ -42,11 +42,16 @@ if TYPE_CHECKING:
     import pandas as pd
     from _typeshed import SupportsWrite
 
-    from proofload.diff import Method
+    from poisson_prove.diff import Method
 
-from proofload import __version__
-from proofload._resolve import resolve
-from proofload.diff import (
+from poisson_prove import __version__
+from poisson_prove._compat import (
+    retired_default_store,
+    retired_default_store_refusal,
+    retired_store_variable_note,
+)
+from poisson_prove._resolve import resolve
+from poisson_prove.diff import (
     _CAUSES,
     _PAIRED_METHODS,
     COVERAGE_COLUMNS,
@@ -58,7 +63,7 @@ from proofload.diff import (
     infer_events,
     multi_diff,
 )
-from proofload.executor import (
+from poisson_prove.executor import (
     ExecutorError,
     Plan,
     RunSummary,
@@ -67,15 +72,15 @@ from proofload.executor import (
     preflight,
     run_local,
 )
-from proofload.executor_burla import BurlaOptions, preflight_burla, run_burla
-from proofload.executor_modal import (
+from poisson_prove.executor_burla import BurlaOptions, preflight_burla, run_burla
+from poisson_prove.executor_modal import (
     ImageSpec,
     ModalOptions,
     ModalTarget,
     preflight_modal,
     run_modal,
 )
-from proofload.paired import (
+from poisson_prove.paired import (
     Declaration,
     PairedError,
     _artifact_text,
@@ -85,8 +90,8 @@ from proofload.paired import (
     _fold_html,
     _fold_markdown,
 )
-from proofload.paired import cost as paired_cost
-from proofload.report import (
+from poisson_prove.paired import cost as paired_cost
+from poisson_prove.report import (
     MultiReport,
     ReportError,
     ReportSpec,
@@ -97,12 +102,12 @@ from proofload.report import (
     build_multi_report,
     build_survival_report,
 )
-from proofload.sampler import SamplerError, SweepSpec
-from proofload.steps import declaration_check
-from proofload.store import RunManifest, Store, StoreError
-from proofload.survival import SurvivalError, cell_table, competing_set
-from proofload.trace import Trace, TraceValidationError
-from proofload.tree import (
+from poisson_prove.sampler import SamplerError, SweepSpec
+from poisson_prove.steps import declaration_check
+from poisson_prove.store import RunManifest, Store, StoreError
+from poisson_prove.survival import SurvivalError, cell_table, competing_set
+from poisson_prove.trace import Trace, TraceValidationError
+from poisson_prove.tree import (
     DEFAULT_DEPTH,
     DEFAULT_MAX_GROUP_MDE,
     DEFAULT_PERMUTATIONS,
@@ -122,12 +127,13 @@ from proofload.tree import (
     TreeResult,
     tree,
 )
-from proofload.viewer import _HOST, ViewerError, build_structure, render_html, serve_page
+from poisson_prove.viewer import _HOST, ViewerError, build_structure, render_html, serve_page
 
 __all__ = ["main"]
 
-_ENV_STORE = "PROOFLOAD_STORE"
-_DEFAULT_STORE = "./proofload-runs"
+_COMMAND = "poisson-prove"
+_ENV_STORE = "POISSON_PROVE_STORE"
+_DEFAULT_STORE = "./prove-runs"
 _DEFAULT_BATCH_SIZE = 64
 _DEFAULT_METHOD = "fisher_bh"
 _DEFAULT_Q = 0.05
@@ -181,6 +187,17 @@ class _Refusal(Exception):
     """A verb refused before doing any work. Exit 2, message only."""
 
 
+class _RetiredStoreRefusal(Exception):
+    """The default store is in use, ``./prove-runs`` does not exist and the folder an earlier
+    version of Prove wrote to does: every verb that reads or writes a store refuses, creates
+    nothing, and says how to move or name the old folder, so a store is never split in two.
+    Exit 1: one ``error:`` line, then the ``next:`` lines."""
+
+    def __init__(self, error: str, nexts: list[str]) -> None:
+        super().__init__(error)
+        self.nexts = nexts
+
+
 class _Parser(argparse.ArgumentParser):
     """argparse that writes to the streams ``main`` was given and never calls ``sys.exit``."""
 
@@ -204,11 +221,11 @@ class _Parser(argparse.ArgumentParser):
 
 def _build_parser(io: _IO) -> _Parser:
     parser = _Parser(
-        prog="proofload",
+        prog=_COMMAND,
         description="A statistical instrument for finding where autonomous and agentic "
         "systems break.",
     )
-    parser.add_argument("--version", action="version", version=f"proofload {__version__}")
+    parser.add_argument("--version", action="version", version=f"{_COMMAND} {__version__}")
     parser.add_argument(
         "--store",
         metavar="PATH",
@@ -297,7 +314,7 @@ def _build_parser(io: _IO) -> _Parser:
     report_p.add_argument(
         "--out",
         metavar="DIR",
-        help="default ./proofload-report-<A>-<B> or ./proofload-report-<RUN>",
+        help="default ./prove-report-<A>-vs-<B> or ./prove-report-<RUN>",
     )
     report_p.add_argument("--title", metavar="TEXT")
     report_p.add_argument("--force", action="store_true", help="write into a non-empty --out")
@@ -317,7 +334,7 @@ def _build_parser(io: _IO) -> _Parser:
         "--declaration", required=True, metavar="DECL", help="the paired-replay declaration (TOML)"
     )
     paired_p.add_argument(
-        "--out", metavar="DIR", help="default ./proofload-paired-<declaration digest prefix>"
+        "--out", metavar="DIR", help="default ./prove-paired-<declaration digest prefix>"
     )
     paired_p.add_argument("--format", choices=("md", "json"), default="md")
     paired_p.add_argument(
@@ -503,8 +520,17 @@ def _dispatch(ns: argparse.Namespace, io: _IO) -> int:
     root = _store_root(ns)
     state = _State()
     try:
+        note = retired_store_variable_note(os.environ, _ENV_STORE)
+        if note is not None:
+            io.err.write(f"note: {note}\n")
+        _check_retired_default_store(ns, root)
         _check_store(ns, root)
         return _VERBS[ns.verb](ns, io, root, state)
+    except _RetiredStoreRefusal as exc:
+        io.err.write(f"error: {exc}\n")
+        for line in exc.nexts:
+            io.err.write(f"  next: {line}\n")
+        return 1
     except _Refusal as exc:
         io.err.write(f"error: {exc}\n")
         return 2
@@ -530,13 +556,31 @@ def _store_root(ns: argparse.Namespace) -> Path:
     return Path(_DEFAULT_STORE)
 
 
+def _check_retired_default_store(ns: argparse.Namespace, root: Path) -> None:
+    """With the default store in use, a folder an earlier version of Prove wrote to beside a
+    missing ``./prove-runs`` is a refusal on every verb, ``sweep`` included: reading past it
+    would answer from nothing, and writing would split the store in two. Creates nothing."""
+    if ns.store or os.environ.get(_ENV_STORE):
+        return
+    old = retired_default_store(root)
+    if old is None:
+        return
+    error, nexts = retired_default_store_refusal(root, old, _COMMAND, ns.verb)
+    raise _RetiredStoreRefusal(error, nexts)
+
+
+def _slug(name: str) -> str:
+    """A run's name as a folder name: lower case, spaces and slashes as dashes."""
+    return name.lower().replace(" ", "-").replace("/", "-")
+
+
 _SWEEP_NEXT = "sweep SPEC.toml --target pkg.module:rollout"
 
 
 def _store_source(ns: argparse.Namespace) -> str:
     """Which of the three places named the store root, in the order ``_store_root`` reads them.
 
-    An empty ``$PROOFLOAD_STORE`` is not a source: ``_store_root`` falls through it to the
+    An empty ``$POISSON_PROVE_STORE`` is not a source: ``_store_root`` falls through it to the
     default, and the clause has to name the resolution that actually happened (D3).
     """
     if ns.store:
@@ -557,7 +601,7 @@ def _no_runs_note(ns: argparse.Namespace, root: Path) -> str:
         [
             f"no runs in {root}. No directory under it holds a manifest.json; "
             f"{_store_source(ns)}.",
-            f"  to write the first run there: proofload --store {quoted} {_SWEEP_NEXT}",
+            f"  to write the first run there: {_COMMAND} --store {quoted} {_SWEEP_NEXT}",
         ]
     )
 
@@ -575,14 +619,14 @@ def _check_store(ns: argparse.Namespace, root: Path) -> None:
     quoted = shlex.quote(str(root))
     elsewhere = (
         "  to read another store: "
-        f"proofload --store PATH {ns.verb}, with --store before the verb"
+        f"{_COMMAND} --store PATH {ns.verb}, with --store before the verb"
     )
     if not root.is_dir():
         raise _Refusal(
             "\n".join(
                 [
                     f"no store at {root}. No directory exists at that path; {_store_source(ns)}.",
-                    f"  to create one there: proofload --store {quoted} {_SWEEP_NEXT}",
+                    f"  to create one there: {_COMMAND} --store {quoted} {_SWEEP_NEXT}",
                     elsewhere,
                 ]
             )
@@ -1101,7 +1145,7 @@ def _resolve_target(target: str) -> Any:
 
     A module that raises at import because it is outside the boundary it demands -- the golden
     pilot's agent, on a laptop -- raises RuntimeError, which is a refusal of this target and
-    not a bug in proofload, so it exits 2 naming the path like the other three.
+    not a bug in Prove, so it exits 2 naming the path like the other three.
     """
     try:
         return resolve(target)
@@ -1422,7 +1466,7 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
             f"{', '.join(stray)}: single-run flag{'s' if len(stray) > 1 else ''}; a diff report "
             f"takes its horizon from the two runs ({_REPORT_FORMS})"
         )
-    out_dir = _prepare_out_dir(ns, f"./proofload-report-{a}-{b}")
+    out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(a)}-vs-{_slug(b)}")
     declaration = None if ns.paired is None else _paired_declaration(ns.paired, a, b)
     fixed = _parse_pairs(ns.fix, "--fix")
     method = _DEFAULT_METHOD if ns.method is None else ns.method
@@ -1525,7 +1569,7 @@ def _cmd_paired(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> i
     if ns.format == "json":
         io.out.write(_artifact_text(_bundle(store, declaration).payload) + "\n")
         return 0
-    out_dir = _prepare_out_dir(ns, f"./proofload-paired-{declaration.digest[:12]}")
+    out_dir = _prepare_out_dir(ns, f"./prove-paired-{declaration.digest[:12]}")
     bundle = _bundle(store, declaration)
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, artifact in bundle.artifacts.items():
@@ -1544,7 +1588,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
             f"{', '.join(given)}: diff-only flag{'s' if len(given) > 1 else ''}; "
             f"a single-run report compares nothing ({_REPORT_FORMS})"
         )
-    out_dir = _prepare_out_dir(ns, f"./proofload-report-{run}")
+    out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(run)}")
     fixed = _parse_pairs(ns.fix, "--fix")
 
     store = Store(root)

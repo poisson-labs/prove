@@ -22,10 +22,10 @@ from typing import Any, Literal
 
 from scipy.stats import qmc
 
-from proofload.capture import CaptureSpec
-from proofload.chaos import ChaosSpec
-from proofload.store import InvalidConfig, config_hash
-from proofload.trace import Declaration
+from poisson_prove.capture import CaptureSpec
+from poisson_prove.chaos import ChaosSpec
+from poisson_prove.store import InvalidConfig, config_hash
+from poisson_prove.trace import Declaration
 
 AxisType = Literal["continuous", "categorical"]
 
@@ -184,7 +184,7 @@ tail and its original length. Set it to "none" to store every value whole.
 Sizing it: an LLM agent whose prompt carries a system prompt and tool schemas
 needs tens of thousands of bytes; a target whose observations are scalars is
 served by 1024. To size it from this target, run a short sweep at a low limit
-such as 64 and read `proofload inspect`: every value's true length is recorded,
+such as 64 and read `poisson-prove inspect`: every value's true length is recorded,
 though the values themselves are not kept. 8192 is what a sweep file without
 this line stored before this change.
 See docs/what-capture-stores.md."""

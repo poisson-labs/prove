@@ -46,7 +46,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from proofload.diff import (
+from poisson_prove.diff import (
     DiffError,
     Method,
     MultiDiffResult,
@@ -55,8 +55,8 @@ from proofload.diff import (
     bh,
     mde_two_proportion,
 )
-from proofload.executor import DEFAULT_MAX_MDE, _offered_override
-from proofload.store import RunManifest
+from poisson_prove.executor import DEFAULT_MAX_MDE, _offered_override
+from poisson_prove.store import RunManifest
 
 Scheme = Literal["pair_swap", "arm_label"]
 
@@ -100,7 +100,7 @@ _REBUILD_COLUMNS = ("n_a", "n_b", "events_a", "events_b")
 #: The tag inside the agreement digest's hashed payload (spec A28 section 3.2). Not a
 #: compatibility promise and never a sibling key (section 10 Q9): it is ``/1`` so that a later
 #: change to the canonical form is visible, and no consumer may compare digests across tags.
-AGREEMENT_SCHEMA = "proofload.agreement/1"
+AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 
 
 # ---------- S26: the resolver's vocabulary ----------

@@ -19,8 +19,8 @@ import random
 from collections.abc import Mapping
 from typing import Any
 
-from proofload.episode import Episode
-from proofload.trace import Span, Trace
+from poisson_prove.episode import Episode
+from poisson_prove.trace import Span, Trace
 
 HORIZON = 20
 T_UNIT = "tool_calls"

@@ -52,9 +52,9 @@ import pandas as pd
 from numpy.typing import NDArray
 from scipy.stats import beta as _beta
 
-from proofload.diff import _discordant, _mcnemar
-from proofload.store import Store
-from proofload.trace import Trace, TraceValidationError
+from poisson_prove.diff import _discordant, _mcnemar
+from poisson_prove.store import Store
+from poisson_prove.trace import Trace, TraceValidationError
 
 
 class PairedError(Exception):
@@ -935,7 +935,7 @@ def _arm_identity(store: Store, run_id: str) -> dict[str, Any]:
     environment = manifest.environment
     capture = environment.get("capture")
     return {
-        "proofload_version": manifest.proofload_version,
+        "poisson_prove_version": manifest.poisson_prove_version,
         "run_salt": manifest.run_salt,
         "python": environment.get("python"),
         "concurrency": environment.get("concurrency"),

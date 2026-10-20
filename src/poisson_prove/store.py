@@ -17,9 +17,10 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from proofload import __version__
-from proofload.episode import Episode
-from proofload.trace import Declaration, Span, Trace, TraceValidationError, assemble, split
+from poisson_prove import __version__
+from poisson_prove._compat import retired_manifest_version
+from poisson_prove.episode import Episode
+from poisson_prove.trace import Declaration, Span, Trace, TraceValidationError, assemble, split
 
 
 class StoreError(Exception):
@@ -210,7 +211,7 @@ def _a7_trace_as_current(stored: Any) -> Any:
 
     A trace stored before A8a has six keys and spans of thirteen, and ``Trace.from_dict``, which
     demands the exact key set, rejects it: ``Store.read`` raised on every such row and
-    ``inspect`` exited 3 (measured on the four runs of that age in ``proofload-runs`` that keep
+    ``inspect`` exited 3 (measured on the four runs of that age in the default store that keep
     their trace in the ``trace`` column; the eight that keep it in ``meta`` on a part before A7
     read back unvalidated and ``inspect`` printed nothing for them). The store knows what it
     wrote, so it recognises that shape here and adds what the shape lacked, each ``None``, which
@@ -273,13 +274,24 @@ class RunManifest:
     retain_traces_for: tuple[str, ...] | None = None
     status: Literal["partial", "complete"] = "partial"
     created_at: str = field(default_factory=_now_iso_utc)
-    proofload_version: str = field(default_factory=lambda: __version__)
+    poisson_prove_version: str = field(default_factory=lambda: __version__)
     schema_version: int = _SCHEMA_VERSION
     #: What the run's sweep declared it expects -- steps, outcomes, gates -- or ``None`` (A10).
     #: A thirteenth top-level field and not an ``environment`` entry: ``diff`` reads it as part
     #: of run identity beside ``t_unit`` and ``run_salt``. A manifest written before A10 has no
     #: key and reads back ``None``; no ``_SCHEMA_VERSION`` bump, the version gates the rows.
     declared: Declaration | None = None
+
+    @property
+    def written_by(self) -> str | None:
+        """The name the run was stored under when it was not this package's, else ``None``.
+
+        Set by ``from_dict`` on a manifest whose version was recorded under a retired key; a
+        manifest built in this process has none. Not a field: nothing stored carries it,
+        ``to_dict`` never writes it, and the thirteen fields above are the whole record.
+        """
+        marker: str | None = self.__dict__.get("_written_by")
+        return marker
 
     def __post_init__(self) -> None:
         if not isinstance(self.target_id, str) or not self.target_id:
@@ -303,7 +315,7 @@ class RunManifest:
             ),
             "status": self.status,
             "created_at": self.created_at,
-            "proofload_version": self.proofload_version,
+            "poisson_prove_version": self.poisson_prove_version,
             "schema_version": self.schema_version,
             "declared": None if self.declared is None else self.declared.to_dict(),
         }
@@ -312,7 +324,17 @@ class RunManifest:
     def from_dict(cls, d: Mapping[str, Any]) -> RunManifest:
         retain = d.get("retain_traces_for")
         declared = d.get("declared")
-        return cls(
+        # The version under the current key; else under the key an earlier build wrote, with
+        # the name that wrote it; else, for a manifest that recorded none, this build's.
+        version = d.get("poisson_prove_version")
+        written_by: str | None = None
+        if version is None:
+            recorded = retired_manifest_version(d)
+            if recorded is not None:
+                version, written_by = recorded
+            else:
+                version = __version__
+        manifest = cls(
             run_id=d["run_id"],
             target_id=d["target_id"],
             t_unit=d["t_unit"],
@@ -323,10 +345,13 @@ class RunManifest:
             retain_traces_for=None if retain is None else tuple(retain),
             status=d.get("status", "partial"),
             created_at=d.get("created_at", _now_iso_utc()),
-            proofload_version=d.get("proofload_version", __version__),
+            poisson_prove_version=str(version),
             schema_version=d.get("schema_version", _SCHEMA_VERSION),
             declared=None if declared is None else Declaration.from_dict(declared),
         )
+        if written_by is not None:
+            object.__setattr__(manifest, "_written_by", written_by)
+        return manifest
 
 
 # ---------- EpisodeRecord ----------

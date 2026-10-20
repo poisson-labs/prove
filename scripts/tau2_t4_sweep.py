@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate ``examples/tau2_pilot/t4.toml`` from τ²'s pinned airline task file.
 
-**The rule is pre-registered; the table is not.** [[Proofload — T.4 τ²-bench Pre-registration]]
+**The rule is pre-registered; the table is not.** [[Prove — T.4 τ²-bench Pre-registration]]
 §2.3 fixes a mechanical partition of the 50 airline tasks over each task's
 ``evaluation_criteria.actions``, and prints a table of task ids beside it that was read by hand.
 This script is the rule. It reads the task file at the pinned commit, applies the rule, and
@@ -94,10 +94,10 @@ def least_admitted_replicates(cells_in_smallest_family: int) -> tuple[int, float
     §4.4's derivation, run rather than quoted: the resolver's own ``_group_mdes`` is the
     *unpaired* two-proportion MDE at base rate 0.5 and ``alpha = q / G``, and N is the least
     replicate count whose smallest family clears ``--max-group-mde``. Imported from
-    ``proofload.diff`` so the number that sizes the run and the number that admits it are the
+    ``poisson_prove.diff`` so the number that sizes the run and the number that admits it are the
     same function.
     """
-    from proofload.diff import mde_two_proportion
+    from poisson_prove.diff import mde_two_proportion
 
     alpha = Q / N_FAMILIES
     n = 1
@@ -116,8 +116,8 @@ def render(
     replicates: int,
     digest: str,
 ) -> str:
-    from proofload.diff import mde_two_proportion
-    from proofload.executor import _offered_override
+    from poisson_prove.diff import mde_two_proportion
+    from poisson_prove.executor import _offered_override
 
     alpha = Q / N_FAMILIES
     family_of_task = {tid: family for family, ids in families.items() for tid in ids}
@@ -146,7 +146,7 @@ def render(
         f"#   tasks.json sha256   {digest}",
         f"#   tasks               {len(tasks)}",
         "#",
-        "# The design, recomputed by the generator from proofload.diff.mde_two_proportion:",
+        "# The design, recomputed by the generator from poisson_prove.diff.mde_two_proportion:",
         "#",
         *rows,
         "#",
@@ -159,10 +159,10 @@ def render(
         "# The commands (pre-registration §10). The salt is fresh; A' and B pair with A.",
         "#",
         '#   export PYTHONPATH="$PWD/examples${PYTHONPATH:+:$PYTHONPATH}"',
-        "#   export PROOFLOAD_STORE=~/code/poisson-labs/proofload-runs",
+        "#   export POISSON_PROVE_STORE=~/code/poisson-labs/prove-runs",
         "#   export MODAL_IMAGE_BUILDER_VERSION=2024.10        # required; Dockerfile note 6",
         "#   python scripts/tau2_t4_budget.py --arm A          # the launch gate; see note below",
-        "#   proofload sweep examples/tau2_pilot/t4.toml --target tau2_pilot.rollout:rollout \\",
+        "#   poisson-prove sweep examples/tau2_pilot/t4.toml --target tau2_pilot.rollout:rollout \\",
         f"#     --backend modal --max-mde {_offered_override(per_cell):.4f} --yes",
         "#",
         "# THE THREE JUNK CELLS ARE DECLARED. [axes.task_family] is required -- SweepSpec.load",
@@ -205,7 +205,7 @@ def render(
         "# 1.80.0 + openai 2.54.0 + opentelemetry-instrumentation-openai-v2 2.4b0: the",
         "# instrumentor emits gen_ai.input.messages / gen_ai.output.messages only when",
         "# OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT is set to SPAN_ONLY (or",
-        "# SPAN_AND_EVENT) in the container. Proofload's content flag decides what it KEEPS; that",
+        "# SPAN_AND_EVENT) in the container. Prove's content flag decides what it KEEPS; that",
         "# variable decides what the instrumentor EMITS. The Dockerfile sets it.",
         "#",
         "# max_observation_bytes is pinned by the T.4 pre-registration, which registered this",

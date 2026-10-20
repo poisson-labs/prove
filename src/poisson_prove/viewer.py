@@ -31,8 +31,8 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import TYPE_CHECKING, Any
 
-from proofload.plain import build_summary
-from proofload.report import (
+from poisson_prove.plain import build_summary
+from poisson_prove.report import (
     _EPISTEMIC_FENCE,
     _coord_text,
     _fmt,
@@ -46,10 +46,10 @@ from proofload.report import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-    from proofload.diff import MultiDiffResult
-    from proofload.report import Cell, MultiReport, Report, ReportSpec
-    from proofload.store import RunManifest, RunTally
-    from proofload.tree import TreeResult
+    from poisson_prove.diff import MultiDiffResult
+    from poisson_prove.report import Cell, MultiReport, Report, ReportSpec
+    from poisson_prove.store import RunManifest, RunTally
+    from poisson_prove.tree import TreeResult
 
 __all__ = ["ViewerError", "build_structure", "render_html", "serve_page"]
 
@@ -77,11 +77,11 @@ __all__ = ["ViewerError", "build_structure", "render_html", "serve_page"]
 # spans were stamped as cut. A ``/4`` structure is refused by name like the ones before it.
 #
 # ``/6`` adds the eighth top-level key ``summary`` -- the plain-language sentences, built once by
-# ``proofload.plain`` over the payload's own objects so that ``serve``, the dashboard and any
+# ``poisson_prove.plain`` over the payload's own objects so that ``serve``, the dashboard and any
 # later surface say the same words from one source -- and, inside each panel, ``mde_unchanged``
 # after ``honesty`` (the detection limit as a field, not prose) and, inside each hole, ``where``
 # after ``coords``. A ``/5`` structure is refused by name like the ones before it.
-SCHEMA = "proofload.viewpair/6"
+SCHEMA = "poisson-prove.viewpair/7"
 
 #: Which BH family ``intervals.level`` and ``intervals.alpha_star`` belong to. The layered
 #: report introduces a nested family with a different level, so a bare ``alpha*`` on the page
@@ -103,8 +103,8 @@ _CSP = (
     "img-src data:; form-action 'none'; base-uri 'none'"
 )
 
-_INDEX_ID = "proofload-cells"
-_HOLES_ID = "proofload-holes"
+_INDEX_ID = "prove-cells"
+_HOLES_ID = "prove-holes"
 _SIGN_CONVENTION = "delta = rate_b - rate_a"
 _EVENT_LINE_TAIL = "given by --event, not inferred"
 _HOLE_MESSAGE = "No comparable data for this cell."
@@ -231,7 +231,7 @@ _ARM_SCALARS = (
     "created_at",
     "run_salt",
     "t_unit",
-    "proofload_version",
+    "poisson_prove_version",
     "schema_version",
     "retain_traces_for",
     "axis_types",
@@ -299,7 +299,7 @@ def _arm(manifest: RunManifest, role: str, rows_stored: int, tally: RunTally) ->
         "created_at",
         "run_salt",
         "t_unit",
-        "proofload_version",
+        "poisson_prove_version",
         "schema_version",
         "retain_traces_for",
         "axis_types",
@@ -564,10 +564,10 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     The **knob clause** follows it because the digest covers the cell set, the event set and the
     four episode counts and nothing else (spec A28 section 3.3), so a tree grown under another
     method or at another ``q`` passes it. ``agreement_digest`` is imported inside the function:
-    W20 pins that this module's body imports ``proofload.tree`` nowhere and that this closure
+    W20 pins that this module's body imports ``poisson_prove.tree`` nowhere and that this closure
     applies exactly one arithmetic node, and a function-level import and a compare move neither.
     """
-    from proofload.tree import agreement_digest
+    from poisson_prove.tree import agreement_digest
 
     if tuple(tree.root.events) != tuple(multi.events):
         raise ViewerError(

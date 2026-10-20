@@ -25,14 +25,15 @@ from xml.sax.saxutils import escape as _xml_escape
 
 import pandas as pd
 
-from proofload import __version__
-from proofload.diff import _CENSORED, _PAIRED_METHODS, DiffResult, EventDiff, MultiDiffResult
-from proofload.store import RunManifest
-from proofload.survival import CIFCurve, KMCurve
+from poisson_prove import __version__
+from poisson_prove._compat import old_writer_line, version_as_recorded
+from poisson_prove.diff import _CENSORED, _PAIRED_METHODS, DiffResult, EventDiff, MultiDiffResult
+from poisson_prove.store import RunManifest
+from poisson_prove.survival import CIFCurve, KMCurve
 
 if TYPE_CHECKING:
-    from proofload.steps import DeclarationCheck
-    from proofload.tree import Bound, Leaves, RootResult, TreeResult
+    from poisson_prove.steps import DeclarationCheck
+    from poisson_prove.tree import Bound, Leaves, RootResult, TreeResult
 
 Theme = Literal["dark", "light"]
 
@@ -775,6 +776,23 @@ def _diff_honesty(
     return honesty
 
 
+def _version_shown(manifests: tuple[RunManifest, ...] | None) -> str:
+    """The version the provenance block gives: this build's, unless every run the output is
+    over was written by an earlier version of Prove under its old name and recorded the same
+    version, in which case that version as the runs recorded it, so the output says who wrote
+    them. A run written under the old name beside one written by this build keeps this build's
+    version and says nothing of the old name."""
+    if not manifests:
+        return __version__
+    recorded = {(m.poisson_prove_version, m.written_by) for m in manifests}
+    if len(recorded) != 1:
+        return __version__
+    (version, written_by) = recorded.pop()
+    if written_by is None:
+        return __version__
+    return version_as_recorded(version)
+
+
 def _run_identity(
     provenance: dict[str, object], manifests: tuple[RunManifest, RunManifest] | None
 ) -> None:
@@ -920,7 +938,7 @@ def build_report(
         "dropped_b": diff.dropped_b,
         "episodes_censored_at_horizon": diff.truncated,
         "n_absent": sum(not c.present for c in grid[0]),
-        "proofload_version": __version__,
+        "poisson_prove_version": _version_shown(manifests),
     }
     _run_identity(provenance, manifests)
     _run_observations(provenance, manifests, observations)
@@ -1001,9 +1019,9 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     ``fisher_bh`` diff. ``agreement_digest`` is imported inside the function: ``tree.py``
     imports ``diff``, ``executor`` and ``store`` and not ``report``, so a module-level import
     would not be a cycle today, but it would be M7 depending on M14 -- and W20 pins that
-    ``report.py`` imports ``proofload.tree`` under ``TYPE_CHECKING`` only.
+    ``report.py`` imports ``poisson_prove.tree`` under ``TYPE_CHECKING`` only.
     """
-    from proofload.tree import agreement_digest
+    from poisson_prove.tree import agreement_digest
 
     if tuple(tree.root.events) != tuple(multi.events):
         raise ComparisonMismatch(
@@ -1089,7 +1107,7 @@ def build_multi_report(
         "dropped_b": multi.dropped_b,
         "episodes_censored_at_horizon": multi.truncated,
         "n_absent": sum(not c.present for c in all_cells),
-        "proofload_version": __version__,
+        "poisson_prove_version": _version_shown(manifests),
     }
     _run_identity(provenance, manifests)
     _run_observations(provenance, manifests, observations)
@@ -1207,7 +1225,7 @@ def build_survival_report(
         "events": list(event_list),
         "horizon": float(horizon),
         "n_cells": len(base_rows),
-        "proofload_version": __version__,
+        "poisson_prove_version": _version_shown(None if manifest is None else (manifest,)),
     }
     if manifest is not None:
         provenance["run_id"] = manifest.run_id
@@ -1742,6 +1760,10 @@ _UNKNOWN_READING = (
 )
 
 
+#: How a provenance key reads on the page when its words are not the key's own.
+_PROVENANCE_LABELS = {"poisson_prove_version": "Prove version"}
+
+
 def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
     lines = []
     for key, value in provenance.items():
@@ -1762,7 +1784,11 @@ def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
             )
         else:
             shown = str(value)
-        lines.append(f"- {key.replace('_', ' ')}: {shown}")
+        lines.append(f"- {_PROVENANCE_LABELS.get(key, key.replace('_', ' '))}: {shown}")
+        if key == "poisson_prove_version":
+            writer = old_writer_line(shown)
+            if writer is not None:
+                lines.append(f"- {writer}")
     return lines
 
 

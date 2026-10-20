@@ -47,16 +47,16 @@ from typing import IO, Any
 BUNDLE = b""
 BUNDLE_SHA256 = ""
 _BUSY_RETRY_S = 15.0
-_PREFIX = "proofload-bundle-"
+_PREFIX = "poisson-prove-bundle-"
 _LOCK = ".held"
-_STATE = "_proofload_bundle_held"
+_STATE = "_poisson_prove_bundle_held"
 #: A folder with no lock file yet is being created, unless it has been sitting this long.
 _STALE_S = 600.0
 _FRESH = (
     "import pickle, sys\n"
     "paths, item = pickle.load(sys.stdin.buffer)\n"
     "sys.path[:] = paths\n"
-    "module = __import__('proofload.executor_modal', fromlist=['_container_batch'])\n"
+    "module = __import__('poisson_prove.executor_modal', fromlist=['_container_batch'])\n"
     "sys.stdout.buffer.write(pickle.dumps(module._container_batch(item)))\n"
 )
 
@@ -185,7 +185,7 @@ def _bootstrap(
     item = (k, jobs, import_path, episode_timeout, capture, chaos)
     out: tuple[int, list[Any] | None, str | None]
     if capture is None and chaos is None:
-        out = importlib.import_module("proofload.executor_modal")._container_batch(item)
+        out = importlib.import_module("poisson_prove.executor_modal")._container_batch(item)
         return out
     done = subprocess.run(
         [sys.executable, "-I", "-S", "-c", _FRESH],

@@ -2,7 +2,7 @@
 """The T.4 launch gate: refuse to start an arm whose worst case breaks the spend cap.
 
 **Why this exists.** ``estimate_cost`` guards Modal compute and has never seen a token (C20),
-so nothing in Proofload bounds provider spend, and the pre-registration's cap was a number in a
+so nothing in Prove bounds provider spend, and the pre-registration's cap was a number in a
 document. This is the cap as a gate: it reads what T.4 has already spent -- from the store, from
 ``meta.cost_tau2``, which is litellm's own per-episode figure -- adds a projection for the arm
 about to launch, and exits nonzero if the total would pass ``--cap``. Run it before every arm.
@@ -70,7 +70,7 @@ def episode_counts(spec_path: Path) -> tuple[int, int]:
     The three junk configs carry no ``task_id``, so the wrapper raises before any request is
     made: they are launched, they cost a container start, and they cost nothing at the provider.
     """
-    from proofload.sampler import SweepSpec
+    from poisson_prove.sampler import SweepSpec
 
     spec = SweepSpec.load(spec_path)
     junk = sum(1 for cfg in spec.configs if "task_id" not in cfg)
@@ -80,7 +80,7 @@ def episode_counts(spec_path: Path) -> tuple[int, int]:
 
 def run_costs(store_path: Path) -> dict[str, tuple[int, float]]:
     """``run_id -> (episodes with a cost, total dollars)`` for every stored T.4 run."""
-    from proofload.store import Store
+    from poisson_prove.store import Store
 
     store = Store(store_path)
     out: dict[str, tuple[int, float]] = {}
@@ -125,7 +125,7 @@ def main() -> int:
     parser.add_argument(
         "--store",
         type=Path,
-        default=Path(os.environ.get("PROOFLOAD_STORE", "./proofload-runs")).expanduser(),
+        default=Path(os.environ.get("POISSON_PROVE_STORE", "./prove-runs")).expanduser(),
     )
     args = parser.parse_args()
 

@@ -3,9 +3,9 @@
 # N=100 clears the pre-flight power gate on its own: MDE 0.1932 at base rate 0.5,
 # under the 0.20 default, so no --max-mde is needed to run it.
 #
-#   proofload sweep examples/quickstart.toml --target proofload.examples.mock_agent:rollout --yes
-#   proofload sweep examples/quickstart.toml --target proofload.examples.mock_agent:rollout_patched --pair-with <run_a> --yes
-#   proofload report <run_a> <run_b> --event violated --x tool_fail_rate --y task_id
+#   poisson-prove sweep examples/quickstart.toml --target poisson_prove.examples.mock_agent:rollout --yes
+#   poisson-prove sweep examples/quickstart.toml --target poisson_prove.examples.mock_agent:rollout_patched --pair-with <run_a> --yes
+#   poisson-prove report <run_a> <run_b> --event violated --x tool_fail_rate --y task_id
 
 target_id = "mock-agent@v0"
 t_unit = "tool_calls"

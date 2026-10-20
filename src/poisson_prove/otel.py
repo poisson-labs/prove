@@ -1,6 +1,6 @@
 """Episode correlation for OpenTelemetry capture — the stamper.
 
-``proofload.run_id`` and ``proofload.episode`` are the two attributes M12 never lifts, so
+``poisson_prove.run_id`` and ``poisson_prove.episode`` are the two attributes M12 never lifts, so
 they arrive in every span's ``attrs`` and are the whole mechanism for attaching captured
 spans to a rollout. The onboarding story assumed the executor would set them as a per-episode
 *resource* attribute; a 2026-09-04 spike against ``opentelemetry-sdk`` 1.44.0 found that
@@ -16,8 +16,8 @@ the same place and the converter is unchanged. The alternative — one process p
 map is exactly where that is wanted.
 
 This module imports ``opentelemetry`` and therefore lives behind the ``agent`` extra. Core
-never reaches it: ``proofload/__init__.py`` does not import it, and ``proofload.trace`` stays
-standard-library-only (T27).
+never reaches it: ``poisson_prove/__init__.py`` does not import it, and ``poisson_prove.trace``
+stays standard-library-only (T27).
 
 Usage — register the stamper once, then wrap each episode::
 
@@ -30,7 +30,7 @@ A span started outside any ``episode()`` block carries neither key. That is the 
 
 **Thread pools.** A bare ``ThreadPoolExecutor.submit`` loses the stamp, because a worker
 thread does not inherit the caller's context — the same cause, and the same fix, as a
-``proofload.trace.record()`` span offloaded the same way. Use
+``poisson_prove.trace.record()`` span offloaded the same way. Use
 ``contextvars.copy_context().run(...)`` to carry the episode into the worker.
 """
 
@@ -43,7 +43,7 @@ from collections.abc import Iterator
 from opentelemetry.context import Context
 from opentelemetry.sdk.trace import Span, SpanProcessor
 
-from proofload.trace import _EPISODE_KEY, _RUN_ID_KEY
+from poisson_prove.trace import _EPISODE_KEY, _RUN_ID_KEY
 
 __all__ = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
 
@@ -55,7 +55,7 @@ RUN_ID_KEY = _RUN_ID_KEY
 EPISODE_KEY = _EPISODE_KEY
 
 _EPISODE: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar(
-    "proofload_otel_episode", default=None
+    "poisson_prove_otel_episode", default=None
 )
 
 

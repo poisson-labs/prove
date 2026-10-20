@@ -1,6 +1,6 @@
 """The pilot's agent: a thin, ordinary tool-using loop over one golden.
 
-Two entry points, and they are the only surface Proofload sees::
+Two entry points, and they are the only surface Prove sees::
 
     rollout(cfg, seed)          -> Episode      arm A / A'
     rollout_patched(cfg, seed)  -> Episode      arm B
@@ -45,8 +45,8 @@ from typing import Any
 
 import openai
 
-from proofload import Episode, record
-from proofload.trace import Trace, collect
+from poisson_prove import Episode, record
+from poisson_prove.trace import Trace, collect
 
 from . import HORIZON as HORIZON
 from . import OUTCOMES as OUTCOMES
@@ -190,7 +190,7 @@ def _call(
 def _checked(result: sandbox.TestResult) -> sandbox.TestResult:
     """The sandbox's verdict, or a raise when the sandbox itself broke.
 
-    A broken sandbox is Proofload failing to observe, not the agent failing the task. Scoring
+    A broken sandbox is Prove failing to observe, not the agent failing the task. Scoring
     it ``failed_assertion`` would put a harness fault in the pilot's headline number; raising
     puts the episode in an errored row where ``numbers.py`` counts it apart (spec section 3).
     """

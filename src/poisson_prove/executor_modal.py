@@ -10,7 +10,7 @@ retries, out-of-order flush, caps, manifest, completion) and is driven by any ``
 is tested without a network. ``worker_batch`` is the code that runs inside a container: pure
 Python, no modal import, unit-tested locally. ``run_modal`` is the only function that imports
 ``modal``; it builds the app, image and function, wraps ``.map`` in a real mapper, and hands
-off to ``run_with_mapper``. Core ``proofload`` imports and runs without ``modal`` installed.
+off to ``run_with_mapper``. Core ``poisson_prove`` imports and runs without ``modal`` installed.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from proofload._resolve import resolve, split_import_path
-from proofload.capture import CaptureSpec, CaptureStatus, install
-from proofload.chaos import ChaosSpec, ChaosStatus, _installed_hooks
-from proofload.chaos import install as chaos_install
-from proofload.chaos_catalog import ENGINE_VERSION as CATALOG_VERSION
-from proofload.episode import Episode
-from proofload.executor import (
+from poisson_prove._resolve import resolve, split_import_path
+from poisson_prove.capture import CaptureSpec, CaptureStatus, install
+from poisson_prove.chaos import ChaosSpec, ChaosStatus, _installed_hooks
+from poisson_prove.chaos import install as chaos_install
+from poisson_prove.chaos_catalog import ENGINE_VERSION as CATALOG_VERSION
+from poisson_prove.episode import Episode
+from poisson_prove.executor import (
     _TIMEOUT_ERROR,
     ExecutorError,
     Plan,
@@ -52,7 +52,7 @@ from proofload.executor import (
     _with_capture_envelope,
     preflight_mde,
 )
-from proofload.store import EpisodeRecord, RunManifest, Store, StoreError
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, StoreError
 
 __all__ = [
     "CostGuard",
@@ -75,7 +75,7 @@ _BACKEND = "modal"
 _INFRA_PREFIX = "infra: "
 _OUTER_TIMEOUT_GRACE_S = 60
 _MAX_OUTER_TIMEOUT_S = 24 * 3600
-_INSTALL_HINT = "pip install proofload[modal]"
+_INSTALL_HINT = 'pip install "poisson-prove[modal]"'
 
 # Published Modal per-second prices (USD), read from modal.com/pricing on the date below.
 # Keys are Modal gpu strings, upper-cased; "CPU" is the no-gpu rate per physical core.
@@ -124,7 +124,7 @@ class ImageSpec:
 
     ``dockerfile`` replaces the ``python``/``pip``/``apt`` build and is exclusive with ``pip``
     and ``apt``. ``local_packages`` are importable local packages shipped into the image
-    (``proofload`` itself is always shipped). ``gpu`` is a Modal gpu string such as ``"A10G"``.
+    (``poisson_prove`` itself is always shipped). ``gpu`` is a Modal gpu string such as ``"A10G"``.
     """
 
     python: str = "3.11"
@@ -170,8 +170,8 @@ class ModalTarget:
 
 
 # A Modal secret is named here and never read here: the value stays in the Modal workspace,
-# so "no Proofload output can carry it" is structural rather than a filter over strings
-# (ADR-030). The bounds below are Proofload's own and deliberately narrower than whatever
+# so "no Prove output can carry it" is structural rather than a filter over strings
+# (ADR-030). The bounds below are Prove's own and deliberately narrower than whatever
 # Modal accepts; widening them is a one-constant change.
 _SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _SECRET_NAME_MAX = 64
@@ -231,7 +231,7 @@ class ModalOptions:
     max_rollouts: int | None = None
     max_cost: float | None = None
     est_seconds_per_episode: float | None = None
-    app_name: str = "proofload"
+    app_name: str = "poisson-prove"
     # The names of Modal secrets mounted on the remote function, never their values. Last and
     # defaulted, so every existing keyword construction and comparison is untouched.
     secrets: tuple[str, ...] = ()
@@ -474,7 +474,7 @@ def _jobs(p: Plan) -> list[Job]:
 _SHARED_FIELDS = (
     "python",
     "platform",
-    "proofload_version",
+    "poisson_prove_version",
     "sweep",
     "infra_retries",
     "import_path",
@@ -886,7 +886,7 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
         "Secrets: none"
         if not options.secrets
         else f"Secrets: {', '.join(options.secrets)} · mounted by name; "
-        "proofload never reads the values"
+        "Prove never reads the values"
     )
     cost = (
         "Cost: unknown (no estimate)"
@@ -920,10 +920,10 @@ _CORE_REQUIREMENTS_FALLBACK = ("numpy", "pandas", "scipy", "pyarrow")
 
 
 def _core_requirements() -> tuple[str, ...]:
-    """proofload's own runtime requirements, which the worker needs inside the container.
-    These are proofload's, not the user's; the user's dependencies are never inferred."""
+    """Prove's own runtime requirements, which the worker needs inside the container.
+    These are Prove's, not the user's; the user's dependencies are never inferred."""
     try:
-        requires = importlib.metadata.requires("proofload") or []
+        requires = importlib.metadata.requires("poisson-prove") or []
     except importlib.metadata.PackageNotFoundError:
         return _CORE_REQUIREMENTS_FALLBACK
     core = tuple(req.strip() for req in requires if ";" not in req)
@@ -940,7 +940,7 @@ def _build_image(modal: Any, spec: ImageSpec) -> Any:
     image = image.pip_install(*_core_requirements())
     if spec.pip:
         image = image.pip_install(*spec.pip)
-    return image.add_local_python_source("proofload", *spec.local_packages)
+    return image.add_local_python_source("poisson_prove", *spec.local_packages)
 
 
 def _outer_timeout(options: ModalOptions) -> int:
