@@ -303,11 +303,11 @@ OUT_PLACEHOLDER = "<out>"
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): three of the fourteen move: both 'report A B' files, whose Cells section prints LS16's respelled sentence ('MDE is the smallest detectable increase', no ADR number), and 'serve --json', which is proofload.viewpair/6 with the summary key and each panel's mde_unchanged. The other eleven are unchanged. Read through this test's own measurement on the built tree, not predicted.
 # The front door's look (spec sections 5.3, 5.4 and 14) changes every other verb's output on Go1 (rule 10 numbers,
 # 12-hex hashes, check's verdict line, --json for --format json), so those thirteen digests are gone and
-# ``assert_go1_verb_facts`` checks the facts they guarded instead. The page structure inside serve --json is
-# unchanged, so its digest stays.
-GO1_VERB_SHA256 = {
-    "serve --json": "725d60142c4322fcdb26242e515636ff9353394c51f61e5b05c8ee240b4e32a7",
-}
+# ``assert_go1_verb_facts`` checks the facts they guarded instead.
+# PF4 (PF4.3, PF4.11, PF4.13 to PF4.20): the page structure inside serve --json changes too (no
+# ``pair.store_root``, the cells' shares, directions and notes, the Summary's verdict and direction
+# words), so its digest is no longer asserted either; ``assert_go1_verb_facts`` checks the facts it
+# guarded against ``diff --json`` and the store.
 GO1_EVENT = "fell"
 GO1_X, GO1_Y = "mu", "push_pct_bw"
 SNIPPET_MARKER = "# reproduce one episode"
@@ -656,7 +656,9 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
     for k, digest in GO1_AGREEMENT.items():
         as_0_0_1 = as_0_0_1.replace(digest, GO1_AGREEMENT_0_0_1[k])
     digests["diff --json"] = sha256_text(as_0_0_1)
-    results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event]); digests["check"] = sha256_text(norm(r.out))
+    # PF4 (PF4.20): neither pair's event carries a kind, so check's default --fail-on worse is refused;
+    # --fail-on higher is the same gate (fail when a rate rose).
+    results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event, "--fail-on", "higher"]); digests["check"] = sha256_text(norm(r.out))
     for label, runs in (("report A", [a]), ("report A B", [a, b])):
         out = out_dir / label.replace(" ", "_")
         results[label] = r = run_cli(["--store", store_arg, "report", *runs, "--event", event, "--x", x, "--y", y, "--out", str(out)])
@@ -672,7 +674,9 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
     try:
         # serve --json now leads with verdict and sentence before the page structure (spec section 5.6).
         structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence")}
-        structure["pair"]["store_root"] = STORE_PLACEHOLDER
+        # PF4 (PF4.11): the structure no longer carries the store's absolute path, so there is nothing to
+        # normalise.
+        assert "store_root" not in structure["pair"], structure["pair"]
         as_0_0_1 = json.dumps(structure_as_0_0_1_wrote_it(structure), sort_keys=True)
         if root == GO1_ROOT:
             assert GO1_AGREEMENT[1] in as_0_0_1 and GO1_AGREEMENT_0_0_1[1] not in as_0_0_1
@@ -815,6 +819,11 @@ def check_report_table(header: list[str], rows: list[list[str]], data: Mapping[s
             printed = dict(zip(header, row, strict=True))
             cell = cell_by_config(cells, {GO1_X: float(printed[GO1_X]), GO1_Y: float(printed[GO1_Y])})
             for column in shared:
+                if column.lower() == "mde" and cell["mde_note"]:
+                    # PF4 (PF4.15): a condition with no detection limit, or none detectable, prints its
+                    # note in place of the number.
+                    assert printed[column] == cell["mde_note"], (column, printed[column], cell["mde_note"])
+                    continue
                 assert printed_as(printed[column], cell[column.lower()]), (column, printed[column], cell[column.lower()])
         return "worst cells"
     return "other"
@@ -847,8 +856,11 @@ def assert_go1_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
     fell = data["by_event"][GO1_EVENT]
     cells = {c["config_hash"]: c for c in fell["cells"]}
     headline = data["headline"].splitlines()[0]
-    assert len(cells) == data["n_tests"] and fell["n_safer"] + fell["n_worse"] + fell["n_unchanged"] == len(cells)
-    for verdict, key in (("safer", "n_safer"), ("worse", "n_worse"), ("unchanged", "n_unchanged")):
+    # PF4 (PF4.20): Go1's ``fell`` carries no kind, so the JSON counts and verdicts are in direction
+    # words (``lower``, ``higher``) and ``n_safer`` and ``n_worse`` are null.
+    assert fell["kind"] is None and fell["n_safer"] is None and fell["n_worse"] is None, fell
+    assert len(cells) == data["n_tests"] and fell["n_lower"] + fell["n_higher"] + fell["n_unchanged"] == len(cells)
+    for verdict, key in (("lower", "n_lower"), ("higher", "n_higher"), ("unchanged", "n_unchanged")):
         assert sum(c["verdict"] == verdict for c in cells.values()) == fell[key], verdict
 
     # runs: one line per run with its status, backend, target, unit and row count.
@@ -882,6 +894,10 @@ def assert_go1_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
         for column in shared:
             if column == "config":
                 assert json.loads(printed[column]) == cells[h][column], printed
+            elif column == "mde" and cells[h]["mde_note"]:
+                # PF4 (PF4.15): a condition with no detection limit, or none detectable, prints its note
+                # in place of the number.
+                assert printed[column] == cells[h]["mde_note"], (printed[column], cells[h]["mde_note"])
             else:
                 assert printed_as(printed[column], cells[h][column]), (column, printed[column], cells[h][column])
     assert seen == set(cells)
@@ -933,7 +949,36 @@ def assert_go1_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
 
     # heatmaps: one panel for the event, every cell labelled with its rate (one run) or delta (two).
     assert check_heatmap(out_dir / "report_A" / "heatmap.svg", cells, "rate_a") == 0
-    assert check_heatmap(out_dir / "report_A_B" / "heatmap.svg", cells, "delta") == fell["n_safer"] + fell["n_worse"]
+    # PF4 (PF4.20): the significant cells are counted in direction words.
+    assert check_heatmap(out_dir / "report_A_B" / "heatmap.svg", cells, "delta") == fell["n_lower"] + fell["n_higher"]
+
+    # PF4 (PF4.3, PF4.5, PF4.11, PF4.13 to PF4.20): the page structure, whose digest is gone, checked as
+    # facts: both arms as the store has them, the headline, the diff block's fields, the one panel's
+    # counts and every cell with the numbers, notes and verdict diff --json gives it, the tree's
+    # agreement, and the Summary's verdict word and detection limit.
+    page = json.loads(results["serve --json"].out)
+    for arm, run_id in (("a", GO1_A), ("b", GO1_B)):
+        assert page["pair"][arm]["run_id"] == run_id and page["pair"][arm]["rows_stored"] == store.count(run_id), arm
+        assert page["pair"][arm]["tally"] == store.tally(run_id).to_dict(), arm
+    assert page["headline"] == data["headline"] and page["trade_line"] == data["trade_line"]
+    shared_diff = [key for key in page["diff"] if key in data]
+    assert {"events", "method", "n_tests", "q", "horizon"} <= set(shared_diff), shared_diff
+    for key in shared_diff:
+        assert page["diff"][key] == data[key], key
+    (panel,) = page["panels"]
+    assert panel["event"] == GO1_EVENT
+    for key in ("n_unchanged", "n_lower", "n_higher"):
+        assert panel[key] == fell[key], key
+    assert {c["config_hash"] for c in panel["cells"]} == set(cells)
+    for c in panel["cells"]:
+        mine = cells[c["config_hash"]]
+        assert {"n_a", "n_b", "rate_a", "rate_b", "delta", "p", "q", "mde", "verdict", "mde_note"} <= set(c) & set(mine)
+        for key in set(c) & set(mine):
+            assert c[key] == mine[key], (c["config_hash"], key, c[key], mine[key])
+    assert page["tree"]["agreement"] == data["tree"]["agreement"]
+    assert page["summary"]["verdict"] == data["verdict"]
+    (entry,) = page["summary"]["events"]
+    assert entry["event"] == GO1_EVENT and printed_as(entry["limit"]["mde"], round(100 * fell["max_mde_unchanged"])), entry
 
     # inspect: the run's rows with the event, in store order, each with its hash, config, seed and t.
     frame = store.read(GO1_A)
@@ -1591,9 +1636,9 @@ def test_p7_10_every_verb_exits_0_on_go1_and_the_mock_pair_and_go1s_bytes_are_un
     # A shared-salt pair now carries one note: line on stderr (spec section 5.4); nothing else.
     for verb, r in results.items():
         assert r.code == 0 and err_lines(r) == [], (verb, r.code, r.err)
-    # Only the page structure keeps its digest; the rest are checked as facts (spec section 14).
-    kept = {k: digests[k] for k in GO1_VERB_SHA256}
-    assert kept == GO1_VERB_SHA256, {k: (kept[k], GO1_VERB_SHA256[k]) for k in kept if kept[k] != GO1_VERB_SHA256[k]}
+    # PF4 (PF4.3, PF4.11, PF4.13 to PF4.20): no digest is kept; every verb, the page structure
+    # included, is checked as facts (spec section 14).
+    assert all(len(d) == HEX64_LEN for d in digests.values()), digests
     assert_go1_verb_facts(results, tmp_path / "go1")
     mock_digests, mock_results = verb_digests(mock_pair.root, mock_pair.a, mock_pair.b, event=MOCK_EVENT, x="tool_fail_rate", y="task_id", out_dir=tmp_path / "mock")
     for verb, r in mock_results.items():

@@ -420,8 +420,10 @@ CORPUS: tuple[Call, ...] = (
     Call("diff", f"{S} diff {{A}} {{B}}", 0, "result"),
     Call("diff-fisher-named", f"{S} diff {{A}} {{B}} --method fisher_bh", 0, "result"),
     Call("diff-mcnemar-named", f"{S} diff {{A}} {{B}} --method mcnemar_bh", 0, "result"),
-    Call("check-passed", f"{S} check {{A}} {{B}} --event violated", 0, "result"),
-    Call("check-failed", f"{S} check {{A}} {{B}} --event timeout", 4, "result"),
+    # PF4 (PF4.20): neither event has a kind in these runs, so check's default --fail-on worse is
+    # refused; --fail-on higher is the same gate on a failure event (fail when the rate rose).
+    Call("check-passed", f"{S} check {{A}} {{B}} --event violated --fail-on higher", 0, "result"),
+    Call("check-failed", f"{S} check {{A}} {{B}} --event timeout --fail-on higher", 4, "result"),
     Call("report-pair", f"{S} report {{A}} {{B}} {PAIR_X} --method fisher_bh --out {{base}}/out-report-pair", 0, "result"),
     Call("report-run", f"{S} report {{A}} {PAIR_X} --event violated --out {{base}}/out-report-run", 0, "result"),
     Call("inspect", f"{S} inspect {{A}} --event timeout --limit 2", 0, "result"),
@@ -438,8 +440,9 @@ CORPUS: tuple[Call, ...] = (
     # --json on every verb
     Call("json-sweep", "--store {base}/json-sweep-store sweep {spec} --target " + MOCK + ":rollout --yes --json", 0, "json"),
     Call("json-diff", f"{S} diff {{A}} {{B}} --method fisher_bh --json", 0, "json"),
-    Call("json-check", f"{S} check {{A}} {{B}} --event violated --json", 0, "json"),
-    Call("json-check-failed", f"{S} check {{A}} {{B}} --event timeout --json", 4, "json"),
+    # PF4 (PF4.20): as check-passed and check-failed, the same gate named for an unknown kind.
+    Call("json-check", f"{S} check {{A}} {{B}} --event violated --fail-on higher --json", 0, "json"),
+    Call("json-check-failed", f"{S} check {{A}} {{B}} --event timeout --fail-on higher --json", 4, "json"),
     Call("json-report", f"{S} report {{A}} {{B}} {PAIR_X} --method fisher_bh --json --out {{base}}/out-report-json", 0, "json"),
     Call("json-paired", f"{PS} paired --declaration {{decl}} --json", 0, "json"),
     Call("json-serve", f"{S} serve {{A}} {{B}} {PAIR_X} --event violated --json", 0, "json"),

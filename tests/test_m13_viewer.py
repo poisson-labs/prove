@@ -116,13 +116,22 @@ ARM_KEYS = (
 )
 VIEW_KEYS = ("title", "x_axis", "y_axis", "fixed", "theme", "top_n", "forest", "bound", "sign_convention")
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): ``mde_unchanged`` after ``honesty`` (spec LS D4, section 3.5).
+# PF4 (PF4.20, PF4.3): each panel carries the event's ``kind`` beside ``n_safer`` and ``n_worse``
+# (null when the kind is not known) and ``n_higher`` / ``n_lower`` after them, then the label of its
+# per-condition share interval (``share_label``, the share caption's level and method) and the
+# threshold section 8.4 reads its nothing-moved word against (``threshold``, the page's own copy).
 PANEL_KEYS = (
-    "event", "caption", "honesty", "mde_unchanged", "n_safer", "n_worse", "n_unchanged", "n_absent", "n_present",
+    "event", "caption", "honesty", "mde_unchanged", "kind", "n_safer", "n_worse", "n_higher", "n_lower",
+    "share_label", "threshold", "n_unchanged", "n_absent", "n_present",
     "x_values", "y_values", "cells", "worst_header", "worst_rows", "worst_hashes",
 )
+# PF4 (PF4.13, PF4.14, PF4.15, PF4.3): each cell gains ``direction``, ``direction_note``, ``pairs``
+# and ``mde_note`` after ``verdict``, then each arm's share object and whether it differs from the
+# arm's rate.
 CELL_KEYS = (
     "coords", "config_hash", "n_a", "n_b", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
+    "direction", "direction_note", "pairs", "mde_note", "share_a", "share_b", "share_a_differs", "share_b_differs",
     "config", "config_text", "text",
 )
 FLOAT_KINDS = {
@@ -1294,7 +1303,13 @@ def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(go1: Built,
     svg_at = go1_dom.first_svg().index
     rules = css_rules(go1_dom.html_style())
     for panel, event in zip(go1.structure["panels"], go1.report.events, strict=True):
-        honesty = go1.report.panels[event].honesty
+        # PF4 (PF4.20): Go1 declares no event kind, so the page names the honesty line's count in
+        # direction words (the count of rises, "higher"); the library's panel keeps its old encoding.
+        ev = go1.multi.by_event[event]
+        assert ev.kind is None
+        library = go1.report.panels[event].honesty
+        assert f'"{ev.n_worse} worse"' in library
+        honesty = library.replace(f'"{ev.n_worse} worse"', f'"{ev.n_higher} higher"')
         assert panel["honesty"] == honesty
         lines = honesty.splitlines()
         assert '"' in honesty, "the honesty text has no double quote to escape"
@@ -1536,7 +1551,8 @@ def test_v32_both_arms_carry_the_manifest_the_row_count_and_the_role(go1: Built,
         assert arm["rows_stored"] == go1_store.count(run_id) == GO1_ROWS
         assert arm["role"] == role
     assert go1.structure["view"]["sign_convention"] == SIGN_CONVENTION
-    assert pair["store_root"] == str(GO1_ROOT)
+    # PF4 (PF4.11): the pair no longer carries the store's path.
+    assert "store_root" not in pair and str(GO1_ROOT) not in json.dumps(go1.structure)
     assert pair["a"]["run_salt"] == pair["b"]["run_salt"] == go1.structure["diff"]["run_salt"]
 
 
@@ -1805,7 +1821,11 @@ def test_v39_fence_headline_captions_and_worst_rows_are_on_the_page(go1: Built) 
     for line in go1.structure["headline"].splitlines():
         assert line in unescaped, line
     for panel, event in zip(go1.structure["panels"], go1.report.events, strict=True):
-        assert panel["caption"] == go1.report.panels[event].headline
+        # PF4 (PF4.20): Go1 declares no event kind, so the caption counts falls and rises in
+        # direction words ("N lower, M higher") rather than the library panel's safer/worse.
+        ev = go1.multi.by_event[event]
+        assert ev.kind is None
+        assert panel["caption"] == f"{event}: {ev.n_lower} lower, {ev.n_higher} higher"
         assert panel["caption"] in unescaped
         for row in panel["worst_rows"]:
             for value in row:

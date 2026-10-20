@@ -207,13 +207,13 @@ OMNIBUS_INFORMATIVE_LINE = re.compile(r"^  informative cells: (\d+) of (\d+); (\
 #: O14 and O23. Minted on the bare tree at cd5f177 (2026-09-07), before the build exists: a hash,
 #: never a diff of two renders. ``multi_diff(go1-v0, go1-v1, events=("fell",), method=...)``,
 #: ``json.dumps(to_json(), sort_keys=True)``.
-MULTI_JSON_SHA256 = {
-    "fisher_bh": "c284e029ea858e3f50a9ee6ca3b55a1abc61a1b08a1fe213e393939c6e0872b8",
-    "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
-    "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
-}
+# PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): MULTI_JSON_SHA256 is no longer asserted. PF4 adds
+# columns to every cell and changes its limits and words, so the multi_diff test checks the facts
+# the digest guarded instead (GO1_DIRECTION_COUNTS and the frozen per-cell record below).
 #: ``check go1-v0 go1-v1 --event fell``: exit code, bare tree.
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
+# PF4 (PF4.20): Go1's fell has no kind, so the default --fail-on worse is refused; --fail-on
+# higher is the same gate on it (fail when the rate rose).
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--fail-on", "higher")
 # CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
 # checks the facts the digest guarded instead (front-door spec section 14).
 CHECK_EXIT = 0
@@ -225,12 +225,13 @@ SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "pus
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
+# PF4 (PF4.3, PF4.11, PF4.17, PF4.20): SERVE_STRUCTURE_SHA256 is no longer asserted. PF4 removes
+# pair.store_root, adds the Summary's verdict, the shares and the direction words, so the serve
+# test checks the facts the digest guarded instead.
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
 #: ``schema`` set back to this literal; on the bare tree that projection is the identity.
-TREE_LESS_SCHEMA = "proofload.viewpair/2"
 
 #: Restated from S24's oracle rather than imported, so two frozen oracles do not couple. ``PAIR``
 #: is ``multi_diff(go1-v0, go1-v1, events=("fell", "survived"), method="fisher_bh")``;
@@ -244,11 +245,27 @@ FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d004
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
-E14_SHA256 = {
-    "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
-    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
-}
+# PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests are no longer asserted. PF4 changes all three
+# files (the share table, the limit notes, direction words for an event of unknown kind), so the
+# E14 test checks the facts they guarded instead.
+#: PF4: what the multi, E14 and serve digests above guarded on Go1's ``fell``, as numbers known
+#: outside any build. The direction counts per method are the statistics re-check's
+#: (log/stats-recheck/README.md, section 2 and the Go1 table's "Methods" rows): Fisher 60 lower /
+#: 0 higher and McNemar 55 / 0, as published; log-rank 182 / 14 (published 88 / 0), because a
+#: rejected cell's direction now comes from the log-rank statistic (PF4.13). The worst-powered
+#: unchanged condition and its 34pp limit, the interval level 99.25% and alpha* 0.0075 are the
+#: published report's, unchanged in the re-check.
+GO1_DIRECTION_COUNTS = {"fisher_bh": (60, 0), "mcnemar_bh": (55, 0), "logrank_bh": (182, 14)}
+GO1_WORST_UNCHANGED = ("mu=0.95, push_pct_bw=100", 34)
+GO1_INTERVAL_LEVEL_TEXT, GO1_ALPHA_STAR_TEXT = "99.25", "0.0075"
+#: The frozen per-cell Fisher record of Go1's ``fell`` (``tests/fixtures/go1/diff_regression.json``,
+#: frozen before any amendment): every cell's counts, rates, delta, p, q and detection limit as the
+#: bare tree computed them.
+GO1_REGRESSION_JSON = GO1_ROOT / "diff_regression.json"
+GO1_ARM_KEYS = ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta")
+#: Keys that belong to the layered report's tree; none may appear outside ``tree`` on the page.
+#: (``bound`` is not among them: the page's ``view`` carries its own forest ``bound`` setting.)
+TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 
 #: Synthetic vocabularies. Non-events end at the horizon; events end at ``EVENT_T``.
 NON_EVENTS = frozenset({"ok", "z"})
@@ -1119,7 +1136,13 @@ def test_o9_go1_mirrored_is_invisible_to_location_and_rejected_by_dispersion(
     assert abs(root.location["fell"]) < 1e-9
     assert root.p_location["fell"] > 0.5
     assert root.p_dispersion["fell"] == floor
-    assert root.p_omnibus == floor
+    # PF4 (PF4.18): the omnibus now ranks every permutation on the observed point's scale, a
+    # permutation's p being (#{b' : S_b' >= S_b} + [S_obs >= S_b]) / (B + 1). Dispersion's observed
+    # statistic exceeds every permuted one, so no permutation reaches the floor there; location's
+    # observed statistic is 0, so the one permutation holding location's largest value, when no
+    # other ties it, scores 1 / (B + 1) there and is counted. By the definition the omnibus is
+    # therefore 1 / (B + 1) or 2 / (B + 1), never more, and the root still rejects.
+    assert root.p_omnibus in (floor, 2.0 / (GOLDEN_PERMUTATIONS + 1)), root.p_omnibus
     assert root.rejects is True
     bonferroni = min(1.0, 2 * len(root.events) * min(*root.p_location.values(), *root.p_dispersion.values()))
     print(f"O9 {method}: p_omnibus={root.p_omnibus:g} p_bonferroni={bonferroni:g}")
@@ -1389,6 +1412,181 @@ def test_o13_the_cli_maps_a_refusal_to_exit_two_without_a_traceback(synth_root: 
 # ---------- O14: the flat family does not move ----------
 
 
+def nested_keys(payload: Any) -> set[str]:
+    """Every mapping key at any depth of a JSON payload."""
+    if isinstance(payload, Mapping):
+        return set(payload) | {k for v in payload.values() for k in nested_keys(v)}
+    if isinstance(payload, list):
+        return {k for v in payload for k in nested_keys(v)}
+    return set()
+
+
+def direction_word(n_lower: int, n_higher: int) -> str:
+    """PF4.20's comparison word for an event of unknown kind when something moved."""
+    return "mixed" if n_lower and n_higher else ("higher" if n_higher else "lower")
+
+
+def mcnemar_reference(a: pd.DataFrame, b: pd.DataFrame, event: str) -> dict[str, float]:
+    """PF4 (PF4.14): each cell's exact McNemar p from its matched pairs, by statsmodels' documented
+    ``mcnemar(table, exact=True)`` with ``table = [[n11, n10], [n01, n00]]`` (rows: arm A with and
+    without the event; columns: arm B); a cell with no discordant pair has p 1."""
+    from statsmodels.stats.contingency_tables import mcnemar
+
+    keys = ["config_hash", "replicate_index"]
+    pairs = a[[*keys, "outcome"]].merge(b[[*keys, "outcome"]], on=keys, suffixes=("_a", "_b"))
+    out: dict[str, float] = {}
+    for cell_hash, group in pairs.groupby("config_hash"):
+        ea = (group["outcome_a"] == event).to_numpy()
+        eb = (group["outcome_b"] == event).to_numpy()
+        table = [[int((ea & eb).sum()), int((ea & ~eb).sum())], [int((~ea & eb).sum()), int((~ea & ~eb).sum())]]
+        discordant = table[0][1] + table[1][0]
+        out[str(cell_hash)] = 1.0 if discordant == 0 else float(mcnemar(table, exact=True).pvalue)
+    return out
+
+
+def assert_go1_multi_json_carries_the_facts(multi: Any, method: str, a: pd.DataFrame, b: pd.DataFrame) -> None:
+    """PF4: the facts the ``to_json()`` digest guarded, with no digest over bytes PF4 changes.
+
+    Every cell's counts, rates and delta equal the frame's and the frozen Fisher record's; p and q
+    equal the frame's, and are the frozen record's under Fisher, the exact McNemar p and its BH q
+    under McNemar, and S24's frozen q column under log-rank. A condition whose baseline had the
+    event in every run has no limit and a note (PF4.15); every other limit is the frozen one. Each
+    cell's JSON verdict is its direction (fell has no kind, PF4.20); a cell moves exactly when it is
+    rejected, in the direction of its delta except under log-rank (PF4.13); and the counts are the
+    re-check's (``GO1_DIRECTION_COUNTS``)."""
+    from statsmodels.stats.multitest import multipletests
+
+    payload = json.loads(json.dumps(multi.to_json(), sort_keys=True))
+    assert (payload["method"], payload["n_tests"], payload["events"]) == (method, 400, ["fell"]), method
+    event = payload["by_event"]["fell"]
+    n_lower, n_higher = GO1_DIRECTION_COUNTS[method]
+    assert (event["kind"], event["n_safer"], event["n_worse"]) == (None, None, None), method
+    assert (event["n_lower"], event["n_higher"], event["n_unchanged"]) == (n_lower, n_higher, 400 - n_lower - n_higher), method
+    frozen = {c["config_hash"]: c for c in json.loads(GO1_REGRESSION_JSON.read_text(encoding="utf-8"))["cells"]}
+    rows = multi.by_event["fell"].cells.to_dict(orient="records")
+    assert [c["config_hash"] for c in event["cells"]] == [r["config_hash"] for r in rows], method
+    assert set(frozen) == {r["config_hash"] for r in rows}, method
+    reference_p = mcnemar_reference(a, b, "fell") if method == "mcnemar_bh" else {}
+    for cell, row in zip(event["cells"], rows, strict=True):
+        ref = frozen[cell["config_hash"]]
+        for key in GO1_ARM_KEYS:
+            assert cell[key] == row[key] == ref[key], (method, cell["config_hash"], key)
+        assert (cell["p"], cell["q"]) == (row["p"], row["q"]), (method, cell["config_hash"])
+        if method == "fisher_bh":
+            assert (cell["p"], cell["q"]) == (ref["p"], ref["q"]), cell["config_hash"]
+        if method == "mcnemar_bh":
+            assert abs(cell["p"] - reference_p[cell["config_hash"]]) <= 1e-12, (cell["config_hash"], cell["p"])
+            assert cell["pairs"] == ref["n_a"] == ref["n_b"], cell["config_hash"]
+        if ref["events_a"] == ref["n_a"]:
+            assert cell["mde"] is None or math.isnan(cell["mde"]), (method, cell["config_hash"], cell["mde"])
+            assert cell["mde_note"], (method, cell["config_hash"])
+        else:
+            assert cell["mde"] == row["mde"] == ref["mde"] and cell["mde"] > 0, (method, cell["config_hash"])
+        rejected = cell["q"] < multi.q
+        assert cell["verdict"] == cell["direction"] == row["direction"], (method, cell["config_hash"])
+        assert (cell["direction"] != "unchanged") == rejected, (method, cell["config_hash"])
+        if rejected and method != "logrank_bh":
+            assert cell["direction"] == ("higher" if cell["delta"] > 0 else "lower"), (method, cell["config_hash"])
+    directions = [c["direction"] for c in event["cells"]]
+    assert (directions.count("lower"), directions.count("higher")) == (n_lower, n_higher), method
+    if method == "mcnemar_bh":
+        bh = multipletests([reference_p[r["config_hash"]] for r in rows], method="fdr_bh")[1]
+        assert max(abs(r["q"] - float(x)) for r, x in zip(rows, bh, strict=True)) <= 1e-12
+    if method == "logrank_bh":
+        assert sha256_of_column(multi, "q") == FELL_LOGRANK_QCOLUMN_SHA256
+
+
+def assert_e14_builder_carries_the_result(multi: Any, report: Any, receipt: Any) -> None:
+    """PF4: the facts the E14 digests guarded in the tree-less builder's report.md, receipt and
+    heatmap: each file's one version entry; the headline counts in direction words (fell has no
+    kind, PF4.20) at the re-check's 60 lower / 0 higher; the worst-powered unchanged condition and
+    its 34pp limit; the interval level and alpha*; no layered block (the root reaches no other
+    verb); and every row of the cell table is a cell of the diff with its counts, rates, p, q and
+    direction."""
+    md, html, svg = report.to_markdown(), receipt.to_html(), report.to_svg()
+    as_0_0_1_wrote_it(md)
+    as_0_0_1_wrote_it(html)
+    fell = multi.by_event["fell"]
+    cells = fell.cells
+    n_lower, n_higher = GO1_DIRECTION_COUNTS["fisher_bh"]
+    assert (fell.n_lower, fell.n_higher) == (n_lower, n_higher)
+    headline = f"fell: {n_lower} lower, {n_higher} higher"
+    md_lines = md.splitlines()
+    assert headline in md_lines and f"## {headline}" in md_lines, md_lines[:12]
+    assert f"<h2>{headline}</h2>" in html
+    assert f">{headline}</text>" in svg
+    where, points = GO1_WORST_UNCHANGED
+    assert round(100 * fell.max_mde_unchanged) == points
+    for name, text in (("report.md", md), ("receipt.html", html), ("heatmap.svg", svg)):
+        honesty = [line for line in text.splitlines() if "Worst-powered unchanged cell" in line]
+        assert honesty and f"({where}," in honesty[0] and f"{points}pp" in honesty[0], (name, honesty)
+        assert "safer" not in text and "worse" not in text, name
+    (intervals,) = [line for line in md_lines if line.startswith("intervals: ")]
+    assert GO1_INTERVAL_LEVEL_TEXT in intervals and GO1_ALPHA_STAR_TEXT in intervals, intervals
+    for name, text in (("report.md", md), ("receipt.html", html)):
+        assert "omnibus" not in text.lower() and "fault lines" not in text.lower(), name
+    first = next(i for i, line in enumerate(md_lines) if line.startswith("| mu |"))
+    table = []
+    for line in md_lines[first:]:
+        if not line.startswith("|"):
+            break
+        table.append([c.strip() for c in line.strip("|").split("|")])
+    header, rows = table[0], [row for row in table[2:]]
+    assert header[:9] == ["mu", "push_pct_bw", "n (a/b)", "rate_a (pp)", "rate_b (pp)", "delta (pp)", "p", "q", "verdict"], header
+    assert rows
+    records = cells.to_dict(orient="records")
+    for values in rows:
+        row = dict(zip(header, values, strict=True))
+        (cell,) = [c for c in records if c["config"] == {"mu": float(row["mu"]), "push_pct_bw": float(row["push_pct_bw"])}]
+        assert row["n (a/b)"] == f"{cell['n_a']}/{cell['n_b']}", row
+        for column, key in (("rate_a (pp)", "rate_a"), ("rate_b (pp)", "rate_b"), ("delta (pp)", "delta")):
+            assert abs(float(row[column]) - 100 * cell[key]) <= 0.05 + 1e-9, (row, column)
+        for column in ("p", "q"):
+            decimals = len(row[column].partition(".")[2])
+            assert abs(float(row[column]) - cell[column]) <= 0.5 * 10.0**-decimals + 1e-12, (row, column)
+        assert row["verdict"] == cell["direction"], row
+
+
+def assert_go1_page_carries_the_diff(structure: Mapping[str, Any], multi: Any, ma: RunManifest, mb: RunManifest, rows: tuple[int, int]) -> None:
+    """PF4: the facts the serve structure digest guarded, on the page minus its tree: both arms
+    from their manifests (no store path, platform or import path, PF4.11); the diff's parameters;
+    one panel whose counts are the re-check's and whose 400 cells carry the diff's numbers with
+    their direction (PF4.20) and limit (PF4.15); the worst-powered unchanged condition; the
+    Summary's comparison word, decided by PF4.20 from those counts; the headline; and no key of the
+    layered tree outside ``tree``."""
+    assert "store_root" not in structure["pair"]
+    for arm, manifest, n_rows in (("a", ma, rows[0]), ("b", mb, rows[1])):
+        side = structure["pair"][arm]
+        assert (side["run_id"], side["target_id"], side["run_salt"], side["t_unit"]) == (
+            manifest.run_id, manifest.target_id, manifest.run_salt, manifest.t_unit,
+        ), arm
+        assert side["axis_types"] == dict(manifest.axis_types) and side["rows_stored"] == n_rows, arm
+        assert not {"platform", "import_path"} & set(side["environment"]), arm
+    diff = structure["diff"]
+    assert (diff["method"], diff["n_tests"], diff["q"], diff["horizon"], diff["events"]) == (multi.method, multi.n_tests, multi.q, multi.horizon, ["fell"])
+    (panel,) = structure["panels"]
+    n_lower, n_higher = GO1_DIRECTION_COUNTS[multi.method]
+    assert (panel["event"], panel["kind"], panel["n_safer"], panel["n_worse"]) == ("fell", None, None, None)
+    assert (panel["n_lower"], panel["n_higher"], panel["n_unchanged"]) == (n_lower, n_higher, multi.n_tests - n_lower - n_higher)
+    by_hash = {r["config_hash"]: r for r in multi.by_event["fell"].cells.to_dict(orient="records")}
+    assert len(panel["cells"]) == len(by_hash) == multi.n_tests
+    assert {c["config_hash"] for c in panel["cells"]} == set(by_hash)
+    for cell in panel["cells"]:
+        row = by_hash[cell["config_hash"]]
+        for key in ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta", "p", "q"):
+            assert cell[key] == row[key], (cell["config_hash"], key)
+        assert cell["verdict"] == cell["direction"] == row["direction"], cell["config_hash"]
+        if row["events_a"] == row["n_a"]:
+            assert cell["mde"] is None and cell["mde_note"], cell["config_hash"]
+        else:
+            assert cell["mde"] == row["mde"], cell["config_hash"]
+    where, points = GO1_WORST_UNCHANGED
+    assert panel["mde_unchanged"]["where"] == where and round(100 * panel["mde_unchanged"]["value"]) == points
+    assert structure["summary"]["verdict"] == direction_word(n_lower, n_higher)
+    assert structure["headline"] == multi.headline()
+    assert not set(TREE_ONLY_KEYS) & nested_keys({k: v for k, v in structure.items() if k != "tree"})
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_o14_multi_diff_on_go1_is_byte_identical_to_the_bare_tree(go1: Any, method: str) -> None:
     """``multi_diff``'s whole ``to_json()`` under each method, digested on the bare tree at
@@ -1397,7 +1595,9 @@ def test_o14_multi_diff_on_go1_is_byte_identical_to_the_bare_tree(go1: Any, meth
     flat family whether or not ``tree.py`` exists."""
     a, b, ma, mb = go1
     multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method=method)
-    assert sha256_of_text(json.dumps(multi.to_json(), sort_keys=True)) == MULTI_JSON_SHA256[method], method
+    # PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): the digest is replaced by the facts it guarded, each
+    # checked against a value known outside the build (the frozen record, the re-check's counts).
+    assert_go1_multi_json_carries_the_facts(multi, method, a, b)
 
 
 def test_o14_the_s24_column_digests_and_the_coverage_digest_are_unchanged(go1: Any) -> None:
@@ -1440,18 +1640,6 @@ def e14_builder(go1: Any) -> tuple[Any, Any, Any]:
         manifests=(ma, mb),
     )
     return multi, report, receipt
-
-
-def e14_builder_digests(go1: Any) -> dict[str, str]:
-    """The builder's report markdown, receipt and heatmap, digested."""
-    _, report, receipt = e14_builder(go1)
-    return {
-        "report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())),
-        # The command line's heatmap now formats its text under rule 10 (spec section 5.4); the
-        # builder's heatmap is unchanged, so the digest moves to it.
-        "heatmap.svg": sha256_of_text(report.to_svg()),
-        "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html())),
-    }
 
 
 def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
@@ -1511,11 +1699,11 @@ def test_o14_and_o23_the_go1_report_still_reproduces_the_three_digests_s21_minte
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    for name, digest in e14_builder_digests(go1).items():
-        assert digest == E14_SHA256[name], name
+    # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded.
+    multi, report, receipt = e14_builder(go1)
+    assert_e14_builder_carries_the_result(multi, report, receipt)
     # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
     # checked by its facts rather than a new digest.
-    multi, report, _ = e14_builder(go1)
     assert_cli_heatmap_is_the_builders_under_rule_10(
         (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event["fell"].cells
     )
@@ -1536,7 +1724,11 @@ def test_o14_and_o23_check_on_go1_prints_the_same_bytes_and_exits_the_same(go1: 
     verdicts = multi.by_event["fell"].cells["verdict"]
     first = out.splitlines()[0]
     assert first.startswith("passed  ") and "fell" in first, out
-    assert f"{(verdicts == 'safer').sum():,} safer, {(verdicts == 'worse').sum():,} worse" in out, out
+    # PF4 (PF4.20): fell has no kind, so the counts read in direction words (the library's safer is
+    # the rate that fell); Go1's 60 and 0 are the re-check's (GO1_DIRECTION_COUNTS).
+    n_lower, n_higher = int((verdicts == 'safer').sum()), int((verdicts == 'worse').sum())
+    assert (n_lower, n_higher) == GO1_DIRECTION_COUNTS["fisher_bh"]
+    assert f"{n_lower:,} lower, {n_higher:,} higher" in out, out
     assert f"{multi.n_tests:,} tests" in out, out
 
 
@@ -1551,10 +1743,16 @@ def test_o23_serve_json_on_go1_prints_the_same_structure() -> None:
     assert code == 0 and without_notes(err) == "", err
     # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
     structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence")}
-    assert structure["pair"]["store_root"] == str(GO1_ROOT)
-    tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
-    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
-    assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
+    # PF4 (PF4.11, section 8.5): the page no longer carries the store path at all.
+    assert "store_root" not in structure["pair"]
+    # PF0's version-field check still holds on the page.
+    structure_as_0_0_1_wrote_it(structure)
+    # PF4 (PF4.3, PF4.11, PF4.17, PF4.20): the digest is replaced by the facts it guarded; the tree
+    # still travels under its own key only.
+    assert "tree" in structure
+    ga, gb, gma, gmb = go1_frames()
+    page_multi = quiet_multi_diff(ga, gb, gma, gmb, events=("fell",), method="fisher_bh")
+    assert_go1_page_carries_the_diff(structure, page_multi, gma, gmb, (len(ga), len(gb)))
 
 
 # ---------- O16: one construction of the stream ----------

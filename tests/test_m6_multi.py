@@ -101,6 +101,12 @@ CELLS_COLUMNS = [
     "q",
     "verdict",
     "mde",
+    # PF4 (PF4.13, PF4.14, PF4.15): every cell now carries its direction from the test, the
+    # log-rank timing note, the matched-pair count and the note on a missing detection limit.
+    "direction",
+    "direction_note",
+    "pairs",
+    "mde_note",
 ]
 REGRESSION_CELL_KEYS = [
     "config_hash",
@@ -254,10 +260,12 @@ def _fisher_p(ea: int, eb: int, n: int = N) -> float:
 
 
 def _headline_counts(headline: str) -> tuple[list[tuple[str, int, int]], str]:
-    """(per-event (event, n_safer, n_worse) in printed order, parenthetical)."""
+    """(per-event (event, n_lower, n_higher) in printed order, parenthetical)."""
     lines = [line for line in headline.splitlines() if line.strip()]
     assert len(lines) == 2, headline
-    events = [(e, int(s), int(w)) for e, s, w in re.findall(r"(\S+): (\d+) safer, (\d+) worse", lines[0])]
+    # PF4 (PF4.20): no frame here gives its event a kind, so the headline prints direction words,
+    # "N lower, M higher", in place of "N safer, M worse"; the counts are the same numbers.
+    events = [(e, int(lo), int(hi)) for e, lo, hi in re.findall(r"(\S+): (\d+) lower, (\d+) higher", lines[0])]
     paren = lines[1].strip()
     assert paren.startswith("(") and paren.endswith(")"), headline
     return events, paren[1:-1]
@@ -286,8 +294,11 @@ def _assert_same_multi(x: MultiDiffResult, y: MultiDiffResult) -> None:
         assert getattr(x, field) == getattr(y, field), field
     for event in x.events:
         ex, ey = x.by_event[event], y.by_event[event]
-        for field in [*EVENT_COUNT_FIELDS, "max_mde", "max_mde_unchanged_cell", "cause_specific", "event"]:
+        for field in [*EVENT_COUNT_FIELDS, "max_mde_unchanged_cell", "cause_specific", "event"]:
             assert getattr(ex, field) == getattr(ey, field), (event, field)
+        # PF4 (PF4.15): a condition at a 100% baseline is left out of max_mde, so an event whose
+        # every condition is there has no max_mde (NaN), compared like max_mde_unchanged.
+        assert _same_or_both_nan(ex.max_mde, ey.max_mde), (event, "max_mde")
         assert _same_or_both_nan(ex.max_mde_unchanged, ey.max_mde_unchanged)
         pd.testing.assert_frame_equal(ex.cells, ey.cells)
     pd.testing.assert_frame_equal(x.trades, y.trades)
@@ -497,6 +508,11 @@ def test_a1_golden_per_cell_bit_identical_to_regression_fixture(golden: DiffResu
         ref = frozen[row.config_hash]
         for key in REGRESSION_CELL_KEYS:
             ours = getattr(row, key)
+            if key == "mde" and ref["events_a"] == ref["n_a"]:
+                # PF4 (PF4.15): a cell whose baseline had the event in every run has no detection
+                # limit; the frozen file holds the old 0.5/n guard's number there, now NaN.
+                assert math.isnan(float(ours)), (row.config_hash, key, float(ours))
+                continue
             if key in REGRESSION_INT_KEYS:
                 assert int(ours) == ref[key], (row.config_hash, key)
             elif key in REGRESSION_STR_KEYS:
@@ -764,11 +780,13 @@ def test_a9_counts_add_up_on_fixture(multi_fell: MultiDiffResult, raw: dict[str,
 
 def _assert_headline(result: MultiDiffResult) -> None:
     printed, paren = _headline_counts(result.headline())
+    # PF4 (PF4.20): with no kind the order "worse, then safer, then name" reads as "higher, then
+    # lower, then name", and the printed counts are each event's n_lower and n_higher.
     assert [e for e, _, _ in printed] == sorted(
-        result.events, key=lambda e: (-result.by_event[e].n_worse, -result.by_event[e].n_safer, e)
+        result.events, key=lambda e: (-result.by_event[e].n_higher, -result.by_event[e].n_lower, e)
     )
-    for e, safer, worse in printed:
-        assert safer == result.by_event[e].n_safer and worse == result.by_event[e].n_worse, e
+    for e, lower, higher in printed:
+        assert lower == result.by_event[e].n_lower and higher == result.by_event[e].n_higher, e
     assert result.method in paren
     assert f"q<{result.q}" in paren or f"q<{result.q:g}" in paren, paren
     assert re.search(rf"\b{result.n_tests}\b", paren), paren
@@ -781,6 +799,7 @@ def _assert_headline(result: MultiDiffResult) -> None:
 
 def test_a10_headline_on_fixture(multi_fell: MultiDiffResult) -> None:
     printed, paren = _headline_counts(multi_fell.headline())
+    # PF4 (PF4.20): printed as "60 lower, 0 higher"; the published 60 safer are the 60 that fell.
     assert printed == [(EVENT, PUBLISHED_SAFER, PUBLISHED_WORSE)]
     assert "fisher_bh" in paren and "400" in paren and "unpaired" in paren
     _assert_headline(multi_fell)
@@ -794,6 +813,7 @@ def test_a10_headline_orders_worse_then_safer_then_name(headline_case: MultiDiff
     assert headline_case.events == ("z", "x", "y")
     printed, paren = _headline_counts(headline_case.headline())
     assert [e for e, _, _ in printed] == ["x", "y", "z"]
+    # PF4 (PF4.20): (event, lower, higher); x rose in two cells, y and z each fell in one.
     assert printed == [("x", 0, 2), ("y", 1, 0), ("z", 1, 0)]
     assert headline_case.seed_identity_match is False and "unpaired" in paren
     assert re.search(r"\b15\b", paren) and headline_case.n_tests == 15
@@ -975,8 +995,14 @@ def _assert_json_round_trip(result: MultiDiffResult) -> None:
     assert list(js["events"]) == list(result.events)
     for e in result.events:
         counts = _json_event_counts(js, e)
-        for field in EVENT_COUNT_FIELDS:
-            assert counts[field] == getattr(result.by_event[e], field), (e, field)
+        ev = result.by_event[e]
+        # PF4 (PF4.20): no frame here gives its event a kind, so the JSON carries ``kind`` null,
+        # ``n_safer`` and ``n_worse`` null, and the direction counts ``n_higher``/``n_lower``
+        # beside them; ``n_unchanged`` is unchanged.
+        assert ev.kind is None and counts["kind"] is None, e
+        assert counts["n_safer"] is None and counts["n_worse"] is None, e
+        assert counts["n_higher"] == ev.n_higher and counts["n_lower"] == ev.n_lower, e
+        assert counts["n_unchanged"] == ev.n_unchanged, e
     text = json.dumps(js)
     assert not re.search(r"-0\.0+(?!\d)", text)
     assert not re.search(r"-0\.0+(?!\d)", result.to_markdown())

@@ -111,7 +111,6 @@ which is ``trace.py``'s and A8a's.
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import html
 import inspect
 import json
@@ -149,11 +148,19 @@ GO1_A, GO1_B = "go1-v0", "go1-v1"
 #: the same bytes on two runs). PR53's "the report the same build produces today".
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.md and receipt.html print LS16's respelled Cells sentence ('MDE is the smallest detectable increase', no ADR number) and nothing else new; heatmap.svg is unchanged. Read through this test's own measurement on the built tree, not predicted.
-E14_SHA256 = {
-    "report.md": "69324de1b24bdcf561501e313561ea481e243249a982a3b274e727445a15c370",
-    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "f5b7342aeb67f1214140bb486b388e9e7a521ffb1d07e2972191b350fa5eb6eb",
-}
+# PF4 (PF4.12, PF4.15, PF4.18, PF4.20): the three digests are no longer asserted. PF4 changes all
+# three renderings (direction words for an event of unknown kind, no limit at a 100% baseline, the
+# Westfall-Young group p-values, the shares), so PR53 asserts the facts they guarded instead.
+E14_FILES = ("report.md", "heatmap.svg", "receipt.html")
+#: Today's Go1 report under fisher_bh, as the frozen digests pinned it: 60 conditions fell and none
+#: rose ("fell: 60 safer, 0 worse"); a fisher_bh condition's direction is still the sign of delta.
+E14_LOWER, E14_HIGHER = 60, 0
+#: The statistics re-check's README section 6 (Go1, B = 4,000): the root stays at the floor 1/4000,
+#: 19 of 20 groups reject, and these group p-values move to one scale.
+E14_ROOT_P = 2.5e-04
+E14_GROUPS_REJECTED = 19
+E14_GROUP_P = {"0.7": 5.0e-04, "0.9": 5.0e-04, "0.85": 1.0e-03}
+JUDGEMENT_WORD = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
 #: ``test_s29_viewer.py``'s and ``test_fr_first_run.py``'s whole-file digest of ``report.py``.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the local serve pass's build (the wrap, the complement, mde_unchanged, LS16's Cells sentence); phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); PR-3's phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
@@ -505,7 +512,12 @@ def test_control_the_five_artifacts_and_the_report_come_out_of_one_store(tmp_pat
     r = paired_cli(store, decl_path, out)
     assert r.code == 0, r.err
     assert sorted(p.name for p in out.iterdir()) == sorted(FIVE)
-    assert [line.strip() for line in r.out.splitlines()] == [str(out / name) for name in FIVE]
+    # PF4 (PF4.9): paired also prints one "  not recorded  ..." detail line naming the harness's
+    # digest and the client's version, which these runs do not record; the paths are as they were.
+    lines = r.out.splitlines()
+    not_recorded = [line for line in lines if line.startswith("  not recorded  ")]
+    assert len(not_recorded) == 1 and "digest" in not_recorded[0] and "version" in not_recorded[0], r.out
+    assert [line.strip() for line in lines if line not in not_recorded] == [str(out / name) for name in FIVE]
     artifacts = artifacts_of(out)
     digest = P().Declaration.from_toml(decl_path).digest
     for name, tree in artifacts.items():
@@ -978,8 +990,8 @@ def as_0_0_1_wrote_it(text: str) -> str:
     """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
-    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
-    byte."""
+    drop any separate ``written by proofload`` entry. PF4 (PF4.20): no digest is taken of the
+    result any more; PR53 reads its facts instead."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
     text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
@@ -991,7 +1003,8 @@ def as_0_0_1_wrote_it(text: str) -> str:
 # The command line prints report.md, receipt.html and the heatmap's labels under rule 10 (spec
 # section 5.4), which PF1 changes; the library renderers it calls do not change. So a digest over
 # a file the command line wrote is replaced by two checks: the library's rendering of the same
-# inputs still gives the frozen digest, and the written file carries the same numbers, verdicts
+# inputs carries the frozen facts (PF4: no longer a digest, see E14_FILES), and the written file
+# carries the same numbers, verdicts
 # and cells as that rendering, each number equal to the library's or to its percentage points
 # read as a fraction, within the coarser of the two printed precisions (a 12-hex token is a hash,
 # not a number).
@@ -1087,10 +1100,67 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     (report_args, report_kwargs), (receipt_args, receipt_kwargs) = calls[0], calls[1]
     report, receipt = real(*report_args, **report_kwargs), real(*receipt_args, **receipt_kwargs)
     library = {"report.md": report.to_markdown(), "heatmap.svg": report.to_svg(), "receipt.html": receipt.to_html()}
-    for name, digest in E14_SHA256.items():
+    # PF4 (PF4.12, PF4.15, PF4.18, PF4.20): the digest over each rendering is replaced by the facts
+    # it guarded, read from the result the CLI built and from the re-check's README.
+    fell = report_args[0].by_event["fell"]
+    cells = fell.cells
+    lower, higher = int((cells["direction"] == "lower").sum()), int((cells["direction"] == "higher").sum())
+    assert (lower, higher) == (E14_LOWER, E14_HIGHER), (lower, higher)
+    for name in E14_FILES:
         text = library[name] if name == "heatmap.svg" else as_0_0_1_wrote_it(library[name])
-        assert hashlib.sha256(text.encode("utf-8")).hexdigest() == digest, name
+        # PF4 (PF4.20): "fell" has no kind in Go1, so the headline counts are direction words and
+        # no rendering says safer or worse.
+        assert f"fell: {lower} lower, {higher} higher" in text, name
+        assert JUDGEMENT_WORD.search(text) is None, (name, JUDGEMENT_WORD.search(text))
         assert rendered_problems(library[name], (out / name).read_text(encoding="utf-8"), name) == [], name
+    md = library["report.md"]
+    tree = report_kwargs["tree"]
+    # PF4 (PF4.18): the root and the fault lines on one scale, as the re-check's README gives them.
+    # README section 6 prints these to three significant figures, hence the tolerance.
+    assert abs(tree.root.p_omnibus - E14_ROOT_P) < 5e-7 and tree.root.rejects, tree.root.p_omnibus
+    assert tree.fault_lines.n_rejected_groups == E14_GROUPS_REJECTED
+    groups = {g.label: g for g in tree.fault_lines.groups}
+    for mu, p_value in E14_GROUP_P.items():
+        assert abs(groups[mu].p_group - p_value) < 5e-7 and groups[mu].rejects, (mu, groups[mu].p_group)
+    # The fault-line table prints each group's p, q and verdict as the tree has them.
+    fault_lines = md.split("## Fault lines", 1)[1].split("\n## ", 1)[0]
+    group_rows = {row[0].strip(): row for row in (line.strip("|").split(" | ") for line in fault_lines.splitlines()
+                                                  if re.match(r"^\| [0-9.]+ \|", line))}
+    assert sorted(group_rows) == sorted(groups), sorted(group_rows)
+    for label, group in groups.items():
+        row = group_rows[label]
+        for printed_token, value in ((row[6], group.p_group), (row[7], group.q_group)):
+            printed, half = rendered_value(printed_token.strip())
+            assert abs(printed - value) <= half + 1e-12, (label, row)
+        assert row[8].strip() == ("rejected" if group.rejects else "not rejected"), (label, row)
+    # The Cells section: each listed condition's delta is the result's, and its limit is the
+    # result's where it has one. PF4 (PF4.15): a condition whose baseline had the event in every run
+    # has no limit, and the text prints no number for it.
+    by_config = {tuple(sorted(c.items())): row for c, row in zip(cells["config"], cells.itertuples(), strict=True)}
+    listed = 0
+    for line in md.split("## Cells", 1)[1].split("\n## ", 1)[0].splitlines():
+        if not line.startswith("| mu="):
+            continue
+        label, event, delta_pp, _q, mde_pp = (part.strip() for part in line.strip("|").split(" | "))
+        row = by_config[tuple(sorted((k, float(v)) for k, v in (kv.split("=") for kv in label.split(", "))))]
+        listed += 1
+        assert event == "fell", line
+        printed, half = rendered_value(delta_pp)
+        assert abs(printed - 100 * row.delta) <= half + 1e-9, line
+        if row.events_a == row.n_a:
+            assert np.isnan(row.mde) and not re.search(r"\d", mde_pp), line
+        else:
+            printed, half = rendered_value(mde_pp)
+            assert abs(printed - 100 * row.mde) <= half + 1e-9, line
+    assert listed > 0
+    # The honesty line names the worst-powered unchanged condition and its limit, which PF4 leaves
+    # as they were (mu=0.95, push_pct_bw=100, 34pp): a condition at a 100% baseline is left out.
+    unchanged = cells[(cells["direction"] == "unchanged") & cells["mde"].notna()]
+    assert fell.max_mde_unchanged == unchanged["mde"].max()
+    worst = unchanged.loc[unchanged["mde"].idxmax()]
+    honesty = f"can only detect a {100 * worst['mde']:.0f}pp rise. \"{higher} higher\" is an honest claim only above that."
+    assert worst["config"] == {"mu": 0.95, "push_pct_bw": 100.0} and honesty in md, worst
+    assert honesty in library["heatmap.svg"]
 
 
 # PF0 (Q4): test_pr53_report_py_is_not_touched_by_phase_three removed. It pinned the bytes of src/poisson_prove/report.py, which the rename

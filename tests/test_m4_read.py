@@ -586,7 +586,9 @@ def r5_argv(verb: str, out: Path) -> list[str]:
     if verb == "diff":
         return ["diff", a, b, "--event", "fell"]
     if verb == "check":
-        return ["check", a, b, "--event", "fell"]
+        # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and the twins
+        # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+        return ["check", a, b, "--event", "fell", "--fail-on", "higher"]
     if verb == "report-pair":
         return ["report", a, b, "--event", "fell", "--x", "x", "--out", str(out)]
     if verb == "report-run":
@@ -615,7 +617,9 @@ def test_r5_verbs_read_the_poisoned_store_exactly_as_the_intact_one(
     assert intact.out.strip(), "the intact run printed nothing"
     if verb == "check":
         # check's verdict is its first stdout line, passed or failed (front-door spec section 5.3).
-        assert intact.out.startswith("passed  ") and "0 worse" in intact.out, intact.out
+        # PF4 (PF4.20): an event of unknown kind is counted in direction words, so no rise reads
+        # "0 higher" where it read "0 worse".
+        assert intact.out.startswith("passed  ") and "0 higher" in intact.out, intact.out
     if verb.startswith("report"):
         assert reports["intact"] is not None
     assert poisoned.code == intact.code, poisoned.text

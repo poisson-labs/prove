@@ -620,7 +620,10 @@ def test_p10_1_declare_parses_to_a_sorted_declaration_minted_in_trace(tmp_path: 
     assert type(spec.declare) is Declaration
     assert (spec.declare.steps, spec.declare.outcomes, spec.declare.gates) == (STEPS, OUTCOMES, GATES)
     assert spec.declare == declaration()
-    assert _DECLARE_FIELDS == DECLARE_FIELDS
+    # PF4 (PF4.20): [declare] also accepts failures and successes (the event kinds); the three
+    # fields this test pinned keep their order, first.
+    assert _DECLARE_FIELDS[:3] == DECLARE_FIELDS, _DECLARE_FIELDS
+    assert set(_DECLARE_FIELDS[3:]) == {"failures", "successes"}, _DECLARE_FIELDS
     assert SweepSpec.load(write(tmp_path / "none.toml", sweep_toml(None))).declare is None
 
 
@@ -780,7 +783,9 @@ def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(t
         ["--store", root, "report", a, b, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "pair")],
         ["--store", root, "report", a, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "one")],
         ["--store", root, "inspect", a, "--event", EVENT],
-        ["--store", root, "check", a, b, "--event", EVENT],
+        # PF4 (PF4.20): the bare pair declares no kind for the event, so the default --fail-on worse
+        # is refused; --fail-on higher is the same gate on a failure event (fail when it rose).
+        ["--store", root, "check", a, b, "--event", EVENT, "--fail-on", "higher"],
         ["--store", root, "runs"],
         ["--store", root, "diff", a, b, "--event", EVENT],
         # --json replaces --format json on diff (front-door spec section 5.6).
@@ -1074,7 +1079,9 @@ def test_p10_7_an_undeclared_outcome_is_stored_listed_printed_and_refused_by_no_
         "report-one": ["report", a, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "one")],
         "inspect": ["inspect", a, "--event", "timed_out"],
         "diff": ["diff", a, b, "--event", EVENT],
-        "check": ["check", a, b, "--event", EVENT],
+        # PF4 (PF4.20): the runs declare outcomes but no kind, so the default --fail-on worse is
+        # refused; --fail-on higher is the same gate on a failure event (fail when it rose).
+        "check": ["check", a, b, "--event", EVENT, "--fail-on", "higher"],
         "serve": ["serve", a, b, "--event", EVENT, "--x", "x", "--json"],
     }
     results = {name: run_cli(["--store", root, *argv]) for name, argv in runs.items()}
@@ -1388,7 +1395,10 @@ def test_p10_13_check_and_diff_print_the_same_bytes_for_a_declaring_pair(tmp_pat
         store = pair_store(tmp_path / name, manifest("a", declared=declared), manifest("b", declared=declared), b_outcomes=PAIR_OUTCOMES_WIDER)
         root = str(store._root)
         texts = []
-        for argv in (["check", "a", "b", "--event", EVENT], ["diff", "a", "b", "--event", EVENT], ["diff", "a", "b", "--event", EVENT, "--format", "json"]):
+        # PF4 (PF4.20): neither pair declares a kind for the event, so check's default --fail-on
+        # worse is refused on both and would compare two refusals; --fail-on higher is the same gate
+        # on a failure event, so check's own output is what is compared again.
+        for argv in (["check", "a", "b", "--event", EVENT, "--fail-on", "higher"], ["diff", "a", "b", "--event", EVENT], ["diff", "a", "b", "--event", EVENT, "--format", "json"]):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 code, out, err = run_cli(["--store", root, *argv])

@@ -588,11 +588,15 @@ def test_r1_without_the_new_keywords_the_modal_manifest_and_cost_guard_are_mains
     run_with_mapper(p, RecordingMapper(), store, options=ModalOptions(batch_size=2))
     m = store.manifest(p.run_id)
     assert m.backend == "modal"
-    assert set(m.environment) == MODAL_ENV_KEYS | {"capture"}, sorted(m.environment)
+    # PF4 (PF4.4): every backend now records the design detection limit as design_mde
+    # ({"mde", "base_rate"}) beside max_mde_accepted; every other key is main's.
+    assert set(m.environment) == MODAL_ENV_KEYS | {"capture", "design_mde"}, sorted(m.environment)
+    assert set(m.environment["design_mde"]) == {"mde", "base_rate"}, m.environment["design_mde"]
     assert m.environment["capture"]["reason"] == MODAL_CAPTURE_REASON
     pc, cstore = r_plan(tmp_path / "chaos", chaos=CHAOS)
     run_with_mapper(pc, RecordingMapper(chaos_record(CHAOS)), cstore, options=ModalOptions(batch_size=2))
-    assert set(cstore.manifest(pc.run_id).environment) == MODAL_ENV_KEYS | {"chaos"}
+    # PF4 (PF4.4): design_mde is recorded on a chaos run too.
+    assert set(cstore.manifest(pc.run_id).environment) == MODAL_ENV_KEYS | {"chaos", "design_mde"}
     pg, gstore = r_plan(tmp_path / "guard")
     mapper = RecordingMapper()
     with pytest.raises(executor_modal.CostGuard):
@@ -1880,7 +1884,10 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     # --json replaces --format json on diff (spec section 5.6).
     code, out, err = run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell", "--json"])
     fell = json.loads(out)["by_event"]["fell"]
-    assert fell["n_worse"] == 0 and fell["n_safer"] == 0 and fell["n_unchanged"] == 2, fell
+    # PF4 (PF4.20): "fell" has no declared kind, so the JSON gives direction counts and leaves the
+    # safer/worse counts null; the fact pinned (no condition moved, two unchanged) is the same.
+    assert fell["n_worse"] is None and fell["n_safer"] is None and fell["kind"] is None, fell
+    assert fell["n_higher"] == 0 and fell["n_lower"] == 0 and fell["n_unchanged"] == 2, fell
     assert comparable(stored(Store(store_root), local)) == comparable(stored(Store(store_root), remote))
 
 
