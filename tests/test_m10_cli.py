@@ -742,10 +742,16 @@ def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> Non
 def test_i9_diff_markdown_summary_line(go1_store: Store) -> None:
     r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell"])
     assert r.code == 0, r.text
-    summary = [line for line in r.lines if "60 safer" in line and "0 worse" in line]
+    # PF2 (spec section 4.3): diff's first lines are now a verdict block ending at the first
+    # blank line; the report that follows it is unchanged, so its summary line is read there.
+    verdict, _, report = r.out.partition("\n\n")
+    assert verdict.splitlines()[0] == "safer  fell: 60 safer, 0 worse", r.out
+    summary = [
+        line for line in report.splitlines() if "60 safer" in line and "0 worse" in line
+    ]
     assert summary, r.out
     assert summary[0].startswith("fell:"), summary[0]
-    assert "fisher_bh" in r.out, r.out
+    assert "fisher_bh" in report, r.out
 
 
 def test_i9_diff_json(go1_store: Store) -> None:
@@ -845,7 +851,13 @@ def test_i11_report_writes_exactly_three_files(go1_store: Store, tmp_path: Path)
     ET.fromstring((out / "heatmap.svg").read_text())
     md = (out / "report.md").read_text()
     assert "fell: 60 safer, 0 worse" in md and "fisher_bh" in md
-    assert "fell: 60 safer, 0 worse" in r.out
+    # PF2 (spec section 4.3): report's stdout now opens with `ok  wrote <folder> (N files)` and
+    # one `  wrote  <path>` line per file, then a blank line, then what it printed before.
+    verdict, _, rest = r.out.partition("\n\n")
+    lines = verdict.splitlines()
+    assert lines[0] == f"ok  wrote {out} ({len(REPORT_FILES)} files)", r.out
+    assert sorted(lines[1:]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
+    assert "fell: 60 safer, 0 worse" in rest
     for name in REPORT_FILES:
         assert name in r.out, name
     assert NEUTRAL_FILL["light"] in (out / "receipt.html").read_text()
@@ -1120,32 +1132,57 @@ def test_i16_inspect_without_trace_prints_rows_and_no_step_lines(tmp_path: Path)
 
 
 def test_i17_runs_lists_every_run_sorted_with_seven_fields(mock_runs: MockRuns, tmp_path: Path) -> None:
-    (tmp_path / "empty").mkdir()  # E1: an existing empty store still lists its header alone
+    (tmp_path / "empty").mkdir()  # E1
     empty = run_cli(["--store", str(tmp_path / "empty"), "runs"])
     assert empty.code == 0, empty.text
-    header_lines = len(empty.lines)
-    assert header_lines >= 1
+    # PF2 (spec section 4.3): an empty store prints `ok  no runs in <store>` and a `next:` line,
+    # both on stdout and nothing on stderr, where it used to print the header alone.
+    assert not empty.err, empty.err
+    assert len(empty.lines) == 2, empty.out
+    assert empty.lines[0] == f"ok  no runs in {tmp_path / 'empty'}"
+    assert empty.lines[1].lstrip().startswith("next:"), empty.out
 
     store = mock_runs.store
     expected = store.runs()
     assert len(expected) == 5
     r = run_cli(["--store", str(mock_runs.root), "runs"])
     assert r.code == 0, r.text
-    assert len(r.lines) == header_lines + len(expected)
-    run_lines = r.lines[header_lines:]
-    for line, run_id in zip(run_lines, expected, strict=True):
-        fields = line.split()
-        assert len(fields) == 7, line
-        manifest = store.manifest(run_id)
-        assert fields[0] == run_id
-        assert fields[1] == manifest.status
-        assert fields[2] == manifest.backend
-        assert fields[3] == manifest.target_id
-        assert fields[4] == manifest.t_unit
+    # PF2 (spec section 4.3): the verdict line, then a header with the columns #, name, id,
+    # status, backend, target, rows, rows without an outcome, created (t_unit is no longer a
+    # column). A name holds single spaces, so cells are split on runs of two or more spaces.
+    assert r.lines[0] == f"ok  {len(expected)} runs in {mock_runs.root}"
+    assert re.split(r"\s{2,}", r.lines[1].strip()) == [
+        "#", "name", "id", "status", "backend", "target", "rows", "rows without an outcome",
+        "created",
+    ]
+    assert len(r.lines) == 2 + len(expected)
+    run_lines = r.lines[2:]
+    manifests = {run_id: store.manifest(run_id) for run_id in expected}
+    # PF2 (spec section 4.3): newest first by created_at, where the old table was in id order.
+    newest_first = sorted(expected, key=lambda run_id: manifests[run_id].created_at, reverse=True)
+    # PF2 (spec section 4.3): the computed name is the target id up to its first `/`, the UTC
+    # date of created_at, then a letter in creation order among that target's runs that day.
+    names: dict[str, str] = {}
+    for run_id in sorted(expected, key=lambda run_id: manifests[run_id].created_at):
+        stem = f"{manifests[run_id].target_id.split('/')[0]} {manifests[run_id].created_at[:10]}"
+        letter = "abcdefghijklmnopqrstuvwxyz"[sum(n.startswith(stem + " ") for n in names.values())]
+        names[run_id] = f"{stem} {letter}"
+    for number, (line, run_id) in enumerate(zip(run_lines, newest_first, strict=True), start=1):
+        fields = re.split(r"\s{2,}", line.rstrip())
+        assert len(fields) == 9, line
+        manifest = manifests[run_id]
+        assert fields[0] == str(number)  # every mock run is complete, so every row is numbered
+        assert fields[1] == names[run_id]
+        assert fields[2] == run_id
+        assert fields[3] == manifest.status
+        assert fields[4] == manifest.backend
+        assert fields[5] == manifest.target_id
         # Counts carry thousands separators in text (rule 10).
-        assert fields[5] == f"{len(store.read(run_id)):,}"
-        assert fields[6] == f"{store.tally(run_id).no_outcome:,}"
-    assert [line.split()[0] for line in run_lines] == sorted(expected)
+        assert fields[6] == f"{len(store.read(run_id)):,}"
+        assert fields[7] == f"{store.tally(run_id).no_outcome:,}"
+        assert fields[8] == f"{manifest.created_at[:19]}Z"
+    assert [re.split(r"\s{2,}", line)[2] for line in run_lines] == newest_first
+    assert newest_first[:3] == [mock_runs.c, mock_runs.b, mock_runs.a]
 
 
 def test_i17_empty_store_prints_only_the_header(tmp_path: Path) -> None:

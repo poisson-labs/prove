@@ -93,6 +93,10 @@ SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
+# PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
+# created_at, a letter); outputs name the Go1 runs by these.
+GO1_NAME_A = "go1-g2-converged@20260813T155006Z 2026-09-03 a"
+GO1_NAME_B = "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a"
 GO1_EVENTS = ("fell", "survived")
 GO1_X, GO1_Y = "push_pct_bw", "mu"
 GO1_TITLE = "Go1 pair"
@@ -272,6 +276,11 @@ def assert_error_then_next(err: str) -> None:
     lines = without_notes(err).splitlines()
     assert lines and lines[0].startswith("error: "), err
     assert all(line.startswith("  next: ") for line in lines[1:]), err
+
+
+def serving_line(port: int) -> str:
+    """PF2 (spec section 5.3): serve's verdict line, which replaced the bare URL line."""
+    return f'ok  serving "{GO1_NAME_A}" against "{GO1_NAME_B}" at http://{HOST}:{port}/ (Ctrl-C stops)'
 
 
 def go1_argv(*extra: str) -> list[str]:
@@ -989,7 +998,8 @@ def test_v1_missing_event_exits_two_names_serve_and_lists_the_axes_and_events_th
     # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr (spec section 5.4).
     assert_clean_refusal(r, 1)
     assert_error_then_next(r.err)
-    for fact in ("serve", "--event", "go1-v0", "go1-v1", "mu", "push_pct_bw", "fell", "survived"):
+    # PF2 (spec section 4.3): the refusal and its next line name the two runs by name, not id.
+    for fact in ("serve", "--event", GO1_NAME_A, GO1_NAME_B, "mu", "push_pct_bw", "fell", "survived"):
         assert fact in r.err, (fact, r.err)
 
 
@@ -1018,7 +1028,8 @@ def test_v4_missing_x_lists_the_axes_and_events_the_runs_carry(monkeypatch: pyte
     # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr (spec section 5.4).
     assert_clean_refusal(r, 1)
     assert_error_then_next(r.err)
-    for fact in ("serve", "--x", "go1-v0", "go1-v1", "mu", "push_pct_bw", "fell", "survived"):
+    # PF2 (spec section 4.3): the refusal and its next line name the two runs by name, not id.
+    for fact in ("serve", "--x", GO1_NAME_A, GO1_NAME_B, "mu", "push_pct_bw", "fell", "survived"):
         assert fact in r.err, (fact, r.err)
 
 
@@ -1137,7 +1148,9 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(go1: B
     real_out, real_err = capfd.readouterr()
     assert statuses == [200, 200, 200] and missed == 404
     assert dropped is None or dropped.status >= 500, dropped
-    assert run.out.getvalue() == f"http://{HOST}:{run.server.server_address[1]}/\n", run.out.getvalue()
+    # PF2 (spec section 5.3): the only stdout line is serve's verdict line, which names both runs
+    # and carries the URL.
+    assert run.out.getvalue() == serving_line(run.server.server_address[1]) + "\n", run.out.getvalue()
     # The unpaired-analysis warning on Go1 is now a note line on stderr (spec section 5.4).
     assert without_notes(run.err.getvalue()) == "", run.err.getvalue()
     assert (real_out, real_err) == ("", ""), (real_out, real_err)
@@ -1146,13 +1159,19 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(go1: B
 def test_v12_assembling_rendering_and_serving_touch_no_file(go1: Built, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
+    # PF2 (spec section 2.3, Q11): report's default folder is named by the runs' names now; both
+    # the folder named by ids and the one named by names must stay absent.
+    def slugged(name: str) -> str:
+        return name.lower().replace(" ", "-").replace("/", "-")
+
     default_dir = tmp_path / f"prove-report-{GO1_A}-vs-{GO1_B}"
-    before = (tree_snapshot(GO1_ROOT), tree_snapshot(tmp_path), tree_snapshot(default_dir))
+    named_dir = tmp_path / f"prove-report-{slugged(GO1_NAME_A)}-vs-{slugged(GO1_NAME_B)}"
+    before = (tree_snapshot(GO1_ROOT), tree_snapshot(tmp_path), tree_snapshot(default_dir), tree_snapshot(named_dir))
     with cli_served(monkeypatch, go1_full_argv()) as run:
         assert get(run.server, "/").status == 200
-    after = (tree_snapshot(GO1_ROOT), tree_snapshot(tmp_path), tree_snapshot(default_dir))
+    after = (tree_snapshot(GO1_ROOT), tree_snapshot(tmp_path), tree_snapshot(default_dir), tree_snapshot(named_dir))
     assert after == before
-    assert not default_dir.exists()
+    assert not default_dir.exists() and not named_dir.exists()
 
 
 # ---------- V13-V15: nothing outbound ----------
@@ -1604,6 +1623,15 @@ def test_v33_json_prints_the_structure_indented_and_strict_and_binds_nothing(go1
     # serve --json wraps the structure with verdict and sentence after schema (spec section 5.6).
     assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
     parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence")}
+    # PF2 (spec section 4.3): serve --json carries run_name beside each arm's run_id; with it set
+    # aside the structure is the library's, and the names sit where they belong.
+    assert {role: (parsed["pair"][role]["run_id"], parsed["pair"][role].get("run_name")) for role in ("a", "b")} == {
+        "a": (GO1_A, GO1_NAME_A), "b": (GO1_B, GO1_NAME_B)
+    }, parsed["pair"]
+    for role in ("a", "b"):
+        arm = parsed["pair"][role]
+        assert tuple(arm).index("run_name") == tuple(arm).index("run_id") + 1, tuple(arm)
+        del arm["run_name"]
     assert parsed == json.loads(json.dumps(go1.structure, allow_nan=False))
     assert parsed["schema"] == SCHEMA
     assert tuple(parsed) == TOP_LEVEL_KEYS, tuple(parsed)
@@ -1748,7 +1776,8 @@ def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(go
         port = run.server.server_address[1]
         assert isinstance(run.server, socketserver.BaseServer)
         assert run.out_at_bind == ""
-        assert run.out.getvalue() == f"http://{HOST}:{port}/\n"
+        # PF2 (spec section 5.3): the URL line is now serve's verdict line naming both runs.
+        assert run.out.getvalue() == serving_line(port) + "\n"
         assert get(run.server, "/").status == 200
     assert run.codes == [0], run.codes
     # The unpaired-analysis warning on Go1 is now a note line on stderr (spec section 5.4).
@@ -1779,7 +1808,8 @@ def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_trace
     assert r.code == 130, r.text
     assert "Traceback" not in r.text and without_notes(r.err) == "", r.text
     lines = r.out.splitlines()
-    assert holder and lines[0] == f"http://{HOST}:{holder[0].server_address[1]}/", r.out
+    # PF2 (spec section 5.3): the URL line is now serve's verdict line naming both runs.
+    assert holder and lines[0] == serving_line(holder[0].server_address[1]), r.out
     assert len(lines) == 2 and lines[1].startswith("stopped  "), r.out
     assert holder[0].socket.fileno() == -1
 

@@ -1435,8 +1435,14 @@ def test_ls2_every_wrapped_text_of_the_figure_is_drawn_whole_and_ends_inside_the
             texts, width, _ = svg_texts(p.structure[source])
             contents = [t.content for t in texts]
             for kind, lines, font, x in wrapped_texts(p):
+                # PF2 (spec section 4.3): the default title names the runs, so a wrapped title can
+                # repeat a line (``synthetic@v0`` as its first and third line). A line is therefore
+                # read in its place, as the k-th of the wrapped text's lines drawn in order at its
+                # font and x, rather than by its content alone.
+                same = [t for t in texts if t.font == font and t.x == x]
+                starts = [i for i in range(len(same) - len(lines) + 1) if [t.content for t in same[i : i + len(lines)]] == lines]
                 for k, line in enumerate(lines):
-                    hits = [t for t in texts if t.content == line and t.font == font and t.x == x]
+                    hits = [same[i + k] for i in starts]
                     assert hits, (p.name, kind, line[:70], [c[:40] for c in contents if c.startswith(line[:12])])
                     for t in hits:
                         assert right_edge(t) <= width, (p.name, kind, line[:70], right_edge(t), width)
