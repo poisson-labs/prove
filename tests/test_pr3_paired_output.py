@@ -394,6 +394,13 @@ def run_cli(argv: Sequence[str]) -> Result:
     return Result(code, out.getvalue(), err.getvalue())
 
 
+def run_names(root: Path) -> dict[str, str]:
+    """PF2 (spec section 4.3/5.3): every run has a name; ``runs --json`` maps each id to it."""
+    r = run_cli(["--store", str(root), "runs", "--json"])
+    assert r.code == 0, r.err
+    return {entry["run_id"]: entry["run_name"] for entry in json.loads(r.out)["runs"]}
+
+
 def root_of(store: Store) -> Path:
     """The store's directory, for ``--store``: the one private read this file makes."""
     return Path(store._root)  # noqa: SLF001
@@ -505,7 +512,9 @@ def test_control_the_five_artifacts_and_the_report_come_out_of_one_store(tmp_pat
     r = paired_cli(store, decl_path, out)
     assert r.code == 0, r.err
     assert sorted(p.name for p in out.iterdir()) == sorted(FIVE)
-    assert [line.strip() for line in r.out.splitlines()] == [str(out / name) for name in FIVE]
+    # PF2 (spec section 4.3/5.3): paired's stdout is "ok  wrote <folder> (5 files)", then one
+    # "  wrote  <path>" line per artifact in the order the paths were printed before.
+    assert r.out.splitlines() == [f"ok  wrote {out} ({len(FIVE)} files)", *(f"  wrote  {out / name}" for name in FIVE)]
     artifacts = artifacts_of(out)
     digest = P().Declaration.from_toml(decl_path).digest
     for name, tree in artifacts.items():
@@ -1087,8 +1096,14 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     (report_args, report_kwargs), (receipt_args, receipt_kwargs) = calls[0], calls[1]
     report, receipt = real(*report_args, **report_kwargs), real(*receipt_args, **receipt_kwargs)
     library = {"report.md": report.to_markdown(), "heatmap.svg": report.to_svg(), "receipt.html": receipt.to_html()}
+    # PF2 (spec section 4.3/5.3): the CLI's default title now names the two runs by name; with
+    # the ids put back in the title the library's rendering gives W20's frozen digests.
+    names = run_names(GO1_ROOT)
+    named, by_id = f"{names[GO1_A]} vs {names[GO1_B]}: fell", f"{GO1_A} vs {GO1_B}: fell"
     for name, digest in E14_SHA256.items():
-        text = library[name] if name == "heatmap.svg" else as_0_0_1_wrote_it(library[name])
+        assert named in library[name] and by_id not in library[name], name
+        titled = library[name].replace(named, by_id)
+        text = titled if name == "heatmap.svg" else as_0_0_1_wrote_it(titled)
         assert hashlib.sha256(text.encode("utf-8")).hexdigest() == digest, name
         assert rendered_problems(library[name], (out / name).read_text(encoding="utf-8"), name) == [], name
 

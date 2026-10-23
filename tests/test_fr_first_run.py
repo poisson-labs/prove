@@ -127,6 +127,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import re
 import shlex
 import sys
@@ -159,6 +160,13 @@ PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 GO1_X, GO1_Y = "mu", "push_pct_bw"
+# PF2 (spec section 4.3): every run has a name -- its target id up to the first ``/``, the UTC date it was
+# created, and a letter in creation order among that target's runs that day. Go1's two runs are of two
+# targets created on 2026-09-03, so each is ``a``.
+GO1_NAMES = {
+    GO1_A: "go1-g2-converged@20260813T155006Z 2026-09-03 a",
+    GO1_B: "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a",
+}
 HORIZON = 10.0
 
 # ---------- the pinned words (spec section 3), verbatim ----------
@@ -230,18 +238,20 @@ def empty_problems(err: str, root: str, source: str, verb: str) -> list[str]:
     return store_refusal_problems(err, "no runs in", root, source, verb)
 
 
-def empty_runs_problems(err: str, root: str, source: str) -> list[str]:
-    """Section 3.1, E-runs: stderr of ``runs`` on an empty store, exit 0, no ``error: `` prefix. It is a
-    ``note: `` line now, with its hint on indented lines (front-door spec section 5.4)."""
-    lines = err.splitlines()
-    problems = [] if lines and lines[0].startswith("note: ") else ["the first line is not a note"]
-    problems += [f"not an indented line: {line}" for line in lines[1:] if not line.startswith("  ")]
-    if f"no runs in {root}" not in err:
-        problems.append(f"does not say no runs in {root}")
-    if source not in err:
-        problems.append("the source clause is missing")
-    if create_command(root) not in hinted_commands(err):
-        problems.append("no hint offers the sweep that writes the first run there")
+def empty_runs_problems(out: str, root: str) -> list[str]:
+    """Section 3.1, E-runs: ``runs`` on an empty store, exit 0, no ``error: `` prefix.
+
+    PF2 (spec section 4.3): ``runs``' first stdout line is its verdict, so the message is now
+    ``ok  no runs in <store>`` and one ``  next: `` line, both on stdout, with nothing on stderr (the
+    callers check stderr); the verdict line carries no source clause, which the other verbs' empty-store
+    refusal still does."""
+    lines = out.splitlines()
+    problems = [] if lines and lines[0] == f"ok  no runs in {root}" else [f"the first line is not ok  no runs in {root}"]
+    problems += [f"not a next line: {line}" for line in lines[1:] if not line.startswith("  next: ")]
+    if len(lines) < 2:
+        problems.append("there is no next line")
+    if create_command(root) not in hinted_commands(out):
+        problems.append("no next line offers the sweep that writes the first run there")
     return problems
 
 
@@ -310,12 +320,28 @@ def listed_values(err: str, label: str) -> list[str]:
     return re.findall(rf"(?<![\w-]){label}: (.+?)(?=[.;]\s|[.;]?$)", err, flags=re.MULTILINE)
 
 
-def e3_problems(err: str, old: str) -> list[str]:
+def run_names(root: Path | str) -> dict[str, str]:
+    """PF2 (spec section 4.3): each run's name, as ``runs --json`` gives it beside its id."""
+    r = run_cli(["--store", str(root), "runs", "--json"])
+    assert r.code == 0, r
+    return {entry["run_id"]: entry["run_name"] for entry in json.loads(r.out)["runs"]}
+
+
+def next_commands(err: str) -> list[list[str]]:
+    """Every ``  next: `` line's command, read back the way a shell would read it."""
+    return [shlex.split(line.partition("next: ")[2]) for line in err.splitlines() if line.startswith("  next: ")]
+
+
+def e3_problems(err: str, old: str, names: Mapping[str, str]) -> list[str]:
     """What is wrong with ``err`` as the listing refusal whose pre-PF1 words are ``old``. A refusal is now one
     ``error: `` line followed only by ``  next: `` lines (front-door spec section 5.4), so the old
     ``  axes:`` and ``  events:`` lines are checked by their facts wherever stderr gives them: the verb, the
     missing flags, the runs, the reason clause where the old words had one and not where they did not, and
-    each list exactly."""
+    each list exactly.
+
+    PF2 (spec section 4.3): the runs are named by name, double-quoted, in the error line (``names`` maps
+    each id the old words gave to its name), and the next line that repeats the command has each typed id
+    replaced by its name."""
     head, *rest = old.splitlines()
     problems = refusal_shape(err)
     verb = head.split()[1]
@@ -327,8 +353,13 @@ def e3_problems(err: str, old: str) -> list[str]:
     runs = re.search(r"\. (\S+) and (\S+) carry:$|\. (\S+) carries:$", head)
     assert runs, head
     for run in filter(None, runs.groups()):
-        if run not in err:
-            problems.append(f"does not name {run}")
+        # PF2 (spec section 4.3): the run is named by its name, and no next line carries its id.
+        if f'"{names[run]}"' not in err.partition("\n")[0]:
+            problems.append(f"the error line does not name {run} as \"{names[run]}\"")
+        if not any(verb in command and names[run] in command for command in next_commands(err)):
+            problems.append(f"no next line repeats the {verb} command with {names[run]}")
+        if any(run in command for command in next_commands(err)):
+            problems.append(f"a next line carries the id {run}")
     for reason in (GATE_REASON, PICTURE_REASON):
         if (reason in head) != (reason in err):
             problems.append(f"the reason clause is {'missing' if reason in head else 'added'}: {reason}")
@@ -662,8 +693,10 @@ def test_fr3_runs_on_an_empty_store_exits_zero_says_so_on_stderr_and_keeps_its_s
     root = make_empty_root(tmp_path)
     r = run_cli(["--store", str(root), "runs"])
     assert r.code == 0, r
-    assert r.out == f"store: {root}\n" + RUNS_HEADER, r.out
-    assert empty_runs_problems(r.err, str(root), FROM_FLAG) == [], r.err
+    # PF2 (spec section 4.3): the empty store is runs' verdict line and its next line, both on stdout, in
+    # place of the header and the stderr note; nothing is on stderr.
+    assert empty_runs_problems(r.out, str(root)) == [], r.out
+    assert r.err == "", r.err
 
 
 @pytest.mark.parametrize("how", ["flag", "env", "default", "empty env"])
@@ -710,8 +743,11 @@ def test_fr4_the_empty_store_messages_name_the_same_three_sources(tmp_path: Path
     # A refusal exits 1 (spec section 5.2).
     assert read.code == 1 and read.out == "" and empty_problems(read.err, shown, source, "diff") == [], read
     listed_runs = run_cli([*flags, "runs"])
-    assert listed_runs.code == 0 and empty_runs_problems(listed_runs.err, shown, source) == [], listed_runs
-    assert [clause for clause in SOURCES if clause in read.err] == [source] == [clause for clause in SOURCES if clause in listed_runs.err]
+    # PF2 (spec section 4.3): runs on an empty store says so on stdout (its verdict line and a next line)
+    # and nothing on stderr; the verdict line carries no source clause, so only the read verb's refusal
+    # is held to the source that happened.
+    assert listed_runs.code == 0 and listed_runs.err == "" and empty_runs_problems(listed_runs.out, shown) == [], listed_runs
+    assert [clause for clause in SOURCES if clause in read.err] == [source]
 
 
 @pytest.mark.parametrize("which", ["runs on go1", "runs on a one-run store", "inspect on go1"])
@@ -750,7 +786,8 @@ def test_fr6_refusing_and_listing_never_touch_an_empty_root(tmp_path: Path) -> N
         r = run_cli(argv)
         # A refusal exits 1 (spec section 5.2).
         assert r.code == (0 if label == "runs" else 1), (label, r)
-        assert r.err != "", label
+        # PF2 (spec section 4.3): runs says the store is empty on stdout now, every other verb on stderr.
+        assert (r.out if label == "runs" else r.err) != "", label
         assert listing(root) == before, label
     assert listing(tmp_path) == ["empty", *[f"empty/{p}" for p in before]], listing(tmp_path)
 
@@ -781,8 +818,9 @@ def test_fr7_the_empty_store_hint_lines_are_commands_that_survive_a_shell(tmp_pa
     # A refusal exits 1, and its hint is a command on a next line (spec sections 5.2 and 5.4).
     assert read.code == 1 and expected in hinted_commands(read.err), read.err
     listed = run_cli(["--store", str(root), "runs"])
-    assert listed.code == 0 and expected in hinted_commands(listed.err), listed.err
-    assert empty_problems(read.err, str(root), FROM_FLAG, "check") == [] and empty_runs_problems(listed.err, str(root), FROM_FLAG) == []
+    # PF2 (spec section 4.3): runs' hint is its next line on stdout now, and stderr is empty.
+    assert listed.code == 0 and listed.err == "" and expected in hinted_commands(listed.out), listed
+    assert empty_problems(read.err, str(root), FROM_FLAG, "check") == [] and empty_runs_problems(listed.out, str(root)) == []
 
 
 # ---------- FR8 to FR13: E3, the missing flag ----------
@@ -798,17 +836,20 @@ def test_fr8_report_without_x_lists_the_axes_and_events_instead_of_failing(tmp_p
     r = run_cli(go1_argv(label))
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
     assert r.code == 1 and r.out == "", r
-    assert e3_problems(r.err, E3_GO1[label][1]) == [], r.err
+    # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
+    assert e3_problems(r.err, E3_GO1[label][1], GO1_NAMES) == [], r.err
     assert "usage:" not in r.err
     assert listing(tmp_path) == [], "the default --out directory was created"
 
 
 def test_fr8_report_without_x_lists_on_the_mock_pair_too(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_pair: MockPair) -> None:
+    names = run_names(mock_pair.root)
     monkeypatch.chdir(tmp_path)
     argv, expected = mock_e3(mock_pair)
     r = run_cli(argv)
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
-    assert r.code == 1 and r.out == "" and e3_problems(r.err, expected) == [], r
+    # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
+    assert r.code == 1 and r.out == "" and e3_problems(r.err, expected, names) == [], r
     assert "usage:" not in r.err
     assert listing(tmp_path) == []
 
@@ -820,7 +861,8 @@ def test_fr9_serve_without_x_or_event_lists_instead_of_failing(monkeypatch: pyte
     r = run_cli(go1_argv(label, *(["--json"] if as_json else [])))
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
     assert r.code == 1 and r.out == "", r
-    assert e3_problems(r.err, E3_GO1[label][1]) == [], r.err
+    # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
+    assert e3_problems(r.err, E3_GO1[label][1], GO1_NAMES) == [], r.err
     assert calls == []
 
 
@@ -829,7 +871,8 @@ def test_fr10_check_and_inspect_without_event_list_and_never_suggest(label: str)
     r = run_cli(go1_argv(label))
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
     assert r.code == 1 and r.out == "", r
-    assert e3_problems(r.err, E3_GO1[label][1]) == [], r.err
+    # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
+    assert e3_problems(r.err, E3_GO1[label][1], GO1_NAMES) == [], r.err
     assert "Inferred events" not in r.err and "Inferred events" not in r.out
 
 
@@ -848,7 +891,8 @@ def test_fr10_inspect_adds_timeout_only_when_rows_timed_out_and_it_is_not_alread
     r = run_cli(["--store", str(tmp_path), "inspect", "t1"])
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
     assert r.code == 1 and r.out == "", r
-    assert e3_problems(r.err, f"error: inspect requires --event NAME, which was not given. t1 carries:\n  events: {events}\n") == [], r.err
+    # PF2 (spec section 4.3): the run is named by name in the error line and the next line.
+    assert e3_problems(r.err, f"error: inspect requires --event NAME, which was not given. t1 carries:\n  events: {events}\n", run_names(tmp_path)) == [], r.err
 
 
 # FR11: the listed vocabulary is the stored vocabulary.
@@ -988,22 +1032,25 @@ def test_fr11_the_axes_are_the_config_keys_and_never_the_manifests_axis_types(tm
         "error: report requires --x AXIS, which was not given. dis-a and dis-b carry:\n"
         "  axes: real_a, real_b\n"
         "  events: fell, ok\n"
-    )) == [], r.err
+    ), run_names(tmp_path)) == [], r.err  # PF2 (spec section 4.3): the runs are named by name.
 
 
-def e3_cases(pair: MockPair) -> list[tuple[str, list[str], str]]:
-    cases = [(label, ["--store", str(GO1_ROOT), *argv], err) for label, (argv, err) in E3_GO1.items()]
+def e3_cases(pair: MockPair) -> list[tuple[str, list[str], str, Mapping[str, str]]]:
+    # PF2 (spec section 4.3): each case carries the names of its runs, read before any tripwire is armed.
+    cases = [(label, ["--store", str(GO1_ROOT), *argv], err, GO1_NAMES) for label, (argv, err) in E3_GO1.items()]
     argv, err = mock_e3(pair)
-    return [*cases, ("mock report pair, no --x", argv, err)]
+    return [*cases, ("mock report pair, no --x", argv, err, run_names(pair.root))]
 
 
 def test_fr12_the_listing_does_no_work(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mock_pair: MockPair) -> None:
     monkeypatch.chdir(tmp_path)
+    cases = e3_cases(mock_pair)
     calls = arm_tripwires(monkeypatch, *WORK_NAMES)
-    for label, argv, expected in e3_cases(mock_pair):
+    for label, argv, expected, names in cases:
         r = run_cli(argv)
         # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
-        assert r.code == 1 and r.out == "" and e3_problems(r.err, expected) == [], (label, r)
+        # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
+        assert r.code == 1 and r.out == "" and e3_problems(r.err, expected, names) == [], (label, r)
     assert calls == [], calls
     assert listing(tmp_path) == []
 
@@ -1015,7 +1062,8 @@ def test_fr12_a_non_empty_out_does_not_pre_empt_the_listing(tmp_path: Path, labe
     (out / "keep.txt").write_text("already here\n")
     r = run_cli(go1_argv(label, "--out", str(out)))
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
-    assert r.code == 1 and r.out == "" and e3_problems(r.err, E3_GO1[label][1]) == [], r
+    # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
+    assert r.code == 1 and r.out == "" and e3_problems(r.err, E3_GO1[label][1], GO1_NAMES) == [], r
     # The problem is stated on the error line; a next line is a command and may repeat the given flags.
     assert "--out" not in r.err.partition("\n")[0]
     assert listing(out) == ["keep.txt"]
@@ -1050,7 +1098,15 @@ def test_fr12_a_wrong_arity_outranks_a_missing_flag(verb: str) -> None:
     message, argv = ARITY[verb]
     r = run_cli(["--store", str(GO1_ROOT), *argv])
     # A wrong command line still exits 2; its error line is followed only by next lines (spec section 5.4).
-    assert r.code == 2 and r.out == "" and r.err.partition("\n")[0] == message.rstrip("\n") and refusal_shape(r.err) == [], r
+    assert r.code == 2 and r.out == "" and refusal_shape(r.err) == [], r
+    # PF2 (spec section 4.3): no runs is now allowed too, so the arity sentence changes; its facts are
+    # pinned instead of its old words: one error line, naming the verb and the count given, and not the
+    # missing-flag listing it outranks.
+    first = r.err.partition("\n")[0]
+    count = re.search(r"got \d+", message)
+    assert count and [line for line in r.err.splitlines() if line.startswith("error: ")] == [first], r.err
+    assert first.startswith(f"error: {message.split()[1]} ") and count.group(0) in first, first
+    assert "requires" not in r.err and "axes:" not in r.err and "events:" not in r.err, r.err
 
 
 @pytest.mark.parametrize("verb", ["report", "serve", "check", "inspect"])
@@ -1204,6 +1260,15 @@ def first_line(r: Result) -> str:
     return r.out.splitlines()[0]
 
 
+def after_verdict(r: Result) -> list[str]:
+    """PF2 (spec section 4.3): ``diff`` and ``check`` open with a verdict block, and ``report`` with its
+    ``ok  wrote`` line and one ``  wrote`` line per file, each ended by one blank line; what the verb
+    printed before follows it unchanged."""
+    lines = r.out.splitlines()
+    assert "" in lines, r.out
+    return lines[lines.index("") + 1 :]
+
+
 @pytest.mark.parametrize("which", ["go1", "a14"])
 def test_fr14_to_markdown_opens_with_the_plain_line_and_it_carries_no_parenthesis(which: str, go1_inferred: MultiDiffResult) -> None:
     multi = go1_inferred if which == "go1" else a14_multi(None)
@@ -1253,11 +1318,13 @@ def marked_lines(text: str) -> list[str]:
 
 
 def test_fr14_the_plain_line_is_line_one_of_diff_stdout(go1_ran: dict[str, Ran]) -> None:
-    assert first_line(go1_ran["diff inferred"].result) == GO1_LINE
+    # PF2 (spec section 4.3): line one of the report diff prints, after its verdict block.
+    assert after_verdict(go1_ran["diff inferred"].result)[0] == GO1_LINE
 
 
 def test_fr14_the_plain_line_is_line_one_of_report_stdout(go1_ran: dict[str, Ran]) -> None:
-    assert first_line(go1_ran["report inferred"].result) == GO1_LINE
+    # PF2 (spec section 4.3): line one of what report printed before, after its wrote block.
+    assert after_verdict(go1_ran["report inferred"].result)[0] == GO1_LINE
 
 
 def test_fr14_the_plain_line_is_in_report_md(go1_ran: dict[str, Ran]) -> None:
@@ -1276,7 +1343,8 @@ def test_fr14_the_plain_line_is_a_paragraph_of_receipt_html(go1_ran: dict[str, R
 
 def test_fr15_the_single_run_report_says_the_same_thing_as_the_pair(go1_ran: dict[str, Ran]) -> None:
     single, pair = go1_ran["single inferred"].result, go1_ran["report inferred"].result
-    assert first_line(single) == GO1_LINE == first_line(pair)
+    # PF2 (spec section 4.3): each report's line one is read after its wrote block.
+    assert after_verdict(single)[0] == GO1_LINE == after_verdict(pair)[0]
 
 
 def texts_of(ran: Ran) -> dict[str, list[str]]:
@@ -1298,7 +1366,9 @@ def test_fr16_given_events_print_no_inference_line_and_the_marker_matches_where_
             assert [line for line in lines if line.startswith(MARKER)] == [], name
     # The positive control, on real output: the same pair without --event, same verb (check never infers).
     control = go1_ran["diff inferred" if verb == "check" else f"{verb} inferred"]
-    assert first_line(control.result).startswith(MARKER)
+    # PF2 (spec section 4.3): the control's line one is read after diff's verdict block or report's wrote
+    # block.
+    assert after_verdict(control.result)[0].startswith(MARKER)
     if verb == "report":
         for name, lines in texts_of(control).items():
             found = [line for line in lines if line.startswith(MARKER)]
@@ -1508,12 +1578,15 @@ def test_fr20_the_single_run_line_is_the_plain_template_and_precedes_the_summary
         argv = single_run_argv(root, run, tmp_path / "out", x="tool_fail_rate", y="task_id")
     frame = Store(root).read(run, meta=False)
     events, non_event = infer_events(frame, frame.iloc[0:0])
+    name = run_names(root)[run]
     r = run_cli(argv)
     assert r.code == 0, r
-    lines = r.out.splitlines()
+    # PF2 (spec section 4.3): the two lines are read after report's wrote block, and the summary line
+    # names the run by its name in double quotes, not by its id.
+    lines = after_verdict(r)
     assert lines[0] == inference_line(events, non_event), lines[:2]
     assert "(" not in lines[0] and ")" not in lines[0], lines[0]
-    assert lines[1].startswith(f"{run}: survival report over {', '.join(events)} at horizon "), lines[:2]
+    assert lines[1].startswith(f'"{name}": survival report over {", ".join(events)} at horizon '), lines[:2]
     assert lines[0] == (GO1_LINE if which == "go1" else A14_LINE)
 
 
@@ -1526,7 +1599,8 @@ def test_fr20_a_single_run_with_given_events_prints_no_inference_line(tmp_path: 
         return single_run_argv(mock_pair.root, mock_pair.a, tmp_path / f"out-{len(extra)}", *extra, x="tool_fail_rate", y="task_id")
 
     control = run_cli(argv())
-    assert control.code == 0 and control.out.splitlines()[0].startswith(MARKER), control.out
+    # PF2 (spec section 4.3): the control's line one is read after report's wrote block.
+    assert control.code == 0 and after_verdict(control)[0].startswith(MARKER), control.out
     explicit = run_cli(argv(*given))
     assert explicit.code == 0, explicit
     assert marked_lines(explicit.out) == [], explicit.out

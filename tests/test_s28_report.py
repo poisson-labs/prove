@@ -673,6 +673,23 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def run_names(root: Path) -> dict[str, str]:
+    """PF2 (spec section 4.3/5.3): every run has a name; ``runs --json`` maps each id to it."""
+    code, out, err = run_cli(["--store", str(root), "runs", "--json"])
+    assert code == 0, out + err
+    return {entry["run_id"]: entry["run_name"] for entry in json.loads(out)["runs"]}
+
+
+def titled_by_ids(text: str, root: Path, a: str, b: str) -> str:
+    """PF2 (spec section 4.3/5.3): the default title names the runs, ``<name A> vs <name B>: …``,
+    where it named them by id. Assert the named form is there and the id form is not, then put
+    the ids back so the comparison with the library's rendering guards every other byte."""
+    names = run_names(root)
+    named, by_id = f"{names[a]} vs {names[b]}: ", f"{a} vs {b}: "
+    assert named in text and by_id not in text, (named, text[:400])
+    return text.replace(named, by_id)
+
+
 _RENDERED: dict[tuple[str, ...], Rendered] = {}
 
 
@@ -1499,7 +1516,7 @@ def test_r2_the_clis_report_and_receipt_with_the_tree_digest_to_the_values_minte
 # ---------- R3: the addition is additive ----------
 
 
-def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_every_pair(every_pair: Any, synth_root: Path) -> None:
+def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_every_pair(every_pair: Any, synth_root: Path, quickstart: tuple[Path, str, str]) -> None:
     """On every fixture, the markdown with the lines from ``## Omnibus`` up to the line before the
     figure removed equals the tree-less markdown byte for byte; the receipt with the lines from
     ``<h2>Omnibus</h2>`` up to the figure ``div`` removed equals the tree-less receipt; the four
@@ -1511,8 +1528,12 @@ def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_ev
         # (spec section 5.4), so the CLI's files equal the tree-less render line for line except
         # where a line carries a number or the points unit; byte for byte, the addition is
         # additive in the library, where the same pair is rendered with and without its tree.
-        assert_same_but_numbers(excised(r.md, md_bounds(r.md)), tree_less.to_markdown(), name)
-        assert_same_but_numbers(excised(r.html, html_bounds(r.html)), tree_less.to_html(), name)
+        # PF2 (spec section 4.3/5.3): the command's default title names the runs; with the ids
+        # put back in the title, the files compare with the library's tree-less render as before.
+        root, a, b = quickstart if name.startswith("quickstart") else (_TREE_LESS_ARGS[name][0] or synth_root, *_TREE_LESS_ARGS[name][1:3])
+        md, html = titled_by_ids(r.md, root, a, b), titled_by_ids(r.html, root, a, b)
+        assert_same_but_numbers(excised(md, md_bounds(md)), tree_less.to_markdown(), name)
+        assert_same_but_numbers(excised(html, html_bounds(html)), tree_less.to_html(), name)
         with_tree = _with_tree_for(name, synth_root)
         assert excised(with_tree.to_markdown(), md_bounds(with_tree.to_markdown())) == tree_less.to_markdown(), name
         assert excised(with_tree.to_html(), html_bounds(with_tree.to_html())) == tree_less.to_html(), name
@@ -2216,7 +2237,12 @@ def test_r14_the_single_run_report_writes_none_of_the_four_headings_and_go1s_std
     assert not any(h in single.md.splitlines() for h in MD_HEADINGS) and not any(h in single.html.splitlines() for h in HTML_HEADINGS)
     r = ok(outs, GO1_ROOT, *E14_ARGV[1:])
     multi, _ = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",))
-    expected = multi.headline() + "\n" + "".join(f"{r.out_dir / name}\n" for name in ("report.md", "heatmap.svg", "receipt.html"))
+    # PF2 (spec section 4.3/5.3): report's stdout opens with "ok  wrote <folder> (3 files)" and one
+    # "  wrote  <path>" line per file, in the order the paths were printed before; after one blank
+    # line comes exactly what it printed before the paths: the headline (Go1's names no run).
+    names = ("report.md", "heatmap.svg", "receipt.html")
+    wrote = f"ok  wrote {r.out_dir} ({len(names)} files)\n" + "".join(f"  wrote  {r.out_dir / name}\n" for name in names)
+    expected = wrote + "\n" + multi.headline() + "\n"
     assert r.out == expected, (r.out, expected)
 
 
@@ -2474,6 +2500,15 @@ def test_r19_diff_py_whole_check_serve_the_column_digests_the_fixtures_and_the_s
     structure = json.loads(out)
     # serve --json leads with the verdict and its sentence; the page structure follows unchanged.
     structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence")}
+    # PF2 (spec section 4.3/5.3): each arm carries run_name beside its run_id, and the default
+    # title names the runs. Assert both, take the names out and put the ids back in the title;
+    # the frozen digest then guards every other byte of the structure.
+    names = run_names(GO1_ROOT)
+    for arm, run_id in (("a", GO1_A), ("b", GO1_B)):
+        assert structure["pair"][arm]["run_id"] == run_id and structure["pair"][arm]["run_name"] == names[run_id]
+    arms = {arm: {k: v for k, v in structure["pair"][arm].items() if k != "run_name"} for arm in ("a", "b")}
+    structure = json.loads(titled_by_ids(json.dumps({**structure, "pair": {**structure["pair"], **arms}}), GO1_ROOT, GO1_A, GO1_B))
+    assert "run_name" not in json.dumps(structure)
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
     normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256

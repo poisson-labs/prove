@@ -1871,7 +1871,12 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     assert code == 0, err
     remote = new_run(store_root, {local})
     code, out, err = run_cli(["--store", str(store_root), "runs"])
-    assert code == 0 and any(line.split()[:3] == [remote, "complete", "burla"] for line in out.splitlines()), out
+    # PF2 (spec section 4.3): runs rows now lead with # and the name, so the row is found by
+    # the id, and the status and backend are the two cells after it.
+    assert code == 0 and any(
+        line.split()[line.split().index(remote):][:3] == [remote, "complete", "burla"]
+        for line in out.splitlines() if remote in line.split()
+    ), out
     assert run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell"])[0] == 0
     assert run_cli(["--store", str(store_root), "check", local, remote, "--event", "fell", "--fail-on", "any"])[0] == 0
     assert run_cli(["--store", str(store_root), "report", local, remote, "--event", "fell", "--x", "cell",

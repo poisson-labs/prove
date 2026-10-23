@@ -1160,19 +1160,27 @@ def test_pf0_9_sweep_with_no_store_anywhere_writes_into_prove_runs(tmp_path: Pat
 #: target carries capitals, a space and a slash for the names PF2 computes from it.
 SLUG_RUNS = ("Base Line A", "Cand Two B")
 SLUG_TARGET = "Team/Agent X"
+# PF2 (spec section 4.3/5.3): default report folders are named by run names, slugged, so the
+# slug check on capitals and spaces uses names given at sweep time that carry them (and differ
+# from the ids, so a folder named by id cannot pass).
+SLUG_NAMES = ("Before Fix A", "After Fix B")
 
 
-def write_mock_pair(root: Path, run_ids_: tuple[str, str], target_id: str) -> Path:
+def write_mock_pair(
+    root: Path, run_ids_: tuple[str, str], target_id: str,
+    names: tuple[str, str] | tuple[None, None] = (None, None),
+) -> Path:
     """The mock agent and its patched form, stored under the two given run ids on shared seeds."""
     from poisson_prove.examples.mock_agent import rollout, rollout_patched
     from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
     store = Store(root)
     configs = [{"task_id": t, "tool_fail_rate": r} for t in ("search", "refund") for r in (0.3, 0.55)]
-    for run_id, agent in zip(run_ids_, (rollout, rollout_patched), strict=True):
+    for run_id, agent, name in zip(run_ids_, (rollout, rollout_patched), names, strict=True):
         store.create_run(RunManifest(
             run_id=run_id, target_id=target_id, t_unit="tool_calls", run_salt="pf0-slug-salt",
             axis_types={"task_id": "categorical", "tool_fail_rate": "continuous"}, backend="local", environment={},
+            name=name,  # PF2 (spec section 4.3): the name given at sweep time
         ))
         store.append(run_id, [
             EpisodeRecord.from_episode(agent(cfg, 1000 * i + k), run_id=run_id, config=cfg, seed=1000 * i + k, replicate_index=k, wall_time=0.01)
@@ -1184,25 +1192,27 @@ def write_mock_pair(root: Path, run_ids_: tuple[str, str], target_id: str) -> Pa
 
 
 def test_pf0_10_a_pair_reports_into_prove_report_a_vs_b_slugged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = write_mock_pair(tmp_path / "store", SLUG_RUNS, SLUG_TARGET)
+    store = write_mock_pair(tmp_path / "store", SLUG_RUNS, SLUG_TARGET, SLUG_NAMES)
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     r = run_cli(["--store", str(store), "report", *SLUG_RUNS, "--event", "violated", "--x", "task_id", "--y", "tool_fail_rate"])
     assert r.code == 0, r
-    assert [p.name for p in cwd.iterdir()] == ["prove-report-base-line-a-vs-cand-two-b"]
-    assert (cwd / "prove-report-base-line-a-vs-cand-two-b" / "report.md").is_file()
+    # PF2 (spec section 4.3/5.3): the folder is named by the run names, not the ids, slugged.
+    assert [p.name for p in cwd.iterdir()] == ["prove-report-before-fix-a-vs-after-fix-b"]
+    assert (cwd / "prove-report-before-fix-a-vs-after-fix-b" / "report.md").is_file()
 
 
 def test_pf0_10_a_single_run_reports_into_prove_report_run_slugged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = write_mock_pair(tmp_path / "store", SLUG_RUNS, SLUG_TARGET)
+    store = write_mock_pair(tmp_path / "store", SLUG_RUNS, SLUG_TARGET, SLUG_NAMES)
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     r = run_cli(["--store", str(store), "report", SLUG_RUNS[0], "--event", "violated", "--x", "task_id", "--y", "tool_fail_rate"])
     assert r.code == 0, r
-    assert [p.name for p in cwd.iterdir()] == ["prove-report-base-line-a"]
-    assert (cwd / "prove-report-base-line-a" / "report.md").is_file()
+    # PF2 (spec section 4.3/5.3): the folder is named by the run name, not the id, slugged.
+    assert [p.name for p in cwd.iterdir()] == ["prove-report-before-fix-a"]
+    assert (cwd / "prove-report-before-fix-a" / "report.md").is_file()
 
 
 PAIRED_DECLARATION = """\

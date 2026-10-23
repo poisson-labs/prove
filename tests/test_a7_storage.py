@@ -199,6 +199,10 @@ REPO = PACKAGE.parents[1]
 SRC = REPO / "src" / "poisson_prove"
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
+# PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
+# created_at, a letter); serve names the Go1 runs by these.
+GO1_NAME_A = "go1-g2-converged@20260813T155006Z 2026-09-03 a"
+GO1_NAME_B = "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a"
 GO1_ROWS = 12_800
 GO1_PART = GO1_ROOT / GO1_A / "episodes" / "part-00000.parquet"
 
@@ -614,6 +618,31 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
+def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
+    """PF2 (spec section 4.3): ``serve --json`` on Go1 moves in two places only: ``run_name`` beside
+    each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
+    the figure's title line). First assert each is there as PF2 writes it and nowhere else the
+    digest reads, then put the structure back as it was before names (no ``run_name``, the title by
+    id) so the frozen digest still guards everything else."""
+    arms = {}
+    for role, run_id, name in (("a", GO1_A, GO1_NAME_A), ("b", GO1_B, GO1_NAME_B)):
+        arm = structure["pair"][role]
+        keys = list(arm)
+        assert (arm["run_id"], arm.get("run_name")) == (run_id, name), arm
+        assert keys.index("run_name") == keys.index("run_id") + 1, keys
+        arms[role] = {k: v for k, v in arm.items() if k != "run_name"}
+    named, by_id = f"{GO1_NAME_A} vs {GO1_NAME_B}: {events}", f"{GO1_A} vs {GO1_B}: {events}"
+    assert structure["view"]["title"] == named, structure["view"]["title"]
+    line = f'font-size="13">{named}</text>'
+    assert structure["heatmap_svg"].count(line) == 1, structure["heatmap_svg"][:600]
+    return {
+        **structure,
+        "pair": {**structure["pair"], **arms},
+        "view": {**structure["view"], "title": by_id},
+        "heatmap_svg": structure["heatmap_svg"].replace(line, f'font-size="13">{by_id}</text>'),
+    }
+
+
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
     """PF0 (Q4, Q10): the page structure's schema string and its version key, in both arms and in the
     provenance block. First assert they are there as the rename writes them, then put them back as
@@ -673,6 +702,10 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
         # serve --json now leads with verdict and sentence before the page structure (spec section 5.6).
         structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence")}
         structure["pair"]["store_root"] = STORE_PLACEHOLDER
+        if root == GO1_ROOT:
+            # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are
+            # asserted, then put back as before names, so the kept digest still guards the rest.
+            structure = structure_as_ids_named_it(structure, event)
         as_0_0_1 = json.dumps(structure_as_0_0_1_wrote_it(structure), sort_keys=True)
         if root == GO1_ROOT:
             assert GO1_AGREEMENT[1] in as_0_0_1 and GO1_AGREEMENT_0_0_1[1] not in as_0_0_1
@@ -852,12 +885,18 @@ def assert_go1_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
         assert sum(c["verdict"] == verdict for c in cells.values()) == fell[key], verdict
 
     # runs: one line per run with its status, backend, target, unit and row count.
+    # PF2 (spec section 5.3): the table leads with the number and the name, so each run's row is
+    # the one carrying its id, and it carries the name; the unit is no column of the table, so it
+    # is read from runs --json, whose entries carry it beside the id.
     runs_lines = results["runs"].out.splitlines()
+    names = {GO1_A: GO1_NAME_A, GO1_B: GO1_NAME_B}
+    units = {entry["run_id"]: entry["t_unit"] for entry in json.loads(run_cli(["--store", str(GO1_ROOT), "runs", "--json"]).out)["runs"]}
     for run_id in (GO1_A, GO1_B):
         m = store.manifest(run_id)
-        (line,) = [row for row in runs_lines if row.split()[:1] == [run_id]]
+        (line,) = [row for row in runs_lines if run_id in row.split()]
         assert store.count(run_id) == GO1_ROWS
-        for value in (m.status, m.backend, m.target_id, m.t_unit, f"{GO1_ROWS:,}"):
+        assert names[run_id] in line and units[run_id] == m.t_unit, (line, units)
+        for value in (m.status, m.backend, m.target_id, f"{GO1_ROWS:,}"):
             assert value in line.split(), (value, line)
 
     # diff: the headline, the method and event lines, and every cell row as the JSON has it.
@@ -1600,7 +1639,10 @@ def test_p7_10_every_verb_exits_0_on_go1_and_the_mock_pair_and_go1s_bytes_are_un
         assert r.code == 0 and err_lines(r) == [], (verb, r.code, r.err)
     assert all(len(d) == HEX64_LEN for d in mock_digests.values()), mock_digests
     r = mock_results["runs"]
-    assert [line.split()[0] for line in r.out.splitlines()[2:]] == sorted((mock_pair.a, mock_pair.b))
+    # PF2 (spec section 5.3): the verdict line, a blank line and the header come first, and the rows
+    # lead with the number and the name, newest first; each row is read by the id it carries.
+    rows = r.out.splitlines()[3:]
+    assert [[t for t in line.split() if t in (mock_pair.a, mock_pair.b)] for line in rows] == [[mock_pair.b], [mock_pair.a]], r.out
     r = mock_results["inspect"]
     assert SNIPPET_MARKER in r.out and "from poisson_prove.examples.mock_agent import rollout" in r.out
     rows = store.read(mock_pair.a, trace="full")
