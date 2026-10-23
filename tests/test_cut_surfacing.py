@@ -96,13 +96,13 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-import proofload.cli as cli
-from proofload.diff import DiffResult, MultiDiffResult, multi_diff
-from proofload.episode import Episode
-from proofload.report import ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.trace import Span, Trace, truncate_observations
-from proofload.viewer import SCHEMA, ViewerError, render_html
+import poisson_prove.cli as cli
+from poisson_prove.diff import DiffResult, MultiDiffResult, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.trace import Span, Trace, truncate_observations
+from poisson_prove.viewer import SCHEMA, ViewerError, render_html
 
 #: CD (D8) renames ``OBSERVATION_LIMIT_BYTES`` to ``OBSERVATION_ROUTING_BYTES`` and takes away its
 #: second job: it is the size at which ``split`` moves an unnamed attribute to ``trace_obs``, and
@@ -115,7 +115,7 @@ GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
-NEW_SCHEMA = "proofload.viewpair/6"
+NEW_SCHEMA = "poisson-prove.viewpair/7"
 EPOCH = 1_756_900_000_000_000_000
 TASKS = ("t0", "t1", "t2", "t3")
 REPLICATES = 8
@@ -131,7 +131,7 @@ GO1_KNOBS = ["--permutations", "300", "--seed", "0"]
 PAIR_KEYS_CLI = (
     "events", "inferred", "non_event", "n_tests", "method", "seed_identity_match", "unpaired_analysis",
     "q", "t_unit", "horizon", "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon",
-    "n_absent", "proofload_version", "run_id_a", "run_id_b", "run_salt",
+    "n_absent", "poisson_prove_version", "run_id_a", "run_id_b", "run_salt",
     "observation_cap_a", "observation_cap_b", "trace_spans_a", "trace_spans_b",
     "observation_cut_spans_a", "observation_cut_spans_b",
 )
@@ -705,8 +705,8 @@ def test_z13_there_is_no_default_cap_and_the_routing_constant_is_not_one() -> No
     the day ADR-096 condemned the default: correct for the surfacing packet, whose brief fenced the
     cap off, and wrong the moment the default went. Nothing about the surfacing packet's own
     behaviour moves -- the value 8192 is still there, under the name of the job it still does."""
-    import proofload.trace as trace_module
-    from proofload.capture import CaptureSpec
+    import poisson_prove.trace as trace_module
+    from poisson_prove.capture import CaptureSpec
 
     assert trace_module.OBSERVATION_ROUTING_BYTES == 8192
     for name in ("OBSERVATION_LIMIT_BYTES", "OBSERVATION_HEAD_BYTES", "OBSERVATION_TAIL_BYTES"):

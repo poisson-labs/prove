@@ -125,15 +125,15 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload
-from proofload import cli
-from proofload import diff as diff_mod
-from proofload.diff import multi_diff
-from proofload.episode import Episode
-from proofload.report import ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove import diff as diff_mod
+from poisson_prove.diff import multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -260,7 +260,7 @@ SALT, OTHER_SALT = "s25-salt", "s25-other-salt"
 
 def tree() -> Any:
     """``proofload.tree``, imported at call time (see the module docstring)."""
-    return importlib.import_module("proofload.tree")
+    return importlib.import_module("poisson_prove.tree")
 
 
 def go1_frames() -> tuple[pd.DataFrame, pd.DataFrame, RunManifest, RunManifest]:
@@ -650,6 +650,23 @@ PROPERTY_SETTINGS = settings(deadline=None, max_examples=40, suppress_health_che
 # ---------- O1: the unweighted forms ----------
 
 
+def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
+    """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
+    arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
+    were written by 0.0.1. First assert the new key is there and the old one is not, then put both
+    back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
+    else."""
+    for arm in ("a", "b"):
+        assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
+    assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
+    arms = {
+        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
+        for arm in ("a", "b")
+    }
+    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
+    return {**structure, "pair": {**structure["pair"], **arms}, "diff": {**diff, "proofload_version": "0.0.1"}}
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_o1_location_is_the_mean_and_dispersion_the_rms_of_units_delta_on_go1(
     go1_roots: dict[str, tuple[Any, Any]], method: str
@@ -881,9 +898,9 @@ def test_o5_the_same_inputs_give_identical_json_bytes_across_two_processes(go1: 
     script = "\n".join(
         [
             "import hashlib, json, sys, warnings",
-            "from proofload.store import Store",
-            "from proofload.diff import multi_diff, UnpairedAnalysis",
-            "from proofload.tree import omnibus",
+            "from poisson_prove.store import Store",
+            "from poisson_prove.diff import multi_diff, UnpairedAnalysis",
+            "from poisson_prove.tree import omnibus",
             "warnings.simplefilter('ignore', UnpairedAnalysis)",
             "s = Store(sys.argv[1]); a = s.read('go1-v0', meta=False); b = s.read('go1-v1', meta=False)",
             "m = multi_diff(a, b, events=['fell'], method='fisher_bh', manifest_a=s.manifest('go1-v0'), manifest_b=s.manifest('go1-v1'))",
@@ -1380,6 +1397,20 @@ def test_o14_the_s24_column_digests_and_the_coverage_digest_are_unchanged(go1: A
     assert sha256_of_text(pair.coverage.to_json(orient="records")) == COVERAGE_SHA256
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
+
+
 def e14_builder_digests(go1: Any) -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
@@ -1394,8 +1425,8 @@ def e14_builder_digests(go1: Any) -> dict[str, str]:
         manifests=(ma, mb),
     )
     return {
-        "report.md": sha256_of_text(report.to_markdown()),
-        "receipt.html": sha256_of_text(receipt.to_html()),
+        "report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())),
+        "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html())),
     }
 
 
@@ -1437,7 +1468,7 @@ def test_o23_serve_json_on_go1_prints_the_same_structure() -> None:
     structure = json.loads(out)
     assert structure["pair"]["store_root"] == str(GO1_ROOT)
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
-    normalised = json.dumps({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}, sort_keys=True)
+    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
 
 

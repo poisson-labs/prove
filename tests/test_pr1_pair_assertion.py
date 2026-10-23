@@ -145,13 +145,13 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import proofload
-from proofload.episode import Episode
-from proofload.executor import derive_seed, plan
-from proofload.executor_modal import Job, ModalOptions, Result, run_with_mapper, worker_batch
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.trace import Span, Trace
+import poisson_prove
+from poisson_prove.episode import Episode
+from poisson_prove.executor import derive_seed, plan
+from poisson_prove.executor_modal import Job, ModalOptions, Result, run_with_mapper, worker_batch
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.trace import Span, Trace
 
 MODULE = __name__
 HORIZON = 10.0
@@ -204,7 +204,7 @@ MISSING: Any = object()
 
 def P() -> Any:
     """The module under test, imported where it is needed so collection never fails."""
-    return importlib.import_module("proofload.paired")
+    return importlib.import_module("poisson_prove.paired")
 
 
 # ---------- helpers: the declaration ----------
@@ -371,14 +371,14 @@ def make_arm(
     version: str | None = None,
 ) -> None:
     environment: dict[str, Any] = {
-        "python": PYTHON, "platform": "oracle", "proofload_version": proofload.__version__,
+        "python": PYTHON, "platform": "oracle", "poisson_prove_version": poisson_prove.__version__,
         "capture": {"content": True, "max_observation_bytes": "none", "max_spans": 200},
     }
     environment.update(env or {})
     extra: dict[str, Any] = {}
     if version is not None:
-        extra["proofload_version"] = version
-        environment["proofload_version"] = version
+        extra["poisson_prove_version"] = version
+        environment["poisson_prove_version"] = version
     store.create_run(RunManifest(
         run_id=run_id, target_id=TARGET, t_unit="steps", run_salt=salt,
         axis_types={"item": "categorical", "cut": "categorical"}, backend="local",
@@ -1203,7 +1203,7 @@ def test_pr17_the_environment_of_both_arms_is_recorded(tmp_path: Path) -> None:
     assertion = P().assert_pairs(store, decl())
     arms = assertion.environment["sweeps"]["S1"]
     for arm in ("a", "b"):
-        assert arms[arm]["proofload_version"] == proofload.__version__
+        assert arms[arm]["poisson_prove_version"] == poisson_prove.__version__
         assert arms[arm]["run_salt"] == SALT
         assert arms[arm]["python"] == PYTHON
         assert arms[arm]["concurrency"] == 4
@@ -1219,7 +1219,7 @@ def test_pr17_the_two_facts_proofload_does_not_record_are_printed_as_gaps(tmp_pa
 @pytest.mark.parametrize(
     "b_kwargs",
     [
-        pytest.param({"version": "0.0.0+other"}, id="proofload_version"),
+        pytest.param({"version": "0.0.0+other"}, id="poisson_prove_version"),
         pytest.param({"salt": "4c71e89b2a0f3d65"}, id="run_salt"),
         pytest.param({"env": {"python": "3.12.4 (main)"}}, id="python"),
         pytest.param({"env": {"concurrency": 8}}, id="concurrency"),

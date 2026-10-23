@@ -38,7 +38,7 @@ def span(span_id: str, name: str, **attrs: Any) -> dict[str, Any]:
 
 
 def test_t35_fetch_response_and_execute_task_are_mapped() -> None:
-    from proofload.trace import OTEL_KIND_MAP
+    from poisson_prove.trace import OTEL_KIND_MAP
 
     assert OTEL_KIND_MAP["fetch_response"] == "llm"
     assert OTEL_KIND_MAP["execute_task"] == "agent"
@@ -48,14 +48,14 @@ def test_t35_fetch_response_and_execute_task_are_mapped() -> None:
     ("operation", "kind"), [("fetch_response", "llm"), ("execute_task", "agent")]
 )
 def test_t35_they_convert_and_are_not_treated_as_unrecognized(operation: str, kind: str) -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel([span("0000000000000001", operation, **{"gen_ai.operation.name": operation})])
     assert tr.dropped == 0 and len(tr.spans) == 1
     got = tr.spans[0]
     assert got.kind == kind, (operation, got.kind)
     # A recognized operation is never stashed as an original.
-    assert "proofload.original_operation" not in got.attrs
+    assert "poisson_prove.original_operation" not in got.attrs
     assert "gen_ai.operation.name" not in got.attrs
 
 
@@ -75,7 +75,7 @@ TRACELOOP = {"tool": "tool", "agent": "agent", "workflow": "agent", "task": "age
 
 @pytest.mark.parametrize(("value", "kind"), sorted(OPENINFERENCE.items()))
 def test_t36_openinference_span_kind_types_the_span(value: str, kind: str) -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel([span("0000000000000002", "some span", **{"openinference.span.kind": value})])
     assert tr.dropped == 0
@@ -84,7 +84,7 @@ def test_t36_openinference_span_kind_types_the_span(value: str, kind: str) -> No
 
 @pytest.mark.parametrize(("value", "kind"), sorted(TRACELOOP.items()))
 def test_t36_traceloop_span_kind_types_the_span(value: str, kind: str) -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel([span("0000000000000003", "some span", **{"traceloop.span.kind": value})])
     assert tr.dropped == 0
@@ -92,7 +92,7 @@ def test_t36_traceloop_span_kind_types_the_span(value: str, kind: str) -> None:
 
 
 def test_t36_matching_is_case_insensitive_both_ways() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     lowered = from_otel([span("0000000000000004", "s", **{"openinference.span.kind": "tool"})])
     uppered = from_otel([span("0000000000000005", "s", **{"traceloop.span.kind": "TOOL"})])
@@ -101,7 +101,7 @@ def test_t36_matching_is_case_insensitive_both_ways() -> None:
 
 
 def test_t36_an_unrecognized_vendor_value_falls_through_the_rest_of_the_ladder() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     # GUARDRAIL is a real openinference value with no Proofload kind: it must not invent one.
     plain = from_otel([span("0000000000000006", "s", **{"openinference.span.kind": "GUARDRAIL"})])
@@ -123,7 +123,7 @@ def test_t36_an_unrecognized_vendor_value_falls_through_the_rest_of_the_ladder()
 
 
 def test_t37_gen_ai_operation_name_wins_over_a_conflicting_vendor_kind() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel(
         [
@@ -145,7 +145,7 @@ def test_t37_vendor_keys_are_lifted_into_operation_and_do_not_survive_in_attrs()
     """A8a inverts the shipped rule (spec A8a section 3.5): ``openinference.span.kind`` and
     ``traceloop.span.kind`` are lifted, the value lands in ``operation`` stripped and lowercased,
     the kind ladder still reads it, and the key never survives in ``attrs`` (T20)."""
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     payload = [
         span("000000000000000a", "s", **{"openinference.span.kind": "TOOL", "tool.name": "search"}),

@@ -50,13 +50,13 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload.cli as cli
-from proofload.episode import Episode
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store
+import poisson_prove.cli as cli
+from poisson_prove.episode import Episode
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "src" / "proofload"
+SRC = ROOT / "src" / "poisson_prove"
 TRACE_SOURCE = SRC / "trace.py"
 CLI_SOURCE = SRC / "cli.py"
 MOCK_AGENT_SOURCE = SRC / "examples" / "mock_agent.py"
@@ -65,12 +65,12 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures" / "trace"
 
 # ---------- spec constants (section 2 and 3), spelled here so the file collects at baseline ----------
 
-SCHEMA_SPEC = "proofload.trace/1"
+SCHEMA_SPEC = "poisson-prove.trace/1"
 KINDS_SPEC = ("llm", "tool", "retrieval", "db", "http", "agent", "other")
 SOURCES_SPEC = ("record", "otel", "litellm", "mixed")
 DROP_REASONS_SPEC = ("no_span_id", "duplicate_span_id", "bad_timestamps", "unparseable")
 OTEL_SEMCONV_VERSION_SPEC = "1.42.0"
-LOGGER_NAME = "proofload.trace"
+LOGGER_NAME = "poisson_prove.trace"
 MOCK_EPOCH_NS_SPEC = 1_700_000_000_000_000_000
 QUICKSTART_REPLICATES = 100
 
@@ -98,11 +98,11 @@ LIFTED_KEYS = (
     "openinference.span.kind",
     "traceloop.span.kind",
     "graph.node.name",
-    "proofload.step_name",
-    "proofload.outcome",
-    "proofload.outcome_by",
-    "proofload.attempt",
-    "proofload.gate",
+    "poisson_prove.step_name",
+    "poisson_prove.outcome",
+    "poisson_prove.outcome_by",
+    "poisson_prove.attempt",
+    "poisson_prove.gate",
 )
 OTEL_KIND_MAP_SPEC = {
     "chat": "llm",
@@ -142,7 +142,7 @@ SPAN_A: dict[str, Any] = {
     "confidence": 0.91,
     "error": None,
     "code": {"filepath": "agent/planner.py", "function": "plan", "lineno": 88},
-    "attrs": {"gen_ai.system": "openai", "proofload.run_id": "r-2026-09-03-a"},
+    "attrs": {"gen_ai.system": "openai", "poisson_prove.run_id": "r-2026-09-03-a"},
     "operation": None,
     "step_name": None,
     "outcome": None,
@@ -285,7 +285,7 @@ def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
 
 
 def test_t12_overlapping_sibling_spans_are_valid_round_trip_and_overlap_is_computable() -> None:
-    from proofload.trace import Span, Trace
+    from poisson_prove.trace import Span, Trace
 
     # Two roots whose [start_ns, end_ns) intervals overlap by exactly 200 ms: a concurrent pair.
     a = Span(
@@ -314,7 +314,7 @@ def test_t12_overlapping_sibling_spans_are_valid_round_trip_and_overlap_is_compu
 
 
 def test_t12_overlapping_parent_and_child_intervals_are_valid() -> None:
-    from proofload.trace import Span, Trace
+    from poisson_prove.trace import Span, Trace
 
     # A child that outlives its parent (a fire-and-forget tool call) is still a valid trace.
     parent = Span(
@@ -334,7 +334,7 @@ def test_t12_overlapping_parent_and_child_intervals_are_valid() -> None:
 
 
 def test_t1_schema_constant_and_to_dict_schema() -> None:
-    from proofload.trace import SCHEMA, Span, Trace
+    from poisson_prove.trace import SCHEMA, Span, Trace
 
     assert SCHEMA == SCHEMA_SPEC
     assert Trace(spans=(), source="record").to_dict()["schema"] == SCHEMA
@@ -342,7 +342,7 @@ def test_t1_schema_constant_and_to_dict_schema() -> None:
 
 
 def test_t1_from_dict_rejects_another_schema_naming_the_value_found() -> None:
-    from proofload.trace import Trace, TraceValidationError
+    from poisson_prove.trace import Trace, TraceValidationError
 
     with pytest.raises(TraceValidationError) as info:
         Trace.from_dict(trace_dict(SPAN_A, schema="proofload.trace/2"))
@@ -352,7 +352,7 @@ def test_t1_from_dict_rejects_another_schema_naming_the_value_found() -> None:
 
 
 def test_t1_from_dict_rejects_unknown_top_level_key_naming_it() -> None:
-    from proofload.trace import Trace, TraceValidationError
+    from poisson_prove.trace import Trace, TraceValidationError
 
     with pytest.raises(TraceValidationError) as info:
         Trace.from_dict(trace_dict(SPAN_A, task_id="checkout"))
@@ -363,7 +363,7 @@ def test_t1_from_dict_rejects_unknown_top_level_key_naming_it() -> None:
 
 
 def test_t1_from_dict_rejects_unknown_span_key_naming_it() -> None:
-    from proofload.trace import Span, Trace, TraceValidationError
+    from poisson_prove.trace import Span, Trace, TraceValidationError
 
     for extra in ("latency_ms", "i", "attempts"):
         bad = dict(SPAN_A)
@@ -377,7 +377,7 @@ def test_t1_from_dict_rejects_unknown_span_key_naming_it() -> None:
 
 
 def test_t1_from_dict_rejects_a_missing_span_key() -> None:
-    from proofload.trace import Trace, TraceValidationError
+    from poisson_prove.trace import Trace, TraceValidationError
 
     bad = dict(SPAN_A)
     del bad["start_ns"]
@@ -398,7 +398,7 @@ def test_t1_from_dict_rejects_a_missing_span_key() -> None:
 def test_t2_json_round_trip(
     spans: list[dict[str, Any]], source: str, source_version: str | None, dropped: int
 ) -> None:
-    from proofload.trace import Span, Trace
+    from poisson_prove.trace import Span, Trace
 
     tr = Trace(
         spans=tuple(Span(**d) for d in spans),
@@ -412,7 +412,7 @@ def test_t2_json_round_trip(
 
 
 def test_t2_section_3_example_round_trips() -> None:
-    from proofload.trace import Trace
+    from poisson_prove.trace import Trace
 
     d = trace_dict(SPAN_B, SPAN_A)
     tr = Trace.from_dict(d)
@@ -424,7 +424,7 @@ def test_t2_section_3_example_round_trips() -> None:
 
 
 def test_t3_constants_match_the_spec() -> None:
-    from proofload.trace import DROP_REASONS, KINDS, SOURCES
+    from poisson_prove.trace import DROP_REASONS, KINDS, SOURCES
 
     assert KINDS == KINDS_SPEC
     assert SOURCES == SOURCES_SPEC
@@ -432,7 +432,7 @@ def test_t3_constants_match_the_spec() -> None:
 
 
 def test_t3_bad_kind_raises_naming_kind_and_listing_kinds() -> None:
-    from proofload.trace import Span, Trace, TraceValidationError
+    from poisson_prove.trace import Span, Trace, TraceValidationError
 
     with pytest.raises(TraceValidationError) as info:
         Span(span_id=CHAT_ID, parent_id=None, kind="function", name="x", start_ns=EPOCH, end_ns=None)
@@ -450,7 +450,7 @@ def test_t3_bad_kind_raises_naming_kind_and_listing_kinds() -> None:
 
 
 def test_t3_bad_source_raises_naming_source_and_listing_sources() -> None:
-    from proofload.trace import Trace, TraceValidationError
+    from poisson_prove.trace import Trace, TraceValidationError
 
     with pytest.raises(TraceValidationError) as info:
         Trace(spans=(), source="manual")
@@ -466,7 +466,7 @@ def test_t3_bad_source_raises_naming_source_and_listing_sources() -> None:
 
 
 def test_t3_every_kind_and_source_is_accepted() -> None:
-    from proofload.trace import Span, Trace
+    from poisson_prove.trace import Span, Trace
 
     for kind in KINDS_SPEC:
         assert Span(span_id=CHAT_ID, parent_id=None, kind=kind, name="x", start_ns=EPOCH, end_ns=None).kind == kind
@@ -478,7 +478,7 @@ def test_t3_every_kind_and_source_is_accepted() -> None:
 
 
 def test_t4_end_before_start_raises() -> None:
-    from proofload.trace import Span, Trace, TraceValidationError
+    from poisson_prove.trace import Span, Trace, TraceValidationError
 
     with pytest.raises(TraceValidationError):
         Span(span_id=CHAT_ID, parent_id=None, kind="tool", name="x", start_ns=EPOCH, end_ns=EPOCH - 1)
@@ -489,7 +489,7 @@ def test_t4_end_before_start_raises() -> None:
 
 
 def test_t4_open_span_and_zero_length_span_are_valid() -> None:
-    from proofload.trace import Span
+    from poisson_prove.trace import Span
 
     never_closed = Span(span_id=CHAT_ID, parent_id=None, kind="tool", name="x", start_ns=EPOCH, end_ns=None)
     assert never_closed.end_ns is None
@@ -499,7 +499,7 @@ def test_t4_open_span_and_zero_length_span_are_valid() -> None:
 
 
 def test_t4_non_integer_timestamps_are_rejected_by_from_dict() -> None:
-    from proofload.trace import Trace, TraceValidationError
+    from poisson_prove.trace import Trace, TraceValidationError
 
     for value in ("1756900000000000000", 1756900000.5):
         bad = dict(SPAN_A)
@@ -512,7 +512,7 @@ def test_t4_non_integer_timestamps_are_rejected_by_from_dict() -> None:
 
 
 def test_t5_duration_ms_is_derived_exactly() -> None:
-    from proofload.trace import Span
+    from poisson_prove.trace import Span
 
     closed = Span.from_dict(SPAN_A)
     assert closed.duration_ms == (SPAN_A["end_ns"] - SPAN_A["start_ns"]) / 1e6 == 812.0
@@ -523,7 +523,7 @@ def test_t5_duration_ms_is_derived_exactly() -> None:
 
 
 def test_t5_span_to_dict_has_exactly_the_twenty_one_keys() -> None:
-    from proofload.trace import Span
+    from poisson_prove.trace import Span
 
     full = Span.from_dict(SPAN_A).to_dict()
     assert set(full) == SPAN_KEYS
@@ -537,7 +537,7 @@ def test_t5_span_to_dict_has_exactly_the_twenty_one_keys() -> None:
 
 
 def test_t5_trace_to_dict_has_exactly_the_seven_keys() -> None:
-    from proofload.trace import Span, Trace
+    from poisson_prove.trace import Span, Trace
 
     assert set(Trace(spans=(), source="record").to_dict()) == TRACE_KEYS
     d = Trace(spans=(Span.from_dict(SPAN_A),), source="otel", source_version="1.42.0", dropped=2).to_dict()
@@ -550,7 +550,7 @@ def test_t5_trace_to_dict_has_exactly_the_seven_keys() -> None:
 
 
 def test_t6_code_is_none_or_exactly_the_three_keys() -> None:
-    from proofload.trace import Span, Trace, TraceValidationError
+    from poisson_prove.trace import Span, Trace, TraceValidationError
 
     assert Span.from_dict(SPAN_A).code == {"filepath": "agent/planner.py", "function": "plan", "lineno": 88}
     assert Span.from_dict(SPAN_B).code is None
@@ -579,7 +579,7 @@ def test_t6_code_is_none_or_exactly_the_three_keys() -> None:
 
 
 def test_t7_duplicate_span_id_raises_naming_the_id() -> None:
-    from proofload.trace import Span, Trace, TraceValidationError
+    from poisson_prove.trace import Span, Trace, TraceValidationError
 
     a = Span.from_dict(SPAN_A)
     twin = dict(SPAN_A)
@@ -596,7 +596,7 @@ def test_t7_duplicate_span_id_raises_naming_the_id() -> None:
 
 
 def test_t8_self_parent_raises() -> None:
-    from proofload.trace import Span, Trace, TraceValidationError
+    from poisson_prove.trace import Span, Trace, TraceValidationError
 
     with pytest.raises(TraceValidationError):
         Trace(
@@ -610,7 +610,7 @@ def test_t8_self_parent_raises() -> None:
 
 
 def test_t8_two_and_three_cycles_raise() -> None:
-    from proofload.trace import Span, Trace, TraceValidationError
+    from poisson_prove.trace import Span, Trace, TraceValidationError
 
     def span(sid: str, parent: str) -> Span:
         return Span(span_id=sid, parent_id=parent, kind="tool", name=sid, start_ns=EPOCH, end_ns=None)
@@ -632,7 +632,7 @@ def test_t8_two_and_three_cycles_raise() -> None:
 
 
 def test_t9_orphan_parent_id_is_kept_and_the_span_is_a_root() -> None:
-    from proofload.trace import Trace
+    from poisson_prove.trace import Trace
 
     # SPAN_A's parent is AGENT_ID, which is not in this trace.
     tr = Trace.from_dict(trace_dict(SPAN_A))
@@ -649,7 +649,7 @@ def test_t9_orphan_parent_id_is_kept_and_the_span_is_a_root() -> None:
 
 
 def test_t10_children_are_exact_and_in_ordered_order() -> None:
-    from proofload.trace import Span, Trace
+    from poisson_prove.trace import Span, Trace
 
     def span(sid: str, parent: str | None, start: int) -> Span:
         return Span(span_id=sid, parent_id=parent, kind="tool", name=sid, start_ns=start, end_ns=None)
@@ -671,7 +671,7 @@ def test_t10_children_are_exact_and_in_ordered_order() -> None:
 
 
 def test_t11_ordered_sorts_by_start_then_span_id() -> None:
-    from proofload.trace import Span, Trace
+    from poisson_prove.trace import Span, Trace
 
     def span(sid: str, start: int) -> Span:
         return Span(span_id=sid, parent_id=None, kind="tool", name=sid, start_ns=start, end_ns=None)
@@ -690,7 +690,7 @@ def test_t11_ordered_sorts_by_start_then_span_id() -> None:
 @settings(max_examples=75, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(spans=span_forests(), data=st.data())
 def test_t11_ordered_is_independent_of_input_order(spans: list[dict[str, Any]], data: st.DataObject) -> None:
-    from proofload.trace import Span, Trace
+    from poisson_prove.trace import Span, Trace
 
     built = [Span(**d) for d in spans]
     shuffled = data.draw(st.permutations(built))
@@ -704,7 +704,7 @@ def test_t11_ordered_is_independent_of_input_order(spans: list[dict[str, Any]], 
 
 
 def test_t13_one_record_appends_exactly_one_span() -> None:
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     with collect() as c:
         with record("tool", "search_catalog", input={"q": "boots"}, attrs={"attempts": 1}) as h:
@@ -722,7 +722,7 @@ def test_t13_one_record_appends_exactly_one_span() -> None:
 
 
 def test_t13_nested_record_gets_the_enclosing_span_as_parent() -> None:
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     with collect() as c:
         with record("agent", "outer") as outer:
@@ -749,7 +749,7 @@ def test_t13_nested_record_gets_the_enclosing_span_as_parent() -> None:
 
 
 def test_t13_sequential_records_are_siblings_and_the_trace_round_trips() -> None:
-    from proofload.trace import Trace, collect, record
+    from poisson_prove.trace import Trace, collect, record
 
     with collect() as c:
         with record("tool", "first"):
@@ -763,7 +763,7 @@ def test_t13_sequential_records_are_siblings_and_the_trace_round_trips() -> None
 
 
 def test_t13_collector_trace_read_before_exit_raises() -> None:
-    from proofload.trace import TraceValidationError, collect, record
+    from poisson_prove.trace import TraceValidationError, collect, record
 
     with collect() as c:
         with pytest.raises(TraceValidationError):
@@ -778,7 +778,7 @@ def test_t13_collector_trace_read_before_exit_raises() -> None:
 
 
 def test_t14_record_outside_collect_is_a_usable_no_op() -> None:
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     with record("tool", "orphan", input={"q": 1}, attrs={"k": 1}) as h:
         h.output = {"rows": 2}
@@ -794,7 +794,7 @@ def test_t14_record_outside_collect_is_a_usable_no_op() -> None:
 
 
 def test_t14_exception_inside_record_outside_collect_still_propagates_unchanged() -> None:
-    from proofload.trace import record
+    from poisson_prove.trace import record
 
     exc = KeyError("missing")
     with pytest.raises(KeyError) as info:
@@ -807,7 +807,7 @@ def test_t14_exception_inside_record_outside_collect_still_propagates_unchanged(
 
 
 def test_t15_exception_sets_error_closes_span_and_reraises_the_same_object() -> None:
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     class Boom(RuntimeError):
         pass
@@ -824,7 +824,7 @@ def test_t15_exception_sets_error_closes_span_and_reraises_the_same_object() -> 
 
 
 def test_t15_exception_inside_a_decorated_function_behaves_the_same() -> None:
-    from proofload.trace import collect, step
+    from poisson_prove.trace import collect, step
 
     exc = ValueError("bad input")
 
@@ -843,7 +843,7 @@ def test_t15_exception_inside_a_decorated_function_behaves_the_same() -> None:
 
 
 def test_t15_nested_exception_closes_both_spans_outermost_last() -> None:
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     with collect() as c:
         with pytest.raises(RuntimeError):
@@ -861,7 +861,7 @@ def test_t15_nested_exception_closes_both_spans_outermost_last() -> None:
 
 
 def test_t16_end_ns_is_not_below_start_ns_when_the_wall_clock_steps_back(monkeypatch: pytest.MonkeyPatch) -> None:
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     wall = itertools.count(EPOCH, -1_000_000_000)  # every read is one second earlier than the last
     mono = itertools.count(5_000_000_000, 250_000)  # every read is 250 us later than the last
@@ -925,7 +925,7 @@ def test_t17_no_module_outside_trace_py_reads_the_span_clock() -> None:
 
 
 def test_t17_trace_py_reads_both_clocks_inside_exactly_one_helper() -> None:
-    assert TRACE_SOURCE.is_file(), "src/proofload/trace.py does not exist"
+    assert TRACE_SOURCE.is_file(), "src/poisson_prove/trace.py does not exist"
     assert clock_names_imported_from_time(TRACE_SOURCE) == []
     sites = clock_call_sites(TRACE_SOURCE)
     assert sites, "trace.py never reads time.time_ns() or time.perf_counter_ns()"
@@ -938,7 +938,7 @@ def test_t17_trace_py_reads_both_clocks_inside_exactly_one_helper() -> None:
 
 
 def test_t18_step_bare_form_records_one_span_and_preserves_metadata() -> None:
-    from proofload.trace import collect, step
+    from poisson_prove.trace import collect, step
 
     decorated = step(_plain_tool)  # what ``@step`` does
     assert decorated.__name__ == "_plain_tool"
@@ -953,7 +953,7 @@ def test_t18_step_bare_form_records_one_span_and_preserves_metadata() -> None:
 
 
 def test_t18_step_called_form_sets_kind_and_name() -> None:
-    from proofload.trace import collect, step
+    from poisson_prove.trace import collect, step
 
     decorated = step(kind="db", name="lookup_order")(_plain_tool)
     assert decorated.__name__ == "_plain_tool" and decorated.__wrapped__ is _plain_tool
@@ -964,7 +964,7 @@ def test_t18_step_called_form_sets_kind_and_name() -> None:
 
 
 def test_t18_decorated_coroutine_produces_one_span_spanning_its_awaits() -> None:
-    from proofload.trace import collect, record, step
+    from poisson_prove.trace import collect, record, step
 
     async def run_agent() -> str:
         await yield_to_loop()
@@ -988,7 +988,7 @@ def test_t18_decorated_coroutine_produces_one_span_spanning_its_awaits() -> None
 
 
 def test_t18_decorated_functions_outside_collect_return_normally_and_record_nothing() -> None:
-    from proofload.trace import collect, step
+    from poisson_prove.trace import collect, step
 
     sync_tool = step(_plain_tool)
     assert sync_tool(5) == 10
@@ -1009,7 +1009,7 @@ def test_t18_decorated_functions_outside_collect_return_normally_and_record_noth
 
 
 def test_t19_concurrent_tasks_nest_independently_in_one_trace() -> None:
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     async def worker(tag: str, mine: asyncio.Event, other: asyncio.Event) -> None:
         with record("agent", f"outer_{tag}"):
@@ -1045,7 +1045,7 @@ def test_t19_concurrent_tasks_nest_independently_in_one_trace() -> None:
 
 
 def test_t20_no_alias_or_lifted_key_survives_in_attrs_across_every_otlp_fixture() -> None:
-    from proofload.trace import ATTRIBUTE_ALIASES, from_otel
+    from poisson_prove.trace import ATTRIBUTE_ALIASES, from_otel
 
     assert ATTRIBUTE_ALIASES["code.filepath"] == "code.file.path"
     payloads = [
@@ -1067,7 +1067,7 @@ def test_t20_no_alias_or_lifted_key_survives_in_attrs_across_every_otlp_fixture(
 
 
 def test_t20_every_alias_key_is_absorbed_when_it_arrives_alone() -> None:
-    from proofload.trace import ATTRIBUTE_ALIASES, from_otel
+    from poisson_prove.trace import ATTRIBUTE_ALIASES, from_otel
 
     assert len(ATTRIBUTE_ALIASES) >= 1
     for source_key, canonical in ATTRIBUTE_ALIASES.items():
@@ -1088,7 +1088,7 @@ def test_t20_every_alias_key_is_absorbed_when_it_arrives_alone() -> None:
 
 
 def test_t20_deprecated_code_filepath_is_lifted_into_code() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel(load_fixture("otlp_aliases.json"))
     assert len(tr.spans) == 1 and tr.dropped == 0
@@ -1096,7 +1096,7 @@ def test_t20_deprecated_code_filepath_is_lifted_into_code() -> None:
     assert span.code == {"filepath": "agent/tools.py", "function": "search", "lineno": 41}
     assert span.kind == "tool" and span.name == "search"
     assert dict(span.tokens or {}) == {"in": 7, "out": 3}
-    assert span.attrs["proofload.run_id"] == "r-aliases"
+    assert span.attrs["poisson_prove.run_id"] == "r-aliases"
     assert "code.filepath" not in span.attrs and "code.file.path" not in span.attrs
 
 
@@ -1104,7 +1104,7 @@ def test_t20_deprecated_code_filepath_is_lifted_into_code() -> None:
 
 
 def test_t21_same_span_three_encodings_yield_equal_traces() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     variants = load_fixture("otlp_encodings.json")
     assert set(variants) == {"camel_string_base64", "snake_int_hex", "camel_int_hex"}
@@ -1128,7 +1128,7 @@ def test_t21_same_span_three_encodings_yield_equal_traces() -> None:
 
 
 def test_t21_uppercase_hex_ids_are_canonicalized_to_lowercase() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     upper = json.loads(json.dumps(load_fixture("otlp_encodings.json")["camel_int_hex"]))
     upper[0]["spanId"] = CHAT_ID.upper()
@@ -1141,7 +1141,7 @@ def test_t21_uppercase_hex_ids_are_canonicalized_to_lowercase() -> None:
 
 
 def test_t22_dropped_spans_are_counted_and_each_is_logged_once_at_warning(caplog: pytest.LogCaptureFixture) -> None:
-    from proofload.trace import DROP_REASONS, from_otel
+    from poisson_prove.trace import DROP_REASONS, from_otel
 
     payload = load_fixture("otlp_dropped.json")
     assert len(payload) == 6
@@ -1164,7 +1164,7 @@ def test_t22_dropped_spans_are_counted_and_each_is_logged_once_at_warning(caplog
 
 
 def test_t22_all_spans_unusable_is_an_empty_trace_not_an_error(caplog: pytest.LogCaptureFixture) -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     caplog.set_level(logging.WARNING, logger=LOGGER_NAME)
     payload = [
@@ -1178,7 +1178,7 @@ def test_t22_all_spans_unusable_is_an_empty_trace_not_an_error(caplog: pytest.Lo
 
 
 def test_t22_a_clean_payload_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     caplog.set_level(logging.WARNING, logger=LOGGER_NAME)
     tr = from_otel(load_fixture("otlp_agent_chat.json"))
@@ -1190,7 +1190,7 @@ def test_t22_a_clean_payload_logs_nothing(caplog: pytest.LogCaptureFixture) -> N
 
 
 def test_t23_chat_under_invoke_agent_and_resource_attrs_survive() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel(load_fixture("otlp_agent_chat.json"))
     assert tr.source == "otel" and tr.dropped == 0 and len(tr.spans) == 2
@@ -1201,14 +1201,14 @@ def test_t23_chat_under_invoke_agent_and_resource_attrs_survive() -> None:
     assert tr.children(AGENT_ID) == (chat,)
     assert tr.roots() == (agent,)
     for span in tr.spans:
-        assert span.attrs["proofload.run_id"] == "r-2026-09-03-a", span.span_id
-        assert span.attrs["proofload.episode"] == "cfg-7:seed-3", span.span_id
+        assert span.attrs["poisson_prove.run_id"] == "r-2026-09-03-a", span.span_id
+        assert span.attrs["poisson_prove.episode"] == "cfg-7:seed-3", span.span_id
         assert span.attrs["service.name"] == "airline-agent", span.span_id
         assert span.attrs["scope.flavor"] == "hand-built", span.span_id
 
 
 def test_t23_section_3_per_span_mapping() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel(load_fixture("otlp_agent_chat.json"))
     by_id = {s.span_id: s for s in tr.spans}
@@ -1230,7 +1230,7 @@ def test_t23_section_3_per_span_mapping() -> None:
 
 
 def test_t23_kind_map_and_fallbacks() -> None:
-    from proofload.trace import OTEL_KIND_MAP, from_otel
+    from poisson_prove.trace import OTEL_KIND_MAP, from_otel
 
     assert dict(OTEL_KIND_MAP) == OTEL_KIND_MAP_SPEC
     tr = from_otel(load_fixture("otlp_kinds.json"))
@@ -1263,20 +1263,20 @@ def test_t23_kind_map_and_fallbacks() -> None:
 
 
 def test_t23_unrecognized_operation_name_lands_in_other_and_is_preserved_as_operation() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel(load_fixture("otlp_kinds.json"))
     span = {s.span_id: s for s in tr.spans}["0000000000000007"]
     assert span.kind == "other"
     # A8a (spec section 3.1, P8-16): the unrecognised operation has a field; the stash key is retired.
-    assert span.operation == "frobnicate" and "proofload.original_operation" not in span.attrs, dict(span.attrs)
+    assert span.operation == "frobnicate" and "poisson_prove.original_operation" not in span.attrs, dict(span.attrs)
 
 
 # ---------- T24: from_litellm ----------
 
 
 def test_t24_one_root_llm_span_per_payload_and_no_confidence_from_logprobs() -> None:
-    from proofload.trace import from_litellm
+    from poisson_prove.trace import from_litellm
 
     payloads = litellm_payloads()
     assert len(payloads) == 3
@@ -1296,7 +1296,7 @@ def test_t24_one_root_llm_span_per_payload_and_no_confidence_from_logprobs() -> 
 
 
 def test_t24_empty_iterable_is_an_empty_litellm_trace() -> None:
-    from proofload.trace import from_litellm
+    from poisson_prove.trace import from_litellm
 
     tr = from_litellm([])
     assert tr.spans == () and tr.source == "litellm" and tr.dropped == 0
@@ -1316,7 +1316,7 @@ def string_constant_sites(literal: str) -> list[str]:
 
 
 def test_t25_source_version_is_the_pinned_semconv_version() -> None:
-    from proofload.trace import OTEL_SEMCONV_VERSION, from_otel
+    from poisson_prove.trace import OTEL_SEMCONV_VERSION, from_otel
 
     assert OTEL_SEMCONV_VERSION == OTEL_SEMCONV_VERSION_SPEC
     for name in ("otlp_agent_chat.json", "otlp_kinds.json", "otlp_dropped.json"):
@@ -1325,7 +1325,7 @@ def test_t25_source_version_is_the_pinned_semconv_version() -> None:
 
 
 def test_t25_semconv_literal_appears_exactly_once_in_src() -> None:
-    assert TRACE_SOURCE.is_file(), "src/proofload/trace.py does not exist"
+    assert TRACE_SOURCE.is_file(), "src/poisson_prove/trace.py does not exist"
     sites = string_constant_sites(OTEL_SEMCONV_VERSION_SPEC)
     assert len(sites) == 1 and sites[0].startswith("trace.py:"), sites
 
@@ -1334,7 +1334,7 @@ def test_t25_semconv_literal_appears_exactly_once_in_src() -> None:
 
 
 def test_t26_merge_concatenates_sums_dropped_and_keeps_parentage() -> None:
-    from proofload.trace import Span, Trace, merge
+    from poisson_prove.trace import Span, Trace, merge
 
     a_root = Span.from_dict(SPAN_B)
     a_child = Span.from_dict(SPAN_A)
@@ -1354,7 +1354,7 @@ def test_t26_merge_concatenates_sums_dropped_and_keeps_parentage() -> None:
 
 
 def test_t26_merge_raises_on_span_id_collision_naming_the_id() -> None:
-    from proofload.trace import Span, Trace, TraceValidationError, merge
+    from poisson_prove.trace import Span, Trace, TraceValidationError, merge
 
     a = Trace(spans=(Span.from_dict(SPAN_A),), source="otel")
     other = dict(SPAN_A)
@@ -1372,7 +1372,7 @@ def test_t27_trace_module_and_both_converters_import_neither_opentelemetry_nor_l
     for name in [n for n in sys.modules if n.split(".")[0] in ("opentelemetry", "litellm")]:
         del sys.modules[name]
 
-    import proofload.trace as trace_module
+    import poisson_prove.trace as trace_module
 
     trace_module.from_otel(load_fixture("otlp_agent_chat.json"))
     trace_module.from_otel(load_fixture("otlp_kinds.json"))
@@ -1385,7 +1385,7 @@ def test_t27_trace_module_and_both_converters_import_neither_opentelemetry_nor_l
 
 
 def test_t27_trace_py_source_imports_only_the_standard_library_and_proofload() -> None:
-    assert TRACE_SOURCE.is_file(), "src/proofload/trace.py does not exist"
+    assert TRACE_SOURCE.is_file(), "src/poisson_prove/trace.py does not exist"
     tree = ast.parse(TRACE_SOURCE.read_text(encoding="utf-8"))
     tops = set()
     for node in ast.walk(tree):
@@ -1393,7 +1393,7 @@ def test_t27_trace_py_source_imports_only_the_standard_library_and_proofload() -
             tops.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
             tops.add(node.module.split(".")[0])
-    third_party = {t for t in tops if t not in sys.stdlib_module_names and t != "proofload"}
+    third_party = {t for t in tops if t not in sys.stdlib_module_names and t != "poisson_prove"}
     assert third_party == set(), third_party
 
 
@@ -1403,30 +1403,30 @@ def test_t27_trace_py_source_imports_only_the_standard_library_and_proofload() -
 def imports_proofload_trace(path: Path) -> bool:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "proofload.trace":
+        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.trace":
             return True
-        if isinstance(node, ast.Import) and any(alias.name == "proofload.trace" for alias in node.names):
+        if isinstance(node, ast.Import) and any(alias.name == "poisson_prove.trace" for alias in node.names):
             return True
     return False
 
 
 def test_t28_schema_literal_appears_exactly_once_in_src() -> None:
-    assert TRACE_SOURCE.is_file(), "src/proofload/trace.py does not exist"
+    assert TRACE_SOURCE.is_file(), "src/poisson_prove/trace.py does not exist"
     sites = string_constant_sites(SCHEMA_SPEC)
     assert len(sites) == 1 and sites[0].startswith("trace.py:"), sites
 
 
 def test_t28_cli_and_mock_agent_reach_the_schema_through_proofload_trace() -> None:
-    assert imports_proofload_trace(CLI_SOURCE), "cli.py does not import proofload.trace"
-    assert imports_proofload_trace(MOCK_AGENT_SOURCE), "mock_agent.py does not import proofload.trace"
+    assert imports_proofload_trace(CLI_SOURCE), "cli.py does not import poisson_prove.trace"
+    assert imports_proofload_trace(MOCK_AGENT_SOURCE), "mock_agent.py does not import poisson_prove.trace"
 
 
 # ---------- T29: the mock agent emits the schema, deterministically ----------
 
 
 def test_t29_mock_agent_traces_decode_and_are_deterministic() -> None:
-    import proofload.examples.mock_agent as mock_agent
-    from proofload.trace import Trace
+    import poisson_prove.examples.mock_agent as mock_agent
+    from poisson_prove.trace import Trace
 
     cells = SweepSpec.load(QUICKSTART).configs
     assert len(cells) == 9  # the quickstart grid, S23: 3 tasks x 3 tool_fail_rate values
@@ -1445,8 +1445,8 @@ def test_t29_mock_agent_traces_decode_and_are_deterministic() -> None:
 
 
 def test_t29_mock_agent_per_step_shape_from_section_3() -> None:
-    import proofload.examples.mock_agent as mock_agent
-    from proofload.trace import Trace
+    import poisson_prove.examples.mock_agent as mock_agent
+    from poisson_prove.trace import Trace
 
     assert mock_agent.MOCK_EPOCH_NS == MOCK_EPOCH_NS_SPEC
     cfg = {"task_id": "checkout", "tool_fail_rate": 0.45}
@@ -1468,7 +1468,7 @@ def test_t29_mock_agent_per_step_shape_from_section_3() -> None:
 
 
 def test_t30_inspect_prints_no_trace_lines_and_no_error_for_a_rejected_trace_dict(tmp_path: Path) -> None:
-    from proofload.trace import Trace, TraceValidationError
+    from poisson_prove.trace import Trace, TraceValidationError
 
     bad = trace_dict(SPAN_B, source="record", source_version=None, task_id="checkout")  # extra top-level key
     with pytest.raises(TraceValidationError):
@@ -1510,12 +1510,12 @@ def test_t30_inspect_prints_no_trace_lines_and_no_error_for_a_rejected_trace_dic
 
 
 def test_t30_inspect_prints_ordered_spans_with_duration_ms_in_the_fourth_column(tmp_path: Path) -> None:
-    from proofload.trace import Trace
+    from poisson_prove.trace import Trace
 
     root = tmp_path / "store"
     out, err = StringIO(), StringIO()
     code = cli.main(
-        ["--store", str(root), "sweep", str(QUICKSTART), "--target", "proofload.examples.mock_agent:rollout", "--yes"],
+        ["--store", str(root), "sweep", str(QUICKSTART), "--target", "poisson_prove.examples.mock_agent:rollout", "--yes"],
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()

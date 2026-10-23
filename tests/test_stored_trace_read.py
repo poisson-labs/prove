@@ -84,10 +84,10 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-import proofload.cli as cli
-from proofload.episode import Episode
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.trace import Span, Trace, TraceValidationError
+import poisson_prove.cli as cli
+from poisson_prove.episode import Episode
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.trace import Span, Trace, TraceValidationError
 
 EPOCH = 1_756_900_000_000_000_000
 TASKS = ("t0", "t1", "t2", "t3")

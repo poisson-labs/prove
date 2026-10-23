@@ -64,14 +64,14 @@ import pytest
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-import proofload.cli as cli
-import proofload.diff as diff_mod
-import proofload.store as store_mod
-from proofload.episode import Episode
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
+import poisson_prove.cli as cli
+import poisson_prove.diff as diff_mod
+import poisson_prove.store as store_mod
+from poisson_prove.episode import Episode
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
 ROOT = Path(__file__).resolve().parents[1]
-DIFF_SOURCE = ROOT / "src" / "proofload" / "diff.py"
+DIFF_SOURCE = ROOT / "src" / "poisson_prove" / "diff.py"
 PYPROJECT = ROOT / "pyproject.toml"
 
 #: The two-record store. One errored row -- ``outcome`` null, ``error`` set, and the three

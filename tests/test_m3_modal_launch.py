@@ -45,12 +45,12 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload
-import proofload.cli as cli
-import proofload.executor_modal as executor_modal
-from proofload.episode import Episode
-from proofload.executor import Plan, RunSummary, plan, run_local
-from proofload.executor_modal import (
+import poisson_prove
+import poisson_prove.cli as cli
+import poisson_prove.executor_modal as executor_modal
+from poisson_prove.episode import Episode
+from poisson_prove.executor import Plan, RunSummary, plan, run_local
+from poisson_prove.executor_modal import (
     ImageSpec,
     Job,
     ModalOptions,
@@ -61,8 +61,8 @@ from proofload.executor_modal import (
     run_with_mapper,
     worker_batch,
 )
-from proofload.sampler import SweepSpec
-from proofload.store import Store
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import Store
 
 HORIZON = 10.0
 CELLS = ({"x": 0.1}, {"x": 0.2}, {"x": 0.3})
@@ -74,16 +74,16 @@ TARGET_ID = "policy@test"
 T_UNIT = "steps"
 
 DET_PATH = f"{__name__}:deterministic_rollout"
-MOCK_MODULE = "proofload.examples.mock_agent"
+MOCK_MODULE = "poisson_prove.examples.mock_agent"
 WELL_SHAPED = f"{MOCK_MODULE}:rollout"  # any well-shaped path; the modal branch never imports it
-MISSING_MODULE_PATH = "proofload.examples.no_such_module_xyz:rollout"
+MISSING_MODULE_PATH = "poisson_prove.examples.no_such_module_xyz:rollout"
 MISSING_ATTR_PATH = f"{MOCK_MODULE}:no_such_attr"
 
 REFUSING_MODULE = "proofload_oracle_refusing_target"
 BOUNDARY_VAR = "PROOFLOAD_TEST_BOUNDARY"
 CANARY_VAR = "PROOFLOAD_ORACLE_CANARY"
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 CLI_SOURCE = PACKAGE / "cli.py"
 MODAL_SOURCE = PACKAGE / "executor_modal.py"
 

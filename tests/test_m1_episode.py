@@ -1,7 +1,7 @@
 import pytest
 from dataclasses import FrozenInstanceError
 from hypothesis import given, strategies as st
-from proofload import Episode, EpisodeValidationError
+from poisson_prove import Episode, EpisodeValidationError
 # ---- unit: construction ----
 def test_minimal_valid():
     e = Episode(outcome="fell", t=37, horizon=200)

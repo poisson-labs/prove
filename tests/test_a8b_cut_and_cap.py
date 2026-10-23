@@ -94,27 +94,27 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import proofload
-import proofload.executor as executor
-from proofload.episode import Episode
-from proofload.executor import plan, run_local
-from proofload.sampler import SamplerError, SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.trace import OBSERVATION_KEYS, Span, Trace, assemble, from_otel, split
+import poisson_prove
+import poisson_prove.executor as executor
+from poisson_prove.episode import Episode
+from poisson_prove.executor import plan, run_local
+from poisson_prove.sampler import SamplerError, SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.trace import OBSERVATION_KEYS, Span, Trace, assemble, from_otel, split
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "trace"
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path needs the fork start method")
 
-TRUNCATED_KEY_SPEC = "proofload.truncated"
+TRUNCATED_KEY_SPEC = "poisson_prove.truncated"
 WRAPPER_KEYS = frozenset({"head", "tail", "bytes_original"})  # section 10 Q8 (a): exactly three
 DEFAULT_LIMIT = 8192
-RUN_ID_KEY = "proofload.run_id"
-EPISODE_KEY = "proofload.episode"
+RUN_ID_KEY = "poisson_prove.run_id"
+EPISODE_KEY = "poisson_prove.episode"
 RUN_ID = "r-2026-09-18-a8b"
 SALT = "a8b-oracle-salt"
 HORIZON = 10.0
@@ -144,10 +144,10 @@ RETIRED_NAMES = ("_TRUNCATION_MARKER", "_apply_budget", "_json_size", "max_span_
 #: ``split`` is absent on purpose -- it is the one A7 symbol A8b edits -- and is pinned structurally.
 HELD_SURFACE: dict[str, dict[str, str]] = {
     "trace.py": {
-        "LOGPROBS_KEY": "b1b1c08b27d289aca2ea8ae77d3ed47dadbe74c7a22ee414b332b5479d71ecaf",
+        # PF0 (Q4): LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
+        # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
         "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
         "_ObservationKeys": "234e6e2bf19ab9d167fb4a9fd108c6c6e5843ee0730abde04a2b92e5688b7f41",
-        "OBSERVATION_KEYS": "0f1224d8e3bfd231b802dc9e642e3d1f09aecaeb95786ed0432659a7f605e98d",
         "_OBSERVATION_FIELDS": "0285e490f26b99c0abb8ef52a382a509ec06efc65bdfa2e3d753af24ec4173fb",
         "assemble": "89ec3fc90530156b4a35bfedd2d5fd5da32412bc70b9d66f80be089716e5a1fe",
     },
@@ -222,7 +222,7 @@ def cut(trace: Trace, limit: int | None) -> Trace:
     """CD (D1): ``limit`` is required here because it is required there. The old ``limit=None``
     sentinel meant *use the module default*; under CD ``None`` means *cut nothing*, so a helper
     that spells one as the other would hide the very thing this packet is about."""
-    from proofload.trace import truncate_observations
+    from poisson_prove.trace import truncate_observations
 
     return truncate_observations(trace, limit=limit)
 
@@ -362,7 +362,7 @@ def _tracer() -> Any:
 def child_capture_spans(spec_kwargs: dict[str, Any], spans: list[dict[str, Any]]) -> dict[str, Any]:
     """``install(CaptureSpec(**spec_kwargs))``, then one capture block emitting ``spans`` in order
     through the real recorder -- the only path ``_is_content`` and the child's cut run on."""
-    from proofload.capture import CaptureSpec, capture, install
+    from poisson_prove.capture import CaptureSpec, capture, install
 
     # CD (D1): CaptureSpec has no default cap, so the harness supplies the one these callers
     # were getting from the dataclass. A caller that names a cap is left alone.
@@ -432,7 +432,7 @@ class TappingContext:
 
 
 def child_tap_the_pipe(limit: int) -> dict[str, Any]:
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     tapping = TappingContext(executor._mp_context())
     call = executor._CaptureCall(spec=CaptureSpec(max_observation_bytes=limit), run_id=RUN_ID, episode_id="cfg-8b:0")
@@ -456,7 +456,7 @@ def child_run_local(store_root: str, toml_path: str, target: str, episode_timeou
 def test_section_2_trace_exports_the_five_names_and_the_routing_constant_is_not_a_cap() -> None:
     """CD (D8), amending A8b section 2 and P8-7's last sentence: the two constants that described the
     default's split are deleted with the default, and the third is renamed to the job it still has."""
-    import proofload.trace as trace_module
+    import poisson_prove.trace as trace_module
 
     assert set(NEW_EXPORTS) <= set(trace_module.__all__), sorted(set(NEW_EXPORTS) - set(trace_module.__all__))
     assert trace_module.TRUNCATED_KEY == TRUNCATED_KEY_SPEC
@@ -469,7 +469,7 @@ def test_section_2_trace_exports_the_five_names_and_the_routing_constant_is_not_
 def test_section_2_the_two_functions_keep_their_specced_signatures() -> None:
     """CD (D1) amends A8b section 2's two signatures: ``limit`` keeps its name, its place and its
     keyword-only kind, and loses its default. What it takes is widened to ``int | None``."""
-    from proofload.trace import finalize, truncate_observations
+    from poisson_prove.trace import finalize, truncate_observations
 
     t = inspect.signature(truncate_observations).parameters
     assert list(t) == ["trace", "limit"] and t["limit"].kind is inspect.Parameter.KEYWORD_ONLY
@@ -485,7 +485,7 @@ def test_section_2_the_two_functions_keep_their_specced_signatures() -> None:
 
 def test_section_2_content_keys_is_a_frozenset_whose_in_answers_members_and_descendants() -> None:
     """Section 10 Q3 (a): the ``_ObservationKeys`` shape. A plain ``frozenset`` loses the families."""
-    from proofload.trace import CONTENT_KEYS
+    from poisson_prove.trace import CONTENT_KEYS
 
     assert isinstance(CONTENT_KEYS, frozenset)
     for key in CONTENT_EXACT + CONTENT_DESCENDANTS:
@@ -610,7 +610,7 @@ def test_p8_7_a_span_cut_sets_the_span_field_and_leaves_the_trace_field_alone() 
 def test_p8_7_there_is_no_default_limit_and_the_ratio_holds_at_a_declared_8192() -> None:
     """CD (D1) inverts this test's shipped half: there is no limit when none is passed, there is a
     ``TypeError``. What P8-7 says about the cut at 8192 is re-asserted with 8192 declared."""
-    from proofload.trace import truncate_observations
+    from poisson_prove.trace import truncate_observations
 
     at, over = "k" * DEFAULT_LIMIT, "k" * (DEFAULT_LIMIT + 1)
     before = trace_of(span(1, attrs={"app.at": at, "app.over": over}))
@@ -814,7 +814,7 @@ def test_p8_11_a_wrapper_is_an_observation_at_any_size_and_the_split_never_cuts(
 def test_p8_12_capture_spec_fields_and_the_cap_that_has_no_default() -> None:
     """CD (D1, D12) amends P8-12: the field-name tuple is unchanged and in ``_CAPTURE_FIELDS`` order,
     and ``CaptureSpec()`` no longer builds. The other three defaults stand."""
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == CAPTURE_FIELDS_SPEC
     with pytest.raises(TypeError):
@@ -851,7 +851,7 @@ def test_p8_12_with_no_cap_every_closed_span_is_kept() -> None:
 
 
 def test_p8_17_environment_capture_has_the_nine_keys_and_the_value_round_trips_from_the_sweep_file(tmp_path: Path) -> None:
-    from proofload.capture import CaptureStatus
+    from poisson_prove.capture import CaptureStatus
 
     spec = SweepSpec.load(write(tmp_path / "sweep.toml", sweep_toml({"instrument": [], "max_observation_bytes": 4096}))).capture
     record = executor._capture_record(spec, CaptureStatus(requested=True, active=True, reason=None, instrumented=()))
@@ -944,8 +944,8 @@ def test_q5_a_low_limit_measures_every_value_and_stores_almost_nothing() -> None
 
 @pytest.mark.parametrize("max_spans", [None, 3])
 def test_p8_24_the_transport_round_trips_the_spec_through_json(max_spans: int | None) -> None:
-    from proofload.capture import CaptureSpec
-    from proofload.executor_modal import _capture_payload, _capture_request
+    from poisson_prove.capture import CaptureSpec
+    from poisson_prove.executor_modal import _capture_payload, _capture_request
 
     spec = CaptureSpec(instrument=("openai",), content=True, max_observation_bytes=4096, max_spans=max_spans)
     payload = _capture_payload(spec, RUN_ID)
@@ -958,7 +958,7 @@ def test_p8_24_a_payload_carrying_the_retired_field_or_an_unknown_one_is_refused
     batch at the default with no error on either side of the process boundary (measured at step
     zero: the three frozen payload literals stayed green under the rename alone). Built as literal
     dicts: ``_capture_payload`` cannot carry the retired key."""
-    from proofload.executor_modal import _capture_request
+    from poisson_prove.executor_modal import _capture_request
 
     old = {"run_id": RUN_ID, "instrument": [], "content": False, "max_span_bytes": 1024, "max_spans": 1000}
     with pytest.raises(Exception, match="max_span_bytes"):
@@ -969,8 +969,8 @@ def test_p8_24_a_payload_carrying_the_retired_field_or_an_unknown_one_is_refused
 
 
 def test_p8_24_the_two_field_lists_are_one_list() -> None:
-    import proofload.executor_modal as modal
-    import proofload.sampler as sampler
+    import poisson_prove.executor_modal as modal
+    import poisson_prove.sampler as sampler
 
     assert tuple(modal._CAPTURE_FIELDS) == tuple(sampler._CAPTURE_FIELDS) == CAPTURE_FIELDS_SPEC
 
@@ -1014,7 +1014,7 @@ def test_p8_25_splits_signature_is_unchanged_and_its_edit_is_confined_to_the_loo
 INVALID_TRACES: dict[str, Any] = {
     "string": "step-a then step-b",
     "list": ["step-a", "step-b"],
-    "dict-missing-spans": {"schema": "proofload.trace/1", "source": "record", "source_version": None, "dropped": 0},
+    "dict-missing-spans": {"schema": "poisson-prove.trace/1", "source": "record", "source_version": None, "dropped": 0},
 }
 
 

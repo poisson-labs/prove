@@ -57,19 +57,19 @@ import numpy as np
 import pytest
 from scipy.stats import fisher_exact
 
-import proofload.cli as cli
-import proofload.report as report_module
-from proofload.diff import bh
-from proofload.episode import Episode
-from proofload.executor_modal import Job, ModalOptions, ModalTarget, run_with_mapper, worker_batch
-from proofload.store import EpisodeRecord, RunManifest, Store
+import poisson_prove.cli as cli
+import poisson_prove.report as report_module
+from poisson_prove.diff import bh
+from poisson_prove.episode import Episode
+from poisson_prove.executor_modal import Job, ModalOptions, ModalTarget, run_with_mapper, worker_batch
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
 QUICKSTART = ROOT / "examples" / "quickstart.toml"
-CLI_SOURCE = ROOT / "src" / "proofload" / "cli.py"
+CLI_SOURCE = ROOT / "src" / "poisson_prove" / "cli.py"
 
-MOCK_MODULE = "proofload.examples.mock_agent"
+MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
@@ -675,8 +675,8 @@ def test_c9_single_run_report_defaults_to_proofload_report_run(pair: MockPair, t
         "--x", "tool_fail_rate", "--y", "task_id",
     ])
     assert r.code == 0, r.text
-    out = tmp_path / f"proofload-report-{pair.a}"
-    assert out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
+    (out,) = [p for p in tmp_path.iterdir() if p.name.startswith("prove-report-")]
+    assert "-vs-" not in out.name and out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
     assert {p.name for p in out.iterdir()} == REPORT_FILES
 
 
@@ -914,7 +914,7 @@ def test_c16_unknown_run_is_still_a_two_and_missing_event_is_not_a_traceback(pai
 
 
 def test_c17_three_quickstart_commands_run_unchanged_under_thirty_seconds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("PROOFLOAD_STORE", raising=False)
+    monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
     t0 = time.perf_counter()
     first = run_cli(["sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
@@ -928,8 +928,8 @@ def test_c17_three_quickstart_commands_run_unchanged_under_thirty_seconds(tmp_pa
     elapsed = time.perf_counter() - t0
     assert elapsed < QUICKSTART_BUDGET_S, elapsed
 
-    out = tmp_path / f"proofload-report-{run_a}-{run_b}"
-    assert out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
+    (out,) = [p for p in tmp_path.iterdir() if p.name.startswith("prove-report-")]
+    assert re.fullmatch(r"prove-report-.+-vs-.+", out.name) and out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
     assert {p.name for p in out.iterdir()} == REPORT_FILES
     md = (out / "report.md").read_text()
     assert re.search(r"^violated: \d+ safer, \d+ worse$", md, re.MULTILINE), md

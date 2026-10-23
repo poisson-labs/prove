@@ -1,6 +1,6 @@
 # Reading a serve page
 
-`proofload serve A B --event NAME --x AXIS` builds one page for one stored pair and holds it on a
+`poisson-prove serve A B --event NAME --x AXIS` builds one page for one stored pair and holds it on a
 loopback port until Ctrl-C. The page is a snapshot: nothing on it is fetched, and it does not change
 while it is open. Fourteen sections, in page order. Each says what it answers and what it cannot.
 

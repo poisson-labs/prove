@@ -12,7 +12,7 @@ Pre-release. Not yet usable.
 first, then the statistics it came from.
 
 ```
-proofload --store ./proofload-runs serve A B --event NAME --x AXIS
+poisson-prove --store ./prove-runs serve A B --event NAME --x AXIS
 ```
 
 It binds nothing until the page is built, fetches nothing, and writes nothing; `--json` prints the

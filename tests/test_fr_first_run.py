@@ -143,18 +143,18 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload.cli as cli
-from proofload.diff import MultiDiffResult, UnpairedAnalysis, infer_events, multi_diff
-from proofload.episode import Episode
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.survival import competing_set
+import poisson_prove.cli as cli
+from poisson_prove.diff import MultiDiffResult, UnpairedAnalysis, infer_events, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.survival import competing_set
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / "src" / "proofload"
+PACKAGE = ROOT / "src" / "poisson_prove"
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
 QUICKSTART = ROOT / "examples" / "quickstart.toml"
-ROLLOUT = "proofload.examples.mock_agent:rollout"
-PATCHED = "proofload.examples.mock_agent:rollout_patched"
+ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
+PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 GO1_X, GO1_Y = "mu", "push_pct_bw"
@@ -163,8 +163,8 @@ HORIZON = 10.0
 # ---------- the pinned words (spec section 3), verbatim ----------
 
 FROM_FLAG = "it came from --store"
-FROM_ENV = "it came from $PROOFLOAD_STORE"
-FROM_DEFAULT = "it is the default, since neither --store nor $PROOFLOAD_STORE is set"
+FROM_ENV = "it came from $POISSON_PROVE_STORE"
+FROM_DEFAULT = "it is the default, since neither --store nor $POISSON_PROVE_STORE is set"
 SOURCES = (FROM_FLAG, FROM_ENV, FROM_DEFAULT)
 SWEEP_TAIL = "sweep SPEC.toml --target pkg.module:rollout"
 RUNS_HEADER = "run_id  status  backend  target_id  t_unit  rows  no_outcome\n"
@@ -174,8 +174,8 @@ def missing_message(root: str, source: str, verb: str) -> str:
     """Section 3.1, M: a path with no directory at it, on a verb that reads the store."""
     return (
         f"error: no store at {root}. No directory exists at that path; {source}.\n"
-        f"  to create one there: proofload --store {shlex.quote(root)} {SWEEP_TAIL}\n"
-        f"  to read another store: proofload --store PATH {verb}, with --store before the verb\n"
+        f"  to create one there: poisson-prove --store {shlex.quote(root)} {SWEEP_TAIL}\n"
+        f"  to read another store: poisson-prove --store PATH {verb}, with --store before the verb\n"
     )
 
 
@@ -183,8 +183,8 @@ def empty_message(root: str, source: str, verb: str) -> str:
     """Section 3.1, E: a directory holding no manifest.json, on a verb that reads the store."""
     return (
         f"error: no runs in {root}. No directory under it holds a manifest.json; {source}.\n"
-        f"  to write the first run there: proofload --store {shlex.quote(root)} {SWEEP_TAIL}\n"
-        f"  to read another store: proofload --store PATH {verb}, with --store before the verb\n"
+        f"  to write the first run there: poisson-prove --store {shlex.quote(root)} {SWEEP_TAIL}\n"
+        f"  to read another store: poisson-prove --store PATH {verb}, with --store before the verb\n"
     )
 
 
@@ -192,7 +192,7 @@ def empty_runs_note(root: str, source: str) -> str:
     """Section 3.1, E-runs: stderr of ``runs`` on an empty store, exit 0, no ``error: `` prefix."""
     return (
         f"no runs in {root}. No directory under it holds a manifest.json; {source}.\n"
-        f"  to write the first run there: proofload --store {shlex.quote(root)} {SWEEP_TAIL}\n"
+        f"  to write the first run there: poisson-prove --store {shlex.quote(root)} {SWEEP_TAIL}\n"
     )
 
 
@@ -262,6 +262,8 @@ SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a dif
 # pin: none of the names below ends in the suffix the exclusion-record sweeps count.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py outside MultiDiffResult.to_markdown gains complementary_events and trade_line()'s complement branch; to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py outside MultiDiffResult.to_markdown: diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "0e1fa8a53987fbe8d2ac9b8fe32b4909341f7da9ffdeb3960972f19c497dcc87"
 # Re-minted 2026-09-20 (truncation surfacing): report.py and viewer.py move, because that packet edits both; store.py and tree.py do not.
 # Re-minted again 2026-09-20 (stored-trace read): store.py moves, because that packet edits it; report.py, viewer.py and tree.py do not.
@@ -274,6 +276,8 @@ DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "0e1fa8a53987fbe8d2ac9b8fe32b4909341f7da9ffdeb
 # through `46c5ac0`.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); the whole-file sha256 of the built file. store.py and tree.py do not move. viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): store.py gains RunManifest.declared, its thirteenth field, in to_dict() and from_dict() (spec A10 W4); report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); the whole-file sha256 of each built file. viewer.py and tree.py do not move. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes all four files, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 UNTOUCHED_FILE_SHA256 = {
     "report.py": "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61",
     "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
@@ -307,34 +311,34 @@ CLI_IMPORTS = frozenset(
         ("__future__", "annotations"), ("_typeshed", "SupportsWrite"), ("argparse", None), ("collections", "Counter"),
         ("collections.abc", "Callable"), ("collections.abc", "Mapping"), ("collections.abc", "Sequence"),
         ("dataclasses", None), ("dataclasses", "dataclass"), ("json", None), ("os", None), ("pandas", None),
-        ("pathlib", "Path"), ("proofload", "__version__"), ("proofload._resolve", "resolve"),
-        ("proofload.diff", "COVERAGE_COLUMNS"), ("proofload.diff", "DiffError"), ("proofload.diff", "EventInferenceError"),
-        ("proofload.diff", "Method"), ("proofload.diff", "MultiDiffResult"), ("proofload.diff", "UnknownEvent"),
-        ("proofload.diff", "_CAUSES"), ("proofload.diff", "_PAIRED_METHODS"), ("proofload.diff", "_md_cell"),
-        ("proofload.diff", "infer_events"), ("proofload.diff", "multi_diff"), ("proofload.executor", "ExecutorError"),
-        ("proofload.executor", "Plan"), ("proofload.executor", "RunSummary"), ("proofload.executor", "check_power"),
-        ("proofload.executor", "plan"), ("proofload.executor", "preflight"), ("proofload.executor", "run_local"),
-        ("proofload.executor_modal", "ImageSpec"), ("proofload.executor_modal", "ModalOptions"),
-        ("proofload.executor_modal", "ModalTarget"), ("proofload.executor_modal", "preflight_modal"),
-        ("proofload.executor_modal", "run_modal"),
-        ("proofload.executor_burla", "BurlaOptions"), ("proofload.executor_burla", "preflight_burla"), ("proofload.executor_burla", "run_burla"),
-        ("proofload.paired", "Declaration"), ("proofload.paired", "PairedError"), ("proofload.paired", "_Bundle"),
-        ("proofload.paired", "_artifact_text"), ("proofload.paired", "_bundle"), ("proofload.paired", "_cost_block"),
-        ("proofload.paired", "_fold_html"), ("proofload.paired", "_fold_markdown"), ("proofload.paired", "cost"),
-        ("proofload.report", "MultiReport"), ("proofload.report", "ReportError"),
-        ("proofload.report", "ReportSpec"), ("proofload.report", "SurvivalReport"), ("proofload.report", "_interval_lines"), ("proofload.report", "_observation_cap"),
-        ("proofload.report", "_provenance_lines"), ("proofload.report", "build_multi_report"), ("proofload.report", "build_survival_report"),
-        ("proofload.sampler", "SamplerError"), ("proofload.sampler", "SweepSpec"), ("proofload.steps", "declaration_check"), ("proofload.store", "RunManifest"),
-        ("proofload.store", "Store"), ("proofload.store", "StoreError"), ("proofload.survival", "SurvivalError"),
-        ("proofload.survival", "cell_table"), ("proofload.survival", "competing_set"), ("proofload.trace", "Trace"),
-        ("proofload.trace", "TraceValidationError"), ("proofload.tree", "Bound"), ("proofload.tree", "CellFamily"),
-        ("proofload.tree", "CellResult"), ("proofload.tree", "DEFAULT_DEPTH"), ("proofload.tree", "DEFAULT_MAX_GROUP_MDE"),
-        ("proofload.tree", "DEFAULT_PERMUTATIONS"), ("proofload.tree", "DEFAULT_SEED"), ("proofload.tree", "DEPTHS"),
-        ("proofload.tree", "FaultLines"), ("proofload.tree", "GroupResult"), ("proofload.tree", "Grouping"),
-        ("proofload.tree", "Leaves"), ("proofload.tree", "RootResult"), ("proofload.tree", "TASK_FAMILY_KEYS"),
-        ("proofload.tree", "TRACE_GROUPINGS"), ("proofload.tree", "TreeResult"), ("proofload.tree", "WHOLE_GRID"),
-        ("proofload.tree", "tree"), ("proofload.viewer", "ViewerError"), ("proofload.viewer", "_HOST"),
-        ("proofload.viewer", "build_structure"), ("proofload.viewer", "render_html"), ("proofload.viewer", "serve_page"),
+        ("pathlib", "Path"), ("poisson_prove", "__version__"), ("poisson_prove._resolve", "resolve"),
+        ("poisson_prove.diff", "COVERAGE_COLUMNS"), ("poisson_prove.diff", "DiffError"), ("poisson_prove.diff", "EventInferenceError"),
+        ("poisson_prove.diff", "Method"), ("poisson_prove.diff", "MultiDiffResult"), ("poisson_prove.diff", "UnknownEvent"),
+        ("poisson_prove.diff", "_CAUSES"), ("poisson_prove.diff", "_PAIRED_METHODS"), ("poisson_prove.diff", "_md_cell"),
+        ("poisson_prove.diff", "infer_events"), ("poisson_prove.diff", "multi_diff"), ("poisson_prove.executor", "ExecutorError"),
+        ("poisson_prove.executor", "Plan"), ("poisson_prove.executor", "RunSummary"), ("poisson_prove.executor", "check_power"),
+        ("poisson_prove.executor", "plan"), ("poisson_prove.executor", "preflight"), ("poisson_prove.executor", "run_local"),
+        ("poisson_prove.executor_modal", "ImageSpec"), ("poisson_prove.executor_modal", "ModalOptions"),
+        ("poisson_prove.executor_modal", "ModalTarget"), ("poisson_prove.executor_modal", "preflight_modal"),
+        ("poisson_prove.executor_modal", "run_modal"),
+        ("poisson_prove.executor_burla", "BurlaOptions"), ("poisson_prove.executor_burla", "preflight_burla"), ("poisson_prove.executor_burla", "run_burla"),
+        ("poisson_prove.paired", "Declaration"), ("poisson_prove.paired", "PairedError"), ("poisson_prove.paired", "_Bundle"),
+        ("poisson_prove.paired", "_artifact_text"), ("poisson_prove.paired", "_bundle"), ("poisson_prove.paired", "_cost_block"),
+        ("poisson_prove.paired", "_fold_html"), ("poisson_prove.paired", "_fold_markdown"), ("poisson_prove.paired", "cost"),
+        ("poisson_prove.report", "MultiReport"), ("poisson_prove.report", "ReportError"),
+        ("poisson_prove.report", "ReportSpec"), ("poisson_prove.report", "SurvivalReport"), ("poisson_prove.report", "_interval_lines"), ("poisson_prove.report", "_observation_cap"),
+        ("poisson_prove.report", "_provenance_lines"), ("poisson_prove.report", "build_multi_report"), ("poisson_prove.report", "build_survival_report"),
+        ("poisson_prove.sampler", "SamplerError"), ("poisson_prove.sampler", "SweepSpec"), ("poisson_prove.steps", "declaration_check"), ("poisson_prove.store", "RunManifest"),
+        ("poisson_prove.store", "Store"), ("poisson_prove.store", "StoreError"), ("poisson_prove.survival", "SurvivalError"),
+        ("poisson_prove.survival", "cell_table"), ("poisson_prove.survival", "competing_set"), ("poisson_prove.trace", "Trace"),
+        ("poisson_prove.trace", "TraceValidationError"), ("poisson_prove.tree", "Bound"), ("poisson_prove.tree", "CellFamily"),
+        ("poisson_prove.tree", "CellResult"), ("poisson_prove.tree", "DEFAULT_DEPTH"), ("poisson_prove.tree", "DEFAULT_MAX_GROUP_MDE"),
+        ("poisson_prove.tree", "DEFAULT_PERMUTATIONS"), ("poisson_prove.tree", "DEFAULT_SEED"), ("poisson_prove.tree", "DEPTHS"),
+        ("poisson_prove.tree", "FaultLines"), ("poisson_prove.tree", "GroupResult"), ("poisson_prove.tree", "Grouping"),
+        ("poisson_prove.tree", "Leaves"), ("poisson_prove.tree", "RootResult"), ("poisson_prove.tree", "TASK_FAMILY_KEYS"),
+        ("poisson_prove.tree", "TRACE_GROUPINGS"), ("poisson_prove.tree", "TreeResult"), ("poisson_prove.tree", "WHOLE_GRID"),
+        ("poisson_prove.tree", "tree"), ("poisson_prove.viewer", "ViewerError"), ("poisson_prove.viewer", "_HOST"),
+        ("poisson_prove.viewer", "build_structure"), ("poisson_prove.viewer", "render_html"), ("poisson_prove.viewer", "serve_page"),
         ("sys", None), ("tomllib", None), ("traceback", None), ("typing", "Any"), ("typing", "NoReturn"),
         ("typing", "TYPE_CHECKING"), ("typing", "TextIO"), ("typing", "cast"),
     }
@@ -573,18 +577,18 @@ def test_fr3_runs_on_an_empty_store_exits_zero_says_so_on_stderr_and_keeps_its_s
 def test_fr4_the_source_clause_is_the_resolution_that_happened_and_only_that_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, how: str) -> None:
     flag, env = tmp_path / "flag-root", tmp_path / "env-root"
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("PROOFLOAD_STORE", raising=False)
+    monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     if how == "flag":
-        monkeypatch.setenv("PROOFLOAD_STORE", str(env))
+        monkeypatch.setenv("POISSON_PROVE_STORE", str(env))
         argv, root, source = ["--store", str(flag), "runs"], str(flag), FROM_FLAG
     elif how == "env":
-        monkeypatch.setenv("PROOFLOAD_STORE", str(env))
+        monkeypatch.setenv("POISSON_PROVE_STORE", str(env))
         argv, root, source = ["runs"], str(env), FROM_ENV
     elif how == "default":
-        argv, root, source = ["runs"], "proofload-runs", FROM_DEFAULT
+        argv, root, source = ["runs"], "prove-runs", FROM_DEFAULT
     else:
-        monkeypatch.setenv("PROOFLOAD_STORE", "")
-        argv, root, source = ["runs"], "proofload-runs", FROM_DEFAULT
+        monkeypatch.setenv("POISSON_PROVE_STORE", "")
+        argv, root, source = ["runs"], "prove-runs", FROM_DEFAULT
     r = run_cli(argv)
     assert r.code == 2 and r.out == "", r
     assert r.err == missing_message(root, source, "runs"), r.err
@@ -598,16 +602,16 @@ def test_fr4_the_empty_store_messages_name_the_same_three_sources(tmp_path: Path
     """E on a read verb and E-runs on ``runs``, each in each source form: FR4's clause for the two templates
     its own runs (on a missing root) cannot reach."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("PROOFLOAD_STORE", raising=False)
+    monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     if how == "flag":
         root, source, flags = tmp_path / "flag-root", FROM_FLAG, ["--store", str(tmp_path / "flag-root")]
     elif how == "env":
         root, source, flags = tmp_path / "env-root", FROM_ENV, []
-        monkeypatch.setenv("PROOFLOAD_STORE", str(root))
+        monkeypatch.setenv("POISSON_PROVE_STORE", str(root))
     else:
-        root, source, flags = tmp_path / "proofload-runs", FROM_DEFAULT, []
+        root, source, flags = tmp_path / "prove-runs", FROM_DEFAULT, []
     root.mkdir()
-    shown = str(root) if how != "default" else "proofload-runs"
+    shown = str(root) if how != "default" else "prove-runs"
     read = run_cli([*flags, "diff", GO1_A, GO1_B, "--event", "fell"])
     assert read.code == 2 and read.out == "" and read.err == empty_message(shown, source, "diff"), read
     listed_runs = run_cli([*flags, "runs"])
@@ -666,14 +670,14 @@ def test_fr7_the_create_line_is_a_command_that_survives_a_shell(tmp_path: Path, 
     root = tmp_path / name
     r = run_cli(["--store", str(root), "diff", GO1_A, GO1_B, "--event", "fell"])
     assert r.code == 2, r
-    assert command_from(r.err, "to create one there") == ["proofload", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"], r.err
+    assert command_from(r.err, "to create one there") == ["poisson-prove", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"], r.err
     assert r.err == missing_message(str(root), FROM_FLAG, "diff"), r.err
 
 
 def test_fr7_the_empty_store_hint_lines_are_commands_that_survive_a_shell(tmp_path: Path) -> None:
     root = tmp_path / "an empty store"
     root.mkdir()
-    expected = ["proofload", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"]
+    expected = ["poisson-prove", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"]
     read = run_cli(["--store", str(root), "check", GO1_A, GO1_B, "--event", "fell"])
     assert read.code == 2 and command_from(read.err, "to write the first run there") == expected, read.err
     listed = run_cli(["--store", str(root), "runs"])
@@ -1221,15 +1225,14 @@ def digest_excluding(path: Path, regions: Sequence[str]) -> str:
     return hashlib.sha256("".join(kept).encode()).hexdigest()
 
 
-def test_fr17_diff_py_outside_the_one_method_is_the_dispatch_commits() -> None:
-    """Green before and after, red on any edit to ``diff.py`` outside ``MultiDiffResult.to_markdown``. The
-    region is ``("MultiDiffResult", "to_markdown")`` and not the bare function: ``DiffResult`` has one too."""
-    assert digest_excluding(PACKAGE / "diff.py", ["MultiDiffResult.to_markdown"]) == DIFF_OUTSIDE_TO_MARKDOWN_SHA256
+# PF0 (Q4): test_fr17_diff_py_outside_the_one_method_is_the_dispatch_commits removed. It pinned the bytes of src/poisson_prove/diff.py outside one method, which the rename
+# changes; no digest of a file this module changes can be frozen honestly before its build
+# exists (front-door spec section 14).
 
 
-def test_fr17_report_viewer_store_and_tree_are_byte_untouched() -> None:
-    """Green before and after: the inference line reaches every surface through ``diff.py`` alone."""
-    assert {name: hashlib.sha256((PACKAGE / name).read_bytes()).hexdigest() for name in UNTOUCHED_FILE_SHA256} == UNTOUCHED_FILE_SHA256
+# PF0 (Q4): test_fr17_report_viewer_store_and_tree_are_byte_untouched removed. It pinned the bytes of report.py, viewer.py, store.py and tree.py, which the rename
+# changes; no digest of a file this module changes can be frozen honestly before its build
+# exists (front-door spec section 14).
 
 
 # FR18: no new surface.
@@ -1268,7 +1271,10 @@ def test_fr18_cli_py_imports_gain_shlex_and_nothing_else() -> None:
     """Green before and after (L3, U14, I21 and the four BinOp guards carry the rest of FR18): ``shlex`` may
     arrive, and no other import may."""
     now = imports_of(PACKAGE / "cli.py")
-    assert now - CLI_IMPORTS <= {("shlex", None)}, now - CLI_IMPORTS
+    # PF0 (Q7, Q8, section 2.5): cli.py reads the old store variable and the old default folder
+    # through ``poisson_prove._compat``, which may arrive too, under either import spelling.
+    via_compat = {i for i in now if i == ("poisson_prove", "_compat") or i[0] == "poisson_prove._compat"}
+    assert now - CLI_IMPORTS - via_compat <= {("shlex", None)}, now - CLI_IMPORTS
     assert CLI_IMPORTS - now == set(), CLI_IMPORTS - now
 
 

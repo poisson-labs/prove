@@ -19,4 +19,4 @@ opentelemetry-instrumentation-openai-v2==2.4b0
 
 # Proofload itself, with the extra that carries opentelemetry-sdk. Install it from this
 # checkout (`pip install -e .[agent]`); the Modal image ships the source instead.
-proofload[agent]
+poisson-prove[agent]

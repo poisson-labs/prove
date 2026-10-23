@@ -4,7 +4,7 @@ differs from this process's (P4)."""
 import os
 from typing import Any
 
-from proofload.episode import Episode
+from poisson_prove.episode import Episode
 
 
 def rollout(cfg: dict[str, Any], seed: int) -> Episode:

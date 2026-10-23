@@ -76,28 +76,28 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload
-import proofload.cli as cli
-import proofload.executor as executor
-import proofload.executor_modal as executor_modal
-from proofload.episode import Episode
-from proofload.executor import plan, run_local
-from proofload.executor_modal import (
+import poisson_prove
+import poisson_prove.cli as cli
+import poisson_prove.executor as executor
+import poisson_prove.executor_modal as executor_modal
+from poisson_prove.episode import Episode
+from poisson_prove.executor import plan, run_local
+from poisson_prove.executor_modal import (
     Job, Mapper, ModalBackendError, ModalOptions, Result, run_with_mapper, worker_batch,
 )
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.trace import OTEL_SEMCONV_VERSION, Span, Trace, TraceValidationError, merge
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace, TraceValidationError, merge
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
-PACKAGE = Path(proofload.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
+PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path needs the fork start method")
 
-RUN_ID_KEY = "proofload.run_id"
-EPISODE_KEY = "proofload.episode"
+RUN_ID_KEY = "poisson_prove.run_id"
+EPISODE_KEY = "poisson_prove.episode"
 RUN_ID = "r-2026-09-05-timeout-oracle"
 EPISODE = "cfg-7:1"
 SALT = "timeout-oracle-salt"
@@ -348,7 +348,7 @@ def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
 def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028 plus A8a's ``alias_map_version``."""
     d: dict[str, Any] = {
-        "schema": "proofload.trace/1",
+        "schema": "poisson-prove.trace/1",
         "source": "otel",
         "source_version": OTEL_SEMCONV_VERSION,
         "dropped": 0,
@@ -525,7 +525,7 @@ def child_call_with_timeout(
     target: str, config: dict[str, Any], seed: int, timeout: float, with_capture: bool
 ) -> dict[str, Any]:
     """One ``_call_with_timeout`` call, timed, with a capture call so the episode child installs."""
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     ctx = executor._mp_context()
     call = (
@@ -554,8 +554,8 @@ def child_snapshot(
     left open, ``innermost_attrs`` and a ``before`` marker set on the innermost,
     ``capture._snapshot("timeout")`` taken, an ``after`` marker set, and everything closed
     normally. Returns the snapshot and the normal close."""
-    from proofload import capture as capture_module
-    from proofload.capture import CaptureSpec, capture, install
+    from poisson_prove import capture as capture_module
+    from poisson_prove.capture import CaptureSpec, capture, install
 
     spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
     status = install(CaptureSpec(**spec_kwargs))
@@ -779,7 +779,7 @@ def test_e1_json_round_trip_holds_with_truncated_set(
 
 
 def test_e2_from_otel_yields_truncated_none_even_when_a_span_is_open() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     closed = {
         "spanId": ROOT_ID, "parentSpanId": None, "name": "invoke_agent",
@@ -796,7 +796,7 @@ def test_e2_from_otel_yields_truncated_none_even_when_a_span_is_open() -> None:
 
 
 def test_e2_from_litellm_yields_truncated_none() -> None:
-    from proofload.trace import from_litellm
+    from poisson_prove.trace import from_litellm
 
     payload = {"model": "gpt-4o", "start_time": 1.0, "end_time": 2.0, "messages": []}
     assert from_litellm([payload]).truncated is None
@@ -804,7 +804,7 @@ def test_e2_from_litellm_yields_truncated_none() -> None:
 
 
 def test_e2_the_recorder_yields_truncated_none() -> None:
-    from proofload.trace import collect, record, step
+    from poisson_prove.trace import collect, record, step
 
     @step
     def lookup(x: int) -> int:
@@ -1351,7 +1351,7 @@ class CountingContext:
 
 def child_count_pipes(target: str, config: dict[str, Any], seed: int, timeout: float, with_capture: bool) -> dict[str, Any]:
     """One ``_call_with_timeout`` call on a counting context; the episode child installs, this one never does."""
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     counting = CountingContext(executor._mp_context())
     call = (
@@ -1385,20 +1385,20 @@ def test_e14_the_drain_pipe_is_created_beside_the_outcome_pipe_with_or_without_a
 
 
 def test_e12_capture_exports_exactly_the_five_s15_symbols() -> None:
-    import proofload.capture as capture_module
+    import poisson_prove.capture as capture_module
 
     assert set(capture_module.__all__) == PUBLIC_CAPTURE, sorted(capture_module.__all__)
     defined = {
         name
         for name, obj in vars(capture_module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == "proofload.capture"
+        if not name.startswith("_") and getattr(obj, "__module__", None) == "poisson_prove.capture"
     }
     assert defined == PUBLIC_CAPTURE, sorted(defined)
 
 
 def test_e12_trace_and_otel_export_what_they_exported_in_s15() -> None:
-    import proofload.otel as otel_module
-    import proofload.trace as trace_module
+    import poisson_prove.otel as otel_module
+    import poisson_prove.trace as trace_module
 
     assert list(trace_module.__all__) == TRACE_EXPORTS, trace_module.__all__
     assert list(otel_module.__all__) == OTEL_EXPORTS, otel_module.__all__

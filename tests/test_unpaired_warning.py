@@ -34,19 +34,19 @@ from typing import Any, get_args
 
 import pandas as pd
 
-import proofload.cli as cli
-from proofload.diff import (
+import poisson_prove.cli as cli
+from poisson_prove.diff import (
     Method,
     NotPairable,
     UnpairedAnalysis,
     diff,
     multi_diff,
 )
-from proofload.episode import Episode
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.survival import censor
+from poisson_prove.episode import Episode
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.survival import censor
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "proofload"
+SRC = Path(__file__).resolve().parents[1] / "src" / "poisson_prove"
 SALT = "unpaired-warning-oracle-salt"
 OTHER_SALT = "a-different-salt"
 HORIZON = 10.0

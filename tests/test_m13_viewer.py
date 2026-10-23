@@ -68,14 +68,14 @@ from typing import Any
 
 import pytest
 
-import proofload
-import proofload.cli as cli
-from proofload.diff import MultiDiffResult, multi_diff
-from proofload.episode import Episode
-from proofload.report import MultiReport, ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.tree import TreeResult
-from proofload.tree import tree as grow_tree
+import poisson_prove
+import poisson_prove.cli as cli
+from poisson_prove.diff import MultiDiffResult, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import MultiReport, ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.tree import TreeResult
+from poisson_prove.tree import tree as grow_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
@@ -83,13 +83,13 @@ QUICKSTART = ROOT / "examples" / "quickstart.toml"
 S0_TEST_SOURCE = Path(__file__).resolve().parent / "test_s0_scaffold.py"
 TESTS_DIR = Path(__file__).resolve().parent
 
-MOCK_MODULE = "proofload.examples.mock_agent"
+MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 V22B_SALT = "00112233445566778899aabbccddeeff"
 
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
-SCHEMA = "proofload.viewpair/6"
+SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -111,7 +111,7 @@ TOP_LEVEL_KEYS = (
 )
 ARM_KEYS = (
     "role", "run_id", "target_id", "backend", "status", "created_at", "run_salt", "t_unit",
-    "proofload_version", "schema_version", "retain_traces_for", "axis_types", "environment",
+    "poisson_prove_version", "schema_version", "retain_traces_for", "axis_types", "environment",
     "rows_stored", "tally",
 )
 VIEW_KEYS = ("title", "x_axis", "y_axis", "fixed", "theme", "top_n", "forest", "bound", "sign_convention")
@@ -173,7 +173,7 @@ UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
 )
 HOLE_MESSAGE = "No comparable data for this cell."
 EVENT_LINE_LITERAL = "given by --event, not inferred"
-INDEX_ID = "proofload-cells"
+INDEX_ID = "prove-cells"
 
 CLIENT_BAN = {"urllib", "requests", "httpx", "socket"}
 SERVER_ALLOWANCE = "http.server"
@@ -212,17 +212,17 @@ REQUEST_TIMEOUT_S = 15.0
 
 def viewer() -> Any:
     """``proofload.viewer``, imported on demand so collection does not depend on it."""
-    import proofload.viewer as module
+    import poisson_prove.viewer as module
 
     return module
 
 
 def viewer_source() -> str:
-    return (Path(proofload.__file__).resolve().parent / "viewer.py").read_text()
+    return (Path(poisson_prove.__file__).resolve().parent / "viewer.py").read_text()
 
 
 def core_modules() -> list[Path]:
-    return sorted(Path(proofload.__file__).resolve().parent.rglob("*.py"))
+    return sorted(Path(poisson_prove.__file__).resolve().parent.rglob("*.py"))
 
 
 @dataclass(frozen=True)
@@ -797,7 +797,7 @@ def format_calls(tree: ast.Module) -> list[int]:
 def report_import_names(tree: ast.Module) -> set[str]:
     names: set[str] = set()
     for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "proofload.report":
+        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.report":
             names.update(alias.name for alias in node.names)
     return names
 
@@ -1127,9 +1127,9 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(go1: B
 
 
 def test_v12_assembling_rendering_and_serving_touch_no_file(go1: Built, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.delenv("PROOFLOAD_STORE", raising=False)
+    monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
-    default_dir = tmp_path / f"proofload-report-{GO1_A}-{GO1_B}"
+    default_dir = tmp_path / f"prove-report-{GO1_A}-vs-{GO1_B}"
     before = (tree_snapshot(GO1_ROOT), tree_snapshot(tmp_path), tree_snapshot(default_dir))
     with cli_served(monkeypatch, go1_full_argv()) as run:
         assert get(run.server, "/").status == 200
@@ -1193,7 +1193,7 @@ def test_v15_from_http_import_server_trips_outside_viewer(tmp_path: Path) -> Non
 
 
 def test_v16_every_text_entry_is_m7s_formatting_of_the_raw_value(go1: Built) -> None:
-    from proofload.report import _fmt
+    from poisson_prove.report import _fmt
 
     for panel in go1.structure["panels"]:
         rows = m6_rows(go1.multi, panel["event"])
@@ -1219,7 +1219,7 @@ def test_v16_integer_fields_have_no_text_entry_and_match_m6(go1: Built) -> None:
 
 
 def test_v16_the_page_prints_no_float_except_through_m7s_strings(go1: Built) -> None:
-    from proofload.report import _provenance_lines
+    from poisson_prove.report import _provenance_lines
 
     # ``config_text`` values (viewpair/2) are structure strings and are already walked.
     allowed = list(walk_strings(go1.structure)) + _provenance_lines(go1.structure["diff"])
@@ -1297,7 +1297,7 @@ def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(go1: Built,
 
 
 def test_v20_provenance_items_are_m7s_lines_in_order_and_diff_is_the_provenance_dict(go1: Built, go1_dom: Dom) -> None:
-    from proofload.report import _provenance_lines
+    from poisson_prove.report import _provenance_lines
 
     expected = [line[2:] for line in _provenance_lines(go1.report.provenance)]
     lists = [[li.deep_text() for li in descendants(ul, "li")] for ul in go1_dom.find("ul") + go1_dom.find("ol")]
@@ -1630,7 +1630,7 @@ def test_v35_render_html_takes_one_parameter_and_renders_a_round_tripped_structu
     script = (
         "import json, sys\n"
         "from pathlib import Path\n"
-        "from proofload.viewer import render_html\n"
+        "from poisson_prove.viewer import render_html\n"
         "structure = json.loads(Path(sys.argv[1]).read_text())\n"
         "Path(sys.argv[2]).write_text(render_html(structure), encoding='utf-8')\n"
     )
@@ -1714,7 +1714,7 @@ def test_v37_both_serializers_pass_allow_nan_false() -> None:
     # With the null rule intact there is no non-finite value left to reject, so the setting
     # has no rendered form; it is the loud-failure guard V37 names, read from the source.
     viewer_tree = ast.parse(viewer_source())
-    cli_tree = ast.parse((Path(proofload.__file__).resolve().parent / "cli.py").read_text())
+    cli_tree = ast.parse((Path(poisson_prove.__file__).resolve().parent / "cli.py").read_text())
     calls = json_dumps_calls(closure(viewer_tree, "render_html")) + json_dumps_calls(closure(cli_tree, "_cmd_serve"))
     assert len(calls) >= 2, len(calls)
     for call in calls:

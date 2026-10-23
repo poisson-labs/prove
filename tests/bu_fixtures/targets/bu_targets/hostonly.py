@@ -4,7 +4,7 @@ environment carries (W6). A worker's environment holds none of the host's."""
 import os
 from typing import Any
 
-from proofload.episode import Episode
+from poisson_prove.episode import Episode
 
 if "BU_HOST_ONLY" not in os.environ:
     raise ImportError("bu_targets.hostonly imports only where BU_HOST_ONLY is set")

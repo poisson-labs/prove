@@ -128,17 +128,17 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload.cli as cli
-from proofload.episode import Episode
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.trace import Span, Trace, TraceValidationError
+import poisson_prove.cli as cli
+from poisson_prove.episode import Episode
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.trace import Span, Trace, TraceValidationError
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "src" / "proofload"
+SRC = ROOT / "src" / "poisson_prove"
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS / "fixtures" / "trace"
 QUICKSTART = ROOT / "examples" / "quickstart.toml"
-LOGGER_NAME = "proofload.trace"
+LOGGER_NAME = "poisson_prove.trace"
 EPOCH = 1_756_900_000_000_000_000
 
 # ---------- spec constants (section 2), spelled here so the file collects before the build ----------
@@ -156,7 +156,7 @@ ALIAS_MAP_VERSION_SPEC = "1"  # section 10 Q4 (a)
 STATUS_CODES = frozenset({"OK", "UNSET", "ERROR"})
 LIFTED_CARRIERS = (
     "openinference.span.kind", "traceloop.span.kind", "graph.node.name",
-    "proofload.step_name", "proofload.outcome", "proofload.outcome_by", "proofload.attempt", "proofload.gate",
+    "poisson_prove.step_name", "poisson_prove.outcome", "poisson_prove.outcome_by", "poisson_prove.attempt", "poisson_prove.gate",
 )
 MANIFEST_CAPTURE_KEYS = frozenset({
     "requested", "active", "reason", "instrumented", "semconv", "alias_map_version", "content", "max_observation_bytes", "max_spans",  # A8b: the key's second move (A8a T4)
@@ -169,10 +169,10 @@ FIVE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-"
 #: P8-22: sha256 of ``ast.get_source_segment`` for each symbol A7 owns, measured at ``3bf4083``.
 A7_SURFACE: dict[str, dict[str, str]] = {
     "trace.py": {
-        "LOGPROBS_KEY": "b1b1c08b27d289aca2ea8ae77d3ed47dadbe74c7a22ee414b332b5479d71ecaf",
+        # PF0 (Q4): LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
+        # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
         "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
         "_ObservationKeys": "234e6e2bf19ab9d167fb4a9fd108c6c6e5843ee0730abde04a2b92e5688b7f41",
-        "OBSERVATION_KEYS": "0f1224d8e3bfd231b802dc9e642e3d1f09aecaeb95786ed0432659a7f605e98d",
         # ``split`` retired from this table by A8b Session A, narrowed and never re-minted (ADR-077 / C19):
         # A8b widens its loop body, which is the one A7 symbol A8b may edit. Owner: A8b. Cover:
         # tests/test_a8b_cut_and_cap.py P8-25, which re-asserts every other symbol here byte-identical,
@@ -196,7 +196,7 @@ def load_fixture(name: str) -> Any:
 
 def loop_spans() -> dict[int, Span]:
     """``otlp_loop.json`` through ``from_otel``, keyed by the span id as an integer (1..16)."""
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     tr = from_otel(load_fixture("otlp_loop.json"))
     assert tr.dropped == 0 and len(tr.spans) == 16, (tr.dropped, len(tr.spans))
@@ -218,7 +218,7 @@ def span_dict(**overrides: Any) -> dict[str, Any]:
 
 def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     d: dict[str, Any] = {
-        "schema": "proofload.trace/1", "source": "otel", "source_version": "1.42.0", "dropped": 0,
+        "schema": "poisson-prove.trace/1", "source": "otel", "source_version": "1.42.0", "dropped": 0,
         "spans": [dict(s) for s in spans], "truncated": None, "alias_map_version": None,
     }
     d.update(overrides)
@@ -350,8 +350,8 @@ def test_p8_2_each_invalid_value_raises_at_the_constructor_and_inside_from_dict(
 
 
 def test_p8_2_the_vocabularies_and_the_free_fields() -> None:
-    from proofload import trace as trace_module
-    from proofload.trace import GATE, OUTCOME_BY
+    from poisson_prove import trace as trace_module
+    from poisson_prove.trace import GATE, OUTCOME_BY
 
     assert OUTCOME_BY == OUTCOME_BY_SPEC and GATE == GATE_SPEC
     assert {"OUTCOME_BY", "GATE", "ALIAS_MAP_VERSION"} <= set(trace_module.__all__)
@@ -399,8 +399,8 @@ def raw_spans_with_an_operation_carrier(payload: Any) -> int:
 
 
 def test_p8_3_every_producer_leaves_all_eight_fields_none_without_a_carrier() -> None:
-    from proofload.examples import mock_agent
-    from proofload.trace import collect, from_litellm, from_otel, record
+    from poisson_prove.examples import mock_agent
+    from poisson_prove.trace import collect, from_litellm, from_otel, record
 
     with collect() as c:
         with record("tool", "search") as h:
@@ -441,7 +441,7 @@ def test_p8_3_every_producer_leaves_all_eight_fields_none_without_a_carrier() ->
 
 
 def test_p8_3_contrapositive_a_record_block_that_sets_each_field_sees_it_on_the_closed_span() -> None:
-    from proofload.trace import SpanHandle, collect, record, step
+    from poisson_prove.trace import SpanHandle, collect, record, step
 
     assert {"outcome", "outcome_by"} <= {f.name for f in dataclasses.fields(SpanHandle)}
     with collect() as c:
@@ -472,7 +472,7 @@ def test_p8_3_contrapositive_a_record_block_that_sets_each_field_sees_it_on_the_
 
 
 def test_p8_3_a_bad_handle_value_drops_the_span_with_a_warning_and_never_raises(caplog: pytest.LogCaptureFixture) -> None:
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     caplog.set_level(logging.WARNING, logger=LOGGER_NAME)
     with collect() as c:
@@ -495,13 +495,13 @@ def test_p8_4_graph_node_name_and_proofload_attempt_are_lifted_and_leave_attrs()
         assert by[sid].step_name == step_name, (sid, by[sid].step_name)
         assert "graph.node.name" not in by[sid].attrs, sid
     assert by[2].attempt == 1 and by[3].attempt == 2
-    assert "proofload.attempt" not in by[2].attrs and "proofload.attempt" not in by[3].attrs
+    assert "poisson_prove.attempt" not in by[2].attrs and "poisson_prove.attempt" not in by[3].attrs
     assert (by[2].outcome, by[2].outcome_by) == ("pass", "code")
     assert (by[3].outcome, by[3].outcome_by) == ("fail", "llm")
     for sid in (2, 3):
-        assert "proofload.outcome" not in by[sid].attrs and "proofload.outcome_by" not in by[sid].attrs
+        assert "poisson_prove.outcome" not in by[sid].attrs and "poisson_prove.outcome_by" not in by[sid].attrs
     for sid in (12, 13):
-        assert "proofload.step_name" not in by[sid].attrs and "proofload.gate" not in by[sid].attrs
+        assert "poisson_prove.step_name" not in by[sid].attrs and "poisson_prove.gate" not in by[sid].attrs
     assert by[12].step_name == "policy" and by[13].step_name == "hook"
 
 
@@ -516,7 +516,7 @@ def test_p8_4_guardrail_is_an_emitted_gate_and_evaluator_is_not_and_graph_node_i
     for sid, node, parent in ((2, "n2", "n1"), (3, "n3", "n1"), (4, "n4", "n1"), (6, "n6", "n5")):
         assert by[sid].attrs["graph.node.id"] == node and by[sid].attrs["graph.node.parent_id"] == parent, sid
     assert by[1].attrs["graph.node.id"] == "n1" and "graph.node.parent_id" not in by[1].attrs
-    from proofload.trace import ATTRIBUTE_ALIASES, _LIFTED_KEYS
+    from poisson_prove.trace import ATTRIBUTE_ALIASES, _LIFTED_KEYS
 
     assert "graph.node.id" not in ATTRIBUTE_ALIASES and "graph.node.parent_id" not in ATTRIBUTE_ALIASES
     assert "graph.node.id" not in _LIFTED_KEYS and "graph.node.parent_id" not in _LIFTED_KEYS
@@ -534,7 +534,7 @@ def test_p8_5_attempt_is_never_derived_from_name_repetition_or_nesting() -> None
     # The third lookup, beside siblings carrying 1 and 2, is still None: a counter is read, never inferred.
     assert by[4].attempt is None
     # And the same shape through the recorder: three same-named spans in one block.
-    from proofload.trace import collect, record
+    from poisson_prove.trace import collect, record
 
     with collect() as c:
         for _ in range(3):
@@ -552,18 +552,18 @@ def test_p8_6_a_span_named_guardrail_with_kind_tool_has_no_gate() -> None:
 
 
 def test_p8_6_declared_on_the_wire_is_dropped_with_one_warning_and_emitted_is_taken(caplog: pytest.LogCaptureFixture) -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     caplog.set_level(logging.WARNING, logger=LOGGER_NAME)
     tr = from_otel([
-        flat_span(21, "policy_check", **{"proofload.gate": "declared"}),
-        flat_span(22, "hook", **{"proofload.gate": "emitted"}),
-        flat_span(23, "junk", **{"proofload.gate": "sometimes"}),
+        flat_span(21, "policy_check", **{"poisson_prove.gate": "declared"}),
+        flat_span(22, "hook", **{"poisson_prove.gate": "emitted"}),
+        flat_span(23, "junk", **{"poisson_prove.gate": "sometimes"}),
     ])
     assert tr.dropped == 0
     by = {int(s.span_id, 16): s for s in tr.spans}
     assert by[21].gate is None and by[22].gate == "emitted" and by[23].gate is None
-    assert all("proofload.gate" not in s.attrs for s in tr.spans)
+    assert all("poisson_prove.gate" not in s.attrs for s in tr.spans)
     warned = [r for r in caplog.records if r.levelno == logging.WARNING and "declared" in r.getMessage()]
     assert len(warned) == 1, [r.getMessage() for r in caplog.records]
     assert loop_spans()[12].gate is None and loop_spans()[13].gate == "emitted"
@@ -587,7 +587,7 @@ def alias_map_version_bindings() -> list[str]:
 
 
 def test_p8_13_alias_map_version_is_bound_exactly_once_in_src_and_the_binding_is_the_value() -> None:
-    from proofload.trace import ALIAS_MAP_VERSION
+    from poisson_prove.trace import ALIAS_MAP_VERSION
 
     assert ALIAS_MAP_VERSION == ALIAS_MAP_VERSION_SPEC
     sites = alias_map_version_bindings()
@@ -596,7 +596,7 @@ def test_p8_13_alias_map_version_is_bound_exactly_once_in_src_and_the_binding_is
 
 
 def test_p8_13_from_otel_stamps_it_and_record_and_litellm_leave_it_none() -> None:
-    from proofload.trace import ALIAS_MAP_VERSION, collect, from_litellm, from_otel, record
+    from poisson_prove.trace import ALIAS_MAP_VERSION, collect, from_litellm, from_otel, record
 
     for name in OTLP_FIXTURES + ("otlp_loop.json",):
         assert from_otel(load_fixture(name)).alias_map_version == ALIAS_MAP_VERSION, name
@@ -608,7 +608,7 @@ def test_p8_13_from_otel_stamps_it_and_record_and_litellm_leave_it_none() -> Non
     assert from_litellm([]).alias_map_version is None
     # The recorder's capture path reaches it for free: Recorder._trace builds through from_otel.
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
-    from proofload.capture import CaptureSpec, Recorder
+    from poisson_prove.capture import CaptureSpec, Recorder
 
     rec = Recorder(CaptureSpec(max_observation_bytes=8192), "r-a8a", "cfg:1")  # CD (D1): the cap has no default
     empty = rec._trace([], None)
@@ -618,7 +618,7 @@ def test_p8_13_from_otel_stamps_it_and_record_and_litellm_leave_it_none() -> Non
 
 
 def test_p8_13_merge_mirrors_source_version_keeps_agreement_and_erases_disagreement() -> None:
-    from proofload.trace import ALIAS_MAP_VERSION, collect, from_otel, merge, record
+    from poisson_prove.trace import ALIAS_MAP_VERSION, collect, from_otel, merge, record
 
     a = from_otel([flat_span(0x41, "a")])
     b = from_otel([flat_span(0x42, "b")])
@@ -644,8 +644,8 @@ def test_p8_14_span_mapping_emits_trace_id_and_from_otel_keeps_it_with_the_statu
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
     from opentelemetry.trace import Status, StatusCode
 
-    from proofload.capture import _span_mapping
-    from proofload.trace import _LIFTED_KEYS, from_otel
+    from poisson_prove.capture import _span_mapping
+    from poisson_prove.trace import _LIFTED_KEYS, from_otel
 
     provider = TracerProvider()
     exporter = InMemorySpanExporter()
@@ -675,7 +675,7 @@ def test_p8_14_span_mapping_emits_trace_id_and_from_otel_keeps_it_with_the_statu
 
 
 def test_p8_14_on_the_fixtures_every_span_carries_both_and_error_keeps_the_shipped_rule() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     by = loop_spans()
     assert by[1].attrs["otel.status_code"] == "UNSET" and by[2].attrs["otel.status_code"] == "OK"
@@ -695,7 +695,7 @@ def test_p8_14_on_the_fixtures_every_span_carries_both_and_error_keeps_the_shipp
 
 
 def test_p8_15_modal_backend_meta_carries_infra_attempt_and_no_attempt() -> None:
-    from proofload import executor_modal
+    from poisson_prove import executor_modal
 
     source = (SRC / "executor_modal.py").read_text(encoding="utf-8")
     literals = string_literals(ast.parse(source))
@@ -707,7 +707,7 @@ def test_p8_15_modal_backend_meta_carries_infra_attempt_and_no_attempt() -> None
 
 
 def test_p8_15_the_mock_emits_tries_and_never_attempt() -> None:
-    from proofload.examples import mock_agent
+    from poisson_prove.examples import mock_agent
 
     source = (SRC / "examples" / "mock_agent.py").read_text(encoding="utf-8")
     assert "attempts" not in string_literals(ast.parse(source))
@@ -726,7 +726,7 @@ def test_p8_15_the_mock_emits_tries_and_never_attempt() -> None:
 
 
 def test_p8_16_operation_is_the_source_operation_name_stripped_and_lowercased_including_unrecognised() -> None:
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     raw = load_fixture("otlp_kinds.json")
     expected = {}
@@ -737,14 +737,14 @@ def test_p8_16_operation_is_the_source_operation_name_stripped_and_lowercased_in
     assert "frobnicate" in expected.values() and len(expected) >= 10
     for span in from_otel(raw).spans:
         assert span.operation == expected.get(span.span_id), (span.span_id, span.operation)
-        assert "proofload.original_operation" not in span.attrs and "gen_ai.operation.name" not in span.attrs
+        assert "poisson_prove.original_operation" not in span.attrs and "gen_ai.operation.name" not in span.attrs
     by = loop_spans()
     assert (by[16].operation, by[16].kind) == ("frobnicate", "other")
     assert (by[14].operation, by[14].kind, by[14].name) == ("chat", "llm", "gpt-4o")
-    from proofload import trace as trace_module
+    from poisson_prove import trace as trace_module
 
     assert not hasattr(trace_module, "_ORIGINAL_OPERATION")
-    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "proofload.error_type"  # section 10 Q7 (a): survives
+    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # section 10 Q7 (a): survives
 
 
 # ---------- P8-17: the manifest's capture record ----------
@@ -752,9 +752,9 @@ def test_p8_16_operation_is_the_source_operation_name_stripped_and_lowercased_in
 
 def test_p8_17_environment_capture_has_the_nine_keys_and_alias_map_version_is_the_constant() -> None:
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
-    from proofload.capture import CaptureSpec, CaptureStatus
-    from proofload.executor import _capture_record
-    from proofload.trace import ALIAS_MAP_VERSION, OTEL_SEMCONV_VERSION
+    from poisson_prove.capture import CaptureSpec, CaptureStatus
+    from poisson_prove.executor import _capture_record
+    from poisson_prove.trace import ALIAS_MAP_VERSION, OTEL_SEMCONV_VERSION
 
     record = _capture_record(CaptureSpec(max_observation_bytes=8192), CaptureStatus(requested=False, active=False, reason=None, instrumented=()))  # CD (D1)
     assert set(record) == MANIFEST_CAPTURE_KEYS, sorted(record)
@@ -769,7 +769,7 @@ def test_p8_18_inspect_prints_nine_columns_the_first_five_unchanged_and_dashes_f
     root = tmp_path / "store"
     out, err = StringIO(), StringIO()
     code = cli.main(
-        ["--store", str(root), "sweep", str(QUICKSTART), "--target", "proofload.examples.mock_agent:rollout", "--yes"],
+        ["--store", str(root), "sweep", str(QUICKSTART), "--target", "poisson_prove.examples.mock_agent:rollout", "--yes"],
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()
@@ -822,8 +822,8 @@ def test_p8_18_the_four_new_columns_carry_step_name_attempt_outcome_and_gate(tmp
 hex_ids = st.text(alphabet="0123456789abcdef", min_size=16, max_size=16)
 json_scalars = st.none() | st.booleans() | st.integers(min_value=-(2**63), max_value=2**63) | st.floats(allow_nan=False, allow_infinity=False) | st.text(max_size=8)
 json_values = st.recursive(json_scalars, lambda inner: st.lists(inner, max_size=3) | st.dictionaries(st.text(max_size=4), inner, max_size=3), max_leaves=8)
-observation_attr_keys = st.sampled_from(["gen_ai.input.messages", "gen_ai.tool.call.result", "input.value", "proofload.logprobs", "gen_ai.prompt.0.content", "llm.output_messages.0.message.content"])
-plain_attr_keys = st.sampled_from(["tries", "otel.trace_id", "otel.status_code", "proofload.run_id", "graph.node.id", "graph.node.parent_id"])
+observation_attr_keys = st.sampled_from(["gen_ai.input.messages", "gen_ai.tool.call.result", "input.value", "poisson_prove.logprobs", "gen_ai.prompt.0.content", "llm.output_messages.0.message.content"])
+plain_attr_keys = st.sampled_from(["tries", "otel.trace_id", "otel.status_code", "poisson_prove.run_id", "graph.node.id", "graph.node.parent_id"])
 attr_maps = st.dictionaries(plain_attr_keys | observation_attr_keys, json_values, max_size=5)
 text1 = st.text(min_size=1, max_size=8)
 
@@ -868,7 +868,7 @@ def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
 @settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(spans=span_forests(), source=st.sampled_from(("record", "otel", "litellm", "mixed")), alias=st.none() | st.sampled_from(["1", "2"]), truncated=st.none() | st.just("timeout"))
 def test_p8_19_assemble_of_split_round_trips_the_twenty_one_key_span_and_the_seventh_trace_key(spans: list[dict[str, Any]], source: str, alias: str | None, truncated: str | None) -> None:
-    from proofload.trace import OBSERVATION_KEYS, assemble, split
+    from poisson_prove.trace import OBSERVATION_KEYS, assemble, split
 
     t = Trace.from_dict(trace_dict(*spans, source=source, source_version=None, alias_map_version=alias, truncated=truncated))
     envelope, obs = split(t)
@@ -888,7 +888,7 @@ def test_p8_19_split_and_assemble_name_no_field_key_outside_the_navigation_set()
     satisfy this. The literals they do name -- ``span_id``, ``attrs``, ``spans`` -- are the keys
     needed to walk the structure, not the field set; the mutant this catches rebuilds the envelope
     from an enumerated key list, which puts ``kind``, ``name``, ``operation`` ... into the body."""
-    from proofload.trace import _OBSERVATION_FIELDS, _SPAN_FIELDS, _TRACE_FIELDS
+    from poisson_prove.trace import _OBSERVATION_FIELDS, _SPAN_FIELDS, _TRACE_FIELDS
 
     navigation = {"span_id", "attrs", "spans", *_OBSERVATION_FIELDS}
     assert set(_SPAN_FIELDS) == set(SPAN_FIELDS_SPEC) and set(_TRACE_FIELDS) == set(TRACE_KEYS_SPEC)

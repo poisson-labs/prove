@@ -73,22 +73,22 @@ from typing import Any
 import pyarrow.parquet as pq
 import pytest
 
-import proofload
-import proofload.cli as cli
-import proofload.executor as executor
-from proofload.episode import Episode
-from proofload.executor import RunSummary, plan, run_local
-from proofload.executor_modal import Job, Mapper, Result, worker_batch
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, Store
-from proofload.trace import OTEL_SEMCONV_VERSION, Span, Trace
+import poisson_prove
+import poisson_prove.cli as cli
+import poisson_prove.executor as executor
+from poisson_prove.episode import Episode
+from poisson_prove.executor import RunSummary, plan, run_local
+from poisson_prove.executor_modal import Job, Mapper, Result, worker_batch
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, Store
+from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
-PACKAGE = Path(proofload.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
-RUN_ID_KEY = "proofload.run_id"
-EPISODE_KEY = "proofload.episode"
+PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
+RUN_ID_KEY = "poisson_prove.run_id"
+EPISODE_KEY = "poisson_prove.episode"
 #: A8b: test-local and narrower than the public ``trace.CONTENT_KEYS`` (six prefix families more);
 #: renamed so it cannot shadow it. C9 covers the shipped half only -- the widening is the A8b oracle's P8-10.
 GENAI_CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
@@ -107,7 +107,7 @@ FAKE_INSTRUMENTOR = "oracle-fake"
 CONFLICT_INSTRUMENTOR = "oracle-conflict"
 UNKNOWN_INSTRUMENTOR = "no-such-instrumentor-xyz"
 FAKE_MODULE = "oracle_fake_instrumentation"
-MOCK_ROLLOUT = "proofload.examples.mock_agent:rollout"
+MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 HORIZON = 10.0
 SALT = "capture-oracle-salt"
 EPOCH = 1_756_900_000_000_000_000
@@ -265,7 +265,7 @@ def names(meta: dict[str, Any] | None) -> list[str]:
 
 
 def warnings_under_proofload(records: list[list[str]]) -> list[list[str]]:
-    return [r for r in records if r[1] == "WARNING" and r[0].split(".")[0] == "proofload"]
+    return [r for r in records if r[1] == "WARNING" and r[0].split(".")[0] == "poisson_prove"]
 
 
 def _global_provider_is_sdk() -> bool:
@@ -441,7 +441,7 @@ def child_run_without_capture(
 ) -> dict[str, Any]:
     """T27's move, one layer up: purge OTel, run with no ``[capture]`` table, then look at
     what came back into ``sys.modules``."""
-    _purge("opentelemetry", "proofload.otel", "proofload.capture")
+    _purge("opentelemetry", "poisson_prove.otel", "poisson_prove.capture")
     store = Store(store_root)
     p = plan(SweepSpec.load(toml_path), store, run_salt=salt)
     results: list[Result] | None = None
@@ -453,16 +453,16 @@ def child_run_without_capture(
         "run_id": p.run_id,
         "results": results,
         "opentelemetry_modules": sorted(n for n in sys.modules if n.split(".")[0] == "opentelemetry"),
-        "otel_helper_loaded": "proofload.otel" in sys.modules,
+        "otel_helper_loaded": "poisson_prove.otel" in sys.modules,
     }
 
 
 def child_import_capture_clean() -> dict[str, Any]:
-    _purge("opentelemetry", "proofload.otel", "proofload.capture")
-    importlib.import_module("proofload.capture")
+    _purge("opentelemetry", "poisson_prove.otel", "poisson_prove.capture")
+    importlib.import_module("poisson_prove.capture")
     return {
         "opentelemetry_modules": sorted(n for n in sys.modules if n.split(".")[0] == "opentelemetry"),
-        "otel_helper_loaded": "proofload.otel" in sys.modules,
+        "otel_helper_loaded": "poisson_prove.otel" in sys.modules,
     }
 
 
@@ -484,7 +484,7 @@ def child_install(
     sink = watch_logs()
     user: dict[str, Any] = {}
     if block_sdk:
-        _purge("opentelemetry.sdk", "proofload.otel", "proofload.capture")
+        _purge("opentelemetry.sdk", "poisson_prove.otel", "poisson_prove.capture")
         sys.modules["opentelemetry.sdk"] = None  # type: ignore[assignment]
     if preset == "noop":
         from opentelemetry import trace
@@ -502,7 +502,7 @@ def child_install(
         trace.set_tracer_provider(provider)
         user = {"provider": provider, "exporter": exporter}
 
-    from proofload.capture import CaptureSpec, capture, install
+    from poisson_prove.capture import CaptureSpec, capture, install
 
     spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
     status = install(CaptureSpec(**spec_kwargs))
@@ -537,7 +537,7 @@ def child_capture_spans(
     order (``{"name", "attrs"}`` each), re-seeding the global ``random`` before every span
     when ``reseed`` is given. With ``reseed`` a second block first checks the global stream."""
     sink = watch_logs()
-    from proofload.capture import CaptureSpec, capture, install
+    from poisson_prove.capture import CaptureSpec, capture, install
 
     spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
     status = install(CaptureSpec(**spec_kwargs))
@@ -569,7 +569,7 @@ def child_capture_spans(
 def child_nested_capture(spec_kwargs: dict[str, Any], depth: int) -> dict[str, Any]:
     """One capture block holding a chain of ``depth`` nested spans, ``depth-0`` outermost.
     Each start waits for the wall clock to tick, so start times are strictly increasing."""
-    from proofload.capture import CaptureSpec, capture, install
+    from poisson_prove.capture import CaptureSpec, capture, install
 
     spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
     status = install(CaptureSpec(**spec_kwargs))
@@ -587,7 +587,7 @@ def child_nested_capture(spec_kwargs: dict[str, Any], depth: int) -> dict[str, A
 def child_sequential_captures() -> dict[str, Any]:
     """Two episodes back to back in one process, plus a span opened in the first and closed
     inside the second."""
-    from proofload.capture import CaptureSpec, capture, install
+    from poisson_prove.capture import CaptureSpec, capture, install
 
     install(CaptureSpec(max_observation_bytes=DECLARED_LIMIT))  # CD (D1)
     tracer = _tracer()
@@ -785,7 +785,7 @@ def test_c2_from_otel_drops_the_repeated_ids_as_duplicates() -> None:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    from proofload.trace import from_otel
+    from poisson_prove.trace import from_otel
 
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
@@ -1128,7 +1128,7 @@ CONTENT_ATTRS = {
 
 
 def test_c9_content_is_off_by_default_in_the_spec() -> None:
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     # CD (D1): ``content`` keeps its default; only the cap loses one.
     assert CaptureSpec(max_observation_bytes=DECLARED_LIMIT).content is False
@@ -1167,8 +1167,8 @@ def test_c10_an_oversized_observation_value_is_stored_head_and_tail_in_attrs() -
     # from_otel never populates these two on a captured span; the cut itself covers both fields.
     assert span.input is None and span.output is None
     wrapper = span.attrs["gen_ai.input.messages"]
-    assert isinstance(wrapper, dict) and set(wrapper) == {"proofload.truncated"}, wrapper
-    cut = wrapper["proofload.truncated"]
+    assert isinstance(wrapper, dict) and set(wrapper) == {"poisson_prove.truncated"}, wrapper
+    cut = wrapper["poisson_prove.truncated"]
     assert set(cut) == {"head", "tail", "bytes_original"}, sorted(cut)
     assert cut["head"] == giant[:768] and cut["tail"] == giant[-256:] and cut["bytes_original"] == 8225, cut
     assert span.truncated == "observation" and span.bytes_original == 8225, (span.truncated, span.bytes_original)
@@ -1184,7 +1184,7 @@ def test_c10_the_cut_runs_when_content_is_off() -> None:
     big = "y" * 300
     r = isolated(child_capture_spans, {"max_observation_bytes": 64}, [{"name": "chat", "attrs": {"big.attribute": big}}])
     (span,) = Trace.from_dict(r["meta"]).spans
-    assert span.attrs["big.attribute"] == {"proofload.truncated": {"head": "y" * 48, "tail": "y" * 16, "bytes_original": 300}}, span.attrs
+    assert span.attrs["big.attribute"] == {"poisson_prove.truncated": {"head": "y" * 48, "tail": "y" * 16, "bytes_original": 300}}, span.attrs
     assert 48 + 16 <= 64 < 300
     assert span.truncated == "observation" and span.bytes_original == 300, (span.truncated, span.bytes_original)
 
@@ -1315,7 +1315,7 @@ def test_c12_the_modal_preflight_prints_the_capture_line_too(tmp_path: Path, mon
 
 
 def test_section_2_public_surface_is_exactly_five_symbols() -> None:
-    import proofload.capture as capture_module
+    import poisson_prove.capture as capture_module
 
     exported = getattr(capture_module, "__all__", None)
     if exported is not None:
@@ -1323,13 +1323,13 @@ def test_section_2_public_surface_is_exactly_five_symbols() -> None:
     defined = {
         name
         for name, obj in vars(capture_module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == "proofload.capture"
+        if not name.startswith("_") and getattr(obj, "__module__", None) == "poisson_prove.capture"
     }
     assert defined == PUBLIC_SURFACE, sorted(defined)
 
 
 def test_section_2_capture_spec_fields_defaults_and_frozenness() -> None:
-    from proofload.capture import CaptureSpec
+    from poisson_prove.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == SPEC_FIELDS
     with pytest.raises(TypeError):
@@ -1341,7 +1341,7 @@ def test_section_2_capture_spec_fields_defaults_and_frozenness() -> None:
 
 
 def test_section_2_capture_status_fields_and_frozenness() -> None:
-    from proofload.capture import CaptureStatus
+    from poisson_prove.capture import CaptureStatus
 
     assert tuple(f.name for f in dataclasses.fields(CaptureStatus)) == STATUS_FIELDS
     status = CaptureStatus(requested=False, active=False, reason=None, instrumented=())
@@ -1350,7 +1350,7 @@ def test_section_2_capture_status_fields_and_frozenness() -> None:
 
 
 def test_section_2_capture_is_a_context_manager_yielding_a_recorder() -> None:
-    from proofload.capture import Recorder, capture, install
+    from poisson_prove.capture import Recorder, capture, install
 
     assert list(inspect.signature(capture).parameters) == ["run_id", "episode_id"]
     assert list(inspect.signature(install).parameters) == ["spec"]
@@ -1401,5 +1401,5 @@ def test_section_2_no_touched_module_imports_opentelemetry_at_module_scope() -> 
     assert (PACKAGE / "capture.py").is_file(), f"{PACKAGE / 'capture.py'} does not exist"
     for name in TOUCHED_FILES:
         imports = module_scope_imports(PACKAGE / name)
-        offending = {m for m in imports if m.split(".")[0] == "opentelemetry" or m == "proofload.otel"}
+        offending = {m for m in imports if m.split(".")[0] == "opentelemetry" or m == "poisson_prove.otel"}
         assert offending == set(), (name, sorted(offending))

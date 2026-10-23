@@ -1,6 +1,6 @@
 """Build the Go1 golden fixture from the published policy-robustness-sweep manifests.
 
-Converts the v0 (pre-retrain) and v1 (post-retrain) 32-seed sweeps into two Proofload runs
+Converts the v0 (pre-retrain) and v1 (post-retrain) 32-seed sweeps into two Prove runs
 in the M4 store format, writes golden.json (the published numbers, copied not computed),
 and writes a README with provenance.
 
@@ -26,8 +26,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from proofload import Episode, __version__
-from proofload.store import EpisodeRecord, RunManifest, Store
+from poisson_prove import Episode, __version__
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
 HORIZON_S = 5.0
 SEED_BASE = 1_000_000
@@ -40,7 +40,7 @@ BACKEND_META = {"wall_time_synthetic": True, "seed_derived_from": "rollout"}
 SOURCE_REPO = "poisson-labs/policy-robustness-sweep"
 SOURCE_DATE = "2026-08-18"
 
-# proofload run_id -> (source run_id the manifest must carry, proofload target_id)
+# poisson_prove run_id -> (source run_id the manifest must carry, poisson_prove target_id)
 RUNS: dict[str, tuple[str, str]] = {
     "go1-v0": ("20260813T155006Z", "go1-g2-converged@20260813T155006Z"),
     "go1-v1": ("20260818T230622Z-v1", "go1-g2-v1@20260818T230622Z-v1"),
@@ -239,7 +239,7 @@ def make_manifest(run_id: str, manifest_path: Path, commit: str, date: str) -> R
             "source_commit": commit,
             "source_manifest": manifest_path.name,
             "conversion_date": date,
-            "proofload_version": __version__,
+            "poisson_prove_version": __version__,
         },
         retain_traces_for=None,
     )
@@ -257,9 +257,9 @@ def write_readme(
     lines = [
         "# Go1 golden fixture",
         "",
-        "Two Proofload runs converted from the published Go1 policy-robustness sweeps. This is",
-        "the test oracle for M5, M6 and M7: if Proofload cannot recover the published numbers",
-        "in `golden.json` from these runs, Proofload is wrong.",
+        "Two Prove runs converted from the published Go1 policy-robustness sweeps. This is",
+        "the test oracle for M5, M6 and M7: if Prove cannot recover the published numbers",
+        "in `golden.json` from these runs, Prove is wrong.",
         "",
         "## Provenance",
         "",
@@ -273,7 +273,7 @@ def write_readme(
         lines.append(f"- Published diff verified against: `{diff_path.name}`")
     lines += [
         f"- Publication date: {SOURCE_DATE}",
-        f"- Converted: {date} with proofload {__version__}",
+        f"- Converted: {date} with poisson_prove {__version__}",
         f"- Command: `{' '.join(argv)}`",
         "",
         "## Conversion",

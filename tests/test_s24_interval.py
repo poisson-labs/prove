@@ -106,15 +106,15 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import proofload
-from proofload import cli
-from proofload import diff as diff_mod
-from proofload.diff import CELLS_COLUMNS, multi_diff
-from proofload.episode import Episode
-from proofload.report import ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove import diff as diff_mod
+from poisson_prove.diff import CELLS_COLUMNS, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -1081,6 +1081,20 @@ def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
         assert list(go1_pair.by_event[event].cells.columns) == list(CELLS_COLUMNS)
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
+
+
 def e14_builder_digests() -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
@@ -1101,8 +1115,8 @@ def e14_builder_digests() -> dict[str, str]:
         manifests=(ma, mb),
     )
     return {
-        "report.md": hashlib.sha256(report.to_markdown().encode("utf-8")).hexdigest(),
-        "receipt.html": hashlib.sha256(receipt.to_html().encode("utf-8")).hexdigest(),
+        "report.md": hashlib.sha256(as_0_0_1_wrote_it(report.to_markdown()).encode("utf-8")).hexdigest(),
+        "receipt.html": hashlib.sha256(as_0_0_1_wrote_it(receipt.to_html()).encode("utf-8")).hexdigest(),
     }
 
 

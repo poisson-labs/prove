@@ -234,14 +234,14 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import proofload
-from proofload import cli
-from proofload import diff as diff_mod
-from proofload.diff import multi_diff
-from proofload.episode import Episode
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove import diff as diff_mod
+from poisson_prove.diff import multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 REPORT_SOURCE = PACKAGE / "report.py"
 DIFF_SOURCE = PACKAGE / "diff.py"
@@ -249,7 +249,7 @@ GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 REGRESSION_DIR = GO1_ROOT / "report_regression"
 QUICKSTART = REPO / "examples" / "quickstart.toml"
-MOCK_MODULE = "proofload.examples.mock_agent"
+MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
@@ -358,6 +358,8 @@ E14_WITH_TREE_SHA256 = {
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
@@ -477,13 +479,13 @@ HOSTILE_GROUP_REJECTED = 16
 
 def tree() -> Any:
     """``proofload.tree``, imported at call time."""
-    return importlib.import_module("proofload.tree")
+    return importlib.import_module("poisson_prove.tree")
 
 
 def report_module() -> Any:
     """``proofload.report``, imported at call time: the new keyword and field are reached inside
     test bodies, so this file collects on the bare tree and its own tests fail there."""
-    return importlib.import_module("proofload.report")
+    return importlib.import_module("poisson_prove.report")
 
 
 def quiet_multi_diff(a: pd.DataFrame, b: pd.DataFrame, ma: RunManifest, mb: RunManifest, *, events: Sequence[str], method: str, q: float = Q) -> Any:
@@ -871,7 +873,7 @@ def numeric_tokens(text: str) -> list[str]:
 
 def fmt(value: Any, kind: str) -> str:
     """M7's one formatter, reached the way S21's oracle reaches it."""
-    from proofload.report import _fmt
+    from poisson_prove.report import _fmt
 
     return _fmt(value, kind)
 
@@ -994,6 +996,20 @@ def config_text(config: Mapping[str, Any]) -> str:
     """A leaf's cell as ``key=value`` over every key of ``config``, in the config's own order,
     ``str(value)``, joined by a comma and a space (module docstring)."""
     return ", ".join(f"{k}={v}" for k, v in config.items())
+
+
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
 def sha256_of_text(text: str) -> str:
@@ -1321,6 +1337,23 @@ def every_pair(outs: Path, synth_root: Path, quickstart: tuple[Path, str, str]) 
 # ---------- R1: literals ----------
 
 
+def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
+    """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
+    arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
+    were written by 0.0.1. First assert the new key is there and the old one is not, then put both
+    back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
+    else."""
+    for arm in ("a", "b"):
+        assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
+    assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
+    arms = {
+        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
+        for arm in ("a", "b")
+    }
+    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
+    return {**structure, "pair": {**structure["pair"], **arms}, "diff": {**diff, "proofload_version": "0.0.1"}}
+
+
 def test_r1_the_headings_the_field_the_keyword_the_reasons_and_the_public_names_are_the_literals() -> None:
     """The four headings are ``## Omnibus``, ``## Fault lines``, ``## Cells``, ``## Bound`` (and
     the same four words in ``<h2>`` on the receipt); ``MultiReport`` has a field ``tree``
@@ -1364,9 +1397,9 @@ def test_r2_the_tree_less_builder_reproduces_s21s_three_digests_and_the_svg_stil
     reported as a spec correction. The colour cells and the geometry are untouched."""
     report = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=False)
     light = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=False, theme="light")
-    assert sha256_of_text(report.to_markdown()) == E14_SHA256["report.md"]
+    assert sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())) == E14_SHA256["report.md"]
     assert sha256_of_text(report.to_svg()) == E14_SHA256["heatmap.svg"]
-    assert sha256_of_text(light.to_html()) == E14_SHA256["receipt.html"]
+    assert sha256_of_text(as_0_0_1_wrote_it(light.to_html())) == E14_SHA256["receipt.html"]
     r = ok(outs, GO1_ROOT, *E14_ARGV[1:])
     assert sha256_of_text(r.svg) == E14_SHA256["heatmap.svg"]
 
@@ -1376,8 +1409,8 @@ def test_r2_the_clis_report_and_receipt_with_the_tree_digest_to_the_values_minte
     the E14 argv, the tree at the default knobs, digest to the values this oracle minted on
     Session A's shim, which Session B reproduces (module docstring: the section templates)."""
     r = ok(outs, GO1_ROOT, *E14_ARGV[1:])
-    assert sha256_of_text(r.md) == E14_WITH_TREE_SHA256["report.md"]
-    assert sha256_of_text(r.html) == E14_WITH_TREE_SHA256["receipt.html"]
+    assert sha256_of_text(as_0_0_1_wrote_it(r.md)) == E14_WITH_TREE_SHA256["report.md"]
+    assert sha256_of_text(as_0_0_1_wrote_it(r.html)) == E14_WITH_TREE_SHA256["receipt.html"]
 
 
 # ---------- R3: the addition is additive ----------
@@ -2228,14 +2261,14 @@ def test_r18_go1_renders_twenty_group_rows_nineteen_rejected_nineteen_families_a
 
 
 def test_r19_diff_py_whole_check_serve_the_column_digests_the_fixtures_and_the_signatures_are_unchanged() -> None:
-    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
+    # PF0 (Q4): the diff.py digest is no longer asserted; the rename changes diff.py.
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
     assert code == CHECK_EXIT and err == "" and sha256_of_text(out) == CHECK_STDOUT_SHA256, (code, err)
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
     assert code == 0 and err == "", err
     structure = json.loads(out)
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
-    normalised = json.dumps({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}, sort_keys=True)
+    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
     store = Store(GO1_ROOT)
     a, b, ma, mb = store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), store.manifest(GO1_A), store.manifest(GO1_B)

@@ -6,7 +6,7 @@ reaches τ² through ``registry.register_agent_factory``, which is public at the
 what ``build_agent`` resolves ``config.effective_agent`` through -- **no τ² file is edited,
 and the two arms differ in one identifier.**
 
-This is the whole surface Proofload sees. τ²-bench is not forked and not patched: it is
+This is the whole surface Prove sees. τ²-bench is not forked and not patched: it is
 installed from a pinned commit inside the image (``examples/tau2_pilot/Dockerfile``) and used
 through the three public entry points its own README documents --
 ``registry.get_tasks_loader``, ``build_text_orchestrator`` and ``run_simulation``. The
@@ -50,7 +50,7 @@ from tau2.registry import registry
 from tau2.runner.build import build_text_orchestrator
 from tau2.runner.simulation import run_simulation
 
-from proofload import Episode
+from poisson_prove import Episode
 
 from . import DOMAIN as DOMAIN
 from . import MAX_ERRORS, MAX_STEPS, OUTCOMES

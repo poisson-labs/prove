@@ -68,7 +68,7 @@ python examples/golden_pilot/make_toml.py            # regenerates pilot.toml an
 ```
 
 **The third line is not optional**, even though nothing here imports the agent any more.
-`golden_pilot` is not a package and is not installed — the wheel ships `src/proofload` only,
+`golden_pilot` is not a package and is not installed — the wheel ships `src/poisson_prove` only,
 and `examples/` is deliberately outside it. The Modal image is built with
 `Image.add_local_python_source("golden_pilot")`, which finds the package's source files
 through the local import system in order to ship them, so the launching process has to be
@@ -130,7 +130,7 @@ run in. It proves the image, the boundary variable, the instrumentor inside the 
 the store round trip, and it measures what the arms will cost.
 
 ```bash
-proofload sweep examples/golden_pilot/smoke.toml \
+poisson-prove sweep examples/golden_pilot/smoke.toml \
   --target golden_pilot.agent:rollout --backend modal --yes
 python -m golden_pilot.numbers <store> <smoke-run-id>
 ```
@@ -179,15 +179,15 @@ arm that cannot reach the model still produces a full set of well-formed rows.
 
 ```bash
 # A — the baseline
-proofload sweep examples/golden_pilot/pilot.toml \
+poisson-prove sweep examples/golden_pilot/pilot.toml \
   --target golden_pilot.agent:rollout --backend modal --yes
 
 # A' — the null diff: same target, same seeds, paired with A
-proofload sweep examples/golden_pilot/pilot.toml \
+poisson-prove sweep examples/golden_pilot/pilot.toml \
   --target golden_pilot.agent:rollout --backend modal --pair-with <A> --yes
 
 # B — the patch: submit is refused until run_tests has run once
-proofload sweep examples/golden_pilot/pilot.toml \
+poisson-prove sweep examples/golden_pilot/pilot.toml \
   --target golden_pilot.agent:rollout_patched --backend modal --pair-with <A> --yes
 ```
 
@@ -220,16 +220,16 @@ that correspondence away. Running the default here answers a weaker question tha
 can answer, and discards the whole reason `--pair-with` and shared seeds exist.
 
 ```bash
-proofload diff   <A> <A'> --method mcnemar_bh \
+poisson-prove diff   <A> <A'> --method mcnemar_bh \
   --event failed_assertion --event timed_out --event crashed --event api_error
-proofload diff   <A> <B>  --method mcnemar_bh \
+poisson-prove diff   <A> <B>  --method mcnemar_bh \
   --event failed_assertion --event timed_out --event crashed --event api_error
-proofload report <A> <B>  --method mcnemar_bh \
+poisson-prove report <A> <B>  --method mcnemar_bh \
   --event failed_assertion --event timed_out --event crashed --event api_error \
   --x temperature --y task_id --out notes/log/pilot-report
-proofload check  <A> <B>  --method mcnemar_bh \
+poisson-prove check  <A> <B>  --method mcnemar_bh \
   --event failed_assertion --event timed_out --event crashed --event api_error
-proofload inspect <A> --event failed_assertion --where temperature=0.0 --limit 5
+poisson-prove inspect <A> --event failed_assertion --where temperature=0.0 --limit 5
 ```
 
 `inspect` takes no `--method`; it selects rows and runs no test.
@@ -251,7 +251,7 @@ named event. 164 rows on a heatmap is tall but legible; `--where temperature=0.0
 ## 4. The numbers, per arm
 
 `<store>` is the same store root the sweeps wrote into — whatever you passed to
-`proofload --store`, or `$PROOFLOAD_STORE`, or `./proofload-runs` by default. Run it from the
+`poisson-prove --store`, or `$POISSON_PROVE_STORE`, or `./prove-runs` by default. Run it from the
 repository root so `golden_pilot` is importable, or put `examples/` on `PYTHONPATH`.
 
 ```bash
@@ -294,4 +294,4 @@ coin flips, at each temperature. Publish figures and that record, never raw trac
 | `pilot.toml` | 164 tasks × 2 temperatures × 32 replicates |
 | `smoke.toml` | the same shape over 5 tasks at 2 replicates |
 | `Dockerfile` | the Modal image, and the only place the boundary variable is set |
-| `requirements.txt` | the contract: `openai>=2.20,<3`, the instrumentor, `proofload[agent]` |
+| `requirements.txt` | the contract: `openai>=2.20,<3`, the instrumentor, `poisson-prove[agent]` |

@@ -152,12 +152,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from scipy.stats import beta
 
-import proofload
-from proofload import paired
-from proofload.episode import Episode
-from proofload.executor import derive_seed
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.trace import Span, Trace
+import poisson_prove
+from poisson_prove import paired
+from poisson_prove.episode import Episode
+from poisson_prove.executor import derive_seed
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.trace import Span, Trace
 
 EPOCH = 1_790_000_000_000_000_000
 SALT = "9f4a1c62d08e5b37"
@@ -604,7 +604,7 @@ def make_k_store(
                 axis_types={"item": "categorical", "cut": "categorical"}, backend="local",
                 environment={
                     "python": "3.11.7", "platform": "oracle",
-                    "proofload_version": proofload.__version__,
+                    "poisson_prove_version": poisson_prove.__version__,
                     "capture": {"content": True, "max_observation_bytes": "none"},
                 },
             ))
@@ -649,9 +649,14 @@ def pr60_digests(store: Store, decl: Any) -> dict[str, str]:
                 row.pop(column, None)
     frozen = [c for c in a.pairs.columns if c not in TIMING_COLUMNS]
     frame = a.pairs[frozen].astype(str).to_csv(index=False)
+    assert '"poisson_prove_version":' in json.dumps(payload) and '"proofload_version":' not in json.dumps(payload)
     return {
         "pairs": hashlib.sha256(frame.encode()).hexdigest(),
-        "assertion": hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest(),
+        # PF0 (Q4): each arm's identity echoes the manifest's version under its new key; under the old
+        # key the assertion is the pre-amendment build's byte for byte.
+        "assertion": hashlib.sha256(json.dumps(
+            json.loads(json.dumps(payload).replace('"poisson_prove_version":', '"proofload_version":')), sort_keys=True,
+        ).encode()).hexdigest(),
         "contingency": hashlib.sha256(mask.sub("", result.contingency_json()).encode()).hexdigest(),
         "intervals": hashlib.sha256(mask.sub("", result.intervals_json()).encode()).hexdigest(),
     }
@@ -1447,7 +1452,7 @@ def test_pr71_the_same_declaration_over_the_same_rows_is_byte_identical(tmp_path
     pickled = tmp_path / "assertion.pkl"
     pickled.write_bytes(pickle.dumps(a))
     child = (
-        "import pickle, sys; from proofload.paired import replicates; "
+        "import pickle, sys; from poisson_prove.paired import replicates; "
         f"a = pickle.load(open({str(pickled)!r}, 'rb')); "
         "sys.stdout.write(replicates(a)[0].to_json())"
     )

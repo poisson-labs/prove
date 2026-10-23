@@ -143,25 +143,25 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-import proofload
-import proofload.diff as diff_module
-import proofload.executor as executor
-import proofload.executor_modal as executor_modal
-import proofload.report as report_module
-import proofload.trace as trace_module
-from proofload import cli
-from proofload.diff import DiffError, NotPairable, UnitMismatch, diff, multi_diff
-from proofload.episode import Episode
-from proofload.executor import NotResumable, plan, run_local
-from proofload.executor_modal import ModalOptions, run_with_mapper, worker_batch
-from proofload.report import ReportSpec, build_multi_report, build_report, build_survival_report
-from proofload.sampler import SamplerError, SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.survival import cell_table, censor, competing_set
-from proofload.trace import Span, Trace, collect, finalize, record, truncate_observations
+import poisson_prove
+import poisson_prove.diff as diff_module
+import poisson_prove.executor as executor
+import poisson_prove.executor_modal as executor_modal
+import poisson_prove.report as report_module
+import poisson_prove.trace as trace_module
+from poisson_prove import cli
+from poisson_prove.diff import DiffError, NotPairable, UnitMismatch, diff, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.executor import NotResumable, plan, run_local
+from poisson_prove.executor_modal import ModalOptions, run_with_mapper, worker_batch
+from poisson_prove.report import ReportSpec, build_multi_report, build_report, build_survival_report
+from poisson_prove.sampler import SamplerError, SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.survival import cell_table, censor, competing_set
+from poisson_prove.trace import Span, Trace, collect, finalize, record, truncate_observations
 
 MODULE = __name__
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parent.parent
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -169,7 +169,7 @@ STEPS_SOURCE = PACKAGE / "steps.py"
 
 #: Every pair here shares a salt and a seed per row, so the unpaired methods warn; the warning is not
 #: this packet's subject, and P10-15 records warnings itself where it matters.
-pytestmark = pytest.mark.filterwarnings("ignore::proofload.diff.UnpairedAnalysis")
+pytestmark = pytest.mark.filterwarnings("ignore::poisson_prove.diff.UnpairedAnalysis")
 
 TARGET = "a10-oracle@v0"
 T_UNIT = "steps"
@@ -209,7 +209,7 @@ CHECK_FIELDS = (
 #: and ``go1-v0/manifest.json``'s twelve).
 TWELVE = frozenset({
     "run_id", "target_id", "t_unit", "run_salt", "axis_types", "backend", "environment",
-    "retain_traces_for", "status", "created_at", "proofload_version", "schema_version",
+    "retain_traces_for", "status", "created_at", "poisson_prove_version", "schema_version",
 })
 #: The names A9 owns in ``steps.py`` (W10); none may appear in A10's half.
 A9_NAMES = ("StepAggregates", "KindTally", "CaptureCheck", "capture_check")
@@ -266,7 +266,7 @@ MAIN_LINES = {
 
 
 def declaration(steps: Sequence[str] = STEPS, outcomes: Sequence[str] = OUTCOMES, gates: Sequence[str] = GATES) -> Any:
-    from proofload.trace import Declaration
+    from poisson_prove.trace import Declaration
 
     return Declaration(steps=tuple(steps), outcomes=tuple(outcomes), gates=tuple(gates))
 
@@ -366,7 +366,7 @@ def gated_step_names(store: Store, run_id: str) -> set[str]:
 
 
 def check_of(store: Store, run_id: str) -> Any:
-    from proofload.steps import declaration_check
+    from poisson_prove.steps import declaration_check
 
     return declaration_check(store.manifest(run_id), store.read(run_id, meta=False, trace="envelope"))
 
@@ -498,7 +498,7 @@ def cut_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
 BAD_TRACES: dict[float, Any] = {
     0.1: "not a trace",
     0.2: ["a", "list"],
-    0.3: {"schema": "proofload.trace/1", "source": "record", "source_version": None, "dropped": 0},
+    0.3: {"schema": "poisson-prove.trace/1", "source": "record", "source_version": None, "dropped": 0},
 }
 
 
@@ -613,8 +613,8 @@ def modal_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str]:
 def test_p10_1_declare_parses_to_a_sorted_declaration_minted_in_trace(tmp_path: Path) -> None:
     """W6 and section 3.1 rule 6: the lists are sorted at construction, so the unsorted spelling in
     the file reads back sorted; and the object is ``proofload.trace.Declaration`` (W1)."""
-    from proofload.sampler import _DECLARE_FIELDS
-    from proofload.trace import Declaration
+    from poisson_prove.sampler import _DECLARE_FIELDS
+    from poisson_prove.trace import Declaration
 
     spec = SweepSpec.load(write(tmp_path / "s.toml", sweep_toml(DECLARE_TOML)))
     assert type(spec.declare) is Declaration
@@ -694,7 +694,7 @@ def test_p10_1_the_cli_refuses_a_malformed_table_before_the_run_exists(tmp_path:
 def test_p10_1_declaration_validates_at_construction_and_from_dict_does_too(case: str, kwargs: dict[str, Any]) -> None:
     """Section 3.2: ``Declaration`` validates at construction (the ``Span`` posture), so a declaration
     read back from a manifest is held to the rules that refused the sweep file."""
-    from proofload.trace import Declaration
+    from poisson_prove.trace import Declaration
 
     assert Declaration(steps=("plan",)).steps == ("plan",)
     with pytest.raises(ValueError):
@@ -705,7 +705,7 @@ def test_p10_1_declaration_validates_at_construction_and_from_dict_does_too(case
 
 def test_p10_1_declaration_sorts_serialises_and_reads_an_absent_list_as_empty() -> None:
     """Section 3.2: plain sorted lists out, sorted tuples in, and an absent key is an empty list."""
-    from proofload.trace import Declaration
+    from poisson_prove.trace import Declaration
 
     d = Declaration(steps=("verify", "plan", "search", "review"), outcomes=("survived", "fell"), gates=("verify", "search", "review"))
     assert (d.steps, d.outcomes, d.gates) == (STEPS, OUTCOMES, GATES)
@@ -754,7 +754,7 @@ def test_p10_2_the_builders_add_no_key_when_no_run_declares(bare_pair: tuple[Sto
 def test_p10_2_one_declaring_side_adds_its_own_keys_and_none_for_the_other(main_pair: tuple[Store, str, str], bare_pair: tuple[Store, str, str]) -> None:
     """W8 per run, on a pair where only ``a`` declares: ``a``'s eight suffixed keys, and no ``_b`` key
     of any of the eight -- the report says one side declared by carrying only that side's."""
-    from proofload.steps import declaration_check
+    from poisson_prove.steps import declaration_check
 
     store, a, _ = main_pair
     bstore, b, _ = bare_pair
@@ -815,7 +815,7 @@ def test_p10_3_never_reached_and_undeclared_steps_are_set_differences(main_pair:
 
 
 def test_p10_3_declaration_check_is_a_frozen_dataclass_with_the_eleven_fields_and_eight_keys(main_pair: tuple[Store, str, str]) -> None:
-    from proofload.steps import DeclarationCheck
+    from poisson_prove.steps import DeclarationCheck
 
     store, a, _ = main_pair
     check = check_of(store, a)
@@ -931,7 +931,7 @@ FNS = ("diff", "multi_diff")
 @pytest.mark.parametrize("fn", FNS)
 @pytest.mark.parametrize("method", METHODS)
 def test_p10_6_differing_declared_outcome_sets_are_refused_under_every_method(tmp_path: Path, fn: str, method: str) -> None:
-    from proofload.diff import DeclaredSetMismatch
+    from poisson_prove.diff import DeclaredSetMismatch
 
     assert issubclass(DeclaredSetMismatch, DiffError)
     ma = manifest("a", declared=declaration(outcomes=("fell", "survived")))
@@ -974,7 +974,7 @@ def test_p10_6_the_refusal_is_raised_before_pairing_and_pairing_is_untouched(tmp
     ``_pairing``'s own refusals (a ``t_unit`` mismatch, a paired method on differing salts); with
     ``_pairing`` replaced by a tripwire it still fires; and with equal declarations ``_pairing`` runs
     exactly once, as it did."""
-    from proofload.diff import DeclaredSetMismatch
+    from poisson_prove.diff import DeclaredSetMismatch
 
     da, db = declaration(outcomes=("fell", "survived")), declaration(outcomes=("fell", "timed_out"))
     ma, mb = manifest("a", declared=da), manifest("b", declared=db, t_unit="seconds", salt=OTHER_SALT)
@@ -1013,7 +1013,7 @@ def test_p10_6_the_refusal_is_raised_before_pairing_and_pairing_is_untouched(tmp
 def test_p10_6_frame_validation_still_comes_first(tmp_path: Path, fn: str) -> None:
     """"Just before ``_pairing``": a malformed frame is refused as it was, by the check that precedes
     ``_pairing``, and not as a declared-set mismatch."""
-    from proofload.diff import DeclaredSetMismatch
+    from poisson_prove.diff import DeclaredSetMismatch
 
     ma = manifest("a", declared=declaration(outcomes=("fell", "survived")))
     mb = manifest("b", declared=declaration(outcomes=("fell", "timed_out")))
@@ -1092,29 +1092,39 @@ def test_p10_8_trace_imports_no_proofload_module_and_a_fresh_interpreter_imports
     initialised half the package. The AST clause catches the lazy spelling (an import inside a
     function or under ``TYPE_CHECKING``) that a fresh interpreter would not."""
     env = {**os.environ, "PYTHONPATH": str(PACKAGE.parent)}
-    for code in ("import proofload.trace", "from proofload.trace import Declaration, finalize"):
+    for code in ("import poisson_prove.trace", "from poisson_prove.trace import Declaration, finalize"):
         done = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=120)
         assert done.returncode == 0, (code, done.stderr)
-    found = [
-        (getattr(n, "module", None) or ",".join(a.name for a in n.names))
-        for n in ast.walk(ast.parse((PACKAGE / "trace.py").read_text()))
-        if isinstance(n, ast.Import | ast.ImportFrom)
-    ]
-    assert [m for m in found if m and m.split(".")[0] == "proofload"] == [], found
+    # PF0 (Q4, section 2.5): trace.py reads the old schema string and span keys through the one
+    # module that holds every old string, ``poisson_prove._compat``, and that module imports
+    # nothing of the package, so trace.py still reaches no other module of it.
+    def package_imports(path: Path) -> set[str]:
+        found: set[str] = set()
+        for n in ast.walk(ast.parse(path.read_text())):
+            if isinstance(n, ast.Import):
+                found |= {a.name for a in n.names if a.name.split(".")[0] == "poisson_prove"}
+            elif isinstance(n, ast.ImportFrom) and n.module == "poisson_prove":
+                found |= {f"poisson_prove.{a.name}" for a in n.names}
+            elif isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] == "poisson_prove":
+                found.add(str(n.module))
+        return found
+
+    assert package_imports(PACKAGE / "trace.py") <= {"poisson_prove._compat"}, package_imports(PACKAGE / "trace.py")
+    assert package_imports(PACKAGE / "_compat.py") == set()
 
 
 def test_p10_8_declaration_is_trace_s_exported_in_sort_order_and_imported_from_there() -> None:
     """*Sole catch for A6 section 2's own spelling*, a ``Declaration`` minted in ``sampler.py``."""
-    from proofload.trace import Declaration
+    from poisson_prove.trace import Declaration
 
-    assert Declaration.__module__ == "proofload.trace"
+    assert Declaration.__module__ == "poisson_prove.trace"
     names = list(trace_module.__all__)
     classes = [n for n in names if n[:1].isupper() and not n.isupper()]
     assert "Declaration" in classes and classes == sorted(classes), classes
     for path in (PACKAGE / "sampler.py", PACKAGE / "store.py", STEPS_SOURCE):
         imports = [
             n for n in ast.parse(path.read_text()).body
-            if isinstance(n, ast.ImportFrom) and n.module == "proofload.trace" and any(a.name == "Declaration" for a in n.names)
+            if isinstance(n, ast.ImportFrom) and n.module == "poisson_prove.trace" and any(a.name == "Declaration" for a in n.names)
         ]
         assert len(imports) == 1, path.name
         assert [n for n in ast.parse(path.read_text()).body if isinstance(n, ast.ClassDef) and n.name == "Declaration"] == [], path.name

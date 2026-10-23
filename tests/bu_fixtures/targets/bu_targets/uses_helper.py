@@ -4,7 +4,7 @@ from typing import Any
 
 import bu_helper
 
-from proofload.episode import Episode
+from poisson_prove.episode import Episode
 
 
 def rollout(cfg: dict[str, Any], seed: int) -> Episode:

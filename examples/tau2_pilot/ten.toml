@@ -10,12 +10,12 @@
 #
 #   export PYTHONPATH="$PWD/examples${PYTHONPATH:+:$PYTHONPATH}"
 #   export MODAL_IMAGE_BUILDER_VERSION=2024.10   # required; see the Dockerfile, note 6
-#   export PROOFLOAD_STORE=~/code/poisson-labs/proofload-runs
-#   proofload sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
+#   export POISSON_PROVE_STORE=~/code/poisson-labs/prove-runs
+#   poisson-prove sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
 #     --backend modal --max-mde 0.5 --max-rollouts 1 --yes        # the canary, one episode
-#   proofload sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
+#   poisson-prove sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
 #     --backend modal --max-mde 0.5 --yes                         # run A, ten episodes
-#   proofload sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
+#   poisson-prove sweep examples/tau2_pilot/ten.toml --target tau2_pilot.rollout:rollout \
 #     --backend modal --max-mde 0.5 --pair-with <A> --yes         # run A', the same ten seeds
 
 target_id = "tau2-airline/gpt-4.1-mini-2025-04-14@v0"

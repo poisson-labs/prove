@@ -87,12 +87,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import proofload
-from proofload import cli
-from proofload.diff import mde_two_proportion
-import proofload.executor as executor
-from proofload.executor import ExecutorError, Plan, plan, preflight
-from proofload.executor_modal import (
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove.diff import mde_two_proportion
+import poisson_prove.executor as executor
+from poisson_prove.executor import ExecutorError, Plan, plan, preflight
+from poisson_prove.executor_modal import (
     Job,
     ModalOptions,
     Result as ModalResult,
@@ -100,17 +100,17 @@ from proofload.executor_modal import (
     run_with_mapper,
     worker_batch,
 )
-from proofload.sampler import SweepSpec
-from proofload.store import RunManifest, Store
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import RunManifest, Store
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 EXECUTOR = PACKAGE / "executor.py"
 EXECUTOR_MODAL = PACKAGE / "executor_modal.py"
 QUICKSTART = REPO / "examples" / "quickstart.toml"
 
-MOCK_ROLLOUT = "proofload.examples.mock_agent:rollout"
-MOCK_PATCHED = "proofload.examples.mock_agent:rollout_patched"
+MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
+MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 
 #: Spec section 3. Stated in the spec, so it may be a constant here (standing rule 1).
 EXPECTED_DEFAULT = 0.20
@@ -619,7 +619,7 @@ def test_w8_the_other_environment_keys_are_unchanged_and_no_manifest_field_is_ad
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
     assert r.code == 0, r.text
     environment = Store(root).manifest(run_id_of(r)).environment
-    assert {"python", "platform", "proofload_version", "sweep", "import_path"} <= set(environment)
+    assert {"python", "platform", "poisson_prove_version", "sweep", "import_path"} <= set(environment)
     assert "max_mde_accepted" in environment
     fields = {f.name for f in dataclasses.fields(RunManifest)}
     assert "max_mde_accepted" not in fields, sorted(fields)
@@ -687,7 +687,7 @@ def test_w9_pair_with_does_not_inherit(tmp_path: Path) -> None:
 def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path: Path) -> None:
     """The label the spec says three oracles pinned. None of them did -- see the module
     docstring, finding 1 -- so this is the only guard it has."""
-    from proofload.executor_modal import ImageSpec, ModalTarget
+    from poisson_prove.executor_modal import ImageSpec, ModalTarget
 
     spec = spec_at(GO1_REPLICATES, cells=2)
     p = plan(spec, Store(tmp_path / "s"))

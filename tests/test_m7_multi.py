@@ -61,9 +61,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from proofload import cli
-from proofload.diff import DiffResult, EventDiff, MultiDiffResult, diff, multi_diff
-from proofload.report import (
+from poisson_prove import cli
+from poisson_prove.diff import DiffResult, EventDiff, MultiDiffResult, diff, multi_diff
+from poisson_prove.report import (
     SATURATED_FILL,
     SEQUENTIAL_RAMP,
     Cell,
@@ -75,15 +75,15 @@ from proofload.report import (
     build_report,
     build_survival_report,
 )
-from proofload.store import RunManifest, Store, config_hash
-from proofload.survival import cell_table, censor
+from poisson_prove.store import RunManifest, Store, config_hash
+from poisson_prove.survival import cell_table, censor
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
 REGRESSION_DIR = FIXTURE_DIR / "report_regression"
 QUICKSTART = ROOT / "examples" / "quickstart.toml"
-MOCK_ROLLOUT = "proofload.examples.mock_agent:rollout"
-MOCK_PATCHED = "proofload.examples.mock_agent:rollout_patched"
+MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
+MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
 
 CELL_COLUMNS = [
@@ -721,6 +721,17 @@ def strip_honesty(text: str) -> str:
     return "\n".join(line for line in text.splitlines() if not _is_honesty_line(line))
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
+    in its provenance list. First assert it is there as the rename writes it -- one ``Prove version:``
+    line and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and drop any separate
+    ``written by proofload`` line, so every other byte is still compared."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    return re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+
+
 def test_b1_regression_fixture_is_present_and_is_the_s8_output() -> None:
     for name in ("report.md", "heatmap.svg", "receipt.html"):
         assert (REGRESSION_DIR / name).is_file(), name
@@ -746,7 +757,7 @@ def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_r
     # Retrofitted 2026-09-20 (truncation surfacing): the horizon count is named for what it counts.
     assert frozen.count("- truncated: 0\n") == 1
     frozen = frozen.replace("- truncated: 0\n", "- episodes censored at horizon: 0\n")
-    assert strip_honesty(golden_report.to_markdown()) == strip_honesty(frozen)
+    assert strip_honesty(as_0_0_1_wrote_it(golden_report.to_markdown())) == strip_honesty(frozen)
 
 
 # ---------- B2: honesty block, both lines ----------
@@ -1406,9 +1417,9 @@ def test_b13_stacked_svg_re_roots_escaped_text_intact() -> None:
 _SUBPROCESS_SCRIPT = """
 import hashlib, sys
 from pathlib import Path
-from proofload.store import Store
-from proofload.diff import multi_diff
-from proofload.report import ReportSpec, build_multi_report
+from poisson_prove.store import Store
+from poisson_prove.diff import multi_diff
+from poisson_prove.report import ReportSpec, build_multi_report
 root = Path(sys.argv[1])
 store = Store(root / "tests" / "fixtures" / "go1")
 a, b = store.read("go1-v0"), store.read("go1-v1")
@@ -1714,7 +1725,7 @@ def test_b18_three_events_by_a_thousand_cells_render_in_all_formats() -> None:
 
 
 def test_b19_report_module_imports_no_numpy_or_scipy() -> None:
-    import proofload.report as report_module
+    import poisson_prove.report as report_module
 
     source = Path(report_module.__file__).read_text()
     for banned in ("import numpy", "from numpy", "import scipy", "from scipy"):

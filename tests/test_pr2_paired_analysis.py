@@ -141,12 +141,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from scipy.stats import beta, binomtest
 
-import proofload
-from proofload import paired
-from proofload.episode import Episode
-from proofload.executor import derive_seed
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.trace import Span, Trace
+import poisson_prove
+from poisson_prove import paired
+from poisson_prove.episode import Episode
+from poisson_prove.executor import derive_seed
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.trace import Span, Trace
 
 EPOCH = 1_790_000_000_000_000_000
 SALT = "9f4a1c62d08e5b37"
@@ -170,7 +170,7 @@ PER_SWEEP_KEYS = frozenset({
 INTERVAL_KEYS = frozenset({"estimate", "lo", "hi", "basis"})
 PAIRED_QUANTITIES = frozenset({"flip_rate", "net_swing", "outcome_interval"})
 
-GOLDEN_STORE = Path.home() / "code" / "poisson-labs" / "proofload-runs"
+GOLDEN_STORE = Path.home() / "code" / "poisson-labs" / "prove-runs"
 ARM_A, ARM_B, SALT_4544 = "20260915T210140Z-4847", "20260915T211148Z-965d", "d2ebb5be1d394d12"
 INSTRUMENT_SIDE = frozenset(
     {"infrastructure_error", "agent_error", "user_error", "unexpected_error"}
@@ -445,7 +445,7 @@ def make_store(root: Path, values: Mapping[tuple[str, str], tuple[str, str]]) ->
             axis_types={"item": "categorical", "cut": "categorical"}, backend="local",
             environment={
                 "python": "3.11.7", "platform": "oracle",
-                "proofload_version": proofload.__version__,
+                "poisson_prove_version": poisson_prove.__version__,
                 "capture": {"content": True, "max_observation_bytes": "none"},
             },
         ))
@@ -847,7 +847,7 @@ def test_pr29_the_same_declaration_over_the_same_rows_is_byte_identical(tmp_path
     pickled = tmp_path / "assertion.pkl"
     pickled.write_bytes(pickle.dumps(a))
     child = (
-        "import pickle, sys; from proofload.paired import analyse; "
+        "import pickle, sys; from poisson_prove.paired import analyse; "
         f"a = pickle.load(open({str(pickled)!r}, 'rb')); "
         "sys.stdout.write(analyse(a).intervals_json())"
     )

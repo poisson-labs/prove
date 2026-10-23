@@ -72,19 +72,19 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-import proofload
-import proofload.cli as cli
-import proofload.diff as diff_module
-import proofload.executor as executor
-import proofload.executor_modal as executor_modal
-import proofload.report as report_module
-import proofload.store as store_module
-from proofload.diff import DiffResult, MultiDiffResult, multi_diff
-from proofload.episode import Episode
-from proofload.report import MultiReport, ReportSpec, build_multi_report, build_report
-from proofload.store import EpisodeRecord, RunManifest, SchemaMismatch, Store, StoreError, config_hash
-from proofload.tree import TreeResult
-from proofload.tree import tree as grow_tree
+import poisson_prove
+import poisson_prove.cli as cli
+import poisson_prove.diff as diff_module
+import poisson_prove.executor as executor
+import poisson_prove.executor_modal as executor_modal
+import poisson_prove.report as report_module
+import poisson_prove.store as store_module
+from poisson_prove.diff import DiffResult, MultiDiffResult, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import MultiReport, ReportSpec, build_multi_report, build_report
+from poisson_prove.store import EpisodeRecord, RunManifest, SchemaMismatch, Store, StoreError, config_hash
+from poisson_prove.tree import TreeResult
+from poisson_prove.tree import tree as grow_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
@@ -107,7 +107,7 @@ E14_SHA256 = {
 }
 
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
-SCHEMA = "proofload.viewpair/6"
+SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 
@@ -131,7 +131,7 @@ MULTI_FIELDS = (
 #: of spans stamped as cut after ``run_salt``.
 PROVENANCE_KEYS = (
     "events", "inferred", "non_event", "n_tests", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon",
-    "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent", "proofload_version",
+    "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent", "poisson_prove_version",
     "run_id_a", "run_id_b", "run_salt", "observation_cap_a", "observation_cap_b", "trace_spans_a", "trace_spans_b",
     "observation_cut_spans_a", "observation_cut_spans_b",
 )
@@ -143,7 +143,7 @@ TOP_LEVEL_KEYS = (
 )
 ARM_KEYS = (
     "role", "run_id", "target_id", "backend", "status", "created_at", "run_salt", "t_unit",
-    "proofload_version", "schema_version", "retain_traces_for", "axis_types", "environment",
+    "poisson_prove_version", "schema_version", "retain_traces_for", "axis_types", "environment",
     "rows_stored", "tally",
 )
 CELL_KEYS = (
@@ -224,8 +224,8 @@ HOLES_HEADING = "Holes"
 HOLES_HEADER = ["where", "cause", "config_hash", "rows (a/b)", "no outcome (a/b)"]
 ZERO_HOLES_TEXT = "0 holes"
 HOLES_OPTGROUP = "holes"
-HOLES_ID = "proofload-holes"
-INDEX_ID = "proofload-cells"
+HOLES_ID = "prove-holes"
+INDEX_ID = "prove-cells"
 HOLE_MESSAGE = "No comparable data for this cell."
 NONE_TEXT = "none"
 RUNS_HEADER = ("run_id", "status", "backend", "target_id", "t_unit", "rows", "no_outcome")
@@ -328,13 +328,13 @@ VOID_TAGS = {"br", "meta", "img", "hr", "input", "link", "col", "area", "base", 
 
 
 def viewer() -> Any:
-    import proofload.viewer as module
+    import poisson_prove.viewer as module
 
     return module
 
 
 def viewer_source() -> str:
-    return (Path(proofload.__file__).resolve().parent / "viewer.py").read_text()
+    return (Path(poisson_prove.__file__).resolve().parent / "viewer.py").read_text()
 
 
 def sha256_of(path: Path) -> str:
@@ -616,7 +616,7 @@ def format_calls(tree: ast.Module) -> list[int]:
 def report_import_names(tree: ast.Module) -> set[str]:
     names: set[str] = set()
     for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "proofload.report":
+        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.report":
             names.update(alias.name for alias in node.names)
     return names
 
@@ -624,7 +624,7 @@ def report_import_names(tree: ast.Module) -> set[str]:
 def store_imports(body: Sequence[ast.stmt]) -> set[str]:
     names: set[str] = set()
     for node in body:
-        if isinstance(node, ast.ImportFrom) and node.module == "proofload.store":
+        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.store":
             names.update(alias.name for alias in node.names)
     return names
 
@@ -1383,6 +1383,20 @@ def test_e13_a_result_without_coverage_and_a_single_event_report_leave_hole_caus
     assert all(c.hole_cause is None and c.config_hash is None for c in single.cells if not c.present)
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
+
+
 def e14_builder_digests() -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
@@ -1396,8 +1410,8 @@ def e14_builder_digests() -> dict[str, str]:
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
     return {
-        "report.md": hashlib.sha256(report.to_markdown().encode("utf-8")).hexdigest(),
-        "receipt.html": hashlib.sha256(receipt.to_html().encode("utf-8")).hexdigest(),
+        "report.md": hashlib.sha256(as_0_0_1_wrote_it(report.to_markdown()).encode("utf-8")).hexdigest(),
+        "receipt.html": hashlib.sha256(as_0_0_1_wrote_it(receipt.to_html()).encode("utf-8")).hexdigest(),
     }
 
 
@@ -1482,7 +1496,7 @@ def test_e16_rows_and_no_outcome_are_ints_equal_to_the_coverage_row(builts: tupl
 
 
 def test_e16_config_text_is_fmt_coord_of_each_scalar_and_null_for_the_rest(syn: Built) -> None:
-    from proofload.report import _fmt
+    from poisson_prove.report import _fmt
 
     seen_non_scalar = seen_bool = False
     for panel in syn.structure["panels"]:
@@ -1513,7 +1527,7 @@ def test_e16_text_keys_are_still_the_seven_floats_and_forbidden_keys_appear_nowh
 
 
 def test_e17_holes_are_the_grid_holes_in_grid_order_then_off_grid_rows_by_hash(syn: Built) -> None:
-    from proofload.report import _coord_text
+    from poisson_prove.report import _coord_text
 
     holes = syn.structure["holes"]
     grid = grid_holes(syn)
@@ -1543,7 +1557,7 @@ def test_e17_unsampled_and_multiple_holes_are_blank_with_four_zero_counts(syn: B
 
 
 def test_e17_every_other_hole_carries_its_coverage_row(syn: Built) -> None:
-    from proofload.report import _fmt
+    from poisson_prove.report import _fmt
 
     frame = coverage_of(syn).set_index("config_hash")
     others = [h for h in syn.structure["holes"] if h["cause"] not in GRID_CAUSES]
@@ -1762,7 +1776,7 @@ def test_e22_the_import_partition_is_unchanged_and_run_tally_is_under_type_check
 
 
 def test_e23_the_page_prints_no_float_except_through_the_structures_strings(builts: tuple[Built, Built]) -> None:
-    from proofload.report import _provenance_lines
+    from poisson_prove.report import _provenance_lines
 
     for b in builts:
         allowed = list(walk_strings(b.structure)) + _provenance_lines(b.structure["diff"])

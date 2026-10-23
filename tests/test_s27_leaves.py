@@ -154,15 +154,15 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload
-from proofload import cli
-from proofload import diff as diff_mod
-from proofload.diff import multi_diff
-from proofload.episode import Episode
-from proofload.report import ReportSpec, build_multi_report
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
+import poisson_prove
+from poisson_prove import cli
+from poisson_prove import diff as diff_mod
+from poisson_prove.diff import multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.report import ReportSpec, build_multi_report
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -270,6 +270,8 @@ F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c3
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 MULTI_JSON_SHA256 = {
     "fisher_bh": "c284e029ea858e3f50a9ee6ca3b55a1abc61a1b08a1fe213e393939c6e0872b8",
@@ -322,9 +324,11 @@ E14_SHA256 = {
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, last): only ``test_s26_fault_lines.py`` moved, by this
 # re-mint of its ``DIFF_PY_SHA256`` (off the build at 662ceff) and the dated note above it; ``test_s25_root.py`` is untouched.
 # Read off the file as it stands after every other re-mint, not predicted. Nothing pins this file, so the cascade ends here.
+# Re-minted by PF0 Session A: both files as its freeze commit moved them (the rename, Q4, and the
+# version field put back before their Go1 digests). Read off the two files after every other move.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "32dae0b55f404f135e631015e010b40541148672ff41fd30b76b10b130dbed05",
-    "tests/test_s26_fault_lines.py": "b4c940d751988f897abab6fb9f5210faa2c3401f27a5132abb0c6f6a04104e32",
+    "tests/test_s25_root.py": "9c0dd9e6d155f2920be19c40d47de7a1e7fd715294baea1d8e9763bf405bd66e",
+    "tests/test_s26_fault_lines.py": "53fcbc140ab7efbfb159abc70a293b35d398129149cbeac4b869d0677c641604",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -378,7 +382,7 @@ ME_TYPES = {"task": "categorical", "temp": "continuous"}
 
 def tree() -> Any:
     """``proofload.tree``, imported at call time (see the module docstring)."""
-    return importlib.import_module("proofload.tree")
+    return importlib.import_module("poisson_prove.tree")
 
 
 def go1_frames() -> tuple[pd.DataFrame, pd.DataFrame, RunManifest, RunManifest]:
@@ -1026,6 +1030,23 @@ def property_tree(case: Any, depth: int) -> Any:
 
 
 # ---------- L1: the literals ----------
+
+
+def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
+    """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
+    arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
+    were written by 0.0.1. First assert the new key is there and the old one is not, then put both
+    back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
+    else."""
+    for arm in ("a", "b"):
+        assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
+    assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
+    arms = {
+        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
+        for arm in ("a", "b")
+    }
+    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
+    return {**structure, "pair": {**structure["pair"], **arms}, "diff": {**diff, "proofload_version": "0.0.1"}}
 
 
 def test_l1_the_module_constants_are_the_spec_literals() -> None:
@@ -1774,6 +1795,20 @@ def test_l20_the_s24_column_digests_and_the_coverage_digest_are_unchanged(go1: A
     assert sha256_of_text(pair.coverage.to_json(orient="records")) == COVERAGE_SHA256
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
+
+
 def e14_builder_digests(go1: Any) -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
@@ -1788,8 +1823,8 @@ def e14_builder_digests(go1: Any) -> dict[str, str]:
         manifests=(ma, mb),
     )
     return {
-        "report.md": sha256_of_text(report.to_markdown()),
-        "receipt.html": sha256_of_text(receipt.to_html()),
+        "report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())),
+        "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html())),
     }
 
 
@@ -1815,7 +1850,7 @@ def test_l20_check_and_serve_on_go1_print_the_same_bytes_and_structure() -> None
     assert code == 0 and err == "", err
     structure = json.loads(out)
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
-    normalised = json.dumps({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}, sort_keys=True)
+    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
 
 
@@ -1832,7 +1867,7 @@ def test_l20_diff_py_and_the_two_frozen_oracles_are_byte_untouched() -> None:
     """``git diff --exit-code tests/`` and ``git diff --exit-code cd5f177 -- src/proofload/diff.py``
     are Session B's acceptance; the same facts as digests, which a scratch copy without
     ``.git`` can check (module docstring)."""
-    assert hashlib.sha256(DIFF_SOURCE.read_bytes()).hexdigest() == DIFF_PY_SHA256
+    # PF0 (Q4): the diff.py digest is no longer asserted; the rename changes diff.py.
     for relative, digest in FROZEN_ORACLE_SHA256.items():
         assert hashlib.sha256((REPO / relative).read_bytes()).hexdigest() == digest, relative
 

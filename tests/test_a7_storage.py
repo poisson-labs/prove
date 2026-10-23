@@ -158,6 +158,7 @@ import importlib
 import inspect
 import json
 import multiprocessing
+import re
 import traceback
 import warnings
 from collections.abc import Callable, Mapping, Sequence
@@ -173,26 +174,26 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-import proofload
-import proofload.cli as cli
-import proofload.store as store_module
-import proofload.trace as trace_module
-from proofload import diff as diff_mod
-from proofload.diff import MultiDiffResult, multi_diff
-from proofload.episode import Episode
-from proofload.examples.mock_agent import rollout, rollout_patched
-from proofload.executor import plan, run_local
-from proofload.report import ReportSpec, build_multi_report
-from proofload.sampler import SweepSpec
-from proofload.store import EpisodeRecord, RunManifest, Store
-from proofload.trace import OTEL_SEMCONV_VERSION, Span, Trace
-from proofload.tree import agreement_digest
-from proofload.tree import tree as grow_tree
+import poisson_prove
+import poisson_prove.cli as cli
+import poisson_prove.store as store_module
+import poisson_prove.trace as trace_module
+from poisson_prove import diff as diff_mod
+from poisson_prove.diff import MultiDiffResult, multi_diff
+from poisson_prove.episode import Episode
+from poisson_prove.examples.mock_agent import rollout, rollout_patched
+from poisson_prove.executor import plan, run_local
+from poisson_prove.report import ReportSpec, build_multi_report
+from poisson_prove.sampler import SweepSpec
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
+from poisson_prove.tree import agreement_digest
+from poisson_prove.tree import tree as grow_tree
 
 MODULE = __name__
-PACKAGE = Path(proofload.__file__).resolve().parent
+PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
-SRC = REPO / "src" / "proofload"
+SRC = REPO / "src" / "poisson_prove"
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 GO1_ROWS = 12_800
@@ -215,14 +216,14 @@ OBSERVATION_KEY_LITERALS = frozenset({
     "traceloop.entity.input", "traceloop.entity.output",
     "input.value", "output.value",
     "gen_ai.tool.call.arguments", "gen_ai.tool.call.result",
-    "proofload.logprobs",
+    "poisson_prove.logprobs",
 })
-LOGPROBS_KEY_SPEC = "proofload.logprobs"
+LOGPROBS_KEY_SPEC = "poisson_prove.logprobs"
 #: A6 section 3.3's four prefix rows; a key under any of them is an observation value.
 OBSERVATION_PREFIXES = ("gen_ai.prompt.", "gen_ai.completion.", "llm.input_messages.", "llm.output_messages.")
 PREFIXED_KEYS = tuple(prefix + "0.content" for prefix in OBSERVATION_PREFIXES)
 #: Attributes that are not observation content and must stay in the envelope.
-PLAIN_KEYS = ("attempts", "otel.trace_id", "proofload.run_id", "tool.retries")
+PLAIN_KEYS = ("attempts", "otel.trace_id", "poisson_prove.run_id", "tool.retries")
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 SPAN_KEYS = frozenset({
     "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
@@ -231,21 +232,31 @@ SPAN_KEYS = frozenset({
     "operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original",
 })
 KINDS_SPEC = ("llm", "tool", "retrieval", "db", "http", "agent", "other")
-SCHEMA_SPEC = "proofload.trace/1"
+SCHEMA_SPEC = "poisson-prove.trace/1"
 EPOCH = 1_756_900_000_000_000_000
 POISON = "not json"
 
 #: G17's two Go1 literals, restated from ``test_a28_agreement.py``: the same value under both
 #: methods at each K, through the fallback read of a pre-A7 store.
+# Re-minted by PF0 Session A (Q4): the agreement form is hashed behind its schema string, which is now
+# ``poisson-prove.agreement/1``. Computed on the 0.0.1 tree (98dc6af) with that one string changed and
+# nothing else; the 0.0.1 values are kept below as ``GO1_AGREEMENT_0_0_1``.
 GO1_AGREEMENT = {
+    1: "ed536c0213e9a9e7942807ec525738d1ca1373544e0b47fc93a8640879ef1087",
+    2: "ceecf72a0f87fbdb0c74758a4554c8a9427f0a6ecba08504c5dc5fad36e04c33",
+}
+GO1_AGREEMENT_0_0_1 = {
     1: "360aaa320c675c40fa8dc7b2b3d5288aa42468c16facc7209264f975cb13e92d",
     2: "988b1dd2c3b30b4f21007de26b1c04520d030c91ec809c3df696a8a5445b33af",
 }
 #: Step zero item 2: A28's crossed P shape at ``93bfa13`` through the shipped writer, K = 1 and
 #: K = 2, the same value under both methods. P7-12 asserts both layouts equal these.
+# Re-minted by PF0 Session A (Q4): the schema string behind the agreement form is renamed. Computed on
+# the 0.0.1 tree (98dc6af) with that one string changed, through this file's own crossed-store
+# fixture; the same code with the old string gives the old values (b6daa2f1..., 83dcc3d9...).
 CROSSED_AGREEMENT = {
-    1: "b6daa2f1adbc29d44f31c2cb1f6c8f98f2d36e5d962e58d6a4b5369864eb4822",
-    2: "83dcc3d986caf525c6f36d51b27334c764c5841e879ed0c36bb4c2c05a09bd9b",
+    1: "f57096cddf8e00b356ad1949f848e1e7e411aa22fa1b3885100e6fab43158cb1",
+    2: "d45463a2d5c94fc6093134f80765949838f509f7a4d1857468e486e16195e93f",
 }
 HEX64_LEN = 64
 
@@ -264,8 +275,8 @@ Q = 0.05
 
 # ---------- the mock quickstart pair for P7-10 ----------
 
-MOCK_ROLLOUT = "proofload.examples.mock_agent:rollout"
-MOCK_PATCHED = "proofload.examples.mock_agent:rollout_patched"
+MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
+MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 MOCK_SALT = "a7-storage-oracle"
 MOCK_CONFIGS = [
     {"task_id": task, "tool_fail_rate": rate}
@@ -381,7 +392,7 @@ def observation_trace(seed: int) -> Trace:
             "llm.output_messages.0.content": f"out {seed}",
             "input.value": f"iv {seed}",
             "output.value": f"ov {seed}",
-            "proofload.logprobs": [[-0.1, -2.3], [-0.5]],
+            "poisson_prove.logprobs": [[-0.1, -2.3], [-0.5]],
             "attempts": 1,
             "otel.trace_id": f"{seed:032x}",
         },
@@ -396,7 +407,7 @@ def observation_trace(seed: int) -> Trace:
             "traceloop.entity.input": f"ti {seed}",
             "traceloop.entity.output": f"to {seed}",
             "tool.retries": 0,
-            "proofload.run_id": "r",
+            "poisson_prove.run_id": "r",
         },
     )
     plain = span(2, kind="tool", attrs={"attempts": 2})
@@ -558,7 +569,7 @@ def grown(store: Store, a: str, b: str, *, events: Sequence[str], method: str) -
 
 def render_both(store: Store, g: Grown, tree: Any) -> None:
     """Both renderers' ``_check_tree`` through their public builders: a refusal raises."""
-    import proofload.viewer as viewer
+    import poisson_prove.viewer as viewer
 
     spec = ReportSpec(title=f"{g.a} vs {g.b}", x_axis="task", y_axis="temp", fixed={})
     report = build_multi_report(g.multi, spec, manifests=g.manifests, tree=tree)
@@ -595,6 +606,39 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
+
+
+def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
+    """PF0 (Q4, Q10): the page structure's schema string and its version key, in both arms and in the
+    provenance block. First assert they are there as the rename writes them, then put them back as
+    0.0.1 wrote them before the frozen digest is taken."""
+    assert structure["schema"] == "poisson-prove.viewpair/7", structure["schema"]
+    for arm in ("a", "b"):
+        assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
+    assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
+    arms = {
+        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
+        for arm in ("a", "b")
+    }
+    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
+    return {
+        **structure, "schema": "proofload.viewpair/6", "pair": {**structure["pair"], **arms},
+        "diff": {**diff, "proofload_version": "0.0.1"},
+    }
+
+
 def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_dir: Path) -> tuple[dict[str, str], dict[str, Result]]:
     """Every verb the spec names, on one stored pair, exit codes kept and stdout digested with the
     store root and the ``--out`` directory normalised."""
@@ -608,19 +652,37 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
 
     results["runs"] = r = run_cli(["--store", store_arg, "runs"]); digests["runs"] = sha256_text(norm(r.out))
     results["diff"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event]); digests["diff"] = sha256_text(norm(r.out))
-    results["diff --format json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--format", "json"]); digests["diff --format json"] = sha256_text(norm(r.out))
+    results["diff --format json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--format", "json"])
+    # PF0 (Q4): the tree's agreement digest is hashed behind the renamed schema string; the 0.0.1 value
+    # is put back before the frozen digest is taken.
+    as_0_0_1 = norm(r.out)
+    if root == GO1_ROOT:
+        assert GO1_AGREEMENT[1] in as_0_0_1 and GO1_AGREEMENT_0_0_1[1] not in as_0_0_1
+    for k, digest in GO1_AGREEMENT.items():
+        as_0_0_1 = as_0_0_1.replace(digest, GO1_AGREEMENT_0_0_1[k])
+    digests["diff --format json"] = sha256_text(as_0_0_1)
     results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event]); digests["check"] = sha256_text(norm(r.out))
     for label, runs in (("report A", [a]), ("report A B", [a, b])):
         out = out_dir / label.replace(" ", "_")
         results[label] = r = run_cli(["--store", store_arg, "report", *runs, "--event", event, "--x", x, "--y", y, "--out", str(out)])
         digests[label] = sha256_text(norm(r.out, out))
         for name in ("report.md", "heatmap.svg", "receipt.html"):
-            digests[f"{label}/{name}"] = sha256_file(out / name) if (out / name).is_file() else ""
+            if not (out / name).is_file():
+                digests[f"{label}/{name}"] = ""
+            elif name == "heatmap.svg":
+                digests[f"{label}/{name}"] = sha256_file(out / name)
+            else:
+                digests[f"{label}/{name}"] = sha256_text(as_0_0_1_wrote_it((out / name).read_text(encoding="utf-8")))
     results["serve --json"] = r = run_cli(["--store", store_arg, "serve", a, b, "--event", event, "--x", x, "--y", y, "--json"])
     try:
         structure = json.loads(r.out)
         structure["pair"]["store_root"] = STORE_PLACEHOLDER
-        digests["serve --json"] = sha256_text(json.dumps(structure, sort_keys=True))
+        as_0_0_1 = json.dumps(structure_as_0_0_1_wrote_it(structure), sort_keys=True)
+        if root == GO1_ROOT:
+            assert GO1_AGREEMENT[1] in as_0_0_1 and GO1_AGREEMENT_0_0_1[1] not in as_0_0_1
+        for k, digest in GO1_AGREEMENT.items():
+            as_0_0_1 = as_0_0_1.replace(digest, GO1_AGREEMENT_0_0_1[k])
+        digests["serve --json"] = sha256_text(as_0_0_1)
     except (ValueError, KeyError, TypeError):
         digests["serve --json"] = ""
     results["inspect"] = r = run_cli(["--store", store_arg, "inspect", a, "--event", event]); digests["inspect"] = sha256_text(norm(r.out))
@@ -1114,7 +1176,7 @@ def test_p7_3_a_pre_a7_part_and_a_post_a7_part_in_one_run_read_as_one_frame(mixe
     truncated=st.none() | st.sampled_from(("timeout", "crash")),
 )
 def test_p7_4_assemble_of_split_round_trips_every_valid_trace(spans: list[dict[str, Any]], source: str, source_version: str | None, dropped: int, truncated: str | None) -> None:
-    from proofload.trace import assemble, split
+    from poisson_prove.trace import assemble, split
 
     t = Trace.from_dict(trace_dict(spans, source=source, source_version=source_version, dropped=dropped, truncated=truncated))
     envelope, obs = split(t)
@@ -1275,7 +1337,7 @@ def test_p7_10_every_verb_exits_0_on_go1_and_the_mock_pair_and_go1s_bytes_are_un
     r = mock_results["runs"]
     assert [line.split()[0] for line in r.out.splitlines()[2:]] == sorted((mock_pair.a, mock_pair.b))
     r = mock_results["inspect"]
-    assert SNIPPET_MARKER in r.out and "from proofload.examples.mock_agent import rollout" in r.out
+    assert SNIPPET_MARKER in r.out and "from poisson_prove.examples.mock_agent import rollout" in r.out
     rows = store.read(mock_pair.a, trace="full")
     violated = rows[rows["outcome"] == MOCK_EVENT]
     assert len(violated) >= 1

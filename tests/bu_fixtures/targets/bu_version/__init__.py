@@ -3,7 +3,7 @@ folder and edits ``VERSION`` between two runs, so the two bundles differ only he
 
 from typing import Any
 
-from proofload.episode import Episode
+from poisson_prove.episode import Episode
 
 VERSION = "one"
 

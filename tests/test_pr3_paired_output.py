@@ -130,13 +130,13 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import proofload
-import proofload.cli as cli
-from proofload import paired
-from proofload.episode import Episode
-from proofload.executor import derive_seed
-from proofload.store import EpisodeRecord, RunManifest, Store, config_hash
-from proofload.trace import Span, Trace
+import poisson_prove
+import poisson_prove.cli as cli
+from poisson_prove import paired
+from poisson_prove.episode import Episode
+from poisson_prove.executor import derive_seed
+from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.trace import Span, Trace
 
 REPO = Path(__file__).resolve().parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
@@ -155,6 +155,8 @@ E14_SHA256 = {
 #: ``test_s29_viewer.py``'s and ``test_fr_first_run.py``'s whole-file digest of ``report.py``.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the local serve pass's build (the wrap, the complement, mde_unchanged, LS16's Cells sentence); phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); PR-3's phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
+# PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
+# changes can be frozen honestly before its build exists (front-door spec section 14).
 REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
 
 EPOCH = 1_790_000_000_000_000_000
@@ -288,7 +290,7 @@ def make_store(
             axis_types={"item": "categorical", "cut": "categorical"}, backend="local",
             environment={
                 "python": "3.11.7", "platform": "oracle",
-                "proofload_version": proofload.__version__,
+                "poisson_prove_version": poisson_prove.__version__,
                 "capture": {"content": True, "max_observation_bytes": "none"},
             },
         ))
@@ -965,6 +967,20 @@ def test_pr52_the_cli_phases_are_the_declared_sweeps(tmp_path: Path) -> None:
 # ---------- PR53: without --paired, today's bytes ----------
 
 
+def as_0_0_1_wrote_it(text: str) -> str:
+    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    is the version in its provenance list. First assert it is there as the rename writes it -- one
+    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
+    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
+    byte."""
+    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
+    assert len(found) == 1 and "proofload version:" not in text, found
+    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
+    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
+    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
+    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
+
+
 def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path) -> None:
     """Green before and after: W20's three digests through the CLI on the Go1 fixture."""
     out = tmp_path / "go1"
@@ -972,14 +988,15 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     assert r.code == 0, r.err
     assert sorted(p.name for p in out.iterdir()) == sorted(REPORT_FILES)
     for name, digest in E14_SHA256.items():
-        assert hashlib.sha256((out / name).read_bytes()).hexdigest() == digest, name
+        text = (out / name).read_text(encoding="utf-8")
+        if name != "heatmap.svg":
+            text = as_0_0_1_wrote_it(text)
+        assert hashlib.sha256(text.encode("utf-8")).hexdigest() == digest, name
 
 
-def test_pr53_report_py_is_not_touched_by_phase_three() -> None:
-    """Green before and after: the paired sections are folded into the rendered strings, and the
-    renderer's whole-file digest is the one two frozen tests carry."""
-    source = (Path(P().__file__).parent / "report.py").read_bytes()
-    assert hashlib.sha256(source).hexdigest() == REPORT_PY_SHA256
+# PF0 (Q4): test_pr53_report_py_is_not_touched_by_phase_three removed. It pinned the bytes of src/poisson_prove/report.py, which the rename
+# changes; no digest of a file this module changes can be frozen honestly before its build
+# exists (front-door spec section 14).
 
 
 def test_pr53_without_the_flag_no_paired_section_and_no_artifact_exists_and_the_flag_needs_a_value(tmp_path: Path) -> None:
