@@ -343,6 +343,8 @@ E14_SHA256 = {
 #: R2, second clause: the CLI's ``report.md`` and ``receipt.html`` on the E14 argv **with** the
 #: tree at the default knobs, minted on Session A's shim (module docstring).
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.md and receipt.html print LS16's respelled Cells sentence ('MDE is the smallest detectable increase', no ADR number) and nothing else new. Read through this test's own measurement on the built tree, not predicted.
+# No longer asserted: the command line writes these files by rule 10 and prose is not pinned;
+# R2 asserts the facts they guarded instead (front-door spec section 14).
 E14_WITH_TREE_SHA256 = {
     "report.md": "69324de1b24bdcf561501e313561ea481e243249a982a3b274e727445a15c370",
     "receipt.html": "f5b7342aeb67f1214140bb486b388e9e7a521ffb1d07e2972191b350fa5eb6eb",
@@ -363,6 +365,7 @@ E14_WITH_TREE_SHA256 = {
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
+# No longer asserted: check's stdout changes shape; R19 asserts the facts it guarded (spec section 14).
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
@@ -685,7 +688,9 @@ def rendered(outs: Path, root: Path, *argv: str) -> Rendered:
 
 def ok(outs: Path, root: Path, *argv: str) -> Rendered:
     r = rendered(outs, root, *argv)
-    assert r.code == 0 and r.err == "", (argv, r.text)
+    # An unpaired method on runs that share a salt prints one "note: " line on stderr (spec
+    # section 5.4); anything else on stderr is still a failure.
+    assert r.code == 0 and not [line for line in r.err.splitlines() if not line.startswith("note: ")], (argv, r.text)
     return r
 
 
@@ -852,19 +857,23 @@ def section_text(items: Sequence[tuple[Any, ...]]) -> str:
 # ---------- tokens and the kind table ----------
 
 
-TOKEN_SPLIT = re.compile(r"[\s=,:;()/|]+")
+# Rule 10 (spec section 5.4): a count carries thousands separators, so a comma between a digit and
+# three more digits is part of the number and not a separator.
+TOKEN_SPLIT = re.compile(r"(?:[\s=:;()/|]|(?<!\d),|,(?!\d{3}(?!\d)))+")
 
 
 def numeric_tokens(text: str) -> list[str]:
     """Every whitespace-, ``=``-, ``,``-, ``:``-, ``;``-, ``(``-, ``)``-, ``/``- or ``|``-separated
     token that parses as a number, verbatim, a trailing ``pp`` stripped first (the kind table's
-    suffix is text beside the number)."""
+    suffix is text beside the number). A count's thousands separators and a leading plus sign are
+    part of the number (rule 10, spec section 5.4)."""
     out = []
     for token in TOKEN_SPLIT.split(text):
         if token.endswith("pp"):
             token = token[:-2]
+        token = token.removeprefix("+")
         try:
-            float(token)
+            float(token.replace(",", "") if re.fullmatch(r"-?\d{1,3}(?:,\d{3})+(?:\.\d+)?", token) else token)
         except ValueError:
             continue
         out.append(token)
@@ -878,19 +887,66 @@ def fmt(value: Any, kind: str) -> str:
     return _fmt(value, kind)
 
 
+def fmt10(value: Any, kind: str) -> set[str]:
+    """What the command line prints for a value M7 formats under ``kind``, by rule 10 (spec section
+    5.4, Q47): the files ``report`` writes follow it, while the library's own renderers keep M7's
+    forms. Rates, deltas and MDEs (``pp1``, ``pp0``) are fractions to three decimals; p, q, alpha
+    and the bound (``sig3``) three decimals, or ``2.3e-08`` below 0.001; counts carry separators;
+    a plain number keeps M7's form. A set, where rule 10 leaves two spellings open (a p of exactly
+    zero; a constant above one under ``sig3``; a plain number)."""
+    x = float(value)
+    if kind == "int":
+        return {f"{int(value):,}"}
+    if math.isnan(x) or math.isinf(x):
+        return {fmt(value, kind), str(x)}
+    if kind in ("pp1", "pp0"):
+        s = f"{x:.3f}"
+        return {s[1:] if re.fullmatch(r"-0\.0+", s) else s}
+    if kind == "sig3":
+        forms = {f"{x:.3f}" if x >= 0.001 or x == 0 else f"{x:.1e}"}
+        if x == 0:
+            forms.add(f"{x:.1e}")
+        if x >= 1:
+            forms.add(fmt(value, kind))
+        return forms
+    forms = {fmt(value, kind)}
+    if x.is_integer() and abs(x) < 1e15:
+        forms.add(f"{int(x):,}")
+    else:
+        forms.add(f"{x:.3f}")
+    return forms
+
+
 def renders(cell: str, value: Any) -> bool:
-    """``cell`` is ``value`` under one of M7's kinds: the field-identity check of R5-R8, which
-    leaves the *kind* to R4 (module docstring)."""
-    token = cell[:-2] if cell.endswith("pp") else cell
+    """``cell`` is ``value`` under one of M7's kinds, as rule 10 prints it: the field-identity
+    check of R5-R8, which leaves the *kind* to R4 (module docstring)."""
+    token = (cell[:-2] if cell.endswith("pp") else cell).removeprefix("+")
     if isinstance(value, bool) or value is None:
         return False
+    kinds = ("sig3", "pp1", "pp0", "num")
     if isinstance(value, int) or (isinstance(value, float) and value.is_integer() and abs(value) < 1e15):
-        return token == fmt(int(value), "int") or token in {fmt(value, k) for k in ("sig3", "pp1", "pp0", "num")}
-    return token in {fmt(value, k) for k in ("sig3", "pp1", "pp0", "num")}
+        return token in fmt10(int(value), "int") or token in set().union(*(fmt10(value, k) for k in kinds))
+    return token in set().union(*(fmt10(value, k) for k in kinds))
 
 
 def has(text: str, value: Any) -> bool:
     return any(renders(tok, value) for tok in TOKEN_SPLIT.split(text))
+
+
+def rule10_spellings(text: str) -> set[str]:
+    """Every spelling rule 10 could give a number in a verbatim library string (a ``headline()``
+    or a refusal's ``detail``, written in M7's forms), so R4 admits the CLI's rendering of it:
+    the token itself, the token as a fraction, a rate, a p-value, and a count."""
+    out: set[str] = set()
+    for token in numeric_tokens(text):
+        x = float(token.replace(",", ""))
+        out.add(token)
+        for kind in ("pp1", "sig3", "num"):
+            out |= fmt10(x, kind)
+            out |= fmt10(x / 100, kind)
+        if x.is_integer():
+            out |= fmt10(int(x), "int")
+    return out
 
 
 def user_data(result: Any, requested: str | None) -> list[str]:
@@ -909,14 +965,17 @@ def masked(text: str, result: Any, requested: str | None) -> str:
     return out.lower()
 
 
-def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[str], set[str]]:
+def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[str], set[frozenset[str]]]:
     """R4's two sets, rebuilt from the tree and the kind table: ``allowed`` -- every ``_fmt(field,
     kind)`` the table assigns, every count under ``int``, the numeric tokens of every user-data
     string, of the verbatim ``headline()`` and ``detail`` strings, and the rule's ``2``; and
-    ``required`` -- the fields spec section 3.2's layout prints, given what was tested."""
+    ``required`` -- the fields spec section 3.2's layout prints, given what was tested.
+    The command line prints each field by rule 10 (spec section 5.4), so a field's token is its
+    ``fmt10`` spelling and a required field is the set of its spellings, one of which must print;
+    the verbatim library strings are admitted in every spelling rule 10 could give their numbers."""
     root, grouping, fault, leaves, bound = result.root, result.grouping, result.fault_lines, result.leaves, result.bound
     allowed: set[str] = set()
-    required: set[str] = set()
+    required: set[frozenset[str]] = set()
 
     def add(obj: Any, name: str, kind: str, *, need: bool) -> None:
         value = getattr(obj, name)
@@ -924,15 +983,15 @@ def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[s
             return
         if isinstance(value, Mapping):
             for event in root.events:
-                token = fmt(value[event], kind)
-                allowed.add(token)
+                tokens = fmt10(value[event], kind)
+                allowed.update(tokens)
                 if need:
-                    required.add(token)
+                    required.add(frozenset(tokens))
             return
-        token = fmt(value, kind)
-        allowed.add(token)
+        tokens = fmt10(value, kind)
+        allowed.update(tokens)
         if need:
-            required.add(token)
+            required.add(frozenset(tokens))
 
     by_structure: dict[str, list[tuple[str, str]]] = {}
     for structure, name, kind in KIND_TABLE:
@@ -963,11 +1022,13 @@ def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[s
     for name, kind in by_structure["Bound"]:
         add(bound, name, kind, need=True)
     if leaves.reason == "depth":
-        required.add(fmt(bound.depth_configured, "int"))
+        required.add(frozenset(fmt10(bound.depth_configured, "int")))
     verbatim = [root.headline(), *(r.detail for r in grouping.refused), *user_data(result, requested)]
     for text in verbatim:
         allowed.update(numeric_tokens(text))
         allowed.update(t for t in TOKEN_SPLIT.split(text) if t)
+    for text in (root.headline(), *(r.detail for r in grouping.refused)):
+        allowed.update(rule10_spellings(text))
     allowed.add(BOUND_RULE_LITERAL)
     return allowed, required
 
@@ -1264,11 +1325,14 @@ def quickstart(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str
     root = tmp_path_factory.mktemp("s28-quickstart")
 
     def sweep(target: str, *extra: str) -> str:
+        # A sweep no longer ends in a "run_id:" line (spec section 5.3); the new run is the one
+        # the store gained.
+        before = set(Store(root).runs())
         code, out, err = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra])
         assert code == 0, out + err
-        last = out.strip().splitlines()[-1]
-        assert last.startswith("run_id: "), out
-        return last.split("run_id: ", 1)[1]
+        new = set(Store(root).runs()) - before
+        assert len(new) == 1, out
+        return new.pop()
 
     a = sweep(ROLLOUT, "--salt", QUICKSTART_SALT)
     b = sweep(PATCHED, "--pair-with", a)
@@ -1401,16 +1465,35 @@ def test_r2_the_tree_less_builder_reproduces_s21s_three_digests_and_the_svg_stil
     assert sha256_of_text(report.to_svg()) == E14_SHA256["heatmap.svg"]
     assert sha256_of_text(as_0_0_1_wrote_it(light.to_html())) == E14_SHA256["receipt.html"]
     r = ok(outs, GO1_ROOT, *E14_ARGV[1:])
-    assert sha256_of_text(r.svg) == E14_SHA256["heatmap.svg"]
+    # The CLI's heatmap labels follow rule 10 (spec section 5.4) and may re-wrap, so its digest
+    # moves; its colour cells are the pinned library SVG's, cell for cell.
+    assert svg_cells(r.svg) == svg_cells(report.to_svg()) and svg_cells(r.svg)
 
 
 def test_r2_the_clis_report_and_receipt_with_the_tree_digest_to_the_values_minted_on_the_shim(outs: Path) -> None:
     """The second clause points the other way: the CLI's ``report.md`` and ``receipt.html`` on
     the E14 argv, the tree at the default knobs, digest to the values this oracle minted on
-    Session A's shim, which Session B reproduces (module docstring: the section templates)."""
+    Session A's shim, which Session B reproduces (module docstring: the section templates).
+    The command line writes numbers by rule 10 (spec section 5.4) and prose is not pinned, so
+    the digests give way to the facts they guarded: the library's render of the same pair line
+    for line outside the numbers, the version entry, and the tree's numbers, verdicts, cells and
+    bound in each section."""
     r = ok(outs, GO1_ROOT, *E14_ARGV[1:])
-    assert sha256_of_text(as_0_0_1_wrote_it(r.md)) == E14_WITH_TREE_SHA256["report.md"]
-    assert sha256_of_text(as_0_0_1_wrote_it(r.html)) == E14_WITH_TREE_SHA256["receipt.html"]
+    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",))
+    library = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=True, theme="light", counted=True)
+    for kind, page, theirs in (("md", r.md, library.to_markdown()), ("html", r.html, library.to_html())):
+        as_0_0_1_wrote_it(page)
+        assert_same_but_numbers(page, theirs, f"e14 {kind}")
+        secs = sections(page, kind)
+        assert_omnibus("e14", kind, secs["Omnibus"], result)
+        assert_fault_lines("e14", kind, secs["Fault lines"], result)
+        assert_cells("e14", kind, secs["Cells"], result)
+        assert_bound("e14", kind, secs["Bound"], result)
+        assert "is rejected" in lines_of(secs["Omnibus"])[0]
+        header, rows = tables_of(secs["Fault lines"])[0]
+        assert len(rows) == GO1_MU_GROUPS and sum(row[-1] == "rejected" for row in rows) == GO1_MU_REJECTED
+        assert sum(len(rows) for _, rows in tables_of(secs["Cells"])) == GO1_FISHER_LEAVES
+        assert BOUND_AT_DEPTH_3 in lines_of(secs["Bound"])[0]
 
 
 # ---------- R3: the addition is additive ----------
@@ -1424,10 +1507,49 @@ def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_ev
     never by the tail."""
     for name, r, _, _ in every_pair:
         tree_less = _tree_less_for(name, synth_root)
-        assert excised(r.md, md_bounds(r.md)) == tree_less.to_markdown(), name
-        assert excised(r.html, html_bounds(r.html)) == tree_less.to_html(), name
+        # The library's renderers keep M7's number forms and the command line writes rule 10
+        # (spec section 5.4), so the CLI's files equal the tree-less render line for line except
+        # where a line carries a number or the points unit; byte for byte, the addition is
+        # additive in the library, where the same pair is rendered with and without its tree.
+        assert_same_but_numbers(excised(r.md, md_bounds(r.md)), tree_less.to_markdown(), name)
+        assert_same_but_numbers(excised(r.html, html_bounds(r.html)), tree_less.to_html(), name)
+        with_tree = _with_tree_for(name, synth_root)
+        assert excised(with_tree.to_markdown(), md_bounds(with_tree.to_markdown())) == tree_less.to_markdown(), name
+        assert excised(with_tree.to_html(), html_bounds(with_tree.to_html())) == tree_less.to_html(), name
         sections(r.md, "md")
         sections(r.html, "html")
+
+
+def outside_svg(text: str) -> tuple[list[str], str]:
+    """The lines of ``text`` outside any inline ``<svg>`` element, and the SVG lines joined."""
+    outside, inside, depth = [], [], 0
+    for line in text.splitlines():
+        if "<svg" in line:
+            depth += 1
+        (inside if depth else outside).append(line)
+        if "</svg>" in line:
+            depth -= 1
+    return outside, "\n".join(inside)
+
+
+def svg_cells(svg: str) -> list[str]:
+    """Every ``rect``'s fill, in order: the figure's colour cells, legend and backgrounds."""
+    return RECT_FILL_RE.findall(svg)
+
+
+RECT_FILL_RE = re.compile(r'<rect\b[^>]*\bfill="([^"]*)"')
+
+
+def assert_same_but_numbers(cli_text: str, library_text: str, name: str) -> None:
+    """``cli_text`` is ``library_text`` line for line, in the same order and count, every line
+    equal except one that carries a number or the points unit in the library's rendering (the
+    lines rule 10 rewrites, spec section 5.4). An inline figure's labels follow rule 10 too and
+    re-wrap, which moves the geometry under them, so a figure is compared by its colour cells."""
+    (cli_lines, cli_svg), (library_lines, library_svg) = outside_svg(cli_text), outside_svg(library_text)
+    assert svg_cells(cli_svg) == svg_cells(library_svg), name
+    assert len(cli_lines) == len(library_lines), (name, len(cli_lines), len(library_lines))
+    for i, (ours, theirs) in enumerate(zip(cli_lines, library_lines, strict=True)):
+        assert ours == theirs or re.search(r"\d|pp\b", theirs), (name, i, ours[:120], theirs[:120])
 
 
 _TREE_LESS_ARGS = {
@@ -1449,11 +1571,23 @@ def _tree_less_for(name: str, synth_root: Path) -> Any:
     return built(root or synth_root, a, b, events=events, x=x, y=y, with_tree=False, method=method, theme="light", counted=True)
 
 
+def _with_tree_for(name: str, synth_root: Path) -> Any:
+    if name.startswith("quickstart"):
+        return _QUICKSTART_WITH_TREE[name]
+    root, a, b, events, x, y, method = _TREE_LESS_ARGS[name]
+    return built(root or synth_root, a, b, events=events, x=x, y=y, with_tree=True, method=method, theme="light", counted=True)
+
+
+_QUICKSTART_WITH_TREE: dict[str, Any] = {}
+
+
 @pytest.fixture(scope="module", autouse=True)
 def _quickstart_tree_less(quickstart: tuple[Path, str, str]) -> None:
     root, a, b = quickstart
     _QUICKSTART_TREE_LESS["quickstart"] = built(root, a, b, events=("violated",), x="tool_fail_rate", y="task_id", with_tree=False, theme="light", counted=True)
     _QUICKSTART_TREE_LESS["quickstart-2"] = built(root, a, b, events=("violated", "timeout"), x="tool_fail_rate", y="task_id", with_tree=False, theme="light", counted=True)
+    _QUICKSTART_WITH_TREE["quickstart"] = built(root, a, b, events=("violated",), x="tool_fail_rate", y="task_id", with_tree=True, theme="light", counted=True)
+    _QUICKSTART_WITH_TREE["quickstart-2"] = built(root, a, b, events=("violated", "timeout"), x="tool_fail_rate", y="task_id", with_tree=True, theme="light", counted=True)
 
 
 def test_r3_the_receipts_stylesheet_and_everything_outside_the_span_is_the_tree_less_renders(every_pair: Any) -> None:
@@ -1489,7 +1623,7 @@ def test_r4_every_numeric_token_in_the_four_sections_is_a_field_under_the_kind_t
                 stray = [t for t in toks if t not in allowed]
                 assert stray == [], (name, kind, heading, stray)
                 found.update(toks)
-            missing = sorted(required - found)
+            missing = sorted(sorted(forms) for forms in required if not forms & found)
             assert missing == [], (name, kind, missing)
 
 
@@ -1505,7 +1639,10 @@ def test_r4_the_kind_table_names_only_fields_that_exist_and_prints_delta_in_poin
     leaf = next(c for f in result.leaves.families for c in f.cells if c.rejects)
     cells = sections(r.md, "md")["Cells"]
     rows = [row for _, rows in tables_of(cells) for row in rows]
-    assert any(row[2] == fmt(leaf.delta, "pp1") for row in rows), (fmt(leaf.delta, "pp1"), rows[:3])
+    # Rule 10 prints a delta as a fraction to three decimals, not in points (spec section 5.4);
+    # it is still formatted once, never under ``:g``.
+    assert any(row[2] in fmt10(leaf.delta, "pp1") for row in rows), (fmt10(leaf.delta, "pp1"), rows[:3])
+    assert g(leaf.delta) not in fmt10(leaf.delta, "pp1")
     assert not any(row[2] == g(leaf.delta) for row in rows if row[1] == leaf.event and row[0] == config_text(leaf.config))
 
 
@@ -1523,22 +1660,31 @@ def test_r5_the_omnibus_prints_the_headline_verbatim_the_method_line_one_row_per
     under any M7 kind; the kind is R4's); a line carrying ``n_informative_cells``, ``n_cells``
     and ``n_uninformative_cells``. Both surfaces."""
     for name, r, result, _ in every_pair:
-        root = result.root
         for kind in ("md", "html"):
-            items = omnibus_items(r, kind)
-            lines, tables = lines_of(items), tables_of(items)
-            assert lines[0] == root.headline(), (name, kind, lines[0])
-            assert any(root.scheme in line and has(line, root.n_permutations) and has(line, root.seed) for line in lines[1:]), (name, kind, lines)
-            assert len(tables) == 1, (name, kind, len(tables))
-            header, rows = tables[0]
-            assert len(header) == 5 and [row[0] for row in rows] == list(root.events), (name, kind, header, rows)
-            for row, event in zip(rows, root.events, strict=True):
-                assert len(row) == 5, (name, kind, row)
-                for cell, value in zip(row[1:], (root.location[event], root.p_location[event], root.dispersion[event], root.p_dispersion[event]), strict=True):
-                    assert renders(cell, value), (name, kind, event, cell, value)
-            assert any(
-                has(line, root.n_informative_cells) and has(line, root.n_cells) and has(line, root.n_uninformative_cells) for line in lines[1:]
-            ), (name, kind, lines)
+            assert_omnibus(name, kind, omnibus_items(r, kind), result)
+
+
+def assert_omnibus(name: str, kind: str, items: Sequence[tuple[Any, ...]], result: Any) -> None:
+    root = result.root
+    lines, tables = lines_of(items), tables_of(items)
+    # ``headline()`` is the library's sentence in M7's number forms; the command line prints it
+    # by rule 10 (spec section 5.4), so the first line carries its facts: the quoted null, the
+    # verdict, p, q and the cell count.
+    verdict = "is rejected" if root.rejects else "is not rejected"
+    assert f'"{ROOT_NULL}"' in lines[0] and verdict in lines[0], (name, kind, lines[0])
+    for value in (root.p_omnibus, root.q, root.n_cells):
+        assert has(lines[0], value), (name, kind, lines[0], value)
+    assert any(root.scheme in line and has(line, root.n_permutations) and has(line, root.seed) for line in lines[1:]), (name, kind, lines)
+    assert len(tables) == 1, (name, kind, len(tables))
+    header, rows = tables[0]
+    assert len(header) == 5 and [row[0] for row in rows] == list(root.events), (name, kind, header, rows)
+    for row, event in zip(rows, root.events, strict=True):
+        assert len(row) == 5, (name, kind, row)
+        for cell, value in zip(row[1:], (root.location[event], root.p_location[event], root.dispersion[event], root.p_dispersion[event]), strict=True):
+            assert renders(cell, value), (name, kind, event, cell, value)
+    assert any(
+        has(line, root.n_informative_cells) and has(line, root.n_cells) and has(line, root.n_uninformative_cells) for line in lines[1:]
+    ), (name, kind, lines)
 
 
 def test_r5_the_identical_pair_reads_is_not_rejected_and_go1_reads_is_rejected(every_pair: Any) -> None:
@@ -1563,6 +1709,24 @@ def group_row_width(result: Any) -> int:
     return 6 + (1 if result.root.scheme == "pair_swap" else 0) + (3 if result.fault_lines.tested else 0)
 
 
+def assert_detail(name: str, kind: str, line: str, refusal: Any, grouping: Any) -> None:
+    """A refusal line carries the refusal's ``detail``. The library writes ``detail`` in M7's
+    number forms and the command line prints it by rule 10 (spec section 5.4), so the line carries
+    it verbatim or by its facts: the group counts it states, the MDE accepted, and the override it
+    offers (rounded up, so it admits, or to nearest)."""
+    if refusal.detail in line:
+        return
+    words = TOKEN_SPLIT.split(refusal.detail)
+    for value in (refusal.n_groups, refusal.n_resolvable_groups):
+        if value is not None and str(value) in words:
+            assert has(line, value), (name, kind, line, value)
+    if refusal.offered_max_group_mde is not None:
+        offered = refusal.offered_max_group_mde
+        assert has(line, grouping.max_group_mde), (name, kind, line, grouping.max_group_mde)
+        spellings = fmt10(offered, "pp0") | {f"{math.ceil(offered * 1000 - 1e-9) / 1000:.3f}"}
+        assert "--max-group-mde" in line and any(tok in spellings for tok in TOKEN_SPLIT.split(line)), (name, kind, line, offered)
+
+
 def assert_fault_lines(name: str, kind: str, items: Sequence[tuple[Any, ...]], result: Any) -> None:
     grouping, fault, root = result.grouping, result.fault_lines, result.root
     lines, tables = lines_of(items), tables_of(items)
@@ -1573,8 +1737,9 @@ def assert_fault_lines(name: str, kind: str, items: Sequence[tuple[Any, ...]], r
     refusals = lines[1 : 1 + len(grouping.refused)]
     assert len(refusals) == len(grouping.refused), (name, kind, lines)
     for line, refusal in zip(refusals, grouping.refused, strict=True):
-        for piece in (refusal.key, refusal.rung, refusal.reason, refusal.detail, refusal.next_rung):
+        for piece in (refusal.key, refusal.rung, refusal.reason, refusal.next_rung):
             assert piece in line, (name, kind, piece, line)
+        assert_detail(name, kind, line, refusal, grouping)
     null = lines[1 + len(grouping.refused)]
     assert f'"{GROUP_NULL}"' in null, (name, kind, null)
     if fault.tested:
@@ -1590,13 +1755,14 @@ def assert_fault_lines(name: str, kind: str, items: Sequence[tuple[Any, ...]], r
     assert [row[0] for row in rows] == list(grouping.labels), (name, kind, [row[0] for row in rows][:5])
     for row, group in zip(rows, fault.groups, strict=True):
         assert len(row) == width and row[0] == group.label, (name, kind, row)
+        # Counts carry separators (rule 10, spec section 5.4).
         for cell, value in zip(row[1:4], (group.n_cells, group.n_informative_cells, group.n_uninformative_cells), strict=True):
-            assert cell == fmt(value, "int"), (name, kind, row, cell, value)
-        assert row[4] == f"{fmt(group.n_a, 'int')}/{fmt(group.n_b, 'int')}", (name, kind, row)
+            assert cell in fmt10(value, "int"), (name, kind, row, cell, value)
+        assert row[4] in {f"{a}/{b}" for a in fmt10(group.n_a, "int") for b in fmt10(group.n_b, "int")}, (name, kind, row)
         assert renders(row[5], group.mde), (name, kind, row)
         rest = row[6:]
         if root.scheme == "pair_swap":
-            assert rest[0] == fmt(group.n_discordant, "int"), (name, kind, row)
+            assert rest[0] in fmt10(group.n_discordant, "int"), (name, kind, row)
             rest = rest[1:]
         if fault.tested:
             assert renders(rest[0], group.p_group) and renders(rest[1], group.q_group), (name, kind, row)
@@ -1635,7 +1801,10 @@ def test_r6_the_axes_pair_carries_the_override_inside_detail_the_one_value_pair_
     refused = [x for x in result.grouping.refused if x.key == "task"]
     assert len(refused) == 1 and refused[0].reason == "underpowered" and refused[0].offered_max_group_mde is not None
     line = lines_of(fault_items(r, "md"))[1]
-    assert refused[0].detail in line and g(refused[0].offered_max_group_mde) in refused[0].detail, (line, refused[0].detail)
+    # The command line prints the detail's numbers by rule 10 (spec section 5.4): the line carries
+    # the detail by its facts, the override among them.
+    assert g(refused[0].offered_max_group_mde) in refused[0].detail, refused[0].detail
+    assert_detail("axes", "md", line, refused[0], result.grouping)
     r, result = by_name["one-value"]
     assert [x.reason for x in result.grouping.refused] == ["underpowered", "one_group"], result.grouping.refused
     lines = lines_of(fault_items(r, "md"))
@@ -1727,12 +1896,15 @@ def test_r7_on_go1_by_push_family_70_follows_cells_order_and_its_q_tokens_are_no
     seventy = families[GO1_PUSH_UNSORTED_FAMILY]
     rejected = [c for c in seventy.cells if c.rejects]
     assert len(rejected) == 13
-    q_tokens = [fmt(c.q_within, "sig3") for c in rejected]
-    assert q_tokens != sorted(q_tokens, key=float), q_tokens
+    q_values = [c.q_within for c in rejected]
+    assert q_values != sorted(q_values), q_values
     tables = tables_of(cells_items(r, "md"))
     index = [f for f in result.leaves.families if f.n_rejected > 0].index(seventy)
     header, rows = tables[index]
-    assert [row[3] for row in rows] == q_tokens, rows
+    # The q tokens as rule 10 prints them (spec section 5.4), in cells order and not sorted.
+    q_tokens = [row[3] for row in rows]
+    assert len(q_tokens) == len(rejected) and all(tok in fmt10(c.q_within, "sig3") for tok, c in zip(q_tokens, rejected, strict=True)), rows
+    assert q_tokens != sorted(q_tokens, key=float), q_tokens
     assert [f.n_rejected for f in result.leaves.families] == list(GO1_PUSH_FAMILIES)
 
 
@@ -1995,10 +2167,12 @@ def test_r13_the_five_flags_reach_the_call_on_the_axes_pair(outs: Path, synth_ro
 
 def test_r13_out_of_range_depths_and_refused_knobs_exit_2_with_error_on_stderr_and_no_file(tmp_path: Path, synth_root: Path) -> None:
     base = ["--store", str(synth_root), "report", "axes-a", "axes-b", "--event", "fail", "--x", "temp", "--y", "task"]
-    for i, extra in enumerate((["--depth", "1"], ["--depth", "4"], ["--by", "nonsense"], ["--max-group-mde", "2"])):
+    # A depth outside the choices is a wrong command line (exit 2); a knob the command refuses is
+    # a refusal (exit 1) (spec section 5.2).
+    for i, (extra, expected) in enumerate(((["--depth", "1"], 2), (["--depth", "4"], 2), (["--by", "nonsense"], 1), (["--max-group-mde", "2"], 1))):
         out = tmp_path / f"refused-{i}"
         code, stdout, stderr = run_cli([*base, *extra, "--out", str(out)])
-        assert code == 2, (extra, code, stdout, stderr)
+        assert code == expected, (extra, code, stdout, stderr)
         assert "error:" in stderr and "Traceback" not in stdout + stderr, (extra, stderr)
         assert not out.exists() or not any(out.iterdir()), (extra, sorted(out.iterdir()))
 
@@ -2007,7 +2181,8 @@ def test_r13_the_single_run_form_refuses_each_of_the_five_as_a_diff_only_flag(tm
     for i, flag in enumerate(TREE_FLAGS):
         out = tmp_path / f"single-{i}"
         code, stdout, stderr = run_cli(["--store", str(synth_root), "report", "axes-a", "--event", "fail", "--x", "temp", "--y", "task", flag, FLAG_VALUES[flag], "--out", str(out)])
-        assert code == 2, (flag, code, stdout, stderr)
+        # A refusal exits 1 (spec section 5.2).
+        assert code == 1, (flag, code, stdout, stderr)
         assert flag in stderr and "diff-only flag" in stderr and "Traceback" not in stdout + stderr, (flag, stderr)
         assert not out.exists() or not any(out.iterdir()), flag
 
@@ -2020,7 +2195,8 @@ def test_r14_every_pair_carries_the_four_sections_with_no_flag_and_the_empty_fam
         assert all(h in r.md.splitlines() for h in MD_HEADINGS) and all(h in r.html.splitlines() for h in HTML_HEADINGS), name
     out = tmp_path / "empty"
     code, stdout, stderr = run_cli(["--store", str(synth_root), "report", "empty-a", "empty-b", "--event", "fail", "--x", "task", "--out", str(out)])
-    assert code == 2 and "error:" in stderr and "Traceback" not in stdout + stderr, (code, stdout, stderr)
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1 and "error:" in stderr and "Traceback" not in stdout + stderr, (code, stdout, stderr)
     assert not out.exists() or not any(out.iterdir())
 
 
@@ -2080,8 +2256,20 @@ def test_r15_a_different_seed_on_go1_changes_only_what_the_second_tree_feeds(out
     assert excised(seeded.html, html_bounds(seeded.html)) == excised(base.html, html_bounds(base.html))
     api = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=True, seed=7, theme="light")
     api_md, api_html = api.to_markdown(), api.to_html()
-    assert section_lines(seeded.md, "md") == section_lines(api_md, "md")
-    assert section_lines(seeded.html, "html") == section_lines(api_html, "html")
+    # The library renders the seed-7 tree in M7's number forms and the command line by rule 10
+    # (spec section 5.4): the sections match the API's line for line outside the numbers, and
+    # every number in them is the seed-7 tree's field.
+    _, seeded_tree = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), seed=7)
+    for kind, page, api_page in (("md", seeded.md, api_md), ("html", seeded.html, api_html)):
+        ours, theirs = section_lines(page, kind), section_lines(api_page, kind)
+        assert list(ours) == list(theirs)
+        for heading in ours:
+            assert_same_but_numbers("\n".join(ours[heading]), "\n".join(theirs[heading]), f"go1-seed-7 {kind} {heading}")
+        secs = sections(page, kind)
+        assert_omnibus("go1-seed-7", kind, secs["Omnibus"], seeded_tree)
+        assert_fault_lines("go1-seed-7", kind, secs["Fault lines"], seeded_tree)
+        assert_cells("go1-seed-7", kind, secs["Cells"], seeded_tree)
+        assert_bound("go1-seed-7", kind, secs["Bound"], seeded_tree)
     assert section_lines(seeded.md, "md") != section_lines(base.md, "md")
 
 
@@ -2263,10 +2451,29 @@ def test_r18_go1_renders_twenty_group_rows_nineteen_rejected_nineteen_families_a
 def test_r19_diff_py_whole_check_serve_the_column_digests_the_fixtures_and_the_signatures_are_unchanged() -> None:
     # PF0 (Q4): the diff.py digest is no longer asserted; the rename changes diff.py.
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
-    assert code == CHECK_EXIT and err == "" and sha256_of_text(out) == CHECK_STDOUT_SHA256, (code, err)
+    # Go1's runs share a salt, so the unpaired default adds one "note: " line on stderr (spec
+    # section 5.4). check's stdout changes shape in PF1 (its verdict line comes first), so its
+    # digest gives way to the facts it guarded: passed, the event gated, its safer and worse
+    # counts, the method, q and the number of tests.
+    assert code == CHECK_EXIT and not [line for line in err.splitlines() if not line.startswith("note: ")], (code, err)
+    store = Store(GO1_ROOT)
+    gated = quiet_multi_diff(store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), store.manifest(GO1_A), store.manifest(GO1_B), events=("fell",), method="fisher_bh")
+    check_lines = out.splitlines()
+    assert check_lines[0].startswith("passed  ") and "fell" in check_lines[0], out
+    fell = gated.by_event["fell"]
+    assert any(
+        "fell" in line and f"{fell.n_safer:,} safer" in line and f"{fell.n_worse:,} worse" in line for line in check_lines
+    ), out
+    assert any(
+        "aalen_johansen" in line and "fisher_bh" in line and "unpaired" in line
+        and re.search(rf"(?<![\d,.]){gated.n_tests:,}(?![\d,])", line) and re.search(r"(?<![\d.])0\.050?(?!\d)", line)
+        for line in check_lines
+    ), out
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
-    assert code == 0 and err == "", err
+    assert code == 0 and not [line for line in err.splitlines() if not line.startswith("note: ")], err
     structure = json.loads(out)
+    # serve --json leads with the verdict and its sentence; the page structure follows unchanged.
+    structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence")}
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
     normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256

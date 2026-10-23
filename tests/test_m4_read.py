@@ -258,13 +258,14 @@ def run_cli(argv: Sequence[str]) -> Result:
 def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[str]]:
     """Split inspect output into per-row blocks (each starting at a line naming a config_hash)
     and the trailing reproduction snippet. ``hashes`` is every hash in the run, so any row the
-    verb prints starts a block, wanted or not."""
+    verb prints starts a block, wanted or not. A hash is printed at 12 hex characters in text
+    (front-door spec section 5.4, rule 10), so a block starts at a line naming that prefix."""
     body, marker, tail = out.partition(SNIPPET_MARKER)
     assert marker, f"no {SNIPPET_MARKER!r} snippet in inspect output:\n{out}"
     blocks: list[list[str]] = []
     current: list[str] | None = None
     for line in body.splitlines():
-        if any(h in line for h in hashes):
+        if any(h[:12] in line for h in hashes):
             if current is not None:
                 blocks.append(current)
             current = [line]
@@ -279,7 +280,8 @@ def assert_block_prints_row_with_trace(block: list[str], row: Any) -> None:
     """The block names the row and carries one tab-delimited trace line per stored span, with
     the span's kind and name in the second and third columns."""
     text = "\n".join(block)
-    assert row.config_hash in block[0], block[0]
+    # 12 hex characters in text (front-door spec section 5.4, rule 10).
+    assert row.config_hash[:12] in block[0], block[0]
     assert f"seed: {row.seed}" in block, text
     assert f"replicate_index: {row.replicate_index}" in block, text
     spans = row.meta["trace"]["spans"]
@@ -612,7 +614,8 @@ def test_r5_verbs_read_the_poisoned_store_exactly_as_the_intact_one(
     assert intact.code == 0, intact.text
     assert intact.out.strip(), "the intact run printed nothing"
     if verb == "check":
-        assert "PASS" in intact.out and "0 worse" in intact.out, intact.out
+        # check's verdict is its first stdout line, passed or failed (front-door spec section 5.3).
+        assert intact.out.startswith("passed  ") and "0 worse" in intact.out, intact.out
     if verb.startswith("report"):
         assert reports["intact"] is not None
     assert poisoned.code == intact.code, poisoned.text
@@ -766,7 +769,8 @@ def test_r8_runs_on_go1_prints_each_run_with_12800_rows(go1_store: Store) -> Non
     for run_id in GO1_RUNS:
         m = go1_store.manifest(run_id)
         assert rows[run_id] == [
-            run_id, m.status, m.backend, m.target_id, m.t_unit, str(GO1_ROWS), "0",
+            # Counts carry thousands separators in text (front-door spec section 5.4, rule 10).
+            run_id, m.status, m.backend, m.target_id, m.t_unit, f"{GO1_ROWS:,}", "0",
         ]
 
 

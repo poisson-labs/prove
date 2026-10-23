@@ -121,6 +121,7 @@ import typing
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from html.parser import HTMLParser
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -132,6 +133,7 @@ from hypothesis import strategies as st
 
 import poisson_prove
 import poisson_prove.cli as cli
+import poisson_prove.report as report_module
 from poisson_prove import paired
 from poisson_prove.episode import Episode
 from poisson_prove.executor import derive_seed
@@ -544,7 +546,9 @@ def test_pr7_with_no_cap_cap_reached_is_false_and_cap_check_exits_zero(tmp_path:
     store = make_store(tmp_path, default_rows())
     decl_path = write_declaration(tmp_path / "decl.toml")
     out = tmp_path / "paired"
-    r = paired_cli(store, decl_path, out, "--cap-check")
+    # The cap check's text is now a verdict line; its cost block is what --json prints (spec
+    # sections 5.3 and 5.6).
+    r = paired_cli(store, decl_path, out, "--cap-check", "--json")
     assert r.code == 0, r.err
     block = json.loads(r.out)
     assert block["token_cap"] is None and block["cap_reached"] is False
@@ -905,16 +909,19 @@ def test_pr51_cap_reached_is_cumulative_input_tokens_at_or_above_the_declared_ca
     assert report.input_tokens == 6400 and report.token_cap == cap and report.cap_reached is reached
 
 
-@pytest.mark.parametrize(("cap", "code"), [(6400, 1), (6401, 0)])
+# At the cap the check exits 4 (spec section 5.2).
+@pytest.mark.parametrize(("cap", "code"), [(6400, 4), (6401, 0)])
 def test_pr51_cap_check_prints_the_cost_block_writes_nothing_and_exits_one_at_the_cap(tmp_path: Path, cap: int, code: int) -> None:
     store = make_store(tmp_path, default_rows())
     decl_path = write_declaration(tmp_path / "decl.toml", top={"token_cap": str(cap)})
     out = tmp_path / "paired"
-    r = paired_cli(store, decl_path, out, "--cap-check")
+    # The cap check's text is now a verdict line; its cost block is what --json prints, after the
+    # schema, verdict and sentence keys, with the same exit code (spec sections 5.3 and 5.6).
+    r = paired_cli(store, decl_path, out, "--cap-check", "--json")
     assert r.code == code, r.err
     block = json.loads(r.out)
-    assert block["cap_reached"] is (code == 1) and block["input_tokens"] == 6400
-    assert list(block)[0] == "declaration_digest"
+    assert block["cap_reached"] is (code == 4) and block["input_tokens"] == 6400
+    assert list(block)[:4] == ["schema", "verdict", "sentence", "declaration_digest"], list(block)
     assert not out.exists()
 
 
@@ -981,17 +988,109 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path) -> None:
-    """Green before and after: W20's three digests through the CLI on the Go1 fixture."""
+# The command line prints report.md, receipt.html and the heatmap's labels under rule 10 (spec
+# section 5.4), which PF1 changes; the library renderers it calls do not change. So a digest over
+# a file the command line wrote is replaced by two checks: the library's rendering of the same
+# inputs still gives the frozen digest, and the written file carries the same numbers, verdicts
+# and cells as that rendering, each number equal to the library's or to its percentage points
+# read as a fraction, within the coarser of the two printed precisions (a 12-hex token is a hash,
+# not a number).
+RENDERED_NUMBER = re.compile(r"(?<![\w.])(?![0-9a-f]{12}\b)[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?(?:pp|%)?(?![\w]|\.\d)")
+
+
+def rendered_value(token: str) -> tuple[float, float]:
+    """A printed number and half a unit of its last printed digit."""
+    text = token.replace(",", "").removesuffix("pp").removesuffix("%")
+    m = re.fullmatch(r"[-+]?\d+(?:\.(\d+))?(?:[eE]([-+]?\d+))?", text)
+    assert m, token
+    return float(text), 0.5 * 10.0 ** (int(m.group(2) or 0) - len(m.group(1) or ""))
+
+
+def same_number(library: str, written: str) -> bool:
+    a, half_a = rendered_value(library)
+    w, half_w = rendered_value(written)
+    return abs(w - a) <= max(half_a, half_w) + 1e-12 or abs(w - a / 100) <= max(half_a / 100, half_w) + 1e-12
+
+
+class RenderedUnits(HTMLParser):
+    """The text nodes of an HTML or SVG file in order, each marked when it is a table cell, and
+    every start tag with its attributes (the geometry)."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.units: list[tuple[bool, str]] = []
+        self.tags: list[tuple[str, list[tuple[str, str | None]]]] = []
+        self.open: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag, attrs))
+        self.open.append(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        while self.open and self.open.pop() != tag:
+            pass
+
+    def handle_data(self, data: str) -> None:
+        if data.strip():
+            self.units.append((bool(self.open) and self.open[-1] == "td", data))
+
+
+def rendered_units(text: str, name: str) -> tuple[list[tuple[bool, str]], list[Any]]:
+    if not name.endswith(".md"):
+        parser = RenderedUnits()
+        parser.feed(text)
+        return parser.units, parser.tags
+    lines = text.splitlines()
+    units: list[tuple[bool, str]] = []
+    for i, line in enumerate(lines):
+        header = i + 1 < len(lines) and lines[i + 1].startswith("|---")
+        if line.startswith("|") and not header and not line.startswith("|---"):
+            units += [(True, cell) for cell in line.strip("|").split(" | ")]
+        else:
+            units.append((False, line))
+    return units, []
+
+
+def rendered_problems(library: str, written: str, name: str) -> list[Any]:
+    """Where ``written`` does not carry ``library``'s facts: the same tags and attributes, the same
+    lines or text nodes, the same numbers in each, and the same words in each table cell that
+    holds no number (the verdicts, events and labels)."""
+    lib_units, lib_tags = rendered_units(library, name)
+    out_units, out_tags = rendered_units(written, name)
+    problems: list[Any] = [] if lib_tags == out_tags else ["the tags or their attributes differ"]
+    if len(lib_units) != len(out_units):
+        return [*problems, f"{len(lib_units)} lines or text nodes, not {len(out_units)}"]
+    for (cell, a), (_, w) in zip(lib_units, out_units, strict=True):
+        na, nw = RENDERED_NUMBER.findall(a), RENDERED_NUMBER.findall(w)
+        numbers_agree = len(na) == len(nw) and all(same_number(x, y) for x, y in zip(na, nw, strict=True))
+        if not numbers_agree or (cell and not na and a.strip() != w.strip()):
+            problems.append((a, w))
+    return problems
+
+
+def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Green before and after: W20's three digests on the Go1 fixture, over the library's rendering
+    of what the CLI built, and the CLI's three files carrying that rendering's facts."""
+    calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    real = report_module.build_multi_report
+
+    def recording(*args: Any, **kwargs: Any) -> Any:
+        calls.append((args, kwargs))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "build_multi_report", recording)
     out = tmp_path / "go1"
     r = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert r.code == 0, r.err
     assert sorted(p.name for p in out.iterdir()) == sorted(REPORT_FILES)
+    # The dark report first, then the light receipt, as the CLI builds them.
+    (report_args, report_kwargs), (receipt_args, receipt_kwargs) = calls[0], calls[1]
+    report, receipt = real(*report_args, **report_kwargs), real(*receipt_args, **receipt_kwargs)
+    library = {"report.md": report.to_markdown(), "heatmap.svg": report.to_svg(), "receipt.html": receipt.to_html()}
     for name, digest in E14_SHA256.items():
-        text = (out / name).read_text(encoding="utf-8")
-        if name != "heatmap.svg":
-            text = as_0_0_1_wrote_it(text)
+        text = library[name] if name == "heatmap.svg" else as_0_0_1_wrote_it(library[name])
         assert hashlib.sha256(text.encode("utf-8")).hexdigest() == digest, name
+        assert rendered_problems(library[name], (out / name).read_text(encoding="utf-8"), name) == [], name
 
 
 # PF0 (Q4): test_pr53_report_py_is_not_touched_by_phase_three removed. It pinned the bytes of src/poisson_prove/report.py, which the rename
@@ -1167,7 +1266,8 @@ def test_pr77_at_k_two_no_replicates_section_and_no_sixth_artifact_exists(tmp_pa
     assert not (out / SIXTH).exists()
     markdown = (out / "report.md").read_text()
     assert "## Replicates" not in markdown and "agree@" not in markdown.lower()
-    r = paired_cli(store, decl_path, tmp_path / "json", "--format", "json")
+    # --json replaces --format json on paired (spec section 5.6).
+    r = paired_cli(store, decl_path, tmp_path / "json", "--json")
     assert r.code == 0 and SIXTH[:-5] not in json.loads(r.out)
 
 
@@ -1178,9 +1278,14 @@ def test_cli_paired_format_json_prints_the_combined_payload_and_writes_nothing(t
     store = make_store(tmp_path, replicate_rows(), k=5, sweeps=("S1", "S2"))
     decl_path = write_declaration(tmp_path / "decl.toml", k=5, sweeps=("S1", "S2"))
     out = tmp_path / "paired"
-    r = paired_cli(store, decl_path, out, "--format", "json")
+    # --json replaces --format json on paired and wraps the payload with schema, verdict and
+    # sentence first and next last (spec section 5.6).
+    r = paired_cli(store, decl_path, out, "--json")
     assert r.code == 0, r.err
-    payload = json.loads(r.out)
+    payload = {
+        key: value for key, value in json.loads(r.out).items()
+        if key not in ("schema", "verdict", "sentence", "next") and not key.endswith("_note")
+    }
     assert list(payload) == ["pair_assertion", "contingency_by_cut", "intervals_by_cut", "windows", "cost", "replicates_by_cut"]
     assert not out.exists()
     digest = P().Declaration.from_toml(decl_path).digest
@@ -1196,11 +1301,12 @@ def test_cli_report_paired_refuses_a_pair_that_is_not_a_declared_sweep_by_name(t
     store = make_store(tmp_path, default_rows(), sweeps=("S1", "S2"))
     decl_path = write_declaration(tmp_path / "decl.toml", sweeps=("S1", "S2"))
     r = report_cli(store, "S1-a", "S2-b", tmp_path / "x", "--paired", str(decl_path))
-    assert r.code == 2 and "Traceback" not in r.err
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1 and "Traceback" not in r.err
     assert "S1-a" in r.err and "S2-b" in r.err
     assert not (tmp_path / "x").exists()
     r = report_cli(store, "S1-b", "S1-a", tmp_path / "y", "--paired", str(decl_path))
-    assert r.code == 2, r.err
+    assert r.code == 1, r.err
     r = report_cli(store, "S2-a", "S2-b", tmp_path / "z", "--paired", str(decl_path))
     assert r.code == 0, r.err
     markdown = (tmp_path / "z" / "report.md").read_text()
@@ -1212,10 +1318,11 @@ def test_cli_a_declaration_error_and_a_not_assertable_run_are_clean_refusals(tmp
     bad = tmp_path / "bad.toml"
     bad.write_text(write_declaration(tmp_path / "ok.toml").read_text().replace('comparison = "ge"', 'comparison = "ge"\ninclusive = true'))
     r = paired_cli(store, bad, tmp_path / "out")
-    assert r.code == 2 and "Traceback" not in r.err and "inclusive" in r.err
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1 and "Traceback" not in r.err and "inclusive" in r.err
     asserted = write_declaration(tmp_path / "asserted.toml", top={"headers": '"asserted"'})
     r = paired_cli(store, asserted, tmp_path / "out2")
-    assert r.code == 2 and "Traceback" not in r.err and "header" in r.err.lower()
+    assert r.code == 1 and "Traceback" not in r.err and "header" in r.err.lower()
     assert not (tmp_path / "out").exists() and not (tmp_path / "out2").exists()
 
 
@@ -1225,9 +1332,10 @@ def test_cli_paired_refuses_a_non_empty_out_dir_without_force_and_names_a_defaul
     out = tmp_path / "paired"
     assert paired_cli(store, decl_path, out).code == 0
     r = paired_cli(store, decl_path, out)
-    assert r.code == 2 and "--force" in r.err
+    # A refusal exits 1, and --json replaces --format json (spec sections 5.2 and 5.6).
+    assert r.code == 1 and "--force" in r.err
     assert paired_cli(store, decl_path, out, "--force").code == 0
-    r = run_cli(["--store", str(root_of(store)), "paired", "--declaration", str(decl_path), "--format", "json"])
+    r = run_cli(["--store", str(root_of(store)), "paired", "--declaration", str(decl_path), "--json"])
     assert r.code == 0 and "declaration_digest" in r.out
 
 

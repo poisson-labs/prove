@@ -283,6 +283,25 @@ def snapshot(root: Path) -> dict[str, tuple[str, int]]:
     }
 
 
+def same_label_values(left: Mapping[str, str], right: Mapping[str, str]) -> bool:
+    """The same labels with the same values, where a number is compared by value within the coarser
+    of the two printed precisions: report.md and receipt.html print numbers under rule 10, the
+    served page keeps its own (front-door spec section 5.4)."""
+    if set(left) != set(right):
+        return False
+    for key, a in left.items():
+        b = right[key]
+        if a == b:
+            continue
+        numbers = [re.fullmatch(r"-?\d[\d,]*(?:\.(\d+))?", v) for v in (a, b)]
+        if not all(numbers):
+            return False
+        half = max(0.5 * 10.0 ** -len(m.group(1) or "") for m in numbers if m)
+        if abs(float(a.replace(",", "")) - float(b.replace(",", ""))) > half + 1e-12:
+            return False
+    return True
+
+
 def prov_md(md: str) -> dict[str, str]:
     """``report.md``'s Provenance list as label -> value."""
     out: dict[str, str] = {}
@@ -431,7 +450,10 @@ def test_z2_the_diff_layer_still_says_truncated_and_means_the_same_count(corpus:
     assert "truncated" in DiffResult.__dataclass_fields__
     code, out, err = run_cli(["--store", str(corpus), "diff", "hz10", "hz5", "--event", "fail", *KNOBS])
     assert code == 0, err
-    assert "truncated=24" in out and "horizon=5.0" in out
+    # The command line prints numbers under rule 10 (front-door spec section 5.4), so the horizon is
+    # read by value.
+    horizon = re.search(r"\bhorizon=(\S+?),", out)
+    assert "truncated=24" in out and horizon and float(horizon.group(1)) == 5.0, out
 
 
 # ---------- Z3: the cap is on every surface, verbatim ----------
@@ -482,7 +504,8 @@ def test_z4_the_payload_carries_the_counts_as_integers(s1: Surfaces) -> None:
 def test_z4_the_three_text_surfaces_and_the_payload_agree_on_every_label(s1: Surfaces, s2: Surfaces, s3: Surfaces) -> None:
     for s in (s1, s2, s3):
         texts = s.texts()
-        assert texts["report.md"] == texts["receipt.html"] == texts["viewer page"]
+        assert same_label_values(texts["report.md"], texts["receipt.html"]), (texts["report.md"], texts["receipt.html"])
+        assert same_label_values(texts["report.md"], texts["viewer page"]), (texts["report.md"], texts["viewer page"])
         assert set(NEW_LABELS) <= set(texts["report.md"]), sorted(set(NEW_LABELS) - set(texts["report.md"]))
 
 
@@ -614,7 +637,8 @@ def test_z11_the_diff_object_is_the_pair_provenance_in_this_order(s1: Surfaces, 
 
 
 def test_z11_the_top_level_key_set_is_unchanged(s1: Surfaces) -> None:
-    assert tuple(s1.payload) == TOP_LEVEL_KEYS
+    # serve --json adds verdict and sentence after schema (front-door spec section 5.6).
+    assert tuple(k for k in s1.payload if k not in ("verdict", "sentence")) == TOP_LEVEL_KEYS
 
 
 # ---------- Z12: inspect prints the cut ----------

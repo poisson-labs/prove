@@ -675,7 +675,8 @@ def test_p10_1_the_cli_refuses_a_malformed_table_before_the_run_exists(tmp_path:
     toml = write(tmp_path / "s.toml", sweep_toml({**DECLARE_TOML, "steps": ["plan", "plan", "search", "verify"]}))
     root = tmp_path / "store"
     code, out, err = run_cli(["--store", str(root), argv[0], str(toml), *argv[1:]])
-    assert code == 2, (code, out, err)
+    # A refusal exits 1 (front-door spec section 5.2).
+    assert code == 1, (code, out, err)
     assert "steps" in err and "plan" in err, err
     assert not root.exists() or list(root.iterdir()) == [], sorted(p.name for p in root.iterdir())
 
@@ -782,7 +783,8 @@ def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(t
         ["--store", root, "check", a, b, "--event", EVENT],
         ["--store", root, "runs"],
         ["--store", root, "diff", a, b, "--event", EVENT],
-        ["--store", root, "diff", a, b, "--event", EVENT, "--format", "json"],
+        # --json replaces --format json on diff (front-door spec section 5.6).
+        ["--store", root, "diff", a, b, "--event", EVENT, "--json"],
         ["--store", root, "serve", a, b, "--event", EVENT, "--x", "x", "--json"],
         ["--store", str(GO1_ROOT), "report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--out", str(tmp_path / "go1")],
         ["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json"],
@@ -791,7 +793,8 @@ def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(t
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             code, out, err = run_cli(argv)
-        assert code in (0, 1), (argv, code, err)
+        # Done, or a check that did not pass, which exits 4 now (front-door spec section 5.2).
+        assert code in (0, 4), (argv, code, err)
         texts += [out, err]
     for d in ("pair", "one", "go1"):
         texts += [(tmp_path / d / name).read_text() for name in ("report.md", "receipt.html")]
@@ -1039,7 +1042,7 @@ def test_p10_6_pairing_holds_no_new_manifest_comparison() -> None:
 
 
 def test_p10_6_every_diffing_verb_refuses_the_pair(tmp_path: Path) -> None:
-    """The library refusal reaches the CLI as a refusal (exit 2) on every verb that diffs, and no
+    """The library refusal reaches the CLI as a refusal (exit 1) on every verb that diffs, and no
     report directory is written."""
     ma = manifest("a", declared=declaration(outcomes=("fell", "survived")))
     mb = manifest("b", declared=declaration(outcomes=("fell", "timed_out")))
@@ -1052,7 +1055,8 @@ def test_p10_6_every_diffing_verb_refuses_the_pair(tmp_path: Path) -> None:
         ["serve", "a", "b", "--event", EVENT, "--x", "x", "--json"],
     ):
         code, out, err = run_cli(["--store", root, *argv])
-        assert code == 2, (argv, code, out, err)
+        # A refusal exits 1 (front-door spec section 5.2).
+        assert code == 1, (argv, code, out, err)
         assert err.startswith("error: "), err
     assert not (out_dir / "report.md").exists()
 

@@ -112,7 +112,6 @@ TRADE_MARK = "Trade:"
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 HASH_RE = re.compile(r"\b[0-9a-f]{16}\b")
-RUN_ID_RE = re.compile(r"^run_id: (\S+)$")
 WORDS = ["alpha", "bravo", "charlie", "dingo", "echo", "foxtrot", "golf", "hotel", "india", "juliet"]
 
 
@@ -691,11 +690,14 @@ def _sweep(store: Path, target: str) -> str:
     out, err = StringIO(), StringIO()
     argv = ["--store", str(store), "sweep", str(QUICKSTART), "--target", target, "--yes",
             "--salt", QUICKSTART_SALT]
+    # A sweep no longer ends with a run_id line (its end is a verdict line, front-door spec section
+    # 5.3), so the new run is the one the store gained.
+    before = set(Store(store).runs())
     code = cli.main(argv, stdout=out, stderr=err, stdin=StringIO())
     assert code == 0, err.getvalue() + out.getvalue()
-    m = RUN_ID_RE.match(out.getvalue().strip().splitlines()[-1])
-    assert m, out.getvalue()
-    return m.group(1)
+    added = set(Store(store).runs()) - before
+    assert len(added) == 1, out.getvalue()
+    return added.pop()
 
 
 @pytest.fixture(scope="module")

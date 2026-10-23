@@ -341,7 +341,8 @@ GO1_FELL_AGREEMENT = "ed536c0213e9a9e7942807ec525738d1ca1373544e0b47fc93a8640879
 
 def test_pf0_3_the_agreement_digest_diff_prints_is_built_over_poisson_prove_agreement_1() -> None:
     go1 = Path(__file__).resolve().parent / "fixtures" / "go1"
-    r = run_cli(["--store", str(go1), "diff", "go1-v0", "go1-v1", "--event", "fell", "--format", "json"])
+    # --json replaces --format json on diff (front-door spec section 5.6).
+    r = run_cli(["--store", str(go1), "diff", "go1-v0", "go1-v1", "--event", "fell", "--json"])
     assert r.code == 0, r
     assert json.loads(r.out)["tree"]["agreement"] == GO1_FELL_AGREEMENT
 
@@ -722,9 +723,14 @@ observed["store variable"] = {
 old_default, empty = os.path.join(work, "old-default"), os.path.join(work, "empty")
 copy(args["qa"], os.path.join(old_default, "proofload-runs"))
 os.makedirs(empty)
+# A missing store now exits 1 like the old-store refusal (front-door spec section 5.2), so each is
+# read as its exit code and whether its stderr names the old folder.
+def default_store(cwd):
+    code, _, err = run(["runs"], cwd, {})
+    return [code, "proofload-runs" in err]
 observed["old default store"] = {
-    "with": attempt(lambda: run(["runs"], old_default, {})[0]),
-    "without": attempt(lambda: run(["runs"], empty, {})[0]),
+    "with": attempt(lambda: default_store(old_default)),
+    "without": attempt(lambda: default_store(empty)),
 }
 
 # Who wrote an old pair, and the same pair with no version recorded.
@@ -769,7 +775,8 @@ def test_pf0_5_with_the_compat_module_failing_no_reader_recognises_an_old_string
     assert untouched["store variable"][0] == "read", readers
     code, out, err = untouched["store variable"][1]
     assert code == 0 and STORE_VARIABLE_NOTE in err.splitlines() and out == readers["store variable"]["without"][1][1], readers
-    assert untouched["old default store"] == ["read", 1], readers
+    # The old-store refusal exits 1 and names the old folder (front-door spec section 5.2).
+    assert untouched["old default store"] == ["read", [1, True]], readers
     assert untouched["old run's writer"] == ["read", True], readers
     assert {name: reader for name, reader in readers.items() if reader["with"] == reader["without"]} == {}, readers
     for way in ("raise", "spoil"):
@@ -872,7 +879,10 @@ BOUND_FIELDS = ("depth_configured", "depth", "q", "delta_star", "bound", "discov
 
 
 def same(got: Any, want: Any) -> bool:
-    """Equal, where a NaN 0.0.1 wrote (a statistic with no value) equals a NaN read back."""
+    """Equal, where a NaN 0.0.1 wrote (a statistic with no value) equals a NaN read back. Strict JSON
+    now writes a NaN or an infinity as null (front-door spec section 5.6), so null equals either."""
+    if got is None and isinstance(want, float) and (want != want or want in (float("inf"), float("-inf"))):
+        return True
     return bool(got == want or (isinstance(want, float) and want != want and isinstance(got, float) and got != got))
 
 
@@ -896,7 +906,8 @@ def assert_same_tree(got: dict[str, Any], want: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("method", METHODS)
 def test_pf0_7_diff_json_on_the_0_0_1_pair_gives_0_0_1s_cells_omnibus_fault_lines_and_bound(method: str) -> None:
-    r = run_cli(["--store", str(STORE), "diff", QA, QB, "--method", method, "--format", "json"])
+    # --json replaces --format json on diff (front-door spec section 5.6).
+    r = run_cli(["--store", str(STORE), "diff", QA, QB, "--method", method, "--json"])
     assert r.code == 0, r
     got, want = json.loads(r.out), recorded(f"diff-{method}.json")
     assert got["method"] == want["method"] == method
@@ -947,6 +958,42 @@ def section(markdown: str, heading: str) -> str:
     return markdown[start: end if end >= 0 else None]
 
 
+#: A number as a report prints it: 0.0.1 printed rates in percentage points (``31.0``, ``17pp``) and
+#: p and q in ``:g`` form; the command line now prints them under rule 10 (front-door spec section
+#: 5.4), so a number is compared by value.
+PRINTED_NUMBER = re.compile(r"(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?(?:pp)?(?![\w]|\.\d)")
+
+
+def printed_value(token: str) -> tuple[float, float]:
+    """A printed number and half a unit of its last printed digit."""
+    text = token.replace(",", "").removesuffix("pp")
+    m = re.fullmatch(r"[-+]?\d+(?:\.(\d+))?(?:[eE]([-+]?\d+))?", text)
+    assert m, token
+    return float(text), 0.5 * 10.0 ** (int(m.group(2) or 0) - len(m.group(1) or ""))
+
+
+def same_numbers(got: str, want: str) -> bool:
+    """``got`` prints ``want``'s numbers in the same order, each equal to 0.0.1's within the coarser
+    of the two printed precisions, or to 0.0.1's percentage points read as a fraction."""
+    got_tokens, want_tokens = PRINTED_NUMBER.findall(got), PRINTED_NUMBER.findall(want)
+    if len(got_tokens) != len(want_tokens):
+        return False
+    for g_token, w_token in zip(got_tokens, want_tokens, strict=True):
+        (g, half_g), (w, half_w) = printed_value(g_token), printed_value(w_token)
+        if abs(g - w) > max(half_g, half_w) + 1e-12 and abs(g - w / 100) > max(half_w / 100, half_g) + 1e-12:
+            return False
+    return True
+
+
+def same_row(got: str, want: str) -> bool:
+    """The same cells: the same numbers in each, and the same words in each cell with no number."""
+    got_cells, want_cells = got.strip("|").split(" | "), want.strip("|").split(" | ")
+    return len(got_cells) == len(want_cells) and all(
+        same_numbers(g, w) and (PRINTED_NUMBER.search(w) is not None or g.strip() == w.strip())
+        for g, w in zip(got_cells, want_cells, strict=True)
+    )
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_pf0_7_report_on_the_0_0_1_pair_gives_0_0_1s_tables_and_bound(method: str, tmp_path: Path) -> None:
     out = tmp_path / "report"
@@ -955,9 +1002,12 @@ def test_pf0_7_report_on_the_0_0_1_pair_gives_0_0_1s_tables_and_bound(method: st
     assert r.code == 0, r
     got = (out / "report.md").read_text(encoding="utf-8")
     want = (RECORDED / f"report-{method}" / "report.md").read_text(encoding="utf-8")
-    assert table_data_rows(got) == table_data_rows(want)
-    number = r"-?\d+(?:\.\d+)?"
-    assert re.findall(number, section(got, "## Bound")) == re.findall(number, section(want, "## Bound"))
+    # report.md's numbers are printed under rule 10 now (front-door spec section 5.4): each row and
+    # the bound carry 0.0.1's numbers by value.
+    got_rows, want_rows = table_data_rows(got), table_data_rows(want)
+    assert len(got_rows) == len(want_rows)
+    assert [(g, w) for g, w in zip(got_rows, want_rows, strict=True) if not same_row(g, w)] == []
+    assert same_numbers(section(got, "## Bound"), section(want, "## Bound"))
 
 
 # ---------- PF0.8 the store variable ----------

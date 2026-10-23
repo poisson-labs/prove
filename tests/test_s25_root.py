@@ -187,7 +187,7 @@ EXPECTED_JSON_KEYS = {
 P_DRIVEN_KEYS = ("p_location", "p_dispersion", "p_omnibus", "rejects", "headline")
 
 #: Section 3.4's block, line by line. Numbers are captured and checked against the fields under
-#: ``:g``; nothing is pinned as a formatted float. The informative line's tail is left free (see
+#: rule 10 (front-door spec section 5.4; ``:g`` before it); nothing is pinned as a typed literal. The informative line's tail is left free (see
 #: the module docstring).
 OMNIBUS_FIRST_LINE = re.compile(
     r'^omnibus: "no cell changed" is (rejected|not rejected) \(p = (\S+) (<|>=) q (\S+)\) '
@@ -195,7 +195,8 @@ OMNIBUS_FIRST_LINE = re.compile(
     re.MULTILINE,
 )
 OMNIBUS_SECOND_LINE = re.compile(
-    r"^  min-p of location and dispersion; (\d+) within-cell permutations, (pair_swap|arm_label), "
+    # A count carries thousands separators (front-door spec section 5.4, rule 10).
+    r"^  min-p of location and dispersion; ([\d,]+) within-cell permutations, (pair_swap|arm_label), "
     r"seed (-?\d+)$",
     re.MULTILINE,
 )
@@ -211,9 +212,10 @@ MULTI_JSON_SHA256 = {
     "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
     "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
-#: ``check go1-v0 go1-v1 --event fell``: stdout digest and exit code, bare tree.
+#: ``check go1-v0 go1-v1 --event fell``: exit code, bare tree.
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
-CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
+# CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
+# checks the facts the digest guarded instead (front-door spec section 14).
 CHECK_EXIT = 0
 #: ``serve go1-v0 go1-v1 --event fell --x mu --y push_pct_bw --json``, bare tree. The structure
 #: echoes the ``--store`` path as ``pair.store_root``, so the digest is of the parsed structure with
@@ -450,6 +452,18 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
     out, err = StringIO(), StringIO()
     code = cli.main(argv, stdout=out, stderr=err, stdin=StringIO())
     return code, out.getvalue(), err.getvalue()
+
+
+def without_notes(err: str) -> str:
+    """Stderr with the ``note:`` lines removed. Prove's own warning (``UnpairedAnalysis``, on two
+    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line (spec section 5.4)."""
+    return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
+
+
+def rule_10_p(p: float) -> str:
+    """A p-value or q as the command line prints it (spec section 5.4, rule 10): three decimals,
+    or one decimal of mantissa in exponent form below 0.001."""
+    return f"{p:.3f}" if p >= 0.001 else f"{p:.1e}"
 
 
 def omnibus_block(out: str) -> str:
@@ -1367,7 +1381,8 @@ def test_o13_refusals_fire_before_any_permutation_is_drawn(go1: Any, go1_roots: 
 
 def test_o13_the_cli_maps_a_refusal_to_exit_two_without_a_traceback(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--permutations", "0"])
-    assert code == 2, (out, err)
+    # A refusal exits 1 (spec section 5.2).
+    assert code == 1, (out, err)
     assert "error:" in err and "Traceback" not in out + err, err
 
 
@@ -1411,9 +1426,9 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def e14_builder_digests(go1: Any) -> dict[str, str]:
+def e14_builder(go1: Any) -> tuple[Any, Any, Any]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
-    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    ``_report_pair`` builds them: the multi, the dark-theme report and the light-theme receipt."""
     a, b, ma, mb = go1
     multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="fisher_bh")
     title = f"{GO1_A} vs {GO1_B}: fell"
@@ -1424,10 +1439,58 @@ def e14_builder_digests(go1: Any) -> dict[str, str]:
         multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw", theme="light"),
         manifests=(ma, mb),
     )
+    return multi, report, receipt
+
+
+def e14_builder_digests(go1: Any) -> dict[str, str]:
+    """The builder's report markdown, receipt and heatmap, digested."""
+    _, report, receipt = e14_builder(go1)
     return {
         "report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())),
+        # The command line's heatmap now formats its text under rule 10 (spec section 5.4); the
+        # builder's heatmap is unchanged, so the digest moves to it.
+        "heatmap.svg": sha256_of_text(report.to_svg()),
         "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html())),
     }
+
+
+def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
+    """The command line's ``heatmap.svg`` against the builder's, whose bytes keep the frozen digest.
+
+    Rule 10 (spec section 5.4) reformats only the text in the file, so every element and attribute
+    is the builder's. Each cell's label is its delta to three decimals, read from ``cells``; a text
+    the builder prints as a percentage-point number is that number as a fraction; every other text
+    that changed keeps its ``key=value`` facts and its counts; and the notes the builder writes in
+    percentage points carry the worst-powered MDEs to three decimals.
+    """
+    def bare(svg: str) -> str:
+        return re.sub(r">[^<]*<", "><", svg)
+
+    assert bare(cli_svg) == bare(builder_svg)
+    ids = re.findall(r'data-cell="([0-9a-f]+)"', cli_svg)
+    label_group = cli_svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
+    labels = re.findall(r">([^<]*)</text>", label_group)
+    delta = dict(zip(cells["config_hash"], cells["delta"]))
+    assert len(ids) == len(labels) == len(delta), (len(ids), len(labels), len(delta))
+    for short, label in zip(ids, labels):
+        (full,) = [h for h in delta if h.startswith(short)]
+        assert label == f"{delta[full]:.3f}", (short, label, delta[full])
+    number = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+    texts = list(zip(re.findall(r">([^<]*)</text>", builder_svg), re.findall(r">([^<]*)</text>", cli_svg)))
+    for old, new in texts:
+        if old == new:
+            continue
+        if number.fullmatch(old):
+            assert number.fullmatch(new) and abs(float(new) - float(old) / 100) <= 1e-3, (old, new)
+            continue
+        for fact in re.findall(r"\w+=[^\s,;)]+", old):
+            assert fact in new, (fact, new)
+        for count in re.findall(r"(?<![\d.])\d+(?![\d.%]|pp)", old):
+            assert f"{int(count):,}" in new, (count, new)
+    notes = [new for old, new in texts if re.search(r"\d+pp", old)]
+    assert notes, texts
+    for mde in (cells["mde"].max(), cells.loc[cells["verdict"] == "unchanged", "mde"].max()):
+        assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
 
 
 def test_o14_and_o23_the_go1_report_still_reproduces_the_three_digests_s21_minted(go1: Any, tmp_path: Path) -> None:
@@ -1440,21 +1503,41 @@ def test_o14_and_o23_the_go1_report_still_reproduces_the_three_digests_s21_minte
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
     digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
     ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
-    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
+    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted.
+
+    Moved for rule 10 (spec section 5.4): the command line now prints the heatmap's text as
+    fractions, so its digest moves to the builder's heatmap, and the file the command line writes
+    is checked against that one fact by fact."""
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    assert hashlib.sha256((out / "heatmap.svg").read_bytes()).hexdigest() == E14_SHA256["heatmap.svg"]
     for name, digest in e14_builder_digests(go1).items():
         assert digest == E14_SHA256[name], name
+    # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
+    # checked by its facts rather than a new digest.
+    multi, report, _ = e14_builder(go1)
+    assert_cli_heatmap_is_the_builders_under_rule_10(
+        (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event["fell"].cells
+    )
 
 
-def test_o14_and_o23_check_on_go1_prints_the_same_bytes_and_exits_the_same() -> None:
+def test_o14_and_o23_check_on_go1_prints_the_same_bytes_and_exits_the_same(go1: Any) -> None:
     """``check`` keeps the flat family's gate (section 5); whether the root should gate is
-    P4.4's question. Stdout digest and exit code from the bare tree."""
+    P4.4's question. Stdout digest and exit code from the bare tree.
+
+    Moved for the command line's look (front-door spec sections 5.3 and 14): the verdict line now
+    comes first and the stdout digest is replaced by the facts it guarded: the check passed, it
+    names the gated event, the flat family's counts and its size."""
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
-    assert code == CHECK_EXIT and err == "", (out, err)
-    assert sha256_of_text(out) == CHECK_STDOUT_SHA256
+    # Go1's two runs share a salt, so stderr now carries one note line (spec section 5.4).
+    assert code == CHECK_EXIT and without_notes(err) == "", (out, err)
+    a, b, ma, mb = go1
+    multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="fisher_bh")
+    verdicts = multi.by_event["fell"].cells["verdict"]
+    first = out.splitlines()[0]
+    assert first.startswith("passed  ") and "fell" in first, out
+    assert f"{(verdicts == 'safer').sum():,} safer, {(verdicts == 'worse').sum():,} worse" in out, out
+    assert f"{multi.n_tests:,} tests" in out, out
 
 
 def test_o23_serve_json_on_go1_prints_the_same_structure() -> None:
@@ -1464,8 +1547,10 @@ def test_o23_serve_json_on_go1_prints_the_same_structure() -> None:
     the ``/2`` literal, ``pair.store_root`` normalised as before, digests to the value minted on
     the bare tree. Narrowed, not deleted."""
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
-    assert code == 0 and err == "", err
-    structure = json.loads(out)
+    # Go1's two runs share a salt, so stderr now carries one note line (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", err
+    # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
+    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence")}
     assert structure["pair"]["store_root"] == str(GO1_ROOT)
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
     normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
@@ -1564,30 +1649,34 @@ def test_o17_the_cli_does_no_arithmetic_on_any_root_field() -> None:
 def test_o18_the_block_follows_the_interval_block_and_its_first_line_carries_the_fields(synth_root: Path) -> None:
     """Section 3.4, through ``main()`` with ``StringIO`` streams. The block is found by index and
     never by ``endswith``: a later packet may append after it. The first line's p, q, verdict,
-    cell count and event count are captured and checked against the fields under ``:g``."""
+    cell count and event count are captured and checked against the fields under rule 10."""
     multi, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
     assert code == 0, (out, err)
-    assert err == "", err
+    # The pair shares a salt, so stderr now carries one note line (spec section 5.4).
+    assert without_notes(err) == "", err
     assert out.index("intervals: ") < out.index("omnibus: "), out
     match = OMNIBUS_FIRST_LINE.search(out)
     assert match is not None, out
     verdict, p, sign, q, n_cells, n_events = match.groups()
     assert root.rejects is True
     assert (verdict, sign) == ("rejected", "<")
-    assert p == f"{root.p_omnibus:g}" and q == f"{multi.q:g}"
+    # p and q print under rule 10 (spec section 5.4), not ``:g``.
+    assert p == rule_10_p(root.p_omnibus) and q == rule_10_p(multi.q)
     assert int(n_cells) == root.n_cells and int(n_events) == len(root.events) == 1
 
 
 def test_o18_the_other_branch_reads_not_rejected(synth_root: Path) -> None:
     _, root = store_root(synth_root, "same-a", "same-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail"])
-    assert code == 0 and err == "", (out, err)
+    # The pair shares a salt, so stderr now carries one note line (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     match = OMNIBUS_FIRST_LINE.search(out)
     assert match is not None, out
     assert root.rejects is False
     assert (match.group(1), match.group(3)) == ("not rejected", ">=")
-    assert match.group(2) == f"{root.p_omnibus:g}"
+    # p prints under rule 10 (spec section 5.4), not ``:g``.
+    assert match.group(2) == rule_10_p(root.p_omnibus)
 
 
 def test_o18_the_second_line_and_the_informative_line_carry_the_fields(synth_root: Path) -> None:
@@ -1597,7 +1686,8 @@ def test_o18_the_second_line_and_the_informative_line_carry_the_fields(synth_roo
     assert code == 0, out
     second = OMNIBUS_SECOND_LINE.search(out)
     assert second is not None, out
-    assert (int(second.group(1)), second.group(2), int(second.group(3))) == (root.n_permutations, root.scheme, root.seed)
+    # The permutation count carries separators (spec section 5.4, rule 10); the seed does not.
+    assert (second.group(1), second.group(2), int(second.group(3))) == (f"{root.n_permutations:,}", root.scheme, root.seed)
     informative = OMNIBUS_INFORMATIVE_LINE.search(out)
     assert informative is not None, out
     assert (int(informative.group(1)), int(informative.group(2)), int(informative.group(3))) == (
@@ -1607,30 +1697,33 @@ def test_o18_the_second_line_and_the_informative_line_carry_the_fields(synth_roo
 
 def test_o18_one_location_and_one_dispersion_line_per_event_in_events_order(synth_root: Path) -> None:
     """The three-outcome pair on the store, both events requested: two ``location`` lines and two
-    ``dispersion`` lines, in ``multi.events`` order, values under ``:g``."""
+    ``dispersion`` lines, in ``multi.events`` order, values under rule 10 (``:g`` before it)."""
     _, root = store_root(synth_root, "tri-a", "tri-b", events=("x", "y"), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "tri-a", "tri-b", "--event", "x", "--event", "y"])
-    assert code == 0 and err == "", (out, err)
+    # The pair shares a salt, so stderr now carries one note line (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     block = omnibus_block(out)
     locations = OMNIBUS_LOCATION_LINE.findall(block)
     dispersions = OMNIBUS_DISPERSION_LINE.findall(block)
     assert [e for e, _, _ in locations] == [e for e, _, _ in dispersions] == list(root.events) == ["x", "y"]
+    # Deltas print to three decimals and p under rule 10 (spec section 5.4), not ``:g``.
     for event, value, p in locations:
-        assert (value, p) == (f"{root.location[event]:g}", f"{root.p_location[event]:g}"), event
+        assert (value, p) == (f"{root.location[event]:.3f}", rule_10_p(root.p_location[event])), event
     for event, value, p in dispersions:
-        assert (value, p) == (f"{root.dispersion[event]:g}", f"{root.p_dispersion[event]:g}"), event
+        assert (value, p) == (f"{root.dispersion[event]:.3f}", rule_10_p(root.p_dispersion[event])), event
     first = OMNIBUS_FIRST_LINE.search(block)
     assert first is not None and int(first.group(6)) == 2, block
 
 
 def test_o18_permutations_and_seed_reach_the_call_and_json_carries_to_json(synth_root: Path) -> None:
-    """``--permutations 200 --seed 3`` reach ``omnibus``; ``--format json`` is
+    """``--permutations 200 --seed 3`` reach ``omnibus``; ``--json`` (``--format json`` before) is
     ``{**multi.to_json(), "omnibus": root.to_json()}`` with the CLI composing a mapping and
     computing nothing, so the ``"omnibus"`` value equals the payload the test computes on the
     same frames with the same knobs, after one JSON round trip."""
     multi, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=200, seed=3)
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--format", "json", "--permutations", "200", "--seed", "3"])
-    assert code == 0 and err == "", (out, err)
+    # --json replaces --format json (spec section 5.6); the shared salt adds one note line (5.4).
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--json", "--permutations", "200", "--seed", "3"])
+    assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
     assert payload["omnibus"]["n_permutations"] == 200 and payload["omnibus"]["seed"] == 3
     assert payload["omnibus"] == json.loads(json.dumps(root.to_json()))
@@ -1639,7 +1732,8 @@ def test_o18_permutations_and_seed_reach_the_call_and_json_carries_to_json(synth
 
 
 def test_o18_the_defaults_are_the_named_constants(synth_root: Path) -> None:
-    code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--format", "json"])
+    # --json replaces --format json (spec section 5.6).
+    code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--json"])
     assert code == 0, out
     payload = json.loads(out)["omnibus"]
     assert payload["n_permutations"] == EXPECTED_DEFAULT_PERMUTATIONS and payload["seed"] == EXPECTED_DEFAULT_SEED

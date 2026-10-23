@@ -1470,7 +1470,7 @@ def serve_page(page: str, *, on_bind: Callable[[HTTPServer], None]) -> None:
     try:
         on_bind(server)
         server.serve_forever()
-    except KeyboardInterrupt:
-        pass
     finally:
+        # Ctrl-C is the caller's to answer (it says what was kept and exits 130); the socket
+        # is closed on the way out whatever ended the loop.
         server.server_close()

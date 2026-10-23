@@ -1577,7 +1577,10 @@ def test_ls7_the_fourteen_top_level_keys_the_schema_the_panel_keys_and_the_cell_
     assert viewer().SCHEMA == SCHEMA
     for p in all_pairs:
         s = p.structure
-        assert tuple(s) == TOP_LEVEL_KEYS and s["schema"] == SCHEMA, (p.name, tuple(s))
+        # serve --json adds verdict and sentence after schema (front-door spec section 5.6).
+        assert tuple(s)[1:3] == ("verdict", "sentence"), (p.name, tuple(s))
+        keys = tuple(k for k in s if k not in ("verdict", "sentence"))
+        assert keys == TOP_LEVEL_KEYS and s["schema"] == SCHEMA, (p.name, tuple(s))
         for panel in s["panels"]:
             assert tuple(panel) == PANEL_KEYS, (p.name, tuple(panel))
             assert tuple(panel["mde_unchanged"]) == MDE_UNCHANGED_KEYS
@@ -2009,14 +2012,16 @@ BAD_ARGV = (
 def test_ls17_no_refusal_reachable_from_serve_names_a_python_parameter(go1: Pair) -> None:
     for tail in BAD_ARGV:
         code, out, err, calls = run_serve(["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, "--event", "fell", *tail, "--json"])
-        assert code == 2 and calls == [] and out == "", (tail, code, err[-300:])
+        # A refusal exits 1 (front-door spec section 5.2).
+        assert code == 1 and calls == [] and out == "", (tail, code, err[-300:])
         low = err.lower()
         for spelling in ("x_axis", "y_axis", "fixed=", "fixed ", "spec."):
             assert spelling not in low, (tail, err)
         if "pin" in low or "not a config key" in low or "unknown config key" in low:
             assert "--x" in err or "--y" in err or "--fix" in err, (tail, err)
     code, out, err, calls = run_serve(["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, "--event", "fell", "--json"])
-    assert code == 2 and "--x AXIS" in err, err
+    # A refusal exits 1 (front-door spec section 5.2).
+    assert code == 1 and "--x AXIS" in err, err
 
 
 # ---------- LS18: the docs ----------

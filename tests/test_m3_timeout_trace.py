@@ -1155,7 +1155,8 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
     blocks: list[list[str]] = []
     current: list[str] | None = None
     for line in body.splitlines():
-        if any(h in line for h in hashes):
+        # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+        if any(h[:12] in line for h in hashes):
             if current is not None:
                 blocks.append(current)
             current = [line]
@@ -1168,7 +1169,8 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
 
 def assert_block_is_row(block: list[str], row: Any) -> None:
     text = "\n".join(block)
-    assert row.config_hash in block[0], block[0]
+    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    assert row.config_hash[:12] in block[0], block[0]
     assert re.search(rf"\b{row.seed}\b", text), f"seed {row.seed} missing from block:\n{text}"
     found = False
     for line in block:

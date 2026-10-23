@@ -154,13 +154,16 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import html
 import importlib
 import inspect
 import json
+import math
 import multiprocessing
 import re
 import traceback
 import warnings
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from io import StringIO
@@ -298,21 +301,12 @@ OUT_PLACEHOLDER = "<out>"
 # lines and the structure is proofload.viewpair/5. Each is the baseline's output plus that change, byte for byte; the
 # other nine are unchanged.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): three of the fourteen move: both 'report A B' files, whose Cells section prints LS16's respelled sentence ('MDE is the smallest detectable increase', no ADR number), and 'serve --json', which is proofload.viewpair/6 with the summary key and each panel's mde_unchanged. The other eleven are unchanged. Read through this test's own measurement on the built tree, not predicted.
+# The front door's look (spec sections 5.3, 5.4 and 14) changes every other verb's output on Go1 (rule 10 numbers,
+# 12-hex hashes, check's verdict line, --json for --format json), so those thirteen digests are gone and
+# ``assert_go1_verb_facts`` checks the facts they guarded instead. The page structure inside serve --json is
+# unchanged, so its digest stays.
 GO1_VERB_SHA256 = {
-    "runs": "0c9a8e63beb07be3c4b370e02d93ac33672b77430fe7381da5063f91c182a4b1",
-    "diff": "7849924e1ff36e6a9a2afc338a876bf312d3a5188f069e3e6cdb40693e226d8a",
-    "diff --format json": "fd2a622c4bfc75bd768b5fcc2c6453e97e8b552a603cfb8ac7717af89ce8be43",
-    "check": "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417",
-    "report A": "13976b7c8ba0022d285fc6d882901a209e9df8004cc0a42c072d75df20661615",
-    "report A/report.md": "32d2431a784e4703a5a88270678bb160bb93ae75a66e8933a0b434d5534dec5f",
-    "report A/heatmap.svg": "e6020ec87eae771a66d8847888de06f2355cd810209e39c25d1c7a6584400851",
-    "report A/receipt.html": "c0ac15e72e730f3cb134de862a3ba67a74b0623c07a12571ea0be4642f9fefa1",
-    "report A B": "a597669edbcba109c45e2cf02299c397e30d2033ba79e92f298d274c0a06436d",
-    "report A B/report.md": "69324de1b24bdcf561501e313561ea481e243249a982a3b274e727445a15c370",
-    "report A B/heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "report A B/receipt.html": "f5b7342aeb67f1214140bb486b388e9e7a521ffb1d07e2972191b350fa5eb6eb",
     "serve --json": "725d60142c4322fcdb26242e515636ff9353394c51f61e5b05c8ee240b4e32a7",
-    "inspect": "5e2905ec3c2c8e87e6a0032b82a3ed544fc5bd68557688896c1fa717b648d052",
 }
 GO1_EVENT = "fell"
 GO1_X, GO1_Y = "mu", "push_pct_bw"
@@ -652,7 +646,8 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
 
     results["runs"] = r = run_cli(["--store", store_arg, "runs"]); digests["runs"] = sha256_text(norm(r.out))
     results["diff"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event]); digests["diff"] = sha256_text(norm(r.out))
-    results["diff --format json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--format", "json"])
+    # diff's --format json is now --json (spec section 5.3).
+    results["diff --json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--json"])
     # PF0 (Q4): the tree's agreement digest is hashed behind the renamed schema string; the 0.0.1 value
     # is put back before the frozen digest is taken.
     as_0_0_1 = norm(r.out)
@@ -660,7 +655,7 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
         assert GO1_AGREEMENT[1] in as_0_0_1 and GO1_AGREEMENT_0_0_1[1] not in as_0_0_1
     for k, digest in GO1_AGREEMENT.items():
         as_0_0_1 = as_0_0_1.replace(digest, GO1_AGREEMENT_0_0_1[k])
-    digests["diff --format json"] = sha256_text(as_0_0_1)
+    digests["diff --json"] = sha256_text(as_0_0_1)
     results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event]); digests["check"] = sha256_text(norm(r.out))
     for label, runs in (("report A", [a]), ("report A B", [a, b])):
         out = out_dir / label.replace(" ", "_")
@@ -675,7 +670,8 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
                 digests[f"{label}/{name}"] = sha256_text(as_0_0_1_wrote_it((out / name).read_text(encoding="utf-8")))
     results["serve --json"] = r = run_cli(["--store", store_arg, "serve", a, b, "--event", event, "--x", x, "--y", y, "--json"])
     try:
-        structure = json.loads(r.out)
+        # serve --json now leads with verdict and sentence before the page structure (spec section 5.6).
+        structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence")}
         structure["pair"]["store_root"] = STORE_PLACEHOLDER
         as_0_0_1 = json.dumps(structure_as_0_0_1_wrote_it(structure), sort_keys=True)
         if root == GO1_ROOT:
@@ -691,6 +687,271 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
 
 def go1_verb_digests(out_dir: Path) -> tuple[dict[str, str], dict[str, Result]]:
     return verb_digests(GO1_ROOT, GO1_A, GO1_B, event=GO1_EVENT, x=GO1_X, y=GO1_Y, out_dir=out_dir)
+
+
+# ---------- helpers: the facts the Go1 output digests guarded ----------
+
+REPORT_NAMES = ("report.md", "heatmap.svg", "receipt.html")
+NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?(?:e[-+]?\d+)?")
+PAIR_RE = re.compile(r"(\w+)=(-?\d+(?:\.\d+)?)")
+
+
+def err_lines(r: Result) -> list[str]:
+    """stderr without the ``note: `` lines Prove's own warnings become (spec section 5.4)."""
+    return [line for line in r.err.splitlines() if not line.startswith("note: ")]
+
+
+def finite_number(text: str) -> float | None:
+    try:
+        value = float(text.strip().replace(",", ""))
+    except ValueError:
+        return None
+    return value if math.isfinite(value) else None
+
+
+def printed_as(text: str, value: Any) -> bool:
+    """Whether ``text`` is ``value`` as a text output prints it, whatever the number format: an int
+    exactly (separators allowed), a float to the precision printed, a hash by a prefix of at least
+    12 hex characters, a bool or string as itself, and a missing or non-finite number as anything
+    but a finite number."""
+    text = text.strip()
+    if isinstance(value, bool):
+        return text.lower() == str(value).lower()
+    if value is None or (isinstance(value, float) and not math.isfinite(value)):
+        return finite_number(text) is None
+    if isinstance(value, int):
+        return text.replace(",", "") == str(value)
+    if isinstance(value, float):
+        number = finite_number(text)
+        if number is None:
+            return False
+        mantissa, _, exponent = text.lower().replace(",", "").partition("e")
+        half_unit = 0.5 * 10.0 ** -len(mantissa.partition(".")[2]) * 10.0 ** (int(exponent) if exponent else 0)
+        return abs(number - value) <= half_unit * (1 + 1e-9) + 1e-12
+    if isinstance(value, str):
+        return text == value or (len(text) >= 12 and value.startswith(text))
+    return False
+
+
+def md_tables(text: str) -> list[tuple[list[str], list[list[str]]]]:
+    """Every Markdown table as (header, data rows), cells stripped, separator rows dropped."""
+    tables: list[tuple[list[str], list[list[str]]]] = []
+    block: list[list[str]] = []
+    for line in [*text.splitlines(), ""]:
+        if line.startswith("|"):
+            block.append([cell.strip() for cell in line.strip().strip("|").split("|")])
+        elif block:
+            rows = [row for row in block[1:] if not all(set(cell) <= set("-:") for cell in row)]
+            tables.append((block[0], rows))
+            block = []
+    return tables
+
+
+def html_tables(text: str) -> list[tuple[list[str], list[list[str]]]]:
+    """Every HTML table as (header, data rows), tags inside cells removed and entities unescaped."""
+    def cells(fragment: str, tag: str) -> list[str]:
+        return [html.unescape(re.sub(r"<[^>]+>", "", c)).strip() for c in re.findall(rf"<{tag}[^>]*>(.*?)</{tag}>", fragment, re.S)]
+
+    tables = []
+    for table in re.findall(r"<table[^>]*>(.*?)</table>", text, re.S):
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S)
+        header = cells(rows[0], "th") if rows else []
+        tables.append((header, [cells(row, "td") for row in rows[1:]]))
+    return tables
+
+
+def config_of(pairs: str) -> dict[str, float]:
+    return {k: float(v) for k, v in PAIR_RE.findall(pairs)}
+
+
+def cell_by_config(cells: Mapping[str, Mapping[str, Any]], config: Mapping[str, float]) -> Mapping[str, Any]:
+    (found,) = [c for c in cells.values() if {k: float(v) for k, v in c["config"].items()} == dict(config)]
+    return found
+
+
+def check_report_table(header: list[str], rows: list[list[str]], data: Mapping[str, Any]) -> str:
+    """Check one table of the A B report (Markdown or receipt) against ``diff --json`` and say which
+    table it was. Columns are matched by the names the report has always printed them under."""
+    fell = data["by_event"][GO1_EVENT]
+    cells = {c["config_hash"]: c for c in fell["cells"]}
+    omnibus, fault_lines = data["omnibus"], data["tree"]["fault_lines"]
+    assert rows, header
+    if header and header[0] == "event" and "mean delta" in header:
+        keys = ["event", "location", "p_location", "dispersion", "p_dispersion"]
+        for row in rows:
+            assert len(row) == len(keys) and row[0] == GO1_EVENT, row
+            for text, key in zip(row[1:], keys[1:], strict=True):
+                assert printed_as(text, omnibus[key][GO1_EVENT]), (key, text, omnibus[key])
+        return "omnibus"
+    if header and header[0] == data["tree"]["grouping"]["key"] and "units (a/b)" in header:
+        groups = {g["label"]: g for g in fault_lines["groups"]}
+        names = {"cells": "n_cells", "informative": "n_informative_cells", "unchanged by every exchange": "n_uninformative_cells",
+                 "group MDE": "mde", "p": "p_group", "q": "q_group"}
+        assert len(rows) == len(groups), rows
+        for row in rows:
+            printed = dict(zip(header, row, strict=True))
+            group = groups[printed[header[0]]]
+            for column, key in names.items():
+                assert printed_as(printed[column], group[key]), (column, printed[column], group[key])
+            units_a, units_b = printed["units (a/b)"].split("/")
+            assert printed_as(units_a, group["n_a"]) and printed_as(units_b, group["n_b"]), printed
+            assert (printed["verdict"] == "rejected") is group["rejects"], printed
+        return "fault lines"
+    if header[:2] == ["cell", "event"]:
+        leaves = {c["config_hash"]: c for family in data["tree"]["leaves"]["families"] for c in family["cells"]}
+        names = {"delta": "delta", "q": "q_within", "MDE": "mde"}
+        assert set(names) <= set(header), header
+        for row in rows:
+            printed = dict(zip(header, row, strict=True))
+            leaf = cell_by_config(leaves, config_of(printed["cell"]))
+            assert printed["event"] == GO1_EVENT, printed
+            for column, key in names.items():
+                assert printed_as(printed[column], leaf[key]), (column, printed[column], leaf[key])
+        return "cells"
+    if GO1_X in header and GO1_Y in header:
+        shared = [column for column in header if column.lower() in fell["cells"][0]]
+        assert {"delta", "p", "q", "verdict"} <= set(shared), header
+        for row in rows:
+            printed = dict(zip(header, row, strict=True))
+            cell = cell_by_config(cells, {GO1_X: float(printed[GO1_X]), GO1_Y: float(printed[GO1_Y])})
+            for column in shared:
+                assert printed_as(printed[column], cell[column.lower()]), (column, printed[column], cell[column.lower()])
+        return "worst cells"
+    return "other"
+
+
+def check_heatmap(path: Path, cells: Mapping[str, Mapping[str, Any]], label_key: str) -> int:
+    """The panel is the event; its cells are the diff's cells; each cell's label prints its value.
+    Returns the number of significance markers."""
+    root = ET.fromstring(path.read_text(encoding="utf-8"))
+    panels = [e for e in root.iter() if "data-panel" in e.attrib]
+    assert [p.attrib["data-panel"] for p in panels] == [GO1_EVENT], path
+    rects = [e for e in panels[0].iter() if e.tag.endswith("rect") and "data-cell" in e.attrib]
+    assert sorted(r.attrib["data-cell"] for r in rects) == sorted(cells), path
+    texts = [e for e in panels[0].iter() if e.tag.endswith("text")]
+    for rect in rects:
+        x, y, w, h = (float(rect.attrib[k]) for k in ("x", "y", "width", "height"))
+        (label,) = [t for t in texts if float(t.attrib.get("x", "nan")) == x + w / 2 and y <= float(t.attrib.get("y", "nan")) <= y + h]
+        value = cells[rect.attrib["data-cell"]][label_key]
+        assert printed_as(label.text or "", value), (rect.attrib["data-cell"], label.text, value)
+    return sum(1 for e in panels[0].iter() if "data-sig" in e.attrib)
+
+
+def assert_go1_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
+    """The facts the Go1 digests guarded, read against ``diff --json`` and the store: the runs and
+    their counts, every cell of the diff with its numbers and verdict, check's verdict, the files
+    report wrote, the report's tables, the bound and the honesty block's figure, the heatmaps' cells
+    and labels, and inspect's rows."""
+    store = Store(GO1_ROOT)
+    data = json.loads(results["diff --json"].out)
+    fell = data["by_event"][GO1_EVENT]
+    cells = {c["config_hash"]: c for c in fell["cells"]}
+    headline = data["headline"].splitlines()[0]
+    assert len(cells) == data["n_tests"] and fell["n_safer"] + fell["n_worse"] + fell["n_unchanged"] == len(cells)
+    for verdict, key in (("safer", "n_safer"), ("worse", "n_worse"), ("unchanged", "n_unchanged")):
+        assert sum(c["verdict"] == verdict for c in cells.values()) == fell[key], verdict
+
+    # runs: one line per run with its status, backend, target, unit and row count.
+    runs_lines = results["runs"].out.splitlines()
+    for run_id in (GO1_A, GO1_B):
+        m = store.manifest(run_id)
+        (line,) = [row for row in runs_lines if row.split()[:1] == [run_id]]
+        assert store.count(run_id) == GO1_ROWS
+        for value in (m.status, m.backend, m.target_id, m.t_unit, f"{GO1_ROWS:,}"):
+            assert value in line.split(), (value, line)
+
+    # diff: the headline, the method and event lines, and every cell row as the JSON has it.
+    diff_lines = results["diff"].out.splitlines()
+    assert headline in diff_lines, results["diff"].out
+    for prefix, source in ((f"## {GO1_EVENT}: ", fell), ("method=", data)):
+        (line,) = [row for row in diff_lines if row.startswith(prefix)]
+        pairs = dict(part.split("=", 1) for part in line.removeprefix(f"## {GO1_EVENT}: ").split(", "))
+        assert pairs and set(pairs) <= set(source), line
+        for key, text in pairs.items():
+            assert printed_as(text, source[key]), (key, text, source[key])
+    (table,) = [t for t in md_tables(results["diff"].out) if "verdict" in t[0]]
+    header, rows = table
+    shared = [column for column in header if column in fell["cells"][0]]
+    assert {"config_hash", "config", "verdict", "delta", "p", "q"} <= set(shared), header
+    assert len(rows) == len(cells), len(rows)
+    seen = set()
+    for row in rows:
+        printed = dict(zip(header, row, strict=True))
+        (h,) = [h for h in cells if printed_as(printed["config_hash"], h)]
+        seen.add(h)
+        for column in shared:
+            if column == "config":
+                assert json.loads(printed[column]) == cells[h][column], printed
+            else:
+                assert printed_as(printed[column], cells[h][column]), (column, printed[column], cells[h][column])
+    assert seen == set(cells)
+
+    # check: passed, naming the event, with the same headline (spec section 5.3).
+    check_lines = results["check"].out.splitlines()
+    assert check_lines[0].startswith("passed") and GO1_EVENT in check_lines[0], results["check"].out
+    assert headline in check_lines, results["check"].out
+
+    # report: the files it names, the single run's incidences, the pair report's tables in both forms.
+    for label in ("report A", "report A B"):
+        out = out_dir / label.replace(" ", "_")
+        for name in REPORT_NAMES:
+            assert str(out / name) in results[label].out, (label, name)
+    single = (out_dir / "report_A" / "report.md").read_text(encoding="utf-8")
+    single_tables = [t for t in md_tables(single) if GO1_X in t[0] and GO1_Y in t[0]]
+    assert single_tables, single
+    for header, rows in single_tables:
+        assert rows and header.index("n") == len(header) - 2, header
+        for row in rows:
+            printed = dict(zip(header, row, strict=True))
+            cell = cell_by_config(cells, {GO1_X: float(printed[GO1_X]), GO1_Y: float(printed[GO1_Y])})
+            assert printed_as(printed["n"], cell["n_a"]) and printed_as(row[-1], cell["rate_a"]), (row, cell)
+    pair_md = (out_dir / "report_A_B" / "report.md").read_text(encoding="utf-8")
+    pair_html = (out_dir / "report_A_B" / "receipt.html").read_text(encoding="utf-8")
+    md_kinds = [check_report_table(h, r, data) for h, r in md_tables(pair_md)]
+    html_kinds = [check_report_table(h, r, data) for h, r in html_tables(pair_html)]
+    for kinds in (md_kinds, html_kinds):
+        assert {"omnibus", "fault lines", "cells", "worst cells"} <= set(kinds), kinds
+    md_lines = pair_md.splitlines()
+    assert headline in md_lines and headline in html.unescape(pair_html)
+    # The provenance list prints the diff's scalar fields.
+    for line in md_lines:
+        key, sep, text = line.removeprefix("- ").partition(": ")
+        if line.startswith("- ") and sep and isinstance(data.get(key.replace(" ", "_")), (bool, int, float, str, type(None))) and key.replace(" ", "_") in data:
+            assert printed_as(text, data[key.replace(" ", "_")]), line
+    # The bound in its section, in both forms, and the honesty block's figure on the line naming its cell.
+    bound = data["tree"]["bound"]
+    worst = {k: float(v) for k, v in cells[fell["max_mde_unchanged_cell"]]["config"].items()}
+    md_bound = pair_md.partition("## Bound")[2].partition("\n## ")[0]
+    html_bound = pair_html.partition("<h2>Bound</h2>")[2].partition("<h2>")[0].partition("<svg")[0]
+    for section, text in ((md_bound, pair_md), (html_bound, html.unescape(re.sub(r"<[^>]+>", " ", pair_html)))):
+        assert any(printed_as(t, bound["bound"]) for t in NUMBER_RE.findall(section) if "." in t), section
+        assert any(
+            {k: v for k, v in config_of(line).items() if k in worst} == worst
+            and any(printed_as(t, fell["max_mde_unchanged"]) for t in NUMBER_RE.findall(line.split(")", 1)[-1]) if "." in t)
+            for line in text.splitlines()
+        ), fell["max_mde_unchanged"]
+
+    # heatmaps: one panel for the event, every cell labelled with its rate (one run) or delta (two).
+    assert check_heatmap(out_dir / "report_A" / "heatmap.svg", cells, "rate_a") == 0
+    assert check_heatmap(out_dir / "report_A_B" / "heatmap.svg", cells, "delta") == fell["n_safer"] + fell["n_worse"]
+
+    # inspect: the run's rows with the event, in store order, each with its hash, config, seed and t.
+    frame = store.read(GO1_A)
+    rows_with_event = frame[frame["outcome"] == GO1_EVENT].sort_values(["config_hash", "replicate_index"], kind="stable")
+    body, marker, _ = results["inspect"].out.partition(SNIPPET_MARKER)
+    assert marker, results["inspect"].out
+    blocks: list[list[str]] = []
+    for line in body.splitlines():
+        if line.startswith("config_hash: "):
+            blocks.append([line])
+        elif blocks:
+            blocks[-1].append(line)
+    assert len(blocks) == len(rows_with_event)
+    for block, row in zip(blocks, rows_with_event.itertuples(index=False), strict=True):
+        fields = dict(line.split(": ", 1) for line in block if ": " in line and not line.startswith(" "))
+        assert printed_as(fields["config_hash"], row.config_hash), (block[0], row.config_hash)
+        assert json.loads(fields["config"]) == row.config and fields["seed"] == str(row.seed), block
+        assert printed_as(fields["replicate_index"], int(row.replicate_index)) and printed_as(fields["t"], float(row.t)), block
 
 
 # ---------- helpers: the M3 capture oracle's forked child, restated ----------
@@ -1327,12 +1588,16 @@ def test_p7_10_every_verb_exits_0_on_go1_and_the_mock_pair_and_go1s_bytes_are_un
     for part in (GO1_ROOT / GO1_A / "episodes" / "part-00000.parquet", GO1_ROOT / GO1_B / "episodes" / "part-00000.parquet"):
         assert pq.read_schema(part).names == THIRTEEN, part
     digests, results = go1_verb_digests(tmp_path / "go1")
+    # A shared-salt pair now carries one note: line on stderr (spec section 5.4); nothing else.
     for verb, r in results.items():
-        assert r.code == 0 and r.err == "", (verb, r.code, r.err)
-    assert digests == GO1_VERB_SHA256, {k: (digests[k], GO1_VERB_SHA256.get(k)) for k in digests if digests[k] != GO1_VERB_SHA256.get(k)}
+        assert r.code == 0 and err_lines(r) == [], (verb, r.code, r.err)
+    # Only the page structure keeps its digest; the rest are checked as facts (spec section 14).
+    kept = {k: digests[k] for k in GO1_VERB_SHA256}
+    assert kept == GO1_VERB_SHA256, {k: (kept[k], GO1_VERB_SHA256[k]) for k in kept if kept[k] != GO1_VERB_SHA256[k]}
+    assert_go1_verb_facts(results, tmp_path / "go1")
     mock_digests, mock_results = verb_digests(mock_pair.root, mock_pair.a, mock_pair.b, event=MOCK_EVENT, x="tool_fail_rate", y="task_id", out_dir=tmp_path / "mock")
     for verb, r in mock_results.items():
-        assert r.code == 0 and r.err == "", (verb, r.code, r.err)
+        assert r.code == 0 and err_lines(r) == [], (verb, r.code, r.err)
     assert all(len(d) == HEX64_LEN for d in mock_digests.values()), mock_digests
     r = mock_results["runs"]
     assert [line.split()[0] for line in r.out.splitlines()[2:]] == sorted((mock_pair.a, mock_pair.b))

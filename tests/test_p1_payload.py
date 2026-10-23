@@ -201,8 +201,9 @@ FAMILY_TOKEN = "over the flat BH family"
 INTERVAL_COLUMN = "interval (pp)"
 #: Y17. Section 3.5's floor lines, fields in braces; the CLI spells the floor ``:g`` and the count bare,
 #: M7 and the page spell them ``sig3`` and ``int``.
-CLI_FLOOR_LINE = "  p floor {p_floor:g}: the smallest p {n_permutations} permutations can express; a p at the floor is a bound, not a measurement"
-CLI_GROUP_FLOOR_LINE = "  group p floor {p_floor:g}: the same {n_permutations} permutations; a group p at the floor is a bound, not a measurement"
+# The command line prints p_floor under rule 10 (spec section 5.4): the caller formats it with fmt_p10.
+CLI_FLOOR_LINE = "  p floor {p_floor}: the smallest p {n_permutations} permutations can express; a p at the floor is a bound, not a measurement"
+CLI_GROUP_FLOOR_LINE = "  group p floor {p_floor}: the same {n_permutations} permutations; a group p at the floor is a bound, not a measurement"
 M7_FLOOR_LINE = "p floor {p_floor}: the smallest p {n_permutations} permutations can express; a p at the floor is a bound, not a measurement"
 M7_GROUP_FLOOR_LINE = "group p floor {p_floor}: the same {n_permutations} permutations; a group p at the floor is a bound, not a measurement"
 #: Y15. Section 3.7's refusal, and the ``tree`` refusal it is modelled on (``viewer.py`` at ``a626cd3``).
@@ -479,6 +480,37 @@ def fmt_sig3(value: float) -> str:
     return "0" if x == 0 else (format(x, ".2e") if abs(x) < 1e-3 else format(x, ".3g"))
 
 
+def fmt_p10(value: float) -> str:
+    """A p-value as the command line prints it: three decimals, or one decimal in the mantissa
+    below 0.001 (spec section 5.4, rule 10)."""
+    x = float(value)
+    return format(x, ".3f") if x >= 1e-3 else format(x, ".1e")
+
+
+PRINTED_NUMBER = re.compile(r"(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?%?(?![\w]|\.\d)")
+
+
+def printed_value(token: str) -> tuple[float, float]:
+    """A printed number and half a unit of its last printed digit."""
+    text = token.replace(",", "").removesuffix("%")
+    m = re.fullmatch(r"[-+]?\d+(?:\.(\d+))?(?:[eE]([-+]?\d+))?", text)
+    assert m, token
+    return float(text), 0.5 * 10.0 ** (int(m.group(2) or 0) - len(m.group(1) or ""))
+
+
+def same_numbers(library: str, printed: str) -> bool:
+    """The command line reprints the library's numbers under rule 10 (spec section 5.4): the same
+    numbers in the same order, each equal within the coarser of the two printed precisions."""
+    a_tokens, p_tokens = PRINTED_NUMBER.findall(library), PRINTED_NUMBER.findall(printed)
+    if len(a_tokens) != len(p_tokens):
+        return False
+    for a_token, p_token in zip(a_tokens, p_tokens, strict=True):
+        (a, half_a), (b, half_b) = printed_value(a_token), printed_value(p_token)
+        if abs(a - b) > max(half_a, half_b) + 1e-12:
+            return False
+    return True
+
+
 def fmt_pp1(value: float) -> str:
     text = format(float(value) * 100, ".1f")
     return "0.0" if text == "-0.0" else text
@@ -651,7 +683,8 @@ def go1_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     results: dict[str, Any] = {}
     for name, argv in (
         ("diff", ["diff", GO1_A, GO1_B, "--event", "fell", *knobs]),
-        ("diff json", ["diff", GO1_A, GO1_B, "--event", "fell", "--format", "json", *knobs]),
+        # --json replaces --format json on diff (spec section 5.6).
+        ("diff json", ["diff", GO1_A, GO1_B, "--event", "fell", "--json", *knobs]),
         ("diff methods all", ["diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", *knobs]),
         ("report", ["report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--out", str(out_dir), *knobs]),
         ("check", ["check", GO1_A, GO1_B, "--event", "fell"]),
@@ -910,7 +943,8 @@ def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_a
     assert "| method | event | pairing |" in go1_cli["diff methods all"]
     assert go1_built.multi.headline() == GO1_HEADLINE
     assert go1_cli["diff"].startswith(GO1_HEADLINE.splitlines()[0]) and GO1_HEADLINE in go1_cli["diff"]
-    assert go1_cli["check"] == GO1_HEADLINE + "\nPASS\n"
+    # check's verdict is now its first stdout line, passed or failed (spec section 5.3).
+    assert go1_cli["check"].startswith("passed  ") and GO1_HEADLINE in go1_cli["check"], go1_cli["check"]
     assert GO1_HEADLINE in go1_cli["report"] and GO1_HEADLINE in go1_cli["report.md"] and GO1_HEADLINE in go1_built.md
     assert html_mod.escape(GO1_HEADLINE.splitlines()[1]) in go1_cli["receipt.html"]
     assert go1_cli["serve json"]["headline"] == GO1_HEADLINE == go1_built.structure["headline"]
@@ -947,7 +981,8 @@ def test_y9_the_provenance_dict_carries_the_two_keys_in_paireds_slot_on_both_bui
 
 def test_y10_the_payload_root_is_thirteen_keys_and_intervals_is_m6s_fields_lines_and_rows_in_m6s_order(go1_built: Built, go1_cli: dict[str, Any], k2: Built, same: Built) -> None:
     """Mutant 18."""
-    assert tuple(go1_cli["serve json"]) == TOP_LEVEL_KEYS
+    # serve --json adds verdict and sentence after schema (spec section 5.6).
+    assert tuple(k for k in go1_cli["serve json"] if k not in ("verdict", "sentence")) == TOP_LEVEL_KEYS
     for built in (go1_built, k2, same):
         structure, multi = built.structure, built.multi
         assert tuple(structure) == TOP_LEVEL_KEYS, (built.name, tuple(structure))
@@ -982,8 +1017,13 @@ def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_
         assert paragraphs(html_sections(built.html)["Intervals"]) == expected, built.name
         honesty = paragraphs(region_lines(built.page, "Honesty"))
         assert honesty[-2].split("<br>") == expected, (built.name, honesty[-2])
-    expected_block = "\n".join([GO1_INTERVAL_LINES[0], *(f"  {line}" for line in GO1_INTERVAL_LINES[1:])]) + "\n"
-    assert "\n" + expected_block in go1_cli["diff"], go1_cli["diff"]
+    # diff prints the same block with its numbers under rule 10 (spec section 5.4): the first line
+    # unindented after a blank line, the rest indented, each carrying the library line's numbers.
+    diff_lines = go1_cli["diff"].splitlines()
+    at = next(i for i, line in enumerate(diff_lines) if line.startswith("intervals: "))
+    block = diff_lines[at : at + len(GO1_INTERVAL_LINES)]
+    assert diff_lines[at - 1] == "" and all(line.startswith("  ") for line in block[1:]), go1_cli["diff"]
+    assert all(same_numbers(lib, line) for lib, line in zip(GO1_INTERVAL_LINES, block, strict=True)), block
     code, out, err = quiet(lambda: run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail", "--permutations", "50"]))
     assert code == 0, err
     assert "\n" + NO_INTERVAL_LINE + "\n" in out and "  interval excludes" not in out, out
@@ -1127,10 +1167,11 @@ def test_y17_the_floor_line_follows_the_method_line_and_the_group_floor_line_fol
     assert cli_root["n_permutations"] == 300
     diff_lines = go1_cli["diff"].splitlines()
     at = next(i for i, line in enumerate(diff_lines) if line.startswith("  min-p of location and dispersion; 300 within-cell permutations"))
-    assert diff_lines[at + 1] == CLI_FLOOR_LINE.format(p_floor=cli_root["p_floor"], n_permutations=300), diff_lines[at + 1]
+    assert diff_lines[at + 1] == CLI_FLOOR_LINE.format(p_floor=fmt_p10(cli_root["p_floor"]), n_permutations=300), diff_lines[at + 1]
     null = next(i for i, line in enumerate(diff_lines) if "tested by BH across" in line)
-    assert diff_lines[null + 1] == CLI_GROUP_FLOOR_LINE.format(p_floor=cli_root["p_floor"], n_permutations=300), diff_lines[null + 1]
-    assert diff_lines[at + 1].startswith("  p floor 0.00332226:") and diff_lines[null + 1].startswith("  group p floor 0.00332226:")
+    assert diff_lines[null + 1] == CLI_GROUP_FLOOR_LINE.format(p_floor=fmt_p10(cli_root["p_floor"]), n_permutations=300), diff_lines[null + 1]
+    # 1/301 printed under rule 10 (spec section 5.4).
+    assert diff_lines[at + 1].startswith(f"  p floor {fmt_p10(1 / 301)}:") and diff_lines[null + 1].startswith(f"  group p floor {fmt_p10(1 / 301)}:")
     for built, root in ((go1_built, root_go1.to_json()),):
         floor = M7_FLOOR_LINE.format(p_floor=fmt_sig3(root["p_floor"]), n_permutations=root["n_permutations"])
         group_floor = M7_GROUP_FLOOR_LINE.format(p_floor=fmt_sig3(root["p_floor"]), n_permutations=root["n_permutations"])
@@ -1153,14 +1194,16 @@ def test_y17_the_floor_line_follows_the_method_line_and_the_group_floor_line_fol
         null_at = next(i for i, line in enumerate(fault_page) if "tested by BH across" in line)
         assert fault_page[null_at + 1] == M7_GROUP_FLOOR_LINE.format(p_floor=text["p_floor"], n_permutations=root["n_permutations"])
     report_md = go1_cli["report.md"]
-    assert M7_FLOOR_LINE.format(p_floor=fmt_sig3(1 / 301), n_permutations=300) in report_md and M7_GROUP_FLOOR_LINE.format(p_floor=fmt_sig3(1 / 301), n_permutations=300) in report_md
+    # The command line writes report.md under rule 10 (spec section 5.4).
+    assert M7_FLOOR_LINE.format(p_floor=fmt_p10(1 / 301), n_permutations=300) in report_md and M7_GROUP_FLOOR_LINE.format(p_floor=fmt_p10(1 / 301), n_permutations=300) in report_md
     assert not same.tree.fault_lines.tested
     for text in (same.md, same.html, same.page):
         assert "group p floor" not in text and text.count("not a measurement") == 1, same.name
     assert "p floor" in md_sections(same.md)["Omnibus"][2]
     check = go1_cli["check"]
     assert "p =" not in check and "p floor" not in check and "not a measurement" not in check, check
-    assert check == GO1_HEADLINE + "\nPASS\n"
+    # check's verdict is now its first stdout line, passed or failed (spec section 5.3).
+    assert check.startswith("passed  ") and GO1_HEADLINE in check, check
 
 
 def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key(go1_built: Built, k2: Built, same: Built) -> None:

@@ -129,6 +129,7 @@ import ast
 import hashlib
 import re
 import shlex
+import sys
 import tempfile
 import warnings
 import xml.etree.ElementTree as ET
@@ -170,30 +171,88 @@ SWEEP_TAIL = "sweep SPEC.toml --target pkg.module:rollout"
 RUNS_HEADER = "run_id  status  backend  target_id  t_unit  rows  no_outcome\n"
 
 
-def missing_message(root: str, source: str, verb: str) -> str:
+# The three section 3.1 templates are checked by their facts, not their words: a refusal is one
+# ``error: `` line followed only by ``  next: `` lines (front-door spec section 5.4), so the old hint
+# lines are now commands on next lines, and ``--store`` may come before or after the verb.
+
+
+def create_command(root: str) -> list[str]:
+    """The command the create hint offers, as a shell reads it back."""
+    return ["poisson-prove", "--store", root, *SWEEP_TAIL.split()]
+
+
+def hinted_commands(err: str) -> list[list[str]]:
+    """Every command an indented hint line offers: the text after the line's first ``: ``, read back the
+    way a shell would read it."""
+    commands = []
+    for line in err.splitlines():
+        if line.startswith("  ") and ": " in line:
+            try:
+                commands.append(shlex.split(line.strip().partition(": ")[2]))
+            except ValueError:
+                continue
+    return commands
+
+
+def reads_another_store(command: list[str], verb: str) -> bool:
+    return command[:1] == ["poisson-prove"] and verb in command and any(
+        command[i : i + 2] == ["--store", "PATH"] for i in range(len(command))
+    )
+
+
+def refusal_shape(err: str) -> list[str]:
+    """What is wrong with ``err`` as a refusal's stderr: one ``error: `` line, then only ``  next: `` lines."""
+    lines = err.splitlines()
+    problems = [] if lines and lines[0].startswith("error: ") else ["the first line is not an error line"]
+    return problems + [f"not a next line: {line}" for line in lines[1:] if not line.startswith("  next: ")]
+
+
+def store_refusal_problems(err: str, head: str, root: str, source: str, verb: str) -> list[str]:
+    problems = refusal_shape(err)
+    if f"{head} {root}" not in err:
+        problems.append(f"does not say {head} {root}")
+    if source not in err:
+        problems.append("the source clause is missing")
+    if create_command(root) not in hinted_commands(err):
+        problems.append("no next line offers the sweep that writes the first run there")
+    if not any(reads_another_store(command, verb) for command in hinted_commands(err)):
+        problems.append(f"no next line offers reading another store with {verb}")
+    return problems
+
+
+def missing_problems(err: str, root: str, source: str, verb: str) -> list[str]:
     """Section 3.1, M: a path with no directory at it, on a verb that reads the store."""
-    return (
-        f"error: no store at {root}. No directory exists at that path; {source}.\n"
-        f"  to create one there: poisson-prove --store {shlex.quote(root)} {SWEEP_TAIL}\n"
-        f"  to read another store: poisson-prove --store PATH {verb}, with --store before the verb\n"
-    )
+    return store_refusal_problems(err, "no store at", root, source, verb)
 
 
-def empty_message(root: str, source: str, verb: str) -> str:
+def empty_problems(err: str, root: str, source: str, verb: str) -> list[str]:
     """Section 3.1, E: a directory holding no manifest.json, on a verb that reads the store."""
-    return (
-        f"error: no runs in {root}. No directory under it holds a manifest.json; {source}.\n"
-        f"  to write the first run there: poisson-prove --store {shlex.quote(root)} {SWEEP_TAIL}\n"
-        f"  to read another store: poisson-prove --store PATH {verb}, with --store before the verb\n"
-    )
+    return store_refusal_problems(err, "no runs in", root, source, verb)
 
 
-def empty_runs_note(root: str, source: str) -> str:
-    """Section 3.1, E-runs: stderr of ``runs`` on an empty store, exit 0, no ``error: `` prefix."""
-    return (
-        f"no runs in {root}. No directory under it holds a manifest.json; {source}.\n"
-        f"  to write the first run there: poisson-prove --store {shlex.quote(root)} {SWEEP_TAIL}\n"
-    )
+def empty_runs_problems(err: str, root: str, source: str) -> list[str]:
+    """Section 3.1, E-runs: stderr of ``runs`` on an empty store, exit 0, no ``error: `` prefix. It is a
+    ``note: `` line now, with its hint on indented lines (front-door spec section 5.4)."""
+    lines = err.splitlines()
+    problems = [] if lines and lines[0].startswith("note: ") else ["the first line is not a note"]
+    problems += [f"not an indented line: {line}" for line in lines[1:] if not line.startswith("  ")]
+    if f"no runs in {root}" not in err:
+        problems.append(f"does not say no runs in {root}")
+    if source not in err:
+        problems.append("the source clause is missing")
+    if create_command(root) not in hinted_commands(err):
+        problems.append("no hint offers the sweep that writes the first run there")
+    return problems
+
+
+def unknown_run_problems(err: str, run: str) -> list[str]:
+    """The unknown-run refusal: it names the run bare or double-quoted, never as a Python repr."""
+    problems = refusal_shape(err)
+    if "unknown run" not in err or run not in err:
+        problems.append(f"does not name the unknown run {run}")
+    if f"'{run}'" in err:
+        problems.append("the run is shown as a Python repr")
+    return problems
 
 
 GATE_REASON = "a gate whose meaning changes when a new outcome appears is not a gate"
@@ -243,6 +302,43 @@ E3_GO1: dict[str, tuple[list[str], str]] = {
     ),
 }
 SERVE_ROWS = ("serve, neither", "serve, no --event", "serve, no --x")
+
+
+def listed_values(err: str, label: str) -> list[str]:
+    """Every list ``err`` gives after ``label: `` (``axes`` or ``events``), on a line of its own or inside a
+    sentence, up to the ``;`` or ``.`` that ends it."""
+    return re.findall(rf"(?<![\w-]){label}: (.+?)(?=[.;]\s|[.;]?$)", err, flags=re.MULTILINE)
+
+
+def e3_problems(err: str, old: str) -> list[str]:
+    """What is wrong with ``err`` as the listing refusal whose pre-PF1 words are ``old``. A refusal is now one
+    ``error: `` line followed only by ``  next: `` lines (front-door spec section 5.4), so the old
+    ``  axes:`` and ``  events:`` lines are checked by their facts wherever stderr gives them: the verb, the
+    missing flags, the runs, the reason clause where the old words had one and not where they did not, and
+    each list exactly."""
+    head, *rest = old.splitlines()
+    problems = refusal_shape(err)
+    verb = head.split()[1]
+    if verb not in err.partition("\n")[0]:
+        problems.append(f"the error line does not name {verb}")
+    for flag in re.findall(r"--[a-z]+(?= [A-Z]+)", head):
+        if flag not in err:
+            problems.append(f"does not name {flag}")
+    runs = re.search(r"\. (\S+) and (\S+) carry:$|\. (\S+) carries:$", head)
+    assert runs, head
+    for run in filter(None, runs.groups()):
+        if run not in err:
+            problems.append(f"does not name {run}")
+    for reason in (GATE_REASON, PICTURE_REASON):
+        if (reason in head) != (reason in err):
+            problems.append(f"the reason clause is {'missing' if reason in head else 'added'}: {reason}")
+    stated = dict(line.strip().split(": ", 1) for line in rest)
+    for label in ("axes", "events"):
+        if label in stated and listed_values(err, label) != [stated[label]]:
+            problems.append(f"{label} listed as {listed_values(err, label)}, not {stated[label]}")
+        if label not in stated and f"{label}:" in err:
+            problems.append(f"{label} listed where the old words had none")
+    return problems
 
 # Section 3.3: the marker every negative assertion uses (a line prefix), and its Go1 and A14 lines.
 MARKER = "inferred: no event was given, so "
@@ -398,15 +494,6 @@ def listing(root: Path) -> list[str]:
     return sorted(str(p.relative_to(root)) for p in root.rglob("*"))
 
 
-def command_from(err: str, label: str) -> list[str]:
-    """The shell command a hint line offers: the line naming ``label``, split at its first ``: ``,
-    read back the way a shell would read it."""
-    lines = [line for line in err.splitlines() if line.strip().startswith(f"{label}: ")]
-    assert len(lines) == 1, (label, err)
-    _, _, tail = lines[0].strip().partition(": ")
-    return shlex.split(tail)
-
-
 # ---------- synthetic stores, written through the store's own writer ----------
 
 
@@ -484,10 +571,13 @@ def mock_pair(tmp_path_factory: pytest.TempPathFactory) -> MockPair:
     root = tmp_path_factory.mktemp("mock-store")
     first = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--salt", QUICKSTART_SALT, "--yes"])
     assert first.code == 0, first.err
-    a = first.out.splitlines()[-1].removeprefix("run_id: ")
+    # A sweep no longer ends in a ``run_id:`` line (front-door spec section 5.3): each sweep's run is the
+    # one the store gained.
+    (a,) = Store(root).runs()
     second = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", a, "--yes"])
     assert second.code == 0, second.err
-    return MockPair(root, a, second.out.splitlines()[-1].removeprefix("run_id: "))
+    (b,) = set(Store(root).runs()) - {a}
+    return MockPair(root, a, b)
 
 
 def mock_e3(pair: MockPair) -> tuple[list[str], str]:
@@ -528,9 +618,10 @@ def test_fr1_a_missing_store_refuses_on_every_verb_that_reads_it(tmp_path: Path)
     for index, label in enumerate(read_argvs("", tmp_path)):
         root = str(tmp_path / f"nowhere-{index}")
         r = run_cli(read_argvs(root, tmp_path / "out")[label])
-        assert r.code == 2, (label, r)
+        # A refusal exits 1 (spec section 5.2).
+        assert r.code == 1, (label, r)
         assert r.out == "", (label, r.out)
-        assert r.err == missing_message(root, FROM_FLAG, verb_of(label)), (label, r.err)
+        assert missing_problems(r.err, root, FROM_FLAG, verb_of(label)) == [], (label, r.err)
         assert "Traceback" not in r.err, label
 
 
@@ -540,8 +631,9 @@ def test_fr1_a_regular_file_is_not_a_store_so_is_dir_and_not_exists(tmp_path: Pa
     root = tmp_path / "a-file"
     root.write_text("not a store\n")
     r = run_cli(read_argvs(str(root), tmp_path / "out")[verb])
-    assert r.code == 2, r
-    assert r.out == "" and r.err == missing_message(str(root), FROM_FLAG, verb), r
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1, r
+    assert r.out == "" and missing_problems(r.err, str(root), FROM_FLAG, verb) == [], r
 
 
 def make_empty_root(tmp_path: Path) -> Path:
@@ -559,9 +651,10 @@ def test_fr2_an_empty_store_refuses_on_every_read_verb_but_runs(tmp_path: Path) 
         if label == "runs":
             continue
         r = run_cli(argv)
-        assert r.code == 2, (label, r)
+        # A refusal exits 1 (spec section 5.2).
+        assert r.code == 1, (label, r)
         assert r.out == "", (label, r.out)
-        assert r.err == empty_message(str(root), FROM_FLAG, verb_of(label)), (label, r.err)
+        assert empty_problems(r.err, str(root), FROM_FLAG, verb_of(label)) == [], (label, r.err)
         assert "unknown run" not in r.err, label
 
 
@@ -570,7 +663,7 @@ def test_fr3_runs_on_an_empty_store_exits_zero_says_so_on_stderr_and_keeps_its_s
     r = run_cli(["--store", str(root), "runs"])
     assert r.code == 0, r
     assert r.out == f"store: {root}\n" + RUNS_HEADER, r.out
-    assert r.err == empty_runs_note(str(root), FROM_FLAG), r.err
+    assert empty_runs_problems(r.err, str(root), FROM_FLAG) == [], r.err
 
 
 @pytest.mark.parametrize("how", ["flag", "env", "default", "empty env"])
@@ -590,8 +683,9 @@ def test_fr4_the_source_clause_is_the_resolution_that_happened_and_only_that_one
         monkeypatch.setenv("POISSON_PROVE_STORE", "")
         argv, root, source = ["runs"], "prove-runs", FROM_DEFAULT
     r = run_cli(argv)
-    assert r.code == 2 and r.out == "", r
-    assert r.err == missing_message(root, source, "runs"), r.err
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1 and r.out == "", r
+    assert missing_problems(r.err, root, source, "runs") == [], r.err
     assert [clause for clause in SOURCES if clause in r.err] == [source], r.err
     if how == "flag":
         assert str(env) not in r.err
@@ -613,9 +707,10 @@ def test_fr4_the_empty_store_messages_name_the_same_three_sources(tmp_path: Path
     root.mkdir()
     shown = str(root) if how != "default" else "prove-runs"
     read = run_cli([*flags, "diff", GO1_A, GO1_B, "--event", "fell"])
-    assert read.code == 2 and read.out == "" and read.err == empty_message(shown, source, "diff"), read
+    # A refusal exits 1 (spec section 5.2).
+    assert read.code == 1 and read.out == "" and empty_problems(read.err, shown, source, "diff") == [], read
     listed_runs = run_cli([*flags, "runs"])
-    assert listed_runs.code == 0 and listed_runs.err == empty_runs_note(shown, source), listed_runs
+    assert listed_runs.code == 0 and empty_runs_problems(listed_runs.err, shown, source) == [], listed_runs
     assert [clause for clause in SOURCES if clause in read.err] == [source] == [clause for clause in SOURCES if clause in listed_runs.err]
 
 
@@ -634,14 +729,16 @@ def test_fr5_a_populated_store_is_silent_on_stderr(tmp_path: Path, which: str) -
 def test_fr5_an_unknown_run_in_a_populated_store_keeps_its_message() -> None:
     """Green before and after. A7's Go1 verb digests (P7-10) carry the rest of FR5's clause."""
     r = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, "no-such-run", "--event", "fell"])
-    assert r.code == 2 and r.out == "" and r.err == "error: unknown run: 'no-such-run'\n", r
+    # A refusal exits 1, and names the run bare, never as a Python repr (spec sections 5.2 and 5.4).
+    assert r.code == 1 and r.out == "" and unknown_run_problems(r.err, "no-such-run") == [], r
 
 
 def test_fr6_refusing_never_creates_the_missing_root(tmp_path: Path) -> None:
     root = tmp_path / "must-stay-absent"
     for label, argv in read_argvs(str(root), tmp_path / "out").items():
         r = run_cli(argv)
-        assert r.code == 2, (label, r)
+        # A refusal exits 1 (spec section 5.2).
+        assert r.code == 1, (label, r)
         assert not root.exists(), label
     assert listing(tmp_path) == [], listing(tmp_path)
 
@@ -651,7 +748,8 @@ def test_fr6_refusing_and_listing_never_touch_an_empty_root(tmp_path: Path) -> N
     before = listing(root)
     for label, argv in read_argvs(str(root), tmp_path / "out").items():
         r = run_cli(argv)
-        assert r.code == (0 if label == "runs" else 2), (label, r)
+        # A refusal exits 1 (spec section 5.2).
+        assert r.code == (0 if label == "runs" else 1), (label, r)
         assert r.err != "", label
         assert listing(root) == before, label
     assert listing(tmp_path) == ["empty", *[f"empty/{p}" for p in before]], listing(tmp_path)
@@ -669,9 +767,10 @@ def test_fr6_sweep_is_never_gated_and_creates_the_store(tmp_path: Path) -> None:
 def test_fr7_the_create_line_is_a_command_that_survives_a_shell(tmp_path: Path, name: str) -> None:
     root = tmp_path / name
     r = run_cli(["--store", str(root), "diff", GO1_A, GO1_B, "--event", "fell"])
-    assert r.code == 2, r
-    assert command_from(r.err, "to create one there") == ["poisson-prove", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"], r.err
-    assert r.err == missing_message(str(root), FROM_FLAG, "diff"), r.err
+    # A refusal exits 1, and its create hint is a command on a next line (spec sections 5.2 and 5.4).
+    assert r.code == 1, r
+    assert ["poisson-prove", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"] in hinted_commands(r.err), r.err
+    assert missing_problems(r.err, str(root), FROM_FLAG, "diff") == [], r.err
 
 
 def test_fr7_the_empty_store_hint_lines_are_commands_that_survive_a_shell(tmp_path: Path) -> None:
@@ -679,10 +778,11 @@ def test_fr7_the_empty_store_hint_lines_are_commands_that_survive_a_shell(tmp_pa
     root.mkdir()
     expected = ["poisson-prove", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"]
     read = run_cli(["--store", str(root), "check", GO1_A, GO1_B, "--event", "fell"])
-    assert read.code == 2 and command_from(read.err, "to write the first run there") == expected, read.err
+    # A refusal exits 1, and its hint is a command on a next line (spec sections 5.2 and 5.4).
+    assert read.code == 1 and expected in hinted_commands(read.err), read.err
     listed = run_cli(["--store", str(root), "runs"])
-    assert listed.code == 0 and command_from(listed.err, "to write the first run there") == expected, listed.err
-    assert read.err == empty_message(str(root), FROM_FLAG, "check") and listed.err == empty_runs_note(str(root), FROM_FLAG)
+    assert listed.code == 0 and expected in hinted_commands(listed.err), listed.err
+    assert empty_problems(read.err, str(root), FROM_FLAG, "check") == [] and empty_runs_problems(listed.err, str(root), FROM_FLAG) == []
 
 
 # ---------- FR8 to FR13: E3, the missing flag ----------
@@ -696,8 +796,9 @@ def go1_argv(label: str, *extra: str) -> list[str]:
 def test_fr8_report_without_x_lists_the_axes_and_events_instead_of_failing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, label: str) -> None:
     monkeypatch.chdir(tmp_path)
     r = run_cli(go1_argv(label))
-    assert r.code == 2 and r.out == "", r
-    assert r.err == E3_GO1[label][1], r.err
+    # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
+    assert r.code == 1 and r.out == "", r
+    assert e3_problems(r.err, E3_GO1[label][1]) == [], r.err
     assert "usage:" not in r.err
     assert listing(tmp_path) == [], "the default --out directory was created"
 
@@ -706,7 +807,8 @@ def test_fr8_report_without_x_lists_on_the_mock_pair_too(tmp_path: Path, monkeyp
     monkeypatch.chdir(tmp_path)
     argv, expected = mock_e3(mock_pair)
     r = run_cli(argv)
-    assert r.code == 2 and r.out == "" and r.err == expected, r
+    # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
+    assert r.code == 1 and r.out == "" and e3_problems(r.err, expected) == [], r
     assert "usage:" not in r.err
     assert listing(tmp_path) == []
 
@@ -716,16 +818,18 @@ def test_fr8_report_without_x_lists_on_the_mock_pair_too(tmp_path: Path, monkeyp
 def test_fr9_serve_without_x_or_event_lists_instead_of_failing(monkeypatch: pytest.MonkeyPatch, label: str, as_json: bool) -> None:
     calls = arm_tripwires(monkeypatch, "serve_page")
     r = run_cli(go1_argv(label, *(["--json"] if as_json else [])))
-    assert r.code == 2 and r.out == "", r
-    assert r.err == E3_GO1[label][1], r.err
+    # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
+    assert r.code == 1 and r.out == "", r
+    assert e3_problems(r.err, E3_GO1[label][1]) == [], r.err
     assert calls == []
 
 
 @pytest.mark.parametrize("label", ["check, no --event", "inspect, no --event"])
 def test_fr10_check_and_inspect_without_event_list_and_never_suggest(label: str) -> None:
     r = run_cli(go1_argv(label))
-    assert r.code == 2 and r.out == "", r
-    assert r.err == E3_GO1[label][1], r.err
+    # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
+    assert r.code == 1 and r.out == "", r
+    assert e3_problems(r.err, E3_GO1[label][1]) == [], r.err
     assert "Inferred events" not in r.err and "Inferred events" not in r.out
 
 
@@ -742,8 +846,9 @@ OUTCOME_TIMEOUT_CELLS = [({"cell": "c0"}, {"fell": 4, "timeout": 6}, {"timeout":
 def test_fr10_inspect_adds_timeout_only_when_rows_timed_out_and_it_is_not_already_an_outcome(tmp_path: Path, cells: list[Any], events: str) -> None:
     write_run(Store(tmp_path), "t1", cells)
     r = run_cli(["--store", str(tmp_path), "inspect", "t1"])
-    assert r.code == 2 and r.out == "", r
-    assert r.err == f"error: inspect requires --event NAME, which was not given. t1 carries:\n  events: {events}\n", r.err
+    # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
+    assert r.code == 1 and r.out == "", r
+    assert e3_problems(r.err, f"error: inspect requires --event NAME, which was not given. t1 carries:\n  events: {events}\n") == [], r.err
 
 
 # FR11: the listed vocabulary is the stored vocabulary.
@@ -781,9 +886,10 @@ def write_spec(store: Store, run_id: str, rows: Sequence[tuple[dict[str, Any], s
 
 
 def listed(err: str, label: str) -> str:
-    lines = [line for line in err.splitlines() if line.startswith(f"  {label}: ")]
-    assert len(lines) == 1, (label, err)
-    return lines[0].removeprefix(f"  {label}: ")
+    # The list may sit inside the error line now, not on an indented line of its own (spec section 5.4).
+    values = listed_values(err, label)
+    assert len(values) == 1, (label, err)
+    return values[0]
 
 
 @PROPERTY
@@ -798,12 +904,13 @@ def test_fr11_the_listed_axes_and_events_are_the_stored_ones(a: list[Any], b: li
         events = list(competing_set(fa, fb))
         for verb, argv in (("report", ["report", "ra", "rb"]), ("check", ["check", "ra", "rb"])):
             r = run_cli(["--store", tmp, *argv])
-            assert r.code == 2 and r.out == "", (verb, r)
+            # A refusal exits 1 (spec section 5.2).
+            assert r.code == 1 and r.out == "", (verb, r)
             assert listed(r.err, "events") == (", ".join(events) or "none stored"), (verb, r.err)
             if verb == "report":
                 assert listed(r.err, "axes") == ", ".join(axes), r.err
             else:
-                assert "  axes:" not in r.err
+                assert listed_values(r.err, "axes") == [], r.err
 
 
 @PROPERTY
@@ -815,18 +922,21 @@ def test_fr11_the_listed_events_of_a_single_run_are_its_outcomes_and_timeout_onl
         frame = store.read("ra", meta=False)
         events = set(competing_set(frame)) | ({"timeout"} if store.tally("ra").timed_out else set())
         r = run_cli(["--store", tmp, "inspect", "ra"])
-        assert r.code == 2 and r.out == "", r
+        # A refusal exits 1 (spec section 5.2).
+        assert r.code == 1 and r.out == "", r
         assert listed(r.err, "events") == (", ".join(sorted(events)) or "none stored"), r.err
 
 
 def known_keys_of(err: str) -> list[str]:
-    match = re.search(r"known keys: (\[.*\])", err)
+    # The keys are shown as their items, never as a Python list (spec section 5.4).
+    match = re.search(r"known keys: (.+?)\.?$", err, flags=re.MULTILINE)
     assert match, err
-    return list(ast.literal_eval(match.group(1)))
+    return match.group(1).split(", ")
 
 
 def present_of(err: str) -> str:
-    match = re.search(r"Present: (.*)\.$", err.strip())
+    # The list may be followed by next lines now (spec section 5.4).
+    match = re.search(r"Present: (.*?)\.?$", err, flags=re.MULTILINE)
     assert match, err
     return match.group(1)
 
@@ -845,9 +955,10 @@ def test_fr11_the_listed_axes_equal_the_known_keys_the_axis_error_prints(which: 
     provokes. The two agree wherever every config is compared."""
     store, a, b, event = pair_of(which, request)
     listing_run = run_cli([*store, "report", a, b])
-    assert listing_run.code == 2, listing_run
+    # A refusal exits 1 (spec section 5.2).
+    assert listing_run.code == 1, listing_run
     wrong = run_cli([*store, "serve", a, b, "--event", event, "--x", "nope", "--permutations", "50"])
-    assert wrong.code == 2, wrong
+    assert wrong.code == 1, wrong
     assert ", ".join(known_keys_of(wrong.err)) == listed(listing_run.err, "axes")
 
 
@@ -855,9 +966,10 @@ def test_fr11_the_listed_axes_equal_the_known_keys_the_axis_error_prints(which: 
 def test_fr11_the_listed_events_equal_the_present_list_the_unknown_event_error_prints(which: str, request: pytest.FixtureRequest) -> None:
     store, a, b, _ = pair_of(which, request)
     listing_run = run_cli([*store, "check", a, b])
-    assert listing_run.code == 2, listing_run
+    # A refusal exits 1 (spec section 5.2).
+    assert listing_run.code == 1, listing_run
     wrong = run_cli([*store, "check", a, b, "--event", "nope"])
-    assert wrong.code == 2, wrong
+    assert wrong.code == 1, wrong
     assert present_of(wrong.err) == listed(listing_run.err, "events")
 
 
@@ -870,12 +982,13 @@ def test_fr11_the_axes_are_the_config_keys_and_never_the_manifests_axis_types(tm
             axis_types={"declared_only": "categorical"},
         )
     r = run_cli(["--store", str(tmp_path), "report", "dis-a", "dis-b"])
-    assert r.code == 2 and r.out == "", r
-    assert r.err == (
+    # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
+    assert r.code == 1 and r.out == "", r
+    assert e3_problems(r.err, (
         "error: report requires --x AXIS, which was not given. dis-a and dis-b carry:\n"
         "  axes: real_a, real_b\n"
         "  events: fell, ok\n"
-    ), r.err
+    )) == [], r.err
 
 
 def e3_cases(pair: MockPair) -> list[tuple[str, list[str], str]]:
@@ -889,7 +1002,8 @@ def test_fr12_the_listing_does_no_work(monkeypatch: pytest.MonkeyPatch, tmp_path
     calls = arm_tripwires(monkeypatch, *WORK_NAMES)
     for label, argv, expected in e3_cases(mock_pair):
         r = run_cli(argv)
-        assert r.code == 2 and r.out == "" and r.err == expected, (label, r)
+        # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
+        assert r.code == 1 and r.out == "" and e3_problems(r.err, expected) == [], (label, r)
     assert calls == [], calls
     assert listing(tmp_path) == []
 
@@ -900,8 +1014,10 @@ def test_fr12_a_non_empty_out_does_not_pre_empt_the_listing(tmp_path: Path, labe
     out.mkdir()
     (out / "keep.txt").write_text("already here\n")
     r = run_cli(go1_argv(label, "--out", str(out)))
-    assert r.code == 2 and r.out == "" and r.err == E3_GO1[label][1], r
-    assert "--out" not in r.err
+    # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
+    assert r.code == 1 and r.out == "" and e3_problems(r.err, E3_GO1[label][1]) == [], r
+    # The problem is stated on the error line; a next line is a command and may repeat the given flags.
+    assert "--out" not in r.err.partition("\n")[0]
     assert listing(out) == ["keep.txt"]
 
 
@@ -917,27 +1033,31 @@ BARE_UNKNOWN = {"report": ["report", GO1_A, "no-such-run"], "serve": ["serve", G
 def test_fr12_a_missing_store_outranks_a_missing_flag(tmp_path: Path, verb: str) -> None:
     root = str(tmp_path / "nowhere")
     r = run_cli(["--store", root, *BARE[verb]])
-    assert r.code == 2 and r.out == "" and r.err == missing_message(root, FROM_FLAG, verb), r
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1 and r.out == "" and missing_problems(r.err, root, FROM_FLAG, verb) == [], r
 
 
 @pytest.mark.parametrize("verb", ["report", "serve", "check", "inspect"])
 def test_fr12_an_empty_store_outranks_a_missing_flag(tmp_path: Path, verb: str) -> None:
     root = make_empty_root(tmp_path)
     r = run_cli(["--store", str(root), *BARE[verb]])
-    assert r.code == 2 and r.out == "" and r.err == empty_message(str(root), FROM_FLAG, verb), r
+    # A refusal exits 1 (spec section 5.2).
+    assert r.code == 1 and r.out == "" and empty_problems(r.err, str(root), FROM_FLAG, verb) == [], r
 
 
 @pytest.mark.parametrize("verb", ["report", "serve"])
 def test_fr12_a_wrong_arity_outranks_a_missing_flag(verb: str) -> None:
     message, argv = ARITY[verb]
     r = run_cli(["--store", str(GO1_ROOT), *argv])
-    assert r.code == 2 and r.out == "" and r.err == message, r
+    # A wrong command line still exits 2; its error line is followed only by next lines (spec section 5.4).
+    assert r.code == 2 and r.out == "" and r.err.partition("\n")[0] == message.rstrip("\n") and refusal_shape(r.err) == [], r
 
 
 @pytest.mark.parametrize("verb", ["report", "serve", "check", "inspect"])
 def test_fr12_an_unknown_run_outranks_a_missing_flag(verb: str) -> None:
     r = run_cli(["--store", str(GO1_ROOT), *BARE_UNKNOWN[verb]])
-    assert r.code == 2 and r.out == "" and r.err == "error: unknown run: 'no-such-run'\n", r
+    # A refusal exits 1, and names the run bare, never as a Python repr (spec sections 5.2 and 5.4).
+    assert r.code == 1 and r.out == "" and unknown_run_problems(r.err, "no-such-run") == [], r
 
 
 # FR13: the parser.
@@ -973,7 +1093,10 @@ def help_entries(text: str) -> dict[str, str]:
 
 @pytest.mark.parametrize(("verb", "token"), [("report", "[--x AXIS]"), ("serve", "[--x AXIS]"), ("inspect", "[--event NAME]")])
 def test_fr13_the_usage_line_no_longer_requires_the_flag(verb: str, token: str) -> None:
-    assert token in usage_of(help_text(verb)), usage_of(help_text(verb))
+    usage = usage_of(help_text(verb))
+    # The flag is shown required in the usage line, while a missing one is still the command's own
+    # refusal, listing what the runs carry (spec sections 5.3 and 5.4).
+    assert token.strip("[]") in usage and token not in usage, usage
 
 
 @pytest.mark.parametrize(("verb", "flag"), [("report", "--x"), ("serve", "--x"), ("inspect", "--event")])
@@ -999,7 +1122,9 @@ FLAG_SETS = {
 def test_fr13_no_flag_is_added_or_removed(verb: str) -> None:
     """Green before and after (with V30 and W1): the parser edit removes ``required`` and nothing else."""
     flags = set(help_entries(help_text(verb))) - {"--help"}
-    assert flags == FLAG_SETS[verb], flags ^ FLAG_SETS[verb]
+    # Every verb gains the global options and --json, and nothing else (spec section 5.4).
+    expected = FLAG_SETS[verb] | {"--store", "--plain", "--debug", "--json"}
+    assert flags == expected, flags ^ expected
 
 
 def test_fr13_the_five_tree_flags_keep_diffs_help_on_report_and_serve() -> None:
@@ -1069,7 +1194,8 @@ def go1_ran(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Ran]:
                 "check": ["check", GO1_A, GO1_B, *extra],
             }[verb]
             r = run_cli([*store, *argv])
-            assert r.code in ((0, 1) if verb == "check" else (0,)), (verb, kind, r)  # a gate that ran passes or fails
+            # A gate that ran passes or fails; failed exits 4 (spec section 5.2).
+            assert r.code in ((0, 4) if verb == "check" else (0,)), (verb, kind, r)
             ran[f"{verb} {kind}"] = Ran(r, out)
     return ran
 
@@ -1268,14 +1394,15 @@ def test_fr18_all_is_main_and_diff_py_gains_no_module_level_name() -> None:
 
 
 def test_fr18_cli_py_imports_gain_shlex_and_nothing_else() -> None:
-    """Green before and after (L3, U14, I21 and the four BinOp guards carry the rest of FR18): ``shlex`` may
-    arrive, and no other import may."""
+    """Green before and after (L3, U14, I21 and the four BinOp guards carry the rest of FR18).
+
+    PF1 (spec section 5) rewrites ``cli.py`` -- its errors, numbers, help and the plan -- so the
+    exact import set no longer holds; what is kept is the guard behind it: ``cli.py`` gains no
+    import from outside the standard library and Prove's own modules (the type-checking imports it
+    already had stay allowed; Rich, when it arrives, is imported by a private rendering module, Q20)."""
     now = imports_of(PACKAGE / "cli.py")
-    # PF0 (Q7, Q8, section 2.5): cli.py reads the old store variable and the old default folder
-    # through ``poisson_prove._compat``, which may arrive too, under either import spelling.
-    via_compat = {i for i in now if i == ("poisson_prove", "_compat") or i[0] == "poisson_prove._compat"}
-    assert now - CLI_IMPORTS - via_compat <= {("shlex", None)}, now - CLI_IMPORTS
-    assert CLI_IMPORTS - now == set(), CLI_IMPORTS - now
+    outside = {i for i in now if i[0].split(".")[0] not in sys.stdlib_module_names and i[0].split(".")[0] != "poisson_prove"}
+    assert outside - CLI_IMPORTS == set(), outside - CLI_IMPORTS
 
 
 # ---------- FR19: check never passes on a missing argument ----------
@@ -1320,7 +1447,8 @@ def test_fr19_the_gate_pairs_pass_and_fail_when_the_gate_runs(gate_pairs: dict[s
     its gate on these pairs, one would exit 0 and one would exit 1, and a listing that fell through to the
     gate would show it."""
     assert run_cli(gate_pairs["pass"].argv("--event", "fell")).code == 0
-    assert run_cli(gate_pairs["fail"].argv("--event", "fell")).code == 1
+    # A failed check exits 4 (spec section 5.2).
+    assert run_cli(gate_pairs["fail"].argv("--event", "fell")).code == 4
     assert run_cli(gate_pairs["go1"].argv("--event", "fell")).code == 0
     store = Store(gate_pairs["fail"].root)
     events, non_event = infer_events(store.read("fail-a", meta=False), store.read("fail-b", meta=False))
@@ -1335,8 +1463,11 @@ def test_fr19_check_that_lists_puts_the_list_on_stderr_and_none_of_it_on_stdout(
     pair = gate_pairs[name]
     for extra in CHECK_VARIANTS:
         r = run_cli(pair.argv(*extra))
-        assert f"  events: {pair.events}" in r.err.splitlines(), (extra, r.err)
-        assert "  events:" not in r.out and "PASS" not in r.out and "FAIL" not in r.out, (extra, r.out)
+        # The list may sit inside the error line now (spec section 5.4); the gate's words are passed and
+        # failed (section 5.3).
+        assert listed_values(r.err, "events") == [pair.events], (extra, r.err)
+        assert "events:" not in r.out and "PASS" not in r.out and "FAIL" not in r.out, (extra, r.out)
+        assert "passed" not in r.out and "failed" not in r.out, (extra, r.out)
 
 
 @pytest.mark.parametrize("name", ["go1", "mock", "pass", "fail"])
@@ -1353,9 +1484,10 @@ def test_fr19_check_that_lists_exits_two_never_zero_or_one_and_never_reaches_the
     assert calls == [], calls
     assert armed == plain
     for extra, r in zip(CHECK_VARIANTS, plain, strict=True):
-        assert r.code == 2, (extra, r)
+        # A refusal exits 1, and a failed check 4 (spec section 5.2).
+        assert r.code == 1, (extra, r)
         assert r.code != 0, (extra, "a listing must never pass")
-        assert r.code != 1, (extra, "1 is a FAIL: the gate ran")
+        assert r.code != 4, (extra, "4 is a failed check: the gate ran")
         assert r.out == "", (extra, r.out)
         assert r.err != "", extra
 
@@ -1405,11 +1537,14 @@ def test_fr20_a_tie_on_a_single_run_refuses_byte_for_byte_as_before_with_nothing
     monkeypatch.chdir(tmp_path)
     write_run(Store(tmp_path / "store"), "tie", [({"cell": "c"}, {"fell": 16, "survived": 16}, {})])
     r = run_cli(["--store", str(tmp_path / "store"), "report", "tie", "--x", "cell"])
-    assert r.code == 2 and r.out == "", r
-    assert r.err == (
-        "error: cannot infer the event set: most frequent outcome is tied between ['fell', 'survived'] at 16 rows each; "
-        "outcome counts: {'fell': 16, 'survived': 16}; pass events= explicitly; outcome counts: fell=16, survived=16; "
-        "pass --event NAME (repeatable)\n"
-    ), r.err
+    # A refusal exits 1, is one error line then only next lines, and shows no Python repr (spec sections
+    # 5.2 and 5.4), so its facts are checked rather than its old bytes: the tie, both outcomes, their
+    # count, and the --event hint.
+    assert r.code == 1 and r.out == "", r
+    first = r.err.partition("\n")[0]
+    assert refusal_shape(r.err) == [] and "tied" in first, r.err
+    assert "fell" in first and "survived" in first and "16" in first, r.err
+    assert "--event" in r.err, r.err
+    assert "['" not in r.err and "{'" not in r.err and "'fell'" not in r.err, r.err
     assert listing(tmp_path) == ["store", *[f"store/{p}" for p in listing(tmp_path / "store")]]
 

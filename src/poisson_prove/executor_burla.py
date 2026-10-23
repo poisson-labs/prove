@@ -615,7 +615,9 @@ def _head_line(options: BurlaOptions, bundle: _Bundle) -> str:
 
 def preflight_burla(p: Plan, import_path: str, options: BurlaOptions) -> str:
     """Build the bundle, check it covers the target, rehearse job 0 in the worker's view, read
-    the ledger and estimate. Any refusal happens here; returns the block M10 prints."""
+    the ledger and estimate. Any refusal happens here; returns the block M10 prints. The cap
+    refusal is raised last and carries the block as its ``plan`` attribute, so the command line
+    can keep the plan on screen when it refuses."""
     spec = p.spec
     bundle = _build_bundle(options.packages)
     carried = set(bundle.packages)
@@ -640,7 +642,7 @@ def preflight_burla(p: Plan, import_path: str, options: BurlaOptions) -> str:
         )
     ledger = _Ledger(options.ledger)
     estimate = estimate_burla_cost(p, options)
-    total = _check_cap(ledger, estimate, options)
+    total = ledger.total()
     slots = options.nodes * options.slots_per_node
     mde = preflight_mde(spec)
     chaos = spec.chaos
@@ -676,7 +678,13 @@ def preflight_burla(p: Plan, import_path: str, options: BurlaOptions) -> str:
         lines.append(capture_line)
     if p.resumed:
         lines.append(f"Resuming {p.run_id}: {p.already_stored} stored, {len(p.pairs)} to run")
-    return "\n".join(lines) + "\n"
+    text = "\n".join(lines) + "\n"
+    try:
+        _check_cap(ledger, estimate, options)
+    except BurlaCostGuard as exc:
+        exc.plan = text  # type: ignore[attr-defined]
+        raise
+    return text
 
 
 # ---------- the launcher and the mapper ----------

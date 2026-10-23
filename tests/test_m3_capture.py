@@ -55,6 +55,8 @@ from __future__ import annotations
 import ast
 import dataclasses
 import importlib
+import importlib.machinery
+import importlib.util
 import inspect
 import json
 import logging
@@ -1242,7 +1244,21 @@ def test_c11_a_span_closing_after_its_episode_falls_on_the_floor() -> None:
 
 def capture_lines(out: str) -> tuple[list[str], list[int]]:
     lines = out.splitlines()
-    return lines, [i for i, line in enumerate(lines) if line.startswith("Capture:")]
+    # The pre-flight lines now follow the plan line and may be indented (spec section 5.3).
+    return lines, [i for i, line in enumerate(lines) if line.lstrip().startswith("Capture:")]
+
+
+class LoggedStringIO(StringIO):
+    """A StringIO that also appends every write to a log shared with another stream, so the
+    order of writes across stdout and stderr can be read back."""
+
+    def __init__(self, log: list[str]) -> None:
+        super().__init__()
+        self.log = log
+
+    def write(self, s: str) -> int:
+        self.log.append(s)
+        return super().write(s)
 
 
 #: These fixtures are two-cell plumbing grids, not powered designs: N is 1, 2 or 4 and
@@ -1256,18 +1272,25 @@ PLUMBING_MAX_MDE = ("--max-mde", "0.5")
 def test_c12_preflight_prints_one_capture_line_before_the_prompt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.syspath_prepend(str(register_fake_instrumentors(tmp_path / "fake")))
     toml = write(tmp_path / "sweep.toml", mock_toml(capture={"instrument": [FAKE_INSTRUMENTOR]}))
-    out, err = StringIO(), StringIO()
+    log: list[str] = []
+    out, err = LoggedStringIO(log), LoggedStringIO(log)
     code = cli.main(
         ["--store", str(tmp_path / "store"), "sweep", str(toml), "--target", MOCK_ROLLOUT,
          *PLUMBING_MAX_MDE],
         stdout=out, stderr=err, stdin=TtyStringIO("n\n"),
     )
-    assert code == 2 and "Traceback" not in out.getvalue() + err.getvalue()
+    # Declining is a refusal and exits 1 (spec section 5.2).
+    assert code == 1 and "Traceback" not in out.getvalue() + err.getvalue()
     lines, found = capture_lines(out.getvalue())
     assert len(found) == 1, out.getvalue()
     assert FAKE_INSTRUMENTOR in lines[found[0]], lines[found[0]]
-    prompt = [i for i, line in enumerate(lines) if "Proceed? [y/N]" in line]
-    assert prompt and found[0] < prompt[0], out.getvalue()
+    # The question now goes to stderr (spec section 5.3); the shared log keeps the order of
+    # both streams, so the capture line is still checked to come before it.
+    assert "[y/N]" in err.getvalue(), err.getvalue()
+    both = "".join(log).splitlines()
+    capture_at = [i for i, line in enumerate(both) if line.lstrip().startswith("Capture:")]
+    prompt = [i for i, line in enumerate(both) if "[y/N]" in line]
+    assert capture_at and prompt and capture_at[0] < prompt[0], "".join(log)
     assert Store(tmp_path / "store").runs() == []
     assert not _global_provider_is_sdk(), "a declined pre-flight installed a provider"
 
@@ -1282,9 +1305,11 @@ def test_c12_yes_does_not_suppress_the_capture_line(tmp_path: Path) -> None:
     lines, found = capture_lines(r["out"])
     assert len(found) == 1, r["out"]
     assert FAKE_INSTRUMENTOR in lines[found[0]]
-    run_id_line = [i for i, line in enumerate(lines) if line.startswith("run_id: ")]
-    assert run_id_line and found[0] < run_id_line[0], r["out"]
-    run_id = lines[run_id_line[0]].split(" ", 1)[1]
+    # The sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3); the capture
+    # line still comes before the end, and the run is the one the empty store gained.
+    done_line = [i for i, line in enumerate(lines) if line.startswith("done")]
+    assert done_line and found[0] < done_line[0], r["out"]
+    (run_id,) = Store(tmp_path / "store").runs()
     record = Store(tmp_path / "store").manifest(run_id).environment["capture"]
     assert record["active"] is True and record["instrumented"] == [FAKE_INSTRUMENTOR], record
 
@@ -1296,6 +1321,8 @@ def test_c12_the_modal_preflight_prints_the_capture_line_too(tmp_path: Path, mon
         calls.append(p)
         return RunSummary(run_id=p.run_id, n_ok=len(p.pairs), n_errored=0, n_timeout=0, wall_time=0.0, stopped_by=None, complete=True)
 
+    # A missing modal package is now refused before the plan, so modal must import here.
+    monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
     monkeypatch.setattr(cli, "run_modal", fake_run_modal)
     monkeypatch.syspath_prepend(str(register_fake_instrumentors(tmp_path / "fake")))
     toml = write(tmp_path / "sweep.toml", mock_toml(capture={"instrument": [FAKE_INSTRUMENTOR]}, replicates=1))

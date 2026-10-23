@@ -25,7 +25,7 @@ from xml.sax.saxutils import escape as _xml_escape
 
 import pandas as pd
 
-from poisson_prove import __version__
+from poisson_prove import __version__, _look
 from poisson_prove._compat import old_writer_line, version_as_recorded
 from poisson_prove.diff import _CENSORED, _PAIRED_METHODS, DiffResult, EventDiff, MultiDiffResult
 from poisson_prove.store import RunManifest
@@ -93,7 +93,14 @@ def _fmt(value: Any, kind: str) -> str:
     scientific below 1e-3), "int", "coord" (an axis value), "num" (a plain number).
     Round-half-even is Python's own ``format``; ``-0.0`` and ``-0`` are normalised.
     """
-    if kind == "int":
+    if _look.active():
+        if kind in ("int", "seed"):
+            return _look.fmt_count(value) if kind == "int" else str(int(value))
+        if kind in ("pp1", "pp0"):
+            return _look.fmt_rate(value)
+        if kind == "sig3":
+            return _look.fmt_p(value)
+    if kind in ("int", "seed"):
         return str(int(value))
     if kind == "pp1":
         return _no_negative_zero(format(float(value) * 100, ".1f"))
@@ -113,6 +120,55 @@ def _fmt(value: Any, kind: str) -> str:
             return str(value)
         return _no_negative_zero(format(value, ".10g"))
     raise ReportError(f"unknown format kind {kind!r}")
+
+
+def _pp() -> str:
+    """The unit after a rate the library prints in points; nothing under the look, where the
+    number is a fraction."""
+    return "" if _look.active() else "pp"
+
+
+def _h(label: str) -> str:
+    """A table header for a column in points: ``label (pp)``, or the bare label under the look."""
+    return label if _look.active() else f"{label} (pp)"
+
+
+def _in_pp() -> str:
+    return "as fractions" if _look.active() else "in pp"
+
+
+def _unit() -> str:
+    return "fraction" if _look.active() else "pp"
+
+
+def _detail(text: str) -> str:
+    """A refusal's detail, written by the tree in the library's forms, respelled under the look."""
+    return _look.reprint(text) if _look.active() else text
+
+
+def _plain(make: Callable[[], str]) -> str:
+    """``make()`` rendered in the library's forms whatever the caller is inside."""
+    with _look.library():
+        return make()
+
+
+def _wrap_like(now: str, base: str, budget: int) -> list[str]:
+    """``now`` wrapped exactly where ``base`` wraps: the same words line for line, so a text
+    respelled under the look keeps the geometry the library's rendering has. Falls back to
+    wrapping ``now`` on its own when the two do not share their words."""
+    base_lines = _wrap(base, budget)
+    if now == base:
+        return base_lines
+    base_words, now_words = base.split(" "), now.split(" ")
+    if len(base_words) != len(now_words) or any(len(w) > budget for w in base_words):
+        return _wrap(now, budget)
+    lines: list[str] = []
+    k = 0
+    for line in base_lines:
+        n = len(line.split(" "))
+        lines.append(" ".join(now_words[k : k + n]))
+        k += n
+    return lines
 
 
 def _no_negative_zero(s: str) -> str:
@@ -253,6 +309,9 @@ class Report:
     n_absent: int
     n_present: int
     _bound: float = field(default=0.05, repr=False, compare=False)
+    #: ``honesty`` in the library's forms, whatever forms the report was built under; the
+    #: figure wraps its lines where the library's would.
+    _honesty_plain: str = field(default="", repr=False, compare=False)
     _event: str = field(default="", repr=False, compare=False)
     _methods: tuple[DiffResult, ...] = field(default=(), repr=False, compare=False)
     _survival: tuple[tuple[Cell, float, float], ...] | None = field(
@@ -546,12 +605,16 @@ def _honesty(
         cell = named[0]
         first = (
             f"Worst-powered unchanged cell ({_coord_text(spec, cell)}, n={_fmt(cell.n_a, 'int')}/"
-            f"{_fmt(cell.n_b, 'int')}) can only detect a {_fmt(max_mde_unchanged, 'pp0')}pp rise. "
+            f"{_fmt(cell.n_b, 'int')}) can only detect a "
+            f"{_fmt(max_mde_unchanged, 'pp0')}{_pp()} rise. "
             f'"{n_worse} worse" is an honest claim only above that.'
         )
     attaining = [c for c in present if c.mde == max_mde]
     overall = attaining[0] if attaining else max(present, key=lambda c: c.mde)
-    second = f"Worst-powered cell overall: {_fmt(max_mde, 'pp0')}pp ({_coord_text(spec, overall)})."
+    second = (
+        f"Worst-powered cell overall: {_fmt(max_mde, 'pp0')}{_pp()} "
+        f"({_coord_text(spec, overall)})."
+    )
     return first + "\n" + second
 
 
@@ -617,6 +680,7 @@ def _build_panel(
         y_values=y_values,
         headline=headline_of(present, n_safer, n_worse, n_unchanged),
         honesty=honesty_of(present, n_worse),
+        _honesty_plain=_plain(lambda: honesty_of(present, n_worse)),
         provenance=provenance,
         n_safer=n_safer,
         n_worse=n_worse,
@@ -646,6 +710,10 @@ _NO_INTERVAL_LINE = (
 _INTERVAL_COLUMN = "interval (pp)"
 
 
+def _interval_column() -> str:
+    return _h("interval")
+
+
 def _interval_lines(multi: MultiDiffResult) -> tuple[str, ...]:
     """S24's three interval facts, or the one ``R == 0`` line, unindented and unstyled.
 
@@ -665,6 +733,16 @@ def _interval_lines(multi: MultiDiffResult) -> tuple[str, ...]:
         return (_NO_INTERVAL_LINE,)
     constructed = [b for b in multi.intervals["basis"] if b != _CENSORED]
     basis = constructed[0] if constructed else _CENSORED
+    if _look.active():
+        return (
+            f"intervals: {multi.interval_level:.1%} (alpha* = {_look.fmt_p(multi.alpha_star)} = "
+            f"q x {_look.fmt_count(multi.n_rejected)} / {_look.fmt_count(multi.n_tests)} over "
+            f"the flat BH family), basis {basis}",
+            f"interval excludes zero, verdict unchanged: "
+            f"{_look.fmt_count(multi.n_interval_only)} cells",
+            f"verdict significant, interval covers zero: "
+            f"{_look.fmt_count(multi.n_verdict_only)} cells",
+        )
     return (
         f"intervals: {multi.interval_level:.4%} (alpha* = {multi.alpha_star:g} = "
         f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family), basis {basis}",
@@ -993,7 +1071,7 @@ def _multi_method_rows(
                 _fmt(ev.n_safer, "int"),
                 _fmt(ev.n_worse, "int"),
                 _fmt(ev.n_unchanged, "int"),
-                f"{_fmt(ev.max_mde, 'pp0')}pp",
+                f"{_fmt(ev.max_mde, 'pp0')}{_pp()}",
                 _fmt(m.q, "sig3"),
             ))
 
@@ -1243,7 +1321,7 @@ def build_survival_report(
         def headline(
             present: Sequence[Cell], n_safer: int, n_worse: int, n_unchanged: int, e: str = e
         ) -> str:
-            return f"{e}: cumulative incidence at horizon {_fmt(horizon, 'num')} (pp)"
+            return f"{e}: cumulative incidence at horizon {_fmt(horizon, 'num')} ({_unit()})"
 
         panels[e] = _build_panel(
             rows,
@@ -1342,16 +1420,26 @@ def _notch(x: int, y: int, w: int, h: int) -> str:
 def _legend_caption(rep: Report) -> str:
     if rep._mode == "rate":
         return (
-            f"F(horizon) = cumulative incidence at horizon {_fmt(rep._horizon, 'num')} in pp; "
+            f"F(horizon) = cumulative incidence at horizon {_fmt(rep._horizon, 'num')} {_in_pp()}; "
             f"event={rep._event}; blank = no data"
         )
     caption = (
-        f"delta = rate_b - rate_a in pp; event={rep._event}; negative is safer only if the event "
+        f"delta = rate_b - rate_a {_in_pp()}; event={rep._event}; negative is safer only if the "
+        f"event "
         f"is a failure; corner square = significant; blank = no data"
     )
     if rep._trades:
         caption += "; corner notches = trade (safer in one event, worse in another)"
     return caption
+
+
+def _honesty_lines(rep: Report, budget: int) -> list[list[str]]:
+    """The honesty block's lines wrapped where the library's rendering wraps them."""
+    plain = rep._honesty_plain.splitlines() if rep._honesty_plain else []
+    lines = rep.honesty.splitlines()
+    if len(plain) != len(lines):
+        plain = lines
+    return [_wrap_like(line, base, budget) for line, base in zip(lines, plain, strict=True)]
 
 
 def _grid_body(rep: Report) -> tuple[list[str], int, int]:
@@ -1365,10 +1453,12 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
     width = left + cols * cell_w + 24
     title_lines = _wrap(rep.spec.title, _wrap_budget(width, left, font + 2))
     headline_lines = _wrap(rep.headline, _wrap_budget(width, left, font))
-    caption_lines = _wrap(_legend_caption(rep), _wrap_budget(width, left, font - 2))
-    honesty_lines = [
-        _wrap(line, _wrap_budget(width, left, font - 2)) for line in rep.honesty.splitlines()
-    ]
+    caption_lines = _wrap_like(
+        _legend_caption(rep),
+        _plain(lambda: _legend_caption(rep)),
+        _wrap_budget(width, left, font - 2),
+    )
+    honesty_lines = _honesty_lines(rep, _wrap_budget(width, left, font - 2))
     top = 52 + 18 * (len(title_lines) - 1) + 12 * (len(headline_lines) - 1)
     bottom = (
         112 + 12 * (len(caption_lines) - 1) + 12 * sum(len(lines) - 1 for lines in honesty_lines)
@@ -1439,7 +1529,9 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
                 x = left + i * cell_w + cell_w // 2
                 y = top + j * cell_h + cell_h // 2 + (font - 2) // 2 - 1
                 value = c.rate_a if rep._mode == "rate" else c.delta
-                label = _truncate(_fmt(value, "pp1"), label_budget)
+                label = _fmt(value, "pp1")
+                if not _look.active():
+                    label = _truncate(label, label_budget)
                 out.append(f'<text x="{x}" y="{y}">{_xml_escape(label)}</text>')
         out.append("</g>")
 
@@ -1525,17 +1617,20 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
     width = left + axis_w + right
     title_lines = _wrap(rep.spec.title, _wrap_budget(width, left, font + 2))
     headline_lines = _wrap(rep.headline, _wrap_budget(width, left, font))
-    caption_text = (
-        f"point = delta (rate_b - rate_a, pp) on the shared scale; bracket = ±MDE, the minimum "
-        f"detectable effect from M6, not an interval estimate; event={rep._event}; "
-        f"corner square = significant"
+    def caption_text() -> str:
+        text = (
+            f"point = delta (rate_b - rate_a, {_unit()}) on the shared scale; bracket = ±MDE, "
+            f"the minimum detectable effect from M6, not an interval estimate; "
+            f"event={rep._event}; corner square = significant"
+        )
+        if rep._trades:
+            text += "; row notches = trade"
+        return text
+
+    caption_lines = _wrap_like(
+        caption_text(), _plain(caption_text), _wrap_budget(width, left, font - 2)
     )
-    if rep._trades:
-        caption_text += "; row notches = trade"
-    caption_lines = _wrap(caption_text, _wrap_budget(width, left, font - 2))
-    honesty_lines = [
-        _wrap(line, _wrap_budget(width, left, font - 2)) for line in rep.honesty.splitlines()
-    ]
+    honesty_lines = _honesty_lines(rep, _wrap_budget(width, left, font - 2))
     top = 52 + 18 * (len(title_lines) - 1) + 12 * (len(headline_lines) - 1)
     bottom = (
         112 + 12 * (len(caption_lines) - 1) + 12 * sum(len(lines) - 1 for lines in honesty_lines)
@@ -1704,7 +1799,7 @@ def _worst_table_rows(rep: Report) -> list[list[str]]:
                 _fmt(c.p, "sig3"),
                 _fmt(c.q, "sig3"),
                 c.verdict,
-                f"{_fmt(c.mde, 'pp0')}pp",
+                f"{_fmt(c.mde, 'pp0')}{_pp()}",
             ]
         )
         if rep._intervals:
@@ -1716,15 +1811,23 @@ _WORST_HEADER_TAIL = [
     "n (a/b)", "rate_a (pp)", "rate_b (pp)", "delta (pp)", "p", "q", "verdict", "MDE",
 ]
 _RATE_HEADER_TAIL = ["n", "F at horizon (pp)"]
+
+
+def _worst_header_tail() -> list[str]:
+    return ["n (a/b)", _h("rate_a"), _h("rate_b"), _h("delta"), "p", "q", "verdict", "MDE"]
+
+
+def _rate_header_tail() -> list[str]:
+    return ["n", _h("F at horizon")]
 _METHOD_HEADER = ["method", "pairing", "safer", "worse", "unchanged", "max MDE", "q"]
 
 
 def _worst_header(rep: Report) -> list[str]:
     if rep._mode == "rate":
-        return _axes_of(rep.spec) + _RATE_HEADER_TAIL
+        return _axes_of(rep.spec) + _rate_header_tail()
     # When ``R == 0`` M6 built no intervals and there is no column: a column that does not
     # exist cannot be read (the fault-lines table's rule, one table over).
-    tail = [*_WORST_HEADER_TAIL, _INTERVAL_COLUMN] if rep._intervals else list(_WORST_HEADER_TAIL)
+    tail = [*_worst_header_tail(), _interval_column()] if rep._intervals else _worst_header_tail()
     return _axes_of(rep.spec) + tail
 
 
@@ -1735,7 +1838,7 @@ def _method_row(d: DiffResult) -> list[str]:
         _fmt(d.n_safer, "int"),
         _fmt(d.n_worse, "int"),
         _fmt(d.n_unchanged, "int"),
-        f"{_fmt(d.max_mde, 'pp0')}pp",
+        f"{_fmt(d.max_mde, 'pp0')}{_pp()}",
         _fmt(d.q, "sig3"),
     ]
 
@@ -1773,6 +1876,8 @@ def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
             shown = _fmt(value, "num")
         elif isinstance(value, bool):
             shown = "true" if value else "false"
+        elif isinstance(value, int):
+            shown = _fmt(value, "int")
         elif isinstance(value, (list, tuple)):
             # An empty list reads ``none``: "nothing was missed" is a finding (A10).
             shown = ", ".join(str(v) for v in value) if value else "none"
@@ -1824,7 +1929,7 @@ def _render_markdown(rep: Report) -> str:
         parts += [
             "## Survival at horizon",
             "",
-            _md_table(axes + ["S_a at horizon (pp)", "S_b at horizon (pp)"], _survival_rows(rep)),
+            _md_table(axes + [_h("S_a at horizon"), _h("S_b at horizon")], _survival_rows(rep)),
             "",
         ]
     parts += [
@@ -1992,13 +2097,13 @@ def _omnibus_items(root: RootResult) -> list[_TreeItem]:
         for event in root.events
     ]
     return [
-        root.headline(),
+        _detail(root.headline()),
         f"min-p of location and dispersion; {_fmt(root.n_permutations, 'int')} within-cell "
-        f"permutations, {root.scheme}, seed {_fmt(root.seed, 'int')}",
+        f"permutations, {root.scheme}, seed {_fmt(root.seed, 'seed')}",
         f"p floor {_fmt(root.p_floor, 'sig3')}: the smallest p "
         f"{_fmt(root.n_permutations, 'int')} permutations can express; a p at the floor is a "
         "bound, not a measurement",
-        (["event", "mean delta (pp)", "p", "rms delta (pp)", "p"], rows),
+        (["event", _h("mean delta"), "p", _h("rms delta"), "p"], rows),
         f"informative cells: {_fmt(root.n_informative_cells, 'int')} of "
         f"{_fmt(root.n_cells, 'int')}; {_fmt(root.n_uninformative_cells, 'int')} unchanged by "
         "every exchange",
@@ -2019,12 +2124,12 @@ def _fault_lines_items(tree: TreeResult) -> list[_TreeItem]:
         f"{_fmt(grouping.size_median, 'num')} / max {_fmt(grouping.size_max, 'int')}; "
         f"{_fmt(fault.n_degenerate_groups, 'int')} degenerate; "
         f"{_fmt(grouping.n_resolvable_groups, 'int')} of {_fmt(grouping.n_groups, 'int')} "
-        f"groups resolve {_fmt(grouping.max_group_mde, 'pp0')}pp at alpha "
+        f"groups resolve {_fmt(grouping.max_group_mde, 'pp0')}{_pp()} at alpha "
         f"{_fmt(grouping.alpha_floor, 'sig3')}"
     ]
     for refusal in grouping.refused:
         items.append(
-            f"refused {refusal.key} ({refusal.rung}): {refusal.reason}; {refusal.detail} "
+            f"refused {refusal.key} ({refusal.rung}): {refusal.reason}; {_detail(refusal.detail)} "
             f"next: {refusal.next_rung}"
         )
     if fault.tested:
@@ -2048,7 +2153,7 @@ def _fault_lines_items(tree: TreeResult) -> list[_TreeItem]:
         "informative",
         "unchanged by every exchange",
         "units (a/b)",
-        "group MDE (pp)",
+        _h("group MDE"),
     ]
     if pair_swap:
         header.append("discordant pairs")
@@ -2062,7 +2167,7 @@ def _fault_lines_items(tree: TreeResult) -> list[_TreeItem]:
             _fmt(group.n_informative_cells, "int"),
             _fmt(group.n_uninformative_cells, "int"),
             f"{_fmt(group.n_a, 'int')}/{_fmt(group.n_b, 'int')}",
-            f"{_fmt(group.mde, 'pp1')}pp",
+            f"{_fmt(group.mde, 'pp1')}{_pp()}",
         ]
         if pair_swap:
             row.append(_fmt(group.n_discordant, "int"))
@@ -2097,7 +2202,7 @@ def _cells_items(leaves: Leaves, bound: Bound) -> list[_TreeItem]:
         items.append(
             f"{family.key}={family.label}: {_fmt(family.n_tests, 'int')} tests, "
             f"{_fmt(family.n_rejected, 'int')} rejected; cell MDE median "
-            f"{_fmt(family.mde_median, 'pp0')}pp / max {_fmt(family.mde_max, 'pp0')}pp"
+            f"{_fmt(family.mde_median, 'pp0')}{_pp()} / max {_fmt(family.mde_max, 'pp0')}{_pp()}"
         )
         rows = [
             [
@@ -2105,13 +2210,13 @@ def _cells_items(leaves: Leaves, bound: Bound) -> list[_TreeItem]:
                 leaf.event,
                 _fmt(leaf.delta, "pp1"),
                 _fmt(leaf.q_within, "sig3"),
-                f"{_fmt(leaf.mde, 'pp0')}pp",
+                f"{_fmt(leaf.mde, 'pp0')}{_pp()}",
             ]
             for leaf in family.cells
             if leaf.rejects
         ]
         if rows:
-            items.append((["cell", "event", "delta (pp)", "q", "MDE"], rows))
+            items.append((["cell", "event", _h("delta"), "q", "MDE"], rows))
     return items
 
 
@@ -2225,7 +2330,7 @@ def _render_html(rep: Report) -> str:
     if rep._survival is not None:
         parts += [
             "<h2>Survival at horizon</h2>",
-            _html_table(axes + ["S_a at horizon (pp)", "S_b at horizon (pp)"], _survival_rows(rep)),
+            _html_table(axes + [_h("S_a at horizon"), _h("S_b at horizon")], _survival_rows(rep)),
         ]
     parts += _html_close(rep.provenance)
     return "\n".join(parts) + "\n"

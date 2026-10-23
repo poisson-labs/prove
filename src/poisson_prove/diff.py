@@ -346,23 +346,31 @@ class DiffResult:
     max_mde_unchanged_cell: str | None = None  # config_hash attaining it; None if none unchanged
 
     def to_markdown(self) -> str:
+        from poisson_prove import _look
+
+        look = _look.active()
+        mde = _look.fmt_rate if look else (lambda x: f"{x:.4f}")
+        count = _look.fmt_count if look else str
+        shown = _look.fmt_hash if look else str
+        num = _look.fmt_num if look else str
         cols = list(CELLS_COLUMNS)
         lines = [
             f"Diff of `{self.event}` by {self.method} at q={self.q}: "
-            f"n_safer={self.n_safer}, n_worse={self.n_worse}, n_unchanged={self.n_unchanged}, "
-            f"n_not_comparable={self.n_not_comparable}, max_mde={self.max_mde:.4f}, "
+            f"n_safer={count(self.n_safer)}, n_worse={count(self.n_worse)}, "
+            f"n_unchanged={count(self.n_unchanged)}, "
+            f"n_not_comparable={count(self.n_not_comparable)}, max_mde={mde(self.max_mde)}, "
             f"method={self.method}, seed_identity_match={self.seed_identity_match}, "
             f"unpaired_analysis={self.unpaired_analysis}, t_unit={self.t_unit}, "
-            f"horizon={self.horizon}, truncated={self.truncated}, "
-            f"dropped_a={self.dropped_a}, dropped_b={self.dropped_b}, "
-            f"max_mde_unchanged={self.max_mde_unchanged:.4f}, "
-            f"max_mde_unchanged_cell={self.max_mde_unchanged_cell}",
+            f"horizon={num(self.horizon)}, truncated={count(self.truncated)}, "
+            f"dropped_a={count(self.dropped_a)}, dropped_b={count(self.dropped_b)}, "
+            f"max_mde_unchanged={mde(self.max_mde_unchanged)}, "
+            f"max_mde_unchanged_cell={shown(self.max_mde_unchanged_cell)}",
             "",
             "| " + " | ".join(cols) + " |",
             "|" + "|".join("---" for _ in cols) + "|",
         ]
         for row in self.cells.itertuples(index=False):
-            values = [_md_cell(getattr(row, col)) for col in cols]
+            values = [_md_cell(getattr(row, col), col) for col in cols]
             lines.append("| " + " | ".join(values) + " |")
         return "\n".join(lines) + "\n"
 
@@ -397,9 +405,29 @@ def _native(value: Any) -> Any:
     return value
 
 
-def _md_cell(value: Any) -> str:
+def _md_cell(value: Any, column: str | None = None) -> str:
+    """A table cell. With ``column`` named and the command line's look active, the cell takes
+    the look's forms for that column; otherwise the library's own."""
     if isinstance(value, Mapping):
         return json.dumps(_native(value), sort_keys=True, separators=(",", ":"))
+    if column is not None:
+        from poisson_prove import _look
+
+        if _look.active():
+            native = _native(value)
+            if column in ("config_hash", "max_mde_unchanged_cell"):
+                return _look.fmt_hash(native)
+            if isinstance(native, bool) or native is None or isinstance(native, str):
+                return str(native)
+            if column in ("p", "q"):
+                return _look.fmt_p(native)
+            if column in ("rate_a", "rate_b", "delta", "mde", "ci_lo", "ci_hi", "stat"):
+                return _look.fmt_rate(native)
+            if isinstance(native, int):
+                return _look.fmt_count(native)
+            if isinstance(native, float):
+                return _look.fmt_num(native)
+            return str(native)
     if isinstance(value, float) or isinstance(value, np.floating):
         return f"{float(value):.6g}"
     return str(_native(value))
@@ -753,6 +781,13 @@ class MultiDiffResult:
         return f"Trade: {safer} fell in {n} {'cell' if n == 1 else 'cells'} where {worse} rose."
 
     def to_markdown(self) -> str:
+        from poisson_prove import _look
+
+        look = _look.active()
+        mde = _look.fmt_rate if look else (lambda x: f"{x:.4f}")
+        count = _look.fmt_count if look else str
+        shown = _look.fmt_hash if look else str
+        num = _look.fmt_num if look else str
         lines: list[str] = []
         if self.inferred:
             lines.append(
@@ -767,9 +802,9 @@ class MultiDiffResult:
             f"method={self._method_label()}, "
             f"seed_identity_match={self.seed_identity_match}, "
             f"unpaired_analysis={self.unpaired_analysis}, q={self.q}, "
-            f"t_unit={self.t_unit}, horizon={self.horizon}, n_tests={self.n_tests}, "
-            f"n_not_comparable={self.n_not_comparable}, dropped_a={self.dropped_a}, "
-            f"dropped_b={self.dropped_b}, truncated={self.truncated}"
+            f"t_unit={self.t_unit}, horizon={num(self.horizon)}, n_tests={count(self.n_tests)}, "
+            f"n_not_comparable={count(self.n_not_comparable)}, dropped_a={count(self.dropped_a)}, "
+            f"dropped_b={count(self.dropped_b)}, truncated={count(self.truncated)}"
         )
         cols = list(CELLS_COLUMNS)
         for e in self._ordered_events():
@@ -777,17 +812,19 @@ class MultiDiffResult:
             lines.extend(
                 [
                     "",
-                    f"## {e}: n_safer={ev.n_safer}, n_worse={ev.n_worse}, "
-                    f"n_unchanged={ev.n_unchanged}, max_mde={ev.max_mde:.4f}, "
-                    f"max_mde_unchanged={ev.max_mde_unchanged:.4f}, "
-                    f"max_mde_unchanged_cell={ev.max_mde_unchanged_cell}",
+                    f"## {e}: n_safer={count(ev.n_safer)}, n_worse={count(ev.n_worse)}, "
+                    f"n_unchanged={count(ev.n_unchanged)}, max_mde={mde(ev.max_mde)}, "
+                    f"max_mde_unchanged={mde(ev.max_mde_unchanged)}, "
+                    f"max_mde_unchanged_cell={shown(ev.max_mde_unchanged_cell)}",
                     "",
                     "| " + " | ".join(cols) + " |",
                     "|" + "|".join("---" for _ in cols) + "|",
                 ]
             )
             for row in ev.cells.itertuples(index=False):
-                lines.append("| " + " | ".join(_md_cell(getattr(row, col)) for col in cols) + " |")
+                lines.append(
+                    "| " + " | ".join(_md_cell(getattr(row, col), col) for col in cols) + " |"
+                )
         if len(self.trades):
             tcols = list(_TRADES_COLUMNS)
             lines.extend(
@@ -801,7 +838,7 @@ class MultiDiffResult:
             )
             for row in self.trades.itertuples(index=False):
                 lines.append(
-                    f"| {row.config_hash} | {_md_cell(row.config)} | "
+                    f"| {shown(row.config_hash)} | {_md_cell(row.config)} | "
                     f"{', '.join(row.safer_events)} | {', '.join(row.worse_events)} |"
                 )
         return "\n".join(lines) + "\n"

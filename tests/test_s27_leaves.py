@@ -279,7 +279,8 @@ MULTI_JSON_SHA256 = {
     "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
 CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
-CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
+# CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
+# checks the facts the digest guarded instead (front-door spec section 14).
 CHECK_EXIT = 0
 SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
@@ -326,9 +327,11 @@ E14_SHA256 = {
 # Read off the file as it stands after every other re-mint, not predicted. Nothing pins this file, so the cascade ends here.
 # Re-minted by PF0 Session A: both files as its freeze commit moved them (the rename, Q4, and the
 # version field put back before their Go1 digests). Read off the two files after every other move.
+# Re-minted for the command line's new look (front-door spec sections 5.2 to 5.6 and 14): both files
+# moved their CLI assertions. Read off the two files after every other move, not predicted.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "9c0dd9e6d155f2920be19c40d47de7a1e7fd715294baea1d8e9763bf405bd66e",
-    "tests/test_s26_fault_lines.py": "53fcbc140ab7efbfb159abc70a293b35d398129149cbeac4b869d0677c641604",
+    "tests/test_s25_root.py": "87043026907f0f7de944cc633afbaebd374d1d15269b9171f0f340b05b5703c8",
+    "tests/test_s26_fault_lines.py": "6954c4ed1b9566294597f31138aed4a4d9aa751db2e1e170bf40fd5dc860c4df",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -531,6 +534,12 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def without_notes(err: str) -> str:
+    """Stderr with the ``note:`` lines removed. Prove's own warning (``UnpairedAnalysis``, on two
+    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line (spec section 5.4)."""
+    return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
+
+
 def block_lines(out: str, head: str) -> list[str]:
     """The line starting with ``head`` and every following line indented by two spaces, as a list;
     ``[]`` when there is no such line. Found by index, never by the tail of stdout."""
@@ -582,11 +591,12 @@ def heads(out: str, head: str) -> int:
 
 def numeric_tokens(line: str) -> list[str]:
     """Every whitespace-, ``=``-, ``,``-, ``:``-, ``;``-, ``(``-, ``)``- or ``/``-separated token
-    that parses as a number, verbatim (S26's helper)."""
+    that parses as a number, verbatim (S26's helper). A comma before three digits is a thousands
+    separator inside a count (spec section 5.4, rule 10), so ``1,312`` is one token."""
     out = []
-    for token in re.split(r"[\s=,:;()/]+", line):
+    for token in re.split(r"[\s=:;()/]+|,(?!\d{3}(?!\d))", line):
         try:
-            float(token)
+            float(token.replace(",", ""))
         except ValueError:
             continue
         out.append(token)
@@ -595,6 +605,24 @@ def numeric_tokens(line: str) -> list[str]:
 
 def g(value: Any) -> str:
     return f"{value:g}"
+
+
+# The blocks' numbers as the command line prints them under rule 10 (spec section 5.4), which
+# replaces ``:g``: counts with thousands separators, a rate, delta or MDE to three decimals, and a
+# p, q or alpha to three decimals or in ``2.3e-08`` form below 0.001. A config value is not
+# reformatted.
+
+
+def count(value: Any) -> str:
+    return f"{int(value):,}" if float(value).is_integer() else f"{value:,}"
+
+
+def fraction(value: Any) -> str:
+    return f"{value:.3f}"
+
+
+def rule_10_p(value: Any) -> str:
+    return f"{value:.3f}" if value >= 0.001 else f"{value:.1e}"
 
 
 def config_tokens(config: Mapping[str, Any]) -> set[str]:
@@ -1403,7 +1431,8 @@ def test_l10_no_reason_and_no_block_line_uses_the_conditional_vocabulary(every_t
             knobs: dict[str, Any] = {"depth": int(extra[1])} if extra[:1] == ("--depth",) else ({"by": extra[1]} if extra else {})
             _, result = store_tree(synth_root, a, b, events=events, method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED, **knobs)
             code, out, err = run_cli(argv + list(extra))
-            assert code == 0 and err == "", (a, extra, out, err)
+            # A shared salt now adds one note line on stderr (spec section 5.4).
+            assert code == 0 and without_notes(err) == "", (a, extra, out, err)
             cells, bound = cells_block(out), bound_block(out)
             assert cells and bound, (a, extra, out)
             if result.leaves.tested:
@@ -1508,7 +1537,8 @@ def test_l13_a_requested_axis_declared_in_one_manifest_only_is_not_shared_and_re
     refusal = stored.grouping.refused[0]
     assert (refusal.key, refusal.rung, refusal.reason, refusal.next_rung) == ("temp", "requested", "not_shared", "trace")
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b-task-only", "--event", "fail", "--by", "temp"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     line = fault_lines_block(out)[1]
     assert "refused" in line and all(piece in line for piece in ("temp", "requested", "not_shared", "trace")), line
 
@@ -1535,8 +1565,10 @@ def test_l14_the_cli_refuses_depth_one_and_four_and_passes_two_and_three(synth_r
         code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--depth", value])
         assert code == 2 and "Traceback" not in out + err and "error" in err, (value, out, err)
     for value in ("2", "3"):
-        code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--depth", value, "--format", "json"])
-        assert code == 0 and err == "", (value, out, err)
+        # --json replaces --format json (spec section 5.6).
+        code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--depth", value, "--json"])
+        # A shared salt now adds one note line on stderr (spec section 5.4).
+        assert code == 0 and without_notes(err) == "", (value, out, err)
         assert json.loads(out)["tree"]["bound"]["depth_configured"] == int(value), value
 
 
@@ -1599,7 +1631,8 @@ def cli_pair(synth_root: Path, a: str, b: str, events: Sequence[str], *extra: st
     for event in events:
         argv += ["--event", event]
     code, out, err = run_cli(argv + list(extra))
-    assert code == 0 and err == "", (a, b, extra, out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (a, b, extra, out, err)
     return multi, result, out
 
 
@@ -1618,7 +1651,7 @@ def test_l16_the_cells_block_follows_the_fault_lines_block_and_the_bound_block_f
 
 def test_l16_the_cells_head_line_carries_the_fields_when_tested_and_the_form_when_not(synth_root: Path) -> None:
     """Tested (the axes pair, the multi-event pair): ``n_families``, ``n_tests``, ``n_rejected``
-    and ``q`` under ``:g`` and the quoted null. Not tested (the identical pair): the block is
+    and ``q`` under rule 10 (``:g`` before it) and the quoted null. Not tested (the identical pair): the block is
     one line saying ``not tested`` with the reason's word (module docstring)."""
     for a, b, events in CLI_PAIRS:
         _, result, out = cli_pair(synth_root, a, b, events)
@@ -1626,8 +1659,9 @@ def test_l16_the_cells_head_line_carries_the_fields_when_tested_and_the_form_whe
         head, tokens = block[0], numeric_tokens(block[0])
         if leaves.tested:
             assert f'"{EXPECTED_CELL_NULL}"' in head, head
-            for field in ("n_families", "n_tests", "n_rejected", "q"):
-                assert g(getattr(leaves, field)) in tokens, (a, field, head)
+            # Counts and q print under rule 10 (spec section 5.4), not ``:g``.
+            for field, render in (("n_families", count), ("n_tests", count), ("n_rejected", count), ("q", rule_10_p)):
+                assert render(getattr(leaves, field)) in tokens, (a, field, head)
         else:
             assert leaves.reason == "root_not_rejected" and len(block) == 1 and "not tested" in head and "root" in head, (a, block)
 
@@ -1640,13 +1674,14 @@ def test_l16_one_family_line_per_family_in_order_carrying_the_counts_and_the_mde
         for family, line in zip(result.leaves.families, lines, strict=True):
             tokens = numeric_tokens(line)
             assert family.label in line and "rejected" in line, (a, family.label, line)
-            for field in ("n_tests", "n_rejected", "mde_median", "mde_max"):
-                assert g(getattr(family, field)) in tokens, (a, family.label, field, line)
+            # Counts and MDEs print under rule 10 (spec section 5.4), not ``:g``.
+            for field, render in (("n_tests", count), ("n_rejected", count), ("mde_median", fraction), ("mde_max", fraction)):
+                assert render(getattr(family, field)) in tokens, (a, family.label, field, line)
 
 
 def test_l16_one_line_per_rejected_leaf_carrying_the_config_the_event_and_three_numbers(synth_root: Path) -> None:
     """Under its family line, indented at least four spaces, in ``cells`` order: every
-    ``key=value`` of the config, the event, and ``delta``, ``q_within``, ``mde`` under ``:g`` --
+    ``key=value`` of the config, the event, and ``delta``, ``q_within``, ``mde`` under rule 10 --
     and no other number, which is what keeps a flat ``q``, a ``p`` or an interval off the block.
     A leaf with ``rejects is False`` has no line: the axes pair prints none, the multi-event
     pair prints two ``fail`` lines and no ``crash`` line."""
@@ -1661,9 +1696,11 @@ def test_l16_one_line_per_rejected_leaf_carrying_the_config_the_event_and_three_
                 assert f"{key}={value}" in line or (isinstance(value, (int, float)) and f"{key}={g(value)}" in line), (a, key, value, line)
             assert leaf.event in line, (a, leaf.event, line)
             tokens = numeric_tokens(line)
-            for field in ("delta", "q_within", "mde"):
-                assert g(getattr(leaf, field)) in tokens, (a, field, line)
-            allowed = {g(leaf.delta), g(leaf.q_within), g(leaf.mde)} | config_tokens(leaf.config)
+            # delta and MDE print to three decimals and q under rule 10 (spec section 5.4), not ``:g``.
+            printed = {"delta": fraction(leaf.delta), "q_within": rule_10_p(leaf.q_within), "mde": fraction(leaf.mde)}
+            for field, rendered in printed.items():
+                assert rendered in tokens, (a, field, line)
+            allowed = set(printed.values()) | config_tokens(leaf.config)
             assert set(tokens) <= allowed, (a, line, sorted(set(tokens) - allowed))
         if a == "me-a":
             assert len(lines) == 2 and all("fail" in line and "crash" not in line for line in lines), lines
@@ -1676,8 +1713,11 @@ def test_l16_the_bound_head_line_carries_the_five_fields_and_the_set(synth_root:
         _, result, out = cli_pair(synth_root, a, b, events)
         head = bound_block(out)[0]
         tokens = numeric_tokens(head)
-        for field in ("depth", "depth_configured", "bound", "q", "delta_star"):
-            assert g(getattr(result.bound, field)) in tokens, (a, field, head)
+        # The depths are counts, the bound a rate to three decimals and q a p-value under rule 10
+        # (spec section 5.4). delta_star is a constant rule 10 does not name: ``:g`` or three decimals.
+        bound = result.bound
+        for field, rendered in (("depth", {count(bound.depth)}), ("depth_configured", {count(bound.depth_configured)}), ("bound", {fraction(bound.bound)}), ("q", {rule_10_p(bound.q)}), ("delta_star", {g(bound.delta_star), fraction(bound.delta_star)})):
+            assert rendered & set(tokens), (a, field, head)
         assert "outer-nodes" in head, head
 
 
@@ -1685,7 +1725,8 @@ def test_l16_depth_two_prints_not_tested_depth_two_and_still_the_bound(synth_roo
     _, result, out = cli_pair(synth_root, "axes-a", "axes-b", ("fail",), "--depth", "2", depth=2)
     block, bound = cells_block(out), bound_block(out)
     assert result.leaves.reason == "depth" and len(block) == 1 and "not tested" in block[0] and g(2) in numeric_tokens(block[0]), block
-    assert bound and (result.bound.depth_configured, result.bound.depth) == (2, 2) and g(result.bound.bound) in numeric_tokens(bound[0]), bound
+    # The bound is a rate, printed to three decimals under rule 10 (spec section 5.4).
+    assert bound and (result.bound.depth_configured, result.bound.depth) == (2, 2) and fraction(result.bound.bound) in numeric_tokens(bound[0]), bound
 
 
 def test_l16_the_json_carries_leaves_and_bound_equal_to_to_json_after_a_round_trip(synth_root: Path) -> None:
@@ -1693,7 +1734,8 @@ def test_l16_the_json_carries_leaves_and_bound_equal_to_to_json_after_a_round_tr
         ("me-a", "me-b", ME_EVENTS, (), {}),
         ("axes-a", "axes-b", ("fail",), ("--depth", "2", "--permutations", "300", "--seed", "3"), {"depth": 2, "n_permutations": 300, "seed": 3}),
     ):
-        _, result, out = cli_pair(synth_root, a, b, events, "--format", "json", *extra, **knobs)
+        # --json replaces --format json (spec section 5.6).
+        _, result, out = cli_pair(synth_root, a, b, events, "--json", *extra, **knobs)
         payload = json.loads(out)
         assert payload["tree"]["leaves"] == json.loads(json.dumps(result.leaves.to_json())), a
         assert payload["tree"]["bound"] == json.loads(json.dumps(result.bound.to_json())), a
@@ -1708,7 +1750,8 @@ def test_l17_methods_all_text_prints_the_four_blocks_once_each_after_the_table()
     ``bound:`` blocks, each once, found by line index. ``--permutations 200``: a test about the
     shape of the stream, not the omnibus."""
     code, out, err = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", "--permutations", "200"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     lines = out.splitlines()
     first = {head: next(i for i, line in enumerate(lines) if line.startswith(head)) for head in ("| method |", "omnibus: ", "fault lines:", "cells:", "bound:")}
     assert first["| method |"] < first["omnibus: "] < first["fault lines:"] < first["cells:"] < first["bound:"], first
@@ -1719,10 +1762,15 @@ def test_l17_methods_all_text_prints_the_four_blocks_once_each_after_the_table()
 def test_l17_methods_all_json_keeps_exactly_the_three_method_keys_and_carries_no_tree() -> None:
     """``test_i9_diff_methods_all_json_keys`` and F22 pin the same set; a ``"tree"`` key beside
     three method objects fails all three."""
-    code, out, err = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", "--format", "json", "--permutations", "200"])
-    assert code == 0 and err == "", (out, err)
+    # --json replaces --format json (spec section 5.6).
+    code, out, err = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", "--json", "--permutations", "200"])
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
-    assert set(payload) == set(METHODS), sorted(payload)
+    # --json adds schema, verdict, sentence, next and any key ending _note around the keys it
+    # keeps (spec section 5.6).
+    envelope = {"schema", "verdict", "sentence", "next"} | {k for k in payload if k.endswith("_note")}
+    assert set(payload) - envelope == set(METHODS), sorted(payload)
     assert "tree" not in payload and "leaves" not in walk_keys(payload) and "bound" not in walk_keys(payload)
 
 
@@ -1731,7 +1779,8 @@ def test_l18_no_comparable_cell_prints_neither_block_emits_neither_key_and_the_a
     code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail"])
     assert code == 0 and err == "", (out, err)
     assert heads(out, "cells:") == 0 and heads(out, "bound:") == 0 and heads(out, "omnibus: ") == 0, out
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail", "--format", "json"])
+    # --json replaces --format json (spec section 5.6).
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail", "--json"])
     assert code == 0 and err == "", (out, err)
     payload = json.loads(out)
     keys = walk_keys(payload)
@@ -1809,9 +1858,9 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def e14_builder_digests(go1: Any) -> dict[str, str]:
+def e14_builder(go1: Any) -> tuple[Any, Any, Any]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
-    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    ``_report_pair`` builds them: the multi, the dark-theme report and the light-theme receipt."""
     a, b, ma, mb = go1
     multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="fisher_bh")
     title = f"{GO1_A} vs {GO1_B}: fell"
@@ -1822,10 +1871,58 @@ def e14_builder_digests(go1: Any) -> dict[str, str]:
         multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw", theme="light"),
         manifests=(ma, mb),
     )
+    return multi, report, receipt
+
+
+def e14_builder_digests(go1: Any) -> dict[str, str]:
+    """The builder's report markdown, receipt and heatmap, digested."""
+    _, report, receipt = e14_builder(go1)
     return {
         "report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())),
+        # The command line's heatmap now formats its text under rule 10 (spec section 5.4); the
+        # builder's heatmap is unchanged, so the digest moves to it.
+        "heatmap.svg": sha256_of_text(report.to_svg()),
         "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html())),
     }
+
+
+def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
+    """The command line's ``heatmap.svg`` against the builder's, whose bytes keep the frozen digest.
+
+    Rule 10 (spec section 5.4) reformats only the text in the file, so every element and attribute
+    is the builder's. Each cell's label is its delta to three decimals, read from ``cells``; a text
+    the builder prints as a percentage-point number is that number as a fraction; every other text
+    that changed keeps its ``key=value`` facts and its counts; and the notes the builder writes in
+    percentage points carry the worst-powered MDEs to three decimals.
+    """
+    def bare(svg: str) -> str:
+        return re.sub(r">[^<]*<", "><", svg)
+
+    assert bare(cli_svg) == bare(builder_svg)
+    ids = re.findall(r'data-cell="([0-9a-f]+)"', cli_svg)
+    label_group = cli_svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
+    labels = re.findall(r">([^<]*)</text>", label_group)
+    delta = dict(zip(cells["config_hash"], cells["delta"]))
+    assert len(ids) == len(labels) == len(delta), (len(ids), len(labels), len(delta))
+    for short, label in zip(ids, labels):
+        (full,) = [h for h in delta if h.startswith(short)]
+        assert label == f"{delta[full]:.3f}", (short, label, delta[full])
+    number = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+    texts = list(zip(re.findall(r">([^<]*)</text>", builder_svg), re.findall(r">([^<]*)</text>", cli_svg)))
+    for old, new in texts:
+        if old == new:
+            continue
+        if number.fullmatch(old):
+            assert number.fullmatch(new) and abs(float(new) - float(old) / 100) <= 1e-3, (old, new)
+            continue
+        for fact in re.findall(r"\w+=[^\s,;)]+", old):
+            assert fact in new, (fact, new)
+        for count in re.findall(r"(?<![\d.])\d+(?![\d.%]|pp)", old):
+            assert f"{int(count):,}" in new, (count, new)
+    notes = [new for old, new in texts if re.search(r"\d+pp", old)]
+    assert notes, texts
+    for mde in (cells["mde"].max(), cells.loc[cells["verdict"] == "unchanged", "mde"].max()):
+        assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
 
 
 def test_l20_the_go1_report_still_reproduces_the_three_digests_s21_minted(go1: Any, tmp_path: Path) -> None:
@@ -1834,21 +1931,42 @@ def test_l20_the_go1_report_still_reproduces_the_three_digests_s21_minted(go1: A
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
     digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
     ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
-    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
+    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted.
+
+    Moved for rule 10 (spec section 5.4): the command line now prints the heatmap's text as
+    fractions, so its digest moves to the builder's heatmap, and the file the command line writes
+    is checked against that one fact by fact."""
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    assert hashlib.sha256((out / "heatmap.svg").read_bytes()).hexdigest() == E14_SHA256["heatmap.svg"]
     for name, digest in e14_builder_digests(go1).items():
         assert digest == E14_SHA256[name], name
+    # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
+    # checked by its facts rather than a new digest.
+    multi, report, _ = e14_builder(go1)
+    assert_cli_heatmap_is_the_builders_under_rule_10(
+        (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event["fell"].cells
+    )
 
 
-def test_l20_check_and_serve_on_go1_print_the_same_bytes_and_structure() -> None:
+def test_l20_check_and_serve_on_go1_print_the_same_bytes_and_structure(go1: Any) -> None:
     code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
-    assert code == CHECK_EXIT and err == "" and sha256_of_text(out) == CHECK_STDOUT_SHA256, (code, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == CHECK_EXIT and without_notes(err) == "", (code, err)
+    # The verdict line now comes first, so the stdout digest is replaced by the facts it guarded
+    # (spec sections 5.3 and 14): passed, the gated event, the flat family's counts and its size.
+    a, b, ma, mb = go1
+    multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="fisher_bh")
+    verdicts = multi.by_event["fell"].cells["verdict"]
+    first = out.splitlines()[0]
+    assert first.startswith("passed  ") and "fell" in first, out
+    assert f"{(verdicts == 'safer').sum():,} safer, {(verdicts == 'worse').sum():,} worse" in out, out
+    assert f"{multi.n_tests:,} tests" in out, out
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
-    assert code == 0 and err == "", err
-    structure = json.loads(out)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", err
+    # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
+    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence")}
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
     normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
@@ -1897,11 +2015,13 @@ def test_l21_the_axes_pair_holds_a_moved_group_with_nothing_nameable_inside_it(a
         assert not any(family.label == "0.7" for family in leaves.families), method
     for method in TWO_SCHEMES:
         code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--method", method])
-        assert code == 0 and err == "", (method, out, err)
+        # A shared salt now adds one note line on stderr (spec section 5.4).
+        assert code == 0 and without_notes(err) == "", (method, out, err)
         lines = family_lines(cells_block(out))
         assert len(lines) == 1 and "0.0" in lines[0] and "rejected" in lines[0], (method, lines)
         tokens = numeric_tokens(lines[0])
-        assert g(N_TASKS) in tokens and g(0) in tokens, (method, lines[0])
+        # Counts print with separators under rule 10 (spec section 5.4).
+        assert count(N_TASKS) in tokens and count(0) in tokens, (method, lines[0])
         assert leaf_lines(cells_block(out)) == [], (method, cells_block(out))
 
 
@@ -1958,13 +2078,15 @@ def test_l23_go1_push_70_has_thirteen_rejected_leaves_whose_q_within_is_not_sort
     sequence = [leaf.q_within for leaf in rejected]
     assert len(rejected) == 13 and sequence != sorted(sequence) and sequence != sorted(sequence, reverse=True), sequence
     code, out, err = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B, "--event", "fell", "--method", method, "--by", "push_pct_bw"])
-    assert code == 0 and err == "", (out, err)
+    # A shared salt now adds one note line on stderr (spec section 5.4).
+    assert code == 0 and without_notes(err) == "", (out, err)
     block = cells_block(out)
     families = [line for line in block[1:] if line.startswith("  ") and not line.startswith("    ")]
     start = block.index(next(line for line in families if f"={GO1_PUSH_UNSORTED_FAMILY}" in line))
     following = block[start + 1 :]
     end = next((i for i, line in enumerate(following) if not line.startswith("    ")), len(following))
-    printed = [(g(leaf.delta), g(leaf.q_within), g(leaf.mde)) for leaf in rejected]
+    # delta and MDE print to three decimals and q under rule 10 (spec section 5.4), not ``:g``.
+    printed = [(fraction(leaf.delta), rule_10_p(leaf.q_within), fraction(leaf.mde)) for leaf in rejected]
     seen = [tuple(token for token in numeric_tokens(line) if token in {t for triple in printed for t in triple}) for line in following[:end]]
     assert len(seen) == len(printed), (len(seen), len(printed))
     for triple, tokens in zip(printed, seen, strict=True):
