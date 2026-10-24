@@ -16,7 +16,7 @@ modal = ["modal"]
 agent = ["litellm", "openai>=2.20,<3", "opentelemetry-sdk"]
 viz = ["matplotlib"]
 all = ["modal", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
-dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common"]
+dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common", "pyyaml"]
 
 [project.scripts]
 poisson-prove = "poisson_prove.cli:main"
@@ -47,4 +47,5 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 markers = [
     "calibration: a rejection rate over sharp-null resamples (S25 section A, the slow lane); deselected only by typing -m \"not calibration\", never by configuration",
+    "slow: over 10 s of setup and call on the runner, such as a wheel built and installed into a fresh environment; runs on main and nightly, never on a pull request",
 ]
