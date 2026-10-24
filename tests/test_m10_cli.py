@@ -753,10 +753,12 @@ def test_i9_diff_markdown_summary_line(go1_store: Store) -> None:
     # blank line; the report that follows it is unchanged, so its summary line is read there.
     verdict, _, report = r.out.partition("\n\n")
     # PF3 (spec section 4.4, PF3.6b; rule R4): the verdict line now also names the test in plain words.
-    assert verdict.splitlines()[0].startswith("safer  fell: 60 safer, 0 worse"), r.out
+    # PF4 (PF4.20): the Go1 runs declare no kind for fell, so the counts read in direction words:
+    # 60 conditions fell and none rose, where they read 60 safer, 0 worse.
+    assert verdict.splitlines()[0].startswith("lower  fell: 60 lower, 0 higher"), r.out
     assert "separate samples" in verdict.splitlines()[0], r.out
     summary = [
-        line for line in report.splitlines() if "60 safer" in line and "0 worse" in line
+        line for line in report.splitlines() if "60 lower" in line and "0 higher" in line
     ]
     assert summary, r.out
     assert summary[0].startswith("fell:"), summary[0]
@@ -771,7 +773,10 @@ def test_i9_diff_json(go1_store: Store) -> None:
     data = json.loads(r.out)
     assert data["events"] == ["fell"] and data["inferred"] is False
     fell = data["by_event"]["fell"]
-    assert fell["n_safer"] == 60 and fell["n_worse"] == 0
+    # PF4 (PF4.20): fell's kind is unknown, so n_safer and n_worse are null and the 60 and the 0 are
+    # carried as n_lower and n_higher beside them.
+    assert fell["n_safer"] is None and fell["n_worse"] is None and fell["kind"] is None
+    assert fell["n_lower"] == 60 and fell["n_higher"] == 0
     assert data["method"] == "fisher_bh" and data["q"] == 0.05
     assert data["seed_identity_match"] is True and data["unpaired_analysis"] is True and "paired" not in data
     assert len(fell["cells"]) == go1_store.read("go1-v0")["config_hash"].nunique() == 400
@@ -792,9 +797,17 @@ def test_i9_diff_methods_all_json_keys(go1_store: Store) -> None:
     assert r.code == 0, r.text
     data = json.loads(r.out)
     # diff --json adds schema, verdict, sentence, next and any *_note key around today's keys.
-    assert {k for k in data if k not in DIFF_JSON_ENVELOPE and not k.endswith("_note")} == METHODS
+    # PF4 (PF4.8, section 8.4): it also carries the primary method's omnibus and tree, and the
+    # threshold with its source, beside the three method keys.
+    pf4_keys = {"omnibus", "tree", "threshold", "threshold_source"}
+    assert pf4_keys <= set(data)
+    assert {
+        k for k in data if k not in DIFF_JSON_ENVELOPE | pf4_keys and not k.endswith("_note")
+    } == METHODS
     fell = data["fisher_bh"]["by_event"]["fell"]
-    assert fell["n_safer"] == 60 and fell["n_worse"] == 0
+    # PF4 (PF4.20): fell's kind is unknown, so the 60 and the 0 are n_lower and n_higher.
+    assert fell["n_safer"] is None and fell["n_worse"] is None
+    assert fell["n_lower"] == 60 and fell["n_higher"] == 0
     for method in METHODS:
         assert data[method]["method"] == method
 
@@ -863,14 +876,16 @@ def test_i11_report_writes_exactly_three_files(go1_store: Store, tmp_path: Path)
     assert {p.name for p in out.iterdir()} == REPORT_FILES
     ET.fromstring((out / "heatmap.svg").read_text())
     md = (out / "report.md").read_text()
-    assert "fell: 60 safer, 0 worse" in md and "fisher_bh" in md
+    # PF4 (PF4.20): the Go1 runs declare no kind for fell, so the counts read in direction words:
+    # 60 conditions fell and none rose, where they read 60 safer, 0 worse.
+    assert "fell: 60 lower, 0 higher" in md and "fisher_bh" in md
     # PF2 (spec section 4.3): report's stdout now opens with `ok  wrote <folder> (N files)` and
     # one `  wrote  <path>` line per file, then a blank line, then what it printed before.
     verdict, _, rest = r.out.partition("\n\n")
     lines = verdict.splitlines()
     assert lines[0] == f"ok  wrote {out} ({len(REPORT_FILES)} files)", r.out
     assert sorted(lines[1:]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
-    assert "fell: 60 safer, 0 worse" in rest
+    assert "fell: 60 lower, 0 higher" in rest
     for name in REPORT_FILES:
         assert name in r.out, name
     assert NEUTRAL_FILL["light"] in (out / "receipt.html").read_text()
@@ -983,8 +998,10 @@ def test_i13_fix_parses_toml_scalars(go1_store: Store, tmp_path: Path) -> None:
     md = (out / "report.md").read_text()
     # --fix restricts the report grid, not the diff: the panel covers the mu=0.05 row while
     # the diff line still covers all 400 cells. Pinning the row's own counts pins the parse.
-    whole = re.search(r"^fell: 60 safer, 0 worse$", md, re.MULTILINE)
-    panel = re.search(r"^## fell: (\d+) safer, (\d+) worse$", md, re.MULTILINE)
+    # PF4 (PF4.20): the Go1 runs declare no kind for fell, so the counts (whole and panel) read in direction words:
+    # 60 conditions fell and none rose, where they read 60 safer, 0 worse.
+    whole = re.search(r"^fell: 60 lower, 0 higher$", md, re.MULTILINE)
+    panel = re.search(r"^## fell: (\d+) lower, (\d+) higher$", md, re.MULTILINE)
     assert whole and panel, md
     assert (int(panel.group(1)), int(panel.group(2))) == (9, 0), panel.group(0)
 
@@ -1000,11 +1017,17 @@ def test_i13_fix_with_bad_toml_scalar_exits_two(go1_store: Store, tmp_path: Path
 def test_i14_check_fixture_passes(go1_store: Store) -> None:
     # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
-    r = run_cli(["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh"])
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+    r = run_cli(
+        ["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh",
+         "--fail-on", "higher"]
+    )
     assert r.code == 0, r.text
     # check's first stdout line is "passed  ..." or "failed  ..." (spec section 5.3).
     assert r.out.startswith("passed  ") and not r.out.startswith("failed"), r.out
-    assert "fell: 60 safer, 0 worse" in r.out, r.out
+    # PF4 (PF4.20): with fell's kind unknown the counts read 60 lower, 0 higher (were 60 safer, 0 worse).
+    assert "fell: 60 lower, 0 higher" in r.out, r.out
     assert "fisher_bh" in r.out and "over 400 tests" in r.out, r.out
 
 
@@ -1018,10 +1041,15 @@ def test_i14_check_significantly_worse_cell_fails(tmp_path: Path) -> None:
     store = Store(tmp_path / "syn")
     write_run(store, "syn-a", salt="syn", fell_per_cell={1.0: 0, 2.0: 16})
     write_run(store, "syn-b", salt="syn", fell_per_cell={1.0: 32, 2.0: 16})
-    r = run_cli(["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell"])
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+    r = run_cli(
+        ["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell", "--fail-on", "higher"]
+    )
     assert_clean_refusal(r, 4)  # A failed check exits 4 (spec section 5.2).
     assert r.out.startswith("failed  ") and not r.out.startswith("passed"), r.out
-    assert "fell: 0 safer, 1 worse" in r.out, r.out
+    # PF4 (PF4.20): with fell's kind unknown the count reads 0 lower, 1 higher (was 0 safer, 1 worse).
+    assert "fell: 0 lower, 1 higher" in r.out, r.out
     assert "over 2 tests" in r.out, r.out
 
 
@@ -1029,7 +1057,11 @@ def test_i14_check_safer_direction_passes_by_default(tmp_path: Path) -> None:
     store = Store(tmp_path / "syn")
     write_run(store, "syn-a", salt="syn", fell_per_cell={1.0: 32, 2.0: 16})
     write_run(store, "syn-b", salt="syn", fell_per_cell={1.0: 0, 2.0: 16})
-    r = run_cli(["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell"])
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+    r = run_cli(
+        ["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell", "--fail-on", "higher"]
+    )
     assert r.code == 0, r.text
     assert r.out.startswith("passed  "), r.out  # The first line says passed (spec section 5.3).
 
@@ -1348,10 +1380,12 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     assert re.fullmatch(r"prove-report-.+-vs-.+", out.name) and out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
     assert {p.name for p in out.iterdir()} == REPORT_FILES
     md = (out / "report.md").read_text()
-    panel = re.search(r"^## violated: (\d+) safer, (\d+) worse$", md, re.MULTILINE)
+    # PF4 (PF4.20): the quickstart runs declare no kind for violated, so the panel counts read in
+    # direction words: none rose and at least one fell (were "0 worse" and "at least one safer").
+    panel = re.search(r"^## violated: (\d+) lower, (\d+) higher$", md, re.MULTILINE)
     assert panel, md
-    safer, worse = int(panel.group(1)), int(panel.group(2))
-    assert worse == 0 and safer >= 1, panel.group(0)
+    lower, higher = int(panel.group(1)), int(panel.group(2))
+    assert higher == 0 and lower >= 1, panel.group(0)
     tail = re.search(r"over (\d+) tests, (paired|unpaired)\)", md)
     assert tail, md
     assert int(tail.group(1)) == QUICKSTART_CELLS

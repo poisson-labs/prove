@@ -222,7 +222,15 @@ def make_diff(
     )
 
 
-def make_event(event: str, cells: list[dict[str, Any]], *, cause_specific: bool = False) -> EventDiff:
+#: PF4 (PF4.20): an event's kind. ``safer`` and ``worse`` are a reader's words only for an event
+#: whose kind is known; the tests about the safer/worse captions and honesty words build their
+#: hand-made events as failure events, which keeps the old words (a rise is worse).
+FAILURE = "failure"
+
+
+def make_event(
+    event: str, cells: list[dict[str, Any]], *, cause_specific: bool = False, kind: str | None = None
+) -> EventDiff:
     frame = _cells_frame(cells)
     verdicts = list(frame["verdict"])
     top_unchanged, top_cell = _unchanged_mde(frame)
@@ -236,6 +244,7 @@ def make_event(event: str, cells: list[dict[str, Any]], *, cause_specific: bool 
         max_mde_unchanged=top_unchanged,
         max_mde_unchanged_cell=top_cell,
         cause_specific=cause_specific,
+        kind=kind,
     )
 
 
@@ -342,7 +351,7 @@ def _manifest(run_id: str, *, run_salt: str = "salt", t_unit: str = "steps") -> 
     )
 
 
-def two_event_multi(**multi_kw: Any) -> MultiDiffResult:
+def two_event_multi(*, kind: str | None = None, **multi_kw: Any) -> MultiDiffResult:
     """3x2 grid, two events; (0.1, 10) and (0.3, 20) are trades, (0.2, 10) is safer in one only."""
     xs, ys = [0.1, 0.2, 0.3], [10, 20]
 
@@ -358,8 +367,8 @@ def two_event_multi(**multi_kw: Any) -> MultiDiffResult:
     def v2(i: int, j: int, dl: float) -> str:
         return sign_verdict(i, j, dl) if (i, j) in {(0, 0), (2, 1)} else "unchanged"
 
-    alpha = make_event("alpha", grid_cells(xs, ys, delta_fn=d1, verdict_fn=v1))
-    beta = make_event("beta", grid_cells(xs, ys, delta_fn=d2, verdict_fn=v2))
+    alpha = make_event("alpha", grid_cells(xs, ys, delta_fn=d1, verdict_fn=v1), kind=kind)
+    beta = make_event("beta", grid_cells(xs, ys, delta_fn=d2, verdict_fn=v2), kind=kind)
     return make_multi([alpha, beta], **multi_kw)
 
 
@@ -525,7 +534,10 @@ def panel_sections(md: str, rep: MultiReport) -> dict[str, str]:
         hits = [i for i, line in enumerate(lines) if cap in line and line.strip() != headline_first]
         assert hits, f"no caption line for {e!r}: {cap!r}"
         starts.append(hits[0])
-    return _sections(lines, rep.events, starts)
+    # PF4 (PF4.3): the report gains a section after the panels whose share table repeats every
+    # condition's coordinates, so the last panel runs to the next heading rather than to the end.
+    ends = [i for i, line in enumerate(lines) if i > starts[-1] and line.startswith("## ")]
+    return _sections(lines[: ends[0]] if ends else lines, rep.events, starts)
 
 
 def survival_sections(md: str, rep: SurvivalReport) -> dict[str, str]:
@@ -746,7 +758,30 @@ def test_b1_regression_fixture_is_present_and_is_the_s8_output() -> None:
     ET.fromstring((REGRESSION_DIR / "heatmap.svg").read_text(encoding="utf-8"))
 
 
-def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_report: Report) -> None:
+#: PF4 (PF4.15): the worst-cells table's width and its MDE column.
+_MDE_COLUMN, _TABLE_WIDTH = 9, 10
+
+
+def _set_aside_mde(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """PF4 (PF4.15): the text with every worst-cells row's MDE cell blanked, and each row's
+    coordinates (``x=.., y=..``, the report's axes) with the MDE cell it held, so every other byte is
+    still compared and each limit is checked against its condition."""
+    out, held = [], []
+    header: list[str] = []
+    for line in text.splitlines():
+        cells = line[1:-1].split("|") if line.startswith("|") and line.endswith("|") else []
+        if len(cells) == _TABLE_WIDTH and cells[_MDE_COLUMN].strip() == "MDE":
+            header = [c.strip() for c in cells]
+        elif len(cells) == _TABLE_WIDTH and header and not set(line) <= set("|-: "):
+            coords = f"{header[0]}={cells[0].strip()}, {header[1]}={cells[1].strip()}"
+            held.append((coords, cells[_MDE_COLUMN].strip()))
+            cells[_MDE_COLUMN] = " <limit> "
+            line = "|" + "|".join(cells) + "|"
+        out.append(line)
+    return "\n".join(out), held
+
+
+def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_report: Report, golden_diff: DiffResult) -> None:
     """The S8 bytes are a record of what ``report`` said at S3 and are not rewritten (P-1 section
     3.2). What P-1 moved in them, and only that, is mapped onto the record before the comparison:
     the headline's last token states the requested method's pairing (ADR-052, C1), the Methods
@@ -762,15 +797,43 @@ def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_r
     # Retrofitted 2026-09-20 (truncation surfacing): the horizon count is named for what it counts.
     assert frozen.count("- truncated: 0\n") == 1
     frozen = frozen.replace("- truncated: 0\n", "- episodes censored at horizon: 0\n")
-    assert strip_honesty(as_0_0_1_wrote_it(golden_report.to_markdown())) == strip_honesty(frozen)
+    # PF4 (PF4.15): a condition whose baseline had the event in every run has no detection limit
+    # (its cell holds NaN), and one where even its whole headroom is not detectable carries a note;
+    # the table prints no number for either (the binding words: "ceiling", "none detectable"), where
+    # S8 printed one. Every MDE cell is set aside on both sides, every other byte compared, and each
+    # row's limit checked against its condition: unchanged where the condition has a limit.
+    frozen, was = _set_aside_mde(frozen)
+    now, printed = _set_aside_mde(as_0_0_1_wrote_it(golden_report.to_markdown()))
+    assert strip_honesty(now) == strip_honesty(frozen)
+    assert [c for c, _ in printed] == [c for c, _ in was] and len(was) == golden_report.spec.top_n
+    notes = dict(zip(golden_diff.cells["config_hash"], golden_diff.cells["mde_note"], strict=True))
+    moved = 0
+    for (coords, before), (_, after) in zip(was, printed, strict=True):
+        cell = named_cell(golden_report, coords)
+        if not isinstance(notes[cell.config_hash], str):
+            assert after == before, (coords, before, after)
+            continue
+        moved += 1
+        assert re.fullmatch(r"\d+pp", before) and not re.search(r"\d+pp|(?i:nan)", after), (coords, before, after)
+        assert ("ceiling" if math.isnan(cell.mde) else "none detectable") in after, (coords, after)
+    assert moved, "the Go1 top ten holds conditions with no detection limit"
 
 
 # ---------- B2: honesty block, both lines ----------
 
 
-def _check_honesty(report: Report, *, max_mde: float, max_mde_unchanged: float) -> None:
+def _check_honesty(report: Report, *, max_mde: float, max_mde_unchanged: float, panel: bool = False) -> None:
     first, second = honesty_lines(report)
-    if math.isnan(max_mde_unchanged):
+    if math.isnan(max_mde_unchanged) and panel:
+        # PF4 (PF4.17): with no unchanged condition, the two-run report's honesty line says how many
+        # conditions were compared (and how many were not, when any were not), and never that every
+        # cell moved.
+        compared = sum(c.present for c in report.cells)
+        assert re.search(rf"(?<![\d.]){compared}(?![\d.])", first) and "compared" in first, first
+        assert "every" not in first.lower() and first != HONESTY_NONE, first
+        if report.n_absent:
+            assert re.search(rf"(?<![\d.]){report.n_absent}(?![\d.])", first), first
+    elif math.isnan(max_mde_unchanged):
         assert first == HONESTY_NONE
     else:
         m = HONESTY_FIRST_RE.match(first)
@@ -846,6 +909,10 @@ def _ten_zero_cells(qs: Sequence[float], mdes: Sequence[float]) -> list[dict[str
     ]
 
 
+# PF4 (PF4.20): the B3 panels are found by their safer/worse captions, which a reader sees only for
+# an event whose kind is known, so these hand-built events are failure events.
+
+
 def _panel_table_order(multi: MultiDiffResult, event: str) -> list[str]:
     rep = build_multi_report(multi, ReportSpec(title="t", x_axis="task", top_n=10, forest="never"))
     return table_order(panel_sections(rep.to_markdown(), rep)[event], WORDS)
@@ -855,11 +922,11 @@ def test_b3_panel_rows_with_equal_delta_follow_q_then_mde_then_hash() -> None:
     qs = [0.5, 0.2, 0.2, 0.9, 0.2, 0.1, 0.1, 0.2, 0.9, 0.5]
     mdes = [0.3, 0.2, 0.1, 0.3, 0.1, 0.4, 0.4, 0.1, 0.2, 0.3]
     cells = _ten_zero_cells(qs, mdes)
-    ev = make_event("alpha", cells)
+    ev = make_event("alpha", cells, kind=FAILURE)
     expected = [r.config["task"] for r in sorted(ev.cells.itertuples(index=False), key=_tiebreak_key)]
     assert len(set(expected)) == 10
     assert _panel_table_order(make_multi([ev]), "alpha") == expected
-    shuffled = make_event("alpha", _shuffled(cells, 7))
+    shuffled = make_event("alpha", _shuffled(cells, 7), kind=FAILURE)
     assert _panel_table_order(make_multi([shuffled]), "alpha") == expected
 
 
@@ -870,11 +937,11 @@ def test_b3_delta_stays_the_primary_key_in_each_panel() -> None:
                   verdict=sign_verdict(i, 0, dl) if abs(dl) >= 0.2 else "unchanged")
         for i, (w, dl) in enumerate(zip(WORDS, deltas, strict=True))
     ]
-    ev = make_event("alpha", cells)
-    other = make_event("beta", [dict(c, delta=0.0, verdict="unchanged") for c in cells])
+    ev = make_event("alpha", cells, kind=FAILURE)
+    other = make_event("beta", [dict(c, delta=0.0, verdict="unchanged") for c in cells], kind=FAILURE)
     expected = [r.config["task"] for r in sorted(ev.cells.itertuples(index=False), key=_tiebreak_key)]
     assert _panel_table_order(make_multi([ev, other]), "alpha") == expected
-    assert _panel_table_order(make_multi([make_event("alpha", _shuffled(cells, 3)), other]), "alpha") == expected
+    assert _panel_table_order(make_multi([make_event("alpha", _shuffled(cells, 3), kind=FAILURE), other]), "alpha") == expected
 
 
 def test_b3_hypothesis_ten_zero_delta_rows_order_by_q_mde_hash_under_shuffling() -> None:
@@ -886,13 +953,13 @@ def test_b3_hypothesis_ten_zero_delta_rows_order_by_q_mde_hash_under_shuffling()
     )
     def check(qs: list[float], mdes: list[float], seed: int) -> None:
         cells = _ten_zero_cells(qs, mdes)
-        ev = make_event("alpha", cells)
+        ev = make_event("alpha", cells, kind=FAILURE)
         expected = [
             r.config["task"] for r in sorted(ev.cells.itertuples(index=False), key=_tiebreak_key)
         ]
         spec = ReportSpec(title="t", x_axis="task", top_n=10, forest="never")
         straight = build_multi_report(make_multi([ev]), spec)
-        shuffled = build_multi_report(make_multi([make_event("alpha", _shuffled(cells, seed))]), spec)
+        shuffled = build_multi_report(make_multi([make_event("alpha", _shuffled(cells, seed), kind=FAILURE)]), spec)
         assert table_order(panel_sections(straight.to_markdown(), straight)["alpha"], WORDS) == expected
         assert shuffled.to_markdown() == straight.to_markdown()
         assert shuffled.to_svg() == straight.to_svg()
@@ -1047,20 +1114,22 @@ def test_b5_hypothesis_identical_delta_gives_identical_fill_across_panels() -> N
 # ---------- B6: panel order and captions ----------
 
 
-def _three_event_multi() -> MultiDiffResult:
+def _three_event_multi(*, kind: str | None = None) -> MultiDiffResult:
     xs, ys = [0.1, 0.2, 0.3], [10, 20]
     # tested order alpha, beta, gamma; headline order is gamma (2 worse), beta (1 worse, 2 safer), alpha
     alpha = make_event("alpha", grid_cells(xs, ys, delta_fn=lambda i, j: -0.2 if (i, j) == (0, 0) else 0.0,
-                                           verdict_fn=sign_verdict))
+                                           verdict_fn=sign_verdict), kind=kind)
     beta = make_event("beta", grid_cells(xs, ys, delta_fn=lambda i, j: {(0, 0): -0.2, (1, 0): -0.3, (2, 1): 0.2}.get((i, j), 0.0),
-                                         verdict_fn=sign_verdict))
+                                         verdict_fn=sign_verdict), kind=kind)
     gamma = make_event("gamma", grid_cells(xs, ys, delta_fn=lambda i, j: {(0, 1): 0.2, (1, 1): 0.3}.get((i, j), 0.0),
-                                           verdict_fn=sign_verdict))
+                                           verdict_fn=sign_verdict), kind=kind)
     return make_multi([alpha, beta, gamma])
 
 
 def test_b6_panel_order_is_headline_order_and_captions_parse_to_counts() -> None:
-    multi = _three_event_multi()
+    # PF4 (PF4.20): the captions and the headline read safer/worse only for an event whose kind is
+    # known, so the three hand-built events are failure events.
+    multi = _three_event_multi(kind=FAILURE)
     rep = build_multi_report(multi, spec2())
     assert rep.events == headline_order(multi) == ("gamma", "beta", "alpha")
     assert rep.events != multi.events
@@ -1096,7 +1165,9 @@ def _first_panel_text_index(root: ET.Element) -> int:
 
 
 def test_b7_headline_then_trade_line_then_panels_in_all_three_formats() -> None:
-    multi = two_event_multi()
+    # PF4 (PF4.20): the panel captions read safer/worse only for an event whose kind is known, so
+    # the two hand-built events are failure events.
+    multi = two_event_multi(kind=FAILURE)
     assert len(multi.trades) == 2 and multi.trade_line() is not None
     rep = build_multi_report(multi, spec2())
     assert rep.headline == multi.headline()
@@ -1196,27 +1267,31 @@ def test_b9_inference_line_present_iff_inferred_and_precedes_the_headline() -> N
 
 
 def test_b10_each_panel_honesty_uses_its_own_events_fields() -> None:
+    # PF4 (PF4.20): the honesty line's '"N worse"' and the panel captions are a reader's words only
+    # for an event whose kind is known, so the three hand-built events are failure events.
     xs, ys = [0.1, 0.2], [10, 20]
     alpha = make_event("alpha", [
         make_cell({"mu": 0.1, "push": 10}, delta=-0.3, q=1e-3, verdict="safer", mde=0.5),
         make_cell({"mu": 0.1, "push": 20}, delta=0.0, verdict="unchanged", mde=0.2, n_a=40, n_b=41),
         make_cell({"mu": 0.2, "push": 10}, delta=0.0, verdict="unchanged", mde=0.1),
         make_cell({"mu": 0.2, "push": 20}, delta=0.0, verdict="unchanged", mde=0.05),
-    ])
+    ], kind=FAILURE)
     beta = make_event("beta", [
         make_cell({"mu": 0.1, "push": 10}, delta=0.0, verdict="unchanged", mde=0.3, n_a=12, n_b=13),
         make_cell({"mu": 0.1, "push": 20}, delta=-0.3, q=1e-3, verdict="safer", mde=0.45),
         make_cell({"mu": 0.2, "push": 10}, delta=0.3, q=1e-3, verdict="worse", mde=0.1),
         make_cell({"mu": 0.2, "push": 20}, delta=-0.3, q=1e-3, verdict="safer", mde=0.05),
-    ])
-    gamma = make_event("gamma", grid_cells(xs, ys, delta_fn=lambda i, j: 0.3, verdict_fn=sign_verdict, mde_fn=lambda i, j: 0.25))
+    ], kind=FAILURE)
+    gamma = make_event(
+        "gamma", grid_cells(xs, ys, delta_fn=lambda i, j: 0.3, verdict_fn=sign_verdict, mde_fn=lambda i, j: 0.25), kind=FAILURE
+    )
     multi = make_multi([alpha, beta, gamma])
     rep = build_multi_report(multi, spec2())
     sections = panel_sections(rep.to_markdown(), rep)
     for e in rep.events:
         ev = multi.by_event[e]
         panel = rep.panels[e]
-        _check_honesty(panel, max_mde=ev.max_mde, max_mde_unchanged=ev.max_mde_unchanged)
+        _check_honesty(panel, max_mde=ev.max_mde, max_mde_unchanged=ev.max_mde_unchanged, panel=True)
         first, second = honesty_lines(panel)
         assert first in sections[e] and second in sections[e]
         if ev.max_mde_unchanged_cell is not None:
@@ -1228,7 +1303,8 @@ def test_b10_each_panel_honesty_uses_its_own_events_fields() -> None:
     g_first, _ = honesty_lines(rep.panels["gamma"])
     assert "20pp" in a_first and "n=40/41" in a_first
     assert "30pp" in b_first and "n=12/13" in b_first
-    assert g_first == HONESTY_NONE
+    # PF4 (PF4.17): gamma has no unchanged condition, so its line counts the four compared ones.
+    assert g_first != HONESTY_NONE and re.search(r"(?<![\d.])4(?![\d.])", g_first)
     assert len({a_first, b_first, g_first}) == 3
 
 
@@ -1749,6 +1825,11 @@ def _word_multi(**overrides: Any) -> MultiDiffResult:
     target.update(overrides)
     if "delta" in overrides and "rate_b" not in overrides:
         target["rate_b"] = target["rate_a"] + target["delta"]
+    # PF4 (PF4.3): the report prints each arm's share, events over runs, so a changed run count
+    # keeps the cell's event count within it (the factory counted events at n=30 and n=31).
+    for n, k, rate in (("n_a", "events_a", "rate_a"), ("n_b", "events_b", "rate_b")):
+        if n in overrides:
+            target[k] = int(round(target[rate] * target[n]))
     return make_multi([make_event("ev1", first), make_event("ev2", cells())])
 
 
@@ -1771,7 +1852,9 @@ def test_b19b_all_zero_multi_prints_only_zeros_in_tables_captions_and_honesty() 
             for x in ("alpha", "beta") for y in ("north", "south")
         ]
 
-    multi = make_multi([make_event("uno", zero_cells()), make_event("dos", zero_cells())])
+    # PF4 (PF4.20): the captions read safer/worse only for an event whose kind is known, so the
+    # two hand-built events are failure events.
+    multi = make_multi([make_event("uno", zero_cells(), kind=FAILURE), make_event("dos", zero_cells(), kind=FAILURE)])
     for ev in multi.by_event.values():
         assert ev.max_mde == 0.0 and ev.max_mde_unchanged == 0.0
     rep = build_multi_report(multi, ReportSpec(title="t", x_axis="col", y_axis="row", top_n=10))

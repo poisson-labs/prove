@@ -372,12 +372,14 @@ SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "pus
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# PF4: no longer asserted; W17 asserts the facts it guarded (assert_tree_less_facts).
 SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
 #: W4, W17. Minted on the bare tree at f4e2845 through ``serve --json`` on each pair's argv below
 #: (``scratchpad/s29/mint.py``): the six tree-less keys, ``json.dumps(sort_keys=True)``, sha256.
 # Re-minted 2026-09-20 (truncation surfacing): only the ``diff`` key of the six moves (the horizon key renamed in place, six keys appended); the
 # other five are byte-equal to the baseline's for every pair below.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): every pair's panels gain mde_unchanged (spec LS section 3.5); on eight pairs heatmap_svg also moves, the honesty lines and the long texts wrapping inside the box (D9, ruling 2 of 2026-09-22), and on go1-two-events the complement sentence replaces the trade line. Read through this test's own measurement on the built tree, not predicted.
+# PF4: no longer asserted; W17 asserts the facts they guarded (assert_tree_less_facts).
 TREE_LESS_KEYS_SHA256 = {
     "go1": "b310247f33d1941b825f3b9ab79442e3dbf0e2d7fc50fc6778bb7592d3cd91dd",
     "go1-two-events": "e69716ad568584f30fc9d2d9ead879d5fdb48677867d0a63342697edb7bbc106",
@@ -396,6 +398,7 @@ TREE_LESS_KEYS_SHA256 = {
 # Re-minted 2026-09-20 (truncation surfacing): the page's provenance list gains the horizon rename and six observation items; each value is the
 # baseline page's plus that change, byte for byte.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the excised page moves by the build's page order (Run pair below the figure), the pairing line beside 'unpaired' (LS21), the unverified tail respelled and the inert rule in the style; on go1-two-events the complement sentence replaces the trade line and the figure wraps. Read through this test's own measurement on the built tree, not predicted.
+# PF4: no longer asserted; W4 asserts the facts they guarded.
 GO1_PAGE_2_SHA256 = {
     "go1": "ee10014f70e481a7fe86b893bfc1010e3a91c7bae9f40d219fe1d354e6f3bb8a",
     "go1-two-events": "cf9e9b9f8bd5ffc75d6bce1bc27c6238c09b7c3869f2394dadeaf752e260f115",
@@ -468,7 +471,11 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 # PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; check's gate here is the flat family's unpaired test, named.
+# PF4 (PF4.20): Go1 declares no event kind, so the default ``--fail-on worse`` is refused; ``higher``
+# is the same gate on a failure event (fail when the rate rose).
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh", "--fail-on", "higher")
 # No longer asserted: check's stdout changes shape; W20 asserts the facts it guarded (spec section 14).
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
@@ -477,6 +484,7 @@ CHECK_EXIT = 0
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
+# PF4: no longer asserted; W20 asserts the facts they guarded (assert_e14_facts).
 E14_SHA256 = {
     "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
     "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
@@ -1163,7 +1171,11 @@ def expected_tokens(p: Pair) -> tuple[set[str], set[str]]:
         required.update({str(family["n_tests"]), str(family["n_rejected"]), family["text"]["mde_median"], family["text"]["mde_max"]})
         for leaf in family["cells"]:
             if leaf["rejects"]:
-                required.update({leaf["text"]["delta"], leaf["text"]["q_within"], leaf["text"]["mde"]})
+                required.update({leaf["text"]["delta"], leaf["text"]["q_within"]})
+                # PF4 (PF4.15): a leaf whose baseline had the event in every run has no detection
+                # limit (mde null, no text) and its row prints no number for it.
+                if leaf["mde"] is not None:
+                    required.add(leaf["text"]["mde"])
     required.update({str(bound["depth"]), str(bound["depth_configured"]), bound["text"]["bound"], bound["text"]["q"], bound["text"]["delta_star"]})
     return allowed, required
 
@@ -1641,7 +1653,9 @@ def test_w2_the_tree_with_every_text_removed_is_to_json_after_a_round_trip_and_s
     one under ``config``, the exposure V24 already has)."""
     for p in every_pair:
         stripped = without_text(p.structure["tree"])
-        expected = json.loads(json.dumps(p.tree.to_json()))
+        # PF4 (PF4.12): a condition with no detection limit has mde NaN, which the strict-JSON
+        # structure writes as null; the round trip reads NaN as null to compare like with like.
+        expected = json.loads(json.dumps(p.tree.to_json()), parse_constant=lambda _: None)
         assert stripped == expected, (p.name, diff_paths(stripped, expected)[:10])
         assert list(stripped) == list(expected), (p.name, list(stripped))
         seeds = [path for path, key in walk_key_paths(p.structure) if key == "seed"]
@@ -1723,15 +1737,116 @@ def test_w3_a_non_finite_tree_float_is_null_with_fmts_spelling_kept_in_text(go1:
 # ---------- W4 and W17: the old regions and the old pins ----------
 
 
+# ---------- PF4: the facts the Go1 page and tree-less digests guarded ----------
+
+#: PF4 (PF4.20): a judgement word. No fixture here declares an event kind, so no reader-facing
+#: string may carry one.
+JUDGEMENT_RE = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
+#: PF4 (PF4.20): the library's own frame keeps its encoding when the kind is unknown (``worse`` is a
+#: significant rise, ``safer`` a significant fall); a reader sees the direction.
+DIRECTION_OF = {"worse": "higher", "safer": "lower", "unchanged": "unchanged"}
+CELL_INDEX_RE = re.compile(r'<script type="application/json" id="prove-cells">(.*?)</script>', re.S)
+
+
+def same_number(got: Any, want: Any) -> bool:
+    """A JSON number against the library's float: equal, or null where the library holds NaN."""
+    want = float(want)
+    return got is None if math.isnan(want) else got == want
+
+
+def assert_cell_facts(name: str, event: str, cell: Mapping[str, Any], record: Mapping[str, Any]) -> None:
+    """One condition as the payload carries it against the library's frame row: its counts, its
+    rates, delta, p, q and detection limit (null where the library holds NaN, PF4.15), and the
+    direction a reader sees in place of the library's verdict (PF4.20)."""
+    for field in ("n_a", "n_b", "events_a", "events_b"):
+        assert cell[field] == int(record[field]), (name, event, field, cell[field], record[field])
+    for field in ("rate_a", "rate_b", "delta", "p", "q", "mde"):
+        assert same_number(cell[field], record[field]), (name, event, field, cell[field], record[field])
+    assert cell["verdict"] == cell["direction"] == DIRECTION_OF[str(record["verdict"])], (name, event, cell["verdict"], record["verdict"])
+
+
+def library_records(p: Pair, event: str) -> dict[str, dict[str, Any]]:
+    return {str(r["config_hash"]): r for r in p.multi.by_event[event].cells.to_dict(orient="records")}
+
+
+def assert_tree_less_facts(p: Pair, structure: Mapping[str, Any]) -> None:
+    """PF4 (PF4.3, PF4.11, PF4.15, PF4.20): what a digest of the six tree-less keys guarded, as
+    facts read against the library's frame on the same pair: the provenance is the builder's, the
+    view names the pair's axes, the store's path is nowhere, each panel's counts are the library's
+    rises and falls under direction words with ``kind``, ``n_safer`` and ``n_worse`` null, every
+    cell carries the library's numbers, the figure draws one cell per condition and one glyph per
+    significant one, and no tree-less string says safer or worse."""
+    assert "store_root" not in structure["pair"] and str(p.root) not in json.dumps(structure, allow_nan=False), p.name
+    assert structure["diff"] == p.report.provenance, p.name
+    assert (structure["view"]["x_axis"], structure["view"]["y_axis"]) == (p.x, p.y), p.name
+    assert sorted(panel["event"] for panel in structure["panels"]) == sorted(p.events), p.name
+    hashes: set[str] = set()
+    significant = 0
+    for panel in structure["panels"]:
+        event = panel["event"]
+        assert (panel["kind"], panel["n_safer"], panel["n_worse"]) == (None, None, None), (p.name, event)
+        records = library_records(p, event)
+        here = {c["config_hash"] for c in panel["cells"]}
+        # A panel draws the conditions on its slice: every one with no --fix, the pinned ones with.
+        assert here <= set(records) and (bool(p.fixed) or here == set(records)), (p.name, event)
+        verdicts = [str(records[h]["verdict"]) for h in here]
+        rises, falls = verdicts.count("worse"), verdicts.count("safer")
+        assert (panel["n_higher"], panel["n_lower"], panel["n_unchanged"]) == (rises, falls, verdicts.count("unchanged")), (p.name, event, panel["n_higher"], panel["n_lower"])
+        assert panel["caption"] == f"{event}: {falls} lower, {rises} higher", (p.name, panel["caption"])
+        for cell in panel["cells"]:
+            assert_cell_facts(p.name, event, cell, records[cell["config_hash"]])
+        hashes.update(here)
+        significant += sum(c["direction"] != "unchanged" for c in panel["cells"])
+    svg = structure["heatmap_svg"]
+    assert set(re.findall(r'data-cell="([0-9a-f]{16})"', svg)) == hashes, p.name
+    assert svg.count('data-sig="1"') == significant, (p.name, svg.count('data-sig="1"'), significant)
+    for text in walk_strings({key: structure[key] for key in TREE_LESS_KEYS}):
+        assert not JUDGEMENT_RE.search(text), (p.name, text[:120])
+
+
 def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_go1(every_pair: list[Pair]) -> None:
     """The ``/3`` page with the three new regions (by their ``<h2>`` lines) and the bound line
     excised, ``str(GO1_ROOT)`` normalised, digests to the ``/2`` page minted on the bare tree."""
+    # PF4 (PF4.3, PF4.11, PF4.15, PF4.20): GO1_PAGE_2_SHA256 is no longer asserted. Outside the
+    # excised regions the page now says lower and higher, carries the shares and the detection-limit
+    # notes in its cell index and worst-cells tables, and names no store path. The facts the digest
+    # guarded are asserted instead, on both Go1 pairs: the headings left after the excision, the
+    # headline's counts (Go1's fell: 60 fell and none rose, the golden count every surface carried
+    # as "60 safer, 0 worse" before PF4), every condition of the cell index against the library's
+    # frame, and the worst-cells tables row by row.
     pairs = by_name(every_pair)
-    for name, digest in GO1_PAGE_2_SHA256.items():
+    for name in GO1_PAGE_2_SHA256:
+        p = pairs[name]
         # PF2 (spec section 4.3): the title by name is asserted in its three places, then put back by id.
-        page = page_as_ids_named_it(pairs[name].page, ", ".join(pairs[name].events))
-        page = excised(page_as_0_0_1_wrote_it(page)).replace(str(GO1_ROOT), "<store>")
-        assert sha256_of_text(page) == digest, name
+        page = page_as_ids_named_it(p.page, ", ".join(p.events))
+        page = excised(page_as_0_0_1_wrote_it(page))
+        assert h2_sequence(page) == [h for h in H2_SEQUENCE if h not in EXCISED_REGIONS], name
+        assert "Store root" not in page and str(GO1_ROOT) not in page and not JUDGEMENT_RE.search(page), name
+        headline = str(p.structure["headline"]).splitlines()
+        assert p_lines(region_lines(page, "Result")[0]) == headline, name
+        for event in p.events:
+            ev = p.multi.by_event[event]
+            assert f"{event}: {ev.n_safer} lower, {ev.n_worse} higher" in headline[0], (name, headline[0])
+        assert (p.multi.by_event["fell"].n_safer, p.multi.by_event["fell"].n_worse) == (60, 0), name
+        index = json.loads(CELL_INDEX_RE.search(p.page).group(1))  # type: ignore[union-attr]
+        expected = {(event, h): r for event in p.events for h, r in library_records(p, event).items()}
+        assert {(key.rsplit(" ", 1)[0], entry["config_hash"]) for key, entry in index.items()} == set(expected), name
+        for key, entry in index.items():
+            event = key.rsplit(" ", 1)[0]
+            assert_cell_facts(name, event, entry, expected[(event, entry["config_hash"])])
+        tables = [table_of(line) for line in region_lines(page, "Worst cells") if line.startswith("<table>")]
+        assert len(tables) == len(p.structure["panels"]), name
+        for (header, rows), panel in zip(tables, p.structure["panels"], strict=True):
+            assert (header, rows) == (panel["worst_header"], panel["worst_rows"]), (name, panel["event"])
+            records = library_records(p, panel["event"])
+            verdict, mde = header.index("verdict"), header.index("MDE")
+            for row, h in zip(rows, panel["worst_hashes"], strict=True):
+                record = records[h]
+                assert row[verdict] == record["direction"] == DIRECTION_OF[str(record["verdict"])], (name, row)
+                if isinstance(record["mde_note"], str):
+                    assert not re.search(r"\d+pp|(?i:nan)", row[mde]), (name, row)
+                else:
+                    assert row[mde] == f"{fmt(record['mde'], 'pp0')}pp", (name, row)
 
 
 def test_w4_the_excised_page_and_the_tree_less_keys_do_not_read_the_tree(every_pair: list[Pair], synth_root: Path) -> None:
@@ -1760,26 +1875,23 @@ def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted
     # PF3 (spec section 4.4, R3): method and method_chosen follow sentence and are set aside with them.
     structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
     assert "tree" in structure
+    # PF4 (PF4.3, PF4.11, PF4.15, PF4.20): SERVE_STRUCTURE_SHA256 and TREE_LESS_KEYS_SHA256 are no
+    # longer asserted. The structure loses store_root, its panels gain kind and the direction counts
+    # and its cells the direction, the notes and the shares, its strings say lower and higher, and
+    # the figure's legend and wraps follow. The facts the digests guarded are asserted instead,
+    # against the library's frame on the same pair: on the narrowed O23 structure, and on every
+    # pair the digests named.
     # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
-    # then put back as before names, so the digest below still guards everything else.
+    # then put back as before names.
     structure = structure_as_ids_named_it(structure, "fell")
-    tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": RETIRED_SCHEMA}
-    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
-    assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
     pairs = by_name(every_pair)
-    for name, digest in TREE_LESS_KEYS_SHA256.items():
-        # PF2 (spec section 4.3): serve's default title now names the runs by name, which moves
-        # ``view.title`` and the figure (a longer title wraps). The frozen digest is kept on the
-        # library's structure under the title by id, which PF2 does not move; serve's six keys must
-        # equal the library's under the title by name, and the title must be the names.
-        p = pairs[name]
-        by_id = titled_structure(p, f"{p.a} vs {p.b}: {', '.join(p.events)}")
-        assert tree_less_digest(structure_as_0_0_1_wrote_it(by_id)) == digest, name
-        title = named_title(p)
-        assert p.structure["view"]["title"] == title, (name, p.structure["view"]["title"])
-        named = json.loads(json.dumps(titled_structure(p, title), allow_nan=False))
-        for key in TREE_LESS_KEYS:
-            assert p.structure[key] == named[key], (name, key)
+    structure_as_0_0_1_wrote_it(structure)
+    assert_tree_less_facts(pairs["go1"], structure)
+    for name in TREE_LESS_KEYS_SHA256:
+        # PF2 (spec section 4.3): serve's default title names the runs by name.
+        assert pairs[name].structure["view"]["title"] == named_title(pairs[name]), name
+        structure_as_0_0_1_wrote_it(pairs[name].structure)
+        assert_tree_less_facts(pairs[name], pairs[name].structure)
 
 
 # ---------- W5: order of the document ----------
@@ -2003,11 +2115,13 @@ def test_w9_on_go1_by_mu_the_row_for_0_95_is_the_nineteenth_the_one_value_pair_h
     refused = [x for x in p.tree.grouping.refused if x.key == "task"]
     assert len(refused) == 1 and refused[0].reason == "underpowered" and refused[0].offered_max_group_mde is not None
     assert refused[0].detail in lines_of(region(p, "Fault lines"))[1]
-    p = pair("go1-kind", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", by="kind")
-    assert [(x.key, x.rung, x.reason) for x in p.tree.grouping.refused] == [("kind", "trace", "unsupported")]
-    line = lines_of(region(p, "Fault lines"))[1]
-    assert "kind" in line and "trace" in line and "unsupported" in line, line
-    assert_fault_lines(p)
+    # PF4 (PF4.6): no trace grouping is offered any more, so --by kind is an unknown grouping:
+    # serve refuses it (exit 1, one error line naming it, nothing on stdout) before anything binds,
+    # where it used to draw a page whose fault lines named the trace rung's refusal.
+    code, out, err, calls = run_serve(serve_argv(GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", {}, "fisher_bh", {"by": "kind"}))
+    errors = [line for line in err.splitlines() if line.startswith("error: ")]
+    assert code == 1 and out == "" and calls == [], (code, out[:80], err[-400:], calls)
+    assert len(errors) == 1 and re.search(r"\bkind\b", errors[0]), err
 
 
 # ---------- W10: the cells region ----------
@@ -2053,7 +2167,12 @@ def assert_cells(p: Pair) -> None:
         rejected = [c for c in family["cells"] if c["rejects"]]
         assert len(rows) == len(rejected) == family["n_rejected"], (p.name, family["label"], len(rows), family["n_rejected"])
         for row, leaf in zip(rows, rejected, strict=True):
-            assert row == [config_cell(leaf), leaf["event"], leaf["text"]["delta"], leaf["text"]["q_within"], f"{leaf['text']['mde']}pp"], (p.name, row, leaf["config"])
+            # PF4 (PF4.15): a leaf with no detection limit (mde null) prints no number in the MDE
+            # column; it names the ceiling instead.
+            mde = f"{leaf['text']['mde']}pp" if leaf["mde"] is not None else row[-1]
+            assert row == [config_cell(leaf), leaf["event"], leaf["text"]["delta"], leaf["text"]["q_within"], mde], (p.name, row, leaf["config"])
+            if leaf["mde"] is None:
+                assert "ceiling" in row[-1] and not numeric_tokens(row[-1]), (p.name, row)
 
 
 def test_w10_the_cells_region_prints_the_head_the_meaning_sentence_one_family_line_per_family_and_one_row_per_rejected_leaf(every_pair: list[Pair]) -> None:
@@ -2388,15 +2507,61 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def e14_builder_digests() -> dict[str, str]:
-    """S21's E14 as S28's retrofit left it: the tree-less builder's markdown and light receipt."""
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
-    multi = quiet_multi_diff(store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), ma, mb, events=("fell",), method="fisher_bh")
+SVG_TEXT_RE = re.compile(r"<text\b[^>]*>([^<]*)</text>")
+
+
+def md_cells(line: str) -> list[str]:
+    assert line.startswith("|") and line.endswith("|"), line
+    return [c.strip() for c in line[1:-1].split("|")]
+
+
+def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
+    """S21's E14 as S28's retrofit left it -- the tree-less builder's markdown, SVG and light
+    receipt -- read as facts instead of digests (PF4.3, PF4.15, PF4.20; the same facts S28's R2
+    asserts, restated here). Go1 declares no event kind, so the caption counts falls and rises, the
+    honesty line names the count of rises, the verdict column is each condition's direction and no
+    rendering says safer or worse; each worst-cells row carries its condition's numbers in M7's
+    forms and prints no number where the condition has no detection limit; the SVG draws one cell
+    per condition and one glyph per significant one."""
     spec = ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw")
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
-    return {"report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())), "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html()))}
+    ev = multi.by_event["fell"]
+    caption = f"fell: {ev.n_safer} lower, {ev.n_worse} higher"
+    md = as_0_0_1_wrote_it(report.to_markdown())
+    html = html_mod.unescape(as_0_0_1_wrote_it(receipt.to_html()))
+    svg = report.to_svg()
+    svg_texts = [html_mod.unescape(t) for t in SVG_TEXT_RE.findall(svg)]
+    md_lines = md.splitlines()
+    for line in multi.headline().splitlines():
+        assert line in md_lines and line in html, line
+    assert f"## {caption}" in md_lines and caption in html and caption in svg_texts, caption
+    assert any(f'"{ev.n_worse} higher" is an honest claim' in line for line in md_lines), md
+    for text in (md, html, "\n".join(svg_texts)):
+        assert not JUDGEMENT_RE.search(text), JUDGEMENT_RE.search(text)
+    start = md_lines.index(f"## {caption}") + 1
+    table: list[list[str]] = []
+    for line in md_lines[start:]:
+        if line.startswith("|"):
+            table.append(md_cells(line))
+        elif table:
+            break
+    header, body = table[0], table[2:]
+    assert header[:2] == ["mu", "push_pct_bw"] and len(body) == spec.top_n, (header, len(body))
+    records = ev.cells.to_dict(orient="records")
+    for row in body:
+        [r] = [r for r in records if math.isclose(float(r["config"]["mu"]), float(row[0])) and math.isclose(float(r["config"]["push_pct_bw"]), float(row[1]))]
+        assert row[2] == f"{r['n_a']}/{r['n_b']}", row
+        assert row[3:8] == [fmt(r["rate_a"], "pp1"), fmt(r["rate_b"], "pp1"), fmt(r["delta"], "pp1"), fmt(r["p"], "sig3"), fmt(r["q"], "sig3")], row
+        assert row[8] == DIRECTION_OF[str(r["verdict"])], row
+        if isinstance(r["mde_note"], str):
+            assert not re.search(r"\d+pp|(?i:nan)", row[9]), row
+        else:
+            assert row[9] == f"{fmt(r['mde'], 'pp0')}pp", row
+    deltas = [float(row[5]) for row in body]
+    assert deltas == sorted(deltas, reverse=True), deltas
+    assert set(re.findall(r'data-cell="([0-9a-f]{16})"', svg)) == set(ev.cells["config_hash"])
+    assert svg.count('data-sig="1"') == int((ev.cells["verdict"] != "unchanged").sum())
 
 
 def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_result_and_root_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
@@ -2412,6 +2577,8 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
     # section 5.4). check's stdout changes shape in PF1 (its verdict line comes first), so its
     # digest gives way to the facts it guarded: passed, the event gated, its safer and worse
     # counts, the method, q and the number of tests.
+    # PF4 (PF4.20): Go1's fell has no kind, so the counts read as falls and rises: the library's
+    # n_safer (its falls) is printed "lower" and its n_worse (its rises) "higher".
     assert code == CHECK_EXIT and not [line for line in err.splitlines() if not line.startswith("note: ")], (code, err)
     store = Store(GO1_ROOT)
     ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
@@ -2420,7 +2587,7 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
     assert check_lines[0].startswith("passed  ") and "fell" in check_lines[0], out
     fell = gated.by_event["fell"]
     assert any(
-        "fell" in line and f"{fell.n_safer:,} safer" in line and f"{fell.n_worse:,} worse" in line for line in check_lines
+        "fell" in line and f"{fell.n_safer:,} lower" in line and f"{fell.n_worse:,} higher" in line for line in check_lines
     ), out
     assert any(
         "aalen_johansen" in line and "fisher_bh" in line and "unpaired" in line
@@ -2433,13 +2600,14 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
     # The CLI's heatmap labels follow rule 10 (spec section 5.4) and may re-wrap, so its digest
     # moves; the library's SVG keeps the pinned bytes, and the CLI's colour cells are its, cell
     # for cell.
+    # PF4 (PF4.3, PF4.15, PF4.20): the three E14_SHA256 digests are no longer asserted: the SVG's
+    # headline and caption say lower and higher, the markdown and receipt carry the shares and the
+    # detection-limit notes. assert_e14_facts asserts what they guarded.
     library_svg = build_multi_report(gated, ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw"), manifests=(ma, mb)).to_svg()
-    assert sha256_of_text(library_svg) == E14_SHA256["heatmap.svg"]
     cli_svg = (out_dir / "heatmap.svg").read_text(encoding="utf-8")
     fills = re.compile(r'<rect\b[^>]*\bfill="([^"]*)"')
     assert fills.findall(cli_svg) == fills.findall(library_svg) and fills.findall(cli_svg)
-    for name, digest in e14_builder_digests().items():
-        assert digest == E14_SHA256[name], name
+    assert_e14_facts(gated, ma, mb)
 
 
 def test_w20_the_viewers_import_partition_and_v17s_closure_clauses_are_unchanged() -> None:

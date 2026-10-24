@@ -91,6 +91,12 @@ CELLS_COLUMNS = [
     "q",
     "verdict",
     "mde",
+    # PF4 (PF4.13, PF4.14, PF4.15): every cell now carries its direction from the test, the
+    # log-rank timing note, the matched-pair count and the note on a missing detection limit.
+    "direction",
+    "direction_note",
+    "pairs",
+    "mde_note",
 ]
 SUMMARY_FIELDS = [
     "method",
@@ -442,10 +448,15 @@ def test_i8_logrank_identical_synthetic_including_no_events() -> None:
 
 
 def _reference_mde(rate_a: float, n_a: int, n_b: int, alpha: float, power: float, proportion) -> float:
+    # PF4 (PF4.12): the arguments follow statsmodels' documentation of
+    # ``power_proportions_2indep(diff, prop2, nobs1, ratio)``: sample 1 has ``prop1 = prop2 + diff``
+    # and size ``nobs1``, and ``nobs2 = ratio * nobs1``. The changed arm B is sample 1, so
+    # ``diff = delta``, ``prop2 = rate_a``, ``nobs1 = n_b`` and ``ratio = n_a / n_b`` (the old
+    # call passed ``nobs1 = n_a, ratio = n_b / n_a``, copied from Prove's argument order).
     def pow_at(delta: float) -> float:
         return float(
             proportion.power_proportions_2indep(
-                delta, rate_a, n_a, ratio=n_b / n_a, alpha=alpha,
+                delta, rate_a, n_b, ratio=n_a / n_b, alpha=alpha,
                 alternative="two-sided", return_results=False,
             )
         )
@@ -494,26 +505,39 @@ def test_i9_mde_positive_bounded_and_decreasing_in_n(rate_a: float, n: int, rati
 
 
 def test_i9_mde_guards_rate_zero_and_one() -> None:
-    # Rates of exactly 0 and 1 go through the 0.5/n continuity guard. At 1.0 no increase
-    # is detectable at all, so only finiteness, positivity, and the unit bound are pinned.
-    for rate_a in (0.0, 1.0):
-        m = mde_two_proportion(rate_a, 32, 32)
-        assert np.isfinite(m) and 0.0 < m <= 1.0
+    # A rate of exactly 0 goes through the 0.5/n continuity guard: finite, positive, unit-bounded.
+    m = mde_two_proportion(0.0, 32, 32)
+    assert np.isfinite(m) and 0.0 < m <= 1.0
     assert mde_two_proportion(0.0, 32, 32) <= 1.0
+    # PF4 (PF4.15): at 1.0 no rise is possible, so there is no limit: NaN, not a guarded number.
+    assert np.isnan(mde_two_proportion(1.0, 32, 32))
 
 
 # ---------- I10: max_mde ----------
 
 
 def test_i10_max_mde_is_column_max_and_positive_on_fixture(golden: DiffResult) -> None:
-    assert golden.max_mde == golden.cells["mde"].max()
+    # PF4 (PF4.15): a cell whose baseline had the event in every run (decided from the counts) has
+    # no limit (NaN) and is left out of max_mde; every other cell keeps a positive limit, and
+    # max_mde is the maximum over those.
+    ceiling = golden.cells["events_a"] == golden.cells["n_a"]
+    # 189 cells of Go1's go1-v0 fell in every run (stats re-check README, finding 3).
+    assert int(ceiling.sum()) == 189
+    assert golden.cells.loc[ceiling, "mde"].isna().all()
+    rest = golden.cells.loc[~ceiling, "mde"]
+    assert len(rest) > 0 and (rest > 0.0).all()
+    assert golden.max_mde == rest.max()
     assert golden.max_mde > 0.0
-    assert (golden.cells["mde"] > 0.0).all()
 
 
 def test_i10_cell_mde_is_mde_two_proportion_at_q(golden: DiffResult) -> None:
     for row in golden.cells.head(50).itertuples(index=False):
         expected = mde_two_proportion(row.rate_a, int(row.n_a), int(row.n_b), alpha=Q, power=POWER)
+        # PF4 (PF4.15): a cell at a 100% baseline has no limit, NaN in the cell and from the
+        # function alike; every other cell still equals the function at the cell's counts.
+        if row.events_a == row.n_a:
+            assert np.isnan(row.mde) and np.isnan(expected)
+            continue
         assert abs(row.mde - expected) <= TOL_ORACLE
 
 

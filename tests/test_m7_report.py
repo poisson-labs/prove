@@ -23,6 +23,7 @@ normalised; p/q are ``format(x, ".3g")`` at or above 1e-3 and ``format(x, ".2e")
 zero prints as ``0``.
 """
 
+import dataclasses
 import hashlib
 import json
 from html import escape as html_escape
@@ -1013,6 +1014,21 @@ def _single_insertion(without: str, with_: str) -> bool:
     return prefix + suffix == len(without)
 
 
+def _same_cells(xs: tuple[Cell, ...], ys: tuple[Cell, ...]) -> bool:
+    """PF4 (PF4.15): a condition with no detection limit holds a NaN ``mde``, and NaN equals
+    nothing, so two renders' cells are compared field by field with NaN matching NaN."""
+
+    def same(x: Any, y: Any) -> bool:
+        both_nan = isinstance(x, float) and isinstance(y, float) and math.isnan(x) and math.isnan(y)
+        return both_nan or x == y
+
+    return len(xs) == len(ys) and all(
+        type(x) is type(y)
+        and all(same(getattr(x, f.name), getattr(y, f.name)) for f in dataclasses.fields(x))
+        for x, y in zip(xs, ys, strict=True)
+    )
+
+
 def test_i17_curves_add_one_contiguous_section_and_change_nothing_else(golden_frames: dict[str, Any], golden_diff: DiffResult) -> None:
     ta = cell_table(golden_frames["a"], "fell")
     tb = cell_table(golden_frames["b"], "fell")
@@ -1021,7 +1037,10 @@ def test_i17_curves_add_one_contiguous_section_and_change_nothing_else(golden_fr
     without = build_report(golden_diff, spec)
     with_ = build_report(golden_diff, spec, curves=curves)
     assert with_.to_svg() == without.to_svg()
-    assert with_.cells == without.cells and with_.headline == without.headline
+    # PF4 (PF4.15): Go1's conditions at a 100% baseline hold a NaN limit, so the cells are compared
+    # with NaN matching NaN rather than by ``==``.
+    assert any(math.isnan(c.mde) for c in without.cells if c.present)
+    assert _same_cells(with_.cells, without.cells) and with_.headline == without.headline
     for a, b in ((without.to_markdown(), with_.to_markdown()), (without.to_html(), with_.to_html())):
         assert len(b) > len(a)
         assert _single_insertion(a, b)

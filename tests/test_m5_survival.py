@@ -75,6 +75,8 @@ CELL_TABLE_COLUMNS = [
     "event_rate",
     "event_rate_lo",
     "event_rate_hi",
+    # PF4 (PF4.1b): the table records the Wilson interval's level beside its bounds.
+    "event_rate_level",
     "s_at_horizon",
     "s_var_at_horizon",
     "median_t",
@@ -567,7 +569,9 @@ def test_i13_cell_table_km_warns_with_names() -> None:
     with pytest.warns(UserWarning) as record:
         cell_table(df, "fell", method="km")
     messages = " ".join(str(w.message) for w in record)
-    assert "timeout" in messages and "survived" in messages
+    # PF4 (PF4.19): the warning names the outcomes that end a run before the horizon; "timeout"
+    # does (t = 4.0), "survived" is seen only at the horizon (t = 5.0) and is no longer named.
+    assert "timeout" in messages and "survived" not in messages
 
 
 def test_i13_cell_table_km_silent_when_guard_empty() -> None:

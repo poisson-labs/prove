@@ -173,9 +173,13 @@ INTERVAL_LINE = re.compile(
 #: method="fisher_bh")``; ``FELL_LOGRANK`` is the same pair at ``events=("fell",)`` and
 #: ``method="logrank_bh"``.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the two-event Go1 markdown's trade line is replaced by the complement sentence (fell and survived are complements on every cell, spec LS section 3.6, trade_line()); nothing else in it moves. Read through this test's own measurement on the built tree, not predicted.
-PAIR_MARKDOWN_SHA256 = "e2752b5278166b38601207b6be3a44a7f9df6180afd1462ab5b04eb74da72458"
+# PF4 (PF4.3, PF4.15, PF4.20): the two markdown digests are no longer asserted. PF4 changes those
+# bytes (direction words for an event of unknown kind, the share columns, the limit notes), so C14
+# now asserts the facts the digests guarded, read from the result itself.
+# PF4 (PF4.20): Go1's runs give ``fell`` and ``survived`` no kind, so the headline counts read in
+# direction words; the numbers are the published 60 and 0.
 PAIR_HEADLINE = (
-    "survived: 0 safer, 60 worse · fell: 60 safer, 0 worse\n"
+    "survived: 0 lower, 60 higher · fell: 60 lower, 0 higher\n"
     "(aalen_johansen + fisher_bh, BH q<0.05 over 800 tests, unpaired)"
 )
 #: LS retrofit, 2026-09-22 (local serve pass, Phase A): ``fell`` and ``survived`` are exact complements in all 400 cells and both arms
@@ -191,9 +195,11 @@ PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
 COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee5fa"
 
-FELL_LOGRANK_MARKDOWN_SHA256 = "6ffbb64ecbc8e6ead6aa415aaba0a10de49a5fe99ee7e8a81aba4bd60579991f"
+# PF4 (PF4.13, PF4.20): under log-rank a rejected cell's direction is the sign of B's observed
+# minus expected events, so Go1's 88 safer / 0 worse / 312 unchanged become 182 lower / 14 higher /
+# 204 unchanged (stats re-check README, section 2), printed in direction words.
 FELL_LOGRANK_HEADLINE = (
-    "fell: 88 safer, 0 worse\n"
+    "fell: 182 lower, 14 higher\n"
     "(aalen_johansen + logrank_bh (cause-specific), BH q<0.05 over 400 tests, unpaired)"
 )
 FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
@@ -202,21 +208,23 @@ FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d004
 #: two frozen oracles do not couple. Minted on the bare tree at b10a146 by
 #: ``report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw``.
 # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
-# test; the E14 digests and the heatmap are the unpaired test's, named.
+# test; the E14 facts and the heatmap are the unpaired test's, named.
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
-# Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
-# (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
-E14_SHA256 = {
-    "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
-    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
-}
+# PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests are no longer asserted. PF4 changes all three
+# files (direction words for an event of unknown kind, the share table, the limit notes), so C14
+# asserts the facts they guarded instead.
 
 #: Step zero, measurement 2, restated as a constant so C2's fixture cannot be swapped for one
 #: that does not discriminate. Go1, ``events=("fell",)``, ``logrank_bh``.
 FELL_LOGRANK_N_TESTS = 400
 FELL_LOGRANK_REJECTIONS = 196
-FELL_LOGRANK_VERDICT_SUM = 88
+# PF4 (PF4.13): a rejected cell is now labelled by the log-rank statistic, so the 108 rejected
+# cells at 32/32 vs 32/32 (``delta`` exactly 0) are changes too and the verdict sum equals the
+# rejection count: 182 lower + 14 higher (stats re-check README, section 2). The old verdict
+# sum, 88, survives as the rejected cells whose horizon ``delta`` is not 0, the count the old
+# horizon rule labelled, and that is now the count a wrong level would be built from.
+FELL_LOGRANK_VERDICT_SUM = 196
+FELL_LOGRANK_HORIZON_MOVED = 88
 
 
 # ---------- data builders: construction only, no assertions and no decisions ----------
@@ -748,7 +756,14 @@ def test_c2_the_level_follows_the_rejection_count_and_not_the_verdict_sum(
     result = go1_fell_logrank
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
     verdict_sum = sum(ev.n_safer + ev.n_worse for ev in result.by_event.values())
+    # PF4 (PF4.13): the verdict sum is now the rejection count; the count that still differs is
+    # the rejected cells whose horizon delta moved (the old horizon rule's 88).
+    horizon_moved = sum(
+        int(((ev.cells["q"] < result.q) & (ev.cells["delta"] != 0.0)).sum())
+        for ev in result.by_event.values()
+    )
     assert (rejections, verdict_sum) == (FELL_LOGRANK_REJECTIONS, FELL_LOGRANK_VERDICT_SUM)
+    assert horizon_moved == FELL_LOGRANK_HORIZON_MOVED
     assert result.n_rejected == FELL_LOGRANK_REJECTIONS
     assert result.interval_level == 1.0 - result.q * FELL_LOGRANK_REJECTIONS / FELL_LOGRANK_N_TESTS
 
@@ -761,9 +776,15 @@ def test_c2_the_discriminating_fixture_still_discriminates(go1_fell_logrank: Any
     a green suite that pins nothing."""
     result = go1_fell_logrank
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
-    verdict_sum = sum(ev.n_safer + ev.n_worse for ev in result.by_event.values())
-    assert rejections != verdict_sum, (rejections, verdict_sum)
-    assert 1.0 - result.q * rejections / result.n_tests != 1.0 - result.q * verdict_sum / result.n_tests
+    # PF4 (PF4.13): every rejected cell is now a change, so the verdict sum cannot differ from R on
+    # any fixture; the fixture still discriminates R from the count the horizon rule would give,
+    # the rejected cells whose horizon delta is not 0.
+    horizon_moved = sum(
+        int(((ev.cells["q"] < result.q) & (ev.cells["delta"] != 0.0)).sum())
+        for ev in result.by_event.values()
+    )
+    assert rejections != horizon_moved, (rejections, horizon_moved)
+    assert 1.0 - result.q * rejections / result.n_tests != 1.0 - result.q * horizon_moved / result.n_tests
 
 
 def test_c2_a_per_event_r_would_give_a_different_level_on_this_fixture(go1_pair: Any) -> None:
@@ -1052,11 +1073,63 @@ def test_c14_the_go1_markdown_is_byte_identical_to_the_bare_tree(go1_pair: Any) 
     where ``paired=True`` stood and the headline ends ``unpaired)`` (P-1 section 3.3); S24 section
     0.8's *does not gain a byte* was S24's rule for S24's packet and P-1 retires it (P-1 section 8).
     The interval block's bytes, which S24 owns, are asserted unchanged by P-1's own Y11."""
-    assert sha256_of_text(go1_pair.to_markdown()) == PAIR_MARKDOWN_SHA256
+    # PF4 (PF4.3, PF4.15, PF4.20): the digest is replaced by the facts it guarded.
+    assert_markdown_carries_the_result(go1_pair)
 
 
 def test_c14_the_go1_logrank_markdown_is_byte_identical_too(go1_fell_logrank: Any) -> None:
-    assert sha256_of_text(go1_fell_logrank.to_markdown()) == FELL_LOGRANK_MARKDOWN_SHA256
+    # PF4 (PF4.3, PF4.13, PF4.15, PF4.20): the digest is replaced by the facts it guarded.
+    assert_markdown_carries_the_result(go1_fell_logrank)
+
+
+def _close(printed: str, value: float) -> bool:
+    """A number the markdown prints (``:g``, six significant digits) against the frame's value."""
+    if pd.isna(value):
+        return printed == "nan"
+    return abs(float(printed) - float(value)) <= 1e-5 * max(1.0, abs(float(value)))
+
+
+def assert_markdown_carries_the_result(result: Any) -> None:
+    """PF4: what the C14 digests guarded, as facts. ``to_markdown()`` opens with ``headline()``,
+    carries the trade line and the parameter line, gains no interval block, and holds one table
+    per event whose rows are that event's cells in order, each with the frame's counts, delta, p, q
+    and limit (or the cell's limit note), and the cell's direction word as its verdict: no event
+    here has a kind (PF4.20)."""
+    md = result.to_markdown()
+    lines = md.splitlines()
+    head = result.headline().splitlines()
+    assert lines[: len(head)] == head
+    trade = result.trade_line()
+    assert trade is None or trade in lines
+    assert "intervals:" not in md and "alpha*" not in md
+    (params,) = [line for line in lines if line.startswith("method=")]
+    assert params.startswith(f"method={result.method}") and f"n_tests={result.n_tests}," in params
+    for event in result.events:
+        ev = result.by_event[event]
+        assert ev.kind is None
+        header = f"## {event}: n_lower={ev.n_lower}, n_higher={ev.n_higher}, n_unchanged={ev.n_unchanged},"
+        (start,) = [i for i, line in enumerate(lines) if line.startswith(header)]
+        top = next(i for i in range(start, len(lines)) if lines[i].startswith("| config_hash |"))
+        columns = [c.strip() for c in lines[top].strip("|").split("|")]
+        rows = []
+        for line in lines[top + 2 :]:
+            if not line.startswith("|"):
+                break
+            rows.append(dict(zip(columns, (c.strip() for c in line.strip("|").split("|")), strict=True)))
+        cells = list(ev.cells.itertuples(index=False))
+        assert [r["config_hash"] for r in rows] == [c.config_hash for c in cells], event
+        for r, c in zip(rows, cells, strict=True):
+            for key in ("n_a", "n_b", "events_a", "events_b"):
+                assert int(r[key]) == int(getattr(c, key)), (event, c.config_hash, key)
+            for key in ("delta", "p", "q"):
+                assert _close(r[key], getattr(c, key)), (event, c.config_hash, key, r[key])
+            assert r["verdict"] == c.direction, (event, c.config_hash)
+            # The limit column may carry a mark after its value (a log-rank cell read on the timing
+            # is marked there), so the value is read from the column's start.
+            if c.mde_note is None:
+                assert _close(r["mde"].split()[0], c.mde), (event, c.config_hash, r["mde"])
+            else:
+                assert r["mde"].startswith(c.mde_note), (event, c.config_hash, r["mde"])
 
 
 def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
@@ -1072,7 +1145,10 @@ def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
     assert go1_pair.check() is False and go1_pair.check("any") is False
     assert go1_fell_logrank.headline() == FELL_LOGRANK_HEADLINE
     assert go1_fell_logrank.trade_line() is None
-    assert go1_fell_logrank.check() is True and go1_fell_logrank.check("any") is False
+    # PF4 (PF4.13): 14 cells now rose under log-rank (stats re-check README, section 2), and the
+    # library's own counts keep "worse" for a rise, so check() fails where it passed.
+    assert go1_fell_logrank.by_event["fell"].n_worse == 14
+    assert go1_fell_logrank.check() is False and go1_fell_logrank.check("any") is False
 
 
 def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
@@ -1081,9 +1157,12 @@ def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
     build that frame by hand; S21 measured this cost and declined to pay it for ``coverage``,
     and nothing about an interval makes it cheaper. This is the test that fails if someone pays
     it anyway."""
+    # PF4 (PF4.13, PF4.14, PF4.15): the frame gains PF4's four per-cell fields (direction, the
+    # log-rank timing note, the matched-pair count, the limit note); the interval is still not on it.
     assert CELLS_COLUMNS == (
         "config_hash", "config", "n_a", "n_b", "events_a", "events_b",
         "rate_a", "rate_b", "delta", "stat", "p", "q", "verdict", "mde",
+        "direction", "direction_note", "pairs", "mde_note",
     )
     for event in go1_pair.events:
         assert list(go1_pair.by_event[event].cells.columns) == list(CELLS_COLUMNS)
@@ -1125,16 +1204,36 @@ def e14_builder() -> tuple[Any, Any, Any]:
     return multi, report, receipt
 
 
-def e14_builder_digests() -> dict[str, str]:
-    """The builder's report markdown, receipt and heatmap, digested."""
-    _, report, receipt = e14_builder()
-    return {
-        "report.md": hashlib.sha256(as_0_0_1_wrote_it(report.to_markdown()).encode("utf-8")).hexdigest(),
-        # The command line's heatmap now formats its text under rule 10 (spec section 5.4); the
-        # builder's heatmap is unchanged, so the digest moves to it.
-        "heatmap.svg": hashlib.sha256(report.to_svg().encode("utf-8")).hexdigest(),
-        "receipt.html": hashlib.sha256(as_0_0_1_wrote_it(receipt.to_html()).encode("utf-8")).hexdigest(),
-    }
+def assert_e14_builder_facts() -> None:
+    """PF4 (PF4.3, PF4.15, PF4.20): what the three E14 digests guarded, as facts. The builder's
+    report markdown, receipt and heatmap each carry the headline counts (the published 60 and 0,
+    in direction words: ``fell`` has no kind), the worst-powered unchanged limit (34pp, the Go1
+    number fix), and no ``safer`` or ``worse``; the markdown and the receipt carry the interval
+    line with this family's R and m; the heatmap labels every one of the 400 cells with its delta
+    in percentage points."""
+    multi, report, receipt = e14_builder()
+    ev = multi.by_event["fell"]
+    assert ev.kind is None and (ev.n_lower, ev.n_higher) == (60, 0)
+    counts = f"fell: {ev.n_lower} lower, {ev.n_higher} higher"
+    worst = f"{ev.max_mde_unchanged * 100:.0f}pp"
+    assert worst == "34pp"
+    family = f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family"
+    md = as_0_0_1_wrote_it(report.to_markdown())
+    html = as_0_0_1_wrote_it(receipt.to_html())
+    svg = report.to_svg()
+    for name, text in (("report.md", md), ("receipt.html", html), ("heatmap.svg", svg)):
+        assert counts in text, name
+        assert f"can only detect a {worst} rise" in text, name
+        assert not re.search(r"\b(safer|worse)\b", text), name
+    assert family in md and family in html
+    ids = re.findall(r'data-cell="([0-9a-f]+)"', svg)
+    label_group = svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
+    labels = re.findall(r">([^<]*)</text>", label_group)
+    delta = dict(zip(ev.cells["config_hash"], ev.cells["delta"], strict=True))
+    assert len(ids) == len(labels) == len(delta) == 400, (len(ids), len(labels), len(delta))
+    for short, label in zip(ids, labels, strict=True):
+        (full,) = [h for h in delta if h.startswith(short)]
+        assert label == f"{delta[full] * 100:.1f}", (short, label, delta[full])
 
 
 def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
@@ -1194,8 +1293,8 @@ def test_c14_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_pa
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    for name, digest in e14_builder_digests().items():
-        assert digest == E14_SHA256[name], name
+    # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded.
+    assert_e14_builder_facts()
     # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
     # checked by its facts rather than a new digest.
     multi, report, _ = e14_builder()

@@ -836,7 +836,9 @@ def test_pf0_6_every_pair_verb_exits_0_on_the_0_0_1_quickstart_pair_and_no_store
     before = tree_digest(STORE)
     invocations = [
         ["diff", QA, QB],
-        ["check", QA, QB, "--event", "violated"],
+        # PF4 (PF4.20): a 0.0.1 run records no kind, so check's default --fail-on worse is refused;
+        # --fail-on higher is the same gate on a failure event (fail when the rate rose).
+        ["check", QA, QB, "--event", "violated", "--fail-on", "higher"],
         ["report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(tmp_path / "report")],
         ["serve", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--event", "violated", "--event", "timeout", "--json"],
     ]
@@ -878,6 +880,14 @@ ROOT_FIELDS = ("p_omnibus", "p_location", "p_dispersion", "rejects")
 BOUND_FIELDS = ("depth_configured", "depth", "q", "delta_star", "bound", "discoveries")
 
 
+#: PF4 (PF4.20): a 0.0.1 run records no event kind, so a cell's verdict is now the direction word:
+#: 0.0.1's ``safer`` (the rate fell) reads ``lower`` and its ``worse`` (rose) reads ``higher``.
+DIRECTION_OF = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
+#: PF4 (PF4.18): the omnibus and every group p-value are Westfall-Young on one scale, so these
+#: three fields move; every other field of the tree is 0.0.1's.
+TREE_FIELDS_PF4_MOVES = ("p_omnibus", "p_group", "q_group")
+
+
 def same(got: Any, want: Any) -> bool:
     """Equal, where a NaN 0.0.1 wrote (a statistic with no value) equals a NaN read back. Strict JSON
     now writes a NaN or an infinity as null (front-door spec section 5.6), so null equals either."""
@@ -891,15 +901,62 @@ def recorded(name: str) -> dict[str, Any]:
     return data
 
 
+def assert_same_cell(got: dict[str, Any], want: dict[str, Any], method: str, where: tuple[str, str]) -> None:
+    """0.0.1's cell, field by field, with the two fields PF4 moves read as PF4 writes them."""
+    for field in CELL_FIELDS:
+        if field == "verdict":
+            # PF4 (PF4.20): the direction word in place of 0.0.1's safer/worse; the cell's
+            # direction says the same.
+            assert got[field] == got["direction"] == DIRECTION_OF[want[field]], (*where, field)
+        elif field == "delta" and method == "mcnemar_bh":
+            # PF4 (PF4.14): delta is the matched-pair difference (n01 - n10) / pairs. Every run of
+            # this pair is matched, so n01 - n10 is events_b - events_a and the value is 0.0.1's
+            # horizon difference up to floating-point order.
+            assert got["pairs"] == got["n_a"] == got["n_b"], (*where, got["pairs"])
+            assert abs(got[field] - (got["events_b"] - got["events_a"]) / got["pairs"]) < 1e-12, (*where, field)
+            assert abs(got[field] - want[field]) < 1e-12, (*where, field)
+        else:
+            assert same(got[field], want[field]), (*where, field)
+
+
+def benjamini_hochberg(p: list[float]) -> list[float]:
+    """BH-adjusted q-values, computed here: q_(i) = min over j >= i of m * p_(j) / j, capped at 1."""
+    order = sorted(range(len(p)), key=lambda i: p[i])
+    q = [0.0] * len(p)
+    running = 1.0
+    for rank in range(len(p), 0, -1):
+        i = order[rank - 1]
+        running = min(running, len(p) * p[i] / rank)
+        q[i] = running
+    return q
+
+
 def assert_same_tree(got: dict[str, Any], want: dict[str, Any]) -> None:
     for field in ROOT_FIELDS:
+        if field in TREE_FIELDS_PF4_MOVES:
+            continue
         assert got["root"][field] == want["root"][field], field
+    # PF4 (PF4.18): the root's p is the min-p over its statistics on one scale, which is never
+    # below the smallest of their own p-values; whether it rejects is 0.0.1's (above).
+    root = got["root"]
+    assert min([*root["p_location"].values(), *root["p_dispersion"].values()]) <= root["p_omnibus"] <= 1.0, root
     assert got["fault_lines"]["rejected_groups"] == want["fault_lines"]["rejected_groups"]
     got_groups = {g["label"]: g for g in got["fault_lines"]["groups"]}
     assert sorted(got_groups) == sorted(g["label"] for g in want["fault_lines"]["groups"])
     for group in want["fault_lines"]["groups"]:
         for field in GROUP_FIELDS:
+            if field in TREE_FIELDS_PF4_MOVES:
+                continue
             assert got_groups[group["label"]][field] == group[field], (group["label"], field)
+    # PF4 (PF4.18): each group's p is a min-p on one scale as the root's is, and its q is the
+    # Benjamini-Hochberg adjustment of those p-values, computed here.
+    labels = sorted(got_groups)
+    for label in labels:
+        g = got_groups[label]
+        assert min([*g["p_location"].values(), *g["p_dispersion"].values()]) <= g["p_group"] <= 1.0, (label, g["p_group"])
+    q = benjamini_hochberg([got_groups[label]["p_group"] for label in labels])
+    for label, q_value in zip(labels, q, strict=True):
+        assert abs(got_groups[label]["q_group"] - q_value) < 1e-12, (label, got_groups[label]["q_group"], q_value)
     for field in BOUND_FIELDS:
         assert got["bound"][field] == want["bound"][field], field
 
@@ -916,9 +973,9 @@ def test_pf0_7_diff_json_on_the_0_0_1_pair_gives_0_0_1s_cells_omnibus_fault_line
         got_cells = {c["config_hash"]: c for c in got["by_event"][event]["cells"]}
         assert sorted(got_cells) == sorted(c["config_hash"] for c in block["cells"]), event
         for cell in block["cells"]:
-            for field in CELL_FIELDS:
-                assert same(got_cells[cell["config_hash"]][field], cell[field]), (event, cell["config_hash"], field)
-    assert got["omnibus"]["p_omnibus"] == want["omnibus"]["p_omnibus"]
+            assert_same_cell(got_cells[cell["config_hash"]], cell, method, (event, cell["config_hash"]))
+    # PF4 (PF4.18): the omnibus p moves with the tree's root, which it is.
+    assert got["omnibus"]["p_omnibus"] == got["tree"]["root"]["p_omnibus"]
     assert_same_tree(got["tree"], want["tree"])
 
 
@@ -934,8 +991,7 @@ def test_pf0_7_serve_json_on_the_0_0_1_pair_gives_0_0_1s_cells_omnibus_fault_lin
         got_cells = {c["config_hash"]: c for c in got_panels[panel["event"]]["cells"]}
         assert sorted(got_cells) == sorted(c["config_hash"] for c in panel["cells"]), panel["event"]
         for cell in panel["cells"]:
-            for field in CELL_FIELDS:
-                assert same(got_cells[cell["config_hash"]][field], cell[field]), (panel["event"], cell["config_hash"], field)
+            assert_same_cell(got_cells[cell["config_hash"]], cell, method, (panel["event"], cell["config_hash"]))
     assert_same_tree(got["tree"], want["tree"])
 
 
@@ -1002,11 +1058,33 @@ def test_pf0_7_report_on_the_0_0_1_pair_gives_0_0_1s_tables_and_bound(method: st
     assert r.code == 0, r
     got = (out / "report.md").read_text(encoding="utf-8")
     want = (RECORDED / f"report-{method}" / "report.md").read_text(encoding="utf-8")
+    # PF4 (PF4.3): report.md gains a Shares section, which 0.0.1 did not print; the rows compared
+    # are those of every section 0.0.1 had.
+    got = got.replace(section(got, "## Shares"), "")
+    # PF4 (PF4.20): a 0.0.1 run records no kind, so a row's verdict is the direction word.
+    want = re.sub(r"\b(safer|worse)\b", lambda m: DIRECTION_OF[m.group(1)], want)
+    # PF4 (PF4.18): a fault-line row's p and q (its last-but-two and last-but-one cells) are the
+    # one-scale values, read from the same comparison's JSON; every other cell is 0.0.1's.
+    tree = json.loads(run_cli(["--store", str(STORE), "diff", QA, QB, "--method", method, "--json"]).out)["tree"]
+    groups = {g["label"]: g for g in tree["fault_lines"]["groups"]}
+    fault_rows = set(table_data_rows(section(got, "## Fault lines")))
+    assert len(fault_rows) == len(groups), fault_rows
     # report.md's numbers are printed under rule 10 now (front-door spec section 5.4): each row and
     # the bound carry 0.0.1's numbers by value.
     got_rows, want_rows = table_data_rows(got), table_data_rows(want)
     assert len(got_rows) == len(want_rows)
-    assert [(g, w) for g, w in zip(got_rows, want_rows, strict=True) if not same_row(g, w)] == []
+    moved = []
+    for g, w in zip(got_rows, want_rows, strict=True):
+        if g in fault_rows:
+            g_cells, w_cells = g.strip("|").split(" | "), w.strip("|").split(" | ")
+            group = groups[g_cells[0].strip()]
+            for token, value in ((g_cells[-3], group["p_group"]), (g_cells[-2], group["q_group"])):
+                printed, half = printed_value(token.strip())
+                assert abs(printed - value) <= half + 1e-12, (g, value)
+            g, w = " | ".join(g_cells[:-3] + g_cells[-1:]), " | ".join(w_cells[:-3] + w_cells[-1:])
+        if not same_row(g, w):
+            moved.append((g, w))
+    assert moved == []
     assert same_numbers(section(got, "## Bound"), section(want, "## Bound"))
 
 
@@ -1028,7 +1106,8 @@ def verb_argv(verb: str, inputs: dict[str, Path], out: Path) -> list[str]:
     return {
         "sweep": ["sweep", str(inputs["spec"]), "--target", f"{MOCK}:rollout", "--max-mde", "0.99", "--yes"],
         "diff": ["diff", QA, QB],
-        "check": ["check", QA, QB, "--event", "violated"],
+        # PF4 (PF4.20): as in PF0.6, the same gate named for an event of unknown kind.
+        "check": ["check", QA, QB, "--event", "violated", "--fail-on", "higher"],
         "report": ["report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(out)],
         "paired": ["paired", "--declaration", str(inputs["declaration"]), "--out", str(out)],
         "serve": ["serve", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--event", "violated", "--json"],

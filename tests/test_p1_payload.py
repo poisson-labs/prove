@@ -186,7 +186,9 @@ WARNING = (
     "buys power depends on how far the two arms agree episode by episode."
 )
 #: Y8. Go1 under ``fisher_bh``, ``--event fell``: the headline on every surface (section 3.3).
-GO1_HEADLINE = "fell: 60 safer, 0 worse\n(aalen_johansen + fisher_bh, BH q<0.05 over 400 tests, unpaired)"
+# PF4 (PF4.20): Go1's fell has no declared kind, so the headline counts read in direction words
+# ("N lower, M higher"); the counts are the ones it always pinned (60 fell, 0 rose).
+GO1_HEADLINE = "fell: 60 lower, 0 higher\n(aalen_johansen + fisher_bh, BH q<0.05 over 400 tests, unpaired)"
 GO1_SINGLE_HEADLINE = "60 of 400 cells safer, 0 worse (fisher_bh, BH q<0.05, unpaired)."
 #: Y7. ``to_markdown()``'s parameter line on Go1 starts with these tokens (section 3.3).
 GO1_PARAMETER_LINE_PREFIX = "method=fisher_bh, seed_identity_match=True, unpaired_analysis=True, q=0.05, t_unit=seconds, horizon=5.0, n_tests=400, "
@@ -223,6 +225,8 @@ H2_SEQUENCE = (
 )
 #: Y21. Every panel honesty string at ``a626cd3``, byte for byte, measured on the bare tree for Go1 and
 #: for the two minted pairs (no second honesty block and no rewording, D6).
+# PF4 (PF4.17, PF4.20): Y21 reads each panel's honesty through honesty_as_a626cd3, which puts PF4's
+# two rewordings back after asserting them, so these literals stay a626cd3's bytes.
 GO1_HONESTY = (
     'Worst-powered unchanged cell (mu=0.95, push_pct_bw=100, n=32/32) can only detect a 34pp rise. '
     '"0 worse" is an honest claim only above that.\nWorst-powered cell overall: 34pp (mu=0.1, push_pct_bw=10).',
@@ -239,6 +243,7 @@ HONESTY_AT_A626CD3 = {
         "claim only above that.\nWorst-powered cell overall: 64pp (task=t0, temp=0).",
     ),
 }
+HONESTY_NONE_AT_A626CD3 = "No unchanged cells; every cell moved significantly."
 #: Y16. Go1 at the default 4000 permutations: ``p_omnibus == p_floor`` exactly (section 3.5, measured).
 GO1_DEFAULT_PERMUTATIONS = 4000
 #: W20's two regexes, restated (Y12).
@@ -522,6 +527,21 @@ def interval_text(lo: Any, hi: Any) -> str:
     return f"[{fmt_pp1(lo)}, {fmt_pp1(hi)}]"
 
 
+def honesty_as_a626cd3(honesty: str, n_compared: int) -> str:
+    """PF4 (PF4.17, PF4.20): a panel's honesty with PF4's two rewordings put back as a626cd3 wrote
+    them, each first asserted in PF4's form. No event here declares a kind, so the claim the bound
+    guards counts rises ("N higher" where it read "N worse"); a panel with no unchanged condition
+    counts its compared conditions instead of saying every cell moved."""
+    lines = honesty.splitlines()
+    if "can only detect" in lines[0]:
+        assert re.search(r'"\d+ higher" is an honest claim', lines[0]) and not re.search(r'"\d+ worse"', lines[0]), lines[0]
+        lines[0] = re.sub(r'"(\d+) higher" is an honest claim', r'"\1 worse" is an honest claim', lines[0])
+    else:
+        assert lines[0] != HONESTY_NONE_AT_A626CD3 and str(n_compared) in re.findall(r"\d+", lines[0]), lines[0]
+        lines[0] = HONESTY_NONE_AT_A626CD3
+    return "\n".join(lines)
+
+
 def without_text(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: without_text(v) for k, v in value.items() if k != "text"}
@@ -690,7 +710,9 @@ def go1_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
         ("diff json", ["diff", GO1_A, GO1_B, "--event", "fell", "--json", *fisher, *knobs]),
         ("diff methods all", ["diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", *knobs]),
         ("report", ["report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--out", str(out_dir), *fisher, *knobs]),
-        ("check", ["check", GO1_A, GO1_B, "--event", "fell", *fisher]),
+        # PF4 (PF4.20): the default --fail-on worse is refused on an event of unknown kind; --fail-on
+        # higher is the same gate on Go1's fell (fail when the rate rose).
+        ("check", ["check", GO1_A, GO1_B, "--event", "fell", "--fail-on", "higher", *fisher]),
     ):
         code, out, err = quiet(lambda argv=argv: run_cli([*base, *argv]))
         assert code == 0, (name, code, err)
@@ -1076,12 +1098,15 @@ def test_y13_adr_060s_placement_by_position_on_every_surface_and_the_h2_sequence
         at = md_lines.index("## Intervals")
         assert md_lines[at - 1] == panels[-1]["honesty"].splitlines()[-1], (built.name, md_lines[at - 1])
         after = md_lines[at + 1 + len(built.report.interval_lines)]
-        assert after == "## Methods" or after.startswith("> "), (built.name, after)
+        # PF4 (PF4.3): the two-run report now prints the per-arm shares, as their own section after
+        # the intervals; the intervals block still ends where it did.
+        assert after in ("## Methods", "## Shares") or after.startswith("> "), (built.name, after)
         html_lines = [line for line in built.html.splitlines() if line.strip()]
         at = html_lines.index("<h2>Intervals</h2>")
         assert html_lines[at - 1] == f"<p>{'<br>'.join(html_mod.escape(hl) for hl in panels[-1]['honesty'].splitlines())}</p>", (built.name, html_lines[at - 1])
         after = html_lines[at + 1 + len(built.report.interval_lines)]
-        assert after == "<h2>Methods</h2>" or after.startswith("<blockquote>"), (built.name, after)
+        # PF4 (PF4.3): as in report.md, the shares section may follow the intervals block.
+        assert after in ("<h2>Methods</h2>", "<h2>Shares</h2>") or after.startswith("<blockquote>"), (built.name, after)
 
 
 def test_y14_the_worst_cells_column_is_the_interval_per_event_and_cell_on_every_surface_and_absent_when_r_is_zero(go1_built: Built, k2: Built, same: Built, go1: Any) -> None:
@@ -1215,7 +1240,10 @@ def test_y17_the_floor_line_follows_the_method_line_and_the_group_floor_line_fol
 def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key(go1_built: Built, k2: Built, same: Built) -> None:
     assert viewer_mod._TREE_KINDS["root"]["p_floor"] == "sig3"
     for built in (go1_built, k2, same):
-        assert without_text(built.structure["tree"]) == json.loads(json.dumps(built.tree.to_json())), built.name
+        # PF4 (PF4.12): a condition with no detection limit has mde NaN, which the strict-JSON
+        # structure writes as null; the round trip reads NaN as null to compare like with like.
+        round_trip = json.loads(json.dumps(built.tree.to_json()), parse_constant=lambda _: None)
+        assert without_text(built.structure["tree"]) == round_trip, built.name
         assert built.structure["tree"]["root"]["text"]["p_floor"] == fmt_sig3(built.tree.root.p_floor), built.name
 
 
@@ -1260,9 +1288,12 @@ def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_li
 def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at_one_site_inside_root(go1_built: Built, go1_cli: dict[str, Any], k2: Built, same: Built) -> None:
     """The honesty and closure clauses are green before and after by design; the assignment-site
     clause is the guard on ADR-086's reading."""
-    assert tuple(p["honesty"] for p in go1_built.structure["panels"]) == GO1_HONESTY == tuple(p["honesty"] for p in go1_cli["serve json"]["panels"])
+    def frozen(panels: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+        return tuple(honesty_as_a626cd3(p["honesty"], p["n_present"]) for p in panels)
+
+    assert frozen(go1_built.structure["panels"]) == GO1_HONESTY == frozen(go1_cli["serve json"]["panels"])
     for built in (go1_built, k2, same):
-        assert tuple(p["honesty"] for p in built.structure["panels"]) == HONESTY_AT_A626CD3[built.name], built.name
+        assert frozen(built.structure["panels"]) == HONESTY_AT_A626CD3[built.name], built.name
         for panel in built.structure["panels"]:
             assert "interval" not in panel["honesty"] and "alpha*" not in panel["honesty"], (built.name, panel["honesty"])
             assert built.md.count(panel["honesty"].splitlines()[0]) == 1, built.name
