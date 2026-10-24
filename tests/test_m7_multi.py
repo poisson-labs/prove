@@ -85,6 +85,11 @@ REGRESSION_DIR = FIXTURE_DIR / "report_regression"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
+# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
@@ -703,7 +708,7 @@ def golden_multi(golden_frames: dict[str, Any]) -> MultiDiffResult:
 
 def _sweep(store: Path, target: str) -> str:
     out, err = StringIO(), StringIO()
-    argv = ["--store", str(store), "sweep", str(QUICKSTART), "--target", target, "--yes",
+    argv = ["--store", str(store), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", target, "--yes",
             "--salt", QUICKSTART_SALT]
     # A sweep no longer ends with a run_id line (its end is a verdict line, front-door spec section
     # 5.3), so the new run is the one the store gained.

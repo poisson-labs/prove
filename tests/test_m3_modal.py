@@ -59,7 +59,6 @@ import pytest
 
 import poisson_prove
 import poisson_prove.executor_modal as executor_modal
-from poisson_prove.diff import mde_two_proportion
 from poisson_prove.episode import Episode
 from poisson_prove.executor import ExecutorError, Plan, RunSummary, plan, run_local
 from poisson_prove.executor_modal import (
@@ -809,11 +808,9 @@ def test_i15_preflight_fresh_plan_with_and_without_estimate(tmp_path: Path) -> N
     cost_line = _line_with(text, "Cost: ~$")
     assert "best-effort" in cost_line and "prices" in cost_line
     assert "Cost: unknown" not in text
-    mde_line = _line_with(text, "MDE at N=")
-    assert f"MDE at N={REPLICATES}" in mde_line
-    found = re.search(r"MDE at N=\d+[^:]*:\s*([0-9]*\.?[0-9]+)", mde_line)
-    assert found, mde_line
-    assert abs(float(found.group(1)) - mde_two_proportion(0.5, REPLICATES, REPLICATES)) <= 5e-3
+    # PF4 re-freeze (PF4.22, reading R36): the preflight block no longer prints the old limit at a base
+    # rate of 0.5 (the normal approximation, beside the gate's own); the plan's one limit is the gate's.
+    assert "MDE at N=" not in text and "base rate 0.5" not in text
     assert "Resuming" not in text
 
     no_estimate = preflight_modal(

@@ -59,6 +59,11 @@ GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
+# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 CLI_SOURCE = ROOT / "src" / "poisson_prove" / "cli.py"
 EXAMPLES_DIR = ROOT / "src" / "poisson_prove" / "examples"
 MOCK_AGENT_SOURCE = EXAMPLES_DIR / "mock_agent.py"
@@ -173,7 +178,7 @@ def new_run_id(root: Path, before: Sequence[str]) -> str:
 
 def sweep(store: Path, target: str, *extra: str) -> str:
     before = Store(store).runs()
-    r = run_cli(["--store", str(store), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra])
+    r = run_cli(["--store", str(store), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", target, "--yes", *extra])
     assert r.code == 0, r.text
     return new_run_id(store, before)
 
@@ -466,7 +471,7 @@ def test_i2_resolved_store_is_the_one_read(tmp_path: Path, monkeypatch: pytest.M
 
 
 def test_i3_sweep_local_end_to_end(store_root: Path) -> None:
-    r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
+    r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes"])
     assert r.code == 0, r.text
     run_id = new_run_id(store_root, [])
     store = Store(store_root)
@@ -495,7 +500,7 @@ def test_i3_sweep_local_end_to_end(store_root: Path) -> None:
 def test_i4_declined_prompt_exits_two_and_creates_nothing(store_root: Path) -> None:
     expected = preflight(plan(SweepSpec.load(QUICKSTART), Store(store_root)))
     r = run_cli(
-        ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT],
+        ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT],
         stdin=TtyStringIO("n\n"),
     )
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
@@ -512,7 +517,7 @@ def test_i4_declined_prompt_exits_two_and_creates_nothing(store_root: Path) -> N
 @pytest.mark.parametrize("answer", ["", "maybe\n", "N\n"], ids=["empty-line", "other-word", "upper-n"])
 def test_i4_anything_but_yes_is_a_decline(store_root: Path, answer: str) -> None:
     r = run_cli(
-        ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT],
+        ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT],
         stdin=TtyStringIO(answer),
     )
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
@@ -522,7 +527,7 @@ def test_i4_anything_but_yes_is_a_decline(store_root: Path, answer: str) -> None
 @pytest.mark.parametrize("answer", ["y\n", "YES\n", "  yes  \n"], ids=["y", "upper-yes", "padded-yes"])
 def test_i4_accepted_prompt_runs(store_root: Path, answer: str) -> None:
     r = run_cli(
-        ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT],
+        ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT],
         stdin=TtyStringIO(answer),
     )
     assert r.code == 0, r.text
@@ -536,7 +541,7 @@ def test_i4_accepted_prompt_runs(store_root: Path, answer: str) -> None:
 
 def test_i5_non_tty_stdin_without_yes_exits_two_naming_the_flag(store_root: Path) -> None:
     r = run_cli(
-        ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT],
+        ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT],
         stdin=StringIO(),
     )
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
@@ -568,7 +573,7 @@ def test_i6_explicit_salt_is_recorded(store_root: Path) -> None:
 
 def test_i6_resume_completes_a_partial_run(store_root: Path) -> None:
     partial = run_cli(
-        ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes", "--max-rollouts", "40"]
+        ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes", "--max-rollouts", "40"]
     )
     # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
     assert partial.code == 3, partial.text
@@ -578,7 +583,7 @@ def test_i6_resume_completes_a_partial_run(store_root: Path) -> None:
     assert len(store.read(run_id)) == 40
 
     resumed = run_cli(
-        ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes", "--resume", run_id]
+        ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes", "--resume", run_id]
     )
     assert resumed.code == 0, resumed.text
     # The resumed run is the partial one: the store gained no run (spec section 5.3).
@@ -603,7 +608,7 @@ def test_i6_resume_completes_a_partial_run(store_root: Path) -> None:
 def test_i6_salt_pair_with_resume_are_mutually_exclusive(mock_runs: MockRuns, extra: tuple[str, ...]) -> None:
     argv = [a if a != "A" else mock_runs.a for a in extra]
     before = mock_runs.store.runs()
-    r = run_cli(["--store", str(mock_runs.root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes", *argv])
+    r = run_cli(["--store", str(mock_runs.root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes", *argv])
     assert_clean_refusal(r, 2)
     assert mock_runs.store.runs() == before
 
@@ -613,7 +618,7 @@ def test_i6_salt_pair_with_resume_are_mutually_exclusive(mock_runs: MockRuns, ex
 
 def test_i7_modal_absent_exits_two_with_install_hint(store_root: Path, modal_absent: None) -> None:
     r = run_cli(
-        ["--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--backend", "modal", "--yes"]
+        ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--backend", "modal", "--yes"]
     )
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert "pip install \"poisson-prove[modal]\"" in r.text, r.text
@@ -624,7 +629,7 @@ def test_i7_table_only_reaches_options_and_image(
     store_root: Path, modal_toml: Path, captured_run_modal: CapturedRunModal
 ) -> None:
     r = run_cli(
-        ["--store", str(store_root), "sweep", str(modal_toml), "--target", ROLLOUT, "--backend", "modal", "--yes"]
+        ["--store", str(store_root), "sweep", str(modal_toml), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--backend", "modal", "--yes"]
     )
     assert r.code == 0, r.text
     assert "Backend: modal" in r.out
@@ -644,7 +649,7 @@ def test_i7_flags_only_reach_options_with_default_image(
 ) -> None:
     r = run_cli(
         [
-            "--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT,
+            "--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT,
             "--backend", "modal", "--yes",
             "--concurrency", "3", "--infra-retries", "0", "--max-cost", "50",
             "--est-seconds", "2.0", "--app-name", "flag-app",
@@ -671,7 +676,7 @@ def test_i7_flags_override_table(
 ) -> None:
     r = run_cli(
         [
-            "--store", str(store_root), "sweep", str(modal_toml), "--target", ROLLOUT,
+            "--store", str(store_root), "sweep", str(modal_toml), *QUICKSTART_MAX_MDE, "--target", ROLLOUT,
             "--backend", "modal", "--yes",
             "--concurrency", "9", "--infra-retries", "5", "--max-cost", "250",
             "--est-seconds", "1.5", "--app-name", "from-flag",
@@ -696,7 +701,7 @@ def test_i7_image_flag_selects_the_named_section(
 ) -> None:
     r = run_cli(
         [
-            "--store", str(store_root), "sweep", str(modal_toml), "--target", ROLLOUT,
+            "--store", str(store_root), "sweep", str(modal_toml), *QUICKSTART_MAX_MDE, "--target", ROLLOUT,
             "--backend", "modal", "--yes", "--image", "image-gpu",
         ]
     )
@@ -720,14 +725,14 @@ def test_i7_local_backend_never_calls_run_modal(store_root: Path, captured_run_m
     ids=["no-colon", "missing-module", "missing-attr"],
 )
 def test_i8_unresolvable_target_exits_two_naming_the_path(store_root: Path, target: str) -> None:
-    r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), "--target", target, "--yes"])
+    r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", target, "--yes"])
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert target in r.text, r.text
     assert Store(store_root).runs() == []
 
 
 def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> None:
-    r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), "--target", RAISING, "--yes"])
+    r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", RAISING, "--yes"])
     # A sweep in which every rollout errored exits 3 (spec section 5.2).
     assert r.code == 3, r.text
     run_id = new_run_id(store_root, [])
@@ -1365,10 +1370,10 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     monkeypatch.chdir(tmp_path)
     t0 = time.perf_counter()
     store_root = tmp_path / "prove-runs"
-    first = run_cli(["sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
+    first = run_cli(["sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes"])
     assert first.code == 0, first.text
     run_a = new_run_id(store_root, [])
-    second = run_cli(["sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", run_a, "--yes"])
+    second = run_cli(["sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", PATCHED, "--pair-with", run_a, "--yes"])
     assert second.code == 0, second.text
     run_b = new_run_id(store_root, [run_a])
     third = run_cli(["report", run_a, run_b, "--event", "violated", "--x", "tool_fail_rate", "--y", "task_id"])

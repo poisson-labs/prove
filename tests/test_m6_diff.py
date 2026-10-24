@@ -97,6 +97,32 @@ CELLS_COLUMNS = [
     "direction_note",
     "pairs",
     "mde_note",
+    # PF4 re-freeze (PF4.34 to PF4.47): every cell row gains Holm's adjusted p and decision, the
+    # limit keys both ways, the competing shift and the interval on the change; the order is the
+    # reference build's.
+    "q_holm",
+    "holm",
+    "mde_rise",
+    "mde_fall",
+    "mde_rise_note",
+    "mde_fall_note",
+    "mde_test",
+    "mde_basis",
+    "mde_level",
+    "mde_family",
+    "mde_power",
+    "mde_anchor",
+    "mde_hr",
+    "p_min",
+    "flaggable",
+    "mde_moves_with",
+    "mde_rise_verdict",
+    "mde_fall_verdict",
+    "competing_shift",
+    "ci_lo",
+    "ci_hi",
+    "ci_level",
+    "ci_method",
 ]
 SUMMARY_FIELDS = [
     "method",

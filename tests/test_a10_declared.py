@@ -674,7 +674,10 @@ def test_p10_1_declare_must_be_a_table(tmp_path: Path) -> None:
 def test_p10_1_the_cli_refuses_a_malformed_table_before_the_run_exists(tmp_path: Path) -> None:
     """Section 3.10's second row: refused at sweep-file parse, and "before the run exists" is a
     claim about the filesystem, so it is measured there."""
-    argv = ["sweep", "--target", f"{MODULE}:silent_rollout", "--yes", "--max-mde", "0.5"]
+    # PF4 re-freeze (PF4.49, reading R17): the control is a 2-replicate design, which no lone condition
+    # can flag, so below 1 the gate refuses it; --max-mde 1 admits any design, where 0.5 admitted it
+    # under the old normal approximation (which saturated at 0.5 for tiny designs).
+    argv = ["sweep", "--target", f"{MODULE}:silent_rollout", "--yes", "--max-mde", "1"]
     good = write(tmp_path / "good.toml", sweep_toml(DECLARE_TOML))
     code, out, err = run_cli(["--store", str(tmp_path / "control"), argv[0], str(good), *argv[1:]])
     assert code == 0, (code, out, err)

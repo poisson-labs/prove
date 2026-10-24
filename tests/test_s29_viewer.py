@@ -288,6 +288,10 @@ MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit above the default accepted change of 0.20, so its sweep is refused;
+# the frozen sweeps accept 0.3, the smallest round value above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 
 # ---------- spec sections 2, 3.1, 3.2, 3.3: the literals ----------
 
@@ -755,6 +759,17 @@ def store_tree(root: Path, a: str, b: str, *, events: Sequence[str], method: str
     return _TREES[key]
 
 
+def admitting(root: Path, a: str, b: str, *, events: Sequence[str], key: str, method: str = "fisher_bh", **knobs: Any) -> dict[str, Any]:
+    """PF4 re-freeze (PF4.45): a group's limit now comes from each cell's own baseline with the root
+    and the group both rejecting, so a grouping this file was frozen on can be refused
+    ``underpowered`` at the default ``--max-group-mde``. The override the refusal itself offers is
+    read here, never typed in, and returned as the knobs that keep the frozen grouping."""
+    _, result = store_tree(root, a, b, events=events, method=method, **knobs)
+    refused = [x for x in result.grouping.refused if x.key == key]
+    assert len(refused) == 1 and refused[0].reason == "underpowered" and refused[0].offered_max_group_mde is not None, result.grouping.refused
+    return {**knobs, "max_group_mde": float(refused[0].offered_max_group_mde)}
+
+
 def counts_of(store: Store, run: str) -> tuple[int, int]:
     """``(spans, spans stamped as cut)`` over a run's stored envelopes: the count the CLI hands the builders.
     Added 2026-09-20 (truncation surfacing); restated here and never imported from another test module."""
@@ -1168,7 +1183,10 @@ def expected_tokens(p: Pair) -> tuple[set[str], set[str]]:
         if leaves["reason"] == "depth":
             required.add(str(bound["depth_configured"]))
     for family in leaves["families"]:
-        required.update({str(family["n_tests"]), str(family["n_rejected"]), family["text"]["mde_median"], family["text"]["mde_max"]})
+        required.update({str(family["n_tests"]), str(family["n_rejected"])})
+        # PF4 re-freeze (PF4.24): a family whose every cell has no detection limit (each "cannot be
+        # flagged" or "none detectable") has a null median and max, with no text; nothing is owed.
+        required.update(family["text"][f] for f in ("mde_median", "mde_max") if family[f] is not None)
         for leaf in family["cells"]:
             if leaf["rejects"]:
                 required.update({leaf["text"]["delta"], leaf["text"]["q_within"]})
@@ -1466,14 +1484,21 @@ def quickstart(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str
         assert len(new) == 1, out
         return new.pop()
 
-    a = sweep(ROLLOUT, "--salt", QUICKSTART_SALT)
-    b = sweep(PATCHED, "--pair-with", a)
+    a = sweep(ROLLOUT, "--salt", QUICKSTART_SALT, *QUICKSTART_MAX_MDE)
+    b = sweep(PATCHED, "--pair-with", a, *QUICKSTART_MAX_MDE)
     return root, a, b
+
+
+def go1_mu(method: str = "fisher_bh") -> dict[str, Any]:
+    """PF4 re-freeze (PF4.45): Go1's frozen grouping by ``mu`` is refused at the default 0.20 (and
+    ``push_pct_bw`` resolves); the knobs that keep it, the override read off the refusal."""
+    return admitting(GO1_ROOT, GO1_A, GO1_B, events=("fell",), key="mu", method=method)
 
 
 @pytest.fixture(scope="module")
 def go1() -> Pair:
-    return pair("go1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw")
+    # PF4 re-freeze (PF4.45): the override the mu refusal offers keeps the grouping this file pins.
+    return pair("go1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", **go1_mu())
 
 
 @pytest.fixture(scope="module")
@@ -1481,15 +1506,21 @@ def every_pair(synth_root: Path, quickstart: tuple[Path, str, str]) -> list[Pair
     """Every section 0.7 pair through ``serve --json`` with no tree flag but the ``--by grp`` the
     BH and gate pairs need (section 6), beside the tree the API grows on the same frames."""
     qroot, qa, qb = quickstart
+    # PF4 re-freeze (PF4.45): group limits from each cell's own baseline, unconditional, refuse the
+    # grouping these rows were frozen on (Go1's mu, the BH and gate pairs' grp, the multi-event
+    # pair's task) at the default 0.20; each row passes the override its refusal offers.
+    def by_grp(a: str, b: str) -> dict[str, Any]:
+        return admitting(synth_root, a, b, events=("fail",), key="grp", method="mcnemar_bh", by="grp")
+
     return [
-        pair("go1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw"),
-        pair("go1-mcnemar", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", method="mcnemar_bh"),
+        pair("go1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", **go1_mu()),
+        pair("go1-mcnemar", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", method="mcnemar_bh", **go1_mu("mcnemar_bh")),
         pair("go1-two-events", GO1_ROOT, GO1_A, GO1_B, ("fell", "survived"), "push_pct_bw", "mu"),
         pair("axes", synth_root, "axes-a", "axes-b", ("fail",), "temp", "task"),
         pair("identical", synth_root, "same-a", "same-b", ("fail",), "temp", "task"),
-        pair("bh", synth_root, "bh-a", "bh-b", ("fail",), "grp", "cell", method="mcnemar_bh", by="grp"),
-        pair("gate", synth_root, "gate-a", "gate-b", ("fail",), "grp", "cell", method="mcnemar_bh", by="grp"),
-        pair("multi-event", synth_root, "me-a", "me-b", ("fail", "crash"), "task", "temp"),
+        pair("bh", synth_root, "bh-a", "bh-b", ("fail",), "grp", "cell", method="mcnemar_bh", **by_grp("bh-a", "bh-b")),
+        pair("gate", synth_root, "gate-a", "gate-b", ("fail",), "grp", "cell", method="mcnemar_bh", **by_grp("gate-a", "gate-b")),
+        pair("multi-event", synth_root, "me-a", "me-b", ("fail", "crash"), "task", "temp", **admitting(synth_root, "me-a", "me-b", events=("fail", "crash"), key="task")),
         pair("one-value", synth_root, "ov-a", "ov-b", ("fail",), "task", "temp"),
         pair("three-key", synth_root, "three-a", "three-b", ("fail",), "task", "temp", fixed={"model": "m1"}),
         pair("vocab", synth_root, "vocab-a", "vocab-b", ("fail",), "task", "temp"),
@@ -1742,9 +1773,11 @@ def test_w3_a_non_finite_tree_float_is_null_with_fmts_spelling_kept_in_text(go1:
 #: PF4 (PF4.20): a judgement word. No fixture here declares an event kind, so no reader-facing
 #: string may carry one.
 JUDGEMENT_RE = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
-#: PF4 (PF4.20): the library's own frame keeps its encoding when the kind is unknown (``worse`` is a
-#: significant rise, ``safer`` a significant fall); a reader sees the direction.
-DIRECTION_OF = {"worse": "higher", "safer": "lower", "unchanged": "unchanged"}
+#: PF4 (PF4.20): a reader sees the direction.
+# PF4 re-freeze (ruling on a kindless event, reading R35): the library's own frame no longer keeps
+# safer and worse when the kind is unknown; its verdict column holds the direction words too, so the
+# mapping is the identity and a safer or worse left in the frame is a KeyError.
+DIRECTION_OF = {"higher": "higher", "lower": "lower", "unchanged": "unchanged"}
 CELL_INDEX_RE = re.compile(r'<script type="application/json" id="prove-cells">(.*?)</script>', re.S)
 
 
@@ -1790,7 +1823,8 @@ def assert_tree_less_facts(p: Pair, structure: Mapping[str, Any]) -> None:
         # A panel draws the conditions on its slice: every one with no --fix, the pinned ones with.
         assert here <= set(records) and (bool(p.fixed) or here == set(records)), (p.name, event)
         verdicts = [str(records[h]["verdict"]) for h in here]
-        rises, falls = verdicts.count("worse"), verdicts.count("safer")
+        # PF4 re-freeze (ruling on a kindless event, reading R35): the frame's verdicts are direction words.
+        rises, falls = verdicts.count("higher"), verdicts.count("lower")
         assert (panel["n_higher"], panel["n_lower"], panel["n_unchanged"]) == (rises, falls, verdicts.count("unchanged")), (p.name, event, panel["n_higher"], panel["n_lower"])
         assert panel["caption"] == f"{event}: {falls} lower, {rises} higher", (p.name, panel["caption"])
         for cell in panel["cells"]:
@@ -1824,10 +1858,13 @@ def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_go
         assert "Store root" not in page and str(GO1_ROOT) not in page and not JUDGEMENT_RE.search(page), name
         headline = str(p.structure["headline"]).splitlines()
         assert p_lines(region_lines(page, "Result")[0]) == headline, name
+        # PF4 re-freeze (ruling on a kindless event, reading R35): a kindless event's result carries
+        # no safer or worse counts (None); its falls and rises are n_lower and n_higher.
         for event in p.events:
             ev = p.multi.by_event[event]
-            assert f"{event}: {ev.n_safer} lower, {ev.n_worse} higher" in headline[0], (name, headline[0])
-        assert (p.multi.by_event["fell"].n_safer, p.multi.by_event["fell"].n_worse) == (60, 0), name
+            assert (ev.n_safer, ev.n_worse) == (None, None), (name, event)
+            assert f"{event}: {ev.n_lower} lower, {ev.n_higher} higher" in headline[0], (name, headline[0])
+        assert (p.multi.by_event["fell"].n_lower, p.multi.by_event["fell"].n_higher) == (60, 0), name
         index = json.loads(CELL_INDEX_RE.search(p.page).group(1))  # type: ignore[union-attr]
         expected = {(event, h): r for event in p.events for h, r in library_records(p, event).items()}
         assert {(key.rsplit(" ", 1)[0], entry["config_hash"]) for key, entry in index.items()} == set(expected), name
@@ -2149,7 +2186,10 @@ def assert_cells(p: Pair) -> None:
         return
     assert leaves["families"], p.name
     meaning = lines[1]
-    assert "increase" in meaning.lower() and "headroom" in meaning.lower() and numeric_tokens(meaning) == [], (p.name, meaning)
+    # PF4 re-freeze (PF4.24, PF4.32): a cell's limit is no longer the increase capped at the headroom
+    # but the smallest change either way one condition alone would be flagged for, from where it was;
+    # the sentence says that, still with no number.
+    assert "alone" in meaning.lower() and "from where" in meaning.lower() and numeric_tokens(meaning) == [], (p.name, meaning)
     family_lines = lines[2:]
     assert len(family_lines) == len(leaves["families"]), (p.name, family_lines)
     expected_tables = [f for f in leaves["families"] if f["n_rejected"] > 0]
@@ -2157,7 +2197,10 @@ def assert_cells(p: Pair) -> None:
     table_iter = iter(tables)
     for line, family in zip(family_lines, leaves["families"], strict=True):
         assert f"{family['key']}={family['label']}" in line, (p.name, line)
-        for token in (str(family["n_tests"]), str(family["n_rejected"]), family["text"]["mde_median"], family["text"]["mde_max"]):
+        # PF4 re-freeze (PF4.24): a family whose every cell has no limit has a null median and max and
+        # no text for them; the counts are still owed.
+        limits = [family["text"][f] for f in ("mde_median", "mde_max") if family[f] is not None]
+        for token in (str(family["n_tests"]), str(family["n_rejected"]), *limits):
             assert has(line, token), (p.name, line, token)
         assert re.search(rf"\b{family['n_rejected']} rejected\b", line), (p.name, line)
         if family["n_rejected"] == 0:
@@ -2172,7 +2215,10 @@ def assert_cells(p: Pair) -> None:
             mde = f"{leaf['text']['mde']}pp" if leaf["mde"] is not None else row[-1]
             assert row == [config_cell(leaf), leaf["event"], leaf["text"]["delta"], leaf["text"]["q_within"], mde], (p.name, row, leaf["config"])
             if leaf["mde"] is None:
-                assert "ceiling" in row[-1] and not numeric_tokens(row[-1]), (p.name, row)
+                # PF4 re-freeze (PF4.24): the 100% baseline's "ceiling" is gone (the rise has no room
+                # and the fall is computed); a null limit is a direction with room where none is
+                # detectable or none can be flagged, and the row still prints no number.
+                assert row[-1] and "ceiling" not in row[-1] and not numeric_tokens(row[-1]), (p.name, row)
 
 
 def test_w10_the_cells_region_prints_the_head_the_meaning_sentence_one_family_line_per_family_and_one_row_per_rejected_leaf(every_pair: list[Pair]) -> None:
@@ -2303,7 +2349,8 @@ def test_w13_two_builds_are_equal_two_renders_identical_and_a_seed_moves_only_wh
     second = viewer().build_structure(report, go1.multi, tree=go1.tree, **kwargs)
     assert first == second
     assert viewer().render_html(first) == viewer().render_html(second) == go1.page
-    seeded = pair("go1-seed1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", seed=1)
+    # PF4 re-freeze (PF4.45): the seed-1 pair keeps the go1 fixture's override, so only the seed differs.
+    seeded = pair("go1-seed1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", **go1_mu(), seed=1)
     moved = diff_paths(seeded.structure, go1.structure)
     assert moved, "seed 1 moved nothing on Go1"
     stray = [path for path in moved if not any(path == prefix or path.startswith(prefix + ".") for prefix in SEED_MAY_MOVE)]
@@ -2527,7 +2574,10 @@ def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
     ev = multi.by_event["fell"]
-    caption = f"fell: {ev.n_safer} lower, {ev.n_worse} higher"
+    # PF4 re-freeze (ruling on a kindless event, reading R35): n_safer and n_worse are None on a
+    # kindless event; the falls and rises are n_lower and n_higher.
+    assert (ev.n_safer, ev.n_worse) == (None, None)
+    caption = f"fell: {ev.n_lower} lower, {ev.n_higher} higher"
     md = as_0_0_1_wrote_it(report.to_markdown())
     html = html_mod.unescape(as_0_0_1_wrote_it(receipt.to_html()))
     svg = report.to_svg()
@@ -2536,7 +2586,7 @@ def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
     for line in multi.headline().splitlines():
         assert line in md_lines and line in html, line
     assert f"## {caption}" in md_lines and caption in html and caption in svg_texts, caption
-    assert any(f'"{ev.n_worse} higher" is an honest claim' in line for line in md_lines), md
+    assert any(f'"{ev.n_higher} higher" is an honest claim' in line for line in md_lines), md
     for text in (md, html, "\n".join(svg_texts)):
         assert not JUDGEMENT_RE.search(text), JUDGEMENT_RE.search(text)
     start = md_lines.index(f"## {caption}") + 1
@@ -2577,8 +2627,9 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
     # section 5.4). check's stdout changes shape in PF1 (its verdict line comes first), so its
     # digest gives way to the facts it guarded: passed, the event gated, its safer and worse
     # counts, the method, q and the number of tests.
-    # PF4 (PF4.20): Go1's fell has no kind, so the counts read as falls and rises: the library's
-    # n_safer (its falls) is printed "lower" and its n_worse (its rises) "higher".
+    # PF4 (PF4.20): Go1's fell has no kind, so the counts read as falls and rises.
+    # PF4 re-freeze (ruling on a kindless event, reading R35): the library carries them as n_lower and
+    # n_higher, and n_safer and n_worse are None.
     assert code == CHECK_EXIT and not [line for line in err.splitlines() if not line.startswith("note: ")], (code, err)
     store = Store(GO1_ROOT)
     ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
@@ -2586,8 +2637,9 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
     check_lines = out.splitlines()
     assert check_lines[0].startswith("passed  ") and "fell" in check_lines[0], out
     fell = gated.by_event["fell"]
+    assert (fell.n_safer, fell.n_worse) == (None, None)
     assert any(
-        "fell" in line and f"{fell.n_safer:,} lower" in line and f"{fell.n_worse:,} higher" in line for line in check_lines
+        "fell" in line and f"{fell.n_lower:,} lower" in line and f"{fell.n_higher:,} higher" in line for line in check_lines
     ), out
     assert any(
         "aalen_johansen" in line and "fisher_bh" in line and "unpaired" in line

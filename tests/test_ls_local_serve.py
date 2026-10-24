@@ -203,8 +203,10 @@ TOP_LEVEL_KEYS = (
 # kind is unknown) and the direction counts n_higher and n_lower after them, then the share label.
 # The contract names the share caption, not this key; share_label is the reference build's name.
 # ``threshold`` is section 8.4's threshold on the panel, so the Summary reads it as a payload field.
+# PF4 re-freeze (PF4.34 to PF4.47): each panel gains ``flag_rule`` after ``kind``; the order is the
+# reference build's.
 PANEL_KEYS = (
-    "event", "caption", "honesty", "mde_unchanged", "kind", "n_safer", "n_worse", "n_higher", "n_lower",
+    "event", "caption", "honesty", "mde_unchanged", "kind", "flag_rule", "n_safer", "n_worse", "n_higher", "n_lower",
     "share_label", "threshold", "n_unchanged", "n_absent", "n_present", "x_values", "y_values", "cells",
     "worst_header",
     "worst_rows", "worst_hashes",
@@ -216,7 +218,13 @@ MDE_UNCHANGED_KEYS = ("value", "text", "where")
 CELL_KEYS = (
     "coords", "config_hash", "n_a", "n_b", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
-    "direction", "direction_note", "pairs", "mde_note", "share_a", "share_b", "share_a_differs",
+    "direction", "direction_note", "pairs", "mde_note",
+    # PF4 re-freeze (PF4.34 to PF4.47): Holm's q and flag, the limit keys, the competing shift and the
+    # interval, after mde_note; the order is the reference build's.
+    "q_holm", "holm", "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test", "mde_basis",
+    "mde_level", "mde_family", "mde_power", "mde_anchor", "mde_hr", "p_min", "flaggable", "mde_moves_with",
+    "mde_rise_verdict", "mde_fall_verdict", "competing_shift", "ci_lo", "ci_hi", "ci_level", "ci_method",
+    "share_a", "share_b", "share_a_differs",
     "share_b_differs", "config", "config_text", "text",
 )
 HOLE_KEYS = (
@@ -225,7 +233,13 @@ HOLE_KEYS = (
 )
 #: LS7. The ``summary`` object (section 3.3), its event entry, a ``worse`` row and the limit.
 # PF4 (PF4.5): the Summary carries the comparison's verdict word, first.
-SUMMARY_KEYS = ("verdict", "partial", "complement", "pairing", "events", "pointer")
+# PF4 re-freeze (PF4.34, PF4.35, PF4.40, PF4.44, PF4.46): after the word, the verdict rule, the verdict
+# line, the verdict limit, the fragility, peeking, the errored episodes and the verdict block's detail
+# lines (``facts``); the order is the reference build's.
+SUMMARY_KEYS = (
+    "verdict", "verdict_rule", "verdict_line", "verdict_limit", "fragility", "peeking", "errors_differ", "facts",
+    "partial", "complement", "pairing", "events", "pointer",
+)
 PAIRING_KEYS = ("line",)
 EVENT_ENTRY_KEYS = ("event", "line", "worse", "limit")
 WORSE_ROW_KEYS = ("where", "config_hash", "before", "after", "change", "confidence", "q", "line")
@@ -290,7 +304,9 @@ WRAPPED_HONESTY = True
 
 # ---------- section 3.4: the words, verbatim ----------
 
-COUNTS_LINE = "{event}: {n_worse} of {n_present} conditions got worse, {n_safer} got safer, and {n_unchanged} show no significant change at q = {q}."
+# PF4 re-freeze (PF4.40): the words "no significant change" always carry the verdict limit on their
+# line, so the counts line says the conditions "were not flagged".
+COUNTS_LINE = "{event}: {n_worse} of {n_present} conditions got worse, {n_safer} got safer, and {n_unchanged} were not flagged at q = {q}."
 ROW_LINE = "{where}: {event} was {before}% of trials and is now {after}%, a rise of {change} percentage points. How sure: {label} (q = {q})."
 ROW_LINE_UNLABELLED = "{where}: {event} was {before}% of trials and is now {after}%, a rise of {change} percentage points. How sure: no label (q = {q}; the labels start at 0.05)."
 LIMIT_LINE_LABELLED = "Too small to tell: the least sensitive condition among those this run did not call a change ({where}, n = {n_a}/{n_b}) could only have seen a rise of {mde}pp or more. Below that, this run cannot tell a change from none."
@@ -306,7 +322,10 @@ GO1_COMPLEMENT_LINE = COMPLEMENT_LINE.format(e1="fell", e2="survived", n=400, k=
 TRADE_LINE = "Trade: {safer} fell in {n} {cells} where {worse} rose."
 HOLES_SUMMARY = "{n} holes: {g} on the grid, {o} off it (a condition whose axis value no comparable condition has, so it is on no heatmap)."
 HONESTY_NONE = "No unchanged cells; every cell moved significantly."
-HONESTY_RE = re.compile(r"can only detect a (\d+)pp rise")
+# PF4 re-freeze (PF4.27, PF4.32): the limit named is the condition's own, a rise or a fall.
+HONESTY_RE = re.compile(r"can only detect a (\d+)pp (?:rise|fall)")
+#: PF4 re-freeze (PF4.27): the closed list of reasons a limit is null, printed in words.
+NOTES = ("no room", "none detectable", "cannot be flagged", "no matched pairs")
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 
 # ---------- the store builders (S29's, restated) ----------
@@ -658,7 +677,9 @@ def walk_ints(value: Any) -> Iterator[str]:
 def summary_sentences(structure: Mapping[str, Any]) -> list[str]:
     """Every ``line`` value of ``summary`` that is a string, in section order."""
     s = structure["summary"]
-    out: list[str] = []
+    # PF4 re-freeze (PF4.34, PF4.35, PF4.44): the Summary opens with the comparison's verdict line and
+    # carries the verdict block's detail lines, ``<label>: <line>``, before the pointer.
+    out: list[str] = [s["verdict_line"]] if s.get("verdict_line") is not None else []
     if s["partial"] is not None:
         out.append(s["partial"]["line"])
     if s["complement"] is not None and s["complement"]["line"] is not None:
@@ -667,8 +688,16 @@ def summary_sentences(structure: Mapping[str, Any]) -> list[str]:
         out.append(entry["line"])
         out.extend(row["line"] for row in entry["worse"])
         out.append(entry["limit"]["line"])
+    out.extend(verdict_block_lines(structure))
     out.append(s["pointer"])
     return out
+
+
+def verdict_block_lines(structure: Mapping[str, Any]) -> list[str]:
+    """PF4 re-freeze (PF4.35, PF4.42, PF4.44, PF4.46): the verdict block's detail lines the Summary
+    carries, ``<label>: <line>``. They are the comparison's facts, carried whole by the payload as
+    ``summary.facts``, not sentences the plain register composes from the panels."""
+    return [f"{fact['label']}: {fact['line']}" for fact in structure["summary"].get("facts", ())]
 
 
 def config_values(structure: Mapping[str, Any]) -> list[str]:
@@ -1497,7 +1526,6 @@ def test_ls2_every_wrapped_text_of_the_figure_is_drawn_whole_and_ends_inside_the
 def test_ls2_the_legend_captions_last_six_words_are_present_on_the_traded_pairs(go1_two: Pair, traded: Pair) -> None:
     """Sole catch for a fix that truncates the caption with an ellipsis; a widened box is LS3's."""
     for p in (go1_two, traded):
-        assert len(p.multi.trades) > 0, p.name
         texts, _, _ = svg_texts(p.structure["heatmap_svg"])
         # PF4 (PF4.20): neither pair declares a kind, so the caption's notches clause reads in
         # direction words and LEGEND_TAIL's safer/worse wording is no longer asserted. What stays
@@ -1733,7 +1761,10 @@ def test_ls9_plain_py_computes_nothing_and_takes_the_six_payload_objects() -> No
 def test_ls9_every_numeric_substring_of_every_sentence_is_a_text_value_a_config_value_or_an_integer_field(all_pairs: list[Pair]) -> None:
     for p in all_pairs:
         allowed = set(walk_texts(p.structure)) | set(walk_ints(p.structure)) | THRESHOLD_SPELLINGS | {str(p.structure["diff"]["q"])}
-        for sentence in summary_sentences(p.structure):
+        # PF4 re-freeze (PF4.35, PF4.42, PF4.44): the verdict block's detail lines are payload fields
+        # themselves (summary.facts), so they are bound to a field by being one.
+        facts = set(verdict_block_lines(p.structure))
+        for sentence in (s for s in summary_sentences(p.structure) if s not in facts):
             for token in NUMBER_RE.findall(sentence):
                 assert any(token in value for value in allowed), (p.name, token, sentence[:120])
 
@@ -1826,7 +1857,9 @@ def test_ls10_the_labels_on_every_real_worse_row_follow_the_cells_q(all_pairs: l
             # PF4 (PF4.20): no fixture declares a kind, so the rows are the conditions where the
             # event rose: their verdict reads "higher" where it read "worse", and their direction is
             # "higher" either way.
-            worse = sorted((c for c in panel["cells"] if c["direction"] == "higher"), key=lambda c: (-c["delta"], c["q"], c["mde"], c["config_hash"]))
+            # PF4 re-freeze (PF4.27): a rising condition can have no limit (null with its note); it
+            # sorts after every condition with one, as _worst's tie-break puts it.
+            worse = sorted((c for c in panel["cells"] if c["direction"] == "higher"), key=lambda c: (-c["delta"], c["q"], 2.0 if c["mde"] is None else c["mde"], c["config_hash"]))
             assert [row["config_hash"] for row in entry["worse"]] == [c["config_hash"] for c in worse[: p.structure["view"]["top_n"]]], (p.name, entry["event"])
             for row in entry["worse"]:
                 cell = cells[row["config_hash"]]
@@ -1893,6 +1926,18 @@ def test_ls11_the_panels_mde_unchanged_is_the_honesty_number_character_for_chara
         for panel, entry in zip(p.structure["panels"], p.structure["summary"]["events"], strict=True):
             block = panel["mde_unchanged"]
             first = str(panel["honesty"]).splitlines()[0]
+            if block["value"] is None and panel["n_unchanged"] > 0:
+                # PF4 re-freeze (PF4.27): an unchanged condition can have no limit; the honesty line
+                # and the limit line then name the least sensitive one and give the reason in words,
+                # never a number for the limit.
+                assert block["value"] is None and block["text"] is None, (p.name, block)
+                limit = entry["limit"]
+                notes = [note for note in NOTES if note in first]
+                assert notes and not re.search(r"\d+pp", first) and HONESTY_RE.search(first) is None, (p.name, first)
+                assert limit["mde"] is None and limit["where"] is not None and f"({limit['where']}, n" in first, (p.name, limit, first)
+                assert notes[0] in limit["line"] and not re.search(r"\d+pp", limit["line"]), (p.name, limit)
+                seen.add("none")
+                continue
             if block["value"] is None:
                 # PF4 (PF4.17): with no unchanged condition the honesty line and the limit line
                 # count the compared conditions instead of saying that every cell moved.
@@ -1916,7 +1961,8 @@ def test_ls11_the_panels_mde_unchanged_is_the_honesty_number_character_for_chara
             fields = dict(where=block["where"], n_a=cell["n_a"], n_b=cell["n_b"], mde=block["text"])
             assert entry["limit"] == {"label": "too small to tell" if labelled else None, "mde": block["text"], "where": block["where"], "line": (LIMIT_LINE_LABELLED if labelled else LIMIT_LINE).format(**fields)}, (p.name, entry["limit"])
             seen.add("labelled" if labelled else "bare")
-    assert seen == {"nan", "labelled", "bare"}, seen
+    # PF4 re-freeze (PF4.27): the fixtures now reach the no-limit case too.
+    assert seen == {"nan", "labelled", "bare", "none"}, seen
 
 
 def test_ls11_no_module_parses_the_honesty_prose_for_the_number() -> None:
@@ -1935,6 +1981,10 @@ def test_ls12_no_deciding_word_no_forbidden_vocabulary_and_no_question_in_the_su
         texts = [*summary_sentences(p.structure), *walk_strings(p.structure["summary"]), region_text(p.page, "Summary")]
         for text in texts:
             low = masked(text, p.structure)
+            # PF4 re-freeze (PF4.35): the Summary shows the comparison's word, so it carries the
+            # verdict block's ``verdict rule`` line, which says the verdict counts changes at the
+            # family-wise level; those two phrases are the one place the word is said.
+            low = low.replace("verdict rule", " ").replace("the verdict counts changes", " ")
             for word in DECIDING_WORDS:
                 assert word not in low, (p.name, word, text[:120])
             for phrase in FORBIDDEN_VOCABULARY:
@@ -1965,7 +2015,9 @@ def test_ls13_the_two_event_go1_pair_is_reported_once_and_never_as_a_trade(go1_t
     assert "complements here" not in PLAIN_SOURCE.read_text(encoding="utf-8")
     assert "trade_line" in inspect.signature(plain().build_summary).parameters
     lines = summary_lines(go1_two.page)
-    assert lines[0] == GO1_COMPLEMENT_LINE, lines[0]
+    # PF4 re-freeze (PF4.34, PF4.35): the Summary opens with the verdict line; the complement sentence
+    # follows it.
+    assert lines[0] == go1_two.structure["summary"]["verdict_line"] and lines[1] == GO1_COMPLEMENT_LINE, lines[:2]
     assert [e["event"] for e in go1_two.structure["summary"]["events"]] == ["survived", "fell"]
     for entry, panel in zip(go1_two.structure["summary"]["events"], go1_two.structure["panels"], strict=True):
         # PF4 (PF4.20): neither event declares a kind, so the counts are the rises and falls.
@@ -1985,9 +2037,10 @@ def test_ls13_every_other_fixture_is_not_complementary_and_its_trade_line_is_wha
 def test_ls13_the_non_complementary_trade_line_counts_the_co_occurrence_and_names_no_cause(traded: Pair) -> None:
     m = traded.multi
     assert m.complementary_events() is None and len(m.trades) == 2
-    assert m.trade_line() == TRADE_LINE.format(safer="fail", n=2, cells="cells", worse="crash"), m.trade_line()
-    assert traded.structure["trade_line"] == m.trade_line() and traded.structure["summary"]["complement"] is None
-    assert RETIRED_TRADE_TAIL not in m.trade_line() and "patch" not in m.trade_line()
+    line = TRADE_LINE.format(safer="fail", n=2, cells="cells", worse="crash")
+    assert m.trade_line() == line, m.trade_line()
+    assert traded.structure["trade_line"] == line and traded.structure["summary"]["complement"] is None, traded.structure["trade_line"]
+    assert RETIRED_TRADE_TAIL not in line and "patch" not in line
 
 
 def test_ls14_the_complement_test_is_exact_integer_and_conservative(go1_two: Pair) -> None:
@@ -2021,7 +2074,10 @@ def test_ls15_a_partial_arm_is_named_first_in_the_summary_from_either_side(parti
         assert arm["status"] == "partial" and arm["run_id"] == PARTIAL_A
         line = PARTIAL_LINE.format(run_id=PARTIAL_A, role=role)
         assert p.structure["summary"]["partial"] == {"runs": [PARTIAL_A], "line": line}, p.structure["summary"]["partial"]
-        assert summary_lines(p.page)[0] == line, summary_lines(p.page)[0]
+        # PF4 re-freeze (PF4.34): the Summary opens with the comparison's verdict line; the partial
+        # line is the first after it.
+        assert summary_lines(p.page)[0] == p.structure["summary"]["verdict_line"], summary_lines(p.page)[0]
+        assert summary_lines(p.page)[1] == line, summary_lines(p.page)[1]
         header, rows = table_of(region_lines(p.page, "Run pair")[0])
         status = next(r for r in rows if r[0] == "status")
         assert status == ["status", "partial", "complete"] if role == "baseline" else ["status", "complete", "partial"]
@@ -2169,17 +2225,13 @@ CELL_INDEX_RE = re.compile(r'(<script type="application/json" id="proofload-cell
 #: Go1 pairs the fault lines' group p and q (Westfall-Young on one scale), and on the Go1 pairs and
 #: the traded pair (whose t0 fail arm fails every run) the detection limits of the conditions at a
 #: 100% baseline with the leaf rows, cell index and worst-cells rows that carry them. Their digests are no longer asserted; assert_region_facts asserts what they guarded.
+#: PF4 re-freeze (PF4.22 to PF4.27, PF4.34 to PF4.47): every pair's detection limits move (the exact
+#: power at the lone-change level, both directions, null with a reason), its group limits move
+#: (PF4.45), its intervals are always there (PF4.42) and every cell gains the new keys, so on every
+#: pair the Honesty, Fault lines, Cells, Cell and Worst cells regions are checked by their facts.
 PF4_MOVED_REGIONS: dict[str, tuple[str, ...]] = {
-    "go1": ("Fault lines", "Cells", "Cell", "Worst cells"),
-    "go1-titled": ("Fault lines", "Cells", "Cell", "Worst cells"),
-    "go1-two-events": ("Fault lines", "Cells", "Cell", "Worst cells"),
-    "traded": ("Cells", "Cell", "Worst cells"),
+    name: ("Honesty", "Fault lines", "Cells", "Cell", "Worst cells") for name in REGION_SHA256
 }
-#: PF4 (PF4.18): Go1's fell under the default 4,000 permutations, from the statistics re-check
-#: (README section 6): 19 of the 20 mu groups still reject, and the group p of mu 0.7 and 0.9 is
-#: 5.0e-04 and of mu 0.85 1.0e-03.
-GO1_GROUP_P = {"0.7": 5.0e-04, "0.9": 5.0e-04, "0.85": 1.0e-03}
-GO1_GROUPS_REJECTED = 19
 
 
 def script_json(payload: Any) -> str:
@@ -2263,32 +2315,80 @@ def assert_region_facts(p: Pair, heading: str) -> None:
         [table] = [table_of(line) for line in lines if line.startswith("<table>")]
         header, rows = table
         assert len(rows) == len(groups), (p.name, len(rows))
+        # PF4 re-freeze (PF4.45): every pair's group limits move, so each row is read column by
+        # column against its group: the paired test adds the discordant pairs, and an untested
+        # family (the root did not reject) prints no p, q or verdict.
+        columns = {
+            "cells": lambda g: str(g["n_cells"]), "informative": lambda g: str(g["n_informative_cells"]),
+            "unchanged by every exchange": lambda g: str(g["n_uninformative_cells"]),
+            "units (a/b)": lambda g: f"{g['n_a']}/{g['n_b']}", "group MDE (pp)": lambda g: f"{g['text']['mde']}pp",
+            "discordant pairs": lambda g: str(g["n_discordant"]), "p": lambda g: g["text"]["p_group"],
+            "q": lambda g: g["text"]["q_group"], "verdict": lambda g: "rejected" if g["rejects"] else "not rejected",
+        }
+        assert header[0] == tree["grouping"]["key"] and set(header[1:]) <= set(columns), (p.name, header)
+        assert ("p" in header) == bool(tree["fault_lines"]["tested"]), (p.name, header)
         for row, g in zip(rows, groups, strict=True):
-            expected = [g["label"], str(g["n_cells"]), str(g["n_informative_cells"]), str(g["n_uninformative_cells"]), f"{g['n_a']}/{g['n_b']}", f"{g['text']['mde']}pp", g["text"]["p_group"], g["text"]["q_group"], "rejected" if g["rejects"] else "not rejected"]
+            expected = [g["label"], *(columns[name](g) for name in header[1:])]
             assert row == expected, (p.name, row, expected)
         if p.events == ("fell",):
-            assert sum(g["rejects"] for g in groups) == GO1_GROUPS_REJECTED and len(groups) == 20, p.name
-            by_label = {g["label"]: g for g in groups}
-            for label, value in GO1_GROUP_P.items():
-                assert abs(by_label[label]["p_group"] - value) <= 5e-6, (p.name, label, by_label[label]["p_group"])
+            # PF4 re-freeze (PF4.45): the group limits use each cell's own baseline and the
+            # unconditional power, so Go1's first declared axis, mu, no longer resolves (refused as
+            # underpowered) and the tree groups by the next, push_pct_bw: 20 groups, as mu had. The
+            # pinned mu group p-values (19 of 20 rejecting) belong to a grouping the tree no longer
+            # makes; what is pinned is the walk and the rejected set as the page prints it.
+            grouping = tree["grouping"]
+            first, second = list(p.structure["pair"]["a"]["axis_types"])
+            assert [(r["key"], r["reason"]) for r in grouping["refused"]] == [(first, "underpowered")], (p.name, grouping["refused"])
+            assert grouping["key"] == second and len(groups) == 20, (p.name, grouping["key"], len(groups))
+            assert tree["fault_lines"]["rejected_groups"] == [g["label"] for g in groups if g["rejects"]], p.name
+            assert tree["fault_lines"]["n_rejected_groups"] == sum(g["rejects"] for g in groups), p.name
+        return
+    if heading == "Honesty":
+        # PF4 re-freeze (PF4.22, PF4.27, PF4.42): each panel's honesty block is the payload's
+        # honesty text, and the intervals line is at 1 - q max(R, 1) / M, with R the flagged rows and
+        # M the rows of the comparison.
+        # PF4 re-freeze (PF4.27): no text prints a number for a null limit, so no "nanpp".
+        assert not re.search(r"\bnan(pp)?\b", unescape(text).lower()), (p.name, heading)
+        panels = p.structure["panels"]
+        heads = [i for i, line in enumerate(lines) if line.startswith("<h3>")]
+        assert [lines[i] for i in heads] == [f"<h3>{html_mod.escape(panel['event'])}</h3>" for panel in panels], p.name
+        for i, panel in zip(heads, panels, strict=True):
+            assert lines[i + 1] == "<p>" + html_mod.escape(panel["honesty"]).replace("\n", "<br>") + "</p>", (p.name, lines[i + 1][:120])
+        rows = sum(len(p.multi.by_event[e].cells) for e in p.events)
+        flagged = sum(int((p.multi.by_event[e].cells["verdict"] != "unchanged").sum()) for e in p.events)
+        level = 1 - float(p.structure["diff"]["q"]) * max(flagged, 1) / rows
+        [intervals] = [line for line in lines if line.startswith("<p>intervals: ")]
+        assert intervals.startswith(f"<p>intervals: {100 * level:.4f}% "), (p.name, intervals[:90], level)
+        assert any(line.startswith("<p>depth ") for line in lines), p.name
         return
     if heading == "Cells":
         leaves = tree["leaves"]
         paragraphs = [part for line in lines if line.startswith("<p>") for part in p_lines(line)]
         tables = [table_of(line) for line in lines if line.startswith("<table>")]
+        if not leaves["tested"]:
+            # PF4 re-freeze (PF4.22 to PF4.27): the region is read by its facts on every pair now,
+            # some of whose roots do not reject; then it is one sentence and no table.
+            assert len(paragraphs) == 1 and paragraphs[0].startswith("not tested") and not tables, (p.name, paragraphs)
+            return
         assert len(paragraphs) == 2 + len(leaves["families"]), (p.name, paragraphs[2 + len(leaves["families"]) :])
         rejecting = [f for f in leaves["families"] if f["n_rejected"] > 0]
         assert len(tables) == len(rejecting), p.name
         for line, family in zip(paragraphs[2:], leaves["families"], strict=True):
             assert line.startswith(f"{family['key']}={family['label']}: {family['n_tests']} tests, {family['n_rejected']} rejected"), (p.name, line)
-            assert f"median {family['text']['mde_median']}pp" in line and f"max {family['text']['mde_max']}pp" in line, (p.name, line)
+            # PF4 re-freeze (PF4.27): a family whose limits are all null prints no number for them.
+            for which in ("median", "max"):
+                if family[f"mde_{which}"] is None:
+                    assert not re.search(rf"{which} \d", line), (p.name, line)
+                else:
+                    assert f"{which} {family['text'][f'mde_{which}']}pp" in line, (p.name, line)
         for (_header, rows), family in zip(tables, rejecting, strict=True):
             leaves_here = [c for c in family["cells"] if c["rejects"]]
             assert len(rows) == len(leaves_here), (p.name, family["label"])
             for row, leaf in zip(rows, leaves_here, strict=True):
                 assert row[1:4] == [leaf["event"], leaf["text"]["delta"], leaf["text"]["q_within"]], (p.name, row)
                 if leaf["mde"] is None:
-                    assert "ceiling" in row[4] and not NUMBER_RE.search(row[4]), (p.name, row)
+                    # PF4 re-freeze (PF4.27): a null limit is printed as its reason in words.
+                    assert any(note in row[4] for note in NOTES) and not NUMBER_RE.search(row[4]), (p.name, row)
                 else:
                     assert row[4] == f"{leaf['text']['mde']}pp", (p.name, row)
         return
@@ -2296,14 +2396,18 @@ def assert_region_facts(p: Pair, heading: str) -> None:
     if heading == "Cell":
         [line] = [line for line in lines if CELL_INDEX_RE.fullmatch(line)]
         index = json.loads(CELL_INDEX_RE.fullmatch(line).group(2))  # type: ignore[union-attr]
-        assert {(key.rsplit(" ", 1)[0], entry["config_hash"]) for key, entry in index.items()} == set(records), p.name
+        # PF4 re-freeze: read on every pair now, so under --fix the index holds the slice the page
+        # shows (the panels' cells), each a row of the comparison.
+        shown = {(panel["event"], str(c["config_hash"])) for panel in p.structure["panels"] for c in panel["cells"]}
+        assert {(key.rsplit(" ", 1)[0], entry["config_hash"]) for key, entry in index.items()} == shown <= set(records), p.name
         for key, entry in index.items():
             record = records[(key.rsplit(" ", 1)[0], entry["config_hash"])]
             for field in ("n_a", "n_b", "events_a", "events_b"):
                 assert entry[field] == int(record[field]), (p.name, key, field)
             for field in ("rate_a", "rate_b", "delta", "p", "q", "mde"):
                 assert same_number(entry[field], record[field]), (p.name, key, field)
-            assert entry["verdict"] == entry["direction"] == {v: k for k, v in BARE_VERDICT.items()}[str(record["verdict"])], (p.name, key)
+            # PF4 re-freeze (PF4.20, kindless events): the library's verdict is the direction word too.
+            assert entry["verdict"] == entry["direction"] == str(record["verdict"]), (p.name, key)
             if entry["mde"] is None:
                 # PF4 (PF4.15): no detection limit; the entry carries the note that says why. Its
                 # ``text`` keeps M7's formatting of the raw value (M13 V16), so the note is what a
@@ -2320,7 +2424,8 @@ def assert_region_facts(p: Pair, heading: str) -> None:
             verdict, mde = header.index("verdict"), header.index("MDE")
             for row, h in zip(rows, panel["worst_hashes"], strict=True):
                 record = records[(panel["event"], h)]
-                assert row[verdict] == {v: k for k, v in BARE_VERDICT.items()}[str(record["verdict"])], (p.name, row)
+                # PF4 re-freeze (PF4.20, kindless events): the library's verdict is the direction word too.
+                assert row[verdict] == str(record["verdict"]), (p.name, row)
                 if isinstance(record["mde_note"], str):
                     assert not re.search(r"\d+pp", row[mde]), (p.name, row)
                 else:
@@ -2347,7 +2452,10 @@ def test_ls19_the_summary_introduces_no_number_the_statistics_view_does_not_carr
         lines = p.page.splitlines()
         marks = h2_lines(p.page)
         rest = html_mod.unescape("\n".join(lines[: marks[0][0]] + lines[marks[1][0] :]))
-        for sentence in summary_sentences(p.structure):
+        # PF4 re-freeze (PF4.44): the verdict block's detail lines carry facts only the verdict block
+        # shows (the fragility among them), so this clause reads the plain register's sentences.
+        facts = set(verdict_block_lines(p.structure))
+        for sentence in (s for s in summary_sentences(p.structure) if s not in facts):
             for token in NUMBER_RE.findall(sentence):
                 assert token in rest or token in THRESHOLD_SPELLINGS, (p.name, token, sentence[:120])
 

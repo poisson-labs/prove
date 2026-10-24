@@ -198,9 +198,11 @@ COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee
 # PF4 (PF4.13, PF4.20): under log-rank a rejected cell's direction is the sign of B's observed
 # minus expected events, so Go1's 88 safer / 0 worse / 312 unchanged become 182 lower / 14 higher /
 # 204 unchanged (stats re-check README, section 2), printed in direction words.
+# PF4 re-freeze (PF4.41): every surface that names logrank_bh says it tests the cause-specific
+# hazard, the headline's method included.
 FELL_LOGRANK_HEADLINE = (
     "fell: 182 lower, 14 higher\n"
-    "(aalen_johansen + logrank_bh (cause-specific), BH q<0.05 over 400 tests, unpaired)"
+    "(aalen_johansen + logrank_bh (cause-specific hazard), BH q<0.05 over 400 tests, unpaired)"
 )
 FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
 
@@ -377,6 +379,26 @@ def synth_diff(root: Path, a: str, b: str, method: str = "fisher_bh") -> Any:
             manifest_a=store.manifest(a),
             manifest_b=store.manifest(b),
         )
+
+
+def assert_intervals_always(result: Any, rejections: int) -> None:
+    """PF4.42 (reading R10): the interval frame has a row for every compared row, the level is
+    ``1 - q * max(R, 1) / M`` and ``alpha_star`` its complement, and every cell carries its interval
+    at that level, whether anything was flagged or not."""
+    assert isinstance(result.intervals, pd.DataFrame), type(result.intervals)
+    assert len(result.intervals) == result.n_tests > 0, (len(result.intervals), result.n_tests)
+    level = 1.0 - result.q * max(rejections, 1) / result.n_tests
+    assert result.interval_level is not None and abs(result.interval_level - level) <= 1e-12, result.interval_level
+    assert result.alpha_star is not None and abs(result.alpha_star - result.q * max(rejections, 1) / result.n_tests) <= 1e-12
+    for event in result.events:
+        cells = result.by_event[event].cells
+        assert ((cells["ci_level"] - level).abs() <= 1e-12).all(), event
+        assert cells["ci_lo"].notna().all() and cells["ci_hi"].notna().all(), event
+
+
+def format_level(level: float) -> str:
+    """PF4.42: a level as a percentage to at most three decimals (``95%``, ``99.722%``)."""
+    return f"{level * 100:.3f}".rstrip("0").rstrip(".") + "%"
 
 
 def run_cli(argv: list[str]) -> tuple[int, str, str]:
@@ -683,9 +705,10 @@ def test_c1_identical_arms_reject_nothing_and_carry_no_interval_object(synth_roo
     result = synth_diff(synth_root, "same-a", "same-b")
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
     assert rejections == 0, rejections
-    assert result.intervals is None
-    assert result.interval_level is None
-    assert result.alpha_star is None
+    # PF4 re-freeze (PF4.42, reading R10): every comparison carries an interval on the change for
+    # every compared row, flagged or not; with nothing flagged its level is the simultaneous one,
+    # 1 - q / M (Bonferroni), so the object is present, one row per compared row, never None.
+    assert_intervals_always(result, rejections)
     assert result.n_rejected == 0
     assert result.n_interval_only == 0 and result.n_verdict_only == 0
 
@@ -696,7 +719,10 @@ def test_c1_the_absent_frame_is_none_and_never_an_empty_frame(synth_root: Path) 
     An empty frame says "searched, found nothing"; this ran no search at all. Same rule
     ADR-035 wrote for ``coverage``."""
     result = synth_diff(synth_root, "same-a", "same-b")
-    assert result.intervals is None, type(result.intervals)
+    # PF4 re-freeze (PF4.42): there is no absent case any more; the frame is always set, with a row
+    # for every compared row, and is never empty on a comparison of one row or more.
+    assert isinstance(result.intervals, pd.DataFrame), type(result.intervals)
+    assert len(result.intervals) == result.n_tests > 0
 
 
 def test_c1_go1_under_logrank_with_the_inferred_events_also_rejects_nothing(
@@ -709,7 +735,10 @@ def test_c1_go1_under_logrank_with_the_inferred_events_also_rejects_nothing(
     a zero and the synthetic pair above still is."""
     result = go1_inferred_logrank
     assert result.n_tests == 400
-    assert result.intervals is None and result.interval_level is None and result.alpha_star is None
+    # PF4 re-freeze (PF4.42): nothing is rejected, and the interval is there for all 400 rows at the
+    # simultaneous level 1 - q / 400.
+    assert result.n_rejected == 0
+    assert_intervals_always(result, 0)
 
 
 def test_c1_a_family_with_rejections_carries_every_part_of_the_object(go1_pair: Any) -> None:
@@ -755,7 +784,10 @@ def test_c2_the_level_follows_the_rejection_count_and_not_the_verdict_sum(
     """
     result = go1_fell_logrank
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
-    verdict_sum = sum(ev.n_safer + ev.n_worse for ev in result.by_event.values())
+    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): fell has no kind, so n_safer and n_worse
+    # are None on the result and the verdict sum is the direction counts.
+    assert all(ev.n_safer is None and ev.n_worse is None for ev in result.by_event.values())
+    verdict_sum = sum(ev.n_lower + ev.n_higher for ev in result.by_event.values())
     # PF4 (PF4.13): the verdict sum is now the rejection count; the count that still differs is
     # the rejected cells whose horizon delta moved (the old horizon rule's 88).
     horizon_moved = sum(
@@ -1126,10 +1158,30 @@ def assert_markdown_carries_the_result(result: Any) -> None:
             assert r["verdict"] == c.direction, (event, c.config_hash)
             # The limit column may carry a mark after its value (a log-rank cell read on the timing
             # is marked there), so the value is read from the column's start.
-            if c.mde_note is None:
-                assert _close(r["mde"].split()[0], c.mde), (event, c.config_hash, r["mde"])
+            # PF4 re-freeze (PF4.22, PF4.27, PF4.32): the column carries both directions, each its
+            # limit to three decimals (a change size above 0) or its note in words.
+            # When the two ways agree to three decimals the column prints the one number.
+            if not pd.isna(c.mde_rise) and not pd.isna(c.mde_fall) and abs(c.mde_rise - c.mde_fall) < 0.001:
+                assert _close(r["mde"].split()[0], round(float(c.mde_rise), 3)), (event, c.config_hash, r["mde"])
+                assert float(r["mde"].split()[0]) > 0, (event, c.config_hash, r["mde"])
+                parts = []
             else:
-                assert r["mde"].startswith(c.mde_note), (event, c.config_hash, r["mde"])
+                parts = r["mde"].split(", ")
+                assert len(parts) == 2, (event, c.config_hash, r["mde"])
+            for way, part in zip(("rise", "fall")[: len(parts)], parts, strict=True):
+                value, note = getattr(c, f"mde_{way}"), getattr(c, f"mde_{way}_note")
+                if value is None or pd.isna(value):
+                    assert part.startswith(f"{way}: {note}"), (event, c.config_hash, way, r["mde"])
+                else:
+                    printed = part.split()[1]
+                    assert part.startswith(f"{way} ") and abs(float(printed) - float(value)) <= 5e-4 + 1e-12, (
+                        event, c.config_hash, way, r["mde"])
+                    assert float(value) > 0 and float(printed) > 0, (event, c.config_hash, way, value, r["mde"])
+            # PF4 re-freeze (PF4.42): the table prints the interval on the change for every row,
+            # labelled with its level as a percentage and its method.
+            (change,) = [k for k in r if k.startswith("change [")]
+            assert change == f"change [{format_level(c.ci_level)}, Miettinen-Nurminen]", (change, c.ci_level)
+            assert r[change] == f"[{c.ci_lo:.3f}, {c.ci_hi:.3f}]", (event, c.config_hash, r[change])
 
 
 def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
@@ -1141,14 +1193,23 @@ def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
     produced -- which is the Rollout Plan Phase 2 item this docstring once pinned as *current
     wording* so that S24 could not be what moved it; P-1 was."""
     assert go1_pair.headline() == PAIR_HEADLINE
+    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no; PF4.20): the trade line is unchanged (its
+    # words are fell and rose), and check()'s default gate on "worse" is refused (a DiffError) on the
+    # kindless pair rather than failed; check("any") gates over the rows that count.
     assert go1_pair.trade_line() == PAIR_TRADE_LINE
-    assert go1_pair.check() is False and go1_pair.check("any") is False
+    with pytest.raises(diff_mod.DiffError):
+        go1_pair.check()
+    assert go1_pair.check("any") is False
     assert go1_fell_logrank.headline() == FELL_LOGRANK_HEADLINE
     assert go1_fell_logrank.trade_line() is None
-    # PF4 (PF4.13): 14 cells now rose under log-rank (stats re-check README, section 2), and the
-    # library's own counts keep "worse" for a rise, so check() fails where it passed.
-    assert go1_fell_logrank.by_event["fell"].n_worse == 14
-    assert go1_fell_logrank.check() is False and go1_fell_logrank.check("any") is False
+    # PF4 (PF4.13): 14 cells now rose under log-rank (stats re-check README, section 2).
+    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the rise is counted in direction words
+    # (n_higher), n_worse is None, check() is refused and check("higher") fails.
+    fell = go1_fell_logrank.by_event["fell"]
+    assert (fell.n_lower, fell.n_higher, fell.n_worse, fell.n_safer) == (182, 14, None, None)
+    with pytest.raises(diff_mod.DiffError):
+        go1_fell_logrank.check()
+    assert go1_fell_logrank.check("any") is False and go1_fell_logrank.check("higher") is False
 
 
 def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
@@ -1158,11 +1219,19 @@ def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
     and nothing about an interval makes it cheaper. This is the test that fails if someone pays
     it anyway."""
     # PF4 (PF4.13, PF4.14, PF4.15): the frame gains PF4's four per-cell fields (direction, the
-    # log-rank timing note, the matched-pair count, the limit note); the interval is still not on it.
+    # log-rank timing note, the matched-pair count, the limit note).
+    # PF4 re-freeze (PF4.34, PF4.27, PF4.32, PF4.41, PF4.42, PF4.47): it also gains Holm's adjusted p
+    # and whether the row counts, the limit keys, the competing outcomes, and the interval on the
+    # change (ci_lo, ci_hi, its level and method), which PF4.42 puts on every cell beside the
+    # interval frame; the order is the reference build's.
     assert CELLS_COLUMNS == (
         "config_hash", "config", "n_a", "n_b", "events_a", "events_b",
         "rate_a", "rate_b", "delta", "stat", "p", "q", "verdict", "mde",
         "direction", "direction_note", "pairs", "mde_note",
+        "q_holm", "holm", "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test",
+        "mde_basis", "mde_level", "mde_family", "mde_power", "mde_anchor", "mde_hr", "p_min",
+        "flaggable", "mde_moves_with", "mde_rise_verdict", "mde_fall_verdict", "competing_shift",
+        "ci_lo", "ci_hi", "ci_level", "ci_method",
     )
     for event in go1_pair.events:
         assert list(go1_pair.by_event[event].cells.columns) == list(CELLS_COLUMNS)
@@ -1204,6 +1273,31 @@ def e14_builder() -> tuple[Any, Any, Any]:
     return multi, report, receipt
 
 
+def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
+    """The largest limit over an event's unchanged conditions (each the larger of its two Fisher
+    limits at ``level``, or the one way with room; PF4.27), from the stats file's references, and
+    the way that limit goes on the condition the result names as worst."""
+    from test_pf4_stats import _ref_fisher_limits
+
+    def limit(row: Any) -> tuple[float | None, float | None, float | None]:
+        rise, fall = _ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
+        no_rise, no_fall = row.events_a == row.n_a, row.events_a == 0
+        if rise is not None and fall is not None:
+            return max(rise, fall), rise, fall
+        if rise is not None and no_fall:
+            return rise, rise, fall
+        if fall is not None and no_rise:
+            return fall, rise, fall
+        return None, rise, fall
+
+    unchanged = [row for row in ev.cells.itertuples(index=False) if row.verdict == "unchanged"]
+    limits = {row.config_hash: limit(row) for row in unchanged}
+    value = max(v for v, _, _ in limits.values() if v is not None)
+    top, rise, fall = limits[ev.max_mde_unchanged_cell]
+    assert top is not None and abs(top - value) <= 1e-12, (ev.max_mde_unchanged_cell, top, value)
+    return value, "rise" if rise is not None and abs(rise - value) <= 1e-12 else "fall"
+
+
 def assert_e14_builder_facts() -> None:
     """PF4 (PF4.3, PF4.15, PF4.20): what the three E14 digests guarded, as facts. The builder's
     report markdown, receipt and heatmap each carry the headline counts (the published 60 and 0,
@@ -1215,15 +1309,20 @@ def assert_e14_builder_facts() -> None:
     ev = multi.by_event["fell"]
     assert ev.kind is None and (ev.n_lower, ev.n_higher) == (60, 0)
     counts = f"fell: {ev.n_lower} lower, {ev.n_higher} higher"
+    # PF4 re-freeze (PF4.22, PF4.27): the worst-powered unchanged limit is Fisher's exact limit at
+    # q / M (M = 400 here), the larger of the two directions, so Go1's 34 points become about 47;
+    # recomputed from the stats file's references, and the sentence names the direction that limit
+    # is for (a fall from a cell where every run fell has no rise to detect).
+    value, way = ref_worst_unchanged(ev, multi.q / multi.n_tests)
+    assert abs(ev.max_mde_unchanged - value) <= 1e-4 + 1e-12, (ev.max_mde_unchanged, value)
     worst = f"{ev.max_mde_unchanged * 100:.0f}pp"
-    assert worst == "34pp"
     family = f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family"
     md = as_0_0_1_wrote_it(report.to_markdown())
     html = as_0_0_1_wrote_it(receipt.to_html())
     svg = report.to_svg()
     for name, text in (("report.md", md), ("receipt.html", html), ("heatmap.svg", svg)):
         assert counts in text, name
-        assert f"can only detect a {worst} rise" in text, name
+        assert f"can only detect a {worst} {way}" in text, (name, way)
         assert not re.search(r"\b(safer|worse)\b", text), name
     assert family in md and family in html
     ids = re.findall(r'data-cell="([0-9a-f]+)"', svg)
@@ -1479,8 +1578,19 @@ def test_c18_the_diff_output_prints_the_no_interval_line_when_nothing_was_reject
     assert code == 0, (out, err)
     # A shared salt now adds one note line on stderr (spec section 5.4); nothing else is there.
     assert without_notes(err) == "", err
-    assert NO_INTERVAL_LINE in out, out
-    assert INTERVAL_LINE.search(out) is None, out
+    # PF4 re-freeze (PF4.42, reading R10): intervals always, so the no-interval line is gone; the
+    # interval line is printed at the simultaneous level 1 - q / M (Bonferroni), and the arithmetic
+    # it prints is true: alpha* is q times max(R, 1) over M.
+    result = synth_diff(synth_root, "same-a", "same-b", "mcnemar_bh")
+    assert NO_INTERVAL_LINE not in out, out
+    match = INTERVAL_LINE.search(out)
+    assert match is not None, out
+    level, alpha_star, rejections, tests, _ = match.groups()
+    assert result.n_rejected == 0 and int(tests) == result.n_tests
+    assert abs(float(level) / 100.0 - (1.0 - result.q / result.n_tests)) <= 5e-4, level
+    assert abs(float(alpha_star) - result.q / result.n_tests) <= 5e-4, alpha_star
+    assert int(rejections) == max(result.n_rejected, 1), match.group(0)
+    assert abs(float(alpha_star) - result.q * int(rejections) / int(tests)) <= 5e-4, match.group(0)
 
 
 def test_c18_the_interval_block_follows_the_coverage_block(synth_root: Path) -> None:

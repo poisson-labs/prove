@@ -74,6 +74,11 @@ GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
+# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 CLI_SOURCE = ROOT / "src" / "poisson_prove" / "cli.py"
 
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
@@ -100,9 +105,11 @@ HORIZON = 10.0
 N_FILLERS = 6
 
 HONESTY_FIRST_RE = re.compile(
-    r'^Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d\.\d{3}) rise\. '
+    r'^Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d\.\d{3}) (?:rise|fall)\. '
     r'"(\d+) higher" is an honest claim only above that\.$'
 )  # PF4 (PF4.20): the claim names the rise in direction words for an event of unknown kind (was "worse").
+# PF4 re-freeze (PF4.27, PF4.32): the limit named is the condition's own, a rise or a fall (Go1's least
+# sensitive unchanged condition had the event in every run, so its limit is a fall).
 HONESTY_NONE = "No unchanged cells; every cell moved significantly."
 HONESTY_OVERALL_RE = re.compile(r"^Worst-powered cell overall: (\d\.\d{3}) \((.*)\)\.$")
 COMPOUND_RE = re.compile(r"^([a-zA-Z][a-zA-Z0-9-]*|\*)?((?:[.#][\w-]+)*)$")
@@ -153,7 +160,7 @@ def run_id_of(r: Result, store: Path, before: set[str]) -> str:
 
 def sweep(store: Path, target: str, *extra: str) -> str:
     before = run_ids(store)
-    r = run_cli(["--store", str(store), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra])
+    r = run_cli(["--store", str(store), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", target, "--yes", *extra])
     assert r.code == 0, r.text
     return run_id_of(r, store, before)
 
@@ -716,7 +723,11 @@ def test_c9_single_run_report_writes_three_files_with_one_panel_per_event(pair: 
     assert len(panels) == 2 and set(panels) == MOCK_EVENTS, panels
     md = (out / "report.md").read_text()
     assert not re.search(r"\bdelta\b", md), md
-    assert not re.search(r"\bq\b", md), md
+    # PF4 re-freeze (PF4.30, PF4.48a, section 8.3): the header's design limit names the test's level
+    # ("q 0.05 over 9 tests"); no other line of a single-run report carries a q.
+    design = [line for line in md.splitlines() if line.startswith("design limit ")]
+    assert len(design) == 1, md
+    assert not [line for line in md.splitlines() if line not in design and re.search(r"\bq\b", line)], md
     assert not re.search(r"\bsafer\b", md), md
     for name in REPORT_FILES:
         assert name in r.out, name
@@ -888,7 +899,7 @@ def test_c13_inspect_on_a_local_run_prints_the_real_import(pair: MockPair) -> No
 def test_c14_modal_run_records_the_same_import_path_and_inspects_the_same(store_root: Path, modal_in_process: None) -> None:
     before = run_ids(store_root)
     modal = run_cli([
-        "--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT,
+        "--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT,
         "--backend", "modal", "--yes",
     ])
     assert modal.code == 0, modal.text
@@ -982,11 +993,11 @@ def test_c17_three_quickstart_commands_run_unchanged_under_thirty_seconds(tmp_pa
     t0 = time.perf_counter()
     default_store = tmp_path / "prove-runs"
     before = run_ids(default_store)
-    first = run_cli(["sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
+    first = run_cli(["sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes"])
     assert first.code == 0, first.text
     run_a = run_id_of(first, default_store, before)
     before = run_ids(default_store)
-    second = run_cli(["sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", run_a, "--yes"])
+    second = run_cli(["sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", PATCHED, "--pair-with", run_a, "--yes"])
     assert second.code == 0, second.text
     run_b = run_id_of(second, default_store, before)
     third = run_cli(["report", run_a, run_b, "--event", "violated", "--x", "tool_fail_rate", "--y", "task_id"])

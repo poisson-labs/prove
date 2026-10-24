@@ -1038,8 +1038,96 @@ def test_y10_the_payload_root_is_thirteen_keys_and_intervals_is_m6s_fields_lines
     assert json.loads(json.dumps(go1_built.structure, allow_nan=False))["intervals"] == go1_cli["serve json"]["intervals"]
 
 
+#: PF4 re-freeze: the closed list of reasons a direction has no limit (PF4.27).
+LIMIT_NOTES = {"no room", "none detectable", "cannot be flagged", "no matched pairs"}
+S24_INTERVAL_LINE = re.compile(
+    r"^intervals: ([0-9.]+)% \(alpha\* = ([0-9.eE+-]+) = q x (\d+) / (\d+) over the flat BH family\), basis (\w+)$"
+)
+
+
+def assert_zero_r_interval_lines(built: Built) -> None:
+    """PF4.42 (reading R10) on a pair where nothing was flagged: the interval lines are printed at
+    the simultaneous level 1 - q / M, ``alpha*`` is q / M, the arithmetic the line prints is true
+    (q times max(R, 1) over M), and the two disagreement counts are the result's."""
+    multi = built.multi
+    lines = list(built.report.interval_lines)
+    assert multi.n_rejected == 0 and NO_INTERVAL_LINE not in lines, (built.name, lines)
+    match = S24_INTERVAL_LINE.match(lines[0])
+    assert match, lines
+    level, alpha_star, k, m, _ = match.groups()
+    assert abs(float(level) / 100 - (1 - multi.q / multi.n_tests)) <= 5e-7, level
+    assert abs(float(alpha_star) - multi.q / multi.n_tests) <= 1e-9, alpha_star
+    assert int(m) == multi.n_tests and int(k) == max(multi.n_rejected, 1), lines[0]
+    assert lines[1:] == [
+        f"interval excludes zero, verdict unchanged: {multi.n_interval_only} cells",
+        f"verdict significant, interval covers zero: {multi.n_verdict_only} cells",
+    ], lines
+
+
+def _ref_cell_limit(row: Any) -> tuple[float | None, float | None, float | None]:
+    """A condition's limit under Fisher at its row's level, from the stats file's references: the
+    larger of the two ways, or the one way with room, else None (PF4.22, PF4.27); then each way's."""
+    from test_pf4_stats import _ref_fisher_limits
+
+    rise, fall = _ref_fisher_limits(int(row["events_a"]), int(row["n_a"]), int(row["n_b"]), float(row["mde_level"]))
+    if rise is not None and fall is not None:
+        return max(rise, fall), rise, fall
+    if rise is not None and row["events_a"] == 0:
+        return rise, rise, fall
+    if fall is not None and row["events_a"] == row["n_a"]:
+        return fall, rise, fall
+    return None, rise, fall
+
+
+def assert_honesty_facts(built: Built, panel: Mapping[str, Any]) -> None:
+    """A panel's honesty, by its facts (PF4.22, PF4.27): no number for a null limit; the worst-powered
+    unchanged condition, its limit in points and the way it goes, and the count of rises the bound
+    guards; or, when no unchanged condition has a limit, one of them named with its reason; then the
+    worst-powered condition overall, every number from the references."""
+    assert built.multi.method == "fisher_bh", built.multi.method
+    ev = built.multi.by_event[panel["event"]]
+    records = ev.cells.to_dict(orient="records")
+    for row in records:
+        assert abs(row["mde_level"] - built.multi.q / built.multi.n_tests) <= 1e-15, (built.name, row["mde_level"])
+    limits = {row["config_hash"]: _ref_cell_limit(row) for row in records}
+    texts = {c["config_hash"]: ", ".join(f"{k}={v}" for k, v in c["config_text"].items()) for c in panel["cells"]}
+    honesty = panel["honesty"]
+    first, second = honesty.splitlines()
+    assert not re.search(r"\bnan", honesty, re.IGNORECASE), (built.name, honesty)
+    unchanged = [row for row in records if row["direction"] == "unchanged"]
+    numbers = {row["config_hash"]: limits[row["config_hash"]][0] for row in unchanged if limits[row["config_hash"]][0] is not None}
+    if not unchanged:
+        assert honesty_as_a626cd3(first, panel["n_present"]) == HONESTY_NONE_AT_A626CD3, (built.name, first)
+    elif numbers:
+        worst = max(numbers.values())
+        found = re.fullmatch(r'Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d+)pp (rise|fall)\. '
+                             r'"(\d+) higher" is an honest claim only above that\.', first)
+        assert found, (built.name, first)
+        named = [h for h, text in texts.items() if text == found.group(1) and h in numbers]
+        assert named and all(abs(numbers[h] - worst) <= 1e-12 for h in named), (built.name, first, worst)
+        _, rise, _ = limits[named[0]]
+        way = "rise" if rise is not None and abs(rise - worst) <= 1e-12 else "fall"
+        assert (int(found.group(4)), found.group(5), int(found.group(6))) == (round(100 * worst), way, ev.n_higher), (built.name, first, worst, way)
+    else:
+        found = re.fullmatch(r"Least sensitive unchanged condition \((.*), n=(\d+)/(\d+)\) has no limit: (.+)\.", first)
+        assert found and found.group(4) in LIMIT_NOTES, (built.name, first)
+        assert any(texts.get(row["config_hash"]) == found.group(1) for row in unchanged), (built.name, first)
+    overall = {h: v for h, (v, _, _) in limits.items() if v is not None}
+    if overall:
+        top = max(overall.values())
+        found = re.fullmatch(r"Worst-powered cell overall: (\d+)pp \((.*)\)\.", second)
+        assert found and int(found.group(1)) == round(100 * top), (built.name, second, top)
+        assert any(texts.get(h) == found.group(2) and abs(v - top) <= 1e-12 for h, v in overall.items()), (built.name, second)
+    else:
+        assert not re.search(r"\d+pp", second), (built.name, second)
+
+
 def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_byte_identical(go1_built: Built, go1_cli: dict[str, Any], same: Built, synth_root: Path) -> None:
-    for built, expected in ((go1_built, list(GO1_INTERVAL_LINES)), (same, [NO_INTERVAL_LINE])):
+    # PF4 re-freeze (PF4.42, reading R10): intervals always, so the R == 0 pair prints the interval
+    # lines too, at the simultaneous level 1 - q / M; their facts are checked by
+    # assert_zero_r_interval_lines and the one-formatter property over every surface as before.
+    assert_zero_r_interval_lines(same)
+    for built, expected in ((go1_built, list(GO1_INTERVAL_LINES)), (same, list(same.report.interval_lines))):
         assert list(built.report.interval_lines) == expected == built.structure["intervals"]["lines"], built.name
         assert md_sections(built.md)["Intervals"] == expected, built.name
         assert paragraphs(html_sections(built.html)["Intervals"]) == expected, built.name
@@ -1054,7 +1142,15 @@ def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_
     assert all(same_numbers(lib, line) for lib, line in zip(GO1_INTERVAL_LINES, block, strict=True)), block
     code, out, err = quiet(lambda: run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail", "--permutations", "50"]))
     assert code == 0, err
-    assert "\n" + NO_INTERVAL_LINE + "\n" in out and "  interval excludes" not in out, out
+    # PF4 re-freeze (PF4.42): no no-interval line; the R == 0 pair's block is printed like Go1's,
+    # each line carrying the library line's numbers.
+    assert NO_INTERVAL_LINE not in out, out
+    same_lines = list(same.report.interval_lines)
+    lines = out.splitlines()
+    at = next(i for i, line in enumerate(lines) if line.startswith("intervals: "))
+    block = lines[at : at + len(same_lines)]
+    assert lines[at - 1] == "" and all(line.startswith("  ") for line in block[1:]), out
+    assert all(same_numbers(lib, line) for lib, line in zip(same_lines, block, strict=True)), block
 
 
 def test_y12_the_family_is_named_no_renderer_does_arithmetic_on_the_interval_fields_and_a_small_alpha_prints_in_g_form(go1_built: Built, alpha: Built) -> None:
@@ -1112,7 +1208,8 @@ def test_y13_adr_060s_placement_by_position_on_every_surface_and_the_h2_sequence
 def test_y14_the_worst_cells_column_is_the_interval_per_event_and_cell_on_every_surface_and_absent_when_r_is_zero(go1_built: Built, k2: Built, same: Built, go1: Any) -> None:
     """The two-event pair is the sole catch for mutant 21: its endpoints differ across events on the
     same cell, so a join on ``config_hash`` alone puts one event's interval on the other's row."""
-    for built in (go1_built, k2):
+    # PF4 re-freeze (PF4.42): the R == 0 pair carries the interval column too, so it joins the loop.
+    for built in (go1_built, k2, same):
         by_key = {(str(r["event"]), str(r["config_hash"])): r for r in built.multi.intervals.to_dict(orient="records")}
         tables = html_tables(built.html)
         for index, panel in enumerate(built.structure["panels"]):
@@ -1131,10 +1228,11 @@ def test_y14_the_worst_cells_column_is_the_interval_per_event_and_cell_on_every_
             assert len(two_events) == 2
             cells = {k[1] for k in by_key}
             assert all(interval_text(by_key[("fail", c)]["ci_lo"], by_key[("fail", c)]["ci_hi"]) != interval_text(by_key[("crash", c)]["ci_lo"], by_key[("crash", c)]["ci_hi"]) for c in cells)
+    # PF4 re-freeze (PF4.42): no surface drops the column or prints the no-interval line on R == 0.
     for panel in same.structure["panels"]:
-        assert INTERVAL_COLUMN not in panel["worst_header"] and all(len(row) == len(panel["worst_header"]) for row in panel["worst_rows"])
-    assert same.structure["intervals"]["lines"] == [NO_INTERVAL_LINE]
-    assert INTERVAL_COLUMN not in same.md and INTERVAL_COLUMN not in same.html and INTERVAL_COLUMN not in same.page
+        assert panel["worst_header"][-1] == INTERVAL_COLUMN and all(len(row) == len(panel["worst_header"]) for row in panel["worst_rows"])
+    assert same.structure["intervals"]["lines"] != [NO_INTERVAL_LINE]
+    assert INTERVAL_COLUMN in same.md and INTERVAL_COLUMN in same.html and INTERVAL_COLUMN in same.page
     a, b, ma, mb = go1
     single = quiet(lambda: diff(censor(a, "fell"), censor(b, "fell"), event="fell", method="fisher_bh", manifest_a=ma, manifest_b=mb))
     single_report = build_report(single, ReportSpec(title="p1", x_axis="mu", y_axis="push_pct_bw"))
@@ -1288,12 +1386,15 @@ def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_li
 def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at_one_site_inside_root(go1_built: Built, go1_cli: dict[str, Any], k2: Built, same: Built) -> None:
     """The honesty and closure clauses are green before and after by design; the assignment-site
     clause is the guard on ADR-086's reading."""
-    def frozen(panels: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
-        return tuple(honesty_as_a626cd3(p["honesty"], p["n_present"]) for p in panels)
-
-    assert frozen(go1_built.structure["panels"]) == GO1_HONESTY == frozen(go1_cli["serve json"]["panels"])
+    # PF4 re-freeze (PF4.22, PF4.27): the honesty's limits are the exact limits at q / M, both
+    # directions, so a626cd3's numbers (and the conditions that attain them) move, and a condition
+    # with no limit is named with its reason instead of a number. The literals give way to the facts
+    # they held, checked against the stats file's references; the wording a626cd3 pinned is kept.
+    assert [p["honesty"] for p in go1_built.structure["panels"]] == [p["honesty"] for p in go1_cli["serve json"]["panels"]]
     for built in (go1_built, k2, same):
-        assert frozen(built.structure["panels"]) == HONESTY_AT_A626CD3[built.name], built.name
+        assert len(built.structure["panels"]) == len(HONESTY_AT_A626CD3[built.name]), built.name
+        for panel in built.structure["panels"]:
+            assert_honesty_facts(built, panel)
         for panel in built.structure["panels"]:
             assert "interval" not in panel["honesty"] and "alpha*" not in panel["honesty"], (built.name, panel["honesty"])
             assert built.md.count(panel["honesty"].splitlines()[0]) == 1, built.name

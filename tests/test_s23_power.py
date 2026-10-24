@@ -77,12 +77,14 @@ re-litigated. Session B builds to these.**
 from __future__ import annotations
 
 import ast
+import functools
 import io
 import math
 import re
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
+import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -102,7 +104,7 @@ from poisson_prove.executor_modal import (
 )
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import RunManifest, Store
-from conftest import quickstart_design
+from conftest import PACKAGED_QUICKSTART, quickstart_design
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -127,7 +129,22 @@ GO1_TARGET = "go1-g2-converged@20260813T155006Z"
 
 #: A design that clears the default (W12's second half). The spec names 105; it is not the
 #: bisection answer (that is 93, below) and nothing here depends on which it is.
-CLEARING_REPLICATES = 105
+# PF4 re-freeze (PF4.30): the gate asks Fisher's exact test at q / M at the worst base rate, so
+# 105 replicates over the four conditions below no longer clear the default; 150 do, which
+# test_w12_a_design_at_the_clearing_replicate_count_passes_at_the_default checks against the
+# references rather than trusting.
+CLEARING_REPLICATES = 150
+
+#: The gate's false discovery rate and target power (spec section 8.10), stated in the spec.
+Q = 0.05
+POWER = 0.8
+
+#: PF4 re-freeze (reading R33): the quickstart's design at 100 replicates with nothing declared
+#: (nine rows) is refused at the default 0.20; ``--max-mde 0.3`` is the round value above its limit.
+QUICKSTART_MAX_MDE = 0.3
+
+#: The conditions of ``spec_at`` and ``underpowered_toml``, one event each (nothing declared).
+FOUR = 4
 
 MDE_LINE = re.compile(r"MDE at N=(\d+) \(base rate 0\.5\): ([0-9]*\.?[0-9]+)")
 
@@ -248,6 +265,88 @@ def in_process_mapper(
         yield index, worker_batch(jobs, MOCK_ROLLOUT, None)
 
 
+# ---------- PF4.30, PF4.48a: the gate's rule, from the stats file's references ----------
+
+#: Every accepted change a refusal can offer: three decimals, above 0 and up to 1 (PF4.49).
+GATE_T = np.arange(1, 1001) / 1000
+
+
+@functools.cache
+def _ref_gate_table(n: int, rows: int, test: str) -> tuple[tuple[tuple[float, str], ...], np.ndarray]:
+    """For each base rate on the 0.005 grid and each way (a rise first), the power at exactly each
+    accepted change of ``GATE_T``, at level q / rows, NaN where that change has no room (PF4.30)."""
+    from test_pf4_stats import _ref_fisher_power, _ref_paired_power
+
+    level = Q / rows
+    keys: list[tuple[float, str]] = []
+    table: list[np.ndarray] = []
+    for base in np.round(np.arange(0.0, 1.0 + 1e-9, 0.005), 3):
+        for way in ("rise", "fall"):
+            room = 1 - base if way == "rise" else base
+            if test == "fisher":
+                power = _ref_fisher_power(float(base), n, n, level, GATE_T, way == "rise")
+            else:
+                power = _ref_paired_power(float(base), n, level, GATE_T, way == "rise")
+            keys.append((float(base), way))
+            table.append(np.where(GATE_T <= room + 1e-9, power, np.nan))
+    return tuple(keys), np.array(table)
+
+
+def _column(accepted: float) -> int:
+    k = int(round(accepted * 1000)) - 1
+    assert abs(GATE_T[k] - accepted) <= 1e-12, accepted
+    return k
+
+
+def ref_admits(n: int, rows: int, accepted: float, test: str = "fisher") -> bool:
+    """The gate's rule: the power at exactly ``accepted`` reaches the target at every base rate
+    where it has room."""
+    _, table = _ref_gate_table(n, rows, test)
+    column = table[:, _column(accepted)]
+    return bool((column[~np.isnan(column)] >= POWER).all())
+
+
+def ref_worst(n: int, rows: int, accepted: float, test: str = "fisher") -> tuple[float, str, float | None]:
+    """The worst base rate at exactly ``accepted`` (ties within 1e-12 to the lower base rate, a rise
+    first; PF4.48a), the way the change goes there, and the limit that way at that base rate."""
+    from test_pf4_stats import _ref_fisher_power, _ref_limit, _ref_paired_power
+
+    keys, table = _ref_gate_table(n, rows, test)
+    worst = (2.0, 0.0, "rise")
+    for (base, way), power in zip(keys, table[:, _column(accepted)]):
+        if not np.isnan(power) and power < worst[0] - 1e-12:
+            worst = (float(power), base, way)
+    _, base, way = worst
+    level = Q / rows
+    room = 1 - base if way == "rise" else base
+    if test == "fisher":
+        limit = _ref_limit(lambda g: _ref_fisher_power(base, n, n, level, g, way == "rise"), room)
+    else:
+        limit = _ref_limit(lambda g: _ref_paired_power(base, n, level, g, way == "rise"), room)
+    return base, way, limit
+
+
+def ref_offer(n: int, rows: int, accepted: float, test: str = "fisher") -> float:
+    """The smallest three-decimal accepted change at or above ``accepted`` that admits the design."""
+    for t in GATE_T:
+        if t >= accepted - 1e-12 and ref_admits(n, rows, float(t), test):
+            return float(t)
+    raise AssertionError((n, rows, accepted, test))
+
+
+def assert_design_recorded(design: dict, *, n: int, rows: int, accepted: float) -> None:
+    """``environment["design_mde"]`` (PF4.30, PF4.48a): the limit at the worst base rate for the
+    accepted change, its base rate and way, Fisher's test at q / M, and the design's family."""
+    base, way, limit = ref_worst(n, rows, accepted)
+    assert set(design) == {"mde", "base_rate", "direction", "test", "level", "family", "conditions",
+                           "events", "q", "power", "flaggable"}, sorted(design)
+    assert (design["base_rate"], design["direction"]) == (base, way), (design, base, way)
+    assert limit is not None and abs(design["mde"] - limit) <= 1e-4 + 1e-12, (design, limit)
+    assert (design["test"], design["family"], design["conditions"], design["events"]) == ("fisher", rows, rows, 1)
+    assert abs(design["level"] - Q / rows) <= 1e-15 and design["q"] == Q and design["power"] == POWER
+    assert design["flaggable"] is True
+
+
 # ---------- W1: one statistic, and it is the one already computed ----------
 
 
@@ -305,8 +404,13 @@ def test_w1_the_default_refuses_both_designs_this_project_has_run() -> None:
     """Spec section 3's calibration claim, asserted rather than believed. S18 and Go1 are both
     N=32; a default that passed them would be calibrated to pass everything."""
     assert executor.DEFAULT_MAX_MDE == EXPECTED_DEFAULT
-    assert executor.preflight_mde(go1_spec()) > executor.DEFAULT_MAX_MDE
-    assert executor.preflight_mde(spec_at(GO1_REPLICATES)) > executor.DEFAULT_MAX_MDE
+    # PF4 re-freeze (PF4.30): the gate's own rule decides, read from the references, not the
+    # normal approximation at base rate 0.5.
+    assert not ref_admits(GO1_REPLICATES, len(go1_spec().configs), executor.DEFAULT_MAX_MDE)
+    assert not ref_admits(GO1_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    for spec in (go1_spec(), spec_at(GO1_REPLICATES)):
+        with pytest.raises(executor.UnderpoweredDesign):
+            executor.check_power(_bare_plan(spec), max_mde=None)
 
 
 # ---------- W2: one construction ----------
@@ -378,18 +482,34 @@ def test_w2_the_cli_names_no_threshold_of_its_own_and_makes_no_comparison() -> N
 
 def test_w3_check_power_passes_below_the_threshold_and_refuses_above_it() -> None:
     spec = spec_at(GO1_REPLICATES)
-    mde = executor.preflight_mde(spec)
+    # PF4 re-freeze (PF4.30): the design's limit is the gate's, Fisher's test at q / M at the worst
+    # base rate for the accepted change, read from the references; the normal approximation at base
+    # rate 0.5 no longer decides.
+    _, _, mde = ref_worst(GO1_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    assert mde is not None
+    below = math.floor(mde / 2 * 1000) / 1000
+    above = min(1.0, math.ceil(mde * 2 * 1000) / 1000)
+    assert not ref_admits(GO1_REPLICATES, FOUR, below) and ref_admits(GO1_REPLICATES, FOUR, above), (below, above)
     p = _bare_plan(spec)
     with pytest.raises(executor.UnderpoweredDesign):
-        executor.check_power(p, max_mde=mde / 2)
-    assert executor.check_power(p, max_mde=mde * 2) is None
+        executor.check_power(p, max_mde=below)
+    assert executor.check_power(p, max_mde=above) is None
+    # PF4 re-freeze (PF4.49): an accepted change of exactly 1 admits any design.
+    assert executor.check_power(p, max_mde=1.0) is None
 
 
 def test_w3_equality_passes(tmp_path: Path) -> None:
     """``>`` and not ``>=``: a design that exactly meets what the caller accepts is accepted."""
     spec = spec_at(GO1_REPLICATES)
     p = plan(spec, Store(tmp_path / "s"))
-    assert executor.check_power(p, max_mde=executor.preflight_mde(spec)) is None
+    # PF4 re-freeze (PF4.30): a design passes when its power at exactly the accepted change is at
+    # least the target at every base rate with room, so the boundary is the smallest accepted change
+    # the references admit; it passes and one step of 0.001 below it is refused.
+    boundary = ref_offer(GO1_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    assert not ref_admits(GO1_REPLICATES, FOUR, round(boundary - 0.001, 3)), boundary
+    assert executor.check_power(p, max_mde=boundary) is None
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(p, max_mde=round(boundary - 0.001, 3))
 
 
 def test_w3_max_mde_none_means_the_default(tmp_path: Path) -> None:
@@ -408,7 +528,9 @@ def test_w3_underpowered_design_is_an_executor_error() -> None:
     assert issubclass(executor.UnderpoweredDesign, ExecutorError)
 
 
-@pytest.mark.parametrize("bad", [0.0, -0.1, -1.0, 1.0, 1.5, 2.0])
+# PF4 re-freeze (PF4.49): --max-mde accepts (0, 1], so 1.0 left this list for 1.01 (1.0 is admitted
+# in test_w3_check_power_passes_below_the_threshold_and_refuses_above_it).
+@pytest.mark.parametrize("bad", [0.0, -0.1, -1.0, 1.01, 1.5, 2.0])
 def test_w3_an_out_of_range_accepted_value_is_refused_by_the_executor(bad: float, tmp_path: Path) -> None:
     """M3 owns the range, exactly as M6 owns ``0 < q < 1`` -- see the module docstring."""
     p = plan(spec_at(CLEARING_REPLICATES), Store(tmp_path / "s"))
@@ -443,21 +565,36 @@ def refusal_text(spec: SweepSpec, max_mde: float | None) -> str:
     return str(excinfo.value)
 
 
+def refusal(spec: SweepSpec, max_mde: float | None) -> executor.UnderpoweredDesign:
+    p = _bare_plan(spec)
+    with pytest.raises(executor.UnderpoweredDesign) as excinfo:
+        executor.check_power(p, max_mde=max_mde)
+    return excinfo.value
+
+
 @pytest.mark.parametrize("replicates", [8, 16, GO1_REPLICATES, 64])
 def test_w4_the_refusal_names_the_mde_the_accepted_value_the_n_and_a_reachable_n(replicates: int) -> None:
     spec = spec_at(replicates)
-    mde = executor.preflight_mde(spec)
-    message = refusal_text(spec, executor.DEFAULT_MAX_MDE)
-    assert f"{mde:.4f}" in message, message
-    assert f"N={replicates}" in message, message
-    assert f"{executor.DEFAULT_MAX_MDE:.4f}" in message, message
-    suggested = [int(n) for n in re.findall(r"N=(\d+)", message) if int(n) != replicates]
-    assert suggested, message
-    target = smallest_n_reaching(executor.DEFAULT_MAX_MDE)
-    for n in suggested:
-        assert executor.preflight_mde(spec_at(n)) <= executor.DEFAULT_MAX_MDE, (n, message)
-        assert n == target, (n, target, message)
-    assert executor.preflight_mde(spec_at(target - 1)) > executor.DEFAULT_MAX_MDE, target
+    accepted = executor.DEFAULT_MAX_MDE
+    # PF4 re-freeze (PF4.30, PF4.48a): the refusal's facts are the limit at the worst base rate, that
+    # base rate and the accepted change, to three decimals (`one condition alone would be flagged for
+    # a change of X at its worst base rate, B, and you accept T`), all read from the references; the
+    # design's N and the N that passes are the refusal's numbers, which the command line prints as
+    # its `--replicates N` next: line.
+    base, _, mde = ref_worst(replicates, FOUR, accepted)
+    assert mde is not None
+    exc = refusal(spec, accepted)
+    message = str(exc)
+    assert f"{mde:.3f}" in message, message
+    assert f"{base:.3f}" in message, message
+    assert f"{accepted:.3f}" in message, message
+    assert exc.replicates == replicates, exc.replicates
+    needed = exc.replicates_needed
+    assert needed is not None and needed > replicates, needed
+    assert ref_admits(needed, FOUR, accepted), needed
+    assert not ref_admits(needed - 1, FOUR, accepted), needed
+    # The offered --max-mde is the smallest three-decimal value that admits the design as it is.
+    assert exc.offered == pytest.approx(ref_offer(replicates, FOUR, accepted), abs=1e-12), exc.offered
 
 
 @given(accepted=st.floats(min_value=0.02, max_value=0.9))
@@ -479,16 +616,24 @@ def test_w4_the_override_the_message_suggests_actually_clears_the_gate() -> None
     suggestion up at four decimals, or print more of them.
     """
     spec = go1_spec()
-    mde = executor.preflight_mde(spec)
-    assert mde > float(f"{mde:.4f}"), mde  # the rounding this test exists for is real
-    message = refusal_text(spec, executor.DEFAULT_MAX_MDE)
-    offered = [float(v) for v in re.findall(r"--max-mde\s+([0-9]*\.?[0-9]+)", message)]
-    assert offered, message
-    accepted_again = [v for v in offered if v != pytest.approx(executor.DEFAULT_MAX_MDE)]
-    assert accepted_again, message
-    for value in accepted_again:
-        assert executor.check_power(_bare_plan(spec), max_mde=value) is None, (value, mde, message)
-    assert math.ceil(mde * 1e4) / 1e4 >= mde  # the fix the message may take
+    rows = len(spec.configs)
+    # PF4 re-freeze (PF4.30): the refusal's limit is printed to three decimals at the worst base rate
+    # for the accepted change, and the --max-mde it offers (the command line's second next: line) is
+    # the smallest three-decimal change that admits the design. Pasting the printed limit back does
+    # not admit it; the offer does, and one step of 0.001 below the offer does not.
+    _, _, mde = ref_worst(GO1_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    assert mde is not None
+    exc = refusal(spec, executor.DEFAULT_MAX_MDE)
+    assert f"{mde:.3f}" in str(exc), str(exc)
+    offered = exc.offered
+    assert offered is not None, str(exc)
+    assert offered == pytest.approx(ref_offer(GO1_REPLICATES, rows, executor.DEFAULT_MAX_MDE), abs=1e-12)
+    printed = float(f"{mde:.3f}")
+    assert printed < offered and not ref_admits(GO1_REPLICATES, rows, printed), (printed, offered)  # the trap is real
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(_bare_plan(spec), max_mde=printed)
+    assert executor.check_power(_bare_plan(spec), max_mde=offered) is None, (offered, mde, str(exc))
+    assert not ref_admits(GO1_REPLICATES, rows, round(offered - 0.001, 3)), offered
 
 
 # ---------- W5: --yes does not clear the gate, and nothing is created ----------
@@ -527,17 +672,26 @@ def test_w5_the_refusal_creates_no_manifest_even_beside_an_existing_run(tmp_path
 def test_w6_an_accepted_value_at_or_above_the_computed_mde_proceeds(tmp_path: Path) -> None:
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
-    mde = executor.preflight_mde(SweepSpec.load(spec_path))
+    # PF4 re-freeze (PF4.30): the computed value is the smallest accepted change the gate admits for
+    # this design (the references' Fisher power at q / M at every base rate), not the normal
+    # approximation at base rate 0.5.
+    mde = ref_offer(SweepSpec.load(spec_path).replicates, FOUR, executor.DEFAULT_MAX_MDE)
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(mde)))
     assert r.code == 0, r.text
     assert len(Store(root).runs()) == 1
+    # PF4 re-freeze (PF4.49): an accepted change of exactly 1, however typed, admits any design.
+    for value in ("1", "1.0"):
+        again = run_cli(sweep_argv(tmp_path / f"runs-{value}", spec_path, MOCK_ROLLOUT, "--max-mde", value))
+        assert again.code == 0, again.text
+        assert len(Store(tmp_path / f"runs-{value}").runs()) == 1
 
 
 def test_w6_an_accepted_value_below_the_computed_mde_refuses(tmp_path: Path) -> None:
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
-    mde = executor.preflight_mde(SweepSpec.load(spec_path))
-    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(mde * 0.99)))
+    # PF4 re-freeze (PF4.30): below the smallest accepted change the gate admits, by one step of 0.001.
+    mde = ref_offer(SweepSpec.load(spec_path).replicates, FOUR, executor.DEFAULT_MAX_MDE)
+    r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(round(mde - 0.001, 3))))
     # A refusal exits 1 (spec section 5.2).
     assert r.code == 1, r.text
     assert store_is_untouched(root)
@@ -552,7 +706,9 @@ def test_w6_a_non_float_is_refused_at_exit_two_with_nothing_written(value: str, 
     assert store_is_untouched(root)
 
 
-@pytest.mark.parametrize("value", ["0", "0.0", "-0.2", "1", "1.0", "1.5"])
+# PF4 re-freeze (PF4.49): --max-mde accepts (0, 1], so "1" and "1.0" left this list for "1.01" and
+# "1.001" (they are admitted in test_w6_an_accepted_value_at_or_above_the_computed_mde_proceeds).
+@pytest.mark.parametrize("value", ["0", "0.0", "-0.2", "1.01", "1.001", "1.5"])
 def test_w6_a_value_outside_the_open_unit_interval_is_refused_with_nothing_written(value: str, tmp_path: Path) -> None:
     spec_path = write_spec(tmp_path / "clear.toml", underpowered_toml(replicates=CLEARING_REPLICATES))
     root = tmp_path / "runs"
@@ -579,11 +735,15 @@ def test_w7_the_refusal_follows_the_complete_preflight_block_on_stdout(tmp_path:
     spec = SweepSpec.load(spec_path)
     for token in ("Sweep:", "Backend: local", "Cost:", f"N={spec.replicates}"):
         assert token in r.out, (token, r.out)
-    found = MDE_LINE.search(r.out)
-    assert found, r.out
-    assert int(found.group(1)) == spec.replicates
-    # The command line prints an MDE to three decimals (spec section 5.4, rule 10).
-    assert found.group(2) == f"{executor.preflight_mde(spec):.3f}"
+    # PF4 re-freeze (PF4.22, reading R36): the plan no longer prints the normal approximation's
+    # `MDE at N=... (base rate 0.5)` line; the number the refusal is about is the gate's limit at the
+    # worst base rate, on the refusal's own error line, to three decimals (rule 10), from the
+    # references.
+    assert not MDE_LINE.search(r.out), r.out
+    base, _, limit = ref_worst(spec.replicates, FOUR, executor.DEFAULT_MAX_MDE)
+    assert limit is not None
+    (error,) = [line for line in r.err.splitlines() if line.startswith("error: ")]
+    assert f"{limit:.3f}" in error and f"{base:.3f}" in error, error
     assert "underpowered" in r.err.lower() and "underpowered" not in r.out.lower(), r.text
 
 
@@ -593,12 +753,16 @@ def test_w7_the_refusal_follows_the_complete_preflight_block_on_stdout(tmp_path:
 def test_w8_a_launched_local_run_records_the_accepted_value(tmp_path: Path) -> None:
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
-    mde = executor.preflight_mde(SweepSpec.load(spec_path))
-    accepted = math.ceil(mde * 1e4) / 1e4
+    # PF4 re-freeze (PF4.30): the accepted value is the smallest the gate admits for this design,
+    # from the references, where it was the normal approximation rounded up.
+    replicates = SweepSpec.load(spec_path).replicates
+    accepted = ref_offer(replicates, FOUR, executor.DEFAULT_MAX_MDE)
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(accepted)))
     assert r.code == 0, r.text
     environment = Store(root).manifest(run_id_of(root)).environment
     assert environment["max_mde_accepted"] == pytest.approx(accepted)
+    # PF4 re-freeze (PF4.30, PF4.48a): the run also records the gate's design limit for that value.
+    assert_design_recorded(environment["design_mde"], n=replicates, rows=FOUR, accepted=accepted)
 
 
 def test_w8_a_run_that_clears_the_default_records_the_default(tmp_path: Path) -> None:
@@ -620,6 +784,9 @@ def test_w8_the_modal_path_records_it_too(tmp_path: Path) -> None:
     )
     run_with_mapper(p, in_process_mapper, store, options=ModalOptions(batch_size=8))
     assert store.manifest(p.run_id).environment["max_mde_accepted"] == pytest.approx(accepted)
+    # PF4 re-freeze (PF4.30): design_mde is recorded on every backend, the modal path included.
+    assert_design_recorded(store.manifest(p.run_id).environment["design_mde"], n=CLEARING_REPLICATES, rows=2,
+                           accepted=accepted)
 
 
 def test_w8_the_other_environment_keys_are_unchanged_and_no_manifest_field_is_added(tmp_path: Path) -> None:
@@ -632,6 +799,10 @@ def test_w8_the_other_environment_keys_are_unchanged_and_no_manifest_field_is_ad
     environment = Store(root).manifest(run_id_of(root)).environment
     assert {"python", "platform", "poisson_prove_version", "sweep", "import_path"} <= set(environment)
     assert "max_mde_accepted" in environment
+    # PF4 re-freeze (PF4.30): new runs also record the gate's design limit, in environment, not as a
+    # manifest field.
+    assert "design_mde" in environment
+    assert_design_recorded(environment["design_mde"], n=CLEARING_REPLICATES, rows=FOUR, accepted=executor.DEFAULT_MAX_MDE)
     fields = {f.name for f in dataclasses.fields(RunManifest)}
     assert "max_mde_accepted" not in fields, sorted(fields)
 
@@ -647,7 +818,8 @@ def test_w9_a_resume_inherits_the_accepted_value_without_the_flag(tmp_path: Path
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
     spec = SweepSpec.load(spec_path)
-    accepted = math.ceil(executor.preflight_mde(spec) * 1e4) / 1e4
+    # PF4 re-freeze (PF4.30): the smallest accepted change the gate admits, from the references.
+    accepted = ref_offer(spec.replicates, FOUR, executor.DEFAULT_MAX_MDE)
     first = launched_underpowered(root, spec_path, accepted, "--max-rollouts", "4")
     # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
     assert first.code == 3, first.text
@@ -663,14 +835,16 @@ def test_w9_a_resume_is_refused_when_the_recorded_value_no_longer_covers_the_des
     ``replicates``. So the recorded value is compared against the *current* design."""
     root = tmp_path / "runs"
     started = write_spec(tmp_path / "a.toml", underpowered_toml(replicates=64))
-    accepted = math.ceil(executor.preflight_mde(SweepSpec.load(started)) * 1e4) / 1e4
+    # PF4 re-freeze (PF4.30): the accepted change and whether it still covers the design are the
+    # gate's rule, read from the references.
+    accepted = ref_offer(64, FOUR, executor.DEFAULT_MAX_MDE)
     first = launched_underpowered(root, started, accepted, "--max-rollouts", "4")
     # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
     assert first.code == 3, first.text
     run_id = run_id_of(root)
 
     grown = write_spec(tmp_path / "b.toml", underpowered_toml(replicates=8))
-    assert executor.preflight_mde(SweepSpec.load(grown)) > accepted
+    assert not ref_admits(SweepSpec.load(grown).replicates, FOUR, accepted)
     resumed = run_cli(sweep_argv(root, grown, MOCK_ROLLOUT, "--resume", run_id))
     # A refusal exits 1 (spec section 5.2).
     assert resumed.code == 1, resumed.text
@@ -681,7 +855,13 @@ def test_w9_pair_with_does_not_inherit(tmp_path: Path) -> None:
     """A paired arm is a different run making its own claim, and the flag is one word."""
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
-    accepted = math.ceil(executor.preflight_mde(SweepSpec.load(spec_path)) * 1e4) / 1e4
+    # PF4 re-freeze (PF4.30): under --pair-with the gate asks the paired test with independent arms,
+    # its pairs the earlier run's replicates, so the accepted change is the larger of the two tests'
+    # smallest admitted values: the first run is admitted by it, and so is the pair once the flag is
+    # typed, which is what makes "does not inherit" a fact about inheritance.
+    replicates = SweepSpec.load(spec_path).replicates
+    accepted = max(ref_offer(replicates, FOUR, executor.DEFAULT_MAX_MDE),
+                   ref_offer(replicates, FOUR, executor.DEFAULT_MAX_MDE, test="mcnemar"))
     first = launched_underpowered(root, spec_path, accepted)
     assert first.code == 0, first.text
     run_a = run_id_of(root)
@@ -713,11 +893,21 @@ def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path:
         ModalOptions(),
     )
     for text in (local, modal):
-        found = MDE_LINE.search(text)
-        assert found, text
-        assert int(found.group(1)) == GO1_REPLICATES
-        assert float(found.group(2)) == pytest.approx(executor.preflight_mde(spec), abs=5e-5)
+        # PF4 re-freeze (PF4.22, reading R36): neither pre-flight block prints a limit; the
+        # normal approximation's `MDE at N=... (base rate 0.5)` line is gone.
+        assert not MDE_LINE.search(text) and "MDE at N=" not in text, text
         assert "worst case" not in text, text
+    # PF4 re-freeze (PF4.30, reading R36): the plan's one limit is the command line's gate line, and
+    # it names the limit at the worst base rate, that base rate, the test and the family; the
+    # numbers are the references'.
+    spec_path = write_spec(tmp_path / "plan.toml", underpowered_toml(replicates=GO1_REPLICATES))
+    accepted = ref_offer(GO1_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    r = run_cli(sweep_argv(tmp_path / "runs", spec_path, MOCK_ROLLOUT, "--max-mde", repr(accepted), "--dry-run"))
+    assert r.code == 0, r.text
+    base, _, limit = ref_worst(GO1_REPLICATES, FOUR, accepted)
+    assert limit is not None
+    (line,) = [x for x in r.out.splitlines() if "worst base rate" in x]
+    assert f"{limit:.3f}" in line and f"{base:.3f}" in line and "Fisher" in line and "over 4 tests" in line, line
 
 
 def test_w10_worst_case_appears_in_neither_executor_module() -> None:
@@ -772,22 +962,41 @@ def test_w12_the_go1_design_passes_at_its_own_mde_and_not_at_the_printed_roundin
     is wrong: ``--max-mde 0.3251`` is what the message tells the reader to paste and it refuses.
     See ``test_w4_the_override_the_message_suggests_actually_clears_the_gate``."""
     spec = go1_spec()
-    mde = executor.preflight_mde(spec)
-    assert executor.check_power(_bare_plan(spec), max_mde=mde) is None
+    rows = len(spec.configs)
+    # PF4 re-freeze (PF4.30): the design's own value is the smallest accepted change the gate admits
+    # (the references' Fisher power at q / 400 at every base rate); the printed limit at the worst
+    # base rate, rounded to three decimals, is below it and refused.
+    own = ref_offer(GO1_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    _, _, mde = ref_worst(GO1_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    assert mde is not None
+    assert executor.check_power(_bare_plan(spec), max_mde=own) is None
     with pytest.raises(executor.UnderpoweredDesign):
-        executor.check_power(_bare_plan(spec), max_mde=float(f"{mde:.4f}"))
-    assert executor.check_power(_bare_plan(spec), max_mde=math.ceil(mde * 1e4) / 1e4) is None
+        executor.check_power(_bare_plan(spec), max_mde=float(f"{mde:.3f}"))
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(_bare_plan(spec), max_mde=round(own - 0.001, 3))
 
 
 def test_w12_a_design_at_the_clearing_replicate_count_passes_at_the_default() -> None:
     spec = spec_at(CLEARING_REPLICATES)
-    assert executor.preflight_mde(spec) <= executor.DEFAULT_MAX_MDE
+    # PF4 re-freeze (PF4.30): the clearing count is checked against the gate's rule from the references.
+    assert ref_admits(CLEARING_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
     assert executor.check_power(_bare_plan(spec), max_mde=None) is None
 
 
 def test_w12_the_rebalanced_quickstart_clears_its_own_gate_with_no_flag() -> None:
     """Spec section 9's acceptance clause, and the reason step zero rebalanced the grid rather
     than teaching a stranger to pass an override on the first command they ever run."""
+    # PF4 re-freeze (PF4.30, Q56): the packaged quickstart (194 replicates, its two failures
+    # declared, 9 conditions by 2 events) clears the default with no flag; its design at the 100
+    # replicates this file was frozen at, nothing declared (nine rows), is refused at the default and
+    # admitted at --max-mde 0.3 (reading R33). Both decisions are read from the references.
+    packaged = SweepSpec.load(PACKAGED_QUICKSTART)
+    assert len(packaged.configs) == 9
+    assert ref_admits(packaged.replicates, 9 * 2, executor.DEFAULT_MAX_MDE), packaged.replicates
+    assert executor.check_power(_bare_plan(packaged), max_mde=None) is None
     spec = SweepSpec.load(QUICKSTART)
-    assert executor.preflight_mde(spec) <= executor.DEFAULT_MAX_MDE, (spec.replicates, executor.preflight_mde(spec))
-    assert executor.check_power(_bare_plan(spec), max_mde=None) is None
+    assert not ref_admits(spec.replicates, len(spec.configs), executor.DEFAULT_MAX_MDE)
+    assert ref_admits(spec.replicates, len(spec.configs), QUICKSTART_MAX_MDE)
+    with pytest.raises(executor.UnderpoweredDesign):
+        executor.check_power(_bare_plan(spec), max_mde=None)
+    assert executor.check_power(_bare_plan(spec), max_mde=QUICKSTART_MAX_MDE) is None

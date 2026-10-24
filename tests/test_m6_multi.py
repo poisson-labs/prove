@@ -62,11 +62,13 @@ from poisson_prove.diff import (
     UnitMismatch,
     bh,
     diff,
+    holm,
     infer_events,
     multi_diff,
 )
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import censor
+from test_pf4_stats import _assert_limit, _ref_fisher_limits
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
@@ -107,6 +109,32 @@ CELLS_COLUMNS = [
     "direction_note",
     "pairs",
     "mde_note",
+    # PF4 re-freeze (PF4.34 to PF4.47): every cell row gains Holm's adjusted p and decision, the
+    # limit keys both ways, the competing shift and the interval on the change; the order is the
+    # reference build's.
+    "q_holm",
+    "holm",
+    "mde_rise",
+    "mde_fall",
+    "mde_rise_note",
+    "mde_fall_note",
+    "mde_test",
+    "mde_basis",
+    "mde_level",
+    "mde_family",
+    "mde_power",
+    "mde_anchor",
+    "mde_hr",
+    "p_min",
+    "flaggable",
+    "mde_moves_with",
+    "mde_rise_verdict",
+    "mde_fall_verdict",
+    "competing_shift",
+    "ci_lo",
+    "ci_hi",
+    "ci_level",
+    "ci_method",
 ]
 REGRESSION_CELL_KEYS = [
     "config_hash",
@@ -240,11 +268,13 @@ def _multi(
     salt_b: str = "salt",
     manifests: bool = True,
     t_unit_b: str = "steps",
+    kinds: dict[str, str] | None = None,
 ) -> MultiDiffResult:
     return multi_diff(
         a, b, events=events, method=method, q=q, power=POWER,
         manifest_a=_manifest("a", run_salt=salt_a) if manifests else None,
         manifest_b=_manifest("b", run_salt=salt_b, t_unit=t_unit_b) if manifests else None,
+        kinds=kinds,
     )
 
 
@@ -335,6 +365,13 @@ def _trade_counts(q_threshold: float, *, n: int = N, n_fillers: int = 6) -> dict
         together = bh(np.array([p_swing, p_swing, p_swing, p_step, *filler_p]), q_threshold)
         alone = bh(np.array([p_swing, p_step, *filler_p]), q_threshold)
         swings_significant = bool(np.all(together[:3] < q_threshold)) and alone[0] < q_threshold
+        # PF4 re-freeze (PF4.34): a trade reads the rows that count for the verdict, Holm's, so the
+        # swings must also count under Holm over the same family.
+        holm_together = holm(np.array([p_swing, p_swing, p_swing, p_step, *filler_p]), q_threshold)
+        holm_alone = holm(np.array([p_swing, p_step, *filler_p]), q_threshold)
+        swings_significant = (
+            swings_significant and bool(np.all(holm_together[:3] < q_threshold)) and holm_alone[0] < q_threshold
+        )
         step_not = together[3] >= q_threshold and alone[1] >= q_threshold
         return swings_significant and step_not
 
@@ -442,6 +479,18 @@ def trade_counts() -> dict[str, tuple[int, int, int, int]]:
 def trade_result(trade_counts: dict[str, tuple[int, int, int, int]]) -> MultiDiffResult:
     a, b = _trade_frames(trade_counts)
     return _multi(a, b, ["timeout", "violated"])
+
+
+# PF4 re-freeze (PF4.20, the library follows the screen): an event with no kind has no safer or
+# worse and a kindless pair has no trade, so the trade tests give both events the kind "failure"
+# (a fall is safer, a rise worse), which is what the safer/worse words of A11 read.
+TRADE_KINDS = {"timeout": "failure", "violated": "failure"}
+
+
+@pytest.fixture(scope="module")
+def kinded_trade_result(trade_counts: dict[str, tuple[int, int, int, int]]) -> MultiDiffResult:
+    a, b = _trade_frames(trade_counts)
+    return _multi(a, b, ["timeout", "violated"], kinds=TRADE_KINDS)
 
 
 @pytest.fixture(scope="module")
@@ -572,7 +621,9 @@ def test_a2_max_mde_unchanged_is_over_unchanged_cells_only_single_event() -> Non
 def test_a2_max_mde_unchanged_is_over_unchanged_cells_only_multi_event() -> None:
     a, b = _mde_split_frames()
     ev = _multi(a, b, ["fell"]).by_event["fell"]
-    assert ev.n_safer == 1 and ev.n_unchanged == 2
+    # PF4 re-freeze (PF4.20, the library follows the screen): "fell" has no kind here, so the
+    # object carries no safer/worse counts; the one cell that was "safer" is the one that fell.
+    assert ev.n_safer is None and ev.n_lower == 1 and ev.n_unchanged == 2
     top, attaining = _expected_unchanged(ev.cells)
     assert ev.max_mde_unchanged == top
     assert ev.max_mde_unchanged_cell in attaining
@@ -600,7 +651,9 @@ def test_a3_no_unchanged_cells_single_event() -> None:
 def test_a3_no_unchanged_cells_multi_event() -> None:
     a, b = _all_significant_frames()
     ev = _multi(a, b, ["fell"]).by_event["fell"]
-    assert ev.n_unchanged == 0 and ev.n_safer == 2
+    # PF4 re-freeze (PF4.20, the library follows the screen): no kind, so the two "safer" cells are
+    # counted as lower and n_safer is null.
+    assert ev.n_unchanged == 0 and ev.n_safer is None and ev.n_lower == 2
     assert math.isnan(ev.max_mde_unchanged)
     assert ev.max_mde_unchanged_cell is None
 
@@ -616,8 +669,12 @@ def test_a5_single_event_via_multi_matches_diff(golden: DiffResult, multi_fell: 
     assert set(multi_fell.by_event) == {EVENT}
     ev = multi_fell.by_event[EVENT]
     assert isinstance(ev, EventDiff) and ev.event == EVENT
-    assert ev.n_safer == golden.n_safer == PUBLISHED_SAFER
-    assert ev.n_worse == golden.n_worse == PUBLISHED_WORSE
+    # PF4 re-freeze (PF4.20, the library follows the screen; reading R35): the comparison object
+    # gives "fell" no kind, so its published 60 safer and 0 worse are 60 lower and 0 higher, with
+    # n_safer and n_worse null; the single-event DiffResult keeps its safer/worse record.
+    assert ev.n_safer is None and ev.n_worse is None
+    assert ev.n_lower == golden.n_safer == PUBLISHED_SAFER
+    assert ev.n_higher == golden.n_worse == PUBLISHED_WORSE
     assert ev.n_unchanged == golden.n_unchanged
     assert multi_fell.n_tests == CELLS
     assert len(ev.cells) == CELLS and multi_fell.n_not_comparable == 0
@@ -633,9 +690,35 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
     assert list(ours.index) == list(ref.index)
     for col in ("n_a", "n_b", "events_a", "events_b"):
         assert (ours[col].to_numpy() == ref[col].to_numpy()).all(), col
-    for col in ("p", "q", "delta", "mde"):
+    for col in ("p", "q", "delta"):
         np.testing.assert_allclose(ours[col].to_numpy(dtype=float), ref[col].to_numpy(dtype=float), rtol=0, atol=TOL_EXACT)
-    assert list(ours["verdict"]) == list(ref["verdict"])
+    # PF4 re-freeze (PF4.22, PF4.23, PF4.27; reading R35): the comparison's limit is Fisher's exact
+    # power at the lone-change level q / M, both ways, with mde the larger (section 8.10), while the
+    # single-event DiffResult keeps its own record, so the two mde columns no longer agree; the
+    # comparison's is recomputed here from the stats suite's reference.
+    level = Q / multi_fell.n_tests
+    refs: dict[int, tuple[float | None, float | None]] = {}
+    for row in ours.itertuples():
+        n_a, events_a = int(row.n_a), int(row.events_a)
+        if events_a not in refs:
+            refs[events_a] = _ref_fisher_limits(events_a, n_a, int(row.n_b), level)
+        rise, fall = refs[events_a]
+        if events_a == n_a:
+            rise = None  # no room to rise
+        if events_a == 0:
+            fall = None  # no room to fall
+        if rise is not None and fall is not None:
+            want = max(rise, fall)
+        elif events_a in (0, n_a):
+            want = rise if fall is None else fall
+        else:
+            want = None  # a direction with room and no limit leaves no single number
+        assert abs(float(row.mde_level) - level) <= 1e-15, row.Index
+        _assert_limit(row.mde, want, (row.Index, events_a))
+    # PF4 re-freeze (PF4.20, the library follows the screen; reading R35): the comparison's "fell"
+    # has no kind, so its verdict column reads direction words where DiffResult's reads safer/worse.
+    as_direction = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
+    assert list(ours["verdict"]) == [as_direction[v] for v in ref["verdict"]]
 
 
 # ---------- A6: CIF equals the rate without censoring ----------
@@ -721,8 +804,10 @@ def _assert_family_never_smaller(both: MultiDiffResult, singles: dict[str, Multi
         assert list(joint.index) == list(alone.index)
         np.testing.assert_allclose(joint["p"].to_numpy(dtype=float), alone["p"].to_numpy(dtype=float), rtol=0, atol=TOL_EXACT)
         assert np.all(joint["q"].to_numpy(dtype=float) >= alone["q"].to_numpy(dtype=float) - TOL_EXACT), e
-        assert both.by_event[e].n_safer <= singles[e].by_event[e].n_safer
-        assert both.by_event[e].n_worse <= singles[e].by_event[e].n_worse
+        # PF4 re-freeze (PF4.20, the library follows the screen): no event here has a kind, so the
+        # counts compared are the direction counts (n_safer and n_worse are null).
+        assert both.by_event[e].n_lower <= singles[e].by_event[e].n_lower
+        assert both.by_event[e].n_higher <= singles[e].by_event[e].n_higher
 
 
 def test_a8_two_events_together_never_smaller_q_than_separately_synthetic() -> None:
@@ -752,9 +837,12 @@ def _assert_counts(result: MultiDiffResult, a: pd.DataFrame, b: pd.DataFrame) ->
     common = set(a["config_hash"]) & set(b["config_hash"])
     for e in result.events:
         ev = result.by_event[e]
-        assert ev.n_safer + ev.n_worse + ev.n_unchanged == len(ev.cells) == len(common), e
+        # PF4 re-freeze (PF4.20, the library follows the screen): no event here has a kind, so the
+        # verdict column holds direction words and the counts are n_lower and n_higher.
+        assert ev.n_safer is None and ev.n_worse is None, e
+        assert ev.n_lower + ev.n_higher + ev.n_unchanged == len(ev.cells) == len(common), e
         counts = ev.cells["verdict"].value_counts()
-        assert ev.n_safer == counts.get("safer", 0) and ev.n_worse == counts.get("worse", 0)
+        assert ev.n_lower == counts.get("lower", 0) and ev.n_higher == counts.get("higher", 0)
         assert ev.n_unchanged == counts.get("unchanged", 0)
         assert list(ev.cells["config_hash"]) == sorted(common)
     assert len(common) + result.n_not_comparable == len(union)
@@ -772,7 +860,8 @@ def test_a9_counts_add_up_property(pair: tuple[pd.DataFrame, pd.DataFrame]) -> N
 def test_a9_counts_add_up_on_fixture(multi_fell: MultiDiffResult, raw: dict[str, pd.DataFrame]) -> None:
     _assert_counts(multi_fell, raw["go1-v0"], raw["go1-v1"])
     ev = multi_fell.by_event[EVENT]
-    assert ev.n_safer + ev.n_worse + ev.n_unchanged == CELLS
+    # PF4 re-freeze (PF4.20, the library follows the screen): the direction counts, "fell" having no kind.
+    assert ev.n_lower + ev.n_higher + ev.n_unchanged == CELLS
 
 
 # ---------- A10: headline ----------
@@ -807,9 +896,11 @@ def test_a10_headline_on_fixture(multi_fell: MultiDiffResult) -> None:
 
 def test_a10_headline_orders_worse_then_safer_then_name(headline_case: MultiDiffResult) -> None:
     by = headline_case.by_event
-    assert (by["x"].n_safer, by["x"].n_worse) == (0, 2)
-    assert (by["y"].n_safer, by["y"].n_worse) == (1, 0)
-    assert (by["z"].n_safer, by["z"].n_worse) == (1, 0)
+    # PF4 re-freeze (PF4.20, the library follows the screen): no kind, so (n_lower, n_higher) where
+    # the object read (n_safer, n_worse); the numbers are the same.
+    assert (by["x"].n_lower, by["x"].n_higher) == (0, 2)
+    assert (by["y"].n_lower, by["y"].n_higher) == (1, 0)
+    assert (by["z"].n_lower, by["z"].n_higher) == (1, 0)
     assert headline_case.events == ("z", "x", "y")
     printed, paren = _headline_counts(headline_case.headline())
     assert [e for e, _, _ in printed] == ["x", "y", "z"]
@@ -835,8 +926,20 @@ def test_a11_trade_builder_finds_counts(trade_counts: dict[str, tuple[int, int, 
 
 
 def test_a11_engineered_cell_is_exactly_one_trade(
-    trade_result: MultiDiffResult, trade_counts: dict[str, tuple[int, int, int, int]]
+    trade_result: MultiDiffResult, kinded_trade_result: MultiDiffResult, trade_counts: dict[str, tuple[int, int, int, int]]
 ) -> None:
+    # PF4 re-freeze (PF4.20, the library follows the screen): with no kind the engineered cell reads
+    # lower in timeout and higher in violated; it is still recorded as the one condition that moved
+    # both ways, its line in direction words, and the comparison's word is mixed ...
+    kindless_t = trade_result.by_event["timeout"].cells.set_index("config_hash")
+    kindless_v = trade_result.by_event["violated"].cells.set_index("config_hash")
+    assert kindless_t.loc[_hash("x"), "verdict"] == "lower" and kindless_v.loc[_hash("x"), "verdict"] == "higher"
+    assert len(trade_result.trades) == 1 and list(trade_result.trades.columns) == TRADES_COLUMNS
+    assert trade_result.comparison_verdict() == "mixed"
+    line = trade_result.trade_line()
+    assert line is not None and "fell" in line and "rose" in line and "safer" not in line and "worse" not in line
+    # ... and with both events failures it is exactly the one trade A11 froze.
+    trade_result = kinded_trade_result
     timeout = trade_result.by_event["timeout"].cells.set_index("config_hash")
     violated = trade_result.by_event["violated"].cells.set_index("config_hash")
     x, y = _hash("x"), _hash("y")
@@ -852,8 +955,9 @@ def test_a11_engineered_cell_is_exactly_one_trade(
     assert tuple(row["worse_events"]) == ("violated",)
 
 
-def test_a11_trade_line_names_both_events_and_the_count(trade_result: MultiDiffResult) -> None:
-    line = trade_result.trade_line()
+def test_a11_trade_line_names_both_events_and_the_count(kinded_trade_result: MultiDiffResult) -> None:
+    # PF4 re-freeze (PF4.20): a trade needs kinds, so the line is read from the kinded result.
+    line = kinded_trade_result.trade_line()
     assert line is not None
     assert "timeout" in line and "violated" in line
     assert re.search(r"\b1 cell", line), line
@@ -863,7 +967,8 @@ def test_a11_no_trade_when_the_opposite_move_is_not_significant(
     trade_counts: dict[str, tuple[int, int, int, int]]
 ) -> None:
     a, b = _trade_frames(trade_counts, include=("y",))
-    result = _multi(a, b, ["timeout", "violated"])
+    # PF4 re-freeze (PF4.20): the safer/unchanged words need kinds; both events are failures.
+    result = _multi(a, b, ["timeout", "violated"], kinds=TRADE_KINDS)
     y = _hash("y")
     timeout = result.by_event["timeout"].cells.set_index("config_hash")
     violated = result.by_event["violated"].cells.set_index("config_hash")
@@ -882,8 +987,9 @@ def test_a11_no_trade_on_fixture(multi_fell: MultiDiffResult) -> None:
 # ---------- A12: trade line is a count, not a claim ----------
 
 
-def test_a12_trade_line_has_no_causal_verb(trade_result: MultiDiffResult) -> None:
-    line = trade_result.trade_line()
+def test_a12_trade_line_has_no_causal_verb(kinded_trade_result: MultiDiffResult) -> None:
+    # PF4 re-freeze (PF4.20): a trade needs kinds, so the line is read from the kinded result.
+    line = kinded_trade_result.trade_line()
     assert line is not None
     lowered = line.lower()
     for word in BANNED_CAUSAL:
@@ -1030,31 +1136,41 @@ def test_a14_no_negative_zero_when_deltas_vanish() -> None:
 
 
 def _assert_check(result: MultiDiffResult) -> None:
-    worse_free = all(e.n_worse == 0 for e in result.by_event.values())
-    quiet = worse_free and all(e.n_safer == 0 for e in result.by_event.values())
-    assert result.check(fail_on="worse") is worse_free
-    assert result.check(fail_on="any") is quiet
-    assert result.check() is worse_free
+    # PF4 re-freeze (PF4.20, the library follows the screen; PF4.34, reading R2): no event here has a
+    # kind, so the default gate on worse is refused, and the gate reads the direction of the rows
+    # that count for the verdict (Holm's): "higher" where it read "worse", "any" over both ways.
+    with pytest.raises(DiffError):
+        result.check()
+    with pytest.raises(DiffError):
+        result.check(fail_on="worse")
+    rise_free = all(e.n_holm_higher == 0 for e in result.by_event.values())
+    fall_free = all(e.n_holm_lower == 0 for e in result.by_event.values())
+    assert result.check(fail_on="higher") is rise_free
+    assert result.check(fail_on="lower") is fall_free
+    assert result.check(fail_on="any") is (rise_free and fall_free)
 
 
 def test_a15_check_on_fixture(multi_fell: MultiDiffResult) -> None:
     _assert_check(multi_fell)
-    assert multi_fell.check(fail_on="worse") is True and multi_fell.check(fail_on="any") is False
+    # PF4 re-freeze (PF4.20): "higher" where this read "worse" ("fell" has no kind).
+    assert multi_fell.check(fail_on="higher") is True and multi_fell.check(fail_on="any") is False
 
 
 def test_a15_check_on_synthetic_cases(trade_result: MultiDiffResult, headline_case: MultiDiffResult) -> None:
+    # PF4 re-freeze (PF4.20): every check below gates on "higher" where it gated on "worse"; no
+    # event has a kind.
     _assert_check(trade_result)
-    assert trade_result.check(fail_on="worse") is False and trade_result.check(fail_on="any") is False
+    assert trade_result.check(fail_on="higher") is False and trade_result.check(fail_on="any") is False
     _assert_check(headline_case)
-    assert headline_case.check(fail_on="worse") is False
+    assert headline_case.check(fail_on="higher") is False
     a = _raw({"c1": _cell(timeout=N), "c2": _cell(timeout=4)})
     b = _raw({"c1": _cell(timeout=0), "c2": _cell(timeout=4)})
     safer_only = _multi(a, b, ["timeout", "violated"])
     _assert_check(safer_only)
-    assert safer_only.check(fail_on="worse") is True and safer_only.check(fail_on="any") is False
+    assert safer_only.check(fail_on="higher") is True and safer_only.check(fail_on="any") is False
     null = _multi(a, a.copy(), ["timeout", "violated"])
     _assert_check(null)
-    assert null.check(fail_on="worse") is True and null.check(fail_on="any") is True
+    assert null.check(fail_on="higher") is True and null.check(fail_on="any") is True
 
 
 # ---------- A16: logrank_bh is labelled cause-specific ----------

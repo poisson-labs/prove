@@ -105,6 +105,7 @@ former's top-level key set to the three methods, and nothing pins the latter.
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import importlib
 import json
@@ -262,11 +263,13 @@ E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push
 #: outside any build. The direction counts per method are the statistics re-check's
 #: (log/stats-recheck/README.md, section 2 and the Go1 table's "Methods" rows): Fisher 60 lower /
 #: 0 higher and McNemar 55 / 0, as published; log-rank 182 / 14 (published 88 / 0), because a
-#: rejected cell's direction now comes from the log-rank statistic (PF4.13). The worst-powered
-#: unchanged condition and its 34pp limit, the interval level 99.25% and alpha* 0.0075 are the
-#: published report's, unchanged in the re-check.
+#: rejected cell's direction now comes from the log-rank statistic (PF4.13). The interval level
+#: 99.25% and alpha* 0.0075 are the published report's, unchanged in the re-check (the worst-powered
+#: unchanged condition's limit moved at the statistics re-freeze; see below).
 GO1_DIRECTION_COUNTS = {"fisher_bh": (60, 0), "mcnemar_bh": (55, 0), "logrank_bh": (182, 14)}
-GO1_WORST_UNCHANGED = ("mu=0.95, push_pct_bw=100", 34)
+# PF4 re-freeze (PF4.22, PF4.23): GO1_WORST_UNCHANGED (mu=0.95, push_pct_bw=100 at 34pp) is no longer a
+# literal: the limits are the exact test's at q / M, so the worst-powered unchanged condition and its
+# limit are recomputed from the stats file's Fisher reference (go1_worst_unchanged below).
 GO1_INTERVAL_LEVEL_TEXT, GO1_ALPHA_STAR_TEXT = "99.25", "0.0075"
 #: The frozen per-cell Fisher record of Go1's ``fell`` (``tests/fixtures/go1/diff_regression.json``,
 #: frozen before any amendment): every cell's counts, rates, delta, p, q and detection limit as the
@@ -1479,13 +1482,91 @@ def mcnemar_reference(a: pd.DataFrame, b: pd.DataFrame, event: str) -> dict[str,
     return out
 
 
+#: PF4 re-freeze (PF4.22, PF4.48): limits are multiples of this grid step.
+LIMIT_GRID_STEP = 1e-4
+
+
+def is_null(value: Any) -> bool:
+    """A null limit as JSON (None) or as the frame (NaN) carries it."""
+    return value is None or (isinstance(value, float) and math.isnan(value))
+
+
+@functools.cache
+def reference_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> tuple[float | None, float | None]:
+    """PF4 re-freeze (PF4.23): the stats file's independent Fisher enumeration, rise then fall.
+    Imported here, not at module level, so this file still collects where the stats file cannot."""
+    from test_pf4_stats import _ref_fisher_limits
+
+    return _ref_fisher_limits(events_a, n_a, n_b, level)
+
+
+def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | None:
+    """Section 8.10's ``mde`` rule over the reference's two limits: the larger of two numbers, the
+    number beside a direction with no room, and null otherwise."""
+    rise, fall = reference_fisher_limits(events_a, n_a, n_b, level)
+    if rise is not None and fall is not None:
+        return max(rise, fall)
+    if rise is not None and events_a == 0:
+        return rise
+    if fall is not None and events_a == n_a:
+        return fall
+    return None
+
+
+def assert_the_limits_follow_the_rule(cell: Mapping[str, Any], row: Mapping[str, Any], level: float, method: str) -> None:
+    """PF4 re-freeze (PF4.22, PF4.23, PF4.27, section 8.10, Q54): the JSON carries the frame's limits;
+    a baseline with the event in every run has no rise (``no room``) and its fall is computed; ``mde``
+    follows section 8.10's rule, with a note when it is null, and a number is a positive grid value;
+    under Fisher both limits are the stats file's reference at the lone-change level ``q / M``."""
+    what = (method, cell["config_hash"])
+    for key in ("mde", "mde_rise", "mde_fall"):
+        assert is_null(cell[key]) == is_null(row[key]), (what, key)
+        assert is_null(cell[key]) or cell[key] == row[key], (what, key)
+    rise, fall = cell["mde_rise"], cell["mde_fall"]
+    if cell["events_a"] == cell["n_a"]:
+        assert is_null(rise) and cell["mde_rise_note"] == "no room", what
+    if not is_null(rise) and not is_null(fall):
+        want = max(rise, fall)
+    elif not is_null(rise) and cell["mde_fall_note"] == "no room":
+        want = rise
+    elif not is_null(fall) and cell["mde_rise_note"] == "no room":
+        want = fall
+    else:
+        want = None
+    if want is None:
+        assert is_null(cell["mde"]) and cell["mde_note"], (what, cell["mde"], cell["mde_note"])
+    else:
+        assert cell["mde"] == want and cell["mde"] >= LIMIT_GRID_STEP - 1e-12, (what, cell["mde"], want)
+    if method == "fisher_bh":
+        assert abs(cell["mde_level"] - level) <= 1e-15, what
+        for got, ref in zip((rise, fall), reference_fisher_limits(cell["events_a"], cell["n_a"], cell["n_b"], level), strict=True):
+            assert (ref is None and is_null(got)) or (ref is not None and not is_null(got) and abs(got - ref) <= LIMIT_GRID_STEP + 1e-12), (what, got, ref)
+
+
+def go1_worst_unchanged(multi: Any) -> tuple[set[str], int]:
+    """PF4 re-freeze (PF4.22, PF4.23): Go1's worst-powered unchanged condition under Fisher, from the
+    stats file's reference: every unchanged condition whose recomputed ``mde`` is the largest (they
+    tie), written as the report writes a condition, and that limit in whole points."""
+    level = multi.q / multi.n_tests
+    limits = {}
+    for row in multi.by_event["fell"].cells.to_dict(orient="records"):
+        if row["direction"] != "unchanged":
+            continue
+        value = reference_mde(int(row["events_a"]), int(row["n_a"]), int(row["n_b"]), level)
+        if value is not None:
+            limits[f"mu={row['config']['mu']:g}, push_pct_bw={row['config']['push_pct_bw']:g}"] = value
+    worst = max(limits.values())
+    return {where for where, value in limits.items() if abs(value - worst) <= LIMIT_GRID_STEP + 1e-12}, round(100 * worst)
+
+
 def assert_go1_multi_json_carries_the_facts(multi: Any, method: str, a: pd.DataFrame, b: pd.DataFrame) -> None:
     """PF4: the facts the ``to_json()`` digest guarded, with no digest over bytes PF4 changes.
 
     Every cell's counts, rates and delta equal the frame's and the frozen Fisher record's; p and q
     equal the frame's, and are the frozen record's under Fisher, the exact McNemar p and its BH q
     under McNemar, and S24's frozen q column under log-rank. A condition whose baseline had the
-    event in every run has no limit and a note (PF4.15); every other limit is the frozen one. Each
+    event in every run has no rise and its fall computed, and every limit follows section 8.10's
+    rule at ``q / M``, Fisher's recomputed from the stats file's reference (PF4.22, PF4.27). Each
     cell's JSON verdict is its direction (fell has no kind, PF4.20); a cell moves exactly when it is
     rejected, in the direction of its delta except under log-rank (PF4.13); and the counts are the
     re-check's (``GO1_DIRECTION_COUNTS``)."""
@@ -1512,11 +1593,10 @@ def assert_go1_multi_json_carries_the_facts(multi: Any, method: str, a: pd.DataF
         if method == "mcnemar_bh":
             assert abs(cell["p"] - reference_p[cell["config_hash"]]) <= 1e-12, (cell["config_hash"], cell["p"])
             assert cell["pairs"] == ref["n_a"] == ref["n_b"], cell["config_hash"]
-        if ref["events_a"] == ref["n_a"]:
-            assert cell["mde"] is None or math.isnan(cell["mde"]), (method, cell["config_hash"], cell["mde"])
-            assert cell["mde_note"], (method, cell["config_hash"])
-        else:
-            assert cell["mde"] == row["mde"] == ref["mde"] and cell["mde"] > 0, (method, cell["config_hash"])
+        # PF4 re-freeze (PF4.22, PF4.23, PF4.27): the frozen record's limits were the normal
+        # approximation at q; each limit is now the exact test's at q / M both ways, a 100% baseline
+        # has its fall computed, and Fisher's are recomputed from the stats file's reference.
+        assert_the_limits_follow_the_rule(cell, row, multi.q / multi.n_tests, method)
         rejected = cell["q"] < multi.q
         assert cell["verdict"] == cell["direction"] == row["direction"], (method, cell["config_hash"])
         assert (cell["direction"] != "unchanged") == rejected, (method, cell["config_hash"])
@@ -1535,7 +1615,7 @@ def assert_e14_builder_carries_the_result(multi: Any, report: Any, receipt: Any)
     """PF4: the facts the E14 digests guarded in the tree-less builder's report.md, receipt and
     heatmap: each file's one version entry; the headline counts in direction words (fell has no
     kind, PF4.20) at the re-check's 60 lower / 0 higher; the worst-powered unchanged condition and
-    its 34pp limit; the interval level and alpha*; no layered block (the root reaches no other
+    its limit, recomputed; the interval level and alpha*; no layered block (the root reaches no other
     verb); and every row of the cell table is a cell of the diff with its counts, rates, p, q and
     direction."""
     md, html, svg = report.to_markdown(), receipt.to_html(), report.to_svg()
@@ -1550,14 +1630,20 @@ def assert_e14_builder_carries_the_result(multi: Any, report: Any, receipt: Any)
     assert headline in md_lines and f"## {headline}" in md_lines, md_lines[:12]
     assert f"<h2>{headline}</h2>" in html
     assert f">{headline}</text>" in svg
-    where, points = GO1_WORST_UNCHANGED
+    # PF4 re-freeze (PF4.22, PF4.23): the worst-powered unchanged condition and its limit are
+    # recomputed from the stats file's reference (they tie, so the line names one of them).
+    wheres, points = go1_worst_unchanged(multi)
     assert round(100 * fell.max_mde_unchanged) == points
     for name, text in (("report.md", md), ("receipt.html", html), ("heatmap.svg", svg)):
         honesty = [line for line in text.splitlines() if "Worst-powered unchanged cell" in line]
-        assert honesty and f"({where}," in honesty[0] and f"{points}pp" in honesty[0], (name, honesty)
+        assert honesty and any(f"({where}," in honesty[0] for where in wheres) and f"{points}pp" in honesty[0], (name, honesty)
         assert "safer" not in text and "worse" not in text, name
-    (intervals,) = [line for line in md_lines if line.startswith("intervals: ")]
+    # PF4 re-freeze (PF4.42): the verdict's section adds its own "intervals: " line, the interval on
+    # the change at the same level; the line that names alpha* is the one this pinned.
+    (intervals,) = [line for line in md_lines if line.startswith("intervals: ") and "alpha*" in line]
     assert GO1_INTERVAL_LEVEL_TEXT in intervals and GO1_ALPHA_STAR_TEXT in intervals, intervals
+    (on_change,) = [line for line in md_lines if line.startswith("intervals: ") and "alpha*" not in line]
+    assert f"{GO1_INTERVAL_LEVEL_TEXT}%" in on_change and "miettinen-nurminen" in on_change.lower().replace("–", "-"), on_change
     for name, text in (("report.md", md), ("receipt.html", html)):
         assert "omnibus" not in text.lower() and "fault lines" not in text.lower(), name
     first = next(i for i, line in enumerate(md_lines) if line.startswith("| mu |"))
@@ -1611,12 +1697,13 @@ def assert_go1_page_carries_the_diff(structure: Mapping[str, Any], multi: Any, m
         for key in ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta", "p", "q"):
             assert cell[key] == row[key], (cell["config_hash"], key)
         assert cell["verdict"] == cell["direction"] == row["direction"], cell["config_hash"]
-        if row["events_a"] == row["n_a"]:
-            assert cell["mde"] is None and cell["mde_note"], cell["config_hash"]
-        else:
-            assert cell["mde"] == row["mde"], cell["config_hash"]
-    where, points = GO1_WORST_UNCHANGED
-    assert panel["mde_unchanged"]["where"] == where and round(100 * panel["mde_unchanged"]["value"]) == points
+        # PF4 re-freeze (PF4.27, Q54): a 100% baseline's limit is its fall, and a null limit is
+        # null on the page with its note, as in the diff.
+        assert is_null(cell["mde"]) == is_null(row["mde"]), cell["config_hash"]
+        assert (is_null(row["mde"]) and cell["mde_note"]) or cell["mde"] == row["mde"], cell["config_hash"]
+    # PF4 re-freeze (PF4.22, PF4.23): the worst-powered unchanged condition, recomputed.
+    wheres, points = go1_worst_unchanged(multi)
+    assert panel["mde_unchanged"]["where"] in wheres and round(100 * panel["mde_unchanged"]["value"]) == points
     assert structure["summary"]["verdict"] == direction_word(n_lower, n_higher)
     assert structure["headline"] == multi.headline()
     assert not set(TREE_ONLY_KEYS) & nested_keys({k: v for k, v in structure.items() if k != "tree"})
@@ -1759,12 +1846,19 @@ def test_o14_and_o23_check_on_go1_prints_the_same_bytes_and_exits_the_same(go1: 
     verdicts = multi.by_event["fell"].cells["verdict"]
     first = out.splitlines()[0]
     assert first.startswith("passed  ") and "fell" in first, out
-    # PF4 (PF4.20): fell has no kind, so the counts read in direction words (the library's safer is
-    # the rate that fell); Go1's 60 and 0 are the re-check's (GO1_DIRECTION_COUNTS).
-    n_lower, n_higher = int((verdicts == 'safer').sum()), int((verdicts == 'worse').sum())
+    # PF4 (PF4.20): fell has no kind, so the counts read in direction words; Go1's 60 and 0 are the
+    # re-check's (GO1_DIRECTION_COUNTS).
+    # PF4 re-freeze (PF4.20, no split between the library and the screen): the library's verdict
+    # column holds the direction words too, where it held safer and worse.
+    n_lower, n_higher = int((verdicts == "lower").sum()), int((verdicts == "higher").sum())
     assert (n_lower, n_higher) == GO1_DIRECTION_COUNTS["fisher_bh"]
     assert f"{n_lower:,} lower, {n_higher:,} higher" in out, out
     assert f"{multi.n_tests:,} tests" in out, out
+    # PF4 re-freeze (PF4.34, PF4.40, reading R34): check's block names the comparison's own word on
+    # its comparison line, read from Holm's rows.
+    holm = multi.to_json()["by_event"]["fell"]
+    (comparison,) = [line for line in out.splitlines() if line.startswith("  comparison  ")]
+    assert comparison.split()[1] == direction_word(holm["n_holm_lower"], holm["n_holm_higher"]), comparison
 
 
 def test_o23_serve_json_on_go1_prints_the_same_structure() -> None:

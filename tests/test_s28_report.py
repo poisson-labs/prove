@@ -256,6 +256,10 @@ MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit above the default accepted change of 0.20, so its sweep is refused;
+# the frozen sweeps accept 0.3, the smallest round value above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 
 # ---------- spec section 2, 3.2, 3.6: the literals ----------
 
@@ -746,6 +750,23 @@ def store_tree(root: Path, a: str, b: str, *, events: Sequence[str], method: str
     return _TREES[key]
 
 
+def admitting(root: Path, a: str, b: str, *, events: Sequence[str], key: str, method: str = "fisher_bh", **knobs: Any) -> float:
+    """PF4 re-freeze (PF4.45): a group's limit now comes from each cell's own baseline with the root
+    and the group both rejecting, so a grouping this file was frozen on can be refused
+    ``underpowered`` at the default ``--max-group-mde``. The override the refusal itself offers is
+    read here, never typed in, and passed back so the frozen grouping is the one tested."""
+    _, result = store_tree(root, a, b, events=events, method=method, **knobs)
+    refused = [x for x in result.grouping.refused if x.key == key]
+    assert len(refused) == 1 and refused[0].reason == "underpowered" and refused[0].offered_max_group_mde is not None, result.grouping.refused
+    return float(refused[0].offered_max_group_mde)
+
+
+def go1_mu(method: str = "fisher_bh") -> tuple[str, str]:
+    """PF4 re-freeze (PF4.45): the flags that keep Go1's frozen grouping by ``mu``, the override read
+    off the default tree's refusal (``mu`` is refused at 0.20 and ``push_pct_bw`` resolves)."""
+    return ("--max-group-mde", str(admitting(GO1_ROOT, GO1_A, GO1_B, events=("fell",), key="mu", method=method)))
+
+
 def spec_for(a: str, b: str, events: Sequence[str], x: str, y: str | None, **extra: Any) -> Any:
     return report_module().ReportSpec(title=f"{a} vs {b}: {', '.join(events)}", x_axis=x, y_axis=y, **extra)
 
@@ -957,7 +978,10 @@ def renders(cell: str, value: Any) -> bool:
         return False
     if isinstance(value, float) and math.isnan(value):
         # PF4 (PF4.15): a condition with no detection limit prints the reason, never a number.
-        return "ceiling" in cell and not re.search(r"\d", cell)
+        # PF4 re-freeze (PF4.24): the 100% baseline's "ceiling" is gone (the rise has no room and the
+        # fall is computed); a null limit is a direction with room where none is detectable or none
+        # can be flagged, and it still prints no number.
+        return bool(cell) and "ceiling" not in cell and not re.search(r"\d", cell)
     kinds = ("sig3", "pp1", "pp0", "num")
     if isinstance(value, int) or (isinstance(value, float) and value.is_integer() and abs(value) < 1e15):
         return token in fmt10(int(value), "int") or token in set().union(*(fmt10(value, k) for k in kinds))
@@ -1067,6 +1091,20 @@ def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[s
         allowed.update(t for t in TOKEN_SPLIT.split(text) if t)
     for text in (root.headline(), *(r.detail for r in grouping.refused)):
         allowed.update(rule10_spellings(text))
+    # PF4 re-freeze (PF4.32, PF4.45): the fault-lines head now says the group limit is the change the
+    # tree would flag "4 times in 5" (the power through the one formatting function), so the power's
+    # two numbers are admitted, read from the build's constant.
+    from fractions import Fraction
+
+    from poisson_prove import stats as stats_mod
+
+    power = Fraction(stats_mod.POWER).limit_denominator(100)
+    allowed.update({str(power.numerator), str(power.denominator)})
+    # PF4 re-freeze (PF4.45): the offered --max-group-mde values change, and one that is not a round
+    # number prints rounded up so it admits (assert_detail's spelling), which rule 10's nearest is not.
+    for refusal in grouping.refused:
+        if refusal.offered_max_group_mde is not None:
+            allowed.add(f"{math.ceil(refusal.offered_max_group_mde * 1000 - 1e-9) / 1000:.3f}")
     allowed.add(BOUND_RULE_LITERAL)
     return allowed, required
 
@@ -1372,8 +1410,8 @@ def quickstart(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str
         assert len(new) == 1, out
         return new.pop()
 
-    a = sweep(ROLLOUT, "--salt", QUICKSTART_SALT)
-    b = sweep(PATCHED, "--pair-with", a)
+    a = sweep(ROLLOUT, "--salt", QUICKSTART_SALT, *QUICKSTART_MAX_MDE)
+    b = sweep(PATCHED, "--pair-with", a, *QUICKSTART_MAX_MDE)
     return root, a, b
 
 
@@ -1417,6 +1455,10 @@ def events_of(event_flags: Sequence[str]) -> tuple[str, ...]:
     return tuple(event_flags[i + 1] for i, f in enumerate(event_flags) if f == "--event")
 
 
+#: PF4 re-freeze (PF4.45): the rows whose frozen grouping now needs the offered override.
+ADMITTED_KEYS = {"go1": "mu", "bh": "grp", "gate": "grp", "multi-event": "task"}
+
+
 @pytest.fixture(scope="module")
 def every_pair(outs: Path, synth_root: Path, quickstart: tuple[Path, str, str]) -> list[tuple[str, Rendered, Any, str | None]]:
     """Every section 0.7 pair rendered through ``main()`` with no tree flag, beside the tree the
@@ -1435,6 +1477,12 @@ def every_pair(outs: Path, synth_root: Path, quickstart: tuple[Path, str, str]) 
         # no method is checked against the unpaired test's tree (method_of), so the command line names it.
         if "--method" not in extra:
             extra = (*extra, "--method", "fisher_bh")
+        # PF4 re-freeze (PF4.45): group limits from each cell's own baseline, unconditional, refuse
+        # the grouping these rows were frozen on (Go1's mu, the BH and gate pairs' grp, the
+        # multi-event pair's task) at the default 0.20; the override the refusal offers is passed.
+        if name in ADMITTED_KEYS:
+            offered = admitting(root, a, b, events=events_of(ev), key=ADMITTED_KEYS[name], method=method_of(extra), **knobs_of(extra))
+            extra = (*extra, "--max-group-mde", str(offered))
         r = ok(outs, root, a, b, *ev, *axes, *extra)
         _, result = store_tree(root, a, b, events=events_of(ev), method=method_of(extra), **knobs_of(extra))
         out.append((name, r, result, requested))
@@ -1507,8 +1555,11 @@ def assert_tree_less_facts(report: Any, light: Any, multi: Any, event: str) -> N
     assert ev.kind is None
     caption = f"{event}: {ev.n_lower} lower, {ev.n_higher} higher"
     library = report.panels[event].honesty
-    assert f'"{ev.n_worse} worse"' in library
-    honesty = library.replace(f'"{ev.n_worse} worse"', f'"{ev.n_higher} higher"').splitlines()
+    # PF4 re-freeze (ruling on a kindless event, reading R35): n_safer and n_worse are None on a
+    # kindless event; the honesty line's count of rises is n_higher, under either word in the field.
+    assert (ev.n_safer, ev.n_worse) == (None, None)
+    assert f'"{ev.n_higher} worse"' in library or f'"{ev.n_higher} higher"' in library, library
+    honesty = library.replace(f'"{ev.n_higher} worse"', f'"{ev.n_higher} higher"').splitlines()
     md = as_0_0_1_wrote_it(report.to_markdown())
     html = html_mod.unescape(as_0_0_1_wrote_it(light.to_html()))
     svg = report.to_svg()
@@ -1583,14 +1634,19 @@ def test_r2_the_clis_report_and_receipt_with_the_tree_digest_to_the_values_minte
     bound in each section."""
     # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
     # test; the library render and the tree are the unpaired test's, named.
-    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
-    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",))
-    library = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=True, theme="light", counted=True)
+    # PF4 re-freeze (PF4.45): Go1's mu grouping is refused at the default 0.20; the override its
+    # refusal offers keeps the grouping this test pins (go1_mu).
+    mu = go1_mu()
+    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh", *mu)
+    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), max_group_mde=float(mu[1]))
+    library = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=True, theme="light", counted=True, max_group_mde=float(mu[1]))
     for kind, page, theirs in (("md", r.md, library.to_markdown()), ("html", r.html, library.to_html())):
         as_0_0_1_wrote_it(page)
         # PF3 (spec section 4.4, PF3.6b; rule R2): the command line's files gain a line naming the method,
         # which the library's render does not carry; compared without it.
-        assert_same_but_numbers(without_method_lines(page), theirs, f"e14 {kind}")
+        # PF4 re-freeze (PF4.32): every surface that prints a limit names its test, so the library's
+        # render now carries a limits line naming Fisher too; both sides are compared without it.
+        assert_same_but_numbers(without_method_lines(page), without_method_lines(theirs), f"e14 {kind}")
         secs = sections(page, kind)
         assert_omnibus("e14", kind, secs["Omnibus"], result)
         assert_fault_lines("e14", kind, secs["Fault lines"], result)
@@ -1624,8 +1680,10 @@ def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_ev
         # PF3 (spec section 4.4, PF3.6b; rule R2): the command line's files gain a line naming the method,
         # which the library's tree-less render does not carry; compared without it.
         md, html = without_method_lines(titled_by_ids(r.md, root, a, b)), without_method_lines(titled_by_ids(r.html, root, a, b))
-        assert_same_but_numbers(excised(md, md_bounds(md)), tree_less.to_markdown(), name)
-        assert_same_but_numbers(excised(html, html_bounds(html)), tree_less.to_html(), name)
+        # PF4 re-freeze (PF4.32): every surface that prints a limit names its test, so the library's
+        # tree-less render now carries a limits line naming Fisher too; both sides are compared without it.
+        assert_same_but_numbers(excised(md, md_bounds(md)), without_method_lines(tree_less.to_markdown()), name)
+        assert_same_but_numbers(excised(html, html_bounds(html)), without_method_lines(tree_less.to_html()), name)
         with_tree = _with_tree_for(name, synth_root)
         assert excised(with_tree.to_markdown(), md_bounds(with_tree.to_markdown())) == tree_less.to_markdown(), name
         assert excised(with_tree.to_html(), html_bounds(with_tree.to_html())) == tree_less.to_html(), name
@@ -1961,7 +2019,10 @@ def assert_cells(name: str, kind: str, items: Sequence[tuple[Any, ...]], result:
         return
     assert leaves.families, (name, kind)
     meaning = lines[1]
-    assert "increase" in meaning.lower() and "headroom" in meaning.lower() and numeric_tokens(meaning) == [], (name, kind, meaning)
+    # PF4 re-freeze (PF4.24, PF4.32): a cell's limit is no longer the increase capped at the headroom
+    # but the smallest change either way one condition alone would be flagged for, from where it was;
+    # the sentence says that, still with no number.
+    assert "alone" in meaning.lower() and "from where" in meaning.lower() and numeric_tokens(meaning) == [], (name, kind, meaning)
     family_lines = lines[2:]
     assert len(family_lines) == len(leaves.families), (name, kind, family_lines)
     expected_tables = [f for f in leaves.families if f.n_rejected > 0]
@@ -2563,14 +2624,17 @@ def test_r21_seed_identity_is_the_salt_plus_the_stored_seeds_and_mcnemar_refuses
 def test_r18_go1_renders_twenty_group_rows_nineteen_rejected_nineteen_families_and_the_golden_leaf_counts(outs: Path) -> None:
     # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
     # test; the Fisher and by-grid goldens are the unpaired test's, named.
-    fisher = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
+    # PF4 re-freeze (PF4.45): Go1's mu grouping is refused at the default 0.20; the override its
+    # refusal offers keeps the grouping these goldens are of (go1_mu), under each method.
+    fisher = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh", *go1_mu())
     header, rows = tables_of(fault_items(fisher, "md"))[0]
     assert len(rows) == GO1_MU_GROUPS and sum(row[-1] == "rejected" for row in rows) == GO1_MU_REJECTED
     cells = cells_items(fisher, "md")
     assert len(lines_of(cells)) == 2 + GO1_MU_REJECTED
     assert sum(len(rows) for _, rows in tables_of(cells)) == GO1_FISHER_LEAVES
-    mcnemar = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "mcnemar_bh")
-    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), method="mcnemar_bh")
+    mu = go1_mu("mcnemar_bh")
+    mcnemar = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "mcnemar_bh", *mu)
+    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), method="mcnemar_bh", max_group_mde=float(mu[1]))
     assert result.root.scheme == "pair_swap"
     assert sum(len(rows) for _, rows in tables_of(cells_items(mcnemar, "md"))) == GO1_MCNEMAR_LEAVES
     assert_fault_lines("go1-mcnemar", "md", fault_items(mcnemar, "md"), result)

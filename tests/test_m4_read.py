@@ -62,6 +62,11 @@ THIRTEEN = [
     "confidence", "meta", "error", "wall_time", "backend_meta",
 ]
 ELEVEN = [c for c in THIRTEEN if c not in ("meta", "backend_meta")]
+# PF4 re-freeze (reading R5): the store copies a rollout's case id into its own nullable string
+# column, appended after trace_obs on disk, and every read returns it last (null for older parts), so
+# a read frame is the thirteen columns plus case_id and a narrow read the eleven plus case_id.
+FRAME = THIRTEEN + ["case_id"]
+NARROW = ELEVEN + ["case_id"]
 JSON_COLUMNS = ("config", "meta", "backend_meta")
 
 POISON = "not json"
@@ -400,7 +405,7 @@ def assert_inspect_prints_exactly(r: Result, rows: pd.DataFrame, hashes: set[str
 
 def test_r1_default_read_is_the_thirteen_column_frame(keyed: tuple[Store, pd.DataFrame]) -> None:
     _, frame = keyed
-    assert list(frame.columns) == THIRTEEN
+    assert list(frame.columns) == FRAME
     assert len(frame) == len(PRESENT_KEYS)
     assert keys_of(frame) == sorted(PRESENT_KEYS)
     for col in JSON_COLUMNS:
@@ -429,10 +434,10 @@ def test_r2_narrow_read_is_the_eleven_columns_of_the_default_frame(
 ) -> None:
     store, frame = keyed
     narrow = store.read(KEYED_RUN, meta=False)
-    assert list(narrow.columns) == ELEVEN
+    assert list(narrow.columns) == NARROW
     assert all(isinstance(cfg, dict) for cfg in narrow["config"])
     assert keys_of(narrow) == sorted(PRESENT_KEYS)
-    pd.testing.assert_frame_equal(narrow, frame[ELEVEN])
+    pd.testing.assert_frame_equal(narrow, frame[NARROW])
 
 
 def test_r2_narrow_read_of_an_empty_run_keeps_columns_and_dtypes(
@@ -442,7 +447,7 @@ def test_r2_narrow_read_of_an_empty_run_keeps_columns_and_dtypes(
     empty = Store(tmp_path)
     empty.create_run(_manifest("empty"))
     narrow = empty.read("empty", meta=False)
-    assert list(narrow.columns) == ELEVEN and len(narrow) == 0
+    assert list(narrow.columns) == NARROW and len(narrow) == 0
     assert narrow.dtypes.equals(store.read(KEYED_RUN, meta=False).dtypes)
 
 
@@ -465,7 +470,7 @@ def test_r3_keys_select_exactly_those_rows(
     wanted = set(keys)
     expected = frame[[k in wanted for k in keys_of(frame)]]
     if not meta:
-        expected = expected[ELEVEN]
+        expected = expected[NARROW]
     got = store.read(KEYED_RUN, keys=container(keys), meta=meta)
     pd.testing.assert_frame_equal(got, expected.reset_index(drop=True))
     assert keys_of(got) == sorted(keys_of(got))
@@ -482,7 +487,7 @@ def test_r3_absent_keys_and_duplicates_change_nothing(keyed: tuple[Store, pd.Dat
 
 
 @pytest.mark.parametrize(
-    "meta, columns", [(True, THIRTEEN), (False, ELEVEN)], ids=["meta", "no-meta"]
+    "meta, columns", [(True, FRAME), (False, NARROW)], ids=["meta", "no-meta"]
 )
 def test_r3_empty_keys_is_an_empty_frame_with_the_requested_columns(
     keyed: tuple[Store, pd.DataFrame], meta: bool, columns: list[str]
@@ -503,7 +508,7 @@ def test_r3_empty_keys_touch_no_part(tmp_path: Path) -> None:
         part.write_bytes(b"\x00 not a parquet file")
         with pytest.raises(pa.ArrowInvalid):
             pq.read_table(part)
-    for meta, columns in ((True, THIRTEEN), (False, ELEVEN)):
+    for meta, columns in ((True, FRAME), (False, NARROW)):
         got = store.read(KEYED_RUN, keys=[], meta=meta)
         assert list(got.columns) == columns and len(got) == 0
 
@@ -513,8 +518,8 @@ def test_r3_keys_compose_with_narrow_read(keyed: tuple[Store, pd.DataFrame]) -> 
     cell_hash = config_hash(KEYED_CELLS[3])
     keys = [(cell_hash, k) for k in range(KEYED_REPS)]  # includes the errored row
     got = store.read(KEYED_RUN, keys=keys, meta=False)
-    assert list(got.columns) == ELEVEN
-    expected = frame[frame["config_hash"] == cell_hash][ELEVEN].reset_index(drop=True)
+    assert list(got.columns) == NARROW
+    expected = frame[frame["config_hash"] == cell_hash][NARROW].reset_index(drop=True)
     assert len(expected) == KEYED_REPS
     pd.testing.assert_frame_equal(got, expected)
     assert got["error"].notna().sum() == 1
@@ -634,7 +639,7 @@ def test_r5_poisoned_meta_raises_on_the_default_read_and_not_on_the_narrow_paths
 ) -> None:
     intact, poisoned = Store(twins.intact), Store(twins.poisoned)
     reference = intact.read(run_id)
-    assert list(reference.columns) == THIRTEEN and len(reference) == 2 * TWIN_N
+    assert list(reference.columns) == FRAME and len(reference) == 2 * TWIN_N
     assert reference.iloc[0]["meta"] == {"note": "intact", "k": 0}
 
     with pytest.raises(ValueError):
@@ -643,7 +648,7 @@ def test_r5_poisoned_meta_raises_on_the_default_read_and_not_on_the_narrow_paths
         poisoned.read(run_id, meta=True)
     narrow = poisoned.read(run_id, meta=False)
     pd.testing.assert_frame_equal(narrow, intact.read(run_id, meta=False))
-    pd.testing.assert_frame_equal(narrow, reference[ELEVEN])
+    pd.testing.assert_frame_equal(narrow, reference[NARROW])
     assert poisoned.count(run_id) == intact.count(run_id) == 2 * TWIN_N
 
 
@@ -706,7 +711,7 @@ def test_r6_one_poisoned_selected_row_is_loud(mock_run: MockRun, tmp_path: Path)
     got = store.read(mock_run.run_id, keys=[other_key])
     assert keys_of(got) == [other_key]
     assert got.iloc[0]["meta"] == other["meta"]
-    pd.testing.assert_frame_equal(store.read(mock_run.run_id, meta=False), mock_run.frame[ELEVEN])
+    pd.testing.assert_frame_equal(store.read(mock_run.run_id, meta=False), mock_run.frame[NARROW])
     assert store.count(mock_run.run_id) == len(mock_run.frame)
 
 
@@ -716,15 +721,19 @@ def test_r6_one_poisoned_selected_row_is_loud(mock_run: MockRun, tmp_path: Path)
 @pytest.mark.parametrize("run_id", GO1_RUNS)
 def test_r7_go1_default_read_is_12800_by_13(go1_store: Store, run_id: str) -> None:
     df = go1_store.read(run_id)
-    assert df.shape == (GO1_ROWS, 13)
-    assert list(df.columns) == THIRTEEN
+    # PF4 re-freeze (reading R5): the thirteen columns plus case_id, null on parts written before it.
+    assert df.shape == (GO1_ROWS, 13 + 1)
+    assert list(df.columns) == FRAME
+    assert df["case_id"].isna().all()
 
 
 @pytest.mark.parametrize("run_id", GO1_RUNS)
 def test_r7_go1_narrow_read_is_12800_by_11(go1_store: Store, run_id: str) -> None:
     df = go1_store.read(run_id, meta=False)
-    assert df.shape == (GO1_ROWS, 11)
-    assert list(df.columns) == ELEVEN
+    # PF4 re-freeze (reading R5): the eleven columns plus case_id, null on parts written before it.
+    assert df.shape == (GO1_ROWS, 11 + 1)
+    assert list(df.columns) == NARROW
+    assert df["case_id"].isna().all()
 
 
 def test_r7_go1_count_is_12800_per_run_and_25600_together(go1_store: Store) -> None:
@@ -742,11 +751,12 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     # A7 (spec section 3.1, 7.1): the on-disk schema is the Go1 golden's thirteen fields plus
     # ``trace`` and ``trace_obs``, both nullable strings, appended in that order. Amended from
     # ``fresh.equals(golden)`` / ``fresh.names == THIRTEEN``; the golden comparison is kept.
+    # PF4 re-freeze (reading R5): a nullable string case_id column follows trace_obs.
     expected = golden.append(pa.field("trace", pa.string(), nullable=True)).append(
         pa.field("trace_obs", pa.string(), nullable=True)
-    )
+    ).append(pa.field("case_id", pa.string(), nullable=True))
     assert fresh.equals(expected), f"\n{fresh}\n!=\n{expected}"
-    assert fresh.names == THIRTEEN + ["trace", "trace_obs"]
+    assert fresh.names == THIRTEEN + ["trace", "trace_obs", "case_id"]
     golden_manifest = json.loads((GO1_ROOT / "go1-v0" / "manifest.json").read_text())
     # A10 (spec section 3.3, 7.1 group 1, W4): the manifest's top-level keys are the Go1 golden's
     # twelve plus ``declared``, which is null for a sweep that declares nothing. Amended from

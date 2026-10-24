@@ -114,6 +114,7 @@ import dataclasses
 import html
 import inspect
 import json
+import math
 import re
 import tempfile
 import typing
@@ -164,6 +165,8 @@ E14_LOWER, E14_HIGHER = 60, 0
 E14_ROOT_P = 2.5e-04
 E14_GROUPS_REJECTED = 19
 E14_GROUP_P = {"0.7": 5.0e-04, "0.9": 5.0e-04, "0.85": 1.0e-03}
+# PF4 re-freeze (PF4.45): the two group facts above are the README's for the mu grouping, which the
+# tree no longer chooses; test_pr53 reads the groups from the tree instead.
 JUDGEMENT_WORD = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
 #: ``test_s29_viewer.py``'s and ``test_fr_first_run.py``'s whole-file digest of ``report.py``.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the local serve pass's build (the wrap, the complement, mde_unchanged, LS16's Cells sentence); phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
@@ -1094,6 +1097,15 @@ def rendered_problems(library: str, written: str, name: str) -> list[Any]:
     return problems
 
 
+def offers_rounded_up(text: str) -> str:
+    """PF4 re-freeze (PF4.45): the group limits moved, and the ``--max-group-mde`` the fault-lines
+    section offers is printed by the command line rounded up at three decimals (PF1's offer, rule
+    10), which is more than half a digit from the library's four-decimal value when the fourth
+    decimal is small; the library's offers are rounded up the same way before the comparison."""
+    return re.sub(r"(--max-group-mde )(\d+\.\d+)",
+                  lambda m: m.group(1) + f"{math.ceil(float(m.group(2)) * 1000 - 1e-9) / 1000:.3f}", text)
+
+
 def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Green before and after: W20's three digests on the Go1 fixture, over the library's rendering
     of what the CLI built, and the CLI's three files carrying that rendering's facts."""
@@ -1133,16 +1145,25 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         # own naming the method; with it taken out they carry the library rendering's facts as before.
         written = (out / name).read_text(encoding="utf-8")
         assert name == "heatmap.svg" or without_method_lines(written) != written, name
-        assert rendered_problems(library[name], written if name == "heatmap.svg" else without_method_lines(written), name) == [], name
+        # PF4 re-freeze (PF4.32): the library's rendering now names the test on its limits line too,
+        # which without_method_lines takes out of the written file, so it is taken out of both.
+        rendered = library[name] if name == "heatmap.svg" else offers_rounded_up(without_method_lines(library[name]))
+        assert rendered_problems(rendered, written if name == "heatmap.svg" else without_method_lines(written), name) == [], name
     md = library["report.md"]
     tree = report_kwargs["tree"]
     # PF4 (PF4.18): the root and the fault lines on one scale, as the re-check's README gives them.
     # README section 6 prints these to three significant figures, hence the tolerance.
     assert abs(tree.root.p_omnibus - E14_ROOT_P) < 5e-7 and tree.root.rejects, tree.root.p_omnibus
-    assert tree.fault_lines.n_rejected_groups == E14_GROUPS_REJECTED
+    # PF4 re-freeze (PF4.45): a group's limit now uses each condition's own baseline and the
+    # unconditional power, so the mu grouping the README measured resolves none of its 20 groups at
+    # the default 0.200 and is refused, and the tree groups by push_pct_bw instead with the dual
+    # statistic; its group counts and p-values are read from the tree (no reference computes the
+    # permutation test), and the table below is checked against them.
+    assert tree.fault_lines.mde_basis == "unconditional"
+    assert "refused mu (axis): underpowered; 0 of 20 groups can resolve" in md
     groups = {g.label: g for g in tree.fault_lines.groups}
-    for mu, p_value in E14_GROUP_P.items():
-        assert abs(groups[mu].p_group - p_value) < 5e-7 and groups[mu].rejects, (mu, groups[mu].p_group)
+    assert tree.fault_lines.n_rejected_groups == len(tree.fault_lines.rejected_groups) == sum(g.rejects for g in groups.values())
+    assert set(tree.fault_lines.rejected_groups) == {label for label, g in groups.items() if g.rejects}
     # The fault-line table prints each group's p, q and verdict as the tree has them.
     fault_lines = md.split("## Fault lines", 1)[1].split("\n## ", 1)[0]
     group_rows = {row[0].strip(): row for row in (line.strip("|").split(" | ") for line in fault_lines.splitlines()
@@ -1168,19 +1189,39 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         assert event == "fell", line
         printed, half = rendered_value(delta_pp)
         assert abs(printed - 100 * row.delta) <= half + 1e-9, line
-        if row.events_a == row.n_a:
-            assert np.isnan(row.mde) and not re.search(r"\d", mde_pp), line
+        # PF4 re-freeze (PF4.27, Q54): a 100% baseline now has a fall limit; a condition whose limit
+        # is null (a direction with room that detects nothing) prints no number.
+        if row.mde is None or np.isnan(row.mde):
+            assert not re.search(r"\d", mde_pp), line
         else:
             printed, half = rendered_value(mde_pp)
             assert abs(printed - 100 * row.mde) <= half + 1e-9, line
     assert listed > 0
     # The honesty line names the worst-powered unchanged condition and its limit, which PF4 leaves
     # as they were (mu=0.95, push_pct_bw=100, 34pp): a condition at a 100% baseline is left out.
-    unchanged = cells[(cells["direction"] == "unchanged") & cells["mde"].notna()]
-    assert fell.max_mde_unchanged == unchanged["mde"].max()
-    worst = unchanged.loc[unchanged["mde"].idxmax()]
-    honesty = f"can only detect a {100 * worst['mde']:.0f}pp rise. \"{higher} higher\" is an honest claim only above that."
-    assert worst["config"] == {"mu": 0.95, "push_pct_bw": 100.0} and honesty in md, worst
+    # PF4 re-freeze (PF4.22, PF4.27): the limits are Fisher's exact limits at q / M in both
+    # directions and a 100% baseline enters with its fall, so the worst condition, its limit (about
+    # 47 points) and the way it goes are recomputed from the stats file's references.
+    from test_pf4_stats import _ref_fisher_limits
+
+    level = report_args[0].q / report_args[0].n_tests
+    reference: dict[str, tuple[float, str]] = {}
+    for row in cells[cells["direction"] == "unchanged"].itertuples():
+        rise, fall = _ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
+        if rise is not None and fall is not None:
+            reference[row.config_hash] = (max(rise, fall), "rise" if rise >= fall else "fall")
+        elif rise is not None and row.events_a == 0:
+            reference[row.config_hash] = (rise, "rise")
+        elif fall is not None and row.events_a == row.n_a:
+            reference[row.config_hash] = (fall, "fall")
+    top = max(v for v, _ in reference.values())
+    assert abs(fell.max_mde_unchanged - top) <= 1e-4 + 1e-12, (fell.max_mde_unchanged, top)
+    worst = cells.set_index("config_hash").loc[fell.max_mde_unchanged_cell]
+    assert abs(reference[fell.max_mde_unchanged_cell][0] - top) <= 1e-12, worst
+    way = reference[fell.max_mde_unchanged_cell][1]
+    honesty = f"can only detect a {100 * fell.max_mde_unchanged:.0f}pp {way}. \"{higher} higher\" is an honest claim only above that."
+    config = ", ".join(f"{k}={v:g}" for k, v in worst["config"].items())
+    assert f"({config}, n={worst['n_a']}/{worst['n_b']}) {honesty}" in md, (config, honesty)
     assert honesty in library["heatmap.svg"]
 
 
