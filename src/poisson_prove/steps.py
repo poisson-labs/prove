@@ -61,7 +61,9 @@ class DeclarationCheck:
 
 
 def declaration_check(manifest: RunManifest, frame: pd.DataFrame) -> DeclarationCheck | None:
-    """``None`` when the run declared nothing; otherwise its declaration against its spans.
+    """``None`` when the run declared no step, outcome or gate (nothing, or only which outcomes
+    are failures and successes, which are the comparison's to read); otherwise its declaration
+    against its spans.
 
     ``frame`` is ``Store.read(run, meta=False, trace="envelope")`` and nothing else: the
     envelope's spans are walked as plain mappings and never validated, so a run ``inspect``
@@ -73,7 +75,7 @@ def declaration_check(manifest: RunManifest, frame: pd.DataFrame) -> Declaration
     meaningful ``undeclared_outcomes``. Nullness is ``is None`` throughout (A8a section 3.10).
     """
     declared: Declaration | None = manifest.declared
-    if declared is None:
+    if declared is None or not (declared.steps or declared.outcomes or declared.gates):
         return None
     observed: set[str] = set()
     emitted: set[str] = set()

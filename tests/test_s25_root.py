@@ -217,7 +217,9 @@ MULTI_JSON_SHA256 = {
     "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
 #: ``check go1-v0 go1-v1 --event fell``: exit code, bare tree.
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; check's gate here is the flat family's unpaired test, named.
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh")
 # CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
 # checks the facts the digest guarded instead (front-door spec section 14).
 CHECK_EXIT = 0
@@ -225,7 +227,9 @@ CHECK_EXIT = 0
 #: echoes the ``--store`` path as ``pair.store_root``, so the digest is of the parsed structure with
 #: that one value replaced by ``<store>`` and re-serialised with sorted keys; the raw bytes would
 #: pin the machine's absolute path.
-SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the structure digest is the unpaired test's, named.
+SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
@@ -245,7 +249,9 @@ COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee
 FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
 #: The three digests S21's E14 pins, restated. Minted on the bare tree at b10a146 by
 #: ``report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw``.
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the E14 digests and the heatmap are the unpaired test's, named.
+E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
@@ -1579,7 +1585,9 @@ def test_o23_serve_json_on_go1_prints_the_same_structure() -> None:
     # Go1's two runs share a salt, so stderr now carries one note line (spec section 5.4).
     assert code == 0 and without_notes(err) == "", err
     # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
-    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence")}
+    # PF3 (spec section 4.4, PF3.6b; rule R3): serve --json now names the method at the top level after the
+    # sentence; dropped beside the verdict and the sentence, so the frozen digest guards the rest.
+    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
     assert structure["pair"]["store_root"] == str(GO1_ROOT)
     # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
     # then put back as before names, so the digest below still guards everything else.
@@ -1714,7 +1722,9 @@ def test_o18_the_other_branch_reads_not_rejected(synth_root: Path) -> None:
 def test_o18_the_second_line_and_the_informative_line_carry_the_fields(synth_root: Path) -> None:
     """Every number on the block is a field the test reads back (section 0.4)."""
     _, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
-    code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now the
+    # paired test (scheme pair_swap); the root here is the unpaired test's, named.
+    code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, out
     second = OMNIBUS_SECOND_LINE.search(out)
     assert second is not None, out
@@ -1754,7 +1764,9 @@ def test_o18_permutations_and_seed_reach_the_call_and_json_carries_to_json(synth
     same frames with the same knobs, after one JSON round trip."""
     multi, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=200, seed=3)
     # --json replaces --format json (spec section 5.6); the shared salt adds one note line (5.4).
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--json", "--permutations", "200", "--seed", "3"])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now the
+    # paired test (scheme pair_swap); the root here is the unpaired test's, named.
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--json", "--permutations", "200", "--seed", "3", "--method", "fisher_bh"])
     assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
     assert payload["omnibus"]["n_permutations"] == 200 and payload["omnibus"]["seed"] == 3

@@ -680,19 +680,22 @@ def go1_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     out_dir = tmp_path_factory.mktemp("p1-go1-cli") / "report"
     base = ["--store", str(GO1_ROOT)]
     knobs = ["--permutations", "300", "--seed", "0"]
+    # PF3 (Q17, spec sections 4.4 and 14; R1): Go1's runs share a salt, so the default is now the
+    # paired test; every number this file pins on the CLI is the unpaired test's, named.
+    fisher = ["--method", "fisher_bh"]
     results: dict[str, Any] = {}
     for name, argv in (
-        ("diff", ["diff", GO1_A, GO1_B, "--event", "fell", *knobs]),
+        ("diff", ["diff", GO1_A, GO1_B, "--event", "fell", *fisher, *knobs]),
         # --json replaces --format json on diff (spec section 5.6).
-        ("diff json", ["diff", GO1_A, GO1_B, "--event", "fell", "--json", *knobs]),
+        ("diff json", ["diff", GO1_A, GO1_B, "--event", "fell", "--json", *fisher, *knobs]),
         ("diff methods all", ["diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", *knobs]),
-        ("report", ["report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--out", str(out_dir), *knobs]),
-        ("check", ["check", GO1_A, GO1_B, "--event", "fell"]),
+        ("report", ["report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--out", str(out_dir), *fisher, *knobs]),
+        ("check", ["check", GO1_A, GO1_B, "--event", "fell", *fisher]),
     ):
         code, out, err = quiet(lambda argv=argv: run_cli([*base, *argv]))
         assert code == 0, (name, code, err)
         results[name] = out
-    code, out, err, calls = quiet(lambda: run_serve([*base, "serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json", *knobs]))
+    code, out, err, calls = quiet(lambda: run_serve([*base, "serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json", *fisher, *knobs]))
     assert code == 0 and calls == [], (code, err, calls)
     results["serve json"] = json.loads(out)
     results["report.md"] = (out_dir / "report.md").read_text(encoding="utf-8")
@@ -984,7 +987,8 @@ def test_y9_the_provenance_dict_carries_the_two_keys_in_paireds_slot_on_both_bui
 def test_y10_the_payload_root_is_thirteen_keys_and_intervals_is_m6s_fields_lines_and_rows_in_m6s_order(go1_built: Built, go1_cli: dict[str, Any], k2: Built, same: Built) -> None:
     """Mutant 18."""
     # serve --json adds verdict and sentence after schema (spec section 5.6).
-    assert tuple(k for k in go1_cli["serve json"] if k not in ("verdict", "sentence")) == TOP_LEVEL_KEYS
+    # PF3 (spec section 4.4, R3): serve --json also adds method and method_chosen right after sentence.
+    assert tuple(k for k in go1_cli["serve json"] if k not in ("verdict", "sentence")) == ("schema", "method", "method_chosen") + TOP_LEVEL_KEYS[1:]
     for built in (go1_built, k2, same):
         structure, multi = built.structure, built.multi
         assert tuple(structure) == TOP_LEVEL_KEYS, (built.name, tuple(structure))

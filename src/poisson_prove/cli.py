@@ -1,11 +1,12 @@
 """The command line.
 
-Eight verbs over the built modules: ``sweep`` runs a plan on a backend after showing the plan
-and asking; ``diff``, ``report``, ``check`` and ``serve`` operate on stored runs; ``inspect``
-prints the ``(config, seed)`` pairs behind an event plus a reproduction snippet; ``runs``
-lists the store; ``paired`` asserts that a declaration's arms were the same request replayed
-and writes the paired-replay files, and ``report --paired`` folds the same sections into the
-report. ``serve`` is the one verb that binds a socket: a loopback listener holding one page
+Nine verbs over the built modules: ``init`` writes a sweep spec, ``prove.toml``, and nothing
+else; ``sweep`` runs a plan on a backend after showing the plan and asking; ``diff``,
+``report``, ``check`` and ``serve`` operate on stored runs; ``inspect`` prints the ``(config,
+seed)`` pairs behind an event plus a reproduction snippet; ``runs`` lists the store;
+``paired`` asserts that a declaration's arms were the same request replayed and writes the
+paired-replay files, and ``report --paired`` folds the same sections into the report.
+``serve`` is the one verb that binds a socket: a loopback listener holding one page
 built before the bind, which writes nothing and dies with the process.
 
 This module computes nothing and decides nothing statistical: it parses arguments, calls the
@@ -32,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import html
 import importlib.util
 import json
 import math
@@ -156,9 +158,18 @@ _COMMAND = "poisson-prove"
 _ENV_STORE = "POISSON_PROVE_STORE"
 _DEFAULT_STORE = "./prove-runs"
 _DEFAULT_BATCH_SIZE = 64
-_DEFAULT_METHOD = "fisher_bh"
+_DEFAULT_SPEC = "prove.toml"
 _DEFAULT_Q = 0.05
 _METHODS: tuple[str, ...] = ("fisher_bh", "mcnemar_bh", "logrank_bh")
+#: Each test in plain words, with its own name kept beside them for the record.
+_METHOD_WORDS = {
+    "mcnemar_bh": ("paired test on shared seeds", "McNemar"),
+    "fisher_bh": ("two separate samples", "Fisher"),
+    "logrank_bh": ("time to the event", "log-rank"),
+}
+#: The packaged keyless agent, whose first sweep's next step is its patched twin, paired.
+_MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
+_MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 _REPORT_FILES = ("report.md", "heatmap.svg", "receipt.html")
 _SNIPPET_MARKER = "# reproduce one episode"
 _MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
@@ -184,7 +195,7 @@ _SWEEP_NEXT = "sweep SPEC.toml --target pkg.module:rollout"
 _LATEST_PARTIAL = "\0latest-partial"
 #: The tool's own options, accepted before or after the verb.
 _GLOBAL_OPTIONS = ("--store", "--plain", "--debug")
-_VERB_NAMES = ("sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs")
+_VERB_NAMES = ("init", "sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs")
 _SCHEMAS = {verb: f"{_COMMAND}.{verb}/1" for verb in _VERB_NAMES}
 _ERRORS_LOG = "~/.cache/poisson-prove/errors.log"
 _EXTRA_HINTS = {
@@ -380,6 +391,41 @@ def _build_parser(io: _IO) -> _Parser:
         dest="verb", title="verbs", metavar="VERB", help="what to do; each verb has its own --help"
     )
 
+    init_p = sub.add_parser(
+        "init",
+        help=f"write {_DEFAULT_SPEC}, a sweep spec to edit, or the keyless example",
+        description=(
+            f"Write a sweep spec, ./{_DEFAULT_SPEC} unless --out names another file, and nothing\n"
+            "else: a commented template to edit, or with --example the keyless quickstart,\n"
+            "runnable as it is. Nothing is asked."
+        ),
+        epilog=(
+            "examples:\n"
+            f"  {_COMMAND} init --example\n"
+            f"  {_COMMAND} init --target my_agent:rollout"
+        ),
+    )
+    init_p.add_argument(
+        "--example",
+        action="store_true",
+        help="write the keyless quickstart, which runs as it is (default: the template)",
+    )
+    init_p.add_argument(
+        "--target",
+        metavar="pkg.module:rollout",
+        help="fill the template's target with this rollout (default: a commented placeholder)",
+    )
+    init_p.add_argument(
+        "--out",
+        metavar="PATH",
+        help=f"the file to write (default: ./{_DEFAULT_SPEC})",
+    )
+    init_p.add_argument(
+        "--force", action="store_true", help="replace the file if it exists (default: refuse)"
+    )
+    _add_json_option(init_p, "the file written")
+    _add_global_options(init_p, top=False)
+
     sweep = sub.add_parser(
         "sweep",
         help="run a sweep spec on a backend after showing the plan",
@@ -390,18 +436,29 @@ def _build_parser(io: _IO) -> _Parser:
         ),
         epilog=(
             "examples:\n"
-            f"  {_COMMAND} sweep prove.toml --target my_agent:rollout\n"
-            f"  {_COMMAND} sweep prove.toml --target my_agent:rollout --pair-with latest --yes"
+            f"  {_COMMAND} sweep\n"
+            f"  {_COMMAND} sweep --target my_agent:rollout_patched --pair-with latest --yes\n"
+            f"  {_COMMAND} sweep other.toml --target my_agent:rollout --replicates 300"
         ),
     )
     sweep.add_argument(
-        "spec", metavar="SPEC.toml", help="the sweep spec: the target, the axes, the replicates"
+        "spec",
+        metavar="SPEC.toml",
+        nargs="?",
+        help=f"the sweep spec: the target, the axes, the replicates (default: ./{_DEFAULT_SPEC})",
     )
     sweep.add_argument(
         "--target",
-        required=True,
         metavar="pkg.module:rollout",
-        help="import path of the rollout function (no default)",
+        help="import path of the rollout function; wins over the spec's target (default: the "
+        "spec's target)",
+    )
+    sweep.add_argument(
+        "--replicates",
+        type=int,
+        metavar="N",
+        help="replicates per condition for this run, recorded in its manifest (default: the "
+        "spec's replicates)",
     )
     sweep.add_argument(
         "--backend",
@@ -424,7 +481,8 @@ def _build_parser(io: _IO) -> _Parser:
         nargs="?",
         const=_LATEST_PARTIAL,
         help="continue that partial run where it stopped; alone, the latest partial run; "
-        "written after SPEC.toml, so the spec is not read as the run (default: none)",
+        "written after SPEC.toml when a spec is given, so the spec is not read as the run "
+        "(default: none)",
     )
     sweep.add_argument(
         "--name", metavar="TEXT", help="the name the new run goes by (default: computed)"
@@ -815,14 +873,16 @@ def _add_event_argument(p: argparse.ArgumentParser, note: str, *, shown: bool = 
 
 def _add_method_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None:
     """``--method`` and ``--q``. Without defaults the namespace keeps ``None`` for a flag the
-    user did not pass, so the single-run report can name the diff-only flags it was given."""
+    user did not pass, so the single-run report can name the diff-only flags it was given.
+    ``--method`` keeps ``None`` either way: the default test is the comparison's to choose from
+    the two manifests, and whether it was named is what every surface says."""
     p.add_argument(
         "--method",
         choices=_METHODS,
-        default=_DEFAULT_METHOD if defaults else None,
+        default=None,
         help="the per-condition test: fisher_bh treats the two runs as separate samples, "
         "mcnemar_bh pairs them on their shared seeds, logrank_bh is time to the event "
-        f"(default: {_DEFAULT_METHOD})",
+        "(default: mcnemar_bh for runs paired at sweep time, else fisher_bh)",
     )
     p.add_argument(
         "--q",
@@ -1137,13 +1197,14 @@ def _first_sweep(root: Path) -> str:
 
 def _check_store(ns: argparse.Namespace, root: Path) -> None:
     """A missing store refuses on every verb that reads it, an empty one on every such verb
-    but ``runs``. ``sweep`` is the verb that creates the store, so it is never gated.
+    but ``runs``. ``sweep`` is the verb that creates the store and ``init`` never reads it, so
+    neither is gated.
 
     A path with no directory at it is certainly wrong, because nothing was ever stored there;
     a directory with no ``manifest.json`` under it can be a fresh project. This reads the
     store and creates nothing.
     """
-    if ns.verb == "sweep":
+    if ns.verb in ("sweep", "init"):
         return
     elsewhere = f"{_COMMAND} --store PATH {ns.verb}"
     if not root.is_dir():
@@ -1336,12 +1397,13 @@ def _verdict_block(
     b: str,
     idx: Index,
     manifests: tuple[RunManifest, RunManifest],
+    chosen: str,
 ) -> None:
     """The verdict line, then ``method``, ``before`` and ``after`` (the old run of a mixed pair
     says who wrote it), one ``trade`` line per traded condition, and a blank line before the
     report."""
     io.line(f"{word}  {sentence}")
-    io.detail("method", multi.method)
+    io.detail("method", _method_line(multi.method, chosen))
     writers = _old_writer(manifests)
     for role, run_id in (("before", a), ("after", b)):
         shown = idx.name_of(run_id)
@@ -1351,6 +1413,65 @@ def _verdict_block(
         moved += [f"{event} rose" for event in record.get("worse_events", ())]
         io.detail("trade", f"{_condition_text(record.get('config'))}: {', '.join(moved)}")
     io.line()
+
+
+def _chosen(ns: argparse.Namespace) -> str:
+    """How the test was chosen: named with ``--method``, or the comparison's default."""
+    return "default" if ns.method is None else "named"
+
+
+def _method_line(method: str, chosen: str) -> str:
+    """The test in plain words, its own name, and how it was chosen, on one line."""
+    plain, own = _METHOD_WORDS[method]
+    if chosen == "named":
+        how = "named with --method"
+    elif method == "mcnemar_bh":
+        how = "the default for runs paired at sweep time"
+    else:
+        how = "the default for runs not paired at sweep time"
+    return f"{plain} ({own}), {how}"
+
+
+def _with_method(sentence: str, method: str) -> str:
+    """A verdict sentence with the test it rests on, in plain words, at its end."""
+    return f"{sentence} ({_METHOD_WORDS[method][0]})"
+
+
+def _method_first(payload: Mapping[str, Any], method: str, chosen: str) -> dict[str, Any]:
+    """A comparison's JSON with ``method_chosen`` right after ``method``; with ``method``
+    absent, both lead."""
+    if "method" not in payload:
+        return {"method": method, "method_chosen": chosen, **payload}
+    out: dict[str, Any] = {}
+    for key, value in payload.items():
+        out[key] = value
+        if key == "method":
+            out["method_chosen"] = chosen
+    return out
+
+
+def _method_markdown(markdown: str, line: str) -> str:
+    """``report.md`` with the method's line as a paragraph of its own at the end of the header,
+    just before the first section; the lines under the title keep their places."""
+    at = markdown.find("\n\n## ")
+    if at < 0:
+        return f"{markdown.rstrip(chr(10))}\n\nmethod: {line}\n"
+    return f"{markdown[: at + 2]}method: {line}\n\n{markdown[at + 2 :]}"
+
+
+def _method_html(page: str, line: str, *, summary: bool = False) -> str:
+    """A page with the method's line as a paragraph of its own under its ``<h1>`` (and, with
+    ``summary``, under its Summary heading)."""
+    words = html.escape(line)
+    page = page.replace("</h1>", f"</h1>\n<p>method: {words}</p>", 1)
+    if summary:
+        page = re.sub(
+            r"(<h2\b[^>]*>\s*Summary\s*</h2>)",
+            lambda m: f"{m.group(1)}\n<p>Method: {words}.</p>",
+            page,
+            count=1,
+        )
+    return page
 
 
 def _pair_title(idx: Index, a: str, b: str, events: Sequence[str]) -> str:
@@ -1392,6 +1513,54 @@ def _parse_pairs(items: Sequence[str], flag: str) -> dict[str, Any]:
     return out
 
 
+def _typed_fix(items: Sequence[str], manifests: Sequence[RunManifest]) -> dict[str, Any]:
+    """``--fix KEY=VALUE`` read by the axis's recorded type: on a categorical axis VALUE is
+    matched against the axis's values as text (a TOML-quoted value still works), on a continuous
+    axis it is a number; a value the axis does not hold is refused, listing its values. A key
+    that is no axis of the runs keeps the TOML-scalar reading."""
+    types: dict[str, str] = {}
+    held: dict[str, list[Any]] = {}
+    for m in manifests:
+        for key, kind in m.axis_types.items():
+            types.setdefault(key, kind)
+        for config in (m.environment.get("sweep") or {}).get("configs", []):
+            for key, value in config.items():
+                if value not in held.setdefault(key, []):
+                    held[key].append(value)
+    out: dict[str, Any] = {}
+    for item in items:
+        key, sep, text = item.partition("=")
+        key, text = key.strip(), text.strip()
+        if not sep or key not in types or not held.get(key):
+            out.update(_parse_pairs([item], "--fix"))
+            continue
+        values = held[key]
+        if types[key] == "continuous":
+            try:
+                number: float | None = float(text.strip("\"'"))
+            except ValueError:
+                number = None
+            found = [
+                v for v in values
+                if number is not None and isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isclose(float(v), number, rel_tol=0.0, abs_tol=1e-12)
+            ]
+        else:
+            bare = text
+            if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+                # A TOML-quoted value, as --fix always read one.
+                bare = str(_parse_pairs([f"{key}={text}"], "--fix")[key])
+            found = [v for v in values if str(v) == bare]
+        if not found:
+            shown = ", ".join(
+                _look.fmt_num(v) if isinstance(v, float) else str(v) for v in values
+            )
+            given = text.strip("\"'")
+            raise _Refusal(f"--fix {key}={given}: {given} is not on the axis; {key} holds {shown}")
+        out[key] = found[0]
+    return out
+
+
 def _load_pair(store: Store, a: str, b: str) -> tuple[Any, Any, RunManifest, RunManifest]:
     """Narrow frames and manifests. Nothing is censored here: ``multi_diff`` censors per
     event. Nothing downstream reads ``meta``, so it is never decoded on this path."""
@@ -1415,7 +1584,7 @@ def _multi(
     mb: RunManifest,
     *,
     events: Sequence[str] | None,
-    method: str,
+    method: str | None,
     q: float,
     verb: str = "diff",
 ) -> MultiDiffResult:
@@ -1424,7 +1593,7 @@ def _multi(
             fa,
             fb,
             events=events,
-            method=cast("Method", method),
+            method=cast("Method | None", method),
             q=q,
             manifest_a=ma,
             manifest_b=mb,
@@ -1517,7 +1686,7 @@ def _run_diffs(
     *,
     verb: str,
     events: Sequence[str] | None,
-    method: str,
+    method: str | None,
     q: float,
     all_methods: bool,
 ) -> tuple[
@@ -1527,7 +1696,7 @@ def _run_diffs(
     tuple[pd.DataFrame, pd.DataFrame],
 ]:
     """The primary diff first (so a refusal fires before extra work), then the other two on
-    the same event set.
+    the same event set. ``method=None`` is the comparison's default test.
 
     The raw frames come back beside the result because the tree consumes both: it rebuilds
     the cell view from the frames and checks it against the diff, and reading the pair a second
@@ -1539,7 +1708,7 @@ def _run_diffs(
     others: dict[str, Any] = {}
     if all_methods:
         for other in _METHODS:
-            if other != method:
+            if other != primary.method:
                 others[other] = _multi(
                     fa, fb, ma, mb, events=primary.events, method=other, q=q, verb=verb
                 )
@@ -2027,8 +2196,36 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         ns.resume = partial[0].run_id
     elif ns.resume is not None:
         ns.resume = _run_of(idx, ns.resume, io)
-    spec_path = Path(ns.spec)
+    if ns.spec is None and not Path(_DEFAULT_SPEC).is_file():
+        raise _Refusal(
+            f"no sweep spec here: no ./{_DEFAULT_SPEC} in this folder, and none was given",
+            [f"{_COMMAND} init", f"{_COMMAND} init --example"],
+        )
+    spec_path = Path(_DEFAULT_SPEC if ns.spec is None else ns.spec)
+    # Strict: an unknown key or table is refused here, before the target is resolved.
     spec = SweepSpec.load(spec_path)
+    typed_target = ns.target
+    if ns.resume is not None and ns.target is None:
+        # A resumed run keeps the target it was started with unless another is typed.
+        recorded = Store(root).manifest(ns.resume).environment.get("import_path")
+        if isinstance(recorded, str):
+            ns.target = recorded
+    if ns.target is None:
+        if spec.target is None:
+            raise _Usage(
+                f'no target to run: give --target pkg.module:rollout, or set target = '
+                f'"pkg.module:rollout" in {spec_path}',
+                [f"{_COMMAND} sweep --help"],
+            )
+        ns.target = spec.target
+    ns.typed_target = typed_target
+    if ns.replicates is not None:
+        if ns.replicates < 1:
+            raise _Usage(
+                f"--replicates must be 1 or more, got {ns.replicates}",
+                [f"{_COMMAND} sweep --help"],
+            )
+        spec = dataclasses.replace(spec, replicates=ns.replicates)
     rollout: Any = None
     burla_options: BurlaOptions | None = None
     target: ModalTarget | None = None
@@ -2084,7 +2281,7 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     if p.resumed:
         block = block.replace(f"Resuming {p.run_id}:", f'Resuming "{idx.name_of(p.run_id)}":')
     sentence = _plan_sentence(p, block)
-    detail = [_look.reprint(line) for line in block.splitlines()]
+    detail = [f"target  {ns.target}", *(_look.reprint(line) for line in block.splitlines())]
     if not ns.json:
         io.line(f"plan  {sentence}")
         for line in detail:
@@ -2105,16 +2302,15 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     try:
         check_power(p, max_mde=p.max_mde_accepted)
     except UnderpoweredDesign as exc:
+        # Each offer is the command as typed with one option added or replaced: the replicates
+        # that would pass, then the limit that admits the design as it stands.
         nexts = []
+        if exc.replicates_needed is not None:
+            needed = str(exc.replicates_needed)
+            nexts.append(_join([_COMMAND, *_set_option(ns.typed, "--replicates", needed)]))
         if exc.offered is not None:
-            typed = [a for a in ns.typed]
-            offered = _look.ceil3(exc.offered)
-            if "--max-mde" in typed:
-                at = typed.index("--max-mde")
-                typed[at + 1 : at + 2] = [offered]
-            else:
-                typed.extend(["--max-mde", offered])
-            nexts.append(shlex.join([_COMMAND, *typed]))
+            limit = _look.ceil3(exc.offered)
+            nexts.append(_join([_COMMAND, *_set_option(ns.typed, "--max-mde", limit)]))
         raise _Refusal(str(exc), nexts) from exc
     if ns.backend == "modal":
         assert target is not None and options is not None
@@ -2146,6 +2342,52 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         )
     progress.finish()
     return _sweep_result(ns, io, root, store, p, summary, plan_payload)
+
+
+def _set_option(typed: Sequence[str], option: str, value: str) -> list[str]:
+    """The words typed with ``option`` set to ``value``: replaced where it was given (as
+    ``--opt V`` or ``--opt=V``), else added at the end."""
+    words = list(typed)
+    for at, word in enumerate(words):
+        if word == option and at + 1 < len(words):
+            words[at + 1] = value
+            return words
+        if word.startswith(option + "="):
+            words[at] = f"{option}={value}"
+            return words
+    return [*words, option, value]
+
+
+def _resume_command(ns: argparse.Namespace) -> str:
+    """The command that resumes a stopped sweep as it was typed: the spec first when one was
+    given, so it is not read as the run, the ``--target`` and ``--replicates`` that were typed,
+    and the backend and image it ran on when they were not the defaults."""
+    words = [_COMMAND, "sweep", *([ns.spec] if ns.spec is not None else []), "--resume"]
+    if ns.typed_target is not None:
+        words += ["--target", ns.typed_target]
+    if ns.replicates is not None:
+        words += ["--replicates", str(ns.replicates)]
+    if ns.backend != "local":
+        words += ["--backend", ns.backend]
+    if ns.image != "image":
+        words += ["--image", ns.image]
+    return _join(words)
+
+
+def _after_sweep(ns: argparse.Namespace, idx: Index, run_id: str) -> list[str]:
+    """The next step after a finished sweep: the comparison after a paired one (bare when the
+    pair is ``previous`` and ``latest``); after the packaged mock agent, the sweep of its
+    patched twin paired with it."""
+    if ns.pair_with is not None:
+        newest = [r.run_id for r in idx.complete[:2]]
+        if newest == [run_id, ns.pair_with]:
+            return [f"{_COMMAND} diff"]
+        return [_join([_COMMAND, "diff", idx.word_for(ns.pair_with), idx.word_for(run_id)])]
+    if ns.target == _MOCK_ROLLOUT:
+        spec = [] if ns.spec is None else [ns.spec]
+        twin = ["--target", _MOCK_PATCHED, "--pair-with", "latest"]
+        return [_join([_COMMAND, "sweep", *spec, *twin])]
+    return []
 
 
 def _planned_name(idx: Index, p: Plan, given: str | None) -> str:
@@ -2199,7 +2441,7 @@ def _sweep_result(
             f'{n(kept)} of {planned} rollouts kept in run "{name}" ({status}) '
             f"in {_look.fmt_duration(summary.wall_time)}"
         )
-        nexts.append(f"{_COMMAND} sweep --resume")
+        nexts.append(_resume_command(ns))
         code = 3
     elif kept and with_outcome == 0:
         verdict = "stopped"
@@ -2213,6 +2455,7 @@ def _sweep_result(
         code = 3
     else:
         verdict = "done"
+        nexts.extend(_after_sweep(ns, idx, run_id))
         sentence = (
             f'{n(kept)} rollouts in run "{name}" ({status}) in '
             f"{_look.fmt_duration(summary.wall_time)}{paired}"
@@ -2247,6 +2490,89 @@ def _sweep_result(
     return code
 
 
+# ---------- init ----------
+
+
+_TEMPLATE = """\
+# A sweep spec for poisson-prove: what to run, over which conditions, how many times each.
+# Set the target to your rollout and the axes to what you vary, then sweep it with
+# poisson-prove sweep (naming this file when it is not ./prove.toml).
+
+# The rollout, a function (cfg, seed) -> Episode, as an import path; --target wins over it.
+{target}
+# The name the runs go by, and the unit their times are counted in.
+target_id = "my-agent"
+t_unit = "steps"
+# Episodes per condition.
+replicates = 194
+
+# Every combination of the axes' values is one condition.
+[axes.task_id]
+type = "categorical"
+values = ["search", "refund"]
+
+[axes.temperature]
+type = "continuous"
+values = [0.0, 0.7]
+"""
+
+
+def _cmd_init(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
+    """Write one sweep spec and nothing else: the packaged quickstart with ``--example``, else
+    the template, its target filled with ``--target`` or left a commented line. Asks nothing."""
+    from importlib import resources
+
+    if ns.example and ns.target is not None:
+        raise _Usage(
+            "--example writes the quickstart with its own target; --target fills the template",
+            [f"{_COMMAND} init --example", _join([_COMMAND, "init", "--target", ns.target])],
+        )
+    out = Path(_DEFAULT_SPEC if ns.out is None else ns.out)
+    if out.exists() and not out.is_file():
+        raise _Refusal(f"{out} exists and is not a file; init writes a file")
+    if out.exists() and not ns.force:
+        raise _Refusal(
+            f"{out} exists; init replaces it only with --force",
+            [_join([_COMMAND, *state.argv, "--force"])],
+        )
+    if not out.parent.is_dir():
+        raise _Refusal(f"no folder {out.parent} to write {out.name} into")
+    if ns.example:
+        # Bytes in, bytes out: the file written is the packaged one on every platform.
+        data = (resources.files("poisson_prove.examples") / "quickstart.toml").read_bytes()
+        spec = tomllib.loads(data.decode("utf-8"))
+        cells = math.prod(len(axis["values"]) for axis in spec["axes"].values())
+        about = (
+            f"a sweep of the keyless mock agent, {_look.fmt_count(cells)} conditions x "
+            f"{_look.fmt_count(spec['replicates'])} replicates"
+        )
+    else:
+        target = (
+            f"target = {json.dumps(ns.target)}"
+            if ns.target is not None
+            else '# target = "pkg.module:rollout"'
+        )
+        data = _TEMPLATE.format(target=target).encode("utf-8")
+        about = (
+            "a template; set its axes to what you vary"
+            if ns.target is not None
+            else "a template; set its target to your rollout and its axes to what you vary"
+        )
+    out.write_bytes(data)
+    nexts: list[str] = []
+    if ns.example or ns.target is not None:
+        default = ns.out is None or Path(ns.out) == Path(_DEFAULT_SPEC)
+        nexts.append(f"{_COMMAND} sweep" if default else _join([_COMMAND, "sweep", str(out)]))
+    sentence = f"wrote {out}: {about}"
+    if ns.json:
+        _write_json(io, "init", "ok", sentence, {"wrote": [str(out)]}, nexts)
+        return 0
+    io.line(f"ok  {sentence}")
+    for command in nexts:
+        io.next(command)
+    return 0
+
+
 # ---------- diff / report / check ----------
 
 
@@ -2273,10 +2599,11 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         # refusal with nothing on stdout.
         nested = _diff_tree(ns, primary, frames, manifests)
     word = _diff_verdict(primary, manifests)
-    sentence = primary.headline().splitlines()[0]
+    sentence = _with_method(primary.headline().splitlines()[0], primary.method)
+    chosen = _chosen(ns)
     nexts = _report_next(idx, a, b, manifests, bool(ns.runs))
     if ns.json:
-        payload: Any = primary.to_json()
+        payload: Any = _method_first(primary.to_json(), primary.method, chosen)
         if others:
             # ``--methods all`` keeps its three-method shape: the scheme follows the method, so
             # one omnibus and one tree beside three method objects would claim one test across
@@ -2286,7 +2613,7 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
             payload = {**payload, "omnibus": nested.root.to_json(), "tree": nested.to_json()}
         _write_json(io, "diff", word, sentence, payload, nexts)
         return 0
-    _verdict_block(io, word, sentence, primary, a, b, idx, manifests)
+    _verdict_block(io, word, sentence, primary, a, b, idx, manifests, chosen)
     with _look.rule10():
         io.write(primary.to_markdown())
         if others:
@@ -2396,15 +2723,21 @@ def _write_report_files(
     report: MultiReport | SurvivalReport,
     receipt: MultiReport | SurvivalReport,
     bundle: _Bundle | None = None,
+    method_line: str | None = None,
 ) -> list[Path]:
     """With a paired ``bundle`` the four sections are folded into the rendered strings and the
-    files are written beside the three; every file is UTF-8 and named on a ``wrote`` line."""
+    files are written beside the three; with ``method_line`` (a comparison) the report's and the
+    receipt's headers name the test on a line of their own; every file is UTF-8 and named on a
+    ``wrote`` line."""
     written: list[Path] = []
     with _staged(out_dir) as staging:
         with _look.rule10():
             markdown, page, figure = report.to_markdown(), receipt.to_html(), report.to_svg()
         if bundle is not None:
             markdown, page = _fold_markdown(markdown, bundle), _fold_html(page, bundle)
+        if method_line is not None:
+            markdown = _method_markdown(markdown, method_line)
+            page = _method_html(page, method_line)
         (staging / "report.md").write_text(markdown, encoding="utf-8")
         (staging / "heatmap.svg").write_text(figure, encoding="utf-8")
         (staging / "receipt.html").write_text(page, encoding="utf-8")
@@ -2452,18 +2785,17 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str, id
         ns, f"./prove-report-{_slug(idx.name_of(a))}-vs-{_slug(idx.name_of(b))}", idx
     )
     declaration = None if ns.paired is None else _paired_declaration(ns.paired, a, b)
-    fixed = _parse_pairs(ns.fix, "--fix")
-    method = _DEFAULT_METHOD if ns.method is None else ns.method
+    store = Store(root)
+    fixed = _typed_fix(ns.fix, (store.manifest(a), store.manifest(b)))
     q = _DEFAULT_Q if ns.q is None else ns.q
 
-    store = Store(root)
     multi, others, manifests, frames = _run_diffs(
         store,
         a,
         b,
         verb="report",
         events=ns.event,
-        method=method,
+        method=ns.method,
         q=q,
         all_methods=ns.methods == "all",
     )
@@ -2518,9 +2850,16 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str, id
     for built in {id(report): report, id(receipt): receipt}.values():
         _name_provenance(built.provenance, manifests, idx)
     bundle = None if declaration is None else _bundle(store, declaration)
-    written = _write_report_files(io, out_dir, report, receipt, bundle)
+    chosen = _chosen(ns)
+    written = _write_report_files(
+        io, out_dir, report, receipt, bundle, _method_line(multi.method, chosen)
+    )
     if ns.json:
-        payload = {"out": str(out_dir), "wrote": [str(p) for p in written], **multi.to_json()}
+        payload = {
+            "out": str(out_dir),
+            "wrote": [str(p) for p in written],
+            **_method_first(multi.to_json(), multi.method, chosen),
+        }
         _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
         return 0
     _wrote(io, out_dir, written)
@@ -2642,10 +2981,9 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
             f"a single-run report compares nothing ({_REPORT_FORMS})"
         )
     out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(idx.name_of(run))}", idx)
-    fixed = _parse_pairs(ns.fix, "--fix")
-
     store = Store(root)
     manifest = store.manifest(run)
+    fixed = _typed_fix(ns.fix, (manifest,))
     df = store.read(run, meta=False)
     _require_known_events("report", ns.event, df)
     inferred = ns.event is None
@@ -2777,12 +3115,17 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     )
     passed = multi.check(fail_on=ns.fail_on)
     verdict = "passed" if passed else "failed"
-    sentence = _check_sentence(multi, ns.fail_on)
+    sentence = _with_method(_check_sentence(multi, ns.fail_on), multi.method)
+    chosen = _chosen(ns)
     if ns.json:
-        payload = {"passed": passed, "fail_on": ns.fail_on, **multi.to_json()}
+        payload = {
+            "passed": passed,
+            "fail_on": ns.fail_on,
+            **_method_first(multi.to_json(), multi.method, chosen),
+        }
         _write_json(io, "check", verdict, sentence, payload, [])
         return 0 if passed else 4
-    _verdict_block(io, verdict, sentence, multi, a, b, idx, manifests)
+    _verdict_block(io, verdict, sentence, multi, a, b, idx, manifests, chosen)
     _write_summary(io, multi)
     return 0 if passed else 4
 
@@ -2813,7 +3156,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             x_missing=ns.x is None,
             event_missing=ns.event is None,
         )
-    fixed = _parse_pairs(ns.fix, "--fix")
+    fixed = _typed_fix(ns.fix, (store.manifest(a), store.manifest(b)))
     multi, _, manifests, frames = _run_diffs(
         store,
         a,
@@ -2857,11 +3200,15 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         tally_b=store.tally(b),
         store_root=str(root),
     )
+    # The test the page rests on and how it was chosen lead the structure, after the envelope.
+    chosen = _chosen(ns)
+    structure = {"method": multi.method, "method_chosen": chosen, **structure}
     if ns.json:
         sentence = f'the page comparing "{idx.name_of(a)}" with "{idx.name_of(b)}", bound nowhere'
         structure = _add_names(structure, idx)
         _write_json(io, "serve", "ok", sentence, structure, None)
         return 0
+    page = _method_html(render_html(structure), _method_line(multi.method, chosen), summary=True)
 
     def announce(srv: Any) -> None:
         # Once the socket is up: an ephemeral port nobody is told about is a page nobody can
@@ -2872,7 +3219,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         )
         io.out.flush()
 
-    serve_page(render_html(structure), on_bind=announce)
+    serve_page(page, on_bind=announce)
     return 0
 
 
@@ -3130,6 +3477,7 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
 
 
 _VERBS: dict[str, Callable[[argparse.Namespace, _IO, Path, _State], int]] = {
+    "init": _cmd_init,
     "sweep": _cmd_sweep,
     "diff": _cmd_diff,
     "report": _cmd_report,

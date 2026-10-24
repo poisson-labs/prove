@@ -662,9 +662,11 @@ def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_dir: Path) -> tuple[dict[str, str], dict[str, Result]]:
+def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_dir: Path, method: tuple[str, ...] = ()) -> tuple[dict[str, str], dict[str, Result]]:
     """Every verb the spec names, on one stored pair, exit codes kept and stdout digested with the
     store root and the ``--out`` directory normalised."""
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): ``method`` is appended to every verb that compares the
+    # two runs (diff, check, report A B, serve), so a caller can name the method its numbers were frozen under.
     store_arg = str(root)
     results: dict[str, Result] = {}
     digests: dict[str, str] = {}
@@ -674,9 +676,9 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
         return text if out is None else text.replace(str(out), OUT_PLACEHOLDER)
 
     results["runs"] = r = run_cli(["--store", store_arg, "runs"]); digests["runs"] = sha256_text(norm(r.out))
-    results["diff"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event]); digests["diff"] = sha256_text(norm(r.out))
+    results["diff"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, *method]); digests["diff"] = sha256_text(norm(r.out))
     # diff's --format json is now --json (spec section 5.3).
-    results["diff --json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--json"])
+    results["diff --json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--json", *method])
     # PF0 (Q4): the tree's agreement digest is hashed behind the renamed schema string; the 0.0.1 value
     # is put back before the frozen digest is taken.
     as_0_0_1 = norm(r.out)
@@ -685,10 +687,10 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
     for k, digest in GO1_AGREEMENT.items():
         as_0_0_1 = as_0_0_1.replace(digest, GO1_AGREEMENT_0_0_1[k])
     digests["diff --json"] = sha256_text(as_0_0_1)
-    results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event]); digests["check"] = sha256_text(norm(r.out))
+    results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event, *method]); digests["check"] = sha256_text(norm(r.out))
     for label, runs in (("report A", [a]), ("report A B", [a, b])):
         out = out_dir / label.replace(" ", "_")
-        results[label] = r = run_cli(["--store", store_arg, "report", *runs, "--event", event, "--x", x, "--y", y, "--out", str(out)])
+        results[label] = r = run_cli(["--store", store_arg, "report", *runs, "--event", event, "--x", x, "--y", y, "--out", str(out), *(method if len(runs) == 2 else ())])
         digests[label] = sha256_text(norm(r.out, out))
         for name in ("report.md", "heatmap.svg", "receipt.html"):
             if not (out / name).is_file():
@@ -697,10 +699,12 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
                 digests[f"{label}/{name}"] = sha256_file(out / name)
             else:
                 digests[f"{label}/{name}"] = sha256_text(as_0_0_1_wrote_it((out / name).read_text(encoding="utf-8")))
-    results["serve --json"] = r = run_cli(["--store", store_arg, "serve", a, b, "--event", event, "--x", x, "--y", y, "--json"])
+    results["serve --json"] = r = run_cli(["--store", store_arg, "serve", a, b, "--event", event, "--x", x, "--y", y, "--json", *method])
     try:
         # serve --json now leads with verdict and sentence before the page structure (spec section 5.6).
-        structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence")}
+        # PF3 (spec section 4.4, R3): it also adds method and method_chosen right after sentence; neither
+        # is the page structure the kept digest guards, so they are dropped as verdict and sentence are.
+        structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
         structure["pair"]["store_root"] = STORE_PLACEHOLDER
         if root == GO1_ROOT:
             # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are
@@ -719,7 +723,9 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
 
 
 def go1_verb_digests(out_dir: Path) -> tuple[dict[str, str], dict[str, Result]]:
-    return verb_digests(GO1_ROOT, GO1_A, GO1_B, event=GO1_EVENT, x=GO1_X, y=GO1_Y, out_dir=out_dir)
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the kept digest and the facts are the unpaired test's, named.
+    return verb_digests(GO1_ROOT, GO1_A, GO1_B, event=GO1_EVENT, x=GO1_X, y=GO1_Y, out_dir=out_dir, method=("--method", "fisher_bh"))
 
 
 # ---------- helpers: the facts the Go1 output digests guarded ----------

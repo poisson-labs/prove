@@ -842,9 +842,12 @@ def _spec_declared(spec: SweepSpec) -> Declaration | None:
 
 
 def _declaration_text(d: Declaration) -> str:
-    """A declaration as data for a refusal: its three lists, ``-`` for an empty one."""
+    """A declaration as data for a refusal: its three lists, ``-`` for an empty one, and the
+    failures and successes when it names any."""
+    kinds = tuple(name for name in ("failures", "successes") if getattr(d, name))
     return "; ".join(
-        f"{name} {', '.join(getattr(d, name)) or '-'}" for name in ("steps", "outcomes", "gates")
+        f"{name} {', '.join(getattr(d, name)) or '-'}"
+        for name in ("steps", "outcomes", "gates", *kinds)
     )
 
 

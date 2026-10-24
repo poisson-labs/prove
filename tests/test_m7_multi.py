@@ -77,11 +77,14 @@ from poisson_prove.report import (
 )
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import cell_table, censor
+from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
 REGRESSION_DIR = FIXTURE_DIR / "report_regression"
-QUICKSTART = ROOT / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"

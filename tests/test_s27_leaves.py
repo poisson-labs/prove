@@ -282,11 +282,15 @@ MULTI_JSON_SHA256 = {
     "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
     "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; check's gate here is the flat family's unpaired test, named.
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh")
 # CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
 # checks the facts the digest guarded instead (front-door spec section 14).
 CHECK_EXIT = 0
-SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the structure digest is the unpaired test's, named.
+SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
@@ -300,7 +304,9 @@ PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
 COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee5fa"
 FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the E14 digests and the heatmap are the unpaired test's, named.
+E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
@@ -336,9 +342,12 @@ E14_SHA256 = {
 # Re-minted again for run names (front-door spec sections 4.3 and 5.3): both files moved their
 # serve --json digests to compare with the names put back to ids. Read off the two files after
 # every other move, not predicted.
+# Re-minted again for the paired default (front-door spec sections 4.4 and 14, Q17): both files name
+# --method fisher_bh on their Go1 commands and drop method and method_chosen from serve --json.
+# Read off the two files after every other move, not predicted.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "559d23e24a955c6abade344cc93750f68f3cf43629afe3f8f0ba65b08ef5d6b2",
-    "tests/test_s26_fault_lines.py": "73d4b2797d165e75db1df35dc18c517bbbae9c23add06b6fa9392a944eba78b6",
+    "tests/test_s25_root.py": "e06498c29f1a5bcc7bd78e7e71aea85f8734ae6ff6d6ceeb2fa3652a04e5a76b",
+    "tests/test_s26_fault_lines.py": "941d07d2f5d55c3257093c32a8b0762511eaa1bcb7de18d30c15da71ebbec1e0",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -1659,7 +1668,9 @@ CLI_PAIRS = (("axes-a", "axes-b", ("fail",)), ("same-a", "same-b", ("fail",)), (
 def cli_pair(synth_root: Path, a: str, b: str, events: Sequence[str], *extra: str, **knobs: Any) -> tuple[Any, Any, str]:
     """The stored pair through ``main()`` beside the same tree built here with the CLI's knobs."""
     multi, result = store_tree(synth_root, a, b, events=events, method="fisher_bh", **{"n_permutations": GOLDEN_PERMUTATIONS, "seed": GOLDEN_SEED, **knobs})
-    argv = ["--store", str(synth_root), "diff", a, b]
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pairs share a salt, so the default is now the
+    # paired test; the tree built beside the CLI is the unpaired test's, so the CLI names it.
+    argv = ["--store", str(synth_root), "diff", a, b, "--method", "fisher_bh"]
     for event in events:
         argv += ["--event", event]
     code, out, err = run_cli(argv + list(extra))
@@ -1998,7 +2009,9 @@ def test_l20_check_and_serve_on_go1_print_the_same_bytes_and_structure(go1: Any)
     # A shared salt now adds one note line on stderr (spec section 5.4).
     assert code == 0 and without_notes(err) == "", err
     # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
-    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence")}
+    # PF3 (spec section 4.4, PF3.6b; rule R3): serve --json now names the method at the top level after the
+    # sentence; dropped beside the verdict and the sentence, so the frozen digest guards the rest.
+    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
     # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
     # then put back as before names, so the digest below still guards everything else.
     structure = structure_as_ids_named_it(structure, "fell")

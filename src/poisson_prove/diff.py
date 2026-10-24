@@ -1032,12 +1032,12 @@ def _seed_identity(
         return False, False
     if method in _PAIRED_METHODS:
         return True, False
-    # Never a switch. The same command running a different test depending on how two runs were
-    # produced would make the statistic a property of run provenance rather than of the request
-    # (ADR-052), and a reader of the output could not tell which was run without going back to
-    # the manifests. It says what was discarded and what the alternative is spelled; the choice
-    # stays the caller's. No claim about power: that depends on how far the two arms agree
-    # episode by episode, which is a fact about the data and not about the salt.
+    # Never a switch here. A method the caller named is the method that runs; the one default
+    # that follows how the runs were produced is chosen before any frame is read, from the
+    # manifests alone (``method=None``), and every surface names the test it ran. This says
+    # what the named method discarded and what the alternative is spelled; the choice stays the
+    # caller's. No claim about power: that depends on how far the two arms agree episode by
+    # episode, which is a fact about the data and not about the salt.
     #
     # A27's sentence could not carry a count -- it was raised before any cell existed -- and said
     # instead that which cells were matched "is not settled here". After C18 they are: this runs
@@ -1230,13 +1230,17 @@ def multi_diff(
     b: pd.DataFrame,
     *,
     events: Sequence[str] | None = None,
-    method: Method = "fisher_bh",
+    method: Method | None = "fisher_bh",
     q: float = 0.05,
     power: float = 0.8,
     manifest_a: RunManifest | None = None,
     manifest_b: RunManifest | None = None,
 ) -> MultiDiffResult:
     """Diff two RAW store frames across several competing events at once.
+
+    ``method=None`` asks for the default test, chosen from the two manifests and never from the
+    outcomes: ``mcnemar_bh`` when both carry one ``run_salt`` (the runs were paired at
+    sweep time), else ``fisher_bh``. The result's ``method`` names the test that ran.
 
     a, b are Store.read() frames (not censored); censoring is applied per event internally.
     events=None infers the set with infer_events. Per cell and event the compared quantity
@@ -1246,6 +1250,13 @@ def multi_diff(
     covers every (cell, event) pair. Errored rows (null outcome) are excluded from every
     numerator and denominator.
     """
+    if method is None:
+        paired = (
+            manifest_a is not None
+            and manifest_b is not None
+            and manifest_a.run_salt == manifest_b.run_salt
+        )
+        method = "mcnemar_bh" if paired else "fisher_bh"
     if method not in _METHODS:
         raise DiffError(f"method must be one of {_METHODS}, got {method!r}")
     if not 0.0 < q < 1.0:

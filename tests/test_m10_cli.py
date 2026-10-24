@@ -52,10 +52,13 @@ from poisson_prove.executor_modal import ImageSpec, ModalOptions, ModalTarget
 from poisson_prove.report import NEUTRAL_FILL
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
-QUICKSTART = ROOT / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 CLI_SOURCE = ROOT / "src" / "poisson_prove" / "cli.py"
 EXAMPLES_DIR = ROOT / "src" / "poisson_prove" / "examples"
 MOCK_AGENT_SOURCE = EXAMPLES_DIR / "mock_agent.py"
@@ -73,7 +76,9 @@ DIFF_JSON_ENVELOPE = {"schema", "verdict", "sentence", "next"}
 QUICKSTART_CELLS = 9
 QUICKSTART_REPLICATES = 100
 QUICKSTART_ROWS = QUICKSTART_CELLS * QUICKSTART_REPLICATES
-QUICKSTART_TARGET_ID = "mock-agent@v0"
+# PF3 (spec sections 8.8 and 14; rule R4): the packaged spec's target id is mock-agent, where the old
+# examples/quickstart.toml said mock-agent@v0.
+QUICKSTART_TARGET_ID = "mock-agent"
 QUICKSTART_T_UNIT = "tool_calls"
 MOCK_HORIZON = 20.0
 TRACE_SCHEMA = "poisson-prove.trace/1"
@@ -740,12 +745,16 @@ def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> Non
 
 
 def test_i9_diff_markdown_summary_line(go1_store: Store) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell"])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; these numbers are the unpaired test's, named.
+    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh"])
     assert r.code == 0, r.text
     # PF2 (spec section 4.3): diff's first lines are now a verdict block ending at the first
     # blank line; the report that follows it is unchanged, so its summary line is read there.
     verdict, _, report = r.out.partition("\n\n")
-    assert verdict.splitlines()[0] == "safer  fell: 60 safer, 0 worse", r.out
+    # PF3 (spec section 4.4, PF3.6b; rule R4): the verdict line now also names the test in plain words.
+    assert verdict.splitlines()[0].startswith("safer  fell: 60 safer, 0 worse"), r.out
+    assert "separate samples" in verdict.splitlines()[0], r.out
     summary = [
         line for line in report.splitlines() if "60 safer" in line and "0 worse" in line
     ]
@@ -755,7 +764,9 @@ def test_i9_diff_markdown_summary_line(go1_store: Store) -> None:
 
 
 def test_i9_diff_json(go1_store: Store) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--json"])  # --json replaces --format
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; these numbers are the unpaired test's, named.
+    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--json", "--method", "fisher_bh"])  # --json replaces --format
     assert r.code == 0, r.text
     data = json.loads(r.out)
     assert data["events"] == ["fell"] and data["inferred"] is False
@@ -845,7 +856,9 @@ def report_argv(out: Path, *extra: str) -> list[str]:
 
 def test_i11_report_writes_exactly_three_files(go1_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report"
-    r = run_cli(report_argv(out))
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; these numbers are the unpaired test's, named.
+    r = run_cli(report_argv(out, "--method", "fisher_bh"))
     assert r.code == 0, r.text
     assert {p.name for p in out.iterdir()} == REPORT_FILES
     ET.fromstring((out / "heatmap.svg").read_text())
@@ -958,10 +971,12 @@ def test_i13_x_equal_to_y_exits_two(go1_store: Store, tmp_path: Path) -> None:
 
 def test_i13_fix_parses_toml_scalars(go1_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report-1d"
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; these counts are the unpaired test's, named.
     r = run_cli(
         [
             "--store", str(GO1_ROOT), "report", "go1-v0", "go1-v1", "--event", "fell",
-            "--x", "push_pct_bw", "--fix", "mu=0.05", "--out", str(out),
+            "--x", "push_pct_bw", "--fix", "mu=0.05", "--out", str(out), "--method", "fisher_bh",
         ]
     )
     assert r.code == 0, r.text
@@ -983,7 +998,9 @@ def test_i13_fix_with_bad_toml_scalar_exits_two(go1_store: Store, tmp_path: Path
 
 
 def test_i14_check_fixture_passes(go1_store: Store) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell"])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; these numbers are the unpaired test's, named.
+    r = run_cli(["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh"])
     assert r.code == 0, r.text
     # check's first stdout line is "passed  ..." or "failed  ..." (spec section 5.3).
     assert r.out.startswith("passed  ") and not r.out.startswith("failed"), r.out
@@ -1339,7 +1356,10 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     assert tail, md
     assert int(tail.group(1)) == QUICKSTART_CELLS
     # P-1 (ADR-052): the quickstart diffs under the default fisher_bh, and the token states the request.
-    assert tail.group(2) == "unpaired"
+    # PF3 (Q17, spec sections 4.4 and 14; rule R4): the second sweep is --pair-with the first, so the two
+    # share a salt and the default is now mcnemar_bh; the token states that request.
+    assert tail.group(2) == "paired"
+    assert "mcnemar_bh" in md, md
     assert Store(tmp_path / "prove-runs").runs() == sorted([run_a, run_b])
 
 

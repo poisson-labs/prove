@@ -12,7 +12,10 @@ split them. ``SweepSpec.build`` deduplicates on the hash and keeps the first rep
 
 from __future__ import annotations
 
+import dataclasses
+import difflib
 import math
+import re
 import tomllib
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -33,7 +36,18 @@ _AXIS_TYPES: tuple[str, ...] = ("continuous", "categorical")
 _TOOL_RELIABILITY_RATES: tuple[float, ...] = (0.0, 0.05, 0.10, 0.20, 0.30)
 _CAPTURE_FIELDS: tuple[str, ...] = ("instrument", "content", "max_observation_bytes", "max_spans")
 _CHAOS_FIELDS: tuple[str, ...] = ("fault", "rate", "steps")
-_DECLARE_FIELDS: tuple[str, ...] = ("steps", "outcomes", "gates")
+_DECLARE_FIELDS: tuple[str, ...] = ("steps", "outcomes", "gates", "failures", "successes")
+#: Every top-level key and table a sweep spec has; ``[[scenarios]]`` entries are configs and
+#: hold any key, and ``[modal]``'s subtables are image sections under any name.
+_TOP_FIELDS: tuple[str, ...] = (
+    "target", "target_id", "t_unit", "replicates", "retain_traces_for",
+    "axes", "scenarios", "capture", "chaos", "declare", "modal", "burla",
+)
+_AXIS_FIELDS: tuple[str, ...] = ("type", "values")
+_PART = r'(?:"[^"]*"|\'[^\']*\'|[A-Za-z0-9_-]+)'
+_HEADER = re.compile(rf"^\[\[?\s*({_PART}(?:\s*\.\s*{_PART})*)\s*\]\]?\s*(?:#.*)?$")
+_KEY = re.compile(rf"^({_PART}(?:\s*\.\s*{_PART})*)\s*=(.*)$")
+_STRING = re.compile(r'"(?:[^"\\]|\\.)*"|\'[^\']*\'')
 
 
 class SamplerError(Exception):
@@ -292,8 +306,9 @@ def _declare_table(table: Any) -> Declaration | None:
     Like ``[capture]`` and ``[chaos]`` the table rides the spec and stays out of ``to_dict()``:
     what a run expects of itself is not what makes two sweeps the same sweep, and keeping it out
     of the sweep's identity is what lets a declaring arm and a non-declaring one derive the same
-    seeds and pair under ``diff``. An unknown *top-level* table is still ignored, as it was: a
-    misspelled ``[declair]`` is read by nothing and refused by nothing.
+    seeds and pair under ``diff``. ``failures`` and ``successes`` name the outcomes' kinds; the
+    manifest records them beside the three lists. A misspelled ``[declair]`` or field is refused
+    before this runs, by the spec's strict check.
     """
     if table is None:
         return None
@@ -310,9 +325,114 @@ def _declare_table(table: Any) -> Declaration | None:
             steps=table.get("steps", ()),
             outcomes=table.get("outcomes", ()),
             gates=table.get("gates", ()),
+            failures=table.get("failures", ()),
+            successes=table.get("successes", ()),
         )
     except ValueError as exc:
         raise SamplerError(f"[declare] {exc}") from exc
+
+
+def _dotted(path: str) -> tuple[str, ...]:
+    return tuple(m.group(0).strip("\"'") for m in re.finditer(_PART, path))
+
+
+def _key_lines(text: str) -> dict[tuple[str, ...], int]:
+    """The line each table header and each key of a TOML text first sits on, by its dotted path.
+
+    A plain line reader, enough for the files people write: a header ``[a.b]`` or ``[[a]]``, and
+    ``key = ...`` or a dotted ``key.sub = ...`` under it, every prefix of the path recorded. The
+    lines of a value that spans several (an array, an inline table) are not read as headers or
+    keys. A key it cannot place (inside an inline table) is given the line of the nearest path
+    it did.
+    """
+    where: dict[tuple[str, ...], int] = {}
+    table: tuple[str, ...] = ()
+    depth = 0
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if depth > 0:
+            bare = _STRING.sub("", line.split("#", 1)[0])
+            depth = max(depth + _opened(bare), 0)
+            continue
+        header = _HEADER.match(line)
+        if header:
+            table = _dotted(header.group(1))
+            for end in range(1, len(table) + 1):
+                where.setdefault(table[:end], number)
+            continue
+        key = _KEY.match(line)
+        if key:
+            path = (*table, *_dotted(key.group(1)))
+            for end in range(len(table) + 1, len(path) + 1):
+                where.setdefault(path[:end], number)
+            bare = _STRING.sub("", key.group(2).split("#", 1)[0])
+            depth = max(_opened(bare), 0)
+    return where
+
+
+def _opened(text: str) -> int:
+    """Brackets and braces a value's line opens and leaves open (strings taken out first)."""
+    return text.count("[") + text.count("{") - text.count("]") - text.count("}")
+
+
+def _line_of(lines: Mapping[tuple[str, ...], int], path: tuple[str, ...]) -> int:
+    """The line of ``path``, else of its longest prefix the reader placed, else the first."""
+    for end in range(len(path), 0, -1):
+        if path[:end] in lines:
+            return lines[path[:end]]
+    return 1
+
+
+def _strict(file: Path, text: str, data: Mapping[str, Any]) -> None:
+    """Every key and table of a sweep spec is one the spec has, whatever the backend, or the file
+    is refused naming the file, the line and the nearest known key of the same table.
+
+    Checked when the spec is read, before the target is resolved or any table's values are
+    read. The ``[modal]`` and ``[burla]`` fields are their option classes' own, imported here so
+    the two lists cannot drift.
+    """
+    from poisson_prove.executor_burla import BurlaOptions
+    from poisson_prove.executor_modal import ImageSpec, ModalOptions
+
+    lines = _key_lines(text)
+
+    def check(path: tuple[str, ...], keys: Iterable[str], known: Sequence[str], where: str) -> None:
+        for key in keys:
+            if key in known:
+                continue
+            nearest = difflib.get_close_matches(key, known, n=1, cutoff=0.0) or [known[0]]
+            line = _line_of(lines, (*path, key))
+            what = f"[{key}]" if not path and isinstance(data.get(key), Mapping) else f'"{key}"'
+            raise SamplerError(
+                f'{file}, line {line}: {what} is not {where}; the nearest known key is '
+                f'"{nearest[0]}"'
+            )
+
+    def names(cls: Any) -> list[str]:
+        return [f.name for f in dataclasses.fields(cls)]
+
+    check((), data, _TOP_FIELDS, "a key or table a sweep spec has")
+    axes = data.get("axes")
+    if isinstance(axes, Mapping):
+        for axis, table in axes.items():
+            if isinstance(table, Mapping):
+                check(("axes", axis), table, _AXIS_FIELDS, f"a key of [axes.{axis}]")
+    for name, known in (
+        ("capture", _CAPTURE_FIELDS),
+        ("chaos", _CHAOS_FIELDS),
+        ("declare", _DECLARE_FIELDS),
+        ("burla", tuple(names(BurlaOptions))),
+    ):
+        table = data.get(name)
+        if isinstance(table, Mapping):
+            check((name,), table, known, f"a key of [{name}]")
+    modal = data.get("modal")
+    if isinstance(modal, Mapping):
+        scalars = [key for key, value in modal.items() if not isinstance(value, Mapping)]
+        check(("modal",), scalars, names(ModalOptions), "a key of [modal]")
+        for section, table in modal.items():
+            if isinstance(table, Mapping):
+                check(("modal", section), table, names(ImageSpec), f"a key of [modal.{section}]")
 
 
 @dataclass(frozen=True)
@@ -324,6 +444,10 @@ class SweepSpec:
     t_unit: str
     retain_traces_for: tuple[str, ...] | None = None
     duplicates_dropped: int = 0
+    #: The spec's ``target`` key, the import path ``sweep`` runs when no ``--target`` is given.
+    #: Like ``capture`` it rides the spec and stays out of ``to_dict()``: the manifest records
+    #: the target a run used as ``environment.import_path``.
+    target: str | None = None
     #: The ``[capture]`` table, when the sweep file has one. It rides the spec but is
     #: deliberately absent from ``to_dict()``: that dict is the sweep's identity in
     #: ``manifest.environment["sweep"]``, and asking for a trace is not part of what makes two
@@ -408,8 +532,10 @@ class SweepSpec:
         """
         file = Path(path)
         try:
-            with file.open("rb") as fh:
-                data = tomllib.load(fh)
+            text = file.read_text(encoding="utf-8")
+            data = tomllib.loads(text)
+        except UnicodeDecodeError as exc:
+            raise SamplerError(f"cannot read sweep file {file}: it is not UTF-8 text") from exc
         except OSError as exc:
             raise SamplerError(f"cannot read sweep file {file}: {exc}") from exc
         except tomllib.TOMLDecodeError as exc:
@@ -419,6 +545,12 @@ class SweepSpec:
             raise SamplerError(
                 f"sweep file {file}: name is not a key a sweep spec has; a run is named on the "
                 "command line with sweep --name"
+            )
+        _strict(file, text, data)
+        target = data.get("target")
+        if target is not None and (not isinstance(target, str) or not target.strip()):
+            raise SamplerError(
+                f"sweep file {file}: target must be an import path, pkg.module:rollout"
             )
         for field in ("target_id", "t_unit", "replicates"):
             if field not in data:
@@ -459,7 +591,7 @@ class SweepSpec:
         ):
             raise SamplerError("retain_traces_for must be a list of outcome names")
 
-        return cls.build(
+        built = cls.build(
             configs,
             replicates=data["replicates"],
             target_id=data["target_id"],
@@ -470,6 +602,7 @@ class SweepSpec:
             chaos=_chaos_table(data.get("chaos")),
             declare=_declare_table(data.get("declare")),
         )
+        return dataclasses.replace(built, target=None if target is None else target.strip())
 
     def cells(self) -> list[str]:
         return [_hash(cfg) for cfg in self.configs]

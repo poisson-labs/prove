@@ -270,11 +270,15 @@ MULTI_JSON_SHA256 = {
     "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
     "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
 }
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; check's gate here is the flat family's unpaired test, named.
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh")
 # CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
 # checks the facts the digest guarded instead (front-door spec section 14).
 CHECK_EXIT = 0
-SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the structure digest is the unpaired test's, named.
+SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
@@ -288,7 +292,9 @@ PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
 COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee5fa"
 FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the E14 digests and the heatmap are the unpaired test's, named.
+E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
@@ -1552,7 +1558,9 @@ def test_f15_the_block_prints_the_grouping_line_and_not_tested_and_no_p(synth_ro
     """Every numeric token on an untested group line is a rule-10 rendering of one of that group's
     count or design fields, or its label; a p has nowhere to come from."""
     _, result = store_tree(synth_root, "same-a", "same-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail"])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now the
+    # paired test; the tree here is the unpaired test's, named.
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail", "--method", "fisher_bh"])
     # A shared salt now adds one note line on stderr (spec section 5.4).
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
@@ -1840,7 +1848,9 @@ def test_f20_the_json_tree_equals_to_json_after_a_round_trip_and_its_root_equals
     the CLI-level form of F11."""
     multi, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=300, seed=3)
     # --json replaces --format json (spec section 5.6).
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--json", "--permutations", "300", "--seed", "3"])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now the
+    # paired test; the tree here is the unpaired test's, named.
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--json", "--permutations", "300", "--seed", "3", "--method", "fisher_bh"])
     # A shared salt now adds one note line on stderr (spec section 5.4).
     assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
@@ -2167,7 +2177,9 @@ def test_f28_serve_json_on_go1_prints_the_same_structure() -> None:
     # A shared salt now adds one note line on stderr (spec section 5.4).
     assert code == 0 and without_notes(err) == "", err
     # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
-    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence")}
+    # PF3 (spec section 4.4, PF3.6b; rule R3): serve --json now names the method at the top level after the
+    # sentence; dropped beside the verdict and the sentence, so the frozen digest guards the rest.
+    structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
     # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
     # then put back as before names, so the digest below still guards everything else.
     structure = structure_as_ids_named_it(structure, "fell")

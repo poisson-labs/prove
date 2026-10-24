@@ -150,11 +150,14 @@ from poisson_prove.diff import MultiDiffResult, UnpairedAnalysis, infer_events, 
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.survival import competing_set
+from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "poisson_prove"
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
-QUICKSTART = ROOT / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"

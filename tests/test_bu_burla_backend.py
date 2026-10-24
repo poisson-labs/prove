@@ -1752,7 +1752,10 @@ def test_p1_an_unknown_burla_field_is_a_refusal(fake: Fake, tmp_path: Path) -> N
 def test_p2_the_target_resolves_here_first_with_the_local_refusal(fake: Fake, tmp_path: Path) -> None:
     bad = "bu_targets.nope:rollout"
     good = write_sweep(tmp_path / "good", burla=burla_table())
-    broken = write_sweep(tmp_path / "broken", burla=burla_table(nodez=4))
+    # PF3 (PF3.3, rule R4): an unknown key in [burla] is now refused when the spec is read, before the
+    # target; the [burla] table is broken here in a way strict key checking does not see (nodes, a known
+    # field, out of range), so the test still says the target resolves before the table's values are checked.
+    broken = write_sweep(tmp_path / "broken", burla=burla_table(nodes=0))
     local = run_cli(sweep_argv(tmp_path / "good", good, bad, backend="local"))
     # A refusal exits 1 (spec section 5.2).
     assert local[0] == 1

@@ -66,10 +66,13 @@ from poisson_prove.diff import bh
 from poisson_prove.episode import Episode
 from poisson_prove.executor_modal import Job, ModalOptions, ModalTarget, run_with_mapper, worker_batch
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
-QUICKSTART = ROOT / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 CLI_SOURCE = ROOT / "src" / "poisson_prove" / "cli.py"
 
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
@@ -504,7 +507,9 @@ def run_report_argv(pair: MockPair, out: Path, *extra: str) -> list[str]:
 
 
 def test_c1_single_event_diff_headline_reads_sixty_safer_zero_worse_fisher() -> None:
-    r = run_cli(go1_argv("diff", "--event", "fell"))
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; these numbers are the unpaired test's, named.
+    r = run_cli(go1_argv("diff", "--event", "fell", "--method", "fisher_bh"))
     assert r.code == 0, r.text
     assert GO1_HEADLINE in r.lines, r.out
     assert "fisher_bh" in r.out, r.out
@@ -590,7 +595,9 @@ def test_c6_worse_counts_are_a_real_swing() -> None:
 
 
 def test_c6_check_fails_when_any_named_event_has_a_worse_cell(worse_pair: Path) -> None:
-    r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--event", "timeout"])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the hand-built pair's two manifests carry one salt, so the
+    # default is now the paired test; the worse cell this gate fails on is the unpaired test's, named.
+    r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--event", "timeout", "--method", "fisher_bh"])
     # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
     assert_clean_refusal(r, 4)
     assert r.lines[0].startswith("failed") and not [x for x in r.lines if x.startswith("passed")], r.out
@@ -640,8 +647,10 @@ def test_c7_inferred_report_writes_the_same_three_files_and_one_panel_per_event(
 
 
 def go1_report(tmp_path: Path) -> str:
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the report C8 reads is the unpaired test's, named.
     out = tmp_path / "go1-report"
-    r = run_cli(go1_argv("report", "--event", "fell", "--x", "push_pct_bw", "--y", "mu", "--out", str(out)))
+    r = run_cli(go1_argv("report", "--event", "fell", "--x", "push_pct_bw", "--y", "mu", "--out", str(out), "--method", "fisher_bh"))
     assert r.code == 0, r.text
     return (out / "report.md").read_text()
 
@@ -655,7 +664,9 @@ def test_c8_single_event_report_has_the_two_line_honesty_block(tmp_path: Path) -
 
 def test_c8_single_event_worst_cells_use_the_multi_tiebreak(tmp_path: Path) -> None:
     # diff's --format json is now --json (spec section 5.3).
-    j = run_cli(go1_argv("diff", "--event", "fell", "--json"))
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the cells ordered here are the unpaired test's, named.
+    j = run_cli(go1_argv("diff", "--event", "fell", "--json", "--method", "fisher_bh"))
     assert j.code == 0, j.text
     cells = json.loads(j.out)["by_event"]["fell"]["cells"]
     ordered = sorted(cells, key=lambda c: (-c["delta"], c["q"], c["mde"], c["config_hash"]))

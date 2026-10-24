@@ -140,6 +140,8 @@ from poisson_prove.executor import derive_seed
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.trace import Span, Trace
 
+from conftest import without_method_lines
+
 REPO = Path(__file__).resolve().parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
@@ -147,7 +149,9 @@ GO1_A, GO1_B = "go1-v0", "go1-v1"
 #: minted 2026-09-22 on ``6f40d92``'s ``src/`` (the heatmap is the value ``test_s29_viewer.py``
 #: pins; W20 takes its markdown and receipt through the builder, so those two are minted here,
 #: the same bytes on two runs). PR53's "the report the same build produces today".
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the E14 digests are the unpaired test's, named.
+E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.md and receipt.html print LS16's respelled Cells sentence ('MDE is the smallest detectable increase', no ADR number) and nothing else new; heatmap.svg is unchanged. Read through this test's own measurement on the built tree, not predicted.
 E14_SHA256 = {
     "report.md": "69324de1b24bdcf561501e313561ea481e243249a982a3b274e727445a15c370",
@@ -1105,7 +1109,11 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         titled = library[name].replace(named, by_id)
         text = titled if name == "heatmap.svg" else as_0_0_1_wrote_it(titled)
         assert hashlib.sha256(text.encode("utf-8")).hexdigest() == digest, name
-        assert rendered_problems(library[name], (out / name).read_text(encoding="utf-8"), name) == [], name
+        # PF3 (spec section 4.4, PF3.6b; rule R2): the written report.md and receipt.html gain a line of their
+        # own naming the method; with it taken out they carry the library rendering's facts as before.
+        written = (out / name).read_text(encoding="utf-8")
+        assert name == "heatmap.svg" or without_method_lines(written) != written, name
+        assert rendered_problems(library[name], written if name == "heatmap.svg" else without_method_lines(written), name) == [], name
 
 
 # PF0 (Q4): test_pr53_report_py_is_not_touched_by_phase_three removed. It pinned the bytes of src/poisson_prove/report.py, which the rename
