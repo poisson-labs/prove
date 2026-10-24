@@ -76,10 +76,13 @@ from poisson_prove.report import MultiReport, ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.tree import TreeResult
 from poisson_prove.tree import tree as grow_tree
+from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
 GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
-QUICKSTART = ROOT / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 S0_TEST_SOURCE = Path(__file__).resolve().parent / "test_s0_scaffold.py"
 TESTS_DIR = Path(__file__).resolve().parent
 
@@ -937,14 +940,17 @@ def go1_serve_json(go1_store: Store) -> Result:
     """``serve --json`` on the Go1 pair, both events, with ``serve_page`` tripwired."""
     with pytest.MonkeyPatch.context() as mp:
         tripwire_serve(mp)
-        return run_cli(go1_full_argv("--json"))
+        # PF3 (Q17, spec sections 4.4 and 14; R1): Go1's runs share a salt, so the default is now the
+        # paired test; V22 and V33 compare with the unpaired test's numbers, named.
+        return run_cli(go1_full_argv("--method", "fisher_bh", "--json"))
 
 
 @pytest.fixture(scope="module")
 def go1_serve_json_one_event(go1_store: Store) -> Result:
     with pytest.MonkeyPatch.context() as mp:
         tripwire_serve(mp)
-        return run_cli(go1_argv("--event", "fell", "--x", GO1_X, "--y", GO1_Y, "--title", GO1_TITLE, "--json"))
+        # PF3 (Q17, spec sections 4.4 and 14; R1): V22 compares with diff's unpaired numbers, named.
+        return run_cli(go1_argv("--event", "fell", "--x", GO1_X, "--y", GO1_Y, "--title", GO1_TITLE, "--method", "fisher_bh", "--json"))
 
 
 @dataclass(frozen=True)
@@ -1621,8 +1627,10 @@ def test_v33_json_prints_the_structure_indented_and_strict_and_binds_nothing(go1
     assert r.out.startswith('{\n  "schema": ')
     parsed = strict_loads(r.out)
     # serve --json wraps the structure with verdict and sentence after schema (spec section 5.6).
-    assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
-    parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence")}
+    # PF3 (spec section 4.4, R3): and with method and method_chosen right after sentence, which the
+    # library's structure does not carry; they are set aside with verdict and sentence.
+    assert tuple(parsed)[:5] == ("schema", "verdict", "sentence", "method", "method_chosen"), tuple(parsed)
+    parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
     # PF2 (spec section 4.3): serve --json carries run_name beside each arm's run_id; with it set
     # aside the structure is the library's, and the names sit where they belong.
     assert {role: (parsed["pair"][role]["run_id"], parsed["pair"][role].get("run_name")) for role in ("a", "b")} == {

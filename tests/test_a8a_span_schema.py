@@ -132,12 +132,15 @@ import poisson_prove.cli as cli
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace, TraceValidationError
+from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "poisson_prove"
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS / "fixtures" / "trace"
-QUICKSTART = ROOT / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 LOGGER_NAME = "poisson_prove.trace"
 EPOCH = 1_756_900_000_000_000_000
 

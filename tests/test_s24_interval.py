@@ -201,7 +201,9 @@ FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d004
 #: C14, second half. The three digests S21's E14 already pins, restated rather than imported so
 #: two frozen oracles do not couple. Minted on the bare tree at b10a146 by
 #: ``report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw``.
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the E14 digests and the heatmap are the unpaired test's, named.
+E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
@@ -1341,7 +1343,9 @@ def test_c18_the_diff_output_prints_the_alpha_star_arithmetic_and_names_the_fami
     defect into the oracle.
     """
     result = synth_diff(synth_root, "moved-a", "moved-b", "fisher_bh")
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now
+    # the paired test (basis score_rd_paired); these fields are the unpaired test's, named.
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, (out, err)
     # A shared salt now adds one note line on stderr (spec section 5.4); nothing else is there.
     assert without_notes(err) == "", err

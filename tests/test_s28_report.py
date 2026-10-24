@@ -240,6 +240,7 @@ from poisson_prove import diff as diff_mod
 from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from conftest import quickstart_design, without_method_lines
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -248,7 +249,9 @@ DIFF_SOURCE = PACKAGE / "diff.py"
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 REGRESSION_DIR = GO1_ROOT / "report_regression"
-QUICKSTART = REPO / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
@@ -364,11 +367,15 @@ E14_WITH_TREE_SHA256 = {
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; check's gate here is the flat family's unpaired test, named.
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh")
 # No longer asserted: check's stdout changes shape; R19 asserts the facts it guarded (spec section 14).
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
-SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the structure digest is the unpaired test's, named.
+SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
@@ -1409,6 +1416,11 @@ def every_pair(outs: Path, synth_root: Path, quickstart: tuple[Path, str, str]) 
     ]
     out = []
     for name, root, a, b, ev, axes, extra, requested in rows:
+        # PF3 (Q17, spec sections 4.4 and 14; rule R1): every pair here shares a salt (Go1, the synthetic
+        # pairs, the quickstart's --pair-with), so the default is now the paired test; a row that names
+        # no method is checked against the unpaired test's tree (method_of), so the command line names it.
+        if "--method" not in extra:
+            extra = (*extra, "--method", "fisher_bh")
         r = ok(outs, root, a, b, *ev, *axes, *extra)
         _, result = store_tree(root, a, b, events=events_of(ev), method=method_of(extra), **knobs_of(extra))
         out.append((name, r, result, requested))
@@ -1481,7 +1493,9 @@ def test_r2_the_tree_less_builder_reproduces_s21s_three_digests_and_the_svg_stil
     assert sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())) == E14_SHA256["report.md"]
     assert sha256_of_text(report.to_svg()) == E14_SHA256["heatmap.svg"]
     assert sha256_of_text(as_0_0_1_wrote_it(light.to_html())) == E14_SHA256["receipt.html"]
-    r = ok(outs, GO1_ROOT, *E14_ARGV[1:])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the library SVG is the unpaired test's, named.
+    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
     # The CLI's heatmap labels follow rule 10 (spec section 5.4) and may re-wrap, so its digest
     # moves; its colour cells are the pinned library SVG's, cell for cell.
     assert svg_cells(r.svg) == svg_cells(report.to_svg()) and svg_cells(r.svg)
@@ -1495,12 +1509,16 @@ def test_r2_the_clis_report_and_receipt_with_the_tree_digest_to_the_values_minte
     the digests give way to the facts they guarded: the library's render of the same pair line
     for line outside the numbers, the version entry, and the tree's numbers, verdicts, cells and
     bound in each section."""
-    r = ok(outs, GO1_ROOT, *E14_ARGV[1:])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the library render and the tree are the unpaired test's, named.
+    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
     _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",))
     library = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=True, theme="light", counted=True)
     for kind, page, theirs in (("md", r.md, library.to_markdown()), ("html", r.html, library.to_html())):
         as_0_0_1_wrote_it(page)
-        assert_same_but_numbers(page, theirs, f"e14 {kind}")
+        # PF3 (spec section 4.4, PF3.6b; rule R2): the command line's files gain a line naming the method,
+        # which the library's render does not carry; compared without it.
+        assert_same_but_numbers(without_method_lines(page), theirs, f"e14 {kind}")
         secs = sections(page, kind)
         assert_omnibus("e14", kind, secs["Omnibus"], result)
         assert_fault_lines("e14", kind, secs["Fault lines"], result)
@@ -1531,7 +1549,9 @@ def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_ev
         # PF2 (spec section 4.3/5.3): the command's default title names the runs; with the ids
         # put back in the title, the files compare with the library's tree-less render as before.
         root, a, b = quickstart if name.startswith("quickstart") else (_TREE_LESS_ARGS[name][0] or synth_root, *_TREE_LESS_ARGS[name][1:3])
-        md, html = titled_by_ids(r.md, root, a, b), titled_by_ids(r.html, root, a, b)
+        # PF3 (spec section 4.4, PF3.6b; rule R2): the command line's files gain a line naming the method,
+        # which the library's tree-less render does not carry; compared without it.
+        md, html = without_method_lines(titled_by_ids(r.md, root, a, b)), without_method_lines(titled_by_ids(r.html, root, a, b))
         assert_same_but_numbers(excised(md, md_bounds(md)), tree_less.to_markdown(), name)
         assert_same_but_numbers(excised(html, html_bounds(html)), tree_less.to_html(), name)
         with_tree = _with_tree_for(name, synth_root)
@@ -1830,7 +1850,9 @@ def test_r6_the_axes_pair_carries_the_override_inside_detail_the_one_value_pair_
     assert [x.reason for x in result.grouping.refused] == ["underpowered", "one_group"], result.grouping.refused
     lines = lines_of(fault_items(r, "md"))
     assert "underpowered" in lines[1] and "one_group" in lines[2], lines[:3]
-    r = ok(outs, GO1_ROOT, GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--by", "kind")
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the tree checked here is the unpaired test's, named.
+    r = ok(outs, GO1_ROOT, GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--by", "kind", "--method", "fisher_bh")
     _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), by="kind")
     assert [(x.key, x.rung, x.reason) for x in result.grouping.refused] == [("kind", "trace", "unsupported")]
     line = lines_of(fault_items(r, "md"))[1]
@@ -1910,7 +1932,9 @@ def test_r7_the_axes_pair_prints_one_family_line_reading_0_rejected_and_no_table
 
 
 def test_r7_on_go1_by_push_family_70_follows_cells_order_and_its_q_tokens_are_not_sorted(outs: Path) -> None:
-    r = ok(outs, GO1_ROOT, GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--by", "push_pct_bw")
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the tree checked here is the unpaired test's, named.
+    r = ok(outs, GO1_ROOT, GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--by", "push_pct_bw", "--method", "fisher_bh")
     _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), by="push_pct_bw")
     assert_cells("go1-push", "md", cells_items(r, "md"), result)
     families = {f.label: f for f in result.leaves.families}
@@ -1933,7 +1957,9 @@ def test_r7_on_a_pair_with_a_fixed_third_key_every_leaf_row_carries_every_config
     """The tree is the family's and ``--fix`` slices only the figure: with ``model`` fixed to
     ``m1`` on the page, the leaf rows carry ``model=m1`` and ``model=m2`` alike, every key of
     each config. A builder who prints only the grid's two axes fails here alone."""
-    r = ok(outs, synth_root, "three-a", "three-b", "--event", "fail", "--x", "task", "--y", "temp", "--fix", 'model="m1"')
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the three-key pair's runs share a salt, so the default is now the paired
+    # test; the tree checked here is the unpaired test's, named.
+    r = ok(outs, synth_root, "three-a", "three-b", "--event", "fail", "--x", "task", "--y", "temp", "--fix", 'model="m1"', "--method", "fisher_bh")
     _, result = store_tree(synth_root, "three-a", "three-b", events=("fail",))
     assert result.leaves.tested and result.leaves.n_rejected == 8, (result.leaves.tested, result.leaves.n_rejected)
     for kind in ("md", "html"):
@@ -2170,7 +2196,9 @@ def test_r13_report_help_lists_the_five_flags_with_diffs_help_text_for_each() ->
 
 
 def test_r13_the_five_flags_reach_the_call_on_the_axes_pair(outs: Path, synth_root: Path) -> None:
-    r = ok(outs, synth_root, "axes-a", "axes-b", "--event", "fail", "--x", "temp", "--y", "task", "--by", "temp", "--max-group-mde", "0.6", "--depth", "2", "--permutations", "300", "--seed", "3")
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the axes pair's runs share a salt, so the default is now the paired
+    # test; the tree checked here is the unpaired test's, named.
+    r = ok(outs, synth_root, "axes-a", "axes-b", "--event", "fail", "--x", "temp", "--y", "task", "--by", "temp", "--max-group-mde", "0.6", "--depth", "2", "--permutations", "300", "--seed", "3", "--method", "fisher_bh")
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), by="temp", max_group_mde=0.6, depth=2, n_permutations=300, seed=3)
     assert result.grouping.key == "temp" and result.grouping.resolved_by == "requested"
     assert "temp (requested)" in lines_of(fault_items(r, "md"))[0]
@@ -2222,7 +2250,9 @@ def test_r14_every_pair_carries_the_four_sections_with_no_flag_and_the_empty_fam
 
 
 def test_r14_under_methods_all_the_sections_appear_once_and_the_omnibus_names_the_primarys_scheme(outs: Path) -> None:
-    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--methods", "all")
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the primary here is the unpaired test's, named.
+    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--methods", "all", "--method", "fisher_bh")
     _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",))
     assert result.root.scheme == "arm_label"
     secs = sections(r.md, "md")
@@ -2235,7 +2265,9 @@ def test_r14_the_single_run_report_writes_none_of_the_four_headings_and_go1s_std
     single = rendered(outs, synth_root, "axes-b", "--event", "fail", "--x", "temp", "--y", "task")
     assert single.code == 0, single.text
     assert not any(h in single.md.splitlines() for h in MD_HEADINGS) and not any(h in single.html.splitlines() for h in HTML_HEADINGS)
-    r = ok(outs, GO1_ROOT, *E14_ARGV[1:])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the headline here is the unpaired test's, named.
+    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
     multi, _ = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",))
     # PF2 (spec section 4.3/5.3): report's stdout opens with "ok  wrote <folder> (3 files)" and one
     # "  wrote  <path>" line per file, in the order the paths were printed before; after one blank
@@ -2276,8 +2308,10 @@ def test_r15_identical_arguments_and_twin_stores_write_byte_identical_files(tmp_
 def test_r15_a_different_seed_on_go1_changes_only_what_the_second_tree_feeds(outs: Path) -> None:
     """The sections of the ``--seed 7`` run equal the sections rendered from the API's seed-7
     tree; everything outside them equals the default run's."""
-    base = ok(outs, GO1_ROOT, *E14_ARGV[1:])
-    seeded = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--seed", "7")
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the seed-7 tree checked here is the unpaired test's, named.
+    base = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
+    seeded = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--seed", "7", "--method", "fisher_bh")
     assert excised(seeded.md, md_bounds(seeded.md)) == excised(base.md, md_bounds(base.md))
     assert excised(seeded.html, html_bounds(seeded.html)) == excised(base.html, html_bounds(base.html))
     api = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=True, seed=7, theme="light")
@@ -2453,7 +2487,9 @@ def test_r21_seed_identity_is_the_salt_plus_the_stored_seeds_and_mcnemar_refuses
 
 
 def test_r18_go1_renders_twenty_group_rows_nineteen_rejected_nineteen_families_and_the_golden_leaf_counts(outs: Path) -> None:
-    fisher = ok(outs, GO1_ROOT, *E14_ARGV[1:])
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # test; the Fisher and by-grid goldens are the unpaired test's, named.
+    fisher = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
     header, rows = tables_of(fault_items(fisher, "md"))[0]
     assert len(rows) == GO1_MU_GROUPS and sum(row[-1] == "rejected" for row in rows) == GO1_MU_REJECTED
     cells = cells_items(fisher, "md")
@@ -2464,7 +2500,7 @@ def test_r18_go1_renders_twenty_group_rows_nineteen_rejected_nineteen_families_a
     assert result.root.scheme == "pair_swap"
     assert sum(len(rows) for _, rows in tables_of(cells_items(mcnemar, "md"))) == GO1_MCNEMAR_LEAVES
     assert_fault_lines("go1-mcnemar", "md", fault_items(mcnemar, "md"), result)
-    grid = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--by", "grid")
+    grid = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--by", "grid", "--method", "fisher_bh")
     cells = cells_items(grid, "md")
     assert len(lines_of(cells)) == 3 and f"{tree().WHOLE_GRID_KEY}={tree().WHOLE_GRID_LABEL}" in lines_of(cells)[2]
     assert sum(len(rows) for _, rows in tables_of(cells)) == GO1_GRID_LEAVES
@@ -2499,7 +2535,9 @@ def test_r19_diff_py_whole_check_serve_the_column_digests_the_fixtures_and_the_s
     assert code == 0 and not [line for line in err.splitlines() if not line.startswith("note: ")], err
     structure = json.loads(out)
     # serve --json leads with the verdict and its sentence; the page structure follows unchanged.
-    structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence")}
+    # PF3 (spec section 4.4, PF3.6b; rule R3): serve --json now names the method at the top level after the
+    # sentence; dropped beside the verdict and the sentence, so the frozen digest guards the rest.
+    structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
     # PF2 (spec section 4.3/5.3): each arm carries run_name beside its run_id, and the default
     # title names the runs. Assert both, take the names out and put the ids back in the title;
     # the frozen digest then guards every other byte of the structure.

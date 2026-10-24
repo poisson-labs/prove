@@ -1399,7 +1399,15 @@ def test_pf1_13_a_sweep_stopped_by_max_rollouts_exits_3_with_what_was_kept_and_t
     stopped = [line for line in r.out.splitlines() if line.startswith("stopped  ")]
     assert len(stopped) == 1 and f"{kept:,}" in stopped[0], r.out
     assert not any(line.startswith("done  ") for line in r.out.splitlines()), r.out
-    assert "  next: poisson-prove sweep --resume" in r.out.splitlines() + r.err.splitlines(), (r.out, r.err)
+    # PF3 (spec section 5.3, reading e; rule R4): the next line resumes the sweep as it was typed. This
+    # sweep typed a spec path and --target, so the line carries the spec before --resume and the --target typed.
+    spec, target = r.argv[r.argv.index("sweep") + 1], r.argv[r.argv.index("--target") + 1]
+    nexts = [line for line in r.out.splitlines() + r.err.splitlines() if line.startswith("  next: poisson-prove sweep ")]
+    assert len(nexts) == 1, (r.out, r.err)
+    words = nexts[0].split()[1:]
+    assert words[:2] == ["poisson-prove", "sweep"] and spec in words and "--resume" in words, nexts
+    assert words.index(spec) < words.index("--resume"), nexts
+    assert "--target" in words and words[words.index("--target") + 1] == target, nexts
 
 
 def test_pf1_13_a_sweep_in_which_every_rollout_raised_exits_3_naming_the_commonest_error_for_inspect(corpus: dict[str, Ran], world: World) -> None:

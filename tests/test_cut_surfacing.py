@@ -638,7 +638,8 @@ def test_z11_the_diff_object_is_the_pair_provenance_in_this_order(s1: Surfaces, 
 
 def test_z11_the_top_level_key_set_is_unchanged(s1: Surfaces) -> None:
     # serve --json adds verdict and sentence after schema (front-door spec section 5.6).
-    assert tuple(k for k in s1.payload if k not in ("verdict", "sentence")) == TOP_LEVEL_KEYS
+    # PF3 (spec section 4.4, R3): serve --json also adds method and method_chosen right after sentence.
+    assert tuple(k for k in s1.payload if k not in ("verdict", "sentence")) == ("schema", "method", "method_chosen") + TOP_LEVEL_KEYS[1:]
 
 
 # ---------- Z12: inspect prints the cut ----------

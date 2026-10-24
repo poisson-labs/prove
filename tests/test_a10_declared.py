@@ -620,7 +620,11 @@ def test_p10_1_declare_parses_to_a_sorted_declaration_minted_in_trace(tmp_path: 
     assert type(spec.declare) is Declaration
     assert (spec.declare.steps, spec.declare.outcomes, spec.declare.gates) == (STEPS, OUTCOMES, GATES)
     assert spec.declare == declaration()
-    assert _DECLARE_FIELDS == DECLARE_FIELDS
+    # PF4 (PF4.20): [declare] also accepts failures and successes (the event kinds); the three
+    # fields this test pinned keep their order, first.
+    # PF3 (spec section 14, rule R4): PF3's packaged spec declares failures, so PF3 needs this move first.
+    assert _DECLARE_FIELDS[:3] == DECLARE_FIELDS, _DECLARE_FIELDS
+    assert set(_DECLARE_FIELDS[3:]) == {"failures", "successes"}, _DECLARE_FIELDS
     assert SweepSpec.load(write(tmp_path / "none.toml", sweep_toml(None))).declare is None
 
 
@@ -633,7 +637,9 @@ def test_p10_1_declare_parses_to_a_sorted_declaration_minted_in_trace(tmp_path: 
         ("duplicate-step", {**DECLARE_TOML, "steps": ["plan", "plan", "search", "verify"]}, DECLARE_TOML, ("steps", "plan")),
         ("duplicate-outcome", {**DECLARE_TOML, "outcomes": ["fell", "survived", "fell"]}, DECLARE_TOML, ("outcomes", "fell")),
         ("duplicate-gate", {**DECLARE_TOML, "gates": ["verify", "verify"]}, DECLARE_TOML, ("gates", "verify")),
-        ("unknown-field", {**DECLARE_TOML, "stages": ["plan"]}, DECLARE_TOML, ("stages", "steps", "outcomes", "gates")),
+        # PF3 (PF3.3, rule R4): strict specs refuse the unknown key when the spec is read, before [declare]'s
+        # own check, naming the key, its table and the nearest known key rather than every field.
+        ("unknown-field", {**DECLARE_TOML, "stages": ["plan"]}, DECLARE_TOML, ('"stages"', "[declare]", '"steps"')),
         ("not-a-list", {**DECLARE_TOML, "steps": "plan"}, DECLARE_TOML, ("steps",)),
         ("three-empty-lists", {"steps": [], "outcomes": [], "gates": []}, {"steps": [], "outcomes": ["fell"], "gates": []}, ()),
         ("empty-table", {}, {"outcomes": ["fell"]}, ()),

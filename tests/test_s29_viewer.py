@@ -266,6 +266,7 @@ from poisson_prove.episode import Episode
 from poisson_prove.report import MultiReport, ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.tree import tree as grow_tree
+from conftest import quickstart_design
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -280,7 +281,9 @@ GO1_A, GO1_B = "go1-v0", "go1-v1"
 # created_at, a letter); serve names the Go1 runs by these.
 GO1_NAME_A = "go1-g2-converged@20260813T155006Z 2026-09-03 a"
 GO1_NAME_B = "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a"
-QUICKSTART = REPO / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
@@ -363,7 +366,9 @@ RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
 
 #: W17, W20. S25's O23 digest restated as narrowed: ``serve --json`` on Go1 with ``tree`` removed
 #: and ``schema`` set to ``/2``, ``store_root`` normalised.
-SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json")
+# PF3 (Q17, spec sections 4.4 and 14; R1): Go1's runs share a salt, so the default is now the paired
+# test; the digests and facts below are the unpaired test's, named. Every user of these three wants it.
+SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh", "--json")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
@@ -463,13 +468,13 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 # PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell")
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh")
 # No longer asserted: check's stdout changes shape; W20 asserts the facts it guarded (spec section 14).
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
 #: W20. S21's E14 digests as S28's retrofit left them: the SVG through the CLI, the markdown and
 #: the light receipt through the tree-less builder.
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
@@ -788,8 +793,10 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
         argv += ["--y", y]
     for k, v in fixed.items():
         argv += ["--fix", f"{k}={json.dumps(v)}"]
-    if method != "fisher_bh":
-        argv += ["--method", method]
+    # PF3 (Q17, spec sections 4.4 and 14; R1): with no --method the default is now the paired test
+    # for runs that share a salt (Go1 among them); every pair here is checked against the oracle's
+    # own tree under ``method``, so the method is always named.
+    argv += ["--method", method]
     for k, v in knobs.items():
         argv += [KNOB_FLAGS[k], str(v)]
     return argv + ["--json"]
@@ -806,8 +813,10 @@ def pair(name: str, root: Path, a: str, b: str, events: Sequence[str], x: str, y
         structure = strict_loads(out)
         # serve --json leads with the verdict and its sentence after the schema; the page structure
         # follows unchanged, and it is what this file reads.
-        assert list(structure)[:3] == ["schema", "verdict", "sentence"], list(structure)[:3]
-        structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence")}
+        # PF3 (spec section 4.4, R3): method and method_chosen follow sentence; build_structure does
+        # not carry them, so they are set aside with verdict and sentence.
+        assert list(structure)[:5] == ["schema", "verdict", "sentence", "method", "method_chosen"], list(structure)[:5]
+        structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
         multi, result = store_tree(root, a, b, events=events, method=method, **knobs)
         _PAIRS[name] = Pair(
             name, root, a, b, tuple(events), x, y, fixed, method, dict(knobs), knobs.get("by"),
@@ -1748,7 +1757,8 @@ def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted
     assert code == 0 and not [line for line in err.splitlines() if not line.startswith("note: ")] and calls == [], err
     structure = strict_loads(out)
     # serve --json leads with the verdict and its sentence; the page structure follows unchanged.
-    structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence")}
+    # PF3 (spec section 4.4, R3): method and method_chosen follow sentence and are set aside with them.
+    structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
     assert "tree" in structure
     # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
     # then put back as before names, so the digest below still guards everything else.
