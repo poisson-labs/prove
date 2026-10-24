@@ -193,7 +193,8 @@ RECORD_FIELDS = (
 )
 ENTRY_FIELDS = ("name", "intercept", "action", "target_path", "value")
 MANIFEST_KEYS = frozenset({"requested", "fault", "rate", "steps", "engine_version", "hooks"})
-EXTRAS = {"modal", "agent", "viz", "all", "dev"}
+# PF9 (Q31): the [burla] extra joins the set.
+EXTRAS = {"modal", "agent", "viz", "all", "dev", "burla"}
 FAULT_KEY = "poisson_prove.fault"
 FAULT_POSITION_KEY = "poisson_prove.fault.position"
 ATTRIBUTION = ("AgentChaos", "github.com/floritange/AgentChaos", "MIT", "0.1.0")

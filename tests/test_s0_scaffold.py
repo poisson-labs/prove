@@ -45,7 +45,8 @@ def test_cli_version_via_module():
 def test_pyproject_extras_exact():
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
     extras = set(data["project"]["optional-dependencies"])
-    assert extras == {"modal", "agent", "viz", "all", "dev"}
+    # PF9 (Q31): the [burla] extra joins the set.
+    assert extras == {"modal", "agent", "viz", "all", "dev", "burla"}
 
 
 def test_pyproject_core_deps_are_math_only():
