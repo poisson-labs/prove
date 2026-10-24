@@ -54,13 +54,16 @@ import poisson_prove.cli as cli
 from poisson_prove.episode import Episode
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "poisson_prove"
 TRACE_SOURCE = SRC / "trace.py"
 CLI_SOURCE = SRC / "cli.py"
 MOCK_AGENT_SOURCE = SRC / "examples" / "mock_agent.py"
-QUICKSTART = ROOT / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "trace"
 
 # ---------- spec constants (section 2 and 3), spelled here so the file collects at baseline ----------

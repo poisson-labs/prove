@@ -102,12 +102,15 @@ from poisson_prove.executor_modal import (
 )
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import RunManifest, Store
+from conftest import quickstart_design
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 EXECUTOR = PACKAGE / "executor.py"
 EXECUTOR_MODAL = PACKAGE / "executor_modal.py"
-QUICKSTART = REPO / "examples" / "quickstart.toml"
+# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# the 100 replicates this file was frozen at.
+QUICKSTART = quickstart_design()
 
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"

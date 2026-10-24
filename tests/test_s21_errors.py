@@ -97,7 +97,9 @@ GO1_TALLY = (12_800, 12_800, 0, 0, 0, 0)
 
 # E14: minted on the bare tree at b10a146 (2026-09-06) by
 #   proofload --store tests/fixtures/go1 report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# test; the E14 digests and the heatmap are the unpaired test's, named.
+E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 E14_SHA256 = {
@@ -1142,7 +1144,9 @@ def go1_serve_json(go1: Built) -> Served:
 
 @pytest.fixture(scope="module")
 def syn_serve_json(syn: Built) -> Served:
-    return serve_json(serve_argv(syn, "--title", "syn", "--json"))
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair's manifests carry one salt, so the
+    # default is now the paired test; the structure E24 compares with is the unpaired test's, named.
+    return serve_json(serve_argv(syn, "--title", "syn", "--json", "--method", "fisher_bh"))
 
 
 # ---------- E1-E5: RunTally and Store.tally ----------
@@ -1444,7 +1448,9 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     body = after_verdict_block(r.out, names[SYN_A], names[SYN_B])
     head = "".join(body.splitlines(keepends=True)[: md_n + 1 + block_n])
     assert rendered_problems(shortened(md + "\n" + block), head, "diff.md") == [], r.out
-    every = run_cli(diff_argv(syn_root, "--methods", "all"))
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair's manifests carry one salt, so the
+    # default is now the paired test; the markdown --methods all prints first is the unpaired test's, named.
+    every = run_cli(diff_argv(syn_root, "--methods", "all", "--method", "fisher_bh"))
     assert every.code == 0, every.text
     lines = after_verdict_block(every.out, names[SYN_A], names[SYN_B]).splitlines(keepends=True)
     assert rendered_problems(shortened(md), "".join(lines[:md_n]), "diff.md") == [], every.out
@@ -1942,7 +1948,8 @@ def test_e24_serve_json_on_go1_prints_the_thirteen_keys_both_tallies_and_no_hole
     parsed = strict_loads(r.out)
     # serve --json adds verdict and sentence after schema (spec section 5.6).
     assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
-    assert tuple(k for k in parsed if k not in ("verdict", "sentence")) == TOP_LEVEL_KEYS
+    # PF3 (spec section 4.4, R3): serve --json also adds method and method_chosen right after sentence.
+    assert tuple(k for k in parsed if k not in ("verdict", "sentence")) == ("schema", "method", "method_chosen") + TOP_LEVEL_KEYS[1:]
     assert parsed["schema"] == SCHEMA
     assert parsed["pair"]["a"]["tally"] == go1_store.tally(GO1_A).to_dict() == dict(zip(TALLY_FIELDS, GO1_TALLY))
     assert parsed["pair"]["b"]["tally"] == go1_store.tally(GO1_B).to_dict() == dict(zip(TALLY_FIELDS, GO1_TALLY))
@@ -1959,7 +1966,10 @@ def test_e24_serve_json_on_the_synthetic_pair_has_holes_with_the_seven_causes(sy
     assert {h["cause"] for h in parsed["holes"]} == set(ALL_CAUSES)
     # serve --json adds verdict and sentence after schema (spec section 5.6).
     assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
-    parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence")}
+    # PF3 (spec section 4.4, R3): serve --json also adds method and method_chosen right after sentence;
+    # the library's structure has neither, so they are dropped here as verdict and sentence are.
+    assert tuple(parsed)[3:5] == ("method", "method_chosen"), tuple(parsed)
+    parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
     # PF2 (spec section 4.3/5.3): serve --json carries run_name beside every run_id; each is the
     # run's name, and with them taken out the structure is the library's as before.
     seen: list[tuple[str, str]] = []

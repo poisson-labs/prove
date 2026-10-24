@@ -519,8 +519,10 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
         argv += ["--y", y]
     for k, v in fixed.items():
         argv += ["--fix", f"{k}={json.dumps(v)}"]
-    if method != "fisher_bh":
-        argv += ["--method", method]
+    # PF3 (Q17, spec sections 4.4 and 14; R1): with no --method the default is now the paired test
+    # for runs that share a salt (Go1 among them); every pair here is compared with the library's
+    # multi_diff under ``method``, so the method is always named.
+    argv += ["--method", method]
     for k, v in knobs.items():
         argv += [KNOB_FLAGS[k], str(v)]
     if title is not None:
@@ -1464,7 +1466,9 @@ def test_ls2_the_same_wrap_reaches_the_reports_figure_and_the_receipt(tmp_path: 
     """``report`` draws the figure with the same builders: its ``heatmap.svg`` and the receipt's
     inline figure carry the wrapped caption on the two-event Go1 pair."""
     out = tmp_path / "rep"
-    code, _, err = run_cli(["--store", str(GO1_ROOT), "report", GO1_A, GO1_B, "--event", "fell", "--event", "survived", "--x", "push_pct_bw", "--y", "mu", "--out", str(out)])
+    # PF3 (Q17, spec sections 4.4 and 14; R1): Go1's runs share a salt, so the default is now the
+    # paired test; GO1_COMPLEMENT_LINE's 60 is the unpaired test's, named.
+    code, _, err = run_cli(["--store", str(GO1_ROOT), "report", GO1_A, GO1_B, "--event", "fell", "--event", "survived", "--x", "push_pct_bw", "--y", "mu", "--method", "fisher_bh", "--out", str(out)])
     assert code == 0, err[-400:]
     for name in ("heatmap.svg", "receipt.html"):
         text = (out / name).read_text(encoding="utf-8")
@@ -1584,8 +1588,9 @@ def test_ls7_the_fourteen_top_level_keys_the_schema_the_panel_keys_and_the_cell_
     for p in all_pairs:
         s = p.structure
         # serve --json adds verdict and sentence after schema (front-door spec section 5.6).
-        assert tuple(s)[1:3] == ("verdict", "sentence"), (p.name, tuple(s))
-        keys = tuple(k for k in s if k not in ("verdict", "sentence"))
+        # PF3 (spec section 4.4, R3): and method and method_chosen right after sentence.
+        assert tuple(s)[1:5] == ("verdict", "sentence", "method", "method_chosen"), (p.name, tuple(s))
+        keys = tuple(k for k in s if k not in ("verdict", "sentence", "method", "method_chosen"))
         assert keys == TOP_LEVEL_KEYS and s["schema"] == SCHEMA, (p.name, tuple(s))
         for panel in s["panels"]:
             assert tuple(panel) == PANEL_KEYS, (p.name, tuple(panel))
