@@ -264,34 +264,25 @@ def _assert_limit(got: Any, want: float | None, what: Any) -> None:
 # ---------- PF4.1: the public Wilson interval states its level ----------
 
 
-def test_pf4_1_wilson_returns_its_bounds_level_z_and_method_at_the_default_level() -> None:
+@pytest.mark.parametrize("level,k,n", [(None, 10, 32), (0.90, 7, 20), (0.975, 7, 20), (0.5, 7, 20)],
+                         ids=["default", "0.90", "0.975", "0.5"])
+def test_pf4_1_wilson_returns_its_bounds_level_z_and_method_at_each_level(level: float | None, k: int, n: int) -> None:
+    """Trimmed by the re-freeze's T3 (ruled 2026-10-24): the default level and other levels in one
+    test. scipy documents ``norm.isf(q)`` as the inverse survival function: the two-sided quantile at
+    level L leaves (1 - L) / 2 in the upper tail."""
     from scipy.stats import norm
 
     from poisson_prove.stats import WILSON_LEVEL, WilsonInterval, wilson
 
-    assert WILSON_LEVEL == 0.95
-    w = wilson(10, 32)
-    assert isinstance(w, WilsonInterval)
-    assert w.level == 0.95
-    assert w.method == "wilson"
-    # scipy documents ``norm.isf(q)`` as the inverse survival function: the two-sided 95% quantile
-    # leaves 0.025 in the upper tail.
-    assert abs(w.z - float(norm.isf(0.025))) <= 1e-12
-    lo, hi = survival.wilson(10, 32, z=w.z)
+    w = wilson(k, n) if level is None else wilson(k, n, level=level)
+    want = WILSON_LEVEL if level is None else level
+    if level is None:
+        assert WILSON_LEVEL == 0.95
+    assert isinstance(w, WilsonInterval) and w.method == "wilson"
+    assert w.level == want
+    assert abs(w.z - float(norm.isf((1.0 - want) / 2.0))) <= 1e-12
+    lo, hi = survival.wilson(k, n, z=w.z)
     assert abs(w.lo - lo) <= 1e-12 and abs(w.hi - hi) <= 1e-12
-
-
-def test_pf4_1_wilson_at_another_level_returns_that_level_and_its_two_sided_quantile() -> None:
-    from scipy.stats import norm
-
-    from poisson_prove.stats import wilson
-
-    for level in (0.90, 0.975, 0.5):
-        w = wilson(7, 20, level=level)
-        assert w.level == level
-        assert abs(w.z - float(norm.isf((1.0 - level) / 2.0))) <= 1e-12
-        lo, hi = survival.wilson(7, 20, z=w.z)
-        assert abs(w.lo - lo) <= 1e-12 and abs(w.hi - hi) <= 1e-12
 
 
 def test_pf4_1_wilson_bounds_equal_the_private_two_tuple_over_the_existing_grid() -> None:
@@ -1152,55 +1143,51 @@ def _one_competitor_frame() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     return df, t, outcome
 
 
-def test_pf4_19_one_other_outcome_that_ends_runs_early_draws_the_warning() -> None:
+@pytest.mark.parametrize("case", ["one-competitor-early", "others-only-at-the-horizon", "names-each-early-outcome",
+                                  "aalen-johansen"])
+def test_pf4_19_the_kaplan_meier_warning_names_each_outcome_that_ends_runs_early_and_only_then(case: str) -> None:
+    """Trimmed by the re-freeze's T4 (ruled 2026-10-24): PF4.19's four cases as one test. One other
+    outcome that ends runs early draws the warning (lifelines documents
+    ``KaplanMeierFitter().fit(durations, event_observed)`` and ``AalenJohansenFitter().fit(durations,
+    event_observed, event_of_interest)`` with the event coded as an integer per cause; they disagree
+    there, which is what the warning is for); outcomes seen only at the horizon draw none; the warning
+    names each outcome that ends runs early; Aalen-Johansen draws none."""
     from lifelines import AalenJohansenFitter, KaplanMeierFitter
 
-    df, t, outcome = _one_competitor_frame()
-    # lifelines documents ``KaplanMeierFitter().fit(durations, event_observed)`` and
-    # ``AalenJohansenFitter().fit(durations, event_observed, event_of_interest)`` with the event
-    # coded as an integer per competing cause. They disagree here, which is what the warning is for.
-    km = KaplanMeierFitter().fit(t, outcome == "fell")
-    aj = AalenJohansenFitter(calculate_variance=False).fit(
-        t, np.where(outcome == "fell", 1, 2), event_of_interest=1
-    )
-    km_incidence = float(1 - km.survival_function_at_times(10.0).iloc[0])
-    aj_incidence = float(aj.cumulative_density_.iloc[-1, 0])
-    assert km_incidence - aj_incidence > 0.05
-    with pytest.warns(UserWarning) as record:
-        survival.cell_table(df, "fell", method="km")
-    assert any("stuck" in str(w.message) for w in record)
-
-
-def test_pf4_19_other_outcomes_seen_only_at_the_horizon_draw_no_warning() -> None:
-    rows = []
-    for i in range(30):
-        if i < 10:
-            rows.append((i, "fell", 1.0 + 0.1 * i))
-        elif i < 20:
-            rows.append((i, "survived", 5.0))
-        else:
-            rows.append((i, "stuck_at_limit", 5.0))
-    df = _frame({"c": rows}, 5.0)
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", UserWarning)
-        survival.cell_table(df, "fell", method="km")
-
-
-def test_pf4_19_the_warning_names_each_outcome_that_ends_runs_early() -> None:
-    rows = [(i, "fell", 1.0 + 0.1 * i) for i in range(5)]
-    rows += [(5 + i, "timeout", 3.0) for i in range(5)]
-    rows += [(10 + i, "survived", 5.0) for i in range(5)]
-    df = _frame({"c": rows}, 5.0)
-    with pytest.warns(UserWarning) as record:
-        survival.cell_table(df, "fell", method="km")
-    assert any("timeout" in str(w.message) for w in record)
-
-
-def test_pf4_19_aalen_johansen_draws_no_warning() -> None:
-    df, _, _ = _one_competitor_frame()
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", UserWarning)
-        survival.cell_table(df, "fell", method="aj", events=["fell", "stuck"])
+    if case == "one-competitor-early":
+        df, t, outcome = _one_competitor_frame()
+        km = KaplanMeierFitter().fit(t, outcome == "fell")
+        aj = AalenJohansenFitter(calculate_variance=False).fit(t, np.where(outcome == "fell", 1, 2), event_of_interest=1)
+        km_incidence = float(1 - km.survival_function_at_times(10.0).iloc[0])
+        aj_incidence = float(aj.cumulative_density_.iloc[-1, 0])
+        assert km_incidence - aj_incidence > 0.05
+        with pytest.warns(UserWarning) as record:
+            survival.cell_table(df, "fell", method="km")
+        assert any("stuck" in str(w.message) for w in record)
+    elif case == "others-only-at-the-horizon":
+        rows = []
+        for i in range(30):
+            if i < 10:
+                rows.append((i, "fell", 1.0 + 0.1 * i))
+            elif i < 20:
+                rows.append((i, "survived", 5.0))
+            else:
+                rows.append((i, "stuck_at_limit", 5.0))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            survival.cell_table(_frame({"c": rows}, 5.0), "fell", method="km")
+    elif case == "names-each-early-outcome":
+        rows = [(i, "fell", 1.0 + 0.1 * i) for i in range(5)]
+        rows += [(5 + i, "timeout", 3.0) for i in range(5)]
+        rows += [(10 + i, "survived", 5.0) for i in range(5)]
+        with pytest.warns(UserWarning) as record:
+            survival.cell_table(_frame({"c": rows}, 5.0), "fell", method="km")
+        assert any("timeout" in str(w.message) for w in record)
+    else:
+        df, _, _ = _one_competitor_frame()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            survival.cell_table(df, "fell", method="aj", events=["fell", "stuck"])
 
 
 # ---------- PF4.21: the past-the-horizon edge has the module's own error ----------
