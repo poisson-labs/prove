@@ -904,10 +904,12 @@ def truncate_observations(trace: Trace, *, limit: int | None) -> Trace:
 @dataclass(frozen=True)
 class Declaration:
     """What a run expects of itself (A10): the steps it expects to execute, the outcome labels
-    its target can emit, and which of those steps are gates.
+    its target can emit, and which of those steps are gates; and which outcomes are failures
+    and which are successes (the event kinds).
 
-    Three sorted tuples of distinct non-empty names, ``gates`` a subset of ``steps``, at least
-    one of the three non-empty. Validated at construction -- the ``Span`` posture -- so a
+    Sorted tuples of distinct non-empty names, ``gates`` a subset of ``steps``, no outcome both
+    a failure and a success, the kinds among ``outcomes`` when outcomes are declared, at least
+    one list non-empty. Validated at construction -- the ``Span`` posture -- so a
     declaration read back from a manifest is held to the rules that refused the sweep file, and
     two spellings of one declaration compare equal in ``diff`` and on ``--resume``. Minted
     here, in the module ``finalize`` lives in, because this module imports nothing from the
@@ -918,9 +920,11 @@ class Declaration:
     steps: tuple[str, ...] = ()
     outcomes: tuple[str, ...] = ()
     gates: tuple[str, ...] = ()
+    failures: tuple[str, ...] = ()
+    successes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        for name in ("steps", "outcomes", "gates"):
+        for name in ("steps", "outcomes", "gates", "failures", "successes"):
             value = getattr(self, name)
             if isinstance(value, str) or not isinstance(value, (list, tuple)):
                 raise TraceValidationError(f"{name} must be a list of names, got {value!r}")
@@ -938,24 +942,46 @@ class Declaration:
             raise TraceValidationError(
                 f"gates {', '.join(outside)} are not among the declared steps"
             )
-        if not (self.steps or self.outcomes or self.gates):
+        both = sorted(set(self.failures) & set(self.successes))
+        if both:
             raise TraceValidationError(
-                "declares nothing: name steps, outcomes or gates, or drop the table"
+                f"{', '.join(both)} is declared both a failure and a success"
+            )
+        if self.outcomes:
+            for name in ("failures", "successes"):
+                stray = sorted(set(getattr(self, name)) - set(self.outcomes))
+                if stray:
+                    raise TraceValidationError(
+                        f"{name} {', '.join(stray)} are not among the declared outcomes"
+                    )
+        if not (self.steps or self.outcomes or self.gates or self.failures or self.successes):
+            raise TraceValidationError(
+                "declares nothing: name steps, outcomes, gates, failures or successes, or drop "
+                "the table"
             )
 
     def to_dict(self) -> dict[str, list[str]]:
-        """Three plain sorted lists: the shape the manifest carries."""
-        return {
+        """Plain sorted lists: the shape the manifest carries. ``failures`` and ``successes``
+        appear only when declared, so a run that declares no kind is stored as before."""
+        out = {
             "steps": list(self.steps),
             "outcomes": list(self.outcomes),
             "gates": list(self.gates),
         }
+        for name in ("failures", "successes"):
+            if getattr(self, name):
+                out[name] = list(getattr(self, name))
+        return out
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> Declaration:
         """The inverse of ``to_dict``, validated the same way; an absent list reads as empty."""
         return cls(
-            steps=d.get("steps", ()), outcomes=d.get("outcomes", ()), gates=d.get("gates", ())
+            steps=d.get("steps", ()),
+            outcomes=d.get("outcomes", ()),
+            gates=d.get("gates", ()),
+            failures=d.get("failures", ()),
+            successes=d.get("successes", ()),
         )
 
 

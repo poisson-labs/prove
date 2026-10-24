@@ -1,0 +1,23 @@
+# The Poisson Prove quickstart: the keyless mock agent over three tasks and three tool failure
+# rates, 194 replicates each, 1,746 rollouts. No key, no account, no network.
+#
+#   poisson-prove sweep
+#   poisson-prove sweep --target poisson_prove.examples.mock_agent:rollout_patched --pair-with latest
+#   poisson-prove diff
+
+target = "poisson_prove.examples.mock_agent:rollout"
+target_id = "mock-agent"
+t_unit = "tool_calls"
+replicates = 194
+
+[axes.task_id]
+type = "categorical"
+values = ["search", "checkout", "refund"]
+
+[axes.tool_fail_rate]
+type = "continuous"
+values = [0.0, 0.3, 0.55]
+
+# The outcomes that count against the agent.
+[declare]
+failures = ["timeout", "violated"]
