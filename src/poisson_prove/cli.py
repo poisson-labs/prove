@@ -34,7 +34,9 @@ import argparse
 import dataclasses
 import importlib.util
 import json
+import math
 import os
+import re
 import shlex
 import shutil
 import sys
@@ -58,11 +60,14 @@ if TYPE_CHECKING:
 
 from poisson_prove import __version__, _look
 from poisson_prove._compat import (
+    old_writer_line,
     retired_default_store,
     retired_default_store_refusal,
     retired_store_variable_note,
     version_as_recorded,
 )
+from poisson_prove._names import Index, NamesError, started, unfit
+from poisson_prove._names import index as names_index
 from poisson_prove._resolve import resolve
 from poisson_prove.diff import (
     _CAUSES,
@@ -77,6 +82,7 @@ from poisson_prove.diff import (
     multi_diff,
 )
 from poisson_prove.executor import (
+    DEFAULT_MAX_MDE,
     ExecutorError,
     Plan,
     RunSummary,
@@ -167,11 +173,15 @@ _REFUSABLE = (
     PairedError,
 )
 _REPORT_FORMS = (
-    "report A B --x AXIS [...]  (two run ids: diff report) or "
-    "report RUN --x AXIS [...]  (one run id: survival report)"
+    "report A B --x AXIS [...]  (two runs, or none for previous and latest: a comparison) or "
+    "report RUN --x AXIS [...]  (one run: a survival report)"
 )
-_SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a diff view)"
+_SERVE_FORM = (
+    "serve A B --event NAME --x AXIS [...]  (two runs, or none for previous and latest: a "
+    "comparison view)"
+)
 _SWEEP_NEXT = "sweep SPEC.toml --target pkg.module:rollout"
+_LATEST_PARTIAL = "\0latest-partial"
 #: The tool's own options, accepted before or after the verb.
 _GLOBAL_OPTIONS = ("--store", "--plain", "--debug")
 _VERB_NAMES = ("sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs")
@@ -409,7 +419,15 @@ def _build_parser(io: _IO) -> _Parser:
         help="inherit that run's salt, so the two runs share their seeds (default: none)",
     )
     identity.add_argument(
-        "--resume", metavar="RUN", help="continue that partial run where it stopped (default: none)"
+        "--resume",
+        metavar="RUN",
+        nargs="?",
+        const=_LATEST_PARTIAL,
+        help="continue that partial run where it stopped; alone, the latest partial run; "
+        "written after SPEC.toml, so the spec is not read as the run (default: none)",
+    )
+    sweep.add_argument(
+        "--name", metavar="TEXT", help="the name the new run goes by (default: computed)"
     )
     sweep.add_argument(
         "--episode-timeout",
@@ -486,8 +504,10 @@ def _build_parser(io: _IO) -> _Parser:
             f"  {_COMMAND} diff latest previous --event violated --json"
         ),
     )
-    diff_p.add_argument("a", metavar="A", help="the baseline run")
-    diff_p.add_argument("b", metavar="B", help="the candidate run")
+    diff_p.add_argument(
+        "runs", nargs="*", metavar="RUN",
+        help="the baseline and the candidate (default: previous and latest)",
+    )
     _add_event_argument(diff_p, "default: inferred from the outcomes present")
     _add_method_arguments(diff_p, defaults=True)
     diff_p.add_argument(
@@ -513,7 +533,8 @@ def _build_parser(io: _IO) -> _Parser:
         ),
     )
     report_p.add_argument(
-        "runs", nargs="+", metavar="RUN", help="A B for a comparison, one RUN for a survival report"
+        "runs", nargs="*", metavar="RUN",
+        help="A B for a comparison, one RUN for a survival report (default: previous and latest)",
     )
     _add_event_argument(report_p, "default: inferred from the outcomes present")
     _add_method_arguments(report_p, defaults=False)
@@ -631,8 +652,10 @@ def _build_parser(io: _IO) -> _Parser:
             f"  {_COMMAND} check latest previous --event violated --fail-on any"
         ),
     )
-    check_p.add_argument("a", metavar="A", help="the baseline run")
-    check_p.add_argument("b", metavar="B", help="the candidate run")
+    check_p.add_argument(
+        "runs", nargs="*", metavar="RUN",
+        help="the baseline and the candidate (default: previous and latest)",
+    )
     _add_event_argument(
         check_p,
         "required: a gate never infers its events; omitted: lists the events the runs carry; "
@@ -664,7 +687,8 @@ def _build_parser(io: _IO) -> _Parser:
         ),
     )
     serve_p.add_argument(
-        "runs", nargs="+", metavar="RUN", help="the baseline and the candidate, in that order"
+        "runs", nargs="*", metavar="RUN",
+        help="the baseline and the candidate, in that order (default: previous and latest)",
     )
     _add_event_argument(
         serve_p,
@@ -733,7 +757,13 @@ def _build_parser(io: _IO) -> _Parser:
             f"  {_COMMAND} inspect latest --event timeout --limit 5"
         ),
     )
-    inspect_p.add_argument("run", metavar="RUN", help="the run to inspect")
+    inspect_p.add_argument(
+        "run",
+        nargs="?",
+        default="latest",
+        metavar="RUN",
+        help="the run to inspect (default: latest)",
+    )
     ev = inspect_p.add_argument(
         "--event",
         metavar="NAME",
@@ -1006,9 +1036,14 @@ def _kept(root: Path, state: _State) -> tuple[str, list[str]]:
         kept = Store(root).count(state.run_id or "")
     except Exception:  # noqa: BLE001 - the store may be the thing that failed
         kept = 0
+    run_id = state.run_id or ""
+    try:
+        name = names_index(Store(root), root, str(root)).name_of(run_id)
+    except Exception:  # noqa: BLE001 - the store may be the thing that failed
+        name = run_id
     sentence = (
         f"{_look.fmt_count(kept)} of {_look.fmt_count(state.planned)} rollouts "
-        f'kept in run "{state.run_id}" (partial)'
+        f'kept in run "{name}" (partial)'
     )
     return sentence, [f"{_COMMAND} sweep --resume"]
 
@@ -1156,6 +1191,186 @@ def _write_json(
     io.out.write(text + "\n")
 
 
+# ---------- names ----------
+
+
+def _index(root: Path) -> Index:
+    """The store's runs, named; a names file Trace would refuse is a refusal here too."""
+    try:
+        return names_index(Store(root), root, str(root))
+    except NamesError as exc:
+        raise _Refusal(str(exc), exc.nexts) from exc
+
+
+def _run_of(idx: Index, word: str, io: _IO | None = None) -> str:
+    """The id of the one run ``word`` names, or a refusal. A run whose manifest cannot be read
+    is reached by its id alone and refused here; with ``io``, a word that counts the runs says
+    on a note which runs it left out."""
+    counting = word.strip() in ("latest", "previous") or word.strip().startswith(
+        ("latest:", "previous:", "#")
+    )
+    if io is not None and idx.unreadable and counting:
+        io.err_line(
+            "note: latest, previous and the numbers leave out the runs whose manifest.json "
+            f"could not be read: {', '.join(idx.unreadable)}"
+        )
+    try:
+        found = idx.find(word)
+    except NamesError as exc:
+        raise _Refusal(str(exc), exc.nexts) from exc
+    if found.status == "unreadable":
+        raise _Refusal(
+            f"the run {found.run_id} cannot be read: its manifest.json is damaged or carries no "
+            "start time",
+            [idx.listing()],
+        )
+    return found.run_id
+
+
+def _pair_of(idx: Index, verb: str, runs: Sequence[str], io: _IO | None = None) -> tuple[str, str]:
+    """The two runs a comparing verb was given, or ``previous`` and ``latest`` when none."""
+    if len(runs) == 0:
+        return _run_of(idx, "previous", io), _run_of(idx, "latest", io)
+    if len(runs) == 2:
+        return _run_of(idx, runs[0], io), _run_of(idx, runs[1], io)
+    raise _Usage(
+        f"{verb} takes two runs or none, got {len(runs)}", [f"{_COMMAND} {verb} --help"]
+    )
+
+
+def _join(words: Sequence[str]) -> str:
+    """A command to copy, quoted so a value on stderr never reads as a Python repr."""
+    return _look.command(*words)
+
+
+def _named_argv(argv: Sequence[str], idx: Index) -> list[str]:
+    """The command as typed with every run id replaced by the word that reaches that run alone:
+    its name, or its number when two runs answer to the name."""
+    return [idx.word_for(token) if idx.by_id(token) is not None else token for token in argv]
+
+
+def _with_names(message: str, idx: Index) -> str:
+    """A library's message with every run id it gives followed by the run's name, as
+    ``"NAME" (ID)``; an id that is the run's name is left as it is."""
+    for run in idx.runs:
+        if run.name == run.run_id or run.run_id not in message:
+            continue
+        shown = f'"{run.name}" ({run.run_id})'
+        message = message.replace(f'"{run.run_id}"', shown).replace(f"'{run.run_id}'", shown)
+        message = re.sub(rf"(?<![\w(\"-]){re.escape(run.run_id)}(?![\w-])", shown, message)
+    return message
+
+
+def _add_names(node: Any, idx: Index) -> Any:
+    """A document with ``run_name`` placed after every key named exactly ``run_id``."""
+    if isinstance(node, dict):
+        out: dict[str, Any] = {}
+        for key, value in node.items():
+            out[key] = _add_names(value, idx)
+            if isinstance(value, str) and key == "run_id":
+                out["run_name"] = idx.name_of(value)
+        return out
+    if isinstance(node, list):
+        return [_add_names(v, idx) for v in node]
+    return node
+
+
+def _old_writer(manifests: tuple[RunManifest, RunManifest]) -> dict[str, str]:
+    """For a pair of one run written under the old name and one this build wrote, the old
+    run's role (``before`` or ``after``) and the line that says who wrote it; empty otherwise,
+    since a pair both written under the old name says so in its version line."""
+    if sum(1 for m in manifests if m.written_by) != 1:
+        return {}
+    out = {}
+    for role, m in zip(("before", "after"), manifests, strict=True):
+        writer = old_writer_line(version_as_recorded(m.poisson_prove_version))
+        if m.written_by and writer is not None:
+            out[role] = writer
+    return out
+
+
+def _condition_text(config: Any) -> str:
+    """A condition as its axis values, ``task_id refund · tool_fail_rate 0.55``."""
+    cfg = json.loads(config) if isinstance(config, str) else config
+    if not isinstance(cfg, Mapping):
+        return str(config)
+    return " · ".join(
+        f"{key} {_look.fmt_num(value) if isinstance(value, float) else value}"
+        for key, value in cfg.items()
+    )
+
+
+def _threshold(manifests: tuple[RunManifest, RunManifest]) -> float:
+    """The change the two runs accepted at sweep time: the smaller of the two recorded values,
+    or the default ``--max-mde`` when neither run recorded one."""
+    recorded = [m.environment.get("max_mde_accepted") for m in manifests]
+    values = [float(v) for v in recorded if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    return min(values) if values else float(DEFAULT_MAX_MDE)
+
+
+def _diff_verdict(multi: MultiDiffResult, manifests: tuple[RunManifest, RunManifest]) -> str:
+    """The verdict word over every event compared: a trade when conditions moved both ways,
+    else the one way they moved, else whether the smallest change the comparison could have
+    seen was within the threshold the runs accepted (the threshold itself is named once the
+    comparison reports its limits for the test it used)."""
+    worse = sum(ev.n_worse for ev in multi.by_event.values())
+    safer = sum(ev.n_safer for ev in multi.by_event.values())
+    if (worse and safer) or len(multi.trades):
+        return "trade"
+    if worse:
+        return "worse"
+    if safer:
+        return "safer"
+    threshold = _threshold(manifests)
+    tops = [float(ev.max_mde_unchanged) for ev in multi.by_event.values()]
+    above = not tops or any(math.isnan(top) for top in tops) or max(tops) > threshold
+    return "too small to tell" if above else "no significant change"
+
+
+def _verdict_block(
+    io: _IO,
+    word: str,
+    sentence: str,
+    multi: MultiDiffResult,
+    a: str,
+    b: str,
+    idx: Index,
+    manifests: tuple[RunManifest, RunManifest],
+) -> None:
+    """The verdict line, then ``method``, ``before`` and ``after`` (the old run of a mixed pair
+    says who wrote it), one ``trade`` line per traded condition, and a blank line before the
+    report."""
+    io.line(f"{word}  {sentence}")
+    io.detail("method", multi.method)
+    writers = _old_writer(manifests)
+    for role, run_id in (("before", a), ("after", b)):
+        shown = idx.name_of(run_id)
+        io.detail(role, f"{shown}, {writers[role]}" if role in writers else shown)
+    for record in multi.trades.to_dict(orient="records"):
+        moved = [f"{event} fell" for event in record.get("safer_events", ())]
+        moved += [f"{event} rose" for event in record.get("worse_events", ())]
+        io.detail("trade", f"{_condition_text(record.get('config'))}: {', '.join(moved)}")
+    io.line()
+
+
+def _pair_title(idx: Index, a: str, b: str, events: Sequence[str]) -> str:
+    """The default title of a comparison: the two runs by name, then the events."""
+    return f"{idx.name_of(a)} vs {idx.name_of(b)}: {', '.join(events)}"
+
+
+def _report_next(
+    idx: Index, a: str, b: str, manifests: tuple[RunManifest, RunManifest], named: bool
+) -> list[str]:
+    """``diff``'s next step: the report over the runs' first two axes, naming the runs only when
+    they were typed."""
+    axes = list(manifests[0].axis_types)[:2]
+    if not axes:
+        return []
+    command = [_COMMAND, "report", *([idx.word_for(a), idx.word_for(b)] if named else [])]
+    command += ["--x", axes[0], *(["--y", axes[1]] if len(axes) > 1 else [])]
+    return [_join(command)]
+
+
 # ---------- shared helpers ----------
 
 
@@ -1247,6 +1462,7 @@ def _missing_flags_refusal(
     verb: str,
     runs: Sequence[str],
     argv: Sequence[str],
+    idx: Index,
     *,
     x_missing: bool,
     event_missing: bool,
@@ -1278,19 +1494,20 @@ def _missing_flags_refusal(
     )
     given = "and neither was given" if x_missing and event_missing else "which was not given"
     reason = f"; {_NEVER_INFERS[verb]}" if event_missing and verb in _NEVER_INFERS else ""
-    who = f"{runs[0]} and {runs[1]} carry" if len(runs) == 2 else f"{runs[0]} carries"
+    shown = [f'"{idx.name_of(r)}"' for r in runs]
+    who = f"{shown[0]} and {shown[1]} carry" if len(runs) == 2 else f"{shown[0]} carries"
     carried = []
     if verb in ("report", "serve"):
         carried.append(f"axes: {', '.join(axes) or 'none stored'}")
     carried.append(f"events: {', '.join(events) or 'none stored'}")
     message = f"{verb} requires {flags}, {given}{reason}. {who} {'; '.join(carried)}."
-    filled = [_COMMAND, *argv]
+    filled = [_COMMAND, *_named_argv(argv, idx)]
     if x_missing and axes:
         filled.extend(["--x", axes[0]])
     if event_missing and events:
         filled.extend(["--event", events[0]])
     fillable = (not x_missing or axes) and (not event_missing or events)
-    return _Refusal(message, [shlex.join(filled)] if fillable else [])
+    return _Refusal(message, [_join(filled)] if fillable else [])
 
 
 def _run_diffs(
@@ -1687,14 +1904,14 @@ def _recorded_max_mde(store: Store, resume: str | None) -> float | None:
     return float(recorded) if isinstance(recorded, (int, float)) else None
 
 
-def _confirm(ns: argparse.Namespace, io: _IO) -> None:
+def _confirm(ns: argparse.Namespace, io: _IO, idx: Index | None = None) -> None:
     """Ask once on stderr, read exactly one line; anything but y/yes declines. Never hang."""
     if ns.yes:
         return
     if not io.inp.isatty():
         raise _Refusal(
             "stdin is not a terminal, so the question after the plan cannot be asked",
-            [f"{shlex.join([_COMMAND, *ns.typed])} --yes"],
+            [f"{_join([_COMMAND, *(_named_argv(ns.typed, idx) if idx else ns.typed)])} --yes"],
         )
     io.err_write("Proceed? [y/N] ")
     io.err.flush()
@@ -1784,6 +2001,32 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             raise _Refusal(f"{names} does not apply to --backend burla")
     if ns.backend == "modal":
         _require_extra("modal")
+    idx = _index(root) if root.is_dir() else Index(str(root), [], {})
+    if ns.name is not None:
+        if ns.resume is not None:
+            raise _Refusal("--name names a new run; a resumed run keeps the name it has")
+        typed, ns.name = ns.name, ns.name.strip()
+        why = unfit(ns.name)
+        if why is not None:
+            shown = _look.one_line(typed) or typed
+            raise _Refusal(f'--name "{shown}" cannot name a run: {why}')
+        holders = idx.holders(ns.name)
+        if holders:
+            run_id = sorted(holders)[0]
+            raise _Refusal(
+                f'--name "{ns.name}": the run "{idx.name_of(run_id)}" ({run_id}) already answers '
+                "to it; give the new run another name",
+                [idx.listing()],
+            )
+    if ns.pair_with is not None:
+        ns.pair_with = _run_of(idx, ns.pair_with, io)
+    if ns.resume == _LATEST_PARTIAL:
+        partial = idx.partial
+        if not partial:
+            raise _Refusal(f"no partial run to resume in {root}", [_first_sweep(root)])
+        ns.resume = partial[0].run_id
+    elif ns.resume is not None:
+        ns.resume = _run_of(idx, ns.resume, io)
     spec_path = Path(ns.spec)
     spec = SweepSpec.load(spec_path)
     rollout: Any = None
@@ -1800,18 +2043,23 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     if ns.backend == "burla":
         burla_options = _burla_config(ns, spec_path)
     store = Store(root)
-    p: Plan = plan(
-        spec,
-        store,
-        backend=ns.backend,
-        run_salt=ns.salt,
-        pair_with=ns.pair_with,
-        resume=ns.resume,
-        import_path=ns.target,
-        max_mde_accepted=(
-            ns.max_mde if ns.max_mde is not None else _recorded_max_mde(store, ns.resume)
-        ),
-    )
+    try:
+        p: Plan = plan(
+            spec,
+            store,
+            backend=ns.backend,
+            run_salt=ns.salt,
+            pair_with=ns.pair_with,
+            resume=ns.resume,
+            import_path=ns.target,
+            max_mde_accepted=(
+                ns.max_mde if ns.max_mde is not None else _recorded_max_mde(store, ns.resume)
+            ),
+        )
+    except ExecutorError as exc:
+        # The planner names a run it refuses by its id; the user reads its name beside it.
+        raise _Refusal(_with_names(_look.plain_words(str(exc)), idx)) from exc
+    p = dataclasses.replace(p, name=ns.name)
     state.planned = len(p.pairs)
 
     # Describe, then decide, then ask. The reader who gets a refusal has already been shown
@@ -1833,6 +2081,8 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             raise
     else:
         block = preflight(p)
+    if p.resumed:
+        block = block.replace(f"Resuming {p.run_id}:", f'Resuming "{idx.name_of(p.run_id)}":')
     sentence = _plan_sentence(p, block)
     detail = [_look.reprint(line) for line in block.splitlines()]
     if not ns.json:
@@ -1841,6 +2091,7 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             io.line(f"  {line}")
     plan_payload: dict[str, Any] = {
         "run_id": p.run_id,
+        "run_name": _planned_name(idx, p, ns.name),
         "plan": {
             "rollouts": len(p.pairs),
             "cells": len(spec.configs),
@@ -1872,7 +2123,7 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         if ns.json:
             _write_json(io, "sweep", "plan", sentence, plan_payload, [])
         return 0
-    _confirm(ns, io)
+    _confirm(ns, io, idx)
 
     state.run_id = p.run_id
     progress = _Progress(io)
@@ -1894,12 +2145,23 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             on_progress=progress,
         )
     progress.finish()
-    return _sweep_result(ns, io, store, p, summary, plan_payload)
+    return _sweep_result(ns, io, root, store, p, summary, plan_payload)
+
+
+def _planned_name(idx: Index, p: Plan, given: str | None) -> str:
+    """The name the planned run goes by: a resumed run's own, the name given, or the name a
+    new run would be computed if it started now."""
+    if p.resumed:
+        return idx.name_of(p.run_id)
+    if given is not None:
+        return given
+    return idx.computed_for(p.spec.target_id, datetime.now(UTC)) or p.run_id
 
 
 def _sweep_result(
     ns: argparse.Namespace,
     io: _IO,
+    root: Path,
     store: Store,
     p: Plan,
     summary: RunSummary,
@@ -1908,6 +2170,14 @@ def _sweep_result(
     """The closing verdict of a sweep: ``done``, or ``stopped`` with exit 3 when it stopped
     short or every rollout errored."""
     run_id = summary.run_id
+    try:
+        idx = _index(root)
+    except _Refusal:
+        # the names file changed under the sweep: the run is still named by its id
+        idx = Index(str(root), [], {})
+    name = idx.name_of(run_id)
+    paired = "" if ns.pair_with is None else f', paired with "{idx.name_of(ns.pair_with)}"'
+    payload = {**payload, "run_id": run_id, "run_name": name}
     try:
         status = store.manifest(run_id).status
         tally = store.tally(run_id)
@@ -1926,7 +2196,7 @@ def _sweep_result(
     if not summary.complete:
         verdict = "stopped"
         sentence = (
-            f'{n(kept)} of {planned} rollouts kept in run "{run_id}" ({status}) '
+            f'{n(kept)} of {planned} rollouts kept in run "{name}" ({status}) '
             f"in {_look.fmt_duration(summary.wall_time)}"
         )
         nexts.append(f"{_COMMAND} sweep --resume")
@@ -1935,7 +2205,7 @@ def _sweep_result(
         verdict = "stopped"
         commonest = _commonest_error(store, run_id)
         sentence = (
-            f'every rollout errored in run "{run_id}": {n(no_outcome)} of {n(kept)}, '
+            f'every rollout errored in run "{name}": {n(no_outcome)} of {n(kept)}, '
             f"commonest {commonest or 'unknown'}"
         )
         if commonest is not None:
@@ -1944,8 +2214,8 @@ def _sweep_result(
     else:
         verdict = "done"
         sentence = (
-            f'{n(kept)} rollouts in run "{run_id}" ({status}) in '
-            f"{_look.fmt_duration(summary.wall_time)}"
+            f'{n(kept)} rollouts in run "{name}" ({status}) in '
+            f"{_look.fmt_duration(summary.wall_time)}{paired}"
         )
     details = [
         ("episodes with an outcome", n(with_outcome)),
@@ -1981,10 +2251,12 @@ def _sweep_result(
 
 
 def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
+    idx = _index(root)
+    a, b = _pair_of(idx, "diff", ns.runs, io)
     primary, others, manifests, frames = _run_diffs(
         Store(root),
-        ns.a,
-        ns.b,
+        a,
+        b,
         verb="diff",
         events=ns.event,
         method=ns.method,
@@ -2000,6 +2272,9 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         # one ``TreeResult``. Grown before anything is printed, so a knob the tree refuses is a
         # refusal with nothing on stdout.
         nested = _diff_tree(ns, primary, frames, manifests)
+    word = _diff_verdict(primary, manifests)
+    sentence = primary.headline().splitlines()[0]
+    nexts = _report_next(idx, a, b, manifests, bool(ns.runs))
     if ns.json:
         payload: Any = primary.to_json()
         if others:
@@ -2009,8 +2284,9 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
             payload = {primary.method: payload, **{m: d.to_json() for m, d in others.items()}}
         elif nested is not None:
             payload = {**payload, "omnibus": nested.root.to_json(), "tree": nested.to_json()}
-        _write_json(io, "diff", "ok", primary.headline().splitlines()[0], payload, [])
+        _write_json(io, "diff", word, sentence, payload, nexts)
         return 0
+    _verdict_block(io, word, sentence, primary, a, b, idx, manifests)
     with _look.rule10():
         io.write(primary.to_markdown())
         if others:
@@ -2028,6 +2304,9 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
             io.write(_cells_block(nested))
             io.write("\n")
             io.write(_bound_block(nested.bound))
+    for command in nexts:
+        io.write("\n")
+        io.next(command)
     return 0
 
 
@@ -2061,7 +2340,7 @@ def _diff_tree(
         raise
 
 
-def _prepare_out_dir(ns: argparse.Namespace, default: str) -> Path:
+def _prepare_out_dir(ns: argparse.Namespace, default: str, idx: Index | None = None) -> Path:
     """Refuse a non-empty ``--out`` before any work unless ``--force``; nothing is created yet."""
     out_dir = Path(ns.out) if ns.out else Path(default)
     if out_dir.exists():
@@ -2070,7 +2349,9 @@ def _prepare_out_dir(ns: argparse.Namespace, default: str) -> Path:
         if any(out_dir.iterdir()) and not ns.force:
             raise _Refusal(
                 f"--out {out_dir} exists and is not empty",
-                [shlex.join([_COMMAND, *_ns_argv(ns), "--force"])],
+                [_join([
+                    _COMMAND, *(_named_argv(_ns_argv(ns), idx) if idx else _ns_argv(ns)), "--force",
+                ])],
             )
     return out_dir
 
@@ -2136,31 +2417,40 @@ def _write_report_files(
 
 
 def _cmd_report(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    """The positional arity picks the verb: two run ids diff, one run id is a survival report."""
+    """The positional arity picks the verb: two runs (or none) compare, one run is a survival
+    report."""
     ns.typed = [a for a in state.argv]
-    runs: list[str] = list(ns.runs)
-    if len(runs) not in (1, 2):
+    words: list[str] = list(ns.runs)
+    if len(words) not in (0, 1, 2):
         raise _Usage(
-            f"report takes one or two run ids, got {len(runs)}: {_REPORT_FORMS}",
+            f"report takes one or two runs, or none, got {len(words)}: {_REPORT_FORMS}",
             [f"{_COMMAND} report --help"],
         )
+    idx = _index(root)
+    runs = (
+        [_run_of(idx, words[0], io)]
+        if len(words) == 1
+        else list(_pair_of(idx, "report", words, io))
+    )
     if ns.x is None:
         raise _missing_flags_refusal(
-            Store(root), "report", runs, state.argv, x_missing=True, event_missing=False
+            Store(root), "report", runs, state.argv, idx, x_missing=True, event_missing=False
         )
     if len(runs) == 2:
-        return _report_pair(ns, io, root, runs[0], runs[1])
-    return _report_run(ns, io, root, runs[0])
+        return _report_pair(ns, io, root, runs[0], runs[1], idx)
+    return _report_run(ns, io, root, runs[0], idx)
 
 
-def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) -> int:
+def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str, idx: Index) -> int:
     stray = [f"--{name}" for name in _RUN_ONLY_FLAGS if getattr(ns, name) is not None]
     if stray:
         raise _Refusal(
             f"{', '.join(stray)}: single-run flag{'s' if len(stray) > 1 else ''}; a diff report "
             f"takes its horizon from the two runs ({_REPORT_FORMS})"
         )
-    out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(a)}-vs-{_slug(b)}")
+    out_dir = _prepare_out_dir(
+        ns, f"./prove-report-{_slug(idx.name_of(a))}-vs-{_slug(idx.name_of(b))}", idx
+    )
     declaration = None if ns.paired is None else _paired_declaration(ns.paired, a, b)
     fixed = _parse_pairs(ns.fix, "--fix")
     method = _DEFAULT_METHOD if ns.method is None else ns.method
@@ -2178,7 +2468,7 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
         all_methods=ns.methods == "all",
     )
     spec = ReportSpec(
-        title=ns.title if ns.title else f"{a} vs {b}: {', '.join(multi.events)}",
+        title=ns.title if ns.title else _pair_title(idx, a, b, multi.events),
         x_axis=ns.x,
         y_axis=ns.y,
         fixed=fixed,
@@ -2225,16 +2515,55 @@ def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str) ->
                 declarations=declarations,
             )
         )
+    for built in {id(report): report, id(receipt): receipt}.values():
+        _name_provenance(built.provenance, manifests, idx)
     bundle = None if declaration is None else _bundle(store, declaration)
     written = _write_report_files(io, out_dir, report, receipt, bundle)
     if ns.json:
         payload = {"out": str(out_dir), "wrote": [str(p) for p in written], **multi.to_json()}
-        _write_json(io, "report", "ok", f"wrote {out_dir} ({len(written)} files)", payload, [])
+        _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
         return 0
+    _wrote(io, out_dir, written)
+    io.line()
     _write_summary(io, multi)
-    for path in written:
-        io.line(str(path))
     return 0
+
+
+def _wrote_sentence(out_dir: Path, written: Sequence[Path]) -> str:
+    count = len(written)
+    return f"wrote {out_dir} ({_look.fmt_count(count)} file{'' if count == 1 else 's'})"
+
+
+def _wrote(io: _IO, out_dir: Path, written: Sequence[Path]) -> None:
+    """``ok  wrote <folder> (N files)``, then one ``wrote`` detail line per file."""
+    io.line(f"ok  {_wrote_sentence(out_dir, written)}")
+    for path in written:
+        io.detail("wrote", str(path))
+
+
+def _name_provenance(
+    provenance: dict[str, object], manifests: Sequence[RunManifest], idx: Index
+) -> None:
+    """For a pair of one run written under the old name and one this build wrote, a provenance
+    line per old run saying which run that was, by name, beside the pair's run ids."""
+    if len(manifests) != 2:
+        return
+    writers = _old_writer((manifests[0], manifests[1]))
+    added = {
+        f"run_{'a' if role == 'before' else 'b'}": f'"{idx.name_of(m.run_id)}", {writers[role]}'
+        for role, m in zip(("before", "after"), manifests, strict=True)
+        if role in writers
+    }
+    if not added:
+        return
+    items = list(provenance.items())
+    provenance.clear()
+    for key, value in items:
+        provenance[key] = value
+        if key == "run_salt":
+            provenance.update(added)
+            added = {}
+    provenance.update(added)
 
 
 def _paired_declaration(path: str, a: str, b: str) -> Declaration:
@@ -2298,12 +2627,11 @@ def _cmd_paired(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> i
         for name, artifact in bundle.artifacts.items():
             (staging / name).write_text(_artifact_text(artifact), encoding="utf-8")
             written.append(out_dir / name)
-    for path in written:
-        io.line(str(path))
+    _wrote(io, out_dir, written)
     return 0
 
 
-def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
+def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Index) -> int:
     # Each named as it was typed: --max-group-mde, not the namespace's max_group_mde.
     given = [
         f"--{name.replace('_', '-')}" for name in _DIFF_ONLY_FLAGS if getattr(ns, name) is not None
@@ -2313,7 +2641,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
             f"{', '.join(given)}: diff-only flag{'s' if len(given) > 1 else ''}; "
             f"a single-run report compares nothing ({_REPORT_FORMS})"
         )
-    out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(run)}")
+    out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(idx.name_of(run))}", idx)
     fixed = _parse_pairs(ns.fix, "--fix")
 
     store = Store(root)
@@ -2347,7 +2675,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
     competing = list(competing_set(df))
     cells = cell_table(df, events[0], horizon=horizon, method="aj", events=competing)
     spec = ReportSpec(
-        title=ns.title if ns.title else f"{run}: {', '.join(events)}",
+        title=ns.title if ns.title else f"{idx.name_of(run)}: {', '.join(events)}",
         x_axis=ns.x,
         y_axis=ns.y,
         fixed=fixed,
@@ -2386,23 +2714,24 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str) -> int:
             "out": str(out_dir),
             "wrote": [str(p) for p in written],
             "run_id": run,
+            "run_name": idx.name_of(run),
             "events": list(events),
             "non_event": non_event,
             "horizon": horizon,
         }
-        _write_json(io, "report", "ok", f"wrote {out_dir} ({len(written)} files)", payload, [])
+        _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
         return 0
+    _wrote(io, out_dir, written)
+    io.line()
     if inferred:
         io.line(
             f"inferred: no event was given, so the event set is {', '.join(events)}; "
             f"the non-event is {non_event}, the most frequent outcome"
         )
     io.line(
-        f"{run}: survival report over {', '.join(events)} at horizon "
+        f'"{idx.name_of(run)}": survival report over {", ".join(events)} at horizon '
         f"{_look.fmt_num(report.provenance['horizon'])}"
     )
-    for path in written:
-        io.line(str(path))
     return 0
 
 
@@ -2414,19 +2743,32 @@ def _check_sentence(multi: MultiDiffResult, fail_on: str) -> str:
             f"{event}: {_look.fmt_count(ev.n_worse)} worse, {_look.fmt_count(ev.n_safer)} safer "
             f"in {_look.fmt_count(len(ev.cells))} conditions"
         )
-    return f"{'; '.join(parts)}; fail on {fail_on}"
+    failing = []
+    for event in multi.events:
+        for record in multi.by_event[event].cells.to_dict(orient="records"):
+            bad = record.get("verdict") == "worse" or (
+                fail_on == "any" and record.get("verdict") in ("worse", "safer")
+            )
+            if bad:
+                condition = _condition_text(record.get("config"))
+                if condition not in failing:
+                    failing.append(condition)
+    tail = f"; failed in {', '.join(failing)}" if failing else ""
+    return f"{'; '.join(parts)}; fail on {fail_on}{tail}"
 
 
 def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     store = Store(root)
+    idx = _index(root)
+    a, b = _pair_of(idx, "check", ns.runs, io)
     if ns.event is None:
         raise _missing_flags_refusal(
-            store, "check", [ns.a, ns.b], state.argv, x_missing=False, event_missing=True
+            store, "check", [a, b], state.argv, idx, x_missing=False, event_missing=True
         )
-    multi, _, _, _ = _run_diffs(
+    multi, _, manifests, _ = _run_diffs(
         store,
-        ns.a,
-        ns.b,
+        a,
+        b,
         verb="check",
         events=ns.event,
         method=ns.method,
@@ -2440,9 +2782,7 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         payload = {"passed": passed, "fail_on": ns.fail_on, **multi.to_json()}
         _write_json(io, "check", verdict, sentence, payload, [])
         return 0 if passed else 4
-    io.line(f"{verdict}  {sentence}")
-    io.detail("method", multi.method)
-    io.line()
+    _verdict_block(io, verdict, sentence, multi, a, b, idx, manifests)
     _write_summary(io, multi)
     return 0 if passed else 4
 
@@ -2454,12 +2794,14 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
     socket in existence, and ``--json`` returns having bound nothing at all. Nothing on this
     path writes to the store, to the cwd, or to a temp file.
     """
-    runs: list[str] = list(ns.runs)
-    if len(runs) != 2:
+    words: list[str] = list(ns.runs)
+    if len(words) not in (0, 2):
         raise _Usage(
-            f"serve takes two run ids, got {len(runs)}: {_SERVE_FORM}", [f"{_COMMAND} serve --help"]
+            f"serve takes two runs or none, got {len(words)}: {_SERVE_FORM}",
+            [f"{_COMMAND} serve --help"],
         )
-    a, b = runs[0], runs[1]
+    idx = _index(root)
+    a, b = _pair_of(idx, "serve", words, io)
     store = Store(root)
     if ns.x is None or ns.event is None:
         raise _missing_flags_refusal(
@@ -2467,6 +2809,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             "serve",
             [a, b],
             state.argv,
+            idx,
             x_missing=ns.x is None,
             event_missing=ns.event is None,
         )
@@ -2482,7 +2825,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         all_methods=False,
     )
     spec = ReportSpec(
-        title=ns.title if ns.title else f"{a} vs {b}: {', '.join(multi.events)}",
+        title=ns.title if ns.title else _pair_title(idx, a, b, multi.events),
         x_axis=ns.x,
         y_axis=ns.y,
         fixed=fixed,
@@ -2497,6 +2840,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         observations=(_observation_counts(store, a), _observation_counts(store, b)),
         declarations=(_declaration_check(store, a), _declaration_check(store, b)),
     )
+    _name_provenance(report.provenance, manifests, idx)
     # After the report and before the structure: the report's axis check refuses an unknown
     # ``--x`` first, so no refusal spends a tree, and every tree refusal still fires before
     # anything binds. One call, one draw, on the frames ``_run_diffs`` already read.
@@ -2514,14 +2858,18 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         store_root=str(root),
     )
     if ns.json:
-        sentence = f'the page comparing "{a}" with "{b}", bound nowhere'
+        sentence = f'the page comparing "{idx.name_of(a)}" with "{idx.name_of(b)}", bound nowhere'
+        structure = _add_names(structure, idx)
         _write_json(io, "serve", "ok", sentence, structure, None)
         return 0
 
     def announce(srv: Any) -> None:
         # Once the socket is up: an ephemeral port nobody is told about is a page nobody can
         # open. Flushed because stdout is block buffered when it is a pipe.
-        io.line(f"http://{_HOST}:{srv.server_address[1]}/")
+        io.line(
+            f'ok  serving "{idx.name_of(a)}" against "{idx.name_of(b)}" at '
+            f"http://{_HOST}:{srv.server_address[1]}/ (Ctrl-C stops)"
+        )
         io.out.flush()
 
     serve_page(render_html(structure), on_bind=announce)
@@ -2571,10 +2919,13 @@ def _stored_trace(meta: Any) -> Trace | None:
 
 def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     store = Store(root)
+    idx = _index(root)
+    ns.run = _run_of(idx, ns.run, io)
+    name = idx.name_of(ns.run)
     manifest = store.manifest(ns.run)
     if ns.event is None:
         raise _missing_flags_refusal(
-            store, "inspect", [ns.run], state.argv, x_missing=False, event_missing=True
+            store, "inspect", [ns.run], state.argv, idx, x_missing=False, event_missing=True
         )
     check = _declaration_check(store, ns.run)
     provenance = [] if check is None else _provenance_lines(check.provenance())
@@ -2593,12 +2944,13 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
         ]
         rows = rows.loc[keep]
     rows = rows.sort_values(["config_hash", "replicate_index"], kind="stable")
+    total = len(rows)
     if ns.limit is not None:
         rows = rows.head(max(ns.limit, 0))
     if rows.empty:
-        sentence = f'no rows with outcome or error "{ns.event}" in run "{ns.run}"'
+        sentence = f'no rows with outcome or error "{ns.event}" in run "{name}"'
         if ns.json:
-            empty = {"run_id": ns.run, "event": ns.event, "episodes": []}
+            empty = {"run_id": ns.run, "run_name": name, "event": ns.event, "episodes": []}
             _write_json(io, "inspect", "ok", sentence, empty, [])
             return 0
         io.line(f"ok  {sentence}")
@@ -2618,8 +2970,8 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
     else:
         module, fn = "your_module", "rollout"
     sentence = (
-        f"{_look.fmt_count(len(rows))} episode{'' if len(rows) == 1 else 's'} with outcome or "
-        f'error "{ns.event}" in run "{ns.run}"'
+        f"{_look.fmt_count(len(rows))} of {_look.fmt_count(total)} episodes with outcome or "
+        f'error "{ns.event}" in run "{name}"'
     )
     if ns.json:
         episodes = []
@@ -2635,6 +2987,7 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
             })
         payload = {
             "run_id": ns.run,
+            "run_name": name,
             "event": ns.event,
             "episodes": episodes,
             "reproduce": {
@@ -2712,13 +3065,23 @@ def _version_shown(m: RunManifest) -> str:
     return version_as_recorded(m.poisson_prove_version) if m.written_by else m.poisson_prove_version
 
 
+def _created(created_at: str) -> str:
+    """A run's ``created_at`` as the table prints it: UTC, with seconds and ``Z``."""
+    at_ = started(created_at)
+    return created_at if at_ is None else at_.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
     store = Store(root)
+    idx = _index(root)
     entries: list[dict[str, Any]] = []
-    for run_id in store.runs():
+    for named in idx.runs:
+        run_id = named.run_id
         m = store.manifest(run_id)
         entries.append({
+            "number": named.number,
             "run_id": run_id,
+            "run_name": named.name,
             "status": m.status,
             "backend": m.backend,
             "target_id": m.target_id,
@@ -2729,32 +3092,40 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
             "poisson_prove_version": _version_shown(m),
         })
     count = _look.fmt_count(len(entries))
-    sentence = f"{count} runs in {root}" if entries else f"no runs in {root}"
+    plural = "run" if len(entries) == 1 else "runs"
+    sentence = f"{count} {plural} in {root}" if entries else f"no runs in {root}"
     nexts = [] if entries else [_first_sweep(root)]
     if ns.json:
         _write_json(io, "runs", "ok", sentence, {"store": str(root), "runs": entries}, nexts)
         return 0
-    io.line(f"store: {root}")
-    # ``no_outcome``, never ``errored``: the number says whether the executor stored an
-    # outcome, not whether the run was healthy.
-    header = ("run_id", "status", "backend", "target_id", "t_unit", "rows", "no_outcome")
+    io.line(f"ok  {sentence}")
+    if idx.unreadable:
+        io.err_line(
+            f"note: {_look.fmt_count(len(idx.unreadable))} of this store's runs could not be "
+            f"read and are not listed; each has a manifest.json that is damaged or carries no "
+            f"start time: {', '.join(idx.unreadable)}"
+        )
+    if not entries:
+        for command in nexts:
+            io.next(command)
+        return 0
+    header = (
+        "#", "name", "id", "status", "backend", "target", "rows", "rows without an outcome",
+        "created",
+    )
     lines: list[tuple[str, ...]] = [header]
     for entry in entries:
         lines.append((
+            "" if entry["number"] is None else str(entry["number"]), str(entry["run_name"]),
             str(entry["run_id"]), str(entry["status"]), str(entry["backend"]),
-            str(entry["target_id"]), str(entry["t_unit"]), _look.fmt_count(entry["rows"]),
-            _look.fmt_count(entry["no_outcome"]),
+            str(entry["target_id"]), _look.fmt_count(entry["rows"]),
+            _look.fmt_count(entry["no_outcome"]), _created(str(entry["created_at"])),
         ))
     widths = [max(len(line[i]) for line in lines) for i in range(len(header))]
+    io.line()
     for line in lines:
         cells = (cell.ljust(w) for cell, w in zip(line, widths, strict=True))
         io.line("  ".join(cells).rstrip())
-    if not entries:
-        io.err_line(
-            f"note: no runs in {root}. No directory under it holds a manifest.json; "
-            f"{_store_source(ns)}."
-        )
-        io.err_line(f"  next: {_first_sweep(root)}")
     return 0
 
 

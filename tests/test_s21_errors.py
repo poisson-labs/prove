@@ -228,7 +228,8 @@ HOLES_ID = "prove-holes"
 INDEX_ID = "prove-cells"
 HOLE_MESSAGE = "No comparable data for this cell."
 NONE_TEXT = "none"
-RUNS_HEADER = ("run_id", "status", "backend", "target_id", "t_unit", "rows", "no_outcome")
+# PF2 (spec section 4.3/5.3): runs prints these nine columns, newest first.
+RUNS_HEADER = ("#", "name", "id", "status", "backend", "target", "rows", "rows without an outcome", "created")
 PUBLIC_STORE_METHODS = {
     "create_run", "manifest", "mark_complete", "runs", "append", "read", "missing", "count",
     "tally",
@@ -360,6 +361,32 @@ def run_cli(argv: Sequence[str]) -> Result:
     out, err = StringIO(), StringIO()
     code = cli.main(list(argv), stdout=out, stderr=err, stdin=StringIO())
     return Result(code, out.getvalue(), err.getvalue())
+
+
+DIFF_VERDICT_WORDS = frozenset({
+    "worse", "safer", "trade", "no significant change", "too small to tell", "mixed", "higher", "lower",
+})
+
+
+def run_names(root: Path) -> dict[str, str]:
+    """PF2 (spec section 4.3/5.3): every run has a name; ``runs --json`` maps each id to it."""
+    r = run_cli(["--store", str(root), "runs", "--json"])
+    assert r.code == 0, r.text
+    return {entry["run_id"]: entry["run_name"] for entry in json.loads(r.out)["runs"]}
+
+
+def after_verdict_block(out: str, name_a: str, name_b: str) -> str:
+    """PF2 (spec section 4.3/5.3): ``diff`` prints a verdict block first -- the verdict line, then
+    ``  method``, ``  before <name A>``, ``  after <name B>`` (and any ``  trade`` lines) -- then one
+    blank line, then the text as before. Check the block's shape and return what follows it."""
+    block, sep, rest = out.partition("\n\n")
+    assert sep, out
+    lines = block.split("\n")
+    assert lines[0].split("  ")[0] in DIFF_VERDICT_WORDS, out
+    assert [line.split("  ")[1] for line in lines[1:4]] == ["method", "before", "after"], out
+    assert lines[2] == f"  before  {name_a}" and lines[3] == f"  after  {name_b}", out
+    assert all(line.startswith("  trade  ") for line in lines[4:]), out
+    return rest
 
 
 def tripwire_serve(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -1411,11 +1438,15 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     md_n, block_n = len(md.splitlines()), len(block.splitlines())
     r = run_cli(diff_argv(syn_root, "--method", "fisher_bh"))
     assert r.code == 0, r.text
-    head = "".join(r.out.splitlines(keepends=True)[: md_n + 1 + block_n])
+    # PF2 (spec section 4.3/5.3): diff's stdout opens with the verdict block naming both runs; the
+    # text as before follows the first blank line, and the prefix and ordering are read there.
+    names = run_names(syn_root)
+    body = after_verdict_block(r.out, names[SYN_A], names[SYN_B])
+    head = "".join(body.splitlines(keepends=True)[: md_n + 1 + block_n])
     assert rendered_problems(shortened(md + "\n" + block), head, "diff.md") == [], r.out
     every = run_cli(diff_argv(syn_root, "--methods", "all"))
     assert every.code == 0, every.text
-    lines = every.out.splitlines(keepends=True)
+    lines = after_verdict_block(every.out, names[SYN_A], names[SYN_B]).splitlines(keepends=True)
     assert rendered_problems(shortened(md), "".join(lines[:md_n]), "diff.md") == [], every.out
     # > and not >=: the method table sits between the markdown and the block, so the block
     # cannot begin where the markdown ends.
@@ -1521,7 +1552,14 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
     # The heatmap's labels are printed under rule 10 by the command line (spec section 5.4): the
     # frozen digest now holds over the builder's own SVG, and the written file carries its cells,
     # geometry and numbers.
-    assert rendered_problems(texts["heatmap.svg"], (out / "heatmap.svg").read_text(encoding="utf-8"), "heatmap.svg") == []
+    # PF2 (spec section 4.3/5.3): the default title names the two runs by name instead of by id;
+    # the builder's SVG with only its title moved to the names is what the command writes.
+    names = run_names(GO1_ROOT)
+    old_title, new_title = f"{GO1_A} vs {GO1_B}: fell", f"{names[GO1_A]} vs {names[GO1_B]}: fell"
+    written = (out / "heatmap.svg").read_text(encoding="utf-8")
+    assert new_title in written and old_title not in written
+    assert texts["heatmap.svg"].count(old_title) >= 1
+    assert rendered_problems(texts["heatmap.svg"].replace(old_title, new_title), written, "heatmap.svg") == []
     for name, text in texts.items():
         normalised = text if name == "heatmap.svg" else as_0_0_1_wrote_it(text)
         assert hashlib.sha256(normalised.encode("utf-8")).hexdigest() == E14_SHA256[name], name
@@ -1922,7 +1960,44 @@ def test_e24_serve_json_on_the_synthetic_pair_has_holes_with_the_seven_causes(sy
     # serve --json adds verdict and sentence after schema (spec section 5.6).
     assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
     parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence")}
+    # PF2 (spec section 4.3/5.3): serve --json carries run_name beside every run_id; each is the
+    # run's name, and with them taken out the structure is the library's as before.
+    seen: list[tuple[str, str]] = []
+    parsed = without_run_names(parsed, seen)
+    names = run_names(syn.root)
+    assert sorted(seen) == sorted((rid, names[rid]) for rid in (SYN_A, SYN_B)), seen
     assert parsed == json.loads(json.dumps(syn.structure, allow_nan=False))
+
+
+def without_run_names(node: Any, seen: list[tuple[str, str]]) -> Any:
+    """Drop every ``run_name`` that sits beside a ``run_id``, recording the (id, name) pairs; a
+    ``run_name`` without a ``run_id`` beside it is left in place, so the comparison still sees it."""
+    if isinstance(node, dict):
+        out = {}
+        for k, v in node.items():
+            if k == "run_name" and "run_id" in node:
+                seen.append((node["run_id"], v))
+                continue
+            out[k] = without_run_names(v, seen)
+        return out
+    if isinstance(node, list):
+        return [without_run_names(v, seen) for v in node]
+    return node
+
+
+def runs_table(r: Result) -> tuple[tuple[str, ...], list[dict[str, str]]]:
+    """PF2 (spec section 4.3/5.3): ``runs`` prints ``ok  N runs in <store>``, a blank line, then a
+    table whose cells are padded to their column and joined by two spaces; names and the header
+    ``rows without an outcome`` hold single spaces, so a row is cut at the header's column starts."""
+    assert r.lines[0].startswith("ok  "), r.out
+    header_line = r.lines[1]
+    starts = [m.start() for m in re.finditer(r"\S+(?: \S+)*", header_line)]
+    header = tuple(header_line[a:b].strip() for a, b in zip(starts, [*starts[1:], None], strict=True))
+    rows = [
+        dict(zip(header, (line[a:b].strip() for a, b in zip(starts, [*starts[1:], None], strict=True)), strict=True))
+        for line in r.lines[2:]
+    ]
+    return header, rows
 
 
 def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(syn_root: Path, three_root: Path) -> None:
@@ -1930,25 +2005,34 @@ def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(
         store = Store(root)
         r = run_cli(["--store", str(root), "runs"])
         assert r.code == 0, r.text
-        header = r.lines[1].split()
-        assert tuple(header) == RUNS_HEADER
-        assert header[6] == "no_outcome"
-        rows = [line.split() for line in r.lines[2:]]
-        assert [row[0] for row in rows] == store.runs()
+        # PF2 (spec section 4.3/5.3): the table's columns are now #, name, id, status, backend,
+        # target, rows, rows without an outcome, created, newest first; the store's no_outcome
+        # count is the "rows without an outcome" column and the row count the "rows" column.
+        header, rows = runs_table(r)
+        assert header == RUNS_HEADER
+        assert header[7] == "rows without an outcome"
+        names = run_names(root)
+        assert sorted(row["id"] for row in rows) == sorted(store.runs())
+        newest_first = sorted(store.runs(), key=lambda rid: store.manifest(rid).created_at, reverse=True)
+        assert [row["id"] for row in rows] == newest_first
         for row in rows:
-            assert len(row) == 7, row
+            assert row["name"] == names[row["id"]], row
+            assert row["status"] == store.manifest(row["id"]).status, row
             # Counts carry thousands separators in text (spec section 5.4, rule 10).
-            assert row[6] == f"{store.tally(row[0]).no_outcome:,}", row
-            assert row[5] == f"{store.count(row[0]):,}", row
+            assert row["rows without an outcome"] == f"{store.tally(row['id']).no_outcome:,}", row
+            assert row["rows"] == f"{store.count(row['id']):,}", row
 
 
 def test_e25_a_run_of_three_errored_rows_prints_three(three_root: Path) -> None:
     r = run_cli(["--store", str(three_root), "runs"])
     assert r.code == 0, r.text
-    fields = r.lines[2].split()
-    assert fields[0] == "three"
-    assert fields[6] == "3"
-    assert fields[5] == "5"
+    # PF2 (spec section 4.3/5.3): the run is found by its id column in the new table.
+    _, rows = runs_table(r)
+    assert len(rows) == 1
+    fields = rows[0]
+    assert fields["id"] == "three"
+    assert fields["rows without an outcome"] == "3"
+    assert fields["rows"] == "5"
 
 
 def test_e26_every_errored_row_is_on_the_page_exactly_once(syn_serve_json: Served, syn_root: Path) -> None:

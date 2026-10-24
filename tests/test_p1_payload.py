@@ -942,7 +942,9 @@ def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_a
     }, table
     assert "| method | event | pairing |" in go1_cli["diff methods all"]
     assert go1_built.multi.headline() == GO1_HEADLINE
-    assert go1_cli["diff"].startswith(GO1_HEADLINE.splitlines()[0]) and GO1_HEADLINE in go1_cli["diff"]
+    # PF2 (spec section 5.3): diff's verdict block comes first; the report after its blank line
+    # starts with the headline as before.
+    assert go1_cli["diff"].partition("\n\n")[2].startswith(GO1_HEADLINE.splitlines()[0]) and GO1_HEADLINE in go1_cli["diff"]
     # check's verdict is now its first stdout line, passed or failed (spec section 5.3).
     assert go1_cli["check"].startswith("passed  ") and GO1_HEADLINE in go1_cli["check"], go1_cli["check"]
     assert GO1_HEADLINE in go1_cli["report"] and GO1_HEADLINE in go1_cli["report.md"] and GO1_HEADLINE in go1_built.md

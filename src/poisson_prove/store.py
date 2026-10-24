@@ -281,6 +281,8 @@ class RunManifest:
     #: of run identity beside ``t_unit`` and ``run_salt``. A manifest written before A10 has no
     #: key and reads back ``None``; no ``_SCHEMA_VERSION`` bump, the version gates the rows.
     declared: Declaration | None = None
+    #: The name given at sweep time, or ``None``.
+    name: str | None = None
 
     @property
     def written_by(self) -> str | None:
@@ -318,6 +320,7 @@ class RunManifest:
             "poisson_prove_version": self.poisson_prove_version,
             "schema_version": self.schema_version,
             "declared": None if self.declared is None else self.declared.to_dict(),
+            **({} if self.name is None else {"name": self.name}),
         }
 
     @classmethod
@@ -348,6 +351,7 @@ class RunManifest:
             poisson_prove_version=str(version),
             schema_version=d.get("schema_version", _SCHEMA_VERSION),
             declared=None if declared is None else Declaration.from_dict(declared),
+            name=d.get("name") if isinstance(d.get("name"), str) else None,
         )
         if written_by is not None:
             object.__setattr__(manifest, "_written_by", written_by)

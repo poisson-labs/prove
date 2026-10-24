@@ -471,6 +471,28 @@ def normalise(text: str, run_id: str) -> str:
     return text.replace(run_id, "RUN")
 
 
+def computed_name(root: Path, run_id: str) -> str:
+    """PF2 (spec section 4.3): the target id up to its first `/`, the UTC date of created_at, then
+    a letter in creation order among that target's runs that day."""
+    store = Store(root)
+    manifests = sorted((store.manifest(r) for r in store.runs()), key=lambda m: m.created_at)
+    stems = [f"{m.target_id.split('/')[0]} {m.created_at[:10]}" for m in manifests]
+    i = [m.run_id for m in manifests].index(run_id)
+    return f"{stems[i]} {'abcdefghijklmnopqrstuvwxyz'[stems[:i].count(stems[i])]}"
+
+
+def split_verdict(text: str, root: Path, run_id: str) -> str:
+    """PF2 (spec section 4.3): inspect's first line names the run by its name, which differs
+    between two runs of one store; check it names this run, and return everything after it."""
+    first, _, rest = text.partition("\n")
+    rows = 2 * len(TASKS)  # the two failing rows of each task, as fail_span_count counts them
+    assert first == (
+        f'ok  {rows} of {rows} episodes with outcome or error "{EVENT}" '
+        f'in run "{computed_name(root, run_id)}"'
+    ), first
+    return rest
+
+
 def test_r7_inspect_opens_a_run_stored_before_a8a_and_prints_every_span_of_the_failing_rows(root: Path) -> None:
     code, out, err = inspect_run(root, "old")
     assert code == 0, err
@@ -484,7 +506,8 @@ def test_r7_what_it_prints_is_what_the_current_writers_run_of_the_same_traces_pr
     code, twin, err = inspect_run(root, "twin")
     assert code == 0, err
     assert len(SPAN_LINE.findall(twin)) == fail_span_count()
-    assert normalise(old, "old") == normalise(twin, "twin")
+    # PF2 (spec section 4.3): the verdict line names each run by its own name; all after it agrees.
+    assert normalise(split_verdict(old, root, "old"), "old") == normalise(split_verdict(twin, root, "twin"), "twin")
 
 
 def test_r7_it_prints_no_observation_line_because_an_old_span_carries_no_stamp(root: Path) -> None:
@@ -540,7 +563,8 @@ def test_r8_inspect_prints_every_span_of_an_old_trace_inside_meta(root: Path) ->
     assert code == 0, err
     assert len(SPAN_LINE.findall(out)) == fail_span_count()
     _, twin, _ = inspect_run(root, "twin")
-    assert normalise(out, "meta-old") == normalise(twin, "twin")
+    # PF2 (spec section 4.3): the verdict line names each run by its own name; all after it agrees.
+    assert normalise(split_verdict(out, root, "meta-old"), "meta-old") == normalise(split_verdict(twin, root, "twin"), "twin")
 
 
 def test_r8_inspect_prints_no_trace_lines_and_no_error_for_what_is_no_trace_inside_meta(root: Path) -> None:

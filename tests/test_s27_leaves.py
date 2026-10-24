@@ -166,6 +166,10 @@ PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
+# PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
+# created_at, a letter); serve names the Go1 runs by these.
+GO1_NAME_A = "go1-g2-converged@20260813T155006Z 2026-09-03 a"
+GO1_NAME_B = "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a"
 TREE_SOURCE = PACKAGE / "tree.py"
 CLI_SOURCE = PACKAGE / "cli.py"
 DIFF_SOURCE = PACKAGE / "diff.py"
@@ -329,9 +333,12 @@ E14_SHA256 = {
 # version field put back before their Go1 digests). Read off the two files after every other move.
 # Re-minted for the command line's new look (front-door spec sections 5.2 to 5.6 and 14): both files
 # moved their CLI assertions. Read off the two files after every other move, not predicted.
+# Re-minted again for run names (front-door spec sections 4.3 and 5.3): both files moved their
+# serve --json digests to compare with the names put back to ids. Read off the two files after
+# every other move, not predicted.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "87043026907f0f7de944cc633afbaebd374d1d15269b9171f0f340b05b5703c8",
-    "tests/test_s26_fault_lines.py": "6954c4ed1b9566294597f31138aed4a4d9aa751db2e1e170bf40fd5dc860c4df",
+    "tests/test_s25_root.py": "559d23e24a955c6abade344cc93750f68f3cf43629afe3f8f0ba65b08ef5d6b2",
+    "tests/test_s26_fault_lines.py": "73d4b2797d165e75db1df35dc18c517bbbae9c23add06b6fa9392a944eba78b6",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -1058,6 +1065,31 @@ def property_tree(case: Any, depth: int) -> Any:
 
 
 # ---------- L1: the literals ----------
+
+
+def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
+    """PF2 (spec section 4.3): ``serve --json`` on Go1 moves in two places only: ``run_name`` beside
+    each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
+    the figure's title line). First assert each is there as PF2 writes it and nowhere else the
+    digest reads, then put the structure back as it was before names (no ``run_name``, the title by
+    id) so the frozen digest still guards everything else."""
+    arms = {}
+    for role, run_id, name in (("a", GO1_A, GO1_NAME_A), ("b", GO1_B, GO1_NAME_B)):
+        arm = structure["pair"][role]
+        keys = list(arm)
+        assert (arm["run_id"], arm.get("run_name")) == (run_id, name), arm
+        assert keys.index("run_name") == keys.index("run_id") + 1, keys
+        arms[role] = {k: v for k, v in arm.items() if k != "run_name"}
+    named, by_id = f"{GO1_NAME_A} vs {GO1_NAME_B}: {events}", f"{GO1_A} vs {GO1_B}: {events}"
+    assert structure["view"]["title"] == named, structure["view"]["title"]
+    line = f'font-size="13">{named}</text>'
+    assert structure["heatmap_svg"].count(line) == 1, structure["heatmap_svg"][:600]
+    return {
+        **structure,
+        "pair": {**structure["pair"], **arms},
+        "view": {**structure["view"], "title": by_id},
+        "heatmap_svg": structure["heatmap_svg"].replace(line, f'font-size="13">{by_id}</text>'),
+    }
 
 
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
@@ -1967,6 +1999,9 @@ def test_l20_check_and_serve_on_go1_print_the_same_bytes_and_structure(go1: Any)
     assert code == 0 and without_notes(err) == "", err
     # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
     structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence")}
+    # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
+    # then put back as before names, so the digest below still guards everything else.
+    structure = structure_as_ids_named_it(structure, "fell")
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
     normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256

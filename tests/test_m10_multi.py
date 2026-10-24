@@ -517,11 +517,16 @@ def test_c1_single_event_diff_headline_reads_sixty_safer_zero_worse_fisher() -> 
 def test_c2_no_event_prints_inference_line_first_then_a_headline_naming_both_events(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "diff"))
     assert r.code == 0, r.text
-    first = r.lines[0]
+    # PF2 (spec section 4.3): diff now opens with a verdict block that ends at the first blank
+    # line; the inference line is the first line of the report after it.
+    verdict, _, report = r.out.partition("\n\n")
+    assert verdict and not verdict.startswith(INFERENCE_MARKER), r.out
+    report_lines = [line for line in report.splitlines() if line.strip()]
+    first = report_lines[0]
     assert first.startswith(INFERENCE_MARKER), r.out
     assert NON_EVENT in first, first
     assert "violated" in first and "timeout" in first, first
-    headline = [line for line in r.lines[1:] if "violated:" in line and "timeout:" in line]
+    headline = [line for line in report_lines[1:] if "violated:" in line and "timeout:" in line]
     assert headline, r.out
     assert "safer" in headline[0] and "worse" in headline[0], headline[0]
 

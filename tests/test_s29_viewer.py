@@ -276,6 +276,10 @@ REPORT_SOURCE = PACKAGE / "report.py"
 DIFF_SOURCE = PACKAGE / "diff.py"
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
 GO1_A, GO1_B = "go1-v0", "go1-v1"
+# PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
+# created_at, a letter); serve names the Go1 runs by these.
+GO1_NAME_A = "go1-g2-converged@20260813T155006Z 2026-09-03 a"
+GO1_NAME_B = "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a"
 QUICKSTART = REPO / "examples" / "quickstart.toml"
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
@@ -1478,7 +1482,68 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
     return {p.name: p for p in pairs}
 
 
+def run_names(root: Path) -> dict[str, str]:
+    """PF2 (spec section 4.3): every run's name, as ``runs --json`` gives it beside the id."""
+    code, out, err = run_cli(["--store", str(root), "runs", "--json"])
+    assert code == 0, err
+    return {entry["run_id"]: entry["run_name"] for entry in json.loads(out)["runs"]}
+
+
+def named_title(p: Pair) -> str:
+    """PF2 (spec section 4.3): the default title names the two runs by name."""
+    names = run_names(p.root)
+    return f"{names[p.a]} vs {names[p.b]}: {', '.join(p.events)}"
+
+
+def titled_structure(p: Pair, title: str) -> dict[str, Any]:
+    """PF2 (spec section 4.3): the pair's structure through the library, as ``Pair.report`` builds
+    it but under ``title``. The library did not move; only the CLI's default title did."""
+    store = Store(p.root)
+    ma, mb = store.manifest(p.a), store.manifest(p.b)
+    spec = ReportSpec(title=title, x_axis=p.x, y_axis=p.y, fixed=p.fixed)
+    report = build_multi_report(p.multi, spec, manifests=(ma, mb), observations=(counts_of(store, p.a), counts_of(store, p.b)))
+    return viewer().build_structure(
+        report, p.multi, tree=p.tree, manifest_a=ma, manifest_b=mb, rows_a=store.count(p.a), rows_b=store.count(p.b),
+        tally_a=store.tally(p.a), tally_b=store.tally(p.b), store_root=str(p.root),
+    )
+
+
+def page_as_ids_named_it(page: str, events: str) -> str:
+    """PF2 (spec section 4.3): on a Go1 page the default title names the runs by name in three
+    places, the ``<title>``, the ``<h1>`` and the figure's title line, and nowhere else. Assert that,
+    then put the title by id back so the frozen digest still guards everything else."""
+    named, by_id = f"{GO1_NAME_A} vs {GO1_NAME_B}: {events}", f"{GO1_A} vs {GO1_B}: {events}"
+    places = (f"<title>{named}</title>", f"<h1>{named}</h1>", f'font-size="13">{named}</text>')
+    assert [page.count(place) for place in places] == [1, 1, 1] and page.count(named) == 3, [page.count(place) for place in places]
+    return page.replace(named, by_id)
+
+
 # ---------- W1: literals ----------
+
+
+def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
+    """PF2 (spec section 4.3): ``serve --json`` on Go1 moves in two places only: ``run_name`` beside
+    each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
+    the figure's title line). First assert each is there as PF2 writes it and nowhere else the
+    digest reads, then put the structure back as it was before names (no ``run_name``, the title by
+    id) so the frozen digest still guards everything else."""
+    arms = {}
+    for role, run_id, name in (("a", GO1_A, GO1_NAME_A), ("b", GO1_B, GO1_NAME_B)):
+        arm = structure["pair"][role]
+        keys = list(arm)
+        assert (arm["run_id"], arm.get("run_name")) == (run_id, name), arm
+        assert keys.index("run_name") == keys.index("run_id") + 1, keys
+        arms[role] = {k: v for k, v in arm.items() if k != "run_name"}
+    named, by_id = f"{GO1_NAME_A} vs {GO1_NAME_B}: {events}", f"{GO1_A} vs {GO1_B}: {events}"
+    assert structure["view"]["title"] == named, structure["view"]["title"]
+    line = f'font-size="13">{named}</text>'
+    assert structure["heatmap_svg"].count(line) == 1, structure["heatmap_svg"][:600]
+    return {
+        **structure,
+        "pair": {**structure["pair"], **arms},
+        "view": {**structure["view"], "title": by_id},
+        "heatmap_svg": structure["heatmap_svg"].replace(line, f'font-size="13">{by_id}</text>'),
+    }
 
 
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
@@ -1654,7 +1719,9 @@ def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_go
     excised, ``str(GO1_ROOT)`` normalised, digests to the ``/2`` page minted on the bare tree."""
     pairs = by_name(every_pair)
     for name, digest in GO1_PAGE_2_SHA256.items():
-        page = excised(page_as_0_0_1_wrote_it(pairs[name].page)).replace(str(GO1_ROOT), "<store>")
+        # PF2 (spec section 4.3): the title by name is asserted in its three places, then put back by id.
+        page = page_as_ids_named_it(pairs[name].page, ", ".join(pairs[name].events))
+        page = excised(page_as_0_0_1_wrote_it(page)).replace(str(GO1_ROOT), "<store>")
         assert sha256_of_text(page) == digest, name
 
 
@@ -1683,12 +1750,26 @@ def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted
     # serve --json leads with the verdict and its sentence; the page structure follows unchanged.
     structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence")}
     assert "tree" in structure
+    # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
+    # then put back as before names, so the digest below still guards everything else.
+    structure = structure_as_ids_named_it(structure, "fell")
     tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": RETIRED_SCHEMA}
     normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
     assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
     pairs = by_name(every_pair)
     for name, digest in TREE_LESS_KEYS_SHA256.items():
-        assert tree_less_digest(structure_as_0_0_1_wrote_it(pairs[name].structure)) == digest, name
+        # PF2 (spec section 4.3): serve's default title now names the runs by name, which moves
+        # ``view.title`` and the figure (a longer title wraps). The frozen digest is kept on the
+        # library's structure under the title by id, which PF2 does not move; serve's six keys must
+        # equal the library's under the title by name, and the title must be the names.
+        p = pairs[name]
+        by_id = titled_structure(p, f"{p.a} vs {p.b}: {', '.join(p.events)}")
+        assert tree_less_digest(structure_as_0_0_1_wrote_it(by_id)) == digest, name
+        title = named_title(p)
+        assert p.structure["view"]["title"] == title, (name, p.structure["view"]["title"])
+        named = json.loads(json.dumps(titled_structure(p, title), allow_nan=False))
+        for key in TREE_LESS_KEYS:
+            assert p.structure[key] == named[key], (name, key)
 
 
 # ---------- W5: order of the document ----------
@@ -2085,8 +2166,12 @@ def test_w13_two_builds_are_equal_two_renders_identical_and_a_seed_moves_only_wh
     store = Store(GO1_ROOT)
     ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
     kwargs = dict(manifest_a=ma, manifest_b=mb, rows_a=store.count(GO1_A), rows_b=store.count(GO1_B), tally_a=store.tally(GO1_A), tally_b=store.tally(GO1_B), store_root=str(GO1_ROOT))
-    first = viewer().build_structure(go1.report, go1.multi, tree=go1.tree, **kwargs)
-    second = viewer().build_structure(go1.report, go1.multi, tree=go1.tree, **kwargs)
+    # PF2 (spec section 4.3): serve's page carries the default title by name, so the library builds
+    # under that title (``Pair.report`` titles by id) before its render is compared with the page.
+    spec = ReportSpec(title=named_title(go1), x_axis=go1.x, y_axis=go1.y, fixed=go1.fixed)
+    report = build_multi_report(go1.multi, spec, manifests=(ma, mb), observations=(counts_of(store, GO1_A), counts_of(store, GO1_B)))
+    first = viewer().build_structure(report, go1.multi, tree=go1.tree, **kwargs)
+    second = viewer().build_structure(report, go1.multi, tree=go1.tree, **kwargs)
     assert first == second
     assert viewer().render_html(first) == viewer().render_html(second) == go1.page
     seeded = pair("go1-seed1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", seed=1)

@@ -760,17 +760,30 @@ def test_r8_runs_on_go1_prints_each_run_with_12800_rows(go1_store: Store) -> Non
     assert r.code == 0, r.text
     assert not r.err
     lines = [line for line in r.out.splitlines() if line.strip()]
-    assert lines[0] == f"store: {GO1_ROOT}"
-    assert lines[1].split() == [
-        "run_id", "status", "backend", "target_id", "t_unit", "rows", "no_outcome",
+    # PF2 (spec section 4.3): the first line is the verdict `ok  N runs in <store>` instead of
+    # `store: <root>`, and the table has the columns #, name, id, status, backend, target, rows,
+    # rows without an outcome, created (t_unit is no longer a column). A name holds single
+    # spaces, so cells are split on runs of two or more spaces.
+    assert lines[0] == f"ok  {len(GO1_RUNS)} runs in {GO1_ROOT}"
+    assert re.split(r"\s{2,}", lines[1].strip()) == [
+        "#", "name", "id", "status", "backend", "target", "rows", "rows without an outcome",
+        "created",
     ]
-    rows = {line.split()[0]: line.split() for line in lines[2:]}
-    assert list(rows) == list(GO1_RUNS)
-    for run_id in GO1_RUNS:
+    cells = [re.split(r"\s{2,}", line.rstrip()) for line in lines[2:]]
+    rows = {cell[2]: cell for cell in cells}
+    # PF2 (spec section 4.3): newest first by created_at, where the old table was in id order.
+    newest_first = sorted(
+        GO1_RUNS, key=lambda run_id: go1_store.manifest(run_id).created_at, reverse=True,
+    )
+    assert list(rows) == newest_first == ["go1-v1", "go1-v0"]
+    for number, run_id in enumerate(newest_first, start=1):
         m = go1_store.manifest(run_id)
         assert rows[run_id] == [
+            # PF2 (spec section 4.3): a number and the computed name lead the row; created ends it.
+            str(number), f"{m.target_id.split('/')[0]} {m.created_at[:10]} a",
             # Counts carry thousands separators in text (front-door spec section 5.4, rule 10).
-            run_id, m.status, m.backend, m.target_id, m.t_unit, f"{GO1_ROWS:,}", "0",
+            run_id, m.status, m.backend, m.target_id, f"{GO1_ROWS:,}", "0",
+            f"{m.created_at[:19]}Z",
         ]
 
 

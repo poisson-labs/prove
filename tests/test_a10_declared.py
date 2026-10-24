@@ -1514,7 +1514,8 @@ def test_p10_17_steps_has_no_writer_and_no_check_result_reaches_the_manifest() -
     }
     for banned in ("open", "write_text", "write_bytes", "to_parquet", "write_table", "dump", "_write_manifest", "create_run", "mark_complete", "RunManifest", "replace"):
         assert banned not in called, banned
-    assert {f.name for f in dataclasses.fields(RunManifest)} == TWELVE | {"declared"}
+    # PF2 (spec section 4.3): RunManifest gains the field `name` (None unless given at sweep time).
+    assert {f.name for f in dataclasses.fields(RunManifest)} == TWELVE | {"declared", "name"}
 
 
 # ---------- P10-18: no arithmetic ----------
