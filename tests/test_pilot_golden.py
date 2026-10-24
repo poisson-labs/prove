@@ -1806,7 +1806,8 @@ def test_p12_the_wheel_and_the_extras_are_unchanged() -> None:
     with (REPO / "pyproject.toml").open("rb") as fh:
         pyproject = tomllib.load(fh)
     assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["src/poisson_prove"]
-    assert set(pyproject["project"]["optional-dependencies"]) == {"modal", "agent", "viz", "all", "dev"}
+    # PF9 (Q31): the [burla] extra joins the set.
+    assert set(pyproject["project"]["optional-dependencies"]) == {"modal", "agent", "viz", "all", "dev", "burla"}
     assert "openai" not in str(pyproject["project"]["dependencies"])
 
 
