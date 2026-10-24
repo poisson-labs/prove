@@ -464,7 +464,8 @@ def _build_parser(io: _IO) -> _Parser:
         "--backend",
         choices=("local", "modal", "burla"),
         default="local",
-        help="where the rollouts run: local, modal or burla (default: local)",
+        help="where the rollouts run: local, modal or burla (burla is experimental; "
+        "default: local)",
     )
     identity = sweep.add_mutually_exclusive_group()
     identity.add_argument(
@@ -1059,6 +1060,7 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
     )
     try:
         with _notes(io):
+            _refuse_unrunnable_backend(ns)
             note = retired_store_variable_note(os.environ, _ENV_STORE)
             if note is not None:
                 io.err_line(f"note: {note}")
@@ -1158,6 +1160,15 @@ def _store_root(ns: argparse.Namespace) -> Path:
     if env:
         return Path(env)
     return Path(_DEFAULT_STORE)
+
+
+def _refuse_unrunnable_backend(ns: argparse.Namespace) -> None:
+    """The Burla backend cannot run on Windows (its launcher needs ``fcntl``, ``select`` on
+    pipes and process groups), so a Burla sweep there is refused before anything else it does:
+    the store, the flags, the extra, the spec and its ``[burla]`` table, the target. Installing
+    the extra cannot help, so no install line is offered."""
+    if ns.verb == "sweep" and ns.backend == "burla" and os.name == "nt":
+        raise _Refusal("the burla backend cannot run on Windows; run it from macOS or Linux")
 
 
 def _check_retired_default_store(ns: argparse.Namespace, root: Path) -> None:
@@ -2168,8 +2179,8 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         if stray or ns.image != "image":
             names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
             raise _Refusal(f"{names} does not apply to --backend burla")
-    if ns.backend == "modal":
-        _require_extra("modal")
+    if ns.backend in ("modal", "burla"):
+        _require_extra(ns.backend)
     idx = _index(root) if root.is_dir() else Index(str(root), [], {})
     if ns.name is not None:
         if ns.resume is not None:

@@ -12,10 +12,11 @@ requires-python = ">=3.11"
 dependencies = ["numpy", "pandas>=2", "scipy", "pyarrow"]
 
 [project.optional-dependencies]
-modal = ["modal"]
+modal = ["modal>=0.73.76"]
+burla = ["burla==1.8.2"]
 agent = ["litellm", "openai>=2.20,<3", "opentelemetry-sdk"]
 viz = ["matplotlib"]
-all = ["modal", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
+all = ["modal>=0.73.76", "burla==1.8.2", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
 dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common"]
 
 [project.scripts]

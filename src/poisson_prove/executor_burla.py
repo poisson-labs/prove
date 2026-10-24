@@ -75,7 +75,7 @@ __all__ = [
 
 _BACKEND = "burla"
 _BURLA_PIN = "1.8.2"
-_INSTALL_HINT = f"pip install burla=={_BURLA_PIN}"
+_INSTALL_HINT = 'pip install "poisson-prove[burla]"'
 #: After the stop's deadline, how long the launcher has to report before the parent sends it
 #: SIGINT, and how long after that before its whole process group is killed.
 _BACKSTOP_S = 60.0
