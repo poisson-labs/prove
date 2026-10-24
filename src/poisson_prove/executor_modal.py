@@ -889,11 +889,13 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
         else f"Secrets: {', '.join(options.secrets)} · mounted by name; "
         "Prove never reads the values"
     )
-    cost = (
-        "Cost: unknown (no estimate)"
-        if estimate is None
-        else f"Cost: ~${_format_usd(estimate)} (best-effort, {_PRICES_ASOF} prices)"
-    )
+    covers = f"Modal's {_PRICES_ASOF} prices, which cover compute, not model tokens"
+    if estimate is not None:
+        cost = f"Cost: ~${_format_usd(estimate)} (best-effort, {covers})"
+    elif options.est_seconds_per_episode is None:
+        cost = f"Cost: unknown (no estimate; {covers})"
+    else:
+        cost = f"Cost: unknown (no price for gpu {gpu} in the table; {covers})"
     lines = [
         f"Sweep: {len(spec.axis_types)} axes · {len(spec.configs)} cells · "
         f"N={spec.replicates} → {total} rollouts",

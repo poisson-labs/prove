@@ -12,10 +12,11 @@ requires-python = ">=3.11"
 dependencies = ["numpy", "pandas>=2", "scipy", "pyarrow"]
 
 [project.optional-dependencies]
-modal = ["modal"]
+modal = ["modal>=0.73.76"]
+burla = ["burla==1.8.2"]
 agent = ["litellm", "openai>=2.20,<3", "opentelemetry-sdk"]
 viz = ["matplotlib"]
-all = ["modal", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
+all = ["modal>=0.73.76", "burla==1.8.2", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
 dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common"]
 
 [project.scripts]
@@ -48,4 +49,5 @@ testpaths = ["tests"]
 markers = [
     "calibration: a rejection rate over sharp-null resamples (S25 section A, the slow lane); deselected only by typing -m \"not calibration\", never by configuration",
     "slow: over 10 s of setup and call on the runner, such as a wheel built and installed into a fresh environment; runs on main and nightly, never on a pull request",
+    "backend: calls a real Modal or Burla account (a paid call, needs the user's own credentials); run by hand only, never on a pull request and never in CI; each such test is also skipped unless its opt-in variable is set",
 ]

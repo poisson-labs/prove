@@ -89,7 +89,8 @@ PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
 PIN = "1.8.2"
-INSTALL_HINT = "pip install burla==1.8.2"
+# PF9 (PF0 Session A yes/no 5, ruled 2026-10-14): Burla's install line names Prove's extra.
+INSTALL_HINT = 'pip install "poisson-prove[burla]"'
 HEAD = "http://localhost:5001"
 SALT = "bu-oracle-salt"
 PLAIN = "bu_targets.plain:rollout"
@@ -419,6 +420,16 @@ class Fake:
 @pytest.fixture
 def fake(tmp_path: Path, pool: Pool, monkeypatch: pytest.MonkeyPatch) -> Fake:
     monkeypatch.syspath_prepend(str(TARGETS))
+    # PF9 (reading r2): a Burla sweep refuses a missing ``burla`` before the plan, as a Modal sweep
+    # refuses a missing ``modal``. The fake client stays importable only in the launcher; here an
+    # empty package of that name, at the pin, is findable, and nothing imports it.
+    findable = tmp_path / "findable-burla"
+    (findable / "burla").mkdir(parents=True)
+    (findable / "burla" / "__init__.py").write_text("", encoding="utf-8")
+    (findable / f"burla-{PIN}.dist-info").mkdir()
+    (findable / f"burla-{PIN}.dist-info" / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: burla\nVersion: {PIN}\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(findable))
     made = Fake(tmp_path / "fake-state", pool)
     monkeypatch.setattr(eb, "_launcher_argv", made.argv)
     return made
@@ -1986,11 +1997,13 @@ def test_i4_the_new_files_pass_the_frozen_guards() -> None:
         assert clock == [], (path.name, clock)
 
 
-def test_i5_no_burla_extra_and_cloudpickle_joins_dev() -> None:
+def test_i5_the_burla_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None:
+    # PF9 (Q31, ruled 2026-10-13): Burla ships as an experimental backend with a [burla] extra
+    # pinning the client the backend runs, so the extra is no longer absent; what it pins is
+    # test_pf9_backends.py's.
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     extras = project["optional-dependencies"]
-    assert set(extras) == {"modal", "agent", "viz", "all", "dev"}
-    assert not any("burla" in req.lower() for reqs in extras.values() for req in reqs)
+    assert set(extras) == {"modal", "agent", "viz", "all", "dev", "burla"}
     assert any(req.split("=")[0].split(">")[0].split("<")[0].strip().lower() == "cloudpickle" for req in extras["dev"])
 
 
