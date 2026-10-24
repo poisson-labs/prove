@@ -1,51 +1,48 @@
-"""PF4, completeness: the frozen tests of what a user reads.
+"""PF4, completeness: the frozen tests of what a user reads, and the contract tests (the code suite).
 
-Written from the front-door spec's section 8 (8.2 to 8.5) and its invariants PF4.1b to PF4.20 as
-they are read on a screen or in a file: ``diff``, ``check``, ``report`` and ``serve`` (text and
-``--json``), ``report.md``, ``receipt.html``, the page and its Summary, ``paired``, and what a sweep
-records. ``tests/test_pf4_stats.py`` holds the numbers underneath. The build is written against
-this file and does not edit it.
+Written from the front-door spec's section 8 (8.2 to 8.5, 8.10) and its invariants PF4.1b to PF4.51
+as they are read on a screen or in a file: ``diff``, ``check``, ``report`` and ``serve`` (text and
+``--json``), ``report.md``, ``receipt.html``, the page and its Summary, ``paired``, ``sweep``'s plan,
+and what a sweep records. PF4 Session A froze PF4.1 to PF4.21 (2026-10-20); the statistics re-freeze of
+2026-10-24 adds PF4.22 to PF4.51 and moves what Taylor's rulings of that day on Argon's methodology
+review change. ``tests/test_pf4_stats.py`` holds the numbers underneath (the math suite) and
+``tests/test_pf4_calibration.py`` the simulations. The build is written against this file and does
+not edit it.
 
-**What this file can rely on, and what it cannot.** Other modules are built in parallel from the
-same base. These tests name runs by their ids (run names are PF2's), always pass ``--method``
-(the paired default is PF3's), and read the verdict word from ``--json`` and from the first stdout
-line (the line's form is PF1's and PF2's; the word is PF4's). Each surface is reached through the
-command line in process, with ``HOME`` pointed at an empty folder.
+**What this file can rely on.** PF4 is built on ``main`` with PF0 to PF3 and PF9 merged: run names
+(PF2), the paired default and the method lines (PF3). These tests name runs by id, always pass
+``--method`` unless the default is the point, and read the verdict word from ``--json`` and from the
+first stdout line. Each surface is reached through the command line in process, with ``HOME`` pointed
+at an empty folder.
 
-**Readings, named here** (each is a yes/no in the session log).
+**Readings, named here** (each is a yes/no in the re-freeze's log, ``log/pf4/refreeze.md``).
 
-- The comparison's verdict word is carried as ``verdict`` in ``diff --json``, as
-  ``comparison_verdict`` in ``report --json`` (whose own ``verdict`` is the verb's ``ok``), as
-  ``verdict`` in the page Summary (``summary.verdict`` in ``serve --json``), and in ``report.md``
-  as the first line after the title and its blank line, in the ``word  sentence`` form ``diff``
-  prints. ``diff --json`` also carries ``threshold`` and ``threshold_source`` (``recorded``,
-  ``smaller`` or ``default``) for section 8.4's threshold.
-- An event's kind on the command line is ``--event NAME:failure`` or ``--event NAME:success``; in a
-  run it is the declaration's ``failures`` and ``successes`` lists, which the manifest stores under
-  ``declared``.
-- The single-run ``report --json`` carries ``by_event``, one entry per event, whose ``cells`` each
-  hold ``config``, ``share`` (the interval object), ``incidence`` (the cumulative incidence at the
-  horizon) and ``share_differs``; and ``design_mde``, an object with ``mde``, ``base_rate`` and
-  ``computed_at_read_time``. A sweep records its design MDE in ``manifest.environment["design_mde"]``
-  (where ``max_mde_accepted`` already lives) as ``{"mde", "base_rate"}``.
-- PF4.1c's patched constant is ``poisson_prove.stats.WILSON_LEVEL``, read when a surface computes,
-  so patching the module attribute moves every surface.
-- A share counts the runs whose stored outcome is the event, over the runs with an outcome, so
-  a run's share counts events after a shorter partner's horizon that its rate at the common
-  horizon does not; each cell carries ``share_a_differs`` and ``share_b_differs``, and the text
-  row marks a differing share with ``*``. The same mark is used in the single-run report.
-- Binding words, pinned as words: ``ceiling`` and ``none detectable`` for a condition with no
-  detection limit, ``not adjusted`` in the share caption, ``read time`` for a design MDE computed
-  from an old run, and ``Wilson``, ``incidence`` and the level label in the single-run header.
-- ``diff``'s first stdout line is PF2's verdict line (PF2.9); PF4 gives it its word. The tests
-  that read the word there (``_first_word``) assume PF4 is built on PF2's tip, as the builds
-  stack; built alone, PF4 writes that line itself.
-- PF4.11 reads "any ``--json``" as every comparison verb's (``diff``, ``check``, ``report``,
-  ``serve``) and ``runs --json``; ``inspect``'s reproduce line keeps the target's import path,
-  because reproducing the episode is what it is for.
+- Session A's, ruled 2026-10-24: the comparison's word is ``verdict`` in ``diff --json``,
+  ``comparison_verdict`` in ``report --json``, ``summary.verdict`` on the page, and ``report.md``'s
+  first line after the title; ``diff --json`` carries ``threshold`` and ``threshold_source``
+  (``recorded``, ``smaller``, ``default``); a kind is ``--event NAME:failure|success`` or the
+  declaration's ``failures``/``successes``; the single-run ``report --json`` carries ``by_event`` with
+  each cell's ``config``, ``share``, ``incidence`` and ``share_differs``, and ``design_mde``;
+  ``poisson_prove.stats.WILSON_LEVEL`` is read when a surface computes; PF4.11's "any ``--json``" is
+  every comparing verb's, ``runs``', ``paired``'s and ``sweep``'s, and ``inspect`` keeps the import
+  path; ``check`` prints no cell table.
+- Re-freeze readings: shares count by the common horizon and the single-run report's by the
+  horizon it reads, so no share differs from its rate in a store 0.1.0 writes (R3, R4); the verdict
+  block's detail lines are found by their label, ``  <label>  `` (``method``, ``comparison`` on
+  ``check``, ``threshold``, ``before``, ``after``, ``trade``, ``verdict rule``, ``flagged only``, ``fragility``, ``peeking``, ``errors``,
+  ``competing``), and a text surface's line is pinned only by its facts: the number, the run's name,
+  the binding words of the spec (PF4.35, PF4.41, PF4.42, PF4.45: ``Benjamini``, ``Hochberg``, ``Holm``,
+  ``false discovery rate``, ``family-wise``, ``cause-specific hazard``, ``peeking``, ``errored``,
+  ``fragility``, ``unconditional``, ``Miettinen-Nurminen``, ``Tango``, ``simultaneous``, ``Bonferroni``,
+  ``false coverage``, ``Benjamini-Yekutieli``), matched without regard to case, hyphens or dashes
+  (``_says``, reading R30); the page carries the same facts in ``summary`` (``verdict``,
+  ``verdict_limit``, ``fragility``, ``peeking``, ``errors_differ``) and each panel's ``flag_rule``;
+  the read record is ``~/.cache/poisson-prove/compared.jsonl`` (R6); a case id is
+  ``Episode.meta["case_id"]``, which the store copies into its ``case_id`` column (R5); ``--max-mde 1`` admits any design (R17); PF4.32's patched constant
+  is ``poisson_prove.stats.POWER``, read when a surface computes, as ``WILSON_LEVEL`` is.
 
-**Lanes.** The tests that sweep (PF4.4, PF4.20's declaration) and the capture subprocess (PF4.10)
-take a few seconds each; the rest run in process on hand-built stores.
+**Lanes.** The code suite. The tests that sweep take a few seconds each; the gate's paired design at
+194 replicates sweeps 1,746 rollouts and is marked ``slow``.
 """
 
 from __future__ import annotations
@@ -65,8 +62,9 @@ from typing import Any
 import pytest
 
 from poisson_prove import cli
-from poisson_prove.diff import mde_two_proportion
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+
+from test_pf4_stats import _ref_fisher_limits
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -78,11 +76,13 @@ A_ID = "20261020T100000Z-aaaa"
 B_ID = "20261020T100100Z-bbbb"
 SALT = "pf4-shared-salt"
 HORIZON = 10.0
+Q = 0.05
 #: Rule 3's verdict line: a lowercase word or phrase, two spaces, then the sentence.
 FIRST_LINE = re.compile(r"^([a-z][a-z ]*?)  \S")
 JUDGEMENT = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
 KNOWN_WORDS = {"trade", "worse", "safer", "too small to tell", "no significant change"}
 DIRECTION_WORDS = {"mixed", "higher", "lower", "too small to tell", "no significant change"}
+NOTES = {"no room", "none detectable", "cannot be flagged", "no matched pairs"}
 
 
 # ---------- the command line, in process ----------
@@ -101,6 +101,16 @@ def _empty_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.Mo
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.delenv("PROOFLOAD_STORE", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+
+
+def _norm(text: str) -> str:
+    return " ".join(re.sub(r"[-\u2010-\u2015]", " ", text.lower()).split())
+
+
+def _says(text: str, words: str) -> bool:
+    """A binding phrase, whatever its case and whichever hyphen or dash joins its words (reading R30)."""
+    return _norm(words) in _norm(text)
 
 
 def _cli(root: Path | str, *argv: str) -> Result:
@@ -126,6 +136,17 @@ def _first_word(text: str) -> str:
     return m.group(1)
 
 
+def _block(text: str) -> list[str]:
+    """The verdict block: the verdict line and its detail lines, up to the first blank line."""
+    return text.split("\n\n", 1)[0].splitlines()
+
+
+def _detail(text: str, label: str) -> list[str]:
+    """The values of a verdict block's detail lines with this label."""
+    prefix = f"  {label}  "
+    return [line[len(prefix):] for line in _block(text) if line.startswith(prefix)]
+
+
 def _strings(node: Any) -> list[str]:
     """Every string value in a JSON document, keys left out."""
     if isinstance(node, str):
@@ -137,25 +158,37 @@ def _strings(node: Any) -> list[str]:
     return []
 
 
+def _strip_tags(html: str) -> str:
+    return re.sub(r"<[^>]+>", " ", html)
+
+
+def _page_text(page: dict[str, Any]) -> str:
+    from poisson_prove.viewer import render_html
+
+    return _strip_tags(render_html({k: v for k, v in page.items() if k not in ("verdict", "sentence", "next", "method", "method_chosen")}))
+
+
 # ---------- stores, built by hand ----------
 
 
-def _arm(k: int, n: int, *, start: float = 1.0, step: float = 0.1) -> list[tuple[int, str, float]]:
-    """``n`` runs of which the first ``k`` fell, at ``start``, ``start + step``, ...; the rest end
-    ``ok`` at the horizon."""
-    return [(i, "fell", start + step * i) if i < k else (i, "ok", HORIZON) for i in range(n)]
+def _arm(k: int, n: int, *, start: float = 1.0, step: float = 0.1, event: str = "fell") -> list[tuple[int, str | None, float]]:
+    """``n`` runs of which the first ``k`` ended in ``event``, at ``start``, ``start + step``, ...; the
+    rest end ``ok`` at the horizon."""
+    return [(i, event, start + step * i) if i < k else (i, "ok", HORIZON) for i in range(n)]
 
 
 def _write_run(
     root: Path,
     run_id: str,
-    cells: dict[str, list[tuple[int, str, float]]],
+    cells: dict[str, list[tuple[int, str | None, float]]],
     *,
     salt: str = SALT,
     environment: dict[str, Any] | None = None,
     declared: dict[str, Any] | None = None,
     created_at: str = "2026-10-20T10:00:00Z",
     horizon: float = HORIZON,
+    meta: dict[str, dict[str, Any]] | None = None,
+    complete: bool = True,
 ) -> None:
     store = Store(root)
     store.create_run(
@@ -170,29 +203,21 @@ def _write_run(
             created_at=created_at,
         )
     )
-    records = [
-        EpisodeRecord(
-            run_id=run_id,
-            config_hash=config_hash({"cell": name}),
-            config={"cell": name},
-            seed=1000 + rep,
-            replicate_index=rep,
-            outcome=outcome,
-            t=t,
-            horizon=horizon,
-            confidence=None,
-            meta={},
-            error=None,
-            wall_time=0.01,
-            backend_meta={},
-        )
-        for name, rows in cells.items()
-        for rep, outcome, t in rows
-    ]
+    records = []
+    for name, rows in cells.items():
+        for rep, outcome, t in rows:
+            common = dict(run_id=run_id, config_hash=config_hash({"cell": name}), config={"cell": name}, seed=1000 + rep,
+                          replicate_index=rep, t=t, horizon=horizon, confidence=None,
+                          meta=dict((meta or {}).get(name, {})), wall_time=0.01, backend_meta={})
+            if outcome is None:
+                records.append(EpisodeRecord(outcome=None, error="ValueError: the rollout raised",
+                                             **{**common, "t": None, "horizon": None}))
+            else:
+                records.append(EpisodeRecord(outcome=outcome, error=None, **common))
     store.append(run_id, records)
-    store.mark_complete(run_id)
+    if complete:
+        store.mark_complete(run_id)
     if declared is not None:
-        # The stored form of a declaration, written as the manifest keeps it.
         path = root / run_id / "manifest.json"
         doc = json.loads(path.read_text(encoding="utf-8"))
         doc["declared"] = {"steps": [], "gates": [], **declared}
@@ -201,22 +226,24 @@ def _write_run(
 
 def _pair(
     root: Path,
-    a: dict[str, list[tuple[int, str, float]]],
-    b: dict[str, list[tuple[int, str, float]]],
+    a: dict[str, list[tuple[int, str | None, float]]],
+    b: dict[str, list[tuple[int, str | None, float]]],
     **kw: Any,
 ) -> Path:
     env_a = kw.pop("environment_a", None)
     env_b = kw.pop("environment_b", None)
     decl_a = kw.pop("declared_a", None)
     decl_b = kw.pop("declared_b", None)
-    _write_run(root, A_ID, a, environment=env_a, declared=decl_a, created_at="2026-10-20T10:00:00Z", **kw)
-    _write_run(root, B_ID, b, environment=env_b, declared=decl_b, created_at="2026-10-20T10:01:00Z", **kw)
+    meta_a = kw.pop("meta_a", None)
+    meta_b = kw.pop("meta_b", None)
+    _write_run(root, A_ID, a, environment=env_a, declared=decl_a, meta=meta_a, created_at="2026-10-20T10:00:00Z", **kw)
+    _write_run(root, B_ID, b, environment=env_b, declared=decl_b, meta=meta_b, created_at="2026-10-20T10:01:00Z", **kw)
     return root
 
 
 #: Six conditions, 40 runs an arm: one whose rate rose significantly ("up"), one where it fell
-#: ("down"), one unchanged, one whose
-#: baseline fell in every run, one at 38 of 40 where no rise is detectable, and one at zero.
+#: ("down"), one unchanged, one whose baseline fell in every run, one at 38 of 40 where no rise is
+#: detectable, and one at zero.
 STANDARD_A = {
     "up": _arm(4, 40), "down": _arm(30, 40), "same": _arm(10, 40),
     "top": _arm(40, 40), "near_top": _arm(38, 40), "zero": _arm(0, 40),
@@ -251,7 +278,7 @@ def _row(text: str, name: str) -> str:
 
 def _column(text: str, name: str, column: str) -> str:
     """One cell of a text cell table: the row carrying this condition's short hash, the column
-    found by the nearest header above it."""
+    found by the nearest header above it whose name starts with ``column``."""
     lines = text.splitlines()
     short = _hash(name)[:12]
     for i, line in enumerate(lines):
@@ -260,7 +287,8 @@ def _column(text: str, name: str, column: str) -> str:
                 if header.startswith("| config_hash"):
                     names = [h.strip() for h in header.strip("|").split("|")]
                     values = [v.strip() for v in line.strip("|").split("|")]
-                    return values[names.index(column)]
+                    (index,) = [j for j, h in enumerate(names) if h == column or h.startswith(column + " ")]
+                    return values[index]
     raise AssertionError((name, column))
 
 
@@ -287,6 +315,34 @@ def _assert_share(obj: Any, k: int, n: int, level: float = 0.95) -> None:
 def _interval_text(k: int, n: int, level: float = 0.95) -> str:
     lo, hi = _statsmodels_wilson(k, n, level)
     return f"{k / n:.3f} [{lo:.3f}, {hi:.3f}]"
+
+
+def _surfaces(root: Path, tmp: Path, *event_args: str, method: str = "fisher_bh") -> dict[str, Any]:
+    """Every surface that shows a comparison's verdict, for one pair: text and JSON of diff and
+    check (``--fail-on any``, which needs no kind), the written report.md and receipt.html, the page
+    and its structure."""
+    ev = [a for e in event_args for a in ("--event", e)]
+    out = tmp / f"r-{uuid.uuid4().hex[:8]}"
+    report = _cli(root, "report", A_ID, B_ID, *ev, "--method", method, "--x", "cell", "--out", str(out))
+    assert report.code == 0, report.err
+    page = _json(_cli(root, "serve", A_ID, B_ID, *ev, "--method", method, "--x", "cell", "--json"))
+    return {
+        "diff": _cli(root, "diff", A_ID, B_ID, *ev, "--method", method),
+        "diff --json": _json(_cli(root, "diff", A_ID, B_ID, *ev, "--method", method, "--json")),
+        "check": _cli(root, "check", A_ID, B_ID, *ev, "--method", method, "--fail-on", "any"),
+        "check --json": _json(_cli(root, "check", A_ID, B_ID, *ev, "--method", method, "--fail-on", "any", "--json")),
+        "report --json": _json(_cli(root, "report", A_ID, B_ID, *ev, "--method", method, "--x", "cell",
+                                    "--out", str(tmp / f"j-{uuid.uuid4().hex[:8]}"), "--json")),
+        "report.md": (out / "report.md").read_text(encoding="utf-8"),
+        "receipt.html": _strip_tags((out / "receipt.html").read_text(encoding="utf-8")),
+        "page": page,
+        "page text": _page_text(page),
+    }
+
+
+def _texts(s: dict[str, Any]) -> dict[str, str]:
+    return {"diff": s["diff"].out, "check": s["check"].out, "report.md": s["report.md"], "receipt.html": s["receipt.html"],
+            "page": s["page text"]}
 
 
 # ---------- PF4.1b: every saved Wilson interval records its level ----------
@@ -387,10 +443,6 @@ def test_pf4_1b_no_saved_wilson_interval_lacks_a_level(standard: Path, tmp_path:
 # ---------- PF4.1c: every label comes from the recorded level ----------
 
 
-def _strip_tags(html: str) -> str:
-    return re.sub(r"<[^>]+>", " ", html)
-
-
 def test_pf4_1c_with_the_level_patched_to_90_every_surface_says_90_and_none_95(
     standard: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -443,7 +495,7 @@ def test_pf4_1c_the_rendering_code_holds_no_95_percent_and_no_1_96() -> None:
         assert not re.search(r"(?<![\d.])1\.96(?!\d)", text), path.name
 
 
-# ---------- PF4.2: the single-run report shows the share, its interval and the incidence ----------
+# ---------- PF4.2 and PF4.37: shares on the window the tests read ----------
 
 
 def test_pf4_2_the_single_run_report_prints_each_share_with_its_interval_and_the_incidence(
@@ -452,39 +504,50 @@ def test_pf4_2_the_single_run_report_prints_each_share_with_its_interval_and_the
     result = _cli(standard, "report", A_ID, "--event", "fell", "--x", "cell", "--out", str(tmp_path / "r"))
     assert result.code == 0, result.err
     md = (tmp_path / "r" / "report.md").read_text(encoding="utf-8")
-    assert "95%" in md
-    assert "Wilson" in md
-    assert "incidence" in md
+    assert "95%" in md and "Wilson" in md and "incidence" in md
     for name, rows in STANDARD_A.items():
         k = sum(1 for _, o, _ in rows if o == "fell")
         assert _interval_text(k, len(rows)) in md, name
 
 
-def test_pf4_2_a_condition_whose_share_is_not_its_incidence_is_marked_and_explained(
-    standard: Path, tmp_path: Path
-) -> None:
-    """At ``--horizon 2`` the incidence counts only falls by step 2, while the share counts every
-    fall the run recorded; three of the six conditions fall after step 2."""
+def test_pf4_37_the_single_run_reports_share_counts_by_the_horizon_it_reads(standard: Path, tmp_path: Path) -> None:
+    """Reading R3, which reverses PF4 Session A's yes/no 10 here too: at ``--horizon 2`` a condition's
+    share counts the falls by step 2, as its incidence does, so the two agree and nothing is marked."""
     doc = _json(_cli(standard, "report", A_ID, "--event", "fell", "--x", "cell", "--horizon", "2",
                      "--out", str(tmp_path / "r"), "--json"))
     cells = {c["config"]["cell"]: c for c in doc["by_event"]["fell"]["cells"]}
-    expected = {"down": 11 / 40, "top": 11 / 40, "near_top": 11 / 40}
-    for name, c in cells.items():
-        if name in expected:
-            assert c["share_differs"] is True, name
-            assert abs(c["incidence"] - expected[name]) <= 1e-12, (name, c["incidence"])
-        else:
-            assert c["share_differs"] is False, name
-            assert abs(c["incidence"] - c["share"]["value"]) <= 1e-12, name
     md = (tmp_path / "r" / "report.md").read_text(encoding="utf-8")
-    for name in cells:
-        k = sum(1 for _, o, _ in STANDARD_A[name] if o == "fell")
-        rows = [line for line in md.splitlines() if _interval_text(k, 40) in line and name in line]
-        assert rows, name
-        assert ("*" in rows[0]) is (name in expected), (name, rows[0])
-    plain = _json(_cli(standard, "report", A_ID, "--event", "fell", "--x", "cell",
-                       "--out", str(tmp_path / "s"), "--json"))
-    assert not any(c["share_differs"] for c in plain["by_event"]["fell"]["cells"])
+    for name, rows in STANDARD_A.items():
+        by_two = sum(1 for _, o, t in rows if o == "fell" and t <= 2.0)
+        c = cells[name]
+        _assert_share(c["share"], by_two, 40)
+        assert c["share_differs"] is False, name
+        assert abs(c["incidence"] - by_two / 40) <= 1e-12, (name, c["incidence"])
+        lines = [line for line in md.splitlines() if _interval_text(by_two, 40) in line and name in line]
+        assert lines and "*" not in lines[0], (name, lines[:1])
+
+
+def test_pf4_37_a_two_run_share_counts_by_the_common_horizon_and_is_never_marked(tmp_path: Path) -> None:
+    """A ran to step 10 and B to step 5, so the comparison's horizon is 5. In 'late' half of A's runs fell
+    after step 5: by then A had none, so its share is 0 of 40, the rate the test compares, and no mark.
+    PF4 Session A's W17 counted the stored outcomes here (0.500); ruling 2 of 2026-10-24 reverses it."""
+    root = tmp_path / "prove-runs"
+    a = {"late": [(i, "fell", 6.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)],
+         "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)]}
+    b = {"late": [(i, "ok", 5.0) for i in range(40)],
+         "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 5.0) for i in range(40)]}
+    _write_run(root, A_ID, a, created_at="2026-10-20T10:00:00Z")
+    _write_run(root, B_ID, b, created_at="2026-10-20T10:01:00Z", horizon=5.0)
+    doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
+    cells = _cells_of(doc)
+    late, early = cells[_hash("late")], cells[_hash("early")]
+    assert late["rate_a"] == 0.0 and late["events_a"] == 0
+    _assert_share(late["share_a"], 0, 40)
+    _assert_share(early["share_a"], 20, 40)
+    for c in (late, early):
+        assert c["share_a_differs"] is False and c["share_b_differs"] is False
+    text = _cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
+    assert "*" not in _row(text, "late") and "*" not in _row(text, "early")
 
 
 # ---------- PF4.3: per-arm shares beside the rates ----------
@@ -502,64 +565,44 @@ def test_pf4_3_diffs_text_table_prints_both_shares_beside_the_rates_labelled_by_
         assert _interval_text(kb, 40) in row, (name, row)
 
 
-def test_pf4_3_the_two_run_report_prints_the_shares(standard: Path, tmp_path: Path) -> None:
+def test_pf4_3_the_two_run_report_prints_the_shares_and_the_caption_says_they_are_not_adjusted(standard: Path, tmp_path: Path) -> None:
+    diff_text = _cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
     result = _cli(standard, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell",
                   "--out", str(tmp_path / "r"))
     assert result.code == 0, result.err
     md = (tmp_path / "r" / "report.md").read_text(encoding="utf-8")
-    assert _interval_text(30, 40) in md and _interval_text(4, 40) in md
-    assert "95%" in md
-
-
-def test_pf4_3_the_caption_says_the_intervals_are_per_condition_and_not_adjusted(standard: Path, tmp_path: Path) -> None:
-    diff_text = _cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
-    _cli(standard, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell",
-         "--out", str(tmp_path / "r"))
-    md = (tmp_path / "r" / "report.md").read_text(encoding="utf-8")
+    assert _interval_text(30, 40) in md and _interval_text(4, 40) in md and "95%" in md
     for text in (diff_text, md):
         assert "not adjusted" in text
 
 
-def test_pf4_3_a_share_that_is_not_its_rate_is_marked_beside_the_rate(tmp_path: Path) -> None:
-    """A ran to step 10 and B to step 5, so the comparison's horizon is 5. In 'late' half of A's
-    runs fell after step 5: A's rate at the horizon is 0 while its share of runs that ended in the
-    event is 0.500. In 'early' every fall is by step 5 and the two agree."""
-    root = tmp_path / "prove-runs"
-    a = {"late": [(i, "fell", 6.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)],
-         "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)]}
-    b = {"late": [(i, "ok", 5.0) for i in range(40)],
-         "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 5.0) for i in range(40)]}
-    _write_run(root, A_ID, a, created_at="2026-10-20T10:00:00Z")
-    _write_run(root, B_ID, b, created_at="2026-10-20T10:01:00Z", horizon=5.0)
-    doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
-    cells = _cells_of(doc)
-    late, early = cells[_hash("late")], cells[_hash("early")]
-    assert late["rate_a"] == 0.0
-    _assert_share(late["share_a"], 20, 40)
-    assert late["share_a_differs"] is True and late["share_b_differs"] is False
-    assert early["share_a_differs"] is False and early["share_b_differs"] is False
-    text = _cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
-    assert "*" in _row(text, "late") and "*" not in _row(text, "early")
+# ---------- PF4.4 and PF4.30: the design's limit, recorded and printed ----------
 
 
-# ---------- PF4.4: the design MDE is recorded and printed ----------
+def _ref_gate(n: int, rows: int, threshold: float) -> tuple[float, str, float]:
+    """The gate's worst base rate on a 0.005 grid among those with room for the threshold, the way the
+    change goes there, and the limit that way at that base rate (Fisher, level q / rows), from the
+    stats file's references."""
+    import numpy as np
 
+    from test_pf4_stats import _ref_fisher_power, _ref_limit
 
-def _statsmodels_design_mde(n: int) -> float:
-    """The smallest rise from a base rate of 0.5 detectable with ``n`` runs an arm at q = 0.05 and
-    power 0.8, by bisection on statsmodels' documented ``power_proportions_2indep(diff, prop2,
-    nobs1, ratio)``."""
-    from statsmodels.stats.proportion import power_proportions_2indep
+    level = Q / rows
+    worst = (2.0, 0.0, "rise")
+    for base in np.round(np.arange(0.0, 1.0 + 1e-9, 0.005), 3):
+        for way in ("rise", "fall"):
+            if (way == "rise" and base > 1 - threshold + 1e-9) or (way == "fall" and base < threshold - 1e-9):
+                continue
+            power = float(_ref_fisher_power(float(base), n, n, level, np.array([threshold]), way == "rise")[0])
+            # Ties (within 1e-12) go to the lower base rate, a rise before a fall (PF4.30).
+            if power < worst[0] - 1e-12:
+                worst = (power, float(base), way)
+    _, base, way = worst
+    room = 1 - base if way == "rise" else base
+    limit = _ref_limit(lambda g: _ref_fisher_power(base, n, n, level, g, way == "rise"), room)
+    assert limit is not None
+    return base, way, limit
 
-    lo, hi = 0.0, 0.5
-    for _ in range(200):
-        mid = 0.5 * (lo + hi)
-        power = power_proportions_2indep(mid, 0.5, n, ratio=1.0, alpha=0.05, return_results=False)
-        if power >= 0.8:
-            hi = mid
-        else:
-            lo = mid
-    return hi
 
 SMALL_SPEC = """\
 target_id = "mock-agent"
@@ -587,26 +630,33 @@ def swept(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
     return root, run
 
 
-def test_pf4_4_a_new_run_records_its_design_mde_and_base_rate(swept: tuple[Path, str]) -> None:
+def _assert_design(design: dict[str, Any], *, n: int, conditions: int, events: int, threshold: float) -> None:
+    rows = conditions * events
+    base, way, limit = _ref_gate(n, rows, threshold)
+    assert design["base_rate"] == base, (design["base_rate"], base)
+    assert design["direction"] == way, (design["direction"], way)
+    assert abs(design["mde"] - limit) <= 1e-4 + 1e-12, (design["mde"], limit)
+    assert (design["test"], design["family"], design["conditions"], design["events"]) == ("fisher", rows, conditions, events)
+    assert abs(design["level"] - Q / rows) <= 1e-15 and design["q"] == Q and design["power"] == 0.8
+    assert design["flaggable"] is True
+
+
+def test_pf4_4_a_new_run_records_the_gates_design_limit(swept: tuple[Path, str]) -> None:
     root, run = swept
     env = Store(root).manifest(run).environment
-    assert env["design_mde"]["base_rate"] == 0.5
-    assert abs(env["design_mde"]["mde"] - _statsmodels_design_mde(30)) <= 1e-7
+    _assert_design(env["design_mde"], n=30, conditions=2, events=1, threshold=0.5)
 
 
-def test_pf4_4_the_single_run_report_prints_the_recorded_design_mde(swept: tuple[Path, str], tmp_path: Path) -> None:
+def test_pf4_4_the_single_run_report_prints_the_recorded_design_limit(swept: tuple[Path, str], tmp_path: Path) -> None:
     root, run = swept
-    doc = _json(_cli(root, "report", run, "--event", "completed", "--x", "task_id",
-                     "--out", str(tmp_path / "r"), "--json"))
-    expected = _statsmodels_design_mde(30)
-    assert abs(doc["design_mde"]["mde"] - expected) <= 1e-7
-    assert doc["design_mde"]["base_rate"] == 0.5
+    doc = _json(_cli(root, "report", run, "--event", "completed", "--x", "task_id", "--out", str(tmp_path / "r"), "--json"))
+    _assert_design(doc["design_mde"], n=30, conditions=2, events=1, threshold=0.5)
     assert doc["design_mde"]["computed_at_read_time"] is False
     md = (tmp_path / "r" / "report.md").read_text(encoding="utf-8")
-    assert f"{expected:.3f}" in md.split("##")[0]
+    assert f"{doc['design_mde']['mde']:.3f}" in md.split("##")[0]
 
 
-def test_pf4_4_a_0_0_1_runs_design_mde_is_computed_at_read_time_and_says_so(tmp_path: Path) -> None:
+def test_pf4_4_a_0_0_1_runs_design_limit_is_computed_at_read_time_and_says_so(tmp_path: Path) -> None:
     import shutil
 
     root = tmp_path / "old"
@@ -614,15 +664,62 @@ def test_pf4_4_a_0_0_1_runs_design_mde_is_computed_at_read_time_and_says_so(tmp_
     run = OLD_RUNS["quickstart_before"]
     doc = _json(_cli(root, "report", run, "--event", "violated", "--x", "task_id", "--y", "tool_fail_rate",
                      "--out", str(tmp_path / "r"), "--json"))
-    expected = _statsmodels_design_mde(100)  # the run recorded 100 replicates
-    assert abs(doc["design_mde"]["mde"] - expected) <= 1e-7
+    # The run recorded 100 replicates over 9 conditions and declared no outcome: one event, 9 rows.
+    _assert_design(doc["design_mde"], n=100, conditions=9, events=1, threshold=0.2)
     assert doc["design_mde"]["computed_at_read_time"] is True
     md = (tmp_path / "r" / "report.md").read_text(encoding="utf-8")
-    assert f"{expected:.3f}" in md.split("##")[0]
-    assert "read time" in md
+    assert f"{doc['design_mde']['mde']:.3f}" in md.split("##")[0] and "read time" in md
 
 
-# ---------- PF4.5: one verdict rule on every surface ----------
+@pytest.mark.parametrize("replicates,passes", [(100, False), (194, True)])
+def test_pf4_30_the_quickstarts_design_passes_the_gate_at_194_and_is_refused_at_100(replicates: int, passes: bool, tmp_path: Path) -> None:
+    """The packaged quickstart's design, its two failures declared (9 conditions by 2 events, 18 rows),
+    at the default 0.20: Fisher's worst base rate 0.4 with a limit of 0.1991 at 194 (E21, E22); 100 is
+    refused with the 194 that passes both tests offered first. (Fisher alone passes from fewer: the
+    quickstart's 194 is the paired test's, Q56.)"""
+    from conftest import PACKAGED_QUICKSTART
+
+    spec = tmp_path / "prove.toml"
+    text = PACKAGED_QUICKSTART.read_text(encoding="utf-8")
+    spec.write_text(re.sub(r"(?m)^replicates = \d+$", f"replicates = {replicates}", text), encoding="utf-8")
+    result = _cli(tmp_path / "prove-runs", "sweep", str(spec), "--dry-run", "--json")
+    if passes:
+        plan = _json(result)
+        design = plan["design_mde"]
+        assert (design["family"], design["conditions"], design["events"], design["test"]) == (18, 9, 2, "fisher")
+        assert design["base_rate"] == 0.4 and abs(design["mde"] - 0.1991) <= 1e-4 + 1e-12, design
+    else:
+        assert result.code == 1, (result.code, result.err)
+        nexts = [line for line in result.err.splitlines() if line.startswith("  next:")]
+        assert re.search(r"--replicates \d+", nexts[0]), nexts
+        assert any("--max-mde" in line for line in nexts), nexts
+
+
+@pytest.mark.slow
+def test_pf4_30_paired_with_an_earlier_run_the_gate_asks_the_paired_test_and_194_passes(tmp_path: Path) -> None:
+    """Under ``--pair-with`` the gate's test is the paired test with independent arms, its pairs the
+    earlier run's replicates: at 194 its worst base rate is 0.4 for a rise, the tie with a fall from 0.6
+    going to the lower base rate (limit 0.1998, E21), and at 193 it is refused (0.7984)."""
+    from conftest import PACKAGED_QUICKSTART
+
+    root = tmp_path / "prove-runs"
+    spec = tmp_path / "prove.toml"
+    spec.write_text(PACKAGED_QUICKSTART.read_text(encoding="utf-8"), encoding="utf-8")
+    first = _cli(root, "sweep", str(spec), "--yes")
+    assert first.code == 0, first.err
+    (earlier,) = Store(root).runs()
+    plan = _json(_cli(root, "sweep", str(spec), "--target", "poisson_prove.examples.mock_agent:rollout_patched",
+                      "--pair-with", earlier, "--dry-run", "--json"))
+    design = plan["design_mde"]
+    assert design["test"] == "mcnemar" and design["base_rate"] == 0.4 and abs(design["mde"] - 0.1998) <= 1e-4 + 1e-12, design
+    lowered = tmp_path / "lowered.toml"
+    lowered.write_text(re.sub(r"(?m)^replicates = \d+$", "replicates = 193", spec.read_text(encoding="utf-8")), encoding="utf-8")
+    refused = _cli(root, "sweep", str(lowered), "--target", "poisson_prove.examples.mock_agent:rollout_patched",
+                   "--pair-with", earlier, "--dry-run")
+    assert refused.code == 1, refused.err
+
+
+# ---------- PF4.5 and PF4.29: one verdict rule on every surface ----------
 
 
 def _verdicts(root: Path, tmp: Path, *events: str) -> dict[str, str]:
@@ -653,25 +750,45 @@ def _one_word(words: dict[str, str]) -> str:
     return next(iter(words.values()))
 
 
-#: One constructed pair per row of section 8.4's table, the event declared a failure on the
-#: command line. n = 200 gives every unchanged condition a limit near 0.09; n = 20 one near 0.4.
 def _rows_of_8_4() -> list[tuple[str, dict[str, Any], dict[str, Any], str]]:
+    """One constructed pair per row of section 8.4's table and PF4.29's edges, the event declared a
+    failure on the command line. 200 runs give an unchanged condition a limit near 0.1 both ways; 20,
+    one near 0.5."""
     return [
         ("trade", {"w": _arm(4, 40), "s": _arm(30, 40)}, {"w": _arm(30, 40), "s": _arm(4, 40)}, "trade"),
         ("worse", {"w": _arm(4, 40), "u": _arm(5, 200)}, {"w": _arm(30, 40), "u": _arm(5, 200)}, "worse"),
         ("safer", {"s": _arm(30, 40), "u": _arm(5, 200)}, {"s": _arm(4, 40), "u": _arm(5, 200)}, "safer"),
-        ("too small", {"u": _arm(10, 20), "v": _arm(10, 20)}, {"u": _arm(10, 20), "v": _arm(10, 20)},
-         "too small to tell"),
-        ("no change", {"u": _arm(20, 200), "v": _arm(5, 200)}, {"u": _arm(20, 200), "v": _arm(5, 200)},
-         "no significant change"),
+        ("too small", {"u": _arm(10, 20), "v": _arm(10, 20)}, {"u": _arm(10, 20), "v": _arm(10, 20)}, "too small to tell"),
+        ("no change", {"u": _arm(20, 200), "v": _arm(5, 200)}, {"u": _arm(20, 200), "v": _arm(5, 200)}, "no significant change"),
+        # PF4.29: a condition that can tell a rise of 0.20 from 0.70 at 120 runs but not a fall: too small.
+        ("only up", {"u": _arm(84, 120), "v": _arm(84, 120)}, {"u": _arm(84, 120), "v": _arm(84, 120)}, "too small to tell"),
+        # No room downward at T: from 0.05 a fall of 0.20 has no room, so only the rise is asked.
+        ("no room down", {"u": _arm(10, 200), "v": _arm(10, 200)}, {"u": _arm(10, 200), "v": _arm(10, 200)}, "no significant change"),
+        # Every condition cannot be flagged at all: too small, whatever the threshold.
+        ("cannot flag", {"u": _arm(1, 3), "v": _arm(1, 3)}, {"u": _arm(1, 3), "v": _arm(1, 3)}, "too small to tell"),
     ]
 
 
-@pytest.mark.parametrize("row", range(5), ids=["trade", "worse", "safer", "too-small", "no-change"])
+ROW_IDS = ["trade", "worse", "safer", "too-small", "no-change", "only-up", "no-room-down", "cannot-flag"]
+
+
+@pytest.mark.parametrize("row", range(len(ROW_IDS)), ids=ROW_IDS)
 def test_pf4_5_every_surface_gives_the_same_word_by_section_8_4s_table(row: int, tmp_path: Path) -> None:
     name, a, b, word = _rows_of_8_4()[row]
     root = _pair(tmp_path / "prove-runs", a, b)
     assert _one_word(_verdicts(root, tmp_path, "fell:failure")) == word, name
+
+
+def test_pf4_29_the_question_reads_each_direction_with_room_and_t_above_both_rooms(tmp_path: Path) -> None:
+    """The constructions the rows above rest on, against the stats file's references: 'only up' (0.7 at 120
+    runs, two rows) can tell a rise of 0.20 and not a fall; with T at 0.6 a condition at 0.5 is asked
+    about 0.5."""
+    up, down = _ref_fisher_limits(84, 120, 120, Q / 2)
+    assert up is not None and down is not None and up <= 0.20 < down, (up, down)
+    root = _pair(tmp_path / "prove-runs", {"u": _arm(100, 200)}, {"u": _arm(100, 200)},
+                 environment_a={"max_mde_accepted": 0.6}, environment_b={"max_mde_accepted": 0.6})
+    doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh", "--json"))
+    assert doc["verdict"] == "no significant change" and doc["threshold"] == 0.6
 
 
 def test_pf4_5_a_condition_that_trades_two_events_counts_as_both(tmp_path: Path) -> None:
@@ -685,7 +802,7 @@ def test_pf4_5_a_condition_that_trades_two_events_counts_as_both(tmp_path: Path)
     assert _one_word(_verdicts(root, tmp_path, "fell:failure", "stuck:failure")) == "trade"
 
 
-#: Every unchanged condition at n = 60 and a rate of 0.5: a limit between 0.20 and 0.30.
+#: Every unchanged condition at 60 runs and a rate of 0.5: a limit between 0.20 and 0.30 both ways.
 MID = {"u": _arm(30, 60), "v": _arm(30, 60)}
 
 
@@ -702,20 +819,18 @@ MID = {"u": _arm(30, 60), "v": _arm(30, 60)}
 def test_pf4_5_the_threshold_is_the_recorded_one_the_smaller_of_two_or_the_default(
     env_a: dict[str, Any], env_b: dict[str, Any], word: str, threshold: float, source: str, tmp_path: Path
 ) -> None:
-    assert 0.20 < mde_two_proportion(0.5, 60, 60) < 0.30  # the construction these rows rest on
+    rise, fall = _ref_fisher_limits(30, 60, 60, Q / 2)
+    assert rise is not None and fall is not None and 0.20 < max(rise, fall) <= 0.30  # the construction
     root = _pair(tmp_path / "prove-runs", MID, MID, environment_a=env_a, environment_b=env_b)
     assert _one_word(_verdicts(root, tmp_path, "fell:failure")) == word
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh", "--json"))
-    assert doc["threshold"] == threshold
-    assert doc["threshold_source"] == source
+    assert doc["threshold"] == threshold and doc["threshold_source"] == source
     text = _cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh").out
-    block = text.split("\n\n")[0]
-    assert f"{threshold:.3f}" in block, block
+    (line,) = _detail(text, "threshold")
+    assert f"{threshold:.3f}" in line and source in line, line
 
 
 def test_pf4_5_the_page_summarys_50_point_rule_is_gone(tmp_path: Path) -> None:
-    """A largest unchanged limit near 0.25, under the old page rule's 0.50 and above the default
-    0.20: the page says too small to tell, as every other surface does."""
     root = _pair(tmp_path / "prove-runs", MID, MID, environment_a={}, environment_b={})
     page = _json(_cli(root, "serve", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh",
                       "--x", "cell", "--json"))
@@ -723,6 +838,17 @@ def test_pf4_5_the_page_summarys_50_point_rule_is_gone(tmp_path: Path) -> None:
     (entry,) = page["summary"]["events"]
     assert entry["limit"]["label"] == "too small to tell"
 
+
+def test_pf4_50_the_threshold_line_sits_under_the_nothing_moved_words_only(standard: Path, tmp_path: Path) -> None:
+    """PF2 Session B's yes/no 1: test_e12 moves for it."""
+    moved = _cli(standard, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
+    assert _first_word(moved.out) == "trade" and _detail(moved.out, "threshold") == []
+    root = _pair(tmp_path / "prove-runs", MID, MID)
+    still = _cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
+    block = _block(still.out)
+    assert len(_detail(still.out, "threshold")) == 1
+    labels = [line.split("  ")[1] for line in block[1:] if line.startswith("  ")]
+    assert labels.index("method") < labels.index("threshold") < labels.index("before"), labels
 
 # ---------- PF4.6: no trace grouping offered ----------
 
@@ -763,20 +889,32 @@ def test_pf4_6_no_help_names_a_phase_or_offers_a_trace_grouping(verb: str, tmp_p
 # ---------- PF4.7: no comparable condition is a refusal ----------
 
 
-def test_pf4_7_diff_on_a_pair_with_no_comparable_condition_is_refused_naming_the_holes(tmp_path: Path) -> None:
+@pytest.mark.parametrize("verb", ["diff", "diff --json", "check", "report", "serve"])
+def test_pf4_7_a_pair_with_no_comparable_condition_is_refused_naming_the_holes(verb: str, tmp_path: Path) -> None:
+    """PF4 Session A's yes/no 13, ruled 2026-10-24: every comparing verb refuses, not only diff."""
     a = {"c1": _arm(4, 20), "c2": _arm(4, 20), "c3": _arm(4, 20)}
     b = {"d1": _arm(4, 20), "d2": _arm(4, 20)}
     root = _pair(tmp_path / "prove-runs", a, b)
-    for argv in (["diff"], ["diff", "--json"]):
-        result = _cli(root, argv[0], A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", *argv[1:])
-        assert result.code == 1, (result.code, result.out, result.err)
-        assert result.out == ""
-        lines = result.err.splitlines()
-        errors = [line for line in lines if line.startswith("error: ")]
-        assert len(errors) == 1, lines
-        assert all(line.startswith(("error: ", "  next:", "note: ")) for line in lines), lines
-        assert re.search(r"\b3\b", errors[0]) and re.search(r"\b2\b", errors[0]), errors[0]
-        assert any(line.startswith("  next:") for line in lines)
+    name, *extra = verb.split()
+    argv = [name, A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", *extra]
+    if name in ("report", "serve"):
+        argv += ["--x", "cell"]
+    if name == "report":
+        argv += ["--out", str(tmp_path / "r")]
+    if name == "serve":
+        argv += ["--json"]  # a build that did not refuse would otherwise bind and wait
+    if name == "check":
+        argv += ["--fail-on", "any"]
+    result = _cli(root, *argv)
+    assert result.code == 1, (result.code, result.out, result.err)
+    assert result.out == ""
+    lines = result.err.splitlines()
+    errors = [line for line in lines if line.startswith("error: ")]
+    assert len(errors) == 1, lines
+    assert all(line.startswith(("error: ", "  next:", "note: ")) for line in lines), lines
+    assert re.search(r"\b3\b", errors[0]) and re.search(r"\b2\b", errors[0]), errors[0]
+    assert any(line.startswith("  next:") for line in lines)
+    assert not (tmp_path / "r").exists()
 
 
 # ---------- PF4.8: --methods all --json keeps the primary method's omnibus and tree ----------
@@ -956,6 +1094,20 @@ def test_pf4_11_no_output_carries_the_store_path_the_platform_the_python_build_o
     for folder in ("r", "s"):
         for file in ("report.md", "receipt.html"):
             texts[f"{folder}/{file}"] = (work / folder / file).read_text(encoding="utf-8")
+    # PF4 Session A's yes/no 15 and the independent read's finding 4, ruled 2026-10-24: paired --json and
+    # sweep --json are in "any --json" too. sweep's plan names the target as it was typed (PF3's frozen
+    # plan.target), so the import path is the one fact its scan leaves out (reading R19).
+    spec = work / "spec.toml"
+    spec.write_text(SMALL_SPEC, encoding="utf-8")
+    swept = _cli("prove-runs", "sweep", "spec.toml", "--target", "poisson_prove.examples.mock_agent:rollout",
+                 "--max-mde", "0.5", "--yes", "--json")
+    assert swept.code == 0, swept.err
+    paired_root = work / "paired-store"
+    _paired_store(paired_root, ("S1",))
+    _paired_declaration(work / "decl.toml", ("S1",))
+    paired = _cli("paired-store", "paired", "--declaration", "decl.toml", "--json")
+    assert paired.code == 0, paired.err
+    texts["paired --json"] = paired.out
     from poisson_prove.viewer import render_html
 
     page = json.loads(texts["serve --json"])
@@ -964,6 +1116,10 @@ def test_pf4_11_no_output_carries_the_store_path_the_platform_the_python_build_o
     for name, text in texts.items():
         for secret in secrets:
             assert secret not in text, (name, secret)
+    (new_run,) = set(Store(root).runs()) - set(OLD_RUNS.values())
+    own = Store(root).manifest(new_run).environment
+    for secret in [*secrets[:3], own["platform"], own["python"]]:
+        assert secret not in swept.out, ("sweep --json", secret)
     # The page shows the run's Python version and nothing more of the build.
     assert "3.11.7" in texts["page"]
 
@@ -977,10 +1133,9 @@ def test_pf4_13_diff_json_carries_the_direction_and_its_timing_note_under_logran
     root = _pair(tmp_path / "prove-runs", a, b, salt="unshared")
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "logrank_bh", "--json"))
     (cell,) = doc["by_event"]["fell"]["cells"]
-    assert cell["delta"] == 0.0
-    assert cell["direction"] == "higher"
-    assert cell["verdict"] == "worse"
-    assert isinstance(cell["direction_note"], str) and cell["direction_note"]
+    assert cell["delta"] == 0.0 and cell["direction"] == "higher" and cell["verdict"] == "worse"
+    # The independent read's finding 6: the note says which way the timing went.
+    assert isinstance(cell["direction_note"], str) and "sooner" in cell["direction_note"]
     assert doc["by_event"]["fell"]["n_worse"] == 1
 
 
@@ -992,73 +1147,113 @@ def test_pf4_14_diff_json_carries_the_matched_difference_and_the_pair_count_unde
     root = _pair(tmp_path / "prove-runs", {"c": a}, {"c": b})
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "mcnemar_bh", "--json"))
     (cell,) = doc["by_event"]["fell"]["cells"]
-    assert cell["pairs"] == 20
-    assert abs(cell["delta"] - 8 / 20) <= 1e-12
-    assert cell["direction"] == "higher"
-    assert cell["verdict"] == "worse"
+    assert cell["pairs"] == 20 and abs(cell["delta"] - 8 / 20) <= 1e-12
+    assert cell["direction"] == "higher" and cell["verdict"] == "worse"
     assert abs(cell["rate_a"] - 0.5) <= 1e-12 and abs(cell["rate_b"] - 0.375) <= 1e-12
 
 
-# ---------- PF4.15 on the surface ----------
-
-POWER_TARGET = 0.8
+# ---------- PF4.22, PF4.27, PF4.32: the limits on every surface ----------
 
 
-def test_pf4_15_json_gives_no_limit_at_ceiling_and_says_when_none_is_detectable(standard: Path) -> None:
-    from statsmodels.stats.proportion import power_proportions_2indep
+LIMIT_KEYS = ("mde_rise", "mde_fall", "mde", "mde_rise_note", "mde_fall_note", "mde_note", "mde_test", "mde_basis",
+              "mde_level", "mde_family", "mde_power", "mde_anchor", "p_min", "flaggable", "mde_moves_with",
+              "mde_rise_verdict", "mde_fall_verdict")
 
-    # The construction: at 38 of 40 even a rise to 40 of 40 has power well under 0.8.
-    assert power_proportions_2indep(0.05, 0.95, 40, ratio=1.0, alpha=0.05, return_results=False) < POWER_TARGET
+
+def test_pf4_22_every_surface_gives_the_same_limits_as_the_one_family(standard: Path, tmp_path: Path) -> None:
+    """The contract: diff, check, report and serve carry each condition's limits as the library
+    computes them, key for key."""
+    from poisson_prove.diff import multi_diff
+
+    store = Store(standard)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        library = multi_diff(store.read(A_ID, meta=False), store.read(B_ID, meta=False), events=["fell"], method="fisher_bh",
+                             manifest_a=store.manifest(A_ID), manifest_b=store.manifest(B_ID)).to_json()
+    want = _cells_of(library)
+    page = _json(_cli(standard, "serve", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell", "--json"))
+    docs = {
+        "diff": _cells_of(_json(_cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))),
+        "check": _cells_of(_json(_cli(standard, "check", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh",
+                                      "--fail-on", "any", "--json"))),
+        "report": _cells_of(_json(_cli(standard, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh",
+                                       "--x", "cell", "--out", str(tmp_path / "r"), "--json"))),
+        "serve": {str(c["config_hash"]): c for c in page["panels"][0]["cells"]},
+    }
+    for surface, cells in docs.items():
+        assert sorted(cells) == sorted(want), surface
+        for h, c in cells.items():
+            for key in LIMIT_KEYS:
+                assert c[key] == want[h][key], (surface, h, key, c[key], want[h][key])
+
+
+def test_pf4_27_a_null_limit_prints_its_reason_and_no_number(standard: Path, tmp_path: Path) -> None:
+    """Amends PF4.15 (Q54 = yes): the condition at 40 of 40 has no rise ('no room') and a fall, which is
+    its limit; at 38 of 40 a rise has room and none is detectable, so its one number is null."""
     doc = _json(_cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
     cells = _cells_of(doc)
-    ceiling = cells[_hash("top")]
-    assert ceiling["mde"] is None
-    assert isinstance(ceiling.get("mde_note"), str) and ceiling["mde_note"]
-    near = cells[_hash("near_top")]
-    assert abs(near["mde"] - (1.0 - 38 / 40)) <= 1e-9
-    assert isinstance(near.get("mde_note"), str) and near["mde_note"]
-    assert near["mde_note"] != ceiling["mde_note"]
-    for name in ("up", "down", "same", "zero"):
-        assert cells[_hash(name)].get("mde_note") is None, name
+    top, near = cells[_hash("top")], cells[_hash("near_top")]
+    assert top["mde_rise"] is None and top["mde_rise_note"] == "no room"
+    assert isinstance(top["mde_fall"], float) and top["mde"] == top["mde_fall"] and top["mde_note"] is None
+    assert near["mde_rise"] is None and near["mde_rise_note"] == "none detectable"
+    assert near["mde"] is None and near["mde_note"] == "none detectable"
+    for c in cells.values():
+        for way in ("rise", "fall"):
+            assert (c[f"mde_{way}"] is None) is (c[f"mde_{way}_note"] in NOTES), (c["config_hash"], way)
     numbers = [c["mde"] for c in cells.values() if c["mde"] is not None]
-    ev = doc["by_event"]["fell"]
-    assert ev["max_mde"] == max(numbers)
-    unchanged = [c["mde"] for c in cells.values()
-                 if c["mde"] is not None and c["direction"] == "unchanged"]
-    assert ev["max_mde_unchanged"] == max(unchanged)
-
-
-def test_pf4_15_text_prints_no_limit_at_ceiling_and_says_none_is_detectable_instead_of_the_headroom(
-    standard: Path, tmp_path: Path
-) -> None:
-    diff_text = _cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
-    top = _column(diff_text, "top", "mde")
-    assert "ceiling" in top and not re.search(r"\d", top), top
-    near = _column(diff_text, "near_top", "mde")
-    assert "none detectable" in near, near
-    _cli(standard, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell",
-         "--out", str(tmp_path / "r"))
+    assert doc["by_event"]["fell"]["max_mde"] == max(numbers)
+    text = _cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
+    top_text, near_text = _column(text, "top", "mde"), _column(text, "near_top", "mde")
+    assert f"{top['mde_fall']:.3f}" in top_text and "no room" in top_text, top_text
+    assert "none detectable" in near_text and "rise" in near_text, near_text
+    rise_part = near_text.split("rise", 1)[1].split(",", 1)[0]
+    assert not re.search(r"\d", rise_part), near_text  # no number for the null way
+    if near["mde_fall"] is not None:
+        assert f"{near['mde_fall']:.3f}" in near_text, near_text
+    _cli(standard, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell", "--out", str(tmp_path / "r"))
     md = (tmp_path / "r" / "report.md").read_text(encoding="utf-8")
-    assert "ceiling" in md
-    assert "none detectable" in md
+    assert "no room" in md and "none detectable" in md and "ceiling" not in md
 
 
-def test_pf4_15_the_honesty_line_that_names_an_undetectable_condition_says_so(tmp_path: Path) -> None:
-    """The only unchanged condition is the one where no rise is detectable."""
+def test_pf4_27_the_honesty_line_that_names_an_undetectable_condition_says_so(tmp_path: Path) -> None:
     a = {"w": _arm(4, 40), "s": _arm(30, 40), "near": _arm(38, 40)}
     b = {"w": _arm(30, 40), "s": _arm(4, 40), "near": _arm(38, 40)}
     root = _pair(tmp_path / "prove-runs", a, b)
-    _cli(root, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell",
-         "--out", str(tmp_path / "r"))
+    _cli(root, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell", "--out", str(tmp_path / "r"))
     page = _json(_cli(root, "serve", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell", "--json"))
     (entry,) = page["summary"]["events"]
     assert "none detectable" in entry["limit"]["line"]
     (panel,) = page["panels"]
     assert "none detectable" in panel["honesty"]
     md = (tmp_path / "r" / "report.md").read_text(encoding="utf-8")
-    honesty = [line for line in md.splitlines() if "none detectable" in line and not line.startswith("|")]
-    assert honesty, md
+    assert [line for line in md.splitlines() if "none detectable" in line and not line.startswith("|")], md
 
+
+def test_pf4_32_every_surface_names_the_limits_test_level_family_and_power_from_the_one_setting(
+    standard: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With ``poisson_prove.stats.POWER`` patched to 0.9, every surface that prints a limit says "9 times
+    in 10" and none says "4 times in 5"; each names Fisher, the level and the family."""
+    import poisson_prove.stats as stats_module
+
+    import shutil
+
+    monkeypatch.setattr(stats_module, "POWER", 0.9)
+    s = _surfaces(standard, tmp_path, "fell")
+    old = tmp_path / "old"
+    shutil.copytree(OLD / "store", old)
+    single = tmp_path / "single"
+    assert _cli(old, "report", OLD_RUNS["quickstart_before"], "--event", "violated", "--x", "task_id", "--y", "tool_fail_rate",
+                "--out", str(single)).code == 0
+    single_md = (single / "report.md").read_text(encoding="utf-8")
+    assert "9 times in 10" in single_md and "4 times in 5" not in single_md and "over 9 tests" in single_md
+    for name, text in _texts(s).items():
+        if name == "check":
+            continue  # check prints no cell table (Session A's yes/no 14)
+        assert "9 times in 10" in text and "4 times in 5" not in text, name
+        assert "Fisher" in text and "over 6 tests" in text, name
+    for c in s["diff --json"]["by_event"]["fell"]["cells"]:
+        assert c["mde_power"] == 0.9
 
 # ---------- PF4.17: the limit sentence counts the conditions not compared ----------
 
@@ -1121,6 +1316,29 @@ def test_pf4_20_without_a_kind_every_word_names_the_direction_and_none_judges(st
         assert not hits, (name, hits)
 
 
+def test_pf4_20_the_comparison_object_itself_reads_in_direction_words_without_a_kind() -> None:
+    """Ruled 2026-10-24 (the independent read's yes/no 1): no split between the library and the
+    screen. Go1 under log-rank, ``fell`` with no kind: 182 conditions fell and 14 rose (the statistics
+    re-check's README, section 2), as direction words on the object itself; the safer and worse counts
+    are null; the default worse-gate is refused and ``check("higher")`` fails on the 14 rises."""
+    from poisson_prove.diff import DiffError, multi_diff
+
+    go1 = Store(TESTS / "fixtures" / "go1")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = multi_diff(go1.read("go1-v0", meta=False), go1.read("go1-v1", meta=False), events=["fell"],
+                            method="logrank_bh", manifest_a=go1.manifest("go1-v0"), manifest_b=go1.manifest("go1-v1"))
+    ev = result.by_event["fell"]
+    assert ev.kind is None and ev.n_safer is None and ev.n_worse is None
+    assert set(ev.cells["verdict"]) <= {"higher", "lower", "unchanged"}
+    assert (ev.n_lower, ev.n_higher) == (182, 14) and ev.n_lower + ev.n_higher == 196
+    assert list(ev.cells["verdict"]) == list(ev.cells["direction"])
+    assert len(result.trades) == 0 and result.comparison_verdict() == "mixed"
+    with pytest.raises(DiffError):
+        result.check()
+    assert result.check("higher") is False and result.check("any") is False
+
+
 def test_pf4_20_a_failure_kind_given_on_the_command_line_gives_safer_and_worse(standard: Path) -> None:
     doc = _json(_cli(standard, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh", "--json"))
     assert doc["verdict"] == "trade"
@@ -1160,6 +1378,20 @@ def test_pf4_20_a_success_event_that_rose_is_safer_and_never_worse(solved: Path)
     as_failure = _cli(solved, "check", A_ID, B_ID, "--event", "solved:failure", "--method", "fisher_bh")
     assert as_failure.code == 4
     assert _first_word(as_failure.out) == "failed"
+    # The independent read's finding 2: the report, the receipt and the page say safer too, never worse.
+    # A report needs an axis that varies, so the pair gains a quiet second condition.
+    quiet = [(i, "failed", 1.0) for i in range(32)]
+    two = _pair(solved.parent / f"two-{uuid.uuid4().hex[:6]}", {**SOLVED_A, "d": quiet}, {**SOLVED_B, "d": quiet})
+    out = solved.parent / f"success-{uuid.uuid4().hex[:6]}"
+    assert _cli(two, "report", A_ID, B_ID, "--event", "solved:success", "--method", "fisher_bh", "--x", "cell",
+                "--out", str(out)).code == 0
+    page = _json(_cli(two, "serve", A_ID, B_ID, "--event", "solved:success", "--method", "fisher_bh", "--x", "cell", "--json"))
+    assert page["summary"]["verdict"] == "safer"
+    for name, text in {"report.md": (out / "report.md").read_text(encoding="utf-8"),
+                       "receipt.html": _strip_tags((out / "receipt.html").read_text(encoding="utf-8")),
+                       "page": _page_text(page)}.items():
+        # The rise is counted safer; "0 worse" is a count, never a judgement of the rise.
+        assert re.search(r"\b1 safer\b", text) and not re.search(r"\b[1-9]\d* worse\b", text), name
 
 
 def test_pf4_20_check_fail_on_worse_without_a_kind_is_refused_naming_both_ways_out(solved: Path) -> None:
@@ -1298,3 +1530,336 @@ def test_pf4_20_without_a_kind_the_comparison_word_is_a_direction_word(row: int,
     expected = {"trade": "mixed", "worse": "higher", "safer": "lower"}.get(known, known)
     root = _pair(tmp_path / "prove-runs", a, b)
     assert _one_word(_verdicts(root, tmp_path, "fell")) == expected, name
+
+
+# ---------- PF4.34, PF4.35: the word counts Holm's rows; every surface names both rules ----------
+
+
+def _argon_pair(root: Path, **kw: Any) -> Path:
+    """Nine conditions fell far, twenty did not move, one rose by a step-up margin (0 to 7 of 40): the
+    rise is flagged by Benjamini-Hochberg and does not count at the family-wise level."""
+    a = {f"down{i}": _arm(30, 40) for i in range(9)}
+    b = {f"down{i}": _arm(2, 40) for i in range(9)}
+    for i in range(20):
+        a[f"same{i:02d}"] = b[f"same{i:02d}"] = _arm(5, 40)
+    a["up"], b["up"] = _arm(0, 40), _arm(7, 40)
+    return _pair(root, a, b, **kw)
+
+
+@pytest.mark.parametrize("event,word", [("fell:failure", "safer"), ("fell", "lower")], ids=["failure", "no-kind"])
+def test_pf4_34_a_step_up_flag_does_not_turn_the_word_into_a_trade_on_any_surface(event: str, word: str, tmp_path: Path) -> None:
+    root = _argon_pair(tmp_path / "prove-runs")
+    assert _one_word(_verdicts(root, tmp_path, event)) == word
+    doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", event, "--method", "fisher_bh", "--json"))
+    assert doc["n_flagged_only"] == 1
+    up = _cells_of(doc)[_hash("up")]
+    assert up["q"] < Q and up["holm"] is False and up["direction"] == "higher"
+    text = _cli(root, "diff", A_ID, B_ID, "--event", event, "--method", "fisher_bh").out
+    (line,) = _detail(text, "flagged only")
+    assert re.search(r"(?<![\d.])1(?![\d.])", line) and _says(line, "family-wise"), line
+
+
+@pytest.mark.parametrize("fail_on,code", [("higher", 0), ("lower", 4), ("any", 4)])
+def test_pf4_34_check_fails_on_the_rows_that_count_not_the_flags(fail_on: str, code: int, tmp_path: Path) -> None:
+    """Reading R2: on Argon's pair the rise is flagged and does not count, the nine falls count. check
+    gates on the rows that count, so ``--fail-on higher`` passes."""
+    root = _argon_pair(tmp_path / "prove-runs")
+    result = _cli(root, "check", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--fail-on", fail_on)
+    assert result.code == code, (fail_on, result.code, result.err)
+    assert _first_word(result.out) == ("passed" if code == 0 else "failed")
+
+
+def test_pf4_35_every_surface_names_the_flags_rule_and_the_verdicts(standard: Path, tmp_path: Path) -> None:
+    s = _surfaces(standard, tmp_path, "fell:failure")
+    for name, text in _texts(s).items():
+        for words in ("Benjamini", "Hochberg", "false discovery rate", "Holm", "family-wise"):
+            assert _says(text, words), (name, words)
+    for name in ("diff --json", "check --json", "report --json"):
+        doc = s[name]
+        assert (doc["flag_rule"], doc["verdict_rule"]) == ("benjamini-hochberg", "holm"), name
+        ev = doc["by_event"]["fell"]
+        assert (ev["n_holm_higher"], ev["n_holm_lower"], ev["n_holm_safer"], ev["n_holm_worse"]) == (1, 1, 1, 1), name
+        for c in ev["cells"]:
+            assert isinstance(c["q_holm"], float) and isinstance(c["holm"], bool), name
+    assert s["page"]["panels"][0]["flag_rule"] == "benjamini-hochberg" and s["page"]["summary"]["verdict_rule"] == "holm"
+
+
+# ---------- PF4.38: one case per condition ----------
+
+
+@pytest.mark.parametrize("verb", ["diff", "check", "report", "serve"])
+def test_pf4_38_a_comparison_whose_condition_ran_several_cases_is_refused_on_every_verb(verb: str, tmp_path: Path) -> None:
+    rows = _arm(5, 20)
+    root = tmp_path / "prove-runs"
+    _write_run(root, A_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t1"}, "d": {"case_id": "t2"}})
+    _write_run(root, B_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t3"}, "d": {"case_id": "t2"}},
+               created_at="2026-10-20T10:01:00Z")
+    # Reading R5: the store copies each rollout's case id into its own column, read without decoding meta.
+    assert {str(v) for v in Store(root).read(B_ID, meta=False)["case_id"]} == {"t3", "t2"}
+    argv = [verb, A_ID, B_ID, "--event", "fell", "--method", "fisher_bh"]
+    argv += {"report": ["--x", "cell", "--out", str(tmp_path / "r")], "serve": ["--x", "cell", "--json"],
+             "check": ["--fail-on", "any"]}.get(verb, [])
+    result = _cli(root, *argv)
+    assert result.code == 1 and result.out == "", (result.code, result.err)
+    errors = [line for line in result.err.splitlines() if line.startswith("error: ")]
+    nexts = [line for line in result.err.splitlines() if line.startswith("  next:")]
+    assert len(errors) == 1 and "cell c" in errors[0], errors
+    assert re.search(r"\b2\b", errors[0]) and "t1" in errors[0] and "t3" in errors[0], errors[0]
+    assert any("axis" in line for line in nexts) and any("your-own-agent" in line for line in nexts), nexts
+    one_case = tmp_path / "one"
+    _write_run(one_case, A_ID, {"c": rows}, meta={"c": {"case_id": "t1"}})
+    _write_run(one_case, B_ID, {"c": rows}, meta={"c": {"case_id": "t1"}}, created_at="2026-10-20T10:01:00Z")
+    assert _cli(one_case, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").code == 0
+
+
+# ---------- PF4.39: resume records peeking, and every surface says so ----------
+
+
+def _sweep(cwd: Path, *argv: str) -> Result:
+    result = _cli(cwd / "prove-runs", "sweep", *argv, "--yes")
+    return result
+
+
+def test_pf4_39_a_partial_run_compared_then_resumed_carries_the_peeking_caveat_on_every_surface(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    spec = cwd / "spec.toml"
+    spec.write_text(SMALL_SPEC, encoding="utf-8")
+    target = ["--target", "poisson_prove.examples.mock_agent:rollout", "--max-mde", "0.5"]
+    assert _sweep(cwd, str(spec), *target).code == 0
+    stopped = _sweep(cwd, str(spec), *target, "--max-rollouts", "30")
+    assert stopped.code == 3, stopped.err
+    store = Store(cwd / "prove-runs")
+    (partial,) = [r for r in store.runs() if store.manifest(r).status == "partial"]
+    (first,) = [r for r in store.runs() if r != partial]
+    names = {r["run_id"]: r["run_name"] for r in _json(_cli(cwd / "prove-runs", "runs", "--json"))["runs"]}
+
+    def listing() -> list[tuple[str, int]]:
+        return sorted((str(p.relative_to(cwd)), p.stat().st_size) for p in (cwd / "prove-runs").rglob("*") if p.is_file())
+
+    before = listing()
+    early = _json(_cli(cwd / "prove-runs", "diff", first, partial, "--event", "completed", "--method", "fisher_bh", "--json"))
+    assert listing() == before  # the read record is not in the store
+    assert [(p["run_id"], p["reason"]) for p in early["peeking"]] == [(partial, "partial")]
+    record = Path(os.environ["HOME"]) / ".cache" / "poisson-prove" / "compared.jsonl"
+    lines = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert {line["run_id"] for line in lines} == {first, partial}
+    spec.write_text(SMALL_SPEC.replace("replicates = 30", "replicates = 40"), encoding="utf-8")
+    resumed = _sweep(cwd, str(spec), "--resume", partial)
+    assert resumed.code == 0, resumed.err
+    (entry,) = store.manifest(partial).environment["resumes"]
+    assert entry["after_comparison"] is True and entry["episodes_before"] == 30 and entry["episodes_after"] == 80
+    assert (entry["replicates_before"], entry["replicates_after"]) == (30, 40) and isinstance(entry["at"], str)
+    out = cwd / "r"
+    assert _cli(cwd / "prove-runs", "report", first, partial, "--event", "completed", "--method", "fisher_bh",
+                "--x", "task_id", "--out", str(out)).code == 0
+    page = _json(_cli(cwd / "prove-runs", "serve", first, partial, "--event", "completed", "--method", "fisher_bh",
+                      "--x", "task_id", "--json"))
+    surfaces = {
+        "diff": _cli(cwd / "prove-runs", "diff", first, partial, "--event", "completed", "--method", "fisher_bh").out,
+        "check": _cli(cwd / "prove-runs", "check", first, partial, "--event", "completed", "--method", "fisher_bh",
+                      "--fail-on", "any").out,
+        "report.md": (out / "report.md").read_text(encoding="utf-8"),
+        "receipt.html": _strip_tags((out / "receipt.html").read_text(encoding="utf-8")),
+        "page": _page_text(page),
+    }
+    for name, text in surfaces.items():
+        lines_with = [line for line in text.splitlines() if "peeking" in line.lower()]
+        assert lines_with and any(names[partial] in line for line in lines_with), (name, lines_with)
+    for name in ("diff", "check"):
+        assert any(names[partial] in v for v in _detail(surfaces[name], "peeking")), name
+    assert [(p["run_id"], p["reason"]) for p in page["summary"]["peeking"]] == [(partial, "resumed after a comparison")]
+
+
+def test_pf4_39_a_resume_with_no_comparison_before_it_is_recorded_without_a_caveat(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cwd = tmp_path / "work"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    spec = cwd / "spec.toml"
+    spec.write_text(SMALL_SPEC, encoding="utf-8")
+    target = ["--target", "poisson_prove.examples.mock_agent:rollout", "--max-mde", "0.5"]
+    assert _sweep(cwd, str(spec), *target).code == 0
+    assert _sweep(cwd, str(spec), *target, "--max-rollouts", "30").code == 3
+    store = Store(cwd / "prove-runs")
+    (partial,) = [r for r in store.runs() if store.manifest(r).status == "partial"]
+    (first,) = [r for r in store.runs() if r != partial]
+    assert _sweep(cwd, str(spec), "--resume", partial).code == 0
+    (entry,) = store.manifest(partial).environment["resumes"]
+    assert entry["after_comparison"] is False and (entry["episodes_before"], entry["episodes_after"]) == (30, 60)
+    doc = _json(_cli(cwd / "prove-runs", "diff", first, partial, "--event", "completed", "--method", "fisher_bh", "--json"))
+    assert doc["peeking"] == []
+    assert _detail(_cli(cwd / "prove-runs", "diff", first, partial, "--event", "completed", "--method", "fisher_bh").out, "peeking") == []
+
+
+# ---------- PF4.40: "no significant change" always carries its limit ----------
+
+
+def test_pf4_40_no_significant_change_prints_its_limit_on_the_same_line_everywhere(tmp_path: Path) -> None:
+    root = _pair(tmp_path / "prove-runs", MID, MID, environment_a={"max_mde_accepted": 0.3}, environment_b={"max_mde_accepted": 0.3})
+    s = _surfaces(root, tmp_path, "fell:failure")
+    limit = s["diff --json"]["verdict_limit"]
+    rise, fall = _ref_fisher_limits(30, 60, 60, Q / 2)
+    assert rise is not None and fall is not None and abs(limit - max(rise, fall)) <= 1e-4 + 1e-12
+    assert s["diff --json"]["verdict"] == "no significant change"
+    # Reading R34: check's word is passed or failed, so its block names the comparison's word.
+    (compared,) = _detail(s["check"].out, "comparison")
+    assert compared.startswith("no significant change"), compared
+    for name, text in _texts(s).items():
+        lines = [line for line in text.splitlines() if "no significant change" in line]
+        assert lines, name
+        for line in lines:
+            assert f"{limit:.3f}" in line, (name, line)
+    assert s["page"]["summary"]["verdict_limit"] == limit and s["report --json"]["verdict_limit"] == limit
+
+
+# ---------- PF4.41: log-rank names the cause-specific hazard ----------
+
+
+def test_pf4_41_logrank_is_labelled_the_cause_specific_hazard_and_a_shifted_competitor_is_noted(tmp_path: Path) -> None:
+    def arm(fell: int, stuck: int, n: int) -> list[tuple[int, str | None, float]]:
+        return [(i, "fell", 3.0) if i < fell else (i, "stuck", 2.0) if i < fell + stuck else (i, "ok", HORIZON) for i in range(n)]
+
+    root = _pair(tmp_path / "prove-runs", {"c": arm(10, 5, 60), "quiet": arm(10, 5, 60)},
+                 {"c": arm(10, 25, 60), "quiet": arm(10, 5, 60)}, salt="unshared")
+    s = _surfaces(root, tmp_path, "fell", method="logrank_bh")
+    for name, text in _texts(s).items():
+        assert _says(text, "cause-specific hazard"), name
+    # In the method line and the headline themselves, not only in a note.
+    assert _says(s["diff --json"]["headline"], "cause-specific hazard"), s["diff --json"]["headline"]
+    (method,) = _detail(s["diff"].out, "method")
+    headline = next(line for line in s["diff"].out.splitlines() if line.startswith("(aalen_johansen + logrank_bh"))
+    assert _says(headline, "cause-specific hazard"), headline
+    assert "log-rank" in method or "logrank" in method, method
+    c = _cells_of(s["diff --json"])[_hash("c")]
+    assert c["competing_shift"] == ["ok", "stuck"]
+    assert _cells_of(s["diff --json"])[_hash("quiet")]["competing_shift"] == []
+    (line,) = _detail(s["diff"].out, "competing")
+    assert "stuck" in line, line
+    for name in ("report.md", "page"):
+        assert "stuck" in _texts(s)[name], name
+
+
+# ---------- PF4.42: the interval on the change, on every row and every surface ----------
+
+
+@pytest.mark.parametrize("method,name", [("fisher_bh", "Miettinen-Nurminen"), ("mcnemar_bh", "Tango")])
+def test_pf4_42_every_comparison_carries_an_interval_on_each_change_labelled_with_its_level(method: str, name: str, standard: Path, tmp_path: Path) -> None:
+    s = _surfaces(standard, tmp_path, "fell", method=method)
+    doc = s["diff --json"]
+    m, r = doc["n_tests"], doc["n_rejected"]
+    level = 1 - Q * max(r, 1) / m
+    assert abs(doc["interval_level"] - level) <= 1e-15 and len(doc["intervals"]) == m
+    for c in doc["by_event"]["fell"]["cells"]:
+        assert c["ci_method"] == name.lower() and abs(c["ci_level"] - level) <= 1e-15
+        assert c["ci_lo"] <= c["delta"] <= c["ci_hi"]
+    label = f"{level * 100:.3f}".rstrip("0").rstrip(".") + "%"  # a percentage to at most three decimals
+    for surface, text in _texts(s).items():
+        if surface == "check":
+            continue
+        assert label in text and _says(text, name), (surface, label)
+        assert _says(text, "Benjamini-Yekutieli" if r else "Bonferroni"), surface
+    same = _cells_of(doc)[_hash("same")]
+    row = _row(s["diff"].out, "same")
+    assert f"{same['ci_lo']:.3f}" in row and f"{same['ci_hi']:.3f}" in row, row
+
+
+def test_pf4_42_with_nothing_flagged_the_intervals_are_simultaneous(tmp_path: Path) -> None:
+    root = _pair(tmp_path / "prove-runs", MID, MID)
+    doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
+    assert doc["n_rejected"] == 0 and doc["interval_rule"] == "bonferroni"
+    assert abs(doc["interval_level"] - (1 - Q / 2)) <= 1e-15 and len(doc["intervals"]) == 2
+    text = _cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
+    assert _says(text, "simultaneous") and _says(text, "Bonferroni")
+
+
+# ---------- PF4.44: fragility on every surface that shows the word ----------
+
+
+def test_pf4_44_every_surface_that_shows_the_word_shows_how_many_outcomes_would_change_it(standard: Path, tmp_path: Path) -> None:
+    s = _surfaces(standard, tmp_path, "fell:failure")
+    doc = s["diff --json"]
+    fragility = doc["fragility"]
+    assert isinstance(fragility, int) and fragility >= 1 and len(doc["fragility_flips"]) == fragility
+    for flip in doc["fragility_flips"]:
+        assert set(flip) >= {"config_hash", "event", "run", "replicate_index", "to"}
+    for name in ("check --json", "report --json"):
+        assert s[name]["fragility"] == fragility and s[name]["fragility_flips"] == doc["fragility_flips"], name
+    assert s["page"]["summary"]["fragility"] == fragility
+    for name, text in _texts(s).items():
+        lines = [line for line in text.splitlines() if "fragility" in line.lower()]
+        assert any(re.search(rf"(?<![\d.]){fragility}(?![\d.])", line) for line in lines), (name, lines)
+    for name in ("diff", "check"):
+        assert len(_detail(s[name].out, "fragility")) == 1, name
+
+
+# ---------- PF4.45: the group limit says it is unconditional ----------
+
+
+def test_pf4_45_the_group_limit_is_labelled_unconditional_where_it_is_printed(tmp_path: Path) -> None:
+    """On Go1's fault lines (grouped by mu): the JSON says how the group limit's power is read, and the
+    report's fault-lines section says the root and the group both reject."""
+    go1 = TESTS / "fixtures" / "go1"
+    out = tmp_path / "r"
+    doc = _json(_cli(go1, "diff", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh", "--json"))
+    assert doc["tree"]["fault_lines"]["mde_basis"] == "unconditional"
+    assert _cli(go1, "report", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh", "--x", "mu",
+                "--y", "push_pct_bw", "--out", str(out)).code == 0
+    section = (out / "report.md").read_text(encoding="utf-8").split("## Fault lines", 1)[1].split("\n## ", 1)[0]
+    assert _says(section, "unconditional")
+
+
+# ---------- PF4.46: errored episodes that differ between the runs ----------
+
+
+def test_pf4_46_a_warning_names_the_conditions_whose_errors_differ_on_every_surface(tmp_path: Path) -> None:
+    a = {"c": _arm(5, 40), "d": _arm(5, 40)}
+    b = {"c": _arm(5, 30) + [(30 + i, None, 1.0) for i in range(10)], "d": _arm(5, 40)}
+    root = _pair(tmp_path / "prove-runs", a, b)
+    s = _surfaces(root, tmp_path, "fell")
+    (entry,) = s["diff --json"]["errors_differ"]
+    assert entry["config_hash"] == _hash("c") and (entry["errored_a"], entry["errored_b"]) == (0, 10)
+    assert entry["rows_a"] == 40 and entry["rows_b"] == 40
+    for name, text in _texts(s).items():
+        assert "errored" in text, name
+    assert len(_detail(s["diff"].out, "errors")) == 1
+    assert s["page"]["summary"]["errors_differ"] == s["diff --json"]["errors_differ"]
+
+
+# ---------- PF4.47: the keys of outcomes that move together ----------
+
+
+def test_pf4_47_complementary_rows_name_each_other_in_every_json(tmp_path: Path) -> None:
+    root = _pair(tmp_path / "prove-runs", {"c": _arm(12, 60)}, {"c": _arm(12, 60)})
+    doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--event", "ok", "--method", "fisher_bh", "--json"))
+    fell, ok = _cells_of(doc, "fell")[_hash("c")], _cells_of(doc, "ok")[_hash("c")]
+    assert (fell["mde_moves_with"], ok["mde_moves_with"]) == ("ok", "fell")
+    assert abs(fell["mde_level"] - 2 * Q / 2) <= 1e-15
+    for c in (fell, ok):
+        assert isinstance(c["mde_rise_verdict"], float) and isinstance(c["mde_fall_verdict"], float)
+
+
+# ---------- PF4.49: --max-mde 1 admits a design that can detect nothing ----------
+
+
+def test_pf4_49_a_design_that_cannot_flag_is_refused_below_1_and_admitted_at_1_with_a_note(tmp_path: Path) -> None:
+    spec = tmp_path / "spec.toml"
+    spec.write_text(SMALL_SPEC.replace("replicates = 30", "replicates = 2"), encoding="utf-8")
+    target = ["--target", "poisson_prove.examples.mock_agent:rollout"]
+    refused = _cli(tmp_path / "prove-runs", "sweep", str(spec), *target, "--max-mde", "0.99", "--yes")
+    assert refused.code == 1, refused.err
+    errors = [line for line in refused.err.splitlines() if line.startswith("error: ")]
+    assert len(errors) == 1 and "flagged" in errors[0], errors
+    nexts = [line for line in refused.err.splitlines() if line.startswith("  next:")]
+    assert re.search(r"--replicates \d+", nexts[0]), nexts
+    assert not any(re.search(r"--max-mde (?!0\.99\b)", line) for line in nexts), nexts  # no --max-mde offer
+    admitted = _cli(tmp_path / "prove-runs", "sweep", str(spec), *target, "--max-mde", "1", "--yes")
+    assert admitted.code == 0, admitted.err
+    notes = [line for line in admitted.err.splitlines() if line.startswith("note: ")]
+    assert any("flagged" in line for line in notes), notes
+    (run,) = Store(tmp_path / "prove-runs").runs()
+    assert Store(tmp_path / "prove-runs").manifest(run).environment["design_mde"]["flaggable"] is False
+    over = _cli(tmp_path / "prove-runs", "sweep", str(spec), *target, "--max-mde", "1.01", "--yes")
+    assert over.code in (1, 2) and Store(tmp_path / "prove-runs").runs() == [run]
