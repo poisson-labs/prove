@@ -80,6 +80,7 @@ from poisson_prove.executor_modal import Job, Mapper, ModalOptions, Result, run_
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
+from conftest import code_of
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
@@ -111,7 +112,9 @@ STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine colu
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
 # Re-minted by PF0 Session A over the file as its freeze commit moved it (the rename, Q4).
 # Re-minted over the file as moved for 12-hex config hashes in inspect text (spec section 5.4, rule 10).
-S16_ORACLE_SHA256 = "cd33a676fdb6b93cd33f5998e5e0b29a5486e1b0b906d3ec199f184940f64207"  # 38 tests; re-minted by A10 Session B over the file A10 Session A amended (TRACE_EXPORTS gains Declaration, 5bb967c)
+# Re-minted for public hygiene (Q38): over the file's code with its docstrings and comments taken out
+# (``conftest.code_of``), which the plain-words pass edits; read off the file as it stands, not predicted.
+S16_ORACLE_SHA256 = "9ea86d2005d588bf50d6015580875bc172354e0f8058886d925424e514de5da9"  # 38 tests
 
 #: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
 DECLARED_LIMIT = 8192
@@ -996,7 +999,7 @@ def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_i
 
 def test_k8_the_s16_oracle_is_byte_identical() -> None:
     assert S16_ORACLE.is_file(), S16_ORACLE
-    assert hashlib.sha256(S16_ORACLE.read_bytes()).hexdigest() == S16_ORACLE_SHA256, "the S16 oracle moved"
+    assert hashlib.sha256(code_of(S16_ORACLE.read_text(encoding="utf-8")).encode("utf-8")).hexdigest() == S16_ORACLE_SHA256, "the S16 oracle moved"
 
 
 def test_k8_the_transport_aliases_and_signatures_are_untouched() -> None:

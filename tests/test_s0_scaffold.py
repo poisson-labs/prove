@@ -68,9 +68,18 @@ def test_python_floor():
     assert data["project"]["requires-python"] == ">=3.11"
 
 
-def test_scope_md_exists_and_disclaims_telemetry():
-    text = (ROOT / "SCOPE.md").read_text()
-    assert "never phones home" in text
+#: Q36 (front-door spec sections 6.3, 9.1 and 14): ``SCOPE.md`` folds into the README, and its
+#: never-phones-home paragraph is kept word for word, with the names as the rename gives them.
+NEVER_PHONES_HOME = (
+    "Prove never phones home. No telemetry, no analytics, no update checks. "
+    "`poisson-prove serve` binds a loopback listener on request and makes no outbound connection: "
+    "it holds one page built from data already on the machine, and dies with the process."
+)
+
+
+def test_readme_keeps_the_never_phones_home_promise_word_for_word():
+    text = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert NEVER_PHONES_HOME in text
 
 
 def test_license_is_mit():

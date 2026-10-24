@@ -372,7 +372,10 @@ SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "pus
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
+# Re-minted 2026-10-24 (public hygiene, Q48): the Go1 fixture's manifests record their source folder as ``docs/measurements``,
+# relative to the source repository, where they recorded a machine's absolute path; that value is the only change. Read off
+# main's unchanged code (56e6e69) over the rewritten fixture, not predicted.
+SERVE_STRUCTURE_SHA256 = "06d27889c82b1e474aee3bd10cb12fd7bcd0ca16de4a6c5387e8d44733b61eb5"
 #: W4, W17. Minted on the bare tree at f4e2845 through ``serve --json`` on each pair's argv below
 #: (``scratchpad/s29/mint.py``): the six tree-less keys, ``json.dumps(sort_keys=True)``, sha256.
 # Re-minted 2026-09-20 (truncation surfacing): only the ``diff`` key of the six moves (the horizon key renamed in place, six keys appended); the
@@ -396,9 +399,12 @@ TREE_LESS_KEYS_SHA256 = {
 # Re-minted 2026-09-20 (truncation surfacing): the page's provenance list gains the horizon rename and six observation items; each value is the
 # baseline page's plus that change, byte for byte.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the excised page moves by the build's page order (Run pair below the figure), the pairing line beside 'unpaired' (LS21), the unverified tail respelled and the inert rule in the style; on go1-two-events the complement sentence replaces the trade line and the figure wraps. Read through this test's own measurement on the built tree, not predicted.
+# Re-minted 2026-10-24 (public hygiene, Q48): the Go1 fixture's manifests, which the page's provenance lists, record their source folder as ``docs/measurements``,
+# relative to the source repository, where they recorded a machine's absolute path; that value is the only change. Read off
+# main's unchanged code (56e6e69) over the rewritten fixture, not predicted.
 GO1_PAGE_2_SHA256 = {
-    "go1": "ee10014f70e481a7fe86b893bfc1010e3a91c7bae9f40d219fe1d354e6f3bb8a",
-    "go1-two-events": "cf9e9b9f8bd5ffc75d6bce1bc27c6238c09b7c3869f2394dadeaf752e260f115",
+    "go1": "e506f608e10d7e6a21b6396f577e7a839040e06b1fe67f2bcfbed5f95166c966",
+    "go1-two-events": "e549536a64f8d2afbcff20fabca90ae1feefff4ca7e951eeb2620a9456bcc524",
 }
 #: W20. ``diff.py`` whole again. **A28's retrofit, 2026-09-13 -- both exclusions retired** (ADR-077's
 #: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted

@@ -309,8 +309,11 @@ OUT_PLACEHOLDER = "<out>"
 # 12-hex hashes, check's verdict line, --json for --format json), so those thirteen digests are gone and
 # ``assert_go1_verb_facts`` checks the facts they guarded instead. The page structure inside serve --json is
 # unchanged, so its digest stays.
+# Re-minted 2026-10-24 (public hygiene, Q48): the Go1 fixture's manifests record their source folder as ``docs/measurements``,
+# relative to the source repository, where they recorded a machine's absolute path; that value is the only change. Read off
+# main's unchanged code (56e6e69) over the rewritten fixture, not predicted.
 GO1_VERB_SHA256 = {
-    "serve --json": "725d60142c4322fcdb26242e515636ff9353394c51f61e5b05c8ee240b4e32a7",
+    "serve --json": "d5e2de31e6096b0b026706adf296ee05a5d4e40cd925a9f33fa6c5bec455e4cc",
 }
 GO1_EVENT = "fell"
 GO1_X, GO1_Y = "mu", "push_pct_bw"

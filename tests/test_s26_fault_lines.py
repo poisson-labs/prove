@@ -282,7 +282,10 @@ SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "pus
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
+# Re-minted 2026-10-24 (public hygiene, Q48): the Go1 fixture's manifests record their source folder as ``docs/measurements``,
+# relative to the source repository, where they recorded a machine's absolute path; that value is the only change. Read off
+# main's unchanged code (56e6e69) over the rewritten fixture, not predicted.
+SERVE_STRUCTURE_SHA256 = "06d27889c82b1e474aee3bd10cb12fd7bcd0ca16de4a6c5387e8d44733b61eb5"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
@@ -1009,7 +1012,9 @@ def test_f5_the_trace_stub_refuses_the_name_at_its_own_rung_and_resolution_conti
     assert [r.key for r in grouping.refused] == [name]
     refusal = grouping.refused[0]
     assert (refusal.rung, refusal.reason, refusal.next_rung, refusal.n_groups) == ("trace", "unsupported", "axis", None)
-    assert "Phase 5.2" in refusal.detail, refusal.detail
+    # PF8 (Q37, front-door spec sections 9.2 and 14): the detail no longer has to name the internal phase
+    # that will lift the refusal; the reason ``unsupported`` above carries the fact.
+    assert refusal.detail, refusal
     assert (grouping.resolved_by, grouping.key, grouping.requested) == ("axis", "mu", name)
 
 

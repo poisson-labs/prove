@@ -132,7 +132,7 @@ import poisson_prove.cli as cli
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace, TraceValidationError
-from conftest import quickstart_design
+from conftest import code_of, quickstart_design
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "poisson_prove"
@@ -170,23 +170,26 @@ NINE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-\tplan\t2\tpass\temitted"
 FIVE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-"
 
 #: P8-22: sha256 of ``ast.get_source_segment`` for each symbol A7 owns, measured at ``3bf4083``.
+# Re-minted 2026-10-24 (public hygiene, Q37): each digest is over the symbol's code with its comments and docstrings
+# taken out (``code_of``), so the plain-words pass over src/ moves none of them and a change to the code still does.
+# Read off main's unchanged code (56e6e69), every raw digest above matching first, not predicted.
 A7_SURFACE: dict[str, dict[str, str]] = {
     "trace.py": {
         # PF0 (Q4): LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
         # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
         "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
-        "_ObservationKeys": "234e6e2bf19ab9d167fb4a9fd108c6c6e5843ee0730abde04a2b92e5688b7f41",
+        "_ObservationKeys": "27ead8ed01df19d6fdc2e1ec09a6ff70d40348074e9c62ae48c99f1bfd8a3502",
         # ``split`` retired from this table by A8b Session A, narrowed and never re-minted (ADR-077 / C19):
         # A8b widens its loop body, which is the one A7 symbol A8b may edit. Owner: A8b. Cover:
         # tests/test_a8b_cut_and_cap.py P8-25, which re-asserts every other symbol here byte-identical,
         # pins split's signature line and confines its edit to the loop. Digest at retirement: a63f24ba...13df24.
-        "assemble": "89ec3fc90530156b4a35bfedd2d5fd5da32412bc70b9d66f80be089716e5a1fe",
+        "assemble": "ff677667e7d4d35ab51f1b4a51fae804f4eaa80c7e19bc9188889fbf63d9cb61",
     },
     "store.py": {
-        "_SCHEMA": "7a667ffbc1067dce738a839266851ba6c11dacf989e1fd58a66775490a80c02a",
+        "_SCHEMA": "6860731a98d6b021322e8de25a4c5ff94ca4f3277925e784df05b43c238f52f9",
         "_NULLABLE_STRING_COLUMNS": "c7f3ae63b60a6d4216a9d9ebf8856d2d7151491f59903b447d775b25263a9fe0",
-        "Store.append": "8bdf8983f500500c1f33b16039d0d018085de9f9649561f10d257f09a8e87bb7",
-        "Store.read": "a853c1b49fbf43c0e65038b9620e668ff180acf68601dcef4cb3eace63c834cb",
+        "Store.append": "bd639c8521010aaa52c7baa2765a2feeb8c5f517143e42e3ed5fb5b2f73a2f56",
+        "Store.read": "dbb913562835b7a20a900720cd9d8a94f7b403e513f8966751f4c5ffa52c48cb",
     },
 }
 
@@ -253,6 +256,7 @@ def function_source(path: Path, qualname: str) -> str:
             if any(isinstance(t, ast.Name) and t.id == head for t in targets):
                 return ast.get_source_segment(src, node) or ""
     raise AssertionError(f"{qualname} not found at top level of {path.name}")
+
 
 
 def string_literals(node: ast.AST) -> set[str]:
@@ -981,5 +985,5 @@ def test_p8_22_a8a_edits_nothing_a7_owns() -> None:
     ``OBSERVATION_KEYS``, or touching the store's schema, its nullable columns, ``append`` or ``read``."""
     for file, symbols in A7_SURFACE.items():
         for qualname, expected in symbols.items():
-            actual = hashlib.sha256(function_source(SRC / file, qualname).encode("utf-8")).hexdigest()
+            actual = hashlib.sha256(code_of(function_source(SRC / file, qualname)).encode("utf-8")).hexdigest()
             assert actual == expected, f"{file} {qualname} moved: {actual}"

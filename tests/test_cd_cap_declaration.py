@@ -96,7 +96,7 @@ from poisson_prove import cli
 from poisson_prove.episode import Episode
 from poisson_prove.executor import NotResumable, plan, run_local
 from poisson_prove.sampler import SamplerError, SweepSpec
-from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace, assemble, split
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
@@ -137,15 +137,15 @@ MID_VALUE, MID_BYTES = "m" * 10000, 10000
 HUGE_VALUE, HUGE_BYTES = "y" * 20000, 20000
 NONE_VALUE, NONE_BYTES = "n" * 200000, 200000
 
-#: Section 7.1a: what every shipped golden-pilot sweep file declares after this packet.
-EXAMPLE_CAP = 1024
-SHIPPED_SWEEP_FILES = (
-    "examples/golden_pilot/pilot.toml",
-    "examples/golden_pilot/smoke.toml",
-    "examples/tau2_pilot/t4.toml",
+#: CD12, as a rule over what ships: every sweep spec under ``examples/`` and the packaged one.
+#: PF8 (Q35, front-door spec sections 8.8 and 14): the pilot specs this named left the repository,
+#: so the files are found, not listed; a ``.toml`` there with no ``target_id`` is not a sweep spec.
+SHIPPED_SWEEP_FILES = tuple(
+    str(path.relative_to(REPO))
+    for path in sorted([*REPO.glob("examples/**/*.toml"), *(REPO / "src" / "poisson_prove" / "examples").glob("*.toml")])
+    if re.search(r"(?m)^target_id\s*=", path.read_text(encoding="utf-8"))
 )
-#: D13: the pre-registered value, untouched.
-T4_CAP = 8192
+assert SHIPPED_SWEEP_FILES, "the packaged quickstart spec at least ships"
 
 #: D9: nothing downstream of the manifest is edited. Minted at the dispatch commit ``1f5491b``.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
@@ -164,9 +164,6 @@ UNTOUCHED_FILE_SHA256 = {
 REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "2e35cd3468dd170503d4ad3d7ec9fe1846d6349b84a577fc6de5bb60b74e8724"
 #: CD11: ``split``'s envelope/bodies partition over the fixture below, at the dispatch commit.
 SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
-#: CD12: ``examples/tau2_pilot/t4.toml``'s 53 ``config_hash`` values, sorted and joined (D13).
-T4_CONFIG_HASH_SET_SHA256 = "f528659dfb85fd43fc229eab8c6fc81b2cc72cce11f95b76ddd623408e6c2606"
-T4_CONFIGS = 53
 
 
 # ---------- helpers: never an assertion ----------
@@ -1064,41 +1061,13 @@ def test_cd11_split_does_not_take_a_limit() -> None:
 
 @pytest.mark.parametrize("relative", SHIPPED_SWEEP_FILES)
 def test_cd12_every_shipped_sweep_file_declares_and_loads(relative: str) -> None:
-    """Sole catch for a build that ships an example its own parser rejects. Section 7.1a: the two
-    golden-pilot files declare ``1024``, which CAP3 measured at 64x headroom over every observation
-    value that substrate produces -- a number rather than a silencer, so the shipped example teaches
-    the normal path."""
-    path = REPO / relative
-    assert path.is_file(), path
-    spec = SweepSpec.load(path)
-    assert spec.capture is not None, relative
-    cap = spec.capture.max_observation_bytes
-    assert cap == (T4_CAP if relative.endswith("t4.toml") else EXAMPLE_CAP), (relative, cap)
+    """Sole catch for a build that ships an example its own parser rejects: every sweep spec the
+    repository ships loads, and one with a ``[capture]`` table declares its cap as a number.
 
-
-def test_cd12_the_golden_pilot_template_declares_the_same_number() -> None:
-    """``make_toml.py`` writes ``pilot.toml`` and ``smoke.toml``; a template that does not declare
-    ships a file the parser refuses the moment anyone regenerates them."""
-    text = (REPO / "examples/golden_pilot/make_toml.py").read_text()
-    assert f"max_observation_bytes = {EXAMPLE_CAP}" in text, [line for line in text.splitlines() if "capture" in line or "bytes" in line]
-
-
-def test_cd12_t4_still_declares_8192_and_its_config_hashes_do_not_move() -> None:
-    """D13, Taylor's ruling: the pre-registration pre-registers the old cap as the number under test,
-    CAP3 refuted that, and it stays as written with the discrepancy reported when the run resumes.
-    Only the file's *comment* moves, and ``[capture]`` does not enter ``SweepSpec.to_dict()``, so a
-    comment is not part of anything. Green before and after: ``t4.toml`` already declares."""
-    spec = SweepSpec.load(REPO / "examples/tau2_pilot/t4.toml")
-    assert spec.capture is not None and spec.capture.max_observation_bytes == T4_CAP
-    hashes = sorted(config_hash(c) for c in spec.configs)
-    assert len(hashes) == T4_CONFIGS
-    assert hashlib.sha256("".join(hashes).encode()).hexdigest() == T4_CONFIG_HASH_SET_SHA256
-
-
-def test_cd12_the_t4_comment_no_longer_names_a_shipped_default() -> None:
-    """The comment said the cap "stays at the shipped default", and after this packet there is no
-    shipped default for it to stay at. The generator writes the same line, so both move together."""
-    for relative in ("examples/tau2_pilot/t4.toml", "scripts/tau2_t4_sweep.py"):
-        text = (REPO / relative).read_text()
-        assert "stays at the shipped default" not in text, relative
-        assert "max_observation_bytes = 8192" in text or '"max_observation_bytes = 8192"' in text, relative
+    PF8 (Q35): the golden-pilot and tau2 files this read, and the three tests that pinned the tau2
+    study's pre-registered cap, its config hashes and its comment, left with the pilots; the rule
+    stays, over the files that ship."""
+    spec = SweepSpec.load(REPO / relative)
+    if spec.capture is not None:
+        cap = spec.capture.max_observation_bytes
+        assert isinstance(cap, int) and cap >= 1, (relative, cap)

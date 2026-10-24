@@ -1,5 +1,8 @@
+import ast
 import functools
+import io
 import socket
+import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -168,3 +171,28 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         entry.name.startswith(_PREFIX) for entry in Path(tmp).iterdir()
     ):
         _reap(tmp, None)
+
+
+def code_of(source: str) -> str:
+    """``source`` with its comments and docstrings taken out and its blank lines dropped: the code
+    a change to words alone leaves as it was.
+
+    PF8 (front-door spec sections 9.2 and 14, Q37 and Q38): the plain-words pass rewrites the
+    docstrings and comments of ``src/`` and of the frozen tests, so a frozen digest over a symbol's
+    source or a test file's bytes is taken over this instead, and moves only when code does."""
+    lines = io.StringIO(source, newline="\n").readlines()
+
+    def column(row: int, byte_col: int) -> int:
+        return len(lines[row - 1].encode("utf-8")[:byte_col].decode("utf-8"))
+
+    cuts = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+                cuts.append((first.lineno, column(first.lineno, first.col_offset), first.end_lineno, column(first.end_lineno, first.end_col_offset)))
+    cuts += [(*tok.start, *tok.end) for tok in tokenize.generate_tokens(io.StringIO(source).readline) if tok.type == tokenize.COMMENT]
+    rows = [line.rstrip("\n") for line in lines]
+    for r0, c0, r1, c1 in sorted(cuts, reverse=True):
+        rows[r0 - 1:r1] = [rows[r0 - 1][:c0] + rows[r1 - 1][c1:]]
+    return "\n".join(row.rstrip() for row in rows if row.strip())

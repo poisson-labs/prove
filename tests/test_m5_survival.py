@@ -23,6 +23,7 @@ Notes for the implementation session:
   0), so the sum holds its last finite value there and ``var`` is 0 once ``S`` is 0.
 """
 
+import gzip
 import json
 import warnings
 from pathlib import Path
@@ -48,15 +49,8 @@ from poisson_prove.survival import (
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLDEN_JSON = ROOT / "tests" / "fixtures" / "go1" / "golden.json"
-DIFF_JSON = (
-    Path.home()
-    / "code"
-    / "poisson-labs"
-    / "policy-robustness-sweep"
-    / "docs"
-    / "measurements"
-    / "2026-08-18-v0-v1-diff.json"
-)
+#: The published v0-v1 diff, committed gzipped beside the fixture (front-door spec section 9.1).
+DIFF_JSON = ROOT / "tests" / "fixtures" / "go1" / "source" / "2026-08-18-v0-v1-diff.json.gz"
 
 RUNS = ["go1-v0", "go1-v1"]
 FELL_KEY = {"go1-v0": "fell_a", "go1-v1": "fell_b"}
@@ -190,9 +184,8 @@ def _load_golden_cells() -> dict[tuple[float, float], dict]:
         cells = golden.get("cells")
         if cells is not None:
             return {(c["mu"], c["push_pct_bw"]): c for c in cells}
-    if not DIFF_JSON.is_file():
-        pytest.skip(f"no per-cell golden counts: golden.json has no 'cells' and {DIFF_JSON} absent")
-    diff = json.loads(DIFF_JSON.read_text())
+    assert DIFF_JSON.is_file(), f"no per-cell golden counts: golden.json has no 'cells' and {DIFF_JSON} is missing"
+    diff = json.loads(gzip.decompress(DIFF_JSON.read_bytes()))
     return {(c["mu"], c["push_pct_bw"]): c for c in diff["cells_diff"]}
 
 

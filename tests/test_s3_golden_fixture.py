@@ -2,12 +2,14 @@
 
 Every test runs against the committed fixture at tests/fixtures/go1/ through the
 ``go1_store`` fixture in conftest.py. The two exceptions are I9 and I10, which
-invoke the builder against the source manifests into a tmp_path and skip when the
-source measurements directory is absent (CI does not have it).
+invoke the builder against the source manifests into a tmp_path. The manifests are
+committed gzipped beside the fixture (``tests/fixtures/go1/source/``), so these run
+everywhere and read nothing outside the repository (front-door spec section 9.1).
 
 Builder contract assumed by I9 and I10:
 
-    python scripts/build_golden_fixture.py --v0 <manifest> --v1 <manifest> --out <dir>
+    python tests/fixtures/go1/build_golden_fixture.py --v0 <manifest> --v1 <manifest> --out <dir>
+        --source-commit <sha>
 
 Exit 0 on success, having written <dir>/go1-v0, <dir>/go1-v1 and <dir>/golden.json.
 Non-zero exit with no Parquet written when the computed fell fractions disagree
@@ -15,6 +17,7 @@ with the published numbers. The builder must not depend on files that sit next
 to the manifests it is given; I10 passes a lone tampered copy.
 """
 
+import gzip
 import json
 import subprocess
 import sys
@@ -27,13 +30,11 @@ from poisson_prove.store import Store
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
-BUILDER = ROOT / "scripts" / "build_golden_fixture.py"
-
-MEASUREMENTS = (
-    Path.home() / "code" / "poisson-labs" / "policy-robustness-sweep" / "docs" / "measurements"
-)
-V0_MANIFEST = MEASUREMENTS / "2026-08-18-g4-v0-32-sweep-manifest.json"
-V1_MANIFEST = MEASUREMENTS / "2026-08-18-g4-v1-32-sweep-manifest.json"
+BUILDER = FIXTURE_DIR / "build_golden_fixture.py"
+#: The source repository's commit the committed copies were taken from (the README's).
+SOURCE_COMMIT = "98d2a0435f866db425e99e7643836d83d5312937"
+V0_NAME = "2026-08-18-g4-v0-32-sweep-manifest.json"
+V1_NAME = "2026-08-18-g4-v1-32-sweep-manifest.json"
 
 RUNS = ["go1-v0", "go1-v1"]
 CELLS = 400
@@ -45,9 +46,16 @@ PUBLISHED_SAFER, PUBLISHED_WORSE = 60, 0
 MU_GRID = [round(0.05 * k, 2) for k in range(1, 21)]
 PUSH_GRID = [10.0 * k for k in range(1, 21)]
 
-needs_source = pytest.mark.skipif(
-    not MEASUREMENTS.is_dir(), reason=f"source measurements dir absent: {MEASUREMENTS}"
-)
+
+
+@pytest.fixture(scope="module")
+def measurements(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The two committed source manifests, unzipped into a folder of their own, so a manifest has
+    nothing beside it but the other one."""
+    folder = tmp_path_factory.mktemp("go1-source")
+    for name in (V0_NAME, V1_NAME):
+        (folder / name).write_bytes(gzip.decompress((FIXTURE_DIR / "source" / f"{name}.gz").read_bytes()))
+    return folder
 
 
 # ---------- fixtures ----------
@@ -66,7 +74,7 @@ def _golden() -> dict:
 
 def _run_builder(v0: Path, v1: Path, out: Path) -> subprocess.CompletedProcess[str]:
     assert BUILDER.is_file(), f"builder missing at {BUILDER}"
-    cmd = [sys.executable, str(BUILDER), "--v0", str(v0), "--v1", str(v1), "--out", str(out)]
+    cmd = [sys.executable, str(BUILDER), "--v0", str(v0), "--v1", str(v1), "--out", str(out), "--source-commit", SOURCE_COMMIT]
     return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
 
 
@@ -188,11 +196,10 @@ def test_i8_golden_json_grid_and_fell_pct() -> None:
 # ---------- I9: deterministic conversion ----------
 
 
-@needs_source
-def test_i9_builder_is_deterministic(tmp_path: Path) -> None:
+def test_i9_builder_is_deterministic(measurements: Path, tmp_path: Path) -> None:
     a, b = tmp_path / "a", tmp_path / "b"
     for out in (a, b):
-        r = _run_builder(V0_MANIFEST, V1_MANIFEST, out)
+        r = _run_builder(measurements / V0_NAME, measurements / V1_NAME, out)
         assert r.returncode == 0, r.stderr
     parts_a = sorted(p.relative_to(a) for p in a.rglob("*.parquet"))
     parts_b = sorted(p.relative_to(b) for p in b.rglob("*.parquet"))
@@ -201,12 +208,11 @@ def test_i9_builder_is_deterministic(tmp_path: Path) -> None:
         assert (a / rel).read_bytes() == (b / rel).read_bytes(), rel
 
 
-@needs_source
 def test_i9_committed_fixture_matches_fresh_build(
-    go1_store: Store, frames: dict[str, pd.DataFrame], tmp_path: Path
+    go1_store: Store, frames: dict[str, pd.DataFrame], measurements: Path, tmp_path: Path
 ) -> None:
     out = tmp_path / "fresh"
-    r = _run_builder(V0_MANIFEST, V1_MANIFEST, out)
+    r = _run_builder(measurements / V0_NAME, measurements / V1_NAME, out)
     assert r.returncode == 0, r.stderr
     fresh = Store(out)
     assert fresh.runs() == RUNS
@@ -218,9 +224,8 @@ def test_i9_committed_fixture_matches_fresh_build(
 # ---------- I10: drift guard ----------
 
 
-@needs_source
-def test_i10_builder_refuses_on_fell_fraction_drift(tmp_path: Path) -> None:
-    manifest = json.loads(V0_MANIFEST.read_text())
+def test_i10_builder_refuses_on_fell_fraction_drift(measurements: Path, tmp_path: Path) -> None:
+    manifest = json.loads((measurements / V0_NAME).read_text())
     flipped = 0
     for rec in manifest["records"]:
         if rec["fell_time_upz_s"] is not None:
@@ -232,7 +237,7 @@ def test_i10_builder_refuses_on_fell_fraction_drift(tmp_path: Path) -> None:
     tampered = tmp_path / "v0-tampered.json"
     tampered.write_text(json.dumps(manifest))
     out = tmp_path / "out"
-    r = _run_builder(tampered, V1_MANIFEST, out)
+    r = _run_builder(tampered, measurements / V1_NAME, out)
     assert r.returncode != 0
     assert not list(out.rglob("*.parquet"))
     assert not (out / "golden.json").exists()

@@ -161,6 +161,7 @@ from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
 from poisson_prove.report import ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from conftest import code_of
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -294,7 +295,10 @@ SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "pus
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
+# Re-minted 2026-10-24 (public hygiene, Q48): the Go1 fixture's manifests record their source folder as ``docs/measurements``,
+# relative to the source repository, where they recorded a machine's absolute path; that value is the only change. Read off
+# main's unchanged code (56e6e69) over the rewritten fixture, not predicted.
+SERVE_STRUCTURE_SHA256 = "06d27889c82b1e474aee3bd10cb12fd7bcd0ca16de4a6c5387e8d44733b61eb5"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
@@ -345,9 +349,16 @@ E14_SHA256 = {
 # Re-minted again for the paired default (front-door spec sections 4.4 and 14, Q17): both files name
 # --method fisher_bh on their Go1 commands and drop method and method_chosen from serve --json.
 # Read off the two files after every other move, not predicted.
+# Re-minted again for public hygiene (front-door spec sections 9.1, 9.2 and 14, Q37 and Q48): both files re-mint
+# their serve --json digest over the Go1 fixture's rewritten source folder, and test_s26_fault_lines.py no
+# longer pins an internal phase in a refusal's detail. Read off the two files
+# after every other move, not predicted.
+# Re-minted again for public hygiene (Q38): the plain-words pass edits the docstrings and comments of frozen test
+# files, so the pin is over each file's code with those taken out (``conftest.code_of``) and still moves the moment
+# an assertion does. Read off the two files after every other move, not predicted.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "e06498c29f1a5bcc7bd78e7e71aea85f8734ae6ff6d6ceeb2fa3652a04e5a76b",
-    "tests/test_s26_fault_lines.py": "941d07d2f5d55c3257093c32a8b0762511eaa1bcb7de18d30c15da71ebbec1e0",
+    "tests/test_s25_root.py": "e6f1c86aa220ba93ed8c5b9113d4ba4e04bf4c350644233f35948a1bbd4933dd",
+    "tests/test_s26_fault_lines.py": "e52c36abb557225dec59eafd9135cd9bf08dafc6dd59b3fc0286de3e7a37991a",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -2035,7 +2046,7 @@ def test_l20_diff_py_and_the_two_frozen_oracles_are_byte_untouched() -> None:
     ``.git`` can check (module docstring)."""
     # PF0 (Q4): the diff.py digest is no longer asserted; the rename changes diff.py.
     for relative, digest in FROZEN_ORACLE_SHA256.items():
-        assert hashlib.sha256((REPO / relative).read_bytes()).hexdigest() == digest, relative
+        assert hashlib.sha256(code_of((REPO / relative).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() == digest, relative
 
 
 def test_l20_omnibus_and_resolve_grouping_keep_their_signatures_and_tree_gains_only_depth() -> None:

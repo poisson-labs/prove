@@ -96,8 +96,8 @@ each goes into the spec's change log on the freeze):
 frame by frame -- the spec's section 11.2 ruling made that the front door for phase 2, and it is
 what lets a fixture carry exactly the flip pattern an invariant needs. The two exceptions: the
 control runs a hand-built store through ``assert_pairs`` so the frames ``analyse`` reads are the
-frames phase 1 emits; and PR39 reads the two stored 45/44 arms (skipped when
-``~/code/poisson-labs/proofload-runs`` is absent) and builds their assertion in test code,
+frames phase 1 emits; and PR39 reads the two stored 45/44 arms (committed reduced to the fields
+it reads, ``tests/fixtures/paired-arms``) and builds their assertion in test code,
 matched on ``(config_hash, replicate_index)`` with eligibility as the published script had it. As
 section 6 says, the stored arms carry one cut, four pairs per task and 44 flips, so PR37, PR32's
 ``m_bar = 3`` reading and PR31 each have a hand-built frame here instead.
@@ -170,14 +170,12 @@ PER_SWEEP_KEYS = frozenset({
 INTERVAL_KEYS = frozenset({"estimate", "lo", "hi", "basis"})
 PAIRED_QUANTITIES = frozenset({"flip_rate", "net_swing", "outcome_interval"})
 
-GOLDEN_STORE = Path.home() / "code" / "poisson-labs" / "prove-runs"
+#: The two arms, every episode with only the fields read below (front-door spec section 9.1:
+#: no test reads outside the repository); ``README.md`` beside them says how they were reduced.
+GOLDEN_STORE = Path(__file__).resolve().parent / "fixtures" / "paired-arms"
 ARM_A, ARM_B, SALT_4544 = "20260915T210140Z-4847", "20260915T211148Z-965d", "d2ebb5be1d394d12"
 INSTRUMENT_SIDE = frozenset(
     {"infrastructure_error", "agent_error", "user_error", "unexpected_error"}
-)
-needs_golden = pytest.mark.skipif(
-    not (GOLDEN_STORE / ARM_A).is_dir() or not (GOLDEN_STORE / ARM_B).is_dir(),
-    reason=f"the 45/44 arms are not stored under {GOLDEN_STORE}",
 )
 
 
@@ -1326,7 +1324,6 @@ def golden_cut() -> Any:
     return _GOLDEN["cut"]
 
 
-@needs_golden
 def test_pr39_golden_the_two_by_two_and_the_arm_order_check_are_the_published_ones() -> None:
     cut = golden_cut()
     assert two_by_two(cut, "R") == (67, 23, 21, 89)
@@ -1338,7 +1335,6 @@ def test_pr39_golden_the_two_by_two_and_the_arm_order_check_are_the_published_on
     assert cut.ties == {"a": 90, "b": 88}  # every solved episode sits exactly at the cut
 
 
-@needs_golden
 def test_pr39_golden_the_task_clustered_interval_is_0_155_to_0_285() -> None:
     cut = golden_cut()
     flip = cut.pooled["flip_rate"]
@@ -1352,7 +1348,6 @@ def test_pr39_golden_the_task_clustered_interval_is_0_155_to_0_285() -> None:
     assert (round(lo, 4), round(hi, 4)) == (0.1646, 0.2839)
 
 
-@needs_golden
 def test_pr39_golden_the_net_swing_is_one_point_with_the_published_clustered_interval() -> None:
     """The published sentence is "+1.0 points, -5.5 to +7.5" under arm A minus arm A'. PR26 as
     written is A' minus A -- ruled 2026-09-22 to stand -- so the same swing and the same interval
@@ -1365,7 +1360,6 @@ def test_pr39_golden_the_net_swing_is_one_point_with_the_published_clustered_int
     assert (round(swing["lo"], 3), round(swing["hi"], 3)) == (-0.075, 0.055)
 
 
-@needs_golden
 def test_pr39_golden_the_design_effect_and_the_outcome() -> None:
     cut = golden_cut()
     assert cut.design_effect["m_bar"] == 4.0
@@ -1376,7 +1370,6 @@ def test_pr39_golden_the_design_effect_and_the_outcome() -> None:
     assert cut.threshold == Decimal("1") and cut.name == "solved"
 
 
-@needs_golden
 def test_pr39_golden_reproduces_from_the_published_seed_and_moves_off_it() -> None:
     """The same arms under another seed give another interval, so the 0.155 / 0.285 is the
     published procedure at the published seed and not a coincidence of the arms."""

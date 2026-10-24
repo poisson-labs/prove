@@ -29,6 +29,7 @@ Notes for the implementation session:
   statistic picks up a ~1e-30 residue and ``chi2.sf`` returns just under 1.0.
 """
 
+import gzip
 import json
 import shutil
 from pathlib import Path
@@ -55,15 +56,8 @@ from poisson_prove.survival import censor
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
 GOLDEN_JSON = FIXTURE_DIR / "golden.json"
-DIFF_JSON = (
-    Path.home()
-    / "code"
-    / "poisson-labs"
-    / "policy-robustness-sweep"
-    / "docs"
-    / "measurements"
-    / "2026-08-18-v0-v1-diff.json"
-)
+#: The published v0-v1 diff, committed gzipped beside the fixture (front-door spec section 9.1).
+DIFF_JSON = ROOT / "tests" / "fixtures" / "go1" / "source" / "2026-08-18-v0-v1-diff.json.gz"
 
 RUNS = ["go1-v0", "go1-v1"]
 EVENT = "fell"
@@ -184,9 +178,8 @@ def _load_published_cells() -> dict[tuple[float, float], dict]:
         cells = json.loads(GOLDEN_JSON.read_text()).get("cells")
         if cells and all("fisher_p" in c and "fisher_q" in c for c in cells):
             return {(c["mu"], c["push_pct_bw"]): c for c in cells}
-    if not DIFF_JSON.is_file():
-        pytest.skip(f"no published per-cell p/q: golden.json lacks them and {DIFF_JSON} absent")
-    cells = json.loads(DIFF_JSON.read_text())["cells_diff"]
+    assert DIFF_JSON.is_file(), f"no published per-cell p/q: golden.json lacks them and {DIFF_JSON} is missing"
+    cells = json.loads(gzip.decompress(DIFF_JSON.read_bytes()))["cells_diff"]
     return {(c["mu"], c["push_pct_bw"]): c for c in cells}
 
 
