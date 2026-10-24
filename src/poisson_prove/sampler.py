@@ -415,6 +415,11 @@ class SweepSpec:
         except tomllib.TOMLDecodeError as exc:
             raise SamplerError(f"invalid TOML in {file}: {exc}") from exc
 
+        if "name" in data:
+            raise SamplerError(
+                f"sweep file {file}: name is not a key a sweep spec has; a run is named on the "
+                "command line with sweep --name"
+            )
         for field in ("target_id", "t_unit", "replicates"):
             if field not in data:
                 raise SamplerError(f"sweep file {file.name} is missing required field {field!r}")

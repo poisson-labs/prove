@@ -340,3 +340,31 @@ def strict(value: Any) -> Any:
 
 def dumps(value: Any) -> str:
     return json.dumps(strict(value), indent=2, allow_nan=False, ensure_ascii=False)
+
+
+# ---------- commands to copy ----------
+
+#: The characters a shell reads as themselves in a word.
+_PLAIN = re.compile(r"[A-Za-z0-9_./:@%+=,#-]+")
+
+
+def word(text: str) -> str:
+    """``text`` as one word a POSIX shell reads back exactly: bare when every character is read
+    as itself, else in double quotes with the four characters a shell reads inside them (``"``,
+    ``\\``, ``$`` and the backquote) escaped, so no value on the screen is single-quoted or reads
+    as a Python repr. A ``!``, which an interactive shell may expand even inside double quotes,
+    is written outside them, escaped."""
+    if _PLAIN.fullmatch(text):
+        return text
+    parts = []
+    for i, piece in enumerate(text.split("!")):
+        if i:
+            parts.append("\\!")
+        if piece:
+            parts.append('"' + re.sub(r'(["\\$`])', r"\\\1", piece) + '"')
+    return "".join(parts) or '""'
+
+
+def command(*words: str) -> str:
+    """A command line to copy, each word quoted by :func:`word` where it needs it."""
+    return " ".join(word(w) for w in words)

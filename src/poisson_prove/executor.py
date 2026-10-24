@@ -150,6 +150,8 @@ class Plan:
     #: value the CLI supplies purely so the manifest can record it. ``check_power`` reads it
     #: and never writes it.
     max_mde_accepted: float | None = None
+    #: The name given at sweep time, recorded in the new run's manifest.
+    name: str | None = None
 
 
 def _all_keys(spec: SweepSpec) -> list[tuple[str, int]]:
@@ -1117,6 +1119,7 @@ def run_local(
                 environment=environment,
                 retain_traces_for=p.spec.retain_traces_for,
                 declared=_spec_declared(p.spec),
+                name=p.name,
             )
         )
 
