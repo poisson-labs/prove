@@ -9,9 +9,9 @@ default, and Z13 pins that.
 ``build_report`` and ``build_multi_report`` put ``diff.truncated`` into the provenance dict, and
 that is the count of episodes re-censored at the common horizon (``diff._truncate``: rows with
 ``t > horizon``). ``report.md``, ``receipt.html`` and the viewer page print it as ``truncated: N``,
-which reads as a statement about the observation cut and is not one. ``go1-report.md:45`` and
-``go1-receipt.html`` both read ``truncated: 0`` over runs that dropped a third of their
-observation values. Nothing on any surface says a value was cut, how many, or at what limit, and
+which reads as a statement about the observation cut and is not one: a published pair's report and
+receipt both read ``truncated: 0`` over runs that dropped a third of their observation values.
+Nothing on any surface says a value was cut, how many, or at what limit, and
 ``inspect`` says outright that it prints none of it (``cli.py:1628``).
 
 **What a surface says now** (the names are this file's; the dispatch left them to the build):
@@ -49,7 +49,7 @@ own build recorded, so a pre-A8b run's ``max_span_bytes`` reads as itself.
 | Z12 ``inspect`` prints the cut | ``test_z12_*`` (4) |
 | Z13 the cap, its default and the stored field names are untouched | ``test_z13_*`` (2) |
 | Z14 the builders' interface | ``test_z14_*`` (4) |
-| Z15 the Go1 pair, the published shape | ``test_z15_*`` (4) |
+| Z15 the generated lattice pair (``tests/lattice.py``): no capture record, no traces, nothing censored at the horizon | ``test_z15_*`` (4) |
 
 **Real frames, round-tripped.** Every store here is written by ``Store.append`` from traces cut by
 ``truncate_observations``, and read back by the CLI, never hand-built (standing rule 14). Seven
@@ -69,7 +69,7 @@ test of Z11, the no-cut-and-nine-columns test of Z12, and both tests of Z13.
 
 **Named gaps, not pinned.** (1) ``inspect`` cannot open a run stored before A8a: ``Store.read`` with the
 full trace raises ``TraceValidationError`` on the missing ``alias_map_version`` (measured on all four
-post-A7 runs in ``proofload-runs``, and the pre-A7 golden-pilot runs read as having no trace); Z9's
+post-A7 runs in a local store, and pre-A7 runs, such as the generated lattice pair, read as having no trace); Z9's
 ``inspect`` loop leaves the ``legacy`` run out on purpose, and no test here asserts the defect. (2)
 ``diff`` and ``check`` still say ``truncated=N`` for the horizon count (``diff.py``, byte-fenced by A28
 and FR); Z2 pins that the layer keeps its name, not that it should. (3) A pre-A8b marker is not read: A8b's
@@ -96,6 +96,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+import lattice
 import poisson_prove.cli as cli
 from poisson_prove.diff import DiffResult, MultiDiffResult, multi_diff
 from poisson_prove.episode import Episode
@@ -111,8 +112,6 @@ from poisson_prove.viewer import SCHEMA, ViewerError, render_html
 OWN_RUN_CUT_AT = 8192
 
 REPO = Path(__file__).resolve().parent.parent
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
 
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
 NEW_SCHEMA = "poisson-prove.viewpair/7"
@@ -124,7 +123,7 @@ EVENT_T = 3.0
 #: is over the module default.
 SMALL, BIG, OWN_BIG = 10, 300, 9000
 KNOBS = ["--permutations", "50", "--seed", "0"]
-GO1_KNOBS = ["--permutations", "300", "--seed", "0"]
+LATTICE_KNOBS = ["--permutations", "300", "--seed", "0"]
 
 #: The pair provenance keys the CLI's structure carries, in order: the horizon count in
 #: ``truncated``'s old slot, and the run-identity block followed by the observation block.
@@ -407,8 +406,10 @@ def hz(corpus: Path, tmp_path_factory: pytest.TempPathFactory) -> Surfaces:
 
 
 @pytest.fixture(scope="module")
-def go1(tmp_path_factory: pytest.TempPathFactory) -> Surfaces:
-    return surfaces(GO1_ROOT, GO1_A, GO1_B, tmp_path_factory.mktemp("go1"), x="mu", y="push_pct_bw", event="fell", knobs=GO1_KNOBS)
+def pair(tmp_path_factory: pytest.TempPathFactory) -> Surfaces:
+    """The generated lattice pair: written before the trace columns, with no capture record, every
+    episode ending at or before the shared 5.0 s horizon."""
+    return surfaces(lattice.root(), lattice.RUN_A, lattice.RUN_B, tmp_path_factory.mktemp("lattice"), x=lattice.X, y=lattice.Y, event=lattice.EVENT, knobs=LATTICE_KNOBS)
 
 
 def stored_multi(root: Path, a: str, b: str) -> tuple[MultiDiffResult, RunManifest, RunManifest]:
@@ -785,17 +786,21 @@ def test_z14_the_library_and_the_cli_build_the_same_provenance_from_the_same_inp
     assert built.provenance == s1.diff
 
 
-# ---------- Z15: the Go1 pair, the published shape ----------
+# ---------- Z15: the lattice pair, a store written before the trace columns ----------
 
 
 @pytest.mark.parametrize("surface", ["report.md", "receipt.html", "viewer page"])
-def test_z15_go1_no_longer_says_truncated_and_says_what_it_can_and_cannot_say_about_observations(go1: Surfaces, surface: str) -> None:
-    labels = go1.texts()[surface]
+def test_z15_lattice_no_longer_says_truncated_and_says_what_it_can_and_cannot_say_about_observations(pair: Surfaces, surface: str) -> None:
+    labels = pair.texts()[surface]
     assert "truncated" not in labels and labels["episodes censored at horizon"] == "0"
     assert labels["observation cap a"] == "not recorded" and labels["observation cap b"] == "not recorded"
     assert labels["trace spans a"] == "0" and labels["trace spans b"] == "0"
     assert labels["observation cut spans a"] == "0" and labels["observation cut spans b"] == "0"
 
 
-def test_z15_go1_carries_the_horizon_count_it_always_carried_under_its_new_name(go1: Surfaces) -> None:
-    assert go1.diff["episodes_censored_at_horizon"] == 0 and "truncated" not in go1.diff
+def test_z15_lattice_carries_the_horizon_count_it_always_carried_under_its_new_name(pair: Surfaces) -> None:
+    assert pair.diff["episodes_censored_at_horizon"] == 0 and "truncated" not in pair.diff
+    # the reference: the stored rows (pyarrow alone) hold no time past the horizon, and the
+    # manifests no capture record, so a 0 and two ``not recorded`` caps are the facts
+    assert all(row["t"] <= row["horizon"] == lattice.HORIZON for run in (lattice.RUN_A, lattice.RUN_B) for row in lattice.rows(run))
+    assert all("capture" not in lattice.manifest(run)["environment"] for run in (lattice.RUN_A, lattice.RUN_B))

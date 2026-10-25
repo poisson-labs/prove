@@ -1,7 +1,8 @@
 """Oracle for M7: the report renderer.
 
 Every structural claim about SVG is asserted on the ``xml.etree.ElementTree`` tree, never
-on the raw string. Golden tests use the S3 fixture through ``go1_store``; everything else
+on the raw string. Golden tests use the generated lattice pair (``tests/lattice.py``) through
+``lattice_store``; everything else
 uses a synthetic ``DiffResult`` factory built directly from M6's ``cells`` columns. All
 temp output goes under tmp_path. No network, no clock.
 
@@ -25,7 +26,6 @@ zero prints as ``0``.
 
 import dataclasses
 import hashlib
-import json
 from html import escape as html_escape
 import math
 import re
@@ -41,6 +41,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+import lattice
 from poisson_prove.diff import DiffResult, diff
 from poisson_prove.report import (
     ABSENT_FILL,
@@ -58,7 +59,6 @@ from poisson_prove.store import Store, config_hash
 from poisson_prove.survival import cell_table, censor
 
 ROOT = Path(__file__).resolve().parents[1]
-GOLDEN_JSON = ROOT / "tests" / "fixtures" / "go1" / "golden.json"
 CELL_COLUMNS = [
     "config_hash", "config", "n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b",
     "delta", "stat", "p", "q", "verdict", "mde",
@@ -337,24 +337,24 @@ def present_cells(report: Report) -> list[Cell]:
 
 
 @pytest.fixture(scope="module")
-def golden_frames(go1_store: Store) -> dict[str, Any]:
-    a = censor(go1_store.read("go1-v0"), "fell")
-    b = censor(go1_store.read("go1-v1"), "fell")
-    ma, mb = go1_store.manifest("go1-v0"), go1_store.manifest("go1-v1")
+def golden_frames(lattice_store: Store) -> dict[str, Any]:
+    a = censor(lattice_store.read(lattice.RUN_A), lattice.EVENT)
+    b = censor(lattice_store.read(lattice.RUN_B), lattice.EVENT)
+    ma, mb = lattice_store.manifest(lattice.RUN_A), lattice_store.manifest(lattice.RUN_B)
     return {"a": a, "b": b, "ma": ma, "mb": mb}
 
 
 @pytest.fixture(scope="module")
 def golden_diff(golden_frames: dict[str, Any]) -> DiffResult:
     return diff(
-        golden_frames["a"], golden_frames["b"], event="fell", method="fisher_bh", q=0.05,
+        golden_frames["a"], golden_frames["b"], event=lattice.EVENT, method="fisher_bh", q=0.05,
         manifest_a=golden_frames["ma"], manifest_b=golden_frames["mb"],
     )
 
 
 @pytest.fixture(scope="module")
 def golden_report(golden_diff: DiffResult) -> Report:
-    return build_report(golden_diff, ReportSpec(title="Go1 v0 -> v1", x_axis="push_pct_bw", y_axis="mu"))
+    return build_report(golden_diff, ReportSpec(title="Lattice before -> after", x_axis=lattice.Y, y_axis=lattice.X))
 
 
 # ---------- I1: determinism across processes ----------
@@ -366,12 +366,12 @@ from poisson_prove.store import Store
 from poisson_prove.survival import censor
 from poisson_prove.diff import diff
 from poisson_prove.report import ReportSpec, build_report
-root = Path(sys.argv[1])
-store = Store(root / "tests" / "fixtures" / "go1")
-a, b = (censor(store.read(r), "fell") for r in ("go1-v0", "go1-v1"))
-d = diff(a, b, event="fell", method="fisher_bh", q=0.05,
-         manifest_a=store.manifest("go1-v0"), manifest_b=store.manifest("go1-v1"))
-rep = build_report(d, ReportSpec(title="Go1 v0 -> v1", x_axis="push_pct_bw", y_axis="mu"))
+store = Store(Path(sys.argv[1]))
+run_a, run_b, event, x, y = sys.argv[2:7]
+a, b = (censor(store.read(r), event) for r in (run_a, run_b))
+d = diff(a, b, event=event, method="fisher_bh", q=0.05,
+         manifest_a=store.manifest(run_a), manifest_b=store.manifest(run_b))
+rep = build_report(d, ReportSpec(title="Lattice before -> after", x_axis=x, y_axis=y))
 for text in (rep.to_markdown(), rep.to_svg(), rep.to_html()):
     print(hashlib.sha256(text.encode("utf-8")).hexdigest())
 """
@@ -387,7 +387,7 @@ def test_i1_outputs_are_byte_identical_across_hash_seeds(golden_report: Report, 
     script.write_text(_SUBPROCESS_SCRIPT)
     for seed in ("1", "4242"):
         proc = subprocess.run(
-            [sys.executable, str(script), str(ROOT)],
+            [sys.executable, str(script), str(lattice.root()), lattice.RUN_A, lattice.RUN_B, lattice.EVENT, lattice.Y, lattice.X],
             capture_output=True, text=True, cwd=ROOT,
             env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path)},
         )
@@ -582,18 +582,21 @@ def test_i7_glyphs_survive_attribute_stripping_and_identify_significant_cells() 
 # ---------- I8: golden ----------
 
 
-def test_i8_golden_sixty_zero_full_grid_and_deltas(golden_report: Report) -> None:
-    assert golden_report.n_safer == 60 and golden_report.n_worse == 0
-    assert golden_report.n_unchanged == 340 and golden_report.n_absent == 0
-    assert len(golden_report.cells) == 400 and all(c.present for c in golden_report.cells)
-    assert len(golden_report.x_values) == 20 and len(golden_report.y_values) == 20
-    assert golden_report.headline.startswith("60 of 400 cells safer, 0 worse (fisher_bh, BH q<0.05, ")
-    published = {(c["mu"], c["push_pct_bw"]): c for c in json.loads(GOLDEN_JSON.read_text())["cells"]}
-    assert len(published) == 400
+def test_i8_golden_twenty_two_zero_full_grid_and_deltas(golden_report: Report) -> None:
+    """The lattice pair against its design: the reference Fisher + BH family over the design's
+    counts (``lattice.fisher``) gives 22 lower and 0 higher, and every cell's delta is the design's."""
+    lower, higher = lattice.directions(lattice.fisher())
+    assert golden_report.n_safer == lower == 22 and golden_report.n_worse == higher == 0
+    assert golden_report.n_unchanged == lattice.CELLS - lower - higher == 50 and golden_report.n_absent == 0
+    assert len(golden_report.cells) == lattice.CELLS == 72 and all(c.present for c in golden_report.cells)
+    assert len(golden_report.x_values) == len(lattice.LOAD) == 6 and len(golden_report.y_values) == len(lattice.GAIN) == 12
+    assert golden_report.headline.startswith("22 of 72 cells safer, 0 worse (fisher_bh, BH q<0.05, ")
+    published = {(r["config"][lattice.X], r["config"][lattice.Y]): r for r in lattice.counts()}
+    assert len(published) == 72
     for cell in golden_report.cells:
-        push, mu = cell.coords
-        pub = published[(mu, push)]
-        assert abs(cell.delta - (pub["fell_b"] - pub["fell_a"]) / 32) <= 1e-9, cell.coords
+        load, gain = cell.coords
+        pub = published[(gain, load)]
+        assert abs(cell.delta - (pub["events_b"] - pub["events_a"]) / 32) <= 1e-9, cell.coords
         assert cell.n_a == 32 and cell.n_b == 32
 
 
@@ -813,8 +816,8 @@ def test_i12_dark_and_light_trees_identical_after_stripping_presentation(golden_
     light = strip_presentation(svg_root(build_report(d, spec2(theme="light"))))
     assert tree_signature(dark) == tree_signature(light)
     assert any("data-cell" in e.attrib for e in dark.iter())
-    gd = strip_presentation(ET.fromstring(build_report(golden_diff, ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu", theme="dark")).to_svg()))
-    gl = strip_presentation(ET.fromstring(build_report(golden_diff, ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu", theme="light")).to_svg()))
+    gd = strip_presentation(ET.fromstring(build_report(golden_diff, ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X, theme="dark")).to_svg()))
+    gl = strip_presentation(ET.fromstring(build_report(golden_diff, ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X, theme="light")).to_svg()))
     assert tree_signature(gd) == tree_signature(gl)
 
 
@@ -981,20 +984,20 @@ def test_i16_module_touches_no_filesystem_clock_network_or_rng() -> None:
 
 
 def test_i16_generated_at_and_manifests_are_omitted_not_invented(golden_diff: DiffResult, golden_frames: dict[str, Any]) -> None:
-    spec = ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu")
+    spec = ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X)
     bare = build_report(golden_diff, spec)
     assert "generated_at" not in bare.provenance and "run_id_a" not in bare.provenance
     assert "generated_at" not in bare.to_markdown().lower().replace(" ", "_")
-    stamped = build_report(golden_diff, ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu", generated_at="2026-09-03T00:00:00Z"))
+    stamped = build_report(golden_diff, ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X, generated_at="2026-09-03T00:00:00Z"))
     assert stamped.provenance["generated_at"] == "2026-09-03T00:00:00Z"
     assert "2026-09-03T00:00:00Z" in stamped.to_markdown() and "2026-09-03T00:00:00Z" in stamped.to_html()
     with_runs = build_report(golden_diff, spec, manifests=(golden_frames["ma"], golden_frames["mb"]))
-    assert with_runs.provenance["run_id_a"] == "go1-v0" and with_runs.provenance["run_id_b"] == "go1-v1"
+    assert with_runs.provenance["run_id_a"] == lattice.RUN_A and with_runs.provenance["run_id_b"] == lattice.RUN_B
     assert with_runs.provenance["run_salt"] == golden_frames["ma"].run_salt
-    assert "go1-v0" in with_runs.to_markdown() and "go1-v0" not in bare.to_markdown()
+    assert lattice.RUN_A in with_runs.to_markdown() and lattice.RUN_A not in bare.to_markdown()
     for key in ("event", "t_unit", "horizon", "method", "seed_identity_match", "unpaired_analysis", "q", "n_not_comparable", "dropped_a", "dropped_b", "episodes_censored_at_horizon", "n_absent", "poisson_prove_version"):
         assert key in bare.provenance, key
-    assert bare.provenance["event"] == "fell" and bare.provenance["n_absent"] == 0
+    assert bare.provenance["event"] == lattice.EVENT and bare.provenance["n_absent"] == 0
 
 
 # ---------- I17: survival optionality ----------
@@ -1030,14 +1033,14 @@ def _same_cells(xs: tuple[Cell, ...], ys: tuple[Cell, ...]) -> bool:
 
 
 def test_i17_curves_add_one_contiguous_section_and_change_nothing_else(golden_frames: dict[str, Any], golden_diff: DiffResult) -> None:
-    ta = cell_table(golden_frames["a"], "fell")
-    tb = cell_table(golden_frames["b"], "fell")
+    ta = cell_table(golden_frames["a"], lattice.EVENT)
+    tb = cell_table(golden_frames["b"], lattice.EVENT)
     curves = {h: (ca, cb) for h, ca, cb in zip(ta["config_hash"], ta["curve"], tb["curve"], strict=True)}
-    spec = ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu")
+    spec = ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X)
     without = build_report(golden_diff, spec)
     with_ = build_report(golden_diff, spec, curves=curves)
     assert with_.to_svg() == without.to_svg()
-    # PF4 (PF4.15): Go1's conditions at a 100% baseline hold a NaN limit, so the cells are compared
+    # PF4 (PF4.15): the lattice's conditions at a 100% baseline hold a NaN limit, so the cells are compared
     # with NaN matching NaN rather than by ``==``.
     assert any(math.isnan(c.mde) for c in without.cells if c.present)
     assert _same_cells(with_.cells, without.cells) and with_.headline == without.headline
@@ -1050,11 +1053,14 @@ def test_i17_curves_add_one_contiguous_section_and_change_nothing_else(golden_fr
 
 
 def test_i18_rows_labelled_by_method_attribute_not_mapping_key(golden_frames: dict[str, Any], golden_diff: DiffResult) -> None:
-    kw = {"event": "fell", "q": 0.05, "manifest_a": golden_frames["ma"], "manifest_b": golden_frames["mb"]}
+    kw = {"event": lattice.EVENT, "q": 0.05, "manifest_a": golden_frames["ma"], "manifest_b": golden_frames["mb"]}
     mcnemar = diff(golden_frames["a"], golden_frames["b"], method="mcnemar_bh", **kw)
     logrank = diff(golden_frames["a"], golden_frames["b"], method="logrank_bh", **kw)
+    # The rows are told apart by their counts, which the references fix and which differ.
+    assert (mcnemar.n_safer, mcnemar.n_worse) == lattice.directions(lattice.mcnemar()) == (27, 0)
+    assert (logrank.n_safer, logrank.n_worse) == lattice.directions(lattice.logrank()) == (27, 12)
     report = build_report(golden_diff, ReportSpec(
-        title="g", x_axis="push_pct_bw", y_axis="mu",
+        title="g", x_axis=lattice.Y, y_axis=lattice.X,
         comparison={"paired": mcnemar, "logrank_bh": logrank, "fisher_bh": mcnemar},
     ))
     md = report.to_markdown()
@@ -1072,22 +1078,24 @@ def test_i18_rows_labelled_by_method_attribute_not_mapping_key(golden_frames: di
 def test_i18_mismatching_comparison_raises(golden_frames: dict[str, Any], golden_diff: DiffResult) -> None:
     a, b = golden_frames["a"], golden_frames["b"]
     kw = {"q": 0.05, "manifest_a": golden_frames["ma"], "manifest_b": golden_frames["mb"]}
-    spec = ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu")
+    spec = ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X)
+    # The lattice runs to 5.0 s and trips as late as 4.40 s, so a 3.0 s horizon cuts real events.
+    assert (b["t"] > 3.0).any() and (b["horizon"] == lattice.HORIZON).all()
     truncated_b = b.copy()
     truncated_b["horizon"] = 3.0
     truncated_b.loc[truncated_b["t"] > 3.0, "observed"] = False
     truncated_b.loc[truncated_b["t"] > 3.0, "t"] = 3.0
-    other_horizon = diff(a, truncated_b, event="fell", method="logrank_bh", **kw)
+    other_horizon = diff(a, truncated_b, event=lattice.EVENT, method="logrank_bh", **kw)
     assert other_horizon.horizon != golden_diff.horizon
     with pytest.raises(ComparisonMismatch):
-        build_report(golden_diff, ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu", comparison={"x": other_horizon}))
-    other_event = diff(a, b, event="survived", method="fisher_bh", **kw)
+        build_report(golden_diff, ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X, comparison={"x": other_horizon}))
+    other_event = diff(a, b, event=lattice.OTHER, method="fisher_bh", **kw)
     with pytest.raises(ComparisonMismatch):
-        build_report(golden_diff, ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu", comparison={"x": other_event}))
-    fewer = diff(a[a["replicate_index"] < 16], b, event="fell", method="fisher_bh", **kw)
+        build_report(golden_diff, ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X, comparison={"x": other_event}))
+    fewer = diff(a[a["replicate_index"] < 16], b, event=lattice.EVENT, method="fisher_bh", **kw)
     with pytest.raises(ComparisonMismatch):
-        build_report(golden_diff, ReportSpec(title="g", x_axis="push_pct_bw", y_axis="mu", comparison={"x": fewer}))
-    agreeing = diff(a, b, event="fell", method="mcnemar_bh", **kw)
+        build_report(golden_diff, ReportSpec(title="g", x_axis=lattice.Y, y_axis=lattice.X, comparison={"x": fewer}))
+    agreeing = diff(a, b, event=lattice.EVENT, method="mcnemar_bh", **kw)
     ok = build_report(golden_diff, ReportSpec(title=spec.title, x_axis=spec.x_axis, y_axis=spec.y_axis, comparison={"x": agreeing}))
     assert "mcnemar_bh" in ok.to_markdown()
 

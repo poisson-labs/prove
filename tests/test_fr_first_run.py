@@ -10,7 +10,7 @@ passes on a missing argument), D7 (the ``Inferred events for this pair`` suggest
 (every template pinned verbatim, Taylor reviewing the wording in Session A's mapping table) are Taylor's and
 not reopened; FR19 and FR20 are his additions at the same ruling. Q1 to Q4 are closed. The three section 3.1
 templates are pinned in each source form (``--store``, ``$PROOFLOAD_STORE``, the default), the seven section
-3.2 Go1 literals and the section 3.3 lines byte for byte, as literals and never as a template the build
+3.2 literals (now on the generated lattice pair, ``tests/lattice.py``) and the section 3.3 lines byte for byte, as literals and never as a template the build
 shares.
 
 **Two cells, and no invariant is cell-specific -- a result, not an assumption** (Master Action List section
@@ -22,23 +22,24 @@ FR12 17, FR13 10, FR14 7, FR15 1, FR16 6, FR17 6, FR18 2, FR19 9, FR20 5.
 
 **Step zero, measured at ``f9b881f`` (spec section 7.4), and what it moved.** (1) The section 7.1 greps:
 the first returns 26 lines in four files and the fifth five carriers, as at ``a626cd3``; the fourth gains one
-line, ``test_p1_payload.py`` Y22's ``monkeypatch.chdir``, which drives ``serve`` on Go1 with an explicit
+line, ``test_p1_payload.py`` Y22's ``monkeypatch.chdir``, which drives ``serve`` on the fixture pair with an explicit
 ``--store``, ``--event`` and ``--x`` and moves nothing; A8b re-minted the pin on ``test_m3_timeout_trace.py``,
 a file this packet does not touch. The twenty-one frozen movers are the spec's, at new line numbers: ``test_m6_multi.py`` +5,
 ``test_m7_multi.py`` +14 and +15, ``test_m13_viewer.py`` +2, and I17 +1; ``test_m10_multi.py`` did not move
 (section 12 lists it among P-1's edits and P-1 did not touch it) and neither did I2. (2) Nothing the spec
 predicted about the inference path moved: ``infer_events`` and the inference branch of
 ``MultiDiffResult.to_markdown`` are byte-identical to ``a626cd3``'s (the branch is ``diff.py`` lines 700-704,
-the method 698-750), Go1 infers ``survived`` over ``fell`` on the pair and on ``go1-v0`` alone (8029 / 4771
-and 6753 / 6047), and the mock pair infers ``violated, timeout`` over ``completed``. **What no longer holds:**
+the method 698-750), the fixture pair infers its less frequent outcome over its more frequent one on the
+pair and on its first run alone (on the lattice: ``held`` over ``tripped``, 1,443 / 3,165 on the pair and
+533 / 1,771 on ``lattice-a``), and the mock pair infers ``violated, timeout`` over ``completed``. **What no longer holds:**
 the base is not green -- spec sections 7.3 and 9 assume a green dispatch commit, and ``f9b881f`` carries A8b's
 frozen oracle against a tree that does not build it yet (63 failed and 2 errors, identical in both cells:
 53 in ``test_a8b_cut_and_cap.py``, 4 in ``test_m3_capture.py``, one each in ``test_a8a_span_schema.py``,
-``test_m3_crash_trace.py``, ``test_m3_timeout_trace.py`` and ``test_pilot_golden.py``, and two failures and
-two errors in ``test_t4_tau2_pilot.py``); section 12's "P-1 will edit" is done, ``to_markdown``'s parameter
+``test_m3_crash_trace.py``, ``test_m3_timeout_trace.py`` and one other test file, and two failures and
+two errors in a further test file); section 12's "P-1 will edit" is done, ``to_markdown``'s parameter
 line and ``headline``'s pairing token are in the tree with ``_write_summary``'s code unedited, so the two
 packets no longer collide; section 3.3's line lengths are 108 and 122 characters against 54 and 68 today,
-not 107, 120, 55 and 68; and the Go1 verbs without a paired method now emit P-1's ``UnpairedAnalysis``
+not 107, 120, 55 and 68; and the fixture pair's verbs without a paired method now emit P-1's ``UnpairedAnalysis``
 warning through the warnings machinery, never into the CLI's own stderr stream, which is what every
 assertion here reads. (3) P-1 filed the whole-file route: ``ec05b676...`` in all five carriers of the
 ``diff.py`` digest, no live exclusion record, so D12 stands. (4) The digests below were read off
@@ -63,7 +64,7 @@ and a set-but-empty ``$PROOFLOAD_STORE`` as *not* the source: ``_store_root`` re
 text does not: a run whose ``timeout`` is already an outcome lists it once. (f) FR12's order matrix adds the
 empty store to its store row. (g) FR13's "nothing else moves" is two green tests (the flag sets, and the five
 tree flags' help against ``diff``'s), beside V30, W1, R13 and W11. (h) FR18's import clause is a subset test,
-so it holds before the build as well: ``shlex`` may arrive and nothing else may. (i) FR5's Go1 verb digests
+so it holds before the build as well: ``shlex`` may arrive and nothing else may. (i) FR5's fixture-pair verb digests
 stay with A7's P7-10, which this file does not restate. (j) Not pinned: section 3.3's line lengths, and the
 ``inspect`` wrong-``--event`` neighbour that section 5 names as out of scope.
 
@@ -76,7 +77,7 @@ skipped / 2 errors in both cells at ``f9b881f``: 151 failed / 2019 passed / 5 sk
 test by test in both cells.** The 153 red are the base's 65 and **88 of this packet's**: **82** of this
 file's 106 tests, each red for its expected cause (the store check, the missing-flags refusal, the parser and
 the new wording do not exist yet), and the six frozen tests V1 and V4 (renamed, amended to section 3.2's
-``serve --x mu`` and ``serve --event fell`` literals), A14, B9, B17 and C2 (``:504``), each for the new
+``serve --x AXIS`` and ``serve --event NAME`` literals), A14, B9, B17 and C2 (``:504``), each for the new
 wording. **Nothing else is red beyond the base's 65, and none of the base's 65 turned green.** Group D (F28,
 L20, R19, W20, G20) is green on the retrofit commit and red once the build edits ``diff.py``; nothing in this
 commit touches it. The shim control -- the same copies with the shim built -- is 68 failed / 2102 passed / 5
@@ -150,11 +151,12 @@ from poisson_prove.diff import MultiDiffResult, UnpairedAnalysis, infer_events, 
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.survival import competing_set
+import lattice
 from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "src" / "poisson_prove"
-GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
+LATTICE_ROOT = lattice.root()
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -166,15 +168,17 @@ QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
-GO1_X, GO1_Y = "mu", "push_pct_bw"
+LATTICE_A, LATTICE_B = "lattice-a", "lattice-b"
+LATTICE_X, LATTICE_Y = "gain", "load"
 # PF2 (spec section 4.3): every run has a name -- its target id up to the first ``/``, the UTC date it was
-# created, and a letter in creation order among that target's runs that day. Go1's two runs are of two
-# targets created on 2026-09-03, so each is ``a``.
-GO1_NAMES = {
-    GO1_A: "go1-g2-converged@20260813T155006Z 2026-09-03 a",
-    GO1_B: "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a",
+# created, and a letter in creation order among that target's runs that day. The lattice's two runs are of
+# two targets created on 2026-01-15, so each is ``a``.
+LATTICE_NAMES = {
+    LATTICE_A: "lattice-before 2026-01-15 a",
+    LATTICE_B: "lattice-after 2026-01-15 a",
 }
+assert (LATTICE_A, LATTICE_B, LATTICE_X, LATTICE_Y) == (lattice.RUN_A, lattice.RUN_B, lattice.X, lattice.Y)
+assert LATTICE_NAMES == {lattice.RUN_A: lattice.NAME_A, lattice.RUN_B: lattice.NAME_B}
 HORIZON = 10.0
 
 # ---------- the pinned words (spec section 3), verbatim ----------
@@ -276,47 +280,47 @@ def unknown_run_problems(err: str, run: str) -> list[str]:
 GATE_REASON = "a gate whose meaning changes when a new outcome appears is not a gate"
 PICTURE_REASON = "a picture whose meaning changes when a new outcome appears is worse than a table with the same defect"
 
-# Section 3.2's seven Go1 literals: (argv after ``--store tests/fixtures/go1``, stderr).
-E3_GO1: dict[str, tuple[list[str], str]] = {
+# Section 3.2's seven literals, on the lattice pair: (argv after ``--store`` and the lattice's root, stderr).
+E3_LATTICE: dict[str, tuple[list[str], str]] = {
     "report pair, no --x": (
-        ["report", GO1_A, GO1_B, "--y", GO1_Y],
-        "error: report requires --x AXIS, which was not given. go1-v0 and go1-v1 carry:\n"
-        "  axes: mu, push_pct_bw\n"
-        "  events: fell, survived\n",
+        ["report", LATTICE_A, LATTICE_B, "--y", LATTICE_Y],
+        "error: report requires --x AXIS, which was not given. lattice-a and lattice-b carry:\n"
+        "  axes: gain, load\n"
+        "  events: held, tripped\n",
     ),
     "report single run, no --x": (
-        ["report", GO1_A],
-        "error: report requires --x AXIS, which was not given. go1-v0 carries:\n"
-        "  axes: mu, push_pct_bw\n"
-        "  events: fell, survived\n",
+        ["report", LATTICE_A],
+        "error: report requires --x AXIS, which was not given. lattice-a carries:\n"
+        "  axes: gain, load\n"
+        "  events: held, tripped\n",
     ),
     "serve, neither": (
-        ["serve", GO1_A, GO1_B],
-        f"error: serve requires --x AXIS and --event NAME, and neither was given; {PICTURE_REASON}. go1-v0 and go1-v1 carry:\n"
-        "  axes: mu, push_pct_bw\n"
-        "  events: fell, survived\n",
+        ["serve", LATTICE_A, LATTICE_B],
+        f"error: serve requires --x AXIS and --event NAME, and neither was given; {PICTURE_REASON}. lattice-a and lattice-b carry:\n"
+        "  axes: gain, load\n"
+        "  events: held, tripped\n",
     ),
     "serve, no --event": (
-        ["serve", GO1_A, GO1_B, "--x", GO1_X],
-        f"error: serve requires --event NAME, which was not given; {PICTURE_REASON}. go1-v0 and go1-v1 carry:\n"
-        "  axes: mu, push_pct_bw\n"
-        "  events: fell, survived\n",
+        ["serve", LATTICE_A, LATTICE_B, "--x", LATTICE_X],
+        f"error: serve requires --event NAME, which was not given; {PICTURE_REASON}. lattice-a and lattice-b carry:\n"
+        "  axes: gain, load\n"
+        "  events: held, tripped\n",
     ),
     "serve, no --x": (
-        ["serve", GO1_A, GO1_B, "--event", "fell"],
-        "error: serve requires --x AXIS, which was not given. go1-v0 and go1-v1 carry:\n"
-        "  axes: mu, push_pct_bw\n"
-        "  events: fell, survived\n",
+        ["serve", LATTICE_A, LATTICE_B, "--event", "tripped"],
+        "error: serve requires --x AXIS, which was not given. lattice-a and lattice-b carry:\n"
+        "  axes: gain, load\n"
+        "  events: held, tripped\n",
     ),
     "check, no --event": (
-        ["check", GO1_A, GO1_B],
-        f"error: check requires --event NAME, which was not given; {GATE_REASON}. go1-v0 and go1-v1 carry:\n"
-        "  events: fell, survived\n",
+        ["check", LATTICE_A, LATTICE_B],
+        f"error: check requires --event NAME, which was not given; {GATE_REASON}. lattice-a and lattice-b carry:\n"
+        "  events: held, tripped\n",
     ),
     "inspect, no --event": (
-        ["inspect", GO1_A],
-        "error: inspect requires --event NAME, which was not given. go1-v0 carries:\n"
-        "  events: fell, survived\n",
+        ["inspect", LATTICE_A],
+        "error: inspect requires --event NAME, which was not given. lattice-a carries:\n"
+        "  events: held, tripped\n",
     ),
 }
 SERVE_ROWS = ("serve, neither", "serve, no --event", "serve, no --x")
@@ -379,9 +383,9 @@ def e3_problems(err: str, old: str, names: Mapping[str, str]) -> list[str]:
             problems.append(f"{label} listed where the old words had none")
     return problems
 
-# Section 3.3: the marker every negative assertion uses (a line prefix), and its Go1 and A14 lines.
+# Section 3.3: the marker every negative assertion uses (a line prefix), and its lattice and A14 lines.
 MARKER = "inferred: no event was given, so "
-GO1_LINE = "inferred: no event was given, so the event set is survived; the non-event is fell, the most frequent outcome"
+LATTICE_LINE = "inferred: no event was given, so the event set is held; the non-event is tripped, the most frequent outcome"
 A14_LINE = "inferred: no event was given, so the event set is violated, timeout; the non-event is completed, the most frequent outcome"
 
 
@@ -661,18 +665,18 @@ def mock_e3(pair: MockPair) -> tuple[list[str], str]:
 
 
 def read_argvs(store: str, out: Path) -> dict[str, list[str]]:
-    """Every store-reading invocation, with every other argument valid for Go1."""
+    """Every store-reading invocation, with every other argument valid for the lattice pair."""
     s = ["--store", store]
     o = ["--out", str(out)]
     return {
         "runs": [*s, "runs"],
-        "diff": [*s, "diff", GO1_A, GO1_B, "--event", "fell"],
-        "report pair": [*s, "report", GO1_A, GO1_B, "--event", "fell", "--x", GO1_X, "--y", GO1_Y, *o],
-        "report single run": [*s, "report", GO1_A, "--event", "fell", "--x", GO1_X, "--y", GO1_Y, *o],
-        "check": [*s, "check", GO1_A, GO1_B, "--event", "fell"],
-        "serve": [*s, "serve", GO1_A, GO1_B, "--event", "fell", "--x", GO1_X],
-        "serve --json": [*s, "serve", GO1_A, GO1_B, "--event", "fell", "--x", GO1_X, "--json"],
-        "inspect": [*s, "inspect", GO1_A, "--event", "fell"],
+        "diff": [*s, "diff", LATTICE_A, LATTICE_B, "--event", "tripped"],
+        "report pair": [*s, "report", LATTICE_A, LATTICE_B, "--event", "tripped", "--x", LATTICE_X, "--y", LATTICE_Y, *o],
+        "report single run": [*s, "report", LATTICE_A, "--event", "tripped", "--x", LATTICE_X, "--y", LATTICE_Y, *o],
+        "check": [*s, "check", LATTICE_A, LATTICE_B, "--event", "tripped"],
+        "serve": [*s, "serve", LATTICE_A, LATTICE_B, "--event", "tripped", "--x", LATTICE_X],
+        "serve --json": [*s, "serve", LATTICE_A, LATTICE_B, "--event", "tripped", "--x", LATTICE_X, "--json"],
+        "inspect": [*s, "inspect", LATTICE_A, "--event", "tripped"],
     }
 
 
@@ -775,7 +779,7 @@ def test_fr4_the_empty_store_messages_name_the_same_three_sources(tmp_path: Path
         root, source, flags = tmp_path / "prove-runs", FROM_DEFAULT, []
     root.mkdir()
     shown = str(root) if how != "default" else "prove-runs"
-    read = run_cli([*flags, "diff", GO1_A, GO1_B, "--event", "fell"])
+    read = run_cli([*flags, "diff", LATTICE_A, LATTICE_B, "--event", "tripped"])
     # A refusal exits 1 (spec section 5.2).
     assert read.code == 1 and read.out == "" and empty_problems(read.err, shown, source, "diff") == [], read
     listed_runs = run_cli([*flags, "runs"])
@@ -786,21 +790,21 @@ def test_fr4_the_empty_store_messages_name_the_same_three_sources(tmp_path: Path
     assert [clause for clause in SOURCES if clause in read.err] == [source]
 
 
-@pytest.mark.parametrize("which", ["runs on go1", "runs on a one-run store", "inspect on go1"])
+@pytest.mark.parametrize("which", ["runs on the lattice", "runs on a one-run store", "inspect on the lattice"])
 def test_fr5_a_populated_store_is_silent_on_stderr(tmp_path: Path, which: str) -> None:
     """Green before and after: the fence around FR1 to FR3, and no evidence the build did anything."""
     argv = {
-        "runs on go1": ["--store", str(GO1_ROOT), "runs"],
+        "runs on the lattice": ["--store", str(LATTICE_ROOT), "runs"],
         "runs on a one-run store": ["--store", str(one_run_store(tmp_path)), "runs"],
-        "inspect on go1": ["--store", str(GO1_ROOT), "inspect", GO1_A, "--event", "fell", "--limit", "1"],
+        "inspect on the lattice": ["--store", str(LATTICE_ROOT), "inspect", LATTICE_A, "--event", "tripped", "--limit", "1"],
     }[which]
     r = run_cli(argv)
     assert r.code == 0 and r.err == "", r
 
 
 def test_fr5_an_unknown_run_in_a_populated_store_keeps_its_message() -> None:
-    """Green before and after. A7's Go1 verb digests (P7-10) carry the rest of FR5's clause."""
-    r = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, "no-such-run", "--event", "fell"])
+    """Green before and after. A7's verb digests (P7-10) carry the rest of FR5's clause."""
+    r = run_cli(["--store", str(LATTICE_ROOT), "diff", LATTICE_A, "no-such-run", "--event", "tripped"])
     # A refusal exits 1, and names the run bare, never as a Python repr (spec sections 5.2 and 5.4).
     assert r.code == 1 and r.out == "" and unknown_run_problems(r.err, "no-such-run") == [], r
 
@@ -839,7 +843,7 @@ def test_fr6_sweep_is_never_gated_and_creates_the_store(tmp_path: Path) -> None:
 @pytest.mark.parametrize("name", ["with a space", "it's $HOME"])
 def test_fr7_the_create_line_is_a_command_that_survives_a_shell(tmp_path: Path, name: str) -> None:
     root = tmp_path / name
-    r = run_cli(["--store", str(root), "diff", GO1_A, GO1_B, "--event", "fell"])
+    r = run_cli(["--store", str(root), "diff", LATTICE_A, LATTICE_B, "--event", "tripped"])
     # A refusal exits 1, and its create hint is a command on a next line (spec sections 5.2 and 5.4).
     assert r.code == 1, r
     assert ["poisson-prove", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"] in hinted_commands(r.err), r.err
@@ -850,7 +854,7 @@ def test_fr7_the_empty_store_hint_lines_are_commands_that_survive_a_shell(tmp_pa
     root = tmp_path / "an empty store"
     root.mkdir()
     expected = ["poisson-prove", "--store", str(root), "sweep", "SPEC.toml", "--target", "pkg.module:rollout"]
-    read = run_cli(["--store", str(root), "check", GO1_A, GO1_B, "--event", "fell"])
+    read = run_cli(["--store", str(root), "check", LATTICE_A, LATTICE_B, "--event", "tripped"])
     # A refusal exits 1, and its hint is a command on a next line (spec sections 5.2 and 5.4).
     assert read.code == 1 and expected in hinted_commands(read.err), read.err
     listed = run_cli(["--store", str(root), "runs"])
@@ -862,18 +866,18 @@ def test_fr7_the_empty_store_hint_lines_are_commands_that_survive_a_shell(tmp_pa
 # ---------- FR8 to FR13: E3, the missing flag ----------
 
 
-def go1_argv(label: str, *extra: str) -> list[str]:
-    return ["--store", str(GO1_ROOT), *E3_GO1[label][0], *extra]
+def lattice_argv(label: str, *extra: str) -> list[str]:
+    return ["--store", str(LATTICE_ROOT), *E3_LATTICE[label][0], *extra]
 
 
 @pytest.mark.parametrize("label", ["report pair, no --x", "report single run, no --x"])
 def test_fr8_report_without_x_lists_the_axes_and_events_instead_of_failing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, label: str) -> None:
     monkeypatch.chdir(tmp_path)
-    r = run_cli(go1_argv(label))
+    r = run_cli(lattice_argv(label))
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
     assert r.code == 1 and r.out == "", r
     # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
-    assert e3_problems(r.err, E3_GO1[label][1], GO1_NAMES) == [], r.err
+    assert e3_problems(r.err, E3_LATTICE[label][1], LATTICE_NAMES) == [], r.err
     assert "usage:" not in r.err
     assert listing(tmp_path) == [], "the default --out directory was created"
 
@@ -894,21 +898,21 @@ def test_fr8_report_without_x_lists_on_the_mock_pair_too(tmp_path: Path, monkeyp
 @pytest.mark.parametrize("label", SERVE_ROWS)
 def test_fr9_serve_without_x_or_event_lists_instead_of_failing(monkeypatch: pytest.MonkeyPatch, label: str, as_json: bool) -> None:
     calls = arm_tripwires(monkeypatch, "serve_page")
-    r = run_cli(go1_argv(label, *(["--json"] if as_json else [])))
+    r = run_cli(lattice_argv(label, *(["--json"] if as_json else [])))
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
     assert r.code == 1 and r.out == "", r
     # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
-    assert e3_problems(r.err, E3_GO1[label][1], GO1_NAMES) == [], r.err
+    assert e3_problems(r.err, E3_LATTICE[label][1], LATTICE_NAMES) == [], r.err
     assert calls == []
 
 
 @pytest.mark.parametrize("label", ["check, no --event", "inspect, no --event"])
 def test_fr10_check_and_inspect_without_event_list_and_never_suggest(label: str) -> None:
-    r = run_cli(go1_argv(label))
+    r = run_cli(lattice_argv(label))
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
     assert r.code == 1 and r.out == "", r
     # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
-    assert e3_problems(r.err, E3_GO1[label][1], GO1_NAMES) == [], r.err
+    assert e3_problems(r.err, E3_LATTICE[label][1], LATTICE_NAMES) == [], r.err
     assert "Inferred events" not in r.err and "Inferred events" not in r.out
 
 
@@ -1022,14 +1026,14 @@ def present_of(err: str) -> str:
 
 
 def pair_of(which: str, request: pytest.FixtureRequest) -> tuple[list[str], str, str, str]:
-    """``--store``, both run ids and a known event, for Go1 or for the mock pair."""
-    if which == "go1":
-        return ["--store", str(GO1_ROOT)], GO1_A, GO1_B, "fell"
+    """``--store``, both run ids and a known event, for the lattice pair or for the mock pair."""
+    if which == "lattice":
+        return ["--store", str(LATTICE_ROOT)], LATTICE_A, LATTICE_B, "tripped"
     pair: MockPair = request.getfixturevalue("mock_pair")
     return ["--store", str(pair.root)], pair.a, pair.b, "violated"
 
 
-@pytest.mark.parametrize("which", ["go1", "mock"])
+@pytest.mark.parametrize("which", ["lattice", "mock"])
 def test_fr11_the_listed_axes_equal_the_known_keys_the_axis_error_prints(which: str, request: pytest.FixtureRequest) -> None:
     """Both lists are read off live output: E3's ``axes:`` line, and the ``known keys`` of the error a wrong ``--x``
     provokes. The two agree wherever every config is compared."""
@@ -1042,7 +1046,7 @@ def test_fr11_the_listed_axes_equal_the_known_keys_the_axis_error_prints(which: 
     assert ", ".join(known_keys_of(wrong.err)) == listed(listing_run.err, "axes")
 
 
-@pytest.mark.parametrize("which", ["go1", "mock"])
+@pytest.mark.parametrize("which", ["lattice", "mock"])
 def test_fr11_the_listed_events_equal_the_present_list_the_unknown_event_error_prints(which: str, request: pytest.FixtureRequest) -> None:
     store, a, b, _ = pair_of(which, request)
     listing_run = run_cli([*store, "check", a, b])
@@ -1073,7 +1077,7 @@ def test_fr11_the_axes_are_the_config_keys_and_never_the_manifests_axis_types(tm
 
 def e3_cases(pair: MockPair) -> list[tuple[str, list[str], str, Mapping[str, str]]]:
     # PF2 (spec section 4.3): each case carries the names of its runs, read before any tripwire is armed.
-    cases = [(label, ["--store", str(GO1_ROOT), *argv], err, GO1_NAMES) for label, (argv, err) in E3_GO1.items()]
+    cases = [(label, ["--store", str(LATTICE_ROOT), *argv], err, LATTICE_NAMES) for label, (argv, err) in E3_LATTICE.items()]
     argv, err = mock_e3(pair)
     return [*cases, ("mock report pair, no --x", argv, err, run_names(pair.root))]
 
@@ -1098,21 +1102,21 @@ def test_fr12_a_non_empty_out_does_not_pre_empt_the_listing(tmp_path: Path, labe
     out = tmp_path / "out"
     out.mkdir()
     (out / "keep.txt").write_text("already here\n")
-    r = run_cli(go1_argv(label, "--out", str(out)))
+    r = run_cli(lattice_argv(label, "--out", str(out)))
     # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
     # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
-    assert r.code == 1 and r.out == "" and e3_problems(r.err, E3_GO1[label][1], GO1_NAMES) == [], r
+    assert r.code == 1 and r.out == "" and e3_problems(r.err, E3_LATTICE[label][1], LATTICE_NAMES) == [], r
     # The problem is stated on the error line; a next line is a command and may repeat the given flags.
     assert "--out" not in r.err.partition("\n")[0]
     assert listing(out) == ["keep.txt"]
 
 
 ARITY = {
-    "report": ("error: report takes one or two run ids, got 3: " + REPORT_FORMS + "\n", ["report", GO1_A, GO1_B, GO1_A]),
-    "serve": ("error: serve takes two run ids, got 1: " + SERVE_FORM + "\n", ["serve", GO1_A]),
+    "report": ("error: report takes one or two run ids, got 3: " + REPORT_FORMS + "\n", ["report", LATTICE_A, LATTICE_B, LATTICE_A]),
+    "serve": ("error: serve takes two run ids, got 1: " + SERVE_FORM + "\n", ["serve", LATTICE_A]),
 }
-BARE = {"report": ["report", GO1_A, GO1_B], "serve": ["serve", GO1_A, GO1_B], "check": ["check", GO1_A, GO1_B], "inspect": ["inspect", GO1_A]}
-BARE_UNKNOWN = {"report": ["report", GO1_A, "no-such-run"], "serve": ["serve", GO1_A, "no-such-run"], "check": ["check", GO1_A, "no-such-run"], "inspect": ["inspect", "no-such-run"]}
+BARE = {"report": ["report", LATTICE_A, LATTICE_B], "serve": ["serve", LATTICE_A, LATTICE_B], "check": ["check", LATTICE_A, LATTICE_B], "inspect": ["inspect", LATTICE_A]}
+BARE_UNKNOWN = {"report": ["report", LATTICE_A, "no-such-run"], "serve": ["serve", LATTICE_A, "no-such-run"], "check": ["check", LATTICE_A, "no-such-run"], "inspect": ["inspect", "no-such-run"]}
 
 
 @pytest.mark.parametrize("verb", ["report", "serve", "check", "inspect"])
@@ -1134,7 +1138,7 @@ def test_fr12_an_empty_store_outranks_a_missing_flag(tmp_path: Path, verb: str) 
 @pytest.mark.parametrize("verb", ["report", "serve"])
 def test_fr12_a_wrong_arity_outranks_a_missing_flag(verb: str) -> None:
     message, argv = ARITY[verb]
-    r = run_cli(["--store", str(GO1_ROOT), *argv])
+    r = run_cli(["--store", str(LATTICE_ROOT), *argv])
     # A wrong command line still exits 2; its error line is followed only by next lines (spec section 5.4).
     assert r.code == 2 and r.out == "" and refusal_shape(r.err) == [], r
     # PF2 (spec section 4.3): no runs is now allowed too, so the arity sentence changes; its facts are
@@ -1149,7 +1153,7 @@ def test_fr12_a_wrong_arity_outranks_a_missing_flag(verb: str) -> None:
 
 @pytest.mark.parametrize("verb", ["report", "serve", "check", "inspect"])
 def test_fr12_an_unknown_run_outranks_a_missing_flag(verb: str) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), *BARE_UNKNOWN[verb]])
+    r = run_cli(["--store", str(LATTICE_ROOT), *BARE_UNKNOWN[verb]])
     # A refusal exits 1, and names the run bare, never as a Python repr (spec sections 5.2 and 5.4).
     assert r.code == 1 and r.out == "" and unknown_run_problems(r.err, "no-such-run") == [], r
 
@@ -1233,13 +1237,13 @@ def test_fr13_the_five_tree_flags_keep_diffs_help_on_report_and_serve() -> None:
 # ---------- FR14 to FR17: E4, the inference line ----------
 
 
-def go1_multi(events: Sequence[str] | None) -> MultiDiffResult:
-    store = Store(GO1_ROOT)
+def lattice_multi(events: Sequence[str] | None) -> MultiDiffResult:
+    store = Store(LATTICE_ROOT)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UnpairedAnalysis)
         return multi_diff(
-            store.read(GO1_A, meta=False), store.read(GO1_B, meta=False),
-            events=events, manifest_a=store.manifest(GO1_A), manifest_b=store.manifest(GO1_B),
+            store.read(LATTICE_A, meta=False), store.read(LATTICE_B, meta=False),
+            events=events, manifest_a=store.manifest(LATTICE_A), manifest_b=store.manifest(LATTICE_B),
         )
 
 
@@ -1258,8 +1262,8 @@ def a14_multi(events: Sequence[str] | None) -> MultiDiffResult:
 
 
 @pytest.fixture(scope="module")
-def go1_inferred() -> MultiDiffResult:
-    return go1_multi(None)
+def lattice_inferred() -> MultiDiffResult:
+    return lattice_multi(None)
 
 
 @dataclass(frozen=True)
@@ -1269,12 +1273,12 @@ class Ran:
 
 
 @pytest.fixture(scope="module")
-def go1_ran(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Ran]:
-    """Go1's verbs on the pair and on one run, each run once: inferred, one event, two events."""
-    base = tmp_path_factory.mktemp("go1-ran")
-    store = ["--store", str(GO1_ROOT)]
+def lattice_ran(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Ran]:
+    """The lattice's verbs on the pair and on one run, each run once: inferred, one event, two events."""
+    base = tmp_path_factory.mktemp("lattice-ran")
+    store = ["--store", str(LATTICE_ROOT)]
     knobs = ["--permutations", "50"]
-    events = {"inferred": [], "fell": ["--event", "fell"], "both": ["--event", "fell", "--event", "survived"]}
+    events = {"inferred": [], "tripped": ["--event", "tripped"], "both": ["--event", "tripped", "--event", "held"]}
     ran: dict[str, Ran] = {}
     for kind, extra in events.items():
         for verb in ("diff", "report", "single", "check"):
@@ -1282,12 +1286,12 @@ def go1_ran(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Ran]:
                 continue
             out = base / f"{verb}-{kind}"
             argv = {
-                "diff": ["diff", GO1_A, GO1_B, *extra, *knobs],
-                "report": ["report", GO1_A, GO1_B, *extra, "--x", GO1_X, "--y", GO1_Y, *knobs, "--out", str(out)],
-                "single": ["report", GO1_A, *extra, "--x", GO1_X, "--y", GO1_Y, "--out", str(out)],
-                # PF4 (PF4.20): Go1's events carry no kind, so check's default --fail-on worse is refused;
+                "diff": ["diff", LATTICE_A, LATTICE_B, *extra, *knobs],
+                "report": ["report", LATTICE_A, LATTICE_B, *extra, "--x", LATTICE_X, "--y", LATTICE_Y, *knobs, "--out", str(out)],
+                "single": ["report", LATTICE_A, *extra, "--x", LATTICE_X, "--y", LATTICE_Y, "--out", str(out)],
+                # PF4 (PF4.20): the lattice's events carry no kind, so check's default --fail-on worse is refused;
                 # --fail-on higher is the same gate (fail when a rate rose).
-                "check": ["check", GO1_A, GO1_B, *extra, "--fail-on", "higher"],
+                "check": ["check", LATTICE_A, LATTICE_B, *extra, "--fail-on", "higher"],
             }[verb]
             r = run_cli([*store, *argv])
             # A gate that ran passes or fails; failed exits 4 (spec section 5.2).
@@ -1309,18 +1313,135 @@ def after_verdict(r: Result) -> list[str]:
     return lines[lines.index("") + 1 :]
 
 
-@pytest.mark.parametrize("which", ["go1", "a14"])
-def test_fr14_to_markdown_opens_with_the_plain_line_and_it_carries_no_parenthesis(which: str, go1_inferred: MultiDiffResult) -> None:
-    multi = go1_inferred if which == "go1" else a14_multi(None)
+@pytest.mark.parametrize("which", ["lattice", "a14"])
+def test_fr14_to_markdown_opens_with_the_plain_line_and_it_carries_no_parenthesis(which: str, lattice_inferred: MultiDiffResult) -> None:
+    multi = lattice_inferred if which == "lattice" else a14_multi(None)
     assert multi.inferred
     line = multi.to_markdown().splitlines()[0]
     assert line == inference_line(multi.events, str(multi.non_event)), line
     assert "(" not in line and ")" not in line, line
-    assert line == (GO1_LINE if which == "go1" else A14_LINE), line
+    assert line == (LATTICE_LINE if which == "lattice" else A14_LINE), line
 
 
 def svg_texts(path: Path) -> list[str]:
     return ["".join(el.itertext()) for el in ET.fromstring(path.read_text()).iter() if el.tag.endswith("text")]
+
+
+# The figure's wrap rule, restated from ``test_ls_local_serve.py`` (LS2's ``wrap`` and ``budget``, its
+# ``CHAR_EM`` and ``MIN_BUDGET``), never imported from the build: a text is broken on spaces into lines
+# of at most ``budget`` glyphs, greedy, a word longer than the budget hard-split, and the budget is how
+# many glyphs of the text's font fit from its ``x`` to 24 px short of the figure's right edge. The first
+# line is drawn as a ``<text>`` without ``data-wrap`` and each further line as the next ``<text>`` with
+# ``data-wrap="1"``, at the same ``x``.
+CHAR_EM = 0.6
+MIN_BUDGET = 8
+#: The lattice's report figure is 600 px wide, so its header's budget at x 24 in the 11 px font is 83
+#: glyphs and the 107-character inference line breaks once, after ``tripped,``.
+LATTICE_LINE_DRAWN = [
+    "inferred: no event was given, so the event set is held; the non-event is tripped,",
+    "the most frequent outcome",
+]
+
+
+def wrap(text: str, budget: int) -> list[str]:
+    """LS2's restatement of the figure's ``_wrap``: broken on spaces into lines of at most ``budget``
+    characters, greedy, a word longer than the budget hard-split; ``[""]`` for empty text."""
+    if not text:
+        return [""]
+    lines: list[str] = []
+    current = ""
+    for word in text.split(" "):
+        while len(word) > budget:
+            if current:
+                lines.append(current)
+                current = ""
+            lines.append(word[:budget])
+            word = word[budget:]
+        if not current:
+            current = word
+        elif len(current) + 1 + len(word) <= budget:
+            current = f"{current} {word}"
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def budget(width: float, x: float, font: float) -> int:
+    return max(MIN_BUDGET, int((width - x - 24) / (CHAR_EM * font)))
+
+
+@dataclass(frozen=True)
+class SvgRun:
+    """One ``<text>`` of a figure as drawn: its words, whether it is a continuation, its x and font."""
+    content: str
+    wrap: bool
+    x: float
+    font: float
+
+
+def svg_runs(svg: str) -> tuple[list[SvgRun], float]:
+    """Every ``<text>`` of the figure in document order, with the font it inherits, and the figure's width."""
+    root = ET.fromstring(svg)
+    parents = {child: parent for parent in root.iter() for child in parent}
+
+    def font_of(el: ET.Element) -> float:
+        node: ET.Element | None = el
+        while node is not None:
+            if "font-size" in node.attrib:
+                return float(node.attrib["font-size"])
+            node = parents.get(node)
+        raise AssertionError("a <text> with no font-size on it or above it")
+
+    runs = [
+        SvgRun("".join(el.itertext()), el.get("data-wrap") == "1", float(el.attrib["x"]), font_of(el))
+        for el in root.iter()
+        if el.tag.endswith("text")
+    ]
+    return runs, float(root.attrib["width"])
+
+
+def svgs_in(path: Path) -> list[str]:
+    """The figures a written file holds: ``heatmap.svg`` itself, or every ``<svg>`` a page embeds."""
+    text = path.read_text()
+    return [text] if path.suffix == ".svg" else re.findall(r"<svg\b.*?</svg>", text, flags=re.DOTALL)
+
+
+def joined_lines(runs: Sequence[SvgRun]) -> list[str]:
+    """The figure's texts with each continuation joined to the line before it by the space it broke at."""
+    lines: list[str] = []
+    for run in runs:
+        if run.wrap:
+            assert lines, "a continuation with no line before it"
+            lines[-1] = f"{lines[-1]} {run.content}"
+        else:
+            lines.append(run.content)
+    return lines
+
+
+def drawn_line_problems(svg: str, line: str) -> list[str]:
+    """What is wrong with the figure as the drawing of ``line``: one ``<text>`` opens it, without
+    ``data-wrap``, and it and the continuations after it are the restated wrap of ``line`` at that text's
+    budget, line for line, at its x and font, the continuations marked and the text after them not."""
+    runs, width = svg_runs(svg)
+    starts = [i for i, run in enumerate(runs) if run.content.startswith(MARKER)]
+    if len(starts) != 1:
+        return [f"{len(starts)} <text> elements start with the marker"]
+    first = runs[starts[0]]
+    expected = wrap(line, budget(width, first.x, first.font))
+    drawn = runs[starts[0] : starts[0] + len(expected)]
+    problems = []
+    if [run.content for run in drawn] != expected:
+        problems.append(f"drawn as {[run.content for run in drawn]}, not {expected}")
+    if [run.wrap for run in drawn] != [False] + [True] * (len(expected) - 1):
+        problems.append(f"continuation marks {[run.wrap for run in drawn]}")
+    if {(run.x, run.font) for run in drawn} != {(first.x, first.font)}:
+        problems.append("the lines do not share the first line's x and font")
+    after = runs[starts[0] + len(expected) : starts[0] + len(expected) + 1]
+    if after and after[0].wrap:
+        problems.append(f"a further continuation follows: {after[0].content}")
+    return problems
 
 
 class ParagraphTexts(HTMLParser):
@@ -1357,83 +1478,114 @@ def marked_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.startswith(MARKER)]
 
 
-def test_fr14_the_plain_line_is_line_one_of_diff_stdout(go1_ran: dict[str, Ran]) -> None:
+def test_fr14_the_plain_line_is_line_one_of_diff_stdout(lattice_ran: dict[str, Ran]) -> None:
     # PF2 (spec section 4.3): line one of the report diff prints, after its verdict block.
-    assert after_verdict(go1_ran["diff inferred"].result)[0] == GO1_LINE
+    assert after_verdict(lattice_ran["diff inferred"].result)[0] == LATTICE_LINE
 
 
-def test_fr14_the_plain_line_is_line_one_of_report_stdout(go1_ran: dict[str, Ran]) -> None:
+def test_fr14_the_plain_line_is_line_one_of_report_stdout(lattice_ran: dict[str, Ran]) -> None:
     # PF2 (spec section 4.3): line one of what report printed before, after its wrote block.
-    assert after_verdict(go1_ran["report inferred"].result)[0] == GO1_LINE
+    assert after_verdict(lattice_ran["report inferred"].result)[0] == LATTICE_LINE
 
 
-def test_fr14_the_plain_line_is_in_report_md(go1_ran: dict[str, Ran]) -> None:
-    assert marked_lines((go1_ran["report inferred"].out_dir / "report.md").read_text()) == [GO1_LINE]
+def test_fr14_the_plain_line_is_in_report_md(lattice_ran: dict[str, Ran]) -> None:
+    assert marked_lines((lattice_ran["report inferred"].out_dir / "report.md").read_text()) == [LATTICE_LINE]
 
 
-def test_fr14_the_plain_line_is_the_muted_header_of_heatmap_svg(go1_ran: dict[str, Ran]) -> None:
-    texts = svg_texts(go1_ran["report inferred"].out_dir / "heatmap.svg")
-    assert [t for t in texts if t.startswith(MARKER)] == [GO1_LINE], texts[:6]
+def test_fr14_the_plain_line_is_the_muted_header_of_heatmap_svg(lattice_ran: dict[str, Ran]) -> None:
+    """The lattice's figure is narrower than the line, so the header draws it broken by the figure's wrap
+    rule: where it breaks is checked against the restated rule and against the literal, not only the words."""
+    (svg,) = svgs_in(lattice_ran["report inferred"].out_dir / "heatmap.svg")
+    assert drawn_line_problems(svg, LATTICE_LINE) == []
+    runs, width = svg_runs(svg)
+    (start,) = [i for i, run in enumerate(runs) if run.content.startswith(MARKER)]
+    assert (width, runs[start].x, runs[start].font) == (600.0, 24.0, 11.0), (width, runs[start])
+    assert wrap(LATTICE_LINE, budget(width, runs[start].x, runs[start].font)) == LATTICE_LINE_DRAWN
+    assert [run.content for run in runs[start : start + 2]] == LATTICE_LINE_DRAWN
+    assert [t for t in svg_texts(lattice_ran["report inferred"].out_dir / "heatmap.svg") if t.startswith(MARKER)] == LATTICE_LINE_DRAWN[:1]
 
 
-def test_fr14_the_plain_line_is_a_paragraph_of_receipt_html(go1_ran: dict[str, Ran]) -> None:
-    chunks = html_chunks(go1_ran["report inferred"].out_dir / "receipt.html")
-    assert [text for tag, text in chunks if tag == "p" and text.startswith(MARKER)] == [GO1_LINE]
+def test_fr14_the_plain_line_is_a_paragraph_of_receipt_html(lattice_ran: dict[str, Ran]) -> None:
+    chunks = html_chunks(lattice_ran["report inferred"].out_dir / "receipt.html")
+    assert [text for tag, text in chunks if tag == "p" and text.startswith(MARKER)] == [LATTICE_LINE]
 
 
-def test_fr15_the_single_run_report_says_the_same_thing_as_the_pair(go1_ran: dict[str, Ran]) -> None:
-    single, pair = go1_ran["single inferred"].result, go1_ran["report inferred"].result
+def test_fr15_the_single_run_report_says_the_same_thing_as_the_pair(lattice_ran: dict[str, Ran]) -> None:
+    single, pair = lattice_ran["single inferred"].result, lattice_ran["report inferred"].result
     # PF2 (spec section 4.3): each report's line one is read after its wrote block.
-    assert after_verdict(single)[0] == GO1_LINE == after_verdict(pair)[0]
+    assert after_verdict(single)[0] == LATTICE_LINE == after_verdict(pair)[0]
 
 
 def texts_of(ran: Ran) -> dict[str, list[str]]:
-    """Every text a report writes, as lines: ``report.md``, the SVG's ``<text>`` and the page's chunks."""
+    """Every text a report writes, as lines: ``report.md``'s lines; the figure's ``<text>`` runs as drawn
+    and, beside them, the same runs with each continuation joined to its line; the page's chunks as
+    parsed and, beside them, the joined lines of every figure it embeds."""
+    heatmap, receipt = ran.out_dir / "heatmap.svg", ran.out_dir / "receipt.html"
     return {
         "report.md": (ran.out_dir / "report.md").read_text().splitlines(),
-        "heatmap.svg": svg_texts(ran.out_dir / "heatmap.svg"),
-        "receipt.html": [text for _, text in html_chunks(ran.out_dir / "receipt.html")],
+        "heatmap.svg": [r.content for svg in svgs_in(heatmap) for r in svg_runs(svg)[0]]
+        + [line for svg in svgs_in(heatmap) for line in joined_lines(svg_runs(svg)[0])],
+        "receipt.html": [text for _, text in html_chunks(receipt)]
+        + [line for svg in svgs_in(receipt) for line in joined_lines(svg_runs(svg)[0])],
     }
 
 
-@pytest.mark.parametrize("kind", ["fell", "both"])
+def control_problems(ran: Ran) -> dict[str, list[str]]:
+    """The positive control on each surface of a report that inferred its events: ``report.md`` carries
+    the line and no other marked line; each figure (the heatmap, and the one the page embeds) draws it
+    by the wrap rule (``drawn_line_problems``); and the page's own paragraph is the line."""
+    md = [line for line in (ran.out_dir / "report.md").read_text().splitlines() if line.startswith(MARKER)]
+    figures = {name: svgs_in(ran.out_dir / name) for name in ("heatmap.svg", "receipt.html")}
+    paragraphs = [text for tag, text in html_chunks(ran.out_dir / "receipt.html") if tag == "p" and text.startswith(MARKER)]
+    out = {"report.md": [] if md and set(md) == {LATTICE_LINE} else [f"marked lines {md}"]}
+    for name, svgs in figures.items():
+        out[name] = [] if len(svgs) == 1 else [f"{len(svgs)} figures"]
+        out[name] += [problem for svg in svgs for problem in drawn_line_problems(svg, LATTICE_LINE)]
+    out["receipt.html"] += [] if paragraphs == [LATTICE_LINE] else [f"paragraphs {paragraphs}"]
+    return out
+
+
+@pytest.mark.parametrize("kind", ["tripped", "both"])
 @pytest.mark.parametrize("verb", ["diff", "report", "check"])
-def test_fr16_given_events_print_no_inference_line_and_the_marker_matches_where_it_should(go1_ran: dict[str, Ran], verb: str, kind: str) -> None:
-    given = go1_ran[f"{verb} {kind}"]
+def test_fr16_given_events_print_no_inference_line_and_the_marker_matches_where_it_should(lattice_ran: dict[str, Ran], verb: str, kind: str) -> None:
+    given = lattice_ran[f"{verb} {kind}"]
     assert marked_lines(given.result.out) == [], given.result.out
     if verb == "report":
+        # Over the raw ``<text>`` runs and the page's chunks as well as the joined lines, so a marked line
+        # drawn as a continuation (and so merged into the line before it) is still seen.
         for name, lines in texts_of(given).items():
             assert [line for line in lines if line.startswith(MARKER)] == [], name
+            assert not any(MARKER in line for line in lines), name
     # The positive control, on real output: the same pair without --event, same verb (check never infers).
-    control = go1_ran["diff inferred" if verb == "check" else f"{verb} inferred"]
+    control = lattice_ran["diff inferred" if verb == "check" else f"{verb} inferred"]
     # PF2 (spec section 4.3): the control's line one is read after diff's verdict block or report's wrote
     # block.
     assert after_verdict(control.result)[0].startswith(MARKER)
     if verb == "report":
+        assert control_problems(control) == {"report.md": [], "heatmap.svg": [], "receipt.html": []}
         for name, lines in texts_of(control).items():
-            found = [line for line in lines if line.startswith(MARKER)]
-            assert found and set(found) == {GO1_LINE}, (name, found)
+            assert any(line.startswith(MARKER) for line in lines), name
 
 
-def test_fr17_to_json_carries_the_same_keys_and_the_same_inference_fields(go1_inferred: MultiDiffResult) -> None:
-    inferred, explicit = go1_inferred.to_json(), go1_multi(["fell"]).to_json()
+def test_fr17_to_json_carries_the_same_keys_and_the_same_inference_fields(lattice_inferred: MultiDiffResult) -> None:
+    inferred, explicit = lattice_inferred.to_json(), lattice_multi(["tripped"]).to_json()
     assert sorted(inferred) == MULTI_JSON_KEYS == sorted(explicit)
-    assert (inferred["inferred"], inferred["non_event"], inferred["events"]) == (True, "fell", ["survived"])
-    assert (explicit["inferred"], explicit["non_event"], explicit["events"]) == (False, None, ["fell"])
+    assert (inferred["inferred"], inferred["non_event"], inferred["events"]) == (True, "tripped", ["held"])
+    assert (explicit["inferred"], explicit["non_event"], explicit["events"]) == (False, None, ["tripped"])
 
 
-def test_fr17_infer_events_returns_what_it_returned(go1_inferred: MultiDiffResult) -> None:
-    store = Store(GO1_ROOT)
-    a, b = store.read(GO1_A, meta=False), store.read(GO1_B, meta=False)
-    assert infer_events(a, b) == (("survived",), "fell") == infer_events(a, a.iloc[0:0])
-    assert (go1_inferred.events, go1_inferred.non_event) == (("survived",), "fell")
+def test_fr17_infer_events_returns_what_it_returned(lattice_inferred: MultiDiffResult) -> None:
+    store = Store(LATTICE_ROOT)
+    a, b = store.read(LATTICE_A, meta=False), store.read(LATTICE_B, meta=False)
+    assert infer_events(a, b) == (("held",), "tripped") == infer_events(a, a.iloc[0:0])
+    assert (lattice_inferred.events, lattice_inferred.non_event) == (("held",), "tripped")
     multi = a14_multi(None)
     assert (multi.events, multi.non_event) == (("violated", "timeout"), "completed")
 
 
-@pytest.mark.parametrize(("kind", "line"), [("inferred", "- inferred: true"), ("fell", "- inferred: false")])
-def test_fr17_report_md_provenance_still_prints_inferred(go1_ran: dict[str, Ran], kind: str, line: str) -> None:
-    md = (go1_ran[f"report {kind}"].out_dir / "report.md").read_text().splitlines()
+@pytest.mark.parametrize(("kind", "line"), [("inferred", "- inferred: true"), ("tripped", "- inferred: false")])
+def test_fr17_report_md_provenance_still_prints_inferred(lattice_ran: dict[str, Ran], kind: str, line: str) -> None:
+    md = (lattice_ran[f"report {kind}"].out_dir / "report.md").read_text().splitlines()
     assert line in md, [m for m in md if "inferred" in m]
 
 
@@ -1541,7 +1693,7 @@ class GatePair:
 
 @pytest.fixture(scope="module")
 def gate_pairs(tmp_path_factory: pytest.TempPathFactory, mock_pair: MockPair) -> dict[str, GatePair]:
-    """Go1, the mock pair, and two synthetic pairs: one whose gate PASSes on ``--event fell`` (no cell worse),
+    """The lattice pair, the mock pair, and two synthetic pairs: one whose gate PASSes on ``--event fell`` (no cell worse),
     one whose gate FAILs on it (one cell worse, I14's shape). Same salt and seeds, so all four are pairable."""
     root = tmp_path_factory.mktemp("gate-pairs")
     store = Store(root)
@@ -1550,7 +1702,7 @@ def gate_pairs(tmp_path_factory: pytest.TempPathFactory, mock_pair: MockPair) ->
     fell_run(store, "fail-a", {1.0: 0, 2.0: 8})
     fell_run(store, "fail-b", {1.0: 24, 2.0: 8})
     return {
-        "go1": GatePair(GO1_ROOT, GO1_A, GO1_B, "fell, survived"),
+        "lattice": GatePair(LATTICE_ROOT, LATTICE_A, LATTICE_B, "held, tripped"),
         "mock": GatePair(mock_pair.root, mock_pair.a, mock_pair.b, "completed, timeout, violated"),
         "pass": GatePair(root, "pass-a", "pass-b", "fell, survived"),
         "fail": GatePair(root, "fail-a", "fail-b", "fell, survived"),
@@ -1566,7 +1718,13 @@ def test_fr19_the_gate_pairs_pass_and_fail_when_the_gate_runs(gate_pairs: dict[s
     assert run_cli(gate_pairs["pass"].argv("--event", "fell", "--fail-on", "higher")).code == 0
     # A failed check exits 4 (spec section 5.2).
     assert run_cli(gate_pairs["fail"].argv("--event", "fell", "--fail-on", "higher")).code == 4
-    assert run_cli(gate_pairs["go1"].argv("--event", "fell", "--fail-on", "higher")).code == 0
+    # The lattice pair shares a salt, so check's default is the paired test (McNemar); under it no
+    # condition's tripped rose, as the exact McNemar reference with one BH family gives (27 lower, 0 higher).
+    lower, higher = lattice.directions(lattice.mcnemar(lattice.EVENT, 0.05))
+    assert (lower, higher) == (27, 0)
+    gate = run_cli(gate_pairs["lattice"].argv("--event", "tripped", "--fail-on", "higher"))
+    assert gate.code == 0, gate
+    assert "(McNemar)" in gate.out and f"tripped: {higher} higher, {lower} lower in 72 conditions" in gate.out, gate.out
     store = Store(gate_pairs["fail"].root)
     events, non_event = infer_events(store.read("fail-a", meta=False), store.read("fail-b", meta=False))
     assert (events, non_event) == (("fell",), "survived"), "the FAIL pair infers fell, so a gate run on the inferred set FAILs too"
@@ -1574,7 +1732,7 @@ def test_fr19_the_gate_pairs_pass_and_fail_when_the_gate_runs(gate_pairs: dict[s
     assert infer_events(store.read("pass-a", meta=False), store.read("pass-b", meta=False)) == (("fell",), "survived")
 
 
-@pytest.mark.parametrize("name", ["go1", "mock", "pass", "fail"])
+@pytest.mark.parametrize("name", ["lattice", "mock", "pass", "fail"])
 def test_fr19_check_that_lists_puts_the_list_on_stderr_and_none_of_it_on_stdout(gate_pairs: dict[str, GatePair], name: str) -> None:
     """The red half: the listing itself, on stderr, for every crossing."""
     pair = gate_pairs[name]
@@ -1587,7 +1745,7 @@ def test_fr19_check_that_lists_puts_the_list_on_stderr_and_none_of_it_on_stdout(
         assert "passed" not in r.out and "failed" not in r.out, (extra, r.out)
 
 
-@pytest.mark.parametrize("name", ["go1", "mock", "pass", "fail"])
+@pytest.mark.parametrize("name", ["lattice", "mock", "pass", "fail"])
 def test_fr19_check_that_lists_exits_two_never_zero_or_one_and_never_reaches_the_gate(
     gate_pairs: dict[str, GatePair], monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
@@ -1612,14 +1770,14 @@ def test_fr19_check_that_lists_exits_two_never_zero_or_one_and_never_reaches_the
 # ---------- FR20: the single-run report's own inference line ----------
 
 
-def single_run_argv(root: Path, run: str, out: Path, *extra: str, x: str = GO1_X, y: str = GO1_Y) -> list[str]:
+def single_run_argv(root: Path, run: str, out: Path, *extra: str, x: str = LATTICE_X, y: str = LATTICE_Y) -> list[str]:
     return ["--store", str(root), "report", run, "--x", x, "--y", y, "--out", str(out), *extra]
 
 
-@pytest.mark.parametrize("which", ["go1", "mock"])
+@pytest.mark.parametrize("which", ["lattice", "mock"])
 def test_fr20_the_single_run_line_is_the_plain_template_and_precedes_the_summary_line(tmp_path: Path, mock_pair: MockPair, which: str) -> None:
-    if which == "go1":
-        root, run, argv = GO1_ROOT, GO1_A, single_run_argv(GO1_ROOT, GO1_A, tmp_path / "out")
+    if which == "lattice":
+        root, run, argv = LATTICE_ROOT, LATTICE_A, single_run_argv(LATTICE_ROOT, LATTICE_A, tmp_path / "out")
     else:
         root, run = mock_pair.root, mock_pair.a
         argv = single_run_argv(root, run, tmp_path / "out", x="tool_fail_rate", y="task_id")
@@ -1634,7 +1792,7 @@ def test_fr20_the_single_run_line_is_the_plain_template_and_precedes_the_summary
     assert lines[0] == inference_line(events, non_event), lines[:2]
     assert "(" not in lines[0] and ")" not in lines[0], lines[0]
     assert lines[1].startswith(f'"{name}": survival report over {", ".join(events)} at horizon '), lines[:2]
-    assert lines[0] == (GO1_LINE if which == "go1" else A14_LINE)
+    assert lines[0] == (LATTICE_LINE if which == "lattice" else A14_LINE)
 
 
 @pytest.mark.parametrize("kind", ["one event", "repeated events"])

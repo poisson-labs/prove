@@ -1,13 +1,17 @@
 """Oracle for the M7 multi-event amendment: per-event panels, trade line, saturation, forest,
 survival report.
 
-B1 is the gate. It compares ``build_report`` on the Go1 fixture against the S8.1 output
-frozen on disk under ``tests/fixtures/go1/report_regression/`` (built with the pre-amendment
-renderer, ``fisher_bh``, ``x=push_pct_bw``, ``y=mu``, dark theme, title ``Go1 v0 -> v1``,
-diff with manifests, ``build_report`` without) and never against a recomputation.
+B1 is the gate. It once compared ``build_report`` against an S8.1 output frozen on disk (built
+with the pre-amendment renderer, ``fisher_bh``, the admitted knob on x, dark theme, diff with
+manifests, ``build_report`` without). The frozen file went with the study fixture it was built
+on; B1 now renders the generated lattice pair (``tests/lattice.py``) the same way and checks
+every fact that record carried -- the title and headline, the worst-cells table's rows,
+coordinates and values, the Methods row, the honesty block's place, the fence and the
+provenance list -- against the lattice's own references (its design's counts and scipy's
+Fisher test with one BH family), never against Prove's own diff.
 
 Every ``data-`` assertion is made on the ``xml.etree.ElementTree`` tree, never on the raw
-string. Fixture tests use the Go1 store through ``go1_store``; B17 regenerates the two S10
+string. Fixture tests use the lattice pair through ``lattice_store``; B17 regenerates the two S10
 quickstart runs with ``cli.main`` under a fixed salt; everything else uses synthetic
 ``EventDiff`` / ``MultiDiffResult`` values built directly from M6's ``cells`` columns, with
 ``max_mde_unchanged`` / ``max_mde_unchanged_cell`` and ``trades`` derived the way M6
@@ -34,10 +38,9 @@ Structural pins this oracle adds where the spec leaves the SVG open (as S8's did
   sentence; line 2 matches ``Worst-powered cell overall: Npp (<coords>).``
 
 Deliberately absent, reported to the spec author rather than adapted (see the session
-report): B1's SVG/HTML clause (245 Go1 cells are saturated, so their fills and the legend
-must change) and B3 on the single-event ``build_report`` (its tiebreak reorders the frozen
-I19 data and the Go1 top-10 table that B1's Markdown clause pins). B3 is asserted on the
-multi-report panels only.
+report): B1's SVG/HTML clause (the fixture's saturated cells change their fills and the legend)
+and B3 on the single-event ``build_report`` (its tiebreak reorders the frozen I19 data and the
+top-10 table that B1's Markdown clause pins). B3 is asserted on the multi-report panels only.
 """
 
 from __future__ import annotations
@@ -56,11 +59,13 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+import lattice
 from poisson_prove import cli
 from poisson_prove.diff import DiffResult, EventDiff, MultiDiffResult, diff, multi_diff
 from poisson_prove.report import (
@@ -78,10 +83,11 @@ from poisson_prove.report import (
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import cell_table, censor
 from conftest import quickstart_design
+from test_pf4_stats import POWER, _ref_fisher_power
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
-REGRESSION_DIR = FIXTURE_DIR / "report_regression"
+#: B1. The single-event report's title on the lattice pair.
+LATTICE_TITLE = "Lattice before -> after"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -673,20 +679,20 @@ def raw_frame(cells: dict[tuple[str, float], list[tuple[str, float]]], *, horizo
 
 
 @pytest.fixture(scope="module")
-def golden_frames(go1_store: Store) -> dict[str, Any]:
+def golden_frames(lattice_store: Store) -> dict[str, Any]:
     return {
-        "raw_a": go1_store.read("go1-v0"),
-        "raw_b": go1_store.read("go1-v1"),
-        "ma": go1_store.manifest("go1-v0"),
-        "mb": go1_store.manifest("go1-v1"),
+        "raw_a": lattice_store.read(lattice.RUN_A),
+        "raw_b": lattice_store.read(lattice.RUN_B),
+        "ma": lattice_store.manifest(lattice.RUN_A),
+        "mb": lattice_store.manifest(lattice.RUN_B),
     }
 
 
 @pytest.fixture(scope="module")
 def golden_diff(golden_frames: dict[str, Any]) -> DiffResult:
     return diff(
-        censor(golden_frames["raw_a"], "fell"), censor(golden_frames["raw_b"], "fell"),
-        event="fell", method="fisher_bh", q=0.05,
+        censor(golden_frames["raw_a"], lattice.EVENT), censor(golden_frames["raw_b"], lattice.EVENT),
+        event=lattice.EVENT, method="fisher_bh", q=0.05,
         manifest_a=golden_frames["ma"], manifest_b=golden_frames["mb"],
     )
 
@@ -694,14 +700,14 @@ def golden_diff(golden_frames: dict[str, Any]) -> DiffResult:
 @pytest.fixture(scope="module")
 def golden_report(golden_diff: DiffResult) -> Report:
     return build_report(
-        golden_diff, ReportSpec(title="Go1 v0 -> v1", x_axis="push_pct_bw", y_axis="mu", theme="dark")
+        golden_diff, ReportSpec(title=LATTICE_TITLE, x_axis=lattice.Y, y_axis=lattice.X, theme="dark")
     )
 
 
 @pytest.fixture(scope="module")
 def golden_multi(golden_frames: dict[str, Any]) -> MultiDiffResult:
     return multi_diff(
-        golden_frames["raw_a"], golden_frames["raw_b"], events=["fell", "survived"],
+        golden_frames["raw_a"], golden_frames["raw_b"], events=[lattice.EVENT, lattice.OTHER],
         manifest_a=golden_frames["ma"], manifest_b=golden_frames["mb"],
     )
 
@@ -744,7 +750,7 @@ def strip_honesty(text: str) -> str:
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one line of a rendered Go1 report the rename changes is the version
+    """PF0 (Q4, section 2.3): the one line of a rendered report the rename changes is the version
     in its provenance list. First assert it is there as the rename writes it -- one ``Prove version:``
     line and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and drop any separate
     ``written by proofload`` line, so every other byte is still compared."""
@@ -754,13 +760,25 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
 
 
-def test_b1_regression_fixture_is_present_and_is_the_s8_output() -> None:
-    for name in ("report.md", "heatmap.svg", "receipt.html"):
-        assert (REGRESSION_DIR / name).is_file(), name
-    md = (REGRESSION_DIR / "report.md").read_text(encoding="utf-8")
-    assert "60 of 400 cells safer, 0 worse (fisher_bh, BH q<0.05, paired)." in md
-    assert sum(_is_honesty_line(line) for line in md.splitlines()) == 1
-    ET.fromstring((REGRESSION_DIR / "heatmap.svg").read_text(encoding="utf-8"))
+def lattice_headline() -> str:
+    """The single-event headline the lattice's references give: Fisher + BH over the design's counts."""
+    lower, higher = lattice.directions(lattice.fisher())
+    return f"{lower} of {lattice.CELLS} cells safer, {higher} worse (fisher_bh, BH q<0.05, unpaired)."
+
+
+def test_b1_the_lattice_record_is_intact_and_the_report_carries_its_headline_on_every_surface(golden_report: Report) -> None:
+    """Lattice port: B1's record is no longer a file frozen on disk but the generated lattice pair
+    and its references. The pair is the one the generator wrote (every file by digest); its
+    references give a headline in S8's form; and the build's three surfaces exist and carry it --
+    the Markdown with that headline once and the honesty block's two lines, the SVG parsing."""
+    assert lattice.intact()
+    headline = lattice_headline()
+    assert headline == "22 of 72 cells safer, 0 worse (fisher_bh, BH q<0.05, unpaired)."
+    md = golden_report.to_markdown()
+    assert md.splitlines().count(headline) == 1
+    assert sum(_is_honesty_line(line) for line in md.splitlines()) == 2
+    ET.fromstring(golden_report.to_svg())
+    assert headline in html_unescape(golden_report.to_html())
 
 
 #: PF4 (PF4.15): the worst-cells table's width and its MDE column.
@@ -786,42 +804,146 @@ def _set_aside_mde(text: str) -> tuple[str, list[tuple[str, str]]]:
     return "\n".join(out), held
 
 
+#: B1. What S8's record printed in each place, read off the lattice's design and its references,
+#: and the numbers only Prove computes on it, re-measured on main's build (lattice port): the
+#: largest detection limit over the conditions (Methods row) and every condition's printed limit
+#: where it has one, by ``(gain, load)``. The rest print a note: the ceiling note at a baseline that
+#: had the event in every run, the none-detectable note where even the whole headroom is not caught.
+LATTICE_MAX_MDE_PP = "34pp"
+LATTICE_LIMITS = {
+    (0.1, 20.0): "23pp", (0.1, 30.0): "26pp", (0.2, 20.0): "25pp", (0.2, 30.0): "29pp", (0.3, 10.0): "23pp",
+    (0.3, 20.0): "26pp", (0.3, 30.0): "30pp", (0.4, 10.0): "26pp", (0.4, 20.0): "28pp", (0.4, 30.0): "30pp",
+    (0.5, 10.0): "29pp", (0.5, 20.0): "29pp", (0.5, 30.0): "31pp", (0.6, 10.0): "31pp", (0.6, 20.0): "30pp",
+    (0.6, 30.0): "31pp", (0.7, 10.0): "32pp", (0.7, 20.0): "31pp", (0.7, 30.0): "32pp", (0.8, 10.0): "33pp",
+    (0.8, 20.0): "32pp", (0.8, 30.0): "32pp", (0.9, 10.0): "34pp", (0.9, 20.0): "33pp", (0.9, 30.0): "33pp",
+    (1.0, 10.0): "34pp", (1.0, 20.0): "33pp", (1.0, 30.0): "34pp", (1.1, 10.0): "23pp", (1.1, 20.0): "31pp",
+    (1.1, 30.0): "33pp", (1.2, 10.0): "23pp", (1.2, 20.0): "34pp", (1.2, 30.0): "34pp",
+}
+#: B1. The lattice's one condition whose whole headroom is not detectable (baseline 26 of 32).
+LATTICE_NONE_DETECTABLE = {(0.2, 10.0)}
+#: B1. The epistemic fence, as S8 printed it.
+FENCE = (
+    "> This is empirical evidence under a stated test envelope, not formal verification. Cells outside "
+    "the envelope were not tested; cells inside it were tested at the stated replicate count and can only "
+    "detect effects at or above the reported MDE."
+)
+
+
+def _sig3(x: float) -> str:
+    """The report's p and q format (M7's spec): three significant figures, scientific below 1e-3."""
+    if x == 0:
+        return "0"
+    return format(x, ".2e") if x < 1e-3 else format(x, ".3g")
+
+
+def lattice_worst_rows(top: int = 10) -> list[tuple[tuple[float, float], str, str]]:
+    """The first ``top`` rows of the worst-cells table from the references: the conditions in
+    descending change and then by key (I19's order), each as ``((load, gain), its row with the MDE
+    cell set aside, its key)``. The change, both shares, p, q and the verdict are the reference's."""
+    reference = lattice.fisher()
+    words = {"lower": "safer", "higher": "worse", "unchanged": "unchanged"}
+    ranked = sorted(reference.values(), key=lambda r: (-r["delta"], r["config_hash"]))[:top]
+    out = []
+    for r in ranked:
+        load, gain = r["config"][lattice.Y], r["config"][lattice.X]
+        row = (
+            f"| {load:g} | {gain:g} | {r['n_a']}/{r['n_b']} | {_pp1(r['events_a'] / r['n_a'])} | "
+            f"{_pp1(r['events_b'] / r['n_b'])} | {_pp1(r['delta'])} | {_sig3(r['p'])} | {_sig3(r['q'])} | "
+            f"{words[r['direction']]} | <limit> |"
+        )
+        out.append(((load, gain), row, r["config_hash"]))
+    return out
+
+
+def limit_kind(gain: float, load: float) -> str:
+    """What a condition's MDE cell must hold, from the design and an exact reference, never from
+    Prove: ``ceiling`` where the baseline had the event in all 32 runs; ``none`` where even a rise
+    to 32 of 32 is caught with less than the target power by a two-sided Fisher test at 0.05
+    (``test_pf4_stats``'s exact power, the binomial over every table); ``limit`` otherwise."""
+    cell = lattice.cell_at(gain, load)
+    if cell.tripped_a == lattice.N:
+        return "ceiling"
+    p_a = cell.tripped_a / lattice.N
+    power = float(_ref_fisher_power(p_a, lattice.N, lattice.N, 0.05, np.array([1.0 - p_a]), True)[0])
+    return "none" if power < POWER else "limit"
+
+
+def check_limit(report: Report, notes: dict[str, Any], coords: str, after: str, gain: float, load: float, key: str) -> str:
+    """One row's MDE cell against its condition's kind; returns the kind."""
+    cell = named_cell(report, coords)
+    assert cell.config_hash == key, (coords, key)
+    kind = limit_kind(gain, load)
+    if kind == "limit":
+        assert not isinstance(notes[key], str), (coords, notes[key])
+        assert after == LATTICE_LIMITS[(gain, load)] == f"{_pp0(cell.mde)}pp", (coords, after)
+    elif kind == "ceiling":
+        assert isinstance(notes[key], str) and math.isnan(cell.mde), (coords, notes[key])
+        assert not re.search(r"\d+pp|(?i:nan)", after) and "ceiling" in after and "none detectable" not in after, (coords, after)
+    else:
+        assert isinstance(notes[key], str) and not math.isnan(cell.mde), (coords, notes[key])
+        assert not re.search(r"\d+pp|(?i:nan)", after) and "none detectable" in after and "ceiling" not in after, (coords, after)
+    return kind
+
+
 def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_report: Report, golden_diff: DiffResult) -> None:
-    """The S8 bytes are a record of what ``report`` said at S3 and are not rewritten (P-1 section
-    3.2). What P-1 moved in them, and only that, is mapped onto the record before the comparison:
-    the headline's last token states the requested method's pairing (ADR-052, C1), the Methods
-    row's second column reads ``unpaired`` for ``fisher_bh``, the provenance list carries
-    ``seed identity match`` and ``unpaired analysis`` where ``paired`` stood, and (truncation
-    surfacing, 2026-09-20) ``episodes censored at horizon`` where ``truncated`` stood. Everything
-    else outside the honesty block is byte-identical to the S8 output."""
-    frozen = (REGRESSION_DIR / "report.md").read_text(encoding="utf-8")
-    assert frozen.count("(fisher_bh, BH q<0.05, paired).") == frozen.count("| fisher_bh | paired |") == frozen.count("- paired: true\n") == 1
-    frozen = frozen.replace("(fisher_bh, BH q<0.05, paired).", "(fisher_bh, BH q<0.05, unpaired).")
-    frozen = frozen.replace("| fisher_bh | paired |", "| fisher_bh | unpaired |")
-    frozen = frozen.replace("- paired: true\n", "- seed identity match: true\n- unpaired analysis: true\n")
-    # Retrofitted 2026-09-20 (truncation surfacing): the horizon count is named for what it counts.
-    assert frozen.count("- truncated: 0\n") == 1
-    frozen = frozen.replace("- truncated: 0\n", "- episodes censored at horizon: 0\n")
-    # PF4 (PF4.15): a condition whose baseline had the event in every run has no detection limit
-    # (its cell holds NaN), and one where even its whole headroom is not detectable carries a note;
-    # the table prints no number for either (the binding words: "ceiling", "none detectable"), where
-    # S8 printed one. Every MDE cell is set aside on both sides, every other byte compared, and each
-    # row's limit checked against its condition: unchanged where the condition has a limit.
-    frozen, was = _set_aside_mde(frozen)
+    """S8's record was a frozen file; on the lattice pair the same layout is built here from the
+    references and compared line for line outside the honesty block (B2 owns its two lines). What
+    P-1 moved in S8's record is written the way it reads now: the headline's last token states the
+    requested method's pairing (ADR-052, C1), the Methods row's second column reads ``unpaired``
+    for ``fisher_bh``, the provenance list carries ``seed identity match`` and ``unpaired
+    analysis`` where ``paired`` stood, and (truncation surfacing, 2026-09-20) ``episodes censored
+    at horizon`` where ``truncated`` stood. PF4 (PF4.15): every MDE cell is set aside and each
+    row's limit checked against its condition (``limit_kind``): the re-measured limit where it has
+    one, the ceiling words at a 32-of-32 baseline, the none-detectable words where even the whole
+    headroom is not caught. The default top ten holds limits and ceilings only, so the same report
+    is rendered again with every condition in the table and every row checked the same way, the
+    lattice's one none-detectable condition among them."""
+    lower, higher = lattice.directions(lattice.fisher())
+    worst = lattice_worst_rows()
+    expected = [
+        f"# {LATTICE_TITLE}", "", lattice_headline(), "", "![delta heatmap](heatmap.svg)", "",
+        "## Worst cells", "",
+        f"| {lattice.Y} | {lattice.X} | n (a/b) | rate_a (pp) | rate_b (pp) | delta (pp) | p | q | verdict | MDE |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+        *(row for _, row, _ in worst),
+        "", "## Methods", "",
+        "| method | pairing | safer | worse | unchanged | max MDE | q |",
+        "|---|---|---|---|---|---|---|",
+        f"| fisher_bh | unpaired | {lower} | {higher} | {lattice.CELLS - lower - higher} | {LATTICE_MAX_MDE_PP} | 0.05 |",
+        "", "## Honesty", "", "", FENCE, "", "## Provenance", "",
+        f"- event: {lattice.EVENT}", f"- t unit: {lattice.T_UNIT}", f"- horizon: {lattice.HORIZON:g}",
+        "- method: fisher_bh", "- seed identity match: true", "- unpaired analysis: true", "- q: 0.05",
+        "- n not comparable: 0", "- dropped a: 0", "- dropped b: 0", "- episodes censored at horizon: 0",
+        "- n absent: 0", "- proofload version: 0.0.1",
+    ]
+    # The record's own facts, pinned so a drift of the generator or of the references is seen too.
+    assert expected[2] == "22 of 72 cells safer, 0 worse (fisher_bh, BH q<0.05, unpaired)."
+    assert [coords for coords, _, _ in worst][:2] == [(20.0, 1.1), (30.0, 0.9)]
+    kinds = {(c.gain, c.load): limit_kind(c.gain, c.load) for c in lattice.design_cells()}
+    assert {k for k, v in kinds.items() if v == "none"} == LATTICE_NONE_DETECTABLE
+    assert {k for k, v in kinds.items() if v == "limit"} == set(LATTICE_LIMITS)
+    assert sum(v == "ceiling" for v in kinds.values()) == 37
+    assert LATTICE_MAX_MDE_PP == f"{_pp0(golden_diff.max_mde)}pp"
     now, printed = _set_aside_mde(as_0_0_1_wrote_it(golden_report.to_markdown()))
-    assert strip_honesty(now) == strip_honesty(frozen)
-    assert [c for c, _ in printed] == [c for c, _ in was] and len(was) == golden_report.spec.top_n
+    assert strip_honesty(now).splitlines() == expected
+    assert len(printed) == len(worst) == golden_report.spec.top_n
     notes = dict(zip(golden_diff.cells["config_hash"], golden_diff.cells["mde_note"], strict=True))
-    moved = 0
-    for (coords, before), (_, after) in zip(was, printed, strict=True):
-        cell = named_cell(golden_report, coords)
-        if not isinstance(notes[cell.config_hash], str):
-            assert after == before, (coords, before, after)
-            continue
-        moved += 1
-        assert re.fullmatch(r"\d+pp", before) and not re.search(r"\d+pp|(?i:nan)", after), (coords, before, after)
-        assert ("ceiling" if math.isnan(cell.mde) else "none detectable") in after, (coords, after)
-    assert moved, "the Go1 top ten holds conditions with no detection limit"
+    seen = [check_limit(golden_report, notes, coords, after, gain, load, key)
+            for ((load, gain), _, key), (coords, after) in zip(worst, printed, strict=True)]
+    assert seen.count("ceiling") == 8 and seen.count("limit") == 2, seen
+
+    # Every condition in the table: the same rows from the references, every MDE cell checked.
+    full = build_report(golden_diff, ReportSpec(title=LATTICE_TITLE, x_axis=lattice.Y, y_axis=lattice.X, theme="dark", top_n=lattice.CELLS))
+    every = lattice_worst_rows(lattice.CELLS)
+    assert every[: len(worst)] == worst
+    full_now, full_printed = _set_aside_mde(full.to_markdown())
+    lines = full_now.splitlines()
+    first = lines.index(expected[8]) + 2
+    assert lines[first : first + len(every) + 1] == [row for _, row, _ in every] + [""]
+    assert len(full_printed) == len(every) == lattice.CELLS
+    seen = [check_limit(full, notes, coords, after, gain, load, key)
+            for ((load, gain), _, key), (coords, after) in zip(every, full_printed, strict=True)]
+    assert (seen.count("limit"), seen.count("ceiling"), seen.count("none")) == (34, 37, 1), seen
 
 
 # ---------- B2: honesty block, both lines ----------
@@ -1043,7 +1165,10 @@ def test_b4_fixture_data_sat_count_equals_cells_with_equal_extreme_event_counts(
 ) -> None:
     c = golden_diff.cells
     expected = set(c.loc[(c["events_a"] == c["events_b"]) & c["events_a"].isin([0, 32]), "config_hash"])
-    assert expected, "the Go1 fixture has saturated cells"
+    # The lattice's saturated conditions by design: every ceiling condition at load 40 to 60 and the
+    # two that never trip at load 10.
+    designed = {r["config_hash"] for r in lattice.counts() if r["events_a"] == r["events_b"] and r["events_a"] in (0, lattice.N)}
+    assert expected == designed and len(expected) == 37, "the lattice fixture has saturated cells"
     root = svg_root(golden_report)
     flagged = {r.attrib["data-cell"] for r in cell_rects(root) if r.attrib.get("data-sat") == "1"}
     assert len(flagged) == len(expected)
@@ -1506,13 +1631,13 @@ from pathlib import Path
 from poisson_prove.store import Store
 from poisson_prove.diff import multi_diff
 from poisson_prove.report import ReportSpec, build_multi_report
-root = Path(sys.argv[1])
-store = Store(root / "tests" / "fixtures" / "go1")
-a, b = store.read("go1-v0"), store.read("go1-v1")
-m = multi_diff(a, b, events=["fell", "survived"],
-               manifest_a=store.manifest("go1-v0"), manifest_b=store.manifest("go1-v1"))
-rep = build_multi_report(m, ReportSpec(title="Go1 v0 -> v1", x_axis="push_pct_bw", y_axis="mu"),
-                         manifests=(store.manifest("go1-v0"), store.manifest("go1-v1")))
+store = Store(Path(sys.argv[1]))
+run_a, run_b, event, other, x, y, title = sys.argv[2:9]
+a, b = store.read(run_a), store.read(run_b)
+m = multi_diff(a, b, events=[event, other],
+               manifest_a=store.manifest(run_a), manifest_b=store.manifest(run_b))
+rep = build_multi_report(m, ReportSpec(title=title, x_axis=x, y_axis=y),
+                         manifests=(store.manifest(run_a), store.manifest(run_b)))
 for text in (rep.to_markdown(), rep.to_svg(), rep.to_html()):
     print(hashlib.sha256(text.encode("utf-8")).hexdigest())
 """
@@ -1522,7 +1647,7 @@ def test_b14_multi_report_is_byte_identical_across_hash_seeds(
     golden_multi: MultiDiffResult, golden_frames: dict[str, Any], tmp_path: Path
 ) -> None:
     rep = build_multi_report(
-        golden_multi, ReportSpec(title="Go1 v0 -> v1", x_axis="push_pct_bw", y_axis="mu"),
+        golden_multi, ReportSpec(title=LATTICE_TITLE, x_axis=lattice.Y, y_axis=lattice.X),
         manifests=(golden_frames["ma"], golden_frames["mb"]),
     )
     local = [_sha(rep.to_markdown()), _sha(rep.to_svg()), _sha(rep.to_html())]
@@ -1530,7 +1655,8 @@ def test_b14_multi_report_is_byte_identical_across_hash_seeds(
     script.write_text(_SUBPROCESS_SCRIPT)
     for seed in ("1", "4242"):
         proc = subprocess.run(
-            [sys.executable, str(script), str(ROOT)],
+            [sys.executable, str(script), str(lattice.root()), lattice.RUN_A, lattice.RUN_B, lattice.EVENT, lattice.OTHER,
+             lattice.Y, lattice.X, LATTICE_TITLE],
             capture_output=True, text=True, cwd=ROOT,
             env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path)},
         )

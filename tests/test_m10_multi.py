@@ -2,8 +2,8 @@
 before the CLI is amended.
 
 Every test drives ``proofload.cli.main(argv, stdout=, stderr=, stdin=)`` in-process with
-``StringIO`` streams, as the S10 oracle does. Stores live under ``tmp_path``; the Go1 golden
-is read in place from ``tests/fixtures/go1`` and only ``--out`` directories are written.
+``StringIO`` streams, as the S10 oracle does. Stores live under ``tmp_path``; the generated
+lattice pair (``tests/lattice.py``) is read in place and only ``--out`` directories are written.
 
 One plain assertion per invariant. The two mock-agent runs are swept once per module under
 the S12 salt, so the pair infers ``violated, timeout`` with ``completed`` as the non-event,
@@ -26,9 +26,9 @@ Reading notes for Session B:
 
 Deliberately absent, reported to the spec author rather than adapted (see the session report):
 
-- C1's JSON clause ("``n_safer == 60`` at the top level"). ``MultiDiffResult.to_json()``
+- C1's JSON clause (the fixture's count as ``n_safer`` at the top level). ``MultiDiffResult.to_json()``
   carries per-event counts under ``by_event`` and section 3 prints ``to_json()``; a top-level
-  ``n_safer`` would need the one-event branch section 8 forbids. The amended I9 asserts the 60
+  ``n_safer`` would need the one-event branch section 8 forbids. The amended I9 asserts the count
   where ``to_json()`` puts it.
 - C3. Seven distinct outcomes infer six events, which ``infer_events`` allows (S11 A13 pins the
   six-event ceiling as inclusive), so a seven-outcome frame cannot fail inference as written.
@@ -68,10 +68,11 @@ from poisson_prove.diff import bh
 from poisson_prove.episode import Episode
 from poisson_prove.executor_modal import Job, ModalOptions, ModalTarget, run_with_mapper, worker_batch
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
+import lattice
 from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
-GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
+LATTICE_ROOT = lattice.root()
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -93,9 +94,10 @@ MOCK_EVENTS = {"violated", "timeout"}
 NON_EVENT = "completed"
 #: The inference line's marker, a line prefix and never a substring: report.md's Provenance prints ``- inferred: false``, which a bare ``inferred: `` would match.
 INFERENCE_MARKER = "inferred: no event was given, so "
-# PF4 (PF4.20): the Go1 runs declare no kind for fell, so its counts read in direction words: 60
-# conditions fell and none rose (was "fell: 60 safer, 0 worse").
-GO1_HEADLINE = "fell: 60 lower, 0 higher"
+# PF4 (PF4.20): the lattice's runs declare no kind for tripped, so its counts read in direction
+# words: 22 conditions fell and none rose, as scipy's Fisher with one BH family gives
+# (``lattice.fisher``; C1 checks the reference against the literal).
+LATTICE_HEADLINE = "tripped: 22 lower, 0 higher"
 FALLBACK_IMPORT = "from your_module import rollout"
 REAL_IMPORT = f"from {MOCK_MODULE} import rollout"
 SNIPPET_MARKER = "# reproduce one episode"
@@ -109,8 +111,7 @@ HONESTY_FIRST_RE = re.compile(
     r'^Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d\.\d{3}) (?:rise|fall)\. '
     r'"(\d+) higher" is an honest claim only above that\.$'
 )  # PF4 (PF4.20): the claim names the rise in direction words for an event of unknown kind (was "worse").
-# PF4 re-freeze (PF4.27, PF4.32): the limit named is the condition's own, a rise or a fall (Go1's least
-# sensitive unchanged condition had the event in every run, so its limit is a fall).
+# PF4 re-freeze (PF4.27, PF4.32): the limit named is the condition's own, a rise or a fall.
 HONESTY_NONE = "No unchanged cells; every cell moved significantly."
 HONESTY_OVERALL_RE = re.compile(r"^Worst-powered cell overall: (\d\.\d{3}) \((.*)\)\.$")
 COMPOUND_RE = re.compile(r"^([a-zA-Z][a-zA-Z0-9-]*|\*)?((?:[.#][\w-]+)*)$")
@@ -497,8 +498,8 @@ def modal_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------- argv builders ----------
 
 
-def go1_argv(verb: str, *extra: str) -> list[str]:
-    return ["--store", str(GO1_ROOT), verb, "go1-v0", "go1-v1", *extra]
+def lattice_argv(verb: str, *extra: str) -> list[str]:
+    return ["--store", str(LATTICE_ROOT), verb, lattice.RUN_A, lattice.RUN_B, *extra]
 
 
 def pair_argv(pair: MockPair, verb: str, *extra: str) -> list[str]:
@@ -519,12 +520,14 @@ def run_report_argv(pair: MockPair, out: Path, *extra: str) -> list[str]:
 # ---------- C1: single-event diff output is unchanged ----------
 
 
-def test_c1_single_event_diff_headline_reads_sixty_safer_zero_worse_fisher() -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+def test_c1_single_event_diff_headline_reads_twenty_two_lower_zero_higher_fisher() -> None:
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
-    r = run_cli(go1_argv("diff", "--event", "fell", "--method", "fisher_bh"))
+    r = run_cli(lattice_argv("diff", "--event", lattice.EVENT, "--method", "fisher_bh"))
     assert r.code == 0, r.text
-    assert GO1_HEADLINE in r.lines, r.out
+    assert lattice.directions(lattice.fisher(lattice.EVENT, Q)) == (22, 0)
+    assert LATTICE_HEADLINE == f"{lattice.EVENT}: 22 lower, 0 higher"
+    assert LATTICE_HEADLINE in r.lines, r.out
     assert "fisher_bh" in r.out, r.out
     assert not [line for line in r.out.splitlines() if line.startswith(INFERENCE_MARKER)], r.out
 
@@ -671,17 +674,17 @@ def test_c7_inferred_report_writes_the_same_three_files_and_one_panel_per_event(
 # ---------- C8: report goes through the multi path ----------
 
 
-def go1_report(tmp_path: Path) -> str:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+def lattice_report(tmp_path: Path) -> str:
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
     # test; the report C8 reads is the unpaired test's, named.
-    out = tmp_path / "go1-report"
-    r = run_cli(go1_argv("report", "--event", "fell", "--x", "push_pct_bw", "--y", "mu", "--out", str(out), "--method", "fisher_bh"))
+    out = tmp_path / "lattice-report"
+    r = run_cli(lattice_argv("report", "--event", lattice.EVENT, "--x", lattice.Y, "--y", lattice.X, "--out", str(out), "--method", "fisher_bh"))
     assert r.code == 0, r.text
     return (out / "report.md").read_text()
 
 
 def test_c8_single_event_report_has_the_two_line_honesty_block(tmp_path: Path) -> None:
-    lines = go1_report(tmp_path).splitlines()
+    lines = lattice_report(tmp_path).splitlines()
     firsts = [i for i, line in enumerate(lines) if HONESTY_FIRST_RE.match(line) or line == HONESTY_NONE]
     assert len(firsts) == 1, lines
     assert HONESTY_OVERALL_RE.match(lines[firsts[0] + 1]), lines[firsts[0] : firsts[0] + 2]
@@ -689,25 +692,25 @@ def test_c8_single_event_report_has_the_two_line_honesty_block(tmp_path: Path) -
 
 def test_c8_single_event_worst_cells_use_the_multi_tiebreak(tmp_path: Path) -> None:
     # diff's --format json is now --json (spec section 5.3).
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
     # test; the cells ordered here are the unpaired test's, named.
-    j = run_cli(go1_argv("diff", "--event", "fell", "--json", "--method", "fisher_bh"))
+    j = run_cli(lattice_argv("diff", "--event", lattice.EVENT, "--json", "--method", "fisher_bh"))
     assert j.code == 0, j.text
-    cells = json.loads(j.out)["by_event"]["fell"]["cells"]
+    cells = json.loads(j.out)["by_event"][lattice.EVENT]["cells"]
     # PF4 (PF4.12, PF4.15): a cell at a 100% baseline has no detection limit (mde null); the
     # tiebreak ascends mde, best-powered first, so a cell that can detect nothing sorts last.
     ordered = sorted(
         cells,
         key=lambda c: (-c["delta"], c["q"], math.inf if c["mde"] is None else c["mde"], c["config_hash"]),
     )
-    expected = [(float(c["config"]["push_pct_bw"]), float(c["config"]["mu"])) for c in ordered[:10]]
+    expected = [(float(c["config"][lattice.Y]), float(c["config"][lattice.X])) for c in ordered[:10]]
     plain = sorted(cells, key=lambda c: (-c["delta"], c["config_hash"]))
     assert [c["config_hash"] for c in plain[:10]] != [c["config_hash"] for c in ordered[:10]], (
-        "the Go1 top ten must distinguish the tiebreak from the S8 order"
+        "the lattice's top ten must distinguish the tiebreak from the S8 order"
     )
 
-    lines = go1_report(tmp_path).splitlines()
-    heading = lines.index(f"## {GO1_HEADLINE}")
+    lines = lattice_report(tmp_path).splitlines()
+    heading = lines.index(f"## {LATTICE_HEADLINE}")
     rows = [line for line in lines[heading:] if line.startswith("|")][2:12]
     assert len(rows) == 10, rows
     printed = [(float(row.split("|")[1]), float(row.split("|")[2])) for row in rows]
@@ -946,7 +949,7 @@ def test_c16_gate_pass_is_zero_and_gate_fail_is_one(worse_pair: Path) -> None:
     assert passed.code == 0, passed.text
     # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
     assert failed.code == 4 and "Traceback" not in failed.text, failed.text
-    fixture = run_cli(go1_argv("check", "--event", "fell", "--fail-on", "any"))
+    fixture = run_cli(lattice_argv("check", "--event", lattice.EVENT, "--fail-on", "any"))
     assert fixture.code == 4 and fixture.lines[0].startswith("failed"), fixture.text
 
 

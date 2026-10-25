@@ -5,8 +5,8 @@ Every test drives ``proofload.cli.main(argv, stdout=, stderr=, stdin=)`` in-proc
 installed ``proofload`` script and is skipped when that script is not on PATH (the same
 environment dependency S0's entrypoint test carries).
 
-Stores live under ``tmp_path``. Golden tests point ``--store`` at the committed Go1 fixture
-read-only and write report output under ``tmp_path``. The mock agent
+Stores live under ``tmp_path``. Golden tests point ``--store`` at the generated lattice pair
+(``tests/lattice.py``) read-only and write report output under ``tmp_path``. The mock agent
 (``proofload.examples.mock_agent``) is imported lazily because it does not exist until
 Session B builds it; collection must not depend on it.
 
@@ -53,10 +53,11 @@ from poisson_prove.executor_modal import ImageSpec, ModalOptions, ModalTarget
 from poisson_prove.report import NEUTRAL_FILL
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
+import lattice
 from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
-GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
+LATTICE_ROOT = lattice.root()
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -90,7 +91,6 @@ MOCK_HORIZON = 20.0
 TRACE_SCHEMA = "poisson-prove.trace/1"
 QUICKSTART_BUDGET_S = 30.0
 
-GO1_HEADLINE_PREFIX = "60 of 400 cells safer, 0 worse (fisher_bh, BH q<0.05, "
 HEADLINE_RE = re.compile(
     r"(\d+) of (\d+) cells safer, (\d+) worse \((\S+), BH q<([^,]+), (paired|unpaired)\)\."
 )
@@ -198,10 +198,16 @@ def mock_agent() -> Any:
     return importlib.import_module(MOCK_MODULE)
 
 
-def copy_go1(store: Path) -> None:
+def copy_lattice(store: Path) -> None:
     store.mkdir(parents=True, exist_ok=True)
-    for run_id in ("go1-v0", "go1-v1"):
-        shutil.copytree(GO1_ROOT / run_id, store / run_id)
+    for run_id in (lattice.RUN_A, lattice.RUN_B):
+        shutil.copytree(LATTICE_ROOT / run_id, store / run_id)
+
+
+def fisher_reference_counts() -> tuple[int, int]:
+    """``(lower, higher)`` for the lattice's ``tripped`` under scipy's Fisher and one BH family
+    over every condition at q 0.05 (``lattice.fisher``), never from Prove."""
+    return lattice.directions(lattice.fisher(lattice.EVENT, 0.05))
 
 
 def always_raises(cfg: dict[str, Any], seed: int) -> Episode:
@@ -317,9 +323,12 @@ class MockRuns:
 
 @pytest.fixture(scope="module")
 def mock_runs(tmp_path_factory: pytest.TempPathFactory) -> MockRuns:
-    """Three mock-agent runs plus the Go1 pair in one store. Never mutated by a test."""
+    """Three mock-agent runs plus the lattice pair in one store. Never mutated by a test.
+
+    The lattice runs were written on 2026-01-15, so they are older than the three mock runs and
+    I17's newest-first order puts the mock runs first."""
     root = tmp_path_factory.mktemp("mock-store")
-    copy_go1(root)
+    copy_lattice(root)
     a = sweep(root, ROLLOUT)
     b = sweep(root, PATCHED, "--pair-with", a)
     c = sweep(root, ROLLOUT)
@@ -752,55 +761,56 @@ def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> Non
 # ---------- I9: diff golden ----------
 
 
-def test_i9_diff_markdown_summary_line(go1_store: Store) -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+def test_i9_diff_markdown_summary_line(lattice_store: Store) -> None:
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
-    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh"])
+    r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--method", "fisher_bh"])
     assert r.code == 0, r.text
     # PF2 (spec section 4.3): diff's first lines are now a verdict block ending at the first
     # blank line; the report that follows it is unchanged, so its summary line is read there.
     verdict, _, report = r.out.partition("\n\n")
     # PF3 (spec section 4.4, PF3.6b; rule R4): the verdict line now also names the test in plain words.
-    # PF4 (PF4.20): the Go1 runs declare no kind for fell, so the counts read in direction words:
-    # 60 conditions fell and none rose, where they read 60 safer, 0 worse.
-    assert verdict.splitlines()[0].startswith("lower  fell: 60 lower, 0 higher"), r.out
+    # PF4 (PF4.20): the lattice's runs declare no kind for tripped, so the counts read in direction
+    # words: 22 conditions fell and none rose, as scipy's Fisher with one BH family gives.
+    assert fisher_reference_counts() == (22, 0)
+    assert verdict.splitlines()[0].startswith("lower  tripped: 22 lower, 0 higher"), r.out
     assert "separate samples" in verdict.splitlines()[0], r.out
     summary = [
-        line for line in report.splitlines() if "60 lower" in line and "0 higher" in line
+        line for line in report.splitlines() if "22 lower" in line and "0 higher" in line
     ]
     assert summary, r.out
-    assert summary[0].startswith("fell:"), summary[0]
+    assert summary[0].startswith("tripped:"), summary[0]
     assert "fisher_bh" in report, r.out
 
 
-def test_i9_diff_json(go1_store: Store) -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+def test_i9_diff_json(lattice_store: Store) -> None:
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
-    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--json", "--method", "fisher_bh"])  # --json replaces --format
+    r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--json", "--method", "fisher_bh"])  # --json replaces --format
     assert r.code == 0, r.text
     data = json.loads(r.out)
-    assert data["events"] == ["fell"] and data["inferred"] is False
-    fell = data["by_event"]["fell"]
-    # PF4 (PF4.20): fell's kind is unknown, so n_safer and n_worse are null and the 60 and the 0 are
-    # carried as n_lower and n_higher beside them.
-    assert fell["n_safer"] is None and fell["n_worse"] is None and fell["kind"] is None
-    assert fell["n_lower"] == 60 and fell["n_higher"] == 0
+    assert data["events"] == [lattice.EVENT] and data["inferred"] is False
+    tripped = data["by_event"][lattice.EVENT]
+    # PF4 (PF4.20): tripped's kind is unknown, so n_safer and n_worse are null and the 22 and the 0
+    # are carried as n_lower and n_higher beside them.
+    assert tripped["n_safer"] is None and tripped["n_worse"] is None and tripped["kind"] is None
+    assert (tripped["n_lower"], tripped["n_higher"]) == fisher_reference_counts() == (22, 0)
     assert data["method"] == "fisher_bh" and data["q"] == 0.05
     assert data["seed_identity_match"] is True and data["unpaired_analysis"] is True and "paired" not in data
-    assert len(fell["cells"]) == go1_store.read("go1-v0")["config_hash"].nunique() == 400
+    assert len(tripped["cells"]) == lattice_store.read(lattice.RUN_A)["config_hash"].nunique() == lattice.CELLS == 72
 
 
-def test_i9_diff_json_honours_q(go1_store: Store) -> None:
+def test_i9_diff_json_honours_q(lattice_store: Store) -> None:
     r = run_cli(
-        ["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--json", "--q", "0.01"]  # --json replaces --format
+        ["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--json", "--q", "0.01"]  # --json replaces --format
     )
     assert r.code == 0, r.text
     assert json.loads(r.out)["q"] == 0.01
 
 
-def test_i9_diff_methods_all_json_keys(go1_store: Store) -> None:
+def test_i9_diff_methods_all_json_keys(lattice_store: Store) -> None:
     r = run_cli(
-        ["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--methods", "all", "--json"]  # --json replaces --format
+        ["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--methods", "all", "--json"]  # --json replaces --format
     )
     assert r.code == 0, r.text
     data = json.loads(r.out)
@@ -812,16 +822,16 @@ def test_i9_diff_methods_all_json_keys(go1_store: Store) -> None:
     assert {
         k for k in data if k not in DIFF_JSON_ENVELOPE | pf4_keys and not k.endswith("_note")
     } == METHODS
-    fell = data["fisher_bh"]["by_event"]["fell"]
-    # PF4 (PF4.20): fell's kind is unknown, so the 60 and the 0 are n_lower and n_higher.
-    assert fell["n_safer"] is None and fell["n_worse"] is None
-    assert fell["n_lower"] == 60 and fell["n_higher"] == 0
+    tripped = data["fisher_bh"]["by_event"][lattice.EVENT]
+    # PF4 (PF4.20): tripped's kind is unknown, so the 22 and the 0 are n_lower and n_higher.
+    assert tripped["n_safer"] is None and tripped["n_worse"] is None
+    assert (tripped["n_lower"], tripped["n_higher"]) == fisher_reference_counts() == (22, 0)
     for method in METHODS:
         assert data[method]["method"] == method
 
 
-def test_i9_diff_methods_all_markdown_has_method_table(go1_store: Store) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "go1-v1", "--event", "fell", "--methods", "all"])
+def test_i9_diff_methods_all_markdown_has_method_table(lattice_store: Store) -> None:
+    r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--methods", "all"])
     assert r.code == 0, r.text
     for method in METHODS:
         assert method in r.out, method
@@ -832,14 +842,14 @@ def test_i9_diff_methods_all_markdown_has_method_table(go1_store: Store) -> None
 # ---------- I10: diff refusals ----------
 
 
-def test_i10_unknown_run_exits_two(go1_store: Store) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), "diff", "go1-v0", "no-such-run", "--event", "fell"])
+def test_i10_unknown_run_exits_two(lattice_store: Store) -> None:
+    r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, "no-such-run", "--event", lattice.EVENT])
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert "no-such-run" in r.text, r.text
 
 
 def test_i10_t_unit_mismatch_exits_two_with_unit_mismatch_wording(mock_runs: MockRuns) -> None:
-    r = run_cli(["--store", str(mock_runs.root), "diff", "go1-v0", mock_runs.a, "--event", "fell"])
+    r = run_cli(["--store", str(mock_runs.root), "diff", lattice.RUN_A, mock_runs.a, "--event", lattice.EVENT])
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert "t_unit differs" in r.text, r.text
     assert "seconds" in r.text and QUICKSTART_T_UNIT in r.text
@@ -870,37 +880,38 @@ def test_i10_mcnemar_on_paired_runs_works(mock_runs: MockRuns) -> None:
 
 def report_argv(out: Path, *extra: str) -> list[str]:
     return [
-        "--store", str(GO1_ROOT), "report", "go1-v0", "go1-v1", "--event", "fell",
-        "--x", "push_pct_bw", "--y", "mu", "--out", str(out), *extra,
+        "--store", str(LATTICE_ROOT), "report", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT,
+        "--x", lattice.Y, "--y", lattice.X, "--out", str(out), *extra,
     ]
 
 
-def test_i11_report_writes_exactly_three_files(go1_store: Store, tmp_path: Path) -> None:
+def test_i11_report_writes_exactly_three_files(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report"
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     r = run_cli(report_argv(out, "--method", "fisher_bh"))
     assert r.code == 0, r.text
     assert {p.name for p in out.iterdir()} == REPORT_FILES
     ET.fromstring((out / "heatmap.svg").read_text())
     md = (out / "report.md").read_text()
-    # PF4 (PF4.20): the Go1 runs declare no kind for fell, so the counts read in direction words:
-    # 60 conditions fell and none rose, where they read 60 safer, 0 worse.
-    assert "fell: 60 lower, 0 higher" in md and "fisher_bh" in md
+    # PF4 (PF4.20): the lattice's runs declare no kind for tripped, so the counts read in direction
+    # words: 22 conditions fell and none rose, as scipy's Fisher with one BH family gives.
+    assert fisher_reference_counts() == (22, 0)
+    assert "tripped: 22 lower, 0 higher" in md and "fisher_bh" in md
     # PF2 (spec section 4.3): report's stdout now opens with `ok  wrote <folder> (N files)` and
     # one `  wrote  <path>` line per file, then a blank line, then what it printed before.
     verdict, _, rest = r.out.partition("\n\n")
     lines = verdict.splitlines()
     assert lines[0] == f"ok  wrote {out} ({len(REPORT_FILES)} files)", r.out
     assert sorted(lines[1:]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
-    assert "fell: 60 lower, 0 higher" in rest
+    assert "tripped: 22 lower, 0 higher" in rest
     for name in REPORT_FILES:
         assert name in r.out, name
     assert NEUTRAL_FILL["light"] in (out / "receipt.html").read_text()
     assert NEUTRAL_FILL["dark"] in (out / "heatmap.svg").read_text()
 
 
-def test_i11_theme_light_governs_heatmap_only(go1_store: Store, tmp_path: Path) -> None:
+def test_i11_theme_light_governs_heatmap_only(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report-light"
     r = run_cli(report_argv(out, "--theme", "light"))
     assert r.code == 0, r.text
@@ -908,14 +919,14 @@ def test_i11_theme_light_governs_heatmap_only(go1_store: Store, tmp_path: Path) 
     assert NEUTRAL_FILL["light"] in (out / "receipt.html").read_text()
 
 
-def test_i11_title_flag_names_the_report(go1_store: Store, tmp_path: Path) -> None:
+def test_i11_title_flag_names_the_report(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report-titled"
-    r = run_cli(report_argv(out, "--title", "Go1 v0 vs v1"))
+    r = run_cli(report_argv(out, "--title", "Lattice before vs after"))
     assert r.code == 0, r.text
-    assert (out / "report.md").read_text().startswith("# Go1 v0 vs v1\n")
+    assert (out / "report.md").read_text().startswith("# Lattice before vs after\n")
 
 
-def test_i11_out_dir_is_created_when_absent(go1_store: Store, tmp_path: Path) -> None:
+def test_i11_out_dir_is_created_when_absent(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "nested" / "deeper" / "report"
     r = run_cli(report_argv(out))
     assert r.code == 0, r.text
@@ -925,7 +936,7 @@ def test_i11_out_dir_is_created_when_absent(go1_store: Store, tmp_path: Path) ->
 # ---------- I12: report determinism ----------
 
 
-def test_i12_identical_arguments_give_byte_identical_files(go1_store: Store, tmp_path: Path) -> None:
+def test_i12_identical_arguments_give_byte_identical_files(lattice_store: Store, tmp_path: Path) -> None:
     digests = []
     for k in range(2):
         out = tmp_path / f"report-{k}"
@@ -935,7 +946,7 @@ def test_i12_identical_arguments_give_byte_identical_files(go1_store: Store, tmp
     assert digests[0] == digests[1]
 
 
-def test_i12_no_generated_at_flag_in_v0_1(go1_store: Store, tmp_path: Path) -> None:
+def test_i12_no_generated_at_flag_in_v0_1(lattice_store: Store, tmp_path: Path) -> None:
     r = run_cli(report_argv(tmp_path / "report", "--generated-at", "2026-01-01"))
     assert_clean_refusal(r, 2)
 
@@ -943,7 +954,7 @@ def test_i12_no_generated_at_flag_in_v0_1(go1_store: Store, tmp_path: Path) -> N
 # ---------- I13: report refusals ----------
 
 
-def test_i13_existing_non_empty_out_refused_without_writing(go1_store: Store, tmp_path: Path) -> None:
+def test_i13_existing_non_empty_out_refused_without_writing(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "occupied"
     out.mkdir()
     (out / "keep.txt").write_text("do not touch\n")
@@ -953,7 +964,7 @@ def test_i13_existing_non_empty_out_refused_without_writing(go1_store: Store, tm
     assert (out / "keep.txt").read_text() == "do not touch\n"
 
 
-def test_i13_existing_empty_out_is_fine(go1_store: Store, tmp_path: Path) -> None:
+def test_i13_existing_empty_out_is_fine(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "empty"
     out.mkdir()
     r = run_cli(report_argv(out))
@@ -961,7 +972,7 @@ def test_i13_existing_empty_out_is_fine(go1_store: Store, tmp_path: Path) -> Non
     assert {p.name for p in out.iterdir()} == REPORT_FILES
 
 
-def test_i13_force_overwrites_non_empty_out(go1_store: Store, tmp_path: Path) -> None:
+def test_i13_force_overwrites_non_empty_out(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "occupied"
     out.mkdir()
     (out / "keep.txt").write_text("stale\n")
@@ -970,7 +981,7 @@ def test_i13_force_overwrites_non_empty_out(go1_store: Store, tmp_path: Path) ->
     assert REPORT_FILES <= {p.name for p in out.iterdir()}
 
 
-def test_i13_fix_on_unknown_key_exits_two_with_axis_error_message(go1_store: Store, tmp_path: Path) -> None:
+def test_i13_fix_on_unknown_key_exits_two_with_axis_error_message(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report"
     r = run_cli(report_argv(out, "--fix", "bogus=1"))
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
@@ -980,67 +991,74 @@ def test_i13_fix_on_unknown_key_exits_two_with_axis_error_message(go1_store: Sto
     assert not out.exists() or not any(out.iterdir())
 
 
-def test_i13_x_equal_to_y_exits_two(go1_store: Store, tmp_path: Path) -> None:
+def test_i13_x_equal_to_y_exits_two(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report"
     r = run_cli(
         [
-            "--store", str(GO1_ROOT), "report", "go1-v0", "go1-v1", "--event", "fell",
-            "--x", "mu", "--y", "mu", "--out", str(out),
+            "--store", str(LATTICE_ROOT), "report", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT,
+            "--x", lattice.X, "--y", lattice.X, "--out", str(out),
         ]
     )
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
     assert not out.exists() or not any(out.iterdir())
 
 
-def test_i13_fix_parses_toml_scalars(go1_store: Store, tmp_path: Path) -> None:
+def test_i13_fix_parses_toml_scalars(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report-1d"
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
     # test; these counts are the unpaired test's, named.
     r = run_cli(
         [
-            "--store", str(GO1_ROOT), "report", "go1-v0", "go1-v1", "--event", "fell",
-            "--x", "push_pct_bw", "--fix", "mu=0.05", "--out", str(out), "--method", "fisher_bh",
+            "--store", str(LATTICE_ROOT), "report", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT,
+            "--x", lattice.Y, "--fix", f"{lattice.X}=0.1", "--out", str(out), "--method", "fisher_bh",
         ]
     )
     assert r.code == 0, r.text
     md = (out / "report.md").read_text()
-    # --fix restricts the report grid, not the diff: the panel covers the mu=0.05 row while
-    # the diff line still covers all 400 cells. Pinning the row's own counts pins the parse.
-    # PF4 (PF4.20): the Go1 runs declare no kind for fell, so the counts (whole and panel) read in direction words:
-    # 60 conditions fell and none rose, where they read 60 safer, 0 worse.
-    whole = re.search(r"^fell: 60 lower, 0 higher$", md, re.MULTILINE)
-    panel = re.search(r"^## fell: (\d+) lower, (\d+) higher$", md, re.MULTILINE)
+    # --fix restricts the report grid, not the diff: the panel covers the gain=0.1 row while
+    # the diff line still covers all 72 cells. Pinning the row's own counts pins the parse: the
+    # row's count is the reference's over that row (3 lower), which no other gain row has.
+    # PF4 (PF4.20): the lattice's runs declare no kind for tripped, so the counts (whole and panel)
+    # read in direction words: 22 conditions fell and none rose.
+    reference = lattice.fisher(lattice.EVENT, 0.05)
+    row = [r["direction"] for r in reference.values() if r["config"][lattice.X] == 0.1]
+    assert len(row) == len(lattice.LOAD)
+    assert (row.count("lower"), row.count("higher")) == (3, 0)
+    assert fisher_reference_counts() == (22, 0)
+    whole = re.search(r"^tripped: 22 lower, 0 higher$", md, re.MULTILINE)
+    panel = re.search(r"^## tripped: (\d+) lower, (\d+) higher$", md, re.MULTILINE)
     assert whole and panel, md
-    assert (int(panel.group(1)), int(panel.group(2))) == (9, 0), panel.group(0)
+    assert (int(panel.group(1)), int(panel.group(2))) == (row.count("lower"), row.count("higher")) == (3, 0), panel.group(0)
 
 
-def test_i13_fix_with_bad_toml_scalar_exits_two(go1_store: Store, tmp_path: Path) -> None:
-    r = run_cli(report_argv(tmp_path / "report", "--fix", "mu=not a value"))
+def test_i13_fix_with_bad_toml_scalar_exits_two(lattice_store: Store, tmp_path: Path) -> None:
+    r = run_cli(report_argv(tmp_path / "report", "--fix", f"{lattice.X}=not a value"))
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
 
 
 # ---------- I14: check exit codes ----------
 
 
-def test_i14_check_fixture_passes(go1_store: Store) -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+def test_i14_check_fixture_passes(lattice_store: Store) -> None:
+    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
     # declare none; --fail-on higher is the same gate ("fail when the rate rose").
     r = run_cli(
-        ["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh",
+        ["--store", str(LATTICE_ROOT), "check", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--method", "fisher_bh",
          "--fail-on", "higher"]
     )
     assert r.code == 0, r.text
     # check's first stdout line is "passed  ..." or "failed  ..." (spec section 5.3).
     assert r.out.startswith("passed  ") and not r.out.startswith("failed"), r.out
-    # PF4 (PF4.20): with fell's kind unknown the counts read 60 lower, 0 higher (were 60 safer, 0 worse).
-    assert "fell: 60 lower, 0 higher" in r.out, r.out
-    assert "fisher_bh" in r.out and "over 400 tests" in r.out, r.out
+    # PF4 (PF4.20): with tripped's kind unknown the counts read 22 lower, 0 higher, as the reference gives.
+    assert fisher_reference_counts() == (22, 0)
+    assert "tripped: 22 lower, 0 higher" in r.out, r.out
+    assert "fisher_bh" in r.out and f"over {lattice.CELLS} tests" in r.out and "over 72 tests" in r.out, r.out
 
 
-def test_i14_check_fail_on_any_fails_the_fixture(go1_store: Store) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), "check", "go1-v0", "go1-v1", "--event", "fell", "--fail-on", "any"])
+def test_i14_check_fail_on_any_fails_the_fixture(lattice_store: Store) -> None:
+    r = run_cli(["--store", str(LATTICE_ROOT), "check", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--fail-on", "any"])
     assert_clean_refusal(r, 4)  # A failed check exits 4 (spec section 5.2).
     assert r.out.startswith("failed  ") and not r.out.startswith("passed"), r.out
 

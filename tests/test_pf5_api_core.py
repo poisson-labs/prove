@@ -177,12 +177,13 @@ from typing import Any
 import numpy as np
 import pytest
 
+import lattice
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE = SRC / "poisson_prove"
 DOCS_PYTHON = ROOT / "docs" / "python.md"
 PACKAGED = PACKAGE / "examples" / "quickstart.toml"
-GO1 = Path(__file__).resolve().parent / "fixtures" / "go1"
 MOCK = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK}:rollout"
 PATCHED = f"{MOCK}:rollout_patched"
@@ -1004,14 +1005,14 @@ _LIBRARY_CHECKS = ("kaplan_meier", "mde_two_proportion")
     [pytest.param(name, marks=pytest.mark.math) if name in _LIBRARY_CHECKS else name for name in sorted(PF5_3_CHECKS)],
 )
 def test_pf5_3_the_public_statistics_give_the_numbers_the_comparison_reports(function: str, quickstart: Path, _doc_cache: None) -> None:
-    """PF5.3 and reading l: on every row of the two fixture pairs (the quickstart pair and Go1),
+    """PF5.3 and reading l: on every row of the two fixture pairs (the quickstart pair and the lattice pair),
     each public function given the row's counts or times gives the number and the statistic the
     comparison reports for it; ``kaplan_meier`` and ``mde_two_proportion``, whose numbers no
     comparison prints, agree with lifelines and statsmodels on the pairs' own conditions (those
     two in the math suite)."""
     store = quickstart / "prove-runs"
     checked = PF5_3_CHECKS[function](store, _pair_ids(store))
-    checked += PF5_3_CHECKS[function](GO1, ("go1-v0", "go1-v1"))
+    checked += PF5_3_CHECKS[function](lattice.root(), (lattice.RUN_A, lattice.RUN_B))
     assert checked > 0
 
 

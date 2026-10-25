@@ -108,8 +108,9 @@ is ``is None`` (A8a section 3.10).
 
 **Green before and after -- named so their green is not read as coverage.**
 ``test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight`` (W8's absence of
-change, on the non-declaring pair and on Go1; it cannot fail on the bare tree, and its job is to stay
-green). Go1's byte identity on every verb is A7's P7-10 (``test_a7_storage.py`` ``GO1_VERB_SHA256``);
+change, on the non-declaring pair and on the generated lattice pair, ``tests/lattice.py``; it cannot
+fail on the bare tree, and its job is to stay green). Every verb on a pre-A7 pair is A7's P7-10
+(``test_a7_storage.py``);
 ``viewer.py`` and ``tree.py`` byte identity (P10-13's whole-file clause) is FR17's and CD9's. Neither is
 restated here, so this file adds no output-digest or source-digest carrier.
 
@@ -143,6 +144,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+import lattice
 import poisson_prove
 import poisson_prove.diff as diff_module
 import poisson_prove.executor as executor
@@ -163,8 +165,6 @@ from poisson_prove.trace import Span, Trace, collect, finalize, record, truncate
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parent.parent
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
 STEPS_SOURCE = PACKAGE / "steps.py"
 
 #: Every pair here shares a salt and a seed per row, so the unpaired methods warn; the warning is not
@@ -206,7 +206,7 @@ CHECK_FIELDS = (
     "emitted_not_declared", "declared_never_reached",
 )
 #: ``RunManifest.to_dict()``'s twelve keys at the dispatch commit (``store.py:287``-``:303``,
-#: and ``go1-v0/manifest.json``'s twelve).
+#: and a 0.0.1 manifest's twelve, such as the lattice pair's, with ``proofload_version`` in that slot).
 TWELVE = frozenset({
     "run_id", "target_id", "t_unit", "run_salt", "axis_types", "backend", "environment",
     "retain_traces_for", "status", "created_at", "poisson_prove_version", "schema_version",
@@ -780,8 +780,9 @@ def test_p10_2_one_declaring_side_adds_its_own_keys_and_none_for_the_other(main_
 
 def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(tmp_path: Path, bare_pair: tuple[Store, str, str]) -> None:
     """**Green before and after**, named: A6's narrower grep, widened to every verb the spec lists,
-    on the non-declaring twin of the main pair and on Go1. The byte-identity of Go1's every verb is
-    A7's P7-10 (``test_a7_storage.py`` ``GO1_VERB_SHA256``), which this packet must leave green."""
+    on the non-declaring twin of the main pair and on the generated lattice pair (``tests/lattice.py``,
+    written before A10). Every verb on a pre-A7 pair is A7's P7-10 (``test_a7_storage.py``), which
+    this packet must leave green."""
     store, a, b = bare_pair
     root = str(Path(store._root))
     texts: list[str] = []
@@ -797,9 +798,9 @@ def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(t
         # --json replaces --format json on diff (front-door spec section 5.6).
         ["--store", root, "diff", a, b, "--event", EVENT, "--json"],
         ["--store", root, "serve", a, b, "--event", EVENT, "--x", "x", "--json"],
-        ["--store", str(GO1_ROOT), "report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--out", str(tmp_path / "go1")],
-        ["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json"],
-        ["--store", str(GO1_ROOT), "inspect", GO1_A, "--event", "fell", "--limit", "1"],
+        ["--store", str(lattice.root()), "report", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--out", str(tmp_path / "lattice")],
+        ["--store", str(lattice.root()), "serve", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--json"],
+        ["--store", str(lattice.root()), "inspect", lattice.RUN_A, "--event", lattice.EVENT, "--limit", "1"],
     ):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -807,7 +808,7 @@ def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(t
         # Done, or a check that did not pass, which exits 4 now (front-door spec section 5.2).
         assert code in (0, 4), (argv, code, err)
         texts += [out, err]
-    for d in ("pair", "one", "go1"):
+    for d in ("pair", "one", "lattice"):
         texts += [(tmp_path / d / name).read_text() for name in ("report.md", "receipt.html")]
     for text in texts:
         assert any_label(text) == [], any_label(text)
@@ -1306,11 +1307,11 @@ def test_p10_11_the_manifest_has_thirteen_keys_and_round_trips_both_ways() -> No
 
 
 def test_p10_11_a_manifest_json_with_no_declared_key_loads_as_none() -> None:
-    """Every run written before A10, Go1's golden manifest first."""
-    golden = json.loads((GO1_ROOT / GO1_A / "manifest.json").read_text())
-    assert "declared" not in golden
-    assert RunManifest.from_dict(golden).declared is None
-    assert Store(GO1_ROOT).manifest(GO1_A).declared is None
+    """Every run written before A10, the generated lattice pair's 0.0.1 manifest first."""
+    legacy = json.loads((lattice.root() / lattice.RUN_A / "manifest.json").read_text())
+    assert "declared" not in legacy
+    assert RunManifest.from_dict(legacy).declared is None
+    assert Store(lattice.root()).manifest(lattice.RUN_A).declared is None
 
 
 def test_p10_11_mark_complete_preserves_the_declaration(tmp_path: Path) -> None:

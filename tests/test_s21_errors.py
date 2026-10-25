@@ -15,10 +15,11 @@ What is asserted where:
   once), E16 (``report._fmt`` -- a formatted string can only be checked against the formatter,
   the V16 rule) and E17 (``report._coord_text`` for a grid hole's coords). E22 reads the source
   through ``proofload.__file__`` and imports nothing.
-- **Go1 is the zero case** (E4, E14, E15, E21, E23, E24): no errored rows, no holes, both
-  tallies ``(12800, 12800, 0, 0, 0, 0)``. E14's three digests were minted on the bare tree at
-  ``b10a146`` with ``report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw`` and committed
-  before the build exists: a hash, never a diff of two renders.
+- **The lattice pair is the zero case** (E4, E14, E15, E21, E23, E24): the generated pair
+  (``tests/lattice.py``) has no errored rows, no holes, both tallies ``(2304, 2304, 0, 0, 0, 0)``.
+  E14's three digests were minted on the bare tree at ``b10a146`` on the fixture pair of the time
+  and are no longer asserted; E14 checks the facts they guarded on
+  ``report lattice-a lattice-b --event tripped --x gain --y load``.
 - **The synthetic pair** (E6-E13, E17, E20, E24-E26) is built in ``tmp_path`` the way
   ``test_m13_viewer.py``'s ``write_run`` builds one, restated here. Over a categorical
   ``task`` and a numeric ``level`` it holds every case section 6 lists, plus a ``variant`` key
@@ -43,7 +44,7 @@ Literals the spec leaves to the oracle, pinned here rather than buried in a test
   line, a ``## coverage`` heading and the table over ``COVERAGE_COLUMNS`` in ``_md_cell``
   style, a comparable row's cause printed ``None``.
 - ``NONE_TEXT``: the Holes table prints ``none`` for a null coords or hash.
-- R8's Go1 row literal is ``"0"``: Go1 has no errored rows.
+- R8's fixture-pair row literal is ``"0"``: the lattice pair has no errored rows.
 
 Named non-observables, carried over from S20: the page's JavaScript is not executed; the
 picker's holes optgroup and the holes block are pinned as markup; what selecting a hole shows
@@ -87,20 +88,23 @@ from poisson_prove.store import EpisodeRecord, RunManifest, SchemaMismatch, Stor
 from poisson_prove.tree import TreeResult
 from poisson_prove.tree import tree as grow_tree
 
-ROOT = Path(__file__).resolve().parents[1]
-GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
-GO1_EVENTS = ("fell", "survived")
-GO1_X, GO1_Y = "push_pct_bw", "mu"
-GO1_TITLE = "Go1 pair"
-GO1_ROWS = 12_800
-GO1_TALLY = (12_800, 12_800, 0, 0, 0, 0)
+import lattice
 
-# E14: minted on the bare tree at b10a146 (2026-09-06) by
-#   proofload --store tests/fixtures/go1 report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
-# test; the E14 facts and the heatmap are the unpaired test's, named.
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
+ROOT = Path(__file__).resolve().parents[1]
+LATTICE_ROOT = lattice.root()
+LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
+LATTICE_EVENTS = (lattice.EVENT, lattice.OTHER)
+LATTICE_X, LATTICE_Y = lattice.Y, lattice.X
+LATTICE_TITLE = "Lattice pair"
+LATTICE_ROWS = 2_304
+LATTICE_TALLY = (2_304, 2_304, 0, 0, 0, 0)
+assert LATTICE_ROWS == lattice.ROWS
+
+# E14: the three digests were minted on the bare tree at b10a146 (2026-09-06) on the fixture pair of
+# the time; E14 now reads the facts they guarded off the lattice pair.
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the
+# paired test; the E14 facts and the heatmap are the unpaired test's, named.
+E14_ARGV = ("report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
 # PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests (report.md, heatmap.svg, receipt.html) are no longer
 # asserted: the share table, the detection-limit notes and the direction words change all three files.
 # E14 checks the facts they guarded instead. An event of unknown kind prints in direction words, so the
@@ -1106,13 +1110,13 @@ def syn_fixed(syn_root: Path) -> Built:
 
 
 @pytest.fixture(scope="module")
-def go1(go1_store: Store) -> Built:
-    return built(GO1_ROOT, GO1_A, GO1_B, ReportSpec(title=GO1_TITLE, x_axis=GO1_X, y_axis=GO1_Y), GO1_EVENTS)
+def lattice_pair(lattice_store: Store) -> Built:
+    return built(LATTICE_ROOT, LATTICE_A, LATTICE_B, ReportSpec(title=LATTICE_TITLE, x_axis=LATTICE_X, y_axis=LATTICE_Y), LATTICE_EVENTS)
 
 
 @pytest.fixture(scope="module")
-def builts(go1: Built, syn: Built) -> tuple[Built, Built]:
-    return go1, syn
+def builts(lattice_pair: Built, syn: Built) -> tuple[Built, Built]:
+    return lattice_pair, syn
 
 
 @pytest.fixture(scope="module")
@@ -1149,11 +1153,11 @@ def three_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(scope="module")
 def every_store(
-    go1_store: Store, syn_root: Path, tally_store: Store, poisoned_root: Path,
+    lattice_store: Store, syn_root: Path, tally_store: Store, poisoned_root: Path,
     foreign_root: Path, three_root: Path,
 ) -> list[tuple[Store, str]]:
     return [
-        (go1_store, GO1_A), (go1_store, GO1_B),
+        (lattice_store, LATTICE_A), (lattice_store, LATTICE_B),
         (Store(syn_root), SYN_A), (Store(syn_root), SYN_B),
         (tally_store, COUNTED), (tally_store, EMPTY),
         (Store(poisoned_root), SYN_A),
@@ -1174,8 +1178,8 @@ def serve_json(argv: Sequence[str]) -> Served:
 
 
 @pytest.fixture(scope="module")
-def go1_serve_json(go1: Built) -> Served:
-    return serve_json(serve_argv(go1, "--title", GO1_TITLE, "--json"))
+def lattice_serve_json(lattice_pair: Built) -> Served:
+    return serve_json(serve_argv(lattice_pair, "--title", LATTICE_TITLE, "--json"))
 
 
 @pytest.fixture(scope="module")
@@ -1252,9 +1256,9 @@ def test_e3_a_null_outcome_null_error_row_is_no_outcome_and_other(foreign_root: 
     }
 
 
-def test_e4_go1_both_arms_tally_12800_with_outcome_and_no_errored_rows(go1_store: Store) -> None:
-    for run_id in (GO1_A, GO1_B):
-        assert dataclasses.astuple(go1_store.tally(run_id)) == GO1_TALLY, run_id
+def test_e4_lattice_both_arms_tally_2304_with_outcome_and_no_errored_rows(lattice_store: Store) -> None:
+    for run_id in (LATTICE_A, LATTICE_B):
+        assert dataclasses.astuple(lattice_store.tally(run_id)) == LATTICE_TALLY, run_id
 
 
 def test_e4_tally_rows_equals_count_in_every_store_the_oracle_builds(every_store: list[tuple[Store, str]]) -> None:
@@ -1420,8 +1424,8 @@ def test_e12_the_cause_vocabulary_is_written_once_in_each_module() -> None:
     assert report_module._GRID_CAUSES == GRID_CAUSES
 
 
-def test_e12_every_cause_anywhere_is_drawn_from_the_seven(syn: Built, syn_fixed: Built, go1: Built) -> None:
-    for b in (syn, syn_fixed, go1):
+def test_e12_every_cause_anywhere_is_drawn_from_the_seven(syn: Built, syn_fixed: Built, lattice_pair: Built) -> None:
+    for b in (syn, syn_fixed, lattice_pair):
         assert all(c is None or c in CAUSES for c in coverage_of(b)["cause"])
         assert all(
             c.hole_cause is None or c.hole_cause in ALL_CAUSES
@@ -1537,8 +1541,8 @@ def test_e13_grid_holes_carry_the_cause_and_the_hash_of_their_one_row(syn: Built
         assert not cell.present
 
 
-def test_e13_present_cells_have_no_hole_cause_and_every_panel_shares_the_grid(syn: Built, go1: Built) -> None:
-    for b in (syn, go1):
+def test_e13_present_cells_have_no_hole_cause_and_every_panel_shares_the_grid(syn: Built, lattice_pair: Built) -> None:
+    for b in (syn, lattice_pair):
         first = {c.coords: (c.config_hash, c.hole_cause) for c in grid_holes(b)}
         for event, panel in b.report.panels.items():
             assert all(c.hole_cause is None for c in panel.cells if c.present), event
@@ -1572,19 +1576,19 @@ def as_0_0_1_wrote_it(text: str) -> str:
 
 def e14_multi() -> MultiDiffResult:
     """The E14 argv's ``multi``."""
-    store = Store(GO1_ROOT)
+    store = Store(LATTICE_ROOT)
     return multi_diff(
-        store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), events=["fell"],
-        manifest_a=store.manifest(GO1_A), manifest_b=store.manifest(GO1_B),
+        store.read(LATTICE_A, meta=False), store.read(LATTICE_B, meta=False), events=[lattice.EVENT],
+        manifest_a=store.manifest(LATTICE_A), manifest_b=store.manifest(LATTICE_B),
     )
 
 
 def e14_builder_texts(multi: MultiDiffResult) -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
-    spec = ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw")
+    store = Store(LATTICE_ROOT)
+    ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
+    spec = ReportSpec(title=f"{LATTICE_A} vs {LATTICE_B}: {lattice.EVENT}", x_axis=lattice.X, y_axis=lattice.Y)
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
     return {"report.md": report.to_markdown(), "receipt.html": receipt.to_html(), "heatmap.svg": report.to_svg()}
@@ -1615,7 +1619,7 @@ def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
     return value, "rise" if rise is not None and abs(rise - value) <= 1e-12 else "fall"
 
 
-def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree(tmp_path: Path) -> None:
+def test_e14_the_lattice_report_reproduces_the_three_digests_minted_on_the_bare_tree(tmp_path: Path) -> None:
     """Narrowed for S28 (draft ADR-074, spec S28 section 3.8): ``report`` on a pair now renders the
     layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
@@ -1623,7 +1627,7 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
     ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
     changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
     out = tmp_path / "report"
-    r = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
+    r = run_cli(["--store", str(LATTICE_ROOT), *E14_ARGV, "--out", str(out)])
     assert r.code == 0, r.text
     multi = e14_multi()
     texts = e14_builder_texts(multi)
@@ -1632,8 +1636,9 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
     # geometry and numbers.
     # PF2 (spec section 4.3/5.3): the default title names the two runs by name instead of by id;
     # the builder's SVG with only its title moved to the names is what the command writes.
-    names = run_names(GO1_ROOT)
-    old_title, new_title = f"{GO1_A} vs {GO1_B}: fell", f"{names[GO1_A]} vs {names[GO1_B]}: fell"
+    names = run_names(LATTICE_ROOT)
+    old_title = f"{LATTICE_A} vs {LATTICE_B}: {lattice.EVENT}"
+    new_title = f"{names[LATTICE_A]} vs {names[LATTICE_B]}: {lattice.EVENT}"
     written = (out / "heatmap.svg").read_text(encoding="utf-8")
     assert new_title in written and old_title not in written
     assert texts["heatmap.svg"].count(old_title) >= 1
@@ -1643,26 +1648,25 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
     # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded. First
     # S21's own: attaching the coverage moves no byte of any of the three files.
     assert e14_builder_texts(replace(multi, coverage=None)) == texts
-    # The headline counts, from the library's cells (the bare tree's report printed 60 safer and
-    # 0 worse on this pair), in the report, the receipt and the heatmap.
-    fell = multi.by_event["fell"]
-    cells = fell.cells
+    # The headline counts, from the library's cells, against scipy's Fisher with one BH family over
+    # every condition (``lattice.fisher``), in the report, the receipt and the heatmap.
+    tripped = multi.by_event[lattice.EVENT]
+    cells = tripped.cells
     # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the cells' verdict holds the direction words.
     n_lower, n_higher = int((cells["verdict"] == "lower").sum()), int((cells["verdict"] == "higher").sum())
-    assert (n_lower, n_higher) == (60, 0)
-    headline = f"fell: {n_lower} lower, {n_higher} higher"
+    assert (n_lower, n_higher) == lattice.directions(lattice.fisher(lattice.EVENT, 0.05)) == (22, 0)
+    headline = f"{lattice.EVENT}: {n_lower} lower, {n_higher} higher"
     assert headline in texts["report.md"].splitlines() and f"## {headline}" in texts["report.md"].splitlines()
     assert f"<h2>{headline}</h2>" in texts["receipt.html"]
     assert f">{headline}</text>" in texts["heatmap.svg"]
-    # The worst-powered unchanged condition and its limit (34pp on Go1, the figure the bare tree's
-    # report printed), on its line in all three files.
-    worst = cells.set_index("config_hash").loc[fell.max_mde_unchanged_cell]
+    # The worst-powered unchanged condition and its limit, on its line in all three files.
+    worst = cells.set_index("config_hash").loc[tripped.max_mde_unchanged_cell]
     # PF4 re-freeze (PF4.22, PF4.27): the limit is Fisher's exact limit at q / M, the larger of the two
-    # directions, so the 34 points become about 47; recomputed from the stats file's references, and
-    # the line names the direction that limit is for.
-    value, way = ref_worst_unchanged(fell, multi.q / multi.n_tests)
-    assert abs(fell.max_mde_unchanged - value) <= 1e-4 + 1e-12, (fell.max_mde_unchanged, value)
-    points = round(100 * fell.max_mde_unchanged)
+    # directions; recomputed from the stats file's references, and the line names the direction that
+    # limit is for.
+    value, way = ref_worst_unchanged(tripped, multi.q / multi.n_tests)
+    assert abs(tripped.max_mde_unchanged - value) <= 1e-4 + 1e-12, (tripped.max_mde_unchanged, value)
+    points = round(100 * tripped.max_mde_unchanged)
     config = ", ".join(f"{k}={v:g}" for k, v in sorted(worst["config"].items()))
     worst_line = (f"Worst-powered unchanged cell ({config}, n={worst['n_a']}/{worst['n_b']}) can only detect a "
                   f"{points}pp {way}.")
@@ -1674,12 +1678,12 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
     first = next(i for i, line in enumerate(md_lines) if line.startswith("| "))
     rows = list(itertools.takewhile(lambda line: line.startswith("|"), md_lines[first:]))
     header = [c.strip() for c in rows[0].strip("|").split("|")]
-    assert header[:9] == ["mu", "push_pct_bw", "n (a/b)", "rate_a (pp)", "rate_b (pp)", "delta (pp)", "p", "q", "verdict"], header
+    assert header[:9] == [lattice.X, lattice.Y, "n (a/b)", "rate_a (pp)", "rate_b (pp)", "delta (pp)", "p", "q", "verdict"], header
     table = [dict(zip(header, (c.strip() for c in row.strip("|").split("|")), strict=True)) for row in rows[1:]]
-    table = [row for row in table if set(row["mu"]) - set("-:")]
+    table = [row for row in table if set(row[lattice.X]) - set("-:")]
     assert table
     for row in table:
-        (cell,) = [c for c in cells.to_dict(orient="records") if c["config"] == {"mu": float(row["mu"]), "push_pct_bw": float(row["push_pct_bw"])}]
+        (cell,) = [c for c in cells.to_dict(orient="records") if c["config"] == {lattice.X: float(row[lattice.X]), lattice.Y: float(row[lattice.Y])}]
         assert row["n (a/b)"] == f"{cell['n_a']}/{cell['n_b']}", row
         for column, key in (("rate_a (pp)", "rate_a"), ("rate_b (pp)", "rate_b"), ("delta (pp)", "delta")):
             assert abs(float(row[column]) - 100 * cell[key]) <= 0.05 + 1e-9, (row, column, cell[key])
@@ -1727,8 +1731,8 @@ def test_e15_each_arm_has_fifteen_keys_and_its_tally_from_the_store(builts: tupl
             assert arm["tally"]["rows"] == arm["rows_stored"] == b.store.count(run_id)
 
 
-def test_e15_render_html_refuses_the_retired_schema_naming_both_values(go1: Built) -> None:
-    structure = json.loads(json.dumps(go1.structure, allow_nan=False))
+def test_e15_render_html_refuses_the_retired_schema_naming_both_values(lattice_pair: Built) -> None:
+    structure = json.loads(json.dumps(lattice_pair.structure, allow_nan=False))
     structure["schema"] = RETIRED_SCHEMA
     with pytest.raises(viewer().ViewerError) as info:
         viewer().render_html(structure)
@@ -1843,10 +1847,10 @@ def test_e17_a_fix_that_excludes_a_row_puts_it_off_grid_with_null_coords(syn_fix
     assert len(holes) == syn_fixed.structure["panels"][0]["n_absent"] + len(off_grid_hashes(syn_fixed))
 
 
-def test_e17_holes_is_carried_once_and_go1_has_none(go1: Built) -> None:
-    assert go1.structure["holes"] == []
-    assert all(panel["n_absent"] == 0 for panel in go1.structure["panels"])
-    assert "holes" not in set(walk_keys(go1.structure["panels"]))
+def test_e17_holes_is_carried_once_and_the_lattice_has_none(lattice_pair: Built) -> None:
+    assert lattice_pair.structure["holes"] == []
+    assert all(panel["n_absent"] == 0 for panel in lattice_pair.structure["panels"])
+    assert "holes" not in set(walk_keys(lattice_pair.structure["panels"]))
 
 
 def test_e18_unverified_is_exactly_the_four_entries_in_order(builts: tuple[Built, Built]) -> None:
@@ -1985,8 +1989,8 @@ def test_e21_with_holes_the_section_is_a_table_of_the_five_headers_and_one_row_p
     assert HOLE_MESSAGE not in following[0].deep_text()
 
 
-def test_e21_with_no_holes_the_section_is_a_paragraph_saying_zero_and_no_table(go1: Built) -> None:
-    dom = parse_html(go1.page)
+def test_e21_with_no_holes_the_section_is_a_paragraph_saying_zero_and_no_table(lattice_pair: Built) -> None:
+    dom = parse_html(lattice_pair.page)
     heading = h2_named(dom, HOLES_HEADING)
     next_h2 = min(n.index for n in dom.find("h2") if n.index > heading.index)
     between = nodes_between(dom, heading.index, next_h2)
@@ -2062,18 +2066,18 @@ def test_e23_two_builds_are_equal_and_the_structure_and_holes_are_json_strict(bu
 # ---------- E24-E26: the CLI ----------
 
 
-def test_e24_serve_json_on_go1_prints_the_thirteen_keys_both_tallies_and_no_holes_binding_nothing(go1_serve_json: Served, go1_store: Store) -> None:
-    r = go1_serve_json.result
+def test_e24_serve_json_on_the_lattice_prints_the_thirteen_keys_both_tallies_and_no_holes_binding_nothing(lattice_serve_json: Served, lattice_store: Store) -> None:
+    r = lattice_serve_json.result
     assert r.code == 0, r.err
-    assert go1_serve_json.calls == []
+    assert lattice_serve_json.calls == []
     parsed = strict_loads(r.out)
     # serve --json adds verdict and sentence after schema (spec section 5.6).
     assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
     # PF3 (spec section 4.4, R3): serve --json also adds method and method_chosen right after sentence.
     assert tuple(k for k in parsed if k not in ("verdict", "sentence")) == ("schema", "method", "method_chosen") + TOP_LEVEL_KEYS[1:]
     assert parsed["schema"] == SCHEMA
-    assert parsed["pair"]["a"]["tally"] == go1_store.tally(GO1_A).to_dict() == dict(zip(TALLY_FIELDS, GO1_TALLY))
-    assert parsed["pair"]["b"]["tally"] == go1_store.tally(GO1_B).to_dict() == dict(zip(TALLY_FIELDS, GO1_TALLY))
+    assert parsed["pair"]["a"]["tally"] == lattice_store.tally(LATTICE_A).to_dict() == dict(zip(TALLY_FIELDS, LATTICE_TALLY))
+    assert parsed["pair"]["b"]["tally"] == lattice_store.tally(LATTICE_B).to_dict() == dict(zip(TALLY_FIELDS, LATTICE_TALLY))
     assert parsed["holes"] == []
 
 
@@ -2132,7 +2136,7 @@ def runs_table(r: Result) -> tuple[tuple[str, ...], list[dict[str, str]]]:
 
 
 def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(syn_root: Path, three_root: Path) -> None:
-    for root in (syn_root, three_root, GO1_ROOT):
+    for root in (syn_root, three_root, LATTICE_ROOT):
         store = Store(root)
         r = run_cli(["--store", str(root), "runs"])
         assert r.code == 0, r.text
@@ -2152,6 +2156,8 @@ def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(
             # Counts carry thousands separators in text (spec section 5.4, rule 10).
             assert row["rows without an outcome"] == f"{store.tally(row['id']).no_outcome:,}", row
             assert row["rows"] == f"{store.count(row['id']):,}", row
+            if root == LATTICE_ROOT:
+                assert (row["rows"], row["rows without an outcome"]) == (f"{LATTICE_ROWS:,}", "0") == ("2,304", "0"), row
 
 
 def test_e25_a_run_of_three_errored_rows_prints_three(three_root: Path) -> None:

@@ -1,9 +1,10 @@
 """Oracle for M2: grid / sobol / scenarios samplers, axis typing, SweepSpec, TOML loader.
 
 Property tests (I1, I2, I3, I5, I6, I7, I15) draw small mixed-type axis dicts with
-hypothesis; grids stay under about 200 configs. I10 is the golden: the Go1 TOML from
-section 3 is written to tmp_path inside the test, loaded, and its config_hash set is
-compared against the committed fixture through the ``go1_store`` fixture. I12
+hypothesis; grids stay under about 200 configs. I10 is the golden: the lattice's sweep
+TOML (``tests/lattice.py``'s two axes) is written to tmp_path inside the test, loaded, and
+its config_hash set is compared against the generated store through the ``lattice_store``
+fixture and against the design's own condition keys. I12
 round-trips through ``to_dict()`` and ``json.dumps``.
 
 Conventions the oracle fixes for the implementation session:
@@ -39,20 +40,20 @@ from poisson_prove.sampler import (
 )
 from poisson_prove.store import Store, config_hash
 
-GO1_TOML = """\
-target_id = "go1-g2-converged@20260813T155006Z"
+import lattice
+
+LATTICE_TOML = f"""\
+target_id = "{lattice.TARGET_A}"
 t_unit    = "seconds"
 replicates = 32
 
-[axes.mu]
+[axes.gain]
 type   = "continuous"
-values = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50,
-          0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00]
+values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
 
-[axes.push_pct_bw]
+[axes.load]
 type   = "continuous"
-values = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0,
-          110.0, 120.0, 130.0, 140.0, 150.0, 160.0, 170.0, 180.0, 190.0, 200.0]
+values = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
 """
 
 RATES = (0.0, 0.05, 0.10, 0.20, 0.30)
@@ -393,29 +394,30 @@ def test_i9_cells_and_total_rollouts(configs, replicates) -> None:
 # ---------- I10: golden ----------
 
 
-def test_i10_go1_toml_reproduces_fixture_cells(go1_store: Store, tmp_path: Path) -> None:
-    path = tmp_path / "go1.toml"
-    path.write_text(GO1_TOML)
+def test_i10_lattice_toml_reproduces_fixture_cells(lattice_store: Store, tmp_path: Path) -> None:
+    path = tmp_path / "lattice.toml"
+    path.write_text(LATTICE_TOML)
     spec = SweepSpec.load(path)
-    assert len(spec.configs) == 400
+    assert len(spec.configs) == lattice.CELLS == 72
     assert spec.duplicates_dropped == 0
-    assert spec.replicates == 32
-    assert spec.target_id == "go1-g2-converged@20260813T155006Z"
+    assert spec.replicates == lattice.N == 32
+    assert spec.target_id == lattice.TARGET_A == "lattice-before"
     assert spec.t_unit == "seconds"
-    assert dict(spec.axis_types) == {"mu": "continuous", "push_pct_bw": "continuous"}
+    assert dict(spec.axis_types) == {"gain": "continuous", "load": "continuous"}
     assert spec.retain_traces_for is None
-    fixture_hashes = set(go1_store.read("go1-v0")["config_hash"].unique())
-    assert set(spec.cells()) == fixture_hashes
-    assert spec.total_rollouts() == 12800
+    fixture_hashes = set(lattice_store.read(lattice.RUN_A)["config_hash"].unique())
+    design_hashes = {lattice.config_hash(c.config) for c in lattice.design_cells()}
+    assert set(spec.cells()) == fixture_hashes == design_hashes
+    assert spec.total_rollouts() == lattice.ROWS == 2304
 
 
 def test_i10_load_accepts_str_path_and_matches_grid(tmp_path: Path) -> None:
-    path = tmp_path / "go1.toml"
-    path.write_text(GO1_TOML)
+    path = tmp_path / "lattice.toml"
+    path.write_text(LATTICE_TOML)
     spec = SweepSpec.load(str(path))
-    mus = [round(0.05 * k, 2) for k in range(1, 21)]
-    pushes = [10.0 * k for k in range(1, 21)]
-    assert list(spec.configs) == grid({"mu": mus, "push_pct_bw": pushes})
+    gains = [round(0.1 * k, 1) for k in range(1, 13)]
+    loads = [10.0 * k for k in range(1, 7)]
+    assert list(spec.configs) == grid({"gain": gains, "load": loads})
 
 
 def test_load_appends_scenarios_after_grid(tmp_path: Path) -> None:
@@ -442,7 +444,7 @@ def test_load_appends_scenarios_after_grid(tmp_path: Path) -> None:
 
 
 def _toml_without(field: str) -> str:
-    lines = GO1_TOML.splitlines(keepends=True)
+    lines = LATTICE_TOML.splitlines(keepends=True)
     if field == "axis type":
         return "".join(line for line in lines if not line.startswith('type   = "continuous"'))
     return "".join(line for line in lines if not line.startswith(field))

@@ -232,7 +232,7 @@ def maj_j(acts: Sequence[int], j: int) -> int:
 def cluster_bootstrap(
     clusters: Sequence[Any], values: Sequence[float], *, seed: int, b: int
 ) -> tuple[float, float]:
-    """The twelve lines of ``scripts/repro_r1_agreement.py``, as the PR-2 oracle carries them."""
+    """The percentile cluster bootstrap in twelve lines, as the PR-2 oracle carries them."""
     rng = np.random.default_rng(seed)
     frame = pd.DataFrame({"cluster": list(clusters), "v": list(values)})
     groups = [g["v"].to_numpy() for _, g in frame.groupby("cluster", sort=True)]

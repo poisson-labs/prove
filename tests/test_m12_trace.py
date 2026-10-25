@@ -1211,7 +1211,7 @@ def test_t23_chat_under_invoke_agent_and_resource_attrs_survive() -> None:
     for span in tr.spans:
         assert span.attrs["poisson_prove.run_id"] == "r-2026-09-03-a", span.span_id
         assert span.attrs["poisson_prove.episode"] == "cfg-7:seed-3", span.span_id
-        assert span.attrs["service.name"] == "airline-agent", span.span_id
+        assert span.attrs["service.name"] == "support-agent", span.span_id
         assert span.attrs["scope.flavor"] == "hand-built", span.span_id
 
 
