@@ -1000,6 +1000,10 @@ class MultiDiffResult:
 
     @property
     def fragility_exact(self) -> bool:
+        """True with one event under Fisher or the paired test (R13, R26): the search within each
+        row is then exhaustive, and across rows it covers four ways the word can change (a
+        direction appears, the step-down goes further, a direction disappears, the nothing-moved
+        question switches). Not a proof that no smaller set exists outside those four."""
         return self._fragility.exact
 
     def all_kinds_known(self) -> bool:
