@@ -192,12 +192,15 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
 from poisson_prove.tree import agreement_digest
 from poisson_prove.tree import tree as grow_tree
+from conftest import writable_copy
 
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 SRC = REPO / "src" / "poisson_prove"
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 # PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
 # created_at, a letter); serve names the Go1 runs by these.
@@ -1612,7 +1615,12 @@ def test_p7_6_store_append_is_the_only_writer_and_schema_the_only_declaration_of
         if any("trace_obs" in s for s in string_constants(tree)):
             obs_mentions.append(path.name)
     assert declared == ["store.py"], declared
-    assert writers == ["store.py::Store.append"], writers
+    # PF12 (Artifact Format section 5.3, PF12.3): a saved comparison's long-form table is the one
+    # other Parquet file Prove writes; it is written outside the store module, by a module that
+    # neither declares nor names the two columns, so Store.append stays their only writer.
+    assert [w for w in writers if w.startswith("store.py::")] == ["store.py::Store.append"], writers
+    others = sorted({w.split("::")[0] for w in writers if not w.startswith("store.py::")})
+    assert len(others) <= 1 and not set(others) & set(declared) and not set(others) & set(obs_mentions), writers
     assert obs_mentions == ["store.py"], obs_mentions
     assert "trace" not in RunManifest.from_dict(manifest("r").to_dict()).to_dict()
     for name in ("trace", "trace_obs"):

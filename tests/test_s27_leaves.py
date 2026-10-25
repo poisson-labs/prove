@@ -162,10 +162,13 @@ from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
 from poisson_prove.report import ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from conftest import writable_copy
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 # PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
 # created_at, a letter); serve names the Go1 runs by these.
@@ -375,9 +378,12 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # --methods all --json and the no-comparable-cell refusal), and again at PF4's statistics re-freeze.
 # Read off the two files as they stand after every other move, not predicted; these are test files,
 # not output PF4 changes.
+# PF12: re-minted after PF12's move of both files (their ``GO1_ROOT`` reads a per-process copy of the
+# committed fixture, because report and serve now save into the store they read). Read off the two files
+# as they stand after every other move, not predicted; these are test files, not output PF12 changes.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "6c042ad8d2e7894f9ad5bf6483747ff8cdff434ebc7d8824239f030157f4c928",
-    "tests/test_s26_fault_lines.py": "88cbfc14ca6e249db98d06b1a99d68070b8e59062f670b2e69e48399208d394d",
+    "tests/test_s25_root.py": "ad9e529efa884b4677d0953ddffe381d3ac48c9764f25ec86bfb351c7e4b2388",
+    "tests/test_s26_fault_lines.py": "d8d6913076b7d07635e95b3ff29b5e408d5cc7c2f4222f7927b50f652fd796da",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"

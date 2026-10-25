@@ -119,11 +119,14 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.survival import censor
 from poisson_prove.tree import omnibus, tree
 from poisson_prove.viewer import SCHEMA, ViewerError, build_structure, render_html
+from conftest import writable_copy
 
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "src" / "poisson_prove"
 DIFF_SOURCE, REPORT_SOURCE, TREE_SOURCE, VIEWER_SOURCE, CLI_SOURCE = (SRC / f"{n}.py" for n in ("diff", "report", "tree", "viewer", "cli"))
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 GO1_SALT = "go1-g4-32:PRNGKey(1000000+rollout)"
 
@@ -1428,5 +1431,10 @@ def test_y22_serve_and_serve_json_on_go1_write_nothing_to_the_store_the_cwd_or_t
     assert code == 0 and calls == [] and out.startswith('{\n  "schema": '), err
     code, out, err, calls = quiet(lambda: run_serve(argv))
     assert calls == ["serve_page"] and out == "", (code, out[:80])
-    assert snapshot(GO1_ROOT) == before_store and snapshot(tmp_path) == before_cwd
+    # PF12 (spec section 18.2, Q59): serve saves the comparison it shows under the store's
+    # ``.poisson/``; nothing else in the store, the working folder or the temp folder is written.
+    def stored(listing: dict[str, str]) -> dict[str, str]:
+        return {k: v for k, v in listing.items() if not k.startswith(".poisson")}
+
+    assert stored(snapshot(GO1_ROOT)) == stored(before_store) and snapshot(tmp_path) == before_cwd
     assert sorted(os.listdir(tmp_path)) == sorted(before_cwd) or before_cwd == {}

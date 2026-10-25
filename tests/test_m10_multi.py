@@ -68,9 +68,12 @@ from poisson_prove.episode import Episode
 from poisson_prove.executor_modal import Job, ModalOptions, ModalTarget, run_with_mapper, worker_batch
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from conftest import quickstart_design
+from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
-GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(ROOT / "tests" / "fixtures" / "go1")
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()

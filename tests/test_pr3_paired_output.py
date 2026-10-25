@@ -141,9 +141,12 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.trace import Span, Trace
 
 from conftest import without_method_lines
+from conftest import writable_copy
 
 REPO = Path(__file__).resolve().parents[1]
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 #: W20's E14 argv on the Go1 fixture, through the CLI, as today's build writes the three files:
 #: minted 2026-09-22 on ``6f40d92``'s ``src/`` (the heatmap is the value ``test_s29_viewer.py``

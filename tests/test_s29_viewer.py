@@ -267,6 +267,7 @@ from poisson_prove.report import MultiReport, ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.tree import tree as grow_tree
 from conftest import quickstart_design
+from conftest import writable_copy
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -275,7 +276,9 @@ CLI_SOURCE = PACKAGE / "cli.py"
 TREE_SOURCE = PACKAGE / "tree.py"
 REPORT_SOURCE = PACKAGE / "report.py"
 DIFF_SOURCE = PACKAGE / "diff.py"
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 # PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
 # created_at, a letter); serve names the Go1 runs by these.

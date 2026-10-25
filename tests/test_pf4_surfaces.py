@@ -65,11 +65,14 @@ from poisson_prove import cli
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
 from test_pf4_stats import _ref_fisher_limits
+from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 TESTS = Path(__file__).resolve().parent
-OLD = TESTS / "fixtures" / "stores-0.0.1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+OLD = writable_copy(TESTS / "fixtures" / "stores-0.0.1")
 OLD_RUNS: dict[str, str] = json.loads((OLD / "runs.json").read_text(encoding="utf-8"))
 
 A_ID = "20261020T100000Z-aaaa"
@@ -1323,7 +1326,7 @@ def test_pf4_20_the_comparison_object_itself_reads_in_direction_words_without_a_
     are null; the default worse-gate is refused and ``check("higher")`` fails on the 14 rises."""
     from poisson_prove.diff import DiffError, multi_diff
 
-    go1 = Store(TESTS / "fixtures" / "go1")
+    go1 = Store(writable_copy(TESTS / "fixtures" / "go1"))  # PF12: the per-process copy (R39)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = multi_diff(go1.read("go1-v0", meta=False), go1.read("go1-v1", meta=False), events=["fell"],
@@ -1801,7 +1804,7 @@ def test_pf4_44_every_surface_that_shows_the_word_shows_how_many_outcomes_would_
 def test_pf4_45_the_group_limit_is_labelled_unconditional_where_it_is_printed(tmp_path: Path) -> None:
     """On Go1's fault lines (grouped by mu): the JSON says how the group limit's power is read, and the
     report's fault-lines section says the root and the group both reject."""
-    go1 = TESTS / "fixtures" / "go1"
+    go1 = writable_copy(TESTS / "fixtures" / "go1")  # PF12: report saves into the store it reads (R39)
     out = tmp_path / "r"
     doc = _json(_cli(go1, "diff", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh", "--json"))
     assert doc["tree"]["fault_lines"]["mde_basis"] == "unconditional"

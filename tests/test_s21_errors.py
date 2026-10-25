@@ -86,9 +86,12 @@ from poisson_prove.report import MultiReport, ReportSpec, build_multi_report, bu
 from poisson_prove.store import EpisodeRecord, RunManifest, SchemaMismatch, Store, StoreError, config_hash
 from poisson_prove.tree import TreeResult
 from poisson_prove.tree import tree as grow_tree
+from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
-GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(ROOT / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 GO1_EVENTS = ("fell", "survived")
 GO1_X, GO1_Y = "push_pct_bw", "mu"

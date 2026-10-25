@@ -159,11 +159,14 @@ from poisson_prove.sampler import SamplerError, SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.survival import cell_table, censor, competing_set
 from poisson_prove.trace import Span, Trace, collect, finalize, record, truncate_observations
+from conftest import writable_copy
 
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parent.parent
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 STEPS_SOURCE = PACKAGE / "steps.py"
 
@@ -1518,7 +1521,16 @@ def test_p10_17_the_check_and_the_report_write_nothing_under_the_store(tmp_path:
     check_of(store, a)
     run_cli(["--store", str(root), "report", a, b, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "r")])
     run_cli(["--store", str(root), "inspect", a, "--event", EVENT])
-    assert snapshot(root) == before
+    # PF12 (spec section 18.2, Q59): report saves the comparison it shows, under ``.poisson/``; no
+    # stored file outside it is written (bytes and mtimes), and check without --save writes nothing:
+    # the folder holds the store descriptor and that one comparison.
+    after = snapshot(root)
+    assert {k: v for k, v in after.items() if not k.startswith(".poisson")} == {k: v for k, v in before.items() if not k.startswith(".poisson")}
+    added = sorted(k for k in after if k.startswith(".poisson") and k not in before)
+    saved = [k for k in added if k != ".poisson/store.json"]
+    assert all(k.startswith(".poisson/artifacts/comparison/") for k in saved), added
+    assert len({k.split("/")[3] for k in saved}) <= 1, added
+    assert any(k.startswith(".poisson/artifacts/comparison/") for k in after), sorted(after)
 
 
 def test_p10_17_steps_has_no_writer_and_no_check_result_reaches_the_manifest() -> None:

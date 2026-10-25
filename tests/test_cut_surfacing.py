@@ -103,6 +103,7 @@ from poisson_prove.report import ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace, truncate_observations
 from poisson_prove.viewer import SCHEMA, ViewerError, render_html
+from conftest import writable_copy
 
 #: CD (D8) renames ``OBSERVATION_LIMIT_BYTES`` to ``OBSERVATION_ROUTING_BYTES`` and takes away its
 #: second job: it is the size at which ``split`` moves an unnamed attribute to ``trace_obs``, and
@@ -111,7 +112,9 @@ from poisson_prove.viewer import SCHEMA, ViewerError, render_html
 OWN_RUN_CUT_AT = 8192
 
 REPO = Path(__file__).resolve().parent.parent
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
@@ -599,7 +602,12 @@ def test_z9_report_serve_and_inspect_leave_every_stored_byte_and_mtime_where_the
         surfaces(corpus, *pair, tmp_path / "-".join(pair))
     for run in ("cut-a", "own"):
         assert run_cli(["--store", str(corpus), "inspect", run, "--event", "fail"])[0] == 0
-    assert snapshot(corpus) == before
+    # PF12 (spec section 18.2, Q59): report and serve save the comparison they show, under
+    # ``.poisson/``; every stored byte and mtime outside it stays where it was.
+    def outside(listing: dict[str, tuple[str, int]]) -> dict[str, tuple[str, int]]:
+        return {k: v for k, v in listing.items() if not k.startswith(".poisson")}
+
+    assert outside(snapshot(corpus)) == outside(before)
 
 
 # ---------- Z10: the single-run report says the same things ----------

@@ -241,12 +241,15 @@ from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from conftest import quickstart_design, without_method_lines
+from conftest import writable_copy
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 REPORT_SOURCE = PACKAGE / "report.py"
 DIFF_SOURCE = PACKAGE / "diff.py"
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 REGRESSION_DIR = GO1_ROOT / "report_regression"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
@@ -2409,7 +2412,10 @@ def test_r14_the_single_run_report_writes_none_of_the_four_headings_and_go1s_std
     # line comes exactly what it printed before the paths: the headline (Go1's names no run).
     names = ("report.md", "heatmap.svg", "receipt.html")
     wrote = f"ok  wrote {r.out_dir} ({len(names)} files)\n" + "".join(f"  wrote  {r.out_dir / name}\n" for name in names)
-    expected = wrote + "\n" + multi.headline() + "\n"
+    # PF12 (spec section 18.2, Q59): the saved comparison's line ends the first block.
+    saved = re.findall(r"^  saved  comparison [0-9a-f]{12}\n", r.out, re.MULTILINE)
+    assert len(saved) == 1, r.out
+    expected = wrote + saved[0] + "\n" + multi.headline() + "\n"
     assert r.out == expected, (r.out, expected)
 
 

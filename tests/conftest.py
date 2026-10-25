@@ -139,10 +139,44 @@ def blocked_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
     assert attempts == [], f"network attempted in an offline backend test: {attempts}"
 
 
+@functools.cache
+def writable_copy(fixture: Path) -> Path:
+    """A copy, made once per test process, of a committed fixture folder, for the tests that run a
+    verb which writes into the store it reads.
+
+    PF12 (spec section 18.2, Q59): ``report`` and ``serve`` save the comparison they show into the
+    store's ``.poisson/``. Run on a committed fixture in place, under ``-n`` one worker's save would
+    land while another digests or copies the same folder; so those tests read a copy, named as the
+    fixture is, and the committed folders are never written. The copy is removed when the process
+    ends.
+    """
+    import atexit
+    import shutil
+    import tempfile
+
+    base = Path(tempfile.mkdtemp(prefix="prove-fixture-"))
+    atexit.register(shutil.rmtree, base, True)
+    copy = base / fixture.name
+    shutil.copytree(fixture, copy, symlinks=True)
+    return copy
+
+
 @pytest.fixture(scope="session")
 def go1_store() -> Store:
-    """The committed Go1 golden fixture at tests/fixtures/go1 (built by S3 Session B)."""
-    return Store(FIXTURES / "go1")
+    """The committed Go1 golden fixture at tests/fixtures/go1 (built by S3 Session B), through its
+    per-process copy (``writable_copy``)."""
+    return Store(writable_copy(FIXTURES / "go1"))
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """``--update-snapshots``: the snapshot tests write the snapshots instead of comparing against
+    them (section 10.6, PF12.13; the one documented command is in ``CONTRIBUTING.md``)."""
+    parser.addoption(
+        "--update-snapshots",
+        action="store_true",
+        default=False,
+        help="rewrite the snapshot files the snapshot tests compare against, instead of comparing",
+    )
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
@@ -168,3 +202,46 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         entry.name.startswith(_PREFIX) for entry in Path(tmp).iterdir()
     ):
         _reap(tmp, None)
+
+
+# ---------- PF12's shared stores (tests/pf12_support.py), built once per session when a test asks ----------
+
+
+@pytest.fixture(scope="session")
+def old_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, Any]]:
+    """The 0.0.1 store with its quickstart pair saved and its UI built (PF12)."""
+    from pf12_support import build_old, shared_world
+
+    return shared_world(tmp_path_factory, "old", build_old)
+
+
+@pytest.fixture(scope="session")
+def stats_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, Any]]:
+    """The hand-written pairs, each saved, and their UI (PF12)."""
+    from pf12_support import build_stats, shared_world
+
+    return shared_world(tmp_path_factory, "stats", build_stats)
+
+
+@pytest.fixture(scope="session")
+def sweep_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, Any]]:
+    """Runs a 0.1.0 sweep wrote, with their event logs, and their UI (PF12)."""
+    from pf12_support import build_sweep, shared_world
+
+    return shared_world(tmp_path_factory, "sweep", build_sweep)
+
+
+@pytest.fixture(scope="session")
+def bytes_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, Any]]:
+    """Every writing verb run in turn over a copy of the 0.0.1 store, with its digests (PF12.1)."""
+    from pf12_support import build_bytes, shared_world
+
+    return shared_world(tmp_path_factory, "bytes", build_bytes)
+
+
+@pytest.fixture(scope="session")
+def resume_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, Any]]:
+    """A 0.0.1 partial run resumed by this build (PF12.1's one exception)."""
+    from pf12_support import build_resume_old, shared_world
+
+    return shared_world(tmp_path_factory, "resume-old", build_resume_old)

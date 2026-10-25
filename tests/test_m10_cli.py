@@ -53,9 +53,12 @@ from poisson_prove.report import NEUTRAL_FILL
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from conftest import quickstart_design
+from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
-GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(ROOT / "tests" / "fixtures" / "go1")
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -889,7 +892,10 @@ def test_i11_report_writes_exactly_three_files(go1_store: Store, tmp_path: Path)
     verdict, _, rest = r.out.partition("\n\n")
     lines = verdict.splitlines()
     assert lines[0] == f"ok  wrote {out} ({len(REPORT_FILES)} files)", r.out
-    assert sorted(lines[1:]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
+    # PF12 (spec section 18.2, Q59): report saves the comparison it shows and says so on one
+    # detail line after its wrote lines, the id's first 12 hex.
+    assert re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[-1]), r.out
+    assert sorted(lines[1:-1]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
     assert "fell: 60 lower, 0 higher" in rest
     for name in REPORT_FILES:
         assert name in r.out, name

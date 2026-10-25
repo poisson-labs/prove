@@ -175,6 +175,7 @@ from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
 from poisson_prove.report import _fmt
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from conftest import writable_copy
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -185,7 +186,9 @@ DIFF_SOURCE = PACKAGE / "diff.py"
 PLAIN_SOURCE = PACKAGE / "plain.py"
 README = REPO / "README.md"
 SERVE_DOC = REPO / "docs" / "reading-a-serve-page.md"
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
 GO1_A, GO1_B = "go1-v0", "go1-v1"
 
 # ---------- spec sections 2, 3.2, 3.3, 3.5: the literals ----------
