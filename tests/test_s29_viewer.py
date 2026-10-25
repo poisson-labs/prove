@@ -32,7 +32,7 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
    forbidden-keys walk over the whole structure: green on the bare tree, invisible to a grep
    for the literals, red on the shim's first run of the S21 fixtures, and narrowed by path as
    V24 was. The negatives hold: ``test_m10_cli.py``, ``test_s24_interval.py`` and
-   ``tests/live/`` drive ``serve`` nowhere, and ``test_m10_multi.py``'s ``go1_argv`` is
+   ``tests/live/`` drive ``serve`` nowhere, and ``test_m10_multi.py``'s study-pair argv is
    ``diff``/``report``/``check``.
 2. **The collision scan, re-run at HEAD.** ``viewer.py``: no attribute and no bare name inside a
    ``BinOp`` is a tree field name; the attributes are ``join`` (in ``render_html``), ``x_axis``
@@ -54,20 +54,21 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
 4. **The vocabulary, on today's page.** The 24 phrases are O19's nine, F19's nine and L10's
    six. On the ``/2`` page of every fixture ``where it`` reaches the *Not verified* region alone
    (inside ``elsewhere it``, pinned by V31 and by S21's ``UNVERIFIED``); ``step`` reaches *Run
-   pair* and *Provenance* on every builder-made pair (``t_unit`` ``steps``) and nowhere on Go1
-   (``seconds``); no string of any fixture's tree carries a phrase. The scope of W19 -- the three
+   pair* and *Provenance* on every builder-made pair (``t_unit`` ``steps``) and nowhere on the
+   study pair or the lattice (``seconds``); no string of any fixture's tree carries a phrase. The scope of W19 -- the three
    new regions, the bound paragraph and the tree's strings -- excludes all of them.
 5. **The kind table.** 27 (object, field) rows over eight objects; every field exists on the
    dataclass it is attributed to. This oracle's literal adds one row the spec's table lacks
    (below, *config on the leaf row*).
 6. **The fixtures that gain a tree.** ``test_m13_viewer.py``: ``build_pair`` (called for
-   ``go1``, ``hostile``, the V23 ``--fix`` slice and the V29 rebuild) and V32's two direct
-   ``build_structure`` calls, which reuse ``go1.report`` and ``go1.multi`` and so take
-   ``go1.tree``; ``test_s21_errors.py``: ``built()`` (``syn``, ``syn_fixed``, ``go1``, the E-
+   the study pair, ``hostile``, the V23 ``--fix`` slice and the V29 rebuild) and V32's two direct
+   ``build_structure`` calls, which reuse the study pair's report and multi and so take its
+   tree; ``test_s21_errors.py``: ``built()`` (``syn``, ``syn_fixed``, the study pair, the E-
    determinism rebuild). Each reads both frames inline; the retrofit binds them and grows the
    tree once. A tree grown on ``meta=True`` frames is byte-identical to one grown on the CLI's
-   ``meta=False`` frames (measured). Go1's tree costs about 1.1 s (fell) and 1.3 s (both
-   events); every builder-made pair under half a second.
+   ``meta=False`` frames (measured). The study pair's tree cost about a second; every
+   builder-made pair under half a second. (On the lattice every tree is grown once per test
+   session, ``conftest.SharedTrees``.)
 
 **Conventions this oracle fixes where the spec is silent. Session B builds to these.**
 
@@ -99,9 +100,9 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   a ``config`` mapping over the config's keys whose values are ``_fmt(value, "coord")`` for a
   scalar and ``None`` for anything else -- ``_config_text``'s rule. **Why:** M13's frozen V16
   requires every float token on the page to be a substring of some structure string, and on
-  Go1's default page S28's ``str(value)`` spelling (``push_pct_bw=10.0``) puts nine tokens on
-  the page that no structure string carries (measured: ``10.0``, ``20.0``, ..., ``110.0``); the
-  same value already prints as ``10`` in the drill-down. The page therefore spells a config
+  the study pair's default page S28's ``str(value)`` spelling (``key=10.0``) put tokens on the
+  page that no structure string carries (measured); the same value already prints as ``10``
+  in the drill-down. The page therefore spells a config
   value as the rest of the page does, formatted once at assembly, and the receipt's ``10.0`` is
   S28's spelling. Recorded as spec text not usable as written, below.
 - **The untested forms.** The fault-lines null line reads ``not tested`` and either ``the root
@@ -183,7 +184,7 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   ``DIFF_PY_SHA256`` and ``REPORT_PY_SHA256`` stay as A28 left them, green on Session A's commit and
   red from Session B's build until Session A's post-build commit re-mints both whole-file and
   retires ``REPORT_PY_EXCLUDED`` (ADR-078); ``SERVE_STRUCTURE_SHA256``, ``TREE_LESS_KEYS_SHA256``,
-  ``GO1_PAGE_2_SHA256``, ``CHECK_STDOUT_SHA256`` and the E14 markdown and receipt digests are
+  the ``/2`` page digests, ``CHECK_STDOUT_SHA256`` and the E14 markdown and receipt digests are
   re-minted off P-1 Session A's shadow shim, built to P-1 section 3's verbatim strings. The
   classified red set is in ``tests/test_p1_payload.py``'s module docstring.
 
@@ -198,7 +199,7 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   it in *Cells*. It prints once, in *Cells*, as S28's receipt does; the bound paragraph is the
   rule line and the assumption line.
 - W4's "the page rendered at ``aed3f11`` from the ``/2`` structure" has no renderer after the
-  build. It is pinned as the sha256 of the ``/2`` page on Go1 (``store_root`` normalised),
+  build. It was pinned as the sha256 of the ``/2`` page on the study pair (``store_root`` normalised),
   minted on the bare tree at ``f4e2845``, against the ``/3`` page with the three regions and
   the bound line excised by index; on every pair the excised page is identical across two
   trees of the same pair; and the tree-less keys (``panels``, ``holes``, ``unverified``,
@@ -217,20 +218,20 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   under every leaf's ``config``, an exposure ``panels[].cells[].config`` already has at
   ``f4e2845`` and V24 already catches. No fixture has such an axis.
 - W3's non-finite clause has no fixture: no tree float is non-finite on any pair, so the rule is
-  asserted by putting ``nan`` into a copy of Go1's ``RootResult.location`` before assembly.
+  asserted by putting ``nan`` into a copy of the lattice's ``RootResult.location`` before assembly.
 - W1's "``serve --help`` lists exactly sixteen flags" is read over the option entries, not over
   every ``--word`` in the help text: the helper S28 minted says "the constant sweep's
   ``--max-mde`` uses" in ``--max-group-mde``'s help, so a whole-text flag regex reads seventeen.
   M13's frozen V30 read the whole text and was red on the shim for that reason; the retrofit
   narrows its extraction to option entries, which is the property V30 always meant.
 
-**Fixture limits, stated before anything is asserted on a fixture.** Go1 cannot show a refusal
-or a hostile value; the axes pair cannot show a rejected leaf; the identical pair cannot show
+**Fixture limits, stated before anything is asserted on a fixture.** The lattice cannot show a
+refusal or a hostile value on the page grouped by ``gain``; the axes pair cannot show a rejected leaf; the identical pair cannot show
 anything tested below the root; the BH and gate pairs are reached only with ``--by grp`` under
 McNemar and neither can show a rejected leaf (without ``--by`` both resolve to ``cell``, a
 different tree); the multi-event pair is the only ``K = 2`` whose events are not complements;
 the quickstart pair cannot show a refusal; the hostile pair and the vocabulary pair collapse to
-the whole grid, so their group labels never carry a value; the S18 pair is not a fixture.
+the whole grid, so their group labels never carry a value.
 
 **Named non-observables.** A second ``tree()`` call in ``_cmd_serve`` on the same frames and
 knobs: the same bytes. A ``text`` entry produced by a private copy of ``_fmt`` that agrees with
@@ -267,7 +268,8 @@ from poisson_prove.report import MultiReport, ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.tree import tree as grow_tree
 from conftest import quickstart_design
-from conftest import writable_copy
+
+import lattice
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -276,14 +278,13 @@ CLI_SOURCE = PACKAGE / "cli.py"
 TREE_SOURCE = PACKAGE / "tree.py"
 REPORT_SOURCE = PACKAGE / "report.py"
 DIFF_SOURCE = PACKAGE / "diff.py"
-# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
-# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
-GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
-GO1_A, GO1_B = "go1-v0", "go1-v1"
+#: The generated pair (``tests/lattice.py``) in place of the study pair this file was frozen on.
+LATTICE_ROOT = lattice.root()
+LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
 # PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
-# created_at, a letter); serve names the Go1 runs by these.
-GO1_NAME_A = "go1-g2-converged@20260813T155006Z 2026-09-03 a"
-GO1_NAME_B = "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a"
+# created_at, a letter); serve names the lattice's runs by these.
+LATTICE_NAME_A, LATTICE_NAME_B = lattice.NAME_A, lattice.NAME_B
+EVENT, OTHER, X, Y = lattice.EVENT, lattice.OTHER, lattice.X, lattice.Y
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -371,45 +372,21 @@ BOUND_RULE_LITERAL = "2"
 ASSEMBLY_HELPERS = frozenset({"_fmt", "_coord_text", "_worst_header", "_worst_table_rows", "_EPISTEMIC_FENCE"})
 RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
 
-#: W17, W20. S25's O23 digest restated as narrowed: ``serve --json`` on Go1 with ``tree`` removed
-#: and ``schema`` set to ``/2``, ``store_root`` normalised.
-# PF3 (Q17, spec sections 4.4 and 14; R1): Go1's runs share a salt, so the default is now the paired
-# test; the digests and facts below are the unpaired test's, named. Every user of these three wants it.
-SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh", "--json")
-# Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
-# schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# PF4: no longer asserted; W17 asserts the facts it guarded (assert_tree_less_facts).
-SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
-#: W4, W17. Minted on the bare tree at f4e2845 through ``serve --json`` on each pair's argv below
-#: (``scratchpad/s29/mint.py``): the six tree-less keys, ``json.dumps(sort_keys=True)``, sha256.
-# Re-minted 2026-09-20 (truncation surfacing): only the ``diff`` key of the six moves (the horizon key renamed in place, six keys appended); the
-# other five are byte-equal to the baseline's for every pair below.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): every pair's panels gain mde_unchanged (spec LS section 3.5); on eight pairs heatmap_svg also moves, the honesty lines and the long texts wrapping inside the box (D9, ruling 2 of 2026-09-22), and on go1-two-events the complement sentence replaces the trade line. Read through this test's own measurement on the built tree, not predicted.
-# PF4: no longer asserted; W17 asserts the facts they guarded (assert_tree_less_facts).
-TREE_LESS_KEYS_SHA256 = {
-    "go1": "b310247f33d1941b825f3b9ab79442e3dbf0e2d7fc50fc6778bb7592d3cd91dd",
-    "go1-two-events": "e69716ad568584f30fc9d2d9ead879d5fdb48677867d0a63342697edb7bbc106",
-    "axes": "109a031c0269d0ef609502afaaa76864ae1dcb8e2f884491484acbdbd675da21",
-    "identical": "862bb2fb893045e25a93d111bd5414f6eb35a63ee3c486e076015ab3cc6d5680",
-    "bh": "853f2d8c5c343a5b5c8f9c169b7eac336b61830eb0bd5550d034d057f98a543a",
-    "gate": "dd83c801e924cc47a460e3e329f06e8c6f96b157935cb351a3fec32b2527b62e",
-    "multi-event": "a30b61f65a01e16527b99fff58ffa8899edf2759ac5b168462c49df2a6e4999a",
-    "one-value": "b9cf7d8c6c5bed25d324a8ae1e3343ad73e3c87c93b9fd9ccafeaf25fe9d2e16",
-    "three-key": "8b77b549e4556c6b53abb30c08e8729b8d19f56a528371f93b9c8b002dcfdd92",
-    "vocab": "7c432010fe2bef6e519f6d6609512084fe77407ef8dac8a6f4fc151d0d8fe7d5",
-    "hostile": "0d279a575852324027782918ce2a3d7960ebb418e6832edafa34535ac9b23f23",
-}
-#: W4. The ``/2`` page on Go1, ``str(GO1_ROOT)`` replaced by ``<store>``, sha256, minted on the bare
-#: tree at f4e2845 from the structure ``serve --json`` printed.
-# Re-minted 2026-09-20 (truncation surfacing): the page's provenance list gains the horizon rename and six observation items; each value is the
-# baseline page's plus that change, byte for byte.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the excised page moves by the build's page order (Run pair below the figure), the pairing line beside 'unpaired' (LS21), the unverified tail respelled and the inert rule in the style; on go1-two-events the complement sentence replaces the trade line and the figure wraps. Read through this test's own measurement on the built tree, not predicted.
-# PF4: no longer asserted; W4 asserts the facts they guarded.
-GO1_PAGE_2_SHA256 = {
-    "go1": "ee10014f70e481a7fe86b893bfc1010e3a91c7bae9f40d219fe1d354e6f3bb8a",
-    "go1-two-events": "cf9e9b9f8bd5ffc75d6bce1bc27c6238c09b7c3869f2394dadeaf752e260f115",
-}
+#: W17, W20. S25's O23 as narrowed: ``serve --json`` with ``tree`` removed. Its digest
+#: (``SERVE_STRUCTURE_SHA256``) was taken over the study pair and no longer asserted after PF4; the
+#: dead value is removed and W17 asserts the facts it guarded (assert_tree_less_facts).
+# PF3 (Q17, spec sections 4.4 and 14; R1): the lattice's runs share a salt, so the default is the paired
+# test; the facts below are the unpaired test's, named. Every user of these three wants it.
+SERVE_ARGV = ("serve", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--method", "fisher_bh", "--json")
+#: W4, W17. The pairs whose six tree-less keys were digested at f4e2845 (``TREE_LESS_KEYS_SHA256``,
+#: no longer asserted after PF4; the dead values are removed and the pair list kept): W17 asserts
+#: the facts the digests guarded on each (assert_tree_less_facts).
+TREE_LESS_KEYS_PAIRS = (
+    "lattice", "lattice-two-events", "axes", "identical", "bh", "gate", "multi-event", "one-value", "three-key", "vocab", "hostile",
+)
+#: W4. The pairs whose ``/2`` page was digested on the bare tree (the study pair's page digests, no longer
+#: asserted after PF4; the dead values are removed and the pair list kept): W4 asserts the facts.
+PAGE_2_PAIRS = ("lattice", "lattice-two-events")
 #: W20. ``diff.py`` whole again. **A28's retrofit, 2026-09-13 -- both exclusions retired** (ADR-077's
 #: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted
 #: ``4b3c6ae``) both named ``A28`` as their retiring packet; both owners have landed and A28 rewrites
@@ -441,7 +418,7 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
     {
         "region": ("RootResult", "_root"),
         "owner": "P-1",
-        "cover": ("tests/test_p1_payload.py", ("test_y16_p_floor_is_one_over_b_plus_one_sits_after_n_permutations_and_bounds_every_permutation_p", "test_y16_on_go1_at_the_default_b_p_omnibus_equals_p_floor_exactly", "test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key")),
+        "cover": ("tests/test_p1_payload.py", ("test_y16_p_floor_is_one_over_b_plus_one_sits_after_n_permutations_and_bounds_every_permutation_p", "test_y16_on_the_lattice_at_the_default_b_p_omnibus_equals_p_floor_exactly", "test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key")),
         "minted_at": "a626cd3",
         "blind_spot": (
             "The two excluded regions also hold RootResult.headline(), to_json()'s eighteen existing "
@@ -478,35 +455,34 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 # PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is the paired
 # test; check's gate here is the flat family's unpaired test, named.
-# PF4 (PF4.20): Go1 declares no event kind, so the default ``--fail-on worse`` is refused; ``higher``
-# is the same gate on a failure event (fail when the rate rose).
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh", "--fail-on", "higher")
-# No longer asserted: check's stdout changes shape; W20 asserts the facts it guarded (spec section 14).
-CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
+# PF4 (PF4.20): the lattice's tripped declares no event kind, so the default ``--fail-on worse`` is
+# refused; ``higher`` is the same gate on a failure event (fail when the rate rose).
+CHECK_ARGV = ("check", LATTICE_A, LATTICE_B, "--event", EVENT, "--method", "fisher_bh", "--fail-on", "higher")
+# CHECK_STDOUT_SHA256 removed (dead since check's stdout changed shape); W20 asserts the facts it guarded.
 CHECK_EXIT = 0
-#: W20. S21's E14 digests as S28's retrofit left them: the SVG through the CLI, the markdown and
-#: the light receipt through the tree-less builder.
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
-# Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
-# (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
-# PF4: no longer asserted; W20 asserts the facts they guarded (assert_e14_facts).
-E14_SHA256 = {
-    "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
-    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
-}
+#: W20. S21's E14 as S28's retrofit left it: the SVG through the CLI, the markdown and the light
+#: receipt through the tree-less builder. Its digests (``E14_SHA256``) were taken over the study pair
+#: and no longer asserted after PF4; the dead values are removed and W20 asserts the facts they
+#: guarded (assert_e14_facts).
+E14_ARGV = ("report", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--method", "fisher_bh")
 
-#: W9, W10, W18. Golden Go1 (S26 F13, S27 L7, S28 R18).
-GO1_MU_GROUPS = 20
-GO1_MU_REJECTED = 19
-GO1_MU_NINETEENTH_LABEL = "0.95"
-GO1_FISHER_LEAVES = 62
-GO1_MCNEMAR_LEAVES = 60
-GO1_PUSH_FAMILIES = (2, 2, 2, 2, 3, 7, 13, 13, 13, 9, 2, 0)
-GO1_PUSH_UNSORTED_FAMILY = "70.0"
-GO1_GRID_LEAVES = 60
+#: W9, W10, W18. The lattice's goldens (S26 F13, S27 L7, S28 R18), re-measured on the unchanged
+#: build: by ``gain`` at the offered override twelve groups, eleven rejected, ``1.1`` the eleventh and
+#: not rejected; the leaves under each scheme; by ``load`` the three families' counts, one with an
+#: unsorted ``q_within``; by grid, the flat 22.
+LATTICE_GAIN_GROUPS = 12
+LATTICE_GAIN_REJECTED = 11
+LATTICE_GAIN_ELEVENTH_LABEL = "1.1"
+LATTICE_FISHER_LEAVES = 24
+LATTICE_MCNEMAR_LEAVES = 28
+LATTICE_LOAD_FAMILIES = (10, 11, 1)
+LATTICE_LOAD_UNSORTED_FAMILY, LATTICE_LOAD_UNSORTED_REJECTED = "20.0", 11
+LATTICE_GRID_LEAVES = 22
+#: W4. The flat Fisher family's (lower, higher) on ``tripped``, the reference's, over one event (72
+#: tests) and over both outcomes (144 tests); the same literal either way on the lattice.
+LATTICE_TRIPPED_COUNTS = (22, 0)
 BOUND_AT_DEPTH_2 = "0.288"
 BOUND_AT_DEPTH_3 = "0.432"
 GOLDEN_PERMUTATIONS = 4000
@@ -746,13 +722,25 @@ def strict_loads(text: str) -> Any:
 # ---------- trees and pairs, cached ----------
 
 _TREES: dict[tuple[Any, ...], tuple[Any, Any]] = {}
+#: The session's shared lattice comparisons and trees (``conftest.SharedTrees``), set by the
+#: autouse fixture ``_shared_lattice_trees`` before any test or fixture of this module runs.
+_SHARED: list[Any] = []
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _shared_lattice_trees(lattice_trees: Any) -> None:
+    _SHARED[:] = [lattice_trees]
 
 
 def store_tree(root: Path, a: str, b: str, *, events: Sequence[str], method: str = "fisher_bh", **knobs: Any) -> tuple[Any, Any]:
     """``(multi, tree)`` on a stored pair the way the CLI reaches them: the frames read with
     ``meta=False``, ``multi_diff`` at the CLI's default ``q``, ``tree`` at M14's defaults unless
-    a knob is given."""
+    a knob is given. The lattice pair's come from the session's shared trees, computed once per
+    test session (``conftest.SharedTrees``, the same frames and the same calls)."""
     key = (str(root), a, b, tuple(events), method, tuple(sorted(knobs.items())))
+    if key not in _TREES and (Path(root), a, b) == (LATTICE_ROOT, LATTICE_A, LATTICE_B):
+        shared = _SHARED[0]
+        _TREES[key] = (shared.multi(tuple(events), method), shared.tree(tuple(events), method, **knobs))
     if key not in _TREES:
         store = Store(root)
         fa, fb = store.read(a, meta=False), store.read(b, meta=False)
@@ -820,7 +808,7 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
     for k, v in fixed.items():
         argv += ["--fix", f"{k}={json.dumps(v)}"]
     # PF3 (Q17, spec sections 4.4 and 14; R1): with no --method the default is now the paired test
-    # for runs that share a salt (Go1 among them); every pair here is checked against the oracle's
+    # for runs that share a salt (the lattice among them); every pair here is checked against the oracle's
     # own tree under ``method``, so the method is always named.
     argv += ["--method", method]
     for k, v in knobs.items():
@@ -948,7 +936,7 @@ def bound_lines(page: str) -> list[str]:
 def excised(page: str) -> str:
     """The page with the three new regions and LS's ``Summary`` (heading line to next ``<h2>``) and
     the bound line removed, by index and never by the tail (W4). After LS the projection is to a
-    page that no longer exists twice over: ``Run pair`` has moved, so ``GO1_PAGE_2_SHA256`` is
+    page that no longer exists twice over: ``Run pair`` has moved, so the ``/2`` page digest is
     re-minted off the built page by Phase C (LS retrofit, 2026-09-22 (local serve pass, Phase A))."""
     lines = page.splitlines()
     marks = h2_lines(page)
@@ -1492,16 +1480,16 @@ def quickstart(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str
     return root, a, b
 
 
-def go1_mu(method: str = "fisher_bh") -> dict[str, Any]:
-    """PF4 re-freeze (PF4.45): Go1's frozen grouping by ``mu`` is refused at the default 0.20 (and
-    ``push_pct_bw`` resolves); the knobs that keep it, the override read off the refusal."""
-    return admitting(GO1_ROOT, GO1_A, GO1_B, events=("fell",), key="mu", method=method)
+def lattice_gain(method: str = "fisher_bh") -> dict[str, Any]:
+    """PF4 re-freeze (PF4.45): the lattice's grouping by ``gain`` is refused at the default 0.20 (and
+    ``load`` resolves); the knobs that group by it, the override read off the refusal."""
+    return admitting(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), key=X, method=method)
 
 
 @pytest.fixture(scope="module")
-def go1() -> Pair:
-    # PF4 re-freeze (PF4.45): the override the mu refusal offers keeps the grouping this file pins.
-    return pair("go1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", **go1_mu())
+def lattice_pair() -> Pair:
+    # PF4 re-freeze (PF4.45): the override the gain refusal offers gives the grouping this file pins.
+    return pair("lattice", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, **lattice_gain())
 
 
 @pytest.fixture(scope="module")
@@ -1510,15 +1498,15 @@ def every_pair(synth_root: Path, quickstart: tuple[Path, str, str]) -> list[Pair
     BH and gate pairs need (section 6), beside the tree the API grows on the same frames."""
     qroot, qa, qb = quickstart
     # PF4 re-freeze (PF4.45): group limits from each cell's own baseline, unconditional, refuse the
-    # grouping these rows were frozen on (Go1's mu, the BH and gate pairs' grp, the multi-event
+    # grouping these rows were frozen on (the lattice's gain, the BH and gate pairs' grp, the multi-event
     # pair's task) at the default 0.20; each row passes the override its refusal offers.
     def by_grp(a: str, b: str) -> dict[str, Any]:
         return admitting(synth_root, a, b, events=("fail",), key="grp", method="mcnemar_bh", by="grp")
 
     return [
-        pair("go1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", **go1_mu()),
-        pair("go1-mcnemar", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", method="mcnemar_bh", **go1_mu("mcnemar_bh")),
-        pair("go1-two-events", GO1_ROOT, GO1_A, GO1_B, ("fell", "survived"), "push_pct_bw", "mu"),
+        pair("lattice", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, **lattice_gain()),
+        pair("lattice-mcnemar", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, method="mcnemar_bh", **lattice_gain("mcnemar_bh")),
+        pair("lattice-two-events", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT, OTHER), Y, X),
         pair("axes", synth_root, "axes-a", "axes-b", ("fail",), "temp", "task"),
         pair("identical", synth_root, "same-a", "same-b", ("fail",), "temp", "task"),
         pair("bh", synth_root, "bh-a", "bh-b", ("fail",), "grp", "cell", method="mcnemar_bh", **by_grp("bh-a", "bh-b")),
@@ -1564,32 +1552,43 @@ def titled_structure(p: Pair, title: str) -> dict[str, Any]:
 
 
 def page_as_ids_named_it(page: str, events: str) -> str:
-    """PF2 (spec section 4.3): on a Go1 page the default title names the runs by name in three
+    """PF2 (spec section 4.3): on a lattice page the default title names the runs by name in three
     places, the ``<title>``, the ``<h1>`` and the figure's title line, and nowhere else. Assert that,
     then put the title by id back so the frozen digest still guards everything else."""
-    named, by_id = f"{GO1_NAME_A} vs {GO1_NAME_B}: {events}", f"{GO1_A} vs {GO1_B}: {events}"
-    places = (f"<title>{named}</title>", f"<h1>{named}</h1>", f'font-size="13">{named}</text>')
-    assert [page.count(place) for place in places] == [1, 1, 1] and page.count(named) == 3, [page.count(place) for place in places]
+    named, by_id = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}", f"{LATTICE_A} vs {LATTICE_B}: {events}"
+    # The figure's title line wraps onto ``data-wrap`` lines when the figure is narrower than the
+    # title (the lattice's two-outcome page, six columns wide, does); it is one place, read whole.
+    titles = [m for m in FIGURE_TITLE_RE.finditer(page) if " ".join([m.group(2), *WRAPPED_RE.findall(m.group(3))]) == named]
+    assert len(titles) == 1, [m.group(0)[:200] for m in FIGURE_TITLE_RE.finditer(page)]
+    figure = titles[0]
+    page = page[: figure.start()] + f'<text {figure.group(1)}font-size="13">{by_id}</text>' + page[figure.end() :]
+    places = (f"<title>{named}</title>", f"<h1>{named}</h1>")
+    assert [page.count(place) for place in places] == [1, 1] and page.count(named) == 2, [page.count(place) for place in places]
     return page.replace(named, by_id)
+
+
+#: The figure's title line and the lines it wraps onto, in the page's SVG.
+FIGURE_TITLE_RE = re.compile(r'<text ([^>]*)font-size="13">([^<]*)</text>((?:\n<text [^>]*font-size="13" data-wrap="1">[^<]*</text>)*)')
+WRAPPED_RE = re.compile(r'data-wrap="1">([^<]*)</text>')
 
 
 # ---------- W1: literals ----------
 
 
 def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
-    """PF2 (spec section 4.3): ``serve --json`` on Go1 moves in two places only: ``run_name`` beside
+    """PF2 (spec section 4.3): ``serve --json`` on the lattice moves in two places only: ``run_name`` beside
     each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
     the figure's title line). First assert each is there as PF2 writes it and nowhere else the
     digest reads, then put the structure back as it was before names (no ``run_name``, the title by
     id) so the frozen digest still guards everything else."""
     arms = {}
-    for role, run_id, name in (("a", GO1_A, GO1_NAME_A), ("b", GO1_B, GO1_NAME_B)):
+    for role, run_id, name in (("a", LATTICE_A, LATTICE_NAME_A), ("b", LATTICE_B, LATTICE_NAME_B)):
         arm = structure["pair"][role]
         keys = list(arm)
         assert (arm["run_id"], arm.get("run_name")) == (run_id, name), arm
         assert keys.index("run_name") == keys.index("run_id") + 1, keys
         arms[role] = {k: v for k, v in arm.items() if k != "run_name"}
-    named, by_id = f"{GO1_NAME_A} vs {GO1_NAME_B}: {events}", f"{GO1_A} vs {GO1_B}: {events}"
+    named, by_id = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}", f"{LATTICE_A} vs {LATTICE_B}: {events}"
     assert structure["view"]["title"] == named, structure["view"]["title"]
     line = f'font-size="13">{named}</text>'
     assert structure["heatmap_svg"].count(line) == 1, structure["heatmap_svg"][:600]
@@ -1634,19 +1633,19 @@ def page_as_0_0_1_wrote_it(page: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", page)
 
 
-def test_w1_the_schema_the_thirteen_keys_and_the_signatures_are_the_literals(go1: Pair) -> None:
+def test_w1_the_schema_the_thirteen_keys_and_the_signatures_are_the_literals(lattice_pair: Pair) -> None:
     """``viewer.SCHEMA``; the thirteen keys in order (P-1's ``intervals`` after ``panels``) on ``--json`` and on ``build_structure``'s
     return; ``build_structure`` takes ``tree`` as a required keyword between ``multi`` and
     ``manifest_a`` and its other parameters are unchanged; ``render_html`` and ``serve_page``
     keep their signatures."""
     m = viewer()
     assert m.SCHEMA == SCHEMA
-    assert go1.structure["schema"] == SCHEMA and tuple(go1.structure) == TOP_LEVEL_KEYS, tuple(go1.structure)
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
+    assert lattice_pair.structure["schema"] == SCHEMA and tuple(lattice_pair.structure) == TOP_LEVEL_KEYS, tuple(lattice_pair.structure)
+    store = Store(LATTICE_ROOT)
+    ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
     built = m.build_structure(
-        go1.report, go1.multi, tree=go1.tree, manifest_a=ma, manifest_b=mb, rows_a=store.count(GO1_A), rows_b=store.count(GO1_B),
-        tally_a=store.tally(GO1_A), tally_b=store.tally(GO1_B), store_root=str(GO1_ROOT),
+        lattice_pair.report, lattice_pair.multi, tree=lattice_pair.tree, manifest_a=ma, manifest_b=mb, rows_a=store.count(LATTICE_A), rows_b=store.count(LATTICE_B),
+        tally_a=store.tally(LATTICE_A), tally_b=store.tally(LATTICE_B), store_root=str(LATTICE_ROOT),
     )
     assert tuple(built) == TOP_LEVEL_KEYS and built["schema"] == SCHEMA
     params = tuple((p.name, p.kind.name, p.default is inspect.Parameter.empty, p.annotation) for p in inspect.signature(m.build_structure).parameters.values())
@@ -1751,16 +1750,16 @@ def test_w3_text_sits_on_every_object_the_kind_table_names_and_nowhere_else(ever
         assert p.structure["tree"]["root"]["text"]["location"].keys() == set(p.tree.root.events), p.name
 
 
-def test_w3_a_non_finite_tree_float_is_null_with_fmts_spelling_kept_in_text(go1: Pair) -> None:
+def test_w3_a_non_finite_tree_float_is_null_with_fmts_spelling_kept_in_text(lattice_pair: Pair) -> None:
     """No tree float is non-finite on any fixture, so the rule is asserted by putting ``nan`` into
-    a copy of Go1's ``RootResult.location`` before assembly; the dump still parses strictly."""
-    event = go1.tree.root.events[0]
-    poisoned = replace(go1.tree, root=replace(go1.tree.root, location={**go1.tree.root.location, event: math.nan}))
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
+    a copy of the lattice's ``RootResult.location`` before assembly; the dump still parses strictly."""
+    event = lattice_pair.tree.root.events[0]
+    poisoned = replace(lattice_pair.tree, root=replace(lattice_pair.tree.root, location={**lattice_pair.tree.root.location, event: math.nan}))
+    store = Store(LATTICE_ROOT)
+    ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
     structure = viewer().build_structure(
-        go1.report, go1.multi, tree=poisoned, manifest_a=ma, manifest_b=mb, rows_a=store.count(GO1_A), rows_b=store.count(GO1_B),
-        tally_a=store.tally(GO1_A), tally_b=store.tally(GO1_B), store_root=str(GO1_ROOT),
+        lattice_pair.report, lattice_pair.multi, tree=poisoned, manifest_a=ma, manifest_b=mb, rows_a=store.count(LATTICE_A), rows_b=store.count(LATTICE_B),
+        tally_a=store.tally(LATTICE_A), tally_b=store.tally(LATTICE_B), store_root=str(LATTICE_ROOT),
     )
     root = structure["tree"]["root"]
     assert root["location"][event] is None
@@ -1771,7 +1770,7 @@ def test_w3_a_non_finite_tree_float_is_null_with_fmts_spelling_kept_in_text(go1:
 # ---------- W4 and W17: the old regions and the old pins ----------
 
 
-# ---------- PF4: the facts the Go1 page and tree-less digests guarded ----------
+# ---------- PF4: the facts the study pair's page and tree-less digests guarded ----------
 
 #: PF4 (PF4.20): a judgement word. No fixture here declares an event kind, so no reader-facing
 #: string may carry one.
@@ -1803,6 +1802,18 @@ def assert_cell_facts(name: str, event: str, cell: Mapping[str, Any], record: Ma
 
 def library_records(p: Pair, event: str) -> dict[str, dict[str, Any]]:
     return {str(r["config_hash"]): r for r in p.multi.by_event[event].cells.to_dict(orient="records")}
+
+
+def reference_tripped_counts(events: Sequence[str]) -> tuple[int, int]:
+    """``tripped``'s (lower, higher) under the flat Fisher family over ``events``, from the lattice's
+    references: each outcome's scipy Fisher p, one BH family over all of them (``lattice.bh``), a
+    condition flagged below q in the direction of its delta."""
+    import numpy as np
+
+    rows = [(event, r) for event in events for r in lattice.fisher(event).values()]
+    qs = lattice.bh(np.array([r["p"] for _, r in rows]))
+    flagged = [r["delta"] for (event, r), q in zip(rows, qs, strict=True) if event == EVENT and q < Q]
+    return sum(d < 0 for d in flagged), sum(d > 0 for d in flagged)
 
 
 def assert_tree_less_facts(p: Pair, structure: Mapping[str, Any]) -> None:
@@ -1841,24 +1852,24 @@ def assert_tree_less_facts(p: Pair, structure: Mapping[str, Any]) -> None:
         assert not JUDGEMENT_RE.search(text), (p.name, text[:120])
 
 
-def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_go1(every_pair: list[Pair]) -> None:
+def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_the_lattice(every_pair: list[Pair]) -> None:
     """The ``/3`` page with the three new regions (by their ``<h2>`` lines) and the bound line
-    excised, ``str(GO1_ROOT)`` normalised, digests to the ``/2`` page minted on the bare tree."""
-    # PF4 (PF4.3, PF4.11, PF4.15, PF4.20): GO1_PAGE_2_SHA256 is no longer asserted. Outside the
+    excised, ``str(LATTICE_ROOT)`` normalised, digests to the ``/2`` page minted on the bare tree."""
+    # PF4 (PF4.3, PF4.11, PF4.15, PF4.20): the ``/2`` page digest is no longer asserted. Outside the
     # excised regions the page now says lower and higher, carries the shares and the detection-limit
     # notes in its cell index and worst-cells tables, and names no store path. The facts the digest
-    # guarded are asserted instead, on both Go1 pairs: the headings left after the excision, the
-    # headline's counts (Go1's fell: 60 fell and none rose, the golden count every surface carried
-    # as "60 safer, 0 worse" before PF4), every condition of the cell index against the library's
+    # guarded are asserted instead, on both lattice pairs: the headings left after the excision, the
+    # headline's counts (the lattice's tripped: lower in 22 conditions and higher in none, the Fisher reference's count
+    # over one event and over both outcomes), every condition of the cell index against the library's
     # frame, and the worst-cells tables row by row.
     pairs = by_name(every_pair)
-    for name in GO1_PAGE_2_SHA256:
+    for name in PAGE_2_PAIRS:
         p = pairs[name]
         # PF2 (spec section 4.3): the title by name is asserted in its three places, then put back by id.
         page = page_as_ids_named_it(p.page, ", ".join(p.events))
         page = excised(page_as_0_0_1_wrote_it(page))
         assert h2_sequence(page) == [h for h in H2_SEQUENCE if h not in EXCISED_REGIONS], name
-        assert "Store root" not in page and str(GO1_ROOT) not in page and not JUDGEMENT_RE.search(page), name
+        assert "Store root" not in page and str(LATTICE_ROOT) not in page and not JUDGEMENT_RE.search(page), name
         headline = str(p.structure["headline"]).splitlines()
         assert p_lines(region_lines(page, "Result")[0]) == headline, name
         # PF4 re-freeze (ruling on a kindless event, reading R35): a kindless event's result carries
@@ -1867,7 +1878,7 @@ def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_go
             ev = p.multi.by_event[event]
             assert (ev.n_safer, ev.n_worse) == (None, None), (name, event)
             assert f"{event}: {ev.n_lower} lower, {ev.n_higher} higher" in headline[0], (name, headline[0])
-        assert (p.multi.by_event["fell"].n_lower, p.multi.by_event["fell"].n_higher) == (60, 0), name
+        assert (p.multi.by_event[EVENT].n_lower, p.multi.by_event[EVENT].n_higher) == reference_tripped_counts(p.events) == LATTICE_TRIPPED_COUNTS, name
         index = json.loads(CELL_INDEX_RE.search(p.page).group(1))  # type: ignore[union-attr]
         expected = {(event, h): r for event in p.events for h, r in library_records(p, event).items()}
         assert {(key.rsplit(" ", 1)[0], entry["config_hash"]) for key, entry in index.items()} == set(expected), name
@@ -1893,7 +1904,7 @@ def test_w4_the_excised_page_and_the_tree_less_keys_do_not_read_the_tree(every_p
     """On every pair the excised page is identical between the default tree and a second tree of
     the same pair (``--seed 1``), and the six tree-less keys are equal between the two structures."""
     for p in every_pair:
-        if p.name in ("go1-mcnemar", "quickstart", "quickstart-2"):
+        if p.name in ("lattice-mcnemar", "quickstart", "quickstart-2"):
             continue
         again = pair(f"{p.name}-seed1", p.root, p.a, p.b, p.events, p.x, p.y, fixed=p.fixed, method=p.method, **{**p.knobs, "seed": 1})
         assert excised(again.page) == excised(p.page), p.name
@@ -1903,12 +1914,12 @@ def test_w4_the_excised_page_and_the_tree_less_keys_do_not_read_the_tree(every_p
 
 
 def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted_on_the_bare_tree(every_pair: list[Pair]) -> None:
-    """S25's O23 as narrowed: ``serve --json`` on Go1 with ``tree`` removed and ``schema`` set to
+    """S25's O23 as narrowed: ``serve --json`` on the lattice with ``tree`` removed and ``schema`` set to
     ``/2``, ``store_root`` normalised, digests to S25's literal. And on every pair the six keys
     the tree does not touch digest to the values minted at f4e2845 (quickstart excluded: its run
     ids are minted per run)."""
-    code, out, err, calls = run_serve(["--store", str(GO1_ROOT), *SERVE_ARGV])
-    # Go1's runs share a salt, so the unpaired default adds one "note: " line (spec section 5.4).
+    code, out, err, calls = run_serve(["--store", str(LATTICE_ROOT), *SERVE_ARGV])
+    # The lattice's runs share a salt, so the unpaired default adds one "note: " line (spec section 5.4).
     assert code == 0 and not [line for line in err.splitlines() if not line.startswith("note: ")] and calls == [], err
     structure = strict_loads(out)
     # serve --json leads with the verdict and its sentence; the page structure follows unchanged.
@@ -1923,11 +1934,11 @@ def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted
     # pair the digests named.
     # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
     # then put back as before names.
-    structure = structure_as_ids_named_it(structure, "fell")
+    structure = structure_as_ids_named_it(structure, EVENT)
     pairs = by_name(every_pair)
     structure_as_0_0_1_wrote_it(structure)
-    assert_tree_less_facts(pairs["go1"], structure)
-    for name in TREE_LESS_KEYS_SHA256:
+    assert_tree_less_facts(pairs["lattice"], structure)
+    for name in TREE_LESS_KEYS_PAIRS:
         # PF2 (spec section 4.3): serve's default title names the runs by name.
         assert pairs[name].structure["view"]["title"] == named_title(pairs[name]), name
         structure_as_0_0_1_wrote_it(pairs[name].structure)
@@ -1981,8 +1992,8 @@ def fault_null_line(p: Pair) -> str:
 
 def test_w6_the_reasons_read_in_m14s_precedence_on_the_identical_bh_and_grid_fixtures(every_pair: list[Pair], synth_root: Path) -> None:
     """Identical pair at ``--depth 3``: both untested sentences read the root; at ``--depth 2``:
-    *Cells* reads the ``depth`` form; Go1 at ``--depth 2``: ``depth``; BH pair by ``grp`` under
-    McNemar: ``no group rejected``; ``--by grid`` on Go1: the one-group sentence and a family
+    *Cells* reads the ``depth`` form; the lattice at ``--depth 2``: ``depth``; BH pair by ``grp`` under
+    McNemar: ``no group rejected``; ``--by grid`` on the lattice: the one-group sentence and a family
     ``whole_grid=all``."""
     pairs = by_name(every_pair)
     p = pairs["identical"]
@@ -1993,13 +2004,13 @@ def test_w6_the_reasons_read_in_m14s_precedence_on_the_identical_bh_and_grid_fix
     assert p.tree.leaves.reason == "depth" and not p.tree.root.rejects
     head = cells_head(p)
     assert "not tested" in head and "depth" in head and has(head, "2") and "root" not in head, head
-    p = pair("go1-depth2", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", depth=2)
+    p = pair("lattice-depth2", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, depth=2)
     assert p.tree.leaves.reason == "depth" and "depth" in cells_head(p) and has(cells_head(p), "2"), cells_head(p)
     p = pairs["bh"]
     assert p.tree.leaves.reason == "no_group_rejected" and "no group rejected" in cells_head(p), cells_head(p)
     p = pairs["gate"]
     assert p.tree.leaves.reason == "no_group_rejected" and "no group rejected" in cells_head(p), cells_head(p)
-    p = pair("go1-grid", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", by="grid")
+    p = pair("lattice-grid", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, by="grid")
     assert p.tree.fault_lines.reason == "one_group"
     assert "not tested" in fault_null_line(p) and "one group is the whole family restated" in fault_null_line(p), fault_null_line(p)
     from poisson_prove.tree import WHOLE_GRID_KEY, WHOLE_GRID_LABEL
@@ -2074,8 +2085,8 @@ def test_w8_the_omnibus_prints_the_headline_verbatim_the_method_line_one_row_per
         assert_omnibus(p)
     pairs = by_name(every_pair)
     assert not pairs["identical"].tree.root.rejects and "is not rejected" in lines_of(region(pairs["identical"], "Omnibus"))[0]
-    first = lines_of(region(pairs["go1"], "Omnibus"))[0]
-    assert pairs["go1"].tree.root.rejects and "is rejected" in first and f'"{ROOT_NULL}"' in first
+    first = lines_of(region(pairs["lattice"], "Omnibus"))[0]
+    assert pairs["lattice"].tree.root.rejects and "is rejected" in first and f'"{ROOT_NULL}"' in first
 
 
 # ---------- W9: the fault-lines region ----------
@@ -2137,13 +2148,14 @@ def test_w9_the_fault_lines_print_the_head_the_chain_the_null_and_one_row_per_gr
         assert_fault_lines(p)
 
 
-def test_w9_on_go1_by_mu_the_row_for_0_95_is_the_nineteenth_the_one_value_pair_has_two_refusal_lines_and_by_kind_names_trace(every_pair: list[Pair]) -> None:
+def test_w9_on_the_lattice_by_gain_the_row_for_1_1_is_the_eleventh_the_one_value_pair_has_two_refusal_lines_and_by_kind_names_trace(every_pair: list[Pair]) -> None:
     pairs = by_name(every_pair)
-    p = pairs["go1"]
+    p = pairs["lattice"]
     header, rows = tables_of(region(p, "Fault lines"))[0]
-    assert p.tree.grouping.key == "mu" and len(rows) == GO1_MU_GROUPS
-    assert rows[18][0] == GO1_MU_NINETEENTH_LABEL and rows[18][-1] == "not rejected", rows[18]
-    assert sum(row[-1] == "rejected" for row in rows) == GO1_MU_REJECTED
+    assert p.tree.grouping.key == X and len(rows) == LATTICE_GAIN_GROUPS
+    assert rows[10][0] == LATTICE_GAIN_ELEVENTH_LABEL and rows[10][-1] == "not rejected", rows[10]
+    assert [group.label for group in p.tree.fault_lines.groups if not group.rejects] == [LATTICE_GAIN_ELEVENTH_LABEL]
+    assert sum(row[-1] == "rejected" for row in rows) == LATTICE_GAIN_REJECTED
     p = pairs["identical"]
     header, rows = tables_of(region(p, "Fault lines"))[0]
     assert not p.tree.fault_lines.tested and len(header) == 6 and all(len(row) == 6 for row in rows), header
@@ -2158,7 +2170,7 @@ def test_w9_on_go1_by_mu_the_row_for_0_95_is_the_nineteenth_the_one_value_pair_h
     # PF4 (PF4.6): no trace grouping is offered any more, so --by kind is an unknown grouping:
     # serve refuses it (exit 1, one error line naming it, nothing on stdout) before anything binds,
     # where it used to draw a page whose fault lines named the trace rung's refusal.
-    code, out, err, calls = run_serve(serve_argv(GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", {}, "fisher_bh", {"by": "kind"}))
+    code, out, err, calls = run_serve(serve_argv(LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, {}, "fisher_bh", {"by": "kind"}))
     errors = [line for line in err.splitlines() if line.startswith("error: ")]
     assert code == 1 and out == "" and calls == [], (code, out[:80], err[-400:], calls)
     assert len(errors) == 1 and re.search(r"\bkind\b", errors[0]), err
@@ -2229,22 +2241,22 @@ def test_w10_the_cells_region_prints_the_head_the_meaning_sentence_one_family_li
         assert_cells(p)
 
 
-def test_w10_the_axes_pair_prints_0_rejected_and_no_table_go1_by_push_keeps_cells_order_the_multi_event_pair_two_fail_rows_and_every_config_key(every_pair: list[Pair]) -> None:
+def test_w10_the_axes_pair_prints_0_rejected_and_no_table_the_lattice_by_load_keeps_cells_order_the_multi_event_pair_two_fail_rows_and_every_config_key(every_pair: list[Pair]) -> None:
     pairs = by_name(every_pair)
     p = pairs["axes"]
     assert p.tree.leaves.tested and len(p.tree.leaves.families) == 1 and p.tree.leaves.n_rejected == 0
     its = region(p, "Cells")
     assert tables_of(its) == [] and len(lines_of(its)) == 3, lines_of(its)
     assert has(lines_of(its)[2], "0") and "rejected" in lines_of(its)[2]
-    p = pair("go1-push", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", by="push_pct_bw")
+    p = pair("lattice-push", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, by=Y)
     assert_cells(p)
     families = {f["label"]: f for f in p.structure["tree"]["leaves"]["families"]}
-    seventy = families[GO1_PUSH_UNSORTED_FAMILY]
-    rejected = [c for c in seventy["cells"] if c["rejects"]]
-    assert len(rejected) == 13
+    unsorted = families[LATTICE_LOAD_UNSORTED_FAMILY]
+    rejected = [c for c in unsorted["cells"] if c["rejects"]]
+    assert len(rejected) == LATTICE_LOAD_UNSORTED_REJECTED
     q_tokens = [c["text"]["q_within"] for c in rejected]
     assert q_tokens != sorted(q_tokens, key=float), q_tokens
-    index = [f for f in p.structure["tree"]["leaves"]["families"] if f["n_rejected"] > 0].index(seventy)
+    index = [f for f in p.structure["tree"]["leaves"]["families"] if f["n_rejected"] > 0].index(unsorted)
     header, rows = tables_of(region(p, "Cells"))[index]
     assert [row[3] for row in rows] == q_tokens, rows
     p = pairs["multi-event"]
@@ -2305,22 +2317,22 @@ def test_w11_serve_help_carries_diffs_help_text_for_each_of_the_five_flags() -> 
 # ---------- W12: a structure never lacks the tree ----------
 
 
-def test_w12_build_structure_without_tree_is_a_type_error_and_render_html_refuses_a_structure_without_one(go1: Pair) -> None:
+def test_w12_build_structure_without_tree_is_a_type_error_and_render_html_refuses_a_structure_without_one(lattice_pair: Pair) -> None:
     m = viewer()
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
+    store = Store(LATTICE_ROOT)
+    ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
     with pytest.raises(TypeError):
         m.build_structure(
-            go1.report, go1.multi, manifest_a=ma, manifest_b=mb, rows_a=store.count(GO1_A), rows_b=store.count(GO1_B),
-            tally_a=store.tally(GO1_A), tally_b=store.tally(GO1_B), store_root=str(GO1_ROOT),
+            lattice_pair.report, lattice_pair.multi, manifest_a=ma, manifest_b=mb, rows_a=store.count(LATTICE_A), rows_b=store.count(LATTICE_B),
+            tally_a=store.tally(LATTICE_A), tally_b=store.tally(LATTICE_B), store_root=str(LATTICE_ROOT),
         )
     for retired_schema in RETIRED_SCHEMAS:
-        retired = {k: v for k, v in json.loads(json.dumps(go1.structure, allow_nan=False)).items() if k != "tree"}
+        retired = {k: v for k, v in json.loads(json.dumps(lattice_pair.structure, allow_nan=False)).items() if k != "tree"}
         retired["schema"] = retired_schema
         with pytest.raises(m.ViewerError) as info:
             m.render_html(retired)
         assert retired_schema in str(info.value) and SCHEMA in str(info.value), retired_schema
-    headless = {k: v for k, v in json.loads(json.dumps(go1.structure, allow_nan=False)).items() if k != "tree"}
+    headless = {k: v for k, v in json.loads(json.dumps(lattice_pair.structure, allow_nan=False)).items() if k != "tree"}
     with pytest.raises(m.ViewerError) as info:
         m.render_html(headless)
     assert "tree" in str(info.value)
@@ -2340,26 +2352,26 @@ def test_w12_every_pairs_serve_json_carries_the_tree_with_no_flag(every_pair: li
 SEED_MAY_MOVE = ("tree.root.seed", "tree.root.p_location", "tree.root.p_dispersion", "tree.root.p_omnibus", "tree.root.rejects", "tree.root.headline", "tree.root.text", "tree.fault_lines", "tree.leaves")
 
 
-def test_w13_two_builds_are_equal_two_renders_identical_and_a_seed_moves_only_what_l19_and_f27_allow(go1: Pair) -> None:
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
-    kwargs = dict(manifest_a=ma, manifest_b=mb, rows_a=store.count(GO1_A), rows_b=store.count(GO1_B), tally_a=store.tally(GO1_A), tally_b=store.tally(GO1_B), store_root=str(GO1_ROOT))
+def test_w13_two_builds_are_equal_two_renders_identical_and_a_seed_moves_only_what_l19_and_f27_allow(lattice_pair: Pair) -> None:
+    store = Store(LATTICE_ROOT)
+    ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
+    kwargs = dict(manifest_a=ma, manifest_b=mb, rows_a=store.count(LATTICE_A), rows_b=store.count(LATTICE_B), tally_a=store.tally(LATTICE_A), tally_b=store.tally(LATTICE_B), store_root=str(LATTICE_ROOT))
     # PF2 (spec section 4.3): serve's page carries the default title by name, so the library builds
     # under that title (``Pair.report`` titles by id) before its render is compared with the page.
-    spec = ReportSpec(title=named_title(go1), x_axis=go1.x, y_axis=go1.y, fixed=go1.fixed)
-    report = build_multi_report(go1.multi, spec, manifests=(ma, mb), observations=(counts_of(store, GO1_A), counts_of(store, GO1_B)))
-    first = viewer().build_structure(report, go1.multi, tree=go1.tree, **kwargs)
-    second = viewer().build_structure(report, go1.multi, tree=go1.tree, **kwargs)
+    spec = ReportSpec(title=named_title(lattice_pair), x_axis=lattice_pair.x, y_axis=lattice_pair.y, fixed=lattice_pair.fixed)
+    report = build_multi_report(lattice_pair.multi, spec, manifests=(ma, mb), observations=(counts_of(store, LATTICE_A), counts_of(store, LATTICE_B)))
+    first = viewer().build_structure(report, lattice_pair.multi, tree=lattice_pair.tree, **kwargs)
+    second = viewer().build_structure(report, lattice_pair.multi, tree=lattice_pair.tree, **kwargs)
     assert first == second
-    assert viewer().render_html(first) == viewer().render_html(second) == go1.page
-    # PF4 re-freeze (PF4.45): the seed-1 pair keeps the go1 fixture's override, so only the seed differs.
-    seeded = pair("go1-seed1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", **go1_mu(), seed=1)
-    moved = diff_paths(seeded.structure, go1.structure)
-    assert moved, "seed 1 moved nothing on Go1"
+    assert viewer().render_html(first) == viewer().render_html(second) == lattice_pair.page
+    # PF4 re-freeze (PF4.45): the seed-1 pair keeps the lattice_pair fixture's override, so only the seed differs.
+    seeded = pair("lattice-seed1", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, **lattice_gain(), seed=1)
+    moved = diff_paths(seeded.structure, lattice_pair.structure)
+    assert moved, "seed 1 moved nothing on the lattice"
     stray = [path for path in moved if not any(path == prefix or path.startswith(prefix + ".") for prefix in SEED_MAY_MOVE)]
     assert stray == [], stray[:10]
-    assert seeded.structure["tree"]["grouping"] == go1.structure["tree"]["grouping"]
-    assert seeded.structure["tree"]["bound"] == go1.structure["tree"]["bound"]
+    assert seeded.structure["tree"]["grouping"] == lattice_pair.structure["tree"]["grouping"]
+    assert seeded.structure["tree"]["bound"] == lattice_pair.structure["tree"]["bound"]
 
 
 # ---------- W14: hostile values are escaped ----------
@@ -2419,12 +2431,12 @@ def test_w14_a_hostile_value_in_a_group_label_renders_as_text_on_a_pair_whose_gr
 # ---------- W15: strict JSON ----------
 
 
-def test_w15_the_dump_parses_strictly_with_the_tree_and_every_serialiser_passes_allow_nan_false(go1: Pair) -> None:
-    code, out, err, calls = run_serve(["--store", str(GO1_ROOT), *SERVE_ARGV])
+def test_w15_the_dump_parses_strictly_with_the_tree_and_every_serialiser_passes_allow_nan_false(lattice_pair: Pair) -> None:
+    code, out, err, calls = run_serve(["--store", str(LATTICE_ROOT), *SERVE_ARGV])
     assert code == 0 and calls == [], err
     parsed_out = strict_loads(out)
     assert "tree" in parsed_out and out.startswith('{\n  "schema": ')
-    strict_loads(json.dumps(go1.structure, allow_nan=False))
+    strict_loads(json.dumps(lattice_pair.structure, allow_nan=False))
     viewer_tree = parsed(VIEWER_SOURCE)
     cli_tree = parsed(CLI_SOURCE)
     calls_ = json_dumps_calls([viewer_tree]) + json_dumps_calls(closure(cli_tree, "_cmd_serve"))
@@ -2437,21 +2449,21 @@ def test_w15_the_dump_parses_strictly_with_the_tree_and_every_serialiser_passes_
 # ---------- W16: a tree from another pair is refused ----------
 
 
-def test_w16_a_tree_from_another_pair_is_refused_with_viewer_error_naming_the_events_or_the_cell_count(go1: Pair, synth_root: Path) -> None:
+def test_w16_a_tree_from_another_pair_is_refused_with_viewer_error_naming_the_events_or_the_cell_count(lattice_pair: Pair, synth_root: Path) -> None:
     m = viewer()
     _, axes_tree = store_tree(synth_root, "axes-a", "axes-b", events=("fail",))
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
-    kwargs = dict(manifest_a=ma, manifest_b=mb, rows_a=store.count(GO1_A), rows_b=store.count(GO1_B), tally_a=store.tally(GO1_A), tally_b=store.tally(GO1_B), store_root=str(GO1_ROOT))
+    store = Store(LATTICE_ROOT)
+    ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
+    kwargs = dict(manifest_a=ma, manifest_b=mb, rows_a=store.count(LATTICE_A), rows_b=store.count(LATTICE_B), tally_a=store.tally(LATTICE_A), tally_b=store.tally(LATTICE_B), store_root=str(LATTICE_ROOT))
     with pytest.raises(m.ViewerError) as info:
-        m.build_structure(go1.report, go1.multi, tree=axes_tree, **kwargs)
+        m.build_structure(lattice_pair.report, lattice_pair.multi, tree=axes_tree, **kwargs)
     message = str(info.value).lower()
     assert "event" in message or "cell" in message, message
     # A28: re-grown under another seed rather than another method -- section 10 Q5 (b) makes a
     # mcnemar_bh tree beside a fisher_bh diff a refusal, and the point here is that the same events
     # and the same cells are accepted whatever knob the digest ignores.
-    _, same_events = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), seed=7)
-    assert m.build_structure(go1.report, go1.multi, tree=same_events, **kwargs)["tree"]["root"]["seed"] == 7
+    _, same_events = store_tree(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), seed=7)
+    assert m.build_structure(lattice_pair.report, lattice_pair.multi, tree=same_events, **kwargs)["tree"]["root"]["seed"] == 7
 
 
 def test_w16_a_tree_whose_cells_are_another_pairs_is_refused_at_the_same_arity_and_the_message_names_a_cell(every_pair: list[Pair]) -> None:
@@ -2476,30 +2488,30 @@ def test_w16_a_tree_whose_cells_are_another_pairs_is_refused_at_the_same_arity_a
     assert m.build_structure(vocab.report, vocab.multi, tree=vocab.tree, **kwargs)["tree"]["grouping"]["labels"] == ["all"]
 
 
-# ---------- W18: golden, Go1 ----------
+# ---------- W18: golden, the lattice ----------
 
 
-def test_w18_go1_renders_twenty_group_rows_nineteen_rejected_nineteen_families_and_the_golden_leaf_counts(every_pair: list[Pair]) -> None:
+def test_w18_the_lattice_renders_twelve_group_rows_eleven_rejected_eleven_families_and_the_golden_leaf_counts(every_pair: list[Pair]) -> None:
     pairs = by_name(every_pair)
-    fisher = pairs["go1"]
+    fisher = pairs["lattice"]
     header, rows = tables_of(region(fisher, "Fault lines"))[0]
-    assert len(rows) == GO1_MU_GROUPS and sum(row[-1] == "rejected" for row in rows) == GO1_MU_REJECTED
+    assert len(rows) == LATTICE_GAIN_GROUPS and sum(row[-1] == "rejected" for row in rows) == LATTICE_GAIN_REJECTED
     cells = region(fisher, "Cells")
-    assert len(lines_of(cells)) == 2 + GO1_MU_REJECTED
-    assert sum(len(rows) for _, rows in tables_of(cells)) == GO1_FISHER_LEAVES
+    assert len(lines_of(cells)) == 2 + LATTICE_GAIN_REJECTED
+    assert sum(len(rows) for _, rows in tables_of(cells)) == LATTICE_FISHER_LEAVES
     assert has(bound_lines(fisher.page)[0], BOUND_AT_DEPTH_3)
-    mcnemar = pairs["go1-mcnemar"]
+    mcnemar = pairs["lattice-mcnemar"]
     assert mcnemar.tree.root.scheme == "pair_swap"
-    assert sum(len(rows) for _, rows in tables_of(region(mcnemar, "Cells"))) == GO1_MCNEMAR_LEAVES
-    grid = pair("go1-grid", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", by="grid")
+    assert sum(len(rows) for _, rows in tables_of(region(mcnemar, "Cells"))) == LATTICE_MCNEMAR_LEAVES
+    grid = pair("lattice-grid", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, by="grid")
     cells = region(grid, "Cells")
     assert len(lines_of(cells)) == 3 and "whole_grid=all" in lines_of(cells)[2]
-    assert sum(len(rows) for _, rows in tables_of(cells)) == GO1_GRID_LEAVES
+    assert sum(len(rows) for _, rows in tables_of(cells)) == LATTICE_GRID_LEAVES
     assert has(bound_lines(grid.page)[0], BOUND_AT_DEPTH_2)
-    push = pair("go1-push", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", by="push_pct_bw")
+    push = pair("lattice-push", LATTICE_ROOT, LATTICE_A, LATTICE_B, (EVENT,), X, Y, by=Y)
     family_lines = lines_of(region(push, "Cells"))[2:]
     counts = tuple(int(re.search(r"(\d+) rejected", line).group(1)) for line in family_lines)  # type: ignore[union-attr]
-    assert counts == GO1_PUSH_FAMILIES and tuple(f.n_rejected for f in push.tree.leaves.families) == GO1_PUSH_FAMILIES, counts
+    assert counts == LATTICE_LOAD_FAMILIES and tuple(f.n_rejected for f in push.tree.leaves.families) == LATTICE_LOAD_FAMILIES, counts
 
 
 # ---------- W19: vocabulary ----------
@@ -2568,19 +2580,19 @@ def md_cells(line: str) -> list[str]:
 def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
     """S21's E14 as S28's retrofit left it -- the tree-less builder's markdown, SVG and light
     receipt -- read as facts instead of digests (PF4.3, PF4.15, PF4.20; the same facts S28's R2
-    asserts, restated here). Go1 declares no event kind, so the caption counts falls and rises, the
+    asserts, restated here). The lattice declares no event kind, so the caption counts falls and rises, the
     honesty line names the count of rises, the verdict column is each condition's direction and no
     rendering says safer or worse; each worst-cells row carries its condition's numbers in M7's
     forms and prints no number where the condition has no detection limit; the SVG draws one cell
     per condition and one glyph per significant one."""
-    spec = ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw")
+    spec = ReportSpec(title=f"{LATTICE_A} vs {LATTICE_B}: {EVENT}", x_axis=X, y_axis=Y)
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
-    ev = multi.by_event["fell"]
+    ev = multi.by_event[EVENT]
     # PF4 re-freeze (ruling on a kindless event, reading R35): n_safer and n_worse are None on a
     # kindless event; the falls and rises are n_lower and n_higher.
     assert (ev.n_safer, ev.n_worse) == (None, None)
-    caption = f"fell: {ev.n_lower} lower, {ev.n_higher} higher"
+    caption = f"{EVENT}: {ev.n_lower} lower, {ev.n_higher} higher"
     md = as_0_0_1_wrote_it(report.to_markdown())
     html = html_mod.unescape(as_0_0_1_wrote_it(receipt.to_html()))
     svg = report.to_svg()
@@ -2600,10 +2612,10 @@ def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
         elif table:
             break
     header, body = table[0], table[2:]
-    assert header[:2] == ["mu", "push_pct_bw"] and len(body) == spec.top_n, (header, len(body))
+    assert header[:2] == [X, Y] and len(body) == spec.top_n, (header, len(body))
     records = ev.cells.to_dict(orient="records")
     for row in body:
-        [r] = [r for r in records if math.isclose(float(r["config"]["mu"]), float(row[0])) and math.isclose(float(r["config"]["push_pct_bw"]), float(row[1]))]
+        [r] = [r for r in records if math.isclose(float(r["config"][X]), float(row[0])) and math.isclose(float(r["config"][Y]), float(row[1]))]
         assert row[2] == f"{r['n_a']}/{r['n_b']}", row
         assert row[3:8] == [fmt(r["rate_a"], "pp1"), fmt(r["rate_b"], "pp1"), fmt(r["delta"], "pp1"), fmt(r["p"], "sig3"), fmt(r["q"], "sig3")], row
         assert row[8] == DIRECTION_OF[str(r["verdict"])], row
@@ -2625,24 +2637,25 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
         assert cover.exists(), record["cover"]
         for test_id in record["cover"][1]:
             resolve_region(ast.parse(cover.read_bytes()), test_id)
-    code, out, err = run_cli(["--store", str(GO1_ROOT), *CHECK_ARGV])
-    # Go1's runs share a salt, so the unpaired default adds one "note: " line on stderr (spec
+    code, out, err = run_cli(["--store", str(LATTICE_ROOT), *CHECK_ARGV])
+    # The lattice's runs share a salt, so the unpaired default adds one "note: " line on stderr (spec
     # section 5.4). check's stdout changes shape in PF1 (its verdict line comes first), so its
     # digest gives way to the facts it guarded: passed, the event gated, its safer and worse
     # counts, the method, q and the number of tests.
-    # PF4 (PF4.20): Go1's fell has no kind, so the counts read as falls and rises.
+    # PF4 (PF4.20): the lattice's tripped has no kind, so the counts read as falls and rises.
     # PF4 re-freeze (ruling on a kindless event, reading R35): the library carries them as n_lower and
     # n_higher, and n_safer and n_worse are None.
     assert code == CHECK_EXIT and not [line for line in err.splitlines() if not line.startswith("note: ")], (code, err)
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
-    gated = quiet_multi_diff(store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), ma, mb, events=("fell",), method="fisher_bh")
+    store = Store(LATTICE_ROOT)
+    ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
+    gated, _ = store_tree(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), method="fisher_bh")
     check_lines = out.splitlines()
-    assert check_lines[0].startswith("passed  ") and "fell" in check_lines[0], out
-    fell = gated.by_event["fell"]
-    assert (fell.n_safer, fell.n_worse) == (None, None)
+    assert check_lines[0].startswith("passed  ") and EVENT in check_lines[0], out
+    tripped = gated.by_event[EVENT]
+    assert (tripped.n_safer, tripped.n_worse) == (None, None)
+    assert (tripped.n_lower, tripped.n_higher) == reference_tripped_counts((EVENT,)) == LATTICE_TRIPPED_COUNTS
     assert any(
-        "fell" in line and f"{fell.n_lower:,} lower" in line and f"{fell.n_higher:,} higher" in line for line in check_lines
+        EVENT in line and f"{tripped.n_lower:,} lower" in line and f"{tripped.n_higher:,} higher" in line for line in check_lines
     ), out
     assert any(
         "aalen_johansen" in line and "fisher_bh" in line and "unpaired" in line
@@ -2650,7 +2663,7 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
         for line in check_lines
     ), out
     out_dir = tmp_path / "report"
-    code, out, err = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out_dir)])
+    code, out, err = run_cli(["--store", str(LATTICE_ROOT), *E14_ARGV, "--out", str(out_dir)])
     assert code == 0, out + err
     # The CLI's heatmap labels follow rule 10 (spec section 5.4) and may re-wrap, so its digest
     # moves; the library's SVG keeps the pinned bytes, and the CLI's colour cells are its, cell
@@ -2658,7 +2671,7 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
     # PF4 (PF4.3, PF4.15, PF4.20): the three E14_SHA256 digests are no longer asserted: the SVG's
     # headline and caption say lower and higher, the markdown and receipt carry the shares and the
     # detection-limit notes. assert_e14_facts asserts what they guarded.
-    library_svg = build_multi_report(gated, ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw"), manifests=(ma, mb)).to_svg()
+    library_svg = build_multi_report(gated, ReportSpec(title=f"{LATTICE_A} vs {LATTICE_B}: {EVENT}", x_axis=X, y_axis=Y), manifests=(ma, mb)).to_svg()
     cli_svg = (out_dir / "heatmap.svg").read_text(encoding="utf-8")
     fills = re.compile(r'<rect\b[^>]*\bfill="([^"]*)"')
     assert fills.findall(cli_svg) == fills.findall(library_svg) and fills.findall(cli_svg)

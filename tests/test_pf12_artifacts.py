@@ -78,8 +78,8 @@ number the comparison printed. The quickstart's counts are never pinned; its ver
 - R36 Lanes: every PF12 test is in the code suite, but the browser check and the wheel's bytes
   (``slow``), as section 10.6 puts browser and wheel builds.
 - R38 ``jsonschema`` (the format's schemas) and ``playwright`` (the browser check) join ``[dev]``.
-- R39 Frozen tests that run ``report`` or ``serve`` read a per-process copy of the committed Go1 and
-  0.0.1 fixtures (``conftest.writable_copy``), so no test writes into a committed folder; a copy of a
+- R39 Frozen tests that run ``report`` or ``serve`` read a per-process copy of the generated lattice
+  store and the committed 0.0.1 fixture (``conftest.writable_copy``), so no test writes into either; a copy of a
   committed store made for a shared world leaves out any ``.poisson/`` (``copy_fixture``).
 - R41 Once ``serve`` has saved, its help and its Ctrl-C line no longer say nothing was written: the
   help says it saves, and the stopped line says it was interrupted without that clause.

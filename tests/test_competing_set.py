@@ -60,10 +60,11 @@ Still not mapped, and reported rather than adapted:
 from __future__ import annotations
 
 import ast
-import hashlib
+import html as html_lib
 import inspect
 import json
 import math
+import re
 import xml.etree.ElementTree as ET
 from io import StringIO
 from pathlib import Path
@@ -81,6 +82,9 @@ from poisson_prove.report import ABSENT_FILL, MultiReport, SurvivalReport
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.survival import censor
 from conftest import quickstart_design
+from test_m6_multi import reference_record
+
+import lattice
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "poisson_prove"
@@ -92,9 +96,6 @@ QUICKSTART = quickstart_design()
 # so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
-FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
-REGRESSION_JSON = FIXTURE_DIR / "diff_regression.json"
-REGRESSION_DIR = FIXTURE_DIR / "report_regression"
 
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
@@ -129,20 +130,17 @@ COMPLETED_T = 1.0
 VIOLATED_T = 3.0
 TIMEOUT_T = 5.0
 
-# Frozen fixtures, as committed before this session. H12 is "golden untouched".
-FROZEN_SHA256 = {
-    REGRESSION_JSON: "ea9a19d98490f71544933057dbea62c4c83c3bfbc9e47b98f593798981c0cc5d",
-    REGRESSION_DIR / "report.md": "1755f5bd313e39a9da3b99980607b45d76dd16608d1d8a80a624bddc2af2d217",
-    REGRESSION_DIR / "heatmap.svg": "77df396e6e5cbe4423fe147c57735f33a4c4c5580b00f8e37314d1918fc5288f",
-    REGRESSION_DIR / "receipt.html": "4d0d64320de7be8549c673137d731b3529569f7452d9799983a87393f66cba00",
-}
-
-GO1_EVENT = "fell"
-GO1_CELLS = 400
-GO1_SAFER, GO1_WORSE = 60, 0
-GO1_Q, GO1_POWER = 0.05, 0.8
+# H12 is "golden untouched". The four frozen files (the single-event diff record and the S8
+# report's Markdown, heatmap and receipt) went with the study fixture; each is now the facts it
+# held, asserted on what the build writes for the lattice pair, against the lattice's references.
+H12_FILES = ("diff_regression.json", "heatmap.svg", "receipt.html", "report.md")
+H12_TITLE = "lattice before -> after"
+LATTICE_EVENT = lattice.EVENT
+LATTICE_CELLS = 72
+LATTICE_SAFER, LATTICE_WORSE = 22, 0
+LATTICE_Q, LATTICE_POWER = 0.05, 0.8
 # The frozen cells carry no ``stat``; these are exactly the keys S8 wrote.
-GO1_CELL_KEYS = [
+LATTICE_CELL_KEYS = [
     "config_hash",
     "n_a",
     "n_b",
@@ -156,8 +154,8 @@ GO1_CELL_KEYS = [
     "verdict",
     "mde",
 ]
-GO1_INT_KEYS = {"n_a", "n_b", "events_a", "events_b"}
-GO1_STR_KEYS = {"config_hash", "verdict"}
+LATTICE_INT_KEYS = {"n_a", "n_b", "events_a", "events_b"}
+LATTICE_STR_KEYS = {"config_hash", "verdict"}
 
 # A parameter carrying a competing set would have to be named for one. H5 rejects any name
 # but ``events`` that reads like an outcome set.
@@ -935,50 +933,258 @@ def test_h11_zero_n_cell_has_no_number_painted_in_its_square(
 # ---------- H12: golden untouched ----------
 
 
-@pytest.mark.parametrize("path", sorted(FROZEN_SHA256, key=str), ids=lambda p: p.name)
-def test_h12_frozen_regression_fixtures_are_byte_identical(path: Path) -> None:
-    assert path.is_file(), path
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    assert digest == FROZEN_SHA256[path], path
-
-
-def test_h12_go1_single_event_diff_still_reproduces_the_frozen_cells(go1_store: Store) -> None:
-    frozen = json.loads(REGRESSION_JSON.read_text())
-    raw_a = go1_store.read("go1-v0")
-    raw_b = go1_store.read("go1-v1")
-    result = diff(
-        censor(raw_a, GO1_EVENT),
-        censor(raw_b, GO1_EVENT),
-        event=GO1_EVENT,
+def _lattice_diff(store: Store) -> Any:
+    return diff(
+        censor(store.read(lattice.RUN_A), LATTICE_EVENT),
+        censor(store.read(lattice.RUN_B), LATTICE_EVENT),
+        event=LATTICE_EVENT,
         method="fisher_bh",
-        q=GO1_Q,
-        power=GO1_POWER,
-        manifest_a=go1_store.manifest("go1-v0"),
-        manifest_b=go1_store.manifest("go1-v1"),
+        q=LATTICE_Q,
+        power=LATTICE_POWER,
+        manifest_a=store.manifest(lattice.RUN_A),
+        manifest_b=store.manifest(lattice.RUN_B),
     )
-    assert result.n_safer == frozen["n_safer"] == GO1_SAFER
-    assert result.n_worse == frozen["n_worse"] == GO1_WORSE
-    assert len(result.cells) == frozen["n_cells"] == GO1_CELLS
+
+
+@pytest.fixture(scope="module")
+def h12_written(lattice_store: Store, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """What the build writes now for the lattice pair, as the four frozen files were written: the
+    single-event fisher_bh diff's JSON and the S8 report (dark theme, ``x=load``, ``y=gain``)."""
+    out = tmp_path_factory.mktemp("h12")
+    result = _lattice_diff(lattice_store)
+    report = report_module.build_report(
+        result, report_module.ReportSpec(title=H12_TITLE, x_axis=lattice.Y, y_axis=lattice.X, theme="dark")
+    )
+    (out / "diff_regression.json").write_text(json.dumps(result.to_json(), indent=2), encoding="utf-8")
+    (out / "report.md").write_text(report.to_markdown(), encoding="utf-8")
+    (out / "heatmap.svg").write_text(report.to_svg(), encoding="utf-8")
+    (out / "receipt.html").write_text(report.to_html(), encoding="utf-8")
+    return out
+
+
+def _coords(cell: dict[str, Any]) -> tuple[float, float]:
+    """``(load, gain)`` of a reference cell, from the design."""
+    by_hash = {lattice.config_hash(c.config): c for c in lattice.design_cells()}
+    c = by_hash[cell["config_hash"]]
+    return c.load, c.gain
+
+
+def _coord_text(cell: dict[str, Any]) -> str:
+    load, gain = _coords(cell)
+    return f"load={load:g}, gain={gain:g}"
+
+
+def _headline(record: dict[str, Any]) -> str:
+    return f"{record['n_safer']} of {record['n_cells']} cells safer, {record['n_worse']} worse"
+
+
+def _pp1(value: float) -> str:
+    """A share in percentage points to one decimal, as the report prints it (no negative zero)."""
+    text = f"{100.0 * value:.1f}"
+    return "0.0" if text == "-0.0" else text
+
+
+def _pp0(value: float) -> int:
+    return round(100.0 * value)
+
+
+def _worst_ten(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """The single-event report's worst cells: delta descending, then the condition's key (S8)."""
+    return sorted(record["cells"], key=lambda c: (-c["delta"], c["config_hash"]))[:10]
+
+
+def _assert_worst_rows(rows: list[list[str]], record: dict[str, Any]) -> None:
+    worst = _worst_ten(record)
+    assert len(rows) == len(worst) == 10
+    for row, cell in zip(rows, worst, strict=True):
+        load, gain = _coords(cell)
+        assert len(row) == 10, row
+        assert (float(row[0]), float(row[1])) == (load, gain), (row, cell["config_hash"])
+        assert row[2] == f"{cell['n_a']}/{cell['n_b']}", row
+        assert row[3:6] == [_pp1(cell["rate_a"]), _pp1(cell["rate_b"]), _pp1(cell["delta"])], row
+        assert float(row[6]) == float(f"{cell['p']:.3g}"), (row, cell["p"])
+        assert float(row[7]) == float(f"{cell['q']:.3g}"), (row, cell["q"])
+        assert row[8] == cell["verdict"], row
+        if cell["mde"] is None:
+            assert row[9].startswith("no room") and not re.search(r"\d+pp", row[9]), row
+        else:
+            assert row[9] == f"{_pp0(cell['mde'])}pp", (row, cell["mde"])
+    # The two largest changes tie (+2 trips each), so the key orders them.
+    assert worst[0]["delta"] == worst[1]["delta"] > 0 and worst[0]["config_hash"] < worst[1]["config_hash"]
+
+
+def _methods_row(record: dict[str, Any]) -> list[str]:
+    return ["fisher_bh", "unpaired", str(record["n_safer"]), str(record["n_worse"]),
+            str(record["n_unchanged"]), f"{_pp0(record['max_mde'])}pp", "0.05"]
+
+
+def _honesty(record: dict[str, Any]) -> tuple[str, str]:
+    with_limit = [c for c in record["cells"] if c["mde"] is not None]
+    unchanged = [c for c in with_limit if c["verdict"] == "unchanged"]
+    top_unchanged = max(unchanged, key=lambda c: c["mde"])
+    top = max(with_limit, key=lambda c: c["mde"])
+    first = (f"Worst-powered unchanged cell ({_coord_text(top_unchanged)}, n={top_unchanged['n_a']}/"
+             f"{top_unchanged['n_b']}) can only detect a {_pp0(top_unchanged['mde'])}pp rise. "
+             f'"{record["n_worse"]} worse" is an honest claim only above that.')
+    return first, f"Worst-powered cell overall: {_pp0(top['mde'])}pp ({_coord_text(top)})."
+
+
+def _md_table(lines: list[str], header: str) -> list[list[str]]:
+    start = lines.index(header)
+    rows = []
+    for line in lines[start + 2:]:
+        if not line.startswith("|"):
+            break
+        rows.append([c.strip() for c in line[1:-1].split("|")])
+    return rows
+
+
+_WORST_HEADER = "| load | gain | n (a/b) | rate_a (pp) | rate_b (pp) | delta (pp) | p | q | verdict | MDE |"
+_METHODS_HEADER = "| method | pairing | safer | worse | unchanged | max MDE | q |"
+_SVG = "{http://www.w3.org/2000/svg}"
+
+
+def _check_diff_json(text: str, record: dict[str, Any]) -> None:
+    js = json.loads(text)
+    for field in ("n_safer", "n_worse", "n_unchanged", "n_not_comparable", "dropped_a", "dropped_b",
+                  "truncated", "max_mde", "horizon", "t_unit", "method", "event"):
+        assert js[field] == record[field], field
+    assert js["q"] == record["q_threshold"]
+    assert js["seed_identity_match"] is record["paired"] is True and js["unpaired_analysis"] is True
+    assert (js["n_safer"], js["n_worse"], len(js["cells"])) == (LATTICE_SAFER, LATTICE_WORSE, LATTICE_CELLS)
+    cells = {c["config_hash"]: c for c in js["cells"]}
+    assert [c["config_hash"] for c in js["cells"]] == [c["config_hash"] for c in record["cells"]]
+    for ref in record["cells"]:
+        ours = cells[ref["config_hash"]]
+        for key in LATTICE_CELL_KEYS:
+            if key == "mde" and ref["mde"] is None:
+                assert ours["mde"] is None or math.isnan(ours["mde"]), ref["config_hash"]
+            else:
+                assert ours[key] == ref[key], (ref["config_hash"], key, ours[key], ref[key])
+
+
+def _check_report_md(text: str, record: dict[str, Any]) -> None:
+    lines = text.splitlines()
+    assert lines[0] == f"# {H12_TITLE}"
+    assert lines[2] == f"{_headline(record)} (fisher_bh, BH q<0.05, unpaired)."
+    assert _headline(record) == "22 of 72 cells safer, 0 worse"
+    _assert_worst_rows(_md_table(lines, _WORST_HEADER), record)
+    assert _md_table(lines, _METHODS_HEADER) == [_methods_row(record)]
+    first, second = _honesty(record)
+    assert first in lines and second in lines
+    assert first.startswith("Worst-powered unchanged cell (load=30, gain=1, n=32/32) can only detect a 34pp rise.")
+    for line in ("- event: tripped", "- t unit: seconds", "- horizon: 5", "- method: fisher_bh",
+                 "- seed identity match: true", "- unpaired analysis: true", "- q: 0.05",
+                 "- n not comparable: 0", "- dropped a: 0", "- dropped b: 0",
+                 "- episodes censored at horizon: 0", "- n absent: 0"):
+        assert line in lines, line
+
+
+def _check_heatmap(text: str, record: dict[str, Any]) -> None:
+    root = ET.fromstring(text)
+    by_hash = {c["config_hash"]: c for c in record["cells"]}
+    rects = [r for r in root.iter(f"{_SVG}rect") if "data-cell" in r.attrib]
+    assert sorted(r.attrib["data-cell"] for r in rects) == sorted(by_hash)
+    xs = sorted({float(r.attrib["x"]) for r in rects})
+    ys = sorted({float(r.attrib["y"]) for r in rects})
+    assert len(xs) == len(lattice.LOAD) and len(ys) == len(lattice.GAIN)
+    texts = [(float(t.attrib["x"]), float(t.attrib["y"]), t.text or "") for t in root.iter(f"{_SVG}text")]
+    sig = [(float(r.attrib["x"]), float(r.attrib["y"])) for r in root.iter(f"{_SVG}rect") if "data-sig" in r.attrib]
+    flagged, saturated = set(), set()
+    for r in rects:
+        cell = by_hash[r.attrib["data-cell"]]
+        load, gain = _coords(cell)
+        x, y, w, h = (float(r.attrib[k]) for k in ("x", "y", "width", "height"))
+        # The grid: load runs along x, gain down y, both ascending.
+        assert (xs.index(x), ys.index(y)) == (lattice.LOAD.index(load), lattice.GAIN.index(gain)), cell
+        labels = [t for tx, ty, t in texts if tx == x + w / 2 and y < ty < y + h]
+        assert len(labels) == 1, (cell["config_hash"], labels)
+        assert labels[0] == _pp1(cell["delta"]), (labels, cell)
+        if any(x <= sx < x + w and y <= sy < y + h for sx, sy in sig):
+            flagged.add(cell["config_hash"])
+        if r.attrib.get("data-sat") == "1":
+            saturated.add(cell["config_hash"])
+    assert len(sig) == len(flagged)
+    assert flagged == {c["config_hash"] for c in record["cells"] if c["verdict"] != "unchanged"}
+    assert len(flagged) == LATTICE_SAFER + LATTICE_WORSE
+    both_extreme = {c["config_hash"] for c in record["cells"]
+                    if c["events_a"] == c["events_b"] and c["events_a"] in (0, c["n_a"])}
+    assert saturated == both_extreme and len(saturated) == 37
+    strings = [t for _, _, t in texts]
+    assert strings[0] == H12_TITLE and strings[1] == _headline(record)
+    # The axis ticks: one per column under the grid, one per row left of it, in the design's order.
+    w, h = float(rects[0].attrib["width"]), float(rects[0].attrib["height"])
+    load_ticks = [(tx, t) for tx, ty, t in texts if tx in {x + w / 2 for x in xs} and ys[-1] + h < ty < ys[-1] + 2 * h]
+    assert [float(t) for _, t in sorted(load_ticks)] == list(lattice.LOAD)
+    gain_ticks = [(ty, t) for tx, ty, t in texts if tx < xs[0] and any(y < ty < y + h for y in ys)]
+    assert [float(t) for _, t in sorted(gain_ticks)] == list(lattice.GAIN)
+    first, second = _honesty(record)
+    assert first + " " + second in " ".join(strings)
+
+
+def _check_receipt(text: str, record: dict[str, Any], svg: str) -> None:
+    assert f"<title>{html_lib.escape(H12_TITLE)}</title>" in text
+    assert f"<h1>{html_lib.escape(H12_TITLE)}</h1>" in text
+    assert f"<p>{html_lib.escape(_headline(record))} (fisher_bh, BH q&lt;0.05, unpaired).</p>" in text
+    figure = re.search(r'<div class="figure">(<svg.*?</svg>)</div>', text, re.S)
+    assert figure is not None and figure.group(1) == svg.strip()
+    _check_heatmap(figure.group(1), record)
+    bodies = re.findall(r"<tbody>(.*?)</tbody>", text, re.S)
+    tables = [[[html_lib.unescape(c) for c in re.findall(r"<td>(.*?)</td>", tr)] for tr in re.findall(r"<tr>(.*?)</tr>", b)]
+              for b in bodies]
+    _assert_worst_rows(tables[0], record)
+    assert tables[1] == [_methods_row(record)]
+    first, second = _honesty(record)
+    plain = html_lib.unescape(re.sub(r"<[^>]+>", "", text))
+    assert first in plain and second in plain
+
+
+@pytest.mark.parametrize("name", H12_FILES, ids=lambda name: name)
+def test_h12_regression_facts_hold_on_what_the_build_writes(name: str, h12_written: Path) -> None:
+    """Each frozen file's digest becomes the facts it held, asserted on what the build writes now
+    against the lattice's reference record (``test_m6_multi.reference_record``): the headline counts,
+    the cell set and every cell's values, the worst cells, the methods row, the honesty sentences,
+    the grid and its marks."""
+    path = h12_written / name
+    assert path.is_file(), path
+    text = path.read_text(encoding="utf-8")
+    record = reference_record()
+    if name == "diff_regression.json":
+        _check_diff_json(text, record)
+    elif name == "report.md":
+        _check_report_md(text, record)
+    elif name == "heatmap.svg":
+        _check_heatmap(text, record)
+    else:
+        _check_receipt(text, record, (h12_written / "heatmap.svg").read_text(encoding="utf-8"))
+
+
+def test_h12_lattice_single_event_diff_still_reproduces_the_reference_cells(lattice_store: Store) -> None:
+    frozen = reference_record()
+    result = _lattice_diff(lattice_store)
+    assert result.n_safer == frozen["n_safer"] == LATTICE_SAFER
+    assert result.n_worse == frozen["n_worse"] == LATTICE_WORSE
+    assert len(result.cells) == frozen["n_cells"] == LATTICE_CELLS
     by_hash = {c["config_hash"]: c for c in frozen["cells"]}
     assert set(result.cells["config_hash"]) == set(by_hash)
     at_ceiling = 0
     for row in result.cells.itertuples(index=False):
         reference = by_hash[row.config_hash]
-        for key in GO1_CELL_KEYS:
+        for key in LATTICE_CELL_KEYS:
             ours = getattr(row, key)
             if key == "mde" and reference["events_a"] == reference["n_a"]:
                 # PF4 (PF4.12, PF4.15): a cell whose baseline had the event in every run has no
-                # detection limit, so its mde is NaN where the frozen fixture holds a number.
+                # detection limit, so its mde is NaN where the frozen fixture held a number.
                 assert math.isnan(float(ours)), (row.config_hash, key)
                 at_ceiling += 1
-            elif key in GO1_INT_KEYS:
+            elif key in LATTICE_INT_KEYS:
                 assert int(ours) == reference[key], (row.config_hash, key)
-            elif key in GO1_STR_KEYS:
+            elif key in LATTICE_STR_KEYS:
                 assert str(ours) == reference[key], (row.config_hash, key)
             else:
                 assert float(ours) == reference[key], (row.config_hash, key)
-    # PF4 (PF4.15): every frozen cell at a 100% baseline was checked above, and Go1 has such cells.
-    assert at_ceiling == sum(c["events_a"] == c["n_a"] for c in frozen["cells"]) > 0
+    # PF4 (PF4.15): every reference cell at a 100% baseline was checked above, and the lattice has such cells.
+    assert at_ceiling == sum(c["events_a"] == c["n_a"] for c in frozen["cells"]) == 37
 
 
 # ---------- H13: ADR-021 is enforced in src/, not documented ----------

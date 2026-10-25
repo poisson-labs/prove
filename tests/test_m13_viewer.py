@@ -21,8 +21,9 @@ What is asserted where:
   ``serve_forever`` never started cannot hang the suite.
 - **Tree reads.** V6, V14, V17 and V35 resolve ``viewer.py`` through ``proofload.__file__``,
   never ``Path.cwd()``, so the shadow-shim run under ``PYTHONPATH`` reads the shim.
-- **Non-finite floats.** Fisher's odds ratio is ``inf`` or ``nan`` in 569 of the Go1 pair's
-  800 cells. V37 runs on that pair; V29 and V33 depend on the null-for-non-finite rule.
+- **Non-finite floats.** Fisher's odds ratio is ``inf`` or ``nan`` in 76 of the generated
+  lattice pair's 144 cells (its zero and ceiling conditions, over both events). V37 runs on that
+  pair; V29 and V33 depend on the null-for-non-finite rule.
 
 Two literals the spec leaves to the oracle, recorded here rather than buried in a test:
 
@@ -68,6 +69,7 @@ from typing import Any
 
 import pytest
 
+import lattice
 import poisson_prove
 import poisson_prove.cli as cli
 from poisson_prove.diff import MultiDiffResult, multi_diff
@@ -77,12 +79,10 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.tree import TreeResult
 from poisson_prove.tree import tree as grow_tree
 from conftest import quickstart_design
-from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
-# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
-# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
-GO1_ROOT = writable_copy(ROOT / "tests" / "fixtures" / "go1")
+#: The generated lattice pair (``tests/lattice.py``), built once per machine and checked on use.
+LATTICE_ROOT = lattice.root()
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -98,16 +98,16 @@ V22B_SALT = "00112233445566778899aabbccddeeff"
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
+LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
 # PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
-# created_at, a letter); outputs name the Go1 runs by these.
-GO1_NAME_A = "go1-g2-converged@20260813T155006Z 2026-09-03 a"
-GO1_NAME_B = "go1-g2-v1@20260818T230622Z-v1 2026-09-03 a"
-GO1_EVENTS = ("fell", "survived")
-GO1_X, GO1_Y = "push_pct_bw", "mu"
-GO1_TITLE = "Go1 pair"
-GO1_GAP_S = 0.112099
-GO1_ROWS = 12_800
+# created_at, a letter); outputs name the lattice runs by these.
+LATTICE_NAME_A, LATTICE_NAME_B = lattice.NAME_A, lattice.NAME_B
+LATTICE_EVENTS = (lattice.EVENT, lattice.OTHER)
+#: The page's x is the admitted knob (six groups) and its y the knob refused by default.
+LATTICE_X, LATTICE_Y = lattice.Y, lattice.X
+LATTICE_TITLE = "Lattice pair"
+LATTICE_GAP_S = lattice.CREATED_GAP_S
+LATTICE_ROWS = lattice.ROWS
 
 CSP = (
     "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
@@ -302,17 +302,17 @@ def assert_error_then_next(err: str) -> None:
 
 def serving_line(port: int) -> str:
     """PF2 (spec section 5.3): serve's verdict line, which replaced the bare URL line."""
-    return f'ok  serving "{GO1_NAME_A}" against "{GO1_NAME_B}" at http://{HOST}:{port}/ (Ctrl-C stops)'
+    return f'ok  serving "{LATTICE_NAME_A}" against "{LATTICE_NAME_B}" at http://{HOST}:{port}/ (Ctrl-C stops)'
 
 
-def go1_argv(*extra: str) -> list[str]:
-    return ["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, *extra]
+def lattice_argv(*extra: str) -> list[str]:
+    return ["--store", str(LATTICE_ROOT), "serve", LATTICE_A, LATTICE_B, *extra]
 
 
-def go1_full_argv(*extra: str) -> list[str]:
-    return go1_argv(
-        "--event", GO1_EVENTS[0], "--event", GO1_EVENTS[1], "--x", GO1_X, "--y", GO1_Y,
-        "--title", GO1_TITLE, *extra,
+def lattice_full_argv(*extra: str) -> list[str]:
+    return lattice_argv(
+        "--event", LATTICE_EVENTS[0], "--event", LATTICE_EVENTS[1], "--x", LATTICE_X, "--y", LATTICE_Y,
+        "--title", LATTICE_TITLE, *extra,
     )
 
 
@@ -937,39 +937,39 @@ def build_pair(root: Path, a: str, b: str, spec: ReportSpec, events: Sequence[st
 # ---------- fixtures ----------
 
 
-def go1_spec(**overrides: Any) -> ReportSpec:
-    base: dict[str, Any] = {"title": GO1_TITLE, "x_axis": GO1_X, "y_axis": GO1_Y}
+def lattice_spec(**overrides: Any) -> ReportSpec:
+    base: dict[str, Any] = {"title": LATTICE_TITLE, "x_axis": LATTICE_X, "y_axis": LATTICE_Y}
     base.update(overrides)
     return ReportSpec(**base)
 
 
 @pytest.fixture(scope="module")
-def go1(go1_store: Store) -> Built:
-    """The Go1 pair over both events: the two-panel page every keying invariant needs."""
-    return build_pair(GO1_ROOT, GO1_A, GO1_B, go1_spec(), GO1_EVENTS)
+def lattice_built(lattice_store: Store) -> Built:
+    """The lattice pair over both events: the two-panel page every keying invariant needs."""
+    return build_pair(LATTICE_ROOT, LATTICE_A, LATTICE_B, lattice_spec(), LATTICE_EVENTS)
 
 
 @pytest.fixture(scope="module")
-def go1_dom(go1: Built) -> Dom:
-    return parse_html(go1.page)
+def lattice_dom(lattice_built: Built) -> Dom:
+    return parse_html(lattice_built.page)
 
 
 @pytest.fixture(scope="module")
-def go1_serve_json(go1_store: Store) -> Result:
-    """``serve --json`` on the Go1 pair, both events, with ``serve_page`` tripwired."""
+def lattice_serve_json(lattice_store: Store) -> Result:
+    """``serve --json`` on the lattice pair, both events, with ``serve_page`` tripwired."""
     with pytest.MonkeyPatch.context() as mp:
         tripwire_serve(mp)
-        # PF3 (Q17, spec sections 4.4 and 14; R1): Go1's runs share a salt, so the default is now the
+        # PF3 (Q17, spec sections 4.4 and 14; R1): the lattice's runs share a salt, so the default is now the
         # paired test; V22 and V33 compare with the unpaired test's numbers, named.
-        return run_cli(go1_full_argv("--method", "fisher_bh", "--json"))
+        return run_cli(lattice_full_argv("--method", "fisher_bh", "--json"))
 
 
 @pytest.fixture(scope="module")
-def go1_serve_json_one_event(go1_store: Store) -> Result:
+def lattice_serve_json_one_event(lattice_store: Store) -> Result:
     with pytest.MonkeyPatch.context() as mp:
         tripwire_serve(mp)
         # PF3 (Q17, spec sections 4.4 and 14; R1): V22 compares with diff's unpaired numbers, named.
-        return run_cli(go1_argv("--event", "fell", "--x", GO1_X, "--y", GO1_Y, "--title", GO1_TITLE, "--method", "fisher_bh", "--json"))
+        return run_cli(lattice_argv("--event", lattice.EVENT, "--x", LATTICE_X, "--y", LATTICE_Y, "--title", LATTICE_TITLE, "--method", "fisher_bh", "--json"))
 
 
 @dataclass(frozen=True)
@@ -1027,27 +1027,27 @@ def hostile(tmp_path_factory: pytest.TempPathFactory) -> Built:
 
 def test_v1_missing_event_exits_two_names_serve_and_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
-    r = run_cli(go1_argv("--x", GO1_X))
+    r = run_cli(lattice_argv("--x", LATTICE_X))
     # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr (spec section 5.4).
     assert_clean_refusal(r, 1)
     assert_error_then_next(r.err)
     # PF2 (spec section 4.3): the refusal and its next line name the two runs by name, not id.
-    for fact in ("serve", "--event", GO1_NAME_A, GO1_NAME_B, "mu", "push_pct_bw", "fell", "survived"):
+    for fact in ("serve", "--event", LATTICE_NAME_A, LATTICE_NAME_B, lattice.X, lattice.Y, lattice.EVENT, lattice.OTHER):
         assert fact in r.err, (fact, r.err)
 
 
 def test_v2_unknown_event_exits_two_with_the_known_events_sentence_and_the_verb(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
-    r = run_cli(go1_argv("--event", "nope", "--x", GO1_X))
+    r = run_cli(lattice_argv("--event", "nope", "--x", LATTICE_X))
     # A refusal exits 1 (spec section 5.2).
     assert_clean_refusal(r, 1)
-    assert 'serve: event "nope" does not appear in either run. Present: fell, survived.' in r.err, r.err
+    assert 'serve: event "nope" does not appear in either run. Present: held, tripped.' in r.err, r.err
 
 
-@pytest.mark.parametrize("runs", [(GO1_A,), (GO1_A, GO1_B, GO1_A)])
+@pytest.mark.parametrize("runs", [(LATTICE_A,), (LATTICE_A, LATTICE_B, LATTICE_A)])
 def test_v3_wrong_arity_exits_two_naming_the_two_run_form_and_no_single_run_mode(monkeypatch: pytest.MonkeyPatch, runs: tuple[str, ...]) -> None:
     tripwire_serve(monkeypatch)
-    r = run_cli(["--store", str(GO1_ROOT), "serve", *runs, "--event", "fell", "--x", GO1_X])
+    r = run_cli(["--store", str(LATTICE_ROOT), "serve", *runs, "--event", lattice.EVENT, "--x", LATTICE_X])
     assert_clean_refusal(r, 2)
     assert re.search(r"\bserve\b", r.err), r.err
     assert re.search(r"\bA B\b", r.err), r.err
@@ -1057,18 +1057,18 @@ def test_v3_wrong_arity_exits_two_naming_the_two_run_form_and_no_single_run_mode
 
 def test_v4_missing_x_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
-    r = run_cli(go1_argv("--event", "fell"))
+    r = run_cli(lattice_argv("--event", lattice.EVENT))
     # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr (spec section 5.4).
     assert_clean_refusal(r, 1)
     assert_error_then_next(r.err)
     # PF2 (spec section 4.3): the refusal and its next line name the two runs by name, not id.
-    for fact in ("serve", "--x", GO1_NAME_A, GO1_NAME_B, "mu", "push_pct_bw", "fell", "survived"):
+    for fact in ("serve", "--x", LATTICE_NAME_A, LATTICE_NAME_B, lattice.X, lattice.Y, lattice.EVENT, lattice.OTHER):
         assert fact in r.err, (fact, r.err)
 
 
 def test_v4_unknown_x_exits_two_through_axis_error(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
-    r = run_cli(go1_argv("--event", "fell", "--x", "nope"))
+    r = run_cli(lattice_argv("--event", lattice.EVENT, "--x", "nope"))
     # A refusal exits 1, and an error shows no Python repr, so the value is checked bare (spec section 5.4).
     assert_clean_refusal(r, 1)
     assert "nope" in r.err and "config key" in r.err, r.err
@@ -1076,12 +1076,12 @@ def test_v4_unknown_x_exits_two_through_axis_error(monkeypatch: pytest.MonkeyPat
 
 # Each with its exit code: a refusal exits 1, a wrong command line (the run count) exits 2 (spec section 5.2).
 REFUSALS = [
-    (go1_argv("--x", GO1_X), 1),
-    (go1_argv("--event", "nope", "--x", GO1_X), 1),
-    (["--store", str(GO1_ROOT), "serve", GO1_A, "--event", "fell", "--x", GO1_X], 2),
-    (["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, GO1_A, "--event", "fell", "--x", GO1_X], 2),
-    (go1_argv("--event", "fell"), 1),
-    (go1_argv("--event", "fell", "--x", "nope"), 1),
+    (lattice_argv("--x", LATTICE_X), 1),
+    (lattice_argv("--event", "nope", "--x", LATTICE_X), 1),
+    (["--store", str(LATTICE_ROOT), "serve", LATTICE_A, "--event", lattice.EVENT, "--x", LATTICE_X], 2),
+    (["--store", str(LATTICE_ROOT), "serve", LATTICE_A, LATTICE_B, LATTICE_A, "--event", lattice.EVENT, "--x", LATTICE_X], 2),
+    (lattice_argv("--event", lattice.EVENT), 1),
+    (lattice_argv("--event", lattice.EVENT, "--x", "nope"), 1),
 ]
 
 
@@ -1095,7 +1095,7 @@ def test_v5_every_refusal_exits_two_without_calling_serve_page(monkeypatch: pyte
 
 def test_v5_json_exits_zero_without_calling_serve_page(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = tripwire_serve(monkeypatch)
-    r = run_cli(go1_full_argv("--json"))
+    r = run_cli(lattice_full_argv("--json"))
     assert r.code == 0, r.err
     assert calls == [], calls
 
@@ -1103,17 +1103,17 @@ def test_v5_json_exits_zero_without_calling_serve_page(monkeypatch: pytest.Monke
 # ---------- V6-V9: the server ----------
 
 
-def test_v6_viewer_names_loopback_once_and_binds_it(go1: Built) -> None:
+def test_v6_viewer_names_loopback_once_and_binds_it(lattice_built: Built) -> None:
     src = viewer_source()
     assert src.count(HOST) == 1, src.count(HOST)
     assert "0.0.0.0" not in src
     assert "::" not in src
-    with served(go1.page) as server:
+    with served(lattice_built.page) as server:
         assert server.server_address[0] == HOST, server.server_address
 
 
-def test_v7_get_root_returns_the_page_with_the_four_headers(go1: Built) -> None:
-    with served(go1.page) as server:
+def test_v7_get_root_returns_the_page_with_the_four_headers(lattice_built: Built) -> None:
+    with served(lattice_built.page) as server:
         r = get(server, "/")
     assert r.status == 200
     assert r.headers["content-type"] == CONTENT_TYPE, r.headers
@@ -1123,19 +1123,19 @@ def test_v7_get_root_returns_the_page_with_the_four_headers(go1: Built) -> None:
 
 
 @pytest.mark.parametrize("path", ["/anything-else", "/../x", "/index.html"])
-def test_v8_other_paths_are_404(go1: Built, path: str) -> None:
-    with served(go1.page) as server:
+def test_v8_other_paths_are_404(lattice_built: Built, path: str) -> None:
+    with served(lattice_built.page) as server:
         r = get(server, path)
     assert r.status == 404, (path, r.status)
 
 
-def test_v8_post_is_501(go1: Built) -> None:
-    with served(go1.page) as server:
+def test_v8_post_is_501(lattice_built: Built) -> None:
+    with served(lattice_built.page) as server:
         r = get(server, "/", method="POST")
     assert r.status == 501, r.status
 
 
-def test_v8_no_file_is_opened_per_request(go1: Built, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v8_no_file_is_opened_per_request(lattice_built: Built, monkeypatch: pytest.MonkeyPatch) -> None:
     opened: list[str] = []
     real_open = io.open
 
@@ -1143,7 +1143,7 @@ def test_v8_no_file_is_opened_per_request(go1: Built, monkeypatch: pytest.Monkey
         opened.append(str(file))
         return real_open(file, *args, **kwargs)
 
-    with served(go1.page) as server:
+    with served(lattice_built.page) as server:
         monkeypatch.setattr("builtins.open", recording_open)
         monkeypatch.setattr(io, "open", recording_open)
         first = get(server, "/")
@@ -1153,10 +1153,10 @@ def test_v8_no_file_is_opened_per_request(go1: Built, monkeypatch: pytest.Monkey
     assert opened == [], opened
 
 
-def test_v9_three_gets_return_the_identical_rendered_page(go1: Built) -> None:
-    with served(go1.page) as server:
+def test_v9_three_gets_return_the_identical_rendered_page(lattice_built: Built) -> None:
+    with served(lattice_built.page) as server:
         bodies = [get(server, "/").body for _ in range(3)]
-    expected = viewer().render_html(go1.structure).encode("utf-8")
+    expected = viewer().render_html(lattice_built.structure).encode("utf-8")
     assert bodies[0] == bodies[1] == bodies[2]
     assert bodies[0] == expected
 
@@ -1164,7 +1164,7 @@ def test_v9_three_gets_return_the_identical_rendered_page(go1: Built) -> None:
 # ---------- V11-V12: silence and no writes ----------
 
 
-def test_v11_serving_including_a_raising_request_writes_only_the_url_line(go1: Built, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]) -> None:
+def test_v11_serving_including_a_raising_request_writes_only_the_url_line(lattice_built: Built, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]) -> None:
     real_send_response = http.server.BaseHTTPRequestHandler.send_response
 
     def send_response(self: Any, code: int, message: str | None = None) -> None:
@@ -1174,7 +1174,7 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(go1: B
 
     monkeypatch.setattr(http.server.BaseHTTPRequestHandler, "send_response", send_response)
     capfd.readouterr()
-    with cli_served(monkeypatch, go1_full_argv()) as run:
+    with cli_served(monkeypatch, lattice_full_argv()) as run:
         statuses = [get(run.server, "/").status for _ in range(3)]
         dropped = try_get(run.server, "/raise")
         missed = get(run.server, "/missing").status
@@ -1186,12 +1186,12 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(go1: B
     lines = run.out.getvalue().splitlines()
     assert lines[0] == serving_line(run.server.server_address[1]) and len(lines) == 2, run.out.getvalue()
     assert re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]), run.out.getvalue()
-    # The unpaired-analysis warning on Go1 is now a note line on stderr (spec section 5.4).
+    # The unpaired-analysis warning on the lattice pair is now a note line on stderr (spec section 5.4).
     assert without_notes(run.err.getvalue()) == "", run.err.getvalue()
     assert (real_out, real_err) == ("", ""), (real_out, real_err)
 
 
-def test_v12_assembling_rendering_and_serving_touch_no_file(go1: Built, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_v12_assembling_rendering_and_serving_touch_no_file(lattice_built: Built, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
     # PF2 (spec section 2.3, Q11): report's default folder is named by the runs' names now; both
@@ -1199,15 +1199,15 @@ def test_v12_assembling_rendering_and_serving_touch_no_file(go1: Built, monkeypa
     def slugged(name: str) -> str:
         return name.lower().replace(" ", "-").replace("/", "-")
 
-    default_dir = tmp_path / f"prove-report-{GO1_A}-vs-{GO1_B}"
-    named_dir = tmp_path / f"prove-report-{slugged(GO1_NAME_A)}-vs-{slugged(GO1_NAME_B)}"
+    default_dir = tmp_path / f"prove-report-{LATTICE_A}-vs-{LATTICE_B}"
+    named_dir = tmp_path / f"prove-report-{slugged(LATTICE_NAME_A)}-vs-{slugged(LATTICE_NAME_B)}"
     # PF12 (spec section 18.2, Q59): serve saves the comparison it shows under the store's
     # ``.poisson/``; nothing else in the store, and nothing in the working folder, is touched.
     def store_files() -> dict[str, int]:
-        return {k: v for k, v in tree_snapshot(GO1_ROOT).items() if not k.startswith(".poisson")}
+        return {k: v for k, v in tree_snapshot(LATTICE_ROOT).items() if not k.startswith(".poisson")}
 
     before = (store_files(), tree_snapshot(tmp_path), tree_snapshot(default_dir), tree_snapshot(named_dir))
-    with cli_served(monkeypatch, go1_full_argv()) as run:
+    with cli_served(monkeypatch, lattice_full_argv()) as run:
         assert get(run.server, "/").status == 200
     after = (store_files(), tree_snapshot(tmp_path), tree_snapshot(default_dir), tree_snapshot(named_dir))
     assert after == before
@@ -1217,8 +1217,8 @@ def test_v12_assembling_rendering_and_serving_touch_no_file(go1: Built, monkeypa
 # ---------- V13-V15: nothing outbound ----------
 
 
-def test_v13_the_renderers_own_markup_references_nothing_external(go1: Built) -> None:
-    own = excised(go1.page, SVG_RE, INDEX_RE).lower()
+def test_v13_the_renderers_own_markup_references_nothing_external(lattice_built: Built) -> None:
+    own = excised(lattice_built.page, SVG_RE, INDEX_RE).lower()
     for needle in ("href=", "src=", "@import", "url("):
         assert needle not in own, needle
 
@@ -1268,11 +1268,11 @@ def test_v15_from_http_import_server_trips_outside_viewer(tmp_path: Path) -> Non
 # ---------- V16-V17: it renders, it does not compute ----------
 
 
-def test_v16_every_text_entry_is_m7s_formatting_of_the_raw_value(go1: Built) -> None:
+def test_v16_every_text_entry_is_m7s_formatting_of_the_raw_value(lattice_built: Built) -> None:
     from poisson_prove.report import _fmt
 
-    for panel in go1.structure["panels"]:
-        rows = m6_rows(go1.multi, panel["event"])
+    for panel in lattice_built.structure["panels"]:
+        rows = m6_rows(lattice_built.multi, panel["event"])
         assert panel["cells"], panel["event"]
         for cell in panel["cells"]:
             row = rows[cell["config_hash"]]
@@ -1285,23 +1285,23 @@ def test_v16_every_text_entry_is_m7s_formatting_of_the_raw_value(go1: Built) -> 
                     assert cell[name] is None, (name, cell[name], raw)
 
 
-def test_v16_integer_fields_have_no_text_entry_and_match_m6(go1: Built) -> None:
-    for panel in go1.structure["panels"]:
-        rows = m6_rows(go1.multi, panel["event"])
+def test_v16_integer_fields_have_no_text_entry_and_match_m6(lattice_built: Built) -> None:
+    for panel in lattice_built.structure["panels"]:
+        rows = m6_rows(lattice_built.multi, panel["event"])
         for cell in panel["cells"]:
             assert set(cell["text"]) == set(FLOAT_KINDS), cell["text"].keys()
             for name in INT_FIELDS:
                 assert isinstance(cell[name], int) and cell[name] == int(rows[cell["config_hash"]][name]), name
 
 
-def test_v16_the_page_prints_no_float_except_through_m7s_strings(go1: Built) -> None:
+def test_v16_the_page_prints_no_float_except_through_m7s_strings(lattice_built: Built) -> None:
     from poisson_prove.report import _provenance_lines
 
     # ``config_text`` values (viewpair/2) are structure strings and are already walked.
-    allowed = list(walk_strings(go1.structure)) + _provenance_lines(go1.structure["diff"])
-    allowed.append(str(go1.structure["pair"]["created_at_gap_s"]))
+    allowed = list(walk_strings(lattice_built.structure)) + _provenance_lines(lattice_built.structure["diff"])
+    allowed.append(str(lattice_built.structure["pair"]["created_at_gap_s"]))
     stray = [
-        tok for tok in FLOAT_TOKEN_RE.findall(visible_text(go1.page))
+        tok for tok in FLOAT_TOKEN_RE.findall(visible_text(lattice_built.page))
         if not any(tok in s for s in allowed)
     ]
     assert stray == [], stray
@@ -1339,25 +1339,25 @@ def test_v17_render_html_applies_no_arithmetic() -> None:
 # ---------- V18-V21: the page carries M7's output verbatim ----------
 
 
-def test_v18_heatmap_svg_is_m7s_and_the_page_embeds_it_verbatim(go1: Built) -> None:
-    expected = go1.report.to_svg()
-    assert go1.structure["heatmap_svg"] == expected
-    m = SVG_RE.search(go1.page)
+def test_v18_heatmap_svg_is_m7s_and_the_page_embeds_it_verbatim(lattice_built: Built) -> None:
+    expected = lattice_built.report.to_svg()
+    assert lattice_built.structure["heatmap_svg"] == expected
+    m = SVG_RE.search(lattice_built.page)
     assert m, "no <svg> in the page"
     assert m.group(0) == expected.rstrip("\n")
     assert ET.tostring(ET.fromstring(m.group(0))) == ET.tostring(ET.fromstring(expected.rstrip("\n")))
 
 
-def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(go1: Built, go1_dom: Dom) -> None:
-    unescaped = html_unescape(go1.page)
-    svg_at = go1_dom.first_svg().index
-    rules = css_rules(go1_dom.html_style())
-    for panel, event in zip(go1.structure["panels"], go1.report.events, strict=True):
-        # PF4 (PF4.20): Go1 declares no event kind, so the page names the honesty line's count in
+def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(lattice_built: Built, lattice_dom: Dom) -> None:
+    unescaped = html_unescape(lattice_built.page)
+    svg_at = lattice_dom.first_svg().index
+    rules = css_rules(lattice_dom.html_style())
+    for panel, event in zip(lattice_built.structure["panels"], lattice_built.report.events, strict=True):
+        # PF4 (PF4.20): the lattice declares no event kind, so the page names the honesty line's count in
         # direction words (the count of rises, "higher"); the library's panel keeps its old encoding.
-        ev = go1.multi.by_event[event]
+        ev = lattice_built.multi.by_event[event]
         assert ev.kind is None
-        library = go1.report.panels[event].honesty
+        library = lattice_built.report.panels[event].honesty
         # PF4 re-freeze (PF4.20, kindless events): the library no longer counts a kindless event's
         # rises as worse (n_worse is None, n_higher carries the count); the report's honesty line keeps
         # its old encoding, the count of rises, which is n_higher.
@@ -1367,7 +1367,7 @@ def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(go1: Built,
         assert panel["honesty"] == honesty
         lines = honesty.splitlines()
         assert '"' in honesty, "the honesty text has no double quote to escape"
-        # PF4 re-freeze (PF4.22): a limit is the larger of the two directions, so Go1's two
+        # PF4 re-freeze (PF4.22): a limit is the larger of the two directions, so the lattice's two
         # complementary events have the same limits and their honesty lines can share a line of
         # text; each line is found after the line before it, which keeps the order pinned.
         positions = []
@@ -1375,7 +1375,7 @@ def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(go1: Built,
             positions.append(unescaped.find(line, positions[-1] + 1 if positions else 0))
         assert all(p >= 0 for p in positions), (event, positions)
         assert positions == sorted(positions), positions
-        nodes = [n for n in body_nodes_containing(go1_dom, lines[0]) if lines[1] in n.deep_text()]
+        nodes = [n for n in body_nodes_containing(lattice_dom, lines[0]) if lines[1] in n.deep_text()]
         assert nodes, event
         node = nodes[0]
         assert node.index < svg_at, (node.index, svg_at)
@@ -1387,27 +1387,27 @@ def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(go1: Built,
             assert "max-height" not in styles, n.tag
 
 
-def test_v20_provenance_items_are_m7s_lines_in_order_and_diff_is_the_provenance_dict(go1: Built, go1_dom: Dom) -> None:
+def test_v20_provenance_items_are_m7s_lines_in_order_and_diff_is_the_provenance_dict(lattice_built: Built, lattice_dom: Dom) -> None:
     from poisson_prove.report import _provenance_lines
 
-    expected = [line[2:] for line in _provenance_lines(go1.report.provenance)]
-    lists = [[li.deep_text() for li in descendants(ul, "li")] for ul in go1_dom.find("ul") + go1_dom.find("ol")]
+    expected = [line[2:] for line in _provenance_lines(lattice_built.report.provenance)]
+    lists = [[li.deep_text() for li in descendants(ul, "li")] for ul in lattice_dom.find("ul") + lattice_dom.find("ol")]
     assert expected in lists, lists
-    assert go1.structure["diff"] == go1.report.provenance
-    assert list(go1.structure["diff"]) == list(go1.report.provenance)
+    assert lattice_built.structure["diff"] == lattice_built.report.provenance
+    assert list(lattice_built.structure["diff"]) == list(lattice_built.report.provenance)
 
 
-def test_v21_the_event_line_names_every_event_first_and_says_the_set_was_given(go1: Built) -> None:
-    unescaped = html_unescape(go1.page)
-    first_honesty = min(unescaped.find(p["honesty"].splitlines()[0]) for p in go1.structure["panels"])
+def test_v21_the_event_line_names_every_event_first_and_says_the_set_was_given(lattice_built: Built) -> None:
+    unescaped = html_unescape(lattice_built.page)
+    first_honesty = min(unescaped.find(p["honesty"].splitlines()[0]) for p in lattice_built.structure["panels"])
     assert first_honesty > 0
     region = unescaped[:first_honesty]
     assert "<svg" not in region
-    for event in GO1_EVENTS:
+    for event in LATTICE_EVENTS:
         assert re.search(rf"\b{event}\b", region), event
     assert EVENT_LINE_LITERAL in region, region[-800:]
-    assert go1.report.inference_line is None
-    assert go1.structure["diff"]["inferred"] is False
+    assert lattice_built.report.inference_line is None
+    assert lattice_built.structure["diff"]["inferred"] is False
 
 
 # ---------- V22-V22b: the BH family is the event set ----------
@@ -1425,11 +1425,11 @@ def structure_q(structure: dict[str, Any]) -> dict[tuple[str, str], float]:
     return {(p["event"], c["config_hash"]): c["q"] for p in structure["panels"] for c in p["cells"]}
 
 
-@pytest.mark.parametrize("events", [("fell",), ("fell", "survived")], ids=["one-event", "two-events"])
-def test_v22_n_tests_and_every_q_equal_diff_format_json(go1_serve_json: Result, go1_serve_json_one_event: Result, events: tuple[str, ...]) -> None:
-    served_json = go1_serve_json if len(events) == 2 else go1_serve_json_one_event
+@pytest.mark.parametrize("events", [(lattice.EVENT,), (lattice.EVENT, lattice.OTHER)], ids=["one-event", "two-events"])
+def test_v22_n_tests_and_every_q_equal_diff_format_json(lattice_serve_json: Result, lattice_serve_json_one_event: Result, events: tuple[str, ...]) -> None:
+    served_json = lattice_serve_json if len(events) == 2 else lattice_serve_json_one_event
     assert served_json.code == 0, served_json.err
-    argv = ["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B]
+    argv = ["--store", str(LATTICE_ROOT), "diff", LATTICE_A, LATTICE_B]
     for e in events:
         argv += ["--event", e]
     # --json replaces --format json on diff (spec section 5.6).
@@ -1462,17 +1462,17 @@ def present_hashes(report: MultiReport, event: str) -> list[str]:
     return [str(c.config_hash) for c in report.panels[event].cells if c.present]
 
 
-def test_v23_panel_cells_are_the_present_grid_cells_in_m7_order_and_equal_m6_without_fix(go1: Built) -> None:
-    assert [p["event"] for p in go1.structure["panels"]] == list(go1.report.events)
-    for panel in go1.structure["panels"]:
+def test_v23_panel_cells_are_the_present_grid_cells_in_m7_order_and_equal_m6_without_fix(lattice_built: Built) -> None:
+    assert [p["event"] for p in lattice_built.structure["panels"]] == list(lattice_built.report.events)
+    for panel in lattice_built.structure["panels"]:
         hashes = [c["config_hash"] for c in panel["cells"]]
-        assert hashes == present_hashes(go1.report, panel["event"])
-        assert sorted(hashes) == sorted(m6_rows(go1.multi, panel["event"]))
+        assert hashes == present_hashes(lattice_built.report, panel["event"])
+        assert sorted(hashes) == sorted(m6_rows(lattice_built.multi, panel["event"]))
 
 
-def test_v23_a_fix_slices_the_grid_against_m7_and_not_m6(go1: Built, go1_store: Store) -> None:
-    mu = go1_store.read(GO1_A)["config"].iloc[0]["mu"]
-    sliced = build_pair(GO1_ROOT, GO1_A, GO1_B, go1_spec(y_axis=None, fixed={"mu": mu}), GO1_EVENTS)
+def test_v23_a_fix_slices_the_grid_against_m7_and_not_m6(lattice_built: Built, lattice_store: Store) -> None:
+    gain = lattice_store.read(LATTICE_A)["config"].iloc[0][lattice.X]
+    sliced = build_pair(LATTICE_ROOT, LATTICE_A, LATTICE_B, lattice_spec(y_axis=None, fixed={lattice.X: gain}), LATTICE_EVENTS)
     for panel in sliced.structure["panels"]:
         hashes = [c["config_hash"] for c in panel["cells"]]
         assert hashes == present_hashes(sliced.report, panel["event"])
@@ -1480,8 +1480,8 @@ def test_v23_a_fix_slices_the_grid_against_m7_and_not_m6(go1: Built, go1_store: 
         assert len(hashes) < len(m6_rows(sliced.multi, panel["event"]))
 
 
-def test_v24_cell_keys_are_the_twenty_one_and_no_episode_level_key_anywhere(go1: Built) -> None:
-    for panel in go1.structure["panels"]:
+def test_v24_cell_keys_are_the_twenty_one_and_no_episode_level_key_anywhere(lattice_built: Built) -> None:
+    for panel in lattice_built.structure["panels"]:
         for cell in panel["cells"]:
             assert tuple(cell) == CELL_KEYS, tuple(cell)
             assert set(cell["text"]) == set(FLOAT_KINDS)
@@ -1494,9 +1494,9 @@ def test_v24_cell_keys_are_the_twenty_one_and_no_episode_level_key_anywhere(go1:
     # config axis named ``seed`` still trips this clause under ``tree.root.units.config`` exactly
     # as it does under ``panels.cells.config`` today. The page-index walk is not narrowed: the
     # tree's regions add nothing to the picker's index, and this is the clause that says so.
-    hits = {path for path, key in walk_key_paths(go1.structure) if key in FORBIDDEN_KEYS}
+    hits = {path for path, key in walk_key_paths(lattice_built.structure) if key in FORBIDDEN_KEYS}
     assert hits <= {SEED_CARVE_OUT}, hits
-    assert not FORBIDDEN_KEYS & set(walk_keys(index_of(go1.page)))
+    assert not FORBIDDEN_KEYS & set(walk_keys(index_of(lattice_built.page)))
 
 
 def test_v25_holes_have_no_index_entry_and_the_hole_message_appears_once(hostile: Built) -> None:
@@ -1509,29 +1509,29 @@ def test_v25_holes_have_no_index_entry_and_the_hole_message_appears_once(hostile
     assert html_unescape(hostile.page).count(HOLE_MESSAGE) == 1
 
 
-def test_v26_pointer_events_none_covers_the_glyph_the_notch_and_the_figures_text_and_nothing_else(go1_dom: Dom) -> None:
+def test_v26_pointer_events_none_covers_the_glyph_the_notch_and_the_figures_text_and_nothing_else(lattice_dom: Dom) -> None:
     """LS retrofit, 2026-09-22 (local serve pass, Phase A): the inert set gains the figure's ``<text>`` (spec LS D8, LS1) -- a cell's own
     label swallowed the click. The ``data-cell`` clause is re-asserted verbatim."""
-    rules = css_rules(go1_dom.html_style())
+    rules = css_rules(lattice_dom.html_style())
     inert = [s for selectors, decls in rules if decls.get("pointer-events") == "none" for s in selectors]
     assert inert, rules
     assert any("[data-sig]" in s for s in inert), inert
     assert any(last_compound_tag(s) == "path" for s in inert), inert
     assert any(last_compound_tag(s) == "text" for s in inert), inert
     assert not any("data-cell" in s or "data-mde" in s for s in inert), inert
-    cells = [n for n in go1_dom.nodes if "data-cell" in n.attrs]
+    cells = [n for n in lattice_dom.nodes if "data-cell" in n.attrs]
     assert cells
     for node in cells:
         assert styles_of(node, rules).get("pointer-events") != "none", node.attrs
 
 
-def test_v27_the_select_lists_every_cell_grouped_by_event_in_grid_order(go1: Built, go1_dom: Dom) -> None:
-    selects = go1_dom.find("select")
+def test_v27_the_select_lists_every_cell_grouped_by_event_in_grid_order(lattice_built: Built, lattice_dom: Dom) -> None:
+    selects = lattice_dom.find("select")
     assert len(selects) == 1, len(selects)
     groups = [g for g in selects[0].children if g.tag == "optgroup"]
-    assert [g.attrs.get("label") for g in groups] == [*go1.report.events, "holes"]
-    index = index_of(go1.page)
-    for group, panel in zip(groups[:-1], go1.structure["panels"], strict=True):
+    assert [g.attrs.get("label") for g in groups] == [*lattice_built.report.events, "holes"]
+    index = index_of(lattice_built.page)
+    for group, panel in zip(groups[:-1], lattice_built.structure["panels"], strict=True):
         values = [o.attrs.get("value") for o in group.children if o.tag == "option"]
         assert values == [key_of(panel["event"], c["config_hash"]) for c in panel["cells"]]
         assert all(v in index for v in values)
@@ -1553,15 +1553,15 @@ def test_v28_a_hostile_config_value_renders_as_text(hostile: Built) -> None:
 # ---------- V29-V33: determinism, the verb, the blocks, identity, --json ----------
 
 
-def test_v29_two_builds_are_equal_and_two_renders_identical_with_no_timestamp(go1: Built, go1_store: Store) -> None:
-    again = build_pair(GO1_ROOT, GO1_A, GO1_B, go1_spec(), GO1_EVENTS)
-    assert again.structure == go1.structure
-    assert viewer().render_html(go1.structure) == go1.page == again.page
-    assert go1.report.spec.generated_at is None
-    assert "generated_at" not in go1.structure["diff"]
-    dump = json.dumps(go1.structure, allow_nan=False)
+def test_v29_two_builds_are_equal_and_two_renders_identical_with_no_timestamp(lattice_built: Built, lattice_store: Store) -> None:
+    again = build_pair(LATTICE_ROOT, LATTICE_A, LATTICE_B, lattice_spec(), LATTICE_EVENTS)
+    assert again.structure == lattice_built.structure
+    assert viewer().render_html(lattice_built.structure) == lattice_built.page == again.page
+    assert lattice_built.report.spec.generated_at is None
+    assert "generated_at" not in lattice_built.structure["diff"]
+    dump = json.dumps(lattice_built.structure, allow_nan=False)
     today = dt.datetime.now(dt.UTC).strftime("%Y-%m-%d")
-    for text in (dump, go1.page):
+    for text in (dump, lattice_built.page):
         assert today not in text
         assert dt.date.today().isoformat() not in text
         assert not UUID_RE.search(text)
@@ -1581,15 +1581,15 @@ def test_v30_help_lists_serve_and_serve_help_lists_exactly_the_sixteen_flags() -
     assert "--port" not in r.out
 
 
-def test_v31_the_four_unverified_entries_in_order_rendered_uncollapsed_above_the_svg(go1: Built, go1_dom: Dom) -> None:
-    entries = go1.structure["unverified"]
+def test_v31_the_four_unverified_entries_in_order_rendered_uncollapsed_above_the_svg(lattice_built: Built, lattice_dom: Dom) -> None:
+    entries = lattice_built.structure["unverified"]
     assert [(e["id"], e["statement"], e["blocked_by"]) for e in entries] == list(UNVERIFIED)
     assert all(tuple(e) == ("id", "statement", "blocked_by") for e in entries)
-    unescaped = html_unescape(go1.page)
-    svg_at = go1_dom.first_svg().index
+    unescaped = html_unescape(lattice_built.page)
+    svg_at = lattice_dom.first_svg().index
     for _, statement, _ in UNVERIFIED:
         assert statement in unescaped, statement
-        nodes = body_nodes_containing(go1_dom, statement)
+        nodes = body_nodes_containing(lattice_dom, statement)
         assert nodes, statement
         assert nodes[0].index < svg_at
         assert not nodes[0].inside("details")
@@ -1600,62 +1600,67 @@ def manifest_values(m: RunManifest) -> dict[str, Any]:
     return {k: d[k] for k in ARM_KEYS if k in d}
 
 
-def test_v32_both_arms_carry_the_manifest_the_row_count_and_the_role(go1: Built, go1_store: Store) -> None:
-    pair = go1.structure["pair"]
-    for key, run_id, role in (("a", GO1_A, "baseline"), ("b", GO1_B, "candidate")):
+def test_v32_both_arms_carry_the_manifest_the_row_count_and_the_role(lattice_built: Built, lattice_store: Store) -> None:
+    pair = lattice_built.structure["pair"]
+    for key, run_id, role in (("a", LATTICE_A, "baseline"), ("b", LATTICE_B, "candidate")):
         arm = pair[key]
         assert tuple(arm) == ARM_KEYS, tuple(arm)
-        expected = manifest_values(go1_store.manifest(run_id))
+        expected = manifest_values(lattice_store.manifest(run_id))
         assert {k: arm[k] for k in expected} == expected
-        assert arm["rows_stored"] == go1_store.count(run_id) == GO1_ROWS
+        assert arm["rows_stored"] == lattice_store.count(run_id) == LATTICE_ROWS == 2_304
         assert arm["role"] == role
-    assert go1.structure["view"]["sign_convention"] == SIGN_CONVENTION
+    assert lattice_built.structure["view"]["sign_convention"] == SIGN_CONVENTION
     # PF4 (PF4.11): the pair no longer carries the store's path.
-    assert "store_root" not in pair and str(GO1_ROOT) not in json.dumps(go1.structure)
-    assert pair["a"]["run_salt"] == pair["b"]["run_salt"] == go1.structure["diff"]["run_salt"]
+    assert "store_root" not in pair and str(LATTICE_ROOT) not in json.dumps(lattice_built.structure)
+    assert pair["a"]["run_salt"] == pair["b"]["run_salt"] == lattice_built.structure["diff"]["run_salt"]
 
 
-def test_v32_the_page_shows_both_identities(go1: Built) -> None:
-    unescaped = html_unescape(go1.page)
+def test_v32_the_page_shows_both_identities(lattice_built: Built) -> None:
+    unescaped = html_unescape(lattice_built.page)
     for key in ("a", "b"):
-        arm = go1.structure["pair"][key]
+        arm = lattice_built.structure["pair"][key]
         for name in ("target_id", "status", "created_at", "run_salt", "run_id"):
             assert arm[name] in unescaped, (key, name)
     assert "baseline" in unescaped and "candidate" in unescaped
-    assert str(go1.structure["pair"]["created_at_gap_s"]) in unescaped
+    # The lattice's gap, 0.25, is also a run of digits in its created_at stamps (and a share in the
+    # cell index), so the number alone proves nothing: the page prints the gap's own sentence, with
+    # the structure's number, as one element of its own, once.
+    gap = lattice_built.structure["pair"]["created_at_gap_s"]
+    assert gap == LATTICE_GAP_S == 0.25
+    assert lattice_built.page.splitlines().count(f"<p>created_at gap, B minus A: {gap} seconds.</p>") == 1
 
 
-def test_v32_created_at_gap_is_the_signed_difference_and_go1_measures_0_112099(go1: Built, go1_store: Store) -> None:
-    a, b = go1_store.manifest(GO1_A), go1_store.manifest(GO1_B)
+def test_v32_created_at_gap_is_the_signed_difference_and_the_lattice_measures_0_25(lattice_built: Built, lattice_store: Store) -> None:
+    a, b = lattice_store.manifest(LATTICE_A), lattice_store.manifest(LATTICE_B)
     expected = (dt.datetime.fromisoformat(b.created_at) - dt.datetime.fromisoformat(a.created_at)).total_seconds()
-    assert go1.structure["pair"]["created_at_gap_s"] == expected == GO1_GAP_S
+    assert lattice_built.structure["pair"]["created_at_gap_s"] == expected == LATTICE_GAP_S == 0.25
 
 
-def test_v32_created_at_gap_is_null_when_a_timestamp_does_not_parse(go1: Built, go1_store: Store) -> None:
+def test_v32_created_at_gap_is_null_when_a_timestamp_does_not_parse(lattice_built: Built, lattice_store: Store) -> None:
     from dataclasses import replace
 
-    ma, mb = go1_store.manifest(GO1_A), go1_store.manifest(GO1_B)
+    ma, mb = lattice_store.manifest(LATTICE_A), lattice_store.manifest(LATTICE_B)
     broken = replace(ma, created_at="not a timestamp")
     structure = viewer().build_structure(
-        go1.report, go1.multi, tree=go1.tree, manifest_a=broken, manifest_b=mb,
-        rows_a=GO1_ROWS, rows_b=GO1_ROWS,
-        tally_a=go1_store.tally(GO1_A), tally_b=go1_store.tally(GO1_B), store_root=str(GO1_ROOT),
+        lattice_built.report, lattice_built.multi, tree=lattice_built.tree, manifest_a=broken, manifest_b=mb,
+        rows_a=LATTICE_ROWS, rows_b=LATTICE_ROWS,
+        tally_a=lattice_store.tally(LATTICE_A), tally_b=lattice_store.tally(LATTICE_B), store_root=str(LATTICE_ROOT),
     )
     assert structure["pair"]["created_at_gap_s"] is None
     assert structure["pair"]["a"]["created_at"] == "not a timestamp"
 
 
-def test_v32_each_arm_carries_its_own_salt(go1: Built, go1_store: Store) -> None:
-    # Go1's arms share a salt, so a structure that copied A's salt into B would pass on the
+def test_v32_each_arm_carries_its_own_salt(lattice_built: Built, lattice_store: Store) -> None:
+    # The lattice's arms share a salt, so a structure that copied A's salt into B would pass on the
     # fixture alone; give B a salt of its own and read both back.
     from dataclasses import replace
 
-    ma, mb = go1_store.manifest(GO1_A), go1_store.manifest(GO1_B)
+    ma, mb = lattice_store.manifest(LATTICE_A), lattice_store.manifest(LATTICE_B)
     other = replace(mb, run_salt="candidate-only-salt")
     structure = viewer().build_structure(
-        go1.report, go1.multi, tree=go1.tree, manifest_a=ma, manifest_b=other,
-        rows_a=GO1_ROWS, rows_b=GO1_ROWS,
-        tally_a=go1_store.tally(GO1_A), tally_b=go1_store.tally(GO1_B), store_root=str(GO1_ROOT),
+        lattice_built.report, lattice_built.multi, tree=lattice_built.tree, manifest_a=ma, manifest_b=other,
+        rows_a=LATTICE_ROWS, rows_b=LATTICE_ROWS,
+        tally_a=lattice_store.tally(LATTICE_A), tally_b=lattice_store.tally(LATTICE_B), store_root=str(LATTICE_ROOT),
     )
     assert structure["pair"]["a"]["run_salt"] == ma.run_salt
     assert structure["pair"]["b"]["run_salt"] == "candidate-only-salt"
@@ -1663,16 +1668,27 @@ def test_v32_each_arm_carries_its_own_salt(go1: Built, go1_store: Store) -> None
     assert "candidate-only-salt" in html_unescape(viewer().render_html(structure))
 
 
-def test_v32_the_renderer_prints_the_gap_it_is_given(go1: Built) -> None:
-    structure = json.loads(json.dumps(go1.structure, allow_nan=False))
+def test_v32_the_renderer_prints_the_gap_it_is_given(lattice_built: Built) -> None:
+    structure = json.loads(json.dumps(lattice_built.structure, allow_nan=False))
+    original = html_unescape(viewer().render_html(structure))
     structure["pair"]["created_at_gap_s"] = 4242.5
     page = html_unescape(viewer().render_html(structure))
     assert "4242.5" in page
-    assert str(GO1_GAP_S) not in page
+    # The lattice's gap, 0.25, is also a share some conditions print (and a run of digits inside its
+    # timestamps), so "the real gap is printed nowhere" is read where a gap can be printed: every
+    # line that moved printed the real gap and now prints the given one in its place, nothing else
+    # moved, and no line that speaks of the gap still carries the real gap as a number.
+    gap = str(LATTICE_GAP_S)
+    token = re.compile(rf"(?<![\d.]){re.escape(gap)}(?!\d)")
+    before, after = original.splitlines(), page.splitlines()
+    assert len(before) == len(after)
+    moved = [(o, m) for o, m in zip(before, after, strict=True) if o != m]
+    assert moved and all(token.search(o) and m == token.sub("4242.5", o) for o, m in moved), moved
+    assert not [line for line in after if token.search(line) and "gap" in line.lower()]
 
 
-def test_v33_json_prints_the_structure_indented_and_strict_and_binds_nothing(go1: Built, go1_serve_json: Result) -> None:
-    r = go1_serve_json
+def test_v33_json_prints_the_structure_indented_and_strict_and_binds_nothing(lattice_built: Built, lattice_serve_json: Result) -> None:
+    r = lattice_serve_json
     assert r.code == 0, r.err
     assert r.out.startswith('{\n  "schema": ')
     parsed = strict_loads(r.out)
@@ -1684,29 +1700,29 @@ def test_v33_json_prints_the_structure_indented_and_strict_and_binds_nothing(go1
     # PF2 (spec section 4.3): serve --json carries run_name beside each arm's run_id; with it set
     # aside the structure is the library's, and the names sit where they belong.
     assert {role: (parsed["pair"][role]["run_id"], parsed["pair"][role].get("run_name")) for role in ("a", "b")} == {
-        "a": (GO1_A, GO1_NAME_A), "b": (GO1_B, GO1_NAME_B)
+        "a": (LATTICE_A, LATTICE_NAME_A), "b": (LATTICE_B, LATTICE_NAME_B)
     }, parsed["pair"]
     for role in ("a", "b"):
         arm = parsed["pair"][role]
         assert tuple(arm).index("run_name") == tuple(arm).index("run_id") + 1, tuple(arm)
         del arm["run_name"]
-    assert parsed == json.loads(json.dumps(go1.structure, allow_nan=False))
+    assert parsed == json.loads(json.dumps(lattice_built.structure, allow_nan=False))
     assert parsed["schema"] == SCHEMA
     assert tuple(parsed) == TOP_LEVEL_KEYS, tuple(parsed)
-    assert tuple(go1.structure) == TOP_LEVEL_KEYS
+    assert tuple(lattice_built.structure) == TOP_LEVEL_KEYS
 
 
 # ---------- V34-V36: n_present, the rendering split, the worst tables ----------
 
 
-def test_v34_n_present_counts_the_present_cells_of_the_full_grid(go1: Built) -> None:
-    for event in go1.report.events:
-        panel = go1.report.panels[event]
+def test_v34_n_present_counts_the_present_cells_of_the_full_grid(lattice_built: Built) -> None:
+    for event in lattice_built.report.events:
+        panel = lattice_built.report.panels[event]
         assert panel.n_present == sum(c.present for c in panel.cells)
         assert panel.n_present + panel.n_absent == len(panel.cells)
-    for entry in go1.structure["panels"]:
+    for entry in lattice_built.structure["panels"]:
         assert tuple(entry) == PANEL_KEYS, tuple(entry)
-        assert entry["n_present"] == go1.report.panels[entry["event"]].n_present
+        assert entry["n_present"] == lattice_built.report.panels[entry["event"]].n_present
         assert entry["n_present"] == len(entry["cells"])
 
 
@@ -1727,11 +1743,11 @@ def test_v34_no_test_constructs_report_positionally_or_pins_its_fields() -> None
     assert offenders == [], offenders
 
 
-def test_v35_render_html_takes_one_parameter_and_renders_a_round_tripped_structure_identically(go1: Built, tmp_path: Path) -> None:
+def test_v35_render_html_takes_one_parameter_and_renders_a_round_tripped_structure_identically(lattice_built: Built, tmp_path: Path) -> None:
     assert len(inspect.signature(viewer().render_html).parameters) == 1
     structure_path = tmp_path / "structure.json"
     page_path = tmp_path / "page.html"
-    structure_path.write_text(json.dumps(go1.structure, allow_nan=False))
+    structure_path.write_text(json.dumps(lattice_built.structure, allow_nan=False))
     # A fresh interpreter holds no MultiReport, Report, DiffResult or DataFrame: the only
     # thing render_html can read is the JSON it is handed.
     script = (
@@ -1746,7 +1762,7 @@ def test_v35_render_html_takes_one_parameter_and_renders_a_round_tripped_structu
         capture_output=True, text=True, env={**os.environ},
     )
     assert r.returncode == 0, r.stderr
-    assert page_path.read_text(encoding="utf-8") == go1.page
+    assert page_path.read_text(encoding="utf-8") == lattice_built.page
 
 
 def test_v35_the_report_imports_split_between_assembly_and_rendering() -> None:
@@ -1760,9 +1776,9 @@ def test_v35_the_report_imports_split_between_assembly_and_rendering() -> None:
         assert name not in render, name
 
 
-def test_v36_worst_tables_are_m7s_and_the_first_worst_cell_is_selected(go1: Built, go1_dom: Dom) -> None:
-    receipt = receipt_tables(go1.report)
-    for panel, (header, rows) in zip(go1.structure["panels"], receipt, strict=True):
+def test_v36_worst_tables_are_m7s_and_the_first_worst_cell_is_selected(lattice_built: Built, lattice_dom: Dom) -> None:
+    receipt = receipt_tables(lattice_built.report)
+    for panel, (header, rows) in zip(lattice_built.structure["panels"], receipt, strict=True):
         assert panel["worst_header"] == header
         assert panel["worst_rows"] == rows
         # P-1: the flat panel's worst table gains a trailing ``interval (pp)`` column when M6 built intervals.
@@ -1775,33 +1791,40 @@ def test_v36_worst_tables_are_m7s_and_the_first_worst_cell_is_selected(go1: Buil
         assert panel["worst_hashes"] == expected_hashes
         rendered = [
             ([th.deep_text() for th in descendants(t, "th")], [[td.deep_text() for td in descendants(tr, "td")] for tr in descendants(t, "tr") if descendants(tr, "td")])
-            for t in go1_dom.find("table")
+            for t in lattice_dom.find("table")
         ]
         assert (header, rows) in rendered
-    first = go1.structure["panels"][0]
-    selected = [o for o in go1_dom.find("option") if "selected" in o.attrs]
+    first = lattice_built.structure["panels"][0]
+    selected = [o for o in lattice_dom.find("option") if "selected" in o.attrs]
     assert [o.attrs.get("value") for o in selected] == [key_of(first["event"], first["worst_hashes"][0])]
 
 
 # ---------- V37-V40: non-finite floats, the URL line, the page's text, the schema ----------
 
 
-def test_v37_non_finite_stats_are_null_in_the_structure_and_the_dump_parses_strictly(go1: Built, go1_serve_json: Result) -> None:
+def test_v37_non_finite_stats_are_null_in_the_structure_and_the_dump_parses_strictly(lattice_built: Built, lattice_serve_json: Result) -> None:
     non_finite = sum(
-        not math.isfinite(float(v)) for e in go1.multi.events for v in go1.multi.by_event[e].cells["stat"]
+        not math.isfinite(float(v)) for e in lattice_built.multi.events for v in lattice_built.multi.by_event[e].cells["stat"]
     )
     assert non_finite > 0, "the fixture has no non-finite stat; the invariant is not exercised"
-    nulls = sum(c["stat"] is None for p in go1.structure["panels"] for c in p["cells"])
+    # the reference: the sample odds ratio (a d) / (b c) of each condition's 2x2 table, from the
+    # design's counts, is inf or nan exactly when b c is 0 (the zero and ceiling conditions)
+    reference = sum(
+        (r["n_a"] - r["events_a"]) * r["events_b"] == 0
+        for event in LATTICE_EVENTS for r in lattice.counts(event)
+    )
+    assert non_finite == reference == 76, (non_finite, reference)
+    nulls = sum(c["stat"] is None for p in lattice_built.structure["panels"] for c in p["cells"])
     assert nulls == non_finite
-    for panel in go1.structure["panels"]:
+    for panel in lattice_built.structure["panels"]:
         for cell in panel["cells"]:
             if cell["stat"] is None:
                 assert cell["text"]["stat"] in ("inf", "-inf", "nan"), cell["text"]["stat"]
-    assert go1_serve_json.code == 0
-    strict_loads(go1_serve_json.out)
-    strict_loads(parse_html(go1.page).index_json())
+    assert lattice_serve_json.code == 0
+    strict_loads(lattice_serve_json.out)
+    strict_loads(parse_html(lattice_built.page).index_json())
     with pytest.raises(ValueError):
-        json.dumps(go1.structure | {"probe": math.inf}, allow_nan=False)
+        json.dumps(lattice_built.structure | {"probe": math.inf}, allow_nan=False)
 
 
 def json_dumps_calls(nodes: Sequence[ast.AST]) -> list[ast.Call]:
@@ -1829,8 +1852,8 @@ def test_v37_both_serializers_pass_allow_nan_false() -> None:
         assert flags.get("allow_nan") is False, (call.lineno, flags)
 
 
-def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(go1: Built, monkeypatch: pytest.MonkeyPatch) -> None:
-    with cli_served(monkeypatch, go1_full_argv()) as run:
+def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(lattice_built: Built, monkeypatch: pytest.MonkeyPatch) -> None:
+    with cli_served(monkeypatch, lattice_full_argv()) as run:
         port = run.server.server_address[1]
         assert isinstance(run.server, socketserver.BaseServer)
         assert run.out_at_bind == ""
@@ -1840,11 +1863,11 @@ def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(go
         assert lines[0] == serving_line(port) and len(lines) == 2 and re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]), lines
         assert get(run.server, "/").status == 200
     assert run.codes == [0], run.codes
-    # The unpaired-analysis warning on Go1 is now a note line on stderr (spec section 5.4).
+    # The unpaired-analysis warning on the lattice pair is now a note line on stderr (spec section 5.4).
     assert without_notes(run.err.getvalue()) == ""
 
 
-def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_traceback(go1: Built, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_traceback(lattice_built: Built, monkeypatch: pytest.MonkeyPatch) -> None:
     def interrupted(self: Any, poll_interval: float = 0.5) -> None:
         raise KeyboardInterrupt
 
@@ -1862,8 +1885,8 @@ def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_trace
 
     monkeypatch.setattr(module, "serve_page", wrapped)
     monkeypatch.setattr(cli, "serve_page", wrapped, raising=False)
-    r = run_cli(go1_full_argv())
-    # Ctrl-C exits 130 and adds one stopped line after the URL line; the Go1 warning is a note line
+    r = run_cli(lattice_full_argv())
+    # Ctrl-C exits 130 and adds one stopped line after the URL line; the unpaired-analysis warning is a note line
     # (spec sections 5.2 and 5.4).
     assert r.code == 130, r.text
     assert "Traceback" not in r.text and without_notes(r.err) == "", r.text
@@ -1877,30 +1900,30 @@ def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_trace
     assert holder[0].socket.fileno() == -1
 
 
-def test_v38_bind_failure_is_a_viewer_error_and_exit_two(go1: Built, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v38_bind_failure_is_a_viewer_error_and_exit_two(lattice_built: Built, monkeypatch: pytest.MonkeyPatch) -> None:
     def refuse(self: Any) -> None:
         raise OSError(98, "address in use (injected)")
 
     monkeypatch.setattr(http.server.HTTPServer, "server_bind", refuse)
     with pytest.raises(viewer().ViewerError):
-        viewer().serve_page(go1.page, on_bind=lambda server: None)
-    r = run_cli(go1_full_argv())
-    # A refusal exits 1; the Go1 warning may come first as a note line (spec sections 5.2 and 5.4).
+        viewer().serve_page(lattice_built.page, on_bind=lambda server: None)
+    r = run_cli(lattice_full_argv())
+    # A refusal exits 1; the unpaired-analysis warning may come first as a note line (spec sections 5.2 and 5.4).
     assert_clean_refusal(r, 1)
     assert r.out == "" and without_notes(r.err).startswith("error:"), r.text
 
 
-def test_v39_fence_headline_captions_and_worst_rows_are_on_the_page(go1: Built) -> None:
-    unescaped = html_unescape(go1.page)
-    assert go1.structure["fence"] == receipt_fence(go1.report)
-    assert go1.structure["fence"] in unescaped
-    assert go1.structure["headline"] == go1.report.headline
-    for line in go1.structure["headline"].splitlines():
+def test_v39_fence_headline_captions_and_worst_rows_are_on_the_page(lattice_built: Built) -> None:
+    unescaped = html_unescape(lattice_built.page)
+    assert lattice_built.structure["fence"] == receipt_fence(lattice_built.report)
+    assert lattice_built.structure["fence"] in unescaped
+    assert lattice_built.structure["headline"] == lattice_built.report.headline
+    for line in lattice_built.structure["headline"].splitlines():
         assert line in unescaped, line
-    for panel, event in zip(go1.structure["panels"], go1.report.events, strict=True):
-        # PF4 (PF4.20): Go1 declares no event kind, so the caption counts falls and rises in
+    for panel, event in zip(lattice_built.structure["panels"], lattice_built.report.events, strict=True):
+        # PF4 (PF4.20): the lattice declares no event kind, so the caption counts falls and rises in
         # direction words ("N lower, M higher") rather than the library panel's safer/worse.
-        ev = go1.multi.by_event[event]
+        ev = lattice_built.multi.by_event[event]
         assert ev.kind is None
         assert panel["caption"] == f"{event}: {ev.n_lower} lower, {ev.n_higher} higher"
         assert panel["caption"] in unescaped
@@ -1909,15 +1932,15 @@ def test_v39_fence_headline_captions_and_worst_rows_are_on_the_page(go1: Built) 
                 assert value in unescaped, value
 
 
-def test_v39_trade_line_appears_when_present_and_leaves_no_empty_element_when_null(go1: Built, go1_dom: Dom) -> None:
-    # Go1's two events are complements, so every safer fell cell is a worse survived cell
+def test_v39_trade_line_appears_when_present_and_leaves_no_empty_element_when_null(lattice_built: Built, lattice_dom: Dom) -> None:
+    # The lattice's two events are complements, so every condition where tripped fell is one where held rose
     # and the pair carries a trade line: the non-null case is the fixture itself.
-    trade = go1.structure["trade_line"]
-    assert trade is not None and trade == go1.report.trade_line
+    trade = lattice_built.structure["trade_line"]
+    assert trade is not None and trade == lattice_built.report.trade_line
     # M7 also draws the trade line inside the SVG header; the page must carry it outside too.
-    holder = [n for n in go1_dom.nodes if trade in n.text and not n.inside("svg")]
+    holder = [n for n in lattice_dom.nodes if trade in n.text and not n.inside("svg")]
     assert holder, "the trade line is not the direct text of one element outside the SVG"
-    without = json.loads(json.dumps(go1.structure, allow_nan=False))
+    without = json.loads(json.dumps(lattice_built.structure, allow_nan=False))
     without["trade_line"] = None
     # LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): the Summary carries the same sentence as
     # ``summary.complement.line`` on this pair (spec LS section 3.6), so a structure without the
@@ -1932,22 +1955,28 @@ def test_v39_trade_line_appears_when_present_and_leaves_no_empty_element_when_nu
     assert not any("trade" in n.classes() or "trade" in n.attrs.get("id", "") for n in outside)
 
 
-def test_v41_environment_renders_inside_one_closed_details_and_nowhere_else(go1: Built, go1_dom: Dom) -> None:
-    details = [n for n in go1_dom.find("details") if not n.inside("svg")]
+def test_v41_environment_renders_inside_one_closed_details_and_nowhere_else(lattice_built: Built, lattice_dom: Dom) -> None:
+    details = [n for n in lattice_dom.find("details") if not n.inside("svg")]
     assert len(details) == 1, len(details)
     assert "open" not in details[0].attrs, details[0].attrs
     inside = details[0].deep_text()
-    outside = html_unescape(excised(go1.page, DETAILS_RE))
+    outside = html_unescape(excised(lattice_built.page, DETAILS_RE))
+    sentinels = []
     for key in ("a", "b"):
-        environment = go1.structure["pair"][key]["environment"]
+        environment = lattice_built.structure["pair"][key]["environment"]
         for value in walk_strings(environment):
             assert value in inside, (key, value)
-        sentinel = environment["source_manifest"]
+        # The one string each arm's environment does not share with the other's: both arms are
+        # drawn, each its own.
+        sentinel = environment["run"]
         assert sentinel not in outside, (key, sentinel)
+        sentinels.append(sentinel)
+    assert sentinels == [lattice.ENVIRONMENT_RUN[lattice.RUN_A], lattice.ENVIRONMENT_RUN[lattice.RUN_B]]
+    assert sentinels[0] != sentinels[1] and not any(s in o for s, o in zip(sentinels, reversed(sentinels)))
 
 
-def test_v40_an_unknown_schema_is_refused_naming_both_values(go1: Built) -> None:
-    structure = json.loads(json.dumps(go1.structure, allow_nan=False))
+def test_v40_an_unknown_schema_is_refused_naming_both_values(lattice_built: Built) -> None:
+    structure = json.loads(json.dumps(lattice_built.structure, allow_nan=False))
     structure["schema"] = RETIRED_SCHEMA
     with pytest.raises(viewer().ViewerError) as info:
         viewer().render_html(structure)

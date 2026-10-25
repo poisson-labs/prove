@@ -99,12 +99,11 @@ spec's change log under 2026-09-21):
 **Fixtures, and what each cannot express** (spec section 6, measured first-hand on 2026-09-21).
 Every store here is built under ``tmp_path`` by this file -- the hand-built frames section 6 asks
 for, with an error in each arm and in both. **Neither committed fixture can guard a phase 1
-invariant, and neither is used:** Go1's two runs carry no trace at all, no item axis and no
-``python`` in their imported manifests, so every pair would be ``no_request_span`` under every
-implementation; and the 45/44 arms (``20260915T210140Z-4847`` / ``20260915T211148Z-965d``) carry
-between 6 and 44 spans per episode under one name (none of the 400 episodes carries exactly one),
-with ``input`` null on all 7,369, no ``url.full``, no header attribute and one config axis, so the
-assertion this file pins refuses every one of their 200 pairs as ``retry_or_multicall``. That is the assertion working. **Ruled 2026-09-21 (spec section
+invariant, and neither is used:** the lattice pair's two runs carry no trace at all, no item axis
+and no ``python`` in their imported manifests, so every pair would be ``no_request_span`` under
+every implementation; and the stored replay arms PR39 reads (``tests/replay_arms.py``) carry no
+trace either, so the assertion this file pins would refuse every one of their pairs. That is the
+assertion working. **Ruled 2026-09-21 (spec section
 11.2):** phase 2's PR39 builds its ``PairAssertion`` in test code from the two stored arms and hands
 it to ``analyse``; it does not go through ``assert_pairs``, and PR9's structural rule (``analyse``
 takes a ``PairAssertion`` and nothing else) is unchanged by that.

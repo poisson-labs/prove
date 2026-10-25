@@ -12,7 +12,7 @@ own. And the live defect underneath it -- **a declared cap above 8192 is not the
 the sweep declares it, the manifest records it, the receipt prints it, and the store cuts at the
 module default anyway. Both reproduced on the dispatch tree at step zero
 (``log/proofload-cap-declaration/10-step-zero-cd-session-a.md``): a sweep declaring 131072 stored a
-14,234-byte value as head 6144 + tail 2048, and at a declared 16384 a 10,000-byte value kept 8,192
+value above 8,192 bytes as head 6144 + tail 2048, and at a declared 16384 a 10,000-byte value kept 8,192
 bytes while a 20,000-byte value kept 16,384. A mandatory declaration over a store that ignores it
 is ADR-096's own failure mode with a receipt attached, so CD5 and CD6 are as much this file's
 centre as CD1 is.
@@ -128,9 +128,10 @@ CD_E1_FIRST_LINE = "[capture].max_observation_bytes is required and has no defau
 CD_E1_MUST_CONTAIN = ("max_observation_bytes", '"none"', "1024", "8192", "64", "docs/what-capture-stores.md")
 CD_E1_MUST_NOT_CONTAIN = ("65536", "measured", "airline", "8 KB", "50 KB")
 
-#: CAP3's agent-input p50, and the size the step-zero probes used.
-BIG_VALUE = "x" * 14234
-BIG_BYTES = 14234
+#: A value between the funnel's old constant (8,192 bytes) and twice it: kept whole under a
+#: raised cap, cut under a lowered one.
+BIG_VALUE = "x" * 12000
+BIG_BYTES = 12000
 #: CD6's non-monotone pair: one value between the funnel's old constant and the declared limit, one
 #: above both. At 16384 the shipped funnel keeps 8,192 bytes of the first and 16,384 of the second.
 MID_VALUE, MID_BYTES = "m" * 10000, 10000
@@ -879,7 +880,7 @@ def test_cd9_inspect_names_the_limit_the_run_recorded(tmp_path: Path) -> None:
     """``proofload inspect``'s cut line reads the run's own record of the limit, spelled as recorded.
 
     The line prints only for a row whose trace has a cut span, so this is measured on a run that cut:
-    a 14,234-byte value under a declared 4096. The ``"none"`` case is the test below -- a run that
+    a 12,000-byte value under a declared 4096. The ``"none"`` case is the test below -- a run that
     declares no cap never cuts, so it has no cut line to name a limit on, and that is the reading."""
     store, run_id = stored_run(
         tmp_path, {"instrument": [], "content": True, "max_observation_bytes": 4096}, "big_rollout", "cut"

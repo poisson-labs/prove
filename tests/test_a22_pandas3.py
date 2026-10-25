@@ -25,8 +25,8 @@ from; there is none.
 column read from Arrow is ``str`` dtype on pandas 3 whatever its null pattern, so the
 two-record store below exposes the read-path defect with a single null row. A column built by
 ``DataFrame.from_records`` is ``object`` when the **whole** column is ``None``, so an all-holes
-or all-comparable coverage frame hides the diff defect completely -- Go1's coverage has no
-holes and an unported build passes V9 on it. ``mixed_pair`` therefore carries comparable cells
+or all-comparable coverage frame hides the diff defect completely -- a pair whose coverage has no
+holes lets an unported build pass V9. ``mixed_pair`` therefore carries comparable cells
 **and** one hole of each of the five causes, and that is not optional.
 
 Fixture limits, stated rather than left to be rediscovered:
@@ -36,7 +36,7 @@ Fixture limits, stated rather than left to be rediscovered:
   its coverage rows come from the raw frames, not from ``censor()``.
 - The literal requirement list in V13 says nothing about the real ``pyproject.toml``; V14 and
   V15 assert that separately, deliberately.
-- Nothing here measures a live provider, a Modal run or the golden pilot. A24's W1-W7 are a
+- Nothing here measures a live provider or a Modal run. A24's W1-W7 are a
   different packet (spec section 11) and are not in this file.
 
 **A22 is a retrofit packet** (Master Action List section 18 standing rule 12). On Session A's
@@ -350,8 +350,8 @@ def test_v8_horizon_truncation_leaves_outcome_none_on_exactly_the_recensored_row
 
 def test_v9_coverage_cause_is_none_on_every_comparable_row_and_a_named_cause_on_every_hole(mixed_pair: Any) -> None:
     """An all-comparable or all-holes coverage frame cannot express this: ``from_records`` keeps
-    ``None`` when the whole column is ``None``, measured, so Go1's pair -- which has no holes --
-    passes on an unported build. The fixture carries both, and all five causes."""
+    ``None`` when the whole column is ``None``, measured, so a pair with no holes passes on an
+    unported build. The fixture carries both, and all five causes."""
     coverage = mixed_pair.coverage
     comparable = coverage[coverage["comparable"]]
     holes = coverage[~coverage["comparable"]]

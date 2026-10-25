@@ -1,12 +1,15 @@
 """Oracle for the M6 multi-event amendment: per-event CIF diff over one BH family.
 
-A1 is the gate. It asserts the single-event ``diff`` against
-``tests/fixtures/go1/diff_regression.json`` on disk, frozen from the pre-amendment
-implementation, and never against a recomputation. If A1 fails the amendment is wrong,
-not the golden.
+A1 is the gate. It asserts the single-event ``diff`` against a reference record of the
+lattice pair (``tests/lattice.py``), built in this file in the frozen record's shape from
+sources Prove never touches: the design's counts, scipy's Fisher test with BH written out
+(``lattice.fisher``, equal to Prove's p and q bit for bit), and the pre-amendment detection
+limits at 32 against 32 (``MDE_AT_32``, as the frozen single-event record held them). It is
+never checked against Prove recomputing itself. If A1 fails the amendment is wrong, not the
+golden.
 
-Fixture tests (A1, A2, A5, A6, A8, A10, A14, A19) run on the committed Go1 fixture
-through ``go1_store``: raw frames go to ``multi_diff``, censored frames to ``diff``.
+Fixture tests (A1, A2, A5, A6, A8, A10, A14, A19) run on the generated lattice pair
+through ``lattice_store``: raw frames go to ``multi_diff``, censored frames to ``diff``.
 Everything else uses small raw frames built directly with M4's thirteen columns, as the
 M5 oracle does; synthetic rows sit at the horizon unless a test needs otherwise, so the
 CIF at horizon equals the terminal rate and verdict direction follows the counts.
@@ -70,17 +73,18 @@ from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import censor
 from test_pf4_stats import _assert_limit, _ref_fisher_limits
 
-ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
-REGRESSION_JSON = FIXTURE_DIR / "diff_regression.json"
+import lattice
 
-RUNS = ["go1-v0", "go1-v1"]
-EVENT = "fell"
+ROOT = Path(__file__).resolve().parents[1]
+
+RUNS = [lattice.RUN_A, lattice.RUN_B]
+EVENT = lattice.EVENT
 METHODS = ["fisher_bh", "mcnemar_bh", "logrank_bh"]
 Q = 0.05
 POWER = 0.8
-CELLS = 400
-PUBLISHED_SAFER, PUBLISHED_WORSE = 60, 0
+CELLS = 72
+#: The reference's flagged conditions under fisher_bh (``lattice.directions(lattice.fisher())``).
+REFERENCE_SAFER, REFERENCE_WORSE = 22, 0
 HORIZON = 5.0
 N = 32
 TOL_EXACT = 1e-12
@@ -152,6 +156,62 @@ REGRESSION_CELL_KEYS = [
 ]
 REGRESSION_INT_KEYS = ("n_a", "n_b", "events_a", "events_b")
 REGRESSION_STR_KEYS = ("config_hash", "verdict")
+#: The single-event ``diff``'s detection limit (``mde_two_proportion`` at q 0.05, power 0.8) at
+#: 32 against 32, by the baseline's count: the values the frozen pre-amendment record held at
+#: these counts, bit for bit, except 15 and 21, which that record had no cell at and which were
+#: measured on main's unchanged build (05cd1e8). A baseline of 32 has no limit (PF4.15).
+MDE_AT_32 = {
+    0: 0.23272860124178862,
+    4: 0.3084586246584422,
+    11: 0.34361923907337655,
+    12: 0.34231764190792546,
+    14: 0.3360426082663821,
+    15: 0.3311476663122903,
+    16: 0.32510999650094163,
+    17: 0.31793560258449816,
+    18: 0.3096184808103999,
+    19: 0.30014029828805633,
+    20: 0.2894693869952789,
+    21: 0.2775589204333073,
+    22: 0.26434401505014193,
+    23: 0.24973730400301974,
+    24: 0.2336221980422124,
+    26: 0.1875,
+}
+#: The single-event record's words for the reference's directions (the event has no kind there).
+AS_VERDICT = {"lower": "safer", "higher": "worse", "unchanged": "unchanged"}
+
+
+def reference_record() -> dict[str, Any]:
+    """The single-event fisher_bh diff of the lattice pair as the frozen record laid it out, built
+    from the design and the references alone. A condition whose baseline tripped in every episode
+    holds ``mde`` None (no limit); the frozen record held the old 0.5/n guard's number there."""
+    reference = lattice.fisher(EVENT, Q)
+    manifests = {run_id: lattice.manifest(run_id) for run_id in RUNS}
+    cells = []
+    for key in sorted(reference):
+        r = reference[key]
+        cells.append({
+            "config_hash": key, "delta": r["delta"], "events_a": r["events_a"], "events_b": r["events_b"],
+            "mde": None if r["events_a"] == r["n_a"] else MDE_AT_32[r["events_a"]],
+            "n_a": r["n_a"], "n_b": r["n_b"], "p": r["p"], "q": r["q"],
+            "rate_a": r["events_a"] / r["n_a"], "rate_b": r["events_b"] / r["n_b"],
+            "verdict": AS_VERDICT[r["direction"]],
+        })
+    verdicts = [c["verdict"] for c in cells]
+    return {
+        "a": lattice.RUN_A, "b": lattice.RUN_B, "event": EVENT, "method": "fisher_bh",
+        "q_threshold": Q, "power": POWER, "n_cells": len(cells),
+        "n_safer": verdicts.count("safer"), "n_worse": verdicts.count("worse"),
+        "n_unchanged": verdicts.count("unchanged"),
+        # By construction: every condition is in both runs, at one horizon, with no errored row.
+        "n_not_comparable": 0, "dropped_a": 0, "dropped_b": 0, "truncated": 0,
+        "max_mde": max(c["mde"] for c in cells if c["mde"] is not None),
+        # The two manifests share one salt, and every (condition, replicate) one seed.
+        "paired": manifests[lattice.RUN_A]["run_salt"] == manifests[lattice.RUN_B]["run_salt"],
+        "horizon": lattice.HORIZON, "t_unit": lattice.T_UNIT,
+        "cells": cells,
+    }
 TRADES_COLUMNS = ["config_hash", "config", "safer_events", "worse_events"]
 MULTI_SCALAR_FIELDS = [
     "method",
@@ -431,33 +491,32 @@ def run_pair(draw, *, max_cells: int = 4, n: int = 8) -> tuple[pd.DataFrame, pd.
 
 
 @pytest.fixture(scope="module")
-def raw(go1_store: Store) -> dict[str, pd.DataFrame]:
-    return {run_id: go1_store.read(run_id) for run_id in RUNS}
+def raw(lattice_store: Store) -> dict[str, pd.DataFrame]:
+    return {run_id: lattice_store.read(run_id) for run_id in RUNS}
 
 
 @pytest.fixture(scope="module")
-def manifests(go1_store: Store) -> dict[str, RunManifest]:
-    return {run_id: go1_store.manifest(run_id) for run_id in RUNS}
+def manifests(lattice_store: Store) -> dict[str, RunManifest]:
+    return {run_id: lattice_store.manifest(run_id) for run_id in RUNS}
 
 
 @pytest.fixture(scope="module")
 def regression() -> dict:
-    assert REGRESSION_JSON.is_file(), f"missing regression fixture {REGRESSION_JSON}"
-    return json.loads(REGRESSION_JSON.read_text())
+    return reference_record()
 
 
 @pytest.fixture(scope="module")
 def golden(raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -> DiffResult:
     return diff(
-        censor(raw["go1-v0"], EVENT), censor(raw["go1-v1"], EVENT), event=EVENT,
+        censor(raw[lattice.RUN_A], EVENT), censor(raw[lattice.RUN_B], EVENT), event=EVENT,
         method="fisher_bh", q=Q, power=POWER,
-        manifest_a=manifests["go1-v0"], manifest_b=manifests["go1-v1"],
+        manifest_a=manifests[lattice.RUN_A], manifest_b=manifests[lattice.RUN_B],
     )
 
 
 def _fixture_multi(
     raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest], events: Sequence[str] | None,
-    method: str = "fisher_bh", a: str = "go1-v0", b: str = "go1-v1",
+    method: str = "fisher_bh", a: str = lattice.RUN_A, b: str = lattice.RUN_B,
 ) -> MultiDiffResult:
     return multi_diff(
         raw[a], raw[b], events=events, method=method, q=Q, power=POWER,
@@ -466,7 +525,7 @@ def _fixture_multi(
 
 
 @pytest.fixture(scope="module")
-def multi_fell(raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -> MultiDiffResult:
+def multi_tripped(raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -> MultiDiffResult:
     return _fixture_multi(raw, manifests, [EVENT])
 
 
@@ -512,11 +571,11 @@ def headline_case() -> MultiDiffResult:
     return _multi(a, b, ["z", "x", "y"], salt_a="s1", salt_b="s2")
 
 
-# ---------- A1: golden untouched, against the frozen file ----------
+# ---------- A1: golden untouched, against the reference record ----------
 
 
 def test_a1_regression_fixture_is_well_formed(regression: dict) -> None:
-    assert regression["a"] == "go1-v0" and regression["b"] == "go1-v1"
+    assert regression["a"] == "lattice-a" and regression["b"] == "lattice-b"
     assert regression["event"] == EVENT and regression["method"] == "fisher_bh"
     assert regression["q_threshold"] == Q and regression["power"] == POWER
     cells = regression["cells"]
@@ -525,23 +584,32 @@ def test_a1_regression_fixture_is_well_formed(regression: dict) -> None:
     assert hashes == sorted(hashes) and len(set(hashes)) == CELLS
     for c in cells:
         assert list(c) == sorted(REGRESSION_CELL_KEYS), c["config_hash"]
-    assert regression["n_safer"] == PUBLISHED_SAFER and regression["n_worse"] == PUBLISHED_WORSE
+    assert regression["n_safer"] == REFERENCE_SAFER and regression["n_worse"] == REFERENCE_WORSE
     assert regression["n_safer"] + regression["n_worse"] + regression["n_unchanged"] == CELLS
-    assert regression["max_mde"] == max(c["mde"] for c in cells)
+    # The frozen record's ceiling cells held the old 0.5/n guard's number; the reference holds
+    # None there (no limit, PF4.15), so the maximum is over the cells with a limit.
+    assert regression["max_mde"] == max(c["mde"] for c in cells if c["mde"] is not None) == MDE_AT_32[11]
+    assert sum(c["mde"] is None for c in cells) == sum(c["events_a"] == c["n_a"] for c in cells) == 37
     verdicts = [c["verdict"] for c in cells]
-    assert verdicts.count("safer") == PUBLISHED_SAFER and verdicts.count("worse") == PUBLISHED_WORSE
+    assert verdicts.count("safer") == REFERENCE_SAFER and verdicts.count("worse") == REFERENCE_WORSE
+    # The record is the design: every condition's counts are the design's, in key order.
+    design = {lattice.config_hash(c.config): c for c in lattice.design_cells()}
+    assert set(hashes) == set(design)
+    for c in cells:
+        cell = design[c["config_hash"]]
+        assert (c["n_a"], c["n_b"], c["events_a"], c["events_b"]) == (lattice.N, lattice.N, cell.tripped_a, cell.tripped_b)
 
 
 def test_a1_golden_summary_matches_regression_fixture(golden: DiffResult, regression: dict) -> None:
-    assert golden.n_safer == regression["n_safer"] == PUBLISHED_SAFER
-    assert golden.n_worse == regression["n_worse"] == PUBLISHED_WORSE
+    assert golden.n_safer == regression["n_safer"] == REFERENCE_SAFER
+    assert golden.n_worse == regression["n_worse"] == REFERENCE_WORSE
     assert golden.n_unchanged == regression["n_unchanged"]
     assert golden.n_not_comparable == regression["n_not_comparable"]
     assert golden.dropped_a == regression["dropped_a"] and golden.dropped_b == regression["dropped_b"]
     assert golden.truncated == regression["truncated"]
     assert golden.max_mde == regression["max_mde"]
     # The S3 record's ``paired`` was salt equality; P-1's ``seed_identity_match`` is the salt plus the
-    # stored seeds on every matched row, and on Go1 (12,800 matched, 0 differ) the two coincide.
+    # stored seeds on every matched row, and on the lattice (2,304 matched, 0 differ) the two coincide.
     assert golden.seed_identity_match is regression["paired"] is True
     assert golden.unpaired_analysis is True
     assert golden.horizon == regression["horizon"] and golden.t_unit == regression["t_unit"]
@@ -559,7 +627,7 @@ def test_a1_golden_per_cell_bit_identical_to_regression_fixture(golden: DiffResu
             ours = getattr(row, key)
             if key == "mde" and ref["events_a"] == ref["n_a"]:
                 # PF4 (PF4.15): a cell whose baseline had the event in every run has no detection
-                # limit; the frozen file holds the old 0.5/n guard's number there, now NaN.
+                # limit; the frozen file held the old 0.5/n guard's number there, now NaN.
                 assert math.isnan(float(ours)), (row.config_hash, key, float(ours))
                 continue
             if key in REGRESSION_INT_KEYS:
@@ -585,12 +653,13 @@ def test_a2_diff_result_reports_max_mde_unchanged_on_golden(golden: DiffResult, 
     assert golden.max_mde_unchanged_cell in attaining
     assert golden.max_mde_unchanged_cell is not None and not math.isnan(golden.max_mde_unchanged)
     assert golden.max_mde_unchanged <= golden.max_mde
-    frozen_top = max(c["mde"] for c in regression["cells"] if c["verdict"] == "unchanged")
+    frozen_top = max(c["mde"] for c in regression["cells"] if c["verdict"] == "unchanged" and c["mde"] is not None)
+    assert frozen_top == MDE_AT_32[12]
     assert golden.max_mde_unchanged == frozen_top
 
 
-def test_a2_event_diff_reports_max_mde_unchanged_on_golden(multi_fell: MultiDiffResult) -> None:
-    ev = multi_fell.by_event[EVENT]
+def test_a2_event_diff_reports_max_mde_unchanged_on_golden(multi_tripped: MultiDiffResult) -> None:
+    ev = multi_tripped.by_event[EVENT]
     top, attaining = _expected_unchanged(ev.cells)
     assert ev.max_mde_unchanged == top
     assert ev.max_mde_unchanged_cell in attaining
@@ -664,28 +733,28 @@ def test_a3_no_unchanged_cells_multi_event() -> None:
 # ---------- A5: single event via multi ----------
 
 
-def test_a5_single_event_via_multi_matches_diff(golden: DiffResult, multi_fell: MultiDiffResult) -> None:
-    assert multi_fell.events == (EVENT,)
-    assert set(multi_fell.by_event) == {EVENT}
-    ev = multi_fell.by_event[EVENT]
+def test_a5_single_event_via_multi_matches_diff(golden: DiffResult, multi_tripped: MultiDiffResult) -> None:
+    assert multi_tripped.events == (EVENT,)
+    assert set(multi_tripped.by_event) == {EVENT}
+    ev = multi_tripped.by_event[EVENT]
     assert isinstance(ev, EventDiff) and ev.event == EVENT
     # PF4 re-freeze (PF4.20, the library follows the screen; reading R35): the comparison object
-    # gives "fell" no kind, so its published 60 safer and 0 worse are 60 lower and 0 higher, with
+    # gives "tripped" no kind, so its reference 22 safer and 0 worse are 22 lower and 0 higher, with
     # n_safer and n_worse null; the single-event DiffResult keeps its safer/worse record.
     assert ev.n_safer is None and ev.n_worse is None
-    assert ev.n_lower == golden.n_safer == PUBLISHED_SAFER
-    assert ev.n_higher == golden.n_worse == PUBLISHED_WORSE
+    assert ev.n_lower == golden.n_safer == REFERENCE_SAFER
+    assert ev.n_higher == golden.n_worse == REFERENCE_WORSE
     assert ev.n_unchanged == golden.n_unchanged
-    assert multi_fell.n_tests == CELLS
-    assert len(ev.cells) == CELLS and multi_fell.n_not_comparable == 0
+    assert multi_tripped.n_tests == CELLS
+    assert len(ev.cells) == CELLS and multi_tripped.n_not_comparable == 0
     assert list(ev.cells.columns) == CELLS_COLUMNS
-    assert multi_fell.method == "fisher_bh" and multi_fell.seed_identity_match is True
-    assert multi_fell.q == Q and multi_fell.t_unit == "seconds" and multi_fell.horizon == HORIZON
-    assert multi_fell.inferred is False and multi_fell.non_event is None
+    assert multi_tripped.method == "fisher_bh" and multi_tripped.seed_identity_match is True
+    assert multi_tripped.q == Q and multi_tripped.t_unit == "seconds" and multi_tripped.horizon == HORIZON
+    assert multi_tripped.inferred is False and multi_tripped.non_event is None
 
 
-def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult, multi_fell: MultiDiffResult) -> None:
-    ours = multi_fell.by_event[EVENT].cells.set_index("config_hash")
+def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult, multi_tripped: MultiDiffResult) -> None:
+    ours = multi_tripped.by_event[EVENT].cells.set_index("config_hash")
     ref = golden.cells.set_index("config_hash")
     assert list(ours.index) == list(ref.index)
     for col in ("n_a", "n_b", "events_a", "events_b"):
@@ -696,7 +765,7 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
     # power at the lone-change level q / M, both ways, with mde the larger (section 8.10), while the
     # single-event DiffResult keeps its own record, so the two mde columns no longer agree; the
     # comparison's is recomputed here from the stats suite's reference.
-    level = Q / multi_fell.n_tests
+    level = Q / multi_tripped.n_tests
     refs: dict[int, tuple[float | None, float | None]] = {}
     for row in ours.itertuples():
         n_a, events_a = int(row.n_a), int(row.events_a)
@@ -715,7 +784,7 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
             want = None  # a direction with room and no limit leaves no single number
         assert abs(float(row.mde_level) - level) <= 1e-15, row.Index
         _assert_limit(row.mde, want, (row.Index, events_a))
-    # PF4 re-freeze (PF4.20, the library follows the screen; reading R35): the comparison's "fell"
+    # PF4 re-freeze (PF4.20, the library follows the screen; reading R35): the comparison's "tripped"
     # has no kind, so its verdict column reads direction words where DiffResult's reads safer/worse.
     as_direction = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
     assert list(ours["verdict"]) == [as_direction[v] for v in ref["verdict"]]
@@ -724,8 +793,8 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
 # ---------- A6: CIF equals the rate without censoring ----------
 
 
-def test_a6_cif_equals_rate_on_fixture(multi_fell: MultiDiffResult, regression: dict) -> None:
-    cells = multi_fell.by_event[EVENT].cells
+def test_a6_cif_equals_rate_on_fixture(multi_tripped: MultiDiffResult, regression: dict) -> None:
+    cells = multi_tripped.by_event[EVENT].cells
     rate_a = cells["events_a"].to_numpy(dtype=float) / cells["n_a"].to_numpy(dtype=float)
     rate_b = cells["events_b"].to_numpy(dtype=float) / cells["n_b"].to_numpy(dtype=float)
     np.testing.assert_allclose(cells["rate_a"].to_numpy(dtype=float), rate_a, rtol=0, atol=TOL_EXACT)
@@ -776,7 +845,7 @@ def test_a8_n_tests_is_cells_times_events_synthetic() -> None:
 
 
 def test_a8_n_tests_is_cells_times_events_fixture(raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -> None:
-    result = _fixture_multi(raw, manifests, ["fell", "survived"])
+    result = _fixture_multi(raw, manifests, [lattice.EVENT, lattice.OTHER])
     assert result.n_tests == CELLS * 2
     assert all(len(result.by_event[e].cells) == CELLS for e in result.events)
 
@@ -790,7 +859,7 @@ def test_a8_every_q_is_bh_over_pooled_p_synthetic() -> None:
 
 
 def test_a8_every_q_is_bh_over_pooled_p_fixture(raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -> None:
-    result = _fixture_multi(raw, manifests, ["fell", "survived"])
+    result = _fixture_multi(raw, manifests, [lattice.EVENT, lattice.OTHER])
     p, q = _pooled_p_and_q(result)
     assert len(p) == result.n_tests == CELLS * 2
     np.testing.assert_allclose(q, bh(p, Q), rtol=0, atol=TOL_EXACT)
@@ -824,8 +893,8 @@ def test_a8_two_events_together_never_smaller_q_than_separately_synthetic() -> N
 def test_a8_two_events_together_never_smaller_q_than_separately_fixture(
     raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]
 ) -> None:
-    both = _fixture_multi(raw, manifests, ["fell", "survived"])
-    singles = {e: _fixture_multi(raw, manifests, [e]) for e in ("fell", "survived")}
+    both = _fixture_multi(raw, manifests, [lattice.EVENT, lattice.OTHER])
+    singles = {e: _fixture_multi(raw, manifests, [e]) for e in (lattice.EVENT, lattice.OTHER)}
     _assert_family_never_smaller(both, singles)
 
 
@@ -857,10 +926,10 @@ def test_a9_counts_add_up_property(pair: tuple[pd.DataFrame, pd.DataFrame]) -> N
     _assert_counts(result, a, b)
 
 
-def test_a9_counts_add_up_on_fixture(multi_fell: MultiDiffResult, raw: dict[str, pd.DataFrame]) -> None:
-    _assert_counts(multi_fell, raw["go1-v0"], raw["go1-v1"])
-    ev = multi_fell.by_event[EVENT]
-    # PF4 re-freeze (PF4.20, the library follows the screen): the direction counts, "fell" having no kind.
+def test_a9_counts_add_up_on_fixture(multi_tripped: MultiDiffResult, raw: dict[str, pd.DataFrame]) -> None:
+    _assert_counts(multi_tripped, raw[lattice.RUN_A], raw[lattice.RUN_B])
+    ev = multi_tripped.by_event[EVENT]
+    # PF4 re-freeze (PF4.20, the library follows the screen): the direction counts, "tripped" having no kind.
     assert ev.n_lower + ev.n_higher + ev.n_unchanged == CELLS
 
 
@@ -886,12 +955,12 @@ def _assert_headline(result: MultiDiffResult) -> None:
         assert "unpaired" in paren
 
 
-def test_a10_headline_on_fixture(multi_fell: MultiDiffResult) -> None:
-    printed, paren = _headline_counts(multi_fell.headline())
-    # PF4 (PF4.20): printed as "60 lower, 0 higher"; the published 60 safer are the 60 that fell.
-    assert printed == [(EVENT, PUBLISHED_SAFER, PUBLISHED_WORSE)]
-    assert "fisher_bh" in paren and "400" in paren and "unpaired" in paren
-    _assert_headline(multi_fell)
+def test_a10_headline_on_fixture(multi_tripped: MultiDiffResult) -> None:
+    printed, paren = _headline_counts(multi_tripped.headline())
+    # PF4 (PF4.20): printed as "22 lower, 0 higher"; the reference's 22 safer are the 22 conditions where tripped went down.
+    assert printed == [(EVENT, REFERENCE_SAFER, REFERENCE_WORSE)]
+    assert "fisher_bh" in paren and "72" in paren and "unpaired" in paren
+    _assert_headline(multi_tripped)
 
 
 def test_a10_headline_orders_worse_then_safer_then_name(headline_case: MultiDiffResult) -> None:
@@ -979,9 +1048,9 @@ def test_a11_no_trade_when_the_opposite_move_is_not_significant(
     assert result.trade_line() is None
 
 
-def test_a11_no_trade_on_fixture(multi_fell: MultiDiffResult) -> None:
-    assert len(multi_fell.trades) == 0
-    assert multi_fell.trade_line() is None
+def test_a11_no_trade_on_fixture(multi_tripped: MultiDiffResult) -> None:
+    assert len(multi_tripped.trades) == 0
+    assert multi_tripped.trade_line() is None
 
 
 # ---------- A12: trade line is a count, not a claim ----------
@@ -1088,8 +1157,8 @@ def test_a14_markdown_prints_inference_line_iff_inferred() -> None:
     assert not [line for line in explicit.to_markdown().splitlines() if line.startswith(INFERENCE_MARKER)]
 
 
-def test_a14_markdown_has_no_inference_line_on_fixture(multi_fell: MultiDiffResult) -> None:
-    assert not [line for line in multi_fell.to_markdown().splitlines() if line.startswith(INFERENCE_MARKER)]
+def test_a14_markdown_has_no_inference_line_on_fixture(multi_tripped: MultiDiffResult) -> None:
+    assert not [line for line in multi_tripped.to_markdown().splitlines() if line.startswith(INFERENCE_MARKER)]
 
 
 def _assert_json_round_trip(result: MultiDiffResult) -> None:
@@ -1114,8 +1183,8 @@ def _assert_json_round_trip(result: MultiDiffResult) -> None:
     assert not re.search(r"-0\.0+(?!\d)", result.to_markdown())
 
 
-def test_a14_json_round_trips_on_fixture(multi_fell: MultiDiffResult) -> None:
-    _assert_json_round_trip(multi_fell)
+def test_a14_json_round_trips_on_fixture(multi_tripped: MultiDiffResult) -> None:
+    _assert_json_round_trip(multi_tripped)
 
 
 def test_a14_json_round_trips_on_inferred_and_trade_cases(trade_result: MultiDiffResult) -> None:
@@ -1150,10 +1219,10 @@ def _assert_check(result: MultiDiffResult) -> None:
     assert result.check(fail_on="any") is (rise_free and fall_free)
 
 
-def test_a15_check_on_fixture(multi_fell: MultiDiffResult) -> None:
-    _assert_check(multi_fell)
-    # PF4 re-freeze (PF4.20): "higher" where this read "worse" ("fell" has no kind).
-    assert multi_fell.check(fail_on="higher") is True and multi_fell.check(fail_on="any") is False
+def test_a15_check_on_fixture(multi_tripped: MultiDiffResult) -> None:
+    _assert_check(multi_tripped)
+    # PF4 re-freeze (PF4.20): "higher" where this read "worse" ("tripped" has no kind).
+    assert multi_tripped.check(fail_on="higher") is True and multi_tripped.check(fail_on="any") is False
 
 
 def test_a15_check_on_synthetic_cases(trade_result: MultiDiffResult, headline_case: MultiDiffResult) -> None:
@@ -1270,8 +1339,8 @@ def test_a18_horizon_truncation_applies_once_to_both_runs() -> None:
     assert violated["n_a"] == 6 and violated["events_a"] == 1 and violated["events_b"] == 1
 
 
-def test_a18_no_truncation_when_horizons_match(multi_fell: MultiDiffResult) -> None:
-    assert multi_fell.truncated == 0 and multi_fell.horizon == HORIZON
+def test_a18_no_truncation_when_horizons_match(multi_tripped: MultiDiffResult) -> None:
+    assert multi_tripped.truncated == 0 and multi_tripped.horizon == HORIZON
 
 
 # ---------- A19: determinism ----------
@@ -1296,9 +1365,9 @@ def test_a19_multi_diff_is_deterministic_per_method(method: str) -> None:
 
 
 def test_a19_multi_diff_is_deterministic_on_fixture(
-    raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest], multi_fell: MultiDiffResult
+    raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest], multi_tripped: MultiDiffResult
 ) -> None:
-    _assert_same_multi(multi_fell, _fixture_multi(raw, manifests, [EVENT]))
+    _assert_same_multi(multi_tripped, _fixture_multi(raw, manifests, [EVENT]))
 
 
 def test_a19_inference_is_deterministic() -> None:

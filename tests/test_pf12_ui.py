@@ -48,7 +48,7 @@ its view without knowing the view's field names (Y2 leaves those to PF5 and PF12
 - R40 "Every writing verb refreshes the pages" refreshes the UI a store has: a store with no
   ``.poisson/ui/`` gets none from ``sweep``, a save, ``report`` or ``serve``; ``ui`` (or the terminal
   app, before it shows a link) builds the first. So the frozen tests that run ``report`` and ``serve``
-  on the committed Go1 fixture do not rebuild a 1,600-page UI each time.
+  on the generated lattice store and the committed fixtures do not rebuild a UI each time.
 - R23 Snapshots (PF12.13): seven pages of the 0.0.1 quickstart pair (R33: the committed fixture, so
   the same records every time), compared as text after the build's times, the running version and the
   comparison's id are replaced. A page is one file for both themes (it follows the system's), so light

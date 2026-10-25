@@ -8,7 +8,7 @@ file and does not edit it.
 Written from "Prove -- Spec Local Serve Pass" section 4 against ``f7af030`` (2026-09-22), on the
 retrofit commit that moves the schema pins to ``proofload.viewpair/6``, the top-level key tuple to
 fourteen with ``summary`` eighth, ``PANEL_KEYS`` to fifteen, ``HOLE_KEYS`` to ten, the ``<h2>``
-sequence to ``Summary`` first and ``Run pair`` thirteenth, and the Go1 two-event trade line to the
+sequence to ``Summary`` first and ``Run pair`` thirteenth, and the two-event complementary pair's trade line to the
 complement sentence. Phase B changes ``src/proofload/diff.py`` (``complementary_events``,
 ``trade_line``), ``src/proofload/report.py`` (``_wrap`` and the four wrapped texts,
 ``MultiReport.complement``), the new ``src/proofload/plain.py``, ``src/proofload/viewer.py`` (the
@@ -24,20 +24,20 @@ so a run under ``PYTHONPATH`` reads the tree it was pointed at.
 
 **Step zero, nine items, measured at ``f7af030`` before a test was written** (the log at
 ``.work/serve-pass-1/step-zero/`` in the worktree, filed in the vault under
-``log/prove-serve-pass-1/step-zero/``). The four reproductions hold: (3) on the Go1 page every one
-of 400 present cells has its centre under a label ``<text>`` drawn after its rect, and no
-``pointer-events:none`` selector ends in ``text``; (4) on the two-event Go1 figure exactly two
-``<text>`` runs pass the 920 px box, both legend captions, at 1,176 and 1,198 px, and a 143-char
-``--title`` runs to 1,139 px -- *and on every builder-made pair whose box is 200 to 440 px wide the
+``log/prove-serve-pass-1/step-zero/``). The four reproductions hold: (3) on the then-fixture
+pair's page every present cell has its centre under a label ``<text>`` drawn after its rect, and no
+``pointer-events:none`` selector ends in ``text``; (4) on that pair's two-event figure exactly two
+``<text>`` runs pass the box, both legend captions, and a 143-char ``--title`` runs past it too --
+*and on every builder-made pair whose box is 200 to 440 px wide the
 honesty lines, the panel headline, the stacked headline's second line and the legend swatch labels
 pass it too* (see the LS2 convention below); (5) a three-hole partial pair prints ``none`` in the
 ``where`` column of both off-grid rows, each of which carries its whole ``config``; (6) all four
-integer conditions hold on the two-event Go1 pair in all 400 cells and both arms, the deltas cancel
-in every cell, and every other pair measured (Go1 ``fell`` alone, the multi-event pair, the golden
-pilot and tau2-airline in the workspace store) fails condition 1 or 4. (7) ``max_mde_unchanged`` is
+integer conditions hold on that two-event pair in every cell and both arms, the deltas cancel
+in every cell, and every other pair measured (its one event alone, the multi-event pair, and two
+real-suite pairs in the workspace store) fails condition 1 or 4. (7) ``max_mde_unchanged`` is
 a fraction in [0, 1] on every pair and ``_fmt(value, "pp0")`` is character for character the number
 the honesty line prints, on all thirteen panels that have one. (8) ``MULTI_JSON_SHA256``'s fixture
-is ``events=("fell",)`` and ``to_json()`` has 25 keys, none named ``complementary_events``. (1) The
+is a single-event comparison and ``to_json()`` has 25 keys, none named ``complementary_events``. (1) The
 section 7.1 greps: ``TOP_LEVEL_KEYS`` has **six** copies (``test_s29_viewer.py``,
 ``test_m13_viewer.py``, ``test_p1_payload.py``, ``test_s21_errors.py``, ``test_a28_agreement.py``,
 ``test_cut_surfacing.py``), not the three section 0.2 counts; all six are retrofitted. (2)
@@ -52,7 +52,7 @@ to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
   any), then per event in ``panels`` order the counts line, each ``worse`` row's line, the limit
   line, and last the pointer. Every ``<p>`` is one ``line`` value of ``summary`` through
   ``html.escape``, so LS20's two directions are one equality.
-- **The event name is spelled bare** in the counts and row sentences: ``fell: 0 of 400 conditions
+- **The event name is spelled bare** in the counts and row sentences: ``tripped: 0 of 72 conditions
   ...``. The spec writes the field in backticks in section 3.4, which this oracle reads as the spec's
   own markdown and not as characters the page prints; the headline already spells events bare.
 - **``change`` is the cell's ``text["delta"]`` verbatim**, so a rise reads ``28.1`` and not
@@ -69,7 +69,7 @@ to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
   -- ``_worst``'s tie-break key -- cut at ``view.top_n``; a sort is not arithmetic.
 - **The complement sentence's second clause names the traded pair, not ``events`` order** (ruled
   2026-09-22): ``The {k} conditions where {worse} rose are the {k} where {safer} fell``, with
-  ``(safer, worse)`` the pair ``trade_line()`` picks. On Go1 the two readings coincide.
+  ``(safer, worse)`` the pair ``trade_line()`` picks. On the two-event lattice pair the two readings coincide.
 - **``build_summary`` takes the trade line as a sixth keyword** (ruled 2026-09-22), so
   ``summary.complement.line`` *is* ``trade_line()`` and ``plain.py`` composes no complement sentence:
   one source for one sentence, on every method.
@@ -121,7 +121,7 @@ to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
   honesty line is ``_HONESTY_NONE``.
 - **LS19's region digests are normalised at four places the spec did not count**: the two
   unverified tails (section 3.8), the MDE-meaning sentence (the LS16 convention), the ``Result``
-  region's trade or complement ``<p>`` (D10 changes it on the two-event Go1 pair), and the ``Cell``
+  region's trade or complement ``<p>`` (D10 changes it on the two-event complementary pair), and the ``Cell``
   region's holes JSON block (D12 adds ``where`` to every hole). Everything else in the eight regions
   is pinned byte for byte, on the bare tree, and must survive the build.
 - **LS21, from the ruling of 2026-09-21 that lifted D16's hold on the word "unpaired":** the word
@@ -130,17 +130,17 @@ to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
   ``diff.unpaired_analysis`` is true (the runs share their seeds and the test ignores that). It rides
   the payload as ``summary.pairing.line`` (``None`` otherwise), third key of ``summary`` after
   ``complement``, and is the one ``line`` of ``summary`` that is read in ``Result`` rather than in
-  the Summary region, so LS20's equality leaves it out. The wording is the Go1 pairing report's
+  the Summary region, so LS20's equality leaves it out. The wording is an internal pairing report's
   suggested sentence, verbatim. Not a spec invariant: the ruling came after the spec was written.
 
 **Fixture limits, stated before anything is asserted on a fixture.** Every S29 pair is complete,
 so LS15 rests on this oracle's own partial pair (three holes, ``part-a`` never marked complete,
 both orders). No stored pair was taken at ``--q`` above 0.05, so the unlabelled row and the ``q``
 boundaries are exercised on a hand-built panel (LS10) and only the labels the real payloads reach
-are re-asserted on them. The two-event Go1 pair is the only complementary fixture; the
+are re-asserted on them. The two-event lattice pair (``tests/lattice.py``) is the only complementary fixture; the
 non-complementary trade line is reached through a builder-made pair (``trade-a``/``trade-b``)
 whose one all-``fail``/all-``crash`` cell is a trade and whose ``ok`` rows break condition 4.
-Go1's run ids are short, so the wrapped title needs ``--title``.
+The lattice's run ids are short, so the wrapped title needs ``--title``.
 
 **Named non-observables.** A ``q`` below 0.001 spelled two ways (above). A wrapped text whose
 lines are joined with a different separator than one space: ``_wrap`` breaks on spaces only.
@@ -168,6 +168,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+import lattice
 import poisson_prove
 from poisson_prove import cli
 from poisson_prove import diff as diff_mod
@@ -175,7 +176,6 @@ from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
 from poisson_prove.report import _fmt
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
-from conftest import writable_copy
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -186,10 +186,9 @@ DIFF_SOURCE = PACKAGE / "diff.py"
 PLAIN_SOURCE = PACKAGE / "plain.py"
 README = REPO / "README.md"
 SERVE_DOC = REPO / "docs" / "reading-a-serve-page.md"
-# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
-# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
-GO1_ROOT = writable_copy(REPO / "tests" / "fixtures" / "go1")
-GO1_A, GO1_B = "go1-v0", "go1-v1"
+#: The generated lattice pair (``tests/lattice.py``), built once per machine and checked on use.
+LATTICE_ROOT = lattice.root()
+LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
 
 # ---------- spec sections 2, 3.2, 3.3, 3.5: the literals ----------
 
@@ -321,7 +320,9 @@ PARTIAL_LINE = 'Run {run_id} ({role}) recorded status "partial": it stopped befo
 PAIRING_LINE = "Compared as two separate samples. The runs share their seeds; this test does not use that."
 POINTER_LINE = "Every number above is below with the statistics it came from: the omnibus, the honesty block and its bound, the per-condition table, the intervals, and what this comparison could not establish."
 COMPLEMENT_LINE = "{e1} and {e2} are complements here: in all {n} conditions every trial recorded exactly one of the two, so each rate is one minus the other and each change is the other's with its sign flipped. The {k} conditions where {worse} rose are the {k} where {safer} fell: one finding, reported twice. Naming one of the two shows it once."
-GO1_COMPLEMENT_LINE = COMPLEMENT_LINE.format(e1="fell", e2="survived", n=400, k=60, worse="survived", safer="fell")
+#: The lattice's two outcomes are complements; the 22 conditions where ``held`` rose are the 22 where
+#: ``tripped`` fell under the unpaired test over both events (LS13 recomputes the 22 and the 72).
+LATTICE_COMPLEMENT_LINE = COMPLEMENT_LINE.format(e1=lattice.EVENT, e2=lattice.OTHER, n=72, k=22, worse=lattice.OTHER, safer=lattice.EVENT)
 TRADE_LINE = "Trade: {safer} fell in {n} {cells} where {worse} rose."
 HOLES_SUMMARY = "{n} holes: {g} on the grid, {o} off it (a condition whose axis value no comparable condition has, so it is on no heatmap)."
 HONESTY_NONE = "No unchanged cells; every cell moved significantly."
@@ -555,7 +556,7 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
     for k, v in fixed.items():
         argv += ["--fix", f"{k}={json.dumps(v)}"]
     # PF3 (Q17, spec sections 4.4 and 14; R1): with no --method the default is now the paired test
-    # for runs that share a salt (Go1 among them); every pair here is compared with the library's
+    # for runs that share a salt (the lattice among them); every pair here is compared with the library's
     # multi_diff under ``method``, so the method is always named.
     argv += ["--method", method]
     for k, v in knobs.items():
@@ -1077,8 +1078,8 @@ def every_pair(synth_root: Path) -> list[Pair]:
     """S29's eleven pairs through ``serve --json``, no tree flag but the ``--by grp`` the BH and gate
     pairs need."""
     return [
-        pair("go1", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw"),
-        pair("go1-two-events", GO1_ROOT, GO1_A, GO1_B, ("fell", "survived"), "push_pct_bw", "mu"),
+        pair("lattice", LATTICE_ROOT, LATTICE_A, LATTICE_B, (lattice.EVENT,), lattice.X, lattice.Y),
+        pair("lattice-two-events", LATTICE_ROOT, LATTICE_A, LATTICE_B, (lattice.EVENT, lattice.OTHER), lattice.Y, lattice.X),
         pair("axes", synth_root, "axes-a", "axes-b", ("fail",), "temp", "task"),
         pair("identical", synth_root, "same-a", "same-b", ("fail",), "temp", "task"),
         pair("bh", synth_root, "bh-a", "bh-b", ("fail",), "grp", "cell", method="mcnemar_bh", by="grp"),
@@ -1092,18 +1093,18 @@ def every_pair(synth_root: Path) -> list[Pair]:
 
 
 @pytest.fixture(scope="module")
-def go1(every_pair: list[Pair]) -> Pair:
+def lattice_one(every_pair: list[Pair]) -> Pair:
     return every_pair[0]
 
 
 @pytest.fixture(scope="module")
-def go1_two(every_pair: list[Pair]) -> Pair:
+def lattice_two(every_pair: list[Pair]) -> Pair:
     return every_pair[1]
 
 
 @pytest.fixture(scope="module")
 def titled() -> Pair:
-    return pair("go1-titled", GO1_ROOT, GO1_A, GO1_B, ("fell",), "mu", "push_pct_bw", title=LONG_TITLE)
+    return pair("lattice-titled", LATTICE_ROOT, LATTICE_A, LATTICE_B, (lattice.EVENT,), lattice.X, lattice.Y, title=LONG_TITLE)
 
 
 @pytest.fixture(scope="module")
@@ -1137,9 +1138,12 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
 #: LS3. Per pair, the stacked figure's width and, per panel, its bare-tree body height and the sha256
 #: of its grid and glyph rects (``rect_set`` at shift 0). Green before and after: the grid does not
 #: move.
+#: The three lattice pairs' widths and heights are not minted: they are the grid layout's arithmetic
+#: on the design's 12 x 6 grid (``lattice_bare_box``, which LS3 asserts they equal), measured equal on
+#: main's unchanged src/ (05cd1e8); their rect sets are checked by their facts (``lattice_rects``).
 BARE_WIDTH: dict[str, float] = {
-    "go1": 920.0,
-    "go1-two-events": 920.0,
+    "lattice": 600.0,
+    "lattice-two-events": 360.0,
     "axes": 200.0,
     "identical": 200.0,
     "bh": 920.0,
@@ -1149,18 +1153,18 @@ BARE_WIDTH: dict[str, float] = {
     "three-key": 280.0,
     "vocab": 200.0,
     "hostile": 200.0,
-    "go1-titled": 920.0,
+    "lattice-titled": 600.0,
     "partial": 200.0,
     "partial-b": 200.0,
     "traded": 240.0
 }
 BARE_PANEL_HEIGHT: dict[str, dict[str, float]] = {
-    "go1": {
-        "fell": 724.0
+    "lattice": {
+        "tripped": 332.0
     },
-    "go1-two-events": {
-        "survived": 724.0,
-        "fell": 724.0
+    "lattice-two-events": {
+        "held": 500.0,
+        "tripped": 500.0
     },
     "axes": {
         "fail": 820.0
@@ -1190,8 +1194,8 @@ BARE_PANEL_HEIGHT: dict[str, dict[str, float]] = {
     "hostile": {
         "fail": 192.0
     },
-    "go1-titled": {
-        "fell": 724.0
+    "lattice-titled": {
+        "tripped": 332.0
     },
     "partial": {
         "fail": 248.0
@@ -1205,13 +1209,6 @@ BARE_PANEL_HEIGHT: dict[str, dict[str, float]] = {
     }
 }
 RECT_SET_SHA256: dict[str, dict[str, str]] = {
-    "go1": {
-        "fell": "f48e11830554bd5f97f92dc6bc49e12c7475e9c9a7ef4628a31aab1ea1d30b5f"
-    },
-    "go1-two-events": {
-        "survived": "9740278db673dc19a40ed2c68df9dd430ce2c47ee929b5c5a0bfe2adda3fb74f",
-        "fell": "79fff5af38ef2e0e698ce44d8f9b13267312d7ab680022edeaaf2fcdc55e433b"
-    },
     "axes": {
         "fail": "2e70339ddc493a738427684da54f0ef9fbbd967ba32c7216bacea3677271baf5"
     },
@@ -1240,9 +1237,6 @@ RECT_SET_SHA256: dict[str, dict[str, str]] = {
     "hostile": {
         "fail": "fd8bd55a4b19d460625ae46be32357bc82491535cec164ddae186318b0881c9c"
     },
-    "go1-titled": {
-        "fell": "f48e11830554bd5f97f92dc6bc49e12c7475e9c9a7ef4628a31aab1ea1d30b5f"
-    },
     "partial": {
         "fail": "b3a700424e39cfd4c4d59a14ef74120fb27092f437737c8d03b6d063045f2cb2"
     },
@@ -1258,26 +1252,6 @@ RECT_SET_SHA256: dict[str, dict[str, str]] = {
 #: new ones, the MDE-meaning sentence's ``ADR-018's``, the trade or complement line and the holes JSON block
 #: normalised away (each named in the conventions above). Green before and after.
 REGION_SHA256: dict[str, dict[str, str]] = {
-    "go1": {
-        "Result": "9748bfbc69f4068cf628a9f5f5a66c47c3293ec97116977c195ccc699edc868a",
-        "Honesty": "9a4412a78ee7dbbb434f6de4ab822aa5ce5bc7c8ba5069ce8de964c8c58ee351",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "2b194936fc7b65518d9c93f1742a20d4d7e9d6161fa181a5856d1e2207563f68",
-        "Cells": "fd47e6d33f11f20de37c1d2537ec5b9c9a64c5219f7dd83c457df21fd108181a",
-        "Cell": "3c9552661fdef461213d8c34c5f315cd883b754f1a514922af7a9b2093e64cbd",
-        "Worst cells": "23751fae229af1c168556629889eec9e2c0be4aca3d8b8a45503ee33ba435df7",
-        "Provenance": "3a2d56839e494e55f3923c6c58ee985e41fab7d946f2a78c76a0d585ff94a25b"
-    },
-    "go1-two-events": {
-        "Result": "021ad1a7dac83577b3aa0b74c9065cb2d65c2ec2706ecd1437830a8b62270729",
-        "Honesty": "2a4c0951c1c9c6e889085e7b8c65f7b45ab8486811f0519dd694179e68ad326c",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "2b194936fc7b65518d9c93f1742a20d4d7e9d6161fa181a5856d1e2207563f68",
-        "Cells": "a8c6bc537f0450fb09671ba48e7ca5a9b1d6b4f51810d5cb7d3e7346fe6b8ea7",
-        "Cell": "96984a7ea4942ee243035a20243e93d2a7f402a6202bc2912a60bf99b4dde36e",
-        "Worst cells": "0d8359e3ee3bc3f4383d096dccb689b45b946e7300ecc9848808fbf9d83af07d",
-        "Provenance": "598da0192f1d2367e612c448871ba55d77a9797eee89c7496ae203a0ee5298fb"
-    },
     "axes": {
         "Result": "8eaabfe0f29b5642660eeb10e3cc9baed9b44a2f3b66c428edca31c5c53feeb4",
         "Honesty": "e84a5d18112e5a08d56a07ec1dfa4e7240b51742902d1ef649120d267a4d00b3",
@@ -1368,16 +1342,6 @@ REGION_SHA256: dict[str, dict[str, str]] = {
         "Worst cells": "0d73d36d3d99092724b34d930096a8cac383aee59a85cfe34b4e11cdc1f6b6e9",
         "Provenance": "9e9b246c4204602dc7e99fca5a8b52ae842d1abd54baa6d6a158b0938e7174e6"
     },
-    "go1-titled": {
-        "Result": "9748bfbc69f4068cf628a9f5f5a66c47c3293ec97116977c195ccc699edc868a",
-        "Honesty": "9a4412a78ee7dbbb434f6de4ab822aa5ce5bc7c8ba5069ce8de964c8c58ee351",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "2b194936fc7b65518d9c93f1742a20d4d7e9d6161fa181a5856d1e2207563f68",
-        "Cells": "fd47e6d33f11f20de37c1d2537ec5b9c9a64c5219f7dd83c457df21fd108181a",
-        "Cell": "3c9552661fdef461213d8c34c5f315cd883b754f1a514922af7a9b2093e64cbd",
-        "Worst cells": "23751fae229af1c168556629889eec9e2c0be4aca3d8b8a45503ee33ba435df7",
-        "Provenance": "3a2d56839e494e55f3923c6c58ee985e41fab7d946f2a78c76a0d585ff94a25b"
-    },
     "partial": {
         "Result": "c275359e965f3e9ae8621d19388d7e21801b25c4aee07d1838a19af5863aaf1e",
         "Honesty": "ad1984f57b1c9740c1752ca8830032a9dc2c746a3de0b0121e4761e5a4b4a395",
@@ -1410,6 +1374,168 @@ REGION_SHA256: dict[str, dict[str, str]] = {
     }
 }
 # ---- pins end ----
+
+
+# ---------- the lattice pairs: what the bare-tree digests guarded, from the design ----------
+
+#: The three pairs over the generated lattice (``tests/lattice.py``). Their figure and their Result,
+#: Not verified and Provenance regions are checked against the design and the run identities, not
+#: against a digest of a page.
+LATTICE_PAIRS = ("lattice", "lattice-two-events", "lattice-titled")
+#: The grid body's layout, restated (``report._grid_body``): a cell is at most 40 px wide over 880 px
+#: and at most 28 px high over 560 px, the grid starts 96 px in when there is a y axis, 24 px of
+#: margin on the right, 52 px of top band and 112 px of bottom band before anything wraps, and the
+#: significance glyph is a 4 px square 1 px inside the cell's top right corner.
+GRID_LEFT_WITH_Y, GRID_RIGHT, GRID_TOP, GRID_BOTTOM, GLYPH = 96, 24, 52, 112, 4
+#: The dark theme's colour rule, restated (``report._fill``, ``_cell_fill``): a nine-stop ramp from
+#: the survived colour through neutral to the failed colour, linear in sRGB, a non-significant
+#: change drawn 0.45 of the way toward neutral, both arms at 0% or both at 100% drawn saturated.
+DARK_NEUTRAL, DARK_SATURATED, SURVIVED, FAILED, NONSIG_SCALE = "#1F1F22", "#2A2A2E", "#3ECF8E", "#FF4D4D", 0.45
+
+
+def lattice_bare_box(cols: int, rows: int) -> tuple[float, float]:
+    """A grid panel's width and its height before anything wraps, from the layout above."""
+    cell_w, cell_h = max(4, min(40, int(880 / cols))), max(4, min(28, int(560 / rows)))
+    return float(GRID_LEFT_WITH_Y + cols * cell_w + GRID_RIGHT), float(GRID_TOP + rows * cell_h + GRID_BOTTOM)
+
+
+def _mix(a: str, b: str, t: float) -> str:
+    ra, rb = (tuple(int(h[k : k + 2], 16) for k in (1, 3, 5)) for h in (a, b))
+    return "#" + "".join(format(int(round(min(255.0, max(0.0, x + (y - x) * t)))), "02X") for x, y in zip(ra, rb, strict=True))
+
+
+def dark_fill(ratio: float, significant: bool) -> str:
+    stops = [*(_mix(DARK_NEUTRAL, SURVIVED, t) for t in (1.0, 0.75, 0.5, 0.25)), DARK_NEUTRAL, *(_mix(DARK_NEUTRAL, FAILED, t) for t in (0.25, 0.5, 0.75, 1.0))]
+    r = max(-1.0, min(1.0, ratio)) * (1.0 if significant else NONSIG_SCALE)
+    if r == 0.0:
+        return DARK_NEUTRAL
+    pos = (r + 1.0) * 4.0
+    lo = min(len(stops) - 2, int(pos))
+    return _mix(stops[lo], stops[lo + 1], pos - lo)
+
+
+def lattice_family(events: Sequence[str], q: float = 0.05) -> dict[tuple[str, str], dict[str, Any]]:
+    """Per (event, condition) of the lattice under the unpaired test: the design's counts, scipy's
+    Fisher p (``lattice.fisher``) and one BH family over every event's conditions together."""
+    rows = [(event, r) for event in events for r in lattice.fisher(event, q).values()]
+    qs = lattice.bh([r["p"] for _, r in rows])
+    out = {}
+    for (event, r), adjusted in zip(rows, qs, strict=True):
+        flagged = bool(adjusted < q)
+        out[(event, r["config_hash"])] = {**r, "q": float(adjusted), "direction": "unchanged" if not flagged else ("lower" if r["delta"] < 0 else "higher")}
+    return out
+
+
+def lattice_directions(events: Sequence[str]) -> dict[str, tuple[int, int]]:
+    family = lattice_family(events)
+    return {e: (sum(r["direction"] == "lower" for (ev, _), r in family.items() if ev == e), sum(r["direction"] == "higher" for (ev, _), r in family.items() if ev == e)) for e in events}
+
+
+def lattice_rects(p: Pair, event: str) -> list[dict[str, str | None]]:
+    """The grid and glyph rects of one panel of a lattice pair as the layout and the colour rule
+    place them, from the design alone: one rect per condition at its grid position (``x`` over the
+    pair's x axis values in order, ``y`` over its y axis values), ``data-cell`` its key, its fill from
+    the change over the colour bound and the BH family over the pair's events, ``data-sat`` on the
+    conditions both arms hold at 0% or 100%, ``data-trade`` on the conditions one event flagged lower
+    and another higher; a glyph on every flagged condition."""
+    family = lattice_family(p.events)
+    biggest = max(abs(r["delta"]) for r in family.values())
+    steps = int(biggest * 20)
+    bound = (max(steps + (steps < biggest * 20), 1)) / 20
+    assert bound == p.structure["view"]["bound"] == 0.6, (p.name, bound, p.structure["view"]["bound"])
+    trades = {h for (_, h) in family if {family[(e, h)]["direction"] for e in p.events} >= {"lower", "higher"}}
+    values = {lattice.X: list(lattice.GAIN), lattice.Y: list(lattice.LOAD)}
+    xs, ys = values[p.x], values[str(p.y)]
+    cell_w, cell_h = max(4, min(40, int(880 / len(xs)))), max(4, min(28, int(560 / len(ys))))
+    rects: list[dict[str, str | None]] = []
+    for cell in lattice.design_cells():
+        r = family[(event, lattice.config_hash(cell.config))]
+        i, j = xs.index(cell.config[p.x]), ys.index(cell.config[str(p.y)])
+        x, y = GRID_LEFT_WITH_Y + i * cell_w, GRID_TOP + j * cell_h
+        saturated = r["events_a"] == r["events_b"] and r["events_a"] in (0, lattice.N)
+        significant = r["direction"] != "unchanged"
+        fill = DARK_SATURATED if saturated else dark_fill(r["delta"] / bound, significant)
+        rects.append({"x": str(x), "y": _fmt(float(y), "num"), "width": str(cell_w), "height": str(cell_h), "fill": fill,
+                      "data-cell": r["config_hash"], "data-sig": None, "data-trade": "1" if r["config_hash"] in trades else None,
+                      "data-sat": "1" if saturated else None})
+        if significant:
+            rects.append({"x": str(x + cell_w - GLYPH - 1), "y": _fmt(float(y + 1), "num"), "width": str(GLYPH), "height": str(GLYPH),
+                          "fill": None, "data-cell": None, "data-sig": "1", "data-trade": None, "data-sat": None})
+    return rects
+
+
+def lattice_worst_first(events: Sequence[str], q: float = 0.05) -> list[str]:
+    """The events in worst-first order under log-rank, from lifelines' test per condition on the
+    stored times (``lattice.logrank``) and one BH family over every event's conditions together:
+    by the count of conditions flagged higher, then lower, then the name."""
+    rows = [(event, r) for event in events for r in lattice.logrank(event, q=1.0).values()]
+    qs = lattice.bh([r["p"] for _, r in rows])
+    counts = {e: [0, 0] for e in events}
+    for (event, r), adjusted in zip(rows, qs, strict=True):
+        if adjusted < q:
+            assert r["direction"] in ("lower", "higher"), r
+            counts[event][r["direction"] == "lower"] += 1
+    assert counts == {lattice.EVENT: [12, 25], lattice.OTHER: [0, 0]}, counts
+    return sorted(events, key=lambda e: (-counts[e][0], -counts[e][1], e))
+
+
+def lattice_headline(events: Sequence[str], order: Sequence[str]) -> str:
+    """The headline the lattice pair must print, from the reference's counts: each event's flagged
+    conditions in direction words (no event declares a kind), in the panels' ``order``."""
+    counts = lattice_directions(events)
+    assert sorted(order) == sorted(events), (order, events)
+    return " · ".join(f"{e}: {counts[e][0]} lower, {counts[e][1]} higher" for e in order) + (
+        f"\n(aalen_johansen + fisher_bh, BH q<0.05 over {lattice.CELLS * len(events)} tests, unpaired)"
+    )
+
+
+def assert_lattice_region(p: Pair, heading: str) -> None:
+    """What the bare-tree digest of a lattice pair's Result, Not verified or Provenance region
+    guarded, read line by line against the design, the run identities and the payload."""
+    lines = region_lines(p.page, heading)
+    if heading == "Result":
+        order = [panel["event"] for panel in p.structure["panels"]]
+        assert order == ([lattice.OTHER, lattice.EVENT] if len(p.events) == 2 else [lattice.EVENT]), (p.name, order)
+        headline = lattice_headline(p.events, order)
+        assert headline == {1: "tripped: 22 lower, 0 higher\n(aalen_johansen + fisher_bh, BH q<0.05 over 72 tests, unpaired)",
+                            2: "held: 0 lower, 22 higher · tripped: 22 lower, 0 higher\n(aalen_johansen + fisher_bh, BH q<0.05 over 144 tests, unpaired)"}[len(p.events)]
+        assert p.structure["headline"] == headline, (p.name, p.structure["headline"], headline)
+        expected = ["<p>" + html_mod.escape(headline).replace("\n", "<br>") + "</p>", f"<p>{html_mod.escape(PAIRING_LINE)}</p>"]
+        if len(p.events) == 2:
+            expected.append(f"<p>{html_mod.escape(LATTICE_COMPLEMENT_LINE)}</p>")
+        assert lines == expected, (p.name, lines)
+        return
+    if heading == "Not verified":
+        # Every pair's region is the same four entries; the builder-made pairs' frozen digest of it
+        # is the one shared value, so the lattice pairs are held to it with no digest of their own.
+        shared = {REGION_SHA256[name]["Not verified"] for name in REGION_SHA256}
+        assert len(shared) == 1, shared
+        text = as_before_pf4(normalised_region(page_as_0_0_1_wrote_it(p.page), heading), heading, p)
+        assert sha(text) in shared, p.name
+        return
+    if heading == "Provenance":
+        manifest_a, manifest_b = lattice.manifest(lattice.RUN_A), lattice.manifest(lattice.RUN_B)
+        version = manifest_a["proofload_version"]
+        assert version == manifest_b["proofload_version"] == "0.0.1" and lattice.HORIZON == 5.0
+        assert manifest_a["run_salt"] == manifest_b["run_salt"] == lattice.SALT
+        items = [
+            ("events", ", ".join(p.events)), ("inferred", "false"), ("non event", "none"),
+            ("n tests", str(lattice.CELLS * len(p.events))), ("method", "fisher_bh"), ("seed identity match", "true"),
+            ("unpaired analysis", "true"), ("q", "0.05"), ("t unit", lattice.T_UNIT), ("horizon", "5"),
+            ("n not comparable", "0"), ("dropped a", "0"), ("dropped b", "0"), ("episodes censored at horizon", "0"),
+            ("n absent", "0"), ("Prove version", f"{version} (as proofload)"), ("written by proofload " + version, None),
+            ("run id a", lattice.RUN_A), ("run id b", lattice.RUN_B), ("run salt", lattice.SALT),
+            ("observation cap a", "not recorded"), ("observation cap b", "not recorded"), ("trace spans a", "0"),
+            ("trace spans b", "0"), ("observation cut spans a", "0"), ("observation cut spans b", "0"),
+        ]
+        expected = "<ul>" + "".join(f"<li>{html_mod.escape(k if v is None else f'{k}: {v}')}</li>" for k, v in items) + "</ul>"
+        assert lines == [expected, "</body>", "</html>"], (p.name, lines)
+        diff = p.structure["diff"]
+        assert (diff["events"], diff["n_tests"], diff["run_id_a"], diff["run_id_b"], diff["run_salt"], diff["poisson_prove_version"]) == (
+            list(p.events), lattice.CELLS * len(p.events), lattice.RUN_A, lattice.RUN_B, lattice.SALT, f"{version} (as proofload)"
+        ), (p.name, diff)
+        return
+    raise AssertionError((p.name, heading))
 
 
 def normalised_region(page: str, heading: str) -> str:
@@ -1526,9 +1652,9 @@ def test_ls2_every_wrapped_text_of_the_figure_is_drawn_whole_and_ends_inside_the
             assert not any(t.content.endswith("…") and t.anchor == "start" and t.font in (FONT + 2, FONT) for t in texts), (p.name, "a title or headline was truncated")
 
 
-def test_ls2_the_legend_captions_last_six_words_are_present_on_the_traded_pairs(go1_two: Pair, traded: Pair) -> None:
+def test_ls2_the_legend_captions_last_six_words_are_present_on_the_traded_pairs(lattice_two: Pair, traded: Pair) -> None:
     """Sole catch for a fix that truncates the caption with an ellipsis; a widened box is LS3's."""
-    for p in (go1_two, traded):
+    for p in (lattice_two, traded):
         texts, _, _ = svg_texts(p.structure["heatmap_svg"])
         # PF4 (PF4.20): neither pair declares a kind, so the caption's notches clause reads in
         # direction words and LEGEND_TAIL's safer/worse wording is no longer asserted. What stays
@@ -1543,11 +1669,11 @@ def test_ls2_the_legend_captions_last_six_words_are_present_on_the_traded_pairs(
 
 def test_ls2_the_same_wrap_reaches_the_reports_figure_and_the_receipt(tmp_path: Path) -> None:
     """``report`` draws the figure with the same builders: its ``heatmap.svg`` and the receipt's
-    inline figure carry the wrapped caption on the two-event Go1 pair."""
+    inline figure carry the wrapped caption on the two-event lattice pair."""
     out = tmp_path / "rep"
-    # PF3 (Q17, spec sections 4.4 and 14; R1): Go1's runs share a salt, so the default is now the
-    # paired test; GO1_COMPLEMENT_LINE's 60 is the unpaired test's, named.
-    code, _, err = run_cli(["--store", str(GO1_ROOT), "report", GO1_A, GO1_B, "--event", "fell", "--event", "survived", "--x", "push_pct_bw", "--y", "mu", "--method", "fisher_bh", "--out", str(out)])
+    # PF3 (Q17, spec sections 4.4 and 14; R1): the lattice's runs share a salt, so the default is now the
+    # paired test; LATTICE_COMPLEMENT_LINE's 22 is the unpaired test's, named.
+    code, _, err = run_cli(["--store", str(LATTICE_ROOT), "report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--event", lattice.OTHER, "--x", lattice.Y, "--y", lattice.X, "--method", "fisher_bh", "--out", str(out)])
     assert code == 0, err[-400:]
     for name in ("heatmap.svg", "receipt.html"):
         text = (out / name).read_text(encoding="utf-8")
@@ -1560,7 +1686,7 @@ def test_ls2_the_same_wrap_reaches_the_reports_figure_and_the_receipt(tmp_path: 
             assert caption[caption.index(NOTCHES) :].endswith(")"), (name, event, caption)
         assert all(right_edge(t) <= width for t in texts if t.font == FONT - 2 and t.content.startswith("delta = ")), name
     md = (out / "report.md").read_text(encoding="utf-8")
-    assert GO1_COMPLEMENT_LINE in md and RETIRED_TRADE_TAIL not in md
+    assert LATTICE_COMPLEMENT_LINE in md and RETIRED_TRADE_TAIL not in md
 
 
 # ---------- LS3: the figure grows and the grid does not move ----------
@@ -1571,6 +1697,12 @@ def test_ls3_the_box_grows_by_the_extra_lines_and_by_nothing_else(all_pairs: lis
         layout = expected_layout(p)
         _, width, height = svg_texts(p.structure["heatmap_svg"])
         assert width == BARE_WIDTH[p.name], (p.name, width)
+        if p.name in LATTICE_PAIRS:
+            # the pins are the layout's arithmetic on the design's grid (x across, y down)
+            sizes = {lattice.X: len(lattice.GAIN), lattice.Y: len(lattice.LOAD)}
+            for panel in p.structure["panels"]:
+                assert [float(v) for v in panel["x_values"]] == {lattice.X: list(lattice.GAIN), lattice.Y: list(lattice.LOAD)}[p.x], (p.name, panel["x_values"])
+                assert lattice_bare_box(sizes[p.x], sizes[str(p.y)]) == (BARE_WIDTH[p.name], BARE_PANEL_HEIGHT[p.name][panel["event"]]), p.name
         expected_total = STACKED_HEADER_H + TITLE_LINE_H * (len(layout["title"]) - 1) + STACKED_LINE_H * sum(len(lines) for lines in layout["header"])
         for event, panel in panel_groups(p.structure["heatmap_svg"]):
             entry = layout["panels"][event]
@@ -1590,6 +1722,11 @@ def test_ls3_every_grid_and_glyph_rect_is_the_dispatch_commits_up_to_the_top_gro
         for event, panel in panel_groups(p.structure["heatmap_svg"]):
             entry = layout["panels"][event]
             shift = TITLE_LINE_H * (len(entry["title"]) - 1) + BODY_LINE_H * (len(entry["headline"]) - 1)
+            if p.name in LATTICE_PAIRS:
+                # the rect set recomputed from the design, the layout and the colour rule
+                expected = sorted(json.dumps(r, sort_keys=True) for r in lattice_rects(p, event))
+                assert rect_set(panel, shift).split("\n") == expected, (p.name, event, shift)
+                continue
             assert sha(rect_set(panel, shift)) == RECT_SET_SHA256[p.name][event], (p.name, event, shift)
 
 
@@ -1635,9 +1772,9 @@ def test_ls4_where_is_the_coords_on_the_grid_and_the_config_on_the_reports_axes_
         assert named, hole
 
 
-def test_ls4_a_pair_with_no_holes_keeps_the_one_line_form(go1: Pair) -> None:
-    assert go1.structure["holes"] == []
-    assert region_lines(go1.page, "Holes") == [NO_HOLES_LINE]
+def test_ls4_a_pair_with_no_holes_keeps_the_one_line_form(lattice_one: Pair) -> None:
+    assert lattice_one.structure["holes"] == []
+    assert region_lines(lattice_one.page, "Holes") == [NO_HOLES_LINE]
 
 
 # ---------- LS5, LS6: the page order and the answer at the top ----------
@@ -1704,10 +1841,10 @@ def test_ls7_the_summary_object_has_section_3_3s_shape(all_pairs: list[Pair]) ->
 # ---------- LS8: the version is said once ----------
 
 
-def test_ls8_render_html_refuses_every_retired_version_by_name(go1: Pair) -> None:
+def test_ls8_render_html_refuses_every_retired_version_by_name(lattice_one: Pair) -> None:
     for retired in RETIRED_SCHEMAS:
         with pytest.raises(viewer().ViewerError) as info:
-            viewer().render_html({**go1.structure, "schema": retired})
+            viewer().render_html({**lattice_one.structure, "schema": retired})
         assert retired in str(info.value) and SCHEMA in str(info.value), str(info.value)
 
 
@@ -1777,37 +1914,37 @@ def test_ls9_every_numeric_substring_of_every_sentence_is_a_text_value_a_config_
 
 def synthetic_cell(k: int, q: float, p_value: float, delta: float = 0.281, verdict: str = "worse", mde: float = 0.2) -> dict[str, Any]:
     return {
-        "coords": f"mu={k}, push_pct_bw=30", "config_hash": f"{k:016x}", "n_a": 32, "n_b": 32, "rows_a": 32, "rows_b": 32,
+        "coords": f"gain={k}, load=30", "config_hash": f"{k:016x}", "n_a": 32, "n_b": 32, "rows_a": 32, "rows_b": 32,
         "no_outcome_a": 0, "no_outcome_b": 0, "events_a": 4, "events_b": 13, "rate_a": 0.125, "rate_b": 0.125 + delta, "delta": delta,
-        "stat": 0.25, "p": p_value, "q": q, "mde": mde, "verdict": verdict, "config": {"mu": k, "push_pct_bw": 30},
-        "config_text": {"mu": str(k), "push_pct_bw": "30"},
+        "stat": 0.25, "p": p_value, "q": q, "mde": mde, "verdict": verdict, "config": {"gain": k, "load": 30},
+        "config_text": {"gain": str(k), "load": "30"},
         "text": {"rate_a": "12.5", "rate_b": _fmt(0.125 + delta, "pp1"), "delta": _fmt(delta, "pp1"), "stat": "0.25", "p": _fmt(p_value, "sig3"), "q": _fmt(q, "sig3"), "mde": _fmt(mde, "pp0")},
     }
 
 
-def synthetic_panel(cells: list[dict[str, Any]], mde_unchanged: float | None, where: str | None = "mu=9, push_pct_bw=30") -> dict[str, Any]:
+def synthetic_panel(cells: list[dict[str, Any]], mde_unchanged: float | None, where: str | None = "gain=9, load=30") -> dict[str, Any]:
     worse = sum(c["verdict"] == "worse" for c in cells)
     safer = sum(c["verdict"] == "safer" for c in cells)
     if mde_unchanged is None:
-        honesty = HONESTY_NONE + "\nWorst-powered cell overall: 20pp (mu=0, push_pct_bw=30)."
+        honesty = HONESTY_NONE + "\nWorst-powered cell overall: 20pp (gain=0, load=30)."
         block = {"value": None, "text": None, "where": None}
     else:
-        honesty = f'Worst-powered unchanged cell ({where}, n=32/32) can only detect a {_fmt(mde_unchanged, "pp0")}pp rise. "{worse} worse" is an honest claim only above that.\nWorst-powered cell overall: 20pp (mu=0, push_pct_bw=30).'
+        honesty = f'Worst-powered unchanged cell ({where}, n=32/32) can only detect a {_fmt(mde_unchanged, "pp0")}pp rise. "{worse} worse" is an honest claim only above that.\nWorst-powered cell overall: 20pp (gain=0, load=30).'
         block = {"value": mde_unchanged, "text": _fmt(mde_unchanged, "pp0"), "where": where}
     # PF4 (PF4.20): the hand-built panel declares its event a failure, so its counts and rows keep
     # the safer/worse words these tests are about; a panel now carries its kind and the direction
     # counts beside n_safer and n_worse (for a failure event, a rise is worse).
     return {
-        "event": "fell", "caption": f"fell: {safer} safer, {worse} worse", "honesty": honesty, "mde_unchanged": block,
+        "event": "tripped", "caption": f"tripped: {safer} safer, {worse} worse", "honesty": honesty, "mde_unchanged": block,
         "kind": "failure", "n_safer": safer, "n_worse": worse, "n_higher": worse, "n_lower": safer,
         "n_unchanged": len(cells) - safer - worse, "n_absent": 0, "n_present": len(cells),
-        "x_values": [str(c["config"]["mu"]) for c in cells], "y_values": ["30"], "cells": cells, "worst_header": [], "worst_rows": [], "worst_hashes": [c["config_hash"] for c in cells],
+        "x_values": [str(c["config"]["gain"]) for c in cells], "y_values": ["30"], "cells": cells, "worst_header": [], "worst_rows": [], "worst_hashes": [c["config_hash"] for c in cells],
     }
 
 
-VIEW = {"title": "t", "x_axis": "mu", "y_axis": "push_pct_bw", "fixed": {}, "theme": "dark", "top_n": 10, "forest": "auto", "bound": 0.3, "sign_convention": "delta = rate_b - rate_a"}
+VIEW = {"title": "t", "x_axis": "gain", "y_axis": "load", "fixed": {}, "theme": "dark", "top_n": 10, "forest": "auto", "bound": 0.3, "sign_convention": "delta = rate_b - rate_a"}
 PAIR_OBJ = {"store_root": "<store>", "created_at_gap_s": 0.0, "a": {"role": "baseline", "run_id": "a", "status": "complete"}, "b": {"role": "candidate", "run_id": "b", "status": "complete"}}
-DIFF_OBJ = {"events": ["fell"], "q": 0.25, "n_tests": 7, "seed_identity_match": True, "unpaired_analysis": True}
+DIFF_OBJ = {"events": ["tripped"], "q": 0.25, "n_tests": 7, "seed_identity_match": True, "unpaired_analysis": True}
 Q_LADDER = ((0.0005, "very sure"), (0.001, "sure"), (0.005, "sure"), (0.01, "fairly sure"), (0.02, "fairly sure"), (0.05, None), (0.2, None))
 #: PF4 (PF4.5): the hand-built pair with a recorded threshold of 0.50 in both arms, where the old
 #: page rule drew its line, so the threshold tests keep their boundary.
@@ -1833,7 +1970,7 @@ def test_ls10_the_how_sure_label_is_a_function_of_q_alone_with_the_boundaries_cl
         row = rows[cell["config_hash"]]
         assert row["confidence"] == label, (q, row)
         assert row["q"] == cell["text"]["q"] and row["before"] == "12.5" and row["after"] == cell["text"]["rate_b"] and row["change"] == cell["text"]["delta"]
-        fields = dict(where=cell["coords"], event="fell", before="12.5", after=cell["text"]["rate_b"], change=cell["text"]["delta"], q=cell["text"]["q"])
+        fields = dict(where=cell["coords"], event="tripped", before="12.5", after=cell["text"]["rate_b"], change=cell["text"]["delta"], q=cell["text"]["q"])
         if label is None:
             assert row["line"] == ROW_LINE_UNLABELLED.format(**fields), row["line"]
             assert cell["text"]["q"] in row["line"] and LABEL_START in row["line"]
@@ -1889,8 +2026,8 @@ def test_ls11_too_small_to_tell_is_a_function_of_mde_unchanged_alone_at_0_50() -
     # exactly 0.50 is no longer labelled.
     for value, labelled in ((0.49, False), (0.50, False), (0.51, True), (0.999, True), (0.0, False)):
         limit = summary_of([synthetic_panel(cells, value)], pair_obj=THRESHOLD_PAIR)["events"][0]["limit"]
-        fields = dict(where="mu=9, push_pct_bw=30", n_a=32, n_b=32, mde=_fmt(value, "pp0"))
-        assert limit["mde"] == _fmt(value, "pp0") and limit["where"] == "mu=9, push_pct_bw=30", limit
+        fields = dict(where="gain=9, load=30", n_a=32, n_b=32, mde=_fmt(value, "pp0"))
+        assert limit["mde"] == _fmt(value, "pp0") and limit["where"] == "gain=9, load=30", limit
         if labelled:
             assert limit["label"] == "too small to tell" and limit["line"] == LIMIT_LINE_LABELLED.format(**fields), limit
         else:
@@ -2007,26 +2144,44 @@ def test_ls12_the_vocabulary_pair_is_green_under_the_mask_and_red_without_it(eve
 # ---------- LS13, LS14: complementary outcomes ----------
 
 
-def test_ls13_the_two_event_go1_pair_is_reported_once_and_never_as_a_trade(go1_two: Pair) -> None:
-    assert go1_two.multi.complementary_events() == ("fell", "survived")
-    assert go1_two.multi.trade_line() == GO1_COMPLEMENT_LINE
-    assert go1_two.structure["trade_line"] == GO1_COMPLEMENT_LINE
-    assert go1_two.structure["summary"]["complement"] == {"events": ["fell", "survived"], "line": GO1_COMPLEMENT_LINE}
-    assert go1_two.structure["summary"]["complement"]["line"] == go1_two.structure["trade_line"]
+def test_ls13_the_two_event_lattice_pair_is_reported_once_and_never_as_a_trade(lattice_two: Pair) -> None:
+    # the reference: the 72 conditions, and the 22 the unpaired test flags in each event over the
+    # one BH family of both events, tripped lower where held is higher
+    counts = lattice_directions((lattice.EVENT, lattice.OTHER))
+    assert counts == {lattice.EVENT: (22, 0), lattice.OTHER: (0, 22)} and lattice.CELLS == 72, counts
+    assert LATTICE_COMPLEMENT_LINE == COMPLEMENT_LINE.format(
+        e1=lattice.EVENT, e2=lattice.OTHER, n=lattice.CELLS, k=counts[lattice.EVENT][0], worse=lattice.OTHER, safer=lattice.EVENT
+    )
+    assert lattice_two.multi.complementary_events() == (lattice.EVENT, lattice.OTHER)
+    assert lattice_two.multi.trade_line() == LATTICE_COMPLEMENT_LINE
+    assert lattice_two.structure["trade_line"] == LATTICE_COMPLEMENT_LINE
+    assert lattice_two.structure["summary"]["complement"] == {"events": [lattice.EVENT, lattice.OTHER], "line": LATTICE_COMPLEMENT_LINE}
+    assert lattice_two.structure["summary"]["complement"]["line"] == lattice_two.structure["trade_line"]
     # Ruling 6 (2026-09-22): the sentence has one source. ``plain.py`` carries ``trade_line`` and
     # composes no complement sentence of its own.
     assert "complements here" not in PLAIN_SOURCE.read_text(encoding="utf-8")
     assert "trade_line" in inspect.signature(plain().build_summary).parameters
-    lines = summary_lines(go1_two.page)
+    lines = summary_lines(lattice_two.page)
     # PF4 re-freeze (PF4.34, PF4.35): the Summary opens with the verdict line; the complement sentence
     # follows it.
-    assert lines[0] == go1_two.structure["summary"]["verdict_line"] and lines[1] == GO1_COMPLEMENT_LINE, lines[:2]
-    assert [e["event"] for e in go1_two.structure["summary"]["events"]] == ["survived", "fell"]
-    for entry, panel in zip(go1_two.structure["summary"]["events"], go1_two.structure["panels"], strict=True):
+    assert lines[0] == lattice_two.structure["summary"]["verdict_line"] and lines[1] == LATTICE_COMPLEMENT_LINE, lines[:2]
+    assert [e["event"] for e in lattice_two.structure["summary"]["events"]] == [lattice.OTHER, lattice.EVENT]
+    # The order is the comparison's own, worst first: by the count of rises, then of falls, then the
+    # name. Under Fisher it is held (22 rises) first, which is also the alphabetical order, so the
+    # order is also read on the same pair under log-rank with the events named held first: there
+    # tripped rises in 12 conditions and held in none, so worst first is tripped, held, which is
+    # neither the order the events were named in nor the order of their names.
+    named = (lattice.OTHER, lattice.EVENT)
+    timed = pair("lattice-two-events-logrank", LATTICE_ROOT, LATTICE_A, LATTICE_B, named, lattice.Y, lattice.X, method="logrank_bh")
+    expected = lattice_worst_first(named)
+    assert expected == [lattice.EVENT, lattice.OTHER] != sorted(named) and expected != list(named), expected
+    assert [e["event"] for e in timed.structure["summary"]["events"]] == [panel["event"] for panel in timed.structure["panels"]] == expected
+    assert str(timed.structure["headline"]).startswith(f"{lattice.EVENT}: "), timed.structure["headline"]
+    for entry, panel in zip(lattice_two.structure["summary"]["events"], lattice_two.structure["panels"], strict=True):
         # PF4 (PF4.20): neither event declares a kind, so the counts are the rises and falls.
         assert str(panel["n_higher"]) in entry["line"] and str(panel["n_lower"]) in entry["line"]
-    assert GO1_COMPLEMENT_LINE in region_text(go1_two.page, "Result")
-    for path in SRC.glob("*.py"):
+    assert LATTICE_COMPLEMENT_LINE in region_text(lattice_two.page, "Result")
+    for path in SRC.rglob("*.py"):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
         assert RETIRED_TRADE_TAIL not in path.read_text(encoding="utf-8"), path.name
 
 
@@ -2046,7 +2201,7 @@ def test_ls13_the_non_complementary_trade_line_counts_the_co_occurrence_and_name
     assert RETIRED_TRADE_TAIL not in line and "patch" not in line
 
 
-def test_ls14_the_complement_test_is_exact_integer_and_conservative(go1_two: Pair) -> None:
+def test_ls14_the_complement_test_is_exact_integer_and_conservative(lattice_two: Pair) -> None:
     src = source_of(DIFF_SOURCE, "complementary_events")
     tree = ast.parse(src)
     names = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} | {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
@@ -2054,24 +2209,24 @@ def test_ls14_the_complement_test_is_exact_integer_and_conservative(go1_two: Pai
     assert not names & {"rate_a", "rate_b", "delta", "isclose", "allclose"}, names
     assert not any(isinstance(n, ast.Constant) and isinstance(n.value, float) for n in ast.walk(tree)), src
     assert not any(isinstance(n, ast.Call) and getattr(n.func, "attr", getattr(n.func, "id", "")) in ("isclose", "allclose", "abs", "float") for n in ast.walk(tree)), src
-    store = Store(GO1_ROOT)
-    fa, fb = store.read(GO1_A, meta=False), store.read(GO1_B, meta=False)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
+    store = Store(LATTICE_ROOT)
+    fa, fb = store.read(LATTICE_A, meta=False), store.read(LATTICE_B, meta=False)
+    ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
     censored = fa.copy()
     censored.loc[censored.index[0], "outcome"] = "neither"
-    assert quiet_multi_diff(censored, fb, ma, mb, events=("fell", "survived")).complementary_events() is None
-    assert quiet_multi_diff(fa, fb, ma, mb, events=("fell", "survived", "neither")).complementary_events() is None
-    m = go1_two.multi
+    assert quiet_multi_diff(censored, fb, ma, mb, events=(lattice.EVENT, lattice.OTHER)).complementary_events() is None
+    assert quiet_multi_diff(fa, fb, ma, mb, events=(lattice.EVENT, lattice.OTHER, "neither")).complementary_events() is None
+    m = lattice_two.multi
     e2 = m.events[1]
     fewer = replace(m.by_event[e2], cells=m.by_event[e2].cells.iloc[1:].reset_index(drop=True))
     assert replace(m, by_event={**m.by_event, e2: fewer}).complementary_events() is None
-    assert m.complementary_events() == ("fell", "survived")
+    assert m.complementary_events() == (lattice.EVENT, lattice.OTHER)
 
 
 # ---------- LS15: a partial run says so first ----------
 
 
-def test_ls15_a_partial_arm_is_named_first_in_the_summary_from_either_side(partial: Pair, partial_b: Pair, go1: Pair) -> None:
+def test_ls15_a_partial_arm_is_named_first_in_the_summary_from_either_side(partial: Pair, partial_b: Pair, lattice_one: Pair) -> None:
     for p, role in ((partial, "baseline"), (partial_b, "candidate")):
         arm = p.structure["pair"]["a" if role == "baseline" else "b"]
         assert arm["status"] == "partial" and arm["run_id"] == PARTIAL_A
@@ -2084,9 +2239,9 @@ def test_ls15_a_partial_arm_is_named_first_in_the_summary_from_either_side(parti
         header, rows = table_of(region_lines(p.page, "Run pair")[0])
         status = next(r for r in rows if r[0] == "status")
         assert status == ["status", "partial", "complete"] if role == "baseline" else ["status", "complete", "partial"]
-    assert go1.structure["summary"]["partial"] is None
-    assert not any("recorded status" in line for line in summary_lines(go1.page))
-    header, rows = table_of(region_lines(go1.page, "Run pair")[0])
+    assert lattice_one.structure["summary"]["partial"] is None
+    assert not any("recorded status" in line for line in summary_lines(lattice_one.page))
+    header, rows = table_of(region_lines(lattice_one.page, "Run pair")[0])
     assert next(r for r in rows if r[0] == "status") == ["status", "complete", "complete"]
 
 
@@ -2171,18 +2326,18 @@ def test_ls17_serve_help_marks_event_and_x_required_and_gives_method_theme_and_t
 
 BAD_ARGV = (
     ("--x", "nope"),
-    ("--x", "mu", "--y", "nope"),
-    ("--x", "mu"),
-    ("--x", "mu", "--y", "push_pct_bw", "--fix", "nope=1"),
-    ("--x", "mu", "--y", "push_pct_bw", "--fix", "mu=0.1"),
-    ("--x", "mu", "--y", "mu"),
-    ("--x", "mu", "--y", "push_pct_bw", "--fix", "broken"),
+    ("--x", lattice.X, "--y", "nope"),
+    ("--x", lattice.X),
+    ("--x", lattice.X, "--y", lattice.Y, "--fix", "nope=1"),
+    ("--x", lattice.X, "--y", lattice.Y, "--fix", f"{lattice.X}=0.1"),
+    ("--x", lattice.X, "--y", lattice.X),
+    ("--x", lattice.X, "--y", lattice.Y, "--fix", "broken"),
 )
 
 
-def test_ls17_no_refusal_reachable_from_serve_names_a_python_parameter(go1: Pair) -> None:
+def test_ls17_no_refusal_reachable_from_serve_names_a_python_parameter(lattice_one: Pair) -> None:
     for tail in BAD_ARGV:
-        code, out, err, calls = run_serve(["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, "--event", "fell", *tail, "--json"])
+        code, out, err, calls = run_serve(["--store", str(LATTICE_ROOT), "serve", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, *tail, "--json"])
         # A refusal exits 1 (front-door spec section 5.2).
         assert code == 1 and calls == [] and out == "", (tail, code, err[-300:])
         low = err.lower()
@@ -2190,7 +2345,7 @@ def test_ls17_no_refusal_reachable_from_serve_names_a_python_parameter(go1: Pair
             assert spelling not in low, (tail, err)
         if "pin" in low or "not a config key" in low or "unknown config key" in low:
             assert "--x" in err or "--y" in err or "--fix" in err, (tail, err)
-    code, out, err, calls = run_serve(["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, "--event", "fell", "--json"])
+    code, out, err, calls = run_serve(["--store", str(LATTICE_ROOT), "serve", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--json"])
     # A refusal exits 1 (front-door spec section 5.2).
     assert code == 1 and "--x AXIS" in err, err
 
@@ -2225,15 +2380,15 @@ BARE_VERDICT = {"higher": "worse", "lower": "safer", "unchanged": "unchanged"}
 PF4_CELL_KEYS = ("direction", "direction_note", "pairs", "mde_note", "share_a", "share_b", "share_a_differs", "share_b_differs")
 CELL_INDEX_RE = re.compile(r'(<script type="application/json" id="proofload-cells">)(.*)(</script>)')
 #: PF4 (PF4.12, PF4.15, PF4.18): the regions whose numbers PF4 moves, not only their words: on the
-#: Go1 pairs the fault lines' group p and q (Westfall-Young on one scale), and on the Go1 pairs and
-#: the traded pair (whose t0 fail arm fails every run) the detection limits of the conditions at a
+#: study pairs (now the lattice pairs) the fault lines' group p and q (Westfall-Young on one scale),
+#: and on those pairs and the traded pair (whose t0 fail arm fails every run) the detection limits of the conditions at a
 #: 100% baseline with the leaf rows, cell index and worst-cells rows that carry them. Their digests are no longer asserted; assert_region_facts asserts what they guarded.
 #: PF4 re-freeze (PF4.22 to PF4.27, PF4.34 to PF4.47): every pair's detection limits move (the exact
 #: power at the lone-change level, both directions, null with a reason), its group limits move
 #: (PF4.45), its intervals are always there (PF4.42) and every cell gains the new keys, so on every
 #: pair the Honesty, Fault lines, Cells, Cell and Worst cells regions are checked by their facts.
 PF4_MOVED_REGIONS: dict[str, tuple[str, ...]] = {
-    name: ("Honesty", "Fault lines", "Cells", "Cell", "Worst cells") for name in REGION_SHA256
+    name: ("Honesty", "Fault lines", "Cells", "Cell", "Worst cells") for name in (*REGION_SHA256, *LATTICE_PAIRS)
 }
 
 
@@ -2333,16 +2488,16 @@ def assert_region_facts(p: Pair, heading: str) -> None:
         for row, g in zip(rows, groups, strict=True):
             expected = [g["label"], *(columns[name](g) for name in header[1:])]
             assert row == expected, (p.name, row, expected)
-        if p.events == ("fell",):
+        if p.events == (lattice.EVENT,):
             # PF4 re-freeze (PF4.45): the group limits use each cell's own baseline and the
-            # unconditional power, so Go1's first declared axis, mu, no longer resolves (refused as
-            # underpowered) and the tree groups by the next, push_pct_bw: 20 groups, as mu had. The
-            # pinned mu group p-values (19 of 20 rejecting) belong to a grouping the tree no longer
-            # makes; what is pinned is the walk and the rejected set as the page prints it.
+            # unconditional power, so the lattice's first declared axis, gain, does not resolve
+            # (refused as underpowered) and the tree groups by the next, load: 6 groups, one per
+            # load value. What is pinned is the walk and the rejected set as the page prints it.
             grouping = tree["grouping"]
             first, second = list(p.structure["pair"]["a"]["axis_types"])
-            assert [(r["key"], r["reason"]) for r in grouping["refused"]] == [(first, "underpowered")], (p.name, grouping["refused"])
-            assert grouping["key"] == second and len(groups) == 20, (p.name, grouping["key"], len(groups))
+            assert (first, second) == (lattice.X, lattice.Y), (first, second)
+            assert [(r["key"], r["reason"]) for r in grouping["refused"]] == [(first, "underpowered")] == [("gain", "underpowered")], (p.name, grouping["refused"])
+            assert grouping["key"] == second == "load" and len(groups) == len(lattice.LOAD) == 6, (p.name, grouping["key"], len(groups))
             assert tree["fault_lines"]["rejected_groups"] == [g["label"] for g in groups if g["rejects"]], p.name
             assert tree["fault_lines"]["n_rejected_groups"] == sum(g["rejects"] for g in groups), p.name
         return
@@ -2446,6 +2601,9 @@ def test_ls19_every_dispatch_heading_is_still_on_the_page_and_the_untouched_regi
             if heading in PF4_MOVED_REGIONS.get(p.name, ()):
                 assert_region_facts(p, heading)
                 continue
+            if p.name in LATTICE_PAIRS:
+                assert_lattice_region(p, heading)
+                continue
             text = as_before_pf4(normalised_region(page_as_0_0_1_wrote_it(p.page), heading), heading, p)
             assert sha(text) == REGION_SHA256[p.name][heading], (p.name, heading)
 
@@ -2471,10 +2629,10 @@ def test_ls20_every_sentence_in_the_summary_region_is_a_line_of_summary_and_the_
         assert summary_lines(p.page) == summary_sentences(p.structure), p.name
 
 
-def test_ls20_the_page_renders_from_a_round_tripped_structure_with_no_report_diff_or_tree_in_scope(go1_two: Pair) -> None:
-    text = json.dumps(go1_two.structure, allow_nan=False)
+def test_ls20_the_page_renders_from_a_round_tripped_structure_with_no_report_diff_or_tree_in_scope(lattice_two: Pair) -> None:
+    text = json.dumps(lattice_two.structure, allow_nan=False)
     again = viewer().render_html(strict_loads(text))
-    assert again == go1_two.page
+    assert again == lattice_two.page
     render = source_of(VIEWER_SOURCE, "render_html")
     whole = VIEWER_SOURCE.read_text(encoding="utf-8")
     for fragment in ("conditions got worse", "How sure", "Too small to tell", "recorded status", "complements here", "Every number above", "separate samples"):

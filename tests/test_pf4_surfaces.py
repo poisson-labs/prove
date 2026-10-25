@@ -64,6 +64,7 @@ import pytest
 from poisson_prove import cli
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
+import lattice
 from test_pf4_stats import _ref_fisher_limits
 from conftest import writable_copy
 
@@ -1321,20 +1322,23 @@ def test_pf4_20_without_a_kind_every_word_names_the_direction_and_none_judges(st
 
 def test_pf4_20_the_comparison_object_itself_reads_in_direction_words_without_a_kind() -> None:
     """Ruled 2026-10-24 (the independent read's yes/no 1): no split between the library and the
-    screen. Go1 under log-rank, ``fell`` with no kind: 182 conditions fell and 14 rose (the statistics
-    re-check's README, section 2), as direction words on the object itself; the safer and worse counts
-    are null; the default worse-gate is refused and ``check("higher")`` fails on the 14 rises."""
+    screen. The lattice pair under log-rank, ``tripped`` with no kind: 27 conditions fell and 12 rose
+    (lifelines' log-rank over the stored times gives the same, ``lattice.logrank``), as direction words
+    on the object itself; the safer and worse counts are null; the default worse-gate is refused and
+    ``check("higher")`` fails on the 12 rises."""
     from poisson_prove.diff import DiffError, multi_diff
 
-    go1 = Store(writable_copy(TESTS / "fixtures" / "go1"))  # PF12: the per-process copy (R39)
+    pair = Store(lattice.root())
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = multi_diff(go1.read("go1-v0", meta=False), go1.read("go1-v1", meta=False), events=["fell"],
-                            method="logrank_bh", manifest_a=go1.manifest("go1-v0"), manifest_b=go1.manifest("go1-v1"))
-    ev = result.by_event["fell"]
+        result = multi_diff(pair.read(lattice.RUN_A, meta=False), pair.read(lattice.RUN_B, meta=False),
+                            events=[lattice.EVENT], method="logrank_bh",
+                            manifest_a=pair.manifest(lattice.RUN_A), manifest_b=pair.manifest(lattice.RUN_B))
+    ev = result.by_event[lattice.EVENT]
     assert ev.kind is None and ev.n_safer is None and ev.n_worse is None
     assert set(ev.cells["verdict"]) <= {"higher", "lower", "unchanged"}
-    assert (ev.n_lower, ev.n_higher) == (182, 14) and ev.n_lower + ev.n_higher == 196
+    assert (ev.n_lower, ev.n_higher) == lattice.directions(lattice.logrank()) == (27, 12)
+    assert ev.n_lower + ev.n_higher == 39
     assert list(ev.cells["verdict"]) == list(ev.cells["direction"])
     assert len(result.trades) == 0 and result.comparison_verdict() == "mixed"
     with pytest.raises(DiffError):
@@ -1802,14 +1806,15 @@ def test_pf4_44_every_surface_that_shows_the_word_shows_how_many_outcomes_would_
 
 
 def test_pf4_45_the_group_limit_is_labelled_unconditional_where_it_is_printed(tmp_path: Path) -> None:
-    """On Go1's fault lines (grouped by mu): the JSON says how the group limit's power is read, and the
-    report's fault-lines section says the root and the group both reject."""
-    go1 = writable_copy(TESTS / "fixtures" / "go1")  # PF12: report saves into the store it reads (R39)
+    """On the lattice pair's fault lines (grouped by ``load``): the JSON says how the group limit's
+    power is read, and the report's fault-lines section says the root and the group both reject."""
+    pair = lattice.root()
     out = tmp_path / "r"
-    doc = _json(_cli(go1, "diff", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh", "--json"))
+    doc = _json(_cli(pair, "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--method", "fisher_bh", "--json"))
     assert doc["tree"]["fault_lines"]["mde_basis"] == "unconditional"
-    assert _cli(go1, "report", "go1-v0", "go1-v1", "--event", "fell", "--method", "fisher_bh", "--x", "mu",
-                "--y", "push_pct_bw", "--out", str(out)).code == 0
+    assert doc["tree"]["fault_lines"]["tested"] is True
+    assert _cli(pair, "report", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--method", "fisher_bh",
+                "--x", lattice.X, "--y", lattice.Y, "--out", str(out)).code == 0
     section = (out / "report.md").read_text(encoding="utf-8").split("## Fault lines", 1)[1].split("\n## ", 1)[0]
     assert _says(section, "unconditional")
 

@@ -4,16 +4,15 @@ Frozen 2026-09-20 off ``1f5491b``. The build is written against this file and do
 dispatch was the surfacing cleanup's first item: ``proofload inspect`` cannot open any stored run that
 carries a trace.
 
-**What is being fixed, measured at ``1f5491b`` on the twelve runs in ``proofload-runs`` that carry a trace.**
+**What is being fixed, measured at ``1f5491b`` on stored runs that carry a trace.**
 A8a added one trace key (``alias_map_version``) and eight span keys, and ``Trace.from_dict`` demands the
-exact key set, so a trace stored before it is rejected. Every stored trace is exactly the old shape: six
-trace keys, spans of thirteen. Four runs (``50ce``, ``4847``, ``965d``, ``10b3``, 2,474 traced rows) hold it
-in the ``trace`` column, and ``Store.read`` reassembles it through ``from_dict`` and raises, so ``inspect``
-exits 3 on all four. Eight runs (the golden-pilot runs, 23,140 rows) hold it in ``meta["trace"]`` on a part
-written before A7: ``Store.read`` hands it back as stored, ``inspect`` validates it, rejects it and prints
-no trace lines and no error (the posture M12's T30 pins for a rejected dict), so those eight are silent
-where the four are loud. Adding exactly those nine keys, each ``None``, makes all 25,614 validate and
-change nothing else (``stored-trace-read-probe.py`` in the vault, run read-only over the store).
+exact key set, so a trace stored before it is rejected. Every trace stored before A8a is exactly the old
+shape: six trace keys, spans of thirteen. A run written after A7 holds it in the ``trace`` column, and
+``Store.read`` reassembles it through ``from_dict`` and raises, so ``inspect`` exits 3 on it. A run written
+before A7 holds it in ``meta["trace"]``: ``Store.read`` hands it back as stored, ``inspect`` validates it,
+rejects it and prints no trace lines and no error (the posture M12's T30 pins for a rejected dict), so
+the older runs are silent where the newer are loud. Adding exactly those nine keys, each ``None``, makes
+every such trace validate and changes nothing else.
 
 **The fix is a read, at the store, and only the store.** ``from_dict`` stays strict: A8a's P8-1 pins that it
 rejects thirteen-key spans and a six-key trace, and a stored dict that is *not* the old shape must keep
