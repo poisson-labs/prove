@@ -170,8 +170,8 @@ def blocked_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
 
 @pytest.fixture(scope="session")
 def lattice_store() -> Store:
-    """The generated lattice pair (``tests/lattice.py``), built once per machine and version, checked when a
-    process first asks for it and again when the session ends (``lattice.unchanged``)."""
+    """The generated lattice pair (``tests/lattice.py``), built once per machine and version, checked before
+    any test runs, when a process first asks for it and again when the session ends."""
     import lattice
 
     return Store(lattice.root())
@@ -260,6 +260,23 @@ def lattice_trees(tmp_path_factory: pytest.TempPathFactory) -> SharedTrees:
     folder = root / "lattice-trees"
     folder.mkdir(exist_ok=True)
     return SharedTrees(folder)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Check both generated stores before any test runs, rebuilding one that fails (a crash or an
+    earlier session left it), then mark them checked for this session and its workers: from here
+    on a store that fails was written by a test, and ``lattice.cached_store`` refuses it."""
+    if hasattr(config, "workerinput"):
+        return
+    import os
+
+    import lattice
+    import replay_arms
+
+    os.environ.pop(lattice.CHECKED, None)
+    lattice.root()
+    replay_arms.root()
+    os.environ[lattice.CHECKED] = "1"
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

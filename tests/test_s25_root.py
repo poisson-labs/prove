@@ -265,7 +265,7 @@ E14_ARGV = ("report", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", l
 #: known outside any build. The direction counts per method are the lattice's references'
 #: (``lattice.fisher``, ``lattice.mcnemar``, ``lattice.logrank``): Fisher 22 lower / 0 higher,
 #: McNemar 27 / 0, log-rank 27 / 12 (a rejected cell's direction comes from the log-rank statistic,
-#: PF4.13, and the twelve ``load`` 60 conditions trip sooner in the after run).
+#: PF4.13, and the twelve ``load`` 100 conditions trip sooner in the after run).
 LATTICE_DIRECTION_COUNTS = {"fisher_bh": (22, 0), "mcnemar_bh": (27, 0), "logrank_bh": (27, 12)}
 #: The reference each method's per-cell p, q and direction are checked against.
 REFERENCE_BY_METHOD = {"fisher_bh": lattice.fisher, "mcnemar_bh": lattice.mcnemar, "logrank_bh": lattice.logrank}
@@ -575,14 +575,14 @@ def assert_logrank_column_is_the_reference(result: Any) -> None:
     """The log-rank family (one event, the design's conditions in sorted-hash order) has its q
     column BH over its p column exactly, and each condition's p, q and direction are the
     independent log-rank reference's (``lattice.logrank``: lifelines on the stored times, BH
-    written out) to 1e-12."""
+    written out) to 1e-12 relative."""
     assert_q_column_is_bh_over_its_p_column(result, None, (EVENT,))
     reference = lattice.logrank(EVENT)
     cells = result.by_event[EVENT].cells
     assert set(cells["config_hash"]) == set(reference)
     for row in cells.itertuples(index=False):
-        assert row.p == pytest.approx(reference[row.config_hash]["p"], abs=1e-12), row.config_hash
-        assert row.q == pytest.approx(reference[row.config_hash]["q"], abs=1e-12), row.config_hash
+        assert row.p == pytest.approx(reference[row.config_hash]["p"], rel=1e-12, abs=0), row.config_hash
+        assert row.q == pytest.approx(reference[row.config_hash]["q"], rel=1e-12, abs=0), row.config_hash
         assert row.direction == reference[row.config_hash]["direction"], row.config_hash
 
 
@@ -1631,7 +1631,7 @@ def assert_lattice_multi_json_carries_the_facts(multi: Any, method: str, a: pd.D
     each rate its count over 32, each delta the naive difference); p and q equal the frame's, and
     are the independent reference's (``REFERENCE_BY_METHOD``): exactly under Fisher and McNemar
     (scipy's Fisher test and exact binomial McNemar, one BH family), with the exact McNemar p also
-    statsmodels' and its BH q statsmodels', and to 1e-12 under log-rank (lifelines on the stored
+    statsmodels' and its BH q statsmodels', and to 1e-12 relative under log-rank (lifelines on the stored
     times), whose q column is also BH over its p column exactly. A condition whose baseline had the
     event in every run has no rise and its fall computed, and every limit follows section 8.10's
     rule at ``q / M``, Fisher's recomputed from the stats file's reference (PF4.22, PF4.27). Each
@@ -1661,7 +1661,7 @@ def assert_lattice_multi_json_carries_the_facts(multi: Any, method: str, a: pd.D
         if method in ("fisher_bh", "mcnemar_bh"):
             assert (cell["p"], cell["q"]) == (ref["p"], ref["q"]), (method, cell["config_hash"])
         else:
-            assert cell["p"] == pytest.approx(ref["p"], abs=1e-12) and cell["q"] == pytest.approx(ref["q"], abs=1e-12), cell["config_hash"]
+            assert cell["p"] == pytest.approx(ref["p"], rel=1e-12, abs=0) and cell["q"] == pytest.approx(ref["q"], rel=1e-12, abs=0), cell["config_hash"]
         if method == "mcnemar_bh":
             assert abs(cell["p"] - reference_p[cell["config_hash"]]) <= 1e-12, (cell["config_hash"], cell["p"])
             assert cell["pairs"] == ref["n_a"] == ref["n_b"], cell["config_hash"]

@@ -367,8 +367,8 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # Re-minted when both files moved off the committed study fixture onto the generated lattice pair
 # (tests/lattice.py). Read off the two files after every other move.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "7da856c7d618fb404f5c6a53a31e2763b7a9167c43985913b72e08ec928b3af1",
-    "tests/test_s26_fault_lines.py": "1ea67ed48a15108902a7b8cd22689f3206bcf28f7a1d4a7232625abe00817a2b",
+    "tests/test_s25_root.py": "c5fdb8d1daa184908528dc65c6fc1369eeb8684386392433043603074eb1022e",
+    "tests/test_s26_fault_lines.py": "faf67f4a0a03abc5532662a704ab814f93525f363c6fe056003b1a938c0ab700",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -2054,7 +2054,7 @@ def assert_lattice_multi_json_carries_the_facts(multi: Any, method: str, a: pd.D
 
     Every cell's counts, rates and delta equal the frame's and the design's (``lattice.counts``); p
     and q equal the frame's and the method's reference (``lattice.fisher`` / ``lattice.mcnemar``
-    exactly, ``lattice.logrank`` to 1e-12), McNemar's p also statsmodels' exact test and its BH q,
+    exactly, ``lattice.logrank`` to 1e-12 relative), McNemar's p also statsmodels' exact test and its BH q,
     and the q column is BH over the p column. A condition whose baseline had the event in every run
     has no rise and its fall computed, and every limit follows section 8.10's rule at ``q / M``,
     Fisher's recomputed from the stats file's reference (PF4.22, PF4.27). Each cell's JSON verdict
@@ -2090,7 +2090,7 @@ def assert_lattice_multi_json_carries_the_facts(multi: Any, method: str, a: pd.D
         assert repr(float(cell["delta"])) == repr(float(row["delta"])) == repr(float(ref["delta"])), (method, h, cell["delta"])
         assert (cell["p"], cell["q"]) == (row["p"], row["q"]), (method, h)
         if method == "logrank_bh":
-            assert cell["p"] == pytest.approx(ref["p"], abs=1e-12) and cell["q"] == pytest.approx(ref["q"], abs=1e-12), (h, cell["p"], cell["q"])
+            assert cell["p"] == pytest.approx(ref["p"], rel=1e-12, abs=0) and cell["q"] == pytest.approx(ref["q"], rel=1e-12, abs=0), (h, cell["p"], cell["q"])
         else:
             assert (cell["p"], cell["q"]) == (ref["p"], ref["q"]), (method, h)
         if method == "mcnemar_bh":
@@ -2254,7 +2254,7 @@ def assert_s24_columns_are_the_references(pair: Any, tripped_logrank: Any) -> No
     ``lattice.fisher``'s as ``column_text`` (bits and the sign of every zero), ``held``'s delta
     ``tripped``'s negated numerically; the ``q`` column is ``lattice.bh`` over the one family of 144
     ``p``, as text. Under log-rank on ``tripped``: one event, 72 tests, sorted-hash rows, the ``q``
-    column ``lattice.bh`` over its ``p`` as text and ``lattice.logrank``'s to 1e-12, with the
+    column ``lattice.bh`` over its ``p`` as text and ``lattice.logrank``'s to 1e-12 relative, with the
     reference's directions. The coverage, serialised as its digest serialised it
     (``to_json(orient="records")``), is the design's 72 conditions, each 32 rows a run, all comparable."""
     import numpy as np
@@ -2276,7 +2276,7 @@ def assert_s24_columns_are_the_references(pair: Any, tripped_logrank: Any) -> No
     assert tuple(tripped_logrank.events) == (lattice.EVENT,) and tripped_logrank.n_tests == lattice.CELLS
     assert list(cells["config_hash"].astype(str)) == hashes
     assert column_text(tripped_logrank, "q") == reference_column_text({lattice.EVENT: lattice.bh(cells["p"].to_numpy())})
-    assert cells["q"].to_numpy() == pytest.approx(np.array([reference[h]["q"] for h in hashes]), abs=1e-12)
+    assert cells["q"].to_numpy() == pytest.approx(np.array([reference[h]["q"] for h in hashes]), rel=1e-12, abs=0)
     assert list(cells["direction"]) == [reference[h]["direction"] for h in hashes]
     assert lattice.directions(reference) == (27, 12)
     assert list(pair.coverage.columns) == COVERAGE_COLUMNS

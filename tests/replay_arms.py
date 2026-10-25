@@ -13,24 +13,20 @@ generator only places them on items and replicates by SHA-256 draws (``lattice.d
 the pairs in an order that is neither the items' text order nor their numeric one, and the module imports nothing from
 ``poisson_prove``. Tests compute what the analysis must report from ``pairs()`` with their own
 reference implementations. ``root()`` builds the store once per machine and version of this
-file, under a lock, and checks it on every later use.
+file, under a lock, and checks it as ``lattice.root()`` checks the lattice's (``lattice.cached_store``).
 """
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
-import os
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from lattice import LEGACY_COLUMNS, _LEGACY_SCHEMA, canonical_config, config_hash, draw
+from lattice import LEGACY_COLUMNS, _LEGACY_SCHEMA, _digests, cached_store, canonical_config, config_hash, draw, store_unchanged
 
 ARM_A, ARM_B = "replay-a", "replay-b"
 SALT = "replay:seed=700000+4*item+replicate"
@@ -110,10 +106,6 @@ def write(root: Path) -> dict[str, str]:
     return _digests(root)
 
 
-def _digests(root: Path) -> dict[str, str]:
-    return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.rglob("*")) if p.is_file()}
-
-
 _VERSION = hashlib.sha256(
     Path(__file__).read_bytes() + (Path(__file__).parent / "lattice.py").read_bytes() + pa.__version__.encode()
 ).hexdigest()[:12]
@@ -121,26 +113,12 @@ _ROOT: list[Path] = []
 
 
 def root() -> Path:
-    """The store holding both arms, built on first use and checked on every later one."""
-    if _ROOT:
-        return _ROOT[0]
-    home = Path(tempfile.gettempdir()) / f"prove-replay-arms-{_VERSION}"
-    home.mkdir(parents=True, exist_ok=True)
-    with open(home / ".lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        store, sums = home / "store", home / "SHA256SUMS.json"
-        if not (store.is_dir() and sums.is_file() and json.loads(sums.read_text()) == _digests(store)):
-            shutil.rmtree(store, ignore_errors=True)
-            staging = Path(tempfile.mkdtemp(prefix=".store-", dir=home))
-            digests = write(staging)
-            os.rename(staging, store)
-            sums.write_text(json.dumps(digests, indent=1, sort_keys=True), encoding="utf-8")
-    _ROOT.append(store)
-    return store
+    """The store holding both arms, built on first use and checked when a process first asks."""
+    if not _ROOT:
+        _ROOT.append(cached_store("replay-arms", _VERSION, write))
+    return _ROOT[0]
 
 
 def unchanged() -> bool:
     """Whether a store this machine has built still holds exactly what was written (see ``lattice.unchanged``)."""
-    home = Path(tempfile.gettempdir()) / f"prove-replay-arms-{_VERSION}"
-    store, sums = home / "store", home / "SHA256SUMS.json"
-    return not store.is_dir() or (sums.is_file() and json.loads(sums.read_text()) == _digests(store))
+    return store_unchanged("replay-arms", _VERSION)

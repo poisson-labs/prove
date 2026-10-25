@@ -1949,12 +1949,18 @@ def test_v41_environment_renders_inside_one_closed_details_and_nowhere_else(latt
     assert "open" not in details[0].attrs, details[0].attrs
     inside = details[0].deep_text()
     outside = html_unescape(excised(lattice_built.page, DETAILS_RE))
+    sentinels = []
     for key in ("a", "b"):
         environment = lattice_built.structure["pair"][key]["environment"]
         for value in walk_strings(environment):
             assert value in inside, (key, value)
-        sentinel = environment["generator"]
+        # The one string each arm's environment does not share with the other's: both arms are
+        # drawn, each its own.
+        sentinel = environment["run"]
         assert sentinel not in outside, (key, sentinel)
+        sentinels.append(sentinel)
+    assert sentinels == [lattice.ENVIRONMENT_RUN[lattice.RUN_A], lattice.ENVIRONMENT_RUN[lattice.RUN_B]]
+    assert sentinels[0] != sentinels[1] and not any(s in o for s, o in zip(sentinels, reversed(sentinels)))
 
 
 def test_v40_an_unknown_schema_is_refused_naming_both_values(lattice_built: Built) -> None:

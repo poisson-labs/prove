@@ -21,7 +21,7 @@ S24.1. They are restated here because they are why several tests below look the 
 
 1. **``R`` is the BH rejection count, not the verdict sum.** On the lattice (``tests/lattice.py``)
    with ``events=("tripped",)`` under ``logrank_bh`` the rejection count is **39** and the count a
-   horizon rule would label is **27**: the twelve ``load`` 60 conditions are ``32/32`` vs
+   horizon rule would label is **27**: the twelve ``load`` 100 conditions are ``32/32`` vs
    ``32/32``, every episode tripped in both arms, ``delta`` is exactly ``0``, and log-rank rejects
    them on the trip *times* (the after run trips sooner). That configuration is the only fixture
    on which the two definitions differ, so C2 and C19 are written on it and nowhere else. On every
@@ -205,7 +205,7 @@ PAIR_DIRECTIONS = {EVENT: (22, 0), OTHER: (0, 22)}
 
 # PF4 (PF4.13, PF4.20): under log-rank a rejected cell's direction is the sign of B's observed
 # minus expected events; ``lattice.logrank`` gives 27 lower / 12 higher / 33 unchanged (the twelve
-# higher are the ``load`` 60 conditions, where the after run trips sooner), printed in direction
+# higher are the ``load`` 100 conditions, where the after run trips sooner), printed in direction
 # words.
 # PF4 re-freeze (PF4.41): every surface that names logrank_bh says it tests the cause-specific
 # hazard, the headline's method included.
@@ -348,14 +348,14 @@ def assert_logrank_column_is_the_reference(result: Any) -> None:
     """The log-rank family (one event, the design's conditions in sorted-hash order) has its q
     column BH over its p column exactly, and each condition's p, q and direction are the
     independent log-rank reference's (``lattice.logrank``: lifelines on the stored times, BH
-    written out) to 1e-12."""
+    written out) to 1e-12 relative."""
     assert_q_column_is_bh_over_its_p_column(result, None, (EVENT,))
     reference = lattice.logrank(EVENT)
     cells = result.by_event[EVENT].cells
     assert set(cells["config_hash"]) == set(reference)
     for row in cells.itertuples(index=False):
-        assert row.p == pytest.approx(reference[row.config_hash]["p"], abs=1e-12), row.config_hash
-        assert row.q == pytest.approx(reference[row.config_hash]["q"], abs=1e-12), row.config_hash
+        assert row.p == pytest.approx(reference[row.config_hash]["p"], rel=1e-12, abs=0), row.config_hash
+        assert row.q == pytest.approx(reference[row.config_hash]["q"], rel=1e-12, abs=0), row.config_hash
         assert row.direction == reference[row.config_hash]["direction"], row.config_hash
 
 
@@ -1498,7 +1498,7 @@ def test_c15_every_q_value_and_every_delta_on_cells_is_unchanged(
     its p column, and both are the Fisher reference's exactly (``lattice.fisher``, one family over
     both events); its delta column is the naive difference of the design's counts; the log-rank q
     column is BH over its p column, and each p and q is the independent log-rank reference's
-    (``lattice.logrank``, lifelines on the stored times) to 1e-12."""
+    (``lattice.logrank``, lifelines on the stored times) to 1e-12 relative."""
     fisher = {e: lattice.fisher(e) for e in lattice_pair.events}
     assert_q_column_is_bh_over_its_p_column(lattice_pair, fisher, (EVENT, OTHER))
     assert_delta_column_is_the_naive_difference(lattice_pair, (EVENT, OTHER))

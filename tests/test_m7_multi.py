@@ -1165,7 +1165,7 @@ def test_b4_fixture_data_sat_count_equals_cells_with_equal_extreme_event_counts(
 ) -> None:
     c = golden_diff.cells
     expected = set(c.loc[(c["events_a"] == c["events_b"]) & c["events_a"].isin([0, 32]), "config_hash"])
-    # The lattice's saturated conditions by design: every ceiling condition at load 40 to 60 and the
+    # The lattice's saturated conditions by design: every ceiling condition at load 40, 50 and 100 and the
     # two that never trip at load 10.
     designed = {r["config_hash"] for r in lattice.counts() if r["events_a"] == r["events_b"] and r["events_a"] in (0, lattice.N)}
     assert expected == designed and len(expected) == 37, "the lattice fixture has saturated cells"

@@ -532,7 +532,7 @@ def test_i10_max_mde_is_column_max_and_positive_on_fixture(golden: DiffResult) -
     # no limit (NaN) and is left out of max_mde; every other cell keeps a positive limit, and
     # max_mde is the maximum over those.
     ceiling = golden.cells["events_a"] == golden.cells["n_a"]
-    # 37 conditions of the before run trip in every episode (by design: load 40, 50, 60 and
+    # 37 conditions of the before run trip in every episode (by design: load 40, 50, 100 and
     # gain 0.1 at load 10).
     assert int(ceiling.sum()) == sum(c.tripped_a == lattice.N for c in lattice.design_cells()) == 37
     assert golden.cells.loc[ceiling, "mde"].isna().all()
@@ -776,8 +776,8 @@ def test_i17_capture_paired_and_logrank_counts(
         assert set(result.cells["config_hash"]) == set(reference)
         for row in result.cells.itertuples(index=False):
             ref = reference[row.config_hash]
-            assert float(row.p) == pytest.approx(ref["p"], abs=1e-12), (result.method, row.config)
-            assert float(row.q) == pytest.approx(ref["q"], abs=1e-12), (result.method, row.config)
+            assert float(row.p) == pytest.approx(ref["p"], rel=1e-12, abs=0), (result.method, row.config)
+            assert float(row.q) == pytest.approx(ref["q"], rel=1e-12, abs=0), (result.method, row.config)
     captured = {
         "event": EVENT,
         "q": Q,

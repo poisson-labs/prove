@@ -46,10 +46,13 @@ canonical JSON are written here, so a defect in the package cannot change the ru
 on.
 
 ``root()`` builds the store once per machine and version of this file into the system's
-temporary folder, under a lock, and checks every file against the digests it wrote when a process
-first asks for it; a store that fails is rebuilt. The suite checks it again when the session ends
-(``unchanged``), so a session in which a test wrote into it fails rather than passing on a store
-the next session silently rebuilds.
+temporary folder, under a lock, and checks every file and folder against the digests it wrote
+when a process first asks for it. The suite's controller checks both generated stores before any
+test runs (``conftest.pytest_configure``), and rebuilds one that fails then (left by a crash, or a
+session before it); from then on a store that fails was written by a test of this session, so
+every process refuses it instead of rebuilding it, and the suite checks it once more when the
+session ends (``unchanged``). A session in which a test wrote into it fails, rather than passing
+on a store the next process or session silently rebuilds.
 """
 
 from __future__ import annotations
@@ -126,7 +129,9 @@ LEGACY_MANIFEST_KEYS = frozenset({
     "retain_traces_for", "run_id", "run_salt", "schema_version", "status", "t_unit", "target_id",
 })
 #: What each run's ``environment`` records: where the rows came from, nothing about a machine.
+#: ``run`` is the one string the two runs' environments do not share.
 ENVIRONMENT = {"generator": "tests/lattice.py", "generator_seed": GENERATOR_SEED, "design": "DESIGN"}
+ENVIRONMENT_RUN = {RUN_A: "the before run of the lattice", RUN_B: "the after run of the lattice"}
 
 
 @dataclass(frozen=True)
@@ -288,7 +293,7 @@ def manifest(run_id: str) -> dict[str, Any]:
         "axis_types": {X: "continuous", Y: "continuous"},
         "backend": "import",
         "created_at": created,
-        "environment": dict(ENVIRONMENT),
+        "environment": {**ENVIRONMENT, "run": ENVIRONMENT_RUN[run_id]},
         "proofload_version": "0.0.1",
         "retain_traces_for": None,
         "run_id": run_id,
@@ -322,43 +327,86 @@ def _digests(root: Path) -> dict[str, str]:
     }
 
 
-# ---------- one store per machine and version of this file ----------
+# ---------- one store per machine and version of the generator ----------
+
+#: Set by the suite's controller once it has checked both generated stores at the start of a
+#: session (``conftest.pytest_configure``), and inherited by its workers.
+CHECKED = "PROVE_GENERATED_STORES_CHECKED"
+
+
+def _home(name: str, version: str) -> Path:
+    return Path(tempfile.gettempdir()) / f"prove-{name}-{version}"
+
+
+def _matches(home: Path) -> bool:
+    """Whether ``home/store`` holds exactly the files ``home/SHA256SUMS.json`` lists, with those
+    digests, and no folder but theirs."""
+    store = home / "store"
+    try:
+        sums = json.loads((home / "SHA256SUMS.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not store.is_dir() or not isinstance(sums, dict) or sums != _digests(store):
+        return False
+    folders = {str(p.relative_to(store)) for p in store.rglob("*") if p.is_dir()}
+    return folders == {str(parent) for rel in sums for parent in Path(rel).parents if parent != Path(".")}
+
+
+def cached_store(name: str, version: str, write_to: Any) -> Path:
+    """The store ``write_to(folder)`` writes, built once per machine and ``version`` under a lock.
+
+    A store that fails its digests is rebuilt only while the session has not checked it yet
+    (``CHECKED``); after that it was written by a test, and is refused, its bytes left in place.
+    """
+    home = _home(name, version)
+    home.mkdir(parents=True, exist_ok=True)
+    with open(home / ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        store = home / "store"
+        if not _matches(home):
+            if os.environ.get(CHECKED):
+                raise RuntimeError(
+                    f"the generated store {store} changed during this test session: a test wrote into it"
+                )
+            shutil.rmtree(store, ignore_errors=True)
+            staging = Path(tempfile.mkdtemp(prefix=".store-", dir=home))
+            digests = write_to(staging)
+            os.rename(staging, store)
+            pending = home / ".SHA256SUMS.json.part"
+            pending.write_text(json.dumps(digests, indent=1, sort_keys=True), encoding="utf-8")
+            os.replace(pending, home / "SHA256SUMS.json")
+    return store
+
+
+def store_unchanged(name: str, version: str) -> bool:
+    """Whether the store is as written, without building one; a store the session checked and
+    that is gone has changed."""
+    home = _home(name, version)
+    if not (home / "store").exists():
+        return not os.environ.get(CHECKED)
+    return _matches(home)
+
 
 _VERSION = hashlib.sha256(Path(__file__).read_bytes() + pa.__version__.encode()).hexdigest()[:12]
 _ROOT: list[Path] = []
 
 
 def root() -> Path:
-    """The store holding the two runs, built on first use and checked on every later one."""
-    if _ROOT:
-        return _ROOT[0]
-    home = Path(tempfile.gettempdir()) / f"prove-lattice-{_VERSION}"
-    home.mkdir(parents=True, exist_ok=True)
-    with open(home / ".lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        store, sums = home / "store", home / "SHA256SUMS.json"
-        if not (store.is_dir() and sums.is_file() and json.loads(sums.read_text()) == _digests(store)):
-            shutil.rmtree(store, ignore_errors=True)
-            staging = Path(tempfile.mkdtemp(prefix=".store-", dir=home))
-            digests = write(staging)
-            os.rename(staging, store)
-            sums.write_text(json.dumps(digests, indent=1, sort_keys=True), encoding="utf-8")
-    _ROOT.append(store)
-    return store
+    """The store holding the two runs, built on first use and checked when a process first asks."""
+    if not _ROOT:
+        _ROOT.append(cached_store("lattice", _VERSION, write))
+    return _ROOT[0]
 
 
 def intact() -> bool:
-    """Whether every file of the store is the one this module wrote, and no other file exists."""
-    home = root().parent
-    return json.loads((home / "SHA256SUMS.json").read_text()) == _digests(root())
+    """Whether every file of the store is the one this module wrote, and no other file or folder exists."""
+    return _matches(root().parent)
 
 
 def unchanged() -> bool:
-    """``intact()`` for a store this machine has built, without building one: the session-end
-    check (``conftest.pytest_sessionfinish``) that fails a session in which a test wrote into it."""
-    home = Path(tempfile.gettempdir()) / f"prove-lattice-{_VERSION}"
-    store, sums = home / "store", home / "SHA256SUMS.json"
-    return not store.is_dir() or (sums.is_file() and json.loads(sums.read_text()) == _digests(store))
+    """``intact()`` without building a store: the session-end check (``conftest.pytest_sessionfinish``)
+    that fails a session in which a test wrote into it."""
+    return store_unchanged("lattice", _VERSION)
 
 
 # ---------- the design, read as the independent record ----------

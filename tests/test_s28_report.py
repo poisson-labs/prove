@@ -2693,7 +2693,7 @@ def assert_s24_columns_are_the_references(pair: Any, tripped_logrank: Any) -> No
     ``lattice.fisher``'s as ``column_text`` (bits and the sign of every zero), ``held``'s delta
     ``tripped``'s negated numerically; the ``q`` column is ``lattice.bh`` over the one family of 144
     ``p``, as text. Under log-rank on ``tripped``: one event, 72 tests, sorted-hash rows, the ``q``
-    column ``lattice.bh`` over its ``p`` as text and ``lattice.logrank``'s to 1e-12, with the
+    column ``lattice.bh`` over its ``p`` as text and ``lattice.logrank``'s to 1e-12 relative, with the
     reference's directions. The coverage, serialised as its digest serialised it
     (``to_json(orient="records")``), is the design's 72 conditions, each 32 rows a run, all comparable."""
     import numpy as np
@@ -2715,7 +2715,7 @@ def assert_s24_columns_are_the_references(pair: Any, tripped_logrank: Any) -> No
     assert tuple(tripped_logrank.events) == (lattice.EVENT,) and tripped_logrank.n_tests == lattice.CELLS
     assert list(cells["config_hash"].astype(str)) == hashes
     assert column_text(tripped_logrank, "q") == reference_column_text({lattice.EVENT: lattice.bh(cells["p"].to_numpy())})
-    assert cells["q"].to_numpy() == pytest.approx(np.array([reference[h]["q"] for h in hashes]), abs=1e-12)
+    assert cells["q"].to_numpy() == pytest.approx(np.array([reference[h]["q"] for h in hashes]), rel=1e-12, abs=0)
     assert list(cells["direction"]) == [reference[h]["direction"] for h in hashes]
     assert lattice.directions(reference) == (27, 12)
     assert list(pair.coverage.columns) == COVERAGE_COLUMNS

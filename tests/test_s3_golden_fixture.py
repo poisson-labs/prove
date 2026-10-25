@@ -13,12 +13,14 @@ Generator contract assumed by I9 and I10:
 
 writes <dir>/lattice-a and <dir>/lattice-b (a manifest and one part each) and returns each
 file's digest; ``lattice.root()`` hands out a store only when every file matches the digests
-it wrote, and rebuilds it otherwise.
+it wrote (and no other file or folder exists), rebuilds it otherwise while the session has not
+checked it (``lattice.CHECKED``), and refuses it once the session has.
 """
 
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -251,19 +253,48 @@ def test_i10_generator_refuses_an_inconsistent_design_or_store(tmp_path: Path, m
             with pytest.raises(AssertionError):
                 lattice._design()
     assert lattice._design() == lattice.DESIGN
-    # A store that disagrees with the digests it was written with is never handed out: it is
-    # rebuilt, and the tampered bytes are gone. Built under tmp_path so the session's store is
-    # untouched.
+    # A store that disagrees with the digests it was written with is never handed out. Before the
+    # session has checked it (a crash or an earlier session left it), it is rebuilt and the
+    # tampered bytes are gone; once the session has checked it, the change was a test's, so it is
+    # refused, its bytes left in place, and the session-end check fails. Built under tmp_path so
+    # the session's store is untouched.
     monkeypatch.setattr(lattice.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.delenv(lattice.CHECKED, raising=False)
     monkeypatch.setattr(lattice, "_ROOT", [])
     store = lattice.root()
-    assert store.parent.parent == tmp_path and lattice.intact()
+    assert store.parent.parent == tmp_path and lattice.intact() and lattice.unchanged()
     part = store / lattice.RUN_A / "episodes" / "part-00000.parquet"
     good = part.read_bytes()
-    part.write_bytes(good[:-8] + bytes(8))
-    assert not lattice.intact()
-    monkeypatch.setattr(lattice, "_ROOT", [])
-    again = lattice.root()
-    assert again == store and lattice.intact()
-    assert part.read_bytes() == good
+    sums = store.parent / "SHA256SUMS.json"
+    written = sums.read_bytes()
+
+    def tampered(change: Any) -> None:
+        change()
+        assert not lattice.intact() and not lattice.unchanged()
+        monkeypatch.setenv(lattice.CHECKED, "1")
+        monkeypatch.setattr(lattice, "_ROOT", [])
+        with pytest.raises(RuntimeError, match="changed during this test session"):
+            lattice.root()
+        assert not lattice.unchanged()
+        monkeypatch.delenv(lattice.CHECKED)
+        monkeypatch.setattr(lattice, "_ROOT", [])
+        again = lattice.root()
+        assert again == store and lattice.intact() and lattice.unchanged()
+        assert part.read_bytes() == good and sums.read_bytes() == written
+
+    def flip_bytes() -> None:
+        part.write_bytes(good[:-8] + bytes(8))
+        assert part.read_bytes() != good
+
+    tampered(flip_bytes)
+    tampered(lambda: (store / lattice.RUN_B / "extra.json").write_text("{}"))
+    tampered(lambda: (store / lattice.RUN_B / "empty").mkdir())
+    tampered(lambda: sums.write_text(written.decode()[:-7]))
+    # A store the session checked and that is gone has changed too.
+    monkeypatch.setenv(lattice.CHECKED, "1")
+    renamed = store.with_name("moved")
+    store.rename(renamed)
+    assert not lattice.unchanged()
+    renamed.rename(store)
+    assert lattice.unchanged()
     assert not list(store.parent.glob(".store-*"))
