@@ -1098,8 +1098,9 @@ ROWS: dict[str, Row] = {
     "no kinds declared": Row((cut("prove.toml", "failures = "),), code=0, note=("higher", "lower")),
     "no [declare]": Row((cut("prove.toml", "[declare]"),), code=0, note=("higher", "lower")),
     "an axis with one value": Row((edit("prove.toml", "values = [0.0, 0.7]", "values = [0.0]"),), code=0, note=("temperature",)),
-    "no axis varies": Row((edit("prove.toml", "values = [0.0, 0.7]", "values = [0.0]"), edit("prove.toml", 'values = ["v1", "v2"]', 'values = ["v2"]')),
-                          code=0, note=("prompt_version", "temperature")),
+    "no axis varies": Row((edit("prove.toml", "values = [0.0, 0.7]", "values = [0.0]"), edit("prove.toml", 'values = ["v1", "v2"]', 'values = ["v2"]'),
+                           edit("prove.toml", 'values = ["t1", "t2", "t3", "t4"]', 'values = ["t1"]')),
+                          code=0, note=("prompt_version", "temperature", "ticket")),
     "--backend modal without its extra": Row(argv=("--dry-run", "--backend", "modal"), hide=("modal",), error=(word("modal"),),
                                              stderr=("poisson-prove[modal]",)),
     "[capture] without its extra": Row(
