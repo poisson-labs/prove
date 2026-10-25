@@ -989,6 +989,14 @@ class MultiDiffResult:
     #: reads only the word never pays for it.
     fragility_search: Callable[[], _verdict.Fragility] | None = field(default=None, repr=False)
 
+    def __getstate__(self) -> dict[str, Any]:
+        """The state a pickle keeps: the fragility searched first, so the copy carries the
+        answer and not the search."""
+        state = dict(self.__dict__)
+        state["_fragility"] = self._fragility
+        state["fragility_search"] = None
+        return state
+
     @cached_property
     def _fragility(self) -> _verdict.Fragility:
         if self.fragility_search is None:

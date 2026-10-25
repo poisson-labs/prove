@@ -44,6 +44,11 @@ Compare two runs from Python, getting the result objects the command line prints
 - `RunInfo`: one run of `runs`, with `run_id` and `run_name`.
 - `Refusal`: what every function raises when it refuses; its text is the command line's sentence.
 
+A `Comparison`, and so a `CheckResult`, builds its document and its tree the first time something
+reads them. Get its JSON with `to_json()`: `json.dumps` on the result, or on its `payload` before
+anything has read it, is not supported. It pickles whether or not it has been read, building
+itself in full first, and the unpickled copy is equal to it.
+
 ```python
 from poisson_prove import compare
 

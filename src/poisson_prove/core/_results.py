@@ -216,7 +216,14 @@ class PairedResult(Result):
 @dataclass(frozen=True, eq=False)
 class Comparison(Result):
     """Two runs compared: the word, its sentence, the verdict block's lines, and every fact the
-    statistics returned, each as its JSON carries it."""
+    statistics returned, each as its JSON carries it.
+
+    Its document and its tree are built the first time something reads them, so ``to_json()``
+    is the way to get its JSON: ``json.dumps`` on the result, or on its ``payload`` before
+    anything has read it, is not supported. It pickles whether or not it has been read (it
+    builds itself in full first), and two comparisons are equal when their documents, verdict
+    lines and notes are.
+    """
 
     KIND: ClassVar[str] = "comparison"
     detail: tuple[tuple[str, str], ...] = ()
@@ -240,6 +247,27 @@ class Comparison(Result):
     @property
     def method(self) -> str:
         return str(self.multi.method)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Comparison) or type(other) is not type(self):
+            return NotImplemented
+        return (self.to_json(), self.detail, self.notes) == (
+            other.to_json(),
+            other.detail,
+            other.notes,
+        )
+
+    __hash__ = None  # type: ignore[assignment]
+
+    def __getstate__(self) -> dict[str, Any]:
+        """The state a pickle keeps: the result built in full (its document, its tree and its
+        facts), so the copy needs nothing the original would have computed them with."""
+        state = dict(self.__dict__)
+        state["payload"] = dict(self.payload)
+        state["tree"] = self.tree
+        state["_doc"] = self._doc
+        state["grow"] = None
+        return state
 
     @cached_property
     def tree(self) -> Any:
