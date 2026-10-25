@@ -101,8 +101,8 @@ loaded ``httpx`` by ``install()`` has no LLM client to inject into and is refuse
 
 **Standing rule 12 -- the classified red set, measured on this commit.** Pristine
 ``git clone`` of ``7b61bf5`` at a UUID-free path, venv built from the repo venv's ``pip
-freeze`` with ``--no-deps``, collection 1846 = the repo's 1846; the copy lacks a gitignored
-data file under ``examples/`` so it skips 5 where the repo skips 3.
+freeze`` with ``--no-deps``, collection 1846 = the repo's 1846; the copy lacks the gitignored
+downloaded data file so it skips 5 where the repo skips 3.
 Bare-tree baseline: **4 failed / 1837 passed / 5 skipped** -- the four are A22's own
 classified reds on pandas 2.3.3 (``test_a22_pandas3.py`` V5, V12, V14, V15), whose build has
 not landed. With this file and the amendments below, 1887 collected: **48 failed / 1834 passed
