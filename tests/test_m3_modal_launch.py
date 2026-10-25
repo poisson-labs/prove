@@ -501,7 +501,10 @@ def _with_modal_key(tables: str, line: str) -> str:
 #: invocation here states what it accepts. The flag is the honest answer -- these runs
 #: really can only see a fifty-point move -- and it is what the gate exists to make
 #: people say out loud.
-PLUMBING_MAX_MDE = ("--max-mde", "0.5")
+# PF4 re-freeze (PF4.30, reading R17): at 1, 2 or 4 replicates a side no lone condition of these
+# grids can be flagged at q / M, so any accepted change below 1 refuses them (no fifty-point limit
+# exists any more); --max-mde 1 admits any design, which is what 0.5 did here.
+PLUMBING_MAX_MDE = ("--max-mde", "1")
 
 
 def _modal_argv(tmp_path: Path, sweep_path: Path, *extra: str, target: str = WELL_SHAPED) -> list[str]:

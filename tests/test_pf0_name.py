@@ -45,6 +45,7 @@ runner, decides it; PF10 declares the ``slow`` marker).
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import html
 import json
@@ -62,6 +63,7 @@ from typing import Any
 
 import pyarrow.parquet as pq
 import pytest
+from test_pf4_stats import _ref_fisher_limits, _ref_limit, _ref_paired_power
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "poisson_prove"
@@ -357,9 +359,11 @@ def chaos_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
     (base / "pf0_chaos_target.py").write_text(CHAOS_TARGET, encoding="utf-8")
     (base / "chaos.toml").write_text(CHAOS_SPEC, encoding="utf-8")
     store = base / "store"
+    # PF4 re-freeze (PF4.49, reading R17): no lone condition of this 3-replicate design can be
+    # flagged, which any accepted change below 1 refuses; --max-mde 1 admits it as 0.99 did.
     r = subprocess.run(
         [sys.executable, "-m", "poisson_prove", "--store", str(store), "sweep", str(base / "chaos.toml"),
-         "--target", "pf0_chaos_target:rollout", "--max-mde", "0.99", "--yes"],
+         "--target", "pf0_chaos_target:rollout", "--max-mde", "1", "--yes"],
         cwd=base, env=clean_env(PYTHONPATH=str(base)), capture_output=True, text=True, timeout=300,
     )
     assert r.returncode == 0, r.stderr
@@ -836,7 +840,9 @@ def test_pf0_6_every_pair_verb_exits_0_on_the_0_0_1_quickstart_pair_and_no_store
     before = tree_digest(STORE)
     invocations = [
         ["diff", QA, QB],
-        ["check", QA, QB, "--event", "violated"],
+        # PF4 (PF4.20): a 0.0.1 run records no kind, so check's default --fail-on worse is refused;
+        # --fail-on higher is the same gate on a failure event (fail when the rate rose).
+        ["check", QA, QB, "--event", "violated", "--fail-on", "higher"],
         ["report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(tmp_path / "report")],
         ["serve", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--event", "violated", "--event", "timeout", "--json"],
     ]
@@ -878,6 +884,14 @@ ROOT_FIELDS = ("p_omnibus", "p_location", "p_dispersion", "rejects")
 BOUND_FIELDS = ("depth_configured", "depth", "q", "delta_star", "bound", "discoveries")
 
 
+#: PF4 (PF4.20): a 0.0.1 run records no event kind, so a cell's verdict is now the direction word:
+#: 0.0.1's ``safer`` (the rate fell) reads ``lower`` and its ``worse`` (rose) reads ``higher``.
+DIRECTION_OF = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
+#: PF4 (PF4.18): the omnibus and every group p-value are Westfall-Young on one scale, so these
+#: three fields move; every other field of the tree is 0.0.1's.
+TREE_FIELDS_PF4_MOVES = ("p_omnibus", "p_group", "q_group")
+
+
 def same(got: Any, want: Any) -> bool:
     """Equal, where a NaN 0.0.1 wrote (a statistic with no value) equals a NaN read back. Strict JSON
     now writes a NaN or an infinity as null (front-door spec section 5.6), so null equals either."""
@@ -891,15 +905,99 @@ def recorded(name: str) -> dict[str, Any]:
     return data
 
 
+#: The comparison's false discovery rate, the level of 0.0.1's quickstart pair.
+LIMIT_Q = 0.05
+
+
+@functools.cache
+def reference_mde(method: str, events_a: int, n: int, level: float) -> float | None:
+    """A condition's detection limit at the lone-change level, from the stats file's references:
+    Fisher's exact enumeration under ``fisher_bh``, the paired test's over ``n`` matched pairs under
+    ``mcnemar_bh``; ``mde`` is the larger of the two directions, the one that is a number when the
+    other has no room, and null otherwise (front-door spec section 8.10)."""
+    p_a = events_a / n
+    if method == "fisher_bh":
+        rise, fall = _ref_fisher_limits(events_a, n, n, level)
+    else:
+        rise = _ref_limit(lambda g: _ref_paired_power(p_a, n, level, g, True), 1.0 - p_a)
+        fall = _ref_limit(lambda g: _ref_paired_power(p_a, n, level, g, False), p_a)
+    if rise is not None and fall is not None:
+        return max(rise, fall)
+    if rise is not None and p_a == 0.0:
+        return rise
+    if fall is not None and p_a == 1.0:
+        return fall
+    return None
+
+
+def assert_same_cell(got: dict[str, Any], want: dict[str, Any], method: str, where: tuple[str, str],
+                     rows: int) -> None:
+    """0.0.1's cell, field by field, with the fields PF4 moves read as PF4 writes them; ``rows`` is
+    the number of rows the comparison tests."""
+    for field in CELL_FIELDS:
+        if field == "mde":
+            # PF4 re-freeze (PF4.22 to PF4.24): the limit is the exact power definition at the
+            # lone-change level q / M, both directions, so 0.0.1's normal-approximation number moves;
+            # it is recomputed here from the stats file's references.
+            want_mde = reference_mde(method, got["events_a"], got["pairs"] if method == "mcnemar_bh" else got["n_a"],
+                                     LIMIT_Q / rows)
+            if want_mde is None:
+                assert got[field] is None, (*where, field, got[field])
+            else:
+                assert got[field] is not None and abs(got[field] - want_mde) <= 1e-4 + 1e-12, (*where, field, got[field], want_mde)
+        elif field == "verdict":
+            # PF4 (PF4.20): the direction word in place of 0.0.1's safer/worse; the cell's
+            # direction says the same.
+            assert got[field] == got["direction"] == DIRECTION_OF[want[field]], (*where, field)
+        elif field == "delta" and method == "mcnemar_bh":
+            # PF4 (PF4.14): delta is the matched-pair difference (n01 - n10) / pairs. Every run of
+            # this pair is matched, so n01 - n10 is events_b - events_a and the value is 0.0.1's
+            # horizon difference up to floating-point order.
+            assert got["pairs"] == got["n_a"] == got["n_b"], (*where, got["pairs"])
+            assert abs(got[field] - (got["events_b"] - got["events_a"]) / got["pairs"]) < 1e-12, (*where, field)
+            assert abs(got[field] - want[field]) < 1e-12, (*where, field)
+        else:
+            assert same(got[field], want[field]), (*where, field)
+
+
+def benjamini_hochberg(p: list[float]) -> list[float]:
+    """BH-adjusted q-values, computed here: q_(i) = min over j >= i of m * p_(j) / j, capped at 1."""
+    order = sorted(range(len(p)), key=lambda i: p[i])
+    q = [0.0] * len(p)
+    running = 1.0
+    for rank in range(len(p), 0, -1):
+        i = order[rank - 1]
+        running = min(running, len(p) * p[i] / rank)
+        q[i] = running
+    return q
+
+
 def assert_same_tree(got: dict[str, Any], want: dict[str, Any]) -> None:
     for field in ROOT_FIELDS:
+        if field in TREE_FIELDS_PF4_MOVES:
+            continue
         assert got["root"][field] == want["root"][field], field
+    # PF4 (PF4.18): the root's p is the min-p over its statistics on one scale, which is never
+    # below the smallest of their own p-values; whether it rejects is 0.0.1's (above).
+    root = got["root"]
+    assert min([*root["p_location"].values(), *root["p_dispersion"].values()]) <= root["p_omnibus"] <= 1.0, root
     assert got["fault_lines"]["rejected_groups"] == want["fault_lines"]["rejected_groups"]
     got_groups = {g["label"]: g for g in got["fault_lines"]["groups"]}
     assert sorted(got_groups) == sorted(g["label"] for g in want["fault_lines"]["groups"])
     for group in want["fault_lines"]["groups"]:
         for field in GROUP_FIELDS:
+            if field in TREE_FIELDS_PF4_MOVES:
+                continue
             assert got_groups[group["label"]][field] == group[field], (group["label"], field)
+    # PF4 (PF4.18): each group's p is a min-p on one scale as the root's is, and its q is the
+    # Benjamini-Hochberg adjustment of those p-values, computed here.
+    labels = sorted(got_groups)
+    for label in labels:
+        g = got_groups[label]
+        assert min([*g["p_location"].values(), *g["p_dispersion"].values()]) <= g["p_group"] <= 1.0, (label, g["p_group"])
+    q = benjamini_hochberg([got_groups[label]["p_group"] for label in labels])
+    for label, q_value in zip(labels, q, strict=True):
+        assert abs(got_groups[label]["q_group"] - q_value) < 1e-12, (label, got_groups[label]["q_group"], q_value)
     for field in BOUND_FIELDS:
         assert got["bound"][field] == want["bound"][field], field
 
@@ -912,13 +1010,14 @@ def test_pf0_7_diff_json_on_the_0_0_1_pair_gives_0_0_1s_cells_omnibus_fault_line
     got, want = json.loads(r.out), recorded(f"diff-{method}.json")
     assert got["method"] == want["method"] == method
     assert sorted(got["by_event"]) == sorted(want["by_event"])
+    rows = sum(len(block["cells"]) for block in got["by_event"].values())
     for event, block in want["by_event"].items():
         got_cells = {c["config_hash"]: c for c in got["by_event"][event]["cells"]}
         assert sorted(got_cells) == sorted(c["config_hash"] for c in block["cells"]), event
         for cell in block["cells"]:
-            for field in CELL_FIELDS:
-                assert same(got_cells[cell["config_hash"]][field], cell[field]), (event, cell["config_hash"], field)
-    assert got["omnibus"]["p_omnibus"] == want["omnibus"]["p_omnibus"]
+            assert_same_cell(got_cells[cell["config_hash"]], cell, method, (event, cell["config_hash"]), rows)
+    # PF4 (PF4.18): the omnibus p moves with the tree's root, which it is.
+    assert got["omnibus"]["p_omnibus"] == got["tree"]["root"]["p_omnibus"]
     assert_same_tree(got["tree"], want["tree"])
 
 
@@ -930,12 +1029,12 @@ def test_pf0_7_serve_json_on_the_0_0_1_pair_gives_0_0_1s_cells_omnibus_fault_lin
     got, want = json.loads(r.out), recorded(f"serve-{method}.json")
     got_panels = {p["event"]: p for p in got["panels"]}
     assert sorted(got_panels) == sorted(p["event"] for p in want["panels"])
+    rows = sum(len(panel["cells"]) for panel in got["panels"])
     for panel in want["panels"]:
         got_cells = {c["config_hash"]: c for c in got_panels[panel["event"]]["cells"]}
         assert sorted(got_cells) == sorted(c["config_hash"] for c in panel["cells"]), panel["event"]
         for cell in panel["cells"]:
-            for field in CELL_FIELDS:
-                assert same(got_cells[cell["config_hash"]][field], cell[field]), (panel["event"], cell["config_hash"], field)
+            assert_same_cell(got_cells[cell["config_hash"]], cell, method, (panel["event"], cell["config_hash"]), rows)
     assert_same_tree(got["tree"], want["tree"])
 
 
@@ -994,6 +1093,49 @@ def same_row(got: str, want: str) -> bool:
     )
 
 
+def mde_cells(markdown: str) -> list[tuple[str, int, tuple[str, ...]]]:
+    """Each data row of a table with an MDE column, in order: the row, the column's index and what the
+    row is about, ``("group", label)`` on the fault lines or ``("cell", event, task_id, tool_fail_rate)``."""
+    lines = markdown.splitlines()
+    out: list[tuple[str, int, tuple[str, ...]]] = []
+    heading, header = "", None
+    for i, line in enumerate(lines):
+        if line.startswith("## "):
+            heading, header = line[3:], None
+        if not line.startswith("|"):
+            header = None
+            continue
+        if set(line) <= set("|-: "):
+            continue
+        cells = [c.strip() for c in line.strip("|").split(" | ")]
+        if i + 1 < len(lines) and lines[i + 1].startswith("|") and set(lines[i + 1]) <= set("|-: "):
+            header = cells
+            continue
+        if header is None:
+            continue
+        at = [k for k, name in enumerate(header) if "MDE" in name]
+        if not at:
+            continue
+        if heading == "Fault lines":
+            out.append((line, at[0], ("group", cells[0])))
+        elif header[0] == "cell":
+            config = dict(part.split("=", 1) for part in cells[0].split(", "))
+            out.append((line, at[0], ("cell", cells[1], config["task_id"], str(float(config["tool_fail_rate"])))))
+        elif header[:2] == ["task_id", "tool_fail_rate"]:
+            out.append((line, at[0], ("cell", heading.split(":")[0], cells[0], str(float(cells[1])))))
+    return out
+
+
+def limits_of(comparison: dict[str, Any]) -> dict[tuple[str, ...], float | None]:
+    """Every limit a report prints, from the same comparison's JSON."""
+    out: dict[tuple[str, ...], float | None] = {
+        ("group", g["label"]): g["mde"] for g in comparison["tree"]["fault_lines"]["groups"]}
+    for event, block in comparison["by_event"].items():
+        for c in block["cells"]:
+            out[("cell", event, c["config"]["task_id"], str(float(c["config"]["tool_fail_rate"])))] = c["mde"]
+    return out
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_pf0_7_report_on_the_0_0_1_pair_gives_0_0_1s_tables_and_bound(method: str, tmp_path: Path) -> None:
     out = tmp_path / "report"
@@ -1002,11 +1144,53 @@ def test_pf0_7_report_on_the_0_0_1_pair_gives_0_0_1s_tables_and_bound(method: st
     assert r.code == 0, r
     got = (out / "report.md").read_text(encoding="utf-8")
     want = (RECORDED / f"report-{method}" / "report.md").read_text(encoding="utf-8")
+    # PF4 (PF4.3): report.md gains a Shares section, which 0.0.1 did not print; the rows compared
+    # are those of every section 0.0.1 had.
+    got = got.replace(section(got, "## Shares"), "")
+    # PF4 (PF4.20): a 0.0.1 run records no kind, so a row's verdict is the direction word.
+    want = re.sub(r"\b(safer|worse)\b", lambda m: DIRECTION_OF[m.group(1)], want)
+    # PF4 (PF4.18): a fault-line row's p and q (its last-but-two and last-but-one cells) are the
+    # one-scale values, read from the same comparison's JSON; every other cell is 0.0.1's.
+    tree = json.loads(run_cli(["--store", str(STORE), "diff", QA, QB, "--method", method, "--json"]).out)["tree"]
+    groups = {g["label"]: g for g in tree["fault_lines"]["groups"]}
+    fault_rows = set(table_data_rows(section(got, "## Fault lines")))
+    assert len(fault_rows) == len(groups), fault_rows
     # report.md's numbers are printed under rule 10 now (front-door spec section 5.4): each row and
     # the bound carry 0.0.1's numbers by value.
     got_rows, want_rows = table_data_rows(got), table_data_rows(want)
     assert len(got_rows) == len(want_rows)
-    assert [(g, w) for g, w in zip(got_rows, want_rows, strict=True) if not same_row(g, w)] == []
+    # PF4 re-freeze (PF4.22 to PF4.24, PF4.45): every condition's and every group's limit moves (the
+    # exact power at the lone-change level; the group's from each cell's own baseline, unconditional),
+    # so each printed MDE is read against the JSON of the same comparison (the same events) and left
+    # out of the comparison with 0.0.1's row; every other cell is still 0.0.1's.
+    same_comparison = json.loads(run_cli(["--store", str(STORE), "diff", QA, QB, "--event", "timeout", "--event", "violated",
+                                          "--method", method, "--json"]).out)
+    limits, printed_limits = limits_of(same_comparison), mde_cells(got)
+    assert {about for _, _, about in printed_limits} == set(limits), printed_limits
+    moved = []
+    for g, w in zip(got_rows, want_rows, strict=True):
+        is_fault_row = g in fault_rows
+        if printed_limits and g == printed_limits[0][0]:
+            _, at, about = printed_limits.pop(0)
+            g_cells, w_cells = g.strip("|").split(" | "), w.strip("|").split(" | ")
+            value, token = limits[about], g_cells[at].strip()
+            if value is None:
+                assert PRINTED_NUMBER.search(token) is None and token.startswith("none"), (g, value)
+            else:
+                printed, half = printed_value(token)
+                assert abs(printed - value) <= half + 1e-12, (g, value)
+            g_cells[at], w_cells[at] = " ", " "
+            g, w = "|" + " | ".join(g_cells) + "|", "|" + " | ".join(w_cells) + "|"
+        if is_fault_row:
+            g_cells, w_cells = g.strip("|").split(" | "), w.strip("|").split(" | ")
+            group = groups[g_cells[0].strip()]
+            for token, value in ((g_cells[-3], group["p_group"]), (g_cells[-2], group["q_group"])):
+                printed, half = printed_value(token.strip())
+                assert abs(printed - value) <= half + 1e-12, (g, value)
+            g, w = " | ".join(g_cells[:-3] + g_cells[-1:]), " | ".join(w_cells[:-3] + w_cells[-1:])
+        if not same_row(g, w):
+            moved.append((g, w))
+    assert moved == [] and printed_limits == []
     assert same_numbers(section(got, "## Bound"), section(want, "## Bound"))
 
 
@@ -1028,7 +1212,8 @@ def verb_argv(verb: str, inputs: dict[str, Path], out: Path) -> list[str]:
     return {
         "sweep": ["sweep", str(inputs["spec"]), "--target", f"{MOCK}:rollout", "--max-mde", "0.99", "--yes"],
         "diff": ["diff", QA, QB],
-        "check": ["check", QA, QB, "--event", "violated"],
+        # PF4 (PF4.20): as in PF0.6, the same gate named for an event of unknown kind.
+        "check": ["check", QA, QB, "--event", "violated", "--fail-on", "higher"],
         "report": ["report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(out)],
         "paired": ["paired", "--declaration", str(inputs["declaration"]), "--out", str(out)],
         "serve": ["serve", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--event", "violated", "--json"],

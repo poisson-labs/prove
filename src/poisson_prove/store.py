@@ -78,6 +78,10 @@ _SCHEMA = pa.schema(
         # nothing for a version to select.
         pa.field("trace", pa.string(), nullable=True),
         pa.field("trace_obs", pa.string(), nullable=True),
+        # PF4.38 (reading R5): the case the rollout named in ``meta["case_id"]``, copied to its own
+        # column when the episode is appended, so a comparison reads it without decoding ``meta``.
+        # Appended like A7's columns: a part written before it reads the column as null.
+        pa.field("case_id", pa.string(), nullable=True),
     ]
 )
 _JSON_COLUMNS = ("config", "meta", "backend_meta")
@@ -85,7 +89,7 @@ _JSON_COLUMNS = ("config", "meta", "backend_meta")
 #: a field added to the schema must be added here by hand, and A22's V5 is what fails until it
 #: is. Derived, the assertion would follow the schema silently and A7 would inherit a read path
 #: whose nulls are NaN under ``row.trace is not None``.
-_NULLABLE_STRING_COLUMNS = ("outcome", "error", "trace", "trace_obs")
+_NULLABLE_STRING_COLUMNS = ("outcome", "error", "trace", "trace_obs", "case_id")
 _META_COLUMNS = ("meta", "backend_meta")
 #: The two columns the split writes. Not in ``_META_COLUMNS``: ``meta=`` and ``trace=`` are
 #: orthogonal knobs and folding these two names into that constant would silently couple them
@@ -487,6 +491,13 @@ class RunTally:
 # ---------- Store ----------
 
 
+def _case_id(meta: Any) -> str | None:
+    """PF4.38 (reading R5): the case a rollout named in ``meta["case_id"]``, a non-empty string,
+    copied into the episode's ``case_id`` column; None when it named none."""
+    case = meta.get("case_id") if isinstance(meta, Mapping) else None
+    return case if isinstance(case, str) and case else None
+
+
 class Store:
     def __init__(self, root: Path | str) -> None:
         self._root = Path(root)
@@ -531,6 +542,14 @@ class Store:
         if not path.is_file():
             raise StoreError(f"unknown run: {run_id!r}")
         return RunManifest.from_dict(json.loads(path.read_text()))
+
+    def _record_resume(self, run_id: str, entry: Mapping[str, Any]) -> None:
+        """PF4.39: append one resume to the run's ``environment["resumes"]``: what a sweep
+        ``--resume`` added and whether a comparison of the run was read before it."""
+        manifest = self.manifest(run_id)
+        environment = dict(manifest.environment)
+        environment["resumes"] = [*(environment.get("resumes") or ()), dict(entry)]
+        self._write_manifest(replace(manifest, environment=environment))
 
     def mark_complete(self, run_id: str) -> None:
         self._write_manifest(replace(self.manifest(run_id), status="complete"))
@@ -599,6 +618,7 @@ class Store:
                     "backend_meta": _encode_json(r.backend_meta, "backend_meta"),
                     "trace": envelope_json,
                     "trace_obs": obs_json,
+                    "case_id": _case_id(r.meta),
                 }
             )
 

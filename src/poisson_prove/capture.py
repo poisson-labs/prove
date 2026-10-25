@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Any
 
 from poisson_prove.trace import (
     CONTENT_KEYS,
+    OTEL_KIND_MAP,
     from_otel,
     truncate_observations,
 )
@@ -494,6 +495,31 @@ def _is_content(key: str) -> bool:
     return key in CONTENT_KEYS
 
 
+#: OpenInference's prompt and answer on a span: content on a model call (PF4.10, Q32), and a
+#: tool's arguments and result elsewhere, which ``content = false`` leaves alone.
+_MODEL_CALL_VALUES = ("input.value", "output.value")
+
+
+def _is_model_call(attributes: Mapping[str, Any] | None) -> bool:
+    """Whether a span reads as an ``llm`` span by ``from_otel``'s ladder on its two model-call
+    keys: a recognized ``gen_ai.operation.name`` (or its old spelling) that maps to ``llm``, else
+    OpenInference's span kind. Looked up key by key, never iterated, so a live span's attributes
+    are safe to read here."""
+    if not attributes:
+        return False
+    operation = attributes.get("gen_ai.operation.name", attributes.get("llm.request.type"))
+    if operation is not None and str(operation) in OTEL_KIND_MAP:
+        return OTEL_KIND_MAP[str(operation)] == "llm"
+    vendor = attributes.get("openinference.span.kind")
+    return isinstance(vendor, str) and vendor.strip().lower() == "llm"
+
+
+def _stripped(key: str, model_call: bool) -> bool:
+    """Whether ``content = false`` drops this attribute: every content key, and on a model call
+    its OpenInference prompt and answer too."""
+    return _is_content(key) or (model_call and key in _MODEL_CALL_VALUES)
+
+
 def _live_attributes(attributes: Mapping[str, Any] | None) -> list[tuple[str, Any]]:
     """A live span's attributes, copied in one pass without iterating them.
 
@@ -527,10 +553,11 @@ def _span_mapping(span: ReadableSpan, *, content: bool, live: bool = False) -> d
     """
     context = span.get_span_context()
     parent = span.parent
+    model_call = _is_model_call(span.attributes)
     if live:
         attributes: list[dict[str, Any]] = []
         for key, value in _live_attributes(span.attributes):
-            if not content and _is_content(key):
+            if not content and _stripped(key, model_call):
                 continue
             try:
                 attributes.append({"key": key, "value": _attribute_value(value)})
@@ -540,7 +567,7 @@ def _span_mapping(span: ReadableSpan, *, content: bool, live: bool = False) -> d
         attributes = [
             {"key": key, "value": _attribute_value(value)}
             for key, value in (span.attributes or {}).items()
-            if content or not _is_content(key)
+            if content or not _stripped(key, model_call)
         ]
     mapping: dict[str, Any] = {
         # The OTel trace id a user's own collector keys on; from_otel keeps it in attrs.

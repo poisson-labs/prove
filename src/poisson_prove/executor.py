@@ -29,8 +29,9 @@ from multiprocessing.connection import Connection
 from types import FrameType
 from typing import Any
 
-from poisson_prove import __version__
+from poisson_prove import __version__, _look, stats
 from poisson_prove import capture as capture_module
+from poisson_prove._limits import Design, design
 from poisson_prove.capture import CaptureSpec, CaptureStatus, Recorder, capture, install
 from poisson_prove.chaos import (
     ChaosError,
@@ -97,8 +98,10 @@ class UnderpoweredDesign(ExecutorError):
         replicates: int | None = None,
         replicates_needed: int | None = None,
         offered: float | None = None,
+        most_conditions: int | None = None,
     ) -> None:
         super().__init__(message)
+        self.most_conditions = most_conditions
         self.mde = mde
         self.accepted = accepted
         self.replicates = replicates
@@ -152,6 +155,9 @@ class Plan:
     max_mde_accepted: float | None = None
     #: The name given at sweep time, recorded in the new run's manifest.
     name: str | None = None
+    #: Under ``pair_with=``, the earlier run's replicates: the gate then asks the paired test, its
+    #: pairs the smaller of the two runs' (PF4.30). None for a run paired with nothing.
+    paired_replicates: int | None = None
 
 
 def _all_keys(spec: SweepSpec) -> list[tuple[str, int]]:
@@ -193,6 +199,7 @@ def plan(
 
     resumed = False
     already_stored = 0
+    paired_replicates: int | None = None
     wanted: list[tuple[str, int]] | None = None
 
     if resume is not None:
@@ -230,6 +237,8 @@ def plan(
             )
         run_id = new_run_id(spec.target_id)
         salt = manifest.run_salt
+        recorded = (manifest.environment.get("sweep") or {}).get("replicates")
+        paired_replicates = int(recorded) if recorded is not None else spec.replicates
     else:
         run_id = new_run_id(spec.target_id)
         salt = run_salt if run_salt is not None else new_run_salt()
@@ -255,6 +264,7 @@ def plan(
         already_stored=already_stored,
         import_path=import_path,
         max_mde_accepted=max_mde_accepted,
+        paired_replicates=paired_replicates,
     )
 
 
@@ -298,26 +308,6 @@ def preflight_mde(spec: SweepSpec) -> float:
     return mde_two_proportion(0.5, spec.replicates, spec.replicates)
 
 
-def _smallest_n_reaching(spec: SweepSpec, max_mde: float) -> int:
-    """The fewest replicates whose MDE is at or below ``max_mde``, by bisection on N.
-
-    Through ``preflight_mde`` on a throwaway spec, so the count the refusal suggests cannot
-    drift from the number that refused the design. The bracket is doubled first rather than
-    fixed: a small enough accepted value needs more replicates than any constant ceiling would
-    allow, and a suggestion clipped at a ceiling would be a lie.
-    """
-    lo, hi = 2, 2
-    while preflight_mde(replace(spec, replicates=hi)) > max_mde and hi < _N_SEARCH_LIMIT:
-        lo, hi = hi + 1, hi * 2
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if preflight_mde(replace(spec, replicates=mid)) <= max_mde:
-            hi = mid
-        else:
-            lo = mid + 1
-    return lo
-
-
 def _offered_override(mde: float) -> float:
     """The ``--max-mde`` value the refusal tells the reader to paste, and it has to work.
 
@@ -332,45 +322,153 @@ def _offered_override(mde: float) -> float:
     return offered if offered >= mde else offered + 1e-4
 
 
+#: The comparison's default ``q``: the gate asks each lone condition's flag at ``q / M`` (PF4.30).
+_GATE_Q = 0.05
+
+
+def _design_events(declared: Declaration | None) -> int:
+    """Section 8.10's count of the events a comparison of a sweep will test: the outcomes it
+    declares failures or successes; with no kinds, its declared outcomes but one; with no
+    outcomes, one."""
+    if declared is None:
+        return 1
+    kinds = len(declared.failures) + len(declared.successes)
+    if kinds:
+        return kinds
+    return max(1, len(declared.outcomes) - 1)
+
+
+def _design(spec: SweepSpec, *, threshold: float, paired_replicates: int | None) -> Design:
+    """The gate's reading of a design (section 8.10): Fisher's test, or the paired test with
+    independent arms when the run is paired with an earlier one, over the conditions times the
+    events, at the worst base rate with room for the accepted change."""
+    test = "fisher" if paired_replicates is None else "mcnemar"
+    n_a = spec.replicates if paired_replicates is None else paired_replicates
+    return design(
+        conditions=len(spec.configs), events=_design_events(_spec_declared(spec)), n_a=n_a,
+        n_b=spec.replicates, threshold=threshold, q=_GATE_Q, power=stats.POWER, test=test,
+    )
+
+
+def _plan_design(p: Plan) -> Design:
+    """The gate's reading of the plan's design at the change the launcher accepts."""
+    return _design(p.spec, threshold=_accepted_mde(p), paired_replicates=p.paired_replicates)
+
+
+def _design_record(p: Plan) -> dict[str, Any]:
+    """What a new run's manifest records as ``design_mde`` on every backend (PF4.30, PF4.48a)."""
+    return _plan_design(p).record()
+
+
+def _recorded_design(manifest: RunManifest) -> dict[str, Any] | None:
+    """PF4.4: the design limit a run recorded at sweep time; for a run that recorded none (every
+    0.0.1 run), the gate's reading of its recorded replicates, conditions and declaration,
+    computed now and labelled so. None when the run recorded no replicates."""
+    recorded = manifest.environment.get("design_mde")
+    if isinstance(recorded, Mapping) and "test" in recorded:
+        return {**dict(recorded), "computed_at_read_time": False}
+    sweep = manifest.environment.get("sweep")
+    if not isinstance(sweep, Mapping) or sweep.get("replicates") is None:
+        return None
+    replicates = int(sweep["replicates"])
+    accepted = manifest.environment.get("max_mde_accepted")
+    found = design(
+        conditions=max(1, len(sweep.get("configs") or ())),
+        events=_design_events(manifest.declared),
+        n_a=replicates,
+        n_b=replicates,
+        threshold=DEFAULT_MAX_MDE if accepted is None else float(accepted),
+        q=_GATE_Q,
+        power=stats.POWER,
+        test="fisher",
+    )
+    return {**found.record(), "computed_at_read_time": True}
+
+
+def _smallest_passing(spec: SweepSpec, accepted: float, paired_replicates: int | None) -> int:
+    """The fewest replicates at which the gate passes ``accepted``, by doubling then bisection on
+    N; under ``--pair-with`` the earlier run's replicates move with N, as a fresh pair's would."""
+    def passes(n: int) -> bool:
+        paired = None if paired_replicates is None else n
+        resized = replace(spec, replicates=n)
+        return _design(resized, threshold=accepted, paired_replicates=paired).passes
+
+    lo, hi = spec.replicates, max(spec.replicates + 1, 2)
+    while not passes(hi) and hi < _N_SEARCH_LIMIT:
+        lo, hi = hi, hi * 2
+    while lo + 1 < hi:
+        middle = (lo + hi) // 2
+        if passes(middle):
+            hi = middle
+        else:
+            lo = middle
+    return hi
+
+
+def _smallest_accepted(
+    spec: SweepSpec, accepted: float, paired_replicates: int | None
+) -> float | None:
+    """The smallest ``--max-mde`` at three decimals, at or above ``accepted``, that admits the
+    design as it stands; None when only 1, which accepts any design, would. A larger accepted
+    change only makes the gate easier to pass (more power at it, fewer base rates with room), so
+    a bisection over thousandths finds it."""
+    def passes(thousandths: int) -> bool:
+        threshold = thousandths / 1000
+        return _design(spec, threshold=threshold, paired_replicates=paired_replicates).passes
+
+    lo, hi = max(1, math.ceil(accepted * 1000 - 1e-9)), 999
+    if not passes(hi):
+        return None
+    while lo < hi:
+        middle = (lo + hi) // 2
+        if passes(middle):
+            hi = middle
+        else:
+            lo = middle + 1
+    return lo / 1000
+
+
 def check_power(p: Plan, *, max_mde: float | None = None) -> None:
     """Refuse a design that cannot resolve an effect as small as the caller accepts.
 
-    Raises ``UnderpoweredDesign`` when ``preflight_mde(p.spec)`` exceeds the accepted value;
-    ``max_mde=None`` means ``DEFAULT_MAX_MDE``. **Equality passes**: a design that exactly
-    meets what the caller accepts is accepted. On the passing path it returns None and does
-    nothing at all -- it never prints, never touches the store, and never mutates the plan.
+    Section 8.10's gate (PF4.30): a design passes when a change of the accepted size, from every
+    base rate with room for it, would be flagged in one condition alone at the stated power.
+    ``max_mde=None`` means ``DEFAULT_MAX_MDE``; any value above 0 and up to 1 is accepted, and 1
+    admits every design (PF4.49). On the passing path it returns None and does nothing at all --
+    it never prints, never touches the store, and never mutates the plan.
 
-    M10 calls it after the pre-flight block is written and before the prompt, so a reader who
-    gets the refusal has already been shown the number it is about, and ``--yes`` skips only
-    the prompt. Nothing is in the store when it fires: ``plan`` mints a run id and writes
-    nothing, so the refusal is exit 2 and not exit 3. If a later change makes ``plan`` write,
-    this ordering has to move.
+    Raises ``UnderpoweredDesign`` carrying the replicates that pass and, where a limit exists,
+    the ``--max-mde`` that admits the design; a design in which no lone condition can be flagged
+    is refused with section 8.10's facts and no ``--max-mde`` offer.
 
     The range check on ``max_mde`` lives here rather than in the CLI, by exact analogy with
     M6's ``0 < q < 1``: the CLI parses a float and decides nothing statistical.
     """
     accepted = DEFAULT_MAX_MDE if max_mde is None else float(max_mde)
-    if not 0.0 < accepted < 1.0:
-        raise ExecutorError(
-            f"--max-mde must be greater than 0 and less than 1, got {accepted!r}"
-        )
-    mde = preflight_mde(p.spec)
-    if mde <= accepted:
+    if not 0.0 < accepted <= 1.0:
+        raise ExecutorError(f"--max-mde must be above 0 and at most 1, got {accepted!r}")
+    found = _design(p.spec, threshold=accepted, paired_replicates=p.paired_replicates)
+    if found.passes:
         return
     n = p.spec.replicates
-    needed = _smallest_n_reaching(p.spec, accepted)
-    offered = _offered_override(mde)
+    needed = _smallest_passing(p.spec, accepted, p.paired_replicates)
+    if not found.flaggable:
+        # How many conditions could each be flagged alone at these replicates: the family whose
+        # level q / (K E) is still above the smallest p.
+        most = max(0, math.ceil(_GATE_Q / (found.p_min * found.events)) - 1)
+        raise UnderpoweredDesign(
+            f"no single condition of this design can be flagged: with {n} replicates a side the "
+            f"smallest possible p is {_look.fmt_p(found.p_min)}, and a flag needs less than "
+            f"{_look.fmt_p(found.level)} (q {_GATE_Q:g} over {found.family} tests)",
+            mde=math.nan, accepted=accepted, replicates=n, replicates_needed=needed, offered=None,
+            most_conditions=most,
+        )
+    mde = math.nan if found.mde is None else found.mde
     raise UnderpoweredDesign(
-        f"underpowered design: this sweep can only detect a change of {mde * 100:.1f} points "
-        f"or more in a cell's failure rate (MDE {mde:.4f} at N={n}), and you accepted "
-        f"{accepted * 100:.1f} points (--max-mde {accepted:.4f}). "
-        f"N={needed} replicates would reach {accepted:.4f}; "
-        f"--max-mde {offered:.4f} accepts this design as it stands.",
-        mde=mde,
-        accepted=accepted,
-        replicates=n,
-        replicates_needed=needed,
-        offered=offered,
+        f"underpowered design: one condition alone would be flagged for a change of {mde:.3f} at "
+        f"its worst base rate, {found.base_rate:.3f}, and you accept {accepted:.3f}",
+        mde=mde, accepted=accepted, replicates=n, replicates_needed=needed,
+        offered=_smallest_accepted(p.spec, accepted, p.paired_replicates),
     )
 
 
@@ -393,13 +491,11 @@ def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
     """Text block describing the run. Non-interactive; M10 prints it and asks."""
     spec = p.spec
     total = spec.total_rollouts()
-    mde = preflight_mde(spec)
     lines = [
         f"Sweep: {len(spec.axis_types)} axes · {len(spec.configs)} cells · "
         f"N={spec.replicates} → {total} rollouts",
         f"Backend: {p.backend} · target: {spec.target_id} · t_unit: {spec.t_unit}",
         f"Cost: {cost_estimate if cost_estimate is not None else '$0 (local)'}",
-        f"MDE at N={spec.replicates} (base rate 0.5): {mde:.4f}",
     ]
     capture_line = _capture_line(spec.capture)
     if capture_line is not None:
@@ -1105,6 +1201,7 @@ def run_local(
     if not p.resumed:
         environment = _environment(p.spec)
         environment["max_mde_accepted"] = _accepted_mde(p)
+        environment["design_mde"] = _design_record(p)
         if p.import_path is not None:
             environment["import_path"] = p.import_path
         if capture_spec is not None and capture_status is not None:

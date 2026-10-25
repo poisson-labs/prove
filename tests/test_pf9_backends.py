@@ -117,7 +117,7 @@ def _toml(value: Any) -> str:
 
 def write_spec(root: Path, *, burla: dict[str, Any] | None = None, modal_gpu: str | None = None,
                modal: bool = False, name: str = "sweep.toml") -> Path:
-    """Two cells, two replicates, the keyless mock agent's design; ``--max-mde 0.99`` passes it."""
+    """Two cells, two replicates, the keyless mock agent's design; ``--max-mde 1`` passes it."""
     text = ('target_id = "pf9@v0"\nt_unit = "steps"\nreplicates = 2\n\n'
             '[axes.cell]\ntype = "categorical"\nvalues = ["a", "b"]\n')
     if modal:
@@ -139,8 +139,10 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
 
 
 def sweep_argv(root: Path, spec: Path, backend: str, *extra: str, target: str = MOCK) -> list[str]:
+    # PF4 re-freeze (PF4.30, reading R17): no lone condition of this 2-replicate design can be
+    # flagged, which any accepted change below 1 refuses; --max-mde 1 admits it as 0.99 did.
     return ["--store", str(root / "store"), "sweep", str(spec), "--target", target,
-            "--backend", backend, "--max-mde", "0.99", *extra]
+            "--backend", backend, "--max-mde", "1", *extra]
 
 
 def runs_in(root: Path) -> list[str]:

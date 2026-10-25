@@ -138,9 +138,10 @@ def test_append_to_unknown_run_raises(tmp_path):
     with pytest.raises(StoreError):
         Store(tmp_path).append("nope", [_rec()])
 # ---------- read() shape (I9, I13) ----------
+# PF4 re-freeze (PF4.38, reading R5): a read frame gains the store's ``case_id`` column at the end.
 EXPECTED_COLS = ["run_id", "config_hash", "config", "seed", "replicate_index",
                  "outcome", "t", "horizon", "confidence", "meta", "error",
-                 "wall_time", "backend_meta"]
+                 "wall_time", "backend_meta", "case_id"]
 def test_read_columns_exact(tmp_path):
     s = Store(tmp_path); s.create_run(_manifest())
     s.append("r1", [_rec()])

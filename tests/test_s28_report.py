@@ -256,6 +256,10 @@ MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit above the default accepted change of 0.20, so its sweep is refused;
+# the frozen sweeps accept 0.3, the smallest round value above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 
 # ---------- spec section 2, 3.2, 3.6: the literals ----------
 
@@ -335,6 +339,9 @@ KINDS = ("sig3", "pp1", "pp0", "num", "int")
 BOUND_RULE_LITERAL = "2"
 
 #: R2. S21's three E14 digests, restated (tree-less builder for two, the CLI for the SVG).
+# PF4 (PF4.20, PF4.3, PF4.15): no longer asserted. Go1 declares no event kind, so the captions, the
+# honesty line and the verdict column read in direction words, the report gains a verdict line and a
+# share table, and conditions at a 100% baseline have no limit; R2 asserts the facts these guarded.
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
@@ -369,7 +376,9 @@ DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae9604
 F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c383232f"
 # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
 # test; check's gate here is the flat family's unpaired test, named.
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh")
+# PF4 (PF4.20): Go1 declares no event kind, so the default ``--fail-on worse`` is refused; ``higher``
+# is the same gate on a failure event (fail when the rate rose).
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh", "--fail-on", "higher")
 # No longer asserted: check's stdout changes shape; R19 asserts the facts it guarded (spec section 14).
 CHECK_STDOUT_SHA256 = "dc3d8acc89864cdb69eda671d931c492e3e81c1d74eb1393b37d789f8c2d3417"
 CHECK_EXIT = 0
@@ -379,11 +388,14 @@ SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "pus
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# PF4 (PF4.3, PF4.11, PF4.13, PF4.20): no longer asserted. The structure's cells and panels gain keys,
+# the pair loses ``store_root`` and the words read in directions; R19 asserts the facts it guarded.
 SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
 #: ``schema`` set back to this literal; on the bare tree that projection is the identity.
+# PF4: no longer used; the projection it served went with SERVE_STRUCTURE_SHA256's digest.
 TREE_LESS_SCHEMA = "proofload.viewpair/2"
 PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e77719f9"
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
@@ -738,6 +750,23 @@ def store_tree(root: Path, a: str, b: str, *, events: Sequence[str], method: str
     return _TREES[key]
 
 
+def admitting(root: Path, a: str, b: str, *, events: Sequence[str], key: str, method: str = "fisher_bh", **knobs: Any) -> float:
+    """PF4 re-freeze (PF4.45): a group's limit now comes from each cell's own baseline with the root
+    and the group both rejecting, so a grouping this file was frozen on can be refused
+    ``underpowered`` at the default ``--max-group-mde``. The override the refusal itself offers is
+    read here, never typed in, and passed back so the frozen grouping is the one tested."""
+    _, result = store_tree(root, a, b, events=events, method=method, **knobs)
+    refused = [x for x in result.grouping.refused if x.key == key]
+    assert len(refused) == 1 and refused[0].reason == "underpowered" and refused[0].offered_max_group_mde is not None, result.grouping.refused
+    return float(refused[0].offered_max_group_mde)
+
+
+def go1_mu(method: str = "fisher_bh") -> tuple[str, str]:
+    """PF4 re-freeze (PF4.45): the flags that keep Go1's frozen grouping by ``mu``, the override read
+    off the default tree's refusal (``mu`` is refused at 0.20 and ``push_pct_bw`` resolves)."""
+    return ("--max-group-mde", str(admitting(GO1_ROOT, GO1_A, GO1_B, events=("fell",), key="mu", method=method)))
+
+
 def spec_for(a: str, b: str, events: Sequence[str], x: str, y: str | None, **extra: Any) -> Any:
     return report_module().ReportSpec(title=f"{a} vs {b}: {', '.join(events)}", x_axis=x, y_axis=y, **extra)
 
@@ -947,6 +976,12 @@ def renders(cell: str, value: Any) -> bool:
     token = (cell[:-2] if cell.endswith("pp") else cell).removeprefix("+")
     if isinstance(value, bool) or value is None:
         return False
+    if isinstance(value, float) and math.isnan(value):
+        # PF4 (PF4.15): a condition with no detection limit prints the reason, never a number.
+        # PF4 re-freeze (PF4.24): the 100% baseline's "ceiling" is gone (the rise has no room and the
+        # fall is computed); a null limit is a direction with room where none is detectable or none
+        # can be flagged, and it still prints no number.
+        return bool(cell) and "ceiling" not in cell and not re.search(r"\d", cell)
     kinds = ("sig3", "pp1", "pp0", "num")
     if isinstance(value, int) or (isinstance(value, float) and value.is_integer() and abs(value) < 1e15):
         return token in fmt10(int(value), "int") or token in set().union(*(fmt10(value, k) for k in kinds))
@@ -1005,6 +1040,9 @@ def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[s
         value = getattr(obj, name)
         if value is None:
             return
+        if isinstance(value, float) and math.isnan(value):
+            # PF4 (PF4.15): a limit that does not exist prints its reason, so no token is owed.
+            return
         if isinstance(value, Mapping):
             for event in root.events:
                 tokens = fmt10(value[event], kind)
@@ -1053,6 +1091,20 @@ def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[s
         allowed.update(t for t in TOKEN_SPLIT.split(text) if t)
     for text in (root.headline(), *(r.detail for r in grouping.refused)):
         allowed.update(rule10_spellings(text))
+    # PF4 re-freeze (PF4.32, PF4.45): the fault-lines head now says the group limit is the change the
+    # tree would flag "4 times in 5" (the power through the one formatting function), so the power's
+    # two numbers are admitted, read from the build's constant.
+    from fractions import Fraction
+
+    from poisson_prove import stats as stats_mod
+
+    power = Fraction(stats_mod.POWER).limit_denominator(100)
+    allowed.update({str(power.numerator), str(power.denominator)})
+    # PF4 re-freeze (PF4.45): the offered --max-group-mde values change, and one that is not a round
+    # number prints rounded up so it admits (assert_detail's spelling), which rule 10's nearest is not.
+    for refusal in grouping.refused:
+        if refusal.offered_max_group_mde is not None:
+            allowed.add(f"{math.ceil(refusal.offered_max_group_mde * 1000 - 1e-9) / 1000:.3f}")
     allowed.add(BOUND_RULE_LITERAL)
     return allowed, required
 
@@ -1358,8 +1410,8 @@ def quickstart(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str
         assert len(new) == 1, out
         return new.pop()
 
-    a = sweep(ROLLOUT, "--salt", QUICKSTART_SALT)
-    b = sweep(PATCHED, "--pair-with", a)
+    a = sweep(ROLLOUT, "--salt", QUICKSTART_SALT, *QUICKSTART_MAX_MDE)
+    b = sweep(PATCHED, "--pair-with", a, *QUICKSTART_MAX_MDE)
     return root, a, b
 
 
@@ -1403,6 +1455,10 @@ def events_of(event_flags: Sequence[str]) -> tuple[str, ...]:
     return tuple(event_flags[i + 1] for i, f in enumerate(event_flags) if f == "--event")
 
 
+#: PF4 re-freeze (PF4.45): the rows whose frozen grouping now needs the offered override.
+ADMITTED_KEYS = {"go1": "mu", "bh": "grp", "gate": "grp", "multi-event": "task"}
+
+
 @pytest.fixture(scope="module")
 def every_pair(outs: Path, synth_root: Path, quickstart: tuple[Path, str, str]) -> list[tuple[str, Rendered, Any, str | None]]:
     """Every section 0.7 pair rendered through ``main()`` with no tree flag, beside the tree the
@@ -1421,6 +1477,12 @@ def every_pair(outs: Path, synth_root: Path, quickstart: tuple[Path, str, str]) 
         # no method is checked against the unpaired test's tree (method_of), so the command line names it.
         if "--method" not in extra:
             extra = (*extra, "--method", "fisher_bh")
+        # PF4 re-freeze (PF4.45): group limits from each cell's own baseline, unconditional, refuse
+        # the grouping these rows were frozen on (Go1's mu, the BH and gate pairs' grp, the
+        # multi-event pair's task) at the default 0.20; the override the refusal offers is passed.
+        if name in ADMITTED_KEYS:
+            offered = admitting(root, a, b, events=events_of(ev), key=ADMITTED_KEYS[name], method=method_of(extra), **knobs_of(extra))
+            extra = (*extra, "--max-group-mde", str(offered))
         r = ok(outs, root, a, b, *ev, *axes, *extra)
         _, result = store_tree(root, a, b, events=events_of(ev), method=method_of(extra), **knobs_of(extra))
         out.append((name, r, result, requested))
@@ -1479,6 +1541,66 @@ def test_r1_the_four_headings_render_as_the_literals_in_both_renderers(every_pai
 # ---------- R2: the tree-less bytes do not move; the with-tree bytes are pinned here ----------
 
 
+SVG_TEXT_RE = re.compile(r"<text\b[^>]*>([^<]*)</text>")
+JUDGEMENT_RE = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
+
+
+def assert_tree_less_facts(report: Any, light: Any, multi: Any, event: str) -> None:
+    """PF4 (PF4.20, PF4.3, PF4.15): what S21's three digests guarded, as facts. Go1 declares no
+    event kind, so a reader sees direction words: the caption counts falls and rises, the honesty
+    line names the count of rises, the verdict column is each condition's direction, and no
+    rendering says safer or worse. The worst-cells rows carry their condition's numbers in M7's
+    forms; the SVG carries one cell per condition and one glyph per significant one."""
+    ev = multi.by_event[event]
+    assert ev.kind is None
+    caption = f"{event}: {ev.n_lower} lower, {ev.n_higher} higher"
+    library = report.panels[event].honesty
+    # PF4 re-freeze (ruling on a kindless event, reading R35): n_safer and n_worse are None on a
+    # kindless event; the honesty line's count of rises is n_higher, under either word in the field.
+    assert (ev.n_safer, ev.n_worse) == (None, None)
+    assert f'"{ev.n_higher} worse"' in library or f'"{ev.n_higher} higher"' in library, library
+    honesty = library.replace(f'"{ev.n_higher} worse"', f'"{ev.n_higher} higher"').splitlines()
+    md = as_0_0_1_wrote_it(report.to_markdown())
+    html = html_mod.unescape(as_0_0_1_wrote_it(light.to_html()))
+    svg = report.to_svg()
+    svg_texts = [html_mod.unescape(t) for t in SVG_TEXT_RE.findall(svg)]
+    md_lines = md.splitlines()
+    for line in multi.headline().splitlines():
+        assert line in md_lines and line in html, line
+    assert f"## {caption}" in md_lines and caption in html and caption in svg_texts, caption
+    for line in honesty:
+        assert line in md_lines and line in html, line
+    assert honesty[0] in svg_texts, honesty[0]
+    for text in (md, html, "\n".join(svg_texts)):
+        assert not JUDGEMENT_RE.search(text), JUDGEMENT_RE.search(text)
+    start = md_lines.index(f"## {caption}") + 1
+    table = []
+    for line in md_lines[start:]:
+        if line.startswith("|"):
+            table.append(md_cells(line))
+        elif table:
+            break
+    header, body = table[0], table[2:]
+    assert header[:2] == [report.spec.x_axis, report.spec.y_axis] and len(body) == report.spec.top_n, (header, len(body))
+    records = ev.cells.to_dict(orient="records")
+    for row in body:
+        [r] = [
+            r for r in records
+            if math.isclose(float(r["config"][header[0]]), float(row[0])) and math.isclose(float(r["config"][header[1]]), float(row[1]))
+        ]
+        assert row[2] == f"{r['n_a']}/{r['n_b']}", row
+        assert row[3:8] == [fmt(r["rate_a"], "pp1"), fmt(r["rate_b"], "pp1"), fmt(r["delta"], "pp1"), fmt(r["p"], "sig3"), fmt(r["q"], "sig3")], row
+        assert row[8] == r["direction"], row
+        if isinstance(r["mde_note"], str):
+            assert not re.search(r"\d+pp|(?i:nan)", row[9]), row
+        else:
+            assert row[9] == f"{fmt(r['mde'], 'pp0')}pp", row
+    deltas = [float(row[5]) for row in body]
+    assert deltas == sorted(deltas, reverse=True), deltas
+    assert set(re.findall(r'data-cell="([0-9a-f]{16})"', svg)) == set(ev.cells["config_hash"])
+    assert svg.count('data-sig="1"') == int((ev.cells["direction"] != "unchanged").sum())
+
+
 def test_r2_the_tree_less_builder_reproduces_s21s_three_digests_and_the_svg_still_does_through_the_cli(outs: Path) -> None:
     """The first clause points one way: ``build_multi_report`` with no tree on the E14 argv's
     ``multi`` and spec renders S21's bytes -- markdown, SVG, light receipt -- bit for bit, and
@@ -1490,9 +1612,10 @@ def test_r2_the_tree_less_builder_reproduces_s21s_three_digests_and_the_svg_stil
     reported as a spec correction. The colour cells and the geometry are untouched."""
     report = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=False)
     light = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=False, theme="light")
-    assert sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())) == E14_SHA256["report.md"]
-    assert sha256_of_text(report.to_svg()) == E14_SHA256["heatmap.svg"]
-    assert sha256_of_text(as_0_0_1_wrote_it(light.to_html())) == E14_SHA256["receipt.html"]
+    # PF4 (PF4.20, PF4.3, PF4.15): the three digests give way to the facts they guarded -- the
+    # headline, the panel's caption and honesty, its worst-cells table, the SVG's cells and glyphs.
+    multi, _ = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",))
+    assert_tree_less_facts(report, light, multi, "fell")
     # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
     # test; the library SVG is the unpaired test's, named.
     r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
@@ -1511,14 +1634,19 @@ def test_r2_the_clis_report_and_receipt_with_the_tree_digest_to_the_values_minte
     bound in each section."""
     # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
     # test; the library render and the tree are the unpaired test's, named.
-    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
-    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",))
-    library = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=True, theme="light", counted=True)
+    # PF4 re-freeze (PF4.45): Go1's mu grouping is refused at the default 0.20; the override its
+    # refusal offers keeps the grouping this test pins (go1_mu).
+    mu = go1_mu()
+    r = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh", *mu)
+    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), max_group_mde=float(mu[1]))
+    library = built(GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw", with_tree=True, theme="light", counted=True, max_group_mde=float(mu[1]))
     for kind, page, theirs in (("md", r.md, library.to_markdown()), ("html", r.html, library.to_html())):
         as_0_0_1_wrote_it(page)
         # PF3 (spec section 4.4, PF3.6b; rule R2): the command line's files gain a line naming the method,
         # which the library's render does not carry; compared without it.
-        assert_same_but_numbers(without_method_lines(page), theirs, f"e14 {kind}")
+        # PF4 re-freeze (PF4.32): every surface that prints a limit names its test, so the library's
+        # render now carries a limits line naming Fisher too; both sides are compared without it.
+        assert_same_but_numbers(without_method_lines(page), without_method_lines(theirs), f"e14 {kind}")
         secs = sections(page, kind)
         assert_omnibus("e14", kind, secs["Omnibus"], result)
         assert_fault_lines("e14", kind, secs["Fault lines"], result)
@@ -1552,8 +1680,10 @@ def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_ev
         # PF3 (spec section 4.4, PF3.6b; rule R2): the command line's files gain a line naming the method,
         # which the library's tree-less render does not carry; compared without it.
         md, html = without_method_lines(titled_by_ids(r.md, root, a, b)), without_method_lines(titled_by_ids(r.html, root, a, b))
-        assert_same_but_numbers(excised(md, md_bounds(md)), tree_less.to_markdown(), name)
-        assert_same_but_numbers(excised(html, html_bounds(html)), tree_less.to_html(), name)
+        # PF4 re-freeze (PF4.32): every surface that prints a limit names its test, so the library's
+        # tree-less render now carries a limits line naming Fisher too; both sides are compared without it.
+        assert_same_but_numbers(excised(md, md_bounds(md)), without_method_lines(tree_less.to_markdown()), name)
+        assert_same_but_numbers(excised(html, html_bounds(html)), without_method_lines(tree_less.to_html()), name)
         with_tree = _with_tree_for(name, synth_root)
         assert excised(with_tree.to_markdown(), md_bounds(with_tree.to_markdown())) == tree_less.to_markdown(), name
         assert excised(with_tree.to_html(), html_bounds(with_tree.to_html())) == tree_less.to_html(), name
@@ -1850,14 +1980,16 @@ def test_r6_the_axes_pair_carries_the_override_inside_detail_the_one_value_pair_
     assert [x.reason for x in result.grouping.refused] == ["underpowered", "one_group"], result.grouping.refused
     lines = lines_of(fault_items(r, "md"))
     assert "underpowered" in lines[1] and "one_group" in lines[2], lines[:3]
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
-    # test; the tree checked here is the unpaired test's, named.
-    r = ok(outs, GO1_ROOT, GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--by", "kind", "--method", "fisher_bh")
-    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), by="kind")
-    assert [(x.key, x.rung, x.reason) for x in result.grouping.refused] == [("kind", "trace", "unsupported")]
-    line = lines_of(fault_items(r, "md"))[1]
-    assert "kind" in line and "trace" in line and "unsupported" in line, line
-    assert_fault_lines("go1-kind", "md", fault_items(r, "md"), result)
+    # PF4 (PF4.6): ``--by kind`` is no longer a trace grouping the tree refuses on a row; it is an
+    # unknown grouping, refused with exit 1 and no page, and the tree raises on it.
+    # PF3 (Q17): the method is named, as the rest of this file's Go1 commands name it.
+    r = rendered(outs, GO1_ROOT, GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--by", "kind", "--method", "fisher_bh")
+    errors = [line for line in r.err.splitlines() if not line.startswith("note: ")]
+    assert r.code == 1 and r.out == "" and errors and errors[0].startswith("error:") and "kind" in errors[0], r.text
+    assert not (r.out_dir / "report.md").exists()
+    assert tree().TRACE_GROUPINGS == ()
+    with pytest.raises(tree().UnknownGrouping):
+        store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), by="kind")
 
 
 # ---------- R7: the cells section ----------
@@ -1887,7 +2019,10 @@ def assert_cells(name: str, kind: str, items: Sequence[tuple[Any, ...]], result:
         return
     assert leaves.families, (name, kind)
     meaning = lines[1]
-    assert "increase" in meaning.lower() and "headroom" in meaning.lower() and numeric_tokens(meaning) == [], (name, kind, meaning)
+    # PF4 re-freeze (PF4.24, PF4.32): a cell's limit is no longer the increase capped at the headroom
+    # but the smallest change either way one condition alone would be flagged for, from where it was;
+    # the sentence says that, still with no number.
+    assert "alone" in meaning.lower() and "from where" in meaning.lower() and numeric_tokens(meaning) == [], (name, kind, meaning)
     family_lines = lines[2:]
     assert len(family_lines) == len(leaves.families), (name, kind, family_lines)
     expected_tables = [f for f in leaves.families if f.n_rejected > 0]
@@ -2489,14 +2624,17 @@ def test_r21_seed_identity_is_the_salt_plus_the_stored_seeds_and_mcnemar_refuses
 def test_r18_go1_renders_twenty_group_rows_nineteen_rejected_nineteen_families_and_the_golden_leaf_counts(outs: Path) -> None:
     # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
     # test; the Fisher and by-grid goldens are the unpaired test's, named.
-    fisher = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
+    # PF4 re-freeze (PF4.45): Go1's mu grouping is refused at the default 0.20; the override its
+    # refusal offers keeps the grouping these goldens are of (go1_mu), under each method.
+    fisher = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "fisher_bh", *go1_mu())
     header, rows = tables_of(fault_items(fisher, "md"))[0]
     assert len(rows) == GO1_MU_GROUPS and sum(row[-1] == "rejected" for row in rows) == GO1_MU_REJECTED
     cells = cells_items(fisher, "md")
     assert len(lines_of(cells)) == 2 + GO1_MU_REJECTED
     assert sum(len(rows) for _, rows in tables_of(cells)) == GO1_FISHER_LEAVES
-    mcnemar = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "mcnemar_bh")
-    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), method="mcnemar_bh")
+    mu = go1_mu("mcnemar_bh")
+    mcnemar = ok(outs, GO1_ROOT, *E14_ARGV[1:], "--method", "mcnemar_bh", *mu)
+    _, result = store_tree(GO1_ROOT, GO1_A, GO1_B, events=("fell",), method="mcnemar_bh", max_group_mde=float(mu[1]))
     assert result.root.scheme == "pair_swap"
     assert sum(len(rows) for _, rows in tables_of(cells_items(mcnemar, "md"))) == GO1_MCNEMAR_LEAVES
     assert_fault_lines("go1-mcnemar", "md", fault_items(mcnemar, "md"), result)
@@ -2523,8 +2661,10 @@ def test_r19_diff_py_whole_check_serve_the_column_digests_the_fixtures_and_the_s
     check_lines = out.splitlines()
     assert check_lines[0].startswith("passed  ") and "fell" in check_lines[0], out
     fell = gated.by_event["fell"]
+    # PF4 (PF4.20): Go1 declares no event kind, so check counts falls and rises in direction words.
+    assert fell.kind is None and not JUDGEMENT_RE.search(out), out
     assert any(
-        "fell" in line and f"{fell.n_safer:,} safer" in line and f"{fell.n_worse:,} worse" in line for line in check_lines
+        "fell" in line and f"{fell.n_lower:,} lower" in line and f"{fell.n_higher:,} higher" in line for line in check_lines
     ), out
     assert any(
         "aalen_johansen" in line and "fisher_bh" in line and "unpaired" in line
@@ -2536,22 +2676,36 @@ def test_r19_diff_py_whole_check_serve_the_column_digests_the_fixtures_and_the_s
     structure = json.loads(out)
     # serve --json leads with the verdict and its sentence; the page structure follows unchanged.
     # PF3 (spec section 4.4, PF3.6b; rule R3): serve --json now names the method at the top level after the
-    # sentence; dropped beside the verdict and the sentence, so the frozen digest guards the rest.
+    # sentence; dropped beside the verdict and the sentence.
     structure = {k: v for k, v in structure.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
-    # PF2 (spec section 4.3/5.3): each arm carries run_name beside its run_id, and the default
-    # title names the runs. Assert both, take the names out and put the ids back in the title;
-    # the frozen digest then guards every other byte of the structure.
+    # PF2 (spec section 4.3/5.3): each arm carries run_name beside its run_id.
     names = run_names(GO1_ROOT)
     for arm, run_id in (("a", GO1_A), ("b", GO1_B)):
         assert structure["pair"][arm]["run_id"] == run_id and structure["pair"][arm]["run_name"] == names[run_id]
-    arms = {arm: {k: v for k, v in structure["pair"][arm].items() if k != "run_name"} for arm in ("a", "b")}
-    structure = json.loads(titled_by_ids(json.dumps({**structure, "pair": {**structure["pair"], **arms}}), GO1_ROOT, GO1_A, GO1_B))
-    assert "run_name" not in json.dumps(structure)
-    tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
-    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
-    assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
+    structure_as_0_0_1_wrote_it(structure)
     store = Store(GO1_ROOT)
     a, b, ma, mb = store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), store.manifest(GO1_A), store.manifest(GO1_B)
+    # PF4 (PF4.3, PF4.11, PF4.13, PF4.20): the structure's digest gives way to the facts it guarded:
+    # the pair's two runs, and the one panel's counts and cells, equal to the comparison's own.
+    assert "store_root" not in structure["pair"] and str(GO1_ROOT) not in out
+    assert (structure["pair"]["a"]["run_id"], structure["pair"]["b"]["run_id"]) == (GO1_A, GO1_B)
+    served = quiet_multi_diff(a, b, ma, mb, events=("fell",), method=structure["diff"]["method"]).by_event["fell"]
+    [panel] = structure["panels"]
+    assert (panel["event"], panel["kind"], panel["n_safer"], panel["n_worse"]) == ("fell", None, None, None), panel["event"]
+    assert (panel["n_higher"], panel["n_lower"], panel["n_unchanged"]) == (served.n_higher, served.n_lower, served.n_unchanged)
+    assert panel["caption"] == f"fell: {served.n_lower} lower, {served.n_higher} higher"
+    expected_word = (
+        "mixed" if served.n_higher and served.n_lower else "higher" if served.n_higher else "lower" if served.n_lower else None
+    )
+    assert expected_word is None or structure["summary"]["verdict"] == expected_word, structure["summary"]
+    rows = {r["config_hash"]: r for r in served.cells.to_dict(orient="records")}
+    assert sorted(c["config_hash"] for c in panel["cells"]) == sorted(rows)
+    for c in panel["cells"]:
+        r = rows[c["config_hash"]]
+        assert [c[k] for k in ("n_a", "n_b", "events_a", "events_b")] == [int(r[k]) for k in ("n_a", "n_b", "events_a", "events_b")], c["config_hash"]
+        assert [c[k] for k in ("rate_a", "rate_b", "delta", "p", "q")] == [float(r[k]) for k in ("rate_a", "rate_b", "delta", "p", "q")], c["config_hash"]
+        assert c["mde"] is None if math.isnan(r["mde"]) else c["mde"] == float(r["mde"]), c["config_hash"]
+        assert c["verdict"] == c["direction"] == r["direction"], c["config_hash"]
     pair = quiet_multi_diff(a, b, ma, mb, events=("fell", "survived"), method="fisher_bh")
     fell_logrank = quiet_multi_diff(a, b, ma, mb, events=("fell",), method="logrank_bh")
     assert sha256_of_column(pair, "q") == PAIR_QCOLUMN_SHA256

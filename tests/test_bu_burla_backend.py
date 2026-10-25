@@ -71,7 +71,7 @@ import pytest
 
 import poisson_prove
 from poisson_prove import _burla_submit, cli, executor, executor_burla, executor_modal
-from poisson_prove.executor import ExecutorError, plan, preflight_mde, run_local
+from poisson_prove.executor import ExecutorError, plan, run_local
 from poisson_prove.executor_modal import ModalBackendError, ModalOptions, run_with_mapper
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import Store, StoreError
@@ -599,11 +599,19 @@ def test_r1_without_the_new_keywords_the_modal_manifest_and_cost_guard_are_mains
     run_with_mapper(p, RecordingMapper(), store, options=ModalOptions(batch_size=2))
     m = store.manifest(p.run_id)
     assert m.backend == "modal"
-    assert set(m.environment) == MODAL_ENV_KEYS | {"capture"}, sorted(m.environment)
+    # PF4 (PF4.4): every backend now records the design detection limit as design_mde
+    # ({"mde", "base_rate"}) beside max_mde_accepted; every other key is main's.
+    assert set(m.environment) == MODAL_ENV_KEYS | {"capture", "design_mde"}, sorted(m.environment)
+    # PF4 re-freeze (PF4.30): design_mde now records which test, level and family the gate used and
+    # whether a lone condition can be flagged, beside mde and base_rate.
+    assert set(m.environment["design_mde"]) == {
+        "mde", "base_rate", "direction", "test", "level", "family", "conditions", "events", "q", "power",
+        "flaggable"}, m.environment["design_mde"]
     assert m.environment["capture"]["reason"] == MODAL_CAPTURE_REASON
     pc, cstore = r_plan(tmp_path / "chaos", chaos=CHAOS)
     run_with_mapper(pc, RecordingMapper(chaos_record(CHAOS)), cstore, options=ModalOptions(batch_size=2))
-    assert set(cstore.manifest(pc.run_id).environment) == MODAL_ENV_KEYS | {"chaos"}
+    # PF4 (PF4.4): design_mde is recorded on a chaos run too.
+    assert set(cstore.manifest(pc.run_id).environment) == MODAL_ENV_KEYS | {"chaos", "design_mde"}
     pg, gstore = r_plan(tmp_path / "guard")
     mapper = RecordingMapper()
     with pytest.raises(executor_modal.CostGuard):
@@ -1713,8 +1721,10 @@ def new_run(store_root: Path, before: set[str]) -> str:
 
 
 def sweep_argv(root: Path, spec: Path, target: str = PLAIN, *extra: str, backend: str = "burla") -> list[str]:
+    # PF4 re-freeze (PF4.30, reading R17): no lone condition of these small designs can be flagged,
+    # which any accepted change below 1 refuses; --max-mde 1 admits them as 0.99 did.
     return ["--store", str(root / "store"), "sweep", str(spec), "--target", target, "--backend", backend,
-            "--salt", "0123456789abcdef", "--max-mde", "0.99", "--yes", *extra]
+            "--salt", "0123456789abcdef", "--max-mde", "1", "--yes", *extra]
 
 
 def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) -> None:
@@ -1834,7 +1844,10 @@ def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake
     assert code == 0, err
 
 
-PREFLIGHT_ORDER = ["Backend: burla", "Cluster: ", "Bundle: ", "Worker view: ", "Traffic: ", "Cost: ", "MDE at N=", "Chaos: "]
+# PF4 re-freeze (PF4.22, reading R36): the preflight block no longer prints "MDE at N=..." (the old
+# normal approximation at base 0.5); the plan's one limit is the gate's line. The other lines keep
+# their order.
+PREFLIGHT_ORDER = ["Backend: burla", "Cluster: ", "Bundle: ", "Worker view: ", "Traffic: ", "Cost: ", "Chaos: "]
 
 
 def _git_package(root: Path, name: str) -> Path:
@@ -1867,8 +1880,8 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     commit = _git(tmp_path / "checkout", "rev-parse", "HEAD")
     assert commit and commit[:7] in bundle_line and bundle.sha256 in bundle_line, bundle_line
     assert "uncommitted changes" in bundle_line
-    mde_line = next(line for line in lines if line.startswith("MDE at N="))
-    assert mde_line == f"MDE at N={p.spec.replicates} (base rate 0.5): {preflight_mde(p.spec):.4f}"
+    # PF4 re-freeze (PF4.22, reading R36): the old limit line is gone from the preflight block.
+    assert not any(line.startswith("MDE at N=") for line in lines), lines
     plain = eb.preflight_burla(p, PLAIN, options(tmp_path, packages=("bu_targets",)))
     plain_bundle = next(line for line in plain.splitlines() if line.startswith("Bundle: "))
     dirty = any(_expected_package(name)["dirty"] for name in ("poisson_prove", "bu_targets"))
@@ -1899,7 +1912,10 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     # --json replaces --format json on diff (spec section 5.6).
     code, out, err = run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell", "--json"])
     fell = json.loads(out)["by_event"]["fell"]
-    assert fell["n_worse"] == 0 and fell["n_safer"] == 0 and fell["n_unchanged"] == 2, fell
+    # PF4 (PF4.20): "fell" has no declared kind, so the JSON gives direction counts and leaves the
+    # safer/worse counts null; the fact pinned (no condition moved, two unchanged) is the same.
+    assert fell["n_worse"] is None and fell["n_safer"] is None and fell["kind"] is None, fell
+    assert fell["n_higher"] == 0 and fell["n_lower"] == 0 and fell["n_unchanged"] == 2, fell
     assert comparable(stored(Store(store_root), local)) == comparable(stored(Store(store_root), remote))
 
 
@@ -1918,7 +1934,10 @@ def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -
     fake.script(default={"refuse": "NoNodes"})
     refused = write_sweep(tmp_path / "refused", burla=burla_table())
     code, out, err = run_cli(sweep_argv(refused.parent, refused))
-    assert code == 3 and err.startswith("error: "), err
+    # PF4 re-freeze (PF4.49, reading R17): under --max-mde 1 this design, in which no lone condition
+    # can be flagged, gets the gate's facts as a note: line first; the backend's refusal is the next.
+    rest = "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
+    assert code == 3 and rest.startswith("error: "), err
 
 
 # ---------- the I lane: imports, surface and the frozen guards ----------

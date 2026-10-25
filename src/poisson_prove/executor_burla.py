@@ -49,7 +49,6 @@ from poisson_prove.executor import (
     Plan,
     RunSummary,
     _capture_line,
-    preflight_mde,
 )
 from poisson_prove.executor_modal import (
     Job,
@@ -644,7 +643,6 @@ def preflight_burla(p: Plan, import_path: str, options: BurlaOptions) -> str:
     estimate = estimate_burla_cost(p, options)
     total = ledger.total()
     slots = options.nodes * options.slots_per_node
-    mde = preflight_mde(spec)
     chaos = spec.chaos
     chaos_line = (
         "Chaos: none"
@@ -670,7 +668,6 @@ def preflight_burla(p: Plan, import_path: str, options: BurlaOptions) -> str:
         f"${options.usd_per_node_hour:g}/node-hour, {options.price_asof}) · "
         f"ledger {options.ledger} {_usd(total)} so far · "
         f"stop {_usd(options.stop_cost)} · cap {_usd(options.max_cost)}",
-        f"MDE at N={spec.replicates} (base rate 0.5): {mde:.4f}",
         chaos_line,
     ]
     capture_line = _capture_line(spec.capture)

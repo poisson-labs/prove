@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -46,6 +47,8 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from poisson_prove import stats
+from poisson_prove._limits import group_limit
 from poisson_prove.diff import (
     DiffError,
     Method,
@@ -53,7 +56,6 @@ from poisson_prove.diff import (
     _native,
     _truncate_raw,
     bh,
-    mde_two_proportion,
 )
 from poisson_prove.executor import DEFAULT_MAX_MDE, _offered_override
 from poisson_prove.store import RunManifest
@@ -110,9 +112,9 @@ AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 #: filling one function body and moving no entry (F1, F5).
 RUNG_ORDER: tuple[str, ...] = ("requested", "trace", "axis", "task_family", "whole_grid")
 
-#: The names the trace rung owns and refuses today. Phase 5.2 emits ``kind``; until it does,
-#: both are known-but-unsupported and fall back through a recorded refusal rather than raising.
-TRACE_GROUPINGS: tuple[str, ...] = ("kind", "step_kind")
+#: The names the trace rung owns. None in 0.1.0 (PF4.6, Q30): a grouping by span kind is not
+#: offered, so ``kind`` and ``step_kind`` are unknown groupings, refused with the supported list.
+TRACE_GROUPINGS: tuple[str, ...] = ()
 
 #: Draft ADR-061's order. Read from the configs, not from ``axis_types``: the rung exists for an
 #: imported run whose manifest declares fewer axes than its configs carry.
@@ -654,9 +656,10 @@ def _min_p(
 
     The two roots are one intersection hypothesis on the same deltas, not two hypotheses, so BH
     across them has no proof; calibrating their minimum by the same permutations costs nothing
-    to that dependence. Each permutation gets its own rank-p per statistic -- a count that
-    **includes the permutation itself**, so its minimum is ``1/B`` -- and the omnibus counts
-    the permutations whose min-p reaches the observed one. That last count is what separates
+    to that dependence. Each permutation gets its own rank-p per statistic on the observed
+    p's scale (PF4.18): ``(#{b' : S_b' >= S_b} + [S_obs >= S_b]) / (B + 1)``, the reference set
+    being the ``B`` permutations and the observed point -- and the omnibus counts the
+    permutations whose min-p reaches the observed one. That last count is what separates
     this from the bare minimum of the ``J`` p-values, which is the quantity Westfall-Young
     exists to correct; the two coincide only when one statistic's extreme set contains the
     other's.
@@ -666,9 +669,8 @@ def _min_p(
     rank_p = np.empty_like(permuted)
     for j in range(permuted.shape[1]):
         column = np.sort(permuted[:, j])
-        rank_p[:, j] = (
-            n_permutations - np.searchsorted(column, permuted[:, j], side="left")
-        ) / n_permutations
+        at_least = n_permutations - np.searchsorted(column, permuted[:, j], side="left")
+        rank_p[:, j] = (at_least + (observed[j] >= permuted[:, j])) / (n_permutations + 1)
     m_observed = float(p_observed.min())
     omnibus_p = (1 + int(np.sum(rank_p.min(axis=1) <= m_observed))) / (n_permutations + 1)
     return p_observed, omnibus_p
@@ -1151,6 +1153,8 @@ class FaultLines:
     n_rejected_groups: int
     rejected_groups: tuple[str, ...]
     groups: tuple[GroupResult, ...]
+    #: PF4.45: the group limit's power is the tree's whole flag, the root and the group rejecting.
+    mde_basis: str = "unconditional"
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -1163,6 +1167,7 @@ class FaultLines:
             "n_rejected_groups": int(self.n_rejected_groups),
             "rejected_groups": list(self.rejected_groups),
             "groups": [group.to_json() for group in self.groups],
+            "mde_basis": self.mde_basis,
         }
 
 
@@ -1202,6 +1207,8 @@ class CellResult:
     q_within: float
     rejects: bool
     mde: float
+    #: PF4.27: why a null limit is null, from the flat row; None when ``mde`` is a number.
+    mde_note: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -1217,7 +1224,8 @@ class CellResult:
             "p": float(self.p),
             "q_within": float(self.q_within),
             "rejects": bool(self.rejects),
-            "mde": float(self.mde),
+            "mde": None if math.isnan(self.mde) else float(self.mde),
+            "mde_note": self.mde_note if math.isnan(self.mde) else None,
         }
 
 
@@ -1254,8 +1262,8 @@ class CellFamily:
             "n_tests": int(self.n_tests),
             "n_rejected": int(self.n_rejected),
             "rejected": [[config_hash, event] for config_hash, event in self.rejected],
-            "mde_median": float(self.mde_median),
-            "mde_max": float(self.mde_max),
+            "mde_median": None if math.isnan(self.mde_median) else float(self.mde_median),
+            "mde_max": None if math.isnan(self.mde_max) else float(self.mde_max),
             "cells": [cell.to_json() for cell in self.cells],
         }
 
@@ -1383,6 +1391,9 @@ class _CellTable:
     configs: tuple[Mapping[str, Any], ...]
     n_a: NDArray[np.int64]
     n_b: NDArray[np.int64]
+    #: PF4.45: each compared event's baseline in every cell, arm A's share, in sorted event order;
+    #: a group's limit reads each cell's own (reading R41).
+    baselines: tuple[NDArray[np.float64], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1431,12 +1442,25 @@ def _cell_table(units: pd.DataFrame) -> _CellTable:
     if units.empty:
         raise TreeError("the root's units are empty, so there is nothing to group")
     rows = units[units["event"] == units["event"].iloc[0]]
+    hashes = tuple(str(h) for h in rows["config_hash"])
     return _CellTable(
-        hashes=tuple(str(h) for h in rows["config_hash"]),
+        hashes=hashes,
         configs=tuple(rows["config"]),
         n_a=rows["n_a"].to_numpy(dtype=np.int64),
         n_b=rows["n_b"].to_numpy(dtype=np.int64),
+        baselines=tuple(
+            _baselines(units, hashes, event) for event in sorted({str(e) for e in units["event"]})
+        ),
     )
+
+
+def _baselines(units: pd.DataFrame, hashes: Sequence[str], event: str) -> NDArray[np.float64]:
+    """One event's baseline, arm A's share, in each cell of ``hashes``."""
+    rows = units[units["event"].astype(str) == event]
+    rows = rows.set_index(rows["config_hash"].astype(str)).loc[list(hashes)]
+    sizes = np.maximum(rows["n_a"].to_numpy(dtype=np.float64), 1.0)
+    shares: NDArray[np.float64] = rows["events_a"].to_numpy(dtype=np.float64) / sizes
+    return shares
 
 
 def _partition(table: _CellTable, key: str) -> dict[str, list[int]]:
@@ -1467,19 +1491,22 @@ def _ordered_labels(partition: Mapping[str, Sequence[int]]) -> tuple[str, ...]:
 def _group_mdes(
     table: _CellTable, partition: Mapping[str, Sequence[int]], labels: Sequence[str], alpha: float
 ) -> tuple[float, ...]:
-    """S23's minimum detectable effect on each group, at the family's floor.
+    """PF4.45: each group's detection limit at the family's floor ``alpha`` (``q / G``).
 
-    Base rate 0.5 because it is ``preflight_mde``'s anchor, needs no data and keeps the rule a
-    function of the grouping's shape. ``alpha`` is ``q / G``, the threshold BH applies to the
-    smallest p among ``G`` -- the only threshold a single moved group can be held to, which is
-    the sparse alternative Level 2 exists for.
+    The smallest change that, made in every condition of the group from its own baseline and in
+    no other condition, the tree would flag with the root and the group both rejecting, at the
+    stated power, unconditionally (``_limits.group_limit``). With several events it is the largest
+    over the events, from each event's own baselines, so whichever event moves the group can tell
+    it and the order the events were named in does not matter (reading R41). 1.0 when a group
+    has no room or nothing within its room is detectable.
     """
+    sizes_a, sizes_b = table.n_a.astype(np.float64), table.n_b.astype(np.float64)
+    events = len(table.baselines)
     return tuple(
-        mde_two_proportion(
-            0.5,
-            int(table.n_a[partition[label]].sum()),
-            int(table.n_b[partition[label]].sum()),
-            alpha=alpha,
+        max(
+            group_limit(sizes_a, sizes_b, baseline, np.asarray(partition[label], dtype=np.int64),
+                        alpha=alpha, groups=len(labels), events=events, power=stats.POWER)
+            for baseline in table.baselines
         )
         for label in labels
     )
@@ -1497,7 +1524,7 @@ def _underpowered_detail(
     n_a: int,
     n_b: int,
     alpha: float,
-    offered: float,
+    offered: float | None,
 ) -> str:
     """S23's message shape one level down: three facts and one instruction.
 
@@ -1507,12 +1534,18 @@ def _underpowered_detail(
     checked rather than argued: ``_offered_override`` rounds up, because rounding to nearest is
     the trap that makes a message whose one instruction refuses the same grouping again.
     """
+    # PF4.45, reading R41: a group with no room, or none detectable, has a limit of 1, which no
+    # --max-group-mde admits (the flag refuses 1), so none is offered.
+    admits = (
+        "No --max-group-mde below 1 admits this grouping."
+        if offered is None
+        else f"--max-group-mde {offered:.4f} admits this grouping as it stands."
+    )
     return (
         f"{n_resolvable} of {n_groups} groups can resolve a change of {accepted * 100:.1f} "
         f"points in a group's event rate (group MDE {mde:.4f} at {n_a} and {n_b} units per arm, "
         f"alpha {alpha:.3g} = q/{n_groups}), and you accepted {accepted * 100:.1f} points "
-        f"(--max-group-mde {accepted:.4f}). --max-group-mde {offered:.4f} admits this grouping "
-        f"as it stands."
+        f"(--max-group-mde {accepted:.4f}). {admits}"
     )
 
 
@@ -1560,12 +1593,12 @@ def _consider(
                 n_a=int(request.table.n_a[rows].sum()),
                 n_b=int(request.table.n_b[rows].sum()),
                 alpha=alpha_floor,
-                offered=_offered_override(mdes[pivot]),
+                offered=_offered_override(mdes[pivot]) if mdes[pivot] < 1.0 else None,
             ),
             next_rung=next_rung,
             n_groups=len(labels),
             n_resolvable_groups=resolvable,
-            offered_max_group_mde=_offered_override(mdes[pivot]),
+            offered_max_group_mde=_offered_override(mdes[pivot]) if mdes[pivot] < 1.0 else None,
         )
     return _grouping(request, key, resolved_by, partition, labels, alpha_floor, mdes, resolvable)
 
@@ -1665,8 +1698,7 @@ def _rung_requested(request: _Request) -> Grouping | Refusal | None:
             request, name, rung="requested", next_rung="trace", resolved_by="requested"
         )
     raise UnknownGrouping(
-        f"--by {name}: no rung groups by that. Name a trace grouping "
-        f"({', '.join(TRACE_GROUPINGS)}, unsupported until Phase 5.2), an axis both runs "
+        f"--by {name}: no rung groups by that. Name an axis both runs "
         f"declare ({', '.join(_shared_axes(request)) or 'none'}), a task-family key the configs "
         f"carry ({', '.join(TASK_FAMILY_KEYS)}), or {WHOLE_GRID}."
     )
@@ -1985,18 +2017,19 @@ def _family(
             q_within=float(value),
             rejects=bool(float(value) < q),
             mde=float(row["mde"]),
+            mde_note=row.get("mde_note") if isinstance(row.get("mde_note"), str) else None,
         )
         for (config_hash, event, row), value in zip(rows, adjusted, strict=True)
     )
-    mdes = [cell.mde for cell in cells]
+    mdes = [cell.mde for cell in cells if not math.isnan(cell.mde)]
     return CellFamily(
         label=label,
         key=grouping.key,
         n_tests=len(cells),
         n_rejected=sum(1 for cell in cells if cell.rejects),
         rejected=tuple((cell.config_hash, cell.event) for cell in cells if cell.rejects),
-        mde_median=float(np.median(mdes)),
-        mde_max=max(mdes),
+        mde_median=float(np.median(mdes)) if mdes else math.nan,
+        mde_max=max(mdes) if mdes else math.nan,
         cells=cells,
     )
 

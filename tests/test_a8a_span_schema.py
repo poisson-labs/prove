@@ -141,6 +141,11 @@ FIXTURES = TESTS / "fixtures" / "trace"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
+# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 LOGGER_NAME = "poisson_prove.trace"
 EPOCH = 1_756_900_000_000_000_000
 
@@ -183,9 +188,9 @@ A7_SURFACE: dict[str, dict[str, str]] = {
         "assemble": "89ec3fc90530156b4a35bfedd2d5fd5da32412bc70b9d66f80be089716e5a1fe",
     },
     "store.py": {
-        "_SCHEMA": "7a667ffbc1067dce738a839266851ba6c11dacf989e1fd58a66775490a80c02a",
-        "_NULLABLE_STRING_COLUMNS": "c7f3ae63b60a6d4216a9d9ebf8856d2d7151491f59903b447d775b25263a9fe0",
-        "Store.append": "8bdf8983f500500c1f33b16039d0d018085de9f9649561f10d257f09a8e87bb7",
+        # PF4 re-freeze (PF4.38, reading R5): the store gains a nullable case_id column copied from
+        # meta["case_id"] on append, which moves _SCHEMA, _NULLABLE_STRING_COLUMNS and Store.append;
+        # their digests are removed (digests at removal: 7a667ffb...80c02a, c7f3ae63...a9fe0, 8bdf8983...87bb7).
         "Store.read": "a853c1b49fbf43c0e65038b9620e668ff180acf68601dcef4cb3eace63c834cb",
     },
 }
@@ -772,7 +777,7 @@ def test_p8_18_inspect_prints_nine_columns_the_first_five_unchanged_and_dashes_f
     root = tmp_path / "store"
     out, err = StringIO(), StringIO()
     code = cli.main(
-        ["--store", str(root), "sweep", str(QUICKSTART), "--target", "poisson_prove.examples.mock_agent:rollout", "--yes"],
+        ["--store", str(root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", "poisson_prove.examples.mock_agent:rollout", "--yes"],
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()

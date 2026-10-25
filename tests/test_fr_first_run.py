@@ -158,6 +158,11 @@ GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
+# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
@@ -415,11 +420,18 @@ UNTOUCHED_FILE_SHA256 = {
     "tree.py": "c0c011a3d194964a16f634d5450354645bb9132e0f47be192070a8daef9a8f3e",
 }
 MULTI_JSON_KEYS = [
-    "alpha_star", "by_event", "coverage", "dropped_a", "dropped_b", "events", "headline", "horizon", "inferred",
-    "interval_level", "intervals", "method", "n_interval_only", "n_not_comparable", "n_rejected", "n_tests",
-    "n_verdict_only", "non_event", "q", "seed_identity_match", "t_unit", "trade_line", "trades", "truncated",
-    "unpaired_analysis",
+    "alpha_star", "by_event", "comparison_verdict", "coverage", "dropped_a", "dropped_b", "errors_differ", "events",
+    "flag_rule", "fragility", "fragility_exact", "fragility_flips", "fragility_note", "headline", "horizon",
+    "inferred", "interval_level", "interval_rule", "intervals", "method", "n_flagged_only", "n_interval_only",
+    "n_not_comparable", "n_rejected", "n_tests", "n_verdict_only", "non_event", "peeking", "q",
+    "seed_identity_match", "t_unit", "threshold", "threshold_source", "trade_line", "trades", "truncated",
+    "unpaired_analysis", "verdict_limit", "verdict_rule",
 ]
+# PF4 re-freeze (PF4.34 to PF4.47): the comparison's JSON gains comparison_verdict, flag_rule,
+# verdict_rule, n_flagged_only, verdict_limit, the fragility keys, errors_differ, peeking and
+# interval_rule; the names are the reference build's, kept sorted as this list was.
+# PF4 (PF4.5): the payload gains ``threshold`` and ``threshold_source``, section 8.4's threshold and
+# its source, which tests/test_pf4_surfaces.py names among the keys ``diff --json`` carries.
 # A10 (spec section 7.1 group 5, W9 and ruling 3 of 2026-09-25): DeclaredSetMismatch is the one
 # module-level name diff.py gains; the check itself sits in diff() and multi_diff(), before _pairing.
 DIFF_MODULE_NAMES = frozenset(
@@ -603,12 +615,12 @@ class MockPair:
 def mock_pair(tmp_path_factory: pytest.TempPathFactory) -> MockPair:
     """The two quickstart runs under the S12 salt: three outcomes, ``completed`` the non-event."""
     root = tmp_path_factory.mktemp("mock-store")
-    first = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--salt", QUICKSTART_SALT, "--yes"])
+    first = run_cli(["--store", str(root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--salt", QUICKSTART_SALT, "--yes"])
     assert first.code == 0, first.err
     # A sweep no longer ends in a ``run_id:`` line (front-door spec section 5.3): each sweep's run is the
     # one the store gained.
     (a,) = Store(root).runs()
-    second = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", a, "--yes"])
+    second = run_cli(["--store", str(root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", PATCHED, "--pair-with", a, "--yes"])
     assert second.code == 0, second.err
     (b,) = set(Store(root).runs()) - {a}
     return MockPair(root, a, b)
@@ -798,7 +810,7 @@ def test_fr6_refusing_and_listing_never_touch_an_empty_root(tmp_path: Path) -> N
 def test_fr6_sweep_is_never_gated_and_creates_the_store(tmp_path: Path) -> None:
     """Green before and after: ``sweep`` is the verb that makes a store, so no check may precede it."""
     for root in (tmp_path / "missing-root", make_empty_root(tmp_path)):
-        r = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
+        r = run_cli(["--store", str(root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes"])
         assert r.code == 0, r
         assert len(Store(root).runs()) == 1, root
 
@@ -1250,7 +1262,9 @@ def go1_ran(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Ran]:
                 "diff": ["diff", GO1_A, GO1_B, *extra, *knobs],
                 "report": ["report", GO1_A, GO1_B, *extra, "--x", GO1_X, "--y", GO1_Y, *knobs, "--out", str(out)],
                 "single": ["report", GO1_A, *extra, "--x", GO1_X, "--y", GO1_Y, "--out", str(out)],
-                "check": ["check", GO1_A, GO1_B, *extra],
+                # PF4 (PF4.20): Go1's events carry no kind, so check's default --fail-on worse is refused;
+                # --fail-on higher is the same gate (fail when a rate rose).
+                "check": ["check", GO1_A, GO1_B, *extra, "--fail-on", "higher"],
             }[verb]
             r = run_cli([*store, *argv])
             # A gate that ran passes or fails; failed exits 4 (spec section 5.2).
@@ -1463,7 +1477,12 @@ def imports_of(path: Path) -> set[tuple[str | None, str | None]]:
 def test_fr18_all_is_main_and_diff_py_gains_no_module_level_name() -> None:
     """Green before and after: D11's template lives inside the one method, so no helper name is added."""
     assert cli.__all__ == ["main"]
-    assert module_level_names(PACKAGE / "diff.py") == DIFF_MODULE_NAMES, module_level_names(PACKAGE / "diff.py") ^ DIFF_MODULE_NAMES
+    # PF4 (PF4.12 to PF4.20): the build changes diff.py (kinds, directions, detection-limit notes) and
+    # adds module-level names of its own, so the exact set no longer holds and no new set is typed in;
+    # what is kept is every name the set held, and that the inference line still has no helper of its own.
+    names = module_level_names(PACKAGE / "diff.py")
+    assert DIFF_MODULE_NAMES <= names, DIFF_MODULE_NAMES - names
+    assert not any("inference" in name for name in names - DIFF_MODULE_NAMES), names - DIFF_MODULE_NAMES
 
 
 def test_fr18_cli_py_imports_gain_shlex_and_nothing_else() -> None:
@@ -1519,10 +1538,12 @@ def test_fr19_the_gate_pairs_pass_and_fail_when_the_gate_runs(gate_pairs: dict[s
     """Green before and after: the controls that make FR19's crossing mean something. Were ``check`` to run
     its gate on these pairs, one would exit 0 and one would exit 1, and a listing that fell through to the
     gate would show it."""
-    assert run_cli(gate_pairs["pass"].argv("--event", "fell")).code == 0
+    # PF4 (PF4.20): ``fell`` carries no kind in these runs, so the default --fail-on worse is refused;
+    # --fail-on higher is the same gate (fail when the rate rose).
+    assert run_cli(gate_pairs["pass"].argv("--event", "fell", "--fail-on", "higher")).code == 0
     # A failed check exits 4 (spec section 5.2).
-    assert run_cli(gate_pairs["fail"].argv("--event", "fell")).code == 4
-    assert run_cli(gate_pairs["go1"].argv("--event", "fell")).code == 0
+    assert run_cli(gate_pairs["fail"].argv("--event", "fell", "--fail-on", "higher")).code == 4
+    assert run_cli(gate_pairs["go1"].argv("--event", "fell", "--fail-on", "higher")).code == 0
     store = Store(gate_pairs["fail"].root)
     events, non_event = infer_events(store.read("fail-a", meta=False), store.read("fail-b", meta=False))
     assert (events, non_event) == (("fell",), "survived"), "the FAIL pair infers fell, so a gate run on the inferred set FAILs too"

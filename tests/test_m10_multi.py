@@ -45,6 +45,7 @@ import ast
 import importlib.machinery
 import importlib.util
 import json
+import math
 import re
 import sys
 import time
@@ -73,6 +74,11 @@ GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
+# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 CLI_SOURCE = ROOT / "src" / "poisson_prove" / "cli.py"
 
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
@@ -86,7 +92,9 @@ MOCK_EVENTS = {"violated", "timeout"}
 NON_EVENT = "completed"
 #: The inference line's marker, a line prefix and never a substring: report.md's Provenance prints ``- inferred: false``, which a bare ``inferred: `` would match.
 INFERENCE_MARKER = "inferred: no event was given, so "
-GO1_HEADLINE = "fell: 60 safer, 0 worse"
+# PF4 (PF4.20): the Go1 runs declare no kind for fell, so its counts read in direction words: 60
+# conditions fell and none rose (was "fell: 60 safer, 0 worse").
+GO1_HEADLINE = "fell: 60 lower, 0 higher"
 FALLBACK_IMPORT = "from your_module import rollout"
 REAL_IMPORT = f"from {MOCK_MODULE} import rollout"
 SNIPPET_MARKER = "# reproduce one episode"
@@ -97,9 +105,11 @@ HORIZON = 10.0
 N_FILLERS = 6
 
 HONESTY_FIRST_RE = re.compile(
-    r'^Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d\.\d{3}) rise\. '
-    r'"(\d+) worse" is an honest claim only above that\.$'
-)
+    r'^Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d\.\d{3}) (?:rise|fall)\. '
+    r'"(\d+) higher" is an honest claim only above that\.$'
+)  # PF4 (PF4.20): the claim names the rise in direction words for an event of unknown kind (was "worse").
+# PF4 re-freeze (PF4.27, PF4.32): the limit named is the condition's own, a rise or a fall (Go1's least
+# sensitive unchanged condition had the event in every run, so its limit is a fall).
 HONESTY_NONE = "No unchanged cells; every cell moved significantly."
 HONESTY_OVERALL_RE = re.compile(r"^Worst-powered cell overall: (\d\.\d{3}) \((.*)\)\.$")
 COMPOUND_RE = re.compile(r"^([a-zA-Z][a-zA-Z0-9-]*|\*)?((?:[.#][\w-]+)*)$")
@@ -150,7 +160,7 @@ def run_id_of(r: Result, store: Path, before: set[str]) -> str:
 
 def sweep(store: Path, target: str, *extra: str) -> str:
     before = run_ids(store)
-    r = run_cli(["--store", str(store), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra])
+    r = run_cli(["--store", str(store), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", target, "--yes", *extra])
     assert r.code == 0, r.text
     return run_id_of(r, store, before)
 
@@ -533,7 +543,8 @@ def test_c2_no_event_prints_inference_line_first_then_a_headline_naming_both_eve
     assert "violated" in first and "timeout" in first, first
     headline = [line for line in report_lines[1:] if "violated:" in line and "timeout:" in line]
     assert headline, r.out
-    assert "safer" in headline[0] and "worse" in headline[0], headline[0]
+    # PF4 (PF4.20): neither event's kind is known, so the headline counts in lower/higher.
+    assert "lower" in headline[0] and "higher" in headline[0], headline[0]
 
 
 def test_c2_explicit_event_prints_one_event_and_no_inference_line(pair: MockPair) -> None:
@@ -597,26 +608,37 @@ def test_c6_worse_counts_are_a_real_swing() -> None:
 def test_c6_check_fails_when_any_named_event_has_a_worse_cell(worse_pair: Path) -> None:
     # PF3 (Q17, spec sections 4.4 and 14; rule R1): the hand-built pair's two manifests carry one salt, so the
     # default is now the paired test; the worse cell this gate fails on is the unpaired test's, named.
-    r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--event", "timeout", "--method", "fisher_bh"])
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+    r = run_cli(
+        ["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--event", "timeout",
+         "--method", "fisher_bh", "--fail-on", "higher"]
+    )
     # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
     assert_clean_refusal(r, 4)
     assert r.lines[0].startswith("failed") and not [x for x in r.lines if x.startswith("passed")], r.out
 
 
 def test_c6_check_on_the_worse_event_alone_fails(worse_pair: Path) -> None:
-    r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated"])
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+    r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--fail-on", "higher"])
     # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
     assert_clean_refusal(r, 4)
     assert r.lines[0].startswith("failed") and not [x for x in r.lines if x.startswith("passed")], r.out
-    assert "violated: 0 safer, 1 worse" in r.out, r.out
+    # PF4 (PF4.20): with the kind unknown the count reads 0 lower, 1 higher (was 0 safer, 1 worse).
+    assert "violated: 0 lower, 1 higher" in r.out, r.out
 
 
 def test_c6_check_on_the_untouched_event_alone_passes(worse_pair: Path) -> None:
-    r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout"])
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+    r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout", "--fail-on", "higher"])
     assert r.code == 0, r.text
     # A passed check says passed on its first line (spec section 5.3).
     assert r.lines[0].startswith("passed") and not [x for x in r.lines if x.startswith("failed")], r.out
-    assert "timeout: 0 safer, 0 worse" in r.out, r.out
+    # PF4 (PF4.20): with the kind unknown the count reads 0 lower, 0 higher (was 0 safer, 0 worse).
+    assert "timeout: 0 lower, 0 higher" in r.out, r.out
 
 
 # ---------- C7: report A B file set ----------
@@ -669,7 +691,12 @@ def test_c8_single_event_worst_cells_use_the_multi_tiebreak(tmp_path: Path) -> N
     j = run_cli(go1_argv("diff", "--event", "fell", "--json", "--method", "fisher_bh"))
     assert j.code == 0, j.text
     cells = json.loads(j.out)["by_event"]["fell"]["cells"]
-    ordered = sorted(cells, key=lambda c: (-c["delta"], c["q"], c["mde"], c["config_hash"]))
+    # PF4 (PF4.12, PF4.15): a cell at a 100% baseline has no detection limit (mde null); the
+    # tiebreak ascends mde, best-powered first, so a cell that can detect nothing sorts last.
+    ordered = sorted(
+        cells,
+        key=lambda c: (-c["delta"], c["q"], math.inf if c["mde"] is None else c["mde"], c["config_hash"]),
+    )
     expected = [(float(c["config"]["push_pct_bw"]), float(c["config"]["mu"])) for c in ordered[:10]]
     plain = sorted(cells, key=lambda c: (-c["delta"], c["config_hash"]))
     assert [c["config_hash"] for c in plain[:10]] != [c["config_hash"] for c in ordered[:10]], (
@@ -696,7 +723,11 @@ def test_c9_single_run_report_writes_three_files_with_one_panel_per_event(pair: 
     assert len(panels) == 2 and set(panels) == MOCK_EVENTS, panels
     md = (out / "report.md").read_text()
     assert not re.search(r"\bdelta\b", md), md
-    assert not re.search(r"\bq\b", md), md
+    # PF4 re-freeze (PF4.30, PF4.48a, section 8.3): the header's design limit names the test's level
+    # ("q 0.05 over 9 tests"); no other line of a single-run report carries a q.
+    design = [line for line in md.splitlines() if line.startswith("design limit ")]
+    assert len(design) == 1, md
+    assert not [line for line in md.splitlines() if line not in design and re.search(r"\bq\b", line)], md
     assert not re.search(r"\bsafer\b", md), md
     for name in REPORT_FILES:
         assert name in r.out, name
@@ -868,7 +899,7 @@ def test_c13_inspect_on_a_local_run_prints_the_real_import(pair: MockPair) -> No
 def test_c14_modal_run_records_the_same_import_path_and_inspects_the_same(store_root: Path, modal_in_process: None) -> None:
     before = run_ids(store_root)
     modal = run_cli([
-        "--store", str(store_root), "sweep", str(QUICKSTART), "--target", ROLLOUT,
+        "--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT,
         "--backend", "modal", "--yes",
     ])
     assert modal.code == 0, modal.text
@@ -905,8 +936,10 @@ def test_c15_manifest_without_import_path_prints_the_fallback_snippet(tmp_path: 
 
 
 def test_c16_gate_pass_is_zero_and_gate_fail_is_one(worse_pair: Path) -> None:
-    passed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout"])
-    failed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated"])
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+    passed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout", "--fail-on", "higher"])
+    failed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--fail-on", "higher"])
     assert passed.code == 0, passed.text
     # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
     assert failed.code == 4 and "Traceback" not in failed.text, failed.text
@@ -960,11 +993,11 @@ def test_c17_three_quickstart_commands_run_unchanged_under_thirty_seconds(tmp_pa
     t0 = time.perf_counter()
     default_store = tmp_path / "prove-runs"
     before = run_ids(default_store)
-    first = run_cli(["sweep", str(QUICKSTART), "--target", ROLLOUT, "--yes"])
+    first = run_cli(["sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes"])
     assert first.code == 0, first.text
     run_a = run_id_of(first, default_store, before)
     before = run_ids(default_store)
-    second = run_cli(["sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", run_a, "--yes"])
+    second = run_cli(["sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", PATCHED, "--pair-with", run_a, "--yes"])
     assert second.code == 0, second.text
     run_b = run_id_of(second, default_store, before)
     third = run_cli(["report", run_a, run_b, "--event", "violated", "--x", "tool_fail_rate", "--y", "task_id"])
@@ -976,7 +1009,8 @@ def test_c17_three_quickstart_commands_run_unchanged_under_thirty_seconds(tmp_pa
     assert re.fullmatch(r"prove-report-.+-vs-.+", out.name) and out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
     assert {p.name for p in out.iterdir()} == REPORT_FILES
     md = (out / "report.md").read_text()
-    assert re.search(r"^violated: \d+ safer, \d+ worse$", md, re.MULTILINE), md
+    # PF4 (PF4.20): violated's kind is unknown, so the headline counts read lower/higher.
+    assert re.search(r"^violated: \d+ lower, \d+ higher$", md, re.MULTILINE), md
     assert svg_panels(out / "heatmap.svg") == ["violated"]
 
 

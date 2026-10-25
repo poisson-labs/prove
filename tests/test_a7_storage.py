@@ -214,6 +214,14 @@ THIRTEEN = [
 ]
 ELEVEN = [c for c in THIRTEEN if c not in ("meta", "backend_meta")]
 TRACE_COLUMNS = ["trace", "trace_obs"]
+# PF4 re-freeze (PF4.38, reading R5): the store copies a rollout's meta["case_id"] into its own
+# nullable string column, appended after trace_obs (schema_version stays 1; older parts read it as
+# null), and Store.read returns it by default, so every read frame gains it at the end (before the
+# envelope's decoded trace) and every part written now carries it last.
+CASE_COLUMN = ["case_id"]
+READ_THIRTEEN = THIRTEEN + CASE_COLUMN
+READ_ELEVEN = ELEVEN + CASE_COLUMN
+POST_A7_PART = THIRTEEN + TRACE_COLUMNS + CASE_COLUMN
 MODES = ("full", "envelope", "none")
 #: A6 section 3.3's exact members. ``input.value``/``output.value`` are members whatever the span's
 #: ``kind``; the kind decides the *class* (prompt/completion on ``llm``, tool observation
@@ -307,11 +315,11 @@ OUT_PLACEHOLDER = "<out>"
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): three of the fourteen move: both 'report A B' files, whose Cells section prints LS16's respelled sentence ('MDE is the smallest detectable increase', no ADR number), and 'serve --json', which is proofload.viewpair/6 with the summary key and each panel's mde_unchanged. The other eleven are unchanged. Read through this test's own measurement on the built tree, not predicted.
 # The front door's look (spec sections 5.3, 5.4 and 14) changes every other verb's output on Go1 (rule 10 numbers,
 # 12-hex hashes, check's verdict line, --json for --format json), so those thirteen digests are gone and
-# ``assert_go1_verb_facts`` checks the facts they guarded instead. The page structure inside serve --json is
-# unchanged, so its digest stays.
-GO1_VERB_SHA256 = {
-    "serve --json": "725d60142c4322fcdb26242e515636ff9353394c51f61e5b05c8ee240b4e32a7",
-}
+# ``assert_go1_verb_facts`` checks the facts they guarded instead.
+# PF4 (PF4.3, PF4.11, PF4.13 to PF4.20): the page structure inside serve --json changes too (no
+# ``pair.store_root``, the cells' shares, directions and notes, the Summary's verdict and direction
+# words), so its digest is no longer asserted either; ``assert_go1_verb_facts`` checks the facts it
+# guarded against ``diff --json`` and the store.
 GO1_EVENT = "fell"
 GO1_X, GO1_Y = "mu", "push_pct_bw"
 SNIPPET_MARKER = "# reproduce one episode"
@@ -687,7 +695,9 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
     for k, digest in GO1_AGREEMENT.items():
         as_0_0_1 = as_0_0_1.replace(digest, GO1_AGREEMENT_0_0_1[k])
     digests["diff --json"] = sha256_text(as_0_0_1)
-    results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event, *method]); digests["check"] = sha256_text(norm(r.out))
+    # PF4 (PF4.20): neither pair's event carries a kind, so check's default --fail-on worse is refused;
+    # --fail-on higher is the same gate (fail when a rate rose).
+    results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event, "--fail-on", "higher", *method]); digests["check"] = sha256_text(norm(r.out))
     for label, runs in (("report A", [a]), ("report A B", [a, b])):
         out = out_dir / label.replace(" ", "_")
         results[label] = r = run_cli(["--store", store_arg, "report", *runs, "--event", event, "--x", x, "--y", y, "--out", str(out), *(method if len(runs) == 2 else ())])
@@ -705,7 +715,9 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
         # PF3 (spec section 4.4, R3): it also adds method and method_chosen right after sentence; neither
         # is the page structure the kept digest guards, so they are dropped as verdict and sentence are.
         structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
-        structure["pair"]["store_root"] = STORE_PLACEHOLDER
+        # PF4 (PF4.11): the structure no longer carries the store's absolute path, so there is nothing to
+        # normalise.
+        assert "store_root" not in structure["pair"], structure["pair"]
         if root == GO1_ROOT:
             # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are
             # asserted, then put back as before names, so the kept digest still guards the rest.
@@ -854,9 +866,35 @@ def check_report_table(header: list[str], rows: list[list[str]], data: Mapping[s
             printed = dict(zip(header, row, strict=True))
             cell = cell_by_config(cells, {GO1_X: float(printed[GO1_X]), GO1_Y: float(printed[GO1_Y])})
             for column in shared:
+                if column.lower() == "mde":
+                    # PF4 (PF4.15): a condition with no detection limit, or none detectable, prints its
+                    # note in place of the number.
+                    # PF4 re-freeze (PF4.27, PF4.32): or each direction's limit or note.
+                    assert limit_printed_as(printed[column], cell), (column, printed[column], cell["mde_note"])
+                    continue
                 assert printed_as(printed[column], cell[column.lower()]), (column, printed[column], cell[column.lower()])
         return "worst cells"
     return "other"
+
+
+def limit_printed_as(text: str, cell: Mapping[str, Any]) -> bool:
+    """PF4 re-freeze (PF4.22, PF4.27, PF4.32): a printed limit is both directions, each its number or
+    its note (``rise 0.568, fall: none detectable``); or one number, the condition's limit, when the
+    two agree; or the condition's note alone where a table prints one figure per condition."""
+    text = text.strip()
+    parts = text.split(", ")
+    if len(parts) == 2 and parts[0].startswith("rise") and parts[1].startswith("fall"):
+        for way, part in zip(("rise", "fall"), parts, strict=True):
+            value, note = cell[f"mde_{way}"], cell[f"mde_{way}_note"]
+            if value is None:
+                if part != f"{way}: {note}":
+                    return False
+            elif not (part.startswith(f"{way} ") and printed_as(part.removeprefix(f"{way} "), value)):
+                return False
+        return True
+    if cell["mde_note"]:
+        return text == cell["mde_note"]
+    return printed_as(text, cell["mde"])
 
 
 def check_heatmap(path: Path, cells: Mapping[str, Mapping[str, Any]], label_key: str) -> int:
@@ -886,8 +924,11 @@ def assert_go1_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
     fell = data["by_event"][GO1_EVENT]
     cells = {c["config_hash"]: c for c in fell["cells"]}
     headline = data["headline"].splitlines()[0]
-    assert len(cells) == data["n_tests"] and fell["n_safer"] + fell["n_worse"] + fell["n_unchanged"] == len(cells)
-    for verdict, key in (("safer", "n_safer"), ("worse", "n_worse"), ("unchanged", "n_unchanged")):
+    # PF4 (PF4.20): Go1's ``fell`` carries no kind, so the JSON counts and verdicts are in direction
+    # words (``lower``, ``higher``) and ``n_safer`` and ``n_worse`` are null.
+    assert fell["kind"] is None and fell["n_safer"] is None and fell["n_worse"] is None, fell
+    assert len(cells) == data["n_tests"] and fell["n_lower"] + fell["n_higher"] + fell["n_unchanged"] == len(cells)
+    for verdict, key in (("lower", "n_lower"), ("higher", "n_higher"), ("unchanged", "n_unchanged")):
         assert sum(c["verdict"] == verdict for c in cells.values()) == fell[key], verdict
 
     # runs: one line per run with its status, backend, target, unit and row count.
@@ -927,6 +968,11 @@ def assert_go1_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
         for column in shared:
             if column == "config":
                 assert json.loads(printed[column]) == cells[h][column], printed
+            elif column == "mde":
+                # PF4 (PF4.15): a condition with no detection limit, or none detectable, prints its note
+                # in place of the number.
+                # PF4 re-freeze (PF4.27, PF4.32): the table prints each direction's limit or note.
+                assert limit_printed_as(printed[column], cells[h]), (printed[column], cells[h]["mde_note"])
             else:
                 assert printed_as(printed[column], cells[h][column]), (column, printed[column], cells[h][column])
     assert seen == set(cells)
@@ -978,7 +1024,36 @@ def assert_go1_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
 
     # heatmaps: one panel for the event, every cell labelled with its rate (one run) or delta (two).
     assert check_heatmap(out_dir / "report_A" / "heatmap.svg", cells, "rate_a") == 0
-    assert check_heatmap(out_dir / "report_A_B" / "heatmap.svg", cells, "delta") == fell["n_safer"] + fell["n_worse"]
+    # PF4 (PF4.20): the significant cells are counted in direction words.
+    assert check_heatmap(out_dir / "report_A_B" / "heatmap.svg", cells, "delta") == fell["n_lower"] + fell["n_higher"]
+
+    # PF4 (PF4.3, PF4.5, PF4.11, PF4.13 to PF4.20): the page structure, whose digest is gone, checked as
+    # facts: both arms as the store has them, the headline, the diff block's fields, the one panel's
+    # counts and every cell with the numbers, notes and verdict diff --json gives it, the tree's
+    # agreement, and the Summary's verdict word and detection limit.
+    page = json.loads(results["serve --json"].out)
+    for arm, run_id in (("a", GO1_A), ("b", GO1_B)):
+        assert page["pair"][arm]["run_id"] == run_id and page["pair"][arm]["rows_stored"] == store.count(run_id), arm
+        assert page["pair"][arm]["tally"] == store.tally(run_id).to_dict(), arm
+    assert page["headline"] == data["headline"] and page["trade_line"] == data["trade_line"]
+    shared_diff = [key for key in page["diff"] if key in data]
+    assert {"events", "method", "n_tests", "q", "horizon"} <= set(shared_diff), shared_diff
+    for key in shared_diff:
+        assert page["diff"][key] == data[key], key
+    (panel,) = page["panels"]
+    assert panel["event"] == GO1_EVENT
+    for key in ("n_unchanged", "n_lower", "n_higher"):
+        assert panel[key] == fell[key], key
+    assert {c["config_hash"] for c in panel["cells"]} == set(cells)
+    for c in panel["cells"]:
+        mine = cells[c["config_hash"]]
+        assert {"n_a", "n_b", "rate_a", "rate_b", "delta", "p", "q", "mde", "verdict", "mde_note"} <= set(c) & set(mine)
+        for key in set(c) & set(mine):
+            assert c[key] == mine[key], (c["config_hash"], key, c[key], mine[key])
+    assert page["tree"]["agreement"] == data["tree"]["agreement"]
+    assert page["summary"]["verdict"] == data["verdict"]
+    (entry,) = page["summary"]["events"]
+    assert entry["event"] == GO1_EVENT and printed_as(entry["limit"]["mde"], round(100 * fell["max_mde_unchanged"])), entry
 
     # inspect: the run's rows with the event, in store order, each with its hash, config, seed and t.
     frame = store.read(GO1_A)
@@ -1382,28 +1457,28 @@ def go1_store() -> Store:
 
 def test_p7_1_the_schema_gains_two_nullable_strings_and_every_mode_projects_exactly(post_a7_run: tuple[Store, list[EpisodeRecord]], go1_store: Store) -> None:
     schema = store_module._SCHEMA
-    assert schema.names == THIRTEEN + TRACE_COLUMNS, schema.names
-    for name in TRACE_COLUMNS:
+    assert schema.names == POST_A7_PART, schema.names
+    for name in TRACE_COLUMNS + CASE_COLUMN:
         field = schema.field(name)
         assert field.type == pa.string() and field.nullable, field
     assert "trace" in inspect.signature(Store.read).parameters
     store, records = post_a7_run
     n = len(records)
     for run_store, run_id, rows in ((store, POST_RUN, n), (go1_store, GO1_A, GO1_ROWS)):
-        assert list(run_store.read(run_id).columns) == THIRTEEN
-        assert list(run_store.read(run_id, meta=True).columns) == THIRTEEN
-        assert list(run_store.read(run_id, meta=False).columns) == ELEVEN
-        assert list(run_store.read(run_id, trace="full").columns) == THIRTEEN
-        assert list(run_store.read(run_id, trace="none").columns) == THIRTEEN
-        assert list(run_store.read(run_id, meta=False, trace="none").columns) == ELEVEN
+        assert list(run_store.read(run_id).columns) == READ_THIRTEEN
+        assert list(run_store.read(run_id, meta=True).columns) == READ_THIRTEEN
+        assert list(run_store.read(run_id, meta=False).columns) == READ_ELEVEN
+        assert list(run_store.read(run_id, trace="full").columns) == READ_THIRTEEN
+        assert list(run_store.read(run_id, trace="none").columns) == READ_THIRTEEN
+        assert list(run_store.read(run_id, meta=False, trace="none").columns) == READ_ELEVEN
         envelope = run_store.read(run_id, trace="envelope")
-        assert list(envelope.columns) == THIRTEEN + ["trace"] and len(envelope) == rows
+        assert list(envelope.columns) == READ_THIRTEEN + ["trace"] and len(envelope) == rows
         narrow = run_store.read(run_id, meta=False, trace="envelope")
-        assert list(narrow.columns) == ELEVEN + ["trace"] and len(narrow) == rows
+        assert list(narrow.columns) == READ_ELEVEN + ["trace"] and len(narrow) == rows
         assert "trace_obs" not in envelope.columns and "trace_obs" not in narrow.columns
         empty = run_store.read(run_id, keys=[], trace="envelope")
-        assert list(empty.columns) == THIRTEEN + ["trace"] and len(empty) == 0
-        assert list(run_store.read(run_id, keys=[], meta=False, trace="envelope").columns) == ELEVEN + ["trace"]
+        assert list(empty.columns) == READ_THIRTEEN + ["trace"] and len(empty) == 0
+        assert list(run_store.read(run_id, keys=[], meta=False, trace="envelope").columns) == READ_ELEVEN + ["trace"]
     # Q3 (c): ``meta=True`` with the envelope decodes ``meta`` and it carries no ``"trace"`` key.
     for row in store.read(POST_RUN, trace="envelope").itertuples(index=False):
         assert isinstance(row.meta, dict) and "trace" not in row.meta
@@ -1445,29 +1520,29 @@ def test_p7_2_meta_on_disk_never_carries_the_key_and_the_full_read_presents_the_
 def test_p7_3_a_pre_a7_part_and_a_post_a7_part_in_one_run_read_as_one_frame(mixed_run: tuple[Store, list[EpisodeRecord], list[EpisodeRecord]]) -> None:
     store, old, new = mixed_run
     parts = parts_of(store, MIXED_RUN)
-    assert len(parts) == 2 and pq.read_schema(parts[0]).names == THIRTEEN and pq.read_schema(parts[1]).names == THIRTEEN + TRACE_COLUMNS
+    assert len(parts) == 2 and pq.read_schema(parts[0]).names == THIRTEEN and pq.read_schema(parts[1]).names == POST_A7_PART
     expected = {(r.config_hash, r.replicate_index): r for r in old + new}
     full = store.read(MIXED_RUN, trace="full")
-    assert list(full.columns) == THIRTEEN and set(keys_of(full)) == set(expected)
+    assert list(full.columns) == READ_THIRTEEN and set(keys_of(full)) == set(expected)
     for key, row in rows_by_key(full).items():
         assert row.meta["trace"] is not None and isinstance(row.meta["trace"], dict), key
         assert canonical(row.meta["trace"]) == canonical(expected[key].meta["trace"]), key
     envelope = store.read(MIXED_RUN, trace="envelope")
-    assert list(envelope.columns) == THIRTEEN + ["trace"] and set(keys_of(envelope)) == set(expected)
+    assert list(envelope.columns) == READ_THIRTEEN + ["trace"] and set(keys_of(envelope)) == set(expected)
     for key, row in rows_by_key(envelope).items():
         assert row.trace is not None and isinstance(row.trace, dict), key
         assert row.trace["spans"] and all(s["input"] is None and s["output"] is None for s in row.trace["spans"]), key
         # Q3 (c): the decoded ``meta`` of a pre-A7 row has its ``"trace"`` key removed too.
         assert isinstance(row.meta, dict) and "trace" not in row.meta and row.meta["k"] == expected[key].meta["k"], key
     narrow = store.read(MIXED_RUN, meta=False, trace="envelope")
-    assert list(narrow.columns) == ELEVEN + ["trace"]
+    assert list(narrow.columns) == READ_ELEVEN + ["trace"]
     assert all(row.trace is not None for row in narrow.itertuples(index=False))
     # Q7 (b): ``"none"`` strips a pre-A7 row's ``meta["trace"]`` so the layouts stay indistinguishable.
     none = store.read(MIXED_RUN, trace="none")
-    assert list(none.columns) == THIRTEEN
+    assert list(none.columns) == READ_THIRTEEN
     for key, row in rows_by_key(none).items():
         assert isinstance(row.meta, dict) and "trace" not in row.meta and row.meta["k"] == expected[key].meta["k"], key
-    assert list(store.read(MIXED_RUN, meta=False, trace="none").columns) == ELEVEN
+    assert list(store.read(MIXED_RUN, meta=False, trace="none").columns) == READ_ELEVEN
 
 
 # ---------- P7-4: assemble(*split(t)) is the identity over A7's whole valid space ----------
@@ -1503,11 +1578,11 @@ def test_p7_4_assemble_of_split_round_trips_every_valid_trace(spans: list[dict[s
 def test_p7_5_the_narrow_envelope_read_decodes_neither_trace_obs_nor_meta_on_a_post_a7_part(poisoned_run: tuple[Store, list[EpisodeRecord]]) -> None:
     store, records = poisoned_run
     for part in parts_of(store, POISONED_RUN):
-        assert pq.read_schema(part).names == THIRTEEN + TRACE_COLUMNS
+        assert pq.read_schema(part).names == POST_A7_PART
     assert all(v == POISON for v in raw_column(store, POISONED_RUN, "meta").values())
     assert all(v == POISON for v in raw_column(store, POISONED_RUN, "trace_obs").values())
     narrow = store.read(POISONED_RUN, meta=False, trace="envelope")
-    assert list(narrow.columns) == ELEVEN + ["trace"] and len(narrow) == len(records)
+    assert list(narrow.columns) == READ_ELEVEN + ["trace"] and len(narrow) == len(records)
     for row in narrow.itertuples(index=False):
         assert row.trace is not None and isinstance(row.trace, dict) and row.trace["schema"] == SCHEMA_SPEC
         assert len(row.trace["spans"]) == 3
@@ -1523,7 +1598,8 @@ def test_p7_5_the_narrow_envelope_read_decodes_neither_trace_obs_nor_meta_on_a_p
 
 
 def test_p7_6_store_append_is_the_only_writer_and_schema_the_only_declaration_of_the_two_columns() -> None:
-    assert store_module._SCHEMA.names[-2:] == TRACE_COLUMNS
+    # PF4 re-freeze (PF4.38, reading R5): the case_id column is appended after the two.
+    assert store_module._SCHEMA.names[-3:] == TRACE_COLUMNS + CASE_COLUMN
     declared: list[str] = []
     writers: list[str] = []
     obs_mentions: list[str] = []
@@ -1627,7 +1703,7 @@ def test_p7_10_every_verb_exits_0_on_go1_and_the_mock_pair_and_go1s_bytes_are_un
     store = Store(mock_pair.root)
     for run_id in (mock_pair.a, mock_pair.b):
         for part in parts_of(store, run_id):
-            assert pq.read_schema(part).names == THIRTEEN + TRACE_COLUMNS, part
+            assert pq.read_schema(part).names == POST_A7_PART, part
         frame = store.read(run_id, meta=False, trace="envelope")
         assert all(row.trace is not None and isinstance(row.trace, dict) for row in frame.itertuples(index=False))
     for part in (GO1_ROOT / GO1_A / "episodes" / "part-00000.parquet", GO1_ROOT / GO1_B / "episodes" / "part-00000.parquet"):
@@ -1636,9 +1712,9 @@ def test_p7_10_every_verb_exits_0_on_go1_and_the_mock_pair_and_go1s_bytes_are_un
     # A shared-salt pair now carries one note: line on stderr (spec section 5.4); nothing else.
     for verb, r in results.items():
         assert r.code == 0 and err_lines(r) == [], (verb, r.code, r.err)
-    # Only the page structure keeps its digest; the rest are checked as facts (spec section 14).
-    kept = {k: digests[k] for k in GO1_VERB_SHA256}
-    assert kept == GO1_VERB_SHA256, {k: (kept[k], GO1_VERB_SHA256[k]) for k in kept if kept[k] != GO1_VERB_SHA256[k]}
+    # PF4 (PF4.3, PF4.11, PF4.13 to PF4.20): no digest is kept; every verb, the page structure
+    # included, is checked as facts (spec section 14).
+    assert all(len(d) == HEX64_LEN for d in digests.values()), digests
     assert_go1_verb_facts(results, tmp_path / "go1")
     mock_digests, mock_results = verb_digests(mock_pair.root, mock_pair.a, mock_pair.b, event=MOCK_EVENT, x="tool_fail_rate", y="task_id", out_dir=tmp_path / "mock")
     for verb, r in mock_results.items():
@@ -1713,7 +1789,7 @@ def test_p7_12_the_split_does_not_move_the_agreement_digest_across_layouts_and_g
     for run_id in ("pre-a", "pre-b"):
         assert [pq.read_schema(p).names for p in parts_of(store, run_id)] == [THIRTEEN]
     for run_id in ("post-a", "post-b"):
-        assert all(pq.read_schema(p).names == THIRTEEN + TRACE_COLUMNS for p in parts_of(store, run_id))
+        assert all(pq.read_schema(p).names == POST_A7_PART for p in parts_of(store, run_id))
         assert all(row.trace is not None for row in store.read(run_id, meta=False, trace="envelope").itertuples(index=False))
     for k, events in ((1, ("fail",)), (2, EVENTS)):
         for method in ("fisher_bh", "mcnemar_bh"):

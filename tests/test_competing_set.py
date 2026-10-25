@@ -63,6 +63,7 @@ import ast
 import hashlib
 import inspect
 import json
+import math
 import xml.etree.ElementTree as ET
 from io import StringIO
 from pathlib import Path
@@ -86,6 +87,11 @@ SRC = ROOT / "src" / "poisson_prove"
 # PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
+# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
+# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# above the limit.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
 REGRESSION_JSON = FIXTURE_DIR / "diff_regression.json"
 REGRESSION_DIR = FIXTURE_DIR / "report_regression"
@@ -259,7 +265,7 @@ def sweep(root: Path, target: str, *extra: str) -> str:
     # the new run is the one the store gained.
     before = set(Store(root).runs())
     code, out, err = run_cli(
-        ["--store", str(root), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra]
+        ["--store", str(root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", target, "--yes", *extra]
     )
     assert code == 0, out + err
     added = set(Store(root).runs()) - before
@@ -576,6 +582,10 @@ def test_h6_every_verb_still_accepts_a_known_event(
     argv = ["--store", str(root), verb, a, b, "--event", "violated"]
     if verb == "report":
         argv += ["--x", "tool_fail_rate", "--y", "task_id", "--out", str(tmp_path / "out")]
+    if verb == "check":
+        # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+        # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+        argv += ["--fail-on", "higher"]
     code, out, err = run_cli(argv)
     assert code == 0, out + err
 
@@ -673,7 +683,11 @@ def test_h7_check_prints_no_verdict_when_it_refuses(mock_pair: tuple[Path, str, 
 
 def test_h8_check_still_passes_on_a_known_event(mock_pair: tuple[Path, str, str]) -> None:
     root, a, b = mock_pair
-    code, out, err = run_cli(["--store", str(root), "check", a, b, "--event", "violated"])
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
+    code, out, err = run_cli(
+        ["--store", str(root), "check", a, b, "--event", "violated", "--fail-on", "higher"]
+    )
     assert code == 0, out + err
     assert "Traceback" not in out + err, out + err
     # check's verdict is the first stdout line, passed or failed (spec section 5.3).
@@ -685,8 +699,11 @@ def test_h8_check_still_fails_cleanly_on_two_known_events(mock_pair: tuple[Path,
     """The other half of "unchanged": on this pair ``timeout`` genuinely regresses, so the
     two-event gate fails. A known event still reaches a verdict rather than a refusal."""
     root, a, b = mock_pair
+    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
+    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
     code, out, err = run_cli(
-        ["--store", str(root), "check", a, b, "--event", "violated", "--event", "timeout"]
+        ["--store", str(root), "check", a, b, "--event", "violated", "--event", "timeout",
+         "--fail-on", "higher"]
     )
     # A failed check exits 4 and says failed on its first stdout line (spec sections 5.2, 5.3).
     assert code == 4, out + err
@@ -720,7 +737,10 @@ def test_h9_absent_event_gets_a_zero_count_event_diff() -> None:
     frame."""
     a, b = _absent_event_pair()
     event = multi_diff(a, b, events=[ABSENT]).by_event[ABSENT]
-    assert (event.n_safer, event.n_worse) == (0, 0)
+    # PF4 re-freeze (PF4.20, the library follows the screen): the event has no kind, so n_safer and
+    # n_worse are null and its zero counts are the direction counts.
+    assert (event.n_safer, event.n_worse) == (None, None)
+    assert (event.n_lower, event.n_higher) == (0, 0)
     assert len(event.cells) == 2
     assert event.n_unchanged == len(event.cells)
     assert list(event.cells["events_a"]) == [0, 0]
@@ -754,7 +774,10 @@ def test_h9_multi_diff_stays_permissive_when_every_requested_event_is_absent() -
     assert result.events == (ABSENT, "alsonotthere")
     for name in result.events:
         event = result.by_event[name]
-        assert (event.n_safer, event.n_worse) == (0, 0)
+        # PF4 re-freeze (PF4.20, the library follows the screen): no kind, so the zero counts are
+        # n_lower and n_higher, and n_safer and n_worse are null.
+        assert (event.n_safer, event.n_worse) == (None, None)
+        assert (event.n_lower, event.n_higher) == (0, 0)
         assert len(event.cells) == 2
         assert list(event.cells["events_a"]) == [0, 0]
 
@@ -938,16 +961,24 @@ def test_h12_go1_single_event_diff_still_reproduces_the_frozen_cells(go1_store: 
     assert len(result.cells) == frozen["n_cells"] == GO1_CELLS
     by_hash = {c["config_hash"]: c for c in frozen["cells"]}
     assert set(result.cells["config_hash"]) == set(by_hash)
+    at_ceiling = 0
     for row in result.cells.itertuples(index=False):
         reference = by_hash[row.config_hash]
         for key in GO1_CELL_KEYS:
             ours = getattr(row, key)
-            if key in GO1_INT_KEYS:
+            if key == "mde" and reference["events_a"] == reference["n_a"]:
+                # PF4 (PF4.12, PF4.15): a cell whose baseline had the event in every run has no
+                # detection limit, so its mde is NaN where the frozen fixture holds a number.
+                assert math.isnan(float(ours)), (row.config_hash, key)
+                at_ceiling += 1
+            elif key in GO1_INT_KEYS:
                 assert int(ours) == reference[key], (row.config_hash, key)
             elif key in GO1_STR_KEYS:
                 assert str(ours) == reference[key], (row.config_hash, key)
             else:
                 assert float(ours) == reference[key], (row.config_hash, key)
+    # PF4 (PF4.15): every frozen cell at a 100% baseline was checked above, and Go1 has such cells.
+    assert at_ceiling == sum(c["events_a"] == c["n_a"] for c in frozen["cells"]) > 0
 
 
 # ---------- H13: ADR-021 is enforced in src/, not documented ----------

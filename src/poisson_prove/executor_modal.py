@@ -45,12 +45,12 @@ from poisson_prove.executor import (
     _chaos_record,
     _ChaosCall,
     _declared_limit,
+    _design_record,
     _environment,
     _episode_id,
     _mp_context,
     _spec_declared,
     _with_capture_envelope,
-    preflight_mde,
 )
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, StoreError
 
@@ -479,6 +479,7 @@ _SHARED_FIELDS = (
     "infra_retries",
     "import_path",
     "max_mde_accepted",
+    "design_mde",
     "capture",
     "chaos",
 )
@@ -528,12 +529,14 @@ def _open_run(
             secrets=list(options.secrets),
             max_mde_accepted=_accepted_mde(p),
         )
+        environment["design_mde"] = _design_record(p)
     else:
         environment.update(
             infra_retries=options.infra_retries,
             import_path=import_path,
             max_mde_accepted=_accepted_mde(p),
         )
+        environment["design_mde"] = _design_record(p)
         environment.update(placement)
     if p.spec.capture is not None:
         reason = (
@@ -879,7 +882,6 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
     spec = p.spec
     image = target.image
     total = spec.total_rollouts()
-    mde = preflight_mde(spec)
     estimate = estimate_cost(p, options, image)
     gpu = "none" if image.gpu is None else image.gpu
     timeout = "none" if options.episode_timeout is None else f"{options.episode_timeout:g}s"
@@ -907,7 +909,6 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
         f"episode timeout: {timeout}",
         mounts,
         cost,
-        f"MDE at N={spec.replicates} (base rate 0.5): {mde:.4f}",
     ]
     capture_line = _capture_line(spec.capture)
     if capture_line is not None:

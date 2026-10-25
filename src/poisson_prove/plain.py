@@ -16,6 +16,7 @@ qualifies the absence of a finding, never a finding.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -50,19 +51,27 @@ def _confidence(q: float) -> str | None:
 
 
 def _counts(panel: Mapping[str, Any], q: str) -> str:
+    """The event's counts: worse and safer when its kind is known, else what rose and what fell
+    (PF4.20); the rest were not flagged."""
+    if panel.get("kind") is None:
+        return (
+            f"{panel['event']}: rose in {panel['n_higher']} of {panel['n_present']} conditions, "
+            f"fell in {panel['n_lower']}, and {panel['n_unchanged']} were not flagged "
+            f"at q = {q}."
+        )
     return (
         f"{panel['event']}: {panel['n_worse']} of {panel['n_present']} conditions got worse, "
-        f"{panel['n_safer']} got safer, and {panel['n_unchanged']} show no significant change "
+        f"{panel['n_safer']} got safer, and {panel['n_unchanged']} were not flagged "
         f"at q = {q}."
     )
 
 
-def _row(event: str, cell: Mapping[str, Any]) -> dict[str, Any]:
+def _row(event: str, cell: Mapping[str, Any], way: str) -> dict[str, Any]:
     text = cell["text"]
     label = _confidence(cell["q"])
     head = (
         f"{cell['coords']}: {event} was {text['rate_a']}% of trials and is now {text['rate_b']}%, "
-        f"a rise of {text['delta']} percentage points. How sure: "
+        f"a {way} of {text['delta']} percentage points. How sure: "
     )
     if label is None:
         line = f"{head}no label (q = {text['q']}; the labels start at {_LABELS_START})."
@@ -81,20 +90,40 @@ def _row(event: str, cell: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _worse(panel: Mapping[str, Any], top_n: int) -> list[dict[str, Any]]:
+    """The conditions that changed for the worse: a rise of a failure, a fall of a success, and a
+    rise when the event's kind is not known (PF4.20)."""
+    word = "higher" if panel.get("kind") is None else "worse"
+    way = "fall" if panel.get("kind") == "success" else "rise"
     cells = sorted(
-        (c for c in panel["cells"] if c["verdict"] == "worse"),
-        key=lambda c: (-c["delta"], c["q"], c["mde"], c["config_hash"]),
+        (c for c in panel["cells"] if c["verdict"] == word),
+        key=lambda c: (
+            -c["delta"], c["q"], math.inf if c["mde"] is None else c["mde"], c["config_hash"]
+        ),
     )
-    return [_row(str(panel["event"]), c) for c in cells[:top_n]]
+    return [_row(str(panel["event"]), c, way) for c in cells[:top_n]]
 
 
-def _limit(panel: Mapping[str, Any]) -> dict[str, Any]:
+def _limit(panel: Mapping[str, Any], not_compared: int) -> dict[str, Any]:
+    """The detection limit the event's conditions that did not move rest on. A condition with no
+    limit counts above every threshold (PF4.29) and is named with its reason; with no unchanged
+    condition the line counts what was compared and what was not (PF4.17)."""
     block = panel["mde_unchanged"]
+    threshold = panel.get("threshold", TOO_SMALL_TO_TELL)
     if block["value"] is None:
-        return {"label": None, "mde": None, "where": None, "line": _NO_LIMIT}
+        if block["where"] is not None:
+            cell = next(c for c in panel["cells"] if c["coords"] == block["where"])
+            line = (
+                "The least sensitive condition among those this run did not call a change "
+                f"({cell['coords']}, n = {cell['n_a']}/{cell['n_b']}) has no limit: "
+                f"{cell['mde_note']}."
+            )
+            return {"label": _TOO_SMALL_LABEL, "mde": None, "where": cell["coords"], "line": line}
+        tail = f"; {not_compared} were not compared." if not_compared else "."
+        line = f"All {panel['n_present']} compared conditions moved significantly{tail}"
+        return {"label": None, "mde": None, "where": None, "line": line}
     cell = next(c for c in panel["cells"] if c["coords"] == block["where"])
     where, n_a, n_b, mde = block["where"], cell["n_a"], cell["n_b"], block["text"]
-    if block["value"] >= TOO_SMALL_TO_TELL:
+    if block["value"] > threshold:
         label: str | None = _TOO_SMALL_LABEL
         line = (
             f"Too small to tell: the least sensitive condition among those this run did not call "
@@ -169,7 +198,7 @@ def build_summary(
                 "event": str(panel["event"]),
                 "line": _counts(panel, q),
                 "worse": _worse(panel, top_n),
-                "limit": _limit(panel),
+                "limit": _limit(panel, int(diff.get("n_not_comparable", 0))),
             }
             for panel in panels
         ],

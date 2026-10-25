@@ -134,6 +134,7 @@ The bound's assumption (spec section 0.3): a property of the source, not of any 
 from __future__ import annotations
 
 import ast
+import functools
 import dataclasses
 import hashlib
 import importlib
@@ -189,6 +190,11 @@ EXPECTED_WHOLE_GRID = "grid"
 EXPECTED_WHOLE_GRID_KEY = "whole_grid"
 EXPECTED_WHOLE_GRID_LABEL = "all"
 Q = 0.05
+#: PF4 re-freeze (PF4.45): a group's limit is its cells' own unconditional limit, so the default no
+#: longer admits Go1's ``mu``, the gate fixture's ``grp`` or the multi-event pair's ``task``; the
+#: fixtures that test those levels accept this value, which admits every group whose limit is below
+#: it (the range check refuses 1).
+ADMITTING_MAX_GROUP_MDE = 0.99
 #: L8: the bound is recomputed from the constants and compared to this.
 BOUND_TOLERANCE = 1e-15
 #: L9: the constant and the three numbers it produces at q 0.05, forbidden as literals.
@@ -277,14 +283,14 @@ F28_OMNIBUS_SHA256 = "bb70ad821a933319c9200dee4310ebc117648208675ec6f2556e4386c3
 # PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
-MULTI_JSON_SHA256 = {
-    "fisher_bh": "c284e029ea858e3f50a9ee6ca3b55a1abc61a1b08a1fe213e393939c6e0872b8",
-    "mcnemar_bh": "a2ff3e20c8dfd4b8bc5cd0841df723646b28ef991e8b06b29e5e934f6987b9e8",
-    "logrank_bh": "45a95393006e732b58b40c0b07df2ae87a380ece95fe47f4165bdfe776cf8c02",
-}
+# PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): MULTI_JSON_SHA256 is no longer asserted. PF4 adds
+# columns to every cell and changes its limits and words, so the multi_diff test checks the facts
+# the digest guarded instead (GO1_DIRECTION_COUNTS and the frozen per-cell record below).
 # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
 # test; check's gate here is the flat family's unpaired test, named.
-CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh")
+# PF4 (PF4.20): Go1's fell has no kind, so the default --fail-on worse is refused; --fail-on
+# higher is the same gate on it (fail when the rate rose).
+CHECK_ARGV = ("check", GO1_A, GO1_B, "--event", "fell", "--method", "fisher_bh", "--fail-on", "higher")
 # CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
 # checks the facts the digest guarded instead (front-door spec section 14).
 CHECK_EXIT = 0
@@ -294,12 +300,13 @@ SERVE_ARGV = ("serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "pus
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the Go1 figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-SERVE_STRUCTURE_SHA256 = "4dc0e70ec6638d9206648e04d0384532d0fdd7d68d101105a92ae1e94ecead44"
+# PF4 (PF4.3, PF4.11, PF4.17, PF4.20): SERVE_STRUCTURE_SHA256 is no longer asserted. PF4 removes
+# pair.store_root, adds the Summary's verdict, the shares and the direction words, so the serve
+# test checks the facts the digest guarded instead.
 #: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
 #: ``schema`` set back to this literal; on the bare tree that projection is the identity.
-TREE_LESS_SCHEMA = "proofload.viewpair/2"
 PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e77719f9"
 PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
 COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee5fa"
@@ -309,11 +316,29 @@ FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d004
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
-E14_SHA256 = {
-    "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
-    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
-}
+# PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests are no longer asserted. PF4 changes all three
+# files (the share table, the limit notes, direction words for an event of unknown kind), so the
+# E14 test checks the facts they guarded instead.
+#: PF4: what the multi, E14 and serve digests above guarded on Go1's ``fell``, as numbers known
+#: outside any build. The direction counts per method are the statistics re-check's
+#: (log/stats-recheck/README.md, section 2 and the Go1 table's "Methods" rows): Fisher 60 lower /
+#: 0 higher and McNemar 55 / 0, as published; log-rank 182 / 14 (published 88 / 0), because a
+#: rejected cell's direction now comes from the log-rank statistic (PF4.13). The interval level
+#: 99.25% and alpha* 0.0075 are the published report's, unchanged in the re-check (the worst-powered
+#: unchanged condition's limit moved at the statistics re-freeze; see below).
+GO1_DIRECTION_COUNTS = {"fisher_bh": (60, 0), "mcnemar_bh": (55, 0), "logrank_bh": (182, 14)}
+# PF4 re-freeze (PF4.22, PF4.23): GO1_WORST_UNCHANGED (mu=0.95, push_pct_bw=100 at 34pp) is no longer a
+# literal: the limits are the exact test's at q / M, so the worst-powered unchanged condition and its
+# limit are recomputed from the stats file's Fisher reference (go1_worst_unchanged below).
+GO1_INTERVAL_LEVEL_TEXT, GO1_ALPHA_STAR_TEXT = "99.25", "0.0075"
+#: The frozen per-cell Fisher record of Go1's ``fell`` (``tests/fixtures/go1/diff_regression.json``,
+#: frozen before any amendment): every cell's counts, rates, delta, p, q and detection limit as the
+#: bare tree computed them.
+GO1_REGRESSION_JSON = GO1_ROOT / "diff_regression.json"
+GO1_ARM_KEYS = ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta")
+#: Keys that belong to the layered report's tree; none may appear outside ``tree`` on the page.
+#: (``bound`` is not among them: the page's ``view`` carries its own forest ``bound`` setting.)
+TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 #: The two frozen oracles' bytes: L20's "untouched", in a form a scratch copy can check. Minted at
 #: ``6fd3b9c``; re-minted by S28's retrofit commit, which narrowed both files' E14 clause, and again
 #: by S29's, which narrowed both files' ``serve --json`` digest to the tree-less projection (draft ADR-074);
@@ -345,9 +370,14 @@ E14_SHA256 = {
 # Re-minted again for the paired default (front-door spec sections 4.4 and 14, Q17): both files name
 # --method fisher_bh on their Go1 commands and drop method and method_chosen from serve --json.
 # Read off the two files after every other move, not predicted.
+# PF4: re-minted after PF4's moves of both files (their Go1 multi, E14, check and serve tests, O9's
+# omnibus under PF4.18, and in test_s26_fault_lines.py the trace groupings, the fault-line golden,
+# --methods all --json and the no-comparable-cell refusal), and again at PF4's statistics re-freeze.
+# Read off the two files as they stand after every other move, not predicted; these are test files,
+# not output PF4 changes.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "e06498c29f1a5bcc7bd78e7e71aea85f8734ae6ff6d6ceeb2fa3652a04e5a76b",
-    "tests/test_s26_fault_lines.py": "941d07d2f5d55c3257093c32a8b0762511eaa1bcb7de18d30c15da71ebbec1e0",
+    "tests/test_s25_root.py": "6c042ad8d2e7894f9ad5bf6483747ff8cdff434ebc7d8824239f030157f4c928",
+    "tests/test_s26_fault_lines.py": "88cbfc14ca6e249db98d06b1a99d68070b8e59062f670b2e69e48399208d394d",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -806,13 +836,21 @@ def assert_family_recomputed(name: str, multi: Any, result: Any, family: Any) ->
         assert leaf.config_hash in result.grouping.groups[family.label] and leaf.event in result.root.events, (name, leaf)
         assert dict(leaf.config) == dict(row["config"]), (name, leaf.config_hash)
         assert (leaf.n_a, leaf.n_b, leaf.events_a, leaf.events_b) == (row["n_a"], row["n_b"], row["events_a"], row["events_b"]), (name, leaf.config_hash)
-        assert leaf.p == row["p"] and leaf.delta == row["delta"] and leaf.mde == row["mde"], (name, leaf.config_hash, leaf.event)
+        # PF4 (PF4.15): a leaf whose baseline had the event in every run has no limit (NaN), equal to
+        # its row's NaN; every other limit is the row's, bit for bit.
+        same_mde = leaf.mde == row["mde"] or (math.isnan(leaf.mde) and math.isnan(row["mde"]))
+        assert leaf.p == row["p"] and leaf.delta == row["delta"] and same_mde, (name, leaf.config_hash, leaf.event)
         assert leaf.q_within == row["q_within"], (name, leaf.config_hash, leaf.event, leaf.q_within, row["q_within"])
         assert type(leaf.rejects) is bool and leaf.rejects == (leaf.q_within < q) == bool(row["rejects"]), (name, leaf.config_hash, leaf.event)
     rejected = tuple((leaf.config_hash, leaf.event) for leaf in family.cells if leaf.rejects)
     assert family.rejected == rejected and family.n_rejected == len(rejected), (name, family.label)
-    mdes = [leaf.mde for leaf in family.cells]
-    assert family.mde_max == max(mdes) and abs(family.mde_median - float(np.median(mdes))) <= 1e-12, (name, family.label)
+    # PF4 (PF4.15): a condition with no limit is left out of every maximum over conditions, so the
+    # family's maximum and median are over the leaves that have one; with none, both are NaN.
+    mdes = [leaf.mde for leaf in family.cells if not math.isnan(leaf.mde)]
+    if mdes:
+        assert family.mde_max == max(mdes) and abs(family.mde_median - float(np.median(mdes))) <= 1e-12, (name, family.label, family.mde_max, family.mde_median)
+    else:
+        assert math.isnan(family.mde_max) and math.isnan(family.mde_median), (name, family.label)
 
 
 def assert_leaves_consistent(name: str, multi: Any, result: Any, depth_configured: int) -> None:
@@ -876,14 +914,16 @@ def go1() -> tuple[pd.DataFrame, pd.DataFrame, RunManifest, RunManifest]:
 @pytest.fixture(scope="module")
 def go1_trees(go1: Any) -> dict[str, tuple[Any, Any]]:
     """``(multi, tree)`` per method on Go1 at ``events=("fell",)``, the golden knobs, the default
-    depth, no ``by``: the default resolution, ``mu``. Go1 has one event and cannot show ``K >
+    depth, no ``by``: the axis rung's resolution, ``mu``. Go1 has one event and cannot show ``K >
     1``; every non-rejecting group would reject zero leaves, so it catches the gate mutant by
     structure only; both axes pass the resolver, so it cannot show a refusal."""
     a, b, ma, mb = go1
     out = {}
     for method in METHODS:
         multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method=method)
-        out[method] = (multi, grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED))
+        # PF4 re-freeze (PF4.45): at the default mu is refused as underpowered now, so the golden
+        # mu tree is grown at ADMITTING_MAX_GROUP_MDE, where mu resolves as it did.
+        out[method] = (multi, grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED, max_group_mde=ADMITTING_MAX_GROUP_MDE))
     return out
 
 
@@ -972,7 +1012,9 @@ def gate_trees() -> dict[str, tuple[Any, Any]]:
     a, b = raw_frame("gate-a", cells_a), raw_frame("gate-b", cells_b)
     ma, mb = manifest("gate-a", SALT, GATE_TYPES), manifest("gate-b", SALT, GATE_TYPES)
     multi = quiet_multi_diff(a, b, ma, mb, events=("fail",), method="mcnemar_bh")
-    return {"mcnemar_bh": (multi, grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED))}
+    # PF4 re-freeze (PF4.45): at the default grp is refused as underpowered now, so the gate tree
+    # is grown at ADMITTING_MAX_GROUP_MDE, where grp resolves as it did.
+    return {"mcnemar_bh": (multi, grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED, max_group_mde=ADMITTING_MAX_GROUP_MDE))}
 
 
 @pytest.fixture(scope="module")
@@ -986,7 +1028,9 @@ def multi_event() -> dict[str, Any]:
     trees = {}
     for method in TWO_SCHEMES:
         multi = quiet_multi_diff(a, b, ma, mb, events=ME_EVENTS, method=method)
-        trees[method] = (multi, grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED))
+        # PF4 re-freeze (PF4.45): at the default task is refused as underpowered now and temp
+        # resolves, so the tree is grown at ADMITTING_MAX_GROUP_MDE, where task resolves as it did.
+        trees[method] = (multi, grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED, max_group_mde=ADMITTING_MAX_GROUP_MDE))
     return {"a": a, "b": b, "ma": ma, "mb": mb, "trees": trees}
 
 
@@ -1214,7 +1258,9 @@ def test_l4_the_gate_fixture_holds_a_leaf_that_would_reject_and_prints_none(gate
     right reason, and no family, no ``CellResult`` and no ``q_within`` exists. McNemar only."""
     multi, result = gate_trees["mcnemar_bh"]
     grouping, fault_lines, leaves = result.grouping, result.fault_lines, result.leaves
-    assert (grouping.key, grouping.n_groups) == ("grp", GATE_GROUPS) and grouping.group_mde[0] <= 0.20, grouping
+    # PF4 re-freeze (PF4.45): g00's limit is its cells' own and is admitted at the value the fixture
+    # accepts, where it was at most the default 0.20.
+    assert (grouping.key, grouping.n_groups) == ("grp", GATE_GROUPS) and grouping.group_mde[0] <= grouping.max_group_mde, grouping
     assert result.root.rejects is True and result.root.p_omnibus < Q, result.root.p_omnibus
     g00 = fault_lines.groups[0]
     assert fault_lines.tested is True and g00.label == "g00" and g00.q_group >= GATE_MIN_Q_GROUP and g00.rejects is False, (g00.p_group, g00.q_group)
@@ -1362,7 +1408,8 @@ def test_l8_bound_and_depth_are_byte_identical_across_seed_twin_and_verdict(go1:
     and fails here alone."""
     a, b, ma, mb = go1
     multi, seed_zero = go1_trees["fisher_bh"]
-    seed_one = grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED + 1)
+    # PF4 re-freeze (PF4.45): grown at the value go1_trees grows at, where mu resolves.
+    seed_one = grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED + 1, max_group_mde=ADMITTING_MAX_GROUP_MDE)
     twin = raw_frame("axes-b", axes_cells(False))
     multi_twin = quiet_multi_diff(axes["a"], twin, axes["ma"], axes["mb"], events=("fail",), method="mcnemar_bh")
     unmoved = grown(axes["a"], twin, multi_twin, axes["ma"], axes["mb"], n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
@@ -1553,10 +1600,14 @@ def test_l12_refusal_fields_on_the_reasons_that_are_not_underpowered_as_built(go
     go1_multi, _ = go1_trees["mcnemar_bh"]
     push_first = reordered(gma, {"push_pct_bw": "continuous", "mu": "continuous"})
     b_only_mu = reordered(gmb, {"mu": "continuous"})
-    not_shared = grown(ga, gb, go1_multi, push_first, b_only_mu, n_permutations=50, seed=GOLDEN_SEED).grouping.refused
+    # PF4 re-freeze (PF4.45): at the default mu would be refused too; at a value that admits it the
+    # not_shared row is the only one, as before.
+    not_shared = grown(ga, gb, go1_multi, push_first, b_only_mu, n_permutations=50, seed=GOLDEN_SEED, max_group_mde=ADMITTING_MAX_GROUP_MDE).grouping.refused
     assert [(r.key, r.rung, r.reason, r.n_groups, r.n_resolvable_groups, r.offered_max_group_mde) for r in not_shared] == [("push_pct_bw", "axis", "not_shared", None, None, None)]
-    unsupported = grown(ga, gb, go1_multi, gma, gmb, by="kind", n_permutations=50, seed=GOLDEN_SEED).grouping.refused
-    assert [(r.key, r.rung, r.reason, r.n_groups, r.n_resolvable_groups, r.offered_max_group_mde) for r in unsupported] == [("kind", "trace", "unsupported", None, None, None)]
+    # PF4 (PF4.6): "kind" is no longer a trace grouping refused as unsupported; it is an unknown
+    # grouping, raised before any partition or permutation, so it leaves no refusal row at all.
+    with pytest.raises(tree().UnknownGrouping):
+        grown(ga, gb, go1_multi, gma, gmb, by="kind", n_permutations=50, seed=GOLDEN_SEED)
 
 
 def test_l13_a_requested_axis_declared_in_one_manifest_only_is_not_shared_and_resolution_continues(go1: Any, go1_trees: Any, synth_root: Path) -> None:
@@ -1568,7 +1619,9 @@ def test_l13_a_requested_axis_declared_in_one_manifest_only_is_not_shared_and_re
     a, b, ma, mb = go1
     multi, _ = go1_trees["fisher_bh"]
     b_only_mu = reordered(mb, {"mu": "continuous"})
-    grouping = grown(a, b, multi, ma, b_only_mu, by="push_pct_bw", n_permutations=50, seed=GOLDEN_SEED).grouping
+    # PF4 re-freeze (PF4.45): the axis rung resolves mu at a value that admits it (the default
+    # refuses it now).
+    grouping = grown(a, b, multi, ma, b_only_mu, by="push_pct_bw", n_permutations=50, seed=GOLDEN_SEED, max_group_mde=ADMITTING_MAX_GROUP_MDE).grouping
     rows = [(r.key, r.rung, r.reason, r.next_rung, r.n_groups, r.n_resolvable_groups, r.offered_max_group_mde) for r in grouping.refused]
     assert rows == [("push_pct_bw", "requested", "not_shared", "trace", None, None, None)], rows
     assert (grouping.resolved_by, grouping.key, grouping.requested) == ("axis", "mu", "push_pct_bw")
@@ -1651,7 +1704,8 @@ def test_l15_depth_changes_nothing_above_level_three(go1: Any, go1_trees: Any) -
     still ``omnibus`` at either depth (F11 restated at ``depth=2``)."""
     a, b, ma, mb = go1
     multi, three = go1_trees["fisher_bh"]
-    two = grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED, depth=2)
+    # PF4 re-freeze (PF4.45): grown at the value go1_trees grows at, where mu resolves.
+    two = grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED, depth=2, max_group_mde=ADMITTING_MAX_GROUP_MDE)
     for key in ("root", "grouping", "fault_lines"):
         assert json_bytes(two.to_json()[key]) == json_bytes(three.to_json()[key]), key
     root = tree().omnibus(a, b, multi, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
@@ -1719,6 +1773,10 @@ def test_l16_one_family_line_per_family_in_order_carrying_the_counts_and_the_mde
             assert family.label in line and "rejected" in line, (a, family.label, line)
             # Counts and MDEs print under rule 10 (spec section 5.4), not ``:g``.
             for field, render in (("n_tests", count), ("n_rejected", count), ("mde_median", fraction), ("mde_max", fraction)):
+                # PF4 re-freeze (PF4.27): a null limit prints no number.
+                if field.startswith("mde") and is_null(getattr(family, field)):
+                    assert "nan" not in tokens, (a, family.label, field, line)
+                    continue
                 assert render(getattr(family, field)) in tokens, (a, family.label, field, line)
 
 
@@ -1813,21 +1871,35 @@ def test_l17_methods_all_json_keeps_exactly_the_three_method_keys_and_carries_no
     # --json adds schema, verdict, sentence, next and any key ending _note around the keys it
     # keeps (spec section 5.6).
     envelope = {"schema", "verdict", "sentence", "next"} | {k for k in payload if k.endswith("_note")}
-    assert set(payload) - envelope == set(METHODS), sorted(payload)
-    assert "tree" not in payload and "leaves" not in walk_keys(payload) and "bound" not in walk_keys(payload)
+    # PF4 (PF4.8, section 8.5): the payload now carries the primary method's omnibus and tree (with
+    # its leaves and bound) beside the three method keys, and section 8.4's threshold and its
+    # source; omnibus and tree are the objects the single-method --json prints for the same knobs.
+    pf4_keys = {"omnibus", "tree", "threshold", "threshold_source"}
+    assert set(payload) - envelope - pf4_keys == set(METHODS), sorted(payload)
+    assert {"omnibus", "tree"} <= set(payload) and {"leaves", "bound"} <= set(payload["tree"]), sorted(payload)
+    code, single_out, err = run_cli(["--store", str(GO1_ROOT), "diff", GO1_A, GO1_B, "--event", "fell", "--json", "--permutations", "200"])
+    assert code == 0 and without_notes(err) == "", (single_out, err)
+    single = json.loads(single_out)
+    assert payload["omnibus"] == single["omnibus"] and payload["tree"] == single["tree"]
+    # The leaves and the bound are the tree's only: no method's object carries them.
+    for method in METHODS:
+        assert "leaves" not in walk_keys(payload[method]) and "bound" not in walk_keys(payload[method]), method
 
 
 def test_l18_no_comparable_cell_prints_neither_block_emits_neither_key_and_the_api_refuses(synth_root: Path) -> None:
     """F23 restated and extended: the bound prints only when the tree ran."""
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail"])
-    assert code == 0 and err == "", (out, err)
-    assert heads(out, "cells:") == 0 and heads(out, "bound:") == 0 and heads(out, "omnibus: ") == 0, out
-    # --json replaces --format json (spec section 5.6).
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail", "--json"])
-    assert code == 0 and err == "", (out, err)
-    payload = json.loads(out)
-    keys = walk_keys(payload)
-    assert payload["n_tests"] == 0 and "tree" not in payload and "leaves" not in keys and "bound" not in keys
+    # PF4 (PF4.7, section 8.5): a pair with no comparable condition is refused, exit 1, with one
+    # error line naming the holes (one condition only in each run here) and a next line; nothing
+    # reaches stdout, so no block is printed and no JSON key is emitted, in text and --json.
+    for extra in ((), ("--json",)):
+        code, out, err = run_cli(["--store", str(synth_root), "diff", "empty-a", "empty-b", "--event", "fail", *extra])
+        assert code == 1 and out == "", (extra, out, err)
+        lines = err.splitlines()
+        errors = [line for line in lines if line.startswith("error: ")]
+        assert len(errors) == 1 and re.search(r"\b1\b", errors[0]), lines
+        assert all(line.startswith(("error: ", "  next:", "note: ")) for line in lines), lines
+        assert any(line.startswith("  next:") for line in lines), lines
+        assert heads(err, "cells:") == 0 and heads(err, "bound:") == 0 and heads(err, "omnibus: ") == 0, err
     store = Store(synth_root)
     a, b = store.read("empty-a", meta=False), store.read("empty-b", meta=False)
     multi = quiet_multi_diff(a, b, store.manifest("empty-a"), store.manifest("empty-b"), events=("fail",), method="fisher_bh")
@@ -1853,7 +1925,8 @@ def test_l19_a_different_seed_leaves_the_bound_and_moves_leaves_only_through_mem
     is byte-identical. A builder who seeds the leaf pass fails alone."""
     a, b, ma, mb = go1
     multi, base = go1_trees["fisher_bh"]
-    other = grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED + 1)
+    # PF4 re-freeze (PF4.45): grown at the value go1_trees grows at, where mu resolves.
+    other = grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED + 1, max_group_mde=ADMITTING_MAX_GROUP_MDE)
     one, two = base.to_json(), other.to_json()
     assert one["root"]["seed"] != two["root"]["seed"]
     assert json_bytes(one["bound"]) == json_bytes(two["bound"])
@@ -1870,11 +1943,272 @@ def test_l19_a_different_seed_leaves_the_bound_and_moves_leaves_only_through_mem
 # ---------- L20: nothing else moves ----------
 
 
+def nested_keys(payload: Any) -> set[str]:
+    """Every mapping key at any depth of a JSON payload."""
+    if isinstance(payload, Mapping):
+        return set(payload) | {k for v in payload.values() for k in nested_keys(v)}
+    if isinstance(payload, list):
+        return {k for v in payload for k in nested_keys(v)}
+    return set()
+
+
+def direction_word(n_lower: int, n_higher: int) -> str:
+    """PF4.20's comparison word for an event of unknown kind when something moved."""
+    return "mixed" if n_lower and n_higher else ("higher" if n_higher else "lower")
+
+
+def mcnemar_reference(a: pd.DataFrame, b: pd.DataFrame, event: str) -> dict[str, float]:
+    """PF4 (PF4.14): each cell's exact McNemar p from its matched pairs, by statsmodels' documented
+    ``mcnemar(table, exact=True)`` with ``table = [[n11, n10], [n01, n00]]`` (rows: arm A with and
+    without the event; columns: arm B); a cell with no discordant pair has p 1."""
+    from statsmodels.stats.contingency_tables import mcnemar
+
+    keys = ["config_hash", "replicate_index"]
+    pairs = a[[*keys, "outcome"]].merge(b[[*keys, "outcome"]], on=keys, suffixes=("_a", "_b"))
+    out: dict[str, float] = {}
+    for cell_hash, group in pairs.groupby("config_hash"):
+        ea = (group["outcome_a"] == event).to_numpy()
+        eb = (group["outcome_b"] == event).to_numpy()
+        table = [[int((ea & eb).sum()), int((ea & ~eb).sum())], [int((~ea & eb).sum()), int((~ea & ~eb).sum())]]
+        discordant = table[0][1] + table[1][0]
+        out[str(cell_hash)] = 1.0 if discordant == 0 else float(mcnemar(table, exact=True).pvalue)
+    return out
+
+
+#: PF4 re-freeze (PF4.22, PF4.48): limits are multiples of this grid step.
+LIMIT_GRID_STEP = 1e-4
+
+
+def is_null(value: Any) -> bool:
+    """A null limit as JSON (None) or as the frame (NaN) carries it."""
+    return value is None or (isinstance(value, float) and math.isnan(value))
+
+
+@functools.cache
+def reference_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> tuple[float | None, float | None]:
+    """PF4 re-freeze (PF4.23): the stats file's independent Fisher enumeration, rise then fall.
+    Imported here, not at module level, so this file still collects where the stats file cannot."""
+    from test_pf4_stats import _ref_fisher_limits
+
+    return _ref_fisher_limits(events_a, n_a, n_b, level)
+
+
+def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | None:
+    """Section 8.10's ``mde`` rule over the reference's two limits: the larger of two numbers, the
+    number beside a direction with no room, and null otherwise."""
+    rise, fall = reference_fisher_limits(events_a, n_a, n_b, level)
+    if rise is not None and fall is not None:
+        return max(rise, fall)
+    if rise is not None and events_a == 0:
+        return rise
+    if fall is not None and events_a == n_a:
+        return fall
+    return None
+
+
+def assert_the_limits_follow_the_rule(cell: Mapping[str, Any], row: Mapping[str, Any], level: float, method: str) -> None:
+    """PF4 re-freeze (PF4.22, PF4.23, PF4.27, section 8.10, Q54): the JSON carries the frame's limits;
+    a baseline with the event in every run has no rise (``no room``) and its fall is computed; ``mde``
+    follows section 8.10's rule, with a note when it is null, and a number is a positive grid value;
+    under Fisher both limits are the stats file's reference at the lone-change level ``q / M``."""
+    what = (method, cell["config_hash"])
+    for key in ("mde", "mde_rise", "mde_fall"):
+        assert is_null(cell[key]) == is_null(row[key]), (what, key)
+        assert is_null(cell[key]) or cell[key] == row[key], (what, key)
+    rise, fall = cell["mde_rise"], cell["mde_fall"]
+    if cell["events_a"] == cell["n_a"]:
+        assert is_null(rise) and cell["mde_rise_note"] == "no room", what
+    if not is_null(rise) and not is_null(fall):
+        want = max(rise, fall)
+    elif not is_null(rise) and cell["mde_fall_note"] == "no room":
+        want = rise
+    elif not is_null(fall) and cell["mde_rise_note"] == "no room":
+        want = fall
+    else:
+        want = None
+    if want is None:
+        assert is_null(cell["mde"]) and cell["mde_note"], (what, cell["mde"], cell["mde_note"])
+    else:
+        assert cell["mde"] == want and cell["mde"] >= LIMIT_GRID_STEP - 1e-12, (what, cell["mde"], want)
+    if method == "fisher_bh":
+        assert abs(cell["mde_level"] - level) <= 1e-15, what
+        for got, ref in zip((rise, fall), reference_fisher_limits(cell["events_a"], cell["n_a"], cell["n_b"], level), strict=True):
+            assert (ref is None and is_null(got)) or (ref is not None and not is_null(got) and abs(got - ref) <= LIMIT_GRID_STEP + 1e-12), (what, got, ref)
+
+
+def go1_worst_unchanged(multi: Any) -> tuple[set[str], int]:
+    """PF4 re-freeze (PF4.22, PF4.23): Go1's worst-powered unchanged condition under Fisher, from the
+    stats file's reference: every unchanged condition whose recomputed ``mde`` is the largest (they
+    tie), written as the report writes a condition, and that limit in whole points."""
+    level = multi.q / multi.n_tests
+    limits = {}
+    for row in multi.by_event["fell"].cells.to_dict(orient="records"):
+        if row["direction"] != "unchanged":
+            continue
+        value = reference_mde(int(row["events_a"]), int(row["n_a"]), int(row["n_b"]), level)
+        if value is not None:
+            limits[f"mu={row['config']['mu']:g}, push_pct_bw={row['config']['push_pct_bw']:g}"] = value
+    worst = max(limits.values())
+    return {where for where, value in limits.items() if abs(value - worst) <= LIMIT_GRID_STEP + 1e-12}, round(100 * worst)
+
+
+def assert_go1_multi_json_carries_the_facts(multi: Any, method: str, a: pd.DataFrame, b: pd.DataFrame) -> None:
+    """PF4: the facts the ``to_json()`` digest guarded, with no digest over bytes PF4 changes.
+
+    Every cell's counts, rates and delta equal the frame's and the frozen Fisher record's; p and q
+    equal the frame's, and are the frozen record's under Fisher, the exact McNemar p and its BH q
+    under McNemar, and S24's frozen q column under log-rank. A condition whose baseline had the
+    event in every run has no rise and its fall computed, and every limit follows section 8.10's
+    rule at ``q / M``, Fisher's recomputed from the stats file's reference (PF4.22, PF4.27). Each
+    cell's JSON verdict is its direction (fell has no kind, PF4.20); a cell moves exactly when it is
+    rejected, in the direction of its delta except under log-rank (PF4.13); and the counts are the
+    re-check's (``GO1_DIRECTION_COUNTS``)."""
+    from statsmodels.stats.multitest import multipletests
+
+    payload = json.loads(json.dumps(multi.to_json(), sort_keys=True))
+    assert (payload["method"], payload["n_tests"], payload["events"]) == (method, 400, ["fell"]), method
+    event = payload["by_event"]["fell"]
+    n_lower, n_higher = GO1_DIRECTION_COUNTS[method]
+    assert (event["kind"], event["n_safer"], event["n_worse"]) == (None, None, None), method
+    assert (event["n_lower"], event["n_higher"], event["n_unchanged"]) == (n_lower, n_higher, 400 - n_lower - n_higher), method
+    frozen = {c["config_hash"]: c for c in json.loads(GO1_REGRESSION_JSON.read_text(encoding="utf-8"))["cells"]}
+    rows = multi.by_event["fell"].cells.to_dict(orient="records")
+    assert [c["config_hash"] for c in event["cells"]] == [r["config_hash"] for r in rows], method
+    assert set(frozen) == {r["config_hash"] for r in rows}, method
+    reference_p = mcnemar_reference(a, b, "fell") if method == "mcnemar_bh" else {}
+    for cell, row in zip(event["cells"], rows, strict=True):
+        ref = frozen[cell["config_hash"]]
+        for key in GO1_ARM_KEYS:
+            assert cell[key] == row[key] == ref[key], (method, cell["config_hash"], key)
+        assert (cell["p"], cell["q"]) == (row["p"], row["q"]), (method, cell["config_hash"])
+        if method == "fisher_bh":
+            assert (cell["p"], cell["q"]) == (ref["p"], ref["q"]), cell["config_hash"]
+        if method == "mcnemar_bh":
+            assert abs(cell["p"] - reference_p[cell["config_hash"]]) <= 1e-12, (cell["config_hash"], cell["p"])
+            assert cell["pairs"] == ref["n_a"] == ref["n_b"], cell["config_hash"]
+        # PF4 re-freeze (PF4.22, PF4.23, PF4.27): the frozen record's limits were the normal
+        # approximation at q; each limit is now the exact test's at q / M both ways, a 100% baseline
+        # has its fall computed, and Fisher's are recomputed from the stats file's reference.
+        assert_the_limits_follow_the_rule(cell, row, multi.q / multi.n_tests, method)
+        rejected = cell["q"] < multi.q
+        assert cell["verdict"] == cell["direction"] == row["direction"], (method, cell["config_hash"])
+        assert (cell["direction"] != "unchanged") == rejected, (method, cell["config_hash"])
+        if rejected and method != "logrank_bh":
+            assert cell["direction"] == ("higher" if cell["delta"] > 0 else "lower"), (method, cell["config_hash"])
+    directions = [c["direction"] for c in event["cells"]]
+    assert (directions.count("lower"), directions.count("higher")) == (n_lower, n_higher), method
+    if method == "mcnemar_bh":
+        bh = multipletests([reference_p[r["config_hash"]] for r in rows], method="fdr_bh")[1]
+        assert max(abs(r["q"] - float(x)) for r, x in zip(rows, bh, strict=True)) <= 1e-12
+    if method == "logrank_bh":
+        assert sha256_of_column(multi, "q") == FELL_LOGRANK_QCOLUMN_SHA256
+
+
+def assert_e14_builder_carries_the_result(multi: Any, report: Any, receipt: Any) -> None:
+    """PF4: the facts the E14 digests guarded in the tree-less builder's report.md, receipt and
+    heatmap: each file's one version entry; the headline counts in direction words (fell has no
+    kind, PF4.20) at the re-check's 60 lower / 0 higher; the worst-powered unchanged condition and
+    its limit, recomputed; the interval level and alpha*; no layered block (the root reaches no other
+    verb); and every row of the cell table is a cell of the diff with its counts, rates, p, q and
+    direction."""
+    md, html, svg = report.to_markdown(), receipt.to_html(), report.to_svg()
+    as_0_0_1_wrote_it(md)
+    as_0_0_1_wrote_it(html)
+    fell = multi.by_event["fell"]
+    cells = fell.cells
+    n_lower, n_higher = GO1_DIRECTION_COUNTS["fisher_bh"]
+    assert (fell.n_lower, fell.n_higher) == (n_lower, n_higher)
+    headline = f"fell: {n_lower} lower, {n_higher} higher"
+    md_lines = md.splitlines()
+    assert headline in md_lines and f"## {headline}" in md_lines, md_lines[:12]
+    assert f"<h2>{headline}</h2>" in html
+    assert f">{headline}</text>" in svg
+    # PF4 re-freeze (PF4.22, PF4.23): the worst-powered unchanged condition and its limit are
+    # recomputed from the stats file's reference (they tie, so the line names one of them).
+    wheres, points = go1_worst_unchanged(multi)
+    assert round(100 * fell.max_mde_unchanged) == points
+    for name, text in (("report.md", md), ("receipt.html", html), ("heatmap.svg", svg)):
+        honesty = [line for line in text.splitlines() if "Worst-powered unchanged cell" in line]
+        assert honesty and any(f"({where}," in honesty[0] for where in wheres) and f"{points}pp" in honesty[0], (name, honesty)
+        assert "safer" not in text and "worse" not in text, name
+    # PF4 re-freeze (PF4.42): the verdict's section adds its own "intervals: " line, the interval on
+    # the change at the same level; the line that names alpha* is the one this pinned.
+    (intervals,) = [line for line in md_lines if line.startswith("intervals: ") and "alpha*" in line]
+    assert GO1_INTERVAL_LEVEL_TEXT in intervals and GO1_ALPHA_STAR_TEXT in intervals, intervals
+    (on_change,) = [line for line in md_lines if line.startswith("intervals: ") and "alpha*" not in line]
+    assert f"{GO1_INTERVAL_LEVEL_TEXT}%" in on_change and "miettinen-nurminen" in on_change.lower().replace("–", "-"), on_change
+    for name, text in (("report.md", md), ("receipt.html", html)):
+        assert "omnibus" not in text.lower() and "fault lines" not in text.lower(), name
+    first = next(i for i, line in enumerate(md_lines) if line.startswith("| mu |"))
+    table = []
+    for line in md_lines[first:]:
+        if not line.startswith("|"):
+            break
+        table.append([c.strip() for c in line.strip("|").split("|")])
+    header, rows = table[0], [row for row in table[2:]]
+    assert header[:9] == ["mu", "push_pct_bw", "n (a/b)", "rate_a (pp)", "rate_b (pp)", "delta (pp)", "p", "q", "verdict"], header
+    assert rows
+    records = cells.to_dict(orient="records")
+    for values in rows:
+        row = dict(zip(header, values, strict=True))
+        (cell,) = [c for c in records if c["config"] == {"mu": float(row["mu"]), "push_pct_bw": float(row["push_pct_bw"])}]
+        assert row["n (a/b)"] == f"{cell['n_a']}/{cell['n_b']}", row
+        for column, key in (("rate_a (pp)", "rate_a"), ("rate_b (pp)", "rate_b"), ("delta (pp)", "delta")):
+            assert abs(float(row[column]) - 100 * cell[key]) <= 0.05 + 1e-9, (row, column)
+        for column in ("p", "q"):
+            decimals = len(row[column].partition(".")[2])
+            assert abs(float(row[column]) - cell[column]) <= 0.5 * 10.0**-decimals + 1e-12, (row, column)
+        assert row["verdict"] == cell["direction"], row
+
+
+def assert_go1_page_carries_the_diff(structure: Mapping[str, Any], multi: Any, ma: RunManifest, mb: RunManifest, rows: tuple[int, int]) -> None:
+    """PF4: the facts the serve structure digest guarded, on the page minus its tree: both arms
+    from their manifests (no store path, platform or import path, PF4.11); the diff's parameters;
+    one panel whose counts are the re-check's and whose 400 cells carry the diff's numbers with
+    their direction (PF4.20) and limit (PF4.15); the worst-powered unchanged condition; the
+    Summary's comparison word, decided by PF4.20 from those counts; the headline; and no key of the
+    layered tree outside ``tree``."""
+    assert "store_root" not in structure["pair"]
+    for arm, manifest, n_rows in (("a", ma, rows[0]), ("b", mb, rows[1])):
+        side = structure["pair"][arm]
+        assert (side["run_id"], side["target_id"], side["run_salt"], side["t_unit"]) == (
+            manifest.run_id, manifest.target_id, manifest.run_salt, manifest.t_unit,
+        ), arm
+        assert side["axis_types"] == dict(manifest.axis_types) and side["rows_stored"] == n_rows, arm
+        assert not {"platform", "import_path"} & set(side["environment"]), arm
+    diff = structure["diff"]
+    assert (diff["method"], diff["n_tests"], diff["q"], diff["horizon"], diff["events"]) == (multi.method, multi.n_tests, multi.q, multi.horizon, ["fell"])
+    (panel,) = structure["panels"]
+    n_lower, n_higher = GO1_DIRECTION_COUNTS[multi.method]
+    assert (panel["event"], panel["kind"], panel["n_safer"], panel["n_worse"]) == ("fell", None, None, None)
+    assert (panel["n_lower"], panel["n_higher"], panel["n_unchanged"]) == (n_lower, n_higher, multi.n_tests - n_lower - n_higher)
+    by_hash = {r["config_hash"]: r for r in multi.by_event["fell"].cells.to_dict(orient="records")}
+    assert len(panel["cells"]) == len(by_hash) == multi.n_tests
+    assert {c["config_hash"] for c in panel["cells"]} == set(by_hash)
+    for cell in panel["cells"]:
+        row = by_hash[cell["config_hash"]]
+        for key in ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta", "p", "q"):
+            assert cell[key] == row[key], (cell["config_hash"], key)
+        assert cell["verdict"] == cell["direction"] == row["direction"], cell["config_hash"]
+        # PF4 re-freeze (PF4.27, Q54): a 100% baseline's limit is its fall, and a null limit is
+        # null on the page with its note, as in the diff.
+        assert is_null(cell["mde"]) == is_null(row["mde"]), cell["config_hash"]
+        assert (is_null(row["mde"]) and cell["mde_note"]) or cell["mde"] == row["mde"], cell["config_hash"]
+    # PF4 re-freeze (PF4.22, PF4.23): the worst-powered unchanged condition, recomputed.
+    wheres, points = go1_worst_unchanged(multi)
+    assert panel["mde_unchanged"]["where"] in wheres and round(100 * panel["mde_unchanged"]["value"]) == points
+    assert structure["summary"]["verdict"] == direction_word(n_lower, n_higher)
+    assert structure["headline"] == multi.headline()
+    assert not set(TREE_ONLY_KEYS) & nested_keys({k: v for k, v in structure.items() if k != "tree"})
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_l20_multi_diff_on_go1_is_byte_identical_to_the_bare_tree(go1: Any, method: str) -> None:
     a, b, ma, mb = go1
     multi = quiet_multi_diff(a, b, ma, mb, events=("fell",), method=method)
-    assert sha256_of_text(json.dumps(multi.to_json(), sort_keys=True)) == MULTI_JSON_SHA256[method], method
+    # PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): the digest is replaced by the facts it guarded, each
+    # checked against a value known outside the build (the frozen record, the re-check's counts).
+    assert_go1_multi_json_carries_the_facts(multi, method, a, b)
 
 
 def test_l20_the_s24_column_digests_and_the_coverage_digest_are_unchanged(go1: Any) -> None:
@@ -1915,18 +2249,6 @@ def e14_builder(go1: Any) -> tuple[Any, Any, Any]:
         manifests=(ma, mb),
     )
     return multi, report, receipt
-
-
-def e14_builder_digests(go1: Any) -> dict[str, str]:
-    """The builder's report markdown, receipt and heatmap, digested."""
-    _, report, receipt = e14_builder(go1)
-    return {
-        "report.md": sha256_of_text(as_0_0_1_wrote_it(report.to_markdown())),
-        # The command line's heatmap now formats its text under rule 10 (spec section 5.4); the
-        # builder's heatmap is unchanged, so the digest moves to it.
-        "heatmap.svg": sha256_of_text(report.to_svg()),
-        "receipt.html": sha256_of_text(as_0_0_1_wrote_it(receipt.to_html())),
-    }
 
 
 def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
@@ -1982,11 +2304,11 @@ def test_l20_the_go1_report_still_reproduces_the_three_digests_s21_minted(go1: A
     out = tmp_path / "report"
     code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
-    for name, digest in e14_builder_digests(go1).items():
-        assert digest == E14_SHA256[name], name
+    # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded.
+    multi, report, receipt = e14_builder(go1)
+    assert_e14_builder_carries_the_result(multi, report, receipt)
     # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
     # checked by its facts rather than a new digest.
-    multi, report, _ = e14_builder(go1)
     assert_cli_heatmap_is_the_builders_under_rule_10(
         (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event["fell"].cells
     )
@@ -2003,21 +2325,39 @@ def test_l20_check_and_serve_on_go1_print_the_same_bytes_and_structure(go1: Any)
     verdicts = multi.by_event["fell"].cells["verdict"]
     first = out.splitlines()[0]
     assert first.startswith("passed  ") and "fell" in first, out
-    assert f"{(verdicts == 'safer').sum():,} safer, {(verdicts == 'worse').sum():,} worse" in out, out
+    # PF4 (PF4.20): fell has no kind, so the counts read in direction words; Go1's 60 and 0 are the
+    # re-check's (GO1_DIRECTION_COUNTS).
+    # PF4 re-freeze (PF4.20, no split between the library and the screen): the library's verdict
+    # column holds the direction words too, where it held safer and worse.
+    n_lower, n_higher = int((verdicts == "lower").sum()), int((verdicts == "higher").sum())
+    assert (n_lower, n_higher) == GO1_DIRECTION_COUNTS["fisher_bh"]
+    assert f"{n_lower:,} lower, {n_higher:,} higher" in out, out
     assert f"{multi.n_tests:,} tests" in out, out
+    # PF4 re-freeze (PF4.34, PF4.40, reading R34): check's block names the comparison's own word on
+    # its comparison line, read from Holm's rows.
+    holm = multi.to_json()["by_event"]["fell"]
+    (comparison,) = [line for line in out.splitlines() if line.startswith("  comparison  ")]
+    assert comparison.split()[1] == direction_word(holm["n_holm_lower"], holm["n_holm_higher"]), comparison
     code, out, err = run_cli(["--store", str(GO1_ROOT), *SERVE_ARGV])
     # A shared salt now adds one note line on stderr (spec section 5.4).
     assert code == 0 and without_notes(err) == "", err
     # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
     # PF3 (spec section 4.4, PF3.6b; rule R3): serve --json now names the method at the top level after the
-    # sentence; dropped beside the verdict and the sentence, so the frozen digest guards the rest.
+    # sentence; dropped beside the verdict and the sentence.
     structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
+    # PF4 (PF4.11, section 8.5): the page no longer carries the store path at all.
+    assert "store_root" not in structure["pair"]
     # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
-    # then put back as before names, so the digest below still guards everything else.
+    # then put back as before names.
     structure = structure_as_ids_named_it(structure, "fell")
-    tree_less = {**{k: v for k, v in structure.items() if k != "tree"}, "schema": TREE_LESS_SCHEMA}
-    normalised = json.dumps(structure_as_0_0_1_wrote_it({**tree_less, "pair": {**tree_less["pair"], "store_root": "<store>"}}), sort_keys=True)
-    assert sha256_of_text(normalised) == SERVE_STRUCTURE_SHA256
+    # PF0's version-field check still holds on the page.
+    structure_as_0_0_1_wrote_it(structure)
+    # PF4 (PF4.3, PF4.11, PF4.17, PF4.20): the digest is replaced by the facts it guarded; the tree
+    # still travels under its own key only.
+    assert "tree" in structure
+    ga, gb, gma, gmb = go1_frames()
+    page_multi = quiet_multi_diff(ga, gb, gma, gmb, events=("fell",), method="fisher_bh")
+    assert_go1_page_carries_the_diff(structure, page_multi, gma, gmb, (len(ga), len(gb)))
 
 
 def test_l20_omnibus_on_go1_minus_the_p_driven_keys_digests_to_the_value_minted_on_the_bare_tree(go1: Any, go1_trees: Any) -> None:
@@ -2134,7 +2474,9 @@ def test_l23_go1_push_70_has_thirteen_rejected_leaves_whose_q_within_is_not_sort
     following = block[start + 1 :]
     end = next((i for i, line in enumerate(following) if not line.startswith("    ")), len(following))
     # delta and MDE print to three decimals and q under rule 10 (spec section 5.4), not ``:g``.
-    printed = [(fraction(leaf.delta), rule_10_p(leaf.q_within), fraction(leaf.mde)) for leaf in rejected]
+    # PF4 re-freeze (PF4.27): a leaf whose limit is null prints no number for it.
+    printed = [(fraction(leaf.delta), rule_10_p(leaf.q_within), *(() if is_null(leaf.mde) else (fraction(leaf.mde),))) for leaf in rejected]
+    assert all("nan" not in numeric_tokens(line) for line in following[:end]), following[:end]
     seen = [tuple(token for token in numeric_tokens(line) if token in {t for triple in printed for t in triple}) for line in following[:end]]
     assert len(seen) == len(printed), (len(seen), len(printed))
     for triple, tokens in zip(printed, seen, strict=True):

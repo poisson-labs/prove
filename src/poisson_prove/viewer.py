@@ -31,6 +31,8 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import TYPE_CHECKING, Any
 
+from poisson_prove import _facts, stats
+from poisson_prove.diff import CELLS_COLUMNS, _native
 from poisson_prove.plain import build_summary
 from poisson_prove.report import (
     _EPISTEMIC_FENCE,
@@ -46,7 +48,7 @@ from poisson_prove.report import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-    from poisson_prove.diff import MultiDiffResult
+    from poisson_prove.diff import EventDiff, MultiDiffResult
     from poisson_prove.report import Cell, MultiReport, Report, ReportSpec
     from poisson_prove.store import RunManifest, RunTally
     from poisson_prove.tree import TreeResult
@@ -175,6 +177,13 @@ _EVENT_FIELDS = ("events_a", "events_b")
 # wrong number besides, because the coverage row already carries ``rows_a``.
 _COVERAGE_FIELDS = ("rows_a", "rows_b", "no_outcome_a", "no_outcome_b")
 _NO_COVERAGE: dict[str, int] = dict.fromkeys(_COVERAGE_FIELDS, 0)
+
+# PF4: the cell fields after ``verdict``, in the order the cell frame holds them, then each arm's
+# share (PF4.1b) and whether it differs from the arm's rate (PF4.37).
+_PF4_FIELDS = (
+    *CELLS_COLUMNS[CELLS_COLUMNS.index("direction") :],
+    "share_a", "share_b", "share_a_differs", "share_b_differs",
+)
 
 # The five tally rows the identity table prints after ``rows_stored``, read from the arm's own
 # ``tally`` object rather than from five more arm keys.
@@ -306,6 +315,15 @@ def _arm(manifest: RunManifest, role: str, rows_stored: int, tally: RunTally) ->
         "environment",
     ):
         arm[name] = stored[name]
+    env = dict(arm["environment"])
+    # Provenance stays in the manifest; the page shows Python's version and nothing more of the
+    # machine, and never the target's import path.
+    python = env.pop("python", None)
+    env.pop("platform", None)
+    env.pop("import_path", None)
+    if isinstance(python, str):
+        env["python"] = python.split(" ", 1)[0]
+    arm["environment"] = env
     arm["rows_stored"] = int(rows_stored)
     arm["tally"] = tally.to_dict()
     return arm
@@ -327,7 +345,11 @@ def _config_text(config: Mapping[str, Any]) -> dict[str, str | None]:
 
 
 def _cell(
-    spec: ReportSpec, cell: Cell, row: dict[str, Any], coverage: Mapping[str, Any]
+    spec: ReportSpec,
+    cell: Cell,
+    row: dict[str, Any],
+    record: Mapping[str, Any],
+    coverage: Mapping[str, Any],
 ) -> dict[str, Any]:
     """One present cell: M6's own fields raw, plus M7's rendering of each float.
 
@@ -339,6 +361,10 @@ def _cell(
     ``config_hash`` the way ``events_a`` and ``config`` already are, so "ran 32, no outcome
     20, compared 12" is three integers on one screen. They have no ``text`` entry, as the
     other integers do not.
+
+    PF4: ``record`` is the cell as the comparison's JSON carries it (``EventDiff.records``): the
+    verdict in the event's words, the direction, the limits, the interval and each arm's share,
+    in the order the cell frame holds them.
     """
     out: dict[str, Any] = {
         "coords": _coord_text(spec, cell),
@@ -352,7 +378,9 @@ def _cell(
         out[name] = int(row[name])
     for name in _FLOAT_KINDS:
         out[name] = _finite(row[name])
-    out["verdict"] = str(row["verdict"])
+    out["verdict"] = str(record["verdict"])
+    for name in _PF4_FIELDS:
+        out[name] = record.get(name)
     out["config"] = row["config"]
     out["config_text"] = _config_text(row["config"])
     out["text"] = {name: _fmt(row[name], kind) for name, kind in _FLOAT_KINDS.items()}
@@ -364,15 +392,20 @@ def _mde_unchanged(
 ) -> dict[str, Any]:
     """The event's detection limit as a field: M6's ``max_mde_unchanged``, M7's rendering of it,
     and the coordinate of the cell attaining it by the same three-step search ``_honesty`` does.
-    All three ``None`` when no cell is unchanged, which is when the honesty line says so."""
+    All three ``None`` when no cell is unchanged, which is when the honesty line says so; when
+    no unchanged cell has a limit, ``where`` is the one the honesty line names (PF4.27)."""
     unchanged = [c for c in present if c.verdict == "unchanged"]
-    if math.isnan(value) or not unchanged:
+    if not unchanged:
         return {"value": None, "text": None, "where": None}
+    if math.isnan(value):
+        without = [c for c in unchanged if c.mde_note is not None and math.isnan(c.mde)]
+        where = _coord_text(spec, without[0]) if without else None
+        return {"value": None, "text": None, "where": where}
     named = [c for c in unchanged if c.config_hash == cell_hash]
     if not named:
         named = [c for c in unchanged if c.mde == value]
     if not named:
-        named = [max(unchanged, key=lambda c: c.mde)]
+        named = [max(unchanged, key=lambda c: math.inf if math.isnan(c.mde) else c.mde)]
     return {"value": float(value), "text": _fmt(value, "pp0"), "where": _coord_text(spec, named[0])}
 
 
@@ -380,14 +413,16 @@ def _panel(
     spec: ReportSpec,
     event: str,
     panel: Report,
-    rows: dict[str, dict[str, Any]],
+    ev: EventDiff,
     coverage: Mapping[str, Mapping[str, Any]],
-    max_mde_unchanged: float,
-    max_mde_unchanged_cell: str | None,
+    threshold: float,
 ) -> dict[str, Any]:
     present = [c for c in panel.cells if c.present]
+    rows = {str(r["config_hash"]): r for r in ev.cells.to_dict(orient="records")}
+    records = {str(r["config_hash"]): r for r in ev.records()}
     cells = [
-        _cell(spec, c, rows[str(c.config_hash)], coverage.get(str(c.config_hash), _NO_COVERAGE))
+        _cell(spec, c, rows[str(c.config_hash)], records[str(c.config_hash)],
+              coverage.get(str(c.config_hash), _NO_COVERAGE))
         for c in present
     ]
     header = _worst_header(panel)
@@ -397,10 +432,18 @@ def _panel(
     return {
         "event": event,
         "caption": panel.headline,
-        "honesty": panel.honesty,
-        "mde_unchanged": _mde_unchanged(spec, present, max_mde_unchanged, max_mde_unchanged_cell),
-        "n_safer": int(panel.n_safer),
-        "n_worse": int(panel.n_worse),
+        "honesty": panel.shown_honesty(),
+        "mde_unchanged": _mde_unchanged(
+            spec, present, ev.max_mde_unchanged, ev.max_mde_unchanged_cell
+        ),
+        "kind": ev.kind,
+        "flag_rule": "benjamini-hochberg",
+        "n_safer": None if ev.kind is None else int(panel.n_safer),
+        "n_worse": None if ev.kind is None else int(panel.n_worse),
+        "n_higher": sum(1 for c in cells if c["direction"] == "higher"),
+        "n_lower": sum(1 for c in cells if c["direction"] == "lower"),
+        "share_label": f"share [{stats.level_label(stats.WILSON_LEVEL)}], Wilson, per condition",
+        "threshold": threshold,
         "n_unchanged": int(panel.n_unchanged),
         "n_absent": int(panel.n_absent),
         "n_present": int(panel.n_present),
@@ -485,6 +528,18 @@ def _holes(
         _hole(None, name, str(coverage[name]["cause"]), coverage, axes) for name in off_grid
     )
     return entries
+
+
+def _pp_or_none(text: Mapping[str, Any], key: str) -> str:
+    """A tree limit as M7 rendered it, or ``none`` where it has none (PF4.27)."""
+    return f"{text[key]}pp" if key in text else "none"
+
+
+def _leaf_limit(leaf: Mapping[str, Any]) -> str:
+    """A named cell's limit, or the reason it has none."""
+    if leaf.get("mde") is None and leaf.get("mde_note"):
+        return str(leaf["mde_note"])
+    return _pp_or_none(leaf["text"], "mde")
 
 
 def _tree_text(raw: Any, kind: str) -> Any:
@@ -689,21 +744,11 @@ def build_structure(
             [] if multi.coverage is None else multi.coverage.to_dict(orient="records")
         )
     }
-    panels = []
-    for event in report.events:
-        ev = multi.by_event[event]
-        rows = {
-            str(record["config_hash"]): record
-            for record in ev.cells.to_dict(orient="records")
-        }
-        panels.append(
-            _panel(
-                spec, event, report.panels[event], rows, coverage,
-                ev.max_mde_unchanged, ev.max_mde_unchanged_cell,
-            )
-        )
+    panels = [
+        _panel(spec, event, report.panels[event], multi.by_event[event], coverage, multi.threshold)
+        for event in report.events
+    ]
     pair = {
-        "store_root": store_root,
         "created_at_gap_s": _gap_seconds(manifest_a.created_at, manifest_b.created_at),
         "a": _arm(manifest_a, "baseline", rows_a, tally_a),
         "b": _arm(manifest_b, "candidate", rows_b, tally_b),
@@ -720,7 +765,7 @@ def build_structure(
         "bound": float(report.bound),
         "sign_convention": _SIGN_CONVENTION,
     }
-    return {
+    structure: dict[str, Any] = {
         "schema": SCHEMA,
         "pair": pair,
         "diff": diff,
@@ -728,10 +773,23 @@ def build_structure(
         "view": view,
         "headline": report.headline,
         "trade_line": report.trade_line,
-        "summary": build_summary(
-            panels=panels, view=view, pair=pair, diff=diff, complement=report.complement,
-            trade_line=report.trade_line,
-        ),
+        "summary": {
+            # PF4.5, PF4.34 to PF4.46: the comparison's word and what it rests on, first.
+            "verdict": multi.comparison_verdict(),
+            "verdict_rule": "holm",
+            "verdict_line": report.verdict_line,
+            "verdict_limit": multi.verdict_limit,
+            "fragility": multi.fragility,
+            "peeking": [dict(entry) for entry in multi.peeking],
+            "errors_differ": [
+                {k: _native(v) for k, v in entry.items()} for entry in multi.errors_differ
+            ],
+            "facts": [{"label": label, "line": text} for label, text in _facts.lines(multi)],
+            **build_summary(
+                panels=panels, view=view, pair=pair, diff=diff, complement=report.complement,
+                trade_line=report.trade_line,
+            ),
+        },
         "fence": _EPISTEMIC_FENCE,
         "panels": panels,
         "intervals": _intervals(report, multi),
@@ -742,6 +800,7 @@ def build_structure(
         ],
         "heatmap_svg": report.to_svg(),
     }
+    return structure
 
 
 # ---------- rendering ----------
@@ -792,8 +851,7 @@ def _identity_html(pair: Mapping[str, Any]) -> list[str]:
     parts = [
         "<h2>Run pair</h2>",
         _html_table(["field", "A (baseline)", "B (candidate)"], rows),
-        f"<p>created_at gap, B minus A: {_html.escape(_scalar_text(gap))} seconds. "
-        f"Store root: {_html.escape(str(pair['store_root']))}.</p>",
+        f"<p>created_at gap, B minus A: {_html.escape(_scalar_text(gap))} seconds.</p>",
         f"<p>Sign convention: {_html.escape(_SIGN_CONVENTION)}.</p>",
         "<details><summary>environment, both arms (the runs' own configuration)</summary>",
     ]
@@ -849,9 +907,10 @@ def _cell_rows(cell: Mapping[str, Any]) -> list[list[str]]:
         ["stat", text["stat"]],
         ["p", text["p"]],
         ["q", text["q"]],
-        ["MDE (pp)", text["mde"]],
+        ["MDE (pp)", str(cell["mde_note"]) if cell.get("mde_note") else text["mde"]],
         ["verdict", str(cell["verdict"])],
     ]
+
     for name, value in cell["config"].items():
         shown = config_text.get(str(name))
         rows.append([f"config.{name}", shown if isinstance(shown, str) else _scalar_text(value)])
@@ -893,6 +952,8 @@ def _summary_html(summary: Mapping[str, Any]) -> list[str]:
     """The plain register, first on the page and never folded: every sentence is a ``line`` the
     structure carries, one ``<p>`` each, and nothing here composes one."""
     lines: list[str] = []
+    if summary.get("verdict_line"):
+        lines.append(str(summary["verdict_line"]))
     if summary["partial"] is not None:
         lines.append(str(summary["partial"]["line"]))
     if summary["complement"] is not None and summary["complement"]["line"] is not None:
@@ -901,6 +962,8 @@ def _summary_html(summary: Mapping[str, Any]) -> list[str]:
         lines.append(str(entry["line"]))
         lines.extend(str(row["line"]) for row in entry["worse"])
         lines.append(str(entry["limit"]["line"]))
+    for fact in summary.get("facts", []):
+        lines.append(f"{fact['label']}: {fact['line']}")
     lines.append(str(summary["pointer"]))
     return ["<h2>Summary</h2>", *(f"<p>{_html.escape(line)}</p>" for line in lines)]
 
@@ -921,8 +984,8 @@ _NOT_TESTED_SENTENCES: dict[str, str] = {
 
 #: What the leaf row's MDE column means, said once on the page: free text with no number in it.
 _LEAF_MDE_MEANING = (
-    "MDE is the smallest detectable increase from arm A's rate, capped at the headroom, "
-    "so on a cell at ceiling it reads the headroom and is not a power number."
+    "MDE is the smallest change one condition alone would be flagged for, from where the "
+    "condition was; a condition with none prints why."
 )
 
 #: The bound's assumption, beside the number rather than in a footnote.
@@ -1126,7 +1189,8 @@ def _cells_html(leaves: Mapping[str, Any], bound: Mapping[str, Any]) -> list[str
             _paragraph(
                 f"{family['key']}={family['label']}: {family['n_tests']} tests, "
                 f"{family['n_rejected']} rejected; cell MDE median "
-                f"{family_text['mde_median']}pp / max {family_text['mde_max']}pp"
+                f"{_pp_or_none(family_text, 'mde_median')} / max "
+                f"{_pp_or_none(family_text, 'mde_max')}"
             )
         )
         rows = [
@@ -1135,7 +1199,7 @@ def _cells_html(leaves: Mapping[str, Any], bound: Mapping[str, Any]) -> list[str
                 str(leaf["event"]),
                 leaf["text"]["delta"],
                 leaf["text"]["q_within"],
-                f"{leaf['text']['mde']}pp",
+                _leaf_limit(leaf),
             ]
             for leaf in family["cells"]
             if leaf["rejects"]
@@ -1365,6 +1429,11 @@ def render_html(structure: Mapping[str, Any]) -> str:
     svg = str(structure["heatmap_svg"]).rstrip("\n")
     parts.append("<h2>Heatmap</h2>")
     parts.append(f'<div id="pl-figure" class="figure">{svg}</div>')
+    for panel in panels:
+        # PF4.1c: each panel's share interval, labelled from its recorded level.
+        if panel.get("share_label"):
+            label = f"{panel['event']}: {panel['share_label']}"
+            parts.append(f"<p>{_html.escape(label)}</p>")
 
     index = {}
     for panel in panels:

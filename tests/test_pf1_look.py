@@ -89,6 +89,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from test_pf4_surfaces import _ref_gate
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -107,7 +108,11 @@ PROGRESS = re.compile(r"^\d{1,3}(?:,\d{3})*/\d{1,3}(?:,\d{3})*$")
 ERRORS_LOG = "~/.cache/poisson-prove/errors.log"
 TRACEBACK = "Traceback (most recent call last)"
 
-#: 9 conditions x 120 replicates = 1,080 rollouts. N=120 clears the default power gate on its own.
+#: 9 conditions x 120 replicates = 1,080 rollouts.
+#: PF4 re-freeze (PF4.30, reading R33): this is the quickstart's design at 120 replicates with no
+#: kind declared. Its exact limit at level q / 9 is 0.240 at base rate 0.400, over the default
+#: accepted change of 0.200, so N=120 no longer clears the gate on its own: every sweep of it
+#: accepts ``MAX_MDE``, the smallest round value above that limit.
 SPEC = """\
 target_id = "mock-agent"
 t_unit = "tool_calls"
@@ -121,8 +126,13 @@ values = ["search", "checkout", "refund"]
 type = "continuous"
 values = [0.0, 0.3, 0.55]
 """
-#: The same design at N=10: its smallest detectable change is 0.500, over the default 0.200.
+MAX_MDE = "0.3"
+#: The same design at N=10: its smallest detectable change is over the default 0.200.
 LOW_SPEC = SPEC.replace("replicates = 120", "replicates = 10")
+#: PF4 re-freeze (PF4.30, PF4.48a): the gate's limit for LOW_SPEC is the exact Fisher limit at level
+#: q / 9 at its worst base rate, computed from the stats file's references (it was 0.500 by the old
+#: approximation at base rate 0.5).
+LOW_LIMIT = _ref_gate(10, 9, 0.2)[2]
 #: Three cells of three replicates for the targets that never return an episode.
 TRIPLE_SPEC = """\
 target_id = "pf1-errors"
@@ -381,10 +391,11 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> World:
     folders["empty"].mkdir()
 
     store = base / "store"
-    first = run_cli(["--store", str(store), "sweep", str(folders["spec"]), "--target", f"{MOCK}:rollout", "--yes"])
+    # PF4 re-freeze (PF4.30, reading R33): both sweeps of the 120-replicate design accept MAX_MDE.
+    first = run_cli(["--store", str(store), "sweep", str(folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--max-mde", MAX_MDE])
     assert first.code == 0, first
     (a,) = run_ids(store)
-    second = run_cli(["--store", str(store), "sweep", str(folders["spec"]), "--target", f"{MOCK}:rollout_patched", "--pair-with", a, "--yes"])
+    second = run_cli(["--store", str(store), "sweep", str(folders["spec"]), "--target", f"{MOCK}:rollout_patched", "--pair-with", a, "--yes", "--max-mde", MAX_MDE])
     assert second.code == 0, second
     (b,) = run_ids(store) - {a}
     paired_store = base / "paired-store"
@@ -415,13 +426,17 @@ PAIR_X = "--x task_id --y tool_fail_rate"
 
 CORPUS: tuple[Call, ...] = (
     # the result of every verb
-    Call("sweep-dry-run", "--store {base}/dry-store sweep {spec} --target " + MOCK + ":rollout --dry-run", 0, "result"),
-    Call("sweep-yes", "--store {base}/sweep-store sweep {spec} --target " + MOCK + ":rollout --yes", 0, "result"),
+    # PF4 re-freeze (PF4.30, reading R33): every sweep of the 120-replicate design below accepts
+    # MAX_MDE, so each refusal and each sweep that stops short is the one it names, not the gate's.
+    Call("sweep-dry-run", "--store {base}/dry-store sweep {spec} --target " + MOCK + ":rollout --dry-run --max-mde " + MAX_MDE, 0, "result"),
+    Call("sweep-yes", "--store {base}/sweep-store sweep {spec} --target " + MOCK + ":rollout --yes --max-mde " + MAX_MDE, 0, "result"),
     Call("diff", f"{S} diff {{A}} {{B}}", 0, "result"),
     Call("diff-fisher-named", f"{S} diff {{A}} {{B}} --method fisher_bh", 0, "result"),
     Call("diff-mcnemar-named", f"{S} diff {{A}} {{B}} --method mcnemar_bh", 0, "result"),
-    Call("check-passed", f"{S} check {{A}} {{B}} --event violated", 0, "result"),
-    Call("check-failed", f"{S} check {{A}} {{B}} --event timeout", 4, "result"),
+    # PF4 (PF4.20): neither event has a kind in these runs, so check's default --fail-on worse is
+    # refused; --fail-on higher is the same gate on a failure event (fail when the rate rose).
+    Call("check-passed", f"{S} check {{A}} {{B}} --event violated --fail-on higher", 0, "result"),
+    Call("check-failed", f"{S} check {{A}} {{B}} --event timeout --fail-on higher", 4, "result"),
     Call("report-pair", f"{S} report {{A}} {{B}} {PAIR_X} --method fisher_bh --out {{base}}/out-report-pair", 0, "result"),
     Call("report-run", f"{S} report {{A}} {PAIR_X} --event violated --out {{base}}/out-report-run", 0, "result"),
     Call("inspect", f"{S} inspect {{A}} --event timeout --limit 2", 0, "result"),
@@ -433,13 +448,16 @@ CORPUS: tuple[Call, ...] = (
     #: 8 items x 400 input tokens x 2 arms = 6,400, exactly the declared cap: "at or above" (PF1.14).
     Call("paired-equal-cap", f"{PS} paired --declaration {{decl_equal}} --cap-check", 4, "result"),
     # the two ways a sweep stops short after work started
-    Call("sweep-max-rollouts", "--store {base}/capped-store sweep {spec} --target " + MOCK + ":rollout --yes --max-rollouts 100", 3, "stopped"),
-    Call("sweep-all-errored", "--store {base}/errored-store sweep {triple} --target pf1_targets:mostly_value_error --yes --max-mde 0.99", 3, "stopped", paths=("targets",)),
+    # PF4 re-freeze (PF4.49, reading R17): the 3-replicate design passed --max-mde 0.99; no lone condition
+    # of it can be flagged, which only an accepted change of 1 admits.
+    Call("sweep-max-rollouts", "--store {base}/capped-store sweep {spec} --target " + MOCK + ":rollout --yes --max-rollouts 100 --max-mde " + MAX_MDE, 3, "stopped"),
+    Call("sweep-all-errored", "--store {base}/errored-store sweep {triple} --target pf1_targets:mostly_value_error --yes --max-mde 1", 3, "stopped", paths=("targets",)),
     # --json on every verb
-    Call("json-sweep", "--store {base}/json-sweep-store sweep {spec} --target " + MOCK + ":rollout --yes --json", 0, "json"),
+    Call("json-sweep", "--store {base}/json-sweep-store sweep {spec} --target " + MOCK + ":rollout --yes --json --max-mde " + MAX_MDE, 0, "json"),
     Call("json-diff", f"{S} diff {{A}} {{B}} --method fisher_bh --json", 0, "json"),
-    Call("json-check", f"{S} check {{A}} {{B}} --event violated --json", 0, "json"),
-    Call("json-check-failed", f"{S} check {{A}} {{B}} --event timeout --json", 4, "json"),
+    # PF4 (PF4.20): as check-passed and check-failed, the same gate named for an unknown kind.
+    Call("json-check", f"{S} check {{A}} {{B}} --event violated --fail-on higher --json", 0, "json"),
+    Call("json-check-failed", f"{S} check {{A}} {{B}} --event timeout --fail-on higher --json", 4, "json"),
     Call("json-report", f"{S} report {{A}} {{B}} {PAIR_X} --method fisher_bh --json --out {{base}}/out-report-json", 0, "json"),
     Call("json-paired", f"{PS} paired --declaration {{decl}} --json", 0, "json"),
     Call("json-serve", f"{S} serve {{A}} {{B}} {PAIR_X} --event violated --json", 0, "json"),
@@ -459,21 +477,22 @@ CORPUS: tuple[Call, ...] = (
     Call("refuse-report-without-x", f"{S} report {{A}} {{B}}", 1, "refusal", ("task_id", "tool_fail_rate")),
     Call("refuse-serve-without-x", f"{S} serve {{A}} {{B}} --event violated", 1, "refusal", ("task_id", "tool_fail_rate")),
     Call("refuse-report-free-axis", f"{S} report {{A}} --x task_id --event violated", 1, "refusal", ("tool_fail_rate",)),
-    Call("refuse-underpowered", "--store {base}/low-store sweep {low} --target " + MOCK + ":rollout --yes", 1, "plan", ("0.500", "0.200")),
-    Call("refuse-stdin-not-a-terminal", "--store {base}/tty-store sweep {spec} --target " + MOCK + ":rollout", 1, "plan", ("--yes",)),
-    Call("refuse-over-max-cost", "--store {base}/cost-store sweep {spec} --target " + MOCK + ":rollout --backend modal --max-cost 0.5 --est-seconds 36000 --yes", 1, "plan", ("$0.50",), paths=("fake_modal",)),
+    # PF4 re-freeze (PF4.30): the refusal states the design's exact limit, recomputed, not the old 0.500.
+    Call("refuse-underpowered", "--store {base}/low-store sweep {low} --target " + MOCK + ":rollout --yes", 1, "plan", (f"{LOW_LIMIT:.3f}", "0.200")),
+    Call("refuse-stdin-not-a-terminal", "--store {base}/tty-store sweep {spec} --target " + MOCK + ":rollout --max-mde " + MAX_MDE, 1, "plan", ("--yes",)),
+    Call("refuse-over-max-cost", "--store {base}/cost-store sweep {spec} --target " + MOCK + ":rollout --backend modal --max-cost 0.5 --est-seconds 36000 --yes --max-mde " + MAX_MDE, 1, "plan", ("$0.50",), paths=("fake_modal",)),
     Call("refuse-existing-folder", f"{S} report {{A}} {{B}} {PAIR_X} --out {{full}}", 1, "refusal", ("{full}",)),
-    Call("refuse-unknown-spec-key", "--store {base}/bad-store sweep {bad_capture} --target " + MOCK + ":rollout --yes", 1, "refusal", ("not_a_field",)),
-    Call("refuse-missing-burla-table", "--store {base}/burla-store sweep {spec} --target " + MOCK + ":rollout --backend burla --yes", 1, "refusal", ("[burla]", "{spec}"), paths=("fake_burla",)),
+    Call("refuse-unknown-spec-key", "--store {base}/bad-store sweep {bad_capture} --target " + MOCK + ":rollout --yes --max-mde " + MAX_MDE, 1, "refusal", ("not_a_field",)),
+    Call("refuse-missing-burla-table", "--store {base}/burla-store sweep {spec} --target " + MOCK + ":rollout --backend burla --yes --max-mde " + MAX_MDE, 1, "refusal", ("[burla]", "{spec}"), paths=("fake_burla",)),
     Call("refuse-empty-store", "--store {empty} diff {A} {B}", 1, "refusal", ("{empty}",)),
-    Call("refuse-unresolvable-target", "--store {base}/target-store sweep {spec} --target poisson_prove.examples.no_such_module_xyz:rollout --yes", 1, "refusal", ("no_such_module_xyz",)),
+    Call("refuse-unresolvable-target", "--store {base}/target-store sweep {spec} --target poisson_prove.examples.no_such_module_xyz:rollout --yes --max-mde " + MAX_MDE, 1, "refusal", ("no_such_module_xyz",)),
     Call("refuse-unknown-event", f"{S} diff {{A}} {{B}} --event nope", 1, "refusal", ("violated", "timeout")),
-    Call("refuse-resume-a-complete-run", f"{S} sweep {{spec}} --target " + MOCK + ":rollout --resume {A} --yes", 1, "refusal", ("{A}",)),
+    Call("refuse-resume-a-complete-run", f"{S} sweep {{spec}} --target " + MOCK + ":rollout --resume {A} --yes --max-mde " + MAX_MDE, 1, "refusal", ("{A}",)),
     Call("refuse-unknown-grouping", f"{S} diff {{A}} {{B}} --method mcnemar_bh --by nonsense", 1, "refusal", ("tool_fail_rate",)),
     Call("refuse-group-mde-out-of-range", f"{S} diff {{A}} {{B}} --method mcnemar_bh --max-group-mde 2", 1, "refusal", ("--max-group-mde",)),
     Call("refuse-no-permutations", f"{S} diff {{A}} {{B}} --method mcnemar_bh --permutations 0", 1, "refusal", ("--permutations",)),
     Call("refuse-out-is-a-file", f"{S} report {{A}} {{B}} {PAIR_X} --out {{a_file}}", 1, "refusal", ("{a_file}",)),
-    Call("refuse-missing-extra", "--store {base}/modal-store sweep {spec} --target " + MOCK + ":rollout --backend modal --yes", 1, "refusal", ('pip install "poisson-prove[modal]"',), paths=("no_modal",)),
+    Call("refuse-missing-extra", "--store {base}/modal-store sweep {spec} --target " + MOCK + ":rollout --backend modal --yes --max-mde " + MAX_MDE, 1, "refusal", ('pip install "poisson-prove[modal]"',), paths=("no_modal",)),
     # every kind of wrong command line: exit 2
     Call("usage-no-arguments", "", 2, "usage"),
     Call("usage-unknown-verb", "frobnicate", 2, "usage", ("frobnicate",)),
@@ -486,7 +505,7 @@ CORPUS: tuple[Call, ...] = (
     Call("usage-diff-one-run", f"{S} diff {{A}}", 2, "usage"),
     Call("usage-check-one-run", f"{S} check {{A}} --event violated", 2, "usage"),
     Call("usage-serve-one-run", f"{S} serve {{A}} {PAIR_X} --event violated", 2, "usage"),
-    Call("usage-sweep-no-target", "--store {base}/no-target-store sweep {spec} --yes", 2, "usage", ("--target",)),
+    Call("usage-sweep-no-target", "--store {base}/no-target-store sweep {spec} --yes --max-mde " + MAX_MDE, 2, "usage", ("--target",)),
 )
 CALLS = {call.name: call for call in CORPUS}
 assert len(CALLS) == len(CORPUS), "corpus names are unique"
@@ -591,7 +610,8 @@ def test_pf1_3_no_arguments_says_no_verb_was_given_and_points_to_help(corpus: di
 #: raise: the failure no verb expects. Each runs in a process of its own, so the log's place is
 #: read from that process's ``HOME`` however the build looks it up.
 VERB_CALLS = {
-    "sweep": "--store {base}/failure-store sweep {spec} --target " + MOCK + ":rollout --yes",
+    # PF4 re-freeze (PF4.30, reading R33): the sweep succeeds on the world only with MAX_MDE.
+    "sweep": "--store {base}/failure-store sweep {spec} --target " + MOCK + ":rollout --yes --max-mde " + MAX_MDE,
     "diff": f"{S} diff {{A}} {{B}}",
     "check": f"{S} check {{A}} {{B}} --event violated",
     "report": f"{S} report {{A}} {{B}} {PAIR_X} --out {{base}}/failure-report",
@@ -660,7 +680,9 @@ def test_pf1_4_an_unexpected_failure_exits_3_naming_the_log_and_appends_the_comm
 
 def test_pf1_4_a_failure_after_the_sweep_started_still_names_only_the_log(world: World, tmp_path: Path) -> None:
     home = tmp_path / "home"
-    argv = ["--store", str(tmp_path / "store"), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--batch-size", "64"]
+    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+    argv = ["--store", str(tmp_path / "store"), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--batch-size", "64",
+            "--max-mde", MAX_MDE]
     r = prove_with(RAISE_MID_SWEEP, argv, home=home, cwd=tmp_path)
     assert r.code == 3, r
     errors = [line for line in r.err.splitlines() if not PROGRESS.match(line)]
@@ -734,8 +756,10 @@ def test_pf1_5_a_warning_prove_raises_reaches_the_user_as_one_note_line(corpus: 
 
 def test_pf1_6_ctrl_c_in_a_sweep_exits_130_keeps_what_was_stored_and_names_the_resume(world: World, tmp_path: Path) -> None:
     store = tmp_path / "store"
+    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
     r = prove(
-        ["--store", str(store), "sweep", str(world.folders["spec"]), "--target", "pf1_targets:interrupted", "--yes", "--batch-size", "64"],
+        ["--store", str(store), "sweep", str(world.folders["spec"]), "--target", "pf1_targets:interrupted", "--yes", "--batch-size", "64",
+         "--max-mde", MAX_MDE],
         home=world.home, cwd=tmp_path, paths=(world.folders["targets"],),
     )
     assert r.code == 130, (r.out, r.err)
@@ -1026,7 +1050,8 @@ def test_pf1_9_store_plain_and_debug_are_read_after_the_verb_as_before_it(world:
     ["--store", "{S}", "diff", "{A}", "{B}", "--even", "violated"],
     ["--store", "{S}", "diff", "{A}", "{B}", "--meth", "fisher_bh"],
     ["--store", "{S}", "check", "{A}", "{B}", "--event", "violated", "--fail", "any"],
-    ["--store", "{S}", "sweep", "{spec}", "--tar", MOCK + ":rollout", "--yes"],
+    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+    ["--store", "{S}", "sweep", "{spec}", "--tar", MOCK + ":rollout", "--yes", "--max-mde", MAX_MDE],
 ], ids=lambda argv: " ".join(argv))
 def test_pf1_9_an_abbreviated_option_exits_2(argv: list[str], world: World, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
@@ -1099,7 +1124,10 @@ def cells_of(doc: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
 def cell_strings(cell: dict[str, Any]) -> list[str]:
     """The cell's numbers as rule 10 prints them: rates, delta and MDE to three decimals,
     p and q as p-values. A delta's sign may carry a plus; the substring is the same."""
-    return [f"{cell['rate_a']:.3f}", f"{cell['rate_b']:.3f}", f"{cell['delta']:.3f}", p_text(cell["p"]), p_text(cell["q"]), f"{cell['mde']:.3f}"]
+    # PF4 re-freeze (PF4.27): a condition's limit may be null with its note; no text surface prints a
+    # number for it and each says the reason in words, so a null limit is looked for as its note.
+    limit = cell["mde_note"] if cell["mde"] is None else f"{cell['mde']:.3f}"
+    return [f"{cell['rate_a']:.3f}", f"{cell['rate_b']:.3f}", f"{cell['delta']:.3f}", p_text(cell["p"]), p_text(cell["q"]), limit]
 
 
 def test_pf1_10_diffs_text_cell_tables_print_each_cells_numbers_by_rule_10(corpus: dict[str, Ran]) -> None:
@@ -1128,6 +1156,10 @@ def test_pf1_10_json_carries_the_unformatted_values(corpus: dict[str, Ran]) -> N
     cells = [cell for _, cell in cells_of(strict_json(corpus["json-diff"].out))]
     for cell in cells:
         for key in ("rate_a", "rate_b", "delta", "p", "q", "mde"):
+            if key == "mde" and cell[key] is None:
+                # PF4 re-freeze (PF4.27): a null limit carries its note from the closed list.
+                assert cell["mde_note"] in {"no room", "none detectable", "cannot be flagged", "no matched pairs"}, cell
+                continue
             assert isinstance(cell[key], (int, float)) and not isinstance(cell[key], bool), (key, cell[key])
         assert cell["n_a"] == 120 and isinstance(cell["n_a"], int)
     assert any(abs(cell["rate_a"] - round(cell["rate_a"], 3)) > 1e-9 for cell in cells), "rates are rounded in JSON"
@@ -1214,7 +1246,8 @@ def test_pf1_11_runs_json_names_the_writer_of_a_0_0_1_run_as_proofload_and_a_new
 
 @pytest.mark.parametrize("argv", [
     ["diff", "{A}", "{B}", "--method", "mcnemar_bh"],
-    ["sweep", "{spec}", "--target", MOCK + ":rollout", "--dry-run"],
+    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+    ["sweep", "{spec}", "--target", MOCK + ":rollout", "--dry-run", "--max-mde", MAX_MDE],
 ], ids=["diff", "sweep-dry-run"])
 def test_pf1_12_an_ascii_only_stdout_gets_the_plain_rendering_in_ascii_line_for_line(argv: list[str], world: World, tmp_path: Path) -> None:
     full = ["--store", str(world.store), *(world.fill(word) for word in argv)]
@@ -1276,7 +1309,8 @@ def test_pf1_12_every_file_prove_writes_is_utf_8(world: World, tmp_path: Path) -
     for argv, code in (
         (["--store", str(world.store), "report", world.a, world.b, "--x", "task_id", "--y", "tool_fail_rate", "--title", title, "--out", str(pair_out)], 0),
         (["--store", str(world.store), "report", world.a, "--x", "task_id", "--y", "tool_fail_rate", "--event", "violated", "--title", title, "--out", str(run_out)], 0),
-        (["--store", str(store), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout", "--yes"], 0),
+        # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+        (["--store", str(store), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--max-mde", MAX_MDE], 0),
         (["--store", str(world.paired_store), "paired", "--declaration", str(world.folders["decl"]), "--out", str(tmp_path / "paired")], 0),
     ):
         r = prove_with(LATIN1_LOCALE, argv, home=home, cwd=tmp_path)
@@ -1318,8 +1352,10 @@ def test_pf1_13_every_sweep_prints_its_plan_first_and_a_finished_one_one_closing
 
 def test_pf1_13_a_stdin_that_is_not_a_terminal_without_yes_prints_the_plan_then_refuses(world: World, tmp_path: Path) -> None:
     store = tmp_path / "store"
+    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
     done = subprocess.run(
-        [sys.executable, "-m", "poisson_prove", "--store", str(store), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout"],
+        [sys.executable, "-m", "poisson_prove", "--store", str(store), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout",
+         "--max-mde", MAX_MDE],
         cwd=tmp_path, env=child_env(world.home), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300,
     )
     assert done.returncode == 1
@@ -1336,8 +1372,9 @@ def test_pf1_13_on_modal_an_estimate_over_max_cost_is_refused_before_the_questio
         try:
             os.write(controller, answer)
             return subprocess.run(
+                # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
                 [sys.executable, "-m", "poisson_prove", "--store", str(tmp_path / "store"), "sweep", str(world.folders["spec"]),
-                 "--target", f"{MOCK}:rollout", "--backend", "modal", "--max-cost", max_cost, "--est-seconds", "36000"],
+                 "--target", f"{MOCK}:rollout", "--backend", "modal", "--max-cost", max_cost, "--est-seconds", "36000", "--max-mde", MAX_MDE],
                 cwd=tmp_path, env=child_env(world.home, world.folders["fake_modal"]), stdin=terminal,
                 capture_output=True, timeout=300,
             )
@@ -1373,8 +1410,9 @@ def test_pf1_13_burlas_cap_refusal_keeps_the_plan_on_screen(world: World, tmp_pa
         encoding="utf-8",
     )
     store = tmp_path / "store"
+    # PF4 re-freeze (PF4.49, reading R17): the 2-replicate design passed --max-mde 0.99; it moves to 1.
     r = prove(
-        ["--store", str(store), "sweep", str(spec), "--target", "bu_targets.plain:rollout", "--backend", "burla", "--max-mde", "0.99", "--yes"],
+        ["--store", str(store), "sweep", str(spec), "--target", "bu_targets.plain:rollout", "--backend", "burla", "--max-mde", "1", "--yes"],
         home=world.home, cwd=tmp_path, paths=(BU_TARGETS, world.folders["fake_burla"]),
     )
     assert r.code == 1, (r.out, r.err)
@@ -1434,8 +1472,9 @@ def test_pf1_13_a_sweep_in_which_every_rollout_timed_out_exits_3_naming_timeout_
     spec = tmp_path / "two.toml"
     spec.write_text(TRIPLE_SPEC.replace('["a", "b", "c"]', '["a", "b"]').replace("replicates = 3", "replicates = 2"), encoding="utf-8")
     store = tmp_path / "store"
+    # PF4 re-freeze (PF4.49, reading R17): the 2-replicate design passed --max-mde 0.99; it moves to 1.
     r = prove(
-        ["--store", str(store), "sweep", str(spec), "--target", "pf1_targets:sleeps", "--yes", "--max-mde", "0.99", "--episode-timeout", "0.5"],
+        ["--store", str(store), "sweep", str(spec), "--target", "pf1_targets:sleeps", "--yes", "--max-mde", "1", "--episode-timeout", "0.5"],
         home=world.home, cwd=tmp_path, paths=(world.folders["targets"],),
     )
     assert r.code == 3, (r.out, r.err)

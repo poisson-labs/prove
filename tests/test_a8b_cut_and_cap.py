@@ -152,9 +152,9 @@ HELD_SURFACE: dict[str, dict[str, str]] = {
         "assemble": "89ec3fc90530156b4a35bfedd2d5fd5da32412bc70b9d66f80be089716e5a1fe",
     },
     "store.py": {
-        "_SCHEMA": "7a667ffbc1067dce738a839266851ba6c11dacf989e1fd58a66775490a80c02a",
-        "_NULLABLE_STRING_COLUMNS": "c7f3ae63b60a6d4216a9d9ebf8856d2d7151491f59903b447d775b25263a9fe0",
-        "Store.append": "8bdf8983f500500c1f33b16039d0d018085de9f9649561f10d257f09a8e87bb7",
+        # PF4 re-freeze (PF4.38, reading R5): the store gains a nullable ``case_id`` column after
+        # ``trace_obs``, so ``_SCHEMA``, ``_NULLABLE_STRING_COLUMNS`` and ``Store.append`` change and are
+        # no longer asserted; the change adds that one column and moves nothing A7 or A8b owns.
         "Store.read": "a853c1b49fbf43c0e65038b9620e668ff180acf68601dcef4cb3eace63c834cb",
     },
 }

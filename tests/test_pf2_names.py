@@ -555,13 +555,6 @@ def shared(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return shared_store(tmp_path_factory.mktemp("shared") / "store")
 
 
-def test_pf2_2_the_shared_list_from_trace_gives_the_same_names_in_prove(shared: Path) -> None:
-    entries = runs_json(shared)
-    wrong = {r["run_id"]: (entries.get(r["run_id"], {}).get("run_name"), r["name"]) for r in SHARED["runs"]
-             if entries.get(r["run_id"], {}).get("run_name") != r["name"]}
-    assert not wrong, wrong
-
-
 def runs_rows(text: str) -> list[str]:
     """The table rows of ``runs``'s text output: the lines after the header (the line that
     begins with ``#``), up to the first blank or ``next:`` line."""
@@ -578,24 +571,31 @@ def runs_rows(text: str) -> list[str]:
 ROW_NUMBER = re.compile(r"^\s*#?(\d+)\s")
 
 
-def test_pf2_2_the_shared_list_numbers_the_same_rows_as_trace(shared: Path) -> None:
-    r = at(shared, "runs")
-    assert r.code == 0, r.err
-    rows = runs_rows(r.out)
-    for run in SHARED["runs"]:
-        (row,) = [line for line in rows if run["run_id"] in line]
-        number = ROW_NUMBER.match(row)
-        assert (int(number.group(1)) if number else None) == run["number"], (run["run_id"], row)
-
-
-def test_pf2_2_every_word_resolves_to_the_run_trace_resolves_it_to(shared: Path) -> None:
-    wrong = {}
-    for word, run_id in SHARED["resolves"].items():
-        r = at(shared, "inspect", word, "--event", "violated", "--json")
-        got = strict_json(r.out)["run_id"] if r.code == 0 else (r.code, r.err.splitlines()[:1])
-        if got != run_id:
-            wrong[word] = (got, run_id)
-    assert not wrong, wrong
+@pytest.mark.parametrize("aspect", ["names", "numbers", "resolves"])
+def test_pf2_2_the_shared_list_from_trace_reads_the_same_in_prove(aspect: str, shared: Path) -> None:
+    """Trimmed by the PF4 re-freeze's T1 (ruled 2026-10-24): PF2.2's three tests as one, a case each:
+    the names ``runs`` gives, the numbers its rows carry, and the run each word resolves to."""
+    if aspect == "names":
+        entries = runs_json(shared)
+        wrong = {r["run_id"]: (entries.get(r["run_id"], {}).get("run_name"), r["name"]) for r in SHARED["runs"]
+                 if entries.get(r["run_id"], {}).get("run_name") != r["name"]}
+        assert not wrong, wrong
+    elif aspect == "numbers":
+        r = at(shared, "runs")
+        assert r.code == 0, r.err
+        rows = runs_rows(r.out)
+        for run in SHARED["runs"]:
+            (row,) = [line for line in rows if run["run_id"] in line]
+            number = ROW_NUMBER.match(row)
+            assert (int(number.group(1)) if number else None) == run["number"], (run["run_id"], row)
+    else:
+        wrong = {}
+        for word, run_id in SHARED["resolves"].items():
+            r = at(shared, "inspect", word, "--event", "violated", "--json")
+            got = strict_json(r.out)["run_id"] if r.code == 0 else (r.code, r.err.splitlines()[:1])
+            if got != run_id:
+                wrong[word] = (got, run_id)
+        assert not wrong, wrong
 
 
 # ---------- PF2.3 how a run argument resolves ----------
@@ -750,33 +750,29 @@ def test_pf2_4_a_fit_name_in_the_same_store_is_accepted(name: str, world: World,
     assert manifest_of(store, new)["name"] == name
 
 
-def test_pf2_4_a_name_another_run_already_goes_by_is_refused_before_the_run_folder_exists(world: World, tmp_path: Path) -> None:
+@pytest.mark.parametrize("how", ["goes-by", "answers-to"])
+def test_pf2_4_a_name_another_run_goes_by_or_answers_to_is_refused_before_the_run_folder_exists(
+    how: str, world: World, tmp_path: Path
+) -> None:
+    """Trimmed by the PF4 re-freeze's T2 (ruled 2026-10-24): PF2.4's two refusals as one.
+    ``goes-by``: a name another run already goes by (its stored name, or a name in the names file);
+    the refusal names that run by its id, since it goes by the very word typed. ``answers-to``: R1
+    makes a name two runs answer to unusable, so the computed name and the id of a run that goes by
+    another name are refused before they are stored, and the refusal names that run's name."""
     store = tmp_path / "store"
     for run_id in (world.named, world.paired):
         shutil.copytree(world.store / run_id, store / run_id)
-    write_names(store, {"nickname": world.paired})
+    if how == "goes-by":
+        write_names(store, {"nickname": world.paired})
+        cases = [(world.named_name, world.named), ("nickname", world.paired)]
+    else:
+        computed = f"mock-agent {utc_day(manifest_of(store, world.named)['created_at'])} a"
+        cases = [(computed, world.named_name), (world.named, world.named_name)]
     before = listing(store)
-    for taken, holder in ((world.named_name, world.named), ("nickname", world.paired)):
+    for taken, named in cases:
         r = at(store, "sweep", world.spec, "--target", f"{MOCK}:rollout", "--name", taken, "--yes", *LOOSE)
         assert_refusal(r, taken)
-        # The refusal says which run already answers to it; that run goes by the very word
-        # typed, so its id is what tells it apart.
-        assert holder in r.err.splitlines()[0], r.err
-        assert listing(store) == before, taken
-
-
-def test_pf2_4_a_name_another_run_answers_to_is_refused_too(world: World, tmp_path: Path) -> None:
-    """R1 makes a name two runs answer to unusable, so it is refused before it is stored: here
-    the computed name and the id of a run that goes by another name."""
-    store = tmp_path / "store"
-    for run_id in (world.named, world.paired):
-        shutil.copytree(world.store / run_id, store / run_id)
-    computed = f"mock-agent {utc_day(manifest_of(store, world.named)['created_at'])} a"
-    before = listing(store)
-    for taken in (computed, world.named):
-        r = at(store, "sweep", world.spec, "--target", f"{MOCK}:rollout", "--name", taken, "--yes", *LOOSE)
-        assert_refusal(r, taken)
-        assert world.named_name in r.err.splitlines()[0], r.err
+        assert named in r.err.splitlines()[0], r.err
         assert listing(store) == before, taken
 
 

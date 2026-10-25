@@ -123,13 +123,29 @@ ARM_KEYS = (
 )
 VIEW_KEYS = ("title", "x_axis", "y_axis", "fixed", "theme", "top_n", "forest", "bound", "sign_convention")
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): ``mde_unchanged`` after ``honesty`` (spec LS D4, section 3.5).
+# PF4 (PF4.20, PF4.3): each panel carries the event's ``kind`` beside ``n_safer`` and ``n_worse``
+# (null when the kind is not known) and ``n_higher`` / ``n_lower`` after them, then the label of its
+# per-condition share interval (``share_label``, the share caption's level and method) and the
+# threshold section 8.4 reads its nothing-moved word against (``threshold``, the page's own copy).
+# PF4 re-freeze (PF4.34 to PF4.47): each panel gains ``flag_rule`` after ``kind``; the order is the build's.
 PANEL_KEYS = (
-    "event", "caption", "honesty", "mde_unchanged", "n_safer", "n_worse", "n_unchanged", "n_absent", "n_present",
+    "event", "caption", "honesty", "mde_unchanged", "kind", "flag_rule", "n_safer", "n_worse", "n_higher", "n_lower",
+    "share_label", "threshold", "n_unchanged", "n_absent", "n_present",
     "x_values", "y_values", "cells", "worst_header", "worst_rows", "worst_hashes",
 )
+# PF4 (PF4.13, PF4.14, PF4.15, PF4.3): each cell gains ``direction``, ``direction_note``, ``pairs``
+# and ``mde_note`` after ``verdict``, then each arm's share object and whether it differs from the
+# arm's rate.
 CELL_KEYS = (
     "coords", "config_hash", "n_a", "n_b", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
+    "direction", "direction_note", "pairs", "mde_note",
+    # PF4 re-freeze (PF4.34 to PF4.47): each cell gains Holm's q and flag, the limit keys, the
+    # competing shift and the interval, after mde_note; the order is the build's.
+    "q_holm", "holm", "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test", "mde_basis",
+    "mde_level", "mde_family", "mde_power", "mde_anchor", "mde_hr", "p_min", "flaggable", "mde_moves_with",
+    "mde_rise_verdict", "mde_fall_verdict", "competing_shift", "ci_lo", "ci_hi", "ci_level", "ci_method",
+    "share_a", "share_b", "share_a_differs", "share_b_differs",
     "config", "config_text", "text",
 )
 FLOAT_KINDS = {
@@ -960,15 +976,23 @@ class MockPair:
     b: str
 
 
+#: PF4 re-freeze (PF4.30, reading R33): the quickstart's design at 100 replicates with nothing
+#: declared has a lone-change limit of 0.262 at base 0.400, which the default 0.20 refuses; 0.3 is
+#: the smallest round value above it, and what these sweeps accept.
+QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
+
+
 @pytest.fixture(scope="module")
 def mock_pair(tmp_path_factory: pytest.TempPathFactory) -> MockPair:
     """The quickstart pair under the V22b salt: three outcomes, so the BH family changes with
     the event set. Rates are the mock's own; nothing is tuned."""
     root = tmp_path_factory.mktemp("mock-store")
-    first = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--salt", V22B_SALT, "--yes"])
+    first = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", ROLLOUT, "--salt", V22B_SALT, "--yes",
+                     *QUICKSTART_MAX_MDE])
     assert first.code == 0, first.text
     a = run_id_of(root, set())
-    second = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", a, "--yes"])
+    second = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", PATCHED, "--pair-with", a, "--yes",
+                      *QUICKSTART_MAX_MDE])
     assert second.code == 0, second.text
     return MockPair(root, a, run_id_of(root, {a}))
 
@@ -1319,11 +1343,26 @@ def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(go1: Built,
     svg_at = go1_dom.first_svg().index
     rules = css_rules(go1_dom.html_style())
     for panel, event in zip(go1.structure["panels"], go1.report.events, strict=True):
-        honesty = go1.report.panels[event].honesty
+        # PF4 (PF4.20): Go1 declares no event kind, so the page names the honesty line's count in
+        # direction words (the count of rises, "higher"); the library's panel keeps its old encoding.
+        ev = go1.multi.by_event[event]
+        assert ev.kind is None
+        library = go1.report.panels[event].honesty
+        # PF4 re-freeze (PF4.20, kindless events): the library no longer counts a kindless event's
+        # rises as worse (n_worse is None, n_higher carries the count); the report's honesty line keeps
+        # its old encoding, the count of rises, which is n_higher.
+        assert ev.n_worse is None
+        assert f'"{ev.n_higher} worse"' in library
+        honesty = library.replace(f'"{ev.n_higher} worse"', f'"{ev.n_higher} higher"')
         assert panel["honesty"] == honesty
         lines = honesty.splitlines()
         assert '"' in honesty, "the honesty text has no double quote to escape"
-        positions = [unescaped.find(line) for line in lines]
+        # PF4 re-freeze (PF4.22): a limit is the larger of the two directions, so Go1's two
+        # complementary events have the same limits and their honesty lines can share a line of
+        # text; each line is found after the line before it, which keeps the order pinned.
+        positions = []
+        for line in lines:
+            positions.append(unescaped.find(line, positions[-1] + 1 if positions else 0))
         assert all(p >= 0 for p in positions), (event, positions)
         assert positions == sorted(positions), positions
         nodes = [n for n in body_nodes_containing(go1_dom, lines[0]) if lines[1] in n.deep_text()]
@@ -1561,7 +1600,8 @@ def test_v32_both_arms_carry_the_manifest_the_row_count_and_the_role(go1: Built,
         assert arm["rows_stored"] == go1_store.count(run_id) == GO1_ROWS
         assert arm["role"] == role
     assert go1.structure["view"]["sign_convention"] == SIGN_CONVENTION
-    assert pair["store_root"] == str(GO1_ROOT)
+    # PF4 (PF4.11): the pair no longer carries the store's path.
+    assert "store_root" not in pair and str(GO1_ROOT) not in json.dumps(go1.structure)
     assert pair["a"]["run_salt"] == pair["b"]["run_salt"] == go1.structure["diff"]["run_salt"]
 
 
@@ -1843,7 +1883,11 @@ def test_v39_fence_headline_captions_and_worst_rows_are_on_the_page(go1: Built) 
     for line in go1.structure["headline"].splitlines():
         assert line in unescaped, line
     for panel, event in zip(go1.structure["panels"], go1.report.events, strict=True):
-        assert panel["caption"] == go1.report.panels[event].headline
+        # PF4 (PF4.20): Go1 declares no event kind, so the caption counts falls and rises in
+        # direction words ("N lower, M higher") rather than the library panel's safer/worse.
+        ev = go1.multi.by_event[event]
+        assert ev.kind is None
+        assert panel["caption"] == f"{event}: {ev.n_lower} lower, {ev.n_higher} higher"
         assert panel["caption"] in unescaped
         for row in panel["worst_rows"]:
             for value in row:

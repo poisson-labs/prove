@@ -39,7 +39,6 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from poisson_prove.diff import mde_two_proportion
 from poisson_prove.episode import Episode
 from poisson_prove.executor import (
     ExecutorError,
@@ -527,12 +526,10 @@ def test_i12_preflight_fresh_plan(tmp_path: Path) -> None:
     backend_line = _line_with(text, "Backend: local")
     assert TARGET in backend_line and T_UNIT in backend_line
     cost_line = _line_with(text, "Cost: $0")
-    mde_line = _line_with(text, "MDE at N=")
-    assert f"MDE at N={REPLICATES}" in mde_line
-    found = re.search(r"MDE at N=\d+[^:]*:\s*([0-9]*\.?[0-9]+)", mde_line)
-    assert found, mde_line
-    assert abs(float(found.group(1)) - mde_two_proportion(0.5, REPLICATES, REPLICATES)) <= 5e-3
-    assert len({sweep_line, backend_line, cost_line, mde_line}) == 4
+    # PF4 re-freeze (PF4.22, reading R36): the preflight block no longer prints the old limit at a base
+    # rate of 0.5 (the normal approximation, beside the gate's own); the plan's one limit is the gate's.
+    assert "MDE at N=" not in text and "base rate 0.5" not in text
+    assert len({sweep_line, backend_line, cost_line}) == 3
     assert "Resuming" not in text
 
 

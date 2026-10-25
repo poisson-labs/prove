@@ -56,6 +56,7 @@ import ast
 import dataclasses
 import hashlib
 import inspect
+import itertools
 import json
 import re
 import shutil
@@ -98,15 +99,16 @@ GO1_TALLY = (12_800, 12_800, 0, 0, 0, 0)
 # E14: minted on the bare tree at b10a146 (2026-09-06) by
 #   proofload --store tests/fixtures/go1 report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw
 # PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
-# test; the E14 digests and the heatmap are the unpaired test's, named.
+# test; the E14 facts and the heatmap are the unpaired test's, named.
 E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
-# Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
-# (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
-E14_SHA256 = {
-    "report.md": "39c6dde2db4de96337b13a667d37e080d86664e03ce7593e7714fdeb777154d8",
-    "heatmap.svg": "2e0dfe4e27314d30f1514104a60d0a566a75f4c032fa1b25f92b779f70c324de",
-    "receipt.html": "705aae536623bf35a91a31dd4c3c7967532ce9698cd9fe1de4a01158f39ca379",
-}
+# PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests (report.md, heatmap.svg, receipt.html) are no longer
+# asserted: the share table, the detection-limit notes and the direction words change all three files.
+# E14 checks the facts they guarded instead. An event of unknown kind prints in direction words, so the
+# library's own ``safer`` (the rate fell) and ``worse`` (it rose) read ``lower`` and ``higher``.
+E14_DIRECTION = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
+# PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the library's cells now hold the direction
+# words themselves for an event of unknown kind, so they map to themselves.
+E14_DIRECTION.update({"lower": "lower", "higher": "higher"})
 
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
@@ -152,6 +154,21 @@ CELL_KEYS = (
     "coords", "config_hash", "n_a", "n_b", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
     "config", "config_text", "text",
+)
+# PF4 (PF4.3, PF4.13 to PF4.15): every page cell also carries its direction, the direction and
+# detection-limit notes, its matched pairs and both arms' shares.
+PF4_CELL_KEYS = (
+    "direction", "direction_note", "pairs", "mde_note", "share_a", "share_b", "share_a_differs",
+    "share_b_differs",
+) + (
+    # PF4 re-freeze (PF4.34, PF4.27, PF4.32, PF4.41, PF4.42, PF4.47): each page cell also carries
+    # Holm's adjusted p and whether the row counts, the limit keys, the competing outcomes and the
+    # interval on the change; the names (and their order, which E16 does not pin) are the reference
+    # build's.
+    "q_holm", "holm", "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test",
+    "mde_basis", "mde_level", "mde_family", "mde_power", "mde_anchor", "mde_hr", "p_min",
+    "flaggable", "mde_moves_with", "mde_rise_verdict", "mde_fall_verdict", "competing_shift",
+    "ci_lo", "ci_hi", "ci_level", "ci_method",
 )
 # LS retrofit, 2026-09-22 (local serve pass, Phase A): ``where`` after ``coords``; ``coords`` keeps its meaning (spec LS section 3.1 (c)).
 HOLE_KEYS = (
@@ -368,6 +385,13 @@ def run_cli(argv: Sequence[str]) -> Result:
 DIFF_VERDICT_WORDS = frozenset({
     "worse", "safer", "trade", "no significant change", "too small to tell", "mixed", "higher", "lower",
 })
+#: PF4 re-freeze (PF4.34, PF4.39, PF4.40, PF4.41, PF4.44, PF4.46, PF4.50): the verdict block's
+#: detail lines, found by their label (``  <label>  ``).
+NOTHING_MOVED_WORDS = frozenset({"no significant change", "too small to tell"})
+DETAIL_LABELS = frozenset({
+    "method", "threshold", "before", "after", "trade", "verdict rule", "flagged only", "limits",
+    "intervals", "fragility", "peeking", "errors", "competing",
+})
 
 
 def run_names(root: Path) -> dict[str, str]:
@@ -384,10 +408,22 @@ def after_verdict_block(out: str, name_a: str, name_b: str) -> str:
     block, sep, rest = out.partition("\n\n")
     assert sep, out
     lines = block.split("\n")
-    assert lines[0].split("  ")[0] in DIFF_VERDICT_WORDS, out
-    assert [line.split("  ")[1] for line in lines[1:4]] == ["method", "before", "after"], out
-    assert lines[2] == f"  before  {name_a}" and lines[3] == f"  after  {name_b}", out
-    assert all(line.startswith("  trade  ") for line in lines[4:]), out
+    word = lines[0].split("  ")[0]
+    assert word in DIFF_VERDICT_WORDS, out
+    # PF4 re-freeze (PF4.34, PF4.50): the block gains detail lines found by their label; the facts
+    # kept are the word, the method line first, the threshold line right after it exactly under the
+    # two nothing-moved words, then the two runs by name.
+    assert all(line.startswith("  ") for line in lines[1:]), out
+    labels = [line.split("  ")[1] for line in lines[1:]]
+    assert set(labels) <= DETAIL_LABELS, out
+    assert labels[0] == "method", out
+    threshold = word in NOTHING_MOVED_WORDS
+    assert labels.count("threshold") == (1 if threshold else 0), out
+    if threshold:
+        assert labels[1] == "threshold", out
+    at = 2 if threshold else 1
+    assert labels[at : at + 2] == ["before", "after"], out
+    assert lines[at + 1] == f"  before  {name_a}" and lines[at + 2] == f"  after  {name_b}", out
     return rest
 
 
@@ -1434,7 +1470,10 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     frame = syn_multi.coverage
     assert frame is not None
     md = syn_multi.to_markdown()
-    assert md == hand_built_multi(syn_multi).to_markdown()
+    # PF4 re-freeze (PF4.42): the cell table prints the interval on the change at its level, which a
+    # result hand-built from the M7 fields alone does not carry; S21's property is that attaching
+    # the coverage moves no byte, so the markdown is compared with the same result without it.
+    assert md == replace(syn_multi, coverage=None).to_markdown()
     assert "coverage" not in md
     block = coverage_block(frame)
     # The command line prints the markdown and the block under rule 10 (spec section 5.4): each
@@ -1457,6 +1496,8 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     # > and not >=: the method table sits between the markdown and the block, so the block
     # cannot begin where the markdown ends.
     at = next(i for i, line in enumerate(lines) if line.startswith("coverage: "))
+    # PF4 re-freeze (PF4.50): ``lines`` start after the verdict block, so the markdown starts at 0;
+    # the frozen line named a ``start`` it never defined.
     assert at > md_n, every.out
     assert rendered_problems(shortened(block), "".join(lines[at : at + block_n]), "diff.md") == [], every.out
     assert every.out.count("## coverage") == 1
@@ -1529,19 +1570,49 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def e14_builder_texts() -> dict[str, str]:
+def e14_multi() -> MultiDiffResult:
+    """The E14 argv's ``multi``."""
+    store = Store(GO1_ROOT)
+    return multi_diff(
+        store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), events=["fell"],
+        manifest_a=store.manifest(GO1_A), manifest_b=store.manifest(GO1_B),
+    )
+
+
+def e14_builder_texts(multi: MultiDiffResult) -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
     store = Store(GO1_ROOT)
     ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
-    multi = multi_diff(
-        store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), events=["fell"],
-        manifest_a=ma, manifest_b=mb,
-    )
     spec = ReportSpec(title=f"{GO1_A} vs {GO1_B}: fell", x_axis="mu", y_axis="push_pct_bw")
     report = build_multi_report(multi, spec, manifests=(ma, mb))
     receipt = build_multi_report(multi, replace(spec, theme="light"), manifests=(ma, mb))
     return {"report.md": report.to_markdown(), "receipt.html": receipt.to_html(), "heatmap.svg": report.to_svg()}
+
+
+def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
+    """The largest limit over an event's unchanged conditions (each the larger of its two Fisher
+    limits at ``level``, or the one way with room; PF4.27), from the stats file's references, and
+    the way that limit goes on the condition the result names as worst."""
+    from test_pf4_stats import _ref_fisher_limits
+
+    def limit(row: Any) -> tuple[float | None, float | None, float | None]:
+        rise, fall = _ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
+        no_rise, no_fall = row.events_a == row.n_a, row.events_a == 0
+        if rise is not None and fall is not None:
+            return max(rise, fall), rise, fall
+        if rise is not None and no_fall:
+            return rise, rise, fall
+        if fall is not None and no_rise:
+            return fall, rise, fall
+        return None, rise, fall
+
+    unchanged = [row for row in ev.cells.itertuples(index=False) if row.direction == "unchanged"]
+    limits = {row.config_hash: limit(row) for row in unchanged}
+    value = max(v for v, _, _ in limits.values() if v is not None)
+    top, rise, _ = limits[ev.max_mde_unchanged_cell]
+    assert top is not None and abs(top - value) <= 1e-12, (ev.max_mde_unchanged_cell, top, value)
+    return value, "rise" if rise is not None and abs(rise - value) <= 1e-12 else "fall"
 
 
 def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree(tmp_path: Path) -> None:
@@ -1554,7 +1625,8 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
     out = tmp_path / "report"
     r = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
     assert r.code == 0, r.text
-    texts = e14_builder_texts()
+    multi = e14_multi()
+    texts = e14_builder_texts(multi)
     # The heatmap's labels are printed under rule 10 by the command line (spec section 5.4): the
     # frozen digest now holds over the builder's own SVG, and the written file carries its cells,
     # geometry and numbers.
@@ -1566,9 +1638,55 @@ def test_e14_the_go1_report_reproduces_the_three_digests_minted_on_the_bare_tree
     assert new_title in written and old_title not in written
     assert texts["heatmap.svg"].count(old_title) >= 1
     assert rendered_problems(texts["heatmap.svg"].replace(old_title, new_title), written, "heatmap.svg") == []
+    for name in ("report.md", "receipt.html"):
+        as_0_0_1_wrote_it(texts[name])
+    # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded. First
+    # S21's own: attaching the coverage moves no byte of any of the three files.
+    assert e14_builder_texts(replace(multi, coverage=None)) == texts
+    # The headline counts, from the library's cells (the bare tree's report printed 60 safer and
+    # 0 worse on this pair), in the report, the receipt and the heatmap.
+    fell = multi.by_event["fell"]
+    cells = fell.cells
+    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the cells' verdict holds the direction words.
+    n_lower, n_higher = int((cells["verdict"] == "lower").sum()), int((cells["verdict"] == "higher").sum())
+    assert (n_lower, n_higher) == (60, 0)
+    headline = f"fell: {n_lower} lower, {n_higher} higher"
+    assert headline in texts["report.md"].splitlines() and f"## {headline}" in texts["report.md"].splitlines()
+    assert f"<h2>{headline}</h2>" in texts["receipt.html"]
+    assert f">{headline}</text>" in texts["heatmap.svg"]
+    # The worst-powered unchanged condition and its limit (34pp on Go1, the figure the bare tree's
+    # report printed), on its line in all three files.
+    worst = cells.set_index("config_hash").loc[fell.max_mde_unchanged_cell]
+    # PF4 re-freeze (PF4.22, PF4.27): the limit is Fisher's exact limit at q / M, the larger of the two
+    # directions, so the 34 points become about 47; recomputed from the stats file's references, and
+    # the line names the direction that limit is for.
+    value, way = ref_worst_unchanged(fell, multi.q / multi.n_tests)
+    assert abs(fell.max_mde_unchanged - value) <= 1e-4 + 1e-12, (fell.max_mde_unchanged, value)
+    points = round(100 * fell.max_mde_unchanged)
+    config = ", ".join(f"{k}={v:g}" for k, v in sorted(worst["config"].items()))
+    worst_line = (f"Worst-powered unchanged cell ({config}, n={worst['n_a']}/{worst['n_b']}) can only detect a "
+                  f"{points}pp {way}.")
     for name, text in texts.items():
-        normalised = text if name == "heatmap.svg" else as_0_0_1_wrote_it(text)
-        assert hashlib.sha256(normalised.encode("utf-8")).hexdigest() == E14_SHA256[name], name
+        assert worst_line in text, name
+    # Every row of the report's cell table is a cell of the diff, with its counts, rates in points,
+    # p, q and verdict.
+    md_lines = texts["report.md"].splitlines()
+    first = next(i for i, line in enumerate(md_lines) if line.startswith("| "))
+    rows = list(itertools.takewhile(lambda line: line.startswith("|"), md_lines[first:]))
+    header = [c.strip() for c in rows[0].strip("|").split("|")]
+    assert header[:9] == ["mu", "push_pct_bw", "n (a/b)", "rate_a (pp)", "rate_b (pp)", "delta (pp)", "p", "q", "verdict"], header
+    table = [dict(zip(header, (c.strip() for c in row.strip("|").split("|")), strict=True)) for row in rows[1:]]
+    table = [row for row in table if set(row["mu"]) - set("-:")]
+    assert table
+    for row in table:
+        (cell,) = [c for c in cells.to_dict(orient="records") if c["config"] == {"mu": float(row["mu"]), "push_pct_bw": float(row["push_pct_bw"])}]
+        assert row["n (a/b)"] == f"{cell['n_a']}/{cell['n_b']}", row
+        for column, key in (("rate_a (pp)", "rate_a"), ("rate_b (pp)", "rate_b"), ("delta (pp)", "delta")):
+            assert abs(float(row[column]) - 100 * cell[key]) <= 0.05 + 1e-9, (row, column, cell[key])
+        for column in ("p", "q"):
+            decimals = len(row[column].partition(".")[2])
+            assert abs(float(row[column]) - cell[column]) <= 0.5 * 10.0**-decimals + 1e-12, (row, column, cell[column])
+        assert row["verdict"] == E14_DIRECTION[cell["verdict"]], (row, cell["verdict"])
 
 
 def test_e14_the_synthetic_report_is_byte_identical_with_coverage_replaced_by_none(syn: Built) -> None:
@@ -1622,7 +1740,10 @@ def test_e16_cell_keys_are_the_twenty_one_in_order(builts: tuple[Built, Built]) 
         for panel in b.structure["panels"]:
             assert panel["cells"]
             for cell in panel["cells"]:
-                assert tuple(cell) == CELL_KEYS, tuple(cell)
+                # PF4 (PF4.3, PF4.13 to PF4.15): the twenty-one keep their order, and the cell gains
+                # the PF4 keys; where the new keys sit among them is not pinned.
+                assert tuple(k for k in cell if k in CELL_KEYS) == CELL_KEYS, tuple(cell)
+                assert set(cell) == set(CELL_KEYS) | set(PF4_CELL_KEYS), set(cell) ^ (set(CELL_KEYS) | set(PF4_CELL_KEYS))
 
 
 def test_e16_rows_and_no_outcome_are_ints_equal_to_the_coverage_row(builts: tuple[Built, Built]) -> None:

@@ -17,6 +17,7 @@ a failure. The event is printed in the provenance and the legend so a reader can
 from __future__ import annotations
 
 import html as _html
+import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -25,7 +26,7 @@ from xml.sax.saxutils import escape as _xml_escape
 
 import pandas as pd
 
-from poisson_prove import __version__, _look
+from poisson_prove import __version__, _facts, _look, stats
 from poisson_prove._compat import old_writer_line, version_as_recorded
 from poisson_prove.diff import _CENSORED, _PAIRED_METHODS, DiffResult, EventDiff, MultiDiffResult
 from poisson_prove.store import RunManifest
@@ -168,6 +169,8 @@ def _wrap_like(now: str, base: str, budget: int) -> list[str]:
         n = len(line.split(" "))
         lines.append(" ".join(now_words[k : k + n]))
         k += n
+    if any(len(line) > budget for line in lines):
+        return _wrap(now, budget)
     return lines
 
 
@@ -278,6 +281,10 @@ class Cell:
     ci_lo: float | None = None
     ci_hi: float | None = None
     ci_basis: str | None = None
+    mde_note: str | None = None
+    #: PF4.32: the way the condition's limit goes, ``rise`` or ``fall``; None on a single-event
+    #: report.
+    mde_way: str | None = None
 
 
 @dataclass(frozen=True)
@@ -323,6 +330,10 @@ class Report:
     _forest: bool = field(default=False, repr=False, compare=False)
     _horizon: float = field(default=0.0, repr=False, compare=False)
     _intervals: bool = field(default=False, repr=False, compare=False)
+    #: The panel's two words for a significant change, in the order of ``n_safer`` and
+    #: ``n_worse``: ``safer`` and ``worse`` for an event whose kind is known (and for every
+    #: single-event report), ``lower`` and ``higher`` for one whose kind is not (PF4.20).
+    _words: tuple[str, str] = field(default=("safer", "worse"), repr=False, compare=False)
 
     def to_markdown(self) -> str:
         return _render_markdown(self)
@@ -332,6 +343,15 @@ class Report:
 
     def to_html(self) -> str:
         return _render_html(self)
+
+    def shown_honesty(self, honesty: str | None = None) -> str:
+        """The honesty block as every surface prints it: the claim's count named in the panel's
+        own word, ``"3 higher"`` for an event of unknown kind (PF4.20). ``honesty`` keeps M7's
+        encoding, ``"N worse"``, the count of the panel's second slot."""
+        text = self.honesty if honesty is None else honesty
+        if self._words[1] == "worse":
+            return text
+        return text.replace(f'"{self.n_worse} worse"', f'"{self.n_worse} {self._words[1]}"', 1)
 
 
 @dataclass(frozen=True)
@@ -352,6 +372,13 @@ class MultiReport:
     #: M6's answer to whether the two events are exact complements, carried so the page and the
     #: payload can say so as data; ``trade_line`` already says it as words.
     complement: tuple[str, ...] | None = None
+    #: PF4.5: the comparison's word and its sentence, the line after the title.
+    verdict_line: str | None = None
+    #: The sections after the intervals: each arm's shares (PF4.3) and what the verdict rests
+    #: on (PF4.34 to PF4.46), as Markdown lines the receipt renders too.
+    extra_md: tuple[str, ...] = ()
+    #: The Methods table's two count columns, in the panels' words (PF4.20).
+    _method_words: tuple[str, str] = field(default=("safer", "worse"), repr=False, compare=False)
 
     def to_markdown(self) -> str:
         return _render_multi_markdown(self)
@@ -369,6 +396,10 @@ class SurvivalReport:
     events: tuple[str, ...]
     panels: Mapping[str, Report]
     provenance: dict[str, object]
+    #: PF4.4: the design limit, under the title.
+    header_lines: tuple[str, ...] = ()
+    #: PF4.2: each condition's share with its Wilson interval beside its incidence.
+    extra_md: tuple[str, ...] = ()
 
     def to_markdown(self) -> str:
         return _render_survival_markdown(self)
@@ -471,7 +502,30 @@ def _diff_cell(coords: tuple[object, ...], r: dict[str, Any]) -> Cell:
         q=float(r["q"]),
         verdict=str(r["verdict"]),
         mde=float(r["mde"]),
+        mde_note=r.get("mde_note") if isinstance(r.get("mde_note"), str) else None,
+        mde_way=_way_of(r),
     )
+
+
+def _way_of(r: Mapping[str, Any]) -> str | None:
+    """Which direction a cell's one limit is (PF4.32): the rise's or the fall's, whichever it
+    equals, the rise first; None when the cell has no limit or carries no directions."""
+    def number(value: Any) -> float | None:
+        missing = value is None or (isinstance(value, float) and math.isnan(value))
+        return None if missing else float(value)
+
+    mde = number(r.get("mde"))
+    if mde is None:
+        return None
+    for way in ("rise", "fall"):
+        if number(r.get(f"mde_{way}")) == mde:
+            return way
+    return None
+
+
+def _mde_key(c: Cell) -> float:
+    """A cell with no detection limit sorts after every cell with one."""
+    return math.inf if math.isnan(c.mde) else c.mde
 
 
 _Holes = Mapping[tuple[object, ...], tuple[str | None, str]]
@@ -590,27 +644,56 @@ def _honesty(
     max_mde: float,
     max_mde_unchanged: float,
     max_mde_unchanged_cell: str | None,
+    compared: int | None = None,
+    not_compared: int = 0,
 ) -> str:
     """Two lines: the worst-powered *unchanged* cell (what "0 worse" rests on), then the
-    worst-powered cell overall. Both values are M6 fields; M7 only names a cell attaining them."""
+    worst-powered cell overall. Both values are M6 fields; M7 only names a cell attaining them.
+
+    PF4.27: a limit that is null is never printed as a number. When no unchanged condition has
+    a limit, the first line names the first of them with its reason; a single-event cell whose
+    whole headroom is not detectable says so. PF4.17: with no unchanged condition, a two-run
+    report counts what was compared and what was not. The claim's count keeps M7's encoding,
+    ``"N worse"``; a surface names it in the panel's own word (``Report.shown_honesty``)."""
     unchanged = [c for c in present if c.verdict == "unchanged"]
-    if math.isnan(max_mde_unchanged) or not unchanged:
-        first = _HONESTY_NONE
+    without = [c for c in unchanged if c.mde_note is not None and math.isnan(c.mde)]
+    if unchanged and math.isnan(max_mde_unchanged) and without:
+        cell = without[0]
+        first = (
+            f"Least sensitive unchanged condition ({_coord_text(spec, cell)}, "
+            f"n={_fmt(cell.n_a, 'int')}/{_fmt(cell.n_b, 'int')}) has no limit: {cell.mde_note}."
+        )
+    elif math.isnan(max_mde_unchanged) or not unchanged:
+        if compared is None:
+            first = _HONESTY_NONE
+        else:
+            tail = f"; {not_compared} were not compared." if not_compared else "."
+            first = f"All {compared} compared conditions moved significantly{tail}"
     else:
         named = [c for c in unchanged if c.config_hash == max_mde_unchanged_cell]
         if not named:
             named = [c for c in unchanged if c.mde == max_mde_unchanged]
         if not named:
-            named = [max(unchanged, key=lambda c: c.mde)]
+            named = [max(unchanged, key=_mde_key)]
         cell = named[0]
         first = (
             f"Worst-powered unchanged cell ({_coord_text(spec, cell)}, n={_fmt(cell.n_a, 'int')}/"
             f"{_fmt(cell.n_b, 'int')}) can only detect a "
-            f"{_fmt(max_mde_unchanged, 'pp0')}{_pp()} rise. "
+            f"{_fmt(max_mde_unchanged, 'pp0')}{_pp()} {cell.mde_way or 'rise'}. "
             f'"{n_worse} worse" is an honest claim only above that.'
         )
+        if cell.mde_note is not None and cell.mde_note.startswith("none detectable"):
+            first = (
+                f"Least sensitive unchanged condition ({_coord_text(spec, cell)}, "
+                f"n={_fmt(cell.n_a, 'int')}/{_fmt(cell.n_b, 'int')}) could see no rise: "
+                f"{cell.mde_note}."
+            )
+    if math.isnan(max_mde):
+        # PF4.27: no number for a null limit; the reason is on each condition's row.
+        second = "Worst-powered cell overall: no condition has a limit (each row says why)."
+        return first + "\n" + second
     attaining = [c for c in present if c.mde == max_mde]
-    overall = attaining[0] if attaining else max(present, key=lambda c: c.mde)
+    overall = attaining[0] if attaining else max(present, key=_mde_key)
     second = (
         f"Worst-powered cell overall: {_fmt(max_mde, 'pp0')}{_pp()} "
         f"({_coord_text(spec, overall)})."
@@ -644,17 +727,21 @@ def _build_panel(
     curves: Mapping[str, tuple[KMCurve, KMCurve]] | None = None,
     grid: tuple[tuple[Cell, ...], tuple[object, ...], tuple[object, ...]] | None = None,
     intervals: bool = False,
+    words: tuple[str, str] = ("safer", "worse"),
 ) -> Report:
     """The one grid -> Report path. ``bound`` is injected (shared across a multi report) or
-    derived from this panel's own cells; ``mode`` picks the diverging or the sequential ramp."""
+    derived from this panel's own cells; ``mode`` picks the diverging or the sequential ramp.
+    ``words`` are the panel's two verdicts for a significant change, counted into ``n_safer`` and
+    ``n_worse`` in that order (PF4.20: ``lower`` and ``higher`` when the event's kind is not
+    known)."""
     if grid is None:
         grid = _grid(rows, spec, _diff_cell if mode == "diff" else _rate_cell)
     cells_t, x_values, y_values = grid
     present = [c for c in cells_t if c.present]
     if not present:
         raise AxisError("no present cells to report")
-    n_safer = sum(c.verdict == "safer" for c in present)
-    n_worse = sum(c.verdict == "worse" for c in present)
+    n_safer = sum(c.verdict == words[0] for c in present)
+    n_worse = sum(c.verdict == words[1] for c in present)
     n_unchanged = sum(c.verdict == "unchanged" for c in present)
     n_absent = len(cells_t) - len(present)
     forest = (
@@ -697,6 +784,7 @@ def _build_panel(
         _forest=forest,
         _horizon=horizon,
         _intervals=intervals,
+        _words=words,
     )
 
 
@@ -736,7 +824,8 @@ def _interval_lines(multi: MultiDiffResult) -> tuple[str, ...]:
     if _look.active():
         return (
             f"intervals: {multi.interval_level:.1%} (alpha* = {_look.fmt_p(multi.alpha_star)} = "
-            f"q x {_look.fmt_count(multi.n_rejected)} / {_look.fmt_count(multi.n_tests)} over "
+            f"q x {_look.fmt_count(max(multi.n_rejected, 1))} / "
+            f"{_look.fmt_count(multi.n_tests)} over "
             f"the flat BH family), basis {basis}",
             f"interval excludes zero, verdict unchanged: "
             f"{_look.fmt_count(multi.n_interval_only)} cells",
@@ -745,7 +834,8 @@ def _interval_lines(multi: MultiDiffResult) -> tuple[str, ...]:
         )
     return (
         f"intervals: {multi.interval_level:.4%} (alpha* = {multi.alpha_star:g} = "
-        f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family), basis {basis}",
+        f"q x {max(multi.n_rejected, 1)} / {multi.n_tests} over "
+        f"the flat BH family), basis {basis}",
         f"interval excludes zero, verdict unchanged: {multi.n_interval_only} cells",
         f"verdict significant, interval covers zero: {multi.n_verdict_only} cells",
     )
@@ -798,7 +888,7 @@ def _worst(
     if mode == "rate":
         ordered = sorted(present, key=lambda c: (-c.rate_a, c.config_hash or ""))
     elif tiebreak:
-        ordered = sorted(present, key=lambda c: (-c.delta, c.q, c.mde, c.config_hash or ""))
+        ordered = sorted(present, key=lambda c: (-c.delta, c.q, _mde_key(c), c.config_hash or ""))
     else:
         ordered = sorted(present, key=lambda c: (-c.delta, c.config_hash or ""))
     return ordered[: max(0, min(top_n, len(ordered)))]
@@ -844,11 +934,14 @@ def _diff_honesty(
     max_mde: float,
     max_mde_unchanged: float,
     max_mde_unchanged_cell: str | None,
+    compared: int | None = None,
+    not_compared: int = 0,
 ) -> Callable[[Sequence[Cell], int], str]:
     def honesty(present: Sequence[Cell], n_worse: int) -> str:
         return _honesty(
             present, spec, n_worse=n_worse, max_mde=max_mde,
             max_mde_unchanged=max_mde_unchanged, max_mde_unchanged_cell=max_mde_unchanged_cell,
+            compared=compared, not_compared=not_compared,
         )
 
     return honesty
@@ -1045,12 +1138,20 @@ def build_report(
 # ---------- build: multi event ----------
 
 
-def _caption(event: str, n_safer: int, n_worse: int) -> str:
-    return f"{event}: {_fmt(n_safer, 'int')} safer, {_fmt(n_worse, 'int')} worse"
+def _caption(
+    event: str, n_safer: int, n_worse: int, words: tuple[str, str] = ("safer", "worse")
+) -> str:
+    return f"{event}: {_fmt(n_safer, 'int')} {words[0]}, {_fmt(n_worse, 'int')} {words[1]}"
 
 
 def _method_label(method: str) -> str:
-    return f"{method} (cause-specific)" if method == "logrank_bh" else method
+    # PF4.41: log-rank tests the cause-specific hazard, and says so wherever it is named.
+    return f"{method} (cause-specific hazard)" if method == "logrank_bh" else method
+
+
+def _panel_words(ev: EventDiff) -> tuple[str, str]:
+    """An event's two verdicts in the order of a panel's ``n_safer`` and ``n_worse``."""
+    return ("lower", "higher") if ev.kind is None else ("safer", "worse")
 
 
 def _multi_method_rows(
@@ -1065,11 +1166,12 @@ def _multi_method_rows(
     def add_multi(m: MultiDiffResult) -> None:
         for e in m.events:
             ev = m.by_event[e]
+            (_, n_up), (_, n_down) = ev.counts()
             rows.append((
                 f"{_method_label(m.method)} · {e}",
                 "paired" if m.method in _PAIRED_METHODS else "unpaired",
-                _fmt(ev.n_safer, "int"),
-                _fmt(ev.n_worse, "int"),
+                _fmt(n_down, "int"),
+                _fmt(n_up, "int"),
                 _fmt(ev.n_unchanged, "int"),
                 f"{_fmt(ev.max_mde, 'pp0')}{_pp()}",
                 _fmt(m.q, "sig3"),
@@ -1150,12 +1252,7 @@ def build_multi_report(
     _validate_spec(spec)
     if tree is not None:
         _check_tree(multi, tree)
-    order = tuple(
-        sorted(
-            multi.events,
-            key=lambda e: (-multi.by_event[e].n_worse, -multi.by_event[e].n_safer, e),
-        )
-    )
+    order = tuple(multi._ordered_events())
     rows_by_event = {e: _rows_of(multi.by_event[e].cells) for e in order}
     # One hole map for every panel: each event's cells carry the same ``common``, so the grid
     # and its holes are identical across panels.
@@ -1197,10 +1294,13 @@ def build_multi_report(
     for e in order:
         ev: EventDiff = multi.by_event[e]
 
+        words = _panel_words(ev)
+
         def headline(
-            present: Sequence[Cell], n_safer: int, n_worse: int, n_unchanged: int, e: str = e
+            present: Sequence[Cell], n_safer: int, n_worse: int, n_unchanged: int, e: str = e,
+            words: tuple[str, str] = words,
         ) -> str:
-            return _caption(e, n_safer, n_worse)
+            return _caption(e, n_safer, n_worse, words)
 
         panels[e] = _build_panel(
             rows_by_event[e],
@@ -1212,6 +1312,7 @@ def build_multi_report(
             honesty_of=_diff_honesty(
                 spec, max_mde=ev.max_mde, max_mde_unchanged=ev.max_mde_unchanged,
                 max_mde_unchanged_cell=ev.max_mde_unchanged_cell,
+                compared=len(ev.cells), not_compared=multi.n_not_comparable,
             ),
             provenance=provenance,
             trades=trades,
@@ -1219,11 +1320,15 @@ def build_multi_report(
             horizon=multi.horizon,
             grid=grids[e],
             intervals=multi.intervals is not None,
+            words=words,
         )
     return MultiReport(
         spec=spec,
         events=order,
         panels=panels,
+        verdict_line=_verdict_line(multi),
+        extra_md=(*_shares_md(multi, spec, order), *_facts.markdown(multi)),
+        _method_words=("safer", "worse") if multi.all_kinds_known() else ("lower", "higher"),
         headline=multi.headline(),
         trade_line=multi.trade_line(),
         inference_line=multi.to_markdown().splitlines()[0] if multi.inferred else None,
@@ -1234,6 +1339,84 @@ def build_multi_report(
         interval_lines=_interval_lines(multi),
         complement=multi.complementary_events(),
     )
+
+
+def _md_html(lines: Sequence[str]) -> list[str]:
+    """Sections written as Markdown lines, as the receipt's HTML: headings, tables, paragraphs."""
+    out: list[str] = []
+    table: list[list[str]] = []
+
+    def flush() -> None:
+        if table:
+            out.append(_html_table(table[0], table[2:]))
+            table.clear()
+
+    for line in (part for chunk in lines for part in chunk.split("\n")):
+        if line.startswith("|"):
+            table.append([cell.strip() for cell in line.strip().strip("|").split("|")])
+            continue
+        flush()
+        if line.startswith("## "):
+            out.append(f"<h2>{_html.escape(line[3:])}</h2>")
+        elif line.strip():
+            out.append(f"<p>{_html.escape(line)}</p>")
+    flush()
+    return out
+
+
+def _verdict_line(multi: MultiDiffResult) -> str:
+    """PF4.5: the comparison's word and its sentence, in direction words for every event."""
+    word = multi.comparison_verdict()
+    counts = _facts.counts_text(multi, sorted(multi.events))
+    return f"{word}  {_facts.verdict_sentence(word, counts, multi)}"
+
+
+def _shares_md(multi: MultiDiffResult, spec: ReportSpec, order: Sequence[str]) -> tuple[str, ...]:
+    """PF4.3, PF4.42: each condition's two shares with their Wilson intervals, the change with
+    its interval at the comparison's level, and the condition's limits, one table per event."""
+    label = stats.level_label(stats.WILSON_LEVEL)
+    out = ["## Shares", ""]
+    for e in order:
+        rows = []
+        for r in sorted(multi.by_event[e].records(), key=lambda r: str(r["config_hash"])):
+            if not int(r["n_a"]) or not int(r["n_b"]):
+                continue
+            shares = []
+            for arm in ("a", "b"):
+                k, n = int(r[f"events_{arm}"]), int(r[f"n_{arm}"])
+                interval = stats.wilson(k, n)
+                shares.append(f"{k / n:.3f} [{interval.lo:.3f}, {interval.hi:.3f}]")
+            lo, hi = r.get("ci_lo"), r.get("ci_hi")
+            change = (
+                "censored" if lo is None or hi is None else f"{r['delta']:.3f} [{lo:.3f}, {hi:.3f}]"
+            )
+            coord = _fmt(json.dumps(r["config"], sort_keys=True), "coord")
+            rows.append([coord, *shares, change, _facts.limit_text(r)])
+        out += [
+            f"{e}: share of runs that ended in {e}, {label} Wilson interval",
+            "",
+            _md_table(
+                ["config", f"share A [{label}]", f"share B [{label}]", _change_head(multi), "MDE"],
+                rows,
+            ),
+            "",
+        ]
+    out += [
+        f"The shares are k/n per condition with a {label} Wilson interval, not adjusted for the "
+        "number of conditions, unlike the verdicts; the tests compare the rates.",
+        "",
+        _facts.limits_caption(),
+        "",
+    ]
+    return tuple(out)
+
+
+def _change_head(multi: MultiDiffResult) -> str:
+    """The change column's header, with its interval's level and method (PF4.42)."""
+    if multi.interval_level is None:
+        return "change"
+    level = stats.level_label(multi.interval_level)
+    return f"change [{level}, {_facts.interval_method(multi.method)}]"
 
 
 # ---------- build: single-run survival ----------
@@ -1283,6 +1466,8 @@ def build_survival_report(
     manifest: RunManifest | None = None,
     observations: tuple[int, int] | None = None,
     declarations: DeclarationCheck | None = None,
+    shares: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+    design_mde: Mapping[str, Any] | None = None,
 ) -> SurvivalReport:
     """cells = M5 cell_table output; one rate panel per event, F_k(horizon) from its curve.
 
@@ -1334,7 +1519,64 @@ def build_survival_report(
             provenance=provenance,
             horizon=float(horizon),
         )
-    return SurvivalReport(spec=spec, events=event_list, panels=panels, provenance=provenance)
+    return SurvivalReport(
+        spec=spec, events=event_list, panels=panels, provenance=provenance,
+        header_lines=() if design_mde is None else (_design_line(design_mde),),
+        extra_md=() if shares is None else _single_shares_md(shares, event_list),
+    )
+
+
+def _design_line(design: Mapping[str, Any]) -> str:
+    """PF4.4, PF4.32: the run's design limit with its direction, test, level, family and power,
+    and whether it was recorded at sweep time or computed now from what the run recorded."""
+    how = ("computed at read time from the recorded replicates" if design["computed_at_read_time"]
+           else "recorded at sweep time")
+    limit = "none" if design["mde"] is None else _look.fmt_rate(design["mde"])
+    way = design.get("direction", "rise")
+    return (
+        f"design limit {limit}, a {way}, at its worst base rate, "
+        f"{_look.fmt_rate(design['base_rate'])} ({how}): the smallest change one condition alone "
+        f"would be flagged for, {stats.times_in(design['power'])} "
+        f"({_facts.test_name(design['test'])}, q {design['q']:g} over {design['family']} tests)"
+    )
+
+
+def _single_shares_md(
+    shares: Mapping[str, Sequence[Mapping[str, Any]]], events: Sequence[str]
+) -> tuple[str, ...]:
+    """PF4.2: each condition's share of episodes that ended in the event, with its Wilson interval
+    at its recorded level, beside the cumulative incidence at the horizon; a mark where the two
+    differ, which only a run censored before the horizon can make (PF4.37)."""
+    out = ["## Shares", ""]
+    marked = False
+    for e in events:
+        rows = []
+        label = None
+        for c in shares.get(e, ()):
+            share = c["share"]
+            label = stats.level_label(share["level"])
+            marked = marked or bool(c["share_differs"])
+            rows.append([
+                _fmt(json.dumps(c["config"], sort_keys=True), "coord"),
+                f"{share['value']:.3f} [{share['lo']:.3f}, {share['hi']:.3f}]"
+                + (" *" if c["share_differs"] else ""),
+                _look.fmt_rate(c["incidence"]),
+            ])
+        label = label or stats.level_label(stats.WILSON_LEVEL)
+        out += [
+            f"{e}: share of episodes that ended in the event, {label} Wilson interval; and "
+            "cumulative incidence at the horizon",
+            "",
+            _md_table(["config", f"share [{label}]", "incidence at the horizon"], rows),
+            "",
+        ]
+    if marked:
+        out += [
+            "* the share and the incidence differ here: a run was censored before the horizon, so "
+            "the incidence accounts for it and the share cannot.",
+            "",
+        ]
+    return tuple(out)
 
 
 # ---------- text helpers ----------
@@ -1417,12 +1659,25 @@ def _notch(x: int, y: int, w: int, h: int) -> str:
     )
 
 
+def _limit_pp(value: float) -> str:
+    return "none" if math.isnan(value) else f"{_fmt(value, 'pp0')}{_pp()}"
+
+
 def _legend_caption(rep: Report) -> str:
     if rep._mode == "rate":
         return (
             f"F(horizon) = cumulative incidence at horizon {_fmt(rep._horizon, 'num')} {_in_pp()}; "
             f"event={rep._event}; blank = no data"
         )
+    if rep._words == ("lower", "higher"):
+        # PF4.20: an event of unknown kind is read in direction words, never judged.
+        caption = (
+            f"delta = rate_b - rate_a {_in_pp()}; event={rep._event}; negative means the event's "
+            "rate fell; corner square = significant; blank = no data"
+        )
+        if rep._trades:
+            caption += "; corner notches = mixed (one event fell where another rose)"
+        return caption
     caption = (
         f"delta = rate_b - rate_a {_in_pp()}; event={rep._event}; negative is safer only if the "
         f"event "
@@ -1435,8 +1690,8 @@ def _legend_caption(rep: Report) -> str:
 
 def _honesty_lines(rep: Report, budget: int) -> list[list[str]]:
     """The honesty block's lines wrapped where the library's rendering wraps them."""
-    plain = rep._honesty_plain.splitlines() if rep._honesty_plain else []
-    lines = rep.honesty.splitlines()
+    plain = rep.shown_honesty(rep._honesty_plain).splitlines() if rep._honesty_plain else []
+    lines = rep.shown_honesty().splitlines()
     if len(plain) != len(lines):
         plain = lines
     return [_wrap_like(line, base, budget) for line, base in zip(lines, plain, strict=True)]
@@ -1502,7 +1757,7 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
         for j in range(rows):
             for i in range(cols):
                 c = rep.cells[j * cols + i]
-                if c.present and c.verdict in ("safer", "worse"):
+                if c.present and c.verdict not in ("unchanged", ""):
                     x = left + i * cell_w + cell_w - glyph - 1
                     y = top + j * cell_h + 1
                     out.append(
@@ -1676,7 +1931,7 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
             f'<circle cx="{_fmt(px, "num")}" cy="{_fmt(cy, "num")}" r="4" '
             f'fill="{_cell_fill(c, rep._bound, theme, rep._mode)}" data-point="1"/>'
         )
-        if c.verdict in ("safer", "worse"):
+        if c.verdict not in ("unchanged", ""):
             out.append(
                 f'<rect x="{left + axis_w + 8}" y="{_fmt(cy - glyph / 2, "num")}" width="{glyph}" '
                 f'height="{glyph}" fill="{_GLYPH[theme]}" data-sig="1"/>'
@@ -1799,7 +2054,7 @@ def _worst_table_rows(rep: Report) -> list[list[str]]:
                 _fmt(c.p, "sig3"),
                 _fmt(c.q, "sig3"),
                 c.verdict,
-                f"{_fmt(c.mde, 'pp0')}{_pp()}",
+                c.mde_note if c.mde_note is not None else f"{_fmt(c.mde, 'pp0')}{_pp()}",
             ]
         )
         if rep._intervals:
@@ -1820,6 +2075,11 @@ def _worst_header_tail() -> list[str]:
 def _rate_header_tail() -> list[str]:
     return ["n", _h("F at horizon")]
 _METHOD_HEADER = ["method", "pairing", "safer", "worse", "unchanged", "max MDE", "q"]
+
+
+def _method_header(words: tuple[str, str]) -> list[str]:
+    """The Methods table's header, its count columns in the comparison's words (PF4.20)."""
+    return ["method", "pairing", *words, "unchanged", "max MDE", "q"]
 
 
 def _worst_header(rep: Report) -> list[str]:
@@ -1924,7 +2184,7 @@ def _render_markdown(rep: Report) -> str:
     ]
     if rep._methods:
         parts += ["## Methods", "", _md_table(_METHOD_HEADER, _method_rows(rep)), ""]
-    parts += [_honesty_heading(rep), "", rep.honesty, ""]
+    parts += [_honesty_heading(rep), "", rep.shown_honesty(), ""]
     if rep._survival is not None:
         parts += [
             "## Survival at horizon",
@@ -1945,6 +2205,8 @@ def _render_markdown(rep: Report) -> str:
 
 def _render_multi_markdown(rep: MultiReport) -> str:
     parts = [f"# {rep.spec.title}", ""]
+    if rep.verdict_line is not None:
+        parts += [rep.verdict_line, ""]
     if rep.inference_line is not None:
         parts += [rep.inference_line, ""]
     parts += [rep.headline, ""]
@@ -1960,7 +2222,7 @@ def _render_multi_markdown(rep: MultiReport) -> str:
             "",
             _md_table(_worst_header(panel), _worst_table_rows(panel)),
             "",
-            panel.honesty,
+            panel.shown_honesty(),
             "",
         ]
     # ADR-060: the flat family's intervals sit in the honesty band, after the last panel's
@@ -1969,8 +2231,10 @@ def _render_multi_markdown(rep: MultiReport) -> str:
     parts += ["## Intervals", ""]
     for line in rep.interval_lines:
         parts += [line, ""]
+    parts += list(rep.extra_md)
     if rep._method_rows:
-        parts += ["## Methods", "", _md_table(_METHOD_HEADER, rep._method_rows), ""]
+        table = _md_table(_method_header(rep._method_words), rep._method_rows)
+        parts += ["## Methods", "", table, ""]
     parts += [
         f"> {_EPISTEMIC_FENCE}",
         "",
@@ -1983,7 +2247,10 @@ def _render_multi_markdown(rep: MultiReport) -> str:
 
 
 def _render_survival_markdown(rep: SurvivalReport) -> str:
-    parts = [f"# {rep.spec.title}", "", "![heatmaps](heatmap.svg)", ""]
+    parts = [f"# {rep.spec.title}", ""]
+    for line in rep.header_lines:
+        parts += [line, ""]
+    parts += ["![heatmaps](heatmap.svg)", ""]
     for e in rep.events:
         panel = rep.panels[e]
         parts += [
@@ -1993,9 +2260,10 @@ def _render_survival_markdown(rep: SurvivalReport) -> str:
             "",
             _md_table(_worst_header(panel), _worst_table_rows(panel)),
             "",
-            panel.honesty,
+            panel.shown_honesty(),
             "",
         ]
+    parts += list(rep.extra_md)
     parts += [
         f"> {_EPISTEMIC_FENCE}",
         "",
@@ -2024,8 +2292,8 @@ _NOT_TESTED: dict[str, str] = {
 #: What the leaf row's MDE column means, said once on the page as S27 section 3.1 promised: free
 #: text with no number in it.
 _LEAF_MDE_MEANING = (
-    "MDE is the smallest detectable increase from arm A's rate, capped at the headroom, "
-    "so on a cell at ceiling it reads the headroom and is not a power number."
+    "MDE is the smallest change one condition alone would be flagged for, from where the "
+    "condition was; a condition with none prints why."
 )
 
 #: The bound's assumption, beside the number rather than in a footnote: the condition the source
@@ -2125,7 +2393,9 @@ def _fault_lines_items(tree: TreeResult) -> list[_TreeItem]:
         f"{_fmt(fault.n_degenerate_groups, 'int')} degenerate; "
         f"{_fmt(grouping.n_resolvable_groups, 'int')} of {_fmt(grouping.n_groups, 'int')} "
         f"groups resolve {_fmt(grouping.max_group_mde, 'pp0')}{_pp()} at alpha "
-        f"{_fmt(grouping.alpha_floor, 'sig3')}"
+        f"{_fmt(grouping.alpha_floor, 'sig3')}; a group's limit is the smallest change of all its "
+        f"conditions, each from its own baseline, the tree would flag {_facts.power_words()}, "
+        "unconditional: the root and the group both rejecting"
     ]
     for refusal in grouping.refused:
         items.append(
@@ -2202,7 +2472,7 @@ def _cells_items(leaves: Leaves, bound: Bound) -> list[_TreeItem]:
         items.append(
             f"{family.key}={family.label}: {_fmt(family.n_tests, 'int')} tests, "
             f"{_fmt(family.n_rejected, 'int')} rejected; cell MDE median "
-            f"{_fmt(family.mde_median, 'pp0')}{_pp()} / max {_fmt(family.mde_max, 'pp0')}{_pp()}"
+            f"{_limit_pp(family.mde_median)} / max {_limit_pp(family.mde_max)}"
         )
         rows = [
             [
@@ -2210,7 +2480,7 @@ def _cells_items(leaves: Leaves, bound: Bound) -> list[_TreeItem]:
                 leaf.event,
                 _fmt(leaf.delta, "pp1"),
                 _fmt(leaf.q_within, "sig3"),
-                f"{_fmt(leaf.mde, 'pp0')}{_pp()}",
+                leaf.mde_note if math.isnan(leaf.mde) and leaf.mde_note else _limit_pp(leaf.mde),
             ]
             for leaf in family.cells
             if leaf.rejects
@@ -2326,7 +2596,7 @@ def _render_html(rep: Report) -> str:
     ]
     if rep._methods:
         parts += ["<h2>Methods</h2>", _html_table(_METHOD_HEADER, _method_rows(rep))]
-    parts += [f"<h2>{_honesty_heading(rep)[3:]}</h2>", f"<p>{_html_lines(rep.honesty)}</p>"]
+    parts += [f"<h2>{_honesty_heading(rep)[3:]}</h2>", f"<p>{_html_lines(rep.shown_honesty())}</p>"]
     if rep._survival is not None:
         parts += [
             "<h2>Survival at horizon</h2>",
@@ -2338,6 +2608,8 @@ def _render_html(rep: Report) -> str:
 
 def _render_multi_html(rep: MultiReport) -> str:
     parts = _html_head(rep.spec.title, rep.spec.theme)
+    if rep.verdict_line is not None:
+        parts.append(f'<p class="verdict">{_html.escape(rep.verdict_line)}</p>')
     if rep.inference_line is not None:
         parts.append(f"<p>{_html.escape(rep.inference_line)}</p>")
     parts.append(f"<p>{_html_lines(rep.headline)}</p>")
@@ -2351,12 +2623,15 @@ def _render_multi_html(rep: MultiReport) -> str:
         parts += [
             f"<h2>{_html.escape(panel.headline)}</h2>",
             _html_table(_worst_header(panel), _worst_table_rows(panel)),
-            f"<p>{_html_lines(panel.honesty)}</p>",
+            f"<p>{_html_lines(panel.shown_honesty())}</p>",
         ]
     parts.append("<h2>Intervals</h2>")
     parts.extend(f"<p>{_html_lines(line)}</p>" for line in rep.interval_lines)
+    if rep.extra_md:
+        parts.extend(_md_html(rep.extra_md))
     if rep._method_rows:
-        parts += ["<h2>Methods</h2>", _html_table(_METHOD_HEADER, rep._method_rows)]
+        table = _html_table(_method_header(rep._method_words), rep._method_rows)
+        parts += ["<h2>Methods</h2>", table]
     parts += _html_close(rep.provenance)
     return "\n".join(parts) + "\n"
 
@@ -2373,5 +2648,9 @@ def _render_survival_html(rep: SurvivalReport) -> str:
             f"<p>{_html.escape(panel.headline)}</p>",
             _html_table(_worst_header(panel), _worst_table_rows(panel)),
         ]
+    for line in rep.header_lines:
+        parts.append(f"<p>{_html.escape(line)}</p>")
+    if rep.extra_md:
+        parts.extend(_md_html(rep.extra_md))
     parts += _html_close(rep.provenance)
     return "\n".join(parts) + "\n"
