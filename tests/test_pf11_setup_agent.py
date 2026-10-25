@@ -786,7 +786,9 @@ def test_pf11_3_the_skill_passes_the_shared_setup_file_check(part: str, tmp_path
         assert [s.title for s in steps[4:]] == ["Run the check", "Stop and hand over"], [s.title for s in steps]
         assert "```" not in steps[0].text and COMMAND not in steps[0].text, steps[0].text
         assert "prove_rollout.py" in steps[1].text, steps[1].text
+        assert "case_id" in steps[1].text, steps[1].text
         assert "prove.toml" in steps[2].text, steps[2].text
+        assert re.search(r"each case is its own (?:sweep )?axis", steps[2].text, re.I), steps[2].text
         for fact in ("[declare]", "failures", "successes"):
             assert fact in steps[3].text, (fact, steps[3].text)
         for fact in ("--replicates", "next:", "prove.toml"):
@@ -1046,7 +1048,7 @@ def _plan_lines(child: Child) -> None:
     rollouts = re.search(r"([\d,]+) rollouts", first)
     found = re.search(r"^replicates = (\d+)$", child.spec, flags=re.M)
     assert found, child.spec
-    assert rollouts and rollouts.group(1) == f"{4 * int(found.group(1)):,}", first
+    assert rollouts and rollouts.group(1) == f"{16 * int(found.group(1)):,}", first
     assert detail(child.out, "target") == ["prove_rollout:rollout (imports, takes cfg and seed)"], child.out
     (outcomes,) = detail(child.out, "outcomes")
     failures = re.search(r"failures: ([^;]+)", outcomes)

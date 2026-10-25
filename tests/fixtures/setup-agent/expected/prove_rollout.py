@@ -11,9 +11,9 @@ from support_agent.cases import CASES
 
 
 def rollout(cfg: dict[str, Any], seed: int) -> Episode:
-    ticket = CASES[seed % len(CASES)]
+    ticket = next(case for case in CASES if case["id"] == cfg["ticket"])
     try:
         result = handle_ticket(ticket, prompt_version=cfg["prompt_version"], temperature=cfg["temperature"], seed=seed)
     except TimeoutError:
-        return Episode(outcome="timeout", t=MAX_CALLS, horizon=MAX_CALLS)
-    return Episode(outcome=result.status, t=result.calls, horizon=MAX_CALLS)
+        return Episode(outcome="timeout", t=MAX_CALLS, horizon=MAX_CALLS, meta={"case_id": ticket["id"]})
+    return Episode(outcome=result.status, t=result.calls, horizon=MAX_CALLS, meta={"case_id": ticket["id"]})
