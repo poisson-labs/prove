@@ -22,6 +22,8 @@ from typing import Any
 from poisson_prove.episode import Episode
 from poisson_prove.trace import Span, Trace
 
+__all__ = ["rollout", "rollout_patched"]
+
 HORIZON = 20
 T_UNIT = "tool_calls"
 

@@ -1,0 +1,115 @@
+"""The core every face sits on: the plain commands, ``--json``, the rendered report and page, and
+later the terminal app, the static UI and a local server.
+
+Private: its names may change in any release. ``poisson_prove.compare`` is the public view of the
+comparison operations. Every operation computes, reads and writes; none prints, asks, exits or
+opens a browser, and each returns a result whose ``to_json()`` is one strict JSON document.
+"""
+
+from __future__ import annotations
+
+from poisson_prove import __version__
+from poisson_prove.core._ops import (
+    COMMAND,
+    DEFAULT_Q,
+    DEFAULT_SPEC,
+    DEFAULT_STORE,
+    ENV_STORE,
+    LATEST_PARTIAL,
+    METHODS,
+    check,
+    compare,
+    episodes,
+    init,
+    inspect,
+    open_store,
+    paired,
+    plan,
+    read_spec,
+    resolve,
+    resume,
+    run,
+    runs,
+    start,
+)
+from poisson_prove.core._results import (
+    CheckResult,
+    Comparison,
+    EpisodePage,
+    Event,
+    InspectResult,
+    Interrupted,
+    PairedResult,
+    Plan,
+    Refusal,
+    Result,
+    RunDetail,
+    RunInfo,
+    RunResult,
+    Spec,
+    Stopped,
+    WrittenFiles,
+)
+from poisson_prove.diff import _CAUSES as CAUSES
+from poisson_prove.diff import _PAIRED_METHODS as PAIRED_METHODS
+from poisson_prove.diff import COVERAGE_COLUMNS
+from poisson_prove.tree import (
+    DEFAULT_DEPTH,
+    DEFAULT_MAX_GROUP_MDE,
+    DEFAULT_PERMUTATIONS,
+    DEFAULT_SEED,
+    DEPTHS,
+    TASK_FAMILY_KEYS,
+    WHOLE_GRID,
+)
+
+__all__ = [
+    "CAUSES",
+    "COMMAND",
+    "COVERAGE_COLUMNS",
+    "DEFAULT_DEPTH",
+    "DEFAULT_MAX_GROUP_MDE",
+    "DEFAULT_PERMUTATIONS",
+    "DEFAULT_Q",
+    "DEFAULT_SEED",
+    "DEFAULT_SPEC",
+    "DEFAULT_STORE",
+    "DEPTHS",
+    "ENV_STORE",
+    "LATEST_PARTIAL",
+    "METHODS",
+    "PAIRED_METHODS",
+    "TASK_FAMILY_KEYS",
+    "WHOLE_GRID",
+    "CheckResult",
+    "Comparison",
+    "EpisodePage",
+    "Event",
+    "InspectResult",
+    "Interrupted",
+    "PairedResult",
+    "Plan",
+    "Refusal",
+    "Result",
+    "RunDetail",
+    "RunInfo",
+    "RunResult",
+    "Spec",
+    "Stopped",
+    "WrittenFiles",
+    "__version__",
+    "check",
+    "compare",
+    "episodes",
+    "init",
+    "inspect",
+    "open_store",
+    "paired",
+    "plan",
+    "read_spec",
+    "resolve",
+    "resume",
+    "run",
+    "runs",
+    "start",
+]

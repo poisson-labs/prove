@@ -232,9 +232,10 @@ class UnknownEvent(DiffError):
 
 
 def holm(p: NDArray[Any], q: float = 0.05) -> NDArray[np.float64]:
-    """Holm's step-down adjusted p-values, same shape as p: in ascending order of p (ties in the
-    given order), ``max over j <= i of min(1, (M - j + 1) p_(j))``. A row counts for the verdict
-    when its value is below ``q`` (PF4.34); ``q`` is taken, as ``bh`` takes it, and not used."""
+    """Holm's step-down adjusted p-values, the same shape as ``p``: in ascending order of ``p``
+    (ties in their own order), each is the largest so far of ``min(1, (M - j + 1) * p_(j))``. A
+    row holds at the family-wise level ``q`` when its value is below ``q``; ``q`` is taken, as
+    ``bh`` takes it, and not used."""
     arr = np.asarray(p, dtype=np.float64)
     flat = arr.reshape(-1)
     m = flat.size
@@ -287,14 +288,12 @@ def _power_two_proportion(delta: float, p_a: float, n_a: int, n_b: int, alpha: f
 def mde_two_proportion(
     p_a: float, n_a: int, n_b: int, *, alpha: float = 0.05, power: float = 0.8
 ) -> float:
-    """Smallest increase in event rate from p_a detectable at alpha (two-sided) and power.
-
-    Normal approximation, solved by bisection on (0, 1 - p_a]. A rate of exactly 0 uses a
-    0.5/n continuity guard; at a rate of 1 no increase is possible and the result is NaN
-    (PF4.15). If even the largest possible increase is not detectable the largest possible
-    increase is returned. The single-event ``diff`` reads it (reading R35); every limit a
-    comparison prints is ``_limits``' (section 8.10).
-    """
+    """The smallest rise from the share ``p_a`` a two-sided test at ``alpha`` would catch with
+    ``power``, between samples of ``n_a`` and ``n_b``, by the normal approximation, solved by
+    bisection. A share of exactly 0 uses a ``0.5 / n_a`` guard; at a share of 1 no rise is
+    possible and the result is NaN; if even the largest possible rise would not be caught, that
+    largest rise is returned. Not the limit a comparison prints, which is computed for the test
+    it ran."""
     if n_a <= 0 or n_b <= 0:
         raise DiffError(f"mde needs positive sample sizes, got n_a={n_a}, n_b={n_b}")
     if not 0.0 <= p_a <= 1.0:
@@ -895,6 +894,14 @@ class EventDiff:
         """The cells as JSON-ready records: every number native, every NaN None, the direction
         filled in, each arm's share with its Wilson interval at its level (PF4.1b), and whether a
         share differs from its rate, which no store 0.1.0 writes can make true (PF4.37, R4)."""
+        cached: list[dict[str, Any]] | None = self.__dict__.get("_records")
+        if cached is None:
+            cached = self._build_records()
+            # Every surface reads the same records several times over; they are built once.
+            object.__setattr__(self, "_records", cached)
+        return [dict(cell) for cell in cached]
+
+    def _build_records(self) -> list[dict[str, Any]]:
         from poisson_prove.stats import share
 
         out = []
@@ -1005,6 +1012,14 @@ class MultiDiffResult:
         direction appears, the step-down goes further, a direction disappears, the nothing-moved
         question switches). Not a proof that no smaller set exists outside those four."""
         return self._fragility.exact
+
+    @property
+    def agreement(self) -> str:
+        """The digest a tree grown beside this comparison carries: what a renderer holds the
+        tree it is given against."""
+        from poisson_prove.tree import agreement_digest
+
+        return agreement_digest(self)
 
     def all_kinds_known(self) -> bool:
         return all(self.by_event[e].kind is not None for e in self.events)
@@ -1191,7 +1206,7 @@ class MultiDiffResult:
                 lines.append("| " + " | ".join(values) + " |")
             lines.append("")
             lines.append(_facts.shares_caption(e, WILSON_LEVEL))
-            lines.append(_facts.limits_caption())
+            lines.append(_facts.limits_caption(_facts.power_of(self)))
         if len(self.trades):
             tcols = list(_TRADES_COLUMNS)
             lines.extend(

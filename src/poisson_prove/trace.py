@@ -871,16 +871,16 @@ def truncate_observations(trace: Trace, *, limit: int | None) -> Trace:
     """Every observation value over ``limit`` bytes, stored as its head, its tail and its
     original byte length.
 
-    The unit is **one observation value** -- ``input``, ``output`` and every attribute but the
-    two routing stamps -- and not the span's whole ``attrs`` dict. A value at or under the limit
-    is stored whole; a value already wrapped is never cut again; and the wrapper's head and tail
-    sum to at most the limit, so a cut is always a reduction (ADR-082).
+    The unit is one observation value (``input``, ``output`` and every attribute but the two
+    routing stamps), not the span's whole ``attrs`` dict. A value at or under the limit is
+    stored whole; a value already cut is never cut again; and the head and tail sum to at most
+    the limit, so a cut is always a reduction.
 
-    ``limit`` is required and the caller always has one: every run declares what it keeps whole
-    (ADR-096), and ``None`` is a declaration too -- *cut nothing*, either because the sweep said
-    ``"none"`` or because it asked for no capture at all. The trace itself comes back in that
-    case, as it does whenever nothing was cut, so an uncut trace is stored byte for byte as it
-    arrived. ``0`` is not a spelling of *nothing*: a limit below one is refused.
+    ``limit`` is required: every run declares what it keeps whole, and ``None`` is a declaration
+    too, *cut nothing*, either because the sweep said ``"none"`` or because it asked for no
+    capture at all. The trace itself comes back then, as it does whenever nothing was cut, so an
+    uncut trace is stored byte for byte as it arrived. ``0`` is not a spelling of *nothing*: a
+    limit below one is refused with ``ValueError``.
 
     Idempotent, byte for byte, including each span's ``truncated`` and ``bytes_original``.
     """
@@ -903,18 +903,16 @@ def truncate_observations(trace: Trace, *, limit: int | None) -> Trace:
 
 @dataclass(frozen=True)
 class Declaration:
-    """What a run expects of itself (A10): the steps it expects to execute, the outcome labels
-    its target can emit, and which of those steps are gates; and which outcomes are failures
-    and which are successes (the event kinds).
+    """What a run expects of itself: the steps it expects to execute, the outcome labels its
+    target can emit, and which of those steps are gates; and which outcomes are failures and
+    which are successes (the event kinds).
 
     Sorted tuples of distinct non-empty names, ``gates`` a subset of ``steps``, no outcome both
     a failure and a success, the kinds among ``outcomes`` when outcomes are declared, at least
-    one list non-empty. Validated at construction -- the ``Span`` posture -- so a
-    declaration read back from a manifest is held to the rules that refused the sweep file, and
-    two spellings of one declaration compare equal in ``diff`` and on ``--resume``. Minted
-    here, in the module ``finalize`` lives in, because this module imports nothing from the
-    package: a ``Declaration`` in ``sampler.py`` would make ``import poisson_prove.trace`` a cycle
-    through ``store.py``.
+    one list non-empty. Checked when it is built, as a ``Span`` is, so a declaration read back
+    from a manifest is held to the rules that refused the sweep file, and two spellings of one
+    declaration compare equal in ``diff`` and on ``--resume``. It lives here, beside
+    ``finalize``, because this module imports nothing from the package.
     """
 
     steps: tuple[str, ...] = ()
@@ -1004,21 +1002,18 @@ def _stamp_gates(trace: Trace, gates: tuple[str, ...]) -> Trace:
 
 
 def finalize(trace: Trace, *, declaration: Declaration | None, limit: int | None) -> Trace:
-    """The one site a stored trace passes through before it is written.
+    """The one place a stored trace passes through before it is written.
 
     Two steps in a fixed order: the stamp, then the cut. ``gate="declared"`` is stamped on every
-    span whose ``step_name`` is in ``declaration.gates`` and whose ``gate`` is ``None``
-    (``_stamp_gates``), and ``truncate_observations`` then cuts at ``limit``. The two write
-    disjoint fields, so either order gives the same trace; fixing the order is what makes
-    ``finalize`` idempotent as a whole and not only in its cut half (A8b's P8-8, one level up).
-    The trace itself comes back when neither step changed anything.
+    span whose ``step_name`` is in ``declaration.gates`` and whose ``gate`` is ``None``, and
+    ``truncate_observations`` then cuts at ``limit``. The two write different fields, so either
+    order gives the same trace; fixing the order is what makes ``finalize`` idempotent as a
+    whole and not only in its cut half. The trace itself comes back when neither step changed
+    anything.
 
     A declaration that is neither ``None`` nor a ``Declaration`` is refused, not accepted and
-    dropped: A8b's guard, re-aimed from *this half is A10's* to *this is not a declaration*.
-
-    ``limit`` is the run's own, required and passed down unchanged. A8b left it to a module
-    constant, so every stored row was cut at 8192 whatever its sweep file declared -- the
-    funnel ran on every row of both backends while being described as a backstop for one path.
+    dropped. ``limit`` is the run's own, required and passed down unchanged, so every stored row
+    is cut at what its sweep file declared.
     """
     if declaration is not None and not isinstance(declaration, Declaration):
         raise TypeError(
@@ -1037,13 +1032,13 @@ def split(trace: Trace) -> tuple[dict[str, Any], dict[str, Any]]:
 
     The envelope is a trace dict whose spans carry no ``input``, no ``output`` and no
     observation attribute; everything else about the trace is unchanged, so the envelope's size
-    is bounded by step count and not by content (ADR-047). The bodies are keyed by ``span_id``,
+    is bounded by the number of steps and not by content. The bodies are keyed by ``span_id``,
     hold only the sub-keys that had a value, and carry no entry at all for a span that had none.
 
     An attribute is an observation by its key, by already carrying a cut value's wrapper, or by
-    being over ``OBSERVATION_ROUTING_BYTES`` -- A8b widened the third clause in, so an attribute
-    nobody named is still bounded if it is large enough to matter. The two routing stamps are
-    excluded by name whatever their size. ``split`` classifies and moves; it never cuts.
+    being over ``OBSERVATION_ROUTING_BYTES``, so an attribute nobody named is still bounded if it
+    is large enough to matter. The two routing stamps are excluded by name whatever their size.
+    ``split`` classifies and moves; it never cuts.
 
     Neither the span key set nor the trace key set is spelled here: the envelope starts as
     ``trace.to_dict()`` and only the content fields are cleared, so a field added to ``Span``
@@ -1802,9 +1797,8 @@ def _datetime_ns(value: Any) -> int | None:
 def from_litellm(payloads: Iterable[Mapping[str, Any]]) -> Trace:
     """One ``kind="llm"`` span per LiteLLM logging payload.
 
-    Every span is a root: a LiteLLM callback sees LLM calls and nothing around them, so there
-    is no parentage to recover and none is invented. Confidence is never derived here -- the
-    logprobs ladder is M9's.
+    Every span is a root: a LiteLLM callback sees model calls and nothing around them, so there
+    is no parentage to recover and none is invented. Confidence is never derived here.
     """
     spans: list[Span] = []
     for payload in payloads:

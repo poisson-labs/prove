@@ -22,6 +22,16 @@ from poisson_prove._compat import retired_manifest_version
 from poisson_prove.episode import Episode
 from poisson_prove.trace import Declaration, Span, Trace, TraceValidationError, assemble, split
 
+__all__ = [
+    "EpisodeRecord",
+    "RunManifest",
+    "RunTally",
+    "SchemaMismatch",
+    "Store",
+    "StoreError",
+    "config_hash",
+]
+
 
 class StoreError(Exception):
     """Base class for store failures."""
@@ -268,6 +278,9 @@ def _now_iso_utc() -> str:
 
 @dataclass(frozen=True)
 class RunManifest:
+    """A run's manifest: its id and name, the target and its time unit, the salt its seeds
+    come from, the axes' types, the backend, its status (``partial`` or ``complete``), and what
+    the sweep recorded about itself in ``environment``."""
     run_id: str
     target_id: str
     t_unit: str
@@ -367,6 +380,8 @@ class RunManifest:
 
 @dataclass(frozen=True)
 class EpisodeRecord:
+    """One stored episode: the condition and its hash, the replicate and its seed, the outcome
+    and its time, or the error that ended it, and its trace."""
     run_id: str
     config_hash: str
     config: Mapping[str, Any]
@@ -459,11 +474,10 @@ class EpisodeRecord:
 class RunTally:
     """How a run's stored rows divide into rows with an outcome and rows without one.
 
-    Derived from the rows at read time, never persisted and never a manifest field: a
-    ``RunSummary`` counts one invocation, so a run stopped at ``max_rollouts`` and resumed
-    would carry the second call's numbers over the whole run -- wrong on exactly the runs
-    where the question matters. The rows are the only record that survives a resume
-    (ADR-034).
+    Counted from the rows when they are read, never stored and never a manifest field: a
+    sweep's own summary counts one invocation, so a run stopped at ``max_rollouts`` and resumed
+    would carry the second call's numbers over the whole run, wrong on exactly the runs where
+    the question matters. The rows are the only record that survives a resume.
 
     ``rows == with_outcome + no_outcome`` and ``no_outcome == timed_out + infra + other``,
     always. An empty run is six zeros.
@@ -499,6 +513,9 @@ def _case_id(meta: Any) -> str | None:
 
 
 class Store:
+    """A folder of runs: each run a manifest and its episodes. Reads and writes runs; refuses a
+    run whose schema it does not know with ``SchemaMismatch`` and other faults with
+    ``StoreError``."""
     def __init__(self, root: Path | str) -> None:
         self._root = Path(root)
 

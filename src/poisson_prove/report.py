@@ -26,9 +26,10 @@ from xml.sax.saxutils import escape as _xml_escape
 
 import pandas as pd
 
-from poisson_prove import __version__, _facts, _look, stats
-from poisson_prove._compat import old_writer_line, version_as_recorded
+from poisson_prove import __version__, _facts, _look
+from poisson_prove._compat import RETIRED_NAME
 from poisson_prove.diff import _CENSORED, _PAIRED_METHODS, DiffResult, EventDiff, MultiDiffResult
+from poisson_prove.stats import WILSON_LEVEL
 from poisson_prove.store import RunManifest
 from poisson_prove.survival import CIFCurve, KMCurve
 
@@ -62,6 +63,21 @@ _HONESTY_NONE = "No unchanged cells; every cell moved significantly."
 _SATURATION_LEGEND = "both 0% / both 100%"
 _SMALL_N = 16  # the survival coverage line counts cells below this
 _TRADE_STYLE = f".trade{{fill:{_FAILED}}}"
+
+
+def _version_as_recorded(version: str) -> str:
+    """The version a run's manifest recorded, saying which name wrote it when it was the old
+    one."""
+    return f"{version} (as {RETIRED_NAME})"
+
+
+def _old_writer_line(version_shown: str) -> str | None:
+    """The provenance line of a run the earlier name wrote, when ``version_shown`` says so."""
+    suffix = f" (as {RETIRED_NAME})"
+    if not version_shown.endswith(suffix):
+        return None
+    return f"written by {RETIRED_NAME} {version_shown[: -len(suffix)]}"
+
 
 # The two causes only a grid can have, beside M6's five: a coordinate in the axis product no
 # row exists for, and one that more than one non-comparable coverage row maps to. Written
@@ -366,6 +382,8 @@ class MultiReport:
     provenance: dict[str, object]
     _method_rows: tuple[tuple[str, ...], ...] = field(default=(), repr=False, compare=False)
     tree: TreeResult | None = None
+    #: The power the comparison's limits were computed at, as its rows record it.
+    power: float | None = None
     #: The flat family's interval facts, one formatter (``_interval_lines``) for every surface:
     #: ``report.md``, the receipt, the page's honesty band, the payload and ``diff`` stdout.
     interval_lines: tuple[str, ...] = ()
@@ -961,7 +979,7 @@ def _version_shown(manifests: tuple[RunManifest, ...] | None) -> str:
     (version, written_by) = recorded.pop()
     if written_by is None:
         return __version__
-    return version_as_recorded(version)
+    return _version_as_recorded(version)
 
 
 def _run_identity(
@@ -1201,8 +1219,6 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     would not be a cycle today, but it would be M7 depending on M14 -- and W20 pins that
     ``report.py`` imports ``poisson_prove.tree`` under ``TYPE_CHECKING`` only.
     """
-    from poisson_prove.tree import agreement_digest
-
     if tuple(tree.root.events) != tuple(multi.events):
         raise ComparisonMismatch(
             f"the tree is over events {list(tree.root.events)}; the diff is over "
@@ -1213,7 +1229,7 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
             f"the tree is over {tree.root.n_cells} cells x {len(tree.root.events)} events; the "
             f"diff is over {multi.n_tests} tests"
         )
-    if tree.agreement != agreement_digest(multi):
+    if tree.agreement != multi.agreement:
         raise ComparisonMismatch(
             "the tree's agreement digest is not this diff's; the tree was grown from a "
             "different pair with the same family shape, so nothing above can be named"
@@ -1323,6 +1339,7 @@ def build_multi_report(
             words=words,
         )
     return MultiReport(
+        power=_facts.power_of(multi),
         spec=spec,
         events=order,
         panels=panels,
@@ -1374,7 +1391,7 @@ def _verdict_line(multi: MultiDiffResult) -> str:
 def _shares_md(multi: MultiDiffResult, spec: ReportSpec, order: Sequence[str]) -> tuple[str, ...]:
     """PF4.3, PF4.42: each condition's two shares with their Wilson intervals, the change with
     its interval at the comparison's level, and the condition's limits, one table per event."""
-    label = stats.level_label(stats.WILSON_LEVEL)
+    label = _look.level_label(WILSON_LEVEL)
     out = ["## Shares", ""]
     for e in order:
         rows = []
@@ -1383,9 +1400,9 @@ def _shares_md(multi: MultiDiffResult, spec: ReportSpec, order: Sequence[str]) -
                 continue
             shares = []
             for arm in ("a", "b"):
-                k, n = int(r[f"events_{arm}"]), int(r[f"n_{arm}"])
-                interval = stats.wilson(k, n)
-                shares.append(f"{k / n:.3f} [{interval.lo:.3f}, {interval.hi:.3f}]")
+                share = r[f"share_{arm}"]
+                label = _look.level_label(share["level"])
+                shares.append(f"{share['value']:.3f} [{share['lo']:.3f}, {share['hi']:.3f}]")
             lo, hi = r.get("ci_lo"), r.get("ci_hi")
             change = (
                 "censored" if lo is None or hi is None else f"{r['delta']:.3f} [{lo:.3f}, {hi:.3f}]"
@@ -1405,7 +1422,7 @@ def _shares_md(multi: MultiDiffResult, spec: ReportSpec, order: Sequence[str]) -
         f"The shares are k/n per condition with a {label} Wilson interval, not adjusted for the "
         "number of conditions, unlike the verdicts; the tests compare the rates.",
         "",
-        _facts.limits_caption(),
+        _facts.limits_caption(_facts.power_of(multi)),
         "",
     ]
     return tuple(out)
@@ -1415,7 +1432,7 @@ def _change_head(multi: MultiDiffResult) -> str:
     """The change column's header, with its interval's level and method (PF4.42)."""
     if multi.interval_level is None:
         return "change"
-    level = stats.level_label(multi.interval_level)
+    level = _look.level_label(multi.interval_level)
     return f"change [{level}, {_facts.interval_method(multi.method)}]"
 
 
@@ -1536,7 +1553,7 @@ def _design_line(design: Mapping[str, Any]) -> str:
     return (
         f"design limit {limit}, a {way}, at its worst base rate, "
         f"{_look.fmt_rate(design['base_rate'])} ({how}): the smallest change one condition alone "
-        f"would be flagged for, {stats.times_in(design['power'])} "
+        f"would be flagged for, {_look.times_in(design['power'])} "
         f"({_facts.test_name(design['test'])}, q {design['q']:g} over {design['family']} tests)"
     )
 
@@ -1554,7 +1571,7 @@ def _single_shares_md(
         label = None
         for c in shares.get(e, ()):
             share = c["share"]
-            label = stats.level_label(share["level"])
+            label = _look.level_label(share["level"])
             marked = marked or bool(c["share_differs"])
             rows.append([
                 _fmt(json.dumps(c["config"], sort_keys=True), "coord"),
@@ -1562,7 +1579,7 @@ def _single_shares_md(
                 + (" *" if c["share_differs"] else ""),
                 _look.fmt_rate(c["incidence"]),
             ])
-        label = label or stats.level_label(stats.WILSON_LEVEL)
+        label = label or _look.level_label(WILSON_LEVEL)
         out += [
             f"{e}: share of episodes that ended in the event, {label} Wilson interval; and "
             "cumulative incidence at the horizon",
@@ -2151,7 +2168,7 @@ def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
             shown = str(value)
         lines.append(f"- {_PROVENANCE_LABELS.get(key, key.replace('_', ' '))}: {shown}")
         if key == "poisson_prove_version":
-            writer = old_writer_line(shown)
+            writer = _old_writer_line(shown)
             if writer is not None:
                 lines.append(f"- {writer}")
     return lines
@@ -2213,7 +2230,7 @@ def _render_multi_markdown(rep: MultiReport) -> str:
     if rep.trade_line is not None:
         parts += [rep.trade_line, ""]
     if rep.tree is not None:
-        parts += _tree_markdown(rep.tree)
+        parts += _tree_markdown(rep.tree, rep.power)
     parts += ["![delta heatmaps](heatmap.svg)", ""]
     for e in rep.events:
         panel = rep.panels[e]
@@ -2308,7 +2325,7 @@ _BOUND_ASSUMPTION = (
 _TreeItem = str | tuple[list[str], list[list[str]]]
 
 
-def _tree_markdown(tree: TreeResult) -> list[str]:
+def _tree_markdown(tree: TreeResult, power: float | None = None) -> list[str]:
     """The four sections as markdown parts for ``_render_multi_markdown`` to extend with: each
     heading, then each line or table, every one followed by a blank line.
 
@@ -2318,19 +2335,19 @@ def _tree_markdown(tree: TreeResult) -> list[str]:
     added later joins the closure through these two or is unguarded.
     """
     parts: list[str] = []
-    for heading, items in _tree_sections(tree):
+    for heading, items in _tree_sections(tree, power):
         parts.extend([f"## {heading}", ""])
         for item in items:
             parts.extend([item if isinstance(item, str) else _md_table(*item), ""])
     return parts
 
 
-def _tree_html(tree: TreeResult) -> list[str]:
+def _tree_html(tree: TreeResult, power: float | None = None) -> list[str]:
     """The same four sections as receipt elements, one per line: an ``<h2>``, then a ``<p>`` per
     line through ``_html_lines`` and a table per table through ``_html_table``, escaped like
     every other element of the receipt and carrying no style of their own."""
     parts: list[str] = []
-    for heading, items in _tree_sections(tree):
+    for heading, items in _tree_sections(tree, power):
         parts.append(f"<h2>{_html.escape(heading)}</h2>")
         for item in items:
             parts.append(
@@ -2339,13 +2356,15 @@ def _tree_html(tree: TreeResult) -> list[str]:
     return parts
 
 
-def _tree_sections(tree: TreeResult) -> list[tuple[str, list[_TreeItem]]]:
+def _tree_sections(
+    tree: TreeResult, power: float | None = None
+) -> list[tuple[str, list[_TreeItem]]]:
     """The layered report as four headed sections, in the order a reader acts on them. Every
     number is a field of the tree through ``_fmt`` under the kind S28 section 3.6 assigns;
     nothing here computes, sorts or ranks."""
     return [
         ("Omnibus", _omnibus_items(tree.root)),
-        ("Fault lines", _fault_lines_items(tree)),
+        ("Fault lines", _fault_lines_items(tree, power)),
         ("Cells", _cells_items(tree.leaves, tree.bound)),
         ("Bound", _bound_items(tree.bound)),
     ]
@@ -2378,7 +2397,7 @@ def _omnibus_items(root: RootResult) -> list[_TreeItem]:
     ]
 
 
-def _fault_lines_items(tree: TreeResult) -> list[_TreeItem]:
+def _fault_lines_items(tree: TreeResult, power: float | None = None) -> list[_TreeItem]:
     """Level 2: the grouping and the shape it was admitted on; every refused key in chain order
     with its detail verbatim, which already carries the value a reader would paste back; the
     null and what tested it, or why nothing did; one row per group in label order, never
@@ -2394,7 +2413,7 @@ def _fault_lines_items(tree: TreeResult) -> list[_TreeItem]:
         f"{_fmt(grouping.n_resolvable_groups, 'int')} of {_fmt(grouping.n_groups, 'int')} "
         f"groups resolve {_fmt(grouping.max_group_mde, 'pp0')}{_pp()} at alpha "
         f"{_fmt(grouping.alpha_floor, 'sig3')}; a group's limit is the smallest change of all its "
-        f"conditions, each from its own baseline, the tree would flag {_facts.power_words()}, "
+        f"conditions, each from its own baseline, the tree would flag {_facts.power_words(power)}, "
         "unconditional: the root and the group both rejecting"
     ]
     for refusal in grouping.refused:
@@ -2616,7 +2635,7 @@ def _render_multi_html(rep: MultiReport) -> str:
     if rep.trade_line is not None:
         parts.append(f'<p class="trade">{_html.escape(rep.trade_line)}</p>')
     if rep.tree is not None:
-        parts += _tree_html(rep.tree)
+        parts += _tree_html(rep.tree, rep.power)
     parts.append(_html_figure(rep.to_svg()))
     for e in rep.events:
         panel = rep.panels[e]

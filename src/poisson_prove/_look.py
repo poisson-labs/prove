@@ -368,3 +368,36 @@ def word(text: str) -> str:
 def command(*words: str) -> str:
     """A command line to copy, each word quoted by :func:`word` where it needs it."""
     return " ".join(word(w) for w in words)
+
+
+# ---------- the shared words for levels, powers and table cells ----------
+
+
+def level_label(level: float) -> str:
+    """A level as a percentage to at most three decimals, the percent sign after it: ``0.99722``
+    as "99.722" and the sign. The one function every label of a level comes from."""
+    if math.isnan(level):
+        raise ValueError("a level must be a number")
+    text = f"{float(level) * 100.0:.3f}".rstrip("0").rstrip(".")
+    return f"{text}%"
+
+
+def times_in(power: float) -> str:
+    """A power in words, ``0.8`` as "4 times in 5": the simplest fraction within a twentieth."""
+    from fractions import Fraction
+
+    fraction = Fraction(power).limit_denominator(20)
+    return f"{fraction.numerator} times in {fraction.denominator}"
+
+
+def native(value: Any) -> Any:
+    """``value`` with numpy scalars as Python numbers and mappings and sequences as dicts and
+    lists, all the way down: what a JSON document can hold."""
+    item = getattr(value, "item", None)
+    if item is not None and type(value).__module__ == "numpy":
+        return item()
+    if isinstance(value, Mapping):
+        return {str(k): native(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [native(v) for v in value]
+    return value

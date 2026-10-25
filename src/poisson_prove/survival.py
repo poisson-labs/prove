@@ -89,6 +89,8 @@ class CIFCurve:
 
 
 def kaplan_meier(t: NDArray[Any], observed: NDArray[Any]) -> KMCurve:
+    """The Kaplan-Meier survival curve of times ``t``, ``observed`` true where the event happened
+    and false where the time was censored, with Greenwood's variance at each event time."""
     tt = np.asarray(t, dtype=np.float64)
     obs = np.asarray(observed, dtype=bool)
     if tt.shape != obs.shape or tt.ndim != 1:

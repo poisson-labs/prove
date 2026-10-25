@@ -1,17 +1,16 @@
-"""The command line.
+"""The command line, a face over the core.
 
-Nine verbs over the built modules: ``init`` writes a sweep spec, ``prove.toml``, and nothing
-else; ``sweep`` runs a plan on a backend after showing the plan and asking; ``diff``,
-``report``, ``check`` and ``serve`` operate on stored runs; ``inspect`` prints the ``(config,
-seed)`` pairs behind an event plus a reproduction snippet; ``runs`` lists the store;
-``paired`` asserts that a declaration's arms were the same request replayed and writes the
-paired-replay files, and ``report --paired`` folds the same sections into the report.
-``serve`` is the one verb that binds a socket: a loopback listener holding one page
-built before the bind, which writes nothing and dies with the process.
+Nine verbs: ``init`` writes a sweep spec, ``prove.toml``, and nothing else; ``sweep`` runs a plan
+on a backend after showing the plan and asking; ``diff``, ``report``, ``check`` and ``serve``
+operate on stored runs; ``inspect`` prints the ``(config, seed)`` pairs behind an event plus a
+reproduction snippet; ``runs`` lists the store; ``paired`` asserts that a declaration's arms were
+the same request replayed and writes the paired-replay files. ``serve`` is the one verb that binds
+a socket: a loopback listener holding one page built before the bind, which writes nothing and
+dies with the process.
 
-This module computes nothing and decides nothing statistical: it parses arguments, calls the
-library, and renders what comes back. Every number it prints is a field on a result object,
-a manifest or a store frame, spelled the way every Poisson Labs tool spells it: the look.
+This module computes nothing and decides nothing: it parses arguments, calls the core
+(``poisson_prove.core``), and renders what comes back with the shared formatting. Every number it
+prints is a field on a result object, spelled the way every Poisson Labs tool spells it: the look.
 
 **The look, in one paragraph.** The first line a verb prints is its verdict: a lowercase word,
 two spaces, one sentence; detail follows as indented ``label  value`` lines or as a report
@@ -34,7 +33,6 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import html
-import importlib.util
 import json
 import math
 import os
@@ -43,149 +41,59 @@ import shlex
 import shutil
 import sys
 import tempfile
-import tomllib
 import traceback
 import warnings
-from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn, TextIO, cast
+from typing import TYPE_CHECKING, Any, NoReturn, TextIO
 
 if TYPE_CHECKING:
-    import pandas as pd
     from _typeshed import SupportsWrite
 
-    from poisson_prove.diff import Method
-
-from poisson_prove import __version__, _facts, _look, stats
-from poisson_prove._compat import (
-    old_writer_line,
-    retired_default_store,
-    retired_default_store_refusal,
-    retired_store_variable_note,
-    version_as_recorded,
-)
-from poisson_prove._names import Index, NamesError, started, unfit
-from poisson_prove._names import index as names_index
-from poisson_prove._resolve import resolve
-from poisson_prove.diff import (
-    _CAUSES,
-    _PAIRED_METHODS,
+from poisson_prove import _look, core
+from poisson_prove.core import (
+    CAUSES,
     COVERAGE_COLUMNS,
-    KINDS,
-    DiffError,
-    EventInferenceError,
-    MixedCases,
-    MultiDiffResult,
-    UnknownEvent,
-    _md_cell,
-    infer_events,
-    multi_diff,
+    DEFAULT_DEPTH,
+    DEFAULT_MAX_GROUP_MDE,
+    DEFAULT_PERMUTATIONS,
+    DEFAULT_SEED,
+    DEPTHS,
+    PAIRED_METHODS,
+    TASK_FAMILY_KEYS,
+    WHOLE_GRID,
+    __version__,
 )
-from poisson_prove.executor import (
-    DEFAULT_MAX_MDE,
-    ExecutorError,
-    Plan,
-    RunSummary,
-    UnderpoweredDesign,
-    _plan_design,
-    _recorded_design,
-    check_power,
-    plan,
-    preflight,
-    run_local,
-)
-from poisson_prove.executor_burla import BurlaOptions, preflight_burla, run_burla
-from poisson_prove.executor_modal import (
-    ImageSpec,
-    ModalOptions,
-    ModalTarget,
-    _check_cost,
-    preflight_modal,
-    run_modal,
-)
-from poisson_prove.paired import (
-    Declaration,
-    PairedError,
-    _artifact_text,
-    _Bundle,
-    _bundle,
-    _cost_block,
-    _fold_html,
-    _fold_markdown,
-)
-from poisson_prove.paired import cost as paired_cost
 from poisson_prove.report import (
     MultiReport,
     ReportError,
     ReportSpec,
     SurvivalReport,
     _interval_lines,
-    _observation_cap,
-    _provenance_lines,
     build_multi_report,
     build_survival_report,
-)
-from poisson_prove.sampler import SamplerError, SweepSpec
-from poisson_prove.steps import declaration_check
-from poisson_prove.store import RunManifest, Store, StoreError
-from poisson_prove.survival import SurvivalError, cell_table, competing_set
-from poisson_prove.trace import Trace, TraceValidationError
-from poisson_prove.tree import (
-    DEFAULT_DEPTH,
-    DEFAULT_MAX_GROUP_MDE,
-    DEFAULT_PERMUTATIONS,
-    DEFAULT_SEED,
-    DEPTHS,
-    TASK_FAMILY_KEYS,
-    WHOLE_GRID,
-    Bound,
-    CellFamily,
-    CellResult,
-    FaultLines,
-    Grouping,
-    GroupResult,
-    Leaves,
-    RootResult,
-    TreeResult,
-    tree,
 )
 from poisson_prove.viewer import _HOST, ViewerError, build_structure, render_html, serve_page
 
 __all__ = ["main"]
 
 _COMMAND = "poisson-prove"
-_ENV_STORE = "POISSON_PROVE_STORE"
-_DEFAULT_STORE = "./prove-runs"
+_ENV_STORE = core.ENV_STORE
+_DEFAULT_STORE = core.DEFAULT_STORE
+_DEFAULT_SPEC = core.DEFAULT_SPEC
 _DEFAULT_BATCH_SIZE = 64
-_DEFAULT_SPEC = "prove.toml"
-_DEFAULT_Q = 0.05
-_METHODS: tuple[str, ...] = ("fisher_bh", "mcnemar_bh", "logrank_bh")
-#: Each test in plain words, with its own name kept beside them for the record.
-_METHOD_WORDS = {
-    "mcnemar_bh": ("paired test on shared seeds", "McNemar"),
-    "fisher_bh": ("two separate samples", "Fisher"),
-    "logrank_bh": ("time to the event", "log-rank"),
-}
-#: The packaged keyless agent, whose first sweep's next step is its patched twin, paired.
-_MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
-_MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
+_DEFAULT_Q = core.DEFAULT_Q
+_METHODS: tuple[str, ...] = core.METHODS
+_LATEST_PARTIAL = core.LATEST_PARTIAL
 _REPORT_FILES = ("report.md", "heatmap.svg", "receipt.html")
 _SNIPPET_MARKER = "# reproduce one episode"
-_MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
-#: The remote-backend flags a Burla run takes from the command line over its ``[burla]`` table.
-_BURLA_REFUSED_FLAGS = ("concurrency", "app_name")
 _DIFF_ONLY_FLAGS = (
     "method", "methods", "q", "permutations", "seed", "by", "max_group_mde", "depth", "paired",
 )
 _RUN_ONLY_FLAGS = ("horizon",)
-_REFUSABLE = (
-    SamplerError, ExecutorError, DiffError, ReportError, StoreError, SurvivalError, ViewerError,
-    PairedError,
-)
 _REPORT_FORMS = (
     "report A B --x AXIS [...]  (two runs, or none for previous and latest: a comparison) or "
     "report RUN --x AXIS [...]  (one run: a survival report)"
@@ -194,24 +102,11 @@ _SERVE_FORM = (
     "serve A B --event NAME --x AXIS [...]  (two runs, or none for previous and latest: a "
     "comparison view)"
 )
-_SWEEP_NEXT = "sweep SPEC.toml --target pkg.module:rollout"
-_LATEST_PARTIAL = "\0latest-partial"
 #: The tool's own options, accepted before or after the verb.
 _GLOBAL_OPTIONS = ("--store", "--plain", "--debug")
 _VERB_NAMES = ("init", "sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs")
 _SCHEMAS = {verb: f"{_COMMAND}.{verb}/1" for verb in _VERB_NAMES}
 _ERRORS_LOG = "~/.cache/poisson-prove/errors.log"
-_EXTRA_HINTS = {
-    "modal": 'pip install "poisson-prove[modal]"',
-    "burla": 'pip install "poisson-prove[burla]"',
-}
-_NEVER_INFERS = {
-    "check": "a gate whose meaning changes when a new outcome appears is not a gate",
-    "serve": (
-        "a picture whose meaning changes when a new outcome appears is worse than a table "
-        "with the same defect"
-    ),
-}
 
 
 # ---------- streams, exits, parser ----------
@@ -947,6 +842,7 @@ def _add_tree_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None:
 # ---------- entry point ----------
 
 
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -1029,10 +925,24 @@ def _write_error(io: _IO, message: str, nexts: Sequence[str] = ()) -> None:
         io.err_line(f"  next: {command}")
 
 
+def _refused(io: _IO, exc: core.Refusal) -> None:
+    """A core refusal: its sentence as it is, then its commands."""
+    for note in exc.notes:
+        io.err_line(f"note: {note}")
+    io.err_line(f"error: {exc}")
+    for command in exc.next:
+        io.err_line(f"  next: {command}")
+
+
+def _notes_of(io: _IO, result: Any) -> None:
+    for note in getattr(result, "notes", ()):
+        io.err_line(f"note: {note}")
+
+
 @contextmanager
 def _notes(io: _IO) -> Iterator[None]:
-    """Every warning Prove raises reaches the user as one ``note:`` line; a library's warning
-    is not shown."""
+    """Every warning Prove raises outside the core reaches the user as one ``note:`` line; a
+    library's warning is not shown."""
 
     package = os.path.dirname(os.path.abspath(__file__))
 
@@ -1054,7 +964,6 @@ def _notes(io: _IO) -> Iterator[None]:
 
 def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
     """The single exception-to-exit-code map."""
-    root = _store_root(ns)
     state = _State(
         json=bool(getattr(ns, "json", False)),
         verb=ns.verb,
@@ -1063,71 +972,55 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
     )
     try:
         with _notes(io):
-            _refuse_unrunnable_backend(ns)
-            note = retired_store_variable_note(os.environ, _ENV_STORE)
-            if note is not None:
+            if ns.verb == "sweep" and ns.backend == "burla" and os.name == "nt":
+                # Burla's launcher needs fcntl, select on pipes and process groups.
+                raise _Refusal(
+                    "the burla backend cannot run on Windows; run it from macOS or Linux"
+                )
+            store = core.open_store(getattr(ns, "store", None), verb=ns.verb)
+            for note in store.notes:
                 io.err_line(f"note: {note}")
-            _check_retired_default_store(ns, root)
-            _check_store(ns, root)
-            return _VERBS[ns.verb](ns, io, root, state)
+            return _VERBS[ns.verb](ns, io, store, state)
     except _Usage as exc:
         _write_error(io, str(exc), exc.nexts)
         return 2
     except _Refusal as exc:
         _write_error(io, str(exc), exc.nexts)
         return 1
-    except KeyboardInterrupt:
-        return _interrupted(io, root, state)
-    except _REFUSABLE as exc:
-        if _work_started(root, state):
-            sentence, nexts = _kept(root, state)
-            if not state.json:
-                io.line(f"stopped  {sentence}")
-                for command in nexts:
-                    io.next(command)
-            _write_error(io, f'{exc} (run "{state.run_id}")')
-            return 3
+    except core.Refusal as exc:
+        if exc.plan is not None and not state.json:
+            _print_plan(io, exc.plan)
+        _refused(io, exc)
+        return 2 if exc.usage else 1
+    except (ReportError, ViewerError) as exc:
         _write_error(io, str(exc), getattr(exc, "nexts", ()))
         return 1
+    except core.Stopped as exc:
+        if not state.json:
+            io.line(f"stopped  {exc.sentence}")
+            for command in exc.next:
+                io.next(command)
+        io.err_line(f"error: {exc.error}")
+        return 3
+    except core.Interrupted as exc:
+        if state.json:
+            _write_json(io, state.verb, "stopped", exc.sentence, {}, exc.next)
+        else:
+            io.line(f"stopped  {exc.sentence}")
+            for command in exc.next:
+                io.next(command)
+        return 130
+    except KeyboardInterrupt:
+        sentence = "interrupted; nothing was written"
+        if state.json:
+            _write_json(io, state.verb, "stopped", sentence, {}, [])
+        else:
+            io.line(f"stopped  {sentence}")
+        return 130
     except BrokenPipeError:
         raise
     except Exception as exc:
         return _unexpected(io, state, exc)
-
-
-def _kept(root: Path, state: _State) -> tuple[str, list[str]]:
-    """What a sweep that stopped after work started kept, and how to go on."""
-    try:
-        kept = Store(root).count(state.run_id or "")
-    except Exception:  # noqa: BLE001 - the store may be the thing that failed
-        kept = 0
-    run_id = state.run_id or ""
-    try:
-        name = names_index(Store(root), root, str(root)).name_of(run_id)
-    except Exception:  # noqa: BLE001 - the store may be the thing that failed
-        name = run_id
-    sentence = (
-        f"{_look.fmt_count(kept)} of {_look.fmt_count(state.planned)} rollouts "
-        f'kept in run "{name}" (partial)'
-    )
-    return sentence, [f"{_COMMAND} sweep --resume"]
-
-
-def _interrupted(io: _IO, root: Path, state: _State) -> int:
-    """Ctrl-C: what was kept, and how to go on. Exit 130."""
-    if state.verb == "sweep" and state.run_id is not None and _work_started(root, state):
-        kept, nexts = _kept(root, state)
-        sentence = f"interrupted: {kept}"
-    else:
-        sentence = "interrupted; nothing was written"
-        nexts = []
-    if state.json:
-        _write_json(io, state.verb, "stopped", sentence, {}, nexts)
-    else:
-        io.line(f"stopped  {sentence}")
-        for command in nexts:
-            io.next(command)
-    return 130
 
 
 def _unexpected(io: _IO, state: _State, exc: BaseException) -> int:
@@ -1156,93 +1049,6 @@ def _unexpected(io: _IO, state: _State, exc: BaseException) -> int:
     return 3
 
 
-def _store_root(ns: argparse.Namespace) -> Path:
-    if getattr(ns, "store", None):
-        return Path(ns.store)
-    env = os.environ.get(_ENV_STORE)
-    if env:
-        return Path(env)
-    return Path(_DEFAULT_STORE)
-
-
-def _refuse_unrunnable_backend(ns: argparse.Namespace) -> None:
-    """The Burla backend cannot run on Windows (its launcher needs ``fcntl``, ``select`` on
-    pipes and process groups), so a Burla sweep there is refused before anything else it does:
-    the store, the flags, the extra, the spec and its ``[burla]`` table, the target. Installing
-    the extra cannot help, so no install line is offered."""
-    if ns.verb == "sweep" and ns.backend == "burla" and os.name == "nt":
-        raise _Refusal("the burla backend cannot run on Windows; run it from macOS or Linux")
-
-
-def _check_retired_default_store(ns: argparse.Namespace, root: Path) -> None:
-    """With the default store in use, a folder an earlier version of Prove wrote to beside a
-    missing ``./prove-runs`` is a refusal on every verb, ``sweep`` included: reading past it
-    would answer from nothing, and writing would split the store in two. Creates nothing."""
-    if getattr(ns, "store", None) or os.environ.get(_ENV_STORE):
-        return
-    old = retired_default_store(root)
-    if old is None:
-        return
-    error, nexts = retired_default_store_refusal(root, old, _COMMAND, ns.verb)
-    raise _Refusal(error, nexts)
-
-
-def _slug(name: str) -> str:
-    """A run's name as a folder name: lower case, spaces and slashes as dashes."""
-    return name.lower().replace(" ", "-").replace("/", "-")
-
-
-def _store_source(ns: argparse.Namespace) -> str:
-    """Which of the three places named the store root, in the order ``_store_root`` reads them.
-
-    An empty ``$POISSON_PROVE_STORE`` is not a source: ``_store_root`` falls through it to the
-    default, and the clause has to name the resolution that actually happened.
-    """
-    if getattr(ns, "store", None):
-        return "it came from --store"
-    if os.environ.get(_ENV_STORE):
-        return f"it came from ${_ENV_STORE}"
-    return f"it is the default, since neither --store nor ${_ENV_STORE} is set"
-
-
-def _first_sweep(root: Path) -> str:
-    return f"{_COMMAND} --store {shlex.quote(str(root))} {_SWEEP_NEXT}"
-
-
-def _check_store(ns: argparse.Namespace, root: Path) -> None:
-    """A missing store refuses on every verb that reads it, an empty one on every such verb
-    but ``runs``. ``sweep`` is the verb that creates the store and ``init`` never reads it, so
-    neither is gated.
-
-    A path with no directory at it is certainly wrong, because nothing was ever stored there;
-    a directory with no ``manifest.json`` under it can be a fresh project. This reads the
-    store and creates nothing.
-    """
-    if ns.verb in ("sweep", "init"):
-        return
-    elsewhere = f"{_COMMAND} --store PATH {ns.verb}"
-    if not root.is_dir():
-        raise _Refusal(
-            f"no store at {root}. No directory exists at that path; {_store_source(ns)}.",
-            [_first_sweep(root), elsewhere],
-        )
-    if ns.verb != "runs" and not Store(root).runs():
-        raise _Refusal(
-            f"no runs in {root}. No directory under it holds a manifest.json; "
-            f"{_store_source(ns)}.",
-            [_first_sweep(root), elsewhere],
-        )
-
-
-def _work_started(root: Path, state: _State) -> bool:
-    if state.run_id is None:
-        return False
-    try:
-        return state.run_id in Store(root).runs()
-    except Exception:  # noqa: BLE001 - a store that cannot be read kept nothing we can name
-        return False
-
-
 def _write_json(
     io: _IO,
     verb: str,
@@ -1266,220 +1072,67 @@ def _write_json(
     io.out.write(text + "\n")
 
 
-# ---------- names ----------
+def _print_result(io: _IO, verb: str, result: Any) -> None:
+    """A core result's document, the verb's schema in place of the result's."""
+    doc = result.to_json()
+    _write_json(io, verb, doc["verdict"], doc["sentence"], doc, doc["next"])
 
 
-def _index(root: Path) -> Index:
-    """The store's runs, named; a names file Trace would refuse is a refusal here too."""
-    try:
-        return names_index(Store(root), root, str(root))
-    except NamesError as exc:
-        raise _Refusal(str(exc), exc.nexts) from exc
+def _slug(name: str) -> str:
+    """A run's name as a folder name: lower case, spaces and slashes as dashes."""
+    return name.lower().replace(" ", "-").replace("/", "-")
 
 
-def _run_of(idx: Index, word: str, io: _IO | None = None) -> str:
-    """The id of the one run ``word`` names, or a refusal. A run whose manifest cannot be read
-    is reached by its id alone and refused here; with ``io``, a word that counts the runs says
-    on a note which runs it left out."""
-    counting = word.strip() in ("latest", "previous") or word.strip().startswith(
-        ("latest:", "previous:", "#")
-    )
-    if io is not None and idx.unreadable and counting:
-        io.err_line(
-            "note: latest, previous and the numbers leave out the runs whose manifest.json "
-            f"could not be read: {', '.join(idx.unreadable)}"
-        )
-    try:
-        found = idx.find(word)
-    except NamesError as exc:
-        raise _Refusal(str(exc), exc.nexts) from exc
-    if found.status == "unreadable":
-        raise _Refusal(
-            f"the run {found.run_id} cannot be read: its manifest.json is damaged or carries no "
-            "start time",
-            [idx.listing()],
-        )
-    return found.run_id
-
-
-def _pair_of(idx: Index, verb: str, runs: Sequence[str], io: _IO | None = None) -> tuple[str, str]:
-    """The two runs a comparing verb was given, or ``previous`` and ``latest`` when none."""
-    if len(runs) == 0:
-        return _run_of(idx, "previous", io), _run_of(idx, "latest", io)
-    if len(runs) == 2:
-        return _run_of(idx, runs[0], io), _run_of(idx, runs[1], io)
-    raise _Usage(
-        f"{verb} takes two runs or none, got {len(runs)}", [f"{_COMMAND} {verb} --help"]
-    )
-
-
-def _join(words: Sequence[str]) -> str:
-    """A command to copy, quoted so a value on stderr never reads as a Python repr."""
-    return _look.command(*words)
-
-
-def _named_argv(argv: Sequence[str], idx: Index) -> list[str]:
-    """The command as typed with every run id replaced by the word that reaches that run alone:
-    its name, or its number when two runs answer to the name."""
-    return [idx.word_for(token) if idx.by_id(token) is not None else token for token in argv]
-
-
-def _with_names(message: str, idx: Index) -> str:
-    """A library's message with every run id it gives followed by the run's name, as
-    ``"NAME" (ID)``; an id that is the run's name is left as it is."""
-    for run in idx.runs:
-        if run.name == run.run_id or run.run_id not in message:
-            continue
-        shown = f'"{run.name}" ({run.run_id})'
-        message = message.replace(f'"{run.run_id}"', shown).replace(f"'{run.run_id}'", shown)
-        message = re.sub(rf"(?<![\w(\"-]){re.escape(run.run_id)}(?![\w-])", shown, message)
-    return message
-
-
-def _add_names(node: Any, idx: Index) -> Any:
+def _add_names(node: Any, names: Mapping[str, str]) -> Any:
     """A document with ``run_name`` placed after every key named exactly ``run_id``."""
     if isinstance(node, dict):
         out: dict[str, Any] = {}
         for key, value in node.items():
-            out[key] = _add_names(value, idx)
+            out[key] = _add_names(value, names)
             if isinstance(value, str) and key == "run_id":
-                out["run_name"] = idx.name_of(value)
+                out["run_name"] = names.get(value, value)
         return out
     if isinstance(node, list):
-        return [_add_names(v, idx) for v in node]
+        return [_add_names(v, names) for v in node]
     return node
 
 
-def _old_writer(manifests: tuple[RunManifest, RunManifest]) -> dict[str, str]:
-    """For a pair of one run written under the old name and one this build wrote, the old
-    run's role (``before`` or ``after``) and the line that says who wrote it; empty otherwise,
-    since a pair both written under the old name says so in its version line."""
-    if sum(1 for m in manifests if m.written_by) != 1:
-        return {}
-    out = {}
-    for role, m in zip(("before", "after"), manifests, strict=True):
-        writer = old_writer_line(version_as_recorded(m.poisson_prove_version))
-        if m.written_by and writer is not None:
-            out[role] = writer
-    return out
+def _two_runs(verb: str, words: Sequence[str]) -> tuple[str | None, str | None]:
+    if len(words) == 0:
+        return None, None
+    if len(words) == 2:
+        return words[0], words[1]
+    raise _Usage(f"{verb} takes two runs or none, got {len(words)}", [f"{_COMMAND} {verb} --help"])
 
 
-def _condition_text(config: Any) -> str:
-    """A condition as its axis values, ``task_id refund · tool_fail_rate 0.55``."""
-    cfg = json.loads(config) if isinstance(config, str) else config
-    if not isinstance(cfg, Mapping):
-        return str(config)
-    return " · ".join(
-        f"{key} {_look.fmt_num(value) if isinstance(value, float) else value}"
-        for key, value in cfg.items()
-    )
+# ---------- rendering ----------
 
 
-def _verdict_block(
-    io: _IO,
-    word: str,
-    sentence: str,
-    multi: MultiDiffResult,
-    a: str,
-    b: str,
-    idx: Index,
-    manifests: tuple[RunManifest, RunManifest],
-    chosen: str,
-) -> None:
-    """The verdict line, then its detail lines: ``method``; on ``check``, the comparison's own
-    word (reading R34); under the two nothing-moved words, the ``threshold`` and where it came
-    from (PF4.50); ``before`` and ``after`` (the old run of a mixed pair says who wrote it); one
-    ``trade`` line per traded condition; then the facts the verdict rests on (PF4.34 to PF4.46).
-    A blank line ends the block."""
-    io.line(f"{word}  {sentence}")
-    io.detail("method", _method_line(multi.method, chosen))
-    compared = multi.comparison_verdict()
-    if word in ("passed", "failed"):
-        clause = _facts.limit_clause(multi) if compared == "no significant change" else None
-        io.detail("comparison", compared if clause is None else f"{compared}: {clause}")
-    if _facts.is_nothing_moved(compared):
-        source = _THRESHOLD_SOURCES[multi.threshold_source]
-        io.detail("threshold", f"{_look.fmt_rate(multi.threshold)} ({source})")
-    writers = _old_writer(manifests)
-    for role, run_id in (("before", a), ("after", b)):
-        shown = idx.name_of(run_id)
-        io.detail(role, f"{shown}, {writers[role]}" if role in writers else shown)
-    for record in multi.trades.to_dict(orient="records"):
-        moved = [_moved(multi, event, "fell") for event in record.get("safer_events", ())]
-        moved += [_moved(multi, event, "rose") for event in record.get("worse_events", ())]
-        io.detail("trade", f"{_condition_text(record.get('config'))}: {', '.join(moved)}")
-    names = {run_id: idx.name_of(run_id) for run_id in (a, b)}
-    for label, text in _facts.lines(multi, names):
+def _verdict_block(io: _IO, result: core.Comparison) -> None:
+    """The verdict line, then its detail lines, as the result gives them; a blank line ends it."""
+    io.line(f"{result.verdict}  {result.sentence}")
+    for label, text in result.detail:
         io.detail(label, text)
     io.line()
 
 
-#: Where section 8.4's threshold came from, in words.
-_THRESHOLD_SOURCES = {
-    "recorded": "recorded at sweep time by the runs",
-    "smaller": "the smaller of the two the runs recorded at sweep time",
-    "default": "the default; neither run recorded one",
-}
-
-
-def _moved(multi: MultiDiffResult, event: str, slot: str) -> str:
-    """A traded event and which way it went: ``trades`` keeps a change for the better in its
-    first slot and one for the worse in its second, so a success's slots are the other way
-    about."""
-    if multi.by_event[event].kind == "success":
-        slot = "rose" if slot == "fell" else "fell"
-    return f"{event} {slot}"
-
-
-def _chosen(ns: argparse.Namespace) -> str:
-    """How the test was chosen: named with ``--method``, or the comparison's default."""
-    return "default" if ns.method is None else "named"
-
-
-def _method_line(method: str, chosen: str) -> str:
-    """The test in plain words, its own name, and how it was chosen, on one line."""
-    plain, own = _METHOD_WORDS[method]
-    if chosen == "named":
-        how = "named with --method"
-    elif method == "mcnemar_bh":
-        how = "the default for runs paired at sweep time"
-    else:
-        how = "the default for runs not paired at sweep time"
-    return f"{plain} ({own}), {how}"
-
-
-def _with_method(sentence: str, method: str) -> str:
-    """A verdict sentence with the test it rests on, in plain words, at its end."""
-    return f"{sentence} ({_METHOD_WORDS[method][0]})"
-
-
-def _method_first(payload: Mapping[str, Any], method: str, chosen: str) -> dict[str, Any]:
-    """A comparison's JSON with ``method_chosen`` right after ``method``; with ``method``
-    absent, both lead."""
-    if "method" not in payload:
-        return {"method": method, "method_chosen": chosen, **payload}
-    out: dict[str, Any] = {}
-    for key, value in payload.items():
-        out[key] = value
-        if key == "method":
-            out["method_chosen"] = chosen
-    return out
-
-
-def _method_markdown(markdown: str, line: str) -> str:
+def _method_markdown(markdown: str, line: str, pair: Sequence[str] = ()) -> str:
     """``report.md`` with the method's line as a paragraph of its own at the end of the header,
-    just before the first section; the lines under the title keep their places."""
+    just before the first section, and the two runs by name and id before it; the lines under
+    the title keep their places."""
+    block = "".join(f"{entry}\n" for entry in pair) + ("\n" if pair else "") + f"method: {line}\n"
     at = markdown.find("\n\n## ")
     if at < 0:
-        return f"{markdown.rstrip(chr(10))}\n\nmethod: {line}\n"
-    return f"{markdown[: at + 2]}method: {line}\n\n{markdown[at + 2 :]}"
+        return f"{markdown.rstrip(chr(10))}\n\n{block}"
+    return f"{markdown[: at + 2]}{block}\n{markdown[at + 2 :]}"
 
 
-def _method_html(page: str, line: str, *, summary: bool = False) -> str:
+def _method_html(page: str, line: str, *, summary: bool = False, pair: Sequence[str] = ()) -> str:
     """A page with the method's line as a paragraph of its own under its ``<h1>`` (and, with
-    ``summary``, under its Summary heading)."""
+    ``summary``, under its Summary heading), the two runs by name and id before it."""
     words = html.escape(line)
-    page = page.replace("</h1>", f"</h1>\n<p>method: {words}</p>", 1)
+    runs = "".join(f"\n<p>{html.escape(entry)}</p>" for entry in pair)
+    page = page.replace("</h1>", f"</h1>{runs}\n<p>method: {words}</p>", 1)
     if summary:
         page = re.sub(
             r"(<h2\b[^>]*>\s*Summary\s*</h2>)",
@@ -1490,343 +1143,18 @@ def _method_html(page: str, line: str, *, summary: bool = False) -> str:
     return page
 
 
-def _pair_title(idx: Index, a: str, b: str, events: Sequence[str]) -> str:
-    """The default title of a comparison: the two runs by name, then the events."""
-    return f"{idx.name_of(a)} vs {idx.name_of(b)}: {', '.join(events)}"
+def _method_of(result: core.Comparison) -> str:
+    return next(text for label, text in result.detail if label == "method")
 
 
-def _report_next(
-    idx: Index, a: str, b: str, manifests: tuple[RunManifest, RunManifest], named: bool
-) -> list[str]:
-    """``diff``'s next step: the report over the runs' first two axes, naming the runs only when
-    they were typed."""
-    axes = list(manifests[0].axis_types)[:2]
-    if not axes:
-        return []
-    command = [_COMMAND, "report", *([idx.word_for(a), idx.word_for(b)] if named else [])]
-    command += ["--x", axes[0], *(["--y", axes[1]] if len(axes) > 1 else [])]
-    return [_join(command)]
-
-
-# ---------- shared helpers ----------
-
-
-def _parse_pairs(items: Sequence[str], flag: str) -> dict[str, Any]:
-    """``KEY=VALUE`` items with TOML scalar values: ``push=100`` -> int, ``task="x"`` -> str."""
-    out: dict[str, Any] = {}
-    for item in items:
-        key, sep, value = item.partition("=")
-        key = key.strip()
-        if not sep or not key:
-            raise _Refusal(f'{flag} expects KEY=VALUE, got "{item}"')
-        try:
-            out[key] = tomllib.loads(f"v = {value.strip()}")["v"]
-        except tomllib.TOMLDecodeError as exc:
-            raise _Refusal(
-                f'{flag} "{item}": the value must be a TOML scalar (100, 0.5, "text", true): '
-                f"{exc}"
-            ) from exc
-    return out
-
-
-def _typed_fix(items: Sequence[str], manifests: Sequence[RunManifest]) -> dict[str, Any]:
-    """``--fix KEY=VALUE`` read by the axis's recorded type: on a categorical axis VALUE is
-    matched against the axis's values as text (a TOML-quoted value still works), on a continuous
-    axis it is a number; a value the axis does not hold is refused, listing its values. A key
-    that is no axis of the runs keeps the TOML-scalar reading."""
-    types: dict[str, str] = {}
-    held: dict[str, list[Any]] = {}
-    for m in manifests:
-        for key, kind in m.axis_types.items():
-            types.setdefault(key, kind)
-        for config in (m.environment.get("sweep") or {}).get("configs", []):
-            for key, value in config.items():
-                if value not in held.setdefault(key, []):
-                    held[key].append(value)
-    out: dict[str, Any] = {}
-    for item in items:
-        key, sep, text = item.partition("=")
-        key, text = key.strip(), text.strip()
-        if not sep or key not in types or not held.get(key):
-            out.update(_parse_pairs([item], "--fix"))
-            continue
-        values = held[key]
-        if types[key] == "continuous":
-            try:
-                number: float | None = float(text.strip("\"'"))
-            except ValueError:
-                number = None
-            found = [
-                v for v in values
-                if number is not None and isinstance(v, (int, float)) and not isinstance(v, bool)
-                and math.isclose(float(v), number, rel_tol=0.0, abs_tol=1e-12)
-            ]
-        else:
-            bare = text
-            if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
-                # A TOML-quoted value, as --fix always read one.
-                bare = str(_parse_pairs([f"{key}={text}"], "--fix")[key])
-            found = [v for v in values if str(v) == bare]
-        if not found:
-            shown = ", ".join(
-                _look.fmt_num(v) if isinstance(v, float) else str(v) for v in values
-            )
-            given = text.strip("\"'")
-            raise _Refusal(f"--fix {key}={given}: {given} is not on the axis; {key} holds {shown}")
-        out[key] = found[0]
-    return out
-
-
-def _load_pair(store: Store, a: str, b: str) -> tuple[Any, Any, RunManifest, RunManifest]:
-    """Narrow frames and manifests. Nothing is censored here: ``multi_diff`` censors per
-    event. Nothing downstream reads ``meta``, so it is never decoded on this path."""
-    ma, mb = store.manifest(a), store.manifest(b)
-    return store.read(a, meta=False), store.read(b, meta=False), ma, mb
-
-
-def _outcome_counts(*frames: Any) -> str:
-    """``name=count`` pairs over the non-null outcomes of the given store frames, most first."""
-    counter: Counter[str] = Counter()
-    for frame in frames:
-        counter.update(str(o) for o in frame["outcome"].dropna().tolist())
-    ordered = sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))
-    return ", ".join(f"{name}={_look.fmt_count(count)}" for name, count in ordered)
-
-
-def _split_events(events: Sequence[str] | None) -> tuple[list[str] | None, dict[str, str]]:
-    """The events as named, and the kinds ``--event NAME:failure`` and ``NAME:success`` give them
-    for this comparison (PF4.20). A colon followed by anything else is part of the name."""
-    if events is None:
-        return None, {}
-    names: list[str] = []
-    kinds: dict[str, str] = {}
-    for typed in events:
-        name, colon, kind = str(typed).rpartition(":")
-        if colon and name and kind in KINDS:
-            names.append(name)
-            kinds[name] = kind
-        else:
-            names.append(str(typed))
-    return names, kinds
-
-
-def _multi(
-    fa: Any,
-    fb: Any,
-    ma: RunManifest,
-    mb: RunManifest,
-    *,
-    events: Sequence[str] | None,
-    method: str | None,
-    q: float,
-    verb: str = "diff",
-    kinds: Mapping[str, str] | None = None,
-) -> MultiDiffResult:
-    try:
-        return multi_diff(
-            fa,
-            fb,
-            events=events,
-            method=cast("Method | None", method),
-            q=q,
-            power=stats.POWER,
-            manifest_a=ma,
-            manifest_b=mb,
-            kinds=kinds,
-        )
-    except MixedCases as exc:
-        # PF4.38: a condition that ran several cases mixes what its rows compare.
-        raise _Refusal(
-            str(exc),
-            [
-                "make each case its own sweep axis in the spec, an [axes.<name>] table whose "
-                "values are the cases, then sweep again",
-                "see docs/your-own-agent.md: one case per condition",
-            ],
-        ) from exc
-    except EventInferenceError as exc:
-        raise _Refusal(
-            f"cannot infer the event set: {exc}; outcome counts: {_outcome_counts(fa, fb)}",
-            [f"{_COMMAND} {verb} A B --event NAME"],
-        ) from exc
-
-
-def _require_known_events(
-    verb: str, events: Sequence[str] | None, *frames: pd.DataFrame
-) -> None:
-    """Refuse an ``--event`` name absent from every frame the verb loaded, before any work.
-
-    Compared against the outcomes actually present, never against an inferred set: a typo
-    should never produce a plausible-looking empty result, and the command line is where every
-    typo originates. The library underneath stays permissive.
-    """
-    if events is None:
-        return
-    present = competing_set(*frames)
-    missing = [str(e) for e in events if str(e) not in present]
-    if missing:
-        where = "either run" if len(frames) > 1 else "the run"
-        raise UnknownEvent(
-            f'{verb}: event "{missing[0]}" does not appear in {where}. '
-            f"Present: {', '.join(present)}."
-        )
-
-
-def _missing_flags_refusal(
-    store: Store,
-    verb: str,
-    runs: Sequence[str],
-    argv: Sequence[str],
-    idx: Index,
-    *,
-    x_missing: bool,
-    event_missing: bool,
-) -> _Refusal:
-    """What the named runs carry, in place of argparse's bare "arguments are required".
-
-    The two verbs that refuse to infer keep their own clause: a gate whose meaning moves when a
-    new outcome appears is not a gate, and a picture of the same defect is worse. The listing
-    replaces the suggestion they used to end on, because a verb that refuses to infer should not
-    offer an inference as its advice. The ``next:`` line is the command as typed with the first
-    listed value filled in.
-
-    Fires after the store state, the arity and the unknown-run refusal, and before any work: it
-    reads the frames of the named runs and calls nothing else.
-    """
-    for run in runs:
-        store.manifest(run)
-    frames = [store.read(run, meta=False) for run in runs]
-    axes = sorted({str(key) for frame in frames for config in frame["config"] for key in config})
-    events = list(competing_set(*frames))
-    if verb == "inspect" and "timeout" not in events and store.tally(runs[0]).timed_out:
-        # ``inspect --event`` matches the error column too, and "timeout" is the one error text
-        # a person can type: ``RunTally.timed_out`` counts exactly ``error == "timeout"``.
-        events = sorted({*events, "timeout"})
-    flags = " and ".join(
-        flag
-        for flag, missing in (("--x AXIS", x_missing), ("--event NAME", event_missing))
-        if missing
-    )
-    given = "and neither was given" if x_missing and event_missing else "which was not given"
-    reason = f"; {_NEVER_INFERS[verb]}" if event_missing and verb in _NEVER_INFERS else ""
-    shown = [f'"{idx.name_of(r)}"' for r in runs]
-    who = f"{shown[0]} and {shown[1]} carry" if len(runs) == 2 else f"{shown[0]} carries"
-    carried = []
-    if verb in ("report", "serve"):
-        carried.append(f"axes: {', '.join(axes) or 'none stored'}")
-    carried.append(f"events: {', '.join(events) or 'none stored'}")
-    message = f"{verb} requires {flags}, {given}{reason}. {who} {'; '.join(carried)}."
-    filled = [_COMMAND, *_named_argv(argv, idx)]
-    if x_missing and axes:
-        filled.extend(["--x", axes[0]])
-    if event_missing and events:
-        filled.extend(["--event", events[0]])
-    fillable = (not x_missing or axes) and (not event_missing or events)
-    return _Refusal(message, [_join(filled)] if fillable else [])
-
-
-def _read_record() -> Path:
-    """PF4.39 (reading R6): the person's record of the runs a comparing verb read, beside the
-    error log, never in the store, so ``diff`` and ``check`` still write nothing into it."""
-    return Path.home() / ".cache" / "poisson-prove" / "compared.jsonl"
-
-
-def _record_read(store: Store, *runs: tuple[str, int]) -> None:
-    """One line per run a comparing verb read: its id and creation time (unique per run), the
-    episodes it held, and when. Best effort: a read that cannot be recorded still runs."""
-    at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    try:
-        path = _read_record()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            for run_id, episodes in runs:
-                entry = {"run_id": run_id, "created_at": store.manifest(run_id).created_at,
-                         "episodes": int(episodes), "at": at}
-                fh.write(json.dumps(entry, allow_nan=False) + "\n")
-    except OSError:
-        pass
-
-
-def _compared_before(manifest: RunManifest) -> bool:
-    """Whether the read record holds a comparison of this run."""
-    try:
-        text = _read_record().read_text(encoding="utf-8")
-    except OSError:
-        return False
-    for line in text.splitlines():
-        try:
-            entry = json.loads(line)
-        except ValueError:
-            continue
-        if (entry.get("run_id"), entry.get("created_at")) == (manifest.run_id, manifest.created_at):
-            return True
-    return False
-
-
-def _run_diffs(
-    store: Store,
-    a: str,
-    b: str,
-    *,
-    verb: str,
-    events: Sequence[str] | None,
-    method: str | None,
-    q: float,
-    all_methods: bool,
-) -> tuple[
-    MultiDiffResult,
-    dict[str, Any],
-    tuple[RunManifest, RunManifest],
-    tuple[pd.DataFrame, pd.DataFrame],
-]:
-    """The primary diff first (so a refusal fires before extra work), then the other two on
-    the same event set. ``method=None`` is the comparison's default test.
-
-    The raw frames come back beside the result because the tree consumes both: it rebuilds
-    the cell view from the frames and checks it against the diff, and reading the pair a second
-    time here would be a second read free to disagree with the first.
-    """
-    fa, fb, ma, mb = _load_pair(store, a, b)
-    names, kinds = _split_events(events)
-    _require_known_events(verb, names, fa, fb)
-    primary = _multi(fa, fb, ma, mb, events=names, method=method, q=q, verb=verb, kinds=kinds)
-    if primary.n_tests == 0:
-        # PF4.7: a comparison of nothing is not a result, on every verb that compares.
-        raise _Refusal(
-            f'no condition has an outcome in both "{a}" and "{b}" ({primary.dropped_a} only in '
-            f"A, {primary.dropped_b} only in B); there is nothing to compare",
-            [f"{_COMMAND} runs"],
-        )
-    if primary.peeking:
-        # The caveat names each run as the person knows it (PF4.39).
-        idx = _index(store._root)
-        named = tuple(
-            {**entry, "run_name": idx.name_of(str(entry["run_id"]))} for entry in primary.peeking
-        )
-        primary = dataclasses.replace(primary, peeking=named)
-    _record_read(store, (a, len(fa)), (b, len(fb)))
-    others: dict[str, Any] = {}
-    if all_methods:
-        for other in _METHODS:
-            if other != primary.method:
-                others[other] = _multi(
-                    fa, fb, ma, mb, events=primary.events, method=other, q=q, verb=verb,
-                    kinds=kinds,
-                )
-    return primary, others, (ma, mb), (fa, fb)
-
-
-def _method_table(results: Sequence[MultiDiffResult]) -> str:
+def _method_table(results: Sequence[Any]) -> str:
     # The two count columns are an event's safer and worse with a kind, and its falls and rises
-    # without one; the header keeps M10's names, which its frozen test reads (a PF4.20 finding
-    # for the release audit: the words name no kind there).
+    # without one; the header keeps M10's names, which its frozen test reads.
     known = all(m.all_kinds_known() for m in results)
     header = ("method", "event", "pairing", "safer", "worse", "unchanged", "max_mde")
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     for m in results:
-        # The column states the requested method's pairing, the same fact the headline states,
-        # and never the runs' seed identity, which is its own field on the result.
-        pairing = "paired" if m.method in _PAIRED_METHODS else "unpaired"
+        pairing = "paired" if m.method in PAIRED_METHODS else "unpaired"
         for e in m.events:
             ev = m.by_event[e]
             n_down, n_up = (ev.n_safer, ev.n_worse) if known else (ev.n_lower, ev.n_higher)
@@ -1838,20 +1166,34 @@ def _method_table(results: Sequence[MultiDiffResult]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _coverage_block(multi: MultiDiffResult) -> str:
-    """The coverage facts ``diff``'s text output appends, after the markdown and after the
-    ``--methods all`` table, exactly as ``_method_table`` already is.
+def _md_cell(value: Any, column: str | None = None) -> str:
+    """A table cell, in the look's forms for its column."""
+    if isinstance(value, Mapping):
+        return json.dumps(_look.native(value), sort_keys=True, separators=(",", ":"))
+    plain = _look.native(value)
+    if column is not None and _look.active():
+        if column in ("config_hash", "max_mde_unchanged_cell"):
+            return _look.fmt_hash(plain)
+        if isinstance(plain, bool) or plain is None or isinstance(plain, str):
+            return str(plain)
+        if isinstance(plain, int):
+            return _look.fmt_count(plain)
+        if isinstance(plain, float):
+            return _look.fmt_num(plain)
+        return str(plain)
+    if isinstance(plain, float):
+        return f"{plain:.6g}"
+    return str(plain)
 
-    Not part of ``to_markdown()``: a diff whose rows errored must render identically to one
-    whose rows did not, so ``to_markdown()`` keeps meaning "the statistical result" and the
-    coverage facts reach the reader of ``diff`` here instead. The ``_md_cell`` style and the
-    column order are the diff module's, imported rather than restated.
-    """
+
+def _coverage_block(multi: Any) -> str:
+    """The coverage facts ``diff``'s text output appends, after the markdown and after the
+    ``--methods all`` table."""
     frame = multi.coverage
-    if frame is None:  # never from ``multi_diff``; a hand-built result says nothing.
+    if frame is None:  # never from the core; a hand-built result says nothing.
         return ""
     holes = frame[~frame["comparable"]]
-    counts = {cause: int((holes["cause"] == cause).sum()) for cause in _CAUSES}
+    counts = {cause: int((holes["cause"] == cause).sum()) for cause in CAUSES}
     cols = list(COVERAGE_COLUMNS)
     n = _look.fmt_count
     lines = [
@@ -1872,24 +1214,13 @@ def _coverage_block(multi: MultiDiffResult) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _interval_block(multi: MultiDiffResult) -> str:
-    """The interval facts ``diff``'s text output appends after the coverage block, from the one
-    formatter every surface shares; what is left here is layout: the second and third lines
-    are indented two spaces."""
+def _interval_block(multi: Any) -> str:
     lines = _interval_lines(multi)
     return "\n".join([lines[0], *(f"  {line}" for line in lines[1:])]) + "\n"
 
 
-def _omnibus_block(dual_root: RootResult) -> str:
-    """The tree's root, the block ``diff``'s text output appends after the interval block.
-
-    **The family is named and the null is quoted.** The root tests the sharp "no cell changed"
-    over the same cells x events family the flat analysis runs.
-
-    **Every number is a field and none of them is computed here.** That includes the last
-    line's complement: ``n_cells - n_informative_cells`` is exactly the arithmetic this module
-    must not do, so ``RootResult`` carries ``n_uninformative_cells`` and this reads it.
-    """
+def _omnibus_block(dual_root: Any) -> str:
+    """The tree's root, the block ``diff``'s text output appends after the interval block."""
     n, p_ = _look.fmt_count, _look.fmt_p
     verdict = "rejected" if dual_root.rejects else "not rejected"
     sign = "<" if dual_root.rejects else ">="
@@ -1900,8 +1231,6 @@ def _omnibus_block(dual_root: RootResult) -> str:
         f"{events}",
         f"  min-p of location and dispersion; {n(dual_root.n_permutations)} within-cell "
         f"permutations, {dual_root.scheme}, seed {dual_root.seed}",
-        # Every permutation p below is ``(1 + count) / (B + 1)`` over the same B, so one field
-        # bounds all of them; the floor prints under the same rule as the p beside it.
         f"  p floor {p_(dual_root.p_floor)}: the smallest p {n(dual_root.n_permutations)} "
         f"permutations can express; a p at the floor is a bound, not a measurement",
     ]
@@ -1922,9 +1251,7 @@ def _omnibus_block(dual_root: RootResult) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _fault_lines_head(cut: Grouping, fault: FaultLines) -> str:
-    """The grouping, the rung that resolved it, and the shape it was admitted on. Every number
-    is a field and none of them is computed here."""
+def _fault_lines_head(cut: Any, fault: Any) -> str:
     n = _look.fmt_count
     return (
         f"fault lines: grouping {cut.key} ({cut.resolved_by}), {n(cut.n_groups)} groups; "
@@ -1935,9 +1262,7 @@ def _fault_lines_head(cut: Grouping, fault: FaultLines) -> str:
     )
 
 
-def _fault_lines_null(fault: FaultLines) -> str:
-    """The null in quotes, and either what tested it or why nothing did. A level that was not
-    tested is stated, not omitted, and stated without a conditional."""
+def _fault_lines_null(fault: Any) -> str:
     if fault.tested:
         return (
             f'  "{fault.null}" tested by BH across {_look.fmt_count(fault.n_groups)} groups at '
@@ -1948,9 +1273,7 @@ def _fault_lines_null(fault: FaultLines) -> str:
     return f'  "{fault.null}" not tested: the root did not reject'
 
 
-def _fault_lines_group(key: str, group: GroupResult) -> str:
-    """One group: what it holds, what could move in it, and, when tested, its verdict. The
-    p-values print only when they exist."""
+def _fault_lines_group(key: str, group: Any) -> str:
     n = _look.fmt_count
     line = (
         f"  {key}={group.label}  {n(group.n_cells)} cells, "
@@ -1966,10 +1289,7 @@ def _fault_lines_group(key: str, group: GroupResult) -> str:
     return f"{line}; p {_look.fmt_p(group.p_group)}, q {_look.fmt_p(group.q_group)}: {verdict}"
 
 
-def _fault_lines_block(nested: TreeResult) -> str:
-    """Level 2, the block ``diff``'s text output appends after the omnibus block: its first
-    line, then every following line indented two spaces, the chain first and one line per
-    group in label order, never ordered by result."""
+def _fault_lines_block(nested: Any) -> str:
     lines = [_fault_lines_head(nested.grouping, nested.fault_lines)]
     for refusal in nested.grouping.refused:
         lines.append(
@@ -1978,7 +1298,6 @@ def _fault_lines_block(nested: TreeResult) -> str:
         )
     lines.append(_fault_lines_null(nested.fault_lines))
     if nested.fault_lines.tested:
-        # Only where the level was tested: there is no floor under a p nobody drew.
         lines.append(
             f"  group p floor {_look.fmt_p(nested.root.p_floor)}: the same "
             f"{_look.fmt_count(nested.root.n_permutations)} permutations; a group p at the "
@@ -1989,8 +1308,11 @@ def _fault_lines_block(nested: TreeResult) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _cells_head(leaves: Leaves, bound: Bound) -> str:
-    """The null in quotes and what tested it, or the first reason nothing did."""
+def _rate_or_none(value: float) -> str:
+    return "none" if math.isnan(value) else _look.fmt_rate(value)
+
+
+def _cells_head(leaves: Any, bound: Any) -> str:
     n = _look.fmt_count
     if leaves.tested:
         return (
@@ -2005,9 +1327,7 @@ def _cells_head(leaves: Leaves, bound: Bound) -> str:
     return "cells: not tested: no group rejected"
 
 
-def _cells_family(family: CellFamily) -> str:
-    """One rejected group's family: how many tests were in it, how many it could name, and what
-    its cells could not have seen."""
+def _cells_family(family: Any) -> str:
     return (
         f"  {family.key}={family.label}  {_look.fmt_count(family.n_tests)} tests, "
         f"{_look.fmt_count(family.n_rejected)} rejected; cell MDE median "
@@ -2015,8 +1335,7 @@ def _cells_family(family: CellFamily) -> str:
     )
 
 
-def _cells_leaf(leaf: CellResult) -> str:
-    """One named cell: its config, its event, and three numbers."""
+def _cells_leaf(leaf: Any) -> str:
     config = ", ".join(f"{key}={value}" for key, value in leaf.config.items())
     return (
         f"    {config}  {leaf.event}: delta {_look.fmt_rate(leaf.delta)}, "
@@ -2025,9 +1344,7 @@ def _cells_leaf(leaf: CellResult) -> str:
     )
 
 
-def _cells_block(nested: TreeResult) -> str:
-    """Level 3, the block ``diff``'s text output appends after the fault-lines block: one
-    family line per family, and under each one line per rejected cell in row order."""
+def _cells_block(nested: Any) -> str:
     lines = [_cells_head(nested.leaves, nested.bound)]
     for family in nested.leaves.families:
         lines.append(_cells_family(family))
@@ -2037,8 +1354,7 @@ def _cells_block(nested: TreeResult) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _bound_block(bound: Bound) -> str:
-    """The error rate the whole procedure controls at, and the assumption it rests on."""
+def _bound_block(bound: Any) -> str:
     n = _look.fmt_count
     lines = [
         f"bound: depth {n(bound.depth)} ({n(bound.depth_configured)} configured); "
@@ -2051,7 +1367,7 @@ def _bound_block(bound: Bound) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _write_summary(io: _IO, multi: MultiDiffResult) -> None:
+def _write_summary(io: _IO, multi: Any) -> None:
     """Inference line when inferred, the headline, and the trade line when present."""
     if multi.inferred:
         io.line(multi.to_markdown().splitlines()[0])
@@ -2062,8 +1378,8 @@ def _write_summary(io: _IO, multi: MultiDiffResult) -> None:
 
 
 class _Progress:
-    """``done/total`` on stderr: one rewritten line when stderr is a terminal, else one line
-    per tenth, counts with separators."""
+    """The sweep's progress events as ``done/total`` on stderr: one rewritten line when stderr
+    is a terminal, else one line per tenth, counts with separators."""
 
     def __init__(self, io: _IO) -> None:
         self.io = io
@@ -2072,7 +1388,11 @@ class _Progress:
         self.decile = 0
         self.dirty = False
 
-    def __call__(self, done: int, total: int) -> None:
+    def __call__(self, event: Any) -> None:
+        doc = event.to_json()
+        if doc["kind"] != "progress":
+            return
+        done, total = int(doc["detail"]["done"]), int(doc["detail"]["total"])
         text = f"{_look.fmt_count(done)}/{_look.fmt_count(total)}"
         if self.tty:
             self.io.err_write(f"\r{text}")
@@ -2090,651 +1410,79 @@ class _Progress:
             self.err.write("\n")
 
 
+def _print_plan(io: _IO, p: core.Plan) -> None:
+    io.line(f"plan  {p.sentence}")
+    for line in p.lines:
+        io.line(f"  {line}")
+    if p.design_line is not None:
+        io.line(p.design_line)
+
+
 # ---------- sweep ----------
 
 
-def _resolve_target(target: str) -> Any:
-    """Import the local branch's rollout, turning any refusal at import into exit 1.
-
-    A module that raises at import because it is outside the boundary it demands raises
-    RuntimeError, which is a refusal of this target and not a bug in Prove.
-    """
-    try:
-        return resolve(target)
-    except (ValueError, ImportError, AttributeError, RuntimeError) as exc:
-        raise _Refusal(f'cannot resolve --target "{target}": {exc}') from exc
-
-
-def _require_extra(name: str) -> None:
-    """A backend's package must import before the plan is built: a missing extra is refused
-    first, with the install line."""
-    try:
-        found = importlib.util.find_spec(name) is not None
-    except (ImportError, ValueError):
-        found = False
-    if not found:
-        raise _Refusal(
-            f'the {name} backend needs the "{name}" extra, which is not installed',
-            [_EXTRA_HINTS[name]],
-        )
-
-
-def _modal_config(ns: argparse.Namespace, spec_path: Path) -> tuple[ModalTarget, ModalOptions]:
-    """``[modal]`` -> ModalOptions, ``[modal.<--image>]`` -> ImageSpec; flags override the table."""
-    with spec_path.open("rb") as fh:
-        data = tomllib.load(fh)
-    table = data.get("modal", {})
-    if not isinstance(table, Mapping):
-        raise _Refusal(f"[modal] in {spec_path} must be a table")
-    sections = {k: v for k, v in table.items() if isinstance(v, Mapping)}
-    scalars = {k: v for k, v in table.items() if not isinstance(v, Mapping)}
-
-    image_table = sections.get(ns.image)
-    if image_table is None:
-        if ns.image != "image":
-            raise _Refusal(f"no [modal.{ns.image}] table in {spec_path}")
-        image_table = {}
-    try:
-        image = ImageSpec(**image_table)
-    except (TypeError, ValueError) as exc:
-        raise _Refusal(f"[modal.{ns.image}]: {exc}") from exc
-    try:
-        options = ModalOptions(**scalars)
-    except (TypeError, ValueError) as exc:
-        raise _Refusal(f"[modal]: {exc}") from exc
-
-    overrides = {
-        name: value
-        for name, value in (
-            ("concurrency", ns.concurrency),
-            ("infra_retries", ns.infra_retries),
-            ("max_cost", ns.max_cost),
-            ("est_seconds_per_episode", ns.est_seconds),
-            ("app_name", ns.app_name),
-            ("batch_size", ns.batch_size),
-            ("episode_timeout", ns.episode_timeout),
-            ("max_rollouts", ns.max_rollouts),
-        )
-        if value is not None
-    }
-    options = dataclasses.replace(options, **overrides)
-    try:
-        target = ModalTarget(import_path=ns.target, image=image)
-    except ValueError as exc:
-        raise _Refusal(str(exc)) from exc
-    return target, options
-
-
-def _recorded_max_mde(store: Store, resume: str | None) -> float | None:
-    """The accepted value a resumed run already recorded, or None when there is none.
-
-    A resume is the same run and inherits its own admission. ``--pair-with`` is not read here:
-    a paired arm is a different run making its own claim.
-    """
-    if resume is None:
-        return None
-    try:
-        recorded = store.manifest(resume).environment.get("max_mde_accepted")
-    except StoreError:
-        return None
-    return float(recorded) if isinstance(recorded, (int, float)) else None
-
-
-def _confirm(ns: argparse.Namespace, io: _IO, idx: Index | None = None) -> None:
-    """Ask once on stderr, read exactly one line; anything but y/yes declines. Never hang."""
-    if ns.yes:
-        return
-    if not io.inp.isatty():
-        raise _Refusal(
-            "stdin is not a terminal, so the question after the plan cannot be asked",
-            [f"{_join([_COMMAND, *(_named_argv(ns.typed, idx) if idx else ns.typed)])} --yes"],
-        )
-    io.err_write("Proceed? [y/N] ")
-    io.err.flush()
-    answer = io.inp.readline().strip().lower()
-    if answer not in ("y", "yes"):
-        raise _Refusal("declined at the question; nothing was run")
-
-
-def _burla_config(ns: argparse.Namespace, spec_path: Path) -> BurlaOptions:
-    """``[burla]`` -> BurlaOptions; the flags a Burla run accepts override the table."""
-    try:
-        options = BurlaOptions.from_sweep_file(spec_path)
-        overrides = {
-            name: value
-            for name, value in (
-                ("max_cost", ns.max_cost),
-                ("est_seconds_per_episode", ns.est_seconds),
-                ("infra_retries", ns.infra_retries),
-                ("episode_timeout", ns.episode_timeout),
-                ("max_rollouts", ns.max_rollouts),
-                ("batch_size", ns.batch_size),
-            )
-            if value is not None
-        }
-        return dataclasses.replace(options, **overrides)
-    except (TypeError, ValueError) as exc:
-        raise _Refusal(f"[burla] in {spec_path}: {exc}") from exc
-
-
-def _cost_phrase(block: str) -> str:
-    """The estimate as the plan names it, from the library's ``Cost:`` line."""
-    for line in block.splitlines():
-        if line.startswith("Cost: "):
-            return _look.reprint(line[len("Cost: ") :])
-    return "no estimate"
-
-
-def _plan_sentence(p: Plan, block: str) -> str:
-    spec = p.spec
-    return (
-        f"{_look.fmt_count(spec.total_rollouts())} rollouts: "
-        f"{_look.fmt_count(len(spec.configs))} cells x {_look.fmt_count(spec.replicates)} "
-        f"replicates on {p.backend}, {_cost_phrase(block)}"
+def _sweep_overrides(ns: argparse.Namespace, state: _State) -> dict[str, Any]:
+    keys = (
+        "target", "replicates", "backend", "image", "salt", "pair_with", "resume", "name",
+        "max_mde", "episode_timeout", "max_rollouts", "batch_size", "concurrency",
+        "infra_retries", "max_cost", "est_seconds", "app_name",
     )
+    out = {key: getattr(ns, key, None) for key in keys}
+    out["typed"] = list(state.argv)
+    out["spec_typed"] = ns.spec
+    return out
 
 
-def _error_kind(error: Any) -> str | None:
-    """What ``inspect --event`` matches an errored row on besides its stored text: ``timeout``
-    for a timeout, else the exception's type name, the last line of the traceback up to its
-    colon."""
-    if not isinstance(error, str) or not error:
-        return None
-    if error == "timeout":
-        return "timeout"
-    last = [line for line in error.splitlines() if line.strip()]
-    if not last:
-        return None
-    head = last[-1].strip().partition(":")[0].strip()
-    return head.rsplit(".", 1)[-1] if head else None
-
-
-def _commonest_error(store: Store, run_id: str) -> str | None:
-    try:
-        frame = store.read(run_id, meta=False)
-    except StoreError:
-        return None
-    kinds = Counter(k for k in (_error_kind(e) for e in frame["error"].tolist()) if k)
-    if not kinds:
-        return None
-    top = max(kinds.values())
-    if kinds.get("timeout") == top:
-        return "timeout"
-    return next(kind for kind, count in kinds.items() if count == top)
-
-
-def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    ns.typed = [a for a in state.argv]
-    if ns.backend == "local":
-        stray = [name for name in _MODAL_ONLY_FLAGS if getattr(ns, name) is not None]
-        if stray or ns.image != "image":
-            names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
-            raise _Refusal(f"{names} only applies to --backend modal")
-    if ns.backend == "burla":
-        stray = [name for name in _BURLA_REFUSED_FLAGS if getattr(ns, name) is not None]
-        if stray or ns.image != "image":
-            names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
-            raise _Refusal(f"{names} does not apply to --backend burla")
-    if ns.backend in ("modal", "burla"):
-        _require_extra(ns.backend)
-    idx = _index(root) if root.is_dir() else Index(str(root), [], {})
-    if ns.name is not None:
-        if ns.resume is not None:
-            raise _Refusal("--name names a new run; a resumed run keeps the name it has")
-        typed, ns.name = ns.name, ns.name.strip()
-        why = unfit(ns.name)
-        if why is not None:
-            shown = _look.one_line(typed) or typed
-            raise _Refusal(f'--name "{shown}" cannot name a run: {why}')
-        holders = idx.holders(ns.name)
-        if holders:
-            run_id = sorted(holders)[0]
-            raise _Refusal(
-                f'--name "{ns.name}": the run "{idx.name_of(run_id)}" ({run_id}) already answers '
-                "to it; give the new run another name",
-                [idx.listing()],
-            )
-    if ns.pair_with is not None:
-        ns.pair_with = _run_of(idx, ns.pair_with, io)
-    if ns.resume == _LATEST_PARTIAL:
-        partial = idx.partial
-        if not partial:
-            raise _Refusal(f"no partial run to resume in {root}", [_first_sweep(root)])
-        ns.resume = partial[0].run_id
-    elif ns.resume is not None:
-        ns.resume = _run_of(idx, ns.resume, io)
-    if ns.spec is None and not Path(_DEFAULT_SPEC).is_file():
-        raise _Refusal(
-            f"no sweep spec here: no ./{_DEFAULT_SPEC} in this folder, and none was given",
-            [f"{_COMMAND} init", f"{_COMMAND} init --example"],
-        )
-    spec_path = Path(_DEFAULT_SPEC if ns.spec is None else ns.spec)
-    # Strict: an unknown key or table is refused here, before the target is resolved.
-    spec = SweepSpec.load(spec_path)
-    typed_target = ns.target
-    if ns.resume is not None and ns.target is None:
-        # A resumed run keeps the target it was started with unless another is typed.
-        recorded = Store(root).manifest(ns.resume).environment.get("import_path")
-        if isinstance(recorded, str):
-            ns.target = recorded
-    if ns.target is None:
-        if spec.target is None:
-            raise _Usage(
-                f'no target to run: give --target pkg.module:rollout, or set target = '
-                f'"pkg.module:rollout" in {spec_path}',
-                [f"{_COMMAND} sweep --help"],
-            )
-        ns.target = spec.target
-    ns.typed_target = typed_target
-    if ns.replicates is not None:
-        if ns.replicates < 1:
-            raise _Usage(
-                f"--replicates must be 1 or more, got {ns.replicates}",
-                [f"{_COMMAND} sweep --help"],
-            )
-        spec = dataclasses.replace(spec, replicates=ns.replicates)
-    rollout: Any = None
-    burla_options: BurlaOptions | None = None
-    target: ModalTarget | None = None
-    options: ModalOptions | None = None
-    if ns.backend == "modal":
-        # The container is the resolver: this machine only checks the path's shape, which
-        # ModalTarget does. A target importable solely inside its image must not be imported here.
-        target, options = _modal_config(ns, spec_path)
-    else:
-        # Local and Burla both run this machine's code: Burla's workers run it from the bundle.
-        rollout = _resolve_target(ns.target)
-    if ns.backend == "burla":
-        burla_options = _burla_config(ns, spec_path)
-    store = Store(root)
-    try:
-        p: Plan = plan(
-            spec,
-            store,
-            backend=ns.backend,
-            run_salt=ns.salt,
-            pair_with=ns.pair_with,
-            resume=ns.resume,
-            import_path=ns.target,
-            max_mde_accepted=(
-                ns.max_mde if ns.max_mde is not None else _recorded_max_mde(store, ns.resume)
-            ),
-        )
-    except ExecutorError as exc:
-        # The planner names a run it refuses by its id; the user reads its name beside it.
-        raise _Refusal(_with_names(_look.plain_words(str(exc)), idx)) from exc
-    p = dataclasses.replace(p, name=ns.name)
-    state.planned = len(p.pairs)
-
-    # Describe, then decide, then ask. The reader who gets a refusal has already been shown
-    # the plan it is about; ``--yes`` skips only the question.
-    if ns.backend == "modal":
-        assert target is not None and options is not None
-        block = preflight_modal(p, target, options)
-    elif ns.backend == "burla":
-        assert burla_options is not None
-        try:
-            block = preflight_burla(p, ns.target, burla_options)
-        except ExecutorError as exc:
-            # The cap refusal carries the plan it is about; it stays on screen (rule 7).
-            kept = getattr(exc, "plan", None)
-            if isinstance(kept, str) and not ns.json:
-                io.line(f"plan  {_plan_sentence(p, kept)}")
-                for line in kept.splitlines():
-                    io.line(f"  {_look.reprint(line)}")
-            raise
-    else:
-        block = preflight(p)
-    if p.resumed:
-        block = block.replace(f"Resuming {p.run_id}:", f'Resuming "{idx.name_of(p.run_id)}":')
-    sentence = _plan_sentence(p, block)
-    detail = [f"target  {ns.target}", *(_look.reprint(line) for line in block.splitlines())]
+def _cmd_sweep(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    planned = core.plan(None, store=store, overrides=_sweep_overrides(ns, state))
+    _notes_of(io, planned)
     if not ns.json:
-        io.line(f"plan  {sentence}")
-        for line in detail:
-            io.line(f"  {line}")
-    plan_payload: dict[str, Any] = {
-        "run_id": p.run_id,
-        "run_name": _planned_name(idx, p, ns.name),
-        "plan": {
-            "rollouts": len(p.pairs),
-            "cells": len(spec.configs),
-            "replicates": spec.replicates,
-            "backend": p.backend,
-            "target": ns.target,
-            "cost": _cost_phrase(block),
-            "lines": detail,
-        },
-    }
-    try:
-        check_power(p, max_mde=p.max_mde_accepted)
-    except UnderpoweredDesign as exc:
-        # Each offer is the command as typed with one option added or replaced: the replicates
-        # that would pass, then the limit that admits the design as it stands; a design that
-        # cannot flag a lone condition is offered fewer conditions instead (PF4.30, PF4.49).
-        nexts = []
-        if exc.replicates_needed is not None:
-            needed = str(exc.replicates_needed)
-            nexts.append(_join([_COMMAND, *_set_option(ns.typed, "--replicates", needed)]))
-        if exc.offered is not None:
-            limit = _look.ceil3(exc.offered)
-            nexts.append(_join([_COMMAND, *_set_option(ns.typed, "--max-mde", limit)]))
-        elif exc.most_conditions is not None:
-            nexts.append(
-                f"sweep fewer conditions: with {p.spec.replicates} replicates a side at most "
-                f"{_look.fmt_count(exc.most_conditions)} can each be flagged alone"
-            )
-        raise _Refusal(str(exc), nexts) from exc
-    design = _plan_design(p)
-    if design.flaggable:
-        # The plan's one limit (reading R36): the gate's, at its worst base rate (PF4.30); under
-        # --max-mde 1 there may be none there.
-        accepted = DEFAULT_MAX_MDE if p.max_mde_accepted is None else p.max_mde_accepted
-        limit = "none detectable" if design.mde is None else _look.fmt_rate(design.mde)
-        if not ns.json:
-            io.line(
-                f"  smallest {design.direction} one condition alone would be flagged for  "
-                f"{limit} at its worst base rate, {_look.fmt_rate(design.base_rate)} "
-                f"({_facts.test_name(design.test)}, q {design.q:g} over {design.family} tests, "
-                f"{stats.times_in(design.power)}; you accept up to {_look.fmt_rate(accepted)})"
-            )
-    else:
-        # PF4.49: --max-mde 1 admits a design no lone condition of which can be flagged.
-        io.err_line(
-            f"note: no single condition of this design can be flagged: the smallest possible p is "
-            f"{_look.fmt_p(design.p_min)}, and a flag needs less than {_look.fmt_p(design.level)} "
-            f"(q {design.q:g} over {design.family} tests); you accepted that with --max-mde 1"
-        )
-    plan_payload["design_mde"] = design.record()
-    if ns.backend == "modal":
-        assert target is not None and options is not None
-        _check_cost(p, options, target.image)
+        _print_plan(io, planned)
     if ns.dry_run:
         if ns.json:
-            _write_json(io, "sweep", "plan", sentence, plan_payload, [])
+            _print_result(io, "sweep", planned)
         return 0
-    _confirm(ns, io, idx)
-
-    before = _resume_before(store, p) if p.resumed else None
-    state.run_id = p.run_id
+    if not ns.yes and not io.inp.isatty():
+        raise _Refusal(
+            "stdin is not a terminal, so the question after the plan cannot be asked",
+            [f"{_look.command(_COMMAND, *planned.options['typed_named'])} --yes"],
+        )
+    if not ns.yes:
+        io.err_write("Proceed? [y/N] ")
+        io.err.flush()
+        answer = io.inp.readline().strip().lower()
+        if answer not in ("y", "yes"):
+            raise _Refusal("declined at the question; nothing was run")
     progress = _Progress(io)
-    summary: RunSummary
-    if ns.backend == "modal":
-        assert target is not None and options is not None
-        summary = run_modal(p, target, store, options=options, on_progress=progress)
-    elif ns.backend == "burla":
-        assert burla_options is not None
-        summary = run_burla(p, ns.target, store, options=burla_options, on_progress=progress)
-    else:
-        summary = run_local(
-            p,
-            rollout,
-            store,
-            episode_timeout=ns.episode_timeout,
-            max_rollouts=ns.max_rollouts,
-            batch_size=_DEFAULT_BATCH_SIZE if ns.batch_size is None else ns.batch_size,
-            on_progress=progress,
-        )
-    progress.finish()
-    if before is not None:
-        _record_resume(store, p, before)
-    return _sweep_result(ns, io, root, store, p, summary, plan_payload)
-
-
-def _resume_before(store: Store, p: Plan) -> dict[str, Any]:
-    """What a resume records of the run before it adds to it (PF4.39): its episodes, the
-    replicates it was swept at, and whether a comparison of it was read on this machine."""
-    manifest = store.manifest(p.run_id)
-    tally = store.tally(p.run_id)
-    return {
-        "episodes_before": int(tally.with_outcome + tally.no_outcome),
-        "replicates_before": (manifest.environment.get("sweep") or {}).get("replicates"),
-        "after_comparison": _compared_before(manifest),
-    }
-
-
-def _record_resume(store: Store, p: Plan, before: Mapping[str, Any]) -> None:
-    """One entry in the run's ``environment["resumes"]`` for a resume that added episodes; it
-    records and never refuses (PF4.39)."""
-    tally = store.tally(p.run_id)
-    after = int(tally.with_outcome + tally.no_outcome)
-    if after <= before["episodes_before"]:
-        return
-    store._record_resume(p.run_id, {
-        "at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "episodes_before": before["episodes_before"],
-        "episodes_after": after,
-        "replicates_before": before["replicates_before"],
-        "replicates_after": int(p.spec.replicates),
-        "after_comparison": bool(before["after_comparison"]),
-    })
-
-
-def _set_option(typed: Sequence[str], option: str, value: str) -> list[str]:
-    """The words typed with ``option`` set to ``value``: replaced where it was given (as
-    ``--opt V`` or ``--opt=V``), else added at the end."""
-    words = list(typed)
-    for at, word in enumerate(words):
-        if word == option and at + 1 < len(words):
-            words[at + 1] = value
-            return words
-        if word.startswith(option + "="):
-            words[at] = f"{option}={value}"
-            return words
-    return [*words, option, value]
-
-
-def _resume_command(ns: argparse.Namespace) -> str:
-    """The command that resumes a stopped sweep as it was typed: the spec first when one was
-    given, so it is not read as the run, the ``--target`` and ``--replicates`` that were typed,
-    and the backend and image it ran on when they were not the defaults."""
-    words = [_COMMAND, "sweep", *([ns.spec] if ns.spec is not None else []), "--resume"]
-    if ns.typed_target is not None:
-        words += ["--target", ns.typed_target]
-    if ns.replicates is not None:
-        words += ["--replicates", str(ns.replicates)]
-    if ns.backend != "local":
-        words += ["--backend", ns.backend]
-    if ns.image != "image":
-        words += ["--image", ns.image]
-    return _join(words)
-
-
-def _after_sweep(ns: argparse.Namespace, idx: Index, run_id: str) -> list[str]:
-    """The next step after a finished sweep: the comparison after a paired one (bare when the
-    pair is ``previous`` and ``latest``); after the packaged mock agent, the sweep of its
-    patched twin paired with it."""
-    if ns.pair_with is not None:
-        newest = [r.run_id for r in idx.complete[:2]]
-        if newest == [run_id, ns.pair_with]:
-            return [f"{_COMMAND} diff"]
-        return [_join([_COMMAND, "diff", idx.word_for(ns.pair_with), idx.word_for(run_id)])]
-    if ns.target == _MOCK_ROLLOUT:
-        spec = [] if ns.spec is None else [ns.spec]
-        twin = ["--target", _MOCK_PATCHED, "--pair-with", "latest"]
-        return [_join([_COMMAND, "sweep", *spec, *twin])]
-    return []
-
-
-def _planned_name(idx: Index, p: Plan, given: str | None) -> str:
-    """The name the planned run goes by: a resumed run's own, the name given, or the name a
-    new run would be computed if it started now."""
-    if p.resumed:
-        return idx.name_of(p.run_id)
-    if given is not None:
-        return given
-    return idx.computed_for(p.spec.target_id, datetime.now(UTC)) or p.run_id
-
-
-def _sweep_result(
-    ns: argparse.Namespace,
-    io: _IO,
-    root: Path,
-    store: Store,
-    p: Plan,
-    summary: RunSummary,
-    payload: dict[str, Any],
-) -> int:
-    """The closing verdict of a sweep: ``done``, or ``stopped`` with exit 3 when it stopped
-    short or every rollout errored."""
-    run_id = summary.run_id
     try:
-        idx = _index(root)
-    except _Refusal:
-        # the names file changed under the sweep: the run is still named by its id
-        idx = Index(str(root), [], {})
-    name = idx.name_of(run_id)
-    paired = "" if ns.pair_with is None else f', paired with "{idx.name_of(ns.pair_with)}"'
-    payload = {**payload, "run_id": run_id, "run_name": name}
-    try:
-        status = store.manifest(run_id).status
-        tally = store.tally(run_id)
-        kept = store.count(run_id)
-        with_outcome, no_outcome, timed_out = tally.with_outcome, tally.no_outcome, tally.timed_out
-    except StoreError:
-        # A backend that stored nothing here (a launch answered elsewhere): the summary's own
-        # counts stand in for the store's.
-        status = "complete" if summary.complete else "partial"
-        kept = summary.n_ok + summary.n_errored
-        with_outcome, no_outcome, timed_out = summary.n_ok, summary.n_errored, summary.n_timeout
-    planned = _look.fmt_count(len(p.pairs) + p.already_stored)
-    n = _look.fmt_count
-    nexts: list[str] = []
-    code = 0
-    if not summary.complete:
-        verdict = "stopped"
-        sentence = (
-            f'{n(kept)} of {planned} rollouts kept in run "{name}" ({status}) '
-            f"in {_look.fmt_duration(summary.wall_time)}"
-        )
-        nexts.append(_resume_command(ns))
-        code = 3
-    elif kept and with_outcome == 0:
-        verdict = "stopped"
-        commonest = _commonest_error(store, run_id)
-        sentence = (
-            f'every rollout errored in run "{name}": {n(no_outcome)} of {n(kept)}, '
-            f"commonest {commonest or 'unknown'}"
-        )
-        if commonest is not None:
-            nexts.append(f"{_COMMAND} inspect latest --event {commonest}")
-        code = 3
-    else:
-        verdict = "done"
-        nexts.extend(_after_sweep(ns, idx, run_id))
-        sentence = (
-            f'{n(kept)} rollouts in run "{name}" ({status}) in '
-            f"{_look.fmt_duration(summary.wall_time)}{paired}"
-        )
-    details = [
-        ("episodes with an outcome", n(with_outcome)),
-        ("episodes with no outcome", n(no_outcome)),
-        ("episodes timed out", n(timed_out)),
-        ("wall time", _look.fmt_duration(summary.wall_time)),
-    ]
-    if summary.n_infra_retried or summary.n_infra_failed:
-        details.append(("infrastructure retries", n(summary.n_infra_retried)))
-        details.append(("infrastructure failures", n(summary.n_infra_failed)))
+        result = core.start(planned, on_event=progress)
+    finally:
+        progress.finish()
+    _notes_of(io, result)
     if ns.json:
-        payload = {
-            **payload,
-            "status": status,
-            "rows": kept,
-            "with_outcome": with_outcome,
-            "no_outcome": no_outcome,
-            "timed_out": timed_out,
-            "wall_time_s": summary.wall_time,
-            "stopped_by": summary.stopped_by,
-        }
-        _write_json(io, "sweep", verdict, sentence, payload, nexts)
-        return code
-    io.line(f"{verdict}  {sentence}")
-    for label, value in details:
+        _print_result(io, "sweep", result)
+        return 3 if result.stopped else 0
+    io.line(f"{result.verdict}  {result.sentence}")
+    for label, value in result.details:
         io.detail(label, value)
-    for command in nexts:
+    for command in result.next:
         io.next(command)
-    return code
+    return 3 if result.stopped else 0
 
 
 # ---------- init ----------
 
 
-_TEMPLATE = """\
-# A sweep spec for poisson-prove: what to run, over which conditions, how many times each.
-# Set the target to your rollout and the axes to what you vary, then sweep it with
-# poisson-prove sweep (naming this file when it is not ./prove.toml).
-
-# The rollout, a function (cfg, seed) -> Episode, as an import path; --target wins over it.
-{target}
-# The name the runs go by, and the unit their times are counted in.
-target_id = "my-agent"
-t_unit = "steps"
-# Episodes per condition.
-replicates = 194
-
-# Every combination of the axes' values is one condition.
-[axes.task_id]
-type = "categorical"
-values = ["search", "refund"]
-
-[axes.temperature]
-type = "continuous"
-values = [0.0, 0.7]
-"""
-
-
-def _cmd_init(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    """Write one sweep spec and nothing else: the packaged quickstart with ``--example``, else
-    the template, its target filled with ``--target`` or left a commented line. Asks nothing."""
-    from importlib import resources
-
-    if ns.example and ns.target is not None:
-        raise _Usage(
-            "--example writes the quickstart with its own target; --target fills the template",
-            [f"{_COMMAND} init --example", _join([_COMMAND, "init", "--target", ns.target])],
-        )
-    out = Path(_DEFAULT_SPEC if ns.out is None else ns.out)
-    if out.exists() and not out.is_file():
-        raise _Refusal(f"{out} exists and is not a file; init writes a file")
-    if out.exists() and not ns.force:
-        raise _Refusal(
-            f"{out} exists; init replaces it only with --force",
-            [_join([_COMMAND, *state.argv, "--force"])],
-        )
-    if not out.parent.is_dir():
-        raise _Refusal(f"no folder {out.parent} to write {out.name} into")
-    if ns.example:
-        # Bytes in, bytes out: the file written is the packaged one on every platform.
-        data = (resources.files("poisson_prove.examples") / "quickstart.toml").read_bytes()
-        spec = tomllib.loads(data.decode("utf-8"))
-        cells = math.prod(len(axis["values"]) for axis in spec["axes"].values())
-        about = (
-            f"a sweep of the keyless mock agent, {_look.fmt_count(cells)} conditions x "
-            f"{_look.fmt_count(spec['replicates'])} replicates"
-        )
-    else:
-        target = (
-            f"target = {json.dumps(ns.target)}"
-            if ns.target is not None
-            else '# target = "pkg.module:rollout"'
-        )
-        data = _TEMPLATE.format(target=target).encode("utf-8")
-        about = (
-            "a template; set its axes to what you vary"
-            if ns.target is not None
-            else "a template; set its target to your rollout and its axes to what you vary"
-        )
-    out.write_bytes(data)
-    nexts: list[str] = []
-    if ns.example or ns.target is not None:
-        default = ns.out is None or Path(ns.out) == Path(_DEFAULT_SPEC)
-        nexts.append(f"{_COMMAND} sweep" if default else _join([_COMMAND, "sweep", str(out)]))
-    sentence = f"wrote {out}: {about}"
+def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    """Write one sweep spec and nothing else. Asks nothing."""
+    written = core.init(
+        ns.out, example=ns.example, target=ns.target, force=ns.force, typed=state.argv
+    )
     if ns.json:
-        _write_json(io, "init", "ok", sentence, {"wrote": [str(out)]}, nexts)
+        _print_result(io, "init", written)
         return 0
-    io.line(f"ok  {sentence}")
-    for command in nexts:
+    io.line(f"ok  {written.sentence}")
+    for command in written.next:
         io.next(command)
     return 0
 
@@ -2742,50 +1490,26 @@ def _cmd_init(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
 # ---------- diff / report / check ----------
 
 
-def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    idx = _index(root)
-    a, b = _pair_of(idx, "diff", ns.runs, io)
-    primary, others, manifests, frames = _run_diffs(
-        Store(root),
-        a,
-        b,
-        verb="diff",
-        events=ns.event,
-        method=ns.method,
-        q=ns.q,
-        all_methods=ns.methods == "all",
+def _cmd_diff(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    a, b = _two_runs("diff", ns.runs)
+    result = core.compare(
+        store, a, b, events=ns.event, method=ns.method, q=ns.q, methods=ns.methods, by=ns.by,
+        permutations=ns.permutations, seed=ns.seed, max_group_mde=ns.max_group_mde, depth=ns.depth,
     )
-    # One call, one draw: the omnibus block and the fault-lines block are two renderings of one
-    # ``TreeResult``. Grown before anything is printed, so a knob the tree refuses is a refusal
-    # with nothing on stdout; and with ``--methods all`` too, which carries the primary method's
-    # omnibus and tree (PF4.8).
-    nested = _diff_tree(ns, primary, frames, manifests)
-    word = primary.comparison_verdict()
-    headline = _with_method(primary.headline().splitlines()[0], primary.method)
-    sentence = _facts.verdict_sentence(word, headline, primary)
-    chosen = _chosen(ns)
-    nexts = _report_next(idx, a, b, manifests, bool(ns.runs))
+    _notes_of(io, result)
     if ns.json:
-        payload: Any = _method_first(primary.to_json(), primary.method, chosen)
-        if others:
-            # ``--methods all`` keeps its three-method shape: the scheme follows the method, so
-            # one omnibus and one tree beside three method objects would claim one test across
-            # three.
-            payload = {primary.method: payload, **{m: d.to_json() for m, d in others.items()}}
-            payload["threshold"] = primary.threshold
-            payload["threshold_source"] = primary.threshold_source
-        payload = {**payload, "omnibus": nested.root.to_json(), "tree": nested.to_json()}
-        _write_json(io, "diff", word, sentence, payload, nexts)
+        _print_result(io, "diff", result)
         return 0
-    _verdict_block(io, word, sentence, primary, a, b, idx, manifests, chosen)
+    multi, nested = result.multi, result.tree
+    _verdict_block(io, result)
     with _look.rule10():
-        io.write(primary.to_markdown())
-        if others:
-            io.write("\n" + _method_table([primary, *others.values()]))
-        coverage = _coverage_block(primary)
+        io.write(multi.to_markdown())
+        if result.others:
+            io.write("\n" + _method_table([multi, *result.others.values()]))
+        coverage = _coverage_block(multi)
         if coverage:
             io.write("\n" + coverage)
-        io.write("\n" + _interval_block(primary))
+        io.write("\n" + _interval_block(multi))
         io.write("\n")
         io.write(_omnibus_block(nested.root))
         io.write("\n")
@@ -2794,43 +1518,19 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         io.write(_cells_block(nested))
         io.write("\n")
         io.write(_bound_block(nested.bound))
-    for command in nexts:
+    for command in result.next:
         io.write("\n")
         io.next(command)
     return 0
 
 
-def _diff_tree(
-    ns: argparse.Namespace,
-    multi: MultiDiffResult,
-    frames: tuple[pd.DataFrame, pd.DataFrame],
-    manifests: tuple[RunManifest, RunManifest],
-) -> TreeResult:
-    """``tree`` on the pair ``multi`` was computed from, with the flags that move it, passed
-    through untouched: the range checks live in the tree module, and argparse's ``choices``
-    refuses a depth this parser was not offered."""
-    try:
-        return tree(
-            frames[0],
-            frames[1],
-            multi,
-            manifest_a=manifests[0],
-            manifest_b=manifests[1],
-            by=ns.by,
-            n_permutations=ns.permutations,
-            seed=ns.seed,
-            max_group_mde=ns.max_group_mde,
-            depth=ns.depth,
-        )
-    except DiffError as exc:
-        # The tree names its parameters; the user typed flags.
-        text = str(exc)
-        if "n_permutations" in text:
-            raise _Refusal(text.replace("n_permutations", "--permutations")) from exc
-        raise
+def _ns_argv(ns: argparse.Namespace) -> list[str]:
+    return list(getattr(ns, "typed", []))
 
 
-def _prepare_out_dir(ns: argparse.Namespace, default: str, idx: Index | None = None) -> Path:
+def _prepare_out_dir(
+    ns: argparse.Namespace, default: str, named: Sequence[str] | None = None
+) -> Path:
     """Refuse a non-empty ``--out`` before any work unless ``--force``; nothing is created yet."""
     out_dir = Path(ns.out) if ns.out else Path(default)
     if out_dir.exists():
@@ -2839,26 +1539,22 @@ def _prepare_out_dir(ns: argparse.Namespace, default: str, idx: Index | None = N
         if any(out_dir.iterdir()) and not ns.force:
             raise _Refusal(
                 f"--out {out_dir} exists and is not empty",
-                [_join([
-                    _COMMAND, *(_named_argv(_ns_argv(ns), idx) if idx else _ns_argv(ns)), "--force",
-                ])],
+                [
+                    _look.command(
+                        _COMMAND, *(named if named is not None else _ns_argv(ns)), "--force"
+                    )
+                ],
             )
     return out_dir
-
-
-def _ns_argv(ns: argparse.Namespace) -> list[str]:
-    return list(getattr(ns, "typed", []))
 
 
 @contextmanager
 def _staged(out_dir: Path) -> Iterator[Path]:
     """A folder to write into that becomes ``out_dir`` last: an interrupt or a failure while
-    writing leaves no half-written folder behind. With ``out_dir`` already there (``--force``),
-    the staged files move into it one by one."""
+    writing leaves no half-written folder behind."""
     parent = Path(os.path.abspath(out_dir)).parent
     parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{out_dir.name}.", dir=parent))
-    # ``mkdtemp`` makes a private folder; a report folder is an ordinary one.
     mask = os.umask(0)
     os.umask(mask)
     os.chmod(staging, 0o777 & ~mask)
@@ -2885,150 +1581,28 @@ def _write_report_files(
     out_dir: Path,
     report: MultiReport | SurvivalReport,
     receipt: MultiReport | SurvivalReport,
-    bundle: _Bundle | None = None,
+    bundle: Any = None,
     method_line: str | None = None,
+    pair: Sequence[str] = (),
 ) -> list[Path]:
-    """With a paired ``bundle`` the four sections are folded into the rendered strings and the
-    files are written beside the three; with ``method_line`` (a comparison) the report's and the
-    receipt's headers name the test on a line of their own; every file is UTF-8 and named on a
-    ``wrote`` line."""
     written: list[Path] = []
     with _staged(out_dir) as staging:
         with _look.rule10():
             markdown, page, figure = report.to_markdown(), receipt.to_html(), report.to_svg()
         if bundle is not None:
-            markdown, page = _fold_markdown(markdown, bundle), _fold_html(page, bundle)
+            markdown, page = bundle.fold_markdown(markdown), bundle.fold_html(page)
         if method_line is not None:
-            markdown = _method_markdown(markdown, method_line)
-            page = _method_html(page, method_line)
+            markdown = _method_markdown(markdown, method_line, pair)
+            page = _method_html(page, method_line, pair=pair)
         (staging / "report.md").write_text(markdown, encoding="utf-8")
         (staging / "heatmap.svg").write_text(figure, encoding="utf-8")
         (staging / "receipt.html").write_text(page, encoding="utf-8")
         written.extend(out_dir / name for name in _REPORT_FILES)
         if bundle is not None:
-            for name, artifact in bundle.artifacts.items():
-                (staging / name).write_text(_artifact_text(artifact), encoding="utf-8")
+            for name, text in bundle.texts.items():
+                (staging / name).write_text(text, encoding="utf-8")
                 written.append(out_dir / name)
     return written
-
-
-def _cmd_report(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    """The positional arity picks the verb: two runs (or none) compare, one run is a survival
-    report."""
-    ns.typed = [a for a in state.argv]
-    words: list[str] = list(ns.runs)
-    if len(words) not in (0, 1, 2):
-        raise _Usage(
-            f"report takes one or two runs, or none, got {len(words)}: {_REPORT_FORMS}",
-            [f"{_COMMAND} report --help"],
-        )
-    idx = _index(root)
-    runs = (
-        [_run_of(idx, words[0], io)]
-        if len(words) == 1
-        else list(_pair_of(idx, "report", words, io))
-    )
-    if ns.x is None:
-        raise _missing_flags_refusal(
-            Store(root), "report", runs, state.argv, idx, x_missing=True, event_missing=False
-        )
-    if len(runs) == 2:
-        return _report_pair(ns, io, root, runs[0], runs[1], idx)
-    return _report_run(ns, io, root, runs[0], idx)
-
-
-def _report_pair(ns: argparse.Namespace, io: _IO, root: Path, a: str, b: str, idx: Index) -> int:
-    stray = [f"--{name}" for name in _RUN_ONLY_FLAGS if getattr(ns, name) is not None]
-    if stray:
-        raise _Refusal(
-            f"{', '.join(stray)}: single-run flag{'s' if len(stray) > 1 else ''}; a diff report "
-            f"takes its horizon from the two runs ({_REPORT_FORMS})"
-        )
-    out_dir = _prepare_out_dir(
-        ns, f"./prove-report-{_slug(idx.name_of(a))}-vs-{_slug(idx.name_of(b))}", idx
-    )
-    declaration = None if ns.paired is None else _paired_declaration(ns.paired, a, b)
-    store = Store(root)
-    fixed = _typed_fix(ns.fix, (store.manifest(a), store.manifest(b)))
-    q = _DEFAULT_Q if ns.q is None else ns.q
-
-    multi, others, manifests, frames = _run_diffs(
-        store,
-        a,
-        b,
-        verb="report",
-        events=ns.event,
-        method=ns.method,
-        q=q,
-        all_methods=ns.methods == "all",
-    )
-    spec = ReportSpec(
-        title=ns.title if ns.title else _pair_title(idx, a, b, multi.events),
-        x_axis=ns.x,
-        y_axis=ns.y,
-        fixed=fixed,
-        comparison=others,
-        theme=ns.theme,
-        top_n=ns.top_n,
-        forest=ns.forest,
-    )
-    nested: TreeResult | None = None
-    if multi.n_tests > 0:
-        # ``report`` parses the five tree flags with no default so the single-run form can refuse
-        # one that was given; here an absent knob becomes the tree's constant, by name. They go
-        # on a copy of the namespace, because ``_diff_tree`` reads its knobs off ``ns``.
-        knobs = argparse.Namespace(**vars(ns))
-        for name, constant in (
-            ("permutations", DEFAULT_PERMUTATIONS),
-            ("seed", DEFAULT_SEED),
-            ("depth", DEFAULT_DEPTH),
-        ):
-            if getattr(knobs, name) is None:
-                setattr(knobs, name, constant)
-        nested = _diff_tree(knobs, multi, frames, manifests)
-    observations = (_observation_counts(store, a), _observation_counts(store, b))
-    declarations = (_declaration_check(store, a), _declaration_check(store, b))
-    # One tree for both builds: the light receipt renders the same draw, never a second one.
-    with _look.rule10():
-        report = build_multi_report(
-            multi,
-            spec,
-            manifests=manifests,
-            tree=nested,
-            observations=observations,
-            declarations=declarations,
-        )
-        receipt = (
-            report
-            if spec.theme == "light"
-            else build_multi_report(
-                multi,
-                dataclasses.replace(spec, theme="light"),
-                manifests=manifests,
-                tree=nested,
-                observations=observations,
-                declarations=declarations,
-            )
-        )
-    for built in {id(report): report, id(receipt): receipt}.values():
-        _name_provenance(built.provenance, manifests, idx)
-    bundle = None if declaration is None else _bundle(store, declaration)
-    chosen = _chosen(ns)
-    written = _write_report_files(
-        io, out_dir, report, receipt, bundle, _method_line(multi.method, chosen)
-    )
-    if ns.json:
-        payload = {
-            "out": str(out_dir),
-            "wrote": [str(p) for p in written],
-            **_method_first(multi.to_json(), multi.method, chosen),
-        }
-        _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
-        return 0
-    _wrote(io, out_dir, written)
-    io.line()
-    _write_summary(io, multi)
-    return 0
 
 
 def _wrote_sentence(out_dir: Path, written: Sequence[Path]) -> str:
@@ -3037,23 +1611,20 @@ def _wrote_sentence(out_dir: Path, written: Sequence[Path]) -> str:
 
 
 def _wrote(io: _IO, out_dir: Path, written: Sequence[Path]) -> None:
-    """``ok  wrote <folder> (N files)``, then one ``wrote`` detail line per file."""
     io.line(f"ok  {_wrote_sentence(out_dir, written)}")
     for path in written:
         io.detail("wrote", str(path))
 
 
-def _name_provenance(
-    provenance: dict[str, object], manifests: Sequence[RunManifest], idx: Index
-) -> None:
+def _name_provenance(provenance: dict[str, object], result: core.Comparison) -> None:
     """For a pair of one run written under the old name and one this build wrote, a provenance
     line per old run saying which run that was, by name, beside the pair's run ids."""
-    if len(manifests) != 2:
-        return
-    writers = _old_writer((manifests[0], manifests[1]))
+    writers = result.writers
     added = {
-        f"run_{'a' if role == 'before' else 'b'}": f'"{idx.name_of(m.run_id)}", {writers[role]}'
-        for role, m in zip(("before", "after"), manifests, strict=True)
+        f"run_{'a' if role == 'before' else 'b'}": (
+            f'"{result.names.get(run_id, run_id)}", {writers[role]}'
+        )
+        for role, run_id in (("before", result.run_a), ("after", result.run_b))
         if role in writers
     }
     if not added:
@@ -3068,78 +1639,109 @@ def _name_provenance(
     provenance.update(added)
 
 
-def _paired_declaration(path: str, a: str, b: str) -> Declaration:
-    """``report A B --paired DECL``: ``(A, B)`` must be the declared pair of one of the
-    declaration's sweeps; any other pair is refused by name."""
-    declaration = Declaration.from_toml(path)
-    declared = {(sweep.a, sweep.b): sweep.name for sweep in declaration.sweeps}
-    if (a, b) not in declared:
-        pairs = ", ".join(f"{s.name}: ({s.a}, {s.b})" for s in declaration.sweeps)
+def _cmd_report(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    """The positional arity picks the verb: two runs (or none) compare, one run is a survival
+    report."""
+    ns.typed = list(state.argv)
+    words: list[str] = list(ns.runs)
+    if len(words) not in (0, 1, 2):
+        raise _Usage(
+            f"report takes one or two runs, or none, got {len(words)}: {_REPORT_FORMS}",
+            [f"{_COMMAND} report --help"],
+        )
+    if len(words) == 1:
+        return _report_run(ns, io, store, words[0], state)
+    return _report_pair(ns, io, store, words, state)
+
+
+def _report_pair(
+    ns: argparse.Namespace, io: _IO, store: Any, words: Sequence[str], state: _State
+) -> int:
+    a, b = _two_runs("report", words)
+    if ns.x is None:
+        core.compare(store, a, b, verb="report", require_x=True, typed=state.argv)
+    stray = [f"--{name}" for name in _RUN_ONLY_FLAGS if getattr(ns, name) is not None]
+    if stray:
         raise _Refusal(
-            f"--paired: ({a}, {b}) is not the declared pair of any sweep in {path}; the "
-            f"declaration pairs {pairs}"
+            f"{', '.join(stray)}: single-run flag{'s' if len(stray) > 1 else ''}; a diff report "
+            f"takes its horizon from the two runs ({_REPORT_FORMS})"
         )
-    return declaration
-
-
-def _cmd_paired(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    """The assertion, the analysis, the windows, the cost with one phase per declared sweep,
-    and the replicates, written as the five files (six at ``k > 2``). ``--json`` prints the
-    combined payload and writes nothing; ``--cap-check`` says whether the recorded input tokens
-    are under the declared cap, writes nothing, and exits 4 at or above it."""
-    ns.typed = [a for a in state.argv]
-    declaration = Declaration.from_toml(ns.declaration)
-    store = Store(root)
-    if ns.cap_check:
-        report = paired_cost(
-            store, declaration, phases={s.name: s.arms for s in declaration.sweeps}
-        )
-        n = _look.fmt_count
-        tokens = n(report.input_tokens)
-        if report.token_cap is None:
-            verdict, sentence = "under cap", f"{tokens} input tokens recorded; no cap declared"
-        elif report.cap_reached:
-            verdict = "at cap"
-            sentence = (
-                f"{tokens} input tokens recorded, at or above the cap of {n(report.token_cap)}"
-            )
-        else:
-            verdict = "under cap"
-            sentence = f"{tokens} input tokens recorded, under the cap of {n(report.token_cap)}"
-        code = 4 if report.cap_reached else 0
-        if ns.json:
-            _write_json(io, "paired", verdict, sentence, _cost_block(declaration, report), [])
-            return code
-        io.line(f"{verdict}  {sentence}")
-        io.detail("output tokens", n(report.output_tokens))
-        io.detail("request spans with usage", n(report.recorded_spans))
-        io.detail("request spans without", n(report.unrecorded_spans))
-        if report.dollars is not None:
-            io.detail("dollars", _look.fmt_dollars(float(report.dollars)))
-        return code
-    if ns.json:
-        bundle = _bundle(store, declaration)
-        sentence = f"{_look.fmt_count(len(bundle.artifacts))} files, written nowhere"
-        _write_json(io, "paired", "ok", sentence, bundle.payload, [])
-        return 0
-    out_dir = _prepare_out_dir(ns, f"./prove-paired-{declaration.digest[:12]}")
-    bundle = _bundle(store, declaration)
-    written: list[Path] = []
-    with _staged(out_dir) as staging:
-        for name, artifact in bundle.artifacts.items():
-            (staging / name).write_text(_artifact_text(artifact), encoding="utf-8")
-            written.append(out_dir / name)
-    _wrote(io, out_dir, written)
-    # PF4.9: what no run records is said once, in plain words, never as a gap per field.
-    io.detail(
-        "not recorded",
-        "the harness's digest and the client's version (the runs did not record them)",
+    first = core.resolve(store, "previous" if a is None else a)
+    second = core.resolve(store, "latest" if b is None else b)
+    named = core.runs(store)
+    names = {run.run_id: run.run_name for run in named}
+    out_dir = _prepare_out_dir(
+        ns,
+        f"./prove-report-{_slug(names.get(first, first))}-vs-{_slug(names.get(second, second))}",
+        _named_words(state.argv, named),
     )
+    result = core.compare(
+        store, a, b, events=ns.event, method=ns.method, q=_DEFAULT_Q if ns.q is None else ns.q,
+        methods=ns.methods, by=ns.by, permutations=ns.permutations, seed=ns.seed,
+        max_group_mde=ns.max_group_mde, depth=ns.depth, verb="report", for_report=True, fix=ns.fix,
+        paired=ns.paired,
+    )
+    _notes_of(io, result)
+    multi = result.multi
+    spec = ReportSpec(
+        title=ns.title if ns.title else result.title,
+        x_axis=ns.x,
+        y_axis=ns.y,
+        fixed=dict(result.fixed),
+        comparison=dict(result.others),
+        theme=ns.theme,
+        top_n=ns.top_n,
+        forest=ns.forest,
+    )
+    with _look.rule10():
+        report = build_multi_report(
+            multi, spec, manifests=result.manifests, tree=result.tree,
+            observations=result.observations, declarations=result.declarations,
+        )
+        receipt = (
+            report
+            if spec.theme == "light"
+            else build_multi_report(
+                multi, dataclasses.replace(spec, theme="light"), manifests=result.manifests,
+                tree=result.tree, observations=result.observations,
+                declarations=result.declarations,
+            )
+        )
+    for built in {id(report): report, id(receipt): receipt}.values():
+        _name_provenance(built.provenance, result)
+        # Each run's id is in the header beside its name, so the provenance list gives it no more.
+        built.provenance.pop("run_id_a", None)
+        built.provenance.pop("run_id_b", None)
+    pair = [
+        f"before  {result.names.get(result.run_a, result.run_a)} ({result.run_a})",
+        f"after  {result.names.get(result.run_b, result.run_b)} ({result.run_b})",
+    ]
+    written = _write_report_files(
+        io, out_dir, report, receipt, result.bundle, _method_of(result), pair
+    )
+    if ns.json:
+        doc = result.to_json()
+        payload = {"out": str(out_dir), "wrote": [str(p) for p in written]}
+        dropped = ("schema", "verdict", "sentence", "next", "omnibus", "tree")
+        payload.update({k: v for k, v in doc.items() if k not in dropped})
+        _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
+        return 0
+    _wrote(io, out_dir, written)
+    io.line()
+    _write_summary(io, multi)
     return 0
 
 
-def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Index) -> int:
-    # Each named as it was typed: --max-group-mde, not the namespace's max_group_mde.
+def _named_words(argv: Sequence[str], named: Sequence[Any]) -> list[str]:
+    """The command as typed with every run id replaced by its name."""
+    by_id = {run.run_id: run for run in named}
+    return [by_id[token].run_name if token in by_id else token for token in argv]
+
+
+def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _State) -> int:
+    if ns.x is None:
+        core.run(store, word, require_x=True, typed=state.argv)
+    run_id = core.resolve(store, word)
     given = [
         f"--{name.replace('_', '-')}" for name in _DIFF_ONLY_FLAGS if getattr(ns, name) is not None
     ]
@@ -3148,318 +1750,165 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
             f"{', '.join(given)}: diff-only flag{'s' if len(given) > 1 else ''}; "
             f"a single-run report compares nothing ({_REPORT_FORMS})"
         )
-    out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(idx.name_of(run))}", idx)
-    store = Store(root)
-    manifest = store.manifest(run)
-    fixed = _typed_fix(ns.fix, (manifest,))
-    df = store.read(run, meta=False)
-    # A kind given as NAME:failure names the event; a single run is judged in no direction.
-    named, _ = _split_events(ns.event)
-    _require_known_events("report", named, df)
-    inferred = named is None
-    if named is None:
-        try:
-            # One frame, so the second arm is an empty slice of it: infer_events pools both
-            # arms for its counts, and passing df twice would double every count it reports.
-            events, non_event = infer_events(df, df.iloc[0:0])
-        except EventInferenceError as exc:
-            raise _Refusal(
-                f"cannot infer the event set: {exc}; outcome counts: {_outcome_counts(df)}",
-                [f"{_COMMAND} report RUN --x AXIS --event NAME"],
-            ) from exc
-    else:
-        events, non_event = tuple(dict.fromkeys(named)), None
-    valid_t = df["t"].dropna()
-    if valid_t.empty:
-        raise _Refusal(f"run {run} has no rows with a time; nothing to report")
-    horizon = float(valid_t.max()) if ns.horizon is None else float(ns.horizon)
-    if horizon <= 0.0:
-        typed = "the run's own" if ns.horizon is None else str(ns.horizon)
-        raise _Refusal(f"--horizon must be above 0, got {typed}")
-
-    # The competing set is every terminal outcome present, not only the events asked for: a
-    # row that ended in the non-event is absorbed, not censored, so it must stay out of the
-    # risk set.
-    competing = list(competing_set(df))
-    cells = cell_table(df, events[0], horizon=horizon, method="aj", events=competing)
+    detail = core.run(store, run_id, events=ns.event, horizon=ns.horizon, fix=ns.fix)
+    named = core.runs(store)
+    out_dir = _prepare_out_dir(
+        ns, f"./prove-report-{_slug(detail.run_name)}", _named_words(state.argv, named)
+    )
+    events = detail.events
     spec = ReportSpec(
-        title=ns.title if ns.title else f"{idx.name_of(run)}: {', '.join(events)}",
+        title=ns.title if ns.title else f"{detail.run_name}: {', '.join(events)}",
         x_axis=ns.x,
         y_axis=ns.y,
-        fixed=fixed,
+        fixed=dict(detail.fixed),
         theme=ns.theme,
         top_n=ns.top_n,
         forest=ns.forest,
     )
-    observations = _observation_counts(store, run)
-    declarations = _declaration_check(store, run)
-    shares = _single_run_shares(df, cells, events, horizon)
-    design = _recorded_design(manifest)
+    kwargs: dict[str, Any] = dict(
+        events=events, horizon=detail.horizon, manifest=detail.manifest,
+        observations=detail.observations,
+        declarations=detail.declarations, shares=detail.shares, design_mde=detail.design,
+    )
     with _look.rule10():
-        report = build_survival_report(
-            cells,
-            spec,
-            events=events,
-            horizon=horizon,
-            manifest=manifest,
-            observations=observations,
-            declarations=declarations,
-            shares=shares,
-            design_mde=design,
-        )
-        receipt = (
-            report
-            if spec.theme == "light"
-            else build_survival_report(
-                cells,
-                dataclasses.replace(spec, theme="light"),
-                events=events,
-                horizon=horizon,
-                manifest=manifest,
-                observations=observations,
-                declarations=declarations,
-                shares=shares,
-                design_mde=design,
-            )
+        report = build_survival_report(detail.cells, spec, **kwargs)
+        receipt = report if spec.theme == "light" else build_survival_report(
+            detail.cells, dataclasses.replace(spec, theme="light"), **kwargs
         )
     written = _write_report_files(io, out_dir, report, receipt)
     if ns.json:
-        payload = {
-            "out": str(out_dir),
-            "wrote": [str(p) for p in written],
-            "run_id": run,
-            "run_name": idx.name_of(run),
-            "events": list(events),
-            "non_event": non_event,
-            "horizon": horizon,
-            "by_event": {e: {"cells": list(shares[e])} for e in events},
-            "design_mde": design,
-        }
+        doc = detail.to_json()
+        payload = {"out": str(out_dir), "wrote": [str(p) for p in written]}
+        for key in (
+            "run_id", "run_name", "events", "non_event", "horizon", "by_event", "design_mde",
+        ):
+            payload[key] = doc[key]
         _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
         return 0
     _wrote(io, out_dir, written)
     io.line()
-    if inferred:
+    if detail.inferred:
         io.line(
             f"inferred: no event was given, so the event set is {', '.join(events)}; "
-            f"the non-event is {non_event}, the most frequent outcome"
+            f"the non-event is {detail.non_event}, the most frequent outcome"
         )
     io.line(
-        f'"{idx.name_of(run)}": survival report over {", ".join(events)} at horizon '
+        f'"{detail.run_name}": survival report over {", ".join(events)} at horizon '
         f"{_look.fmt_num(report.provenance['horizon'])}"
     )
     return 0
 
 
-def _single_run_shares(
-    df: pd.DataFrame, cells: pd.DataFrame, events: Sequence[str], horizon: float
-) -> dict[str, list[dict[str, Any]]]:
-    """Each condition's share of runs that ended in each event with its Wilson interval, beside
-    the cumulative incidence the report shows (PF4.2). The share counts the event by the horizon
-    the report reads, as the incidence does (PF4.37, reading R3), so the two differ only where a
-    run was censored before it."""
-    from poisson_prove.report import _cif_at
-
-    valid = df.loc[df["outcome"].notna()]
-    by_hash = {str(h): g for h, g in valid.groupby("config_hash", sort=True)}
-    curves = {str(r["config_hash"]): r["curve"] for r in cells.to_dict(orient="records")}
-    out: dict[str, list[dict[str, Any]]] = {}
-    for event in events:
-        rows = []
-        for h, group in by_hash.items():
-            n = int(len(group))
-            k = int(((group["outcome"] == event) & (group["t"].astype(float) <= horizon)).sum())
-            incidence = float(_cif_at(curves[h], event, horizon))
-            rows.append({
-                "config_hash": h,
-                "config": group["config"].iloc[0],
-                "n": n,
-                "n_events": k,
-                "share": stats.share(k, n),
-                "incidence": incidence,
-                "share_differs": abs(incidence - k / n) > 1e-12,
-            })
-        out[event] = rows
-    return out
-
-
-def _rate_or_none(value: float) -> str:
-    """A limit to three decimals, or ``none`` where there is none (PF4.27)."""
-    return "none" if math.isnan(value) else _look.fmt_rate(value)
-
-
-def _check_sentence(multi: MultiDiffResult, fail_on: str) -> str:
-    """Each event's flagged conditions in its own words (PF4.20), what the gate failed on, and
-    the conditions that failed it: the rows that count for the verdict (reading R2)."""
-    parts = []
-    for event in multi.events:
-        ev = multi.by_event[event]
-        (up, n_up), (down, n_down) = ev.counts()
-        parts.append(
-            f"{event}: {_look.fmt_count(n_up)} {up}, {_look.fmt_count(n_down)} {down} in "
-            f"{_look.fmt_count(len(ev.cells))} conditions"
-        )
-    failing: list[str] = []
-    for event in multi.events:
-        ev = multi.by_event[event]
-        for record in ev.records():
-            direction = record["direction"]
-            if direction == "unchanged" or not record.get("holm", True):
-                continue
-            worse = fail_on == "worse" and record["verdict"] == "worse"
-            bad = worse or fail_on in ("any", direction)
-            condition = _condition_text(record.get("config"))
-            if bad and condition not in failing:
-                failing.append(condition)
-    tail = f"; failed in {', '.join(failing)}" if failing else ""
-    return f"{'; '.join(parts)}; fail on {fail_on}{tail}"
-
-
-def _with_kind(argv: Sequence[str], event: str, kind: str) -> list[str]:
-    """The words typed with ``--event EVENT`` given its kind."""
-    words = list(argv)
-    for i, word in enumerate(words):
-        if word == event and i > 0 and words[i - 1] == "--event":
-            words[i] = f"{event}:{kind}"
-        elif word == f"--event={event}":
-            words[i] = f"--event={event}:{kind}"
-    return words
-
-
-def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    store = Store(root)
-    idx = _index(root)
-    a, b = _pair_of(idx, "check", ns.runs, io)
-    if ns.event is None:
-        raise _missing_flags_refusal(
-            store, "check", [a, b], state.argv, idx, x_missing=False, event_missing=True
-        )
-    multi, _, manifests, _ = _run_diffs(
-        store,
-        a,
-        b,
-        verb="check",
-        events=ns.event,
-        method=ns.method,
-        q=ns.q,
-        all_methods=False,
-    )
-    if ns.fail_on == "worse":
-        # PF4.20: worse needs each event's kind; without one the gate is refused with both ways
-        # out, the direction to gate on or the kind to give.
-        unknown = [e for e in multi.events if multi.by_event[e].kind is None]
-        if unknown:
-            event = unknown[0]
-            raise _Refusal(
-                f'check --fail-on worse needs to know whether "{event}" is a failure or a '
-                "success, and neither the command line nor the runs say",
-                [
-                    _join([_COMMAND, *_set_option(state.argv, "--fail-on", "higher")]),
-                    _join([_COMMAND, *_with_kind(state.argv, event, "failure")]),
-                ],
-            )
-    passed = multi.check(fail_on=ns.fail_on)
-    verdict = "passed" if passed else "failed"
-    sentence = _with_method(_check_sentence(multi, ns.fail_on), multi.method)
-    chosen = _chosen(ns)
+def _cmd_paired(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    """The paired-replay files; ``--json`` prints the combined payload and writes nothing;
+    ``--cap-check`` says whether the recorded input tokens are under the declared cap, writes
+    nothing, and exits 4 at or above it."""
+    ns.typed = list(state.argv)
+    result = core.paired(store, ns.declaration, cap_check=ns.cap_check)
+    if ns.cap_check:
+        code = 4 if result.cap_reached else 0
+        if ns.json:
+            _print_result(io, "paired", result)
+            return code
+        io.line(f"{result.verdict}  {result.sentence}")
+        for label, value in result.details:
+            io.detail(label, value)
+        return code
     if ns.json:
-        payload = {
-            "passed": passed,
-            "fail_on": ns.fail_on,
-            **_method_first(multi.to_json(), multi.method, chosen),
-        }
-        _write_json(io, "check", verdict, sentence, payload, [])
-        return 0 if passed else 4
-    _verdict_block(io, verdict, sentence, multi, a, b, idx, manifests, chosen)
-    _write_summary(io, multi)
-    return 0 if passed else 4
+        _print_result(io, "paired", result)
+        return 0
+    out_dir = _prepare_out_dir(ns, result.default_out)
+    written: list[Path] = []
+    with _staged(out_dir) as staging:
+        for name, text in result.artifacts.items():
+            (staging / name).write_text(text, encoding="utf-8")
+            written.append(out_dir / name)
+    _wrote(io, out_dir, written)
+    io.detail(
+        "not recorded",
+        "the harness's digest and the client's version (the runs did not record them)",
+    )
+    return 0
 
 
-def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    """``_report_pair`` up to the report, then a structure instead of three files.
+def _cmd_check(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    a, b = _two_runs("check", ns.runs)
+    result = core.check(
+        store, a, b, events=ns.event, fail_on=ns.fail_on, method=ns.method, q=ns.q,
+        typed=state.argv,
+    )
+    _notes_of(io, result)
+    code = 0 if result.passed else 4
+    if ns.json:
+        _print_result(io, "check", result)
+        return code
+    _verdict_block(io, result)
+    _write_summary(io, result.multi)
+    return code
 
-    The structure is complete before anything binds, so every refusal happens with no listening
-    socket in existence, and ``--json`` returns having bound nothing at all. Nothing on this
-    path writes to the store, to the cwd, or to a temp file.
-    """
+
+def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    """``report`` up to the report, then a structure instead of three files. The structure is
+    complete before anything binds; ``--json`` returns having bound nothing at all."""
     words: list[str] = list(ns.runs)
     if len(words) not in (0, 2):
         raise _Usage(
             f"serve takes two runs or none, got {len(words)}: {_SERVE_FORM}",
             [f"{_COMMAND} serve --help"],
         )
-    idx = _index(root)
-    a, b = _pair_of(idx, "serve", words, io)
-    store = Store(root)
+    a, b = _two_runs("serve", words)
     if ns.x is None or ns.event is None:
-        raise _missing_flags_refusal(
-            store,
-            "serve",
-            [a, b],
-            state.argv,
-            idx,
-            x_missing=ns.x is None,
-            event_missing=ns.event is None,
+        core.compare(
+            store, a, b, verb="serve", require_x=ns.x is None,
+            require_events=ns.event is None, typed=state.argv,
         )
-    fixed = _typed_fix(ns.fix, (store.manifest(a), store.manifest(b)))
-    multi, _, manifests, frames = _run_diffs(
-        store,
-        a,
-        b,
-        verb="serve",
-        events=ns.event,
-        method=ns.method,
-        q=ns.q,
-        all_methods=False,
+    result = core.compare(
+        store, a, b, events=ns.event, method=ns.method, q=ns.q, by=ns.by,
+        permutations=ns.permutations,
+        seed=ns.seed, max_group_mde=ns.max_group_mde, depth=ns.depth, verb="serve", for_report=True,
+        fix=ns.fix,
     )
+    _notes_of(io, result)
     spec = ReportSpec(
-        title=ns.title if ns.title else _pair_title(idx, a, b, multi.events),
+        title=ns.title if ns.title else result.title,
         x_axis=ns.x,
         y_axis=ns.y,
-        fixed=fixed,
+        fixed=dict(result.fixed),
         theme=ns.theme,
         top_n=ns.top_n,
         forest=ns.forest,
     )
     report = build_multi_report(
-        multi,
-        spec,
-        manifests=manifests,
-        observations=(_observation_counts(store, a), _observation_counts(store, b)),
-        declarations=(_declaration_check(store, a), _declaration_check(store, b)),
+        result.multi, spec, manifests=result.manifests, observations=result.observations,
+        declarations=result.declarations,
     )
-    _name_provenance(report.provenance, manifests, idx)
-    # After the report and before the structure: the report's axis check refuses an unknown
-    # ``--x`` first, so no refusal spends a tree, and every tree refusal still fires before
-    # anything binds. One call, one draw, on the frames ``_run_diffs`` already read.
-    nested = _diff_tree(ns, multi, frames, manifests)
+    _name_provenance(report.provenance, result)
+    nested = result.tree
     structure = build_structure(
         report,
-        multi,
+        result.multi,
         tree=nested,
-        manifest_a=manifests[0],
-        manifest_b=manifests[1],
-        rows_a=store.count(a),
-        rows_b=store.count(b),
-        tally_a=store.tally(a),
-        tally_b=store.tally(b),
-        store_root=str(root),
+        manifest_a=result.manifests[0],
+        manifest_b=result.manifests[1],
+        rows_a=result.rows_counts[0],
+        rows_b=result.rows_counts[1],
+        tally_a=result.tallies[0],
+        tally_b=result.tallies[1],
+        store_root=str(store.shown),
     )
-    # The test the page rests on and how it was chosen lead the structure, after the envelope.
-    chosen = _chosen(ns)
-    structure = {"method": multi.method, "method_chosen": chosen, **structure}
+    structure = {"method": result.method, "method_chosen": result.method_chosen, **structure}
+    a_name = result.names.get(result.run_a, result.run_a)
+    b_name = result.names.get(result.run_b, result.run_b)
     if ns.json:
-        sentence = f'the page comparing "{idx.name_of(a)}" with "{idx.name_of(b)}", bound nowhere'
-        structure = _add_names(structure, idx)
+        sentence = f'the page comparing "{a_name}" with "{b_name}", bound nowhere'
+        structure = _add_names(structure, result.names)
         _write_json(io, "serve", "ok", sentence, structure, None)
         return 0
-    page = _method_html(render_html(structure), _method_line(multi.method, chosen), summary=True)
+    page = _method_html(render_html(structure), _method_of(result), summary=True)
 
     def announce(srv: Any) -> None:
-        # Once the socket is up: an ephemeral port nobody is told about is a page nobody can
-        # open. Flushed because stdout is block buffered when it is a pipe.
         io.line(
-            f'ok  serving "{idx.name_of(a)}" against "{idx.name_of(b)}" at '
+            f'ok  serving "{a_name}" against "{b_name}" at '
             f"http://{_HOST}:{srv.server_address[1]}/ (Ctrl-C stops)"
         )
         io.out.flush()
@@ -3471,171 +1920,52 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
 # ---------- inspect / runs ----------
 
 
-def _envelopes(store: Store, run: str) -> pd.DataFrame:
-    """The run's narrow frame with its trace envelopes: the one read the observation counts and
-    the declaration check share."""
-    return store.read(run, meta=False, trace="envelope")
-
-
-def _declaration_check(store: Store, run: str) -> Any:
-    """What the run declared against its stored envelopes, or ``None`` when it declared
-    nothing."""
-    return declaration_check(store.manifest(run), _envelopes(store, run))
-
-
-def _observation_counts(store: Store, run: str) -> tuple[int, int]:
-    """``(spans, spans stamped as cut)`` over the run's stored envelopes."""
-    frame = _envelopes(store, run)
-    spans = [
-        span
-        for envelope in frame["trace"]
-        if isinstance(envelope, Mapping)
-        for span in envelope.get("spans", ())
-        if isinstance(span, Mapping)
-    ]
-    return len(spans), sum(1 for span in spans if span.get("truncated") == "observation")
-
-
-def _stored_trace(meta: Any) -> Trace | None:
-    """The row's stored trace, or None when there is no readable one."""
-    if not isinstance(meta, Mapping):
-        return None
-    trace = meta.get("trace")
-    if not isinstance(trace, Mapping):
-        return None
-    try:
-        return Trace.from_dict(trace)
-    except (TraceValidationError, TypeError):
-        return None
-
-
-def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    store = Store(root)
-    idx = _index(root)
-    ns.run = _run_of(idx, ns.run, io)
-    name = idx.name_of(ns.run)
-    manifest = store.manifest(ns.run)
-    if ns.event is None:
-        raise _missing_flags_refusal(
-            store, "inspect", [ns.run], state.argv, idx, x_missing=False, event_missing=True
-        )
-    check = _declaration_check(store, ns.run)
-    provenance = [] if check is None else _provenance_lines(check.provenance())
-    # Select on the narrow frame; decode ``meta`` only for the rows that survive selection.
-    df = store.read(ns.run, meta=False)
-    where = _parse_pairs(ns.where, "--where")
-    # An event is an outcome, an error text, or an error's kind: "timeout" for a timeout, else
-    # the exception's type name.
-    kinds = df["error"].map(_error_kind)
-    rows = df[(df["outcome"] == ns.event) | (df["error"] == ns.event) | (kinds == ns.event)]
-    for key, value in where.items():
-        keep = [
-            label
-            for label, cfg in zip(rows.index, rows["config"], strict=True)
-            if isinstance(cfg, Mapping) and cfg.get(key) == value
-        ]
-        rows = rows.loc[keep]
-    rows = rows.sort_values(["config_hash", "replicate_index"], kind="stable")
-    total = len(rows)
-    if ns.limit is not None:
-        rows = rows.head(max(ns.limit, 0))
-    if rows.empty:
-        sentence = f'no rows with outcome or error "{ns.event}" in run "{name}"'
-        if ns.json:
-            empty = {"run_id": ns.run, "run_name": name, "event": ns.event, "episodes": []}
-            _write_json(io, "inspect", "ok", sentence, empty, [])
-            return 0
-        io.line(f"ok  {sentence}")
-        return 0
-    selected = [
-        (str(h), int(i))
-        for h, i in zip(rows["config_hash"], rows["replicate_index"], strict=True)
-    ]
-    rows = store.read(ns.run, keys=selected)
-    # The keyed read promises sorted rows and nothing more; sorting again keeps this loop's
-    # order the store's.
-    rows = rows.sort_values(["config_hash", "replicate_index"], kind="stable")
-    first = rows.iloc[0]
-    import_path = manifest.environment.get("import_path")
-    if isinstance(import_path, str) and ":" in import_path:
-        module, fn = import_path.split(":", 1)
-    else:
-        module, fn = "your_module", "rollout"
-    sentence = (
-        f"{_look.fmt_count(len(rows))} of {_look.fmt_count(total)} episodes with outcome or "
-        f'error "{ns.event}" in run "{name}"'
+def _cmd_inspect(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    result = core.inspect(
+        store, ns.run, event=ns.event, where=ns.where, limit=ns.limit, typed=state.argv,
     )
+    _notes_of(io, result)
     if ns.json:
-        episodes = []
-        for row in rows.itertuples(index=False):
-            episodes.append({
-                "config_hash": str(row.config_hash),
-                "config": dict(row.config),
-                "seed": int(row.seed),
-                "replicate_index": int(row.replicate_index),
-                "outcome": None if not isinstance(row.outcome, str) else row.outcome,
-                "t": None if row.t != row.t else float(row.t),
-                "error": row.error if isinstance(row.error, str) else None,
-            })
-        payload = {
-            "run_id": ns.run,
-            "run_name": name,
-            "event": ns.event,
-            "episodes": episodes,
-            "reproduce": {
-                "module": module,
-                "function": fn,
-                "config": dict(first["config"]),
-                "seed": int(first["seed"]),
-            },
-        }
-        _write_json(io, "inspect", "ok", sentence, payload, [])
+        _print_result(io, "inspect", result)
         return 0
-    io.line(f"ok  {sentence}")
-    if provenance:
-        for line in provenance:
-            io.line(line)
+    io.line(f"ok  {result.sentence}")
+    if not result.rows:
+        return 0
+    for line in result.provenance:
+        io.line(line)
     io.line()
-    for row in rows.itertuples(index=False):
-        io.line(f"config_hash: {_look.fmt_hash(row.config_hash)}")
-        io.line(f"config: {json.dumps(row.config, sort_keys=True)}")
-        io.line(f"seed: {row.seed}")
-        io.line(f"replicate_index: {_look.fmt_count(row.replicate_index)}")
-        if isinstance(row.error, str):
-            # The errored row: no outcome and no time, its error where the ok row's t: line
-            # stands.
+    for row in result.rows:
+        io.line(f"config_hash: {_look.fmt_hash(row['config_hash'])}")
+        io.line(f"config: {json.dumps(row['config'], sort_keys=True)}")
+        io.line(f"seed: {row['seed']}")
+        io.line(f"replicate_index: {_look.fmt_count(row['replicate_index'])}")
+        if isinstance(row["error"], str):
             io.line("outcome: -")
             io.line("t: -")
-            io.line(f"error: {row.error}")
+            io.line(f"error: {row['error']}")
         else:
-            io.line(f"t: {_look.fmt_num(row.t)}")
-        trace = _stored_trace(row.meta)
+            io.line(f"t: {_look.fmt_num(row['t'])}")
+        trace = row["trace"]
         if trace is not None:
             if trace.truncated is not None:
-                # Begins with a letter, so it can never read as a span line.
                 io.line(f"trace: truncated ({trace.truncated})")
             cut = [
-                (j, span)
-                for j, span in enumerate(trace.ordered())
+                (j, span) for j, span in enumerate(trace.ordered())
                 if span.truncated == "observation"
             ]
             if cut:
-                limits = _observation_cap(manifest)
+                limits = result.observation_cap
                 limit = "not recorded" if limits is None else ", ".join(
                     f"{name}={value}" for name, value in limits.items()
                 )
                 sizes = [
-                    f"span {j}"
-                    if span.bytes_original is None
+                    f"span {j}" if span.bytes_original is None
                     else f"span {j}: {span.bytes_original} bytes originally"
                     for j, span in cut
                 ]
-                detail = "; ".join([f"limit {limit}", *sizes])
-                io.line(f"observation: cut ({detail})")
+                io.line(f"observation: cut ({'; '.join([f'limit {limit}', *sizes])})")
             for j, span in enumerate(trace.ordered()):
                 duration = span.duration_ms
-                # Tab-delimited: a span name and an error message are free text, so a space
-                # cannot be the column separator without shifting every column after it.
                 io.line(
                     f"  {j}\t{span.kind or '-'}\t{span.name or '-'}\t"
                     f"{'-' if duration is None else duration}\t"
@@ -3646,59 +1976,28 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> 
                     f"{'-' if span.gate is None else span.gate}"
                 )
         io.line()
-
+    reproduce = result.reproduce
     io.line(_SNIPPET_MARKER)
-    io.line(f"from {module} import {fn}")
-    io.line(f"{fn}({json.dumps(first['config'], sort_keys=True)}, seed={first['seed']})")
+    io.line(f"from {reproduce['module']} import {reproduce['function']}")
+    config = json.dumps(reproduce["config"], sort_keys=True)
+    io.line(f"{reproduce['function']}({config}, seed={reproduce['seed']})")
     return 0
 
 
-def _version_shown(m: RunManifest) -> str:
-    return version_as_recorded(m.poisson_prove_version) if m.written_by else m.poisson_prove_version
-
-
-def _created(created_at: str) -> str:
-    """A run's ``created_at`` as the table prints it: UTC, with seconds and ``Z``."""
-    at_ = started(created_at)
-    return created_at if at_ is None else at_.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
-    store = Store(root)
-    idx = _index(root)
-    entries: list[dict[str, Any]] = []
-    for named in idx.runs:
-        run_id = named.run_id
-        m = store.manifest(run_id)
-        entries.append({
-            "number": named.number,
-            "run_id": run_id,
-            "run_name": named.name,
-            "status": m.status,
-            "backend": m.backend,
-            "target_id": m.target_id,
-            "t_unit": m.t_unit,
-            "rows": store.count(run_id),
-            "no_outcome": store.tally(run_id).no_outcome,
-            "created_at": m.created_at,
-            "poisson_prove_version": _version_shown(m),
-        })
-    count = _look.fmt_count(len(entries))
-    plural = "run" if len(entries) == 1 else "runs"
-    sentence = f"{count} {plural} in {root}" if entries else f"no runs in {root}"
-    nexts = [] if entries else [_first_sweep(root)]
+def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    listed = core.runs(store)
     if ns.json:
-        _write_json(io, "runs", "ok", sentence, {"store": str(root), "runs": entries}, nexts)
+        _print_result(io, "runs", listed)
         return 0
-    io.line(f"ok  {sentence}")
-    if idx.unreadable:
+    io.line(f"ok  {listed.sentence}")
+    if listed.unreadable:
         io.err_line(
-            f"note: {_look.fmt_count(len(idx.unreadable))} of this store's runs could not be "
+            f"note: {_look.fmt_count(len(listed.unreadable))} of this store's runs could not be "
             f"read and are not listed; each has a manifest.json that is damaged or carries no "
-            f"start time: {', '.join(idx.unreadable)}"
+            f"start time: {', '.join(listed.unreadable)}"
         )
-    if not entries:
-        for command in nexts:
+    if not listed:
+        for command in listed.next:
             io.next(command)
         return 0
     header = (
@@ -3706,12 +2005,13 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         "created",
     )
     lines: list[tuple[str, ...]] = [header]
-    for entry in entries:
+    for run in listed:
+        entry = run.entry
         lines.append((
             "" if entry["number"] is None else str(entry["number"]), str(entry["run_name"]),
             str(entry["run_id"]), str(entry["status"]), str(entry["backend"]),
             str(entry["target_id"]), _look.fmt_count(entry["rows"]),
-            _look.fmt_count(entry["no_outcome"]), _created(str(entry["created_at"])),
+            _look.fmt_count(entry["no_outcome"]), run.created,
         ))
     widths = [max(len(line[i]) for line in lines) for i in range(len(header))]
     io.line()
@@ -3721,7 +2021,7 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
     return 0
 
 
-_VERBS: dict[str, Callable[[argparse.Namespace, _IO, Path, _State], int]] = {
+_VERBS: dict[str, Callable[[argparse.Namespace, _IO, Any, _State], int]] = {
     "init": _cmd_init,
     "sweep": _cmd_sweep,
     "diff": _cmd_diff,
