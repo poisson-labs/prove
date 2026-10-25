@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import html
 import json
-import os
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
-from poisson_prove import _look
+from poisson_prove import __version__, _look
 
 TOOL = "poisson-prove"
 POLICY = (
@@ -91,8 +90,22 @@ def resolve(document: Any, pointer: str) -> Any:
 
 
 def _signed(value: float) -> str:
-    text = _look.fmt_rate(abs(value))
-    return f"+{text}" if value > 0 else f"-{text}" if value < 0 else text
+    return _look.fmt_signed(value)
+
+
+def relative(address: str, target: str) -> str:
+    """``target`` relative to the page at ``address``, both relative to ``ui/`` with ``/``
+    between folders: no file system is asked."""
+    path, _, anchor = target.partition("#")
+    here = address.split("/")[:-1]
+    if not path:
+        return address.split("/")[-1] + (f"#{anchor}" if anchor else "")
+    there = path.split("/")
+    common = 0
+    while common < len(here) and common < len(there) - 1 and here[common] == there[common]:
+        common += 1
+    parts = [".."] * (len(here) - common) + there[common:]
+    return "/".join(parts) + (f"#{anchor}" if anchor else "")
 
 
 class _Page:
@@ -169,10 +182,7 @@ class _Page:
         )
 
     def rel(self, target: str) -> str:
-        path, _, anchor = target.partition("#")
-        here = os.path.dirname(self.address)
-        relative = os.path.relpath(path, here or ".") if path else os.path.basename(self.address)
-        return relative + (f"#{anchor}" if anchor else "")
+        return relative(self.address, target)
 
     def config(self, ptr: str) -> str:
         """A condition as its axis values, each value a fact, wrapped in the config's own fact."""
@@ -261,6 +271,7 @@ class _Page:
             '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
             f'<meta http-equiv="Content-Security-Policy" content="{POLICY}">\n'
             '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<meta name="generator" content="{TOOL} {__version__}">\n'
             f"<title>{_esc(self.title)} · {TOOL}</title>\n"
             f'<link rel="stylesheet" href="{self.up}style.css">\n'
             f'<script src="{self.up}ui.js" defer></script>\n</head>\n<body>\n'
@@ -500,16 +511,7 @@ def _run(page: _Page) -> None:
         ("outcomes", outcomes),
         ("declared", page.generic("/declared", kind="plain")),
     ]
-    if "design" in v:
-        pairs.append(
-            (
-                "design limit",
-                f'{page.fact("/design", kind="plain")} <span class="dim">recorded as</span> '
-                f"{page.generic('/design_mde')}",
-            )
-        )
-    else:
-        pairs.append(("design limit", page.generic("/design_mde")))
+    pairs.append(("design limit", _design(page)))
     compared = ", ".join(
         page.link(f"/comparisons/{i}/address", page.fact(f"/comparisons/{i}/name", kind="plain"))
         + f" ({page.fact(f'/comparisons/{i}/verdict', kind='plain', tag='b')}, "
@@ -715,6 +717,72 @@ def _episodes(page: _Page) -> None:
     page.add(f'<p class="note">{page.fact("/reproduce", kind="plain")}</p>')
 
 
+#: How each key of a recorded design reads, and prints.
+_DESIGN_WORDS = {
+    "mde": ("limit", "rate"),
+    "base_rate": ("at the worst base rate", "rate"),
+    "direction": ("direction", "plain"),
+    "test": ("test", "test"),
+    "level": ("level", "p"),
+    "family": ("over tests", "num"),
+    "conditions": ("conditions", "num"),
+    "events": ("events", "num"),
+    "q": ("q", "num"),
+    "power": ("power", "power"),
+    "flaggable": ("flaggable", "num"),
+    "computed_at_read_time": ("computed now from the recorded replicates", "num"),
+}
+
+
+def _design(page: _Page) -> str:
+    """The design's limit as a sentence, then as recorded, each key in words."""
+    design = page.value("/design_mde")
+    if not isinstance(design, Mapping):
+        return page.fact("/design_mde", kind="plain")
+    parts = []
+    for key in design:
+        words, kind = _DESIGN_WORDS.get(str(key), (str(key).replace("_", " "), "num"))
+        value = design[key]
+        ptr = f"/design_mde/{_escape_token(str(key))}"
+        if kind == "test" and isinstance(value, str):
+            cell = page.fact(ptr, kind="plain", text=_TEST_WORDS.get(value, value))
+        elif kind == "power" and isinstance(value, (int, float)):
+            cell = page.fact(
+                ptr, kind="num", text=f"{_look.fmt_num(value)} ({_look.times_in(float(value))})"
+            )
+        elif isinstance(value, (Mapping, list)):
+            cell = page.generic(ptr)
+        else:
+            cell = page.fact(ptr, kind=kind if kind != "test" else "plain")
+        parts.append(f"{_esc(words)} {cell}")
+    recorded = ' <span class="dim">·</span> '.join(parts)
+    if "design" in page.view:
+        sentence = page.fact("/design", kind="plain")
+        return f'{sentence}<br><span class="dim">recorded as</span> {recorded}'
+    return recorded
+
+
+_TEST_WORDS = {
+    "fisher": "Fisher",
+    "mcnemar": "the paired test (McNemar)",
+    "logrank": "log-rank",
+    "fisher_bh": "Fisher",
+    "mcnemar_bh": "the paired test (McNemar)",
+    "logrank_bh": "log-rank",
+}
+
+
+def _plural(count: Any, word: str) -> str:
+    return word if count == 1 else f"{word}s"
+
+
+def _kind_words(page: _Page, ptr: str) -> str:
+    value = page.value(ptr)
+    if value is None:
+        return page.fact(ptr, kind="plain", text="kind not given")
+    return f"a {page.fact(ptr, kind='plain')}"
+
+
 def _facts_dl(page: _Page, ptr: str) -> str:
     facts = page.value(ptr)
     if not facts:
@@ -751,12 +819,14 @@ def _comparison(page: _Page) -> None:
                 (
                     "before",
                     page.link("/before/address", page.fact("/before/name", kind="plain"))
-                    + f' <span class="mono dim">{page.fact("/before/run_id", kind="plain")}</span>',
+                    + f' <span class="mono dim">{page.fact("/before/run_id", kind="plain")}</span>'
+                    + f' <span class="dim">({page.fact("/before/status", kind="plain")})</span>',
                 ),
                 (
                     "after",
                     page.link("/after/address", page.fact("/after/name", kind="plain"))
-                    + f' <span class="mono dim">{page.fact("/after/run_id", kind="plain")}</span>',
+                    + f' <span class="mono dim">{page.fact("/after/run_id", kind="plain")}</span>'
+                    + f' <span class="dim">({page.fact("/after/status", kind="plain")})</span>',
                 ),
                 (
                     "threshold",
@@ -765,8 +835,10 @@ def _comparison(page: _Page) -> None:
                 ),
                 (
                     "tests",
-                    f"{page.fact('/family/tests')} tests over {page.fact('/family/conditions')} "
-                    f"conditions and {page.fact('/family/events')} events, q "
+                    f"{page.fact('/family/tests')} {_plural(v['family']['tests'], 'test')} over "
+                    f"{page.fact('/family/conditions')} "
+                    f"{_plural(v['family']['conditions'], 'condition')} and "
+                    f"{page.fact('/family/events')} {_plural(v['family']['events'], 'event')}, q "
                     f"{page.fact('/family/q')}",
                 ),
                 (
@@ -918,9 +990,7 @@ def _comparison(page: _Page) -> None:
 
 def _condition(page: _Page) -> None:
     v = page.view
-    words = " · ".join(
-        f"{k} {_look.fmt_num(x) if isinstance(x, float) else x}" for k, x in v["condition"].items()
-    )
+    words = _look.condition_words(v["condition"])
     page.title = words
     page.crumbs = [
         ("index.html", "runs"),
@@ -949,8 +1019,7 @@ def _condition(page: _Page) -> None:
         p = f"/events/{i}"
         page.add(
             f'<section id="{_esc(block["event"])}"><h2>{page.fact(f"{p}/event", kind="plain")} '
-            f"<span "
-            f'class="dim">({page.fact(f"{p}/kind", kind="plain")})</span></h2>'
+            f'<span class="dim">({_kind_words(page, f"{p}/kind")})</span></h2>'
         )
         page.add(page.verdict(p))
         before = _arm(page, p, "a", 0)
@@ -962,11 +1031,19 @@ def _condition(page: _Page) -> None:
             f"{page.fact(f'{p}/ci/basis', kind='plain')} interval"
         )
         if block["test"]["n01"] is None:
-            pairs_text = (
-                f'discordant pairs {page.fact(f"{p}/test/n01", kind="plain")} <span class="dim">'
-                f"(only after {page.fact(f'{p}/test/n01', kind='plain', text='–')}, "
-                f"only before {page.fact(f'{p}/test/n10', kind='plain', text='–')})</span>"
-            )
+            paired = str(block.get("test", {}).get("name", "")).startswith("the paired")
+            if paired:
+                pairs_text = (
+                    f"the discordant pair counts are not in the saved comparison (only after "
+                    f"{page.fact(f'{p}/test/n01', kind='plain', text='–')}, only before "
+                    f"{page.fact(f'{p}/test/n10', kind='plain', text='–')})"
+                )
+            else:
+                pairs_text = (
+                    f"not a paired test, so no discordant pairs (only after "
+                    f"{page.fact(f'{p}/test/n01', kind='plain', text='–')}, only before "
+                    f"{page.fact(f'{p}/test/n10', kind='plain', text='–')})"
+                )
         else:
             pairs_text = (
                 f"{page.fact(f'{p}/test/n01')} pairs had the event only after, "
@@ -978,10 +1055,18 @@ def _condition(page: _Page) -> None:
             f"q {page.fact(f'{p}/test/q', kind='p')}, "
             f"Holm {page.fact(f'{p}/test/q_holm', kind='p')}"
         )
+        test_key = str(block.get("mde_test") or "")
+        test_words = _TEST_WORDS.get(test_key, test_key)
+        power_value = block.get("mde_power")
+        power_words = (
+            f"{_look.fmt_num(power_value)} ({_look.times_in(float(power_value))})"
+            if isinstance(power_value, (int, float)) and not isinstance(power_value, bool)
+            else None
+        )
         limits = (
-            f"computed by {page.fact(f'{p}/mde_test', kind='plain')} at level "
+            f"computed by {page.fact(f'{p}/mde_test', kind='plain', text=test_words)} at level "
             f"{page.fact(f'{p}/mde_level', kind='p')} over {page.fact(f'{p}/mde_family')} tests, "
-            f"power {page.fact(f'{p}/mde_power')}, from the "
+            f"power {page.fact(f'{p}/mde_power', text=power_words)}, from the "
             f"{page.fact(f'{p}/mde_anchor', kind='plain')}; the smallest possible p here is "
             f"{page.fact(f'{p}/p_min', kind='p')}, so this condition "
             f"{'can' if block.get('flaggable') else 'cannot'} be flagged "
@@ -1028,7 +1113,6 @@ def _could_not_detect(page: _Page) -> None:
     ]
     page.add("<h1>What the comparison could not detect</h1>")
     page.add(page.verdict())
-    cid = _hash12(v["comparison"]["id"])
     pairs = [
         (
             "comparison",
@@ -1059,16 +1143,7 @@ def _could_not_detect(page: _Page) -> None:
             f"{page.fact('/threshold/source', kind='plain')}",
         ),
     ]
-    if "design" in v:
-        pairs.append(
-            (
-                "design",
-                f'{page.fact("/design", kind="plain")} <span class="dim">recorded as</span> '
-                f"{page.generic('/design_mde')}",
-            )
-        )
-    else:
-        pairs.append(("design", page.generic("/design_mde")))
+    pairs.append(("design", _design(page)))
     page.add(_dl(pairs))
     facts = _facts_dl(page, "/facts")
     if facts:

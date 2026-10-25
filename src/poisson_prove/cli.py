@@ -1981,6 +1981,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
     # The comparison the page shows is saved before anything binds; the page structure keeps
     # its keys, so the save shows in the store and, once bound, on the line after the address.
     saved = _save(io, store, result)
+    state.saved = saved is not None
     if ns.json:
         sentence = f'the page comparing "{a_name}" with "{b_name}", bound nowhere'
         structure = _add_names(structure, result.names)
@@ -1994,7 +1995,6 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
             f"http://{_HOST}:{srv.server_address[1]}/ (Ctrl-C stops)"
         )
         if saved is not None:
-            state.saved = True
             io.detail("saved", f"{saved.kind} {_look.fmt_hash(saved.id)}")
         io.out.flush()
 
@@ -2112,12 +2112,13 @@ def _cmd_ui(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
 
     built = core.build_ui(store)
     _notes_of(io, built)
-    if ns.open:
-        webbrowser.open(built.location)
     if ns.json:
         _print_result(io, "ui", built)
-        return 0
-    io.line(f"ok  dashboard at {built.location}")
+    else:
+        io.line(f"ok  dashboard at {built.location}")
+    if ns.open:
+        io.out.flush()
+        webbrowser.open(built.location)
     return 0
 
 

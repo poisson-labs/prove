@@ -270,6 +270,8 @@ def open_store(path: Path | str | None = None, *, verb: str | None = None) -> Op
             _artifacts.check_store(root)
         except _artifacts.NewerFormat as exc:
             raise refusal(str(exc), [_artifacts.UPGRADE]) from exc
+        except _artifacts.BadDescriptor as exc:
+            raise refusal(str(exc)) from exc
     if verb is None:
         return store
     if not given and not env:
@@ -2028,7 +2030,7 @@ def start(
         started_once["done"] = True
         try:
             _artifacts.ensure_descriptor(store.root)
-        except OSError:
+        except (OSError, ValueError):
             pass  # the run is written; the descriptor follows on the next write that can
         if p.resumed:
             events.emit(

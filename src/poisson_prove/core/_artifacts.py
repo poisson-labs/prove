@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -61,6 +62,10 @@ _LEVEL_OF = {
 }
 _NOTE_OF = {"mde_rise": "mde_rise_note", "mde_fall": "mde_fall_note"}
 _HEX = frozenset("0123456789abcdef")
+
+
+class BadDescriptor(ValueError):
+    """A store descriptor that is not a JSON object."""
 
 
 class NewerFormat(Exception):
@@ -120,6 +125,25 @@ def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _read_descriptor_file(path: Path) -> dict[str, Any]:
+    """The store descriptor as a JSON object, or ``BadDescriptor`` naming the file."""
+    try:
+        document = _read_json(path)
+    except ValueError as exc:
+        raise BadDescriptor(f"{path} is not a store descriptor: {exc}") from exc
+    if not isinstance(document, dict):
+        raise BadDescriptor(f"{path} is not a store descriptor: not a JSON object")
+    return document
+
+
+def _open_to_others(folder: Path) -> None:
+    """A temporary folder as the user's umask would make it, not the private one ``mkdtemp``
+    makes, so what is saved into a shared store is readable to the others who read it."""
+    mask = os.umask(0)
+    os.umask(mask)
+    os.chmod(folder, 0o777 & ~mask)
+
+
 # ---------- the store descriptor ----------
 
 
@@ -128,16 +152,13 @@ def descriptor_path(root: Path) -> Path:
 
 
 def check_store(root: Path) -> None:
-    """Refuse a store whose descriptor is in a newer major than this Prove reads."""
+    """Refuse a store whose descriptor is in a newer major than this Prove reads
+    (``NewerFormat``), or is not a descriptor at all (``BadDescriptor``)."""
     path = descriptor_path(root)
     if not path.is_file():
         return
-    try:
-        document = _read_json(path)
-    except (OSError, ValueError):
-        return
-    if isinstance(document, Mapping):
-        refuse_newer(document.get("format"), STORE_FORMAT)
+    document = _read_descriptor_file(path)
+    refuse_newer(document.get("format"), STORE_FORMAT)
 
 
 def ensure_descriptor(root: Path) -> None:
@@ -146,7 +167,7 @@ def ensure_descriptor(root: Path) -> None:
     descriptor that already lists this version, is left exactly as it is."""
     path = descriptor_path(root)
     if path.is_file():
-        document = _read_json(path)
+        document = _read_descriptor_file(path)
         writers = document.get("writers")
         if not isinstance(writers, list):
             writers = []
@@ -279,11 +300,36 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _clean_stale(parent: Path) -> None:
-    """Temporary folders a killed save left behind are removed before the next save."""
-    for stale in parent.glob(".*"):
-        if stale.is_dir():
-            shutil.rmtree(stale, ignore_errors=True)
+_STAGING = re.compile(r"^\.[0-9a-f]{16}\.(\d+)\.")
+
+
+def _dead(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    return False
+
+
+def clean_dead_saves(root: Path) -> None:
+    """Temporary folders a save that died left behind, removed when the UI is built; a live
+    save's folder is its own, and no reader lists either."""
+    base = root / ".poisson" / "artifacts"
+    if not base.is_dir():
+        return
+    for kind in base.iterdir():
+        if not kind.is_dir():
+            continue
+        for stale in kind.glob(".*"):
+            found = _STAGING.match(stale.name)
+            if stale.is_dir() and found and _dead(int(found.group(1))):
+                shutil.rmtree(stale, ignore_errors=True)
+
+
+def artifact_exists(root: Path, kind: str, identity: str) -> bool:
+    return (root / ".poisson" / "artifacts" / kind / identity / "artifact.json").is_file()
 
 
 def save_result(
@@ -293,10 +339,12 @@ def save_result(
     runs: Sequence[str],
     settings: Mapping[str, Any],
     result: Mapping[str, Any],
+    detail: Sequence[tuple[str, str]] = (),
     charts: Sequence[tuple[str, str, Mapping[str, Any]]] = (),
 ) -> str:
     """Write one saved result and return its id; an id that exists already is that artifact and
-    nothing is written. Raises ``OSError`` when the store cannot be written to."""
+    nothing is written. ``detail`` is the verdict block's detail lines, kept in the descriptor's
+    summary. Raises ``OSError`` when the store cannot be written to."""
     ensure_descriptor(root)
     inputs = {"runs": list(runs)}
     identity = artifact_id(kind, inputs, settings)
@@ -305,9 +353,9 @@ def save_result(
     folder = parent / identity
     if (folder / "artifact.json").is_file():
         return identity
-    _clean_stale(parent)
-    staging = Path(tempfile.mkdtemp(prefix=f".{identity}.", dir=parent))
+    staging = Path(tempfile.mkdtemp(prefix=f".{identity}.{os.getpid()}.", dir=parent))
     try:
+        _open_to_others(staging)
         files: list[dict[str, Any]] = []
         result_name = f"{kind}.json"
         (staging / result_name).write_text(
@@ -362,7 +410,11 @@ def save_result(
             "created_at": utc_now(),
             "inputs": inputs,
             "settings": dict(settings),
-            "summary": {"verdict": result["verdict"], "sentence": result["sentence"]},
+            "summary": {
+                "verdict": result["verdict"],
+                "sentence": result["sentence"],
+                "detail": [[str(label), str(text)] for label, text in detail],
+            },
             "files": files,
         }
         (staging / "artifact.json").write_text(
@@ -384,7 +436,8 @@ def save_result(
 # ---------- reading ----------
 
 
-def is_artifact_id(name: str) -> bool:
+def is_hex16(name: str) -> bool:
+    """Whether ``name`` is a 16-hex digest: an artifact's id, or a condition's hash."""
     return len(name) == 16 and set(name) <= _HEX
 
 
@@ -400,7 +453,7 @@ def artifact_folders(root: Path, kind: str | None = None) -> list[Path]:
         if not folder.is_dir():
             continue
         for candidate in sorted(folder.iterdir()):
-            if is_artifact_id(candidate.name) and (candidate / "artifact.json").is_file():
+            if is_hex16(candidate.name) and (candidate / "artifact.json").is_file():
                 found.append(candidate)
     return found
 

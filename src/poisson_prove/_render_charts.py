@@ -98,11 +98,7 @@ def _f(value: Any) -> str:
 
 
 def _signed(value: Any) -> str:
-    if value is None:
-        return "none"
-    x = float(value)
-    text = _look.fmt_rate(abs(x))
-    return f"+{text}" if x > 0 else f"-{text}" if x < 0 else text
+    return _look.fmt_signed(value)
 
 
 def _p(value: Any) -> str:
@@ -119,21 +115,19 @@ def _scale(lo: float, hi: float, x0: float, x1: float) -> Any:
 
 
 def _ticks(limit: float) -> tuple[float, list[float]]:
-    """A symmetric axis to a round limit at or above ``limit``, with its ticks."""
+    """A symmetric axis to a round limit at or above ``limit``, with two ticks a side, so the
+    labels never crowd each other."""
     limit = max(limit, 0.05)
     for step in (0.05, 0.1, 0.2, 0.25, 0.5, 1.0):
         if limit <= step * 4:
-            top = math.ceil(limit / step - 1e-9) * step
-            ticks = [
-                round(k * step, 3)
-                for k in range(-int(round(top / step)), int(round(top / step)) + 1)
-                if k
-            ]
-            return round(top, 3), ticks
+            top = round(math.ceil(limit / step - 1e-9) * step, 3)
+            half = round(top / 2, 3)
+            return top, [-top, -half, half, top]
     return 1.0, [-1.0, -0.5, 0.5, 1.0]
 
 
-def _dash(d: float) -> str:
+def _n(d: float) -> str:
+    """A coordinate to one decimal."""
     return f"{d:.1f}"
 
 
@@ -147,6 +141,10 @@ def heatmap(chart: Mapping[str, Any]) -> str:
     x_values: Sequence[Any] = chart["x_values"]
     y_values: Sequence[Any] = chart["y_values"]
     x_axis, y_axis = str(chart["x_axis"]), str(chart["y_axis"])
+    by_key = {(c["x"], c["y"]): c for c in rows}
+    if not y_axis and len(x_values) > 6:
+        # One axis, many conditions: the cells wrap into rows of six, each cell labelled.
+        return _heatmap_wrapped(chart, rows)
     cw, ch, x0, y0 = 140, 80, 110 if y_axis else 24, 30
     width = x0 + cw * max(len(x_values), 1) + 12
     height = y0 + ch * max(len(y_values), 1) + 52
@@ -155,7 +153,6 @@ def heatmap(chart: Mapping[str, Any]) -> str:
         body.append(
             _text(x0 + i * cw + cw / 2, y0 - 10, _esc_plain(x), cls="dimt", anchor="middle")
         )
-    by_key = {(c["x"], c["y"]): c for c in rows}
     largest = (
         max((abs(float(c["delta"])) for c in rows if c["delta"] is not None), default=0.0) or 1.0
     )
@@ -233,8 +230,84 @@ def heatmap(chart: Mapping[str, Any]) -> str:
     return _svg(chart["id"], chart["title"], chart["desc"], width, height, body)
 
 
+def _cell_body(
+    cell: Mapping[str, Any], px: float, py: float, cw: int, ch: int, largest: float, event: str
+) -> list[str]:
+    """One heatmap cell: its rect, its word, its change and its q."""
+    delta = cell["delta"]
+    flagged = bool(cell["flagged"])
+    direction = (
+        "rise"
+        if delta is not None and delta > 0
+        else "fall"
+        if delta is not None and delta < 0
+        else ""
+    )
+    tip = (
+        f"{cell['condition']}, {event}: before {_f(cell['before'])}, after {_f(cell['after'])}, "
+        f"change {_signed(delta)}, q {_p(cell['q'])}, {cell['verdict']}"
+    )
+    out = []
+    if flagged and direction:
+        depth = 0.25 + 0.6 * min(abs(float(delta)) / largest, 1.0)
+        out.append(
+            f'<rect class="{direction} cell" x="{_n(px)}" y="{_n(py)}" width="{cw - 2}" '
+            f'height="{ch - 2}" rx="4" fill-opacity="{depth:.2f}"><title>{_esc(tip)}</title></rect>'
+        )
+    else:
+        out.append(
+            f'<rect class="empty cell" x="{_n(px)}" y="{_n(py)}" width="{cw - 2}" '
+            f'height="{ch - 2}" rx="4"><title>{_esc(tip)}</title></rect>'
+        )
+    glyph = "▲" if direction == "rise" else "▼" if direction == "fall" else ""
+    out.append(_text(px + 10, py + 22, str(cell["verdict"]), cls="bold"))
+    out.append(_text(px + 10, py + 42, f"{glyph} {_signed(delta)}".strip()))
+    out.append(_text(px + 10, py + 60, f"q {_p(cell['q'])}", cls="dimt"))
+    return out
+
+
+def _legend(x0: float, height: float) -> list[str]:
+    out = []
+    lx = x0
+    for label, cls in (
+        ("▲ rose, flagged", "rise cell"),
+        ("▼ fell, flagged", "fall cell"),
+        ("not flagged", "empty cell"),
+    ):
+        out.append(
+            f'<rect class="{cls}" x="{_n(lx)}" y="{height - 16}" width="12" height="12" rx="2" '
+            f'fill-opacity="0.6"><title>{_esc(label)}</title></rect>'
+        )
+        out.append(_text(lx + 18, height - 6, label))
+        lx += 150
+    return out
+
+
+def _heatmap_wrapped(chart: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]) -> str:
+    """A one-axis comparison with many conditions: the cells in rows of six, in the axis's
+    order, each labelled with its value above the cell."""
+    cw, ch, per_row, x0, y0 = 140, 96, 6, 24, 30
+    largest = (
+        max((abs(float(c["delta"])) for c in rows if c["delta"] is not None), default=0.0) or 1.0
+    )
+    lines = (len(rows) + per_row - 1) // per_row
+    width = x0 + cw * per_row + 12
+    height = y0 + ch * lines + 52
+    body: list[str] = []
+    for i, cell in enumerate(rows):
+        px = x0 + (i % per_row) * cw + 1
+        py = y0 + (i // per_row) * ch + 1
+        body.append(_text(px + 10, py + 12, _esc_plain(cell["x"]), cls="dimt"))
+        body.extend(_cell_body(cell, px, py + 16, cw, ch - 16, largest, str(chart["event"])))
+    body.append(
+        _text(x0 + cw * per_row / 2, height - 30, str(chart["x_axis"]), cls="dimt", anchor="middle")
+    )
+    body.extend(_legend(x0, height))
+    return _svg(chart["id"], chart["title"], chart["desc"], width, height, body)
+
+
 def _esc_plain(value: Any) -> str:
-    if isinstance(value, float):
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
         return _look.fmt_num(value)
     return str(value)
 
@@ -261,13 +334,12 @@ def differences(chart: Mapping[str, Any]) -> str:
     body: list[str] = []
     for t in ticks:
         body.append(
-            f'<line class="axis" x1="{_dash(at(t))}" x2="{_dash(at(t))}" y1="{top - 8}" '
+            f'<line class="axis" x1="{_n(at(t))}" x2="{_n(at(t))}" y1="{top - 8}" '
             f'y2="{height - 34}"/>'
         )
         body.append(_text(at(t), height - 20, _signed(t), cls="dimt", anchor="middle"))
     body.append(
-        f'<line class="zero" x1="{_dash(at(0))}" x2="{_dash(at(0))}" y1="{top - 8}" '
-        f'y2="{height - 34}"/>'
+        f'<line class="zero" x1="{_n(at(0))}" x2="{_n(at(0))}" y1="{top - 8}" y2="{height - 34}"/>'
     )
     body.append(_text(at(0), height - 20, "0", cls="dimt", anchor="middle"))
     body.append(_text(x0, top - 18, "◀ after lower", cls="dimt"))
@@ -295,13 +367,14 @@ def differences(chart: Mapping[str, Any]) -> str:
         )
         if c["lo"] is not None and c["hi"] is not None:
             body.append(
-                f'<line class="{line_cls}" x1="{_dash(at(float(c["lo"])))}" '
-                f'x2="{_dash(at(float(c["hi"])))}" '
-                f'y1="{_dash(y)}" y2="{_dash(y)}" stroke-width="2" stroke-linecap="round"/>'
+                f'<line class="{line_cls}" x1="{_n(at(float(c["lo"])))}" '
+                f'x2="{_n(at(float(c["hi"])))}" '
+                f'y1="{_n(y)}" y2="{_n(y)}" stroke-width="2" stroke-linecap="round">'
+                f"<title>{_esc(tip)}</title></line>"
             )
         if delta is not None:
             body.append(
-                f'<circle class="{fill_cls} halo" cx="{_dash(at(float(delta)))}" cy="{_dash(y)}" '
+                f'<circle class="{fill_cls} halo" cx="{_n(at(float(delta)))}" cy="{_n(y)}" '
                 f'r="4.5">'
                 f"<title>{_esc(tip)}</title></circle>"
             )
@@ -341,21 +414,20 @@ def limits(chart: Mapping[str, Any]) -> str:
     body: list[str] = []
     for t in ticks:
         body.append(
-            f'<line class="axis" x1="{_dash(at(t))}" x2="{_dash(at(t))}" y1="{top - 8}" '
+            f'<line class="axis" x1="{_n(at(t))}" x2="{_n(at(t))}" y1="{top - 8}" '
             f'y2="{height - 40}"/>'
         )
         body.append(_text(at(t), height - 26, _signed(t), cls="dimt", anchor="middle"))
     for sign in (1, -1):
         x = at(sign * threshold)
         body.append(
-            f'<line class="thr" x1="{_dash(x)}" x2="{_dash(x)}" y1="{top - 8}" y2="{height - 40}"/>'
+            f'<line class="thr" x1="{_n(x)}" x2="{_n(x)}" y1="{top - 8}" y2="{height - 40}"/>'
         )
     words = f"threshold {_look.fmt_rate(threshold)}"
     body.append(_text(at(threshold) + 4, top - 14, words))
     body.append(_text(at(-threshold) - 4, top - 14, words, anchor="end"))
     body.append(
-        f'<line class="zero" x1="{_dash(at(0))}" x2="{_dash(at(0))}" y1="{top - 8}" '
-        f'y2="{height - 40}"/>'
+        f'<line class="zero" x1="{_n(at(0))}" x2="{_n(at(0))}" y1="{top - 8}" y2="{height - 40}"/>'
     )
     for i, c in enumerate(rows):
         y = top + i * rowh + rowh / 2
@@ -392,9 +464,9 @@ def limits(chart: Mapping[str, Any]) -> str:
                 continue
             end = at(sign * float(value))
             body.append(
-                f'<line class="{way}-line" x1="{_dash(at(0))}" x2="{_dash(end)}" y1="{_dash(y)}" '
-                f'y2="{_dash(y)}" '
-                f'stroke-width="2" stroke-opacity="{opacity}"/>'
+                f'<line class="{way}-line" x1="{_n(at(0))}" x2="{_n(end)}" y1="{_n(y)}" '
+                f'y2="{_n(y)}" '
+                f'stroke-width="2" stroke-opacity="{opacity}"><title>{_esc(tip)}</title></line>'
             )
             body.append(
                 _text(
@@ -405,10 +477,6 @@ def limits(chart: Mapping[str, Any]) -> str:
                     anchor="middle",
                     extra=f' fill-opacity="{opacity}"',
                 )
-            )
-            body.append(
-                f'<circle class="{way}" cx="{_dash(end)}" cy="{_dash(y)}" r="0.5" fill-opacity="0">'
-                f"<title>{_esc(tip)}</title></circle>"
             )
     body.append(_text(x0, height - 6, "◀ fall limit ▼", cls="dimt"))
     body.append(_text(x1, height - 6, "▲ rise limit ▶", cls="dimt", anchor="end"))
@@ -435,15 +503,14 @@ def incidence(chart: Mapping[str, Any]) -> str:
     while k * step <= ymax + 1e-9:
         v = round(k * step, 3)
         body.append(
-            f'<line class="axis" x1="{x0}" x2="{x1}" y1="{_dash(at_y(v))}" y2="{_dash(at_y(v))}"/>'
+            f'<line class="axis" x1="{x0}" x2="{x1}" y1="{_n(at_y(v))}" y2="{_n(at_y(v))}"/>'
         )
         body.append(_text(x0 - 8, at_y(v) + 4, _look.fmt_rate(v), cls="dimt", anchor="end"))
         k += 1
     for t in _time_ticks(horizon):
         body.append(_text(at_x(t), y1 + 16, _look.fmt_num(t), cls="dimt", anchor="middle"))
     body.append(
-        f'<line class="thr" x1="{_dash(at_x(horizon))}" x2="{_dash(at_x(horizon))}" y1="{y0}" '
-        f'y2="{y1}"/>'
+        f'<line class="thr" x1="{_n(at_x(horizon))}" x2="{_n(at_x(horizon))}" y1="{y0}" y2="{y1}"/>'
     )
     body.append(
         _text(
@@ -452,17 +519,17 @@ def incidence(chart: Mapping[str, Any]) -> str:
     )
     ends: list[float] = []
     for arm, index, cls in (("before", 1, "before"), ("after", 2, "after")):
-        d = f"M{_dash(at_x(0))},{_dash(at_y(0))}"
+        d = f"M{_n(at_x(0))},{_n(at_y(0))}"
         last = 0.0
         for p in points:
             t, v = float(p[0]), float(p[index])
             if t <= 0:
                 last = v
-                d += f" V{_dash(at_y(v))}"
+                d += f" V{_n(at_y(v))}"
                 continue
-            d += f" H{_dash(at_x(min(t, horizon)))} V{_dash(at_y(v))}"
+            d += f" H{_n(at_x(min(t, horizon)))} V{_n(at_y(v))}"
             last = v
-        d += f" H{_dash(at_x(horizon))}"
+        d += f" H{_n(at_x(horizon))}"
         tip = f"{arm}: {_look.fmt_rate(last)} at the horizon ({chart['counts'][arm]})"
         body.append(f'<path class="{cls}" d="{d}"><title>{_esc(tip)}</title></path>')
         ends.append(last)
@@ -488,10 +555,3 @@ def _time_ticks(horizon: float) -> list[float]:
     if ticks[-1] < horizon - step * 0.25:
         ticks.append(horizon)
     return ticks
-
-
-DRAWERS = {"heatmap": heatmap, "differences": differences, "limits": limits, "incidence": incidence}
-
-
-def draw(kind: str, chart: Mapping[str, Any]) -> str:
-    return DRAWERS[kind](chart)

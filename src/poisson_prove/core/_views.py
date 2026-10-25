@@ -8,8 +8,11 @@ recomputes anything in it; the terminal app and a later local server read the sa
 
 from __future__ import annotations
 
+import html
+import json
 import math
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -18,42 +21,54 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 
-from poisson_prove import _look, _render_charts, _render_ui, stats
+from poisson_prove import __version__, _facts, _look, _render_charts, _render_ui, stats
 from poisson_prove.core import _artifacts as A
-from poisson_prove.core._ops import COMMAND, _index, _opened, _operation, method_line, refusal
+from poisson_prove.core._ops import (
+    COMMAND,
+    _index,
+    _method_first,
+    _opened,
+    _operation,
+    method_line,
+    refusal,
+)
+from poisson_prove.core._ops import run as run_detail
+from poisson_prove.core._ops import runs as list_runs
 from poisson_prove.core._results import (
     Artifact,
     ArtifactRef,
     CheckResult,
     Comparison,
     UiLocation,
+    Unsaved,
     View,
     _document,
 )
 from poisson_prove.executor import _recorded_design
 from poisson_prove.store import Store
-from poisson_prove.survival import aalen_johansen
+from poisson_prove.survival import aalen_johansen, competing_set
 
 VIEW_SCHEMA = f"{A.TOOL}.view/1"
-#: The test behind each method, as a reader names it, and the test behind a recorded design.
-TEST_WORDS = {
-    "fisher_bh": "Fisher",
-    "mcnemar_bh": "the paired test (McNemar)",
-    "logrank_bh": "log-rank",
-}
-DESIGN_WORDS = {"fisher": "Fisher", "mcnemar": "the paired test (McNemar)", "logrank": "log-rank"}
 INTERVAL_WORDS = {"tango": "Tango", "miettinen-nurminen": "Miettinen-Nurminen"}
 CHART_KINDS = ("heatmap", "differences", "limits")
 BUNDLE = ("style.css", "ui.js")
 _HAZARD = "log-rank tests the cause-specific hazard"
+#: The verdict block's detail lines a page shows elsewhere than under "what the verdict rests on".
+_SHOWN_ELSEWHERE = ("method", "before", "after", "trade")
 
 
-def condition_words(config: Mapping[str, Any]) -> str:
-    """A condition as its axis values, ``gain 0.5 · load 10``."""
-    return " · ".join(
-        f"{k} {_look.fmt_num(v) if isinstance(v, float) else v}" for k, v in config.items()
-    )
+class DamagedArtifact(ValueError):
+    """A saved artifact's folder holds a file this Prove cannot read."""
+
+
+def _test_words(method: str) -> str:
+    """The test behind a method, as a reader names it (one table, ``_facts``'s)."""
+    try:
+        return _facts.test_name(method)
+    except KeyError:
+        return method
 
 
 def _number(value: Any) -> float | None:
@@ -78,16 +93,22 @@ def _could_tell(cell: Mapping[str, Any], threshold: float) -> bool:
     for way in ("rise", "fall"):
         if cell.get(f"mde_{way}_note") == "no room":
             continue
-        limit = _number(cell.get(f"mde_{way}_verdict", cell.get(f"mde_{way}")))
-        asked.append(limit)
+        asked.append(_number(cell.get(f"mde_{way}_verdict", cell.get(f"mde_{way}"))))
     return bool(asked) and all(v is not None and v <= threshold for v in asked)
+
+
+def _by_hash(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """A run's rows by condition hash, grouped once."""
+    if len(frame) == 0:
+        return {}
+    return {str(h): sub for h, sub in frame.groupby(frame["config_hash"].astype(str), sort=True)}
 
 
 # ---------- the charts a saved comparison carries ----------
 
 
 def _incidence_points(
-    frames: Sequence[pd.DataFrame], condition_hash: str, event: str, horizon: float
+    arms: Sequence[Mapping[str, pd.DataFrame]], condition_hash: str, event: str, horizon: float
 ) -> tuple[list[list[float]], dict[str, str]]:
     """``[t, before, after]`` at every time the event happened in either run (and the horizon),
     each run's share of its episodes that ended in the event by then (Aalen-Johansen, the other
@@ -95,18 +116,18 @@ def _incidence_points(
     curves: list[Any] = []
     counts: dict[str, str] = {}
     times: set[float] = {0.0, float(horizon)}
-    for arm, frame in zip(("before", "after"), frames, strict=True):
-        rows = frame[
-            (frame["config_hash"].astype(str) == condition_hash) & frame["outcome"].notna()
-        ]
-        hit = rows[rows["outcome"] == event]
-        counts[arm] = f"{len(hit)} of {len(rows)}"
-        if len(hit) == 0:
+    for arm, groups in zip(("before", "after"), arms, strict=True):
+        sub = groups.get(condition_hash)
+        rows = sub[sub["outcome"].notna()] if sub is not None else None
+        hit = rows[rows["outcome"] == event] if rows is not None else None
+        counts[arm] = f"{0 if hit is None else len(hit)} of {0 if rows is None else len(rows)}"
+        if hit is None or rows is None or len(hit) == 0:
             curves.append(None)
             continue
-        outcomes = sorted({str(o) for o in rows["outcome"]})
         curve = aalen_johansen(
-            rows["t"].to_numpy(dtype=float), rows["outcome"].to_numpy(dtype=object), outcomes
+            rows["t"].to_numpy(dtype=float),
+            rows["outcome"].to_numpy(dtype=object),
+            competing_set(rows),
         )
         curves.append(curve)
         times |= {float(t) for t in hit["t"] if t == t}
@@ -117,15 +138,23 @@ def _incidence_points(
     return points, counts
 
 
+def _rest_label(config: Mapping[str, Any], rest: Sequence[str]) -> Any:
+    if not rest:
+        return ""
+    if len(rest) == 1:
+        return config.get(rest[0])
+    return _look.condition_words({k: config.get(k) for k in rest})
+
+
 def comparison_charts(
     doc: Mapping[str, Any], frames: Sequence[pd.DataFrame] | None
 ) -> list[tuple[str, str, dict[str, Any]]]:
     """Every chart of a comparison as ``(path, svg, data)``: per event the verdict heatmap, the
     differences with their intervals and the limits against the threshold; per condition and
-    event each run's cumulative incidence."""
+    event each run's cumulative incidence. Each chart's data carries its title and caption."""
     out: list[tuple[str, str, dict[str, Any]]] = []
     method, q, m = str(doc["method"]), doc["q"], doc["n_tests"]
-    test = TEST_WORDS[method]
+    test = _test_words(method)
     hazard = f" ({_HAZARD})" if method == "logrank_bh" else ""
     threshold = float(doc["threshold"])
     level_words = (
@@ -139,6 +168,7 @@ def comparison_charts(
     power = _look.times_in(stats.POWER)
     unit = str(doc.get("t_unit") or "t")
     horizon = _number(doc.get("horizon")) or 0.0
+    arms = [_by_hash(f) for f in frames] if frames is not None else None
     for event, entry in doc["by_event"].items():
         cells = entry["cells"]
         axes = list(cells[0]["config"]) if cells else []
@@ -147,11 +177,17 @@ def comparison_charts(
         y_axis = " · ".join(rest)
         x_values = list(dict.fromkeys(c["config"].get(x_axis) for c in cells))
         y_values = list(dict.fromkeys(_rest_label(c["config"], rest) for c in cells))
-        methods = sorted({INTERVAL_WORDS[c["ci_method"]] for c in cells if c.get("ci_method")})
+        methods = sorted(
+            {
+                INTERVAL_WORDS.get(str(c["ci_method"]), str(c["ci_method"]))
+                for c in cells
+                if c.get("ci_method")
+            }
+        )
         base = {"schema": A.CHART_FORMAT, "event": event, "condition": None}
         heat_cells = [
             {
-                "condition": condition_words(c["config"]),
+                "condition": _look.condition_words(c["config"]),
                 "x": c["config"].get(x_axis),
                 "y": _rest_label(c["config"], rest),
                 "before": c["share_a"]["value"],
@@ -163,9 +199,19 @@ def comparison_charts(
             }
             for c in cells
         ]
+        title = (
+            f"Verdict heatmap: {event} over the conditions ({test}, flags by Benjamini-Hochberg "
+            f"at the false discovery rate q {q:g} over {m} tests){hazard}"
+        )
+        caption = (
+            f"Each condition's verdict for {event} with the change in its share, after minus "
+            f"before, and its q; {x_axis} across" + (f", {y_axis} up" if rest else "") + "."
+        )
         heat = {
             **base,
             "kind": "heatmap",
+            "title": title,
+            "caption": caption,
             "columns": [
                 "condition",
                 x_axis,
@@ -199,19 +245,14 @@ def comparison_charts(
                 "y_values": y_values if rest else [""],
                 "x_axis": x_axis,
                 "y_axis": y_axis,
-                "title": f"Verdict heatmap: {event} over the conditions ({test}, flags by "
-                f"Benjamini-Hochberg at the false discovery rate q {q:g} over {m} "
-                f"tests){hazard}",
-                "desc": f"Each condition's verdict for {event} with the change in its share, after "
-                f"minus before, and its q; {x_axis} across"
-                + (f", {y_axis} up" if rest else "")
-                + ".",
+                "title": title,
+                "desc": caption,
             }
         )
         out.append((f"charts/heatmap-{event}.svg", svg, heat))
         diff_cells = [
             {
-                "condition": condition_words(c["config"]),
+                "condition": _look.condition_words(c["config"]),
                 "verdict": c["verdict"],
                 "delta": c["delta"],
                 "lo": c.get("ci_lo"),
@@ -221,9 +262,20 @@ def comparison_charts(
             }
             for c in cells
         ]
+        title = (
+            f"Per-condition differences: {event}, after minus before, with its {level_words} "
+            f"interval ({', '.join(methods) or 'none'}; {rule}; {test}){hazard}"
+        )
+        caption = (
+            f"The change in each condition's share of {event}, after minus before, with the "
+            f"interval on the change at {level_words}; flagged rows in their direction's colour, "
+            "the rest dim."
+        )
         diff = {
             **base,
             "kind": "differences",
+            "title": title,
+            "caption": caption,
             "columns": ["condition", "verdict", "delta", "lo", "hi", "q"],
             "rows": [
                 [d["condition"], d["verdict"], d["delta"], d["lo"], d["hi"], d["q"]]
@@ -236,20 +288,14 @@ def comparison_charts(
                 "event": event,
                 "cells": diff_cells,
                 "level": level_words,
-                "title": f"Per-condition differences: {event}, after minus before, with its "
-                f"{level_words} interval ({', '.join(methods) or 'none'}; {rule}; "
-                f"{test}){hazard}",
-                "desc": f"The change in each condition's share of {event}, after minus before, "
-                f"with "
-                f"the interval on the change at {level_words}; flagged rows in their "
-                f"direction's "
-                f"colour, the rest dim.",
+                "title": title,
+                "desc": caption,
             }
         )
         out.append((f"charts/differences-{event}.svg", svg, diff))
         limit_cells = [
             {
-                "condition": condition_words(c["config"]),
+                "condition": _look.condition_words(c["config"]),
                 "verdict": c["verdict"],
                 "rise": _number(c.get("mde_rise")),
                 "rise_note": c.get("mde_rise_note"),
@@ -259,9 +305,21 @@ def comparison_charts(
             }
             for c in cells
         ]
+        title = (
+            f"Limits against the threshold: {event}, the smallest rise ▲ and fall ▼ one "
+            f"condition alone would be flagged for, {power}, if it alone changed, from where it "
+            f"was, against the threshold {_look.fmt_rate(threshold)} ({test}, q {q:g} over {m} "
+            f"tests){hazard}"
+        )
+        caption = (
+            f"Each condition's detection limit in each direction for {event} beside the "
+            "threshold; the unchanged rows, which the verdict asks about, are bold."
+        )
         lim = {
             **base,
             "kind": "limits",
+            "title": title,
+            "caption": caption,
             "columns": ["condition", "verdict", "rise", "fall", "threshold", "could_tell"],
             "rows": [
                 [
@@ -285,30 +343,33 @@ def comparison_charts(
                 "event": event,
                 "cells": limit_cells,
                 "threshold": threshold,
-                "title": f"Limits against the threshold: {event}, the smallest rise ▲ and fall ▼ "
-                f"one condition alone would be flagged for, {power}, if it alone changed, from "
-                f"where it was, against the threshold {_look.fmt_rate(threshold)} ({test}, q "
-                f"{q:g} over {m} tests){hazard}",
-                "desc": f"Each condition's detection limit in each direction for {event} beside "
-                f"the "
-                f"threshold; the unchanged rows, which the verdict asks about, are bold.",
+                "title": title,
+                "desc": caption,
             }
         )
         out.append((f"charts/limits-{event}.svg", svg, lim))
         for c in cells:
             h = str(c["config_hash"])
-            words = condition_words(c["config"])
-            if frames is not None:
-                points, counts = _incidence_points(frames, h, event, horizon)
+            words = _look.condition_words(c["config"])
+            if arms is not None:
+                points, counts = _incidence_points(arms, h, event, horizon)
             else:
                 points, counts = (
                     [[0.0, 0.0, 0.0], [horizon, 0.0, 0.0]],
                     {"before": "not read", "after": "not read"},
                 )
+            title = f"Cumulative incidence of {event}, each run: {words}"
+            caption = (
+                f"The share of each run's episodes in {words} that had ended in {event} by each "
+                f"time, before in grey and after in violet, to the horizon "
+                f"({_look.fmt_num(horizon)} {unit})."
+            )
             data = {
                 **base,
                 "kind": "incidence",
                 "condition": h,
+                "title": title,
+                "caption": caption,
                 "columns": ["t", "before", "after"],
                 "rows": [list(p) for p in points],
             }
@@ -320,33 +381,21 @@ def comparison_charts(
                     "horizon": horizon or 1.0,
                     "unit": unit,
                     "counts": counts,
-                    "title": f"Cumulative incidence of {event}, each run: {words}",
-                    "desc": f"The share of each run's episodes in {words} that had ended in "
-                    f"{event} "
-                    f"by each time, before in grey and after in violet, to the horizon "
-                    f"({_look.fmt_num(horizon)} {unit}).",
+                    "title": title,
+                    "desc": caption,
                 }
             )
             out.append((f"charts/{h}/incidence-{event}.svg", svg, data))
     return out
 
 
-def _rest_label(config: Mapping[str, Any], rest: Sequence[str]) -> Any:
-    if not rest:
-        return ""
-    if len(rest) == 1:
-        return config.get(rest[0])
-    return " · ".join(
-        f"{k} {_look.fmt_num(config[k]) if isinstance(config.get(k), float) else config.get(k)}"
-        for k in rest
-    )
-
-
 # ---------- what a saved result records ----------
 
 
-def _settings_of(result: Comparison, kind: str) -> dict[str, Any]:
-    doc = result.payload
+def _settings_of(result: Comparison, kind: str, doc: Mapping[str, Any]) -> dict[str, Any]:
+    """What a saved result records: the result-changing settings and how it was asked for,
+    read off the saved document (under ``--methods all`` the comparison's own payload is keyed
+    by method; the saved document is the primary method's)."""
     events = sorted(
         ({"name": e, "kind": doc["by_event"][e]["kind"]} for e in doc["by_event"]),
         key=lambda e: str(e["name"]),
@@ -362,7 +411,7 @@ def _settings_of(result: Comparison, kind: str) -> dict[str, Any]:
     if kind == "comparison":
         settings.update(result.tree_settings)
     else:
-        settings["fail_on"] = result.payload["fail_on"]
+        settings["fail_on"] = doc["fail_on"]
     return settings
 
 
@@ -371,8 +420,6 @@ def _saved_document(result: Comparison, kind: str) -> dict[str, Any]:
     the check, under the format's schema."""
     if kind == "check":
         return _document("check", result.verdict, result.sentence, result.payload, result.next)
-    from poisson_prove.core._ops import _method_first
-
     payload: dict[str, Any] = _method_first(
         result.multi.to_json(), result.method, result.method_chosen
     )
@@ -387,24 +434,27 @@ def _saved_document(result: Comparison, kind: str) -> dict[str, Any]:
 def save(store: Any, result: Comparison, *, _notes: list[str]) -> ArtifactRef:
     """Save a comparison or a check into the store's ``.poisson/artifacts/``: the same result
     saved twice is one artifact. A store that cannot be written to raises ``Unsaved``."""
-    from poisson_prove.core._results import Unsaved
-
     store = _opened(store)
     kind = "check" if isinstance(result, CheckResult) else "comparison"
     doc = _saved_document(result, kind)
-    settings = _settings_of(result, kind)
-    charts = comparison_charts(doc, result.frames) if kind == "comparison" else []
+    settings = _settings_of(result, kind, doc)
+    runs = [result.run_a, result.run_b]
+    identity = A.artifact_id(kind, {"runs": runs}, settings)
     try:
-        identity = A.save_result(
-            store.root,
-            kind,
-            runs=[result.run_a, result.run_b],
-            settings=settings,
-            result=doc,
-            charts=charts,
-        )
-    except OSError as exc:
-        raise Unsaved(kind, exc.strerror or str(exc)) from exc
+        if not A.artifact_exists(store.root, kind, identity):
+            charts = comparison_charts(doc, result.frames) if kind == "comparison" else []
+            identity = A.save_result(
+                store.root,
+                kind,
+                runs=runs,
+                settings=settings,
+                result=doc,
+                detail=result.detail,
+                charts=charts,
+            )
+    except (OSError, ValueError, pa.ArrowException) as exc:
+        reason = getattr(exc, "strerror", None) or str(exc)
+        raise Unsaved(kind, reason) from exc
     refresh_ui(store.root)
     return ArtifactRef(kind=kind, id=identity, path=f".poisson/artifacts/{kind}/{identity}")
 
@@ -419,6 +469,8 @@ def artifacts(store: Any, *, kind: str | None = None, _notes: list[str]) -> list
             descriptor = A.read_descriptor(folder)
         except A.NewerFormat as exc:
             raise refusal(str(exc), [A.UPGRADE]) from exc
+        except ValueError as exc:
+            raise refusal(f"the saved artifact at {folder.name} cannot be read: {exc}") from exc
         found.append(
             ArtifactRef(
                 kind=str(descriptor.get("kind", folder.parent.name)),
@@ -437,12 +489,14 @@ def artifact(store: Any, id: str, *, _notes: list[str]) -> Artifact:  # noqa: A0
         if folder.name == id:
             try:
                 descriptor = A.read_descriptor(folder)
+                kind = str(descriptor.get("kind", folder.parent.name))
+                return Artifact(
+                    kind=kind, id=id, descriptor=descriptor, result=A.read_result(folder, kind)
+                )
             except A.NewerFormat as exc:
                 raise refusal(str(exc), [A.UPGRADE]) from exc
-            kind = str(descriptor.get("kind", folder.parent.name))
-            return Artifact(
-                kind=kind, id=id, descriptor=descriptor, result=A.read_result(folder, kind)
-            )
+            except ValueError as exc:
+                raise refusal(f"the saved artifact {id} cannot be read: {exc}") from exc
     raise refusal(f"no saved artifact {id} in {store.shown}")
 
 
@@ -450,26 +504,41 @@ def artifact(store: Any, id: str, *, _notes: list[str]) -> Artifact:  # noqa: A0
 
 
 class _Context:
-    """One reading of a store for its views: its runs, their names and frames, and every
-    saved comparison with its descriptor and result."""
+    """One reading of a store for its views: its runs, their names and rows, and every saved
+    comparison with its descriptor and result. Every check's descriptor is read too, so a check
+    in a newer major refuses the build as the format asks."""
 
-    def __init__(self, root: Path, shown: str | None = None) -> None:
+    def __init__(self, root: Path) -> None:
         self.root = root
         self.name = os.path.basename(os.path.abspath(root))
         self.store = Store(root)
         self.index = _index(_opened(root)) if self.store.runs() else None
         self._frames: dict[str, pd.DataFrame] = {}
+        self._groups: dict[str, dict[str, pd.DataFrame]] = {}
         self._manifests: dict[str, Any] = {}
         self.comparisons: dict[str, tuple[dict[str, Any], dict[str, Any], Path]] = {}
         for folder in A.artifact_folders(root, "comparison"):
-            descriptor = A.read_descriptor(folder)
-            self.comparisons[folder.name] = (
-                descriptor,
-                A.read_result(folder, "comparison"),
-                folder,
-            )
+            try:
+                descriptor = A.read_descriptor(folder)
+                result = A.read_result(folder, "comparison")
+            except A.NewerFormat:
+                raise
+            except (OSError, ValueError) as exc:
+                raise DamagedArtifact(
+                    f"the saved comparison at .poisson/artifacts/comparison/{folder.name} "
+                    f"cannot be read: {exc}"
+                ) from exc
+            self.comparisons[folder.name] = (descriptor, result, folder)
         for folder in A.artifact_folders(root, "check"):
-            A.read_descriptor(folder)
+            try:
+                A.read_descriptor(folder)
+            except A.NewerFormat:
+                raise
+            except (OSError, ValueError) as exc:
+                raise DamagedArtifact(
+                    f"the saved check at .poisson/artifacts/check/{folder.name} cannot be read: "
+                    f"{exc}"
+                ) from exc
         self.episode_pages: set[tuple[str, str, str]] = set()
         for descriptor, result, _ in self.comparisons.values():
             hashes = {
@@ -488,6 +557,12 @@ class _Context:
             self._frames[run] = self.store.read(run, meta=False)
         return self._frames[run]
 
+    def groups(self, run: str) -> dict[str, pd.DataFrame]:
+        """A run's rows by condition hash, grouped once."""
+        if run not in self._groups:
+            self._groups[run] = _by_hash(self.frame(run))
+        return self._groups[run]
+
     def manifest(self, run: str) -> Any:
         if run not in self._manifests:
             self._manifests[run] = self.store.manifest(run)
@@ -501,6 +576,18 @@ class _Context:
     def comparison_name(self, descriptor: Mapping[str, Any]) -> str:
         a, b = descriptor["inputs"]["runs"]
         return f"{self.run_name(a)} → {self.run_name(b)}"
+
+    def detail(self, descriptor: Mapping[str, Any]) -> list[dict[str, str]]:
+        """The verdict block's detail lines the save recorded, as ``{label, text}``."""
+        summary = descriptor.get("summary")
+        lines = summary.get("detail") if isinstance(summary, Mapping) else None
+        if not isinstance(lines, list):
+            return []
+        return [
+            {"label": str(line[0]), "text": str(line[1])}
+            for line in lines
+            if isinstance(line, list) and len(line) == 2
+        ]
 
 
 def _view(view_kind: str, address: str, **fields: Any) -> View:
@@ -516,31 +603,24 @@ def _comparison_address(cid: str) -> str:
 
 
 def _design_sentence(design: Mapping[str, Any] | None) -> str | None:
-    if not isinstance(design, Mapping) or design.get("test") not in DESIGN_WORDS:
+    if not isinstance(design, Mapping) or not isinstance(design.get("test"), str):
         return None
     mde, base = _number(design.get("mde")), _number(design.get("base_rate"))
     power = _number(design.get("power"))
     q = design.get("q")
-    words = DESIGN_WORDS[str(design["test"])]
+    words = _test_words(f"{design['test']}_bh")
     size = _look.fmt_rate(mde) if mde is not None else "none"
     at = "" if base is None else f", {_look.fmt_rate(base)}"
     return (
         f"{size} at its worst base rate{at} ({words}, q {q if q is not None else 'none'} over "
-        f"{design.get('family')} tests, "
-        f"{_look.times_in(power if power is not None else stats.POWER)})"
+        f"{design.get('family')} tests, {_look.times_in(stats.POWER if power is None else power)})"
     )
-
-
-def _comparison_limit(result: Mapping[str, Any]) -> float | None:
-    return _number(result.get("verdict_limit"))
 
 
 def runs_view(ctx: _Context) -> View:
     """View 1: every run, newest first, and the saved comparisons."""
     runs: list[dict[str, Any]] = []
     if ctx.index is not None:
-        from poisson_prove.core._ops import runs as list_runs
-
         for info in list_runs.__wrapped__(_opened(ctx.root), _notes=[]):
             row = info.entry
             runs.append(
@@ -567,12 +647,12 @@ def runs_view(ctx: _Context) -> View:
         entry: dict[str, Any] = {
             "name": ctx.comparison_name(descriptor),
             "verdict": result["verdict"],
-            "method": TEST_WORDS.get(str(result["method"]), str(result["method"])),
+            "method": _test_words(str(result["method"])),
             "saved_at": descriptor.get("created_at", ""),
             "id": cid,
             "address": _comparison_address(cid),
         }
-        limit = _comparison_limit(result)
+        limit = _number(result.get("verdict_limit"))
         if limit is not None and result["verdict"] in (
             "no significant change",
             "too small to tell",
@@ -598,11 +678,27 @@ def runs_view(ctx: _Context) -> View:
         fields["first_run"] = f"{COMMAND} init --example\n{COMMAND} sweep"
     if not comparisons:
         fields["no_comparison"] = (
-            "No saved comparison yet. report, serve and the terminal app save the comparison they "
-            "show; "
-            "diff and check save it with --save."
+            "No saved comparison yet. report and serve save the comparison they show; diff and "
+            "check save it with --save."
         )
     return _view("runs", "index.html", **fields)
+
+
+def _run_shares(ctx: _Context, run: str, outcomes: Sequence[str]) -> dict[str, dict[str, Any]]:
+    """Each condition's share of every outcome with its interval, as the core's ``run``
+    operation computes them (one method for the run page and ``report RUN``); empty when the
+    run has no row with an outcome."""
+    if not outcomes:
+        return {}
+    detail = run_detail.__wrapped__(_opened(ctx.root), run, events=list(outcomes), _notes=[])
+    shares: dict[str, dict[str, Any]] = {}
+    for event, entry in detail.payload["by_event"].items():
+        for cell in entry["cells"]:
+            h = str(cell["config_hash"])
+            share = dict(cell["share"])
+            share["k"] = cell["n_events"]
+            shares.setdefault(h, {})[event] = share
+    return shares
 
 
 def run_view(ctx: _Context, run: str) -> View:
@@ -620,35 +716,20 @@ def run_view(ctx: _Context, run: str) -> View:
         if isinstance(configs, list) and isinstance(replicates, int)
         else None
     )
+    shares_of = _run_shares(ctx, run, outcomes)
     cells: list[dict[str, Any]] = []
-    for h in sorted({str(x) for x in frame["config_hash"]}):
-        sub = frame[frame["config_hash"].astype(str) == h]
+    for h, sub in ctx.groups(run).items():
         kept = sub[sub["outcome"].notna()]
         shares: dict[str, Any] = {}
         for outcome in outcomes:
-            k = int((kept["outcome"] == outcome).sum())
-            entry: dict[str, Any] = {"k": k}
-            if len(kept):
-                w = stats.wilson(k, len(kept))
-                entry.update(
-                    {
-                        "value": k / len(kept),
-                        "lo": w.lo,
-                        "hi": w.hi,
-                        "level": w.level,
-                        "method": w.method,
-                    }
-                )
-            else:
-                entry.update(
-                    {
-                        "value": None,
-                        "lo": None,
-                        "hi": None,
-                        "level": stats.WILSON_LEVEL,
-                        "method": "wilson",
-                    }
-                )
+            entry: dict[str, Any] = shares_of.get(h, {}).get(outcome) or {
+                "value": None,
+                "lo": None,
+                "hi": None,
+                "level": stats.WILSON_LEVEL,
+                "method": "wilson",
+                "k": 0,
+            }
             if (run, outcome, h) in ctx.episode_pages:
                 entry["address"] = f"runs/{run}/episodes/{outcome}/{h}.html"
             shares[outcome] = entry
@@ -699,11 +780,8 @@ def run_view(ctx: _Context, run: str) -> View:
     if outcomes:
         fields["shares_rule"] = (
             f"each run's share of episodes ending in each outcome, with a "
-            f"{_look.level_label(stats.WILSON_LEVEL)} "
-            "Wilson interval per condition, not adjusted for the number of conditions; episodes "
-            "with "
-            "no outcome are "
-            "counted apart"
+            f"{_look.level_label(stats.WILSON_LEVEL)} Wilson interval per condition, not adjusted "
+            "for the number of conditions; episodes with no outcome are counted apart"
         )
     fields["comparisons"] = [
         {
@@ -726,8 +804,9 @@ def run_view(ctx: _Context, run: str) -> View:
 
 def episodes_view(ctx: _Context, run: str, event: str, h: str) -> View:
     """View 5: the episodes behind an event in one condition of a run."""
-    frame = ctx.frame(run)
-    sub = frame[frame["config_hash"].astype(str) == h]
+    sub = ctx.groups(run).get(h)
+    if sub is None:
+        sub = ctx.frame(run).iloc[0:0]
     hit = sub[sub["outcome"] == event].sort_values("replicate_index", kind="stable")
     config = dict(sub.iloc[0]["config"]) if len(sub) else {}
     name = ctx.run_name(run)
@@ -744,8 +823,10 @@ def episodes_view(ctx: _Context, run: str, event: str, h: str) -> View:
     address = f"runs/{run}/episodes/{event}/{h}.html"
     fields: dict[str, Any] = {
         "verdict": "ok",
-        "sentence": f"{_look.fmt_count(len(hit))} of {_look.fmt_count(len(sub))} episodes with "
-        f'outcome {event} in run "{name}"',
+        "sentence": (
+            f"{_look.fmt_count(len(hit))} of {_look.fmt_count(len(sub))} episodes with outcome "
+            f'{event} in run "{name}"'
+        ),
         "run": name,
         "run_id": run,
         "run_address": _run_address(run),
@@ -761,153 +842,14 @@ def episodes_view(ctx: _Context, run: str, event: str, h: str) -> View:
         ],
         "episodes": episodes,
         "reproduce": (
-            f"rollout is the run's target, called as the rollout contract does, rollout(cfg, "
-            f"seed); "
-            f"cfg is the "
-            f'condition above. The import line is printed by {COMMAND} inspect "{name}" --event '
-            f"{event}"
+            "rollout is the run's target, called as the rollout contract does, rollout(cfg, "
+            f"seed); cfg is the condition above. The import line is printed by {COMMAND} inspect "
+            f'"{name}" --event {event}'
         ),
     }
     if not episodes:
         fields["empty"] = f"No episode of this condition ended in {event} in this run."
     return _view("episodes", address, **fields)
-
-
-def _facts_of(ctx: _Context, result: Mapping[str, Any]) -> list[dict[str, str]]:
-    """What the verdict rests on, as the saved result carries it: the lines every surface prints
-    under the verdict (``diff``'s detail lines), written from the document."""
-    return _facts_from_document(ctx, result)
-
-
-def _facts_from_document(ctx: _Context, result: Mapping[str, Any]) -> list[dict[str, str]]:
-    """The fact lines written from the saved document alone."""
-    q, m = f"{result['q']:g}", result["n_tests"]
-    method = str(result["method"])
-    test = TEST_WORDS[method]
-    power = _look.times_in(stats.POWER)
-    out = [
-        {
-            "label": "verdict rule",
-            "text": f"the verdict counts changes at the family-wise level (Holm, q {q} over {m} "
-            f"tests); a condition's "
-            f"flag is Benjamini-Hochberg's, at the false discovery rate q {q} over {m} tests",
-        }
-    ]
-    if result.get("n_flagged_only"):
-        n = result["n_flagged_only"]
-        out.append(
-            {
-                "label": "flagged only",
-                "text": f"{n} flagged at the false discovery rate {'does' if n == 1 else 'do'} not "
-                f"count at the family-wise level",
-            }
-        )
-    cells = [(e, c) for e, entry in result["by_event"].items() for c in entry["cells"]]
-    if method == "logrank_bh":
-        out.append(
-            {
-                "label": "test",
-                "text": f"{_HAZARD}: every other ending is censored, so the hazard test and the "
-                f"incidence need not move together",
-            }
-        )
-        shifted = [
-            f"{condition_words(c['config'])} ({e}): {', '.join(c['competing_shift'])}"
-            for e, c in cells
-            if c.get("competing_shift")
-        ]
-        if shifted:
-            out.append(
-                {
-                    "label": "competing",
-                    "text": f"in {len(shifted)} rows another outcome's share changed too, so the "
-                    f"hazard test and the incidence need not agree: " + "; ".join(shifted),
-                }
-            )
-    without: dict[str, int] = {}
-    for _, c in cells:
-        if c.get("holm") or c.get("mde") is not None:
-            continue
-        note = str(c.get("mde_note") or "none detectable")
-        without[note] = without.get(note, 0) + 1
-    tail = ""
-    if without:
-        n = sum(without.values())
-        counts = ", ".join(f"{note}: {_look.fmt_count(k)}" for note, k in sorted(without.items()))
-        tail = (
-            f"; {_look.fmt_count(n)} row{'' if n == 1 else 's'} that did not count have no limit "
-            f"({counts}), so no change of any size is ruled out there"
-        )
-    out.append(
-        {
-            "label": "limits",
-            "text": f"the smallest change one condition alone would be flagged for, {power}, if it "
-            f"alone changed, from where the condition was ({test}, q {q} over {m} tests){tail}",
-        }
-    )
-    if result.get("interval_level") is not None:
-        level = _look.level_label(result["interval_level"])
-        methods = sorted({INTERVAL_WORDS[c["ci_method"]] for _, c in cells if c.get("ci_method")})
-        if result.get("n_rejected"):
-            rule = (
-                f"false coverage (Benjamini-Yekutieli) over the {result['n_rejected']} flagged; "
-                "an unflagged row's interval is at the same level with no adjusted promise of its "
-                "own"
-            )
-        else:
-            rule = f"simultaneous (Bonferroni) over the {m} tests"
-        out.append(
-            {
-                "label": "intervals",
-                "text": f"on each condition's change: {', '.join(methods) or 'none'} at {level}, "
-                f"{rule}",
-            }
-        )
-    fragility = result.get("fragility")
-    if fragility is None:
-        out.append({"label": "fragility", "text": f"none: {result.get('fragility_note')}"})
-    else:
-        exact = (
-            ""
-            if result.get("fragility_exact")
-            else " (the search is not exhaustive: it may be fewer)"
-        )
-        out.append(
-            {
-                "label": "fragility",
-                "text": f"{fragility} outcome{'' if fragility == 1 else 's'} would change the "
-                f"word{exact}",
-            }
-        )
-    for entry in result.get("peeking") or []:
-        shown = (
-            ctx.run_name(str(entry["run_id"])) if ctx.index is not None else str(entry["run_id"])
-        )
-        why = (
-            "replicates were added after a comparison of it was read"
-            if entry.get("reason") == "resumed after a comparison"
-            else "it is partial"
-        )
-        out.append(
-            {
-                "label": "peeking",
-                "text": f'run "{shown}": {why}; the tests assume the number of runs was fixed '
-                f"before "
-                f"any result was seen, so their error rates do not hold for it",
-            }
-        )
-    if result.get("errors_differ"):
-        n = len(result["errors_differ"])
-        out.append(
-            {
-                "label": "errors",
-                "text": f"errored episodes differ between the runs in {n} "
-                f"condition{'' if n == 1 else 's'}; "
-                f"runs that errored are in neither the shares nor the tests, so a change in "
-                f"errors can hide or make a change in the outcomes",
-            }
-        )
-    return out
 
 
 def comparison_view(ctx: _Context, cid: str) -> View:
@@ -975,17 +917,16 @@ def comparison_view(ctx: _Context, cid: str) -> View:
                 "n_conditions": len(entry["cells"]),
             }
         )
-    trades = []
-    for t in result.get("trades") or []:
-        trades.append(
-            {
-                "config": dict(t["config"]),
-                "config_hash": str(t["config_hash"]),
-                "safer": list(t.get("safer_events") or []),
-                "worse": list(t.get("worse_events") or []),
-                "address": f"comparisons/{cid}/{t['config_hash']}.html",
-            }
-        )
+    trades = [
+        {
+            "config": dict(t["config"]),
+            "config_hash": str(t["config_hash"]),
+            "safer": list(t.get("safer_events") or []),
+            "worse": list(t.get("worse_events") or []),
+            "address": f"comparisons/{cid}/{t['config_hash']}.html",
+        }
+        for t in result.get("trades") or []
+    ]
     charts = [
         {
             "kind": kind,
@@ -996,7 +937,8 @@ def comparison_view(ctx: _Context, cid: str) -> View:
         for kind in CHART_KINDS
         for event in result["by_event"]
     ]
-    test = TEST_WORDS[method]
+    test = _test_words(method)
+    facts = [f for f in ctx.detail(descriptor) if f["label"] not in _SHOWN_ELSEWHERE]
     fields: dict[str, Any] = {
         "verdict": result["verdict"],
         "sentence": result["sentence"],
@@ -1006,10 +948,22 @@ def comparison_view(ctx: _Context, cid: str) -> View:
             "name": method,
             "words": test,
             "chosen": result["method_chosen"],
-            "line": method_line(method, result["method_chosen"]),
+            "line": method_line(method, result["method_chosen"])
+            if method in ("fisher_bh", "mcnemar_bh", "logrank_bh")
+            else f"{test}, {result['method_chosen']}",
         },
-        "before": {"name": ctx.run_name(a), "run_id": a, "address": _run_address(a)},
-        "after": {"name": ctx.run_name(b), "run_id": b, "address": _run_address(b)},
+        "before": {
+            "name": ctx.run_name(a),
+            "run_id": a,
+            "status": ctx.manifest(a).status,
+            "address": _run_address(a),
+        },
+        "after": {
+            "name": ctx.run_name(b),
+            "run_id": b,
+            "status": ctx.manifest(b).status,
+            "address": _run_address(b),
+        },
         "threshold": {"value": threshold, "source": result["threshold_source"]},
         "family": {
             "tests": m,
@@ -1018,21 +972,16 @@ def comparison_view(ctx: _Context, cid: str) -> View:
             "q": q,
         },
         "saved_at": descriptor.get("created_at", ""),
-        "facts": _facts_of(ctx, result),
+        "facts": facts,
         "events": events,
         "trades": trades,
         "rows_rule": (
             f"before and after: each run's share of episodes ending in the event, with a {wilson} "
-            f"Wilson interval per "
-            f"condition, not adjusted for the number of conditions; change: after minus before, "
-            f"with "
-            f"its "
-            f"{level or 'no'} interval; p is {test}'s, q its Benjamini-Hochberg adjustment at the "
-            f"false discovery "
-            f"rate q {q:g} over {m} tests; rise and fall: the smallest rise and the smallest fall "
-            f"one condition alone "
-            f"would be flagged for, {_look.times_in(stats.POWER)}, if it alone changed, from where "
-            f"it was"
+            "Wilson interval per condition, not adjusted for the number of conditions; change: "
+            f"after minus before, with its {level or 'no'} interval; p is {test}'s, q its "
+            f"Benjamini-Hochberg adjustment at the false discovery rate q {q:g} over {m} tests; "
+            "rise and fall: the smallest rise and the smallest fall one condition alone would be "
+            f"flagged for, {_look.times_in(stats.POWER)}, if it alone changed, from where it was"
         ),
         "rows": rows,
         "charts": charts,
@@ -1049,7 +998,7 @@ def condition_view(ctx: _Context, cid: str, h: str) -> View:
     descriptor, result, folder = ctx.comparisons[cid]
     a, b = descriptor["inputs"]["runs"]
     method = str(result["method"])
-    test = TEST_WORDS[method]
+    test = _test_words(method)
     blocks = []
     config: dict[str, Any] = {}
     for event, entry in result["by_event"].items():
@@ -1059,21 +1008,16 @@ def condition_view(ctx: _Context, cid: str, h: str) -> View:
             config = dict(c["config"])
             shifted = list(c.get("competing_shift") or [])
             k_a, k_b = c.get("events_a"), c.get("events_b")
+            delta = _number(c.get("delta"))
             if k_a == 0 and k_b == 0:
                 sentence = f"{event}: no episode ended in {event} in either run"
             else:
-                moved = (
-                    "rose"
-                    if (c["delta"] or 0) > 0
-                    else "fell"
-                    if (c["delta"] or 0) < 0
-                    else "stayed"
-                )
+                moved = "rose" if (delta or 0) > 0 else "fell" if (delta or 0) < 0 else "stayed"
+                q_words = _look.fmt_p(c["q"]) if c.get("q") is not None else "none"
                 sentence = (
                     f"{event} {moved} from {_look.fmt_rate(c['share_a']['value'])} to "
-                    f"{_look.fmt_rate(c['share_b']['value'])} "
-                    f"({_signed(c['delta'])}) ({test}, q "
-                    f"{_look.fmt_p(c['q']) if c.get('q') is not None else 'none'})"
+                    f"{_look.fmt_rate(c['share_b']['value'])} ({_look.fmt_signed(delta)}) "
+                    f"({test}, q {q_words})"
                 )
             block: dict[str, Any] = {
                 "event": event,
@@ -1133,22 +1077,15 @@ def condition_view(ctx: _Context, cid: str, h: str) -> View:
             if shifted:
                 block["competing"] = (
                     f"another outcome's share changed too ({', '.join(shifted)}), so the hazard "
-                    f"test "
-                    f"and the "
-                    "incidence need not move together"
+                    "test and the incidence need not move together"
                 )
             blocks.append(_without_empty_notes(block))
-    facts = _facts_of(ctx, result)
-    rules = [
-        f["text"]
-        for f in facts
-        if f["label"] in ("verdict rule", "test", "competing", "limits", "intervals")
-    ]
+    wanted = ("verdict rule", "flagged only", "test", "competing", "limits", "intervals")
+    rules = [f["text"] for f in ctx.detail(descriptor) if f["label"] in wanted]
     rules.append(
         f"before and after: each run's share with its {_look.level_label(stats.WILSON_LEVEL)} "
-        f"Wilson "
-        f"interval, per "
-        "condition, not adjusted; the rise and the fall are each direction's limit"
+        "Wilson interval, per condition, not adjusted; the rise and the fall are each direction's "
+        "limit"
     )
     return _view(
         "condition",
@@ -1167,21 +1104,13 @@ def condition_view(ctx: _Context, cid: str, h: str) -> View:
     )
 
 
-def _signed(value: Any) -> str:
-    x = _number(value)
-    if x is None:
-        return "none"
-    text = _look.fmt_rate(abs(x))
-    return f"+{text}" if x > 0 else f"-{text}" if x < 0 else text
-
-
 def could_not_detect_view(ctx: _Context, cid: str) -> View:
     """View 6: every condition that did not change, whether it could have shown a change of the
     threshold's size and why, the could-not-tell rows first."""
     descriptor, result, _ = ctx.comparisons[cid]
     threshold = float(result["threshold"])
     method = str(result["method"])
-    test = TEST_WORDS[method]
+    test = _test_words(method)
     q, m = result["q"], result["n_tests"]
     rows = []
     for event, entry in result["by_event"].items():
@@ -1222,10 +1151,9 @@ def could_not_detect_view(ctx: _Context, cid: str) -> View:
     size = f"with {_look.fmt_count(pairs)} pairs " if isinstance(pairs, int) else ""
     if p_min is not None:
         flaggable = (
-            f"{_look.fmt_count(flaggable_n)} of {_look.fmt_count(len(cells))} rows can be flagged: "
-            f"{size}the smallest "
-            f"possible p is {_look.fmt_p(p_min)}, and a flag needs less than {_look.fmt_p(level)} "
-            f"(q {q:g} over {m} tests)"
+            f"{_look.fmt_count(flaggable_n)} of {_look.fmt_count(len(cells))} rows can be "
+            f"flagged: {size}the smallest possible p is {_look.fmt_p(p_min)}, and a flag needs "
+            f"less than {_look.fmt_p(level)} (q {q:g} over {m} tests)"
         )
     else:
         flaggable = (
@@ -1233,6 +1161,7 @@ def could_not_detect_view(ctx: _Context, cid: str) -> View:
         )
     b = descriptor["inputs"]["runs"][1]
     design = _recorded_design(ctx.manifest(b))
+    wanted = ("peeking", "errors", "test", "competing")
     fields: dict[str, Any] = {
         "verdict": result["verdict"],
         "sentence": result["sentence"],
@@ -1241,9 +1170,10 @@ def could_not_detect_view(ctx: _Context, cid: str) -> View:
             "name": ctx.comparison_name(descriptor),
             "address": _comparison_address(cid),
         },
-        "question": f"could each unchanged condition have caught a change of "
-        f"{_look.fmt_rate(threshold)}, "
-        f"if it alone changed, from where it was?",
+        "question": (
+            f"could each unchanged condition have caught a change of {_look.fmt_rate(threshold)}, "
+            "if it alone changed, from where it was?"
+        ),
         "threshold": {"value": threshold, "source": result["threshold_source"]},
         "n_unchanged": len(rows),
         "n_could_not_tell": len(rows) - told,
@@ -1254,16 +1184,11 @@ def could_not_detect_view(ctx: _Context, cid: str) -> View:
         "family": m,
         "design_mde": dict(design) if isinstance(design, Mapping) else None,
         "limits_rule": (
-            f"rise and fall: the smallest change each way this condition alone would be flagged "
-            f"for, "
-            f"{_look.times_in(stats.POWER)}, if it alone changed, from where it was ({test}, Holm "
-            f"q {q:g} over {m} tests)" + (f"; {_HAZARD}" if method == "logrank_bh" else "")
+            "rise and fall: the smallest change each way this condition alone would be flagged "
+            f"for, {_look.times_in(stats.POWER)}, if it alone changed, from where it was ({test}, "
+            f"Holm q {q:g} over {m} tests)" + (f"; {_HAZARD}" if method == "logrank_bh" else "")
         ),
-        "facts": [
-            f
-            for f in _facts_of(ctx, result)
-            if f["label"] in ("peeking", "errors", "test", "competing")
-        ],
+        "facts": [f for f in ctx.detail(descriptor) if f["label"] in wanted],
         "rows": rows,
         "charts": [
             {"kind": "limits", "event": e, "address": f"comparisons/{cid}/limits-{e}.html"}
@@ -1278,18 +1203,17 @@ def could_not_detect_view(ctx: _Context, cid: str) -> View:
 
 def chart_view(ctx: _Context, cid: str, path: str) -> View:
     """View 7: one chart, large, with its caption and its data as a table."""
-    import json
-    import re
-
     descriptor, result, folder = ctx.comparisons[cid]
     svg = (folder / path).read_text(encoding="utf-8")
     data = json.loads((folder / (path[: -len(".svg")] + ".json")).read_text(encoding="utf-8"))
-    title_match = re.search(r"<title[^>]*>(.*?)</title>", svg, re.S)
-    desc_match = re.search(r"<desc[^>]*>(.*?)</desc>", svg, re.S)
-    import html as html_module
-
-    title = html_module.unescape(title_match.group(1)) if title_match else str(data["kind"])
-    caption = html_module.unescape(desc_match.group(1)) if desc_match else ""
+    title = data.get("title")
+    caption = data.get("caption")
+    if not isinstance(title, str) or not isinstance(caption, str):
+        # A chart saved without its words: they are the SVG's own title and description.
+        found_title = re.search(r"<title[^>]*>(.*?)</title>", svg, re.S)
+        found_desc = re.search(r"<desc[^>]*>(.*?)</desc>", svg, re.S)
+        title = html.unescape(found_title.group(1)) if found_title else str(data["kind"])
+        caption = html.unescape(found_desc.group(1)) if found_desc else ""
     address = f"comparisons/{cid}/" + path.removeprefix("charts/").replace(".svg", ".html")
     fields: dict[str, Any] = {
         "kind": data["kind"],
@@ -1311,35 +1235,45 @@ def chart_view(ctx: _Context, cid: str, path: str) -> View:
         for entry in result["by_event"].values():
             for c in entry["cells"]:
                 if str(c["config_hash"]) == h:
-                    fields["condition_words"] = condition_words(c["config"])
+                    fields["condition_words"] = _look.condition_words(c["config"])
                     fields["condition_address"] = f"comparisons/{cid}/{h}.html#{data['event']}"
     return _view("chart", address, **fields)
 
 
-def all_views(ctx: _Context) -> dict[str, View]:
+def comparison_views(ctx: _Context, cid: str) -> dict[str, View]:
+    """Every page of one saved comparison: its own, its could-not-detect page, a page per
+    condition, and its charts' pages."""
+    _, result, _ = ctx.comparisons[cid]
+    views: dict[str, View] = {_comparison_address(cid): comparison_view(ctx, cid)}
+    v = could_not_detect_view(ctx, cid)
+    views[v.address] = v
+    hashes = sorted(
+        {str(c["config_hash"]) for e in result["by_event"].values() for c in e["cells"]}
+    )
+    for h in hashes:
+        v = condition_view(ctx, cid, h)
+        views[v.address] = v
+        for event in result["by_event"]:
+            v = chart_view(ctx, cid, f"charts/{h}/incidence-{event}.svg")
+            views[v.address] = v
+    for kind in CHART_KINDS:
+        for event in result["by_event"]:
+            v = chart_view(ctx, cid, f"charts/{kind}-{event}.svg")
+            views[v.address] = v
+    return views
+
+
+def all_views(ctx: _Context, *, skip: Sequence[str] = ()) -> dict[str, View]:
+    """Every view of the store, the comparisons in ``skip`` left out."""
     views = {"index.html": runs_view(ctx)}
     for run in ctx.runs():
         views[_run_address(run)] = run_view(ctx, run)
     for run, event, h in sorted(ctx.episode_pages):
         v = episodes_view(ctx, run, event, h)
         views[v.address] = v
-    for cid, (_, result, _) in ctx.comparisons.items():
-        views[_comparison_address(cid)] = comparison_view(ctx, cid)
-        v = could_not_detect_view(ctx, cid)
-        views[v.address] = v
-        hashes = sorted(
-            {str(c["config_hash"]) for e in result["by_event"].values() for c in e["cells"]}
-        )
-        for h in hashes:
-            v = condition_view(ctx, cid, h)
-            views[v.address] = v
-            for event in result["by_event"]:
-                v = chart_view(ctx, cid, f"charts/{h}/incidence-{event}.svg")
-                views[v.address] = v
-        for kind in CHART_KINDS:
-            for event in result["by_event"]:
-                v = chart_view(ctx, cid, f"charts/{kind}-{event}.svg")
-                views[v.address] = v
+    for cid in ctx.comparisons:
+        if cid not in skip:
+            views.update(comparison_views(ctx, cid))
     return views
 
 
@@ -1365,7 +1299,7 @@ def view_at(ctx: _Context, address: str) -> View:
             if parts[2] == "could-not-detect.html":
                 return could_not_detect_view(ctx, cid)
             stem = parts[2].removesuffix(".html")
-            if len(parts) == 3 and A.is_artifact_id(stem):
+            if len(parts) == 3 and A.is_hex16(stem):
                 return condition_view(ctx, cid, stem)
             chart = "charts/" + "/".join(parts[2:]).replace(".html", ".svg")
             if (folder / chart).is_file():
@@ -1381,24 +1315,92 @@ def bundle_files() -> dict[str, bytes]:
     return {name: (folder / name).read_bytes() for name in BUNDLE}
 
 
+_FACT = re.compile(r'data-fact="(/(?:before|after)/(?:name|status))" data-value="([^"]*)"')
+_GENERATOR = re.compile(r'<meta name="generator" content="([^"]*)">')
+
+
+def _reusable(ui: Path, ctx: _Context, cid: str) -> bool:
+    """Whether the pages of a saved comparison can be carried over from the UI as it stands:
+    they were built by this version from the same artifact, which never changes, for the same
+    two complete runs under the same names (R26: the same records give the same bytes)."""
+    page = ui / "comparisons" / f"{cid}.html"
+    folder = ui / "comparisons" / cid
+    if not page.is_file() or not folder.is_dir():
+        return False
+    try:
+        text = page.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    generator = _GENERATOR.search(text)
+    if generator is None or generator.group(1) != f"{A.TOOL} {__version__}":
+        return False
+    descriptor = ctx.comparisons[cid][0]
+    a, b = descriptor["inputs"]["runs"]
+    wanted = {
+        "/before/name": ctx.run_name(a),
+        "/after/name": ctx.run_name(b),
+        "/before/status": "complete",
+        "/after/status": "complete",
+    }
+    if ctx.manifest(a).status != "complete" or ctx.manifest(b).status != "complete":
+        return False
+    found: dict[str, Any] = {}
+    for pointer, raw in _FACT.findall(text):
+        try:
+            found[pointer] = json.loads(html.unescape(raw))
+        except ValueError:
+            return False
+    return all(found.get(pointer) == value for pointer, value in wanted.items())
+
+
+def _dead(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    return False
+
+
+_STAGING = re.compile(r"^\.ui-(?:new|old)-(\d+)")
+
+
+def _clean_dead_builds(base: Path) -> None:
+    """Staging and set-aside trees a build that died left behind; a live build's are its own."""
+    for stale in base.glob(".ui-*"):
+        found = _STAGING.match(stale.name)
+        if stale.is_dir() and found and _dead(int(found.group(1))):
+            shutil.rmtree(stale, ignore_errors=True)
+
+
 def build_pages(root: Path) -> Path:
     """Build every page beside the UI and rename the new tree in last, so an interrupted build
-    leaves the previous pages; returns the index page."""
-    A.ensure_descriptor(root)
+    leaves the previous pages; the pages of a saved comparison the UI already holds are carried
+    over unchanged. Returns the index page."""
     base = root / ".poisson"
-    for stale in base.glob(".ui-*"):
-        if stale.is_dir():
-            shutil.rmtree(stale, ignore_errors=True)
-    ctx = _Context(root)
-    views = all_views(ctx)
-    staging = Path(tempfile.mkdtemp(prefix=".ui-new-", dir=base))
-    aside: Path | None = None
     ui = base / "ui"
+    ctx = _Context(root)
+    reused = [cid for cid in ctx.comparisons if _reusable(ui, ctx, cid)]
+    views = all_views(ctx, skip=reused)
+    A.ensure_descriptor(root)
+    _clean_dead_builds(base)
+    A.clean_dead_saves(root)
+    staging = Path(tempfile.mkdtemp(prefix=f".ui-new-{os.getpid()}-", dir=base))
+    aside: Path | None = None
     try:
+        _open_to_others(staging)
         for address, v in views.items():
             page = staging / address
             page.parent.mkdir(parents=True, exist_ok=True)
             page.write_text(_render_ui.render(v.to_json(), ctx.name), encoding="utf-8")
+        for cid in reused:
+            (staging / "comparisons").mkdir(exist_ok=True)
+            shutil.copy2(
+                ui / "comparisons" / f"{cid}.html", staging / "comparisons" / f"{cid}.html"
+            )
+            shutil.copytree(ui / "comparisons" / cid, staging / "comparisons" / cid)
+
         for name, data in bundle_files().items():
             (staging / name).write_bytes(data)
         if ui.exists():
@@ -1419,10 +1421,18 @@ def build_pages(root: Path) -> Path:
     return ui / "index.html"
 
 
+def _open_to_others(folder: Path) -> None:
+    """A temporary folder as the user's umask would make it, not the private one ``mkdtemp``
+    makes, so a shared store's pages and artifacts are readable to the others who read it."""
+    mask = os.umask(0)
+    os.umask(mask)
+    os.chmod(folder, 0o777 & ~mask)
+
+
 def refresh_ui(root: Path) -> None:
     """Rebuild the UI a store already has; a store with none gets none from a write (``ui``
     builds the first). The pages are derived, so a failed refresh leaves the last ones and says
-    nothing."""
+    nothing: the next ``ui`` builds them whole and says what is wrong."""
     if not (root / ".poisson" / "ui").is_dir():
         return
     try:
@@ -1439,6 +1449,12 @@ def build_ui(store: Any, *, _notes: list[str]) -> UiLocation:
         index = build_pages(store.root)
     except A.NewerFormat as exc:
         raise refusal(str(exc), [A.UPGRADE]) from exc
+    except DamagedArtifact as exc:
+        raise refusal(str(exc)) from exc
+    except OSError as exc:
+        raise refusal(
+            f"cannot write the dashboard into {store.shown}: {exc.strerror or exc}"
+        ) from exc
     ctx_name = os.path.basename(os.path.abspath(store.root))
     return UiLocation(
         verdict="ok",
@@ -1458,5 +1474,7 @@ def view(store: Any, address: str, *, _notes: list[str]) -> View:
         return view_at(_Context(store.root), address)
     except A.NewerFormat as exc:
         raise refusal(str(exc), [A.UPGRADE]) from exc
+    except DamagedArtifact as exc:
+        raise refusal(str(exc)) from exc
     except KeyError as exc:
         raise refusal(f"no view at {address} in {store.shown}") from exc

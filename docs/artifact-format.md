@@ -30,7 +30,7 @@ page holds an absolute path, a platform string, a key or content a run captured.
       charts/limits-<event>.svg       the limits against the threshold
       charts/<condition hash>/incidence-<event>.svg   each run's cumulative incidence
     artifacts/check/<id>/           a saved check: artifact.json, check.json, conditions.parquet
-    ui/                             the static dashboard (derived; any writing command rebuilds it)
+    ui/                             the static dashboard (derived; `ui` builds it, a writing command refreshes it)
   <run id>/                         a run record
     manifest.json
     events.jsonl
@@ -100,8 +100,8 @@ run stopped short, by Ctrl-C, by a cancel or by `--max-rollouts`, ends its segme
 
 ## Saved results
 
-`report`, `serve` and the terminal app save the comparison they show; `diff` and `check` save
-only with `--save`. A save prints one detail line, `saved  comparison <id>` (`saved  check <id>`),
+`report` and `serve` save the comparison they show (as will the terminal app); `diff` and
+`check` save only with `--save`. A save prints one detail line, `saved  comparison <id>` (`saved  check <id>`),
 the id's first twelve characters; `--json` carries `saved`, the folder relative to the store. A
 store that cannot be written to does not stop the command: it prints
 `note: the comparison was not saved: <the system's words>` and goes on.
@@ -117,7 +117,7 @@ store that cannot be written to does not stop the command: it prints
 | `created_at` | when the result was saved, UTC |
 | `inputs` | `runs`: the two run ids, before then after |
 | `settings` | what changes the result, and how it was asked for: `method` as resolved, `method_chosen` (`default` or `named`; recorded, not in the id), `events` (each with `name` and `kind`: `failure`, `success` or null, sorted by name), `q`, `power`, `horizon`; for a comparison the tree's `by` (the axis asked for, null when none), `depth`, `permutations`, `seed` and `max_group_mde`; for a check `fail_on` |
-| `summary` | the result's `verdict` and `sentence` |
+| `summary` | the result's `verdict` and `sentence`, and `detail`: the verdict block's detail lines as `[label, text]` pairs, the facts every face prints under the verdict (the method, the runs, the trades, the verdict rule, the limits, the intervals, the fragility, any peeking caveat and any errored-episodes warning) |
 | `files` | every file in the folder but the descriptor itself, each with its `path`, `role` (`result`, `table`, `chart`), `media_type`, `schema` where it has one, `sha256`, and for a chart `data`, the path of the JSON file holding what it was drawn from |
 
 A save writes into a temporary folder beside its place and renames it in last, so an interrupted
@@ -148,7 +148,7 @@ is `next`, the commands to run next. A check carries `passed` and `fail_on` as w
 | `intervals` | per condition and event, the interval on the change: `event`, `config`, `config_hash`, `ci_lo`, `ci_hi`, `basis` |
 | `interval_level`, `interval_rule`, `alpha_star` | the level every interval on a change is stated at, its rule (`benjamini-yekutieli` when anything is flagged, `bonferroni` when nothing is) and the per-test level it rests on |
 | `n_rejected`, `n_interval_only`, `n_verdict_only`, `n_flagged_only` | conditions flagged, flagged by their interval alone, counted by the verdict alone, and flagged at the false discovery rate without counting at the family-wise level |
-| `threshold`, `threshold_source` | the change the verdict asks about, and where it came from (`recorded` by the runs, or the default) |
+| `threshold`, `threshold_source` | the change the verdict asks about, and where it came from: `recorded` by both runs, `smaller` when the two runs recorded different thresholds and the smaller one was taken, or `default` |
 | `comparison_verdict`, `flag_rule`, `verdict_rule` | the verdict word, the rule a condition's flag follows (`benjamini-hochberg`) and the rule the verdict follows (`holm`) |
 | `verdict_limit` | under `no significant change`, the largest limit the verdict read; null otherwise |
 | `fragility`, `fragility_flips`, `fragility_note`, `fragility_exact` | how many stored outcomes would change the word, which (`config_hash`, `event`, `run`, `replicate_index`, `to`), why there is none, and whether the search was exhaustive |
@@ -247,6 +247,7 @@ chart's data is the JSON file of the same name beside it, listed in the descript
 | `kind` | `heatmap`, `differences`, `limits` or `incidence` |
 | `event` | the event drawn |
 | `condition` | the condition's hash for an incidence chart; null for a chart over every condition |
+| `title`, `caption` | what the chart shows, in the words its page and its SVG's own title and description carry |
 | `columns`, `rows` | the data as a table: the column names (the axes' names among them), and one row per point |
 
 The heatmap's rows hold each condition's axis values, both shares, the change, q and the verdict;
