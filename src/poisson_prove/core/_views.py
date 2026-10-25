@@ -440,9 +440,11 @@ def save(store: Any, result: Comparison, *, _notes: list[str]) -> ArtifactRef:
     settings = _settings_of(result, kind, doc)
     runs = [result.run_a, result.run_b]
     identity = A.artifact_id(kind, {"runs": runs}, settings)
+    written = False
     try:
         if not A.artifact_exists(store.root, kind, identity):
             charts = comparison_charts(doc, result.frames) if kind == "comparison" else []
+            written = True
             identity = A.save_result(
                 store.root,
                 kind,
@@ -455,7 +457,8 @@ def save(store: Any, result: Comparison, *, _notes: list[str]) -> ArtifactRef:
     except (OSError, ValueError, pa.ArrowException) as exc:
         reason = getattr(exc, "strerror", None) or str(exc)
         raise Unsaved(kind, reason) from exc
-    refresh_ui(store.root)
+    if written:
+        refresh_ui(store.root)
     return ArtifactRef(kind=kind, id=identity, path=f".poisson/artifacts/{kind}/{identity}")
 
 

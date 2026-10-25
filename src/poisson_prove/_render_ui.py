@@ -13,7 +13,7 @@ import json
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
-from poisson_prove import __version__, _look
+from poisson_prove import __version__, _facts, _look
 
 TOOL = "poisson-prove"
 POLICY = (
@@ -522,82 +522,45 @@ def _run(page: _Page) -> None:
     pairs.append(("compared in", compared or '<span class="dim">no saved comparison</span>'))
     page.add(_dl(pairs))
     page.add("<h2>Outcomes per condition</h2>")
-    rows, classes = [], []
+    outcome_names = list(v["outcomes"])
+    rows = []
     for i, cell in enumerate(v["cells"]):
         p = f"/cells/{i}"
-        first = True
-        for outcome in cell["shares"]:
+        row = [
+            page.config(f"{p}/config"),
+            page.fact(
+                f"{p}/condition_hash",
+                kind="plain",
+                cls="mono",
+                text=_hash12(cell["condition_hash"]),
+            ),
+            page.fact(f"{p}/n"),
+            page.fact(f"{p}/errored"),
+        ]
+        for outcome in outcome_names:
             s = f"{p}/shares/{_escape_token(outcome)}"
-            share = cell["shares"][outcome]
-            link = page.link(f"{s}/address", "episodes") if "address" in share else ""
-            rows.append(
-                [
-                    page.config(f"{p}/config") if first else "",
-                    page.fact(
-                        f"{p}/condition_hash",
-                        kind="plain",
-                        cls="mono",
-                        text=_look.fmt_hash(cell["condition_hash"]),
-                    )
-                    if first
-                    else "",
-                    page.fact(f"{p}/n") if first else "",
-                    page.fact(f"{p}/errored") if first else "",
-                    _esc(outcome),
-                    page.fact(f"{s}/k"),
-                    page.fact(f"{s}/value", kind="rate"),
-                    f'<span class="dim">[{page.fact(f"{s}/lo", kind="rate")}, '
-                    f"{page.fact(f'{s}/hi', kind='rate')}]</span>",
-                    page.fact(f"{s}/level", kind="level"),
-                    page.fact(f"{s}/method", kind="plain"),
-                    link,
-                ]
+            share = cell["shares"].get(outcome)
+            if share is None:
+                row.append('<span class="dim">—</span>')
+                continue
+            ended = f"{page.fact(f'{s}/k')} ended"
+            if "address" in share:
+                ended = page.link(f"{s}/address", ended)
+            row.append(
+                f"{page.fact(f'{s}/value', kind='rate')} "
+                f'<span class="dim">[{page.fact(f"{s}/lo", kind="rate")}, '
+                f"{page.fact(f'{s}/hi', kind='rate')}]</span>"
+                f'<br><span class="dim">{ended} · {page.fact(f"{s}/level", kind="level")} '
+                f"{page.fact(f'{s}/method', kind='plain')} interval</span>"
             )
-            classes.append("")
-            first = False
-        if not cell["shares"]:
-            rows.append(
-                [
-                    page.config(f"{p}/config"),
-                    page.fact(
-                        f"{p}/condition_hash",
-                        kind="plain",
-                        cls="mono",
-                        text=_look.fmt_hash(cell["condition_hash"]),
-                    ),
-                    page.fact(f"{p}/n"),
-                    page.fact(f"{p}/errored"),
-                    '<span class="dim">no outcome</span>',
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                ]
-            )
-            classes.append("")
-    page.add(
-        _table(
-            page,
-            "outcomes",
-            [
-                ("condition", ""),
-                ("hash", ""),
-                ("with an outcome", "num"),
-                ("errored", "num"),
-                ("outcome", ""),
-                ("ended in it", "num"),
-                ("share", "num"),
-                ("interval", ""),
-                ("level", "num"),
-                ("interval method", ""),
-                ("", ""),
-            ],
-            rows,
-            filter_rows=True,
-        )
-    )
+        rows.append(row)
+    columns = [("condition", ""), ("hash", ""), ("with an outcome", "num"), ("errored", "num")]
+    columns += [(_esc(outcome), "") for outcome in outcome_names]
+    if rows:
+        page.add(_table(page, "outcomes", columns, rows, filter_rows=True))
+    else:
+        page.shown.add("/cells")
+        page.add('<p class="note" data-fact="/cells" data-value="[]">No condition has a row.</p>')
     if "shares_rule" in v:
         page.add(f'<p class="note">{page.fact("/shares_rule", kind="plain")}</p>')
     page.add("<h2>Event log</h2>")
@@ -745,7 +708,7 @@ def _design(page: _Page) -> str:
         value = design[key]
         ptr = f"/design_mde/{_escape_token(str(key))}"
         if kind == "test" and isinstance(value, str):
-            cell = page.fact(ptr, kind="plain", text=_TEST_WORDS.get(value, value))
+            cell = page.fact(ptr, kind="plain", text=_test_words(value))
         elif kind == "power" and isinstance(value, (int, float)):
             cell = page.fact(
                 ptr, kind="num", text=f"{_look.fmt_num(value)} ({_look.times_in(float(value))})"
@@ -762,14 +725,12 @@ def _design(page: _Page) -> str:
     return recorded
 
 
-_TEST_WORDS = {
-    "fisher": "Fisher",
-    "mcnemar": "the paired test (McNemar)",
-    "logrank": "log-rank",
-    "fisher_bh": "Fisher",
-    "mcnemar_bh": "the paired test (McNemar)",
-    "logrank_bh": "log-rank",
-}
+def _test_words(key: str) -> str:
+    """A test as a reader names it, from the one table the verdict's lines use."""
+    try:
+        return _facts.test_name(key)
+    except KeyError:
+        return key
 
 
 def _plural(count: Any, word: str) -> str:
@@ -1056,7 +1017,7 @@ def _condition(page: _Page) -> None:
             f"Holm {page.fact(f'{p}/test/q_holm', kind='p')}"
         )
         test_key = str(block.get("mde_test") or "")
-        test_words = _TEST_WORDS.get(test_key, test_key)
+        test_words = _test_words(test_key)
         power_value = block.get("mde_power")
         power_words = (
             f"{_look.fmt_num(power_value)} ({_look.times_in(float(power_value))})"
