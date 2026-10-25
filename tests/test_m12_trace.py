@@ -1425,7 +1425,11 @@ def test_t28_schema_literal_appears_exactly_once_in_src() -> None:
 
 
 def test_t28_cli_and_mock_agent_reach_the_schema_through_proofload_trace() -> None:
-    assert imports_proofload_trace(CLI_SOURCE), "cli.py does not import poisson_prove.trace"
+    # PF5 (spec section 17; PF5.7): the face reads stored traces through the core, which reaches
+    # the schema through ``poisson_prove.trace``; the face imports from Prove only the core and
+    # the renderers, so it is the core's modules that must import the trace module.
+    core_sources = sorted((SRC / "core").rglob("*.py"))
+    assert any(imports_proofload_trace(path) for path in core_sources), "the core does not import poisson_prove.trace"
     assert imports_proofload_trace(MOCK_AGENT_SOURCE), "mock_agent.py does not import poisson_prove.trace"
 
 

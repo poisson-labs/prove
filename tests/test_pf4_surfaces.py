@@ -485,7 +485,8 @@ def test_pf4_1c_the_rendering_code_holds_no_95_percent_and_no_1_96() -> None:
     build that hard-codes either."""
     package = SRC / "poisson_prove"
     files = [package / f"{name}.py" for name in ("report", "viewer", "plain", "cli", "_look")]
-    files += [path for path in sorted(package.glob("*.py"))
+    # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
+    files += [path for path in sorted(package.rglob("*.py"))
               if path not in files and re.search(r"^\s*(import|from) rich\b", path.read_text(encoding="utf-8"), re.M)]
     for path in files:
         if not path.exists():

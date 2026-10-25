@@ -487,7 +487,10 @@ CLI_IMPORTS = frozenset(
 )
 
 #: Every name ``cli`` binds that E3, E1 or the gate could reach for work; armed by ``arm_tripwires``.
-WORK_NAMES = ("multi_diff", "tree", "build_multi_report", "build_survival_report", "build_structure", "serve_page")
+# PF5 (spec section 17; PF5.7, reading f): the comparison and the tree are the core's work, which
+# ``cli`` no longer binds; building either result is the work, so the two result types are armed
+# where they are made (``arm_work_tripwires``) and ``cli`` keeps only its renderers' names.
+WORK_NAMES = ("build_multi_report", "build_survival_report", "build_structure", "serve_page")
 
 
 # ---------- harness ----------
@@ -523,9 +526,27 @@ def arm_tripwires(monkeypatch: pytest.MonkeyPatch, *names: str) -> list[str]:
     return calls
 
 
+def arm_work_tripwires(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """PF5 (spec section 17): building a comparison or a tree, the core's work, records the call
+    and raises, wherever the core does it."""
+    from poisson_prove.tree import TreeResult
+
+    calls: list[str] = []
+    for result_type in (MultiDiffResult, TreeResult):
+
+        def trip(self: Any, *args: Any, _name: str = result_type.__name__, **kwargs: Any) -> None:
+            calls.append(_name)
+            raise AssertionError(f"a {_name} was built")
+
+        monkeypatch.setattr(result_type, "__init__", trip)
+    return calls
+
+
 def arm_gate_tripwire(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """``MultiDiffResult.check`` and ``cli.multi_diff`` both raise: the gate can never run."""
-    calls: list[str] = arm_tripwires(monkeypatch, "multi_diff")
+    """``MultiDiffResult.check`` raises and no comparison can be built: the gate can never run.
+    PF5 (spec section 17): the comparison is built by the core, so the tripwire is on building
+    it, where ``cli.multi_diff`` was."""
+    calls: list[str] = arm_work_tripwires(monkeypatch)
 
     def trip_check(self: MultiDiffResult, *args: Any, **kwargs: Any) -> bool:
         calls.append("MultiDiffResult.check")
@@ -1060,13 +1081,15 @@ def e3_cases(pair: MockPair) -> list[tuple[str, list[str], str, Mapping[str, str
 def test_fr12_the_listing_does_no_work(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mock_pair: MockPair) -> None:
     monkeypatch.chdir(tmp_path)
     cases = e3_cases(mock_pair)
-    calls = arm_tripwires(monkeypatch, *WORK_NAMES)
+    # PF5 (spec section 17): the renderers ``cli`` binds, and the core's work, both armed.
+    calls_cli = arm_tripwires(monkeypatch, *WORK_NAMES)
+    calls_core = arm_work_tripwires(monkeypatch)
     for label, argv, expected, names in cases:
         r = run_cli(argv)
         # A refusal exits 1 (spec section 5.2); its facts, not its line layout (section 5.4).
         # PF2 (spec section 4.3): the runs are named by name in the error line and the next line.
         assert r.code == 1 and r.out == "" and e3_problems(r.err, expected, names) == [], (label, r)
-    assert calls == [], calls
+    assert calls_cli == [] and calls_core == [], (calls_cli, calls_core)
     assert listing(tmp_path) == []
 
 

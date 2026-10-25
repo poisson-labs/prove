@@ -782,7 +782,7 @@ def test_g16_the_canonical_form_is_written_twice_in_src_both_in_tree_py_through_
     function in ``tree.py`` hashes it -- the shared private serialiser, the only ``sha256`` and the
     only ``json.dumps`` in the file -- and exactly two functions call that serialiser by name:
     ``_require_agreement`` and ``agreement_digest``. Neither renderer writes the form."""
-    sources = sorted(PACKAGE.glob("*.py"))
+    sources = sorted(PACKAGE.rglob("*.py"))  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
     tagged = {path.name: string_constants(parsed(path), "poisson-prove.agreement") for path in sources}
     assert {name: tags for name, tags in tagged.items() if tags} == {"tree.py": [AGREEMENT_SCHEMA]}, tagged
     module = parsed(TREE_SOURCE)

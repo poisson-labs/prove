@@ -1978,7 +1978,7 @@ def _burla_imports(path: Path) -> list[tuple[int, str | None]]:
 
 
 def test_i2_only_the_launchers_main_imports_burla() -> None:
-    for path in sorted(PACKAGE.glob("*.py")):
+    for path in sorted(PACKAGE.rglob("*.py")):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
         found = _burla_imports(path)
         if path.name == "_burla_submit.py":
             assert found and all(function == "main" for _, function in found), found
@@ -2039,8 +2039,25 @@ def _cli_imports_constant() -> set[tuple[str | None, str | None]]:
 def test_i6_fr18_admits_exactly_the_three_burla_imports_and_cli_imports_them() -> None:
     frozen = _cli_imports_constant()
     assert {entry for entry in frozen if entry[0] == "poisson_prove.executor_burla"} == BURLA_IMPORTS
-    found: set[tuple[str | None, str | None]] = set()
-    for node in ast.walk(ast.parse((PACKAGE / "cli.py").read_text(encoding="utf-8"))):
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.executor_burla":
-            found.update((node.module, alias.name) for alias in node.names)
-    assert found == BURLA_IMPORTS
+    # PF5 (spec section 17; PF5.7): the face runs no backend, so the three names are the core's to
+    # reach: the core's modules reach exactly these three, imported by name or read off the
+    # module, and ``cli.py`` reaches none.
+    def reached(path: Path) -> set[tuple[str | None, str | None]]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        found: set[tuple[str | None, str | None]] = set()
+        bound: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.executor_burla":
+                found.update((node.module, alias.name) for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module == "poisson_prove":
+                bound |= {a.asname or a.name for a in node.names if a.name == "executor_burla"}
+            elif isinstance(node, ast.Import):
+                bound |= {a.asname or a.name for a in node.names if a.name == "poisson_prove.executor_burla"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and ast.unparse(node.value) in bound | {"poisson_prove.executor_burla"}:
+                found.add(("poisson_prove.executor_burla", node.attr))
+        return found
+
+    core = set().union(*(reached(path) for path in sorted((PACKAGE / "core").rglob("*.py"))))
+    assert core == BURLA_IMPORTS
+    assert reached(PACKAGE / "cli.py") == set()

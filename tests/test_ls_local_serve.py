@@ -1728,7 +1728,7 @@ def test_ls8_both_structural_refusals_interpolate_the_constant_and_no_source_nam
     outside = "\n".join(lines[:start] + lines[at:])
     for retired in RETIRED_SCHEMAS:
         assert retired not in outside, retired
-        for path in SRC.glob("*.py"):
+        for path in SRC.rglob("*.py"):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
             if path.name != "viewer.py":
                 assert retired not in path.read_text(encoding="utf-8"), (path.name, retired)
     assert f'SCHEMA = "{SCHEMA}"' in lines[at]
@@ -1968,7 +1968,7 @@ def test_ls11_the_panels_mde_unchanged_is_the_honesty_number_character_for_chara
 def test_ls11_no_module_parses_the_honesty_prose_for_the_number() -> None:
     """Sole catch for a build that keeps the dashboard's text pattern."""
     pattern = re.compile(r"honesty[^\n]*\.(split|find|index|search|match|findall)\(|re\.\w+\([^\n]*honesty")
-    for path in SRC.glob("*.py"):
+    for path in SRC.rglob("*.py"):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
         for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             assert not pattern.search(line), (path.name, i, line.strip())
 
@@ -2023,7 +2023,7 @@ def test_ls13_the_two_event_go1_pair_is_reported_once_and_never_as_a_trade(go1_t
         # PF4 (PF4.20): neither event declares a kind, so the counts are the rises and falls.
         assert str(panel["n_higher"]) in entry["line"] and str(panel["n_lower"]) in entry["line"]
     assert GO1_COMPLEMENT_LINE in region_text(go1_two.page, "Result")
-    for path in SRC.glob("*.py"):
+    for path in SRC.rglob("*.py"):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
         assert RETIRED_TRADE_TAIL not in path.read_text(encoding="utf-8"), path.name
 
 

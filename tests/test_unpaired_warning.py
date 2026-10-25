@@ -335,7 +335,7 @@ def test_u15_only_m6_names_the_category() -> None:
     second place the rule could be applied, or applied differently."""
     named = sorted(
         path.name
-        for path in SRC.glob("*.py")
+        for path in SRC.rglob("*.py")  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
         if "UnpairedAnalysis" in path.read_text(encoding="utf-8")
     )
     assert named == ["diff.py"], named

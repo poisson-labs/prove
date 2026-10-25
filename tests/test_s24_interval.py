@@ -1477,7 +1477,7 @@ def test_c16_the_two_interval_functions_are_each_called_from_exactly_one_place()
     the interval builder -- so ``alpha_star`` is computed once and spent once.
     """
     sites: dict[str, list[tuple[str, int, str]]] = {"interval_rd": [], "interval_rd_paired": []}
-    for path in sorted(PACKAGE.glob("*.py")):
+    for path in sorted(PACKAGE.rglob("*.py")):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
         tree = parsed(path)
         enclosing = enclosing_functions(tree)
         for node in ast.walk(tree):

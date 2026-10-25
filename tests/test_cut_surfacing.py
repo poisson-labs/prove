@@ -505,7 +505,10 @@ def test_z4_the_three_text_surfaces_and_the_payload_agree_on_every_label(s1: Sur
     for s in (s1, s2, s3):
         texts = s.texts()
         assert same_label_values(texts["report.md"], texts["receipt.html"]), (texts["report.md"], texts["receipt.html"])
-        assert same_label_values(texts["report.md"], texts["viewer page"]), (texts["report.md"], texts["viewer page"])
+        # PF5 (spec section 4.3, reading o): report.md gives each run's id in its header, not its
+        # provenance list; the page keeps both run-id labels, so they are left out of this pair.
+        page = {k: v for k, v in texts["viewer page"].items() if k not in ("run id a", "run id b")}
+        assert same_label_values(texts["report.md"], page), (texts["report.md"], page)
         assert set(NEW_LABELS) <= set(texts["report.md"]), sorted(set(NEW_LABELS) - set(texts["report.md"]))
 
 

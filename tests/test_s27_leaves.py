@@ -375,8 +375,10 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # --methods all --json and the no-comparable-cell refusal), and again at PF4's statistics re-freeze.
 # Read off the two files as they stand after every other move, not predicted; these are test files,
 # not output PF4 changes.
+# PF5: re-minted after PF5's move of test_s25_root.py (o16 reads src/ recursively, since the core is
+# a package); test_s26_fault_lines.py is untouched. Read off the file after every other move.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "6c042ad8d2e7894f9ad5bf6483747ff8cdff434ebc7d8824239f030157f4c928",
+    "tests/test_s25_root.py": "74b4433fe17515c9e21db14a252d49fdc43a9380fbe382b987265b16794d81ce",
     "tests/test_s26_fault_lines.py": "88cbfc14ca6e249db98d06b1a99d68070b8e59062f670b2e69e48399208d394d",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.

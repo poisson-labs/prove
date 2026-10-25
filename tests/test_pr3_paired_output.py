@@ -140,7 +140,7 @@ from poisson_prove.executor import derive_seed
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.trace import Span, Trace
 
-from conftest import without_method_lines
+from conftest import without_method_lines, without_run_lines
 
 REPO = Path(__file__).resolve().parents[1]
 GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
@@ -1148,6 +1148,10 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         # PF4 re-freeze (PF4.32): the library's rendering now names the test on its limits line too,
         # which without_method_lines takes out of the written file, so it is taken out of both.
         rendered = library[name] if name == "heatmap.svg" else offers_rounded_up(without_method_lines(library[name]))
+        # PF5 (spec section 4.3, reading o): the written files name each run with its id in the
+        # header, and their provenance lists give no id; both sides are compared without the two.
+        if name != "heatmap.svg":
+            rendered, written = without_run_lines(rendered), without_run_lines(written)
         assert rendered_problems(rendered, written if name == "heatmap.svg" else without_method_lines(written), name) == [], name
     md = library["report.md"]
     tree = report_kwargs["tree"]

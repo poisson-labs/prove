@@ -1,4 +1,5 @@
 import functools
+import re
 import socket
 from collections.abc import Iterator
 from pathlib import Path
@@ -62,6 +63,34 @@ def without_method_lines(text: str) -> str:
         out.append(line)
     return "".join(out)
 
+
+
+#: PF5 (spec section 4.3, the report header's ``NAME (ID)`` pairing; PF5's reading o): the header
+#: of ``report.md`` and ``receipt.html`` names each run as ``before  NAME (ID)`` and ``after  NAME
+#: (ID)``, and the provenance list no longer gives the ids, so each id is in each file once.
+_RUN_LINE = re.compile(r"^(?:<p>)?(?:before|after)  .+ \([^()]+\)(?:</p>)?$")
+_RUN_ID_ITEM = re.compile(r"<li>run id [ab]: [^<]*</li>")
+_RUN_ID_LINE = re.compile(r"^- run id [ab]: .*$")
+
+
+def without_run_lines(text: str) -> str:
+    """``text`` (``report.md``, ``receipt.html``) with the header's two run lines and the
+    provenance list's two run-id entries taken out, and in place of the run lines no second blank
+    line: the bytes a file had before the pairing, and what the library's render gives without
+    its run-id entries."""
+    out: list[str] = []
+    removed = False
+    for line in text.splitlines(keepends=True):
+        bare = line.rstrip("\n")
+        if _RUN_LINE.match(bare) or _RUN_ID_LINE.match(bare):
+            removed = True
+            continue
+        if removed and not line.strip() and out and not out[-1].strip():
+            removed = False
+            continue
+        removed = False
+        out.append(_RUN_ID_ITEM.sub("", line))
+    return "".join(out)
 
 #: PF9.4 (spec section 13.1): every module that drives a remote backend offline runs with network
 #: sockets blocked in the pytest process (the interpreters the Burla and Modal fakes start arm
