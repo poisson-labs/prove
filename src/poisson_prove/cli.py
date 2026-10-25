@@ -60,7 +60,7 @@ if TYPE_CHECKING:
 
     from poisson_prove.diff import Method
 
-from poisson_prove import __version__, _look
+from poisson_prove import __version__, _facts, _look, stats
 from poisson_prove._compat import (
     old_writer_line,
     retired_default_store,
@@ -75,8 +75,10 @@ from poisson_prove.diff import (
     _CAUSES,
     _PAIRED_METHODS,
     COVERAGE_COLUMNS,
+    KINDS,
     DiffError,
     EventInferenceError,
+    MixedCases,
     MultiDiffResult,
     UnknownEvent,
     _md_cell,
@@ -89,6 +91,8 @@ from poisson_prove.executor import (
     Plan,
     RunSummary,
     UnderpoweredDesign,
+    _plan_design,
+    _recorded_design,
     check_power,
     plan,
     preflight,
@@ -137,7 +141,6 @@ from poisson_prove.tree import (
     DEFAULT_SEED,
     DEPTHS,
     TASK_FAMILY_KEYS,
-    TRACE_GROUPINGS,
     WHOLE_GRID,
     Bound,
     CellFamily,
@@ -724,10 +727,10 @@ def _build_parser(io: _IO) -> _Parser:
     _add_method_arguments(check_p, defaults=True)
     check_p.add_argument(
         "--fail-on",
-        choices=("worse", "any"),
+        choices=("worse", "any", "higher", "lower"),
         default="worse",
-        help="fail on a condition significantly worse, or on any significant change "
-        "(default: worse)",
+        help="fail on a condition significantly worse, on any significant change, or on a rate "
+        "that rose (higher) or fell (lower); worse needs each event's kind (default: worse)",
     )
     _add_json_option(check_p, "the verdict and the comparison")
     _add_global_options(check_p, top=False)
@@ -919,7 +922,7 @@ def _add_tree_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None:
         "--by",
         metavar="KEY",
         help="the grouping for the fault lines: an axis both runs declare, "
-        f"{'/'.join(TASK_FAMILY_KEYS)}, {' or '.join(TRACE_GROUPINGS)}, or {WHOLE_GRID} "
+        f"{'/'.join(TASK_FAMILY_KEYS)}, or {WHOLE_GRID} "
         "(default: resolved in a stated order and named either way)",
     )
     fault_group.add_argument(
@@ -1372,33 +1375,6 @@ def _condition_text(config: Any) -> str:
     )
 
 
-def _threshold(manifests: tuple[RunManifest, RunManifest]) -> float:
-    """The change the two runs accepted at sweep time: the smaller of the two recorded values,
-    or the default ``--max-mde`` when neither run recorded one."""
-    recorded = [m.environment.get("max_mde_accepted") for m in manifests]
-    values = [float(v) for v in recorded if isinstance(v, (int, float)) and not isinstance(v, bool)]
-    return min(values) if values else float(DEFAULT_MAX_MDE)
-
-
-def _diff_verdict(multi: MultiDiffResult, manifests: tuple[RunManifest, RunManifest]) -> str:
-    """The verdict word over every event compared: a trade when conditions moved both ways,
-    else the one way they moved, else whether the smallest change the comparison could have
-    seen was within the threshold the runs accepted (the threshold itself is named once the
-    comparison reports its limits for the test it used)."""
-    worse = sum(ev.n_worse for ev in multi.by_event.values())
-    safer = sum(ev.n_safer for ev in multi.by_event.values())
-    if (worse and safer) or len(multi.trades):
-        return "trade"
-    if worse:
-        return "worse"
-    if safer:
-        return "safer"
-    threshold = _threshold(manifests)
-    tops = [float(ev.max_mde_unchanged) for ev in multi.by_event.values()]
-    above = not tops or any(math.isnan(top) for top in tops) or max(tops) > threshold
-    return "too small to tell" if above else "no significant change"
-
-
 def _verdict_block(
     io: _IO,
     word: str,
@@ -1410,20 +1386,49 @@ def _verdict_block(
     manifests: tuple[RunManifest, RunManifest],
     chosen: str,
 ) -> None:
-    """The verdict line, then ``method``, ``before`` and ``after`` (the old run of a mixed pair
-    says who wrote it), one ``trade`` line per traded condition, and a blank line before the
-    report."""
+    """The verdict line, then its detail lines: ``method``; on ``check``, the comparison's own
+    word (reading R34); under the two nothing-moved words, the ``threshold`` and where it came
+    from (PF4.50); ``before`` and ``after`` (the old run of a mixed pair says who wrote it); one
+    ``trade`` line per traded condition; then the facts the verdict rests on (PF4.34 to PF4.46).
+    A blank line ends the block."""
     io.line(f"{word}  {sentence}")
     io.detail("method", _method_line(multi.method, chosen))
+    compared = multi.comparison_verdict()
+    if word in ("passed", "failed"):
+        clause = _facts.limit_clause(multi) if compared == "no significant change" else None
+        io.detail("comparison", compared if clause is None else f"{compared}: {clause}")
+    if _facts.is_nothing_moved(compared):
+        source = _THRESHOLD_SOURCES[multi.threshold_source]
+        io.detail("threshold", f"{_look.fmt_rate(multi.threshold)} ({source})")
     writers = _old_writer(manifests)
     for role, run_id in (("before", a), ("after", b)):
         shown = idx.name_of(run_id)
         io.detail(role, f"{shown}, {writers[role]}" if role in writers else shown)
     for record in multi.trades.to_dict(orient="records"):
-        moved = [f"{event} fell" for event in record.get("safer_events", ())]
-        moved += [f"{event} rose" for event in record.get("worse_events", ())]
+        moved = [_moved(multi, event, "fell") for event in record.get("safer_events", ())]
+        moved += [_moved(multi, event, "rose") for event in record.get("worse_events", ())]
         io.detail("trade", f"{_condition_text(record.get('config'))}: {', '.join(moved)}")
+    names = {run_id: idx.name_of(run_id) for run_id in (a, b)}
+    for label, text in _facts.lines(multi, names):
+        io.detail(label, text)
     io.line()
+
+
+#: Where section 8.4's threshold came from, in words.
+_THRESHOLD_SOURCES = {
+    "recorded": "recorded at sweep time by the runs",
+    "smaller": "the smaller of the two the runs recorded at sweep time",
+    "default": "the default; neither run recorded one",
+}
+
+
+def _moved(multi: MultiDiffResult, event: str, slot: str) -> str:
+    """A traded event and which way it went: ``trades`` keeps a change for the better in its
+    first slot and one for the worse in its second, so a success's slots are the other way
+    about."""
+    if multi.by_event[event].kind == "success":
+        slot = "rose" if slot == "fell" else "fell"
+    return f"{event} {slot}"
 
 
 def _chosen(ns: argparse.Namespace) -> str:
@@ -1588,6 +1593,23 @@ def _outcome_counts(*frames: Any) -> str:
     return ", ".join(f"{name}={_look.fmt_count(count)}" for name, count in ordered)
 
 
+def _split_events(events: Sequence[str] | None) -> tuple[list[str] | None, dict[str, str]]:
+    """The events as named, and the kinds ``--event NAME:failure`` and ``NAME:success`` give them
+    for this comparison (PF4.20). A colon followed by anything else is part of the name."""
+    if events is None:
+        return None, {}
+    names: list[str] = []
+    kinds: dict[str, str] = {}
+    for typed in events:
+        name, colon, kind = str(typed).rpartition(":")
+        if colon and name and kind in KINDS:
+            names.append(name)
+            kinds[name] = kind
+        else:
+            names.append(str(typed))
+    return names, kinds
+
+
 def _multi(
     fa: Any,
     fb: Any,
@@ -1598,6 +1620,7 @@ def _multi(
     method: str | None,
     q: float,
     verb: str = "diff",
+    kinds: Mapping[str, str] | None = None,
 ) -> MultiDiffResult:
     try:
         return multi_diff(
@@ -1606,9 +1629,21 @@ def _multi(
             events=events,
             method=cast("Method | None", method),
             q=q,
+            power=stats.POWER,
             manifest_a=ma,
             manifest_b=mb,
+            kinds=kinds,
         )
+    except MixedCases as exc:
+        # PF4.38: a condition that ran several cases mixes what its rows compare.
+        raise _Refusal(
+            str(exc),
+            [
+                "make each case its own sweep axis in the spec, an [axes.<name>] table whose "
+                "values are the cases, then sweep again",
+                "see docs/your-own-agent.md: one case per condition",
+            ],
+        ) from exc
     except EventInferenceError as exc:
         raise _Refusal(
             f"cannot infer the event set: {exc}; outcome counts: {_outcome_counts(fa, fb)}",
@@ -1690,6 +1725,44 @@ def _missing_flags_refusal(
     return _Refusal(message, [_join(filled)] if fillable else [])
 
 
+def _read_record() -> Path:
+    """PF4.39 (reading R6): the person's record of the runs a comparing verb read, beside the
+    error log, never in the store, so ``diff`` and ``check`` still write nothing into it."""
+    return Path.home() / ".cache" / "poisson-prove" / "compared.jsonl"
+
+
+def _record_read(store: Store, *runs: tuple[str, int]) -> None:
+    """One line per run a comparing verb read: its id and creation time (unique per run), the
+    episodes it held, and when. Best effort: a read that cannot be recorded still runs."""
+    at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    try:
+        path = _read_record()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            for run_id, episodes in runs:
+                entry = {"run_id": run_id, "created_at": store.manifest(run_id).created_at,
+                         "episodes": int(episodes), "at": at}
+                fh.write(json.dumps(entry, allow_nan=False) + "\n")
+    except OSError:
+        pass
+
+
+def _compared_before(manifest: RunManifest) -> bool:
+    """Whether the read record holds a comparison of this run."""
+    try:
+        text = _read_record().read_text(encoding="utf-8")
+    except OSError:
+        return False
+    for line in text.splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if (entry.get("run_id"), entry.get("created_at")) == (manifest.run_id, manifest.created_at):
+            return True
+    return False
+
+
 def _run_diffs(
     store: Store,
     a: str,
@@ -1714,19 +1787,40 @@ def _run_diffs(
     time here would be a second read free to disagree with the first.
     """
     fa, fb, ma, mb = _load_pair(store, a, b)
-    _require_known_events(verb, events, fa, fb)
-    primary = _multi(fa, fb, ma, mb, events=events, method=method, q=q, verb=verb)
+    names, kinds = _split_events(events)
+    _require_known_events(verb, names, fa, fb)
+    primary = _multi(fa, fb, ma, mb, events=names, method=method, q=q, verb=verb, kinds=kinds)
+    if primary.n_tests == 0:
+        # PF4.7: a comparison of nothing is not a result, on every verb that compares.
+        raise _Refusal(
+            f'no condition has an outcome in both "{a}" and "{b}" ({primary.dropped_a} only in '
+            f"A, {primary.dropped_b} only in B); there is nothing to compare",
+            [f"{_COMMAND} runs"],
+        )
+    if primary.peeking:
+        # The caveat names each run as the person knows it (PF4.39).
+        idx = _index(store._root)
+        named = tuple(
+            {**entry, "run_name": idx.name_of(str(entry["run_id"]))} for entry in primary.peeking
+        )
+        primary = dataclasses.replace(primary, peeking=named)
+    _record_read(store, (a, len(fa)), (b, len(fb)))
     others: dict[str, Any] = {}
     if all_methods:
         for other in _METHODS:
             if other != primary.method:
                 others[other] = _multi(
-                    fa, fb, ma, mb, events=primary.events, method=other, q=q, verb=verb
+                    fa, fb, ma, mb, events=primary.events, method=other, q=q, verb=verb,
+                    kinds=kinds,
                 )
     return primary, others, (ma, mb), (fa, fb)
 
 
 def _method_table(results: Sequence[MultiDiffResult]) -> str:
+    # The two count columns are an event's safer and worse with a kind, and its falls and rises
+    # without one; the header keeps M10's names, which its frozen test reads (a PF4.20 finding
+    # for the release audit: the words name no kind there).
+    known = all(m.all_kinds_known() for m in results)
     header = ("method", "event", "pairing", "safer", "worse", "unchanged", "max_mde")
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     for m in results:
@@ -1735,9 +1829,10 @@ def _method_table(results: Sequence[MultiDiffResult]) -> str:
         pairing = "paired" if m.method in _PAIRED_METHODS else "unpaired"
         for e in m.events:
             ev = m.by_event[e]
+            n_down, n_up = (ev.n_safer, ev.n_worse) if known else (ev.n_lower, ev.n_higher)
             lines.append(
-                f"| {m.method} | {e} | {pairing} | {_look.fmt_count(ev.n_safer)} | "
-                f"{_look.fmt_count(ev.n_worse)} | {_look.fmt_count(ev.n_unchanged)} | "
+                f"| {m.method} | {e} | {pairing} | {_look.fmt_count(n_down)} | "
+                f"{_look.fmt_count(n_up)} | {_look.fmt_count(ev.n_unchanged)} | "
                 f"{_look.fmt_rate(ev.max_mde)} |"
             )
     return "\n".join(lines) + "\n"
@@ -1916,7 +2011,7 @@ def _cells_family(family: CellFamily) -> str:
     return (
         f"  {family.key}={family.label}  {_look.fmt_count(family.n_tests)} tests, "
         f"{_look.fmt_count(family.n_rejected)} rejected; cell MDE median "
-        f"{_look.fmt_rate(family.mde_median)} / max {_look.fmt_rate(family.mde_max)}"
+        f"{_rate_or_none(family.mde_median)} / max {_rate_or_none(family.mde_max)}"
     )
 
 
@@ -1925,7 +2020,8 @@ def _cells_leaf(leaf: CellResult) -> str:
     config = ", ".join(f"{key}={value}" for key, value in leaf.config.items())
     return (
         f"    {config}  {leaf.event}: delta {_look.fmt_rate(leaf.delta)}, "
-        f"q {_look.fmt_p(leaf.q_within)}, MDE {_look.fmt_rate(leaf.mde)}"
+        f"q {_look.fmt_p(leaf.q_within)}, MDE "
+        f"{leaf.mde_note if math.isnan(leaf.mde) and leaf.mde_note else _rate_or_none(leaf.mde)}"
     )
 
 
@@ -2314,7 +2410,8 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         check_power(p, max_mde=p.max_mde_accepted)
     except UnderpoweredDesign as exc:
         # Each offer is the command as typed with one option added or replaced: the replicates
-        # that would pass, then the limit that admits the design as it stands.
+        # that would pass, then the limit that admits the design as it stands; a design that
+        # cannot flag a lone condition is offered fewer conditions instead (PF4.30, PF4.49).
         nexts = []
         if exc.replicates_needed is not None:
             needed = str(exc.replicates_needed)
@@ -2322,7 +2419,33 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         if exc.offered is not None:
             limit = _look.ceil3(exc.offered)
             nexts.append(_join([_COMMAND, *_set_option(ns.typed, "--max-mde", limit)]))
+        elif exc.most_conditions is not None:
+            nexts.append(
+                f"sweep fewer conditions: with {p.spec.replicates} replicates a side at most "
+                f"{_look.fmt_count(exc.most_conditions)} can each be flagged alone"
+            )
         raise _Refusal(str(exc), nexts) from exc
+    design = _plan_design(p)
+    if design.flaggable:
+        # The plan's one limit (reading R36): the gate's, at its worst base rate (PF4.30); under
+        # --max-mde 1 there may be none there.
+        accepted = DEFAULT_MAX_MDE if p.max_mde_accepted is None else p.max_mde_accepted
+        limit = "none detectable" if design.mde is None else _look.fmt_rate(design.mde)
+        if not ns.json:
+            io.line(
+                f"  smallest {design.direction} one condition alone would be flagged for  "
+                f"{limit} at its worst base rate, {_look.fmt_rate(design.base_rate)} "
+                f"({_facts.test_name(design.test)}, q {design.q:g} over {design.family} tests, "
+                f"{stats.times_in(design.power)}; you accept up to {_look.fmt_rate(accepted)})"
+            )
+    else:
+        # PF4.49: --max-mde 1 admits a design no lone condition of which can be flagged.
+        io.err_line(
+            f"note: no single condition of this design can be flagged: the smallest possible p is "
+            f"{_look.fmt_p(design.p_min)}, and a flag needs less than {_look.fmt_p(design.level)} "
+            f"(q {design.q:g} over {design.family} tests); you accepted that with --max-mde 1"
+        )
+    plan_payload["design_mde"] = design.record()
     if ns.backend == "modal":
         assert target is not None and options is not None
         _check_cost(p, options, target.image)
@@ -2332,6 +2455,7 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         return 0
     _confirm(ns, io, idx)
 
+    before = _resume_before(store, p) if p.resumed else None
     state.run_id = p.run_id
     progress = _Progress(io)
     summary: RunSummary
@@ -2352,7 +2476,38 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
             on_progress=progress,
         )
     progress.finish()
+    if before is not None:
+        _record_resume(store, p, before)
     return _sweep_result(ns, io, root, store, p, summary, plan_payload)
+
+
+def _resume_before(store: Store, p: Plan) -> dict[str, Any]:
+    """What a resume records of the run before it adds to it (PF4.39): its episodes, the
+    replicates it was swept at, and whether a comparison of it was read on this machine."""
+    manifest = store.manifest(p.run_id)
+    tally = store.tally(p.run_id)
+    return {
+        "episodes_before": int(tally.with_outcome + tally.no_outcome),
+        "replicates_before": (manifest.environment.get("sweep") or {}).get("replicates"),
+        "after_comparison": _compared_before(manifest),
+    }
+
+
+def _record_resume(store: Store, p: Plan, before: Mapping[str, Any]) -> None:
+    """One entry in the run's ``environment["resumes"]`` for a resume that added episodes; it
+    records and never refuses (PF4.39)."""
+    tally = store.tally(p.run_id)
+    after = int(tally.with_outcome + tally.no_outcome)
+    if after <= before["episodes_before"]:
+        return
+    store._record_resume(p.run_id, {
+        "at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "episodes_before": before["episodes_before"],
+        "episodes_after": after,
+        "replicates_before": before["replicates_before"],
+        "replicates_after": int(p.spec.replicates),
+        "after_comparison": bool(before["after_comparison"]),
+    })
 
 
 def _set_option(typed: Sequence[str], option: str, value: str) -> list[str]:
@@ -2600,17 +2755,14 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         q=ns.q,
         all_methods=ns.methods == "all",
     )
-    # The root refuses an empty family, and ``diff`` on a pair with no comparable cell exits 0
-    # today; turning that into a refusal is a later module's.
-    wanted = primary.n_tests > 0
-    nested = None
-    if wanted and not (ns.json and others):
-        # One call, one draw: the omnibus block and the fault-lines block are two renderings of
-        # one ``TreeResult``. Grown before anything is printed, so a knob the tree refuses is a
-        # refusal with nothing on stdout.
-        nested = _diff_tree(ns, primary, frames, manifests)
-    word = _diff_verdict(primary, manifests)
-    sentence = _with_method(primary.headline().splitlines()[0], primary.method)
+    # One call, one draw: the omnibus block and the fault-lines block are two renderings of one
+    # ``TreeResult``. Grown before anything is printed, so a knob the tree refuses is a refusal
+    # with nothing on stdout; and with ``--methods all`` too, which carries the primary method's
+    # omnibus and tree (PF4.8).
+    nested = _diff_tree(ns, primary, frames, manifests)
+    word = primary.comparison_verdict()
+    headline = _with_method(primary.headline().splitlines()[0], primary.method)
+    sentence = _facts.verdict_sentence(word, headline, primary)
     chosen = _chosen(ns)
     nexts = _report_next(idx, a, b, manifests, bool(ns.runs))
     if ns.json:
@@ -2620,8 +2772,9 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
             # one omnibus and one tree beside three method objects would claim one test across
             # three.
             payload = {primary.method: payload, **{m: d.to_json() for m, d in others.items()}}
-        elif nested is not None:
-            payload = {**payload, "omnibus": nested.root.to_json(), "tree": nested.to_json()}
+            payload["threshold"] = primary.threshold
+            payload["threshold_source"] = primary.threshold_source
+        payload = {**payload, "omnibus": nested.root.to_json(), "tree": nested.to_json()}
         _write_json(io, "diff", word, sentence, payload, nexts)
         return 0
     _verdict_block(io, word, sentence, primary, a, b, idx, manifests, chosen)
@@ -2633,15 +2786,14 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int
         if coverage:
             io.write("\n" + coverage)
         io.write("\n" + _interval_block(primary))
-        if nested is not None:
-            io.write("\n")
-            io.write(_omnibus_block(nested.root))
-            io.write("\n")
-            io.write(_fault_lines_block(nested))
-            io.write("\n")
-            io.write(_cells_block(nested))
-            io.write("\n")
-            io.write(_bound_block(nested.bound))
+        io.write("\n")
+        io.write(_omnibus_block(nested.root))
+        io.write("\n")
+        io.write(_fault_lines_block(nested))
+        io.write("\n")
+        io.write(_cells_block(nested))
+        io.write("\n")
+        io.write(_bound_block(nested.bound))
     for command in nexts:
         io.write("\n")
         io.next(command)
@@ -2978,6 +3130,11 @@ def _cmd_paired(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> i
             (staging / name).write_text(_artifact_text(artifact), encoding="utf-8")
             written.append(out_dir / name)
     _wrote(io, out_dir, written)
+    # PF4.9: what no run records is said once, in plain words, never as a gap per field.
+    io.detail(
+        "not recorded",
+        "the harness's digest and the client's version (the runs did not record them)",
+    )
     return 0
 
 
@@ -2996,9 +3153,11 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
     manifest = store.manifest(run)
     fixed = _typed_fix(ns.fix, (manifest,))
     df = store.read(run, meta=False)
-    _require_known_events("report", ns.event, df)
-    inferred = ns.event is None
-    if inferred:
+    # A kind given as NAME:failure names the event; a single run is judged in no direction.
+    named, _ = _split_events(ns.event)
+    _require_known_events("report", named, df)
+    inferred = named is None
+    if named is None:
         try:
             # One frame, so the second arm is an empty slice of it: infer_events pools both
             # arms for its counts, and passing df twice would double every count it reports.
@@ -3009,7 +3168,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
                 [f"{_COMMAND} report RUN --x AXIS --event NAME"],
             ) from exc
     else:
-        events, non_event = tuple(dict.fromkeys(str(e) for e in ns.event)), None
+        events, non_event = tuple(dict.fromkeys(named)), None
     valid_t = df["t"].dropna()
     if valid_t.empty:
         raise _Refusal(f"run {run} has no rows with a time; nothing to report")
@@ -3034,6 +3193,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
     )
     observations = _observation_counts(store, run)
     declarations = _declaration_check(store, run)
+    shares = _single_run_shares(df, cells, events, horizon)
+    design = _recorded_design(manifest)
     with _look.rule10():
         report = build_survival_report(
             cells,
@@ -3043,6 +3204,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
             manifest=manifest,
             observations=observations,
             declarations=declarations,
+            shares=shares,
+            design_mde=design,
         )
         receipt = (
             report
@@ -3055,6 +3218,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
                 manifest=manifest,
                 observations=observations,
                 declarations=declarations,
+                shares=shares,
+                design_mde=design,
             )
         )
     written = _write_report_files(io, out_dir, report, receipt)
@@ -3067,6 +3232,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
             "events": list(events),
             "non_event": non_event,
             "horizon": horizon,
+            "by_event": {e: {"cells": list(shares[e])} for e in events},
+            "design_mde": design,
         }
         _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
         return 0
@@ -3084,26 +3251,79 @@ def _report_run(ns: argparse.Namespace, io: _IO, root: Path, run: str, idx: Inde
     return 0
 
 
+def _single_run_shares(
+    df: pd.DataFrame, cells: pd.DataFrame, events: Sequence[str], horizon: float
+) -> dict[str, list[dict[str, Any]]]:
+    """Each condition's share of runs that ended in each event with its Wilson interval, beside
+    the cumulative incidence the report shows (PF4.2). The share counts the event by the horizon
+    the report reads, as the incidence does (PF4.37, reading R3), so the two differ only where a
+    run was censored before it."""
+    from poisson_prove.report import _cif_at
+
+    valid = df.loc[df["outcome"].notna()]
+    by_hash = {str(h): g for h, g in valid.groupby("config_hash", sort=True)}
+    curves = {str(r["config_hash"]): r["curve"] for r in cells.to_dict(orient="records")}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for event in events:
+        rows = []
+        for h, group in by_hash.items():
+            n = int(len(group))
+            k = int(((group["outcome"] == event) & (group["t"].astype(float) <= horizon)).sum())
+            incidence = float(_cif_at(curves[h], event, horizon))
+            rows.append({
+                "config_hash": h,
+                "config": group["config"].iloc[0],
+                "n": n,
+                "n_events": k,
+                "share": stats.share(k, n),
+                "incidence": incidence,
+                "share_differs": abs(incidence - k / n) > 1e-12,
+            })
+        out[event] = rows
+    return out
+
+
+def _rate_or_none(value: float) -> str:
+    """A limit to three decimals, or ``none`` where there is none (PF4.27)."""
+    return "none" if math.isnan(value) else _look.fmt_rate(value)
+
+
 def _check_sentence(multi: MultiDiffResult, fail_on: str) -> str:
+    """Each event's flagged conditions in its own words (PF4.20), what the gate failed on, and
+    the conditions that failed it: the rows that count for the verdict (reading R2)."""
     parts = []
     for event in multi.events:
         ev = multi.by_event[event]
+        (up, n_up), (down, n_down) = ev.counts()
         parts.append(
-            f"{event}: {_look.fmt_count(ev.n_worse)} worse, {_look.fmt_count(ev.n_safer)} safer "
-            f"in {_look.fmt_count(len(ev.cells))} conditions"
+            f"{event}: {_look.fmt_count(n_up)} {up}, {_look.fmt_count(n_down)} {down} in "
+            f"{_look.fmt_count(len(ev.cells))} conditions"
         )
-    failing = []
+    failing: list[str] = []
     for event in multi.events:
-        for record in multi.by_event[event].cells.to_dict(orient="records"):
-            bad = record.get("verdict") == "worse" or (
-                fail_on == "any" and record.get("verdict") in ("worse", "safer")
-            )
-            if bad:
-                condition = _condition_text(record.get("config"))
-                if condition not in failing:
-                    failing.append(condition)
+        ev = multi.by_event[event]
+        for record in ev.records():
+            direction = record["direction"]
+            if direction == "unchanged" or not record.get("holm", True):
+                continue
+            worse = fail_on == "worse" and record["verdict"] == "worse"
+            bad = worse or fail_on in ("any", direction)
+            condition = _condition_text(record.get("config"))
+            if bad and condition not in failing:
+                failing.append(condition)
     tail = f"; failed in {', '.join(failing)}" if failing else ""
     return f"{'; '.join(parts)}; fail on {fail_on}{tail}"
+
+
+def _with_kind(argv: Sequence[str], event: str, kind: str) -> list[str]:
+    """The words typed with ``--event EVENT`` given its kind."""
+    words = list(argv)
+    for i, word in enumerate(words):
+        if word == event and i > 0 and words[i - 1] == "--event":
+            words[i] = f"{event}:{kind}"
+        elif word == f"--event={event}":
+            words[i] = f"--event={event}:{kind}"
+    return words
 
 
 def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> int:
@@ -3124,6 +3344,20 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, root: Path, state: _State) -> in
         q=ns.q,
         all_methods=False,
     )
+    if ns.fail_on == "worse":
+        # PF4.20: worse needs each event's kind; without one the gate is refused with both ways
+        # out, the direction to gate on or the kind to give.
+        unknown = [e for e in multi.events if multi.by_event[e].kind is None]
+        if unknown:
+            event = unknown[0]
+            raise _Refusal(
+                f'check --fail-on worse needs to know whether "{event}" is a failure or a '
+                "success, and neither the command line nor the runs say",
+                [
+                    _join([_COMMAND, *_set_option(state.argv, "--fail-on", "higher")]),
+                    _join([_COMMAND, *_with_kind(state.argv, event, "failure")]),
+                ],
+            )
     passed = multi.check(fail_on=ns.fail_on)
     verdict = "passed" if passed else "failed"
     sentence = _with_method(_check_sentence(multi, ns.fail_on), multi.method)

@@ -14,6 +14,7 @@ import math
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Literal
 
 import numpy as np
@@ -22,6 +23,7 @@ from numpy.typing import NDArray
 from scipy import stats
 from scipy.optimize import brentq
 
+from poisson_prove import _limits, _verdict
 from poisson_prove.store import RunManifest
 from poisson_prove.survival import aalen_johansen, competing_set
 
@@ -50,6 +52,46 @@ CELLS_COLUMNS = (
     "q",
     "verdict",
     "mde",
+    # PF4.13, PF4.14, PF4.27: the way the test read the row, why a log-rank row's way is not its
+    # horizon difference's, the matched pairs under the paired test, and why a limit is null.
+    "direction",
+    "direction_note",
+    "pairs",
+    "mde_note",
+    # PF4.34 to PF4.47: Holm's adjusted p and whether the row counts for the verdict, both
+    # directions' limits with what they were computed for, the competing outcomes that shifted
+    # under log-rank, and the interval on the change.
+    "q_holm",
+    "holm",
+    "mde_rise",
+    "mde_fall",
+    "mde_rise_note",
+    "mde_fall_note",
+    "mde_test",
+    "mde_basis",
+    "mde_level",
+    "mde_family",
+    "mde_power",
+    "mde_anchor",
+    "mde_hr",
+    "p_min",
+    "flaggable",
+    "mde_moves_with",
+    "mde_rise_verdict",
+    "mde_fall_verdict",
+    "competing_shift",
+    "ci_lo",
+    "ci_hi",
+    "ci_level",
+    "ci_method",
+)
+# The columns that hold None, a string, a list or a bool: kept as objects, so an absent value
+# reads ``None`` and never the NaN a float column would put there.
+_OBJECT_COLUMNS = (
+    "config", "verdict", "direction", "direction_note", "pairs", "mde_note", "mde_rise_note",
+    "mde_fall_note", "mde_test", "mde_basis", "mde_anchor", "mde_moves_with", "competing_shift",
+    "ci_lo", "ci_hi", "ci_method", "mde_rise", "mde_fall", "mde_hr", "mde_rise_verdict",
+    "mde_fall_verdict", "holm", "flaggable",
 )
 COVERAGE_COLUMNS = (
     "config_hash",
@@ -162,6 +204,22 @@ class UnpairedAnalysis(UserWarning):
     every other warning in the process into an error."""
 
 
+class MixedCases(DiffError):
+    """A compared condition's episodes, both runs together, report more than one case id
+    (PF4.38): the condition ran several cases, so its rows mix what they compare."""
+
+
+class KindConflict(DiffError):
+    """Two sources disagree on whether an event is a failure or a success: the command line and
+    a run's declaration, or the two runs' declarations (PF4.20)."""
+
+
+#: An event's kind, which decides whether a rise of it is worse or safer (PF4.20).
+KINDS = ("failure", "success")
+#: The accepted change when neither run recorded one: the default ``--max-mde`` (section 8.4).
+DEFAULT_THRESHOLD = 0.20
+
+
 class UnknownEvent(DiffError):
     """An event name that appears in none of the frames a command loaded.
 
@@ -171,6 +229,20 @@ class UnknownEvent(DiffError):
 
 
 # ---------- multiple comparisons ----------
+
+
+def holm(p: NDArray[Any], q: float = 0.05) -> NDArray[np.float64]:
+    """Holm's step-down adjusted p-values, same shape as p: in ascending order of p (ties in the
+    given order), ``max over j <= i of min(1, (M - j + 1) p_(j))``. A row counts for the verdict
+    when its value is below ``q`` (PF4.34); ``q`` is taken, as ``bh`` takes it, and not used."""
+    arr = np.asarray(p, dtype=np.float64)
+    flat = arr.reshape(-1)
+    m = flat.size
+    order = np.argsort(flat, kind="stable")
+    stepped = np.minimum(1.0, (m - np.arange(m)) * flat[order])
+    out = np.empty(m, dtype=np.float64)
+    out[order] = np.maximum.accumulate(stepped) if m else stepped
+    return out.reshape(arr.shape)
 
 
 def bh(p: NDArray[Any], q: float = 0.05) -> NDArray[np.float64]:
@@ -196,13 +268,14 @@ def bh(p: NDArray[Any], q: float = 0.05) -> NDArray[np.float64]:
 def _power_two_proportion(delta: float, p_a: float, n_a: int, n_b: int, alpha: float) -> float:
     """Two-sided normal-approximation power to detect p_a + delta vs p_a.
 
-    Pooled SE under the null, separate SEs under the alternative; the increased arm is
-    paired with n_a, matching statsmodels' ``power_proportions_2indep`` convention.
+    Pooled SE under the null, separate SEs under the alternative; the changed arm B, at
+    ``p_a + delta``, is paired with ``n_b`` and the baseline with ``n_a`` (PF4.12), matching
+    statsmodels' ``power_proportions_2indep`` read the way its documentation says.
     """
     p_alt = p_a + delta
-    pooled = (p_alt * n_a + p_a * n_b) / (n_a + n_b)
+    pooled = (p_a * n_a + p_alt * n_b) / (n_a + n_b)
     se_null = math.sqrt(pooled * (1.0 - pooled) * (1.0 / n_a + 1.0 / n_b))
-    se_alt = math.sqrt(p_alt * (1.0 - p_alt) / n_a + p_a * (1.0 - p_a) / n_b)
+    se_alt = math.sqrt(p_a * (1.0 - p_a) / n_a + p_alt * (1.0 - p_alt) / n_b)
     z = float(stats.norm.isf(alpha / 2.0))
     if se_alt == 0.0:
         return 1.0 if delta > z * se_null else 0.0
@@ -216,22 +289,22 @@ def mde_two_proportion(
 ) -> float:
     """Smallest increase in event rate from p_a detectable at alpha (two-sided) and power.
 
-    Normal approximation, solved by bisection on (0, 1 - p_a]. Rates of exactly 0 or 1
-    use a 0.5/n continuity guard. If even the largest possible increase is not detectable
-    the largest possible increase is returned.
+    Normal approximation, solved by bisection on (0, 1 - p_a]. A rate of exactly 0 uses a
+    0.5/n continuity guard; at a rate of 1 no increase is possible and the result is NaN
+    (PF4.15). If even the largest possible increase is not detectable the largest possible
+    increase is returned. The single-event ``diff`` reads it (reading R35); every limit a
+    comparison prints is ``_limits``' (section 8.10).
     """
     if n_a <= 0 or n_b <= 0:
         raise DiffError(f"mde needs positive sample sizes, got n_a={n_a}, n_b={n_b}")
     if not 0.0 <= p_a <= 1.0:
         raise DiffError(f"p_a must be in [0, 1], got {p_a}")
-    guarded = p_a
-    if p_a <= 0.0:
-        guarded = 0.5 / n_a
-    elif p_a >= 1.0:
-        guarded = 1.0 - 0.5 / n_a
+    if p_a >= 1.0:
+        return math.nan
+    guarded = 0.5 / n_a if p_a <= 0.0 else p_a
     cap = 1.0 - guarded
     if _power_two_proportion(cap, guarded, n_a, n_b, alpha) < power:
-        return (1.0 - p_a) if p_a < 1.0 else cap
+        return 1.0 - p_a
     lo, hi = 0.0, cap
     for _ in range(200):
         mid = 0.5 * (lo + hi)
@@ -242,6 +315,120 @@ def mde_two_proportion(
         if hi - lo < 1e-12:
             break
     return hi
+
+
+#: The single-event ``diff``'s two reasons a cell prints no limit (PF4.15), each beginning with
+#: section 8.10's word for it.
+_AT_CEILING = "no room (at ceiling: the baseline had the event in every run)"
+_NO_RISE_DETECTABLE = "none detectable (not even the largest possible rise would be caught)"
+
+
+def _single_event_limit(
+    events_a: int, n_a: int, n_b: int, alpha: float, power: float
+) -> tuple[float, str | None]:
+    """The single-event ``diff``'s limit for a cell and why it has none: a baseline that had the
+    event in every run, decided from the counts and never from a floating rate, has no limit
+    (NaN); one whose whole headroom is not detectable keeps the headroom with a note."""
+    if events_a == n_a:
+        return math.nan, _AT_CEILING
+    rate_a = events_a / n_a
+    mde = mde_two_proportion(rate_a, n_a, n_b, alpha=alpha, power=power)
+    guarded = 0.5 / n_a if rate_a <= 0.0 else rate_a
+    if _power_two_proportion(1.0 - guarded, guarded, n_a, n_b, alpha) < power:
+        return mde, _NO_RISE_DETECTABLE
+    return mde, None
+
+
+# ---------- directions and verdict words ----------
+
+
+def _logrank_signed(
+    t_a: NDArray[np.float64],
+    o_a: NDArray[np.bool_],
+    t_b: NDArray[np.float64],
+    o_b: NDArray[np.bool_],
+) -> float:
+    """B's observed minus expected events over the pooled event times: the sign PF4.13 reads a
+    log-rank row's direction from (positive, B had the event sooner or more often: a rise)."""
+    total = 0.0
+    for x in np.unique(np.concatenate([t_a[o_a], t_b[o_b]])):
+        at_risk_a = int(np.sum(t_a >= x))
+        at_risk_b = int(np.sum(t_b >= x))
+        events = int(np.sum((t_a == x) & o_a)) + int(np.sum((t_b == x) & o_b))
+        total += int(np.sum((t_b == x) & o_b)) - at_risk_b * events / (at_risk_a + at_risk_b)
+    return float(total)
+
+
+def _direction(flagged: bool, signed: float) -> str:
+    """A row's direction: ``higher`` or ``lower`` when it is flagged and moved, else
+    ``unchanged`` (PF4.20)."""
+    way = _verdict.direction_of(signed) if flagged else None
+    return _verdict.UNCHANGED if way is None else way
+
+
+def _verdict_word(direction: str, kind: str | None) -> str:
+    """A row's ``verdict``: ``worse`` or ``safer`` for an event whose kind is known, the direction
+    word otherwise, on the result object as on every surface (PF4.20, ruled 2026-10-24)."""
+    if direction == _verdict.UNCHANGED or kind is None:
+        return direction
+    return _verdict.judged(direction, kind)
+
+
+def _direction_of_record(record: Mapping[str, Any], kind: str | None) -> str:
+    """A cell's direction, read back from its verdict when a frame built by hand carries none (an
+    event of unknown kind is read as a failure there, as M6 recorded it)."""
+    direction = record.get("direction")
+    if isinstance(direction, str):
+        return direction
+    verdict = str(record.get("verdict"))
+    if verdict in (_verdict.UNCHANGED, _verdict.HIGHER, _verdict.LOWER):
+        return verdict
+    rise = "safer" if kind == "success" else "worse"
+    return _verdict.HIGHER if verdict == rise else _verdict.LOWER
+
+
+def _objects(cells: pd.DataFrame, records: Sequence[Mapping[str, Any]]) -> None:
+    """Set the object columns from the records, so an absent value stays None."""
+    for col in _OBJECT_COLUMNS:
+        values = [_none_if_nan(r.get(col)) for r in records]
+        cells[col] = pd.Series(values, index=cells.index, dtype=object)
+
+
+def _none_if_nan(value: Any) -> Any:
+    return None if isinstance(value, float) and math.isnan(value) else value
+
+
+#: PF4.13: a log-rank row whose way is not its horizon difference's says the test read when the
+#: events happened, which way that went, and the difference it did not follow.
+_TIMING_NOTE = (
+    "the log-rank test read when the events happened: B's events came {way} than expected, "
+    "while the rates at the horizon differ by {delta:.3f}"
+)
+
+
+def _correct(rows: list[dict[str, Any]], q: float, method: str, kinds: Mapping[str, str]) -> None:
+    """The one pass over every row: Benjamini-Hochberg's ``q`` (the flag), Holm's ``q_holm`` and
+    whether the row counts for the verdict (PF4.34), its direction, its verdict word, and the
+    log-rank timing note on a flagged row whose horizon difference is 0 or the other way."""
+    if not rows:
+        return
+    p = np.array([r["p"] for r in rows], dtype=np.float64)
+    for r, flag_q, verdict_q in zip(rows, bh(p, q), holm(p, q), strict=True):
+        r["q"], r["q_holm"], r["holm"] = float(flag_q), float(verdict_q), bool(verdict_q < q)
+        r["direction"] = _direction(flag_q < q, r["_signed"])
+        r["verdict"] = _verdict_word(r["direction"], kinds.get(r["event"]))
+        timing = method == "logrank_bh" and r["direction"] != _verdict.UNCHANGED
+        if timing and (r["delta"] == 0 or (r["delta"] > 0) != (r["_signed"] > 0)):
+            way = "sooner" if r["_signed"] > 0 else "later"
+            r["direction_note"] = _TIMING_NOTE.format(way=way, delta=r["delta"])
+
+
+def _cells_frame(records: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
+    cells = pd.DataFrame.from_records(
+        [{c: r.get(c) for c in CELLS_COLUMNS} for r in records], columns=list(CELLS_COLUMNS)
+    )
+    _objects(cells, records)
+    return cells
 
 
 # ---------- per-cell tests ----------
@@ -529,19 +716,23 @@ def diff(
         o_b = cell_b["observed"].to_numpy(dtype=bool)
         events_a, events_b = int(o_a.sum()), int(o_b.sum())
         rate_a, rate_b = events_a / n_a, events_b / n_b
+        delta, signed, pairs = rate_b - rate_a, rate_b - rate_a, None
         if method == "fisher_bh":
             statistic, p = _fisher(events_a, n_a, events_b, n_b)
         elif method == "mcnemar_bh":
             statistic, p = _mcnemar(cell_a, cell_b, h)
+            # PF4.14: the paired test's change is the matched pairs' difference.
+            only_a, only_b, pairs = _discordant(cell_a, cell_b, h)
+            delta = signed = (only_b - only_a) / pairs if pairs else 0.0
         else:
-            statistic, p = _logrank(
-                cell_a["t"].to_numpy(dtype=np.float64),
-                o_a,
-                cell_b["t"].to_numpy(dtype=np.float64),
-                o_b,
-            )
+            t_a = cell_a["t"].to_numpy(dtype=np.float64)
+            t_b = cell_b["t"].to_numpy(dtype=np.float64)
+            statistic, p = _logrank(t_a, o_a, t_b, o_b)
+            signed = _logrank_signed(t_a, o_a, t_b, o_b)
+        mde, mde_note = _single_event_limit(events_a, n_a, n_b, q, power)
         rows.append(
             {
+                "event": event,
                 "config_hash": h,
                 "config": cell_a["config"].iloc[0],
                 "n_a": n_a,
@@ -550,28 +741,21 @@ def diff(
                 "events_b": events_b,
                 "rate_a": float(rate_a),
                 "rate_b": float(rate_b),
-                "delta": float(rate_b - rate_a),
+                "delta": float(delta) + 0.0,
                 "stat": float(statistic),
                 "p": float(p),
-                "q": float("nan"),
                 "verdict": "unchanged",
-                "mde": mde_two_proportion(rate_a, n_a, n_b, alpha=q, power=power),
+                "mde": mde,
+                "pairs": pairs,
+                "mde_note": mde_note,
+                "_signed": signed,
             }
         )
 
-    cells = pd.DataFrame.from_records(rows, columns=list(CELLS_COLUMNS))
-    if rows:
-        adjusted = bh(cells["p"].to_numpy(dtype=np.float64), q)
-        deltas = cells["delta"].to_numpy(dtype=np.float64)
-        verdicts = np.where(
-            (adjusted < q) & (deltas < 0),
-            "safer",
-            np.where((adjusted < q) & (deltas > 0), "worse", "unchanged"),
-        )
-        cells["q"] = adjusted
-        cells["verdict"] = verdicts
-    cells["config"] = cells["config"].astype(object)
-    cells["verdict"] = cells["verdict"].astype(object)
+    # Reading R35: the single-event result keeps M6's record, its event read as a failure (a
+    # rise worse, a fall safer); no verb prints it.
+    _correct(rows, q, method, {event: "failure"})
+    cells = _cells_frame(rows)
 
     n_safer = int((cells["verdict"] == "safer").sum())
     n_worse = int((cells["verdict"] == "worse").sum())
@@ -611,6 +795,8 @@ def _unchanged_mde(cells: pd.DataFrame) -> tuple[float, str | None]:
     if len(unchanged) == 0:
         return math.nan, None
     top = float(unchanged["mde"].max())
+    if math.isnan(top):
+        return math.nan, None
     hits = unchanged.loc[unchanged["mde"] == top, "config_hash"]
     return top, str(hits.iloc[0])
 
@@ -654,25 +840,94 @@ class EventInferenceError(DiffError):
 @dataclass(frozen=True, eq=False)
 class EventDiff:
     """One event's view of a multi-event diff. ``cells`` has the ``DiffResult.cells`` columns;
-    ``rate_a`` / ``rate_b`` are Aalen-Johansen cumulative incidence at the horizon."""
+    ``rate_a`` / ``rate_b`` are Aalen-Johansen cumulative incidence at the horizon.
+
+    PF4.20: ``kind`` is the event's kind when the command line or the runs gave one; ``n_safer``
+    and ``n_worse`` are counts then and None otherwise, while ``n_higher`` and ``n_lower`` count
+    the flagged rows either way. ``n_holm_higher`` and ``n_holm_lower`` count the rows that count
+    for the verdict (PF4.35); the last three are PF4.28's facts when a condition cannot be flagged
+    alone."""
 
     event: str
     cells: pd.DataFrame
-    n_safer: int
-    n_worse: int
+    n_safer: int | None
+    n_worse: int | None
     n_unchanged: int
     max_mde: float
     max_mde_unchanged: float
     max_mde_unchanged_cell: str | None
     cause_specific: bool
+    kind: str | None = None
+    n_higher: int | None = None
+    n_lower: int | None = None
+    n_holm_higher: int = 0
+    n_holm_lower: int = 0
+    n_unflaggable: int = 0
+    together_needed: int | None = None
+    replicates_for_lone_flag: int | None = None
+
+    def __post_init__(self) -> None:
+        # A result built by hand carries no direction counts; they are read from its cells.
+        if self.n_higher is None or self.n_lower is None:
+            records = self.cells.to_dict(orient="records")
+            directions = [_direction_of_record(r, self.kind) for r in records]
+            object.__setattr__(self, "n_higher", directions.count(_verdict.HIGHER))
+            object.__setattr__(self, "n_lower", directions.count(_verdict.LOWER))
+
+    def words(self) -> tuple[str, str]:
+        """The event's two words for a significant change, the one for a rise first:
+        ``worse``/``safer`` for a failure, ``safer``/``worse`` for a success, ``higher``/``lower``
+        when the kind is not known (PF4.20)."""
+        if self.kind is None:
+            return _verdict.HIGHER, _verdict.LOWER
+        return (_verdict.judged(_verdict.HIGHER, self.kind),
+                _verdict.judged(_verdict.LOWER, self.kind))
+
+    def counts(self) -> tuple[tuple[str, int], tuple[str, int]]:
+        """The event's flagged rows in its own words, the change for the worse first:
+        ``(("worse", n), ("safer", n))`` with a kind, ``(("higher", n), ("lower", n))`` without."""
+        if self.kind is None:
+            higher, lower = int(self.n_higher or 0), int(self.n_lower or 0)
+            return (_verdict.HIGHER, higher), (_verdict.LOWER, lower)
+        return ("worse", int(self.n_worse or 0)), ("safer", int(self.n_safer or 0))
+
+    def records(self) -> list[dict[str, Any]]:
+        """The cells as JSON-ready records: every number native, every NaN None, the direction
+        filled in, each arm's share with its Wilson interval at its level (PF4.1b), and whether a
+        share differs from its rate, which no store 0.1.0 writes can make true (PF4.37, R4)."""
+        from poisson_prove.stats import share
+
+        out = []
+        for record in self.cells.to_dict(orient="records"):
+            cell = {col: _none_if_nan(_native(value)) for col, value in record.items()}
+            cell["direction"] = _direction_of_record(cell, self.kind)
+            cell["verdict"] = _verdict_word(cell["direction"], self.kind)
+            for arm in ("a", "b"):
+                # An arm with no run (only a frame built by hand has one) has no share.
+                events, n = int(cell[f"events_{arm}"]), int(cell[f"n_{arm}"])
+                cell[f"share_{arm}"] = share(events, n) if n else None
+                gap = abs(events / n - float(cell[f"rate_{arm}"])) if n else 0.0
+                cell[f"share_{arm}_differs"] = gap > _CIF_EQUALITY_TOLERANCE
+            out.append(cell)
+        return out
 
     def to_json(self) -> dict[str, Any]:
         out: dict[str, Any] = {name: _native(getattr(self, name)) for name in _EVENT_SUMMARY_FIELDS}
+        out["max_mde"] = _nan_to_none(self.max_mde)
         out["max_mde_unchanged"] = _nan_to_none(self.max_mde_unchanged)
-        out["cells"] = [
-            {col: _native(value) for col, value in record.items()}
-            for record in self.cells.to_dict(orient="records")
-        ]
+        out["kind"] = self.kind
+        out["n_higher"], out["n_lower"] = int(self.n_higher or 0), int(self.n_lower or 0)
+        out["n_holm_higher"], out["n_holm_lower"] = int(self.n_holm_higher), int(self.n_holm_lower)
+        if self.kind is None:
+            out["n_safer"] = out["n_worse"] = out["n_holm_safer"] = out["n_holm_worse"] = None
+        else:
+            judged = {_verdict.judged(way, self.kind): n for way, n in
+                      ((_verdict.HIGHER, self.n_holm_higher), (_verdict.LOWER, self.n_holm_lower))}
+            out["n_holm_safer"], out["n_holm_worse"] = int(judged["safer"]), int(judged["worse"])
+        out["n_unflaggable"] = int(self.n_unflaggable)
+        out["together_needed"] = self.together_needed
+        out["replicates_for_lone_flag"] = self.replicates_for_lone_flag
+        out["cells"] = self.records()
         return out
 
 
@@ -706,22 +961,94 @@ class MultiDiffResult:
     n_rejected: int = 0
     n_interval_only: int = 0
     n_verdict_only: int = 0
+    # PF4, defaulted for the same reason. The accepted change the nothing-moved words are asked
+    # against and where it came from (section 8.4); the word as ``multi_diff`` decided it over
+    # the rows that count (None on a result built by hand, which ``comparison_verdict`` decides
+    # from its counts); the verdict limit (PF4.40); the rows flagged that do not count (PF4.35);
+    # the runs whose tests' error rates do not hold (PF4.39); the conditions whose errored
+    # episodes differ (PF4.46).
+    threshold: float = DEFAULT_THRESHOLD
+    threshold_source: str = "default"
+    word: str | None = None
+    verdict_limit: float | None = None
+    n_flagged_only: int = 0
+    peeking: tuple[Mapping[str, Any], ...] = ()
+    errors_differ: tuple[Mapping[str, Any], ...] = ()
+    #: PF4.44's search, run the first time the fragility is read (reading R23), so a caller that
+    #: reads only the word never pays for it.
+    fragility_search: Callable[[], _verdict.Fragility] | None = field(default=None, repr=False)
+
+    @cached_property
+    def _fragility(self) -> _verdict.Fragility:
+        if self.fragility_search is None:
+            return _verdict.Fragility(None, (), "not searched", False)
+        return self.fragility_search()
+
+    @property
+    def fragility(self) -> int | None:
+        """The fewest stored outcomes whose flipping would change the word; None with a note
+        when no set of flips does (PF4.44)."""
+        return self._fragility.value
+
+    @property
+    def fragility_flips(self) -> tuple[Mapping[str, Any], ...]:
+        return self._fragility.flips
+
+    @property
+    def fragility_note(self) -> str | None:
+        return self._fragility.note
+
+    @property
+    def fragility_exact(self) -> bool:
+        return self._fragility.exact
+
+    def all_kinds_known(self) -> bool:
+        return all(self.by_event[e].kind is not None for e in self.events)
+
+    def comparison_verdict(self) -> str:
+        """The comparison's word: section 8.4's when every event's kind is known, PF4.20's
+        direction words when one is not, read over the rows that count (PF4.34)."""
+        if self.word is not None:
+            return self.word
+        # A result built by hand: its flagged rows, and its largest limit among the conditions
+        # that did not move, a condition with none counting above every threshold (PF4.29).
+        known = self.all_kinds_known()
+        ways: list[str] = []
+        for ev in self.by_event.values():
+            if known:
+                ways += [way for way, n in ev.counts() if n]
+            else:
+                moved = ((_verdict.HIGHER, ev.n_higher), (_verdict.LOWER, ev.n_lower))
+                ways += [way for way, n in moved if n]
+        unread = any(
+            ev.n_unchanged and math.isnan(ev.max_mde_unchanged) for ev in self.by_event.values()
+        )
+        tops = [ev.max_mde_unchanged for ev in self.by_event.values()]
+        limits = [top for top in tops if not math.isnan(top)]
+        could = not unread and (not limits or max(limits) <= self.threshold)
+        return _verdict.word_of(ways, known, could)
 
     def _ordered_events(self) -> list[str]:
-        return sorted(
-            self.events,
-            key=lambda e: (-self.by_event[e].n_worse, -self.by_event[e].n_safer, e),
-        )
+        """Worst first: by the count of the change for the worse (a rise, without a kind), then
+        the other way's, then the name."""
+        def key(e: str) -> tuple[int, int, str]:
+            (_, up), (_, down) = self.by_event[e].counts()
+            return -up, -down, e
+
+        return sorted(self.events, key=key)
 
     def _method_label(self) -> str:
-        return f"{self.method} (cause-specific)" if self.method == "logrank_bh" else self.method
+        # PF4.41: log-rank tests the cause-specific hazard, and says so wherever it is named.
+        if self.method == "logrank_bh":
+            return f"{self.method} (cause-specific hazard)"
+        return self.method
 
     def headline(self) -> str:
         """Every event, worst first, then the method line. Never a causal claim."""
-        parts = [
-            f"{e}: {self.by_event[e].n_safer} safer, {self.by_event[e].n_worse} worse"
-            for e in self._ordered_events()
-        ]
+        parts = []
+        for e in self._ordered_events():
+            (up, n_up), (down, n_down) = self.by_event[e].counts()
+            parts.append(f"{e}: {n_down} {down}, {n_up} {up}")
         # ADR-052, C24: the headline states the *requested method's* pairing and never the runs'
         # provenance. A reader reading about the analysis reads a fact about the analysis; the
         # runs' seed identity is its own field, and ``unpaired_analysis`` beside it says the
@@ -757,7 +1084,10 @@ class MultiDiffResult:
 
     def trade_line(self) -> str | None:
         """None when ``trades`` is empty; otherwise a count of co-occurrence, not a cause. When the
-        two events are exact complements the trade is guaranteed and the line says so instead."""
+        two events are exact complements the trade is guaranteed and the line says so instead.
+        ``trades`` keeps an event that fell in its first slot and one that rose in its second
+        whatever the kinds; a success's slots are the other way about, and the line says which
+        way each moved."""
         if len(self.trades) == 0:
             return None
         pairs: dict[tuple[str, str], int] = {}
@@ -767,6 +1097,8 @@ class MultiDiffResult:
                     pairs[(safer, worse)] = pairs.get((safer, worse), 0) + 1
         (safer, worse), _ = min(pairs.items(), key=lambda kv: (-kv[1], kv[0]))
         n = len(self.trades)
+        fell = "rose" if self.by_event[safer].kind == "success" else "fell"
+        rose = "fell" if self.by_event[worse].kind == "success" else "rose"
         complement = self.complementary_events()
         if complement is not None:
             e1, e2 = complement
@@ -778,10 +1110,11 @@ class MultiDiffResult:
                 f"rose are the {n} where {safer} fell: one finding, reported twice. Naming one of "
                 "the two shows it once."
             )
-        return f"Trade: {safer} fell in {n} {'cell' if n == 1 else 'cells'} where {worse} rose."
+        return f"Trade: {safer} {fell} in {n} {'cell' if n == 1 else 'cells'} where {worse} {rose}."
 
     def to_markdown(self) -> str:
-        from poisson_prove import _look
+        from poisson_prove import _facts, _look
+        from poisson_prove.stats import WILSON_LEVEL, level_label, wilson
 
         look = _look.active()
         mde = _look.fmt_rate if look else (lambda x: f"{x:.4f}")
@@ -806,25 +1139,55 @@ class MultiDiffResult:
             f"n_not_comparable={count(self.n_not_comparable)}, dropped_a={count(self.dropped_a)}, "
             f"dropped_b={count(self.dropped_b)}, truncated={count(self.truncated)}"
         )
-        cols = list(CELLS_COLUMNS)
+        # The cell table: each arm's share with its Wilson interval beside the rates (PF4.3), and
+        # the interval on the change beside the change (PF4.42), each labelled with its level.
+        share_label = level_label(WILSON_LEVEL)
+        change = "change"
+        if self.interval_level is not None:
+            level = level_label(self.interval_level)
+            change = f"change [{level}, {_facts.interval_method(self.method)}]"
+        head = [
+            "config_hash", "config", "n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b",
+            f"share_a [{share_label}]", f"share_b [{share_label}]", "delta", change, "stat", "p",
+            "q", "verdict", "mde",
+        ]
         for e in self._ordered_events():
             ev = self.by_event[e]
+            counts = ", ".join(f"n_{word}={count(n)}" for word, n in reversed(ev.counts()))
             lines.extend(
                 [
                     "",
-                    f"## {e}: n_safer={count(ev.n_safer)}, n_worse={count(ev.n_worse)}, "
+                    f"## {e}: {counts}, "
                     f"n_unchanged={count(ev.n_unchanged)}, max_mde={mde(ev.max_mde)}, "
                     f"max_mde_unchanged={mde(ev.max_mde_unchanged)}, "
                     f"max_mde_unchanged_cell={shown(ev.max_mde_unchanged_cell)}",
                     "",
-                    "| " + " | ".join(cols) + " |",
-                    "|" + "|".join("---" for _ in cols) + "|",
+                    "| " + " | ".join(head) + " |",
+                    "|" + "|".join("---" for _ in head) + "|",
                 ]
             )
-            for row in ev.cells.itertuples(index=False):
-                lines.append(
-                    "| " + " | ".join(_md_cell(getattr(row, col), col) for col in cols) + " |"
-                )
+            for record in ev.records():
+                values = [_md_cell(record[col], col) for col in head[:8]]
+                for arm in ("a", "b"):
+                    k, n = int(record[f"events_{arm}"]), int(record[f"n_{arm}"])
+                    if not n:
+                        values.append("none")
+                        continue
+                    interval = wilson(k, n)
+                    mark = " *" if record[f"share_{arm}_differs"] else ""
+                    values.append(f"{k / n:.3f} [{interval.lo:.3f}, {interval.hi:.3f}]{mark}")
+                values.append(_md_cell(record["delta"], "delta"))
+                lo, hi = record.get("ci_lo"), record.get("ci_hi")
+                interval_text = "censored" if lo is None or hi is None else f"[{lo:.3f}, {hi:.3f}]"
+                values.append(interval_text)
+                values += [_md_cell(record[col], col) for col in ("stat", "p", "q")]
+                values.append(str(record["verdict"]))
+                limit = _facts.limit_text(record)
+                values.append(f"{limit} (timing)" if record.get("direction_note") else limit)
+                lines.append("| " + " | ".join(values) + " |")
+            lines.append("")
+            lines.append(_facts.shares_caption(e, WILSON_LEVEL))
+            lines.append(_facts.limits_caption())
         if len(self.trades):
             tcols = list(_TRADES_COLUMNS)
             lines.extend(
@@ -868,22 +1231,62 @@ class MultiDiffResult:
             ]
         )
         out["interval_level"] = self.interval_level
+        out["interval_rule"] = self.interval_rule()
         out["alpha_star"] = self.alpha_star
         out["n_rejected"] = self.n_rejected
         out["n_interval_only"] = self.n_interval_only
         out["n_verdict_only"] = self.n_verdict_only
+        out["threshold"] = self.threshold
+        out["threshold_source"] = self.threshold_source
+        out["comparison_verdict"] = self.comparison_verdict()
+        out["flag_rule"] = "benjamini-hochberg"
+        out["verdict_rule"] = "holm"
+        out["n_flagged_only"] = int(self.n_flagged_only)
+        out["verdict_limit"] = self.verdict_limit
+        out["fragility"] = self.fragility
+        out["fragility_flips"] = [dict(flip) for flip in self.fragility_flips]
+        out["fragility_note"] = self.fragility_note
+        out["fragility_exact"] = self.fragility_exact
+        out["peeking"] = [dict(entry) for entry in self.peeking]
+        out["errors_differ"] = [
+            {k: _native(v) for k, v in entry.items()} for entry in self.errors_differ
+        ]
         out["headline"] = self.headline()
         out["trade_line"] = self.trade_line()
         return out
 
-    def check(self, fail_on: Literal["worse", "any"] = "worse") -> bool:
-        """True if the diff passes. 'worse': no cell significantly worse in any event.
-        'any': nothing significant either way in any event."""
-        if fail_on == "worse":
-            return all(ev.n_worse == 0 for ev in self.by_event.values())
-        if fail_on == "any":
-            return all(ev.n_worse == 0 and ev.n_safer == 0 for ev in self.by_event.values())
-        raise DiffError(f"fail_on must be 'worse' or 'any', got {fail_on!r}")
+    def interval_rule(self) -> str | None:
+        """PF4.42: the interval's level is the false-coverage level (Benjamini-Yekutieli) when
+        anything is flagged and the simultaneous level (Bonferroni) when nothing is."""
+        if self.interval_level is None:
+            return None
+        return "benjamini-yekutieli" if self.n_rejected else "bonferroni"
+
+    def check(self, fail_on: str = "worse") -> bool:
+        """True if the diff passes, read over the rows that count for the verdict (reading R2).
+        'worse': no condition worse in any event, which needs every event's kind (refused with
+        ``DiffError`` otherwise, as the command line refuses it); 'any': nothing either way;
+        'higher' / 'lower': no event's rate rose / fell (PF4.20)."""
+        if fail_on not in ("worse", "any", "higher", "lower"):
+            raise DiffError(f"fail_on must be 'worse', 'any', 'higher' or 'lower', got {fail_on!r}")
+        unknown = [e for e in self.events if self.by_event[e].kind is None]
+        if fail_on == "worse" and unknown:
+            raise DiffError(
+                f"cannot gate on worse: no kind is known for {', '.join(unknown)}; gate on "
+                "'higher', 'lower' or 'any', or give each event its kind"
+            )
+        for ev in self.by_event.values():
+            for record in ev.cells.to_dict(orient="records"):
+                direction = _direction_of_record(record, ev.kind)
+                counted = record.get("holm")
+                # A frame built by hand carries no Holm column; its flagged rows count.
+                if direction == _verdict.UNCHANGED or (counted is not None and not counted):
+                    continue
+                if fail_on == "any" or fail_on == direction:
+                    return False
+                if fail_on == "worse" and _verdict.judged(direction, ev.kind) == "worse":
+                    return False
+        return True
 
 
 def _outcome_counts(a: pd.DataFrame, b: pd.DataFrame) -> dict[str, int]:
@@ -1148,20 +1551,19 @@ def _build_intervals(
 ) -> tuple[pd.DataFrame | None, float | None, float | None, int, int]:
     """``(intervals, interval_level, alpha_star, n_interval_only, n_verdict_only)``.
 
-    Called after the BH pass and after ``by_event``, because the level cannot be known before
-    ``R``. ``n_rejected`` is that ``R``: the count of hypotheses BH rejected over the **flat
-    family** ``multi_diff`` runs, one pass across every cell and every event. It arrives as an
-    argument rather than being recounted here, so it has exactly one derivation.
+    Called after the BH pass, because the level cannot be known before ``R``. ``n_rejected`` is
+    that ``R``: the count of hypotheses BH rejected over the **flat family** ``multi_diff`` runs,
+    one pass across every cell and every event. It arrives as an argument rather than being
+    recounted here, so it has exactly one derivation.
 
-    ``R == 0`` returns early rather than falling through with ``alpha_star == 0.0``: a
-    bisection at zero would run to its step count and hand back ``(-1, 1)`` on every cell,
-    which is true, worthless, and the output section 0.3 exists to prevent. The MDE lines are
-    already the right object for that run.
+    PF4.42 (reading R10): every row has an interval, at ``1 - q max(R, 1) / M``: S24's
+    false-coverage level when anything is flagged, the simultaneous (Bonferroni) level when
+    nothing is. Only a comparison of no rows has none.
     """
-    if n_rejected == 0:
+    if n_tests == 0:
         return None, None, None, 0, 0
-    alpha_star = q * n_rejected / n_tests
-    interval_level = 1.0 - q * n_rejected / n_tests
+    alpha_star = q * max(n_rejected, 1) / n_tests
+    interval_level = 1.0 - alpha_star
     wanted = _BASIS_BY_METHOD[method]
     records: list[dict[str, Any]] = []
     n_interval_only = 0
@@ -1225,6 +1627,309 @@ def _build_intervals(
     return frame, interval_level, alpha_star, n_interval_only, n_verdict_only
 
 
+# ---------- PF4: what a comparison carries beyond its tests ----------
+
+#: The interval each test's rows carry on their change (PF4.42).
+_CI_METHODS: Mapping[str, str] = {
+    "fisher_bh": "miettinen-nurminen",
+    "logrank_bh": "miettinen-nurminen",
+    "mcnemar_bh": "tango",
+}
+
+
+@dataclass(frozen=True)
+class _Arms:
+    """What a row's tests read beyond its counts, per arm: each run's time and outcome at the
+    common horizon, whether it had the row's event, and its replicate index."""
+
+    t: tuple[NDArray[np.float64], NDArray[np.float64]]
+    outcomes: tuple[NDArray[Any], NDArray[Any]]
+    had: tuple[NDArray[np.bool_], NDArray[np.bool_]]
+    reps: tuple[NDArray[Any], NDArray[Any]]
+
+    def pairs(self) -> dict[str, list[int]]:
+        """The matched pairs by replicate index: only A had the event, only B, both, neither."""
+        had_a = dict(zip(self.reps[0].tolist(), self.had[0].tolist(), strict=True))
+        had_b = dict(zip(self.reps[1].tolist(), self.had[1].tolist(), strict=True))
+        out: dict[str, list[int]] = {"only_a": [], "only_b": [], "both": [], "neither": []}
+        for rep in sorted(set(had_a) & set(had_b)):
+            in_a, in_b = had_a[rep], had_b[rep]
+            kind = "only_a" if in_a else "only_b" if in_b else "neither"
+            out["both" if in_a and in_b else kind].append(int(rep))
+        return out
+
+    def outside(self, compared: Sequence[str]) -> tuple[NDArray[np.bool_], NDArray[np.bool_]]:
+        """The runs of each arm that ended in an outcome outside the compared events: the only
+        runs a flip may make end in the event (reading R26)."""
+        def of(outcomes: NDArray[Any]) -> NDArray[np.bool_]:
+            ended = [o is not None and str(o) not in compared for o in outcomes]
+            return np.array(ended, dtype=bool)
+
+        return of(self.outcomes[0]), of(self.outcomes[1])
+
+
+def _require_one_case(a: pd.DataFrame, b: pd.DataFrame, common: Sequence[str]) -> None:
+    """PF4.38: refuse a compared condition whose episodes, both runs together, report more than
+    one case id. The id is read from the store's ``case_id`` column and never from ``meta``
+    (reading R5); an episode that reports none is not counted."""
+    seen: dict[str, set[str]] = {}
+    configs: dict[str, Any] = {}
+    wanted = set(common)
+    for frame in (a, b):
+        if "case_id" not in frame.columns:
+            continue
+        columns = (frame["config_hash"].astype(str), frame["config"], frame["case_id"])
+        for h, config, case in zip(*columns, strict=True):
+            if h in wanted and isinstance(case, str) and case:
+                seen.setdefault(h, set()).add(case)
+                configs.setdefault(h, config)
+    for h in sorted(seen):
+        if len(seen[h]) > 1:
+            cases = sorted(seen[h])
+            shown = ", ".join(cases[:3]) + (", ..." if len(cases) > 3 else "")
+            condition = ", ".join(f"{k} {v}" for k, v in sorted(dict(configs[h]).items()))
+            raise MixedCases(
+                f"condition {condition} ran {len(cases)} cases ({shown}); each case must be its "
+                "own sweep axis"
+            )
+
+
+def _errors_differ(coverage: pd.DataFrame, q: float) -> list[dict[str, Any]]:
+    """PF4.46 (reading R15): the compared conditions whose share of errored episodes differs
+    between the runs by Fisher's two-sided exact test at ``p < q``, unadjusted, with each run's
+    errored and total counts."""
+    out = []
+    for record in coverage.to_dict(orient="records"):
+        if not record["comparable"]:
+            continue
+        errored_a, rows_a = int(record["no_outcome_a"]), int(record["rows_a"])
+        errored_b, rows_b = int(record["no_outcome_b"]), int(record["rows_b"])
+        if errored_a == errored_b == 0:
+            continue
+        p = _fisher(errored_a, rows_a, errored_b, rows_b)[1]
+        if p < q:
+            out.append({"config_hash": str(record["config_hash"]), "config": record["config"],
+                        "errored_a": errored_a, "rows_a": rows_a, "errored_b": errored_b,
+                        "rows_b": rows_b, "p": p})
+    return out
+
+
+def _peeking(
+    manifest_a: RunManifest | None, manifest_b: RunManifest | None
+) -> list[dict[str, Any]]:
+    """PF4.39 (reading R7): the runs whose tests' error rates do not hold, because a resume added
+    to them after a comparison of them was read, or because they are partial."""
+    out = []
+    for manifest in (manifest_a, manifest_b):
+        if manifest is None:
+            continue
+        resumes = manifest.environment.get("resumes") or ()
+        if any(isinstance(r, Mapping) and r.get("after_comparison") for r in resumes):
+            reason = "resumed after a comparison"
+        elif manifest.status == "partial":
+            reason = "partial"
+        else:
+            continue
+        out.append({"run_id": manifest.run_id, "run_name": manifest.name, "reason": reason})
+    return out
+
+
+def _complements(rows: Sequence[Mapping[str, Any]], method: str) -> dict[tuple[str, str], str]:
+    """PF4.47 (reading R16): under Fisher and the paired test, each row whose condition's runs, in
+    both runs, all ended in its event or one other compared event: the two rows' p-values are
+    identical, so a lone change moves both. Maps the row to the other event."""
+    if method not in ("fisher_bh", "mcnemar_bh"):
+        return {}
+    by_condition: dict[str, list[str]] = {}
+    arms: dict[str, _Arms] = {}
+    for r in rows:
+        by_condition.setdefault(r["config_hash"], []).append(r["event"])
+        arms[r["config_hash"]] = r["_arms"]
+    out: dict[tuple[str, str], str] = {}
+    for h, events in by_condition.items():
+        ended = {o for outcomes in arms[h].outcomes for o in outcomes.tolist()}
+        for i, first in enumerate(events):
+            for second in events[i + 1 :]:
+                if ended <= {first, second}:
+                    out[(h, first)], out[(h, second)] = second, first
+    return out
+
+
+def _limits_of(
+    r: Mapping[str, Any], method: str, level: float, power: float, horizon: float
+) -> _limits.Limits:
+    """One row's limits at one level, by its test (section 8.10)."""
+    arms: _Arms = r["_arms"]
+    if method == "fisher_bh":
+        return _limits.fisher_limits(int(r["events_a"]), int(r["n_a"]), int(r["n_b"]), level, power)
+    if method == "mcnemar_bh":
+        pairs = arms.pairs()
+        matched = sum(len(v) for v in pairs.values())
+        events_a = len(pairs["only_a"]) + len(pairs["both"])
+        return _limits.paired_limits(events_a, matched, level, power)
+    return _limits.logrank_limits(arms.t[0], arms.had[0], int(r["n_b"]), horizon, level, power)
+
+
+def _set_limits(rows: list[dict[str, Any]], event_set: Sequence[str], *, method: str, q: float,
+                power: float, horizon: float) -> list[_limits.Limits]:
+    """Every row's limits (PF4.22, PF4.27, PF4.47), written into the row; returns each row's
+    limits at the verdict's level ``q / M``, which the nothing-moved question reads."""
+    m = len(rows)
+    moves_with = _complements(rows, method)
+    verdict_level = q / m if m else q
+    out = []
+    for r in rows:
+        partner = moves_with.get((r["config_hash"], r["event"]))
+        level = verdict_level * (2.0 if partner is not None else 1.0)
+        limits = _limits_of(r, method, level, power, horizon)
+        at_verdict = (
+            limits if partner is None else _limits_of(r, method, verdict_level, power, horizon)
+        )
+        mde, note = limits.one_number()
+        r.update({
+            "mde": math.nan if mde is None else mde,
+            "mde_note": note,
+            "mde_rise": limits.rise.value,
+            "mde_fall": limits.fall.value,
+            "mde_rise_note": limits.rise.note,
+            "mde_fall_note": limits.fall.note,
+            "mde_test": limits.test,
+            "mde_basis": limits.basis,
+            "mde_level": level,
+            "mde_family": m,
+            "mde_power": power,
+            "mde_anchor": "observed baseline",
+            "mde_hr": limits.rise.hazard_ratio,
+            "p_min": float(limits.p_min),
+            "flaggable": bool(limits.p_min < level),
+            "mde_moves_with": partner,
+            "mde_rise_verdict": at_verdict.rise.value,
+            "mde_fall_verdict": at_verdict.fall.value,
+            "competing_shift": None,
+        })
+        out.append(at_verdict)
+    return out
+
+
+def _set_competing_shift(rows: list[dict[str, Any]], q: float) -> None:
+    """PF4.41 (reading R9): under log-rank, each row's other outcomes that ended runs in its
+    condition (the non-event included) whose share differs between the runs by Fisher's
+    two-sided exact test at ``p < q``, unadjusted, sorted by name."""
+    for r in rows:
+        arms: _Arms = r["_arms"]
+        ended = {str(o) for outcomes in arms.outcomes for o in outcomes.tolist() if o is not None}
+        shifted = []
+        for other in sorted(ended - {r["event"]}):
+            count_a = int(np.sum(arms.outcomes[0] == other))
+            count_b = int(np.sum(arms.outcomes[1] == other))
+            if _fisher(count_a, int(r["n_a"]), count_b, int(r["n_b"]))[1] < q:
+                shifted.append(other)
+        r["competing_shift"] = shifted
+
+
+def _event_diff(event: str, rows: Sequence[dict[str, Any]], kind: str | None, method: str, q: float,
+                family: int) -> EventDiff:
+    """One event's rows as an ``EventDiff``: the cells, the counts each way, the largest limits,
+    and PF4.28's design facts when a condition of it cannot be flagged alone."""
+    cells = _cells_frame(rows)
+    directions = [r["direction"] for r in rows]
+    unchanged = [r for r in rows if r["direction"] == _verdict.UNCHANGED]
+    limits = [r["mde"] for r in rows if not math.isnan(r["mde"])]
+    quiet = [r for r in unchanged if not math.isnan(r["mde"])]
+    max_unchanged = max((r["mde"] for r in quiet), default=math.nan)
+    where = next((r["config_hash"] for r in quiet if r["mde"] == max_unchanged), None)
+    unflaggable = [r for r in rows if not r["flaggable"]]
+    n_higher, n_lower = directions.count(_verdict.HIGHER), directions.count(_verdict.LOWER)
+    judged = {
+        _verdict.judged(_verdict.HIGHER, kind): n_higher,
+        _verdict.judged(_verdict.LOWER, kind): n_lower,
+    }
+    return EventDiff(
+        event=event,
+        cells=cells,
+        n_safer=None if kind is None else judged["safer"],
+        n_worse=None if kind is None else judged["worse"],
+        n_unchanged=len(unchanged),
+        max_mde=max(limits, default=math.nan),
+        max_mde_unchanged=max_unchanged,
+        max_mde_unchanged_cell=where,
+        cause_specific=method == "logrank_bh",
+        kind=kind,
+        n_higher=n_higher,
+        n_lower=n_lower,
+        n_holm_higher=sum(1 for r in rows if r["holm"] and r["direction"] == _verdict.HIGHER),
+        n_holm_lower=sum(1 for r in rows if r["holm"] and r["direction"] == _verdict.LOWER),
+        n_unflaggable=len(unflaggable),
+        together_needed=(_limits.together_needed([r["p_min"] for r in rows], q, family)
+                         if unflaggable else None),
+        replicates_for_lone_flag=(_limits.replicates_for_lone_flag(rows[0]["mde_test"], q / family)
+                                  if unflaggable else None),
+    )
+
+
+def _trades(by_event: Mapping[str, EventDiff], event_set: Sequence[str], common: Sequence[str],
+            groups_a: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
+    """The conditions where one event's flagged row went one way and another's the other: a fall
+    (or, with kinds, a change for the better) in the first slot, a rise (for the worse) in the
+    second. With no kind such a condition is still recorded, and the comparison reads it as
+    ``mixed``, not a trade (PF4.20)."""
+    verdicts = {
+        k: dict(zip(by_event[k].cells["config_hash"], by_event[k].cells["verdict"], strict=True))
+        for k in event_set
+    }
+    records = []
+    for h in common:
+        better = tuple(k for k in event_set if verdicts[k].get(h) in ("safer", _verdict.LOWER))
+        worse = tuple(k for k in event_set if verdicts[k].get(h) in ("worse", _verdict.HIGHER))
+        if better and worse:
+            records.append({"config_hash": h, "config": groups_a[h]["config"].iloc[0],
+                            "safer_events": better, "worse_events": worse})
+    trades = pd.DataFrame.from_records(records, columns=list(_TRADES_COLUMNS))
+    for col in ("config", "safer_events", "worse_events"):
+        trades[col] = trades[col].astype(object)
+    return trades
+
+
+def _fragile_row(
+    r: Mapping[str, Any],
+    facts: _verdict.RowFacts,
+    *,
+    method: str,
+    events: Sequence[str],
+    level: float,
+    power: float,
+    horizon: float,
+) -> _verdict.Row:
+    """One row as PF4.44's search reads it."""
+    arms: _Arms = r["_arms"]
+    outside = arms.outside(events)
+    common = {"facts": facts, "event": r["event"], "config_hash": r["config_hash"]}
+    if method == "fisher_bh":
+        def reps(arm: int, chosen: NDArray[np.bool_]) -> tuple[int, ...]:
+            return tuple(int(x) for x in arms.reps[arm][chosen])
+
+        return _verdict.FisherRow(
+            **common, n=(int(r["n_a"]), int(r["n_b"])),
+            had=(reps(0, arms.had[0]), reps(1, arms.had[1])),
+            spare=(reps(0, outside[0]), reps(1, outside[1])),
+            level=level, power=power,
+        )
+    if method == "mcnemar_bh":
+        pairs = arms.pairs()
+        spare_a = frozenset(int(x) for x in arms.reps[0][outside[0]])
+        spare_b = frozenset(int(x) for x in arms.reps[1][outside[1]])
+        return _verdict.PairedRow(
+            **common, only_a=tuple(pairs["only_a"]), only_b=tuple(pairs["only_b"]),
+            both=tuple(pairs["both"]), neither=tuple(pairs["neither"]),
+            spare_a=spare_a, spare_b=spare_b, level=level, power=power,
+        )
+    return _verdict.LogrankRow(
+        facts, event=r["event"], config_hash=r["config_hash"], t=arms.t, had=arms.had,
+        spare=outside, reps=(np.asarray(arms.reps[0]), np.asarray(arms.reps[1])),
+        horizon=horizon, level=level, power=power,
+    )
+
+
 def multi_diff(
     a: pd.DataFrame,
     b: pd.DataFrame,
@@ -1235,6 +1940,7 @@ def multi_diff(
     power: float = 0.8,
     manifest_a: RunManifest | None = None,
     manifest_b: RunManifest | None = None,
+    kinds: Mapping[str, str] | None = None,
 ) -> MultiDiffResult:
     """Diff two RAW store frames across several competing events at once.
 
@@ -1249,6 +1955,14 @@ def multi_diff(
     the per-event test statistic treats every other outcome as censoring. One BH family
     covers every (cell, event) pair. Errored rows (null outcome) are excluded from every
     numerator and denominator.
+
+    ``kinds`` gives events' kinds (``failure`` or ``success``) as the command line names them; a
+    kind the runs declare is used too, and the two disagreeing is refused (``KindConflict``).
+    ``power`` is the power every detection limit is stated at. A condition whose episodes report
+    more than one case id is refused (``MixedCases``, PF4.38). Each row's flag is
+    Benjamini-Hochberg's, and the comparison's word counts Holm's rows (PF4.34); every row
+    carries its limits (section 8.10), its interval on the change (PF4.42) and, under log-rank,
+    the competing outcomes that shifted (PF4.41); the fragility is searched when first read.
     """
     if method is None:
         paired = (
@@ -1288,6 +2002,9 @@ def multi_diff(
         if not event_set:
             raise DiffError("events must name at least one outcome")
 
+    event_kinds = _resolve_kinds(event_set, kinds, manifest_a, manifest_b)
+    threshold, threshold_source = _threshold(manifest_a, manifest_b)
+
     a_valid = a.loc[a["outcome"].notna()].reset_index(drop=True)
     b_valid = b.loc[b["outcome"].notna()].reset_index(drop=True)
     if len(a_valid) == 0 or len(b_valid) == 0:
@@ -1315,6 +2032,8 @@ def multi_diff(
     # errored is absent from both valid hash sets, so grouping the filtered frames would lose
     # exactly the holes this answers for.
     coverage = _coverage(a, b, common)
+    _require_one_case(a, b, common)
+    errors_differ = _errors_differ(coverage, q)
 
     # The competing set for Aalen-Johansen is every terminal outcome present in either run,
     # not just the events asked for: a row that ended in the non-event is absorbed, not
@@ -1322,6 +2041,11 @@ def multi_diff(
     # rows re-censored by horizon truncation (null outcome) are censored. A requested event
     # outside this set did not occur; its incidence is zero rather than an error.
     competing = competing_set(a_t, b_t)
+    if not competing:
+        raise DiffError(
+            f"every row of both runs lies past the common horizon {horizon:g}; nothing ended "
+            "by then, so there is nothing to compare"
+        )
 
     # Gather every (cell, event) row first; one BH pass afterwards.
     rows: list[dict[str, Any]] = []
@@ -1340,14 +2064,19 @@ def multi_diff(
             events_a, events_b = int(o_a.sum()), int(o_b.sum())
             rate_a = min(max(cif_a.at(k, horizon), 0.0), 1.0) if k in competing else 0.0
             rate_b = min(max(cif_b.at(k, horizon), 0.0), 1.0) if k in competing else 0.0
+            delta = signed = float(rate_b - rate_a)
+            pairs: int | None = None
             if method == "fisher_bh":
                 statistic, p = _fisher(events_a, n_a, events_b, n_b)
             elif method == "mcnemar_bh":
-                statistic, p = _mcnemar(
-                    _indicator_frame(cell_a, o_a), _indicator_frame(cell_b, o_b), h
-                )
+                ind_a, ind_b = _indicator_frame(cell_a, o_a), _indicator_frame(cell_b, o_b)
+                statistic, p = _mcnemar(ind_a, ind_b, h)
+                # PF4.14: the paired test's change is the matched pairs' difference.
+                only_a, only_b, pairs = _discordant(ind_a, ind_b, h)
+                delta = signed = (only_b - only_a) / pairs if pairs else 0.0
             else:
                 statistic, p = _logrank(t_a, o_a, t_b, o_b)
+                signed = _logrank_signed(t_a, o_a, t_b, o_b)
             rows.append(
                 {
                     "event": k,
@@ -1359,73 +2088,63 @@ def multi_diff(
                     "events_b": events_b,
                     "rate_a": float(rate_a),
                     "rate_b": float(rate_b),
-                    "delta": float(rate_b - rate_a) + 0.0,
+                    "delta": float(delta) + 0.0,
                     "stat": float(statistic),
                     "p": float(p),
-                    "q": math.nan,
                     "verdict": "unchanged",
-                    "mde": mde_two_proportion(rate_a, n_a, n_b, alpha=q, power=power),
+                    "pairs": pairs,
+                    "_signed": signed,
+                    "_arms": _Arms(
+                        t=(t_a, t_b),
+                        outcomes=(out_a, out_b),
+                        had=(o_a, o_b),
+                        reps=(
+                            cell_a["replicate_index"].to_numpy(),
+                            cell_b["replicate_index"].to_numpy(),
+                        ),
+                    ),
                 }
             )
 
-    if rows:
-        adjusted = bh(np.array([r["p"] for r in rows], dtype=np.float64), q)
-        for r, q_adj in zip(rows, adjusted, strict=True):
-            r["q"] = float(q_adj)
-            if q_adj < q and r["delta"] < 0:
-                r["verdict"] = "safer"
-            elif q_adj < q and r["delta"] > 0:
-                r["verdict"] = "worse"
+    m = len(rows)
+    _correct(rows, q, method, event_kinds)
+    verdict_limits = _set_limits(rows, event_set, method=method, q=q, power=power, horizon=horizon)
+    if method == "logrank_bh":
+        _set_competing_shift(rows, q)
+    facts = [
+        _verdict.RowFacts(r["p"], r["_signed"], event_kinds.get(r["event"]), limits)
+        for r, limits in zip(rows, verdict_limits, strict=True)
+    ]
+    decided = _verdict.decide(facts, q, threshold)
 
-    by_event: dict[str, EventDiff] = {}
-    verdicts: dict[str, dict[str, str]] = {}
-    for k in event_set:
-        records = [{c: r[c] for c in CELLS_COLUMNS} for r in rows if r["event"] == k]
-        cells = pd.DataFrame.from_records(records, columns=list(CELLS_COLUMNS))
-        cells["config"] = cells["config"].astype(object)
-        cells["verdict"] = cells["verdict"].astype(object)
-        n_safer = int((cells["verdict"] == "safer").sum())
-        n_worse = int((cells["verdict"] == "worse").sum())
-        max_mde_unchanged, max_mde_unchanged_cell = _unchanged_mde(cells)
-        by_event[k] = EventDiff(
-            event=k,
-            cells=cells,
-            n_safer=n_safer,
-            n_worse=n_worse,
-            n_unchanged=int(len(cells)) - n_safer - n_worse,
-            max_mde=float(cells["mde"].max()) if records else 0.0,
-            max_mde_unchanged=max_mde_unchanged,
-            max_mde_unchanged_cell=max_mde_unchanged_cell,
-            cause_specific=method == "logrank_bh",
-        )
-        verdicts[k] = dict(zip(cells["config_hash"], cells["verdict"], strict=True))
-
-    # S24, after the BH pass and after ``by_event``: the level cannot be known before R.
-    # R is read from the rows the BH pass wrote -- the count of hypotheses it rejected, not the
-    # safer/worse sum, which drops a rejected cell whose delta is exactly zero. On Go1 under
-    # log-rank those two differ by 196 to 88.
-    n_tests = len(common) * len(event_set)
+    # S24, after the BH pass: the level cannot be known before R. R is read from the rows the BH
+    # pass flagged -- the count of hypotheses it rejected, not the safer/worse sum, which drops a
+    # rejected cell whose delta is exactly zero. On Go1 under log-rank those two differ by 196 to
+    # 88. PF4.42: every row carries its interval, flagged or not.
     n_rejected = sum(1 for r in rows if r["q"] < q)
     intervals, interval_level, alpha_star, n_interval_only, n_verdict_only = _build_intervals(
-        rows, groups_a, groups_b, method=method, q=q, n_rejected=n_rejected, n_tests=n_tests
+        rows, groups_a, groups_b, method=method, q=q, n_rejected=n_rejected, n_tests=m
     )
+    if intervals is not None:
+        bounds = {
+            (rec["event"], rec["config_hash"]): rec for rec in intervals.to_dict(orient="records")
+        }
+        for r in rows:
+            interval = bounds[(r["event"], r["config_hash"])]
+            r["ci_lo"], r["ci_hi"] = interval["ci_lo"], interval["ci_hi"]
+            r["ci_level"] = interval_level
+            r["ci_method"] = None if interval["ci_lo"] is None else _CI_METHODS[method]
 
-    trade_rows: list[dict[str, Any]] = []
-    for h in common:
-        safer = tuple(k for k in event_set if verdicts[k][h] == "safer")
-        worse = tuple(k for k in event_set if verdicts[k][h] == "worse")
-        if safer and worse:
-            trade_rows.append(
-                {
-                    "config_hash": h,
-                    "config": groups_a[h]["config"].iloc[0],
-                    "safer_events": safer,
-                    "worse_events": worse,
-                }
-            )
-    trades = pd.DataFrame.from_records(trade_rows, columns=list(_TRADES_COLUMNS))
-    for col in ("config", "safer_events", "worse_events"):
-        trades[col] = trades[col].astype(object)
+    by_event = {
+        k: _event_diff(k, [r for r in rows if r["event"] == k], event_kinds.get(k), method, q, m)
+        for k in event_set
+    }
+    trades = _trades(by_event, event_set, common, groups_a)
+
+    def search() -> _verdict.Fragility:
+        candidates = [_fragile_row(r, f, method=method, events=event_set, level=q / m, power=power,
+                                   horizon=horizon) for r, f in zip(rows, facts, strict=True)]
+        return _verdict.fragility(candidates, q=q, threshold=threshold, events=len(event_set))
 
     return MultiDiffResult(
         events=event_set,
@@ -1436,7 +2155,7 @@ def multi_diff(
         q=float(q),
         t_unit=t_unit,
         horizon=float(horizon),
-        n_tests=n_tests,
+        n_tests=m,
         n_not_comparable=dropped_a + dropped_b,
         dropped_a=dropped_a,
         dropped_b=dropped_b,
@@ -1451,7 +2170,67 @@ def multi_diff(
         n_rejected=n_rejected,
         n_interval_only=n_interval_only,
         n_verdict_only=n_verdict_only,
+        threshold=threshold,
+        threshold_source=threshold_source,
+        word=decided.word,
+        verdict_limit=decided.verdict_limit,
+        n_flagged_only=sum(1 for r in rows if r["q"] < q and not r["holm"]),
+        peeking=tuple(_peeking(manifest_a, manifest_b)),
+        errors_differ=tuple(errors_differ),
+        fragility_search=search,
     )
+
+
+def _declared_kinds(manifest: RunManifest | None) -> dict[str, str]:
+    """The kinds a run's ``[declare]`` table gave its outcomes."""
+    if manifest is None or manifest.declared is None:
+        return {}
+    kinds = {name: "failure" for name in manifest.declared.failures}
+    kinds.update({name: "success" for name in manifest.declared.successes})
+    return kinds
+
+
+def _resolve_kinds(
+    events: Sequence[str],
+    given: Mapping[str, str] | None,
+    manifest_a: RunManifest | None,
+    manifest_b: RunManifest | None,
+) -> dict[str, str]:
+    """PF4.20: each compared event's kind, the one given (the command line's) else the one either
+    run declares; two runs declaring opposite kinds, or a given kind a run contradicts, are
+    refused. An event no source names has no kind and reads in direction words."""
+    declared_a, declared_b = _declared_kinds(manifest_a), _declared_kinds(manifest_b)
+    out: dict[str, str] = {}
+    for event in events:
+        kind_a, kind_b = declared_a.get(event), declared_b.get(event)
+        if kind_a is not None and kind_b is not None and kind_a != kind_b:
+            raise KindConflict(
+                f'the runs declare "{event}" differently: a as a {kind_a}, b as a {kind_b}'
+            )
+        declared = kind_a or kind_b
+        typed = None if given is None else given.get(event)
+        if typed is not None and declared is not None and typed != declared:
+            raise KindConflict(
+                f'"{event}" was given as a {typed}, and a run declares it a {declared}'
+            )
+        kind = typed or declared
+        if kind is not None:
+            out[event] = kind
+    return out
+
+
+def _threshold(manifest_a: RunManifest | None, manifest_b: RunManifest | None) -> tuple[float, str]:
+    """Section 8.4's threshold and its source: the ``max_mde_accepted`` both runs recorded
+    (``recorded``), the smaller of two different ones (``smaller``), or the default when neither
+    recorded one (``default``)."""
+    recorded = [
+        float(m.environment["max_mde_accepted"])
+        for m in (manifest_a, manifest_b)
+        if m is not None and m.environment.get("max_mde_accepted") is not None
+    ]
+    if not recorded:
+        return DEFAULT_THRESHOLD, "default"
+    return min(recorded), "smaller" if len(set(recorded)) > 1 else "recorded"
 
 
 # ---------- S24: the interval on the delta ----------

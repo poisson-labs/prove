@@ -32,6 +32,7 @@ CELL_TABLE_COLUMNS = (
     "event_rate",
     "event_rate_lo",
     "event_rate_hi",
+    "event_rate_level",
     "s_at_horizon",
     "s_var_at_horizon",
     "median_t",
@@ -186,6 +187,15 @@ def multi_outcome_guard(df: pd.DataFrame, event: str) -> list[str]:
     return others if len(others) > 1 else []
 
 
+def _early_others(df: pd.DataFrame, event: str, horizon: float) -> list[str]:
+    """The outcomes other than ``event`` that end a run before the horizon, sorted: what
+    Kaplan-Meier treats as censoring when it is a competing ending (PF4.19). An outcome seen only
+    at the horizon ends no run early."""
+    valid = df.loc[df["outcome"].notna()]
+    early = valid.loc[(valid["outcome"] != event) & (valid["t"].astype(float) < horizon), "outcome"]
+    return sorted({str(o) for o in early})
+
+
 def _single_horizon(df: pd.DataFrame, horizon: float | None) -> float:
     present = df["horizon"].dropna().unique()
     if len(present) > 1:
@@ -210,7 +220,7 @@ def cell_table(
         raise SurvivalError(f"method must be 'km' or 'aj', got {method!r}")
     h = _single_horizon(df, horizon)
     if method == "km":
-        competing = multi_outcome_guard(df, event)
+        competing = _early_others(df, event, h)
         if competing:
             warnings.warn(
                 f"single-event KM for {event!r} treats competing outcomes as censoring: "
@@ -224,6 +234,11 @@ def cell_table(
         if event not in aj_events:
             raise SurvivalError(f"events {aj_events} must include the declared event {event!r}")
 
+    # PF4.1b: the share's Wilson interval at the level every surface reads, recorded beside it,
+    # read when the table is computed. ``stats`` is imported here because it imports this module.
+    from poisson_prove import stats
+
+    level = stats.WILSON_LEVEL
     rows: list[dict[str, Any]] = []
     for config_hash, cell in df.groupby("config_hash", sort=True):
         valid = censor(cell, event)
@@ -245,7 +260,8 @@ def cell_table(
             var_h = _var_at(kaplan_meier(t, np.isin(outcome, aj_events)), h)
         if n > 0:
             rate = n_events / n
-            lo, hi = wilson(n_events, n)
+            interval = stats.wilson(n_events, n, level=level)
+            lo, hi = interval.lo, interval.hi
         else:
             rate = lo = hi = s_h = var_h = float("nan")
         rows.append(
@@ -258,6 +274,7 @@ def cell_table(
                 "event_rate": rate,
                 "event_rate_lo": lo,
                 "event_rate_hi": hi,
+                "event_rate_level": level,
                 "s_at_horizon": s_h,
                 "s_var_at_horizon": var_h,
                 "median_t": km.median(),
