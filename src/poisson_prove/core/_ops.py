@@ -3,14 +3,21 @@ asked, exited or opened. A face parses its input, calls these, and renders what 
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import functools
+import importlib
 import importlib.util
+import inspect as _pyinspect
 import json
 import math
 import os
 import re
 import shlex
+import signal
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 import tomllib
@@ -37,6 +44,7 @@ from poisson_prove._compat import (
 from poisson_prove._names import Index, NamesError, started, unfit
 from poisson_prove._names import index as names_index
 from poisson_prove._resolve import resolve as _resolve_import
+from poisson_prove._resolve import split_import_path
 from poisson_prove.core._results import (
     CheckResult,
     Comparison,
@@ -117,6 +125,7 @@ LATEST_PARTIAL = "\0latest-partial"
 EXTRA_HINTS = {
     "modal": 'pip install "poisson-prove[modal]"',
     "burla": 'pip install "poisson-prove[burla]"',
+    "agent": 'pip install "poisson-prove[agent]"',
 }
 NEVER_INFERS = {
     "check": "a gate whose meaning changes when a new outcome appears is not a gate",
@@ -1473,6 +1482,108 @@ def init(
     )
 
 
+#: The setup a person's own coding agent follows (§20): the skill's folder, the two places the
+#: agents read skills from, and the prompt the person gives their agent.
+AGENT_SKILL = "poisson-prove-setup"
+AGENT_FOLDERS = (f".agents/skills/{AGENT_SKILL}", f".claude/skills/{AGENT_SKILL}")
+AGENT_PROMPT = (
+    f"Use the {AGENT_SKILL} skill in this repository: set Poisson Prove up for me to review, "
+    "then stop."
+)
+_VERSION_LINE = "  poisson-tool-version: "
+
+
+def _agent_skill() -> str:
+    """The packaged skill with this version filled in: the only line that differs from the
+    template."""
+    from importlib import resources
+
+    from poisson_prove import __version__
+
+    template = (resources.files("poisson_prove") / "skills" / AGENT_SKILL / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    lines = template.split("\n")
+    (at,) = [i for i, line in enumerate(lines) if line.startswith(_VERSION_LINE)]
+    lines[at] = f"{_VERSION_LINE}{json.dumps(__version__)}"
+    return "\n".join(lines)
+
+
+@_operation
+def init_agent(
+    repo: str | Path | None = None,
+    *,
+    force: bool = False,
+    write: bool = True,
+    typed: Sequence[str] = (),
+    _notes: list[str],
+) -> WrittenFiles:
+    """Write the setup a person's own coding agent follows: the skill and the prompt, in each of
+    the two folders the agents read skills from, and nothing else. ``repo`` is the folder as
+    given (the current one by default; no root is looked for). An existing file of the four is
+    refused unless ``force``, which replaces those four only; with ``write`` false nothing is
+    written and the skill is the result's ``text``."""
+    skill = _agent_skill()
+    folder = Path("." if repo is None else repo)
+    if repo is not None and (str(repo) == "" or not folder.is_dir()):
+        why = "is not a folder" if folder.exists() else "does not exist"
+        raise refusal(f'--repo "{repo}" {why}; the setup is written into a folder')
+    files = [
+        (f"{where}/{name}", text)
+        for where in AGENT_FOLDERS
+        for name, text in (("SKILL.md", skill), ("prompt.txt", AGENT_PROMPT + "\n"))
+    ]
+    shown = [rel if repo is None else str(Path(str(repo)) / rel) for rel, _ in files]
+    sentence = f"wrote the setup for your coding agent ({_look.fmt_count(len(files))} files)"
+    nexts = ("give your coding agent the prompt above, then review what it wrote",)
+    if not write:
+        return WrittenFiles(
+            verdict="ok",
+            sentence="the setup for your coding agent, printed; nothing was written",
+            payload={"wrote": [], "prompt": AGENT_PROMPT},
+            next=nexts,
+            text=skill,
+        )
+    # Every path is checked before anything is written: a file standing where a folder must be,
+    # or a folder where a file must be, is refused, so a refusal leaves nothing half written.
+    for rel, _ in files:
+        parts = Path(rel).parts
+        for depth in range(1, len(parts)):
+            above = folder.joinpath(*parts[:depth])
+            if above.exists() and not above.is_dir():
+                raise refusal(f"{Path(*parts[:depth])} is a file; the setup needs a folder there")
+        if (folder / rel).is_dir():
+            raise refusal(f"{rel} is a folder; the setup writes a file there")
+    existing = [rel for rel, _ in files if (folder / rel).exists() or (folder / rel).is_symlink()]
+    if existing and not force:
+        raise refusal(
+            f"{_join_words(existing)} already {'exists' if len(existing) == 1 else 'exist'}; "
+            "init --agent replaces them only with --force",
+            [join([COMMAND, *typed, "--force"])],
+        )
+    for rel, text in files:
+        path = folder / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Written beside and moved into place: a link standing there is replaced, never written
+        # through to the file it points at.
+        staged = path.with_name(f".{path.name}.poisson-prove-new")
+        staged.write_text(text, encoding="utf-8")
+        os.replace(staged, path)
+    return WrittenFiles(
+        verdict="ok",
+        sentence=sentence,
+        payload={"wrote": shown, "prompt": AGENT_PROMPT},
+        next=nexts,
+        paths=tuple(shown),
+    )
+
+
+def _join_words(items: Sequence[str]) -> str:
+    """``a``, ``a and b``, ``a, b and c``."""
+    items = list(items)
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
 @_operation
 def read_spec(path: str | Path, *, _notes: list[str]) -> Spec:
     """A sweep spec, read strictly: an unknown key or table is refused, naming the file, the
@@ -1483,11 +1594,344 @@ def read_spec(path: str | Path, *, _notes: list[str]) -> Spec:
 # ---------- sweeps ----------
 
 
-def _resolve_target(target: str) -> Any:
+#: How long the check lets the target's import take (§20.3).
+IMPORT_LIMIT_S = 30
+_ERRORS_LOG = Path("~") / ".cache" / "poisson-prove" / "errors.log"
+
+#: The check's import, run in a process of its own with this interpreter, this environment and this
+#: import path, the spec's folder first. Its first act is an audit hook that refuses every lookup,
+#: connection or send to a host other than loopback (Prove imports no network module: the hook
+#: reads the events Python raises before it touches the network); the hook stays on until the
+#: process ends. The module is imported on the process's main thread, as a real sweep imports it,
+#: with no byte code written; the target is looked up and its signature read, never called; the
+#: answer goes to a file, and the process ends at once, so nothing the import left running reaches
+#: the network after it. Standard library only.
+_CHECK_IMPORT = r'''
+import ipaddress, json, os, sys
+
+_ATTEMPTS = []
+
+
+class NetworkBlocked(OSError):
+    pass
+
+
+def _text(value):
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("ascii", "replace")
+    return value
+
+
+def _loopback(host):
+    if host is None:
+        return True
+    host = str(_text(host)).strip("[]")
+    if host == "" or host.lower().rstrip(".") == "localhost":
+        return True
     try:
-        return _resolve_import(target)
+        address = ipaddress.ip_address(host.split("%", 1)[0])
+    except ValueError:
+        return False
+    address = getattr(address, "ipv4_mapped", None) or address
+    return address.is_loopback or address.is_unspecified
+
+
+def _hook(event, args):
+    if not event.startswith("socket."):
+        return
+    if event == "socket.getaddrinfo":
+        host, port = args[0], args[1]
+    elif event in ("socket.gethostbyname", "socket.gethostbyaddr"):
+        host, port = args[0], None
+    elif event == "socket.getnameinfo":
+        host, port = args[0][0], args[0][1]
+    elif event in ("socket.connect", "socket.sendto", "socket.sendmsg"):
+        address = args[1]
+        if not isinstance(address, tuple) or not address:
+            return
+        host, port = address[0], address[1] if len(address) > 1 else None
+    else:
+        return
+    if _loopback(host):
+        return
+    where = str(_text(host)) if port is None else str(_text(host)) + ":" + str(_text(port))
+    _ATTEMPTS.append(where)
+    raise NetworkBlocked("the check does not allow a connection to " + where)
+
+
+sys.addaudithook(_hook)
+sys.dont_write_bytecode = True
+_out, _folder, _module, _attr, _path = json.loads(sys.argv[1])
+sys.path[:] = [_folder, *(p for p in _path if p != _folder)]
+_result = {"attempts": _ATTEMPTS}
+
+
+def _failed(exc):
+    import traceback
+
+    _result["error"] = [type(exc).__name__, str(exc), "".join(traceback.format_exception(exc))]
+
+
+try:
+    import importlib
+
+    module = importlib.import_module(_module)
+except BaseException as exc:
+    _failed(exc)
+else:
+    try:
+        target = getattr(module, _attr, None)
+    except BaseException as exc:
+        _failed(exc)
+    else:
+        import inspect
+
+        _result["callable"] = callable(target)
+        _result["callables"] = sorted(
+            name for name, value in vars(module).items()
+            if not name.startswith("_")
+            and callable(value)
+            and getattr(value, "__module__", None) == module.__name__
+        )
+        try:
+            _result["params"] = [
+                [p.name, p.kind.name, p.default is not p.empty]
+                for p in inspect.signature(target).parameters.values()
+            ]
+        except (TypeError, ValueError):
+            _result["params"] = None
+        except BaseException as exc:
+            _failed(exc)
+with open(_out, "w", encoding="utf-8") as fh:
+    json.dump({**_result, "attempts": list(_ATTEMPTS)}, fh)
+os._exit(0)
+'''
+
+
+@dataclasses.dataclass(frozen=True)
+class _Param:
+    """A target's parameter, as the check read it."""
+
+    name: str
+    kind: str
+    has_default: bool
+
+
+def _python_words(kind: str, words: str) -> str:
+    """An exception as ``Type: its words``, its words starting lower case as Prove's do."""
+    words = _look.one_line(words)
+    if words[:1].isupper() and words[1:2].islower():
+        words = words[0].lower() + words[1:]
+    return f"{kind}: {words}" if words else kind
+
+
+def _log_traceback(text: str, typed: Sequence[str]) -> None:
+    """A traceback the person is not shown, appended to the errors log."""
+    try:
+        path = _ERRORS_LOG.expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            fh.write(f"{stamp}  {join([COMMAND, *typed])}\n{text.rstrip()}\n\n")
+    except Exception:  # noqa: BLE001 - the log is best effort; the refusal is not
+        pass
+
+
+def _end(proc: subprocess.Popen[bytes]) -> None:
+    """The check's process ended, with everything it started in its group."""
+    try:
+        if hasattr(os, "killpg"):
+            os.killpg(proc.pid, signal.SIGKILL)
+        else:
+            proc.kill()
+    except OSError:
+        pass
+    proc.wait()
+
+
+def _checked_import(
+    target: str, module_name: str, attr: str, folder: str, typed: Sequence[str]
+) -> list[_Param] | None:
+    """The check's import of the target (``_CHECK_IMPORT``), its answer read back: every way it
+    fails is a refusal; the target's parameters when it passes (None when they cannot be read).
+    The rollout is never called, and this process's import path and modules are untouched."""
+    with tempfile.TemporaryDirectory(prefix="poisson-prove-check-") as scratch:
+        out, err = Path(scratch) / "result.json", Path(scratch) / "stderr.txt"
+        request = json.dumps([str(out), folder, module_name, attr, list(sys.path)])
+        with err.open("wb") as stderr:
+            proc = subprocess.Popen(
+                [sys.executable, "-B", "-c", _CHECK_IMPORT, request],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=stderr,
+                start_new_session=True,
+            )
+            try:
+                proc.wait(IMPORT_LIMIT_S)
+            except subprocess.TimeoutExpired:
+                _end(proc)
+                raise refusal(
+                    f"importing the target took over {IMPORT_LIMIT_S} s",
+                    [f"move slow work out of what importing {module_name} runs, into the rollout"],
+                ) from None
+            finally:
+                _end(proc)
+        if not out.is_file():
+            _log_traceback(err.read_text(encoding="utf-8", errors="replace"), typed)
+            raise refusal(
+                f'the target "{target}" could not be imported: its import ended the process '
+                f"(exit {proc.returncode})",
+                [f"the details are in {_ERRORS_LOG}"],
+            )
+        answer = json.loads(out.read_text(encoding="utf-8"))
+    if answer["attempts"]:
+        raise refusal(
+            f"importing the target tried to connect to {answer['attempts'][0]}; the check does "
+            "not allow it",
+            [
+                f"move the client's creation into the rollout, so importing {module_name} "
+                "connects to nothing"
+            ],
+        )
+    if "error" in answer:
+        kind, words, trace = answer["error"]
+        _log_traceback(trace, typed)
+        raise refusal(
+            f'the target "{target}" could not be imported ({_python_words(kind, words)})',
+            [f"the traceback is in {_ERRORS_LOG}"],
+        )
+    if not answer["callable"]:
+        has = ", ".join(answer["callables"]) or "none"
+        raise refusal(
+            f'"{module_name}" has no callable "{attr}"; it has {has}',
+            [f"set target to one of them, as {module_name}:NAME, in the sweep spec"],
+        )
+    if answer["params"] is None:
+        return None
+    return [_Param(name, kind, has_default) for name, kind, has_default in answer["params"]]
+
+
+def _params_of(fn: Any) -> list[_Param] | None:
+    try:
+        found = _pyinspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return None
+    return [_Param(p.name, p.kind.name, p.default is not p.empty) for p in found]
+
+
+def _takes_cfg_and_seed(params: Sequence[_Param]) -> bool:
+    """A rollout takes ``(cfg, seed)``: its first two parameters by those names, any further one
+    with a default (the executor calls ``rollout(cfg, seed)``)."""
+    positional = [p for p in params if p.kind in ("POSITIONAL_ONLY", "POSITIONAL_OR_KEYWORD")]
+    if [p.name for p in positional[:2]] != ["cfg", "seed"]:
+        return False
+    rest = [*positional[2:], *(p for p in params if p.kind == "KEYWORD_ONLY")]
+    return all(p.has_default for p in rest)
+
+
+def _parameters(params: Sequence[_Param]) -> str:
+    stars = {"VAR_POSITIONAL": "*", "VAR_KEYWORD": "**"}
+    return "(" + ", ".join(stars.get(p.kind, "") + p.name for p in params) + ")"
+
+
+def _target_line(target: str, params: Sequence[_Param] | None, backend: str) -> str:
+    """The plan's ``target`` line: the import path, and what was found where it was imported."""
+    if backend == "modal":
+        return f"target  {target}"
+    if params is None:
+        return f"target  {target} (imports)"
+    if _takes_cfg_and_seed(params):
+        return f"target  {target} (imports, takes cfg and seed)"
+    return f"target  {target} (imports; takes {_parameters(params)}, not cfg and seed)"
+
+
+@contextmanager
+def _folder_first(folder: str) -> Iterator[None]:
+    """``folder`` first on Python's import path for the block, then taken off again."""
+    if sys.path and sys.path[0] == folder:
+        yield
+        return
+    sys.path.insert(0, folder)
+    try:
+        yield
+    finally:
+        if folder in sys.path:
+            sys.path.remove(folder)
+
+
+def _resolve_target(
+    target: str, *, folder: str, checked: bool, typed: Sequence[str]
+) -> tuple[Any, list[_Param] | None]:
+    """The rollout at ``target`` and its parameters. A sweep imports it here (the spec's folder is
+    first on the path while it plans and runs); the check (``sweep --dry-run``) imports it in a
+    process of its own instead (``_checked_import``), refuses a target that does not take
+    ``(cfg, seed)``, and returns no rollout: it is never called."""
+    try:
+        module_name, attr = split_import_path(target)
+    except ValueError as exc:
+        raise refusal(f'cannot resolve --target "{target}": {exc}') from exc
+    if checked:
+        params = _checked_import(target, module_name, attr, folder, typed)
+        if params is not None and not _takes_cfg_and_seed(params):
+            raise refusal(
+                f"the target takes {_parameters(params)}; a rollout takes (cfg, seed)",
+                [
+                    "write it as def rollout(cfg, seed) -> Episode (the rollout contract, "
+                    "docs/your-own-agent.md)"
+                ],
+            )
+        return None, params
+    try:
+        fn = _resolve_import(target)
     except (ValueError, ImportError, AttributeError, RuntimeError) as exc:
         raise refusal(f'cannot resolve --target "{target}": {exc}') from exc
+    return fn, _params_of(fn)
+
+
+def _has_module(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _outcomes_line(spec: SweepSpec) -> str:
+    """The plan's ``outcomes`` line: each failure and each success, then the other outcomes."""
+    declared = spec.declare
+    outcomes = tuple(declared.outcomes) if declared is not None else ()
+    failures = tuple(declared.failures) if declared is not None else ()
+    successes = tuple(declared.successes) if declared is not None else ()
+    if not failures and not successes:
+        named = f"{', '.join(outcomes)}; " if outcomes else ""
+        return f"outcomes  {named}none declared a failure or a success"
+    parts = [
+        f"{label}: {', '.join(names)}"
+        for label, names in (
+            ("failures", failures),
+            ("successes", successes),
+            ("neither", tuple(o for o in outcomes if o not in failures + successes)),
+        )
+        if names
+    ]
+    return "outcomes  " + "; ".join(parts)
+
+
+def _setup_notes(spec: SweepSpec) -> list[str]:
+    """The check's notes on a setup that passes: no kinds declared, and axes that vary nothing."""
+    notes = []
+    declared = spec.declare
+    if declared is None or not (declared.failures or declared.successes):
+        notes.append(
+            'no outcome is declared a failure or a success, so comparisons will say "higher" '
+            'and "lower", not "worse" and "safer"'
+        )
+    for name in spec.axis_types:
+        values = {json.dumps(config.get(name), sort_keys=True) for config in spec.configs}
+        if len(values) == 1:
+            notes.append(f'the axis "{name}" has one value, so it varies nothing')
+    if len(spec.configs) == 1:
+        notes.append("no axis varies, so the sweep runs one condition")
+    return notes
 
 
 def _require_extra(name: str) -> None:
@@ -1586,7 +2030,7 @@ def _cost_phrase(block: str) -> str:
 def _plan_sentence(p: Any, block: str) -> str:
     spec = p.spec
     return (
-        f"{_look.fmt_count(spec.total_rollouts())} rollouts: "
+        f"{_look.fmt_count(spec.total_rollouts())} rollouts of {spec.target_id}: "
         f"{_look.fmt_count(len(spec.configs))} cells x {_look.fmt_count(spec.replicates)} "
         f"replicates on {p.backend}, {_cost_phrase(block)}"
     )
@@ -1614,8 +2058,24 @@ def plan(
 ) -> Plan:
     """What a sweep would run: the conditions and replicates, the backend and its cost, the
     design's detection limit and the power gate's answer. An underpowered design is refused
-    with the plan attached, so a face can still show it."""
+    with the plan attached, so a face can still show it. The target is imported with the spec
+    file's folder first on the import path; with ``overrides["dry_run"]`` (the check, §20.3) it
+    is imported with the network blocked and a time limit, its name and signature are checked,
+    and it is never called."""
+    with contextlib.ExitStack() as on_path:
+        return _planned(spec, store=store, overrides=overrides, on_path=on_path, _notes=_notes)
+
+
+def _planned(
+    spec: Spec | SweepSpec | None,
+    *,
+    store: Any,
+    overrides: Mapping[str, Any] | None,
+    on_path: contextlib.ExitStack,
+    _notes: list[str],
+) -> Plan:
     o = dict(overrides or {})
+    checked = bool(o.get("dry_run"))
     store = _opened(store)
     typed = list(o.get("typed") or [])
     backend = o.get("backend") or "local"
@@ -1668,7 +2128,7 @@ def plan(
         if typed_spec is None and not Path(DEFAULT_SPEC).is_file():
             raise refusal(
                 f"no sweep spec here: no ./{DEFAULT_SPEC} in this folder, and none was given",
-                [f"{COMMAND} init", f"{COMMAND} init --example"],
+                [f"{COMMAND} init", f"{COMMAND} init --example", f"{COMMAND} init --agent"],
             )
         spec = read_spec.__wrapped__(
             DEFAULT_SPEC if typed_spec is None else typed_spec, _notes=_notes
@@ -1676,6 +2136,7 @@ def plan(
     spec_path = spec.path if isinstance(spec, Spec) else None
     spec = spec.spec if isinstance(spec, Spec) else spec
     shown_spec = spec_path or DEFAULT_SPEC
+    folder = os.path.dirname(os.path.abspath(shown_spec))
     target = o.get("target")
     typed_target = target
     st = Store(store.root)
@@ -1701,13 +2162,21 @@ def plan(
                 usage=True,
             )
         spec = dataclasses.replace(spec, replicates=replicates)
+    if checked and spec.capture is not None and not _has_module("opentelemetry.sdk"):
+        raise refusal(
+            '[capture] needs the "agent" extra, which is not installed', [EXTRA_HINTS["agent"]]
+        )
+    # The spec's folder is first on the path while the sweep plans (Burla's bundle reads it) and,
+    # in ``start``, while it runs, as the rollout may import more of the person's code.
+    on_path.enter_context(_folder_first(folder))
     rollout: Any = None
+    params: list[_Param] | None = None
     burla_options: BurlaOptions | None = None
     modal: tuple[Any, Any] | None = None
     if backend == "modal":
         modal = _modal_config(o, Path(spec_path or DEFAULT_SPEC), target)
     else:
-        rollout = _resolve_target(target)
+        rollout, params = _resolve_target(target, folder=folder, checked=checked, typed=typed)
     if backend == "burla":
         burla_options = _burla_config(o, Path(spec_path or DEFAULT_SPEC))
     max_mde = o.get("max_mde")
@@ -1748,7 +2217,11 @@ def plan(
     if p.resumed:
         block = block.replace(f"Resuming {p.run_id}:", f'Resuming "{idx.name_of(p.run_id)}":')
     sentence = _plan_sentence(p, block)
-    lines = (f"target  {target}", *(_look.reprint(line) for line in block.splitlines()))
+    lines = (
+        _target_line(target, params, backend),
+        _outcomes_line(spec),
+        *(_look.reprint(line) for line in block.splitlines()),
+    )
     payload: dict[str, Any] = {
         "run_id": p.run_id,
         "run_name": _planned_name(idx, p, name),
@@ -1797,6 +2270,8 @@ def plan(
             f"(q {design.q:g} over {design.family} tests); you accepted that with --max-mde 1"
         )
     payload["design_mde"] = design.record()
+    if checked:
+        _notes.extend(_setup_notes(spec))
     if backend == "modal":
         assert modal is not None
         try:
@@ -1829,6 +2304,7 @@ def plan(
             "backend": backend,
             "image": image,
             "typed_named": _named_argv(typed, idx),
+            "spec_folder": folder,
         },
     )
 
@@ -2034,11 +2510,17 @@ def start(
             summary = _modal_run(p, plan, st, on_progress, begin)
         elif p.backend == "burla":
             assert plan.burla is not None
-            summary = run_burla(
-                p, plan.target, st, options=plan.burla, on_progress=_starting(begin, on_progress)
-            )
+            with _folder_first(o.get("spec_folder") or os.getcwd()):
+                summary = run_burla(
+                    p,
+                    plan.target,
+                    st,
+                    options=plan.burla,
+                    on_progress=_starting(begin, on_progress),
+                )
         else:
-            summary = _local_run(p, plan, st, o, on_progress, begin)
+            with _folder_first(o.get("spec_folder") or os.getcwd()):
+                summary = _local_run(p, plan, st, o, on_progress, begin)
     except _Cancelled:
         # Set during a rollout: the run stops at the next boundary, partial and resumable.
         stopped_by_cancel = True
