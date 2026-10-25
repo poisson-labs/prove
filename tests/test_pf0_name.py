@@ -39,7 +39,7 @@ runner, decides it; PF10 declares the ``slow`` marker).
 | PF0.10 default output folders | ``test_pf0_10_*`` |
 | PF0.11 install hints | ``test_pf0_11_*`` |
 | PF0.12 an old run's provenance on the report, the receipt and the page | ``test_pf0_12_*`` |
-| PF0.13 the Go1 golden numbers | the existing Go1 tests, moved for the names only |
+| PF0.13 the fixture pair's numbers | the existing fixture-pair tests (now on the generated lattice pair, ``tests/lattice.py``), moved for the names only |
 """
 
 from __future__ import annotations
@@ -335,18 +335,36 @@ def test_pf0_3_serve_json_is_poisson_prove_viewpair_7(new_pair: tuple[Path, str,
     assert "proofload" not in r.out.lower()
 
 
-#: The Go1 pair's agreement digest for ``fell``, hashed behind ``poisson-prove.agreement/1``: computed
-#: on the 0.0.1 tree (98dc6af) with that one string changed. Under the old string it is
-#: ``360aaa32...``, the value ``tests/test_a28_agreement.py`` pinned before the rename.
-GO1_FELL_AGREEMENT = "ed536c0213e9a9e7942807ec525738d1ca1373544e0b47fc93a8640879ef1087"
+#: The schema string the agreement form is hashed behind, and the one the 0.0.1 builds used.
+AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
+OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
+
+
+def lattice_agreement(event: str, schema: str) -> str:
+    """The lattice pair's agreement digest for ``event`` in A28 section 3.2's canonical form,
+    written here from the design's counts (``lattice.counts``) and not from ``tree.py``: one line
+    per cell, ``[event, config_hash, n_a, n_b, events_a, events_b]``, sorted, the pair
+    ``[schema, lines]`` as compact ASCII JSON, sha256, lowercase hex."""
+    import hashlib
+
+    import lattice
+
+    lines = sorted(
+        [event, r["config_hash"], int(r["n_a"]), int(r["n_b"]), int(r["events_a"]), int(r["events_b"])]
+        for r in lattice.counts(event)
+    )
+    return hashlib.sha256(json.dumps([schema, lines], separators=(",", ":"), ensure_ascii=True).encode("utf-8")).hexdigest()
 
 
 def test_pf0_3_the_agreement_digest_diff_prints_is_built_over_poisson_prove_agreement_1() -> None:
-    go1 = Path(__file__).resolve().parent / "fixtures" / "go1"
+    import lattice
+
     # --json replaces --format json on diff (front-door spec section 5.6).
-    r = run_cli(["--store", str(go1), "diff", "go1-v0", "go1-v1", "--event", "fell", "--json"])
+    r = run_cli(["--store", str(lattice.root()), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--json"])
     assert r.code == 0, r
-    assert json.loads(r.out)["tree"]["agreement"] == GO1_FELL_AGREEMENT
+    printed = json.loads(r.out)["tree"]["agreement"]
+    assert printed == lattice_agreement(lattice.EVENT, AGREEMENT_SCHEMA)
+    assert printed != lattice_agreement(lattice.EVENT, OLD_AGREEMENT_SCHEMA)
 
 
 @pytest.fixture(scope="module")

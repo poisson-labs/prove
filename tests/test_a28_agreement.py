@@ -17,11 +17,12 @@ beside a ``fisher_bh`` diff to show a same-events tree is accepted; the retrofit
 under a different ``seed`` instead, which keeps the clause's point (events and cells decide, knobs
 the digest ignores do not) and no longer pins the behaviour Q5 (b) removes.
 
-**The canonical form is section 3.2's, and the Go1 literals in G17 are minted from it.** The
+**The canonical form is section 3.2's, and G17's reference is written from it.** The
 spec's own ``b1423bc1...`` / ``1ac9386b...`` were measured on the spec session's prototype, which
 joined rows with ``\\x1f`` and newlines rather than ``json.dumps`` -- measured here by re-running
-that form: it reproduces the spec's values, and section 3.2's form does not. The values pinned here
-are the JSON form's, ``360aaa32...`` at K = 1 and ``988b1dd2...`` at K = 2, both methods.
+that form: it reproduces the spec's values, and section 3.2's form does not. G17 recomputes the
+JSON form's digest in this file from the generated lattice pair's design counts
+(``lattice.counts``), at K = 1 and K = 2, and requires both methods to carry it.
 
 **Session A's commit is red here by construction** (Master Action List section 18 standing rule
 12). On the retrofit commit, before any source edit, the red set in this file is **fifteen**:
@@ -38,8 +39,8 @@ bind (section 10 Q10 (a)): one environment, one cell.
 
 **Fixture limits, stated rather than left to be rediscovered** (spec section 6):
 
-- **Go1** is one pair and cannot be crossed with anything; it guards G2, G6, G17's method half and
-  every round trip, and nothing about C16.
+- **The lattice pair** (``tests/lattice.py``) is one pair and cannot be crossed with anything; it
+  guards G2, G6, G17's method half and every round trip, and nothing about C16.
 - **The crossed pair P/Q** is the smallest shape that reproduces the measured hole; it says nothing
   about how a refusal reads on a 656-hash mismatch. **R**, four cells over the same events and salt,
   exists only so the arity clause has a same-events input to fire on (G12).
@@ -48,7 +49,7 @@ bind (section 10 Q10 (a)): one environment, one cell.
   nothing about A28's guard, and G10's fixture is deliberately not them.
 - **The holed pair** (five configs in arm a, four in arm b, plus an event nobody ran) is one shape
   of hole; it does not exercise a diff whose ``cells`` carry a hash the rebuild lacks.
-- **A ``mcnemar_bh`` Go1** shows the digest is scheme-blind, not how far ``units`` and ``cells``
+- **A ``mcnemar_bh`` lattice pair** shows the digest is scheme-blind, not how far ``units`` and ``cells``
   can drift apart.
 
 **Mutants, measured over the whole suite on copies of the shadow shim** (spec section 7.4's
@@ -74,6 +75,7 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import hashlib
 import inspect
 import json
 import re
@@ -87,6 +89,7 @@ import pandas as pd
 import pytest
 
 import poisson_prove
+import lattice
 from poisson_prove import diff as diff_mod
 from poisson_prove import report as report_mod
 from poisson_prove import tree as tree_mod
@@ -105,8 +108,7 @@ VIEWER_SOURCE = PACKAGE / "viewer.py"
 DIFF_SOURCE = PACKAGE / "diff.py"
 CLI_SOURCE = PACKAGE / "cli.py"
 TESTS = REPO / "tests"
-GO1_ROOT = TESTS / "fixtures" / "go1"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
+LATTICE_ROOT = lattice.root()
 
 # ---------- spec sections 2, 3.2, 3.4: the literals ----------
 
@@ -123,19 +125,27 @@ TOP_LEVEL_KEYS = (
 TREE_RESULT_FIELDS = ("root", "grouping", "fault_lines", "leaves", "bound", "agreement")
 #: G16, G17. The tag inside the hashed payload (section 3.2); never a sibling key (section 10 Q9).
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
-#: G17. Go1 under section 3.2's JSON form, minted on the shadow shim: the same value under
-#: ``fisher_bh`` and ``mcnemar_bh`` at each K, which is the scheme-blindness the digest is built on.
-# Re-minted by PF0 Session A (Q4): the agreement form is hashed behind its schema string, which is now
-# ``poisson-prove.agreement/1``. Computed on the 0.0.1 tree (98dc6af) with that one string changed and
-# nothing else; the 0.0.1 values are kept below as ``GO1_AGREEMENT_0_0_1``.
-GO1_AGREEMENT = {
-    1: "ed536c0213e9a9e7942807ec525738d1ca1373544e0b47fc93a8640879ef1087",
-    2: "ceecf72a0f87fbdb0c74758a4554c8a9427f0a6ecba08504c5dc5fad36e04c33",
-}
-GO1_AGREEMENT_0_0_1 = {
-    1: "360aaa320c675c40fa8dc7b2b3d5288aa42468c16facc7209264f975cb13e92d",
-    2: "988b1dd2c3b30b4f21007de26b1c04520d030c91ec809c3df696a8a5445b33af",
-}
+#: G17. The schema string the 0.0.1 builds hashed behind, before PF0 Session A (Q4) renamed it.
+OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
+# PF0 Session A (Q4) kept the old fixture's 0.0.1 digests beside its renamed ones; they were never
+# asserted in this file (a dead digest) and went with that fixture. G17 now checks the old string's
+# digest differs from the new one's, from the reference. Lattice port, 2026-10-25.
+
+
+def reference_agreement(events: Sequence[str], schema: str = AGREEMENT_SCHEMA) -> str:
+    """G17's reference, written from section 3.2 and not from ``tree.py``: one line per
+    ``(event, cell)`` of the lattice pair, ``[event, config_hash, n_a, n_b, events_a, events_b]``
+    from the design's counts (``lattice.counts``), the lines sorted, the pair ``[schema, lines]``
+    as compact ASCII JSON, sha256, lowercase hex. Nothing about the method enters."""
+    lines = sorted(
+        [str(event), r["config_hash"], int(r["n_a"]), int(r["n_b"]), int(r["events_a"]), int(r["events_b"])]
+        for event in events
+        for r in lattice.counts(event)
+    )
+    payload = json.dumps([schema, lines], separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 #: G6. ``omnibus``'s signature as ``test_s27_leaves.py`` pins it, restated.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -315,13 +325,13 @@ def crossed(synth_root: Path) -> dict[str, Grown]:
 
 @pytest.fixture(scope="module")
 def every_fixture(synth_root: Path, crossed: dict[str, Grown]) -> list[Grown]:
-    """Section 6's fixture set: Go1 under both schemes at K = 1 and K = 2, the crossed pairs, the
+    """Section 6's fixture set: the lattice pair under both schemes at K = 1 and K = 2, the crossed pairs, the
     holed pair with an event nobody ran, and A27's two disjoint pairs."""
     return [
-        grown("go1", GO1_ROOT, GO1_A, GO1_B, events=("fell",)),
-        grown("go1-mcnemar", GO1_ROOT, GO1_A, GO1_B, events=("fell",), method="mcnemar_bh"),
-        grown("go1-two", GO1_ROOT, GO1_A, GO1_B, events=("fell", "survived")),
-        grown("go1-two-mcnemar", GO1_ROOT, GO1_A, GO1_B, events=("fell", "survived"), method="mcnemar_bh"),
+        grown("lattice", LATTICE_ROOT, lattice.RUN_A, lattice.RUN_B, events=(lattice.EVENT,)),
+        grown("lattice-mcnemar", LATTICE_ROOT, lattice.RUN_A, lattice.RUN_B, events=(lattice.EVENT,), method="mcnemar_bh"),
+        grown("lattice-two", LATTICE_ROOT, lattice.RUN_A, lattice.RUN_B, events=(lattice.EVENT, lattice.OTHER)),
+        grown("lattice-two-mcnemar", LATTICE_ROOT, lattice.RUN_A, lattice.RUN_B, events=(lattice.EVENT, lattice.OTHER), method="mcnemar_bh"),
         *crossed.values(),
         grown("holed", synth_root, "h-a", "h-b", events=("fail", NEVER_RAN)),
         grown("vocab", synth_root, "vocab-a", "vocab-b", events=("fail",)),
@@ -524,7 +534,7 @@ def test_g1_the_digest_and_the_field_are_64_hex_lowercase_strings(every_fixture:
 
 
 def test_g2_every_tree_grown_beside_its_own_diff_carries_the_digest_the_diff_recomputes(every_fixture: list[Grown]) -> None:
-    """The invariant that makes the guard usable: over Go1 under both schemes at K = 1 and 2, the
+    """The invariant that makes the guard usable: over the lattice pair under both schemes at K = 1 and 2, the
     three crossed pairs, the holed pair with an event nobody ran, and A27's two pairs -- and the
     holed pair's shape is asserted, so its green is the over-refusal check it is meant to be."""
     for g in every_fixture:
@@ -693,7 +703,7 @@ def test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_uncha
     m = viewer()
     by_name = {g.name: g for g in every_fixture}
     p, r = crossed["P"], crossed["R"]
-    go1, go1_two = by_name["go1"], by_name["go1-two"]
+    single, two = by_name["lattice"], by_name["lattice-two"]
     vocab, hostile = by_name["vocab"], by_name["hostile"]
     assert not (hashes_of(vocab) & hashes_of(hostile)) and vocab.multi.n_tests == hostile.multi.n_tests == len(hostile.result.root.units)
     assert r.result.root.n_cells == 4 and p.multi.n_tests == 10 and tuple(r.result.root.events) == tuple(p.multi.events)
@@ -704,7 +714,7 @@ def test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_uncha
         message = str(info.value)
         assert phrase in message and DIGEST_WORD not in message.lower(), (phrase, message)
 
-    refusal(m._check_tree, m.ViewerError, go1, go1_two, VIEWER_EVENTS_MESSAGE)
+    refusal(m._check_tree, m.ViewerError, single, two, VIEWER_EVENTS_MESSAGE)
     refusal(m._check_tree, m.ViewerError, p, r, VIEWER_ARITY_MESSAGE)
     with pytest.raises(m.ViewerError) as info:
         m._check_tree(p.multi, r.result)
@@ -713,7 +723,7 @@ def test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_uncha
     with pytest.raises(m.ViewerError) as info:
         m._check_tree(vocab.multi, hostile.result)
     assert any(h in str(info.value) for h in hashes_of(hostile)), str(info.value)
-    refusal(report_mod._check_tree, report_mod.ComparisonMismatch, go1, go1_two, REPORT_EVENTS_MESSAGE)
+    refusal(report_mod._check_tree, report_mod.ComparisonMismatch, single, two, REPORT_EVENTS_MESSAGE)
     refusal(report_mod._check_tree, report_mod.ComparisonMismatch, p, r, REPORT_ARITY_MESSAGE)
     with pytest.raises(report_mod.ComparisonMismatch) as info:
         report_mod._check_tree(p.multi, r.result)
@@ -806,18 +816,25 @@ def test_g16_the_canonical_form_is_written_twice_in_src_both_in_tree_py_through_
 
 def test_g17_a_digest_is_not_a_config_hash_and_not_a_method_hash(crossed: dict[str, Grown], every_fixture: list[Grown]) -> None:
     """The discrimination half on C16's fixture (identical ``config_hash`` sets, different
-    counts, different digests) and the method-equality half on Go1 as literal equalities at K = 1
-    and K = 2, so a later change that makes the form scheme-sensitive -- or drops the schema tag
-    (mutant 6), or widens it with ``multi.method`` (mutant 12) -- is caught rather than welcomed."""
+    counts, different digests) and the method-equality half on the lattice pair at K = 1 and K = 2:
+    both methods carry the one digest this file's reference recomputes from the design's counts in
+    section 3.2's form, so a later change that makes the form scheme-sensitive -- or drops the
+    schema tag (mutant 6), or widens it with ``multi.method`` (mutant 12), or changes the
+    serialiser (mutant 7) -- is caught rather than welcomed. The digest is not the one the 0.0.1
+    schema string gives."""
     p, q = crossed["P"], crossed["Q"]
     assert hashes_of(p) == hashes_of(q)
     assert p.result.agreement != q.result.agreement
     by_name = {g.name: g for g in every_fixture}
-    for k, fisher, mcnemar in ((1, "go1", "go1-mcnemar"), (2, "go1-two", "go1-two-mcnemar")):
+    for k, fisher, mcnemar in ((1, "lattice", "lattice-mcnemar"), (2, "lattice-two", "lattice-two-mcnemar")):
+        events = (lattice.EVENT,) if k == 1 else (lattice.EVENT, lattice.OTHER)
+        expected = reference_agreement(events)
+        assert expected != reference_agreement(events, OLD_AGREEMENT_SCHEMA), k
+        assert tuple(by_name[fisher].multi.events) == tuple(by_name[mcnemar].multi.events) == events, k
         assert by_name[fisher].multi.method == "fisher_bh" and by_name[mcnemar].multi.method == "mcnemar_bh"
         assert by_name[fisher].result.root.scheme != by_name[mcnemar].result.root.scheme
-        assert by_name[fisher].result.agreement == by_name[mcnemar].result.agreement == GO1_AGREEMENT[k], k
-        assert tree_mod.agreement_digest(by_name[mcnemar].multi) == GO1_AGREEMENT[k]
+        assert by_name[fisher].result.agreement == by_name[mcnemar].result.agreement == expected, k
+        assert tree_mod.agreement_digest(by_name[mcnemar].multi) == expected
 
 
 # ---------- G18-G20: ADR-077's record ----------

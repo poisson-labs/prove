@@ -5,9 +5,9 @@ Written from "Proofload -- Spec S23 Power Gate" section 4. Session B builds
 not edit it. ``examples/quickstart.toml`` was rebalanced in step zero and is not Session B's.
 
 **What the packet is.** ``MDE at N=32 (worst case, rate 0.5): 0.3251`` printed before a single
-S18 episode ran, was accurate to 1.6 points against the realised per-cell maximum, and was read
+episode of an earlier sweep ran, was close to the realised per-cell maximum, and was read
 twice and acted on zero times. A louder warning is not the fix -- ``--yes`` is on every command
-in the pilot README, so the prompt was never a gate either. The number gets a threshold, the
+in that sweep's README, so the prompt was never a gate either. The number gets a threshold, the
 threshold fires before any spend, and clearing it costs a number rather than a shrug.
 
 No network, no backend, no dollar. The Modal half of W8 goes through ``run_with_mapper`` with an
@@ -104,6 +104,7 @@ from poisson_prove.executor_modal import (
 )
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import RunManifest, Store
+import lattice
 from conftest import PACKAGED_QUICKSTART, quickstart_design
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
@@ -120,12 +121,16 @@ MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 #: Spec section 3. Stated in the spec, so it may be a constant here (standing rule 1).
 EXPECTED_DEFAULT = 0.20
 
-#: The Go1 design, N=32 -- one of the two this project has actually run, and one of the two the
-#: default is calibrated to refuse (spec section 3, W12).
-GO1_REPLICATES = 32
-GO1_MU = [round(0.05 * k, 2) for k in range(1, 21)]
-GO1_PUSH = [10.0 * k for k in range(1, 21)]
-GO1_TARGET = "go1-g2-converged@20260813T155006Z"
+#: The lattice's design (``tests/lattice.py``), twelve ``gain`` by six ``load`` at N=32, built here in
+#: code and never read from a store: one of the two N=32 designs the default is calibrated to refuse
+#: (spec section 3, W12), the four-condition ``spec_at(32)`` the other.
+LATTICE_REPLICATES = 32
+LATTICE_GAIN = [round(0.1 * k, 1) for k in range(1, 13)]
+LATTICE_LOAD = [10.0, 20.0, 30.0, 40.0, 50.0, 100.0]
+LATTICE_TARGET = "lattice-before"
+assert (LATTICE_REPLICATES, tuple(LATTICE_GAIN), tuple(LATTICE_LOAD), LATTICE_TARGET) == (
+    lattice.N, lattice.GAIN, lattice.LOAD, lattice.TARGET_A
+)
 
 #: A design that clears the default (W12's second half). The spec names 105; it is not the
 #: bisection answer (that is 93, below) and nothing here depends on which it is.
@@ -161,11 +166,11 @@ def spec_at(replicates: int, *, cells: int = 4, target_id: str = "gate@v0") -> S
     )
 
 
-def go1_spec() -> SweepSpec:
+def lattice_spec() -> SweepSpec:
     return SweepSpec.build(
-        [{"mu": mu, "push_pct_bw": push} for mu in GO1_MU for push in GO1_PUSH],
-        replicates=GO1_REPLICATES,
-        target_id=GO1_TARGET,
+        [{"gain": gain, "load": load} for gain in LATTICE_GAIN for load in LATTICE_LOAD],
+        replicates=LATTICE_REPLICATES,
+        target_id=LATTICE_TARGET,
         t_unit="seconds",
     )
 
@@ -400,15 +405,17 @@ def test_w1_the_statistic_saturates_at_the_largest_possible_increase_for_tiny_de
             executor.check_power(_bare_plan(spec_at(n)), max_mde=None)
 
 
-def test_w1_the_default_refuses_both_designs_this_project_has_run() -> None:
-    """Spec section 3's calibration claim, asserted rather than believed. S18 and Go1 are both
-    N=32; a default that passed them would be calibrated to pass everything."""
+def test_w1_the_default_refuses_the_lattice_design_and_the_four_condition_design_at_n_32() -> None:
+    """Spec section 3's calibration claim, asserted rather than believed: the default refuses an N=32
+    design, here the lattice's 72 conditions (twelve ``gain`` by six ``load``) and the four conditions of
+    ``spec_at(32)``, by the gate's own rule from the references and by ``check_power``. A default that
+    passed N=32 designs would be calibrated to pass everything."""
     assert executor.DEFAULT_MAX_MDE == EXPECTED_DEFAULT
     # PF4 re-freeze (PF4.30): the gate's own rule decides, read from the references, not the
     # normal approximation at base rate 0.5.
-    assert not ref_admits(GO1_REPLICATES, len(go1_spec().configs), executor.DEFAULT_MAX_MDE)
-    assert not ref_admits(GO1_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
-    for spec in (go1_spec(), spec_at(GO1_REPLICATES)):
+    assert not ref_admits(LATTICE_REPLICATES, len(lattice_spec().configs), executor.DEFAULT_MAX_MDE)
+    assert not ref_admits(LATTICE_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    for spec in (lattice_spec(), spec_at(LATTICE_REPLICATES)):
         with pytest.raises(executor.UnderpoweredDesign):
             executor.check_power(_bare_plan(spec), max_mde=None)
 
@@ -481,15 +488,15 @@ def test_w2_the_cli_names_no_threshold_of_its_own_and_makes_no_comparison() -> N
 
 
 def test_w3_check_power_passes_below_the_threshold_and_refuses_above_it() -> None:
-    spec = spec_at(GO1_REPLICATES)
+    spec = spec_at(LATTICE_REPLICATES)
     # PF4 re-freeze (PF4.30): the design's limit is the gate's, Fisher's test at q / M at the worst
     # base rate for the accepted change, read from the references; the normal approximation at base
     # rate 0.5 no longer decides.
-    _, _, mde = ref_worst(GO1_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    _, _, mde = ref_worst(LATTICE_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
     assert mde is not None
     below = math.floor(mde / 2 * 1000) / 1000
     above = min(1.0, math.ceil(mde * 2 * 1000) / 1000)
-    assert not ref_admits(GO1_REPLICATES, FOUR, below) and ref_admits(GO1_REPLICATES, FOUR, above), (below, above)
+    assert not ref_admits(LATTICE_REPLICATES, FOUR, below) and ref_admits(LATTICE_REPLICATES, FOUR, above), (below, above)
     p = _bare_plan(spec)
     with pytest.raises(executor.UnderpoweredDesign):
         executor.check_power(p, max_mde=below)
@@ -500,13 +507,13 @@ def test_w3_check_power_passes_below_the_threshold_and_refuses_above_it() -> Non
 
 def test_w3_equality_passes(tmp_path: Path) -> None:
     """``>`` and not ``>=``: a design that exactly meets what the caller accepts is accepted."""
-    spec = spec_at(GO1_REPLICATES)
+    spec = spec_at(LATTICE_REPLICATES)
     p = plan(spec, Store(tmp_path / "s"))
     # PF4 re-freeze (PF4.30): a design passes when its power at exactly the accepted change is at
     # least the target at every base rate with room, so the boundary is the smallest accepted change
     # the references admit; it passes and one step of 0.001 below it is refused.
-    boundary = ref_offer(GO1_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
-    assert not ref_admits(GO1_REPLICATES, FOUR, round(boundary - 0.001, 3)), boundary
+    boundary = ref_offer(LATTICE_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    assert not ref_admits(LATTICE_REPLICATES, FOUR, round(boundary - 0.001, 3)), boundary
     assert executor.check_power(p, max_mde=boundary) is None
     with pytest.raises(executor.UnderpoweredDesign):
         executor.check_power(p, max_mde=round(boundary - 0.001, 3))
@@ -514,7 +521,7 @@ def test_w3_equality_passes(tmp_path: Path) -> None:
 
 def test_w3_max_mde_none_means_the_default(tmp_path: Path) -> None:
     store = Store(tmp_path / "s")
-    under = plan(spec_at(GO1_REPLICATES), store)
+    under = plan(spec_at(LATTICE_REPLICATES), store)
     with pytest.raises(executor.UnderpoweredDesign):
         executor.check_power(under, max_mde=None)
     with pytest.raises(executor.UnderpoweredDesign):
@@ -572,7 +579,7 @@ def refusal(spec: SweepSpec, max_mde: float | None) -> executor.UnderpoweredDesi
     return excinfo.value
 
 
-@pytest.mark.parametrize("replicates", [8, 16, GO1_REPLICATES, 64])
+@pytest.mark.parametrize("replicates", [8, 16, LATTICE_REPLICATES, 64])
 def test_w4_the_refusal_names_the_mde_the_accepted_value_the_n_and_a_reachable_n(replicates: int) -> None:
     spec = spec_at(replicates)
     accepted = executor.DEFAULT_MAX_MDE
@@ -615,25 +622,25 @@ def test_w4_the_override_the_message_suggests_actually_clears_the_gate() -> None
     the message names as an override has to pass ``check_power`` on the same design -- round the
     suggestion up at four decimals, or print more of them.
     """
-    spec = go1_spec()
+    spec = lattice_spec()
     rows = len(spec.configs)
     # PF4 re-freeze (PF4.30): the refusal's limit is printed to three decimals at the worst base rate
     # for the accepted change, and the --max-mde it offers (the command line's second next: line) is
     # the smallest three-decimal change that admits the design. Pasting the printed limit back does
     # not admit it; the offer does, and one step of 0.001 below the offer does not.
-    _, _, mde = ref_worst(GO1_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    _, _, mde = ref_worst(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
     assert mde is not None
     exc = refusal(spec, executor.DEFAULT_MAX_MDE)
     assert f"{mde:.3f}" in str(exc), str(exc)
     offered = exc.offered
     assert offered is not None, str(exc)
-    assert offered == pytest.approx(ref_offer(GO1_REPLICATES, rows, executor.DEFAULT_MAX_MDE), abs=1e-12)
+    assert offered == pytest.approx(ref_offer(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE), abs=1e-12)
     printed = float(f"{mde:.3f}")
-    assert printed < offered and not ref_admits(GO1_REPLICATES, rows, printed), (printed, offered)  # the trap is real
+    assert printed < offered and not ref_admits(LATTICE_REPLICATES, rows, printed), (printed, offered)  # the trap is real
     with pytest.raises(executor.UnderpoweredDesign):
         executor.check_power(_bare_plan(spec), max_mde=printed)
     assert executor.check_power(_bare_plan(spec), max_mde=offered) is None, (offered, mde, str(exc))
-    assert not ref_admits(GO1_REPLICATES, rows, round(offered - 0.001, 3)), offered
+    assert not ref_admits(LATTICE_REPLICATES, rows, round(offered - 0.001, 3)), offered
 
 
 # ---------- W5: --yes does not clear the gate, and nothing is created ----------
@@ -884,7 +891,7 @@ def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path:
     docstring, finding 1 -- so this is the only guard it has."""
     from poisson_prove.executor_modal import ImageSpec, ModalTarget
 
-    spec = spec_at(GO1_REPLICATES, cells=2)
+    spec = spec_at(LATTICE_REPLICATES, cells=2)
     p = plan(spec, Store(tmp_path / "s"))
     local = preflight(p)
     modal = preflight_modal(
@@ -900,11 +907,11 @@ def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path:
     # PF4 re-freeze (PF4.30, reading R36): the plan's one limit is the command line's gate line, and
     # it names the limit at the worst base rate, that base rate, the test and the family; the
     # numbers are the references'.
-    spec_path = write_spec(tmp_path / "plan.toml", underpowered_toml(replicates=GO1_REPLICATES))
-    accepted = ref_offer(GO1_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    spec_path = write_spec(tmp_path / "plan.toml", underpowered_toml(replicates=LATTICE_REPLICATES))
+    accepted = ref_offer(LATTICE_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
     r = run_cli(sweep_argv(tmp_path / "runs", spec_path, MOCK_ROLLOUT, "--max-mde", repr(accepted), "--dry-run"))
     assert r.code == 0, r.text
-    base, _, limit = ref_worst(GO1_REPLICATES, FOUR, accepted)
+    base, _, limit = ref_worst(LATTICE_REPLICATES, FOUR, accepted)
     assert limit is not None
     (line,) = [x for x in r.out.splitlines() if "worst base rate" in x]
     assert f"{limit:.3f}" in line and f"{base:.3f}" in line and "Fisher" in line and "over 4 tests" in line, line
@@ -922,7 +929,7 @@ def test_w11_check_power_prints_nothing_on_either_path(capsys: pytest.CaptureFix
     store = Store(tmp_path / "s")
     assert executor.check_power(plan(spec_at(CLEARING_REPLICATES), store), max_mde=executor.DEFAULT_MAX_MDE) is None
     with pytest.raises(executor.UnderpoweredDesign):
-        executor.check_power(plan(spec_at(GO1_REPLICATES), store), max_mde=executor.DEFAULT_MAX_MDE)
+        executor.check_power(plan(spec_at(LATTICE_REPLICATES), store), max_mde=executor.DEFAULT_MAX_MDE)
     captured = capsys.readouterr()
     assert (captured.out, captured.err) == ("", ""), captured
 
@@ -932,7 +939,7 @@ def test_w11_check_power_touches_neither_the_store_nor_the_plan(tmp_path: Path) 
 
     root = tmp_path / "s"
     store = Store(root)
-    p = plan(spec_at(GO1_REPLICATES), store)
+    p = plan(spec_at(LATTICE_REPLICATES), store)
     before = dataclasses.asdict(p)
     with pytest.raises(executor.UnderpoweredDesign):
         executor.check_power(p, max_mde=executor.DEFAULT_MAX_MDE)
@@ -942,32 +949,32 @@ def test_w11_check_power_touches_neither_the_store_nor_the_plan(tmp_path: Path) 
 
 def test_w11_the_preflights_still_return_text_and_still_raise_nothing(tmp_path: Path) -> None:
     """They describe; the gate decides. An underpowered design still renders its block."""
-    p = plan(spec_at(GO1_REPLICATES, cells=2), Store(tmp_path / "s"))
+    p = plan(spec_at(LATTICE_REPLICATES, cells=2), Store(tmp_path / "s"))
     text = preflight(p)
     assert isinstance(text, str) and text.endswith("\n") and "Sweep:" in text
 
 
-# ---------- W12: golden, on the two designs this project has run ----------
+# ---------- W12: golden, on the lattice's design and on a design that clears ----------
 
 
-def test_w12_the_go1_design_is_refused_at_the_default(tmp_path: Path) -> None:
-    spec = go1_spec()
-    assert spec.replicates == GO1_REPLICATES and len(spec.configs) == 400
+def test_w12_the_lattice_design_is_refused_at_the_default(tmp_path: Path) -> None:
+    spec = lattice_spec()
+    assert spec.replicates == LATTICE_REPLICATES and len(spec.configs) == lattice.CELLS == 72
     with pytest.raises(executor.UnderpoweredDesign):
         executor.check_power(_bare_plan(spec), max_mde=None)
 
 
-def test_w12_the_go1_design_passes_at_its_own_mde_and_not_at_the_printed_rounding() -> None:
+def test_w12_the_lattice_design_passes_at_its_own_mde_and_not_at_the_printed_rounding() -> None:
     """Both halves come from ``preflight_mde``. The second is spec section 3's example, and it
     is wrong: ``--max-mde 0.3251`` is what the message tells the reader to paste and it refuses.
     See ``test_w4_the_override_the_message_suggests_actually_clears_the_gate``."""
-    spec = go1_spec()
+    spec = lattice_spec()
     rows = len(spec.configs)
     # PF4 re-freeze (PF4.30): the design's own value is the smallest accepted change the gate admits
-    # (the references' Fisher power at q / 400 at every base rate); the printed limit at the worst
+    # (the references' Fisher power at q / 72 at every base rate); the printed limit at the worst
     # base rate, rounded to three decimals, is below it and refused.
-    own = ref_offer(GO1_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
-    _, _, mde = ref_worst(GO1_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    own = ref_offer(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    _, _, mde = ref_worst(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
     assert mde is not None
     assert executor.check_power(_bare_plan(spec), max_mde=own) is None
     with pytest.raises(executor.UnderpoweredDesign):

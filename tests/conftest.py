@@ -169,13 +169,123 @@ def blocked_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
 
 
 @pytest.fixture(scope="session")
-def go1_store() -> Store:
-    """The committed Go1 golden fixture at tests/fixtures/go1 (built by S3 Session B)."""
-    return Store(FIXTURES / "go1")
+def lattice_store() -> Store:
+    """The generated lattice pair (``tests/lattice.py``), built once per machine and version, checked before
+    any test runs, when a process first asks for it and again when the session ends."""
+    import lattice
+
+    return Store(lattice.root())
+
+
+class SharedTrees:
+    """The lattice pair's comparisons and trees, each computed once per test session and shared
+    between xdist workers: the first worker to ask computes it under a lock and leaves a pickle,
+    and every later request, in any worker, loads its own copy, so no test sees another's edits.
+    """
+
+    def __init__(self, folder: Path) -> None:
+        self.folder = folder
+        self._memo: dict[str, bytes] = {}
+        self._kept: dict[str, Any] = {}
+
+    def frames(self) -> tuple[Any, Any, Any, Any]:
+        """``(a, b, manifest_a, manifest_b)``: both runs read with ``meta=False``."""
+        import lattice
+
+        store = Store(lattice.root())
+        return (store.read(lattice.RUN_A, meta=False), store.read(lattice.RUN_B, meta=False),
+                store.manifest(lattice.RUN_A), store.manifest(lattice.RUN_B))
+
+    def multi(self, events: tuple[str, ...] | None, method: str, **knobs: Any) -> Any:
+        """``multi_diff`` over the pair with both manifests, for ``events`` under ``method``."""
+        return self._get(("multi", events, method, sorted(knobs.items())), lambda: self._multi(events, method, knobs))
+
+    def tree(self, events: tuple[str, ...] | None, method: str, **knobs: Any) -> Any:
+        """``tree.tree`` beside ``multi(events, method)``, with ``knobs`` (``by``,
+        ``n_permutations``, ``seed``, ``max_group_mde``, ``depth``) as given."""
+        def build() -> Any:
+            from poisson_prove import tree as tree_mod
+
+            a, b, ma, mb = self.frames()
+            return tree_mod.tree(a, b, self.multi(events, method), manifest_a=ma, manifest_b=mb, **knobs)
+
+        return self._get(("tree", events, method, sorted(knobs.items())), build)
+
+    def _multi(self, events: tuple[str, ...] | None, method: str, knobs: dict[str, Any]) -> Any:
+        import warnings
+
+        from poisson_prove.diff import UnpairedAnalysis, multi_diff
+
+        a, b, ma, mb = self.frames()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UnpairedAnalysis)
+            return multi_diff(a, b, events=None if events is None else list(events), method=method,
+                              manifest_a=ma, manifest_b=mb, **knobs)
+
+    def _get(self, key: Any, build: Any) -> Any:
+        import fcntl
+        import hashlib
+        import pickle
+
+        import copy
+
+        name = hashlib.sha256(repr(key).encode()).hexdigest()[:20]
+        if name in self._kept:
+            return copy.deepcopy(self._kept[name])
+        if name not in self._memo:
+            path = self.folder / f"{name}.pickle"
+            with open(self.folder / f"{name}.lock", "w") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                if not path.is_file():
+                    value = build()
+                    try:
+                        data = pickle.dumps(value)
+                    except (pickle.PicklingError, AttributeError, TypeError):
+                        # A result this build cannot pickle is kept in this process alone, built
+                        # once per worker, and every caller still gets a copy of its own.
+                        self._kept[name] = value
+                        return copy.deepcopy(value)
+                    staging = path.with_name(f".{name}.{__import__('os').getpid()}")
+                    staging.write_bytes(data)
+                    staging.replace(path)
+            self._memo[name] = path.read_bytes()
+        return pickle.loads(self._memo[name])
+
+
+@pytest.fixture(scope="session")
+def lattice_trees(tmp_path_factory: pytest.TempPathFactory) -> SharedTrees:
+    """The session's shared comparisons and trees over the lattice pair (``SharedTrees``)."""
+    base = tmp_path_factory.getbasetemp()
+    root = base.parent if base.name.startswith("popen-gw") else base
+    folder = root / "lattice-trees"
+    folder.mkdir(exist_ok=True)
+    return SharedTrees(folder)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Check both generated stores before any test runs, rebuilding one that fails (a crash or an
+    earlier session left it), then mark them checked for this session and its workers: from here
+    on a store that fails was written by a test, and ``lattice.cached_store`` refuses it."""
+    if hasattr(config, "workerinput"):
+        return
+    import os
+
+    import lattice
+    import replay_arms
+
+    os.environ.pop(lattice.CHECKED, None)
+    lattice.root()
+    replay_arms.root()
+    os.environ[lattice.CHECKED] = "1"
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Remove the bundle folders the Burla tests' fake workers unpacked and could not remove.
+    """Fail the session if a test wrote into a generated store; then remove the bundle folders the
+    Burla tests' fake workers unpacked and could not remove.
+
+    The lattice pair and the replay arms are shared by every test and every worker, so a test
+    that writes into one changes what every later test reads. Each store's files are checked
+    against the digests written with it, in every process, worker or not.
 
     A worker process holds its folder for its life and removes it at exit or when another bundle
     replaces it (``proofload._burla_submit``), but the fake pool ends its workers with SIGKILL, so
@@ -185,6 +295,19 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """
     import subprocess
     import sys
+
+    import lattice
+    import replay_arms
+
+    changed = [module.__name__ for module in (lattice, replay_arms) if not module.unchanged()]
+    if changed:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        message = f"a test wrote into the generated store of {', '.join(changed)}; see tests/lattice.py"
+        if reporter is not None:
+            reporter.write_line(f"ERROR {message}", red=True)
+        else:
+            print(f"ERROR {message}", file=sys.stderr)
 
     from poisson_prove._burla_submit import _PREFIX, _reap
 

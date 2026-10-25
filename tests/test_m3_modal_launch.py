@@ -1,6 +1,6 @@
 """Oracle for the M3 modal launch amendment (S19): invariants L1-L14.
 
-The two things the S18 pilot could not do: launch a Modal sweep for a target that only
+The two things a first Modal sweep could not do: launch a Modal sweep for a target that only
 imports inside its container, and let a credential reach that container by name. Nothing here
 touches the network. ``run_modal`` is exercised offline for the first time, through a fake
 ``modal`` module installed in ``sys.modules`` for the test's duration (L11, L12); everything
@@ -97,7 +97,7 @@ FUNCTION_KWARGS = frozenset({
     "image", "gpu", "timeout", "retries", "max_containers", "serialized", "secrets",
 })
 IMAGE_KEYS = frozenset({"python", "pip", "apt", "dockerfile", "local_packages", "gpu"})
-# S18 P12's pins, restated: the __all__ list and the public names executor_modal defines itself.
+# The executor's public-surface pins, restated: the __all__ list and the public names executor_modal defines itself.
 MODAL_EXPORTS = [
     "CostGuard", "ImageSpec", "Job", "Mapper", "ModalBackendError", "ModalNotInstalled",
     "ModalOptions", "ModalTarget", "Result", "estimate_cost", "preflight_modal", "run_modal",
@@ -142,12 +142,12 @@ pip = ["torch"]
 gpu = "A10G"
 """
 
-SECRETS_TABLE = '\n[modal]\nsecrets = ["golden-pilot", "second"]\n'
+SECRETS_TABLE = '\n[modal]\nsecrets = ["app-secret", "second"]\n'
 # A unique alphanumeric bare string: an implementation that tuple()s it gets ("a", "b", "c"),
 # three names that pass every rule, so only a refusal of the bare str itself keeps this red.
 BARE_STRING_TABLE = '\n[modal]\nsecrets = "abc"\n'
 
-# The pilot's shape: a module that refuses to import outside its container.
+# A target of that shape: a module that refuses to import outside its container.
 REFUSING_SOURCE = f'''"""L1's target: importable only where {BOUNDARY_VAR}=container is set."""
 import os
 
@@ -725,7 +725,7 @@ def test_l6_secrets_is_a_defaulted_trailing_tuple_field() -> None:
 
 @pytest.mark.parametrize(
     "value",
-    ["golden-pilot", [""], ["a b"], ["a=b"], ["-leading"], ["x" * 65], ["a", "a"]],
+    ["app-secret", [""], ["a b"], ["a=b"], ["-leading"], ["x" * 65], ["a", "a"]],
     ids=["bare-str", "empty", "whitespace", "equals", "leading-dash", "too-long", "duplicate"],
 )
 def test_l7_malformed_secret_entries_raise_value_error(value: Any) -> None:
@@ -748,7 +748,7 @@ def test_l7_whitespace_refusal_never_echoes_the_entry() -> None:
     assert canary not in str(excinfo.value)
 
 
-@pytest.mark.parametrize("value", [["golden-pilot", "a.b_c-d"], ["x" * 64]], ids=["two-names", "max-length"])
+@pytest.mark.parametrize("value", [["app-secret", "a.b_c-d"], ["x" * 64]], ids=["two-names", "max-length"])
 def test_l7_well_formed_names_construct(value: list[str]) -> None:
     assert ModalOptions(secrets=value).secrets == tuple(value)
 
@@ -762,7 +762,7 @@ def test_l8_secrets_list_in_the_modal_table_reaches_options(
     r = run_cli(_modal_argv(tmp_path, _sweep_file(tmp_path, SECRETS_TABLE)))
     assert r.code == 0, r.text
     _, _, _, options = captured_run_modal.calls[0]
-    assert options is not None and options.secrets == ("golden-pilot", "second")
+    assert options is not None and options.secrets == ("app-secret", "second")
 
 
 def test_l8_the_m10_tables_without_a_secrets_key_give_the_empty_tuple(
@@ -801,7 +801,7 @@ def test_l8_a_pasted_value_is_refused_with_the_create_form_and_never_echoed(
 def test_l8_flag_overrides_still_hold_with_secrets_present(
     tmp_path: Path, captured_run_modal: CapturedRunModal
 ) -> None:
-    tables = _with_modal_key(MODAL_TABLES, 'secrets = ["golden-pilot", "second"]')
+    tables = _with_modal_key(MODAL_TABLES, 'secrets = ["app-secret", "second"]')
     r = run_cli(
         _modal_argv(
             tmp_path, _sweep_file(tmp_path, tables),
@@ -819,7 +819,7 @@ def test_l8_flag_overrides_still_hold_with_secrets_present(
         max_cost=250.0,
         est_seconds_per_episode=1.5,
         app_name="from-flag",
-        secrets=("golden-pilot", "second"),
+        secrets=("app-secret", "second"),
     )
 
 
@@ -829,11 +829,11 @@ def test_l8_flag_overrides_still_hold_with_secrets_present(
 def test_l9_modal_manifest_records_the_secret_names(tmp_path: Path) -> None:
     store = _store(tmp_path)
     p = _modal_plan(_spec(), store)
-    options = ModalOptions(batch_size=BATCH, secrets=("golden-pilot",))
+    options = ModalOptions(batch_size=BATCH, secrets=("app-secret",))
     run_with_mapper(p, in_process_mapper, store, options=options)
     env = dict(store.manifest(p.run_id).environment)
     assert "secrets" in env
-    assert env["secrets"] == ["golden-pilot"]
+    assert env["secrets"] == ["app-secret"]
     assert json.loads(json.dumps(env)) == env
 
 
@@ -860,12 +860,12 @@ def test_l9_local_manifest_has_no_secrets_key(tmp_path: Path) -> None:
 def test_l10_preflight_lists_the_mounts_between_containers_and_cost(tmp_path: Path) -> None:
     p = _modal_plan(_spec(), _store(tmp_path))
     target = ModalTarget(import_path=DET_PATH, image=ImageSpec())
-    options = ModalOptions(batch_size=BATCH, secrets=("golden-pilot", "second"))
+    options = ModalOptions(batch_size=BATCH, secrets=("app-secret", "second"))
     text = preflight_modal(p, target, options)
     lines = text.splitlines()
     secrets_lines = _lines_starting(text, "Secrets:")
     assert len(secrets_lines) == 1, text
-    assert "golden-pilot, second" in secrets_lines[0]
+    assert "app-secret, second" in secrets_lines[0]
     assert "mounted by name" in secrets_lines[0]
     assert _index_of(lines, "Containers:") < _index_of(lines, "Secrets:")
     assert _index_of(lines, "Secrets:") < _index_of(lines, "Cost:")

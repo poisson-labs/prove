@@ -3,10 +3,11 @@ before ``Store.read(meta=, keys=)`` and ``Store.count`` exist.
 
 Stores are written under ``tmp_path`` in the M4 oracle's ``_rec``/``_manifest`` shape; the CLI
 is driven in-process through ``cli.main`` with ``StringIO`` streams, as the M10 oracle does; the
-golden reads the committed Go1 fixture through the ``go1_store`` conftest fixture.
+golden reads the generated lattice pair (``tests/lattice.py``) through the ``lattice_store``
+conftest fixture.
 
-The numbers in the spec's section 1 (6.1 s, 1.13 GB, 25,600 rows) are the motivation and never
-an assertion: nothing here measures a duration or a byte count. What this file asserts is which
+The numbers in the spec's section 1 (a duration, a byte count, a row count) are the motivation
+and never an assertion: nothing here measures a duration or a byte count. What this file asserts is which
 paths decode ``meta``, and the poisoned store is how it knows. A poisoned store is a run written
 through ``Store.append`` whose part files were rewritten in place with the string ``not json``
 in the ``meta`` cells of chosen rows, each part keeping its own schema. On such a store the
@@ -51,11 +52,13 @@ from poisson_prove.executor import plan, run_local
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, StoreError, config_hash
 
+import lattice
+
 ROOT = Path(__file__).resolve().parents[1]
-GO1_ROOT = ROOT / "tests" / "fixtures" / "go1"
-GO1_RUNS = ("go1-v0", "go1-v1")
-GO1_ROWS = 12_800
-GO1_TOTAL_ROWS = 25_600  # section 1's row count: the two committed runs together
+LATTICE_ROOT = lattice.root()
+LATTICE_RUNS = (lattice.RUN_A, lattice.RUN_B)
+LATTICE_ROWS = 2_304
+LATTICE_TOTAL_ROWS = 4_608  # the two generated runs together
 
 THIRTEEN = [
     "run_id", "config_hash", "config", "seed", "replicate_index", "outcome", "t", "horizon",
@@ -715,31 +718,32 @@ def test_r6_one_poisoned_selected_row_is_loud(mock_run: MockRun, tmp_path: Path)
     assert store.count(mock_run.run_id) == len(mock_run.frame)
 
 
-# ---------- R7: no schema change; the Go1 golden ----------
+# ---------- R7: no schema change; the lattice golden ----------
 
 
-@pytest.mark.parametrize("run_id", GO1_RUNS)
-def test_r7_go1_default_read_is_12800_by_13(go1_store: Store, run_id: str) -> None:
-    df = go1_store.read(run_id)
+@pytest.mark.parametrize("run_id", LATTICE_RUNS)
+def test_r7_lattice_default_read_is_2304_by_13(lattice_store: Store, run_id: str) -> None:
+    df = lattice_store.read(run_id)
     # PF4 re-freeze (reading R5): the thirteen columns plus case_id, null on parts written before it.
-    assert df.shape == (GO1_ROWS, 13 + 1)
+    assert df.shape == (LATTICE_ROWS, 13 + 1)
+    assert LATTICE_ROWS == lattice.ROWS == len(lattice.rows(run_id))
     assert list(df.columns) == FRAME
     assert df["case_id"].isna().all()
 
 
-@pytest.mark.parametrize("run_id", GO1_RUNS)
-def test_r7_go1_narrow_read_is_12800_by_11(go1_store: Store, run_id: str) -> None:
-    df = go1_store.read(run_id, meta=False)
+@pytest.mark.parametrize("run_id", LATTICE_RUNS)
+def test_r7_lattice_narrow_read_is_2304_by_11(lattice_store: Store, run_id: str) -> None:
+    df = lattice_store.read(run_id, meta=False)
     # PF4 re-freeze (reading R5): the eleven columns plus case_id, null on parts written before it.
-    assert df.shape == (GO1_ROWS, 11 + 1)
+    assert df.shape == (LATTICE_ROWS, 11 + 1)
     assert list(df.columns) == NARROW
     assert df["case_id"].isna().all()
 
 
-def test_r7_go1_count_is_12800_per_run_and_25600_together(go1_store: Store) -> None:
-    counts = {run_id: go1_store.count(run_id) for run_id in GO1_RUNS}
-    assert counts == {run_id: GO1_ROWS for run_id in GO1_RUNS}
-    assert sum(counts.values()) == GO1_TOTAL_ROWS
+def test_r7_lattice_count_is_2304_per_run_and_4608_together(lattice_store: Store) -> None:
+    counts = {run_id: lattice_store.count(run_id) for run_id in LATTICE_RUNS}
+    assert counts == {run_id: LATTICE_ROWS for run_id in LATTICE_RUNS}
+    assert sum(counts.values()) == LATTICE_TOTAL_ROWS == 2 * lattice.ROWS
 
 
 def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
@@ -747,8 +751,10 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     store.create_run(_manifest())
     store.append("r1", [_rec()])
     fresh = pq.read_schema(next((tmp_path / "r1" / "episodes").glob("part-*.parquet")))
-    golden = pq.read_schema(GO1_ROOT / "go1-v0" / "episodes" / "part-00000.parquet")
-    # A7 (spec section 3.1, 7.1): the on-disk schema is the Go1 golden's thirteen fields plus
+    golden = pq.read_schema(LATTICE_ROOT / lattice.RUN_A / "episodes" / "part-00000.parquet")
+    # The lattice part is written in the legacy (pre-A7) layout, the thirteen columns.
+    assert golden.names == THIRTEEN == list(lattice.LEGACY_COLUMNS)
+    # A7 (spec section 3.1, 7.1): the on-disk schema is the legacy golden's thirteen fields plus
     # ``trace`` and ``trace_obs``, both nullable strings, appended in that order. Amended from
     # ``fresh.equals(golden)`` / ``fresh.names == THIRTEEN``; the golden comparison is kept.
     # PF4 re-freeze (reading R5): a nullable string case_id column follows trace_obs.
@@ -757,8 +763,9 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     ).append(pa.field("case_id", pa.string(), nullable=True))
     assert fresh.equals(expected), f"\n{fresh}\n!=\n{expected}"
     assert fresh.names == THIRTEEN + ["trace", "trace_obs", "case_id"]
-    golden_manifest = json.loads((GO1_ROOT / "go1-v0" / "manifest.json").read_text())
-    # A10 (spec section 3.3, 7.1 group 1, W4): the manifest's top-level keys are the Go1 golden's
+    golden_manifest = json.loads((LATTICE_ROOT / lattice.RUN_A / "manifest.json").read_text())
+    assert set(golden_manifest) == lattice.LEGACY_MANIFEST_KEYS
+    # A10 (spec section 3.3, 7.1 group 1, W4): the manifest's top-level keys are the legacy golden's
     # twelve plus ``declared``, which is null for a sweep that declares nothing. Amended from
     # ``== set(golden_manifest)``; the golden comparison is kept. A23/A26 re-amends this line.
     # PF0 (Q4): the version key is written as ``poisson_prove_version``; the golden, written by
@@ -766,11 +773,11 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     assert set(store.manifest("r1").to_dict()) == (set(golden_manifest) - {"proofload_version"}) | {"poisson_prove_version", "declared"}
 
 
-# ---------- R8: runs on the Go1 store ----------
+# ---------- R8: runs on the lattice store ----------
 
 
-def test_r8_runs_on_go1_prints_each_run_with_12800_rows(go1_store: Store) -> None:
-    r = run_cli(["--store", str(GO1_ROOT), "runs"])
+def test_r8_runs_on_lattice_prints_each_run_with_2304_rows(lattice_store: Store) -> None:
+    r = run_cli(["--store", str(LATTICE_ROOT), "runs"])
     assert r.code == 0, r.text
     assert not r.err
     lines = [line for line in r.out.splitlines() if line.strip()]
@@ -778,7 +785,7 @@ def test_r8_runs_on_go1_prints_each_run_with_12800_rows(go1_store: Store) -> Non
     # `store: <root>`, and the table has the columns #, name, id, status, backend, target, rows,
     # rows without an outcome, created (t_unit is no longer a column). A name holds single
     # spaces, so cells are split on runs of two or more spaces.
-    assert lines[0] == f"ok  {len(GO1_RUNS)} runs in {GO1_ROOT}"
+    assert lines[0] == f"ok  {len(LATTICE_RUNS)} runs in {LATTICE_ROOT}"
     assert re.split(r"\s{2,}", lines[1].strip()) == [
         "#", "name", "id", "status", "backend", "target", "rows", "rows without an outcome",
         "created",
@@ -787,16 +794,18 @@ def test_r8_runs_on_go1_prints_each_run_with_12800_rows(go1_store: Store) -> Non
     rows = {cell[2]: cell for cell in cells}
     # PF2 (spec section 4.3): newest first by created_at, where the old table was in id order.
     newest_first = sorted(
-        GO1_RUNS, key=lambda run_id: go1_store.manifest(run_id).created_at, reverse=True,
+        LATTICE_RUNS, key=lambda run_id: lattice_store.manifest(run_id).created_at, reverse=True,
     )
-    assert list(rows) == newest_first == ["go1-v1", "go1-v0"]
+    assert list(rows) == newest_first == [lattice.RUN_B, lattice.RUN_A]
+    names = {lattice.RUN_A: lattice.NAME_A, lattice.RUN_B: lattice.NAME_B}
     for number, run_id in enumerate(newest_first, start=1):
-        m = go1_store.manifest(run_id)
+        m = lattice_store.manifest(run_id)
+        assert f"{m.target_id.split('/')[0]} {m.created_at[:10]} a" == names[run_id]
         assert rows[run_id] == [
             # PF2 (spec section 4.3): a number and the computed name lead the row; created ends it.
             str(number), f"{m.target_id.split('/')[0]} {m.created_at[:10]} a",
             # Counts carry thousands separators in text (front-door spec section 5.4, rule 10).
-            run_id, m.status, m.backend, m.target_id, f"{GO1_ROWS:,}", "0",
+            run_id, m.status, m.backend, m.target_id, f"{LATTICE_ROWS:,}", "0",
             f"{m.created_at[:19]}Z",
         ]
 

@@ -50,8 +50,7 @@ movers the prototype hid or reached through a helper are new -- I9's column and 
 ``paired`` sat inside ``unpaired`` as a substring), R13 and R4's second test (the kind table). 187 - 3
 - 3 - 3 + 4 = 182. **Nothing else is
 red.** The pandas 3 cell adds nothing: no P-1 field reaches disk. The copies skip 5 where the repo
-skips 3, the two extra being ``test_pilot_golden.py``'s real-suite pair (the gitignored
-``HumanEval.jsonl.gz``).
+skips 3, the two extra being a real-suite pair whose data file is gitignored.
 
 **What step zero measured at ``a626cd3``, so the oracle rests on runs and not on reads.** (1) The
 three fixtures spec section 7.3 names pair by dict position: ``test_s28_report.py``'s ``overlap``
@@ -61,7 +60,7 @@ pair's); ``test_s25_root.py``'s O21 pair matches 48 and **16 of 48 disagree**; `
 ``test_s21_errors.py``'s synthetic pair matches 128 raw rows and **16 disagree** (99 analysed rows
 under ``--methods all``, which is where E12 refused on the prototype). All four are made honest in
 the retrofit commit by a seed that is a function of ``(config, replicate_index)``; after the fix
-every pair matches with 0 disagreeing, measured. (3) The Go1 ``heatmap.svg`` **does** move under
+every pair matches with 0 disagreeing, measured. (3) A stored pair's ``heatmap.svg`` **does** move under
 D1: its subtitle is the headline's second line, so ``paired)`` became ``unpaired)`` in the SVG too;
 spec section 5's "the SVG's bytes do not move" is wrong and every E14 carrier's SVG digest is
 re-minted. (4) ``tree.py`` narrowed at ``("RootResult", "_root")`` digests to ``83ec3494...`` on the
@@ -80,7 +79,7 @@ stored seed).
 carry: mutant 2 (seeds compared positionally over all rows) by Y5's partial-overlap variant alone;
 mutant 3 (zero matched rows read as a match) by Y1's zero-overlap draws alone; mutant 13
 (``alpha*`` printed ``.4f``) by Y12's small-alpha family alone; mutant 15 (``p_floor = 1 / B``) by
-Y16's exact Go1 equality alone; mutant 17 (``render_html`` tolerating a missing ``intervals``) by
+Y16's exact equality on the generated lattice pair alone; mutant 17 (``render_html`` tolerating a missing ``intervals``) by
 Y15 alone; mutant 21 (intervals joined by ``config_hash`` alone) by Y14's two-event pair alone,
 whose endpoints differ across events on the same cell by construction. **One survivor predicted by
 the spec and not mutated here**: the seed check run over the raw frames instead of the analysed
@@ -109,6 +108,7 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+import lattice
 import poisson_prove.cli as cli
 import poisson_prove.diff as diff_mod
 import poisson_prove.viewer as viewer_mod
@@ -123,9 +123,10 @@ from poisson_prove.viewer import SCHEMA, ViewerError, build_structure, render_ht
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "src" / "poisson_prove"
 DIFF_SOURCE, REPORT_SOURCE, TREE_SOURCE, VIEWER_SOURCE, CLI_SOURCE = (SRC / f"{n}.py" for n in ("diff", "report", "tree", "viewer", "cli"))
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
-GO1_SALT = "go1-g4-32:PRNGKey(1000000+rollout)"
+#: The generated lattice pair (``tests/lattice.py``): two runs of one design that share a salt.
+LATTICE_ROOT = lattice.root()
+LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
+EVENT, X, Y = lattice.EVENT, lattice.X, lattice.Y
 
 # ---------- the literals (spec sections 2 and 3, verbatim) ----------
 
@@ -185,17 +186,22 @@ WARNING = (
     "other did not are in coverage. Pass method='mcnemar_bh' to test that correspondence; whether it "
     "buys power depends on how far the two arms agree episode by episode."
 )
-#: Y8. Go1 under ``fisher_bh``, ``--event fell``: the headline on every surface (section 3.3).
-# PF4 (PF4.20): Go1's fell has no declared kind, so the headline counts read in direction words
-# ("N lower, M higher"); the counts are the ones it always pinned (60 fell, 0 rose).
-GO1_HEADLINE = "fell: 60 lower, 0 higher\n(aalen_johansen + fisher_bh, BH q<0.05 over 400 tests, unpaired)"
-GO1_SINGLE_HEADLINE = "60 of 400 cells safer, 0 worse (fisher_bh, BH q<0.05, unpaired)."
-#: Y7. ``to_markdown()``'s parameter line on Go1 starts with these tokens (section 3.3).
-GO1_PARAMETER_LINE_PREFIX = "method=fisher_bh, seed_identity_match=True, unpaired_analysis=True, q=0.05, t_unit=seconds, horizon=5.0, n_tests=400, "
-#: Y11. The three interval lines on Go1 ``fell`` (section 3.4, measured before and after), and the ``R == 0`` line.
-GO1_INTERVAL_LINES = (
-    "intervals: 99.2500% (alpha* = 0.0075 = q x 60 / 400 over the flat BH family), basis score_rd",
-    "interval excludes zero, verdict unchanged: 6 cells",
+#: Y8. The lattice under ``fisher_bh``, ``--event tripped``: the headline on every surface (section 3.3).
+# PF4 (PF4.20): ``tripped`` has no declared kind, so the headline counts read in direction words
+# ("N lower, M higher"). The counts are the reference's (``lattice.fisher``: 22 conditions lower,
+# 0 higher, over the design's 72), which Y8 asserts beside the literal.
+LATTICE_LOWER, LATTICE_HIGHER, LATTICE_TESTS = 22, 0, 72
+LATTICE_HEADLINE = "tripped: 22 lower, 0 higher\n(aalen_johansen + fisher_bh, BH q<0.05 over 72 tests, unpaired)"
+LATTICE_SINGLE_HEADLINE = "22 of 72 cells safer, 0 worse (fisher_bh, BH q<0.05, unpaired)."
+#: Y7. ``to_markdown()``'s parameter line on the lattice starts with these tokens (section 3.3).
+LATTICE_PARAMETER_LINE_PREFIX = "method=fisher_bh, seed_identity_match=True, unpaired_analysis=True, q=0.05, t_unit=seconds, horizon=5.0, n_tests=72, "
+#: Y11. The three interval lines on the lattice's ``tripped`` (section 3.4), and the ``R == 0`` line. The
+#: first line's level and ``alpha*`` are ``1 - q R / M`` and ``q R / M`` at the reference's R = 22 and
+#: M = 72 (Y11 recomputes them); the 3 conditions whose interval excludes zero while the verdict is
+#: unchanged are Prove's count, measured on main's unchanged ``src/`` (05cd1e8).
+LATTICE_INTERVAL_LINES = (
+    "intervals: 98.4722% (alpha* = 0.0152778 = q x 22 / 72 over the flat BH family), basis score_rd",
+    "interval excludes zero, verdict unchanged: 3 cells",
     "verdict significant, interval covers zero: 0 cells",
 )
 NO_INTERVAL_LINE = "intervals: none (nothing significant; the MDE lines above are the honest bound)"
@@ -223,16 +229,19 @@ H2_SEQUENCE = (
     "Summary", "Events", "Omnibus", "Result", "Honesty", "Not verified", "Fault lines", "Cells", "Heatmap", "Cell",
     "Holes", "Worst cells", "Run pair", "Provenance",
 )
-#: Y21. Every panel honesty string at ``a626cd3``, byte for byte, measured on the bare tree for Go1 and
-#: for the two minted pairs (no second honesty block and no rewording, D6).
+#: Y21. Every panel honesty string at ``a626cd3``, byte for byte, measured on the bare tree for the
+#: two minted pairs (no second honesty block and no rewording, D6).
 # PF4 (PF4.17, PF4.20): Y21 reads each panel's honesty through honesty_as_a626cd3, which puts PF4's
 # two rewordings back after asserting them, so these literals stay a626cd3's bytes.
-GO1_HONESTY = (
-    'Worst-powered unchanged cell (mu=0.95, push_pct_bw=100, n=32/32) can only detect a 34pp rise. '
-    '"0 worse" is an honest claim only above that.\nWorst-powered cell overall: 34pp (mu=0.1, push_pct_bw=10).',
+# Since the PF4 re-freeze Y21 reads only each entry's length here (one string per panel); the facts
+# of every honesty string are assert_honesty_facts'. The lattice was never run at a626cd3, so its
+# entry is its one panel's honesty as main's unchanged src/ (05cd1e8) prints it, standing for the count.
+LATTICE_HONESTY = (
+    'Worst-powered unchanged cell (gain=0.4, load=30, n=32/32) can only detect a 50pp fall. '
+    '"0 higher" is an honest claim only above that.\nWorst-powered cell overall: 50pp (gain=0.6, load=20).',
 )
 HONESTY_AT_A626CD3 = {
-    "go1": GO1_HONESTY,
+    "lattice": LATTICE_HONESTY,
     "k2": (
         "No unchanged cells; every cell moved significantly.\nWorst-powered cell overall: 28pp (task=t0, temp=0).",
         'Worst-powered unchanged cell (task=t5, temp=0, n=32/32) can only detect a 28pp rise. "0 worse" is an honest '
@@ -244,8 +253,9 @@ HONESTY_AT_A626CD3 = {
     ),
 }
 HONESTY_NONE_AT_A626CD3 = "No unchanged cells; every cell moved significantly."
-#: Y16. Go1 at the default 4000 permutations: ``p_omnibus == p_floor`` exactly (section 3.5, measured).
-GO1_DEFAULT_PERMUTATIONS = 4000
+#: Y16. The lattice at the default 4000 permutations: ``p_omnibus == p_floor == 1/4001`` exactly
+#: (section 3.5, measured on main's unchanged ``src/``).
+DEFAULT_PERMUTATIONS = 4000
 #: W20's two regexes, restated (Y12).
 FLOAT_SPEC_RE = re.compile(r":\.\d")
 INTERVAL_TOKEN_RE = re.compile(r"\[-?\d+\.\d, -?\d+\.\d\]")
@@ -682,42 +692,42 @@ def synth_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="module")
-def go1() -> tuple[pd.DataFrame, pd.DataFrame, RunManifest, RunManifest]:
-    return read_pair(GO1_ROOT, GO1_A, GO1_B)
+def lattice_pair() -> tuple[pd.DataFrame, pd.DataFrame, RunManifest, RunManifest]:
+    return read_pair(LATTICE_ROOT, LATTICE_A, LATTICE_B)
 
 
 @pytest.fixture(scope="module")
-def go1_built() -> Built:
-    """Go1 ``fell`` at the default knobs: the tree at 4000 permutations, grown once."""
-    return build_pair("go1", GO1_ROOT, GO1_A, GO1_B, events=("fell",), x="mu", y="push_pct_bw")
+def lattice_built() -> Built:
+    """The lattice's ``tripped`` at the default knobs: the tree at 4000 permutations, grown once."""
+    return build_pair("lattice", LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), x=X, y=Y)
 
 
 @pytest.fixture(scope="module")
-def go1_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    """Go1 ``fell`` through every verb, the tree at 300 permutations so the CLI's trees are cheap:
+def lattice_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    """The lattice's ``tripped`` through every verb, the tree at 300 permutations so the CLI's trees are cheap:
     ``diff``, ``diff --format json``, ``diff --methods all``, ``report`` (files), ``check`` and
     ``serve --json``."""
-    out_dir = tmp_path_factory.mktemp("p1-go1-cli") / "report"
-    base = ["--store", str(GO1_ROOT)]
+    out_dir = tmp_path_factory.mktemp("p1-lattice-cli") / "report"
+    base = ["--store", str(LATTICE_ROOT)]
     knobs = ["--permutations", "300", "--seed", "0"]
-    # PF3 (Q17, spec sections 4.4 and 14; R1): Go1's runs share a salt, so the default is now the
+    # PF3 (Q17, spec sections 4.4 and 14; R1): the lattice's runs share a salt, so the default is now the
     # paired test; every number this file pins on the CLI is the unpaired test's, named.
     fisher = ["--method", "fisher_bh"]
     results: dict[str, Any] = {}
     for name, argv in (
-        ("diff", ["diff", GO1_A, GO1_B, "--event", "fell", *fisher, *knobs]),
+        ("diff", ["diff", LATTICE_A, LATTICE_B, "--event", EVENT, *fisher, *knobs]),
         # --json replaces --format json on diff (spec section 5.6).
-        ("diff json", ["diff", GO1_A, GO1_B, "--event", "fell", "--json", *fisher, *knobs]),
-        ("diff methods all", ["diff", GO1_A, GO1_B, "--event", "fell", "--methods", "all", *knobs]),
-        ("report", ["report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--out", str(out_dir), *fisher, *knobs]),
+        ("diff json", ["diff", LATTICE_A, LATTICE_B, "--event", EVENT, "--json", *fisher, *knobs]),
+        ("diff methods all", ["diff", LATTICE_A, LATTICE_B, "--event", EVENT, "--methods", "all", *knobs]),
+        ("report", ["report", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--out", str(out_dir), *fisher, *knobs]),
         # PF4 (PF4.20): the default --fail-on worse is refused on an event of unknown kind; --fail-on
-        # higher is the same gate on Go1's fell (fail when the rate rose).
-        ("check", ["check", GO1_A, GO1_B, "--event", "fell", "--fail-on", "higher", *fisher]),
+        # higher is the same gate on the lattice's tripped (fail when the rate rose).
+        ("check", ["check", LATTICE_A, LATTICE_B, "--event", EVENT, "--fail-on", "higher", *fisher]),
     ):
         code, out, err = quiet(lambda argv=argv: run_cli([*base, *argv]))
         assert code == 0, (name, code, err)
         results[name] = out
-    code, out, err, calls = quiet(lambda: run_serve([*base, "serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--json", *fisher, *knobs]))
+    code, out, err, calls = quiet(lambda: run_serve([*base, "serve", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--json", *fisher, *knobs]))
     assert code == 0 and calls == [], (code, err, calls)
     results["serve json"] = json.loads(out)
     results["report.md"] = (out_dir / "report.md").read_text(encoding="utf-8")
@@ -929,27 +939,28 @@ def test_y6_the_statistic_never_follows_provenance_on_a_pair_and_its_salt_differ
 # ---------- Y7-Y9: the name is gone, the headline states the request, the provenance dict ----------
 
 
-def test_y7_no_field_is_named_paired_and_the_key_set_literals_carry_the_two_keys_in_its_slot(go1: Any, go1_cli: dict[str, Any]) -> None:
+def test_y7_no_field_is_named_paired_and_the_key_set_literals_carry_the_two_keys_in_its_slot(lattice_pair: Any, lattice_cli: dict[str, Any]) -> None:
     for cls in (DiffResult, MultiDiffResult):
         names = [f.name for f in dataclasses.fields(cls)]
         assert "paired" not in names and names.index("unpaired_analysis") == names.index("seed_identity_match") + 1 == names.index("method") + 2, names
     assert diff_mod.SUMMARY_FIELDS == SUMMARY_FIELDS
     assert diff_mod._MULTI_SUMMARY_FIELDS == MULTI_SUMMARY_FIELDS
-    a, b, ma, mb = go1
-    multi = quiet(lambda: multi_diff(a, b, events=["fell"], method="fisher_bh", manifest_a=ma, manifest_b=mb))
+    a, b, ma, mb = lattice_pair
+    multi = quiet(lambda: multi_diff(a, b, events=[EVENT], method="fisher_bh", manifest_a=ma, manifest_b=mb))
     payload = multi.to_json()
     assert [k for k in payload if k in MULTI_SUMMARY_FIELDS] == list(MULTI_SUMMARY_FIELDS) and "paired" not in payload
-    single = quiet(lambda: diff(censor(a, "fell"), censor(b, "fell"), event="fell", method="fisher_bh", manifest_a=ma, manifest_b=mb))
+    single = quiet(lambda: diff(censor(a, EVENT), censor(b, EVENT), event=EVENT, method="fisher_bh", manifest_a=ma, manifest_b=mb))
     single_payload = single.to_json()
     assert [k for k in single_payload if k in SUMMARY_FIELDS] == list(SUMMARY_FIELDS) and "paired" not in single_payload
     parameter_line = next(line for line in multi.to_markdown().splitlines() if line.startswith("method="))
-    assert parameter_line.startswith(GO1_PARAMETER_LINE_PREFIX) and "paired=" not in parameter_line, parameter_line
+    assert LATTICE_PARAMETER_LINE_PREFIX.endswith(f", n_tests={lattice.CELLS}, ")
+    assert parameter_line.startswith(LATTICE_PARAMETER_LINE_PREFIX) and "paired=" not in parameter_line, parameter_line
     assert "seed_identity_match=True" in single.to_markdown() and "unpaired_analysis=True" in single.to_markdown() and "paired=" not in single.to_markdown()
-    cli_json = json.loads(go1_cli["diff json"])
+    cli_json = json.loads(lattice_cli["diff json"])
     assert cli_json["seed_identity_match"] is True and cli_json["unpaired_analysis"] is True and "paired" not in cli_json
 
 
-def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_and_never_reads_the_identity(synth_root: Path, go1_built: Built, go1_cli: dict[str, Any]) -> None:
+def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_and_never_reads_the_identity(synth_root: Path, lattice_built: Built, lattice_cli: dict[str, Any]) -> None:
     """Mutant 6 is the defect restored; the AST clause is its sole catch on any fixture where the
     identity and the request coincide."""
     fa, fb, ma, mb = read_pair(synth_root, "c18-a", "c18-b-equal")
@@ -961,41 +972,45 @@ def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_a
         assert build_report(single, ReportSpec(title="p1", x_axis="task", y_axis="temp")).headline.endswith(f"({method}, BH q<0.05, {token}).")
         rows = build_multi_report(multi, ReportSpec(title="p1", x_axis="task", y_axis="temp", comparison={method: single}))._method_rows
         assert rows and all(row[1] == token for row in rows), (method, rows)
-    table = [line for line in go1_cli["diff methods all"].splitlines() if line.startswith("| ") and "fell" in line]
+    table = [line for line in lattice_cli["diff methods all"].splitlines() if line.startswith("| ") and EVENT in line]
     assert table and {tuple(c.strip() for c in line.strip("|").split("|"))[:3] for line in table} == {
-        ("fisher_bh", "fell", "unpaired"), ("mcnemar_bh", "fell", "paired"), ("logrank_bh", "fell", "unpaired")
+        ("fisher_bh", EVENT, "unpaired"), ("mcnemar_bh", EVENT, "paired"), ("logrank_bh", EVENT, "unpaired")
     }, table
-    assert "| method | event | pairing |" in go1_cli["diff methods all"]
-    assert go1_built.multi.headline() == GO1_HEADLINE
+    assert "| method | event | pairing |" in lattice_cli["diff methods all"]
+    # the reference: scipy's Fisher test per condition and one BH family over the design's conditions
+    assert lattice.directions(lattice.fisher(EVENT)) == (LATTICE_LOWER, LATTICE_HIGHER) == (22, 0) and lattice.CELLS == LATTICE_TESTS == 72
+    assert LATTICE_HEADLINE.splitlines()[0] == f"{EVENT}: {LATTICE_LOWER} lower, {LATTICE_HIGHER} higher" and f"over {LATTICE_TESTS} tests" in LATTICE_HEADLINE
+    assert LATTICE_SINGLE_HEADLINE.startswith(f"{LATTICE_LOWER} of {LATTICE_TESTS} cells safer, {LATTICE_HIGHER} worse ")
+    assert lattice_built.multi.headline() == LATTICE_HEADLINE
     # PF2 (spec section 5.3): diff's verdict block comes first; the report after its blank line
     # starts with the headline as before.
-    assert go1_cli["diff"].partition("\n\n")[2].startswith(GO1_HEADLINE.splitlines()[0]) and GO1_HEADLINE in go1_cli["diff"]
+    assert lattice_cli["diff"].partition("\n\n")[2].startswith(LATTICE_HEADLINE.splitlines()[0]) and LATTICE_HEADLINE in lattice_cli["diff"]
     # check's verdict is now its first stdout line, passed or failed (spec section 5.3).
-    assert go1_cli["check"].startswith("passed  ") and GO1_HEADLINE in go1_cli["check"], go1_cli["check"]
-    assert GO1_HEADLINE in go1_cli["report"] and GO1_HEADLINE in go1_cli["report.md"] and GO1_HEADLINE in go1_built.md
-    assert html_mod.escape(GO1_HEADLINE.splitlines()[1]) in go1_cli["receipt.html"]
-    assert go1_cli["serve json"]["headline"] == GO1_HEADLINE == go1_built.structure["headline"]
-    a, b, ma, mb = read_pair(GO1_ROOT, GO1_A, GO1_B)
-    single = quiet(lambda: diff(censor(a, "fell"), censor(b, "fell"), event="fell", method="fisher_bh", manifest_a=ma, manifest_b=mb))
-    assert build_report(single, ReportSpec(title="p1", x_axis="mu", y_axis="push_pct_bw")).headline == GO1_SINGLE_HEADLINE
+    assert lattice_cli["check"].startswith("passed  ") and LATTICE_HEADLINE in lattice_cli["check"], lattice_cli["check"]
+    assert LATTICE_HEADLINE in lattice_cli["report"] and LATTICE_HEADLINE in lattice_cli["report.md"] and LATTICE_HEADLINE in lattice_built.md
+    assert html_mod.escape(LATTICE_HEADLINE.splitlines()[1]) in lattice_cli["receipt.html"]
+    assert lattice_cli["serve json"]["headline"] == LATTICE_HEADLINE == lattice_built.structure["headline"]
+    a, b, ma, mb = read_pair(LATTICE_ROOT, LATTICE_A, LATTICE_B)
+    single = quiet(lambda: diff(censor(a, EVENT), censor(b, EVENT), event=EVENT, method="fisher_bh", manifest_a=ma, manifest_b=mb))
+    assert build_report(single, ReportSpec(title="p1", x_axis=X, y_axis=Y)).headline == LATTICE_SINGLE_HEADLINE
     forbidden = {"seed_identity_match", "unpaired_analysis"}
     diff_ast, report_ast, cli_ast = parsed(DIFF_SOURCE), parsed(REPORT_SOURCE), parsed(CLI_SOURCE)
     for module, qualified in ((diff_ast, "MultiDiffResult.headline"), (report_ast, "_single_headline"), (report_ast, "_multi_method_rows"), (report_ast, "_method_row"), (cli_ast, "_method_table")):
         assert not (names_in(resolve_region(module, qualified)) & forbidden), qualified
 
 
-def test_y9_the_provenance_dict_carries_the_two_keys_in_paireds_slot_on_both_builders_and_every_rendering(go1_built: Built, go1_cli: dict[str, Any], synth_root: Path) -> None:
+def test_y9_the_provenance_dict_carries_the_two_keys_in_paireds_slot_on_both_builders_and_every_rendering(lattice_built: Built, lattice_cli: dict[str, Any], synth_root: Path) -> None:
     """Mutant 7."""
-    provenance = go1_built.report.provenance
+    provenance = lattice_built.report.provenance
     assert tuple(provenance) == MULTI_PROVENANCE_KEYS, tuple(provenance)
     assert provenance["seed_identity_match"] is True and provenance["unpaired_analysis"] is True
-    assert go1_built.structure["diff"] == provenance == go1_cli["serve json"]["diff"]
-    for text in (go1_built.md, go1_cli["report.md"]):
+    assert lattice_built.structure["diff"] == provenance == lattice_cli["serve json"]["diff"]
+    for text in (lattice_built.md, lattice_cli["report.md"]):
         lines = text.splitlines()
         at = lines.index("- seed identity match: true")
         assert lines[at + 1] == "- unpaired analysis: true" and lines[at - 1] == "- method: fisher_bh", lines[at - 1 : at + 2]
         assert "- paired:" not in text
-    for html in (go1_built.html, go1_cli["receipt.html"]):
+    for html in (lattice_built.html, lattice_cli["receipt.html"]):
         assert "<li>seed identity match: true</li><li>unpaired analysis: true</li>" in html and "<li>paired:" not in html
     fa, fb, ma, mb = read_pair(synth_root, "c18-a", "c18-b-equal")
     single = quiet(lambda: diff(censor(fa, "fail"), censor(fb, "fail"), event="fail", method="fisher_bh", manifest_a=ma, manifest_b=mb))
@@ -1006,12 +1021,12 @@ def test_y9_the_provenance_dict_carries_the_two_keys_in_paireds_slot_on_both_bui
 # ---------- Y10-Y15: intervals ----------
 
 
-def test_y10_the_payload_root_is_thirteen_keys_and_intervals_is_m6s_fields_lines_and_rows_in_m6s_order(go1_built: Built, go1_cli: dict[str, Any], k2: Built, same: Built) -> None:
+def test_y10_the_payload_root_is_thirteen_keys_and_intervals_is_m6s_fields_lines_and_rows_in_m6s_order(lattice_built: Built, lattice_cli: dict[str, Any], k2: Built, same: Built) -> None:
     """Mutant 18."""
     # serve --json adds verdict and sentence after schema (spec section 5.6).
     # PF3 (spec section 4.4, R3): serve --json also adds method and method_chosen right after sentence.
-    assert tuple(k for k in go1_cli["serve json"] if k not in ("verdict", "sentence")) == ("schema", "method", "method_chosen") + TOP_LEVEL_KEYS[1:]
-    for built in (go1_built, k2, same):
+    assert tuple(k for k in lattice_cli["serve json"] if k not in ("verdict", "sentence")) == ("schema", "method", "method_chosen") + TOP_LEVEL_KEYS[1:]
+    for built in (lattice_built, k2, same):
         structure, multi = built.structure, built.multi
         assert tuple(structure) == TOP_LEVEL_KEYS, (built.name, tuple(structure))
         intervals = structure["intervals"]
@@ -1035,7 +1050,7 @@ def test_y10_the_payload_root_is_thirteen_keys_and_intervals_is_m6s_fields_lines
                     assert row[end] is None and end not in row["text"], (built.name, row)
                 else:
                     assert row[end] == float(record[end]) and row["text"][end] == fmt_pp1(record[end]), (built.name, row)
-    assert json.loads(json.dumps(go1_built.structure, allow_nan=False))["intervals"] == go1_cli["serve json"]["intervals"]
+    assert json.loads(json.dumps(lattice_built.structure, allow_nan=False))["intervals"] == lattice_cli["serve json"]["intervals"]
 
 
 #: PF4 re-freeze: the closed list of reasons a direction has no limit (PF4.27).
@@ -1122,12 +1137,18 @@ def assert_honesty_facts(built: Built, panel: Mapping[str, Any]) -> None:
         assert not re.search(r"\d+pp", second), (built.name, second)
 
 
-def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_byte_identical(go1_built: Built, go1_cli: dict[str, Any], same: Built, synth_root: Path) -> None:
+def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_byte_identical(lattice_built: Built, lattice_cli: dict[str, Any], same: Built, synth_root: Path) -> None:
     # PF4 re-freeze (PF4.42, reading R10): intervals always, so the R == 0 pair prints the interval
     # lines too, at the simultaneous level 1 - q / M; their facts are checked by
     # assert_zero_r_interval_lines and the one-formatter property over every surface as before.
     assert_zero_r_interval_lines(same)
-    for built, expected in ((go1_built, list(GO1_INTERVAL_LINES)), (same, list(same.report.interval_lines))):
+    # the lattice's first line from the reference: R conditions flagged by the flat BH family over M
+    lower, higher = lattice.directions(lattice.fisher(EVENT))
+    r, m = lower + higher, lattice.CELLS
+    assert (r, m) == (22, 72) and LATTICE_INTERVAL_LINES[0] == (
+        f"intervals: {100 * (1 - 0.05 * r / m):.4f}% (alpha* = {0.05 * r / m:g} = q x {r} / {m} over the flat BH family), basis score_rd"
+    )
+    for built, expected in ((lattice_built, list(LATTICE_INTERVAL_LINES)), (same, list(same.report.interval_lines))):
         assert list(built.report.interval_lines) == expected == built.structure["intervals"]["lines"], built.name
         assert md_sections(built.md)["Intervals"] == expected, built.name
         assert paragraphs(html_sections(built.html)["Intervals"]) == expected, built.name
@@ -1135,14 +1156,14 @@ def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_
         assert honesty[-2].split("<br>") == expected, (built.name, honesty[-2])
     # diff prints the same block with its numbers under rule 10 (spec section 5.4): the first line
     # unindented after a blank line, the rest indented, each carrying the library line's numbers.
-    diff_lines = go1_cli["diff"].splitlines()
+    diff_lines = lattice_cli["diff"].splitlines()
     at = next(i for i, line in enumerate(diff_lines) if line.startswith("intervals: "))
-    block = diff_lines[at : at + len(GO1_INTERVAL_LINES)]
-    assert diff_lines[at - 1] == "" and all(line.startswith("  ") for line in block[1:]), go1_cli["diff"]
-    assert all(same_numbers(lib, line) for lib, line in zip(GO1_INTERVAL_LINES, block, strict=True)), block
+    block = diff_lines[at : at + len(LATTICE_INTERVAL_LINES)]
+    assert diff_lines[at - 1] == "" and all(line.startswith("  ") for line in block[1:]), lattice_cli["diff"]
+    assert all(same_numbers(lib, line) for lib, line in zip(LATTICE_INTERVAL_LINES, block, strict=True)), block
     code, out, err = quiet(lambda: run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail", "--permutations", "50"]))
     assert code == 0, err
-    # PF4 re-freeze (PF4.42): no no-interval line; the R == 0 pair's block is printed like Go1's,
+    # PF4 re-freeze (PF4.42): no no-interval line; the R == 0 pair's block is printed like the lattice's,
     # each line carrying the library line's numbers.
     assert NO_INTERVAL_LINE not in out, out
     same_lines = list(same.report.interval_lines)
@@ -1153,9 +1174,9 @@ def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_
     assert all(same_numbers(lib, line) for lib, line in zip(same_lines, block, strict=True)), block
 
 
-def test_y12_the_family_is_named_no_renderer_does_arithmetic_on_the_interval_fields_and_a_small_alpha_prints_in_g_form(go1_built: Built, alpha: Built) -> None:
+def test_y12_the_family_is_named_no_renderer_does_arithmetic_on_the_interval_fields_and_a_small_alpha_prints_in_g_form(lattice_built: Built, alpha: Built) -> None:
     """Mutants 12, 13, 14; 13 has one catch, the small-alpha family."""
-    for built in (go1_built, alpha):
+    for built in (lattice_built, alpha):
         first = built.report.interval_lines[0]
         assert FAMILY_TOKEN in first, (built.name, first)
         assert FAMILY_TOKEN in md_sections(built.md)["Intervals"][0] and FAMILY_TOKEN in paragraphs(html_sections(built.html)["Intervals"])[0]
@@ -1175,9 +1196,9 @@ def test_y12_the_family_is_named_no_renderer_does_arithmetic_on_the_interval_fie
     assert "e-05" in first, first
 
 
-def test_y13_adr_060s_placement_by_position_on_every_surface_and_the_h2_sequence_is_unchanged(go1_built: Built, k2: Built, same: Built) -> None:
+def test_y13_adr_060s_placement_by_position_on_every_surface_and_the_h2_sequence_is_unchanged(lattice_built: Built, k2: Built, same: Built) -> None:
     """Mutants 10, 11."""
-    for built in (go1_built, k2, same):
+    for built in (lattice_built, k2, same):
         page, panels = built.page, built.structure["panels"]
         assert [h for _, h in h2_lines(page)] == list(H2_SEQUENCE), (built.name, [h for _, h in h2_lines(page)])
         honesty = region_lines(page, "Honesty")
@@ -1205,11 +1226,11 @@ def test_y13_adr_060s_placement_by_position_on_every_surface_and_the_h2_sequence
         assert after in ("<h2>Methods</h2>", "<h2>Shares</h2>") or after.startswith("<blockquote>"), (built.name, after)
 
 
-def test_y14_the_worst_cells_column_is_the_interval_per_event_and_cell_on_every_surface_and_absent_when_r_is_zero(go1_built: Built, k2: Built, same: Built, go1: Any) -> None:
+def test_y14_the_worst_cells_column_is_the_interval_per_event_and_cell_on_every_surface_and_absent_when_r_is_zero(lattice_built: Built, k2: Built, same: Built, lattice_pair: Any) -> None:
     """The two-event pair is the sole catch for mutant 21: its endpoints differ across events on the
     same cell, so a join on ``config_hash`` alone puts one event's interval on the other's row."""
     # PF4 re-freeze (PF4.42): the R == 0 pair carries the interval column too, so it joins the loop.
-    for built in (go1_built, k2, same):
+    for built in (lattice_built, k2, same):
         by_key = {(str(r["event"]), str(r["config_hash"])): r for r in built.multi.intervals.to_dict(orient="records")}
         tables = html_tables(built.html)
         for index, panel in enumerate(built.structure["panels"]):
@@ -1233,15 +1254,15 @@ def test_y14_the_worst_cells_column_is_the_interval_per_event_and_cell_on_every_
         assert panel["worst_header"][-1] == INTERVAL_COLUMN and all(len(row) == len(panel["worst_header"]) for row in panel["worst_rows"])
     assert same.structure["intervals"]["lines"] != [NO_INTERVAL_LINE]
     assert INTERVAL_COLUMN in same.md and INTERVAL_COLUMN in same.html and INTERVAL_COLUMN in same.page
-    a, b, ma, mb = go1
-    single = quiet(lambda: diff(censor(a, "fell"), censor(b, "fell"), event="fell", method="fisher_bh", manifest_a=ma, manifest_b=mb))
-    single_report = build_report(single, ReportSpec(title="p1", x_axis="mu", y_axis="push_pct_bw"))
+    a, b, ma, mb = lattice_pair
+    single = quiet(lambda: diff(censor(a, EVENT), censor(b, EVENT), event=EVENT, method="fisher_bh", manifest_a=ma, manifest_b=mb))
+    single_report = build_report(single, ReportSpec(title="p1", x_axis=X, y_axis=Y))
     assert INTERVAL_COLUMN not in single_report.to_markdown() and INTERVAL_COLUMN not in single_report.to_html()
 
 
-def test_y15_render_html_refuses_a_viewpair_4_structure_without_intervals_before_rendering_and_the_tree_refusal_still_fires(go1_built: Built) -> None:
+def test_y15_render_html_refuses_a_viewpair_4_structure_without_intervals_before_rendering_and_the_tree_refusal_still_fires(lattice_built: Built) -> None:
     """Sole catch for mutant 17."""
-    structure = json.loads(json.dumps(go1_built.structure, allow_nan=False))
+    structure = json.loads(json.dumps(lattice_built.structure, allow_nan=False))
     assert structure["schema"] == SCHEMA
     stale = {k: v for k, v in structure.items() if k != "intervals"}
     with pytest.raises(ViewerError) as info:
@@ -1271,14 +1292,14 @@ def test_y16_p_floor_is_one_over_b_plus_one_sits_after_n_permutations_and_bounds
         assert p >= root.p_floor, (p, root.p_floor)
 
 
-def test_y16_on_go1_at_the_default_b_p_omnibus_equals_p_floor_exactly(go1_built: Built) -> None:
+def test_y16_on_the_lattice_at_the_default_b_p_omnibus_equals_p_floor_exactly(lattice_built: Built) -> None:
     """Sole catch for mutant 15 (``1 / B``): ``>=`` alone passes it."""
-    root = go1_built.tree.root
-    assert root.n_permutations == GO1_DEFAULT_PERMUTATIONS
-    assert root.p_floor == 1 / (GO1_DEFAULT_PERMUTATIONS + 1) == root.p_omnibus
+    root = lattice_built.tree.root
+    assert root.n_permutations == DEFAULT_PERMUTATIONS
+    assert root.p_floor == 1 / (DEFAULT_PERMUTATIONS + 1) == root.p_omnibus
     fields = [f.name for f in dataclasses.fields(type(root))]
     assert fields[fields.index("n_permutations") + 1] == "p_floor"
-    fault = go1_built.tree.fault_lines
+    fault = lattice_built.tree.fault_lines
     assert fault.tested
     for group in fault.groups:
         for p in (group.p_location, group.p_dispersion, group.p_group):
@@ -1288,20 +1309,20 @@ def test_y16_on_go1_at_the_default_b_p_omnibus_equals_p_floor_exactly(go1_built:
                 assert p >= root.p_floor, (group.label, p)
 
 
-def test_y17_the_floor_line_follows_the_method_line_and_the_group_floor_line_follows_the_null_line_iff_tested_and_check_prints_none(go1_built: Built, go1_cli: dict[str, Any], same: Built) -> None:
+def test_y17_the_floor_line_follows_the_method_line_and_the_group_floor_line_follows_the_null_line_iff_tested_and_check_prints_none(lattice_built: Built, lattice_cli: dict[str, Any], same: Built) -> None:
     """Mutant 16. Section 0.1 C-2 and ADR-085: ``check`` prints no ``p =``, no ``p floor`` and no
     ``not a measurement``."""
-    root_go1 = go1_built.tree.root
-    cli_root = go1_cli["serve json"]["tree"]["root"]
+    root_lattice = lattice_built.tree.root
+    cli_root = lattice_cli["serve json"]["tree"]["root"]
     assert cli_root["n_permutations"] == 300
-    diff_lines = go1_cli["diff"].splitlines()
+    diff_lines = lattice_cli["diff"].splitlines()
     at = next(i for i, line in enumerate(diff_lines) if line.startswith("  min-p of location and dispersion; 300 within-cell permutations"))
     assert diff_lines[at + 1] == CLI_FLOOR_LINE.format(p_floor=fmt_p10(cli_root["p_floor"]), n_permutations=300), diff_lines[at + 1]
     null = next(i for i, line in enumerate(diff_lines) if "tested by BH across" in line)
     assert diff_lines[null + 1] == CLI_GROUP_FLOOR_LINE.format(p_floor=fmt_p10(cli_root["p_floor"]), n_permutations=300), diff_lines[null + 1]
     # 1/301 printed under rule 10 (spec section 5.4).
     assert diff_lines[at + 1].startswith(f"  p floor {fmt_p10(1 / 301)}:") and diff_lines[null + 1].startswith(f"  group p floor {fmt_p10(1 / 301)}:")
-    for built, root in ((go1_built, root_go1.to_json()),):
+    for built, root in ((lattice_built, root_lattice.to_json()),):
         floor = M7_FLOOR_LINE.format(p_floor=fmt_sig3(root["p_floor"]), n_permutations=root["n_permutations"])
         group_floor = M7_GROUP_FLOOR_LINE.format(p_floor=fmt_sig3(root["p_floor"]), n_permutations=root["n_permutations"])
         assert floor.startswith("p floor 2.50e-04: the smallest p 4000 permutations")
@@ -1322,22 +1343,22 @@ def test_y17_the_floor_line_follows_the_method_line_and_the_group_floor_line_fol
         fault_page = paragraphs(region_lines(built.page, "Fault lines"))
         null_at = next(i for i, line in enumerate(fault_page) if "tested by BH across" in line)
         assert fault_page[null_at + 1] == M7_GROUP_FLOOR_LINE.format(p_floor=text["p_floor"], n_permutations=root["n_permutations"])
-    report_md = go1_cli["report.md"]
+    report_md = lattice_cli["report.md"]
     # The command line writes report.md under rule 10 (spec section 5.4).
     assert M7_FLOOR_LINE.format(p_floor=fmt_p10(1 / 301), n_permutations=300) in report_md and M7_GROUP_FLOOR_LINE.format(p_floor=fmt_p10(1 / 301), n_permutations=300) in report_md
     assert not same.tree.fault_lines.tested
     for text in (same.md, same.html, same.page):
         assert "group p floor" not in text and text.count("not a measurement") == 1, same.name
     assert "p floor" in md_sections(same.md)["Omnibus"][2]
-    check = go1_cli["check"]
+    check = lattice_cli["check"]
     assert "p =" not in check and "p floor" not in check and "not a measurement" not in check, check
     # check's verdict is now its first stdout line, passed or failed (spec section 5.3).
-    assert check.startswith("passed  ") and GO1_HEADLINE in check, check
+    assert check.startswith("passed  ") and LATTICE_HEADLINE in check, check
 
 
-def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key(go1_built: Built, k2: Built, same: Built) -> None:
+def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key(lattice_built: Built, k2: Built, same: Built) -> None:
     assert viewer_mod._TREE_KINDS["root"]["p_floor"] == "sig3"
-    for built in (go1_built, k2, same):
+    for built in (lattice_built, k2, same):
         # PF4 (PF4.12): a condition with no detection limit has mde NaN, which the strict-JSON
         # structure writes as null; the round trip reads NaN as null to compare like with like.
         round_trip = json.loads(json.dumps(built.tree.to_json()), parse_constant=lambda _: None)
@@ -1368,9 +1389,9 @@ def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_
     assert "A28" in text and "P-1" in text and "intervals" in text, text
 
 
-def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_literals_and_nothing_says_paired(go1_built: Built, k2: Built) -> None:
+def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_literals_and_nothing_says_paired(lattice_built: Built, k2: Built) -> None:
     """Mutant 19."""
-    for built in (go1_built, k2):
+    for built in (lattice_built, k2):
         entries = built.structure["unverified"]
         assert [e["id"] for e in entries] == list(UNVERIFIED_IDS), built.name
         last = entries[-1]
@@ -1384,15 +1405,15 @@ def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_li
 # ---------- Y21, Y22: the prohibitions ----------
 
 
-def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at_one_site_inside_root(go1_built: Built, go1_cli: dict[str, Any], k2: Built, same: Built) -> None:
+def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at_one_site_inside_root(lattice_built: Built, lattice_cli: dict[str, Any], k2: Built, same: Built) -> None:
     """The honesty and closure clauses are green before and after by design; the assignment-site
     clause is the guard on ADR-086's reading."""
     # PF4 re-freeze (PF4.22, PF4.27): the honesty's limits are the exact limits at q / M, both
     # directions, so a626cd3's numbers (and the conditions that attain them) move, and a condition
     # with no limit is named with its reason instead of a number. The literals give way to the facts
     # they held, checked against the stats file's references; the wording a626cd3 pinned is kept.
-    assert [p["honesty"] for p in go1_built.structure["panels"]] == [p["honesty"] for p in go1_cli["serve json"]["panels"]]
-    for built in (go1_built, k2, same):
+    assert [p["honesty"] for p in lattice_built.structure["panels"]] == [p["honesty"] for p in lattice_cli["serve json"]["panels"]]
+    for built in (lattice_built, k2, same):
         assert len(built.structure["panels"]) == len(HONESTY_AT_A626CD3[built.name]), built.name
         for panel in built.structure["panels"]:
             assert_honesty_facts(built, panel)
@@ -1416,18 +1437,18 @@ def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at
     assert len(sites) == 1 and sites[0][0] == "tree.py" and root.lineno <= sites[0][1] <= (root.end_lineno or 0), sites
 
 
-def test_y22_serve_and_serve_json_on_go1_write_nothing_to_the_store_the_cwd_or_the_temp_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_y22_serve_and_serve_json_on_the_lattice_write_nothing_to_the_store_the_cwd_or_the_temp_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The E-family guard restated over the new payload; green before and after by design."""
 
     def snapshot(root: Path) -> dict[str, str]:
         return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.rglob("*")) if p.is_file()}
 
     monkeypatch.chdir(tmp_path)
-    before_store, before_cwd = snapshot(GO1_ROOT), snapshot(tmp_path)
-    argv = ["--store", str(GO1_ROOT), "serve", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--permutations", "50"]
+    before_store, before_cwd = snapshot(LATTICE_ROOT), snapshot(tmp_path)
+    argv = ["--store", str(LATTICE_ROOT), "serve", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--permutations", "50"]
     code, out, err, calls = quiet(lambda: run_serve([*argv, "--json"]))
     assert code == 0 and calls == [] and out.startswith('{\n  "schema": '), err
     code, out, err, calls = quiet(lambda: run_serve(argv))
     assert calls == ["serve_page"] and out == "", (code, out[:80])
-    assert snapshot(GO1_ROOT) == before_store and snapshot(tmp_path) == before_cwd
+    assert snapshot(LATTICE_ROOT) == before_store and snapshot(tmp_path) == before_cwd
     assert sorted(os.listdir(tmp_path)) == sorted(before_cwd) or before_cwd == {}

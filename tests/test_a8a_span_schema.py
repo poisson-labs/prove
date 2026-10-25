@@ -42,10 +42,10 @@ dicts; E12 on 25 exports; E9 x2 on the regex), ``test_m3_crash_trace.py`` 10 (K1
 on the 21-key dicts; K7 on the regex; K8 on 25 exports), ``test_m4_read.py`` 3 (R6 on the regex),
 ``test_m10_cli.py`` 2 (I15 on the regex, I18 on 21 keys), ``test_a7_storage.py`` 2 (P7-4 on 21 keys,
 P7-10 on eight tabs), ``test_m3_capture.py`` 1 (C4 on nine manifest keys), ``test_m12_kinds.py`` 1
-(T37), ``test_pilot_golden.py`` 1 (P12 on 25 exports). **Nothing else is red.** The pandas 3 cell adds
+(T37), and one example harness's test 1 (P12 on 25 exports). **Nothing else is red.** The pandas 3 cell adds
 nothing: every A8a field reaches disk inside a JSON string. The copies skip 7 where the repo skips 5,
-the two extra being ``test_pilot_golden.py``'s real-suite pair (the gitignored ``HumanEval.jsonl.gz``);
-the other five are T.4's ``tau2 is not installed`` pair and the three the repo always skips.
+the two extra being a real-suite pair that reads a gitignored data file; the other five are an
+example harness's not-installed pair and the three the repo always skips.
 
 **What step zero measured at ``3bf4083`` (spec section 7.4), so the oracle rests on runs and not
 on reads.** (1) The kind-ladder guard fires: adding ``openinference.span.kind`` to ``_LIFTED_KEYS``

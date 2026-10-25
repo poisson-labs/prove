@@ -91,8 +91,9 @@ into the spec's change log on the freeze):
 
 **Fixtures, and what each cannot express.** Every store is built under ``tmp_path`` by this file
 with timestamps and token counts chosen per arm and per item, so a window, a gap, a missing
-timestamp and an unrecorded span are each one knob. The Go1 fixture is read for PR53 only: it
-is the report the suite already pins, and it carries no paired declaration.
+timestamp and an unrecorded span are each one knob. The generated lattice pair
+(``tests/lattice.py``) is read for PR53 only: it is a report the suite already pins elsewhere, and
+it carries no paired declaration.
 
 **Green before and after -- named so their green is not read as coverage.**
 ``test_pr53_a_report_without_paired_is_byte_identical_to_todays`` (the E14 digests the suite
@@ -140,33 +141,30 @@ from poisson_prove.executor import derive_seed
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.trace import Span, Trace
 
+import lattice
 from conftest import without_method_lines, without_run_lines
 
 REPO = Path(__file__).resolve().parents[1]
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
-#: W20's E14 argv on the Go1 fixture, through the CLI, as today's build writes the three files:
+PAIR_ROOT = lattice.root()
+PAIR_A, PAIR_B = lattice.RUN_A, lattice.RUN_B
+#: W20's E14 argv on the pair, through the CLI, as today's build writes the three files:
 #: minted 2026-09-22 on ``6f40d92``'s ``src/`` (the heatmap is the value ``test_s29_viewer.py``
 #: pins; W20 takes its markdown and receipt through the builder, so those two are minted here,
 #: the same bytes on two runs). PR53's "the report the same build produces today".
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
-# test; the E14 digests are the unpaired test's, named.
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): the pair's runs share a salt, so the default is now the paired
+# test; the E14 facts are the unpaired test's, named.
+E14_ARGV = ("report", PAIR_A, PAIR_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.md and receipt.html print LS16's respelled Cells sentence ('MDE is the smallest detectable increase', no ADR number) and nothing else new; heatmap.svg is unchanged. Read through this test's own measurement on the built tree, not predicted.
 # PF4 (PF4.12, PF4.15, PF4.18, PF4.20): the three digests are no longer asserted. PF4 changes all
 # three renderings (direction words for an event of unknown kind, no limit at a 100% baseline, the
 # Westfall-Young group p-values, the shares), so PR53 asserts the facts they guarded instead.
 E14_FILES = ("report.md", "heatmap.svg", "receipt.html")
-#: Today's Go1 report under fisher_bh, as the frozen digests pinned it: 60 conditions fell and none
-#: rose ("fell: 60 safer, 0 worse"); a fisher_bh condition's direction is still the sign of delta.
-E14_LOWER, E14_HIGHER = 60, 0
-#: The statistics re-check's README section 6 (Go1, B = 4,000): the root stays at the floor 1/4000,
-#: 19 of 20 groups reject, and these group p-values move to one scale.
-E14_ROOT_P = 2.5e-04
-E14_GROUPS_REJECTED = 19
-E14_GROUP_P = {"0.7": 5.0e-04, "0.9": 5.0e-04, "0.85": 1.0e-03}
-# PF4 re-freeze (PF4.45): the two group facts above are the README's for the mu grouping, which the
-# tree no longer chooses; test_pr53 reads the groups from the tree instead.
+#: The pair's report under fisher_bh: 22 conditions fell and none rose, as scipy's Fisher test with
+#: one BH family over the design's counts gives them (``lattice.fisher``); a fisher_bh condition's
+#: direction is still the sign of delta.
+E14_LOWER, E14_HIGHER = 22, 0
+#: The root at the default 4,000 permutations sits at the floor, 1 / 4,001.
+E14_ROOT_P = 1 / 4001
 JUDGEMENT_WORD = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
 #: ``test_s29_viewer.py``'s and ``test_fr_first_run.py``'s whole-file digest of ``report.py``.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the local serve pass's build (the wrap, the complement, mde_unchanged, LS16's Cells sentence); phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
@@ -1106,9 +1104,37 @@ def offers_rounded_up(text: str) -> str:
                   lambda m: m.group(1) + f"{math.ceil(float(m.group(2)) * 1000 - 1e-9) / 1000:.3f}", text)
 
 
+def drawn_sentence_problems(svg: str, opening: str, sentence: str) -> list[str]:
+    """What is wrong with the figure as the drawing of the line that opens with ``opening`` and
+    holds ``sentence``: one ``<text>`` opens it, without ``data-wrap``, and it and the continuations
+    after it are the figure's wrap of that line at its own budget (LS2's restatement, as
+    ``test_fr_first_run`` carries it), line for line, at one x and font, nothing continuing after."""
+    from test_fr_first_run import budget, svg_runs, wrap
+
+    runs, width = svg_runs(svg)
+    starts = [i for i, run in enumerate(runs) if run.content.startswith(opening)]
+    if len(starts) != 1:
+        return [f"{len(starts)} <text> elements open with {opening!r}"]
+    first = starts[0]
+    end = first + 1
+    while end < len(runs) and runs[end].wrap:
+        end += 1
+    drawn = runs[first:end]
+    line = " ".join(run.content for run in drawn)
+    problems = [] if sentence in line else [f"{sentence!r} is not in the drawn line {line!r}"]
+    expected = wrap(line, budget(width, drawn[0].x, drawn[0].font))
+    if [run.content for run in drawn] != expected:
+        problems.append(f"drawn as {[run.content for run in drawn]}, not {expected}")
+    if [run.wrap for run in drawn] != [False] + [True] * (len(drawn) - 1):
+        problems.append(f"continuation marks {[run.wrap for run in drawn]}")
+    if {(run.x, run.font) for run in drawn} != {(drawn[0].x, drawn[0].font)}:
+        problems.append("the lines do not share the first line's x and font")
+    return problems
+
+
 def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Green before and after: W20's three digests on the Go1 fixture, over the library's rendering
-    of what the CLI built, and the CLI's three files carrying that rendering's facts."""
+    """Green before and after: the facts W20's three digests guarded, on the lattice pair, over the
+    library's rendering of what the CLI built, and the CLI's three files carrying that rendering's facts."""
     calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
     real = report_module.build_multi_report
 
@@ -1117,8 +1143,8 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         return real(*args, **kwargs)
 
     monkeypatch.setattr(cli, "build_multi_report", recording)
-    out = tmp_path / "go1"
-    r = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
+    out = tmp_path / "pair"
+    r = run_cli(["--store", str(PAIR_ROOT), *E14_ARGV, "--out", str(out)])
     assert r.code == 0, r.err
     assert sorted(p.name for p in out.iterdir()) == sorted(REPORT_FILES)
     # The dark report first, then the light receipt, as the CLI builds them.
@@ -1126,20 +1152,21 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     report, receipt = real(*report_args, **report_kwargs), real(*receipt_args, **receipt_kwargs)
     library = {"report.md": report.to_markdown(), "heatmap.svg": report.to_svg(), "receipt.html": receipt.to_html()}
     # PF4 (PF4.12, PF4.15, PF4.18, PF4.20): the digest over each rendering is replaced by the facts
-    # it guarded, read from the result the CLI built and from the re-check's README.
-    fell = report_args[0].by_event["fell"]
+    # it guarded, read from the result the CLI built and from the references.
+    fell = report_args[0].by_event[lattice.EVENT]
     cells = fell.cells
     lower, higher = int((cells["direction"] == "lower").sum()), int((cells["direction"] == "higher").sum())
-    assert (lower, higher) == (E14_LOWER, E14_HIGHER), (lower, higher)
+    assert (lower, higher) == lattice.directions(lattice.fisher()) == (E14_LOWER, E14_HIGHER), (lower, higher)
     # PF2 (spec section 4.3/5.3): the CLI's default title names the two runs by name.
-    names = run_names(GO1_ROOT)
-    named, by_id = f"{names[GO1_A]} vs {names[GO1_B]}: fell", f"{GO1_A} vs {GO1_B}: fell"
+    names = run_names(PAIR_ROOT)
+    named, by_id = f"{names[PAIR_A]} vs {names[PAIR_B]}: {lattice.EVENT}", f"{PAIR_A} vs {PAIR_B}: {lattice.EVENT}"
+    assert (names[PAIR_A], names[PAIR_B]) == (lattice.NAME_A, lattice.NAME_B)
     for name in E14_FILES:
         assert named in library[name] and by_id not in library[name], name
         text = library[name] if name == "heatmap.svg" else as_0_0_1_wrote_it(library[name])
-        # PF4 (PF4.20): "fell" has no kind in Go1, so the headline counts are direction words and
-        # no rendering says safer or worse.
-        assert f"fell: {lower} lower, {higher} higher" in text, name
+        # PF4 (PF4.20): the event has no kind in the pair, so the headline counts are direction words
+        # and no rendering says safer or worse.
+        assert f"{lattice.EVENT}: {lower} lower, {higher} higher" in text, name
         assert JUDGEMENT_WORD.search(text) is None, (name, JUDGEMENT_WORD.search(text))
         # PF3 (spec section 4.4, PF3.6b; rule R2): the written report.md and receipt.html gain a line of their
         # own naming the method; with it taken out they carry the library rendering's facts as before.
@@ -1155,16 +1182,15 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         assert rendered_problems(rendered, written if name == "heatmap.svg" else without_method_lines(written), name) == [], name
     md = library["report.md"]
     tree = report_kwargs["tree"]
-    # PF4 (PF4.18): the root and the fault lines on one scale, as the re-check's README gives them.
-    # README section 6 prints these to three significant figures, hence the tolerance.
-    assert abs(tree.root.p_omnibus - E14_ROOT_P) < 5e-7 and tree.root.rejects, tree.root.p_omnibus
+    # PF4 (PF4.18): the root and the fault lines on one scale; the root sits at the floor.
+    assert tree.root.n_permutations == 4000 and tree.root.p_omnibus == E14_ROOT_P and tree.root.rejects, tree.root.p_omnibus
     # PF4 re-freeze (PF4.45): a group's limit now uses each condition's own baseline and the
-    # unconditional power, so the mu grouping the README measured resolves none of its 20 groups at
-    # the default 0.200 and is refused, and the tree groups by push_pct_bw instead with the dual
-    # statistic; its group counts and p-values are read from the tree (no reference computes the
+    # unconditional power, so the first axis, gain, resolves none of its 12 groups at the default
+    # 0.200 and is refused, and the tree groups by load instead with the dual statistic; its group counts and p-values are read from the tree (no reference computes the
     # permutation test), and the table below is checked against them.
     assert tree.fault_lines.mde_basis == "unconditional"
-    assert "refused mu (axis): underpowered; 0 of 20 groups can resolve" in md
+    assert f"refused {lattice.X} (axis): underpowered; 0 of {len(lattice.GAIN)} groups can resolve" in md
+    assert tree.grouping.key == lattice.Y and tree.grouping.n_groups == len(lattice.LOAD)
     groups = {g.label: g for g in tree.fault_lines.groups}
     assert tree.fault_lines.n_rejected_groups == len(tree.fault_lines.rejected_groups) == sum(g.rejects for g in groups.values())
     assert set(tree.fault_lines.rejected_groups) == {label for label, g in groups.items() if g.rejects}
@@ -1185,12 +1211,12 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     by_config = {tuple(sorted(c.items())): row for c, row in zip(cells["config"], cells.itertuples(), strict=True)}
     listed = 0
     for line in md.split("## Cells", 1)[1].split("\n## ", 1)[0].splitlines():
-        if not line.startswith("| mu="):
+        if not line.startswith(f"| {lattice.X}="):
             continue
         label, event, delta_pp, _q, mde_pp = (part.strip() for part in line.strip("|").split(" | "))
         row = by_config[tuple(sorted((k, float(v)) for k, v in (kv.split("=") for kv in label.split(", "))))]
         listed += 1
-        assert event == "fell", line
+        assert event == lattice.EVENT, line
         printed, half = rendered_value(delta_pp)
         assert abs(printed - 100 * row.delta) <= half + 1e-9, line
         # PF4 re-freeze (PF4.27, Q54): a 100% baseline now has a fall limit; a condition whose limit
@@ -1201,11 +1227,10 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
             printed, half = rendered_value(mde_pp)
             assert abs(printed - 100 * row.mde) <= half + 1e-9, line
     assert listed > 0
-    # The honesty line names the worst-powered unchanged condition and its limit, which PF4 leaves
-    # as they were (mu=0.95, push_pct_bw=100, 34pp): a condition at a 100% baseline is left out.
+    # The honesty line names the worst-powered unchanged condition and its limit.
     # PF4 re-freeze (PF4.22, PF4.27): the limits are Fisher's exact limits at q / M in both
-    # directions and a 100% baseline enters with its fall, so the worst condition, its limit (about
-    # 47 points) and the way it goes are recomputed from the stats file's references.
+    # directions and a 100% baseline enters with its fall, so the worst condition, its limit and
+    # the way it goes are recomputed from the stats file's references.
     from test_pf4_stats import _ref_fisher_limits
 
     level = report_args[0].q / report_args[0].n_tests
@@ -1226,7 +1251,9 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     honesty = f"can only detect a {100 * fell.max_mde_unchanged:.0f}pp {way}. \"{higher} higher\" is an honest claim only above that."
     config = ", ".join(f"{k}={v:g}" for k, v in worst["config"].items())
     assert f"({config}, n={worst['n_a']}/{worst['n_b']}) {honesty}" in md, (config, honesty)
-    assert honesty in library["heatmap.svg"]
+    # The figure is narrower than the line, so it wraps it onto continuation lines (``data-wrap``):
+    # the line must be drawn exactly as the figure's wrap of it, and hold the sentence.
+    assert drawn_sentence_problems(library["heatmap.svg"], "Worst-powered unchanged cell (", honesty) == []
 
 
 # PF0 (Q4): test_pr53_report_py_is_not_touched_by_phase_three removed. It pinned the bytes of src/poisson_prove/report.py, which the rename

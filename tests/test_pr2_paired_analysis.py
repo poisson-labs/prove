@@ -1,8 +1,8 @@
 """PR-2 oracle: the per-cut paired analysis, the item-clustered bootstrap and the outcome of
 "Prove -- Spec PR Paired Replay" -- invariants PR22 to PR39.
 
-Written by Session A on 2026-09-22 off ``pr1-build`` ``0f1e1e0`` (phase 1 built) plus the Go1
-fixture retrofit ``86c1b4d``, as ``4106e54``. **Frozen 2026-09-22** after Taylor approved the two
+Written by Session A on 2026-09-22 off ``pr1-build`` ``0f1e1e0`` (phase 1 built) plus a fixture
+retrofit (``86c1b4d``), as ``4106e54``. **Frozen 2026-09-22** after Taylor approved the two
 tables in the handoff and the conventions below, and ruled on the sign of the net swing (kept as
 PR26 writes it, the second arm minus the first, and the output labels which way it subtracts), the
 net swing under the fallback (``not_estimated``, null bounds) and spec section 9's
@@ -26,10 +26,10 @@ ruled 2026-09-22, ``value >= threshold`` when the cut declares ``comparison = "g
 ``value > threshold`` when it declares ``"gt"``, a tie being action 1 under the first and action 0
 under the second and counted per arm under both; the 2x2, the flip rate
 and the net swing are paired quantities (PR25 to PR27); the pooled interval is the percentile
-cluster bootstrap over items that the 45/44 note published, with its declared fallback and its
+cluster bootstrap over items, with its declared fallback and its
 design effect (PR28 to PR34); McNemar is the arm-order check and nothing else (PR35, PR36); no
 statistic crosses a cut (PR37); the outcome fires only against a declared floor (PR38); and the
-whole of it reproduces the 45/44 note's published numbers (PR39).
+whole of it, read off two stored arms, gives what an independent reference gives (PR39).
 
 **Conventions this file fixes for the build session** (the spec's section 2 leaves them open;
 each goes into the spec's change log on the freeze):
@@ -51,10 +51,10 @@ each goes into the spec's change log on the freeze):
   swing under the fallback is ``{estimate, lo: null, hi: null, basis: "not_estimated"}``, because a
   signed quantity has no one-sided exact bound and a bootstrap that degenerated for the flip rate
   degenerated for the swing too.
-- *The bootstrap, exactly as ``scripts/repro_r1_agreement.py`` published it.* A fresh
+- *The bootstrap, exactly as ``cluster_bootstrap`` below writes it.* A fresh
   ``numpy.random.default_rng(bootstrap_seed)`` per quantity and per cut; the item clusters in
   ascending order of the cluster key (``groupby(sort=True)``: strings sort as strings, and the
-  golden arms pin that); one index matrix ``rng.integers(0, G, size=(B, G))``; each resample's
+  stored arms pin that); one index matrix ``rng.integers(0, G, size=(B, G))``; each resample's
   per-observation indicators concatenated and averaged; ``numpy.percentile`` at 2.5 and 97.5.
   Two consequences are pinned: the same seed gives the flip-rate and net-swing intervals the same
   draws, and a cut's interval does not move when another cut is added to the declaration (PR37).
@@ -83,9 +83,9 @@ each goes into the spec's change log on the freeze):
   is a JSON number; ``threshold`` is the one string. Key order is stable across calls, processes
   and hash seeds.
 - *The sign of the net swing, ruled 2026-09-22.* PR26 writes ``net_swing = (n01 - n10) / n``,
-  the second arm (``b``, arm A') minus the first (``a``, arm A), and Jev's section 5.1 writes the
-  same; the 45/44 note's "+1.0 points, -5.5 to +7.5" is the same interval under A minus A'. **The
-  formula stands as written**, so the golden reads ``-0.010`` with ``[-0.075, +0.055]``, and
+  the second arm (``b``, arm A') minus the first (``a``, arm A); a reader who subtracts the other
+  way gets the same interval with its sign flipped. **The
+  formula stands as written**, and
   **every ``net_swing`` mapping -- per sweep, pooled, and in ``intervals_json`` -- carries
   ``direction: "b_minus_a"``** so a reader never has to guess which way it subtracts.
 
@@ -96,10 +96,9 @@ each goes into the spec's change log on the freeze):
 frame by frame -- the spec's section 11.2 ruling made that the front door for phase 2, and it is
 what lets a fixture carry exactly the flip pattern an invariant needs. The two exceptions: the
 control runs a hand-built store through ``assert_pairs`` so the frames ``analyse`` reads are the
-frames phase 1 emits; and PR39 reads the two stored 45/44 arms (skipped when
-``~/code/poisson-labs/proofload-runs`` is absent) and builds their assertion in test code,
-matched on ``(config_hash, replicate_index)`` with eligibility as the published script had it. As
-section 6 says, the stored arms carry one cut, four pairs per task and 44 flips, so PR37, PR32's
+frames phase 1 emits; and PR39 reads two stored arms the suite generates (``tests/replay_arms.py``)
+and builds their assertion in test code, matched on ``(config_hash, replicate_index)`` with the
+five eligibility rules. The stored arms carry one cut, four pairs per item and 36 flips, so PR37, PR32's
 ``m_bar = 3`` reading and PR31 each have a hand-built frame here instead.
 
 **Green before and after -- named so their green is not read as coverage.** None. Every test in
@@ -148,6 +147,8 @@ from poisson_prove.executor import derive_seed
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.trace import Span, Trace
 
+import replay_arms
+
 EPOCH = 1_790_000_000_000_000_000
 SALT = "9f4a1c62d08e5b37"
 REQUEST_SPAN = "scorer.request"
@@ -170,14 +171,10 @@ PER_SWEEP_KEYS = frozenset({
 INTERVAL_KEYS = frozenset({"estimate", "lo", "hi", "basis"})
 PAIRED_QUANTITIES = frozenset({"flip_rate", "net_swing", "outcome_interval"})
 
-GOLDEN_STORE = Path.home() / "code" / "poisson-labs" / "prove-runs"
-ARM_A, ARM_B, SALT_4544 = "20260915T210140Z-4847", "20260915T211148Z-965d", "d2ebb5be1d394d12"
+#: The seed PR39 declares for the two stored arms' bootstrap.
+STORED_SEED = 20260120
 INSTRUMENT_SIDE = frozenset(
     {"infrastructure_error", "agent_error", "user_error", "unexpected_error"}
-)
-needs_golden = pytest.mark.skipif(
-    not (GOLDEN_STORE / ARM_A).is_dir() or not (GOLDEN_STORE / ARM_B).is_dir(),
-    reason=f"the 45/44 arms are not stored under {GOLDEN_STORE}",
 )
 
 
@@ -187,7 +184,7 @@ def P() -> Any:
     return paired
 
 
-# ---------- reference implementations, the published arithmetic ----------
+# ---------- reference implementations, the arithmetic written out ----------
 
 
 def cp_two_sided(k: int, n: int) -> tuple[float, float]:
@@ -203,7 +200,7 @@ def cp_upper_one_sided(k: int, g: int) -> float:
 def cluster_bootstrap(
     clusters: Sequence[Any], values: Sequence[int], *, seed: int, b: int
 ) -> tuple[float, float]:
-    """The twelve lines of ``scripts/repro_r1_agreement.py``: ``default_rng(seed)``,
+    """The percentile cluster bootstrap in twelve lines: ``default_rng(seed)``,
     ``groupby(cluster, sort=True)``, ``rng.integers(0, G, size=(B, G))``, concatenate, mean,
     2.5 / 97.5."""
     rng = np.random.default_rng(seed)
@@ -793,7 +790,7 @@ def test_pr27_arm_rates_are_descriptive_and_every_interval_sits_on_a_paired_quan
                 assert "difference" not in path[-1] and "unpaired" not in path[-1], path
 
 
-# ---------- PR28: the pooled interval is the published percentile cluster bootstrap ----------
+# ---------- PR28: the pooled interval is the percentile cluster bootstrap ----------
 
 
 def correlated(i: int, s: str) -> tuple[int, int]:
@@ -1208,7 +1205,7 @@ def test_pr37_phase_two_adds_exactly_its_three_public_names_and_no_function_retu
 # ---------- PR38: the outcome, only against a declared floor ----------
 
 
-def test_pr38_outcome_a_flips_ruled_out_below_the_floor_needs_the_jev_sized_stratum() -> None:
+def test_pr38_outcome_a_flips_ruled_out_below_the_floor_needs_a_large_stratum() -> None:
     """Three hundred items, one sweep, no flip, floor 0.01: the exact upper bound is 0.00994 and
     outcome A fires. Ten items under the same floor cannot rule anything out: outcome C."""
     a = cut_of(analyse(assertion(grid(300, ["S1"], concordant), floor="0.01", b=50)))
@@ -1266,29 +1263,29 @@ def test_pr38_with_no_floor_the_outcome_is_null_and_nothing_else_moves() -> None
     assert cut_of(with_floor).per_sweep == cut_of(without).per_sweep
 
 
-# ---------- PR39: golden, the 45/44 note's published numbers ----------
+# ---------- PR39: two stored arms, read back and analysed whole ----------
 
 
-def golden_assertion(*, b: int = 10_000, seed: int = 20260915) -> Any:
-    """The two stored arms, matched on ``(config_hash, replicate_index)`` in test code, with
-    eligibility as ``scripts/repro_r1_agreement.py`` had it: both outcomes present (E1), neither
-    instrument-side (E2), seeds equal within the pair (E3), no duplicate key (E4), one salt (E5).
-    The published event is ``outcome == "solved"``, which the stored ``reward`` carries as the
-    literal ``1.0`` against ``0.0`` -- asserted here, not assumed -- so the value under test is
-    ``meta["reward"]`` at a single cut with threshold ``1``."""
-    store = Store(GOLDEN_STORE)
-    ma, mb = store.manifest(ARM_A), store.manifest(ARM_B)
-    assert ma.run_salt == mb.run_salt == SALT_4544, (ma.run_salt, mb.run_salt)  # E5
-    fa, fb = store.read(ARM_A), store.read(ARM_B)
+def stored_assertion(*, b: int = 10_000, seed: int = STORED_SEED) -> Any:
+    """The two generated arms (``tests/replay_arms.py``), matched on ``(config_hash,
+    replicate_index)`` in test code, with the five eligibility rules a reader of stored arms
+    applies: both outcomes present (E1), neither instrument-side (E2), seeds equal within the pair
+    (E3), no duplicate key (E4), one salt (E5). The event is ``outcome == "solved"``, which the
+    stored ``reward`` carries as the literal ``1.0`` against ``0.0`` -- asserted here, not
+    assumed -- so the value under test is ``meta["reward"]`` at a single cut with threshold ``1``."""
+    store = Store(replay_arms.root())
+    ma, mb = store.manifest(replay_arms.ARM_A), store.manifest(replay_arms.ARM_B)
+    assert ma.run_salt == mb.run_salt == replay_arms.SALT, (ma.run_salt, mb.run_salt)  # E5
+    fa, fb = store.read(replay_arms.ARM_A), store.read(replay_arms.ARM_B)
     key = ["config_hash", "replicate_index"]
     assert not fa.duplicated(key).any() and not fb.duplicated(key).any()  # E4
     merged = fa.merge(fb, on=key, suffixes=("_a", "_b"), how="inner")
-    assert len(merged) == 200 and (merged["seed_a"] == merged["seed_b"]).all()  # E3
+    assert len(merged) == replay_arms.PAIRS and (merged["seed_a"] == merged["seed_b"]).all()  # E3
     eligible = merged[
         merged["outcome_a"].notna() & merged["outcome_b"].notna()  # E1
         & ~merged["outcome_a"].isin(INSTRUMENT_SIDE) & ~merged["outcome_b"].isin(INSTRUMENT_SIDE)  # E2
     ]
-    assert len(eligible) == 200
+    assert len(eligible) == replay_arms.PAIRS
     records = []
     for row in eligible.to_dict("records"):
         reward_a, reward_b = row["meta_a"]["reward"], row["meta_b"]["reward"]
@@ -1305,8 +1302,8 @@ def golden_assertion(*, b: int = 10_000, seed: int = 20260915) -> Any:
     decl = paired.Declaration(
         value_key="reward", cluster_key="task_id", stratum_key="cut",
         cuts=(paired.Cut(name="solved", threshold=Decimal("1"), comparison="ge"),),
-        sweeps=(paired.SweepPair(name="R", a=ARM_A, b=ARM_B),),
-        request_span="llm", model_key="model", model_pin="gpt-4.1-mini-2025-04-14",
+        sweeps=(paired.SweepPair(name="R", a=replay_arms.ARM_A, b=replay_arms.ARM_B),),
+        request_span="llm", model_key="model", model_pin=MODEL_PIN,
         exemptions=(), headers="not_recorded", retries="not_recorded",
         bootstrap_b=b, bootstrap_seed=seed,
     )
@@ -1317,70 +1314,83 @@ def golden_assertion(*, b: int = 10_000, seed: int = 20260915) -> Any:
     )
 
 
-_GOLDEN: dict[str, Any] = {}
+_STORED: dict[str, Any] = {}
 
 
-def golden_cut() -> Any:
-    if "cut" not in _GOLDEN:
-        _GOLDEN["cut"] = cut_of(analyse(golden_assertion()), "solved")
-    return _GOLDEN["cut"]
+def stored_cut() -> Any:
+    if "cut" not in _STORED:
+        _STORED["cut"] = cut_of(analyse(stored_assertion()), "solved")
+    return _STORED["cut"]
 
 
-@needs_golden
-def test_pr39_golden_the_two_by_two_and_the_arm_order_check_are_the_published_ones() -> None:
-    cut = golden_cut()
-    assert two_by_two(cut, "R") == (67, 23, 21, 89)
+def stored_columns() -> tuple[list[str], list[int], list[int]]:
+    """Each pair's item, its flip indicator and its signed change, from the generator's own
+    record of the pairs and never from the store or the analysis."""
+    pairs = replay_arms.pairs()
+    return ([p["item"] for p in pairs], [int(p["a"] != p["b"]) for p in pairs], [p["b"] - p["a"] for p in pairs])
+
+
+def test_pr39_the_stored_arms_give_their_two_by_two_and_the_arm_order_check() -> None:
+    cut = stored_cut()
+    n11, n10, n01, n00 = replay_arms.TWO_BY_TWO
+    assert two_by_two(cut, "R") == (n11, n10, n01, n00) == (64, 21, 15, 100)
     r = sweep_of(cut, "R")
-    assert r["n"] == 200 and r["arm_order_check"]["n_discordant"] == 44
-    assert round(r["arm_order_check"]["p"], 3) == 0.880
+    assert r["n"] == 200 and r["arm_order_check"]["n_discordant"] == n10 + n01 == 36
+    assert r["arm_order_check"]["p"] == pytest.approx(mcnemar_p(n10, n01), abs=1e-12)
+    assert round(r["arm_order_check"]["p"], 3) == 0.405
     assert r["arm_order_check"]["can_reject"] is True
-    assert r["rate_a"] == pytest.approx(0.45) and r["rate_b"] == pytest.approx(0.44)
-    assert cut.ties == {"a": 90, "b": 88}  # every solved episode sits exactly at the cut
+    assert r["rate_a"] == pytest.approx(0.425) and r["rate_b"] == pytest.approx(0.395)
+    assert cut.ties == {"a": 85, "b": 79}  # every solved episode sits exactly at the cut
 
 
-@needs_golden
-def test_pr39_golden_the_task_clustered_interval_is_0_155_to_0_285() -> None:
-    cut = golden_cut()
+def test_pr39_the_item_clustered_interval_on_the_stored_arms_is_0_095_to_0_275() -> None:
+    cut = stored_cut()
     flip = cut.pooled["flip_rate"]
-    assert flip["estimate"] == pytest.approx(44 / 200) and flip["basis"] == "cluster_bootstrap"
-    assert round(flip["lo"], 3) == 0.155 and round(flip["hi"], 3) == 0.285
+    assert flip["estimate"] == pytest.approx(36 / 200) and flip["basis"] == "cluster_bootstrap"
+    clusters, flips, _ = stored_columns()
+    assert (flip["lo"], flip["hi"]) == cluster_bootstrap(clusters, flips, seed=STORED_SEED, b=10_000)
+    assert round(flip["lo"], 3) == 0.095 and round(flip["hi"], 3) == 0.275
+    # The item matters on these arms: the interval that ignores it is narrower.
+    naive = observation_bootstrap(flips, seed=STORED_SEED, b=10_000)
+    assert flip["lo"] < naive[0] and flip["hi"] > naive[1]
     assert cut.pooled["n"] == {"items": 50, "sweeps": 1}
     per_sweep = sweep_of(cut, "R")["flip_rate"]
-    lo, hi = cp_two_sided(44, 200)
+    lo, hi = cp_two_sided(36, 200)
     assert per_sweep["basis"] == "exact_binomial"
     assert per_sweep["lo"] == pytest.approx(lo) and per_sweep["hi"] == pytest.approx(hi)
-    assert (round(lo, 4), round(hi, 4)) == (0.1646, 0.2839)
+    assert (round(lo, 4), round(hi, 4)) == (0.1294, 0.2404)
 
 
-@needs_golden
-def test_pr39_golden_the_net_swing_is_one_point_with_the_published_clustered_interval() -> None:
-    """The published sentence is "+1.0 points, -5.5 to +7.5" under arm A minus arm A'. PR26 as
-    written is A' minus A -- ruled 2026-09-22 to stand -- so the same swing and the same interval
-    read with the sign flipped, and the output says so."""
-    swing = golden_cut().pooled["net_swing"]
-    assert swing["estimate"] == pytest.approx((21 - 23) / 200)
+def test_pr39_the_net_swing_on_the_stored_arms_is_b_minus_a_with_its_clustered_interval() -> None:
+    """PR26 is A' minus A -- ruled 2026-09-22 to stand -- so the swing is ``(n01 - n10) / n`` and
+    the output says which way it subtracts."""
+    swing = stored_cut().pooled["net_swing"]
+    assert swing["estimate"] == pytest.approx((15 - 21) / 200)
     assert swing["direction"] == "b_minus_a"
-    assert abs(round(swing["estimate"] * 100, 1)) == 1.0
+    assert round(swing["estimate"] * 100, 1) == -3.0
     assert swing["basis"] == "cluster_bootstrap"
-    assert (round(swing["lo"], 3), round(swing["hi"], 3)) == (-0.075, 0.055)
+    clusters, _, changes = stored_columns()
+    assert (swing["lo"], swing["hi"]) == cluster_bootstrap(clusters, changes, seed=STORED_SEED, b=10_000)
+    assert (round(swing["lo"], 3), round(swing["hi"], 3)) == (-0.080, 0.015)
 
 
-@needs_golden
-def test_pr39_golden_the_design_effect_and_the_outcome() -> None:
-    cut = golden_cut()
-    assert cut.design_effect["m_bar"] == 4.0
-    assert cut.design_effect["deff"] == pytest.approx(1 + 3 * cut.design_effect["icc"])
-    assert 0.0 < cut.design_effect["icc"] < 1.0
-    assert cut.outcome is None  # the note declared no floor
+def test_pr39_the_design_effect_and_the_outcome_on_the_stored_arms() -> None:
+    cut = stored_cut()
+    clusters, flips, _ = stored_columns()
+    icc, m_bar, deff = icc1(clusters, flips)
+    assert cut.design_effect["m_bar"] == m_bar == 4.0
+    assert cut.design_effect["icc"] == pytest.approx(icc) and 0.0 < icc < 1.0
+    assert cut.design_effect["deff"] == pytest.approx(1 + 3 * cut.design_effect["icc"]) == pytest.approx(deff)
+    assert cut.outcome is None  # no floor declared
     assert cut.pooled["ineligibility_rate"] == 0.0
     assert cut.threshold == Decimal("1") and cut.name == "solved"
 
 
-@needs_golden
-def test_pr39_golden_reproduces_from_the_published_seed_and_moves_off_it() -> None:
-    """The same arms under another seed give another interval, so the 0.155 / 0.285 is the
-    published procedure at the published seed and not a coincidence of the arms."""
-    other = cut_of(analyse(golden_assertion(seed=20260916)), "solved").pooled["flip_rate"]
-    published = golden_cut().pooled["flip_rate"]
-    assert (other["lo"], other["hi"]) != (published["lo"], published["hi"])
-    assert 0.12 < other["lo"] < 0.20 and 0.24 < other["hi"] < 0.32  # same arms, other draws
+def test_pr39_the_interval_follows_the_declared_seed_and_moves_off_it() -> None:
+    """The same arms under another seed give the reference's interval at that seed, which is not
+    the first one: the interval is the procedure at the declared seed, not a property of the arms."""
+    other = cut_of(analyse(stored_assertion(seed=STORED_SEED + 1)), "solved").pooled["flip_rate"]
+    declared = stored_cut().pooled["flip_rate"]
+    assert (other["lo"], other["hi"]) != (declared["lo"], declared["hi"])
+    clusters, flips, _ = stored_columns()
+    assert (other["lo"], other["hi"]) == cluster_bootstrap(clusters, flips, seed=STORED_SEED + 1, b=10_000)

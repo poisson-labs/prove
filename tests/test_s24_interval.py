@@ -19,12 +19,13 @@ and counts the interval's disagreement with the verdict rather than reconciling 
 Six findings from step zero, all measured on disk, all now carried by the spec as amendment
 S24.1. They are restated here because they are why several tests below look the way they do.
 
-1. **``R`` is the BH rejection count, not the verdict sum.** On Go1 with ``events=("fell",)``
-   under ``logrank_bh`` the two are **196 and 88**: 108 cells are ``32/32`` vs ``32/32``, every
-   episode fell in both arms, ``delta`` is exactly ``0`` so ``multi_diff`` labels them
-   ``unchanged``, and log-rank rejects them on the fall *times*. That configuration is the only
-   committed fixture on which the two definitions differ, so C2 and C19 are written on it and
-   nowhere else. On every other committed configuration both definitions pass.
+1. **``R`` is the BH rejection count, not the verdict sum.** On the lattice (``tests/lattice.py``)
+   with ``events=("tripped",)`` under ``logrank_bh`` the rejection count is **39** and the count a
+   horizon rule would label is **27**: the twelve ``load`` 100 conditions are ``32/32`` vs
+   ``32/32``, every episode tripped in both arms, ``delta`` is exactly ``0``, and log-rank rejects
+   them on the trip *times* (the after run trips sooner). That configuration is the only fixture
+   on which the two definitions differ, so C2 and C19 are written on it and nowhere else. On every
+   other configuration both definitions pass.
 2. **The family is the flat BH family ``multi_diff`` runs**, and C1/C2/C18 say so. Rollout Plan
    Phase 4's nested family (leaves within a rejected Level 2 group) is a separate object with
    its own level; nothing here is designed for it.
@@ -32,13 +33,14 @@ S24.1. They are restated here because they are why several tests below look the 
    ``32/32`` the point estimate is ``1.0``, so C4 forces ``ci_hi >= 1.0``, C5 forces
    ``ci_hi <= 1.0``, and C7 then makes ``score_p_rd(..., delta=1.0)`` equal ``1.0`` rather than
    ``alpha``. C6 is scoped to interior endpoints and **C6b pins the boundary positively** --
-   an exemption with nothing asserting the exempted behaviour is a hole. 245 of Go1's 400 cells
-   (61%) sit on a boundary.
-4. **Go1 is 0 safer / 60 worse under Fisher and 0 safer / 55 worse under McNemar**, not what
-   spec section 6 said before S24.1.
-5. **A committed ``R == 0`` fixture exists**: Go1 under ``logrank_bh`` with the inferred event
-   set. C1's primary fixture is still the synthetic identical-arms pair, because the Go1 route
-   rests on a log-rank tie convention the Rollout Plan still lists as open; Go1 corroborates.
+   an exemption with nothing asserting the exempted behaviour is a hole. 39 of the lattice's 72
+   conditions (54%) sit on a boundary.
+4. **The lattice is 22 lower / 0 higher under Fisher and 27 lower / 0 higher under McNemar**, the
+   counts its own references give (``lattice.fisher``, ``lattice.mcnemar``).
+5. **An ``R == 0`` fixture exists**: the lattice under ``logrank_bh`` with the inferred event
+   set (``held``). C1's primary fixture is still the synthetic identical-arms pair, because the
+   lattice route rests on a log-rank tie convention the Rollout Plan still lists as open; the
+   lattice corroborates.
 6. **ADR-050's guard cannot fire.** ``_truncate_raw`` censors at the horizon, which is ``>=``
    every retained event time, and the estimator reduces to the naive proportion when no
    censoring precedes an event. Five constructed shapes were measured -- late truncation, two
@@ -94,9 +96,11 @@ the bisector, its iteration cap, or its tolerance.
 from __future__ import annotations
 
 import ast
-import hashlib
+import json
+import math
 import re
 import warnings
+from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -114,10 +118,14 @@ from poisson_prove.episode import Episode
 from poisson_prove.report import ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
+import lattice
+
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
-GO1_ROOT = REPO / "tests" / "fixtures" / "go1"
-GO1_A, GO1_B = "go1-v0", "go1-v1"
+#: The generated pair (``tests/lattice.py``): the before run and the after run.
+LATTICE_ROOT = lattice.root()
+RUN_A, RUN_B = lattice.RUN_A, lattice.RUN_B
+EVENT, OTHER = lattice.EVENT, lattice.OTHER
 
 #: Spec section 2 as amended. Stated in the spec, so constants here (standing rule 1).
 EXPECTED_INTERVAL_COLUMNS = ("event", "config_hash", "config", "ci_lo", "ci_hi", "basis")
@@ -127,9 +135,10 @@ EXPECTED_INTERVAL_BASES = ("score_rd", "score_rd_paired", "censored")
 #: later change does to the estimator.
 CIF_TOLERANCE = 1e-12
 
-#: Alphas the unit tests run at: the nominal one, and the two alpha* values Go1 actually
-#: produces (fisher over both events, and the logrank-on-fell family).
-ALPHAS = (0.05, 0.0245, 0.0075, 0.001)
+#: Alphas the unit tests run at: the nominal one, the two alpha* values the lattice produces
+#: (``q x R / m``: the log-rank family on ``tripped``, 39 of 72, and Fisher over both events, 44 of
+#: 144), and a small one.
+ALPHAS = (0.05, 0.05 * 39 / 72, 0.05 * 44 / 144, 0.001)
 
 #: Literal tables. ``(events_a, n_a, events_b, n_b)``. The first three are boundary shapes:
 #: nothing anywhere (C9's sole-catch table), a full sweep up, and a full sweep down.
@@ -169,64 +178,64 @@ INTERVAL_LINE = re.compile(
 )
 
 #: C14. Minted on the bare tree at a597d9a (2026-09-07), before the build exists: a hash, never
-#: a diff of two renders. ``PAIR`` is ``multi_diff(go1-v0, go1-v1, events=("fell", "survived"),
-#: method="fisher_bh")``; ``FELL_LOGRANK`` is the same pair at ``events=("fell",)`` and
+#: a diff of two renders. ``PAIR`` is ``multi_diff(before, after, events=(EVENT, OTHER),
+#: method="fisher_bh")``; ``LOGRANK`` is the same pair at ``events=(EVENT,)`` and
 #: ``method="logrank_bh"``.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the two-event Go1 markdown's trade line is replaced by the complement sentence (fell and survived are complements on every cell, spec LS section 3.6, trade_line()); nothing else in it moves. Read through this test's own measurement on the built tree, not predicted.
+# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the two-event markdown's trade line is replaced by the complement sentence (the two outcomes are complements on every cell, spec LS section 3.6, trade_line()); nothing else in it moves. Read through this test's own measurement on the built tree, not predicted.
 # PF4 (PF4.3, PF4.15, PF4.20): the two markdown digests are no longer asserted. PF4 changes those
 # bytes (direction words for an event of unknown kind, the share columns, the limit notes), so C14
 # now asserts the facts the digests guarded, read from the result itself.
-# PF4 (PF4.20): Go1's runs give ``fell`` and ``survived`` no kind, so the headline counts read in
-# direction words; the numbers are the published 60 and 0.
+# PF4 (PF4.20): the lattice's runs give ``tripped`` and ``held`` no kind, so the headline counts
+# read in direction words; the numbers are the ones ``lattice.fisher`` gives (22 and 0 each way).
 PAIR_HEADLINE = (
-    "survived: 0 lower, 60 higher · fell: 60 lower, 0 higher\n"
-    "(aalen_johansen + fisher_bh, BH q<0.05 over 800 tests, unpaired)"
+    "held: 0 lower, 22 higher · tripped: 22 lower, 0 higher\n"
+    "(aalen_johansen + fisher_bh, BH q<0.05 over 144 tests, unpaired)"
 )
-#: LS retrofit, 2026-09-22 (local serve pass, Phase A): ``fell`` and ``survived`` are exact complements in all 400 cells and both arms
+#: LS retrofit, 2026-09-22 (local serve pass, Phase A): ``tripped`` and ``held`` are exact complements in all 72 cells and both arms
 #: (spec LS section 3.6, D10, D11), so this pair's trade line is the complement sentence and the retired
 #: "moved failures" sentence appears in no file under ``src/`` (LS13).
 PAIR_TRADE_LINE = (
-    "fell and survived are complements here: in all 400 conditions every trial recorded exactly one "
+    "tripped and held are complements here: in all 72 conditions every trial recorded exactly one "
     "of the two, so each rate is one minus the other and each change is the other's with its sign "
-    "flipped. The 60 conditions where survived rose are the 60 where fell fell: one finding, reported "
+    "flipped. The 22 conditions where held rose are the 22 where tripped fell: one finding, reported "
     "twice. Naming one of the two shows it once."
 )
-PAIR_QCOLUMN_SHA256 = "1e8e75a1679a92ba553d45d4b4fcdfd946d0e77939fec7ae7c214270e77719f9"
-PAIR_DELTA_SHA256 = "0b46042d58b4ce9d8ff7cadfef1a0e20637d66e43de58c08f710e2021d3b35bf"
-COVERAGE_SHA256 = "e02aae9ac0d0f902d5fdb9d36340e3a7a72c1a7d6d86b0e5a75fffda95dee5fa"
+#: The pair's direction counts per event, as ``lattice.fisher`` gives them: ``(lower, higher)``.
+PAIR_DIRECTIONS = {EVENT: (22, 0), OTHER: (0, 22)}
 
 # PF4 (PF4.13, PF4.20): under log-rank a rejected cell's direction is the sign of B's observed
-# minus expected events, so Go1's 88 safer / 0 worse / 312 unchanged become 182 lower / 14 higher /
-# 204 unchanged (stats re-check README, section 2), printed in direction words.
+# minus expected events; ``lattice.logrank`` gives 27 lower / 12 higher / 33 unchanged (the twelve
+# higher are the ``load`` 100 conditions, where the after run trips sooner), printed in direction
+# words.
 # PF4 re-freeze (PF4.41): every surface that names logrank_bh says it tests the cause-specific
 # hazard, the headline's method included.
-FELL_LOGRANK_HEADLINE = (
-    "fell: 182 lower, 14 higher\n"
-    "(aalen_johansen + logrank_bh (cause-specific hazard), BH q<0.05 over 400 tests, unpaired)"
+LOGRANK_HEADLINE = (
+    "tripped: 27 lower, 12 higher\n"
+    "(aalen_johansen + logrank_bh (cause-specific hazard), BH q<0.05 over 72 tests, unpaired)"
 )
-FELL_LOGRANK_QCOLUMN_SHA256 = "175f731751711047063b840dacb61c3a9e8ac86ccd937d0043d4986283821e53"
+LOGRANK_DIRECTIONS = (27, 12)
 
 #: C14, second half. The three digests S21's E14 already pins, restated rather than imported so
-#: two frozen oracles do not couple. Minted on the bare tree at b10a146 by
-#: ``report go1-v0 go1-v1 --event fell --x mu --y push_pct_bw``.
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): Go1's runs share a salt, so the default is now the paired
+#: two frozen oracles do not couple. Minted on the bare tree at b10a146 by ``report`` on the pair
+#: with one event and both axes.
+# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
 # test; the E14 facts and the heatmap are the unpaired test's, named.
-E14_ARGV = ("report", GO1_A, GO1_B, "--event", "fell", "--x", "mu", "--y", "push_pct_bw", "--method", "fisher_bh")
+E14_ARGV = ("report", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
 # PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests are no longer asserted. PF4 changes all three
 # files (direction words for an event of unknown kind, the share table, the limit notes), so C14
 # asserts the facts they guarded instead.
 
 #: Step zero, measurement 2, restated as a constant so C2's fixture cannot be swapped for one
-#: that does not discriminate. Go1, ``events=("fell",)``, ``logrank_bh``.
-FELL_LOGRANK_N_TESTS = 400
-FELL_LOGRANK_REJECTIONS = 196
-# PF4 (PF4.13): a rejected cell is now labelled by the log-rank statistic, so the 108 rejected
+#: that does not discriminate. The lattice, ``events=(EVENT,)``, ``logrank_bh``.
+LOGRANK_N_TESTS = 72
+LOGRANK_REJECTIONS = 39
+# PF4 (PF4.13): a rejected cell is now labelled by the log-rank statistic, so the 12 rejected
 # cells at 32/32 vs 32/32 (``delta`` exactly 0) are changes too and the verdict sum equals the
-# rejection count: 182 lower + 14 higher (stats re-check README, section 2). The old verdict
-# sum, 88, survives as the rejected cells whose horizon ``delta`` is not 0, the count the old
-# horizon rule labelled, and that is now the count a wrong level would be built from.
-FELL_LOGRANK_VERDICT_SUM = 196
-FELL_LOGRANK_HORIZON_MOVED = 88
+# rejection count: 27 lower + 12 higher (``lattice.logrank``). The 27 rejected cells whose horizon
+# ``delta`` is not 0 are the count a horizon rule would label, and that is now the count a wrong
+# level would be built from.
+LOGRANK_VERDICT_SUM = 39
+LOGRANK_HORIZON_MOVED = 27
 
 
 # ---------- data builders: construction only, no assertions and no decisions ----------
@@ -277,36 +286,77 @@ def write_run(
     store.mark_complete(run_id)
 
 
-def go1_diff(events: tuple[str, ...] | None, method: str) -> Any:
-    """``multi_diff`` on the committed Go1 pair; ``events=None`` takes the inferred set. The
-    unpaired-analysis warning is expected on every non-McNemar call here (both manifests carry
-    the same run_salt by construction) and is not what any test below is about."""
-    store = Store(GO1_ROOT)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", diff_mod.UnpairedAnalysis)
-        return multi_diff(
-            store.read(GO1_A),
-            store.read(GO1_B),
-            events=None if events is None else list(events),
-            method=method,
-            manifest_a=store.manifest(GO1_A),
-            manifest_b=store.manifest(GO1_B),
-        )
+def bh_over(values: Any) -> list[float]:
+    """``lattice.bh`` (BH written out, independent of ``diff.bh``) over a column of p values."""
+    return [float(v) for v in lattice.bh(list(values))]
 
 
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def assert_q_column_is_bh_over_its_p_column(result: Any, reference: Mapping[str, Mapping[str, Mapping[str, Any]]] | None, events: tuple[str, ...]) -> None:
+    """What a q-column digest guarded, as facts: the family covers ``events`` in that order, one
+    row per condition of the design each, in sorted-hash order (the order the digest read); its q
+    values, in that order, equal BH over its p values exactly (one family over every event); and
+    where ``reference`` (per event, per condition) holds an independent p, each p equals it exactly
+    and each q equals BH over the reference's p column exactly."""
+    assert tuple(result.events) == events and result.n_tests == len(events) * lattice.CELLS, (result.events, result.n_tests)
+    order = sorted(lattice.config_hash(c.config) for c in lattice.design_cells())
+    for event in result.events:
+        assert list(result.by_event[event].cells["config_hash"]) == order, event
+    ps = [float(v) for e in result.events for v in result.by_event[e].cells["p"]]
+    qs = [float(v) for e in result.events for v in result.by_event[e].cells["q"]]
+    assert len(ps) == result.n_tests
+    assert qs == bh_over(ps)
+    if reference is not None:
+        ref_p = [reference[e][h]["p"] for e in result.events for h in result.by_event[e].cells["config_hash"]]
+        assert ps == ref_p
+        assert qs == bh_over(ref_p)
 
 
-def sha256_of_column(result: Any, column: str) -> str:
-    """The per-event column, joined at full float precision. Used only for C14/C15, where the
-    fact asserted is 'this did not move'."""
-    return sha256_of_text(
-        "|".join(
-            f"{e}:" + ",".join(f"{v:.17g}" for v in result.by_event[e].cells[column])
-            for e in result.events
-        )
-    )
+def assert_delta_column_is_the_naive_difference(result: Any, events: tuple[str, ...]) -> None:
+    """What the delta-column digest guarded: the family covers ``events`` in that order, each in
+    sorted-hash order; every row's delta is ``events_b/n_b - events_a/n_a`` exactly, with the
+    reference's sign of zero (the digest printed ``-0`` apart from ``0``), and its counts and delta
+    are the design's (``lattice.fisher``'s)."""
+    assert tuple(result.events) == events and result.n_tests == len(events) * lattice.CELLS, (result.events, result.n_tests)
+    for event in result.events:
+        reference = lattice.fisher(event)
+        cells = result.by_event[event].cells
+        assert list(cells["config_hash"]) == sorted(reference), event
+        for row in cells.itertuples(index=False):
+            ref = reference[row.config_hash]
+            assert (row.n_a, row.n_b, row.events_a, row.events_b) == (ref["n_a"], ref["n_b"], ref["events_a"], ref["events_b"]), (event, row.config_hash)
+            assert row.delta == row.events_b / row.n_b - row.events_a / row.n_a == ref["delta"], (event, row.config_hash)
+            assert math.copysign(1.0, row.delta) == math.copysign(1.0, ref["delta"]), (event, row.config_hash, row.delta)
+
+
+def assert_coverage_is_the_design(result: Any) -> None:
+    """What the coverage digest guarded, as facts: ``coverage.to_json(orient="records")``, the
+    string the digest hashed, is the one the design gives -- one record per condition in
+    sorted-hash order, each with its own condition, every row of both runs present and holding an
+    outcome, every condition comparable with no cause -- with its columns in order and its
+    integers, booleans and nulls typed as written."""
+    design = {lattice.config_hash(c.config): c.config for c in lattice.design_cells()}
+    assert len(result.coverage) == len(design) == lattice.CELLS
+    expected = [
+        {"config_hash": h, "config": design[h], "rows_a": lattice.N, "rows_b": lattice.N, "no_outcome_a": 0,
+         "no_outcome_b": 0, "comparable": True, "cause": None}
+        for h in sorted(design)
+    ]
+    assert result.coverage.to_json(orient="records") == json.dumps(expected, separators=(",", ":"))
+
+
+def assert_logrank_column_is_the_reference(result: Any) -> None:
+    """The log-rank family (one event, the design's conditions in sorted-hash order) has its q
+    column BH over its p column exactly, and each condition's p, q and direction are the
+    independent log-rank reference's (``lattice.logrank``: lifelines on the stored times, BH
+    written out) to 1e-12 relative."""
+    assert_q_column_is_bh_over_its_p_column(result, None, (EVENT,))
+    reference = lattice.logrank(EVENT)
+    cells = result.by_event[EVENT].cells
+    assert set(cells["config_hash"]) == set(reference)
+    for row in cells.itertuples(index=False):
+        assert row.p == pytest.approx(reference[row.config_hash]["p"], rel=1e-12, abs=0), row.config_hash
+        assert row.q == pytest.approx(reference[row.config_hash]["q"], rel=1e-12, abs=0), row.config_hash
+        assert row.direction == reference[row.config_hash]["direction"], row.config_hash
 
 
 def parsed(path: Path) -> ast.Module:
@@ -332,24 +382,26 @@ def enclosing_functions(tree: ast.Module) -> dict[ast.AST, str]:
 
 
 @pytest.fixture(scope="module")
-def go1_pair() -> Any:
-    """Go1 over both events under Fisher. R = 120 over 800 tests, and the rejection count and
-    the verdict sum agree here -- which is exactly why C2 cannot be written on it alone."""
-    return go1_diff(("fell", "survived"), "fisher_bh")
+def lattice_pair(lattice_trees: Any) -> Any:
+    """The lattice over both events under Fisher. R = 44 over 144 tests, and the rejection count
+    and the verdict sum agree here -- which is exactly why C2 cannot be written on it alone. The
+    unpaired-analysis warning (both manifests carry the same run_salt by construction) is not what
+    any test below is about; the shared comparison silences it."""
+    return lattice_trees.multi((EVENT, OTHER), "fisher_bh")
 
 
 @pytest.fixture(scope="module")
-def go1_fell_logrank() -> Any:
-    """The one committed configuration on which the BH rejection count (196) and
-    ``n_safer + n_worse`` (88) differ. C2's and C19's discriminating fixture."""
-    return go1_diff(("fell",), "logrank_bh")
+def lattice_logrank(lattice_trees: Any) -> Any:
+    """The one configuration on which the BH rejection count (39) and the count of rejected cells
+    whose horizon delta moved (27) differ. C2's and C19's discriminating fixture."""
+    return lattice_trees.multi((EVENT,), "logrank_bh")
 
 
 @pytest.fixture(scope="module")
-def go1_inferred_logrank() -> Any:
-    """Go1 with the inferred event set under log-rank: R == 0 over 400 tests. C1's
+def lattice_inferred_logrank(lattice_trees: Any) -> Any:
+    """The lattice with the inferred event set under log-rank: R == 0 over 72 tests. C1's
     corroborating zero fixture."""
-    return go1_diff(None, "logrank_bh")
+    return lattice_trees.multi(None, "logrank_bh")
 
 
 @pytest.fixture(scope="module")
@@ -495,8 +547,8 @@ def test_c8_arm_swap_symmetry_holds_for_any_table_and_any_delta(
 def test_c9_the_all_zero_table_gets_a_finite_non_degenerate_interval() -> None:
     """**Sole-catch guard.** A Wald interval on the risk difference collapses to the single
     point ``(0.0, 0.0)`` here, because its standard error is zero at ``p_hat = 0`` in both arms.
-    The S18 arm carried 77% boundary mass and Go1 carries 245 boundary cells of 400, so the
-    estimator that fails at the boundary fails on most of a real grid, not on a corner case.
+    The lattice puts 39 of its 72 conditions on a boundary (a run at 0/32 or 32/32), so the
+    estimator that fails at the boundary fails on most of a grid, not on a corner case.
 
     Written as a literal ``0/32`` vs ``0/32`` table rather than pulled from a fixture because it
     is the guard against the implementation everyone reaches for first.
@@ -725,36 +777,39 @@ def test_c1_the_absent_frame_is_none_and_never_an_empty_frame(synth_root: Path) 
     assert len(result.intervals) == result.n_tests > 0
 
 
-def test_c1_go1_under_logrank_with_the_inferred_events_also_rejects_nothing(
-    go1_inferred_logrank: Any,
+def test_c1_lattice_under_logrank_with_the_inferred_events_also_rejects_nothing(
+    lattice_inferred_logrank: Any,
 ) -> None:
-    """The committed corroboration for C1's zero branch, found in step zero: Go1's inferred
-    event set is ``("survived",)`` and log-rank rejects none of its 400 cells. Kept as
+    """The corroboration for C1's zero branch: the lattice's inferred event set is
+    ``("held",)`` and log-rank rejects none of its 72 cells (``lattice.logrank(OTHER)`` flags
+    none either). Kept as
     corroboration and not as the primary fixture, because it rests on a log-rank tie convention
     the Rollout Plan still lists as open -- if that convention moves, this fixture stops being
     a zero and the synthetic pair above still is."""
-    result = go1_inferred_logrank
-    assert result.n_tests == 400
-    # PF4 re-freeze (PF4.42): nothing is rejected, and the interval is there for all 400 rows at the
-    # simultaneous level 1 - q / 400.
+    result = lattice_inferred_logrank
+    assert result.events == (OTHER,)
+    assert result.n_tests == lattice.CELLS == 72
+    assert lattice.directions(lattice.logrank(OTHER)) == (0, 0)
+    # PF4 re-freeze (PF4.42): nothing is rejected, and the interval is there for all 72 rows at the
+    # simultaneous level 1 - q / 72.
     assert result.n_rejected == 0
     assert_intervals_always(result, 0)
 
 
-def test_c1_a_family_with_rejections_carries_every_part_of_the_object(go1_pair: Any) -> None:
-    """The other half of the biconditional. Go1 over both events under Fisher rejects 120 of
-    800, so all four of the interval fields are populated together. A build that sets the frame
+def test_c1_a_family_with_rejections_carries_every_part_of_the_object(lattice_pair: Any) -> None:
+    """The other half of the biconditional. The lattice over both events under Fisher rejects 44
+    of 144, so all four of the interval fields are populated together. A build that sets the frame
     but leaves the level ``None``, or the reverse, fails here."""
-    assert go1_pair.intervals is not None
-    assert go1_pair.interval_level is not None
-    assert go1_pair.alpha_star is not None
-    assert go1_pair.n_rejected > 0
+    assert lattice_pair.intervals is not None
+    assert lattice_pair.interval_level is not None
+    assert lattice_pair.alpha_star is not None
+    assert lattice_pair.n_rejected > 0
 
 
 # ---------- C2: the level, and the R it is built from ----------
 
 
-def test_c2_the_level_is_one_minus_q_times_the_rejection_count_over_n_tests(go1_pair: Any) -> None:
+def test_c2_the_level_is_one_minus_q_times_the_rejection_count_over_n_tests(lattice_pair: Any) -> None:
     """ADR-049, recomputed rather than read back. Comparing ``interval_level`` to itself proves
     nothing, so ``R`` is counted here from the ``q`` column the BH pass wrote.
 
@@ -762,7 +817,7 @@ def test_c2_the_level_is_one_minus_q_times_the_rejection_count_over_n_tests(go1_
     regrouping such as ``1.0 - q * (R / m)`` can differ in the last ulp, and the spec pins this
     exactly, so build it the way it is written in section 3.2.
     """
-    result = go1_pair
+    result = lattice_pair
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
     assert result.n_rejected == rejections
     assert result.alpha_star == result.q * rejections / result.n_tests
@@ -770,43 +825,50 @@ def test_c2_the_level_is_one_minus_q_times_the_rejection_count_over_n_tests(go1_
 
 
 def test_c2_the_level_follows_the_rejection_count_and_not_the_verdict_sum(
-    go1_fell_logrank: Any,
+    lattice_logrank: Any,
 ) -> None:
-    """**The discriminating fixture, and the only committed one.** Go1 at ``events=("fell",)``
-    under ``logrank_bh`` rejects 196 of 400 cells, but ``n_safer + n_worse`` is 88: 108 cells
-    are ``32/32`` vs ``32/32``, ``delta`` is exactly ``0`` so ``multi_diff`` labels them
-    ``unchanged``, and log-rank rejects them on the fall *times* rather than the horizon.
+    """**The discriminating fixture, and the only one.** The lattice at ``events=("tripped",)``
+    under ``logrank_bh`` rejects 39 of 72 cells, but only 27 of them moved at the horizon: 12 cells
+    are ``32/32`` vs ``32/32``, ``delta`` is exactly ``0``, and log-rank rejects them on the trip
+    *times* rather than the horizon.
 
     Section 0.2's whole argument is that one threshold decides both the verdict and the
-    interval. BH's threshold is ``q x 196 / 400``; a level built from the verdict sum would use
-    ``q x 88 / 400`` and reinstate exactly the mismatch the section exists to remove. Every
+    interval. BH's threshold is ``q x 39 / 72``; a level built from the horizon count would use
+    ``q x 27 / 72`` and reinstate exactly the mismatch the section exists to remove. Every
     other committed configuration has the two counts equal and would let both definitions pass.
     """
-    result = go1_fell_logrank
+    result = lattice_logrank
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
-    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): fell has no kind, so n_safer and n_worse
+    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): tripped has no kind, so n_safer and n_worse
     # are None on the result and the verdict sum is the direction counts.
     assert all(ev.n_safer is None and ev.n_worse is None for ev in result.by_event.values())
     verdict_sum = sum(ev.n_lower + ev.n_higher for ev in result.by_event.values())
     # PF4 (PF4.13): the verdict sum is now the rejection count; the count that still differs is
-    # the rejected cells whose horizon delta moved (the old horizon rule's 88).
+    # the rejected cells whose horizon delta moved (the horizon rule's 27).
     horizon_moved = sum(
         int(((ev.cells["q"] < result.q) & (ev.cells["delta"] != 0.0)).sum())
         for ev in result.by_event.values()
     )
-    assert (rejections, verdict_sum) == (FELL_LOGRANK_REJECTIONS, FELL_LOGRANK_VERDICT_SUM)
-    assert horizon_moved == FELL_LOGRANK_HORIZON_MOVED
-    assert result.n_rejected == FELL_LOGRANK_REJECTIONS
-    assert result.interval_level == 1.0 - result.q * FELL_LOGRANK_REJECTIONS / FELL_LOGRANK_N_TESTS
+    # The counts the independent log-rank reference gives (lattice.logrank, lifelines on the
+    # stored times): every flagged condition, and those whose share moved by the horizon.
+    reference = lattice.logrank(EVENT)
+    ref_rejections = sum(r["direction"] != "unchanged" for r in reference.values())
+    ref_horizon_moved = sum(r["direction"] != "unchanged" and r["delta"] != 0.0 for r in reference.values())
+    assert (ref_rejections, ref_horizon_moved) == (LOGRANK_REJECTIONS, LOGRANK_HORIZON_MOVED)
+    assert (rejections, verdict_sum) == (LOGRANK_REJECTIONS, LOGRANK_VERDICT_SUM)
+    assert horizon_moved == LOGRANK_HORIZON_MOVED
+    assert result.n_rejected == LOGRANK_REJECTIONS
+    assert result.n_tests == LOGRANK_N_TESTS
+    assert result.interval_level == 1.0 - result.q * LOGRANK_REJECTIONS / LOGRANK_N_TESTS
 
 
-def test_c2_the_discriminating_fixture_still_discriminates(go1_fell_logrank: Any) -> None:
+def test_c2_the_discriminating_fixture_still_discriminates(lattice_logrank: Any) -> None:
     """Before asserting an invariant on a fixture, check the fixture could disagree with it.
     This is that check, promoted to a test of its own so it cannot rot silently: if a future
     change to log-rank, to the tie convention, or to the verdict rule makes these two counts
     equal, the test above stops discriminating and this one says so *here* rather than leaving
     a green suite that pins nothing."""
-    result = go1_fell_logrank
+    result = lattice_logrank
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
     # PF4 (PF4.13): every rejected cell is now a change, so the verdict sum cannot differ from R on
     # any fixture; the fixture still discriminates R from the count the horizon rule would give,
@@ -819,12 +881,12 @@ def test_c2_the_discriminating_fixture_still_discriminates(go1_fell_logrank: Any
     assert 1.0 - result.q * rejections / result.n_tests != 1.0 - result.q * horizon_moved / result.n_tests
 
 
-def test_c2_a_per_event_r_would_give_a_different_level_on_this_fixture(go1_pair: Any) -> None:
+def test_c2_a_per_event_r_would_give_a_different_level_on_this_fixture(lattice_pair: Any) -> None:
     """Section 8's trap 3: ``R`` counts the family, not one event. The mutant is a per-event
-    ``R``, and it is only catchable on a fixture whose events reject at different rates. Go1
-    over both events does: ``fell`` and ``survived`` do not carry the same count, so a level
-    built per event cannot equal the family level."""
-    result = go1_pair
+    ``R``, and it is only catchable on a fixture where more than one event rejects. The lattice
+    over both events does: ``tripped`` and ``held`` each carry 22, so a level built from one
+    event's count (22) cannot equal the family level (44)."""
+    result = lattice_pair
     per_event = [int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events]
     assert len(set(per_event)) > 0 and sum(per_event) != max(per_event), per_event
     assert result.n_rejected == sum(per_event)
@@ -833,29 +895,29 @@ def test_c2_a_per_event_r_would_give_a_different_level_on_this_fixture(go1_pair:
 # ---------- C3: the frame's shape ----------
 
 
-def test_c3_the_frame_has_the_interval_columns_in_order(go1_pair: Any) -> None:
+def test_c3_the_frame_has_the_interval_columns_in_order(lattice_pair: Any) -> None:
     """Spec section 2's ``INTERVAL_COLUMNS``, restated here as a constant because the spec
     states it (standing rule 1) and read off the frame, so the tuple and the frame cannot
     drift apart."""
     assert tuple(diff_mod.INTERVAL_COLUMNS) == EXPECTED_INTERVAL_COLUMNS
-    assert list(go1_pair.intervals.columns) == list(EXPECTED_INTERVAL_COLUMNS)
-    assert isinstance(go1_pair.intervals, pd.DataFrame)
+    assert list(lattice_pair.intervals.columns) == list(EXPECTED_INTERVAL_COLUMNS)
+    assert isinstance(lattice_pair.intervals, pd.DataFrame)
 
 
-def test_c3_there_is_one_row_per_event_and_common_cell_and_no_duplicates(go1_pair: Any) -> None:
+def test_c3_there_is_one_row_per_event_and_common_cell_and_no_duplicates(lattice_pair: Any) -> None:
     """Section 8's trap 7: ``intervals`` is built over the common cells that ``cells`` covers,
     not over the raw frames. ``coverage`` had to come from the raw frames precisely because a
     wholly-errored cell is absent from the valid ones; an interval is only defined where a test
     ran. The two frames are built from different inputs for good reasons and a build that
     unifies them lands a different row count here."""
-    frame = go1_pair.intervals
+    frame = lattice_pair.intervals
     expected = {
         (event, config_hash)
-        for event in go1_pair.events
-        for config_hash in go1_pair.by_event[event].cells["config_hash"]
+        for event in lattice_pair.events
+        for config_hash in lattice_pair.by_event[event].cells["config_hash"]
     }
     seen = list(zip(frame["event"], frame["config_hash"]))
-    assert len(seen) == len(expected) == go1_pair.n_tests
+    assert len(seen) == len(expected) == lattice_pair.n_tests
     assert set(seen) == expected
     assert len(set(seen)) == len(seen)
 
@@ -863,25 +925,25 @@ def test_c3_there_is_one_row_per_event_and_common_cell_and_no_duplicates(go1_pai
 # ---------- C4 and C5 on the frame ----------
 
 
-def test_c4_every_constructed_interval_brackets_the_cells_delta(go1_pair: Any) -> None:
+def test_c4_every_constructed_interval_brackets_the_cells_delta(lattice_pair: Any) -> None:
     """The frame-level form of C4: the ``delta`` an interval is *on* is the one ``cells``
     already reports at the same ``(event, config_hash)``, not one recomputed inside the interval
     builder. Spec section 0.0 -- the point estimate does not change and no existing field
     moves."""
     deltas = {
         (event, row.config_hash): row.delta
-        for event in go1_pair.events
-        for row in go1_pair.by_event[event].cells.itertuples(index=False)
+        for event in lattice_pair.events
+        for row in lattice_pair.by_event[event].cells.itertuples(index=False)
     }
-    for row in go1_pair.intervals.itertuples(index=False):
+    for row in lattice_pair.intervals.itertuples(index=False):
         if row.ci_lo is None:
             continue
         delta = deltas[(row.event, row.config_hash)]
         assert row.ci_lo <= delta <= row.ci_hi, (row.event, row.config_hash, row.ci_lo, delta, row.ci_hi)
 
 
-def test_c5_every_constructed_endpoint_is_inside_the_unit_interval(go1_pair: Any) -> None:
-    for row in go1_pair.intervals.itertuples(index=False):
+def test_c5_every_constructed_endpoint_is_inside_the_unit_interval(lattice_pair: Any) -> None:
+    for row in lattice_pair.intervals.itertuples(index=False):
         if row.ci_lo is None:
             continue
         assert -1.0 <= row.ci_lo <= row.ci_hi <= 1.0, (row.event, row.config_hash, row.ci_lo, row.ci_hi)
@@ -891,7 +953,7 @@ def test_c5_every_constructed_endpoint_is_inside_the_unit_interval(go1_pair: Any
 
 
 def test_c11_the_two_counts_equal_the_counts_recomputed_from_the_frame_and_cells(
-    go1_pair: Any,
+    lattice_pair: Any,
 ) -> None:
     """Recomputed, not read back. ``n_interval_only`` is a cell the verdict left ``unchanged``
     whose interval excludes zero -- the price of Fisher's exactness, since its p-value is
@@ -901,7 +963,7 @@ def test_c11_the_two_counts_equal_the_counts_recomputed_from_the_frame_and_cells
     to be zero anywhere: section 0.6 is explicit that under ``logrank_bh`` disagreement runs in
     both directions and is not a bug.
     """
-    result = go1_pair
+    result = lattice_pair
     verdicts = {
         (event, row.config_hash): row.verdict
         for event in result.events
@@ -923,13 +985,13 @@ def test_c11_the_two_counts_equal_the_counts_recomputed_from_the_frame_and_cells
 
 
 def test_c11_the_counts_are_recomputed_under_logrank_where_both_directions_are_expected(
-    go1_fell_logrank: Any,
+    lattice_logrank: Any,
 ) -> None:
     """Section 0.6: ``logrank_bh`` tests the whole curve while the interval speaks about the
     horizon only. A curve that separates early and closes by ``h`` is a real rejection with an
     interval covering zero, and it is not an error. Same recomputation, on the fixture where the
     disagreement is expected rather than incidental."""
-    result = go1_fell_logrank
+    result = lattice_logrank
     verdicts = {
         (event, row.config_hash): row.verdict
         for event in result.events
@@ -950,14 +1012,14 @@ def test_c11_the_counts_are_recomputed_under_logrank_where_both_directions_are_e
     assert result.n_verdict_only == verdict_only
 
 
-def test_c11_the_two_counts_are_not_interchangeable_on_this_fixture(go1_pair: Any) -> None:
+def test_c11_the_two_counts_are_not_interchangeable_on_this_fixture(lattice_pair: Any) -> None:
     """The handoff's "the two counts swapped" mutant is only catchable where the two differ.
     This says the fixture separates them, so the assertions above are load-bearing. Which of the
     two is larger is not asserted: section 0.6 gives the expected direction, and a run that
     contradicts it is a finding about the two tests, not a test failure."""
-    assert go1_pair.n_interval_only != go1_pair.n_verdict_only, (
-        go1_pair.n_interval_only,
-        go1_pair.n_verdict_only,
+    assert lattice_pair.n_interval_only != lattice_pair.n_verdict_only, (
+        lattice_pair.n_interval_only,
+        lattice_pair.n_verdict_only,
     )
 
 
@@ -999,18 +1061,18 @@ def test_c12_the_paired_method_takes_the_paired_basis_on_the_very_same_frames(
     assert set(mcnemar.intervals["basis"]) == {"score_rd_paired"}
 
 
-def test_c12_logrank_takes_the_unpaired_basis(go1_fell_logrank: Any) -> None:
-    """The third row of section 0.7's table. ``logrank_bh`` runs on a pairable Go1 pair and
+def test_c12_logrank_takes_the_unpaired_basis(lattice_logrank: Any) -> None:
+    """The third row of section 0.7's table. ``logrank_bh`` runs on the pairable lattice pair and
     still takes ``score_rd``: the basis follows the requested method, and log-rank is not a
     paired method however the runs were produced."""
-    assert set(go1_fell_logrank.intervals["basis"]) == {"score_rd"}
+    assert set(lattice_logrank.intervals["basis"]) == {"score_rd"}
 
 
 # ---------- C13: the censoring contract, and what it cannot pin ----------
 
 
 def test_c13_the_endpoints_are_none_exactly_when_the_basis_is_censored(
-    go1_pair: Any, go1_fell_logrank: Any, synth_root: Path
+    lattice_pair: Any, lattice_logrank: Any, synth_root: Path
 ) -> None:
     """Spec section 3.1's contract, over every fixture that produces a frame.
 
@@ -1028,7 +1090,7 @@ def test_c13_the_endpoints_are_none_exactly_when_the_basis_is_censored(
     change to truncation or to the estimator from silently putting a binomial interval on
     censored data.
     """
-    for result in (go1_pair, go1_fell_logrank, synth_diff(synth_root, "moved-a", "moved-b")):
+    for result in (lattice_pair, lattice_logrank, synth_diff(synth_root, "moved-a", "moved-b")):
         for row in result.intervals.itertuples(index=False):
             assert (row.ci_lo is None) == (row.ci_hi is None) == (row.basis == "censored"), (
                 row.event,
@@ -1039,8 +1101,8 @@ def test_c13_the_endpoints_are_none_exactly_when_the_basis_is_censored(
             )
 
 
-def test_c13_no_cell_that_satisfies_the_censoring_guard_is_marked_censored(go1_pair: Any) -> None:
-    """The negative, on the fixture where the guard's own input is known: every Go1 cell has
+def test_c13_no_cell_that_satisfies_the_censoring_guard_is_marked_censored(lattice_pair: Any) -> None:
+    """The negative, on the fixture where the guard's own input is known: every lattice cell has
     ``|rate_x - events_x / n_x| == 0.0`` exactly, on both arms, measured in step zero. So no row
     of this frame may carry ``basis == "censored"``, and one that does means the guard is
     inverted or reading the wrong quantity."""
@@ -1049,22 +1111,22 @@ def test_c13_no_cell_that_satisfies_the_censoring_guard_is_marked_censored(go1_p
             abs(row.rate_a - row.events_a / row.n_a),
             abs(row.rate_b - row.events_b / row.n_b),
         )
-        for event in go1_pair.events
-        for row in go1_pair.by_event[event].cells.itertuples(index=False)
+        for event in lattice_pair.events
+        for row in lattice_pair.by_event[event].cells.itertuples(index=False)
     }
     assert max(max(pair) for pair in rates.values()) <= CIF_TOLERANCE
-    for row in go1_pair.intervals.itertuples(index=False):
+    for row in lattice_pair.intervals.itertuples(index=False):
         assert row.basis != "censored", (row.event, row.config_hash)
 
 
-def test_c13b_the_rejection_count_covers_every_cell_whatever_its_basis(go1_fell_logrank: Any) -> None:
+def test_c13b_the_rejection_count_covers_every_cell_whatever_its_basis(lattice_logrank: Any) -> None:
     """The guard decides whether an *interval* is built, never whether a hypothesis was
     rejected. ``n_rejected`` is counted over the whole ``cells`` frame with no filter on basis,
     so a build that counts only the cells it managed to give an interval to lands a smaller
     ``R`` and a wider level. On today's fixtures no cell is filtered, so this pins the shape of
     the count rather than a difference; the censored half is unpinnable for the reason C13
     gives."""
-    result = go1_fell_logrank
+    result = lattice_logrank
     total_cells = sum(len(result.by_event[e].cells) for e in result.events)
     assert total_cells == result.n_tests == len(result.intervals)
     assert result.n_rejected == sum(
@@ -1081,11 +1143,11 @@ def test_c17_interval_bases_is_exactly_the_three_names_the_spec_states() -> None
 
 
 def test_c17_every_basis_on_every_frame_is_drawn_from_that_tuple(
-    go1_pair: Any, go1_fell_logrank: Any, synth_root: Path
+    lattice_pair: Any, lattice_logrank: Any, synth_root: Path
 ) -> None:
     for result in (
-        go1_pair,
-        go1_fell_logrank,
+        lattice_pair,
+        lattice_logrank,
         synth_diff(synth_root, "moved-a", "moved-b", "fisher_bh"),
         synth_diff(synth_root, "moved-a", "moved-b", "mcnemar_bh"),
     ):
@@ -1097,7 +1159,7 @@ def test_c17_every_basis_on_every_frame_is_drawn_from_that_tuple(
 # ---------- C14: nothing that was already printed moves ----------
 
 
-def test_c14_the_go1_markdown_is_byte_identical_to_the_bare_tree(go1_pair: Any) -> None:
+def test_c14_the_lattice_markdown_is_byte_identical_to_the_bare_tree(lattice_pair: Any) -> None:
     """``to_markdown()`` gains nothing from S24. It is the cheapest surface in the repo to break
     and the dearest to re-baseline, and S21 held the same line for ``coverage``. A digest minted
     before the build exists, never a diff of two renders. **Re-minted by P-1 Session A** off its
@@ -1106,12 +1168,12 @@ def test_c14_the_go1_markdown_is_byte_identical_to_the_bare_tree(go1_pair: Any) 
     0.8's *does not gain a byte* was S24's rule for S24's packet and P-1 retires it (P-1 section 8).
     The interval block's bytes, which S24 owns, are asserted unchanged by P-1's own Y11."""
     # PF4 (PF4.3, PF4.15, PF4.20): the digest is replaced by the facts it guarded.
-    assert_markdown_carries_the_result(go1_pair)
+    assert_markdown_carries_the_result(lattice_pair)
 
 
-def test_c14_the_go1_logrank_markdown_is_byte_identical_too(go1_fell_logrank: Any) -> None:
+def test_c14_the_lattice_logrank_markdown_is_byte_identical_too(lattice_logrank: Any) -> None:
     # PF4 (PF4.3, PF4.13, PF4.15, PF4.20): the digest is replaced by the facts it guarded.
-    assert_markdown_carries_the_result(go1_fell_logrank)
+    assert_markdown_carries_the_result(lattice_logrank)
 
 
 def _close(printed: str, value: float) -> bool:
@@ -1185,34 +1247,38 @@ def assert_markdown_carries_the_result(result: Any) -> None:
 
 
 def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
-    go1_pair: Any, go1_fell_logrank: Any
+    lattice_pair: Any, lattice_logrank: Any
 ) -> None:
     """``headline()``, ``trade_line()`` and ``check()`` gain nothing from S24. The literals are
     the ones the tree produces. **P-1 moved the headline's last token** to the requested method's
     pairing (ADR-052) -- ``unpaired`` under ``fisher_bh`` and ``logrank_bh`` however the runs were
     produced -- which is the Rollout Plan Phase 2 item this docstring once pinned as *current
     wording* so that S24 could not be what moved it; P-1 was."""
-    assert go1_pair.headline() == PAIR_HEADLINE
+    # The headline's counts are the ones the independent Fisher reference gives each event.
+    assert {e: lattice.directions(lattice.fisher(e)) for e in (EVENT, OTHER)} == PAIR_DIRECTIONS
+    assert {e: (lattice_pair.by_event[e].n_lower, lattice_pair.by_event[e].n_higher) for e in lattice_pair.events} == PAIR_DIRECTIONS
+    assert lattice_pair.headline() == PAIR_HEADLINE
     # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no; PF4.20): the trade line is unchanged (its
     # words are fell and rose), and check()'s default gate on "worse" is refused (a DiffError) on the
     # kindless pair rather than failed; check("any") gates over the rows that count.
-    assert go1_pair.trade_line() == PAIR_TRADE_LINE
+    assert lattice_pair.trade_line() == PAIR_TRADE_LINE
     with pytest.raises(diff_mod.DiffError):
-        go1_pair.check()
-    assert go1_pair.check("any") is False
-    assert go1_fell_logrank.headline() == FELL_LOGRANK_HEADLINE
-    assert go1_fell_logrank.trade_line() is None
-    # PF4 (PF4.13): 14 cells now rose under log-rank (stats re-check README, section 2).
+        lattice_pair.check()
+    assert lattice_pair.check("any") is False
+    assert lattice_logrank.headline() == LOGRANK_HEADLINE
+    assert lattice_logrank.trade_line() is None
+    # PF4 (PF4.13): 12 cells rose under log-rank (lattice.logrank: the load 100 conditions).
     # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the rise is counted in direction words
     # (n_higher), n_worse is None, check() is refused and check("higher") fails.
-    fell = go1_fell_logrank.by_event["fell"]
-    assert (fell.n_lower, fell.n_higher, fell.n_worse, fell.n_safer) == (182, 14, None, None)
+    tripped = lattice_logrank.by_event[EVENT]
+    assert lattice.directions(lattice.logrank(EVENT)) == LOGRANK_DIRECTIONS
+    assert (tripped.n_lower, tripped.n_higher, tripped.n_worse, tripped.n_safer) == (*LOGRANK_DIRECTIONS, None, None)
     with pytest.raises(diff_mod.DiffError):
-        go1_fell_logrank.check()
-    assert go1_fell_logrank.check("any") is False and go1_fell_logrank.check("higher") is False
+        lattice_logrank.check()
+    assert lattice_logrank.check("any") is False and lattice_logrank.check("higher") is False
 
 
-def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
+def test_c14_the_cells_columns_are_unchanged(lattice_pair: Any) -> None:
     """ADR-051: the interval is its own frame, not two columns on ``cells``. ``CELLS_COLUMNS``
     has twelve pin sites across ``diff.py`` and two frozen M6 oracles, and M7's multi oracles
     build that frame by hand; S21 measured this cost and declined to pay it for ``coverage``,
@@ -1233,8 +1299,8 @@ def test_c14_the_cells_columns_are_unchanged(go1_pair: Any) -> None:
         "flaggable", "mde_moves_with", "mde_rise_verdict", "mde_fall_verdict", "competing_shift",
         "ci_lo", "ci_hi", "ci_level", "ci_method",
     )
-    for event in go1_pair.events:
-        assert list(go1_pair.by_event[event].cells.columns) == list(CELLS_COLUMNS)
+    for event in lattice_pair.events:
+        assert list(lattice_pair.by_event[event].cells.columns) == list(CELLS_COLUMNS)
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
@@ -1254,20 +1320,20 @@ def as_0_0_1_wrote_it(text: str) -> str:
 def e14_builder() -> tuple[Any, Any, Any]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
     ``_report_pair`` builds them: the multi, the dark-theme report and the light-theme receipt."""
-    store = Store(GO1_ROOT)
-    ma, mb = store.manifest(GO1_A), store.manifest(GO1_B)
+    store = Store(LATTICE_ROOT)
+    ma, mb = store.manifest(RUN_A), store.manifest(RUN_B)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", diff_mod.UnpairedAnalysis)
         multi = multi_diff(
-            store.read(GO1_A, meta=False), store.read(GO1_B, meta=False), events=["fell"],
+            store.read(RUN_A, meta=False), store.read(RUN_B, meta=False), events=[EVENT],
             manifest_a=ma, manifest_b=mb,
         )
-    title = f"{GO1_A} vs {GO1_B}: fell"
+    title = f"{RUN_A} vs {RUN_B}: {EVENT}"
     report = build_multi_report(
-        multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw"), manifests=(ma, mb)
+        multi, ReportSpec(title=title, x_axis=lattice.X, y_axis=lattice.Y), manifests=(ma, mb)
     )
     receipt = build_multi_report(
-        multi, ReportSpec(title=title, x_axis="mu", y_axis="push_pct_bw", theme="light"),
+        multi, ReportSpec(title=title, x_axis=lattice.X, y_axis=lattice.Y, theme="light"),
         manifests=(ma, mb),
     )
     return multi, report, receipt
@@ -1300,19 +1366,20 @@ def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
 
 def assert_e14_builder_facts() -> None:
     """PF4 (PF4.3, PF4.15, PF4.20): what the three E14 digests guarded, as facts. The builder's
-    report markdown, receipt and heatmap each carry the headline counts (the published 60 and 0,
-    in direction words: ``fell`` has no kind), the worst-powered unchanged limit (34pp, the Go1
-    number fix), and no ``safer`` or ``worse``; the markdown and the receipt carry the interval
-    line with this family's R and m; the heatmap labels every one of the 400 cells with its delta
-    in percentage points."""
+    report markdown, receipt and heatmap each carry the headline counts (22 and 0, the ones
+    ``lattice.fisher`` gives, in direction words: ``tripped`` has no kind), the worst-powered
+    unchanged limit (recomputed), and no ``safer`` or ``worse``; the markdown and the receipt carry
+    the interval line with this family's R and m; the heatmap labels every one of the 72 cells with
+    its delta in percentage points."""
     multi, report, receipt = e14_builder()
-    ev = multi.by_event["fell"]
-    assert ev.kind is None and (ev.n_lower, ev.n_higher) == (60, 0)
-    counts = f"fell: {ev.n_lower} lower, {ev.n_higher} higher"
+    ev = multi.by_event[EVENT]
+    assert lattice.directions(lattice.fisher(EVENT)) == PAIR_DIRECTIONS[EVENT]
+    assert ev.kind is None and (ev.n_lower, ev.n_higher) == PAIR_DIRECTIONS[EVENT] == (22, 0)
+    counts = f"{EVENT}: {ev.n_lower} lower, {ev.n_higher} higher"
     # PF4 re-freeze (PF4.22, PF4.27): the worst-powered unchanged limit is Fisher's exact limit at
-    # q / M (M = 400 here), the larger of the two directions, so Go1's 34 points become about 47;
-    # recomputed from the stats file's references, and the sentence names the direction that limit
-    # is for (a fall from a cell where every run fell has no rise to detect).
+    # q / M (M = 72 here), the larger of the two directions; recomputed from the stats file's
+    # references, and the sentence names the direction that limit is for (a fall from a cell where
+    # every run tripped has no rise to detect).
     value, way = ref_worst_unchanged(ev, multi.q / multi.n_tests)
     assert abs(ev.max_mde_unchanged - value) <= 1e-4 + 1e-12, (ev.max_mde_unchanged, value)
     worst = f"{ev.max_mde_unchanged * 100:.0f}pp"
@@ -1329,7 +1396,7 @@ def assert_e14_builder_facts() -> None:
     label_group = svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
     labels = re.findall(r">([^<]*)</text>", label_group)
     delta = dict(zip(ev.cells["config_hash"], ev.cells["delta"], strict=True))
-    assert len(ids) == len(labels) == len(delta) == 400, (len(ids), len(labels), len(delta))
+    assert len(ids) == len(labels) == len(delta) == lattice.CELLS, (len(ids), len(labels), len(delta))
     for short, label in zip(ids, labels, strict=True):
         (full,) = [h for h in delta if h.startswith(short)]
         assert label == f"{delta[full] * 100:.1f}", (short, label, delta[full])
@@ -1374,7 +1441,7 @@ def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: 
         assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
 
 
-def test_c14_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_path: Path) -> None:
+def test_c14_the_lattice_report_still_reproduces_the_three_digests_s21_minted(tmp_path: Path) -> None:
     """The three digests S21's E14 pins, restated rather than imported so two frozen oracles do
     not couple. ``report`` renders through ``MultiDiffResult``; if S24 leaks a byte into
     ``to_markdown``, the receipt or the heatmap, one of these three moves.
@@ -1390,7 +1457,7 @@ def test_c14_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_pa
     fractions, so its digest moves to the builder's heatmap, and the file the command line writes
     is checked against that one fact by fact."""
     out = tmp_path / "report"
-    code, text, _ = run_cli(["--store", str(GO1_ROOT), *E14_ARGV, "--out", str(out)])
+    code, text, _ = run_cli(["--store", str(LATTICE_ROOT), *E14_ARGV, "--out", str(out)])
     assert code == 0, text
     # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded.
     assert_e14_builder_facts()
@@ -1398,41 +1465,50 @@ def test_c14_the_go1_report_still_reproduces_the_three_digests_s21_minted(tmp_pa
     # checked by its facts rather than a new digest.
     multi, report, _ = e14_builder()
     assert_cli_heatmap_is_the_builders_under_rule_10(
-        (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event["fell"].cells
+        (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event[EVENT].cells
     )
 
 
 # ---------- C15: the BH family does not move ----------
 
 
-def test_c15_the_family_its_q_and_its_pairing_are_unchanged(go1_pair: Any) -> None:
+def test_c15_the_family_its_q_and_its_pairing_are_unchanged(lattice_pair: Any) -> None:
     """S24 adds an interval around a number that is already there. It does not retest, rescope
-    or reweight anything: ``n_tests`` is the same 800, ``q`` the same 0.05, ``seed_identity_match`` (``paired`` until P-1) the same
+    or reweight anything: ``n_tests`` is the same 144, ``q`` the same 0.05, ``seed_identity_match`` (``paired`` until P-1) the same
     ``True``, and ``coverage`` the same frame S21 built."""
-    assert go1_pair.n_tests == 800
-    assert go1_pair.q == 0.05
-    assert go1_pair.seed_identity_match is True
-    assert go1_pair.truncated == 0
-    assert len(go1_pair.coverage) == 400
-    assert sha256_of_text(go1_pair.coverage.to_json(orient="records")) == COVERAGE_SHA256
+    assert lattice_pair.n_tests == 2 * lattice.CELLS == 144
+    assert lattice_pair.q == 0.05
+    assert lattice_pair.seed_identity_match is True
+    assert lattice_pair.truncated == 0
+    assert len(lattice_pair.coverage) == lattice.CELLS == 72
+    # The coverage digest is replaced by the facts it guarded: one row per condition of the design,
+    # every row of both runs counted and holding an outcome, every condition comparable.
+    assert_coverage_is_the_design(lattice_pair)
 
 
 def test_c15_every_q_value_and_every_delta_on_cells_is_unchanged(
-    go1_pair: Any, go1_fell_logrank: Any
+    lattice_pair: Any, lattice_logrank: Any
 ) -> None:
     """The per-cell BH output itself, at full float precision. A build that reorders the rows
     fed to ``bh``, or slips the interval construction in before the BH pass rather than after
     it, moves one of these digests. Section 3.3 is exact about the order: after the BH pass and
-    after ``by_event``, because the level cannot be known before ``R``."""
-    assert sha256_of_column(go1_pair, "q") == PAIR_QCOLUMN_SHA256
-    assert sha256_of_column(go1_pair, "delta") == PAIR_DELTA_SHA256
-    assert sha256_of_column(go1_fell_logrank, "q") == FELL_LOGRANK_QCOLUMN_SHA256
+    after ``by_event``, because the level cannot be known before ``R``.
+
+    The three column digests are replaced by the facts they guarded: the pair's q column is BH over
+    its p column, and both are the Fisher reference's exactly (``lattice.fisher``, one family over
+    both events); its delta column is the naive difference of the design's counts; the log-rank q
+    column is BH over its p column, and each p and q is the independent log-rank reference's
+    (``lattice.logrank``, lifelines on the stored times) to 1e-12 relative."""
+    fisher = {e: lattice.fisher(e) for e in lattice_pair.events}
+    assert_q_column_is_bh_over_its_p_column(lattice_pair, fisher, (EVENT, OTHER))
+    assert_delta_column_is_the_naive_difference(lattice_pair, (EVENT, OTHER))
+    assert_logrank_column_is_the_reference(lattice_logrank)
 
 
-def test_c15_to_json_gains_the_six_keys_and_keeps_every_key_it_had(go1_pair: Any) -> None:
+def test_c15_to_json_gains_the_six_keys_and_keeps_every_key_it_had(lattice_pair: Any) -> None:
     """Additive, like ``coverage`` before it. The six new keys are present and every key the
     bare tree emitted is still there."""
-    payload = go1_pair.to_json()
+    payload = lattice_pair.to_json()
     for key in (
         "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon", "n_tests", "n_not_comparable",
         "dropped_a", "dropped_b", "truncated", "inferred", "non_event",
@@ -1446,7 +1522,7 @@ def test_c15_to_json_gains_the_six_keys_and_keeps_every_key_it_had(go1_pair: Any
         assert key in payload, key
 
 
-def test_c15_a_hand_built_result_still_constructs_without_any_new_field(go1_pair: Any) -> None:
+def test_c15_a_hand_built_result_still_constructs_without_any_new_field(lattice_pair: Any) -> None:
     """Section 8's trap 8, and the S21 lesson repeated. M7's two oracles build
     ``MultiDiffResult`` by hand from keywords; an undefaulted new field breaks every one of
     them. Rebuilt here from the fields that existed before this packet, and the result must
@@ -1456,7 +1532,7 @@ def test_c15_a_hand_built_result_still_constructs_without_any_new_field(go1_pair
         "n_not_comparable", "dropped_a", "dropped_b", "truncated", "trades", "inferred",
         "non_event",
     )
-    bare = diff_mod.MultiDiffResult(**{name: getattr(go1_pair, name) for name in before})
+    bare = diff_mod.MultiDiffResult(**{name: getattr(lattice_pair, name) for name in before})
     assert bare.intervals is None
     assert bare.interval_level is None and bare.alpha_star is None
     assert bare.n_rejected == 0 and bare.n_interval_only == 0 and bare.n_verdict_only == 0

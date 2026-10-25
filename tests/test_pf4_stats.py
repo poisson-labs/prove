@@ -603,7 +603,7 @@ def test_pf4_43_where_as_hazard_reaches_one_a_fall_cannot_be_reached_and_reads_n
     """Reading R40: every run of A fell, at steps 1 to 9, so at A's last time its hazard is 1 and
     1 - (1 - 1)^theta stays 1 for every theta: B's incidence cannot fall under the discrete mapping. The
     rise has no room, the fall is none detectable (never a change of 0), and the condition has no
-    limit. On Go1 189 conditions are like this."""
+    limit. On the lattice pair 37 conditions are like this (every run of its before arm tripped)."""
     a = {"c": [(i, "fell", 1.0 + (i % 9)) for i in range(40)]}
     row = _cell(_compare(a, a, method="logrank_bh", q=Q / 18), "fell", "c")
     assert row["mde_basis"] == "test"
