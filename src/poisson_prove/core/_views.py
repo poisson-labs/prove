@@ -457,9 +457,13 @@ def save(store: Any, result: Comparison, *, _notes: list[str]) -> ArtifactRef:
     except (OSError, ValueError, pa.ArrowException) as exc:
         reason = getattr(exc, "strerror", None) or str(exc)
         raise Unsaved(kind, reason) from exc
-    if written:
-        refresh_ui(store.root)
-    return ArtifactRef(kind=kind, id=identity, path=f".poisson/artifacts/{kind}/{identity}")
+    unrefreshed = refresh_ui(store.root) if written else None
+    return ArtifactRef(
+        kind=kind,
+        id=identity,
+        path=f".poisson/artifacts/{kind}/{identity}",
+        unrefreshed=unrefreshed,
+    )
 
 
 @_operation
@@ -1432,16 +1436,23 @@ def _open_to_others(folder: Path) -> None:
     os.chmod(folder, 0o777 & ~mask)
 
 
-def refresh_ui(root: Path) -> None:
+def refresh_ui(root: Path) -> str | None:
     """Rebuild the UI a store already has; a store with none gets none from a write (``ui``
-    builds the first). The pages are derived, so a failed refresh leaves the last ones and says
-    nothing: the next ``ui`` builds them whole and says what is wrong."""
+    builds the first). The pages are derived, so a failed refresh leaves the previous ones as
+    they are and returns why, for the face to say in one line; ``None`` when nothing failed."""
     if not (root / ".poisson" / "ui").is_dir():
-        return
+        return None
     try:
         build_pages(root)
-    except Exception:  # noqa: BLE001 - derived files; the next build is whole
-        pass
+    except A.NewerFormat as exc:
+        return str(exc)
+    except DamagedArtifact as exc:
+        return str(exc)
+    except OSError as exc:
+        return exc.strerror or str(exc)
+    except Exception as exc:  # noqa: BLE001 - derived files; the next ui build says what is wrong
+        return f"{type(exc).__name__}: {exc}"
+    return None
 
 
 @_operation

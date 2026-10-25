@@ -600,7 +600,7 @@ def _require_known_events(verb: str, events: Sequence[str] | None, *frames: pd.D
         where = "either run" if len(frames) > 1 else "the run"
         raise UnknownEvent(
             f'{verb}: event "{missing[0]}" does not appear in {where}. '
-            f'Present: {", ".join(present)}.'
+            f"Present: {', '.join(present)}."
         )
 
 
@@ -874,6 +874,7 @@ def compare(
         q=q,
         all_methods=methods == "all",
     )
+
     @functools.cache
     def grown() -> TreeResult | None:
         # Grown when first read, so a face that refuses on its own flags first (serve's axes)
@@ -2117,8 +2118,18 @@ def start(
     events.emit(end, {"status": result.payload.get("status"), "kept": done_now - errored_now})
     from poisson_prove.core._views import refresh_ui
 
-    refresh_ui(store.root)
+    unrefreshed = refresh_ui(store.root)
+    if unrefreshed is not None:
+        result = dataclasses.replace(
+            result,
+            notes=(*result.notes, _dashboard_note(unrefreshed)),
+        )
     return result
+
+
+def _dashboard_note(why: str) -> str:
+    """The one line a face prints when a write could not refresh the dashboard's pages."""
+    return f"the dashboard's pages were not refreshed ({why}); run {COMMAND} ui"
 
 
 def _starting(
@@ -2205,7 +2216,7 @@ def _sweep_result(
         commonest = _commonest_error(st, run_id)
         sentence = (
             f'every rollout errored in run "{name}": {n(no_outcome)} of {n(kept)}, '
-            f'commonest {commonest or "unknown"}'
+            f"commonest {commonest or 'unknown'}"
         )
         if commonest is not None:
             nexts.append(f"{COMMAND} inspect latest --event {commonest}")

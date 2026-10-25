@@ -366,6 +366,10 @@ class ArtifactRef:
     kind: str
     id: str
     path: str
+    #: Why the dashboard's pages were not refreshed after the save, when they were not; the
+    #: face says so in one line and names ``ui``. ``None`` when nothing failed or nothing was
+    #: written.
+    unrefreshed: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         """``{"schema": "poisson-prove.artifact-ref/1", "kind", "id", "path"}``."""

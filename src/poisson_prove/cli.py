@@ -1165,6 +1165,12 @@ def _save(io: _IO, store: Any, result: core.Comparison) -> core.ArtifactRef | No
     except core.Unsaved as exc:
         io.err_line(f"note: {exc}")
         return None
+    if saved.unrefreshed is not None:
+        # The pages are derived and the previous ones stand; the one line says so and names ui.
+        io.err_line(
+            f"note: the dashboard's pages were not refreshed ({saved.unrefreshed}); "
+            f"run {_COMMAND} ui"
+        )
     return saved
 
 
