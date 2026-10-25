@@ -1668,7 +1668,7 @@ def _report_pair(
         )
     first = core.resolve(store, "previous" if a is None else a)
     second = core.resolve(store, "latest" if b is None else b)
-    named = core.runs(store)
+    named = core.runs(store, counted=False)
     names = {run.run_id: run.run_name for run in named}
     out_dir = _prepare_out_dir(
         ns,
@@ -1722,8 +1722,11 @@ def _report_pair(
     if ns.json:
         doc = result.to_json()
         payload = {"out": str(out_dir), "wrote": [str(p) for p in written]}
+        # Under --methods all the comparison's document holds one per method; the report's
+        # carries the one it rendered, flat.
+        body = doc[result.method] if result.others else doc
         dropped = ("schema", "verdict", "sentence", "next", "omnibus", "tree")
-        payload.update({k: v for k, v in doc.items() if k not in dropped})
+        payload.update({k: v for k, v in body.items() if k not in dropped})
         _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
         return 0
     _wrote(io, out_dir, written)
@@ -1750,11 +1753,14 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
             f"{', '.join(given)}: diff-only flag{'s' if len(given) > 1 else ''}; "
             f"a single-run report compares nothing ({_REPORT_FORMS})"
         )
-    detail = core.run(store, run_id, events=ns.event, horizon=ns.horizon, fix=ns.fix)
-    named = core.runs(store)
+    named = core.runs(store, counted=False)
+    name = next((run.run_name for run in named if run.run_id == run_id), run_id)
     out_dir = _prepare_out_dir(
-        ns, f"./prove-report-{_slug(detail.run_name)}", _named_words(state.argv, named)
+        ns, f"./prove-report-{_slug(name)}", _named_words(state.argv, named)
     )
+    # The word as typed, so the note on what latest, previous and the numbers leave out is said.
+    detail = core.run(store, word, events=ns.event, horizon=ns.horizon, fix=ns.fix)
+    _notes_of(io, detail)
     events = detail.events
     spec = ReportSpec(
         title=ns.title if ns.title else f"{detail.run_name}: {', '.join(events)}",

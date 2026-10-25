@@ -32,8 +32,10 @@ print(__version__, rollout({"task_id": "search"}, 0).outcome)
 
 Compare two runs from Python, getting the result objects the command line prints.
 
-- `diff`: compare two runs; the result is what `poisson-prove diff --json` prints.
-- `check`: a gate over two runs; the result is what `poisson-prove check --json` prints.
+- `diff`: compare two runs; the result's `to_json()` is what `poisson-prove diff --json`
+  prints, under the comparison's own schema.
+- `check`: a gate over two runs; the result's `to_json()` is what `poisson-prove check --json`
+  prints, under the check's own schema.
 - `runs`: every run in a store, newest first, named and numbered.
 - `resolve`: the id of the run a word names: `latest`, `previous`, `#1`, a name or an id.
 - `Comparison`: the result of `diff`: `verdict`, `sentence`, `method`, `method_chosen`, `rows`,

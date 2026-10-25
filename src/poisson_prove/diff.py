@@ -897,9 +897,13 @@ class EventDiff:
         cached: list[dict[str, Any]] | None = self.__dict__.get("_records")
         if cached is None:
             cached = self._build_records()
-            # Every surface reads the same records several times over; they are built once.
+            # Every surface reads the same records several times over; they are built once, and
+            # each caller gets its own copy, down to the share and config mappings in a cell.
             object.__setattr__(self, "_records", cached)
-        return [dict(cell) for cell in cached]
+        return [
+            {key: dict(value) if isinstance(value, dict) else value for key, value in cell.items()}
+            for cell in cached
+        ]
 
     def _build_records(self) -> list[dict[str, Any]]:
         from poisson_prove.stats import share

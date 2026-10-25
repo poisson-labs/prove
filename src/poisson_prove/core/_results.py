@@ -225,7 +225,7 @@ class Comparison(Result):
     run_b: str = ""
     names: Mapping[str, str] = field(default_factory=dict)
     multi: Any = None
-    tree: Any = None
+    grow: Callable[[], Any] | None = field(default=None, repr=False)
     others: Mapping[str, Any] = field(default_factory=dict)
     manifests: tuple[Any, ...] = ()
     writers: Mapping[str, str] = field(default_factory=dict)
@@ -240,6 +240,12 @@ class Comparison(Result):
     @property
     def method(self) -> str:
         return str(self.multi.method)
+
+    @cached_property
+    def tree(self) -> Any:
+        """The layered report's tree over this comparison, grown the first time it is read;
+        ``None`` when there is none to grow."""
+        return None if self.grow is None else self.grow()
 
     @cached_property
     def _doc(self) -> dict[str, Any]:

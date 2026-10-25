@@ -4,6 +4,7 @@ asked, exited or opened. A face parses its input, calls these, and renders what 
 from __future__ import annotations
 
 import dataclasses
+import functools
 import importlib.util
 import json
 import math
@@ -344,8 +345,10 @@ def _with_names(message: str, idx: Index) -> str:
 
 
 @_operation
-def runs(store: Any, *, _notes: list[str]) -> RunList:
-    """Every run in the store, newest first, named, numbered, with its counts."""
+def runs(store: Any, *, counted: bool = True, _notes: list[str]) -> RunList:
+    """Every run in the store, newest first, named, numbered, with its counts. With
+    ``counted=False`` no run's rows are read: each entry has its manifest's facts and no
+    ``rows`` or ``no_outcome``, for a face that needs only the names."""
     store = _opened(store)
     st = Store(store.root)
     idx = _index(store)
@@ -366,8 +369,14 @@ def runs(store: Any, *, _notes: list[str]) -> RunList:
                     "backend": m.backend,
                     "target_id": m.target_id,
                     "t_unit": m.t_unit,
-                    "rows": st.count(named.run_id),
-                    "no_outcome": st.tally(named.run_id).no_outcome,
+                    **(
+                        {
+                            "rows": st.count(named.run_id),
+                            "no_outcome": st.tally(named.run_id).no_outcome,
+                        }
+                        if counted
+                        else {}
+                    ),
                     "created_at": m.created_at,
                     "poisson_prove_version": (
                         version_as_recorded(m.poisson_prove_version)
@@ -854,18 +863,26 @@ def compare(
         q=q,
         all_methods=methods == "all",
     )
-    nested: TreeResult | None = None
-    if with_tree and multi.n_tests > 0:
-        nested = _tree_of(
-            multi,
-            frames,
-            manifests,
-            by=by,
-            permutations=DEFAULT_PERMUTATIONS if permutations is None else permutations,
-            seed=DEFAULT_SEED if seed is None else seed,
-            max_group_mde=max_group_mde,
-            depth=DEFAULT_DEPTH if depth is None else depth,
-        )
+    @functools.cache
+    def grown() -> TreeResult | None:
+        # Grown when first read, so a face that refuses on its own flags first (serve's axes)
+        # spends no permutations; a refusal from the tree is still a Refusal.
+        if not with_tree or multi.n_tests == 0:
+            return None
+        try:
+            return _tree_of(
+                multi,
+                frames,
+                manifests,
+                by=by,
+                permutations=DEFAULT_PERMUTATIONS if permutations is None else permutations,
+                seed=DEFAULT_SEED if seed is None else seed,
+                max_group_mde=max_group_mde,
+                depth=DEFAULT_DEPTH if depth is None else depth,
+            )
+        except _REFUSABLE as exc:
+            raise refusal(str(exc), getattr(exc, "nexts", ())) from exc
+
     chosen = "default" if method is None else "named"
     word = multi.comparison_verdict()
     headline = _with_method(multi.headline().splitlines()[0], multi.method)
@@ -878,7 +895,8 @@ def compare(
             payload = {multi.method: payload, **{m: d.to_json() for m, d in others.items()}}
             payload["threshold"] = multi.threshold
             payload["threshold_source"] = multi.threshold_source
-        if nested is not None and verb == "diff":
+        nested = grown() if verb == "diff" else None
+        if nested is not None:
             payload = {**payload, "omnibus": nested.root.to_json(), "tree": nested.to_json()}
         return payload
 
@@ -902,7 +920,7 @@ def compare(
         run_b=run_b,
         names={r.run_id: r.name for r in idx.runs},
         multi=multi,
-        tree=nested,
+        grow=grown,
         others=others,
         manifests=manifests,
         writers=_old_writer(manifests),
@@ -1863,7 +1881,9 @@ def _commonest_error(store: Store, run_id: str) -> str | None:
 
 class _Events:
     """The run's event log and the face's callback, one event at a time: progress at most once
-    a second, plus once just before the end."""
+    a second, plus once just before the end. An event that comes before the run's folder exists
+    (a remote backend writes the folder when its first results arrive) is written as soon as the
+    folder is there, ahead of the next one."""
 
     def __init__(
         self, store_root: Path, run_id: str, on_event: Callable[[Event], None] | None
@@ -1871,13 +1891,17 @@ class _Events:
         self.path = store_root / run_id / "events.jsonl"
         self.on_event = on_event
         self.last_progress: float | None = None
+        self.unwritten: list[Event] = []
 
     def emit(self, kind: str, detail: Mapping[str, Any]) -> None:
         event = Event(kind, detail)
+        self.unwritten.append(event)
         if self.path.parent.is_dir():
             with self.path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(event.to_json(), allow_nan=False) + "\n")
+                for held in self.unwritten:
+                    fh.write(json.dumps(held.to_json(), allow_nan=False) + "\n")
                 fh.flush()
+            self.unwritten.clear()
         if self.on_event is not None:
             self.on_event(event)
 
@@ -1960,13 +1984,22 @@ def start(
     # A resumed run that has no log yet (one 0.0.1 wrote) starts its log at ``resumed``.
     events = _Events(store.root, p.run_id, on_event)
     total = len(p.pairs)
-    counts = {"kept": 0, "errored": 0}
+    began = time.monotonic()
 
-    def on_progress(done: int, total_: int, errored: int | None = None) -> None:
-        counts["kept"] = done
-        events.progress(done, done, counts["errored"] if errored is None else errored, total_)
+    def on_progress(done: int, total_: int) -> None:
+        # Counted over the whole run, so a resumed run's progress ends where its last event does;
+        # an errored rollout is told apart only once the run is read at the end.
+        shown = p.already_stored + done
+        events.progress(shown, shown, 0, p.already_stored + total_)
         if cancel is not None and cancel.is_set() and done < total_:
             raise _Cancelled
+
+    def closing_progress() -> int:
+        kept = st.count(p.run_id)
+        events.flush_progress(
+            {"done": kept, "kept": kept, "errored": 0, "total": total + p.already_stored}
+        )
+        return kept
 
     started_once = {"done": False}
 
@@ -2006,26 +2039,34 @@ def start(
             )
         else:
             summary = _local_run(p, plan, st, o, on_progress, begin)
-            stopped_by_cancel = summary.stopped_by == "cancel"
+    except _Cancelled:
+        # Set during a rollout: the run stops at the next boundary, partial and resumable.
+        stopped_by_cancel = True
+        summary = RunSummary(
+            run_id=p.run_id,
+            n_ok=st.count(p.run_id),
+            n_errored=0,
+            n_timeout=0,
+            wall_time=time.monotonic() - began,
+            stopped_by="cancel",
+            complete=False,
+        )
     except KeyboardInterrupt as exc:
         if p.run_id in st.runs():
             begin()
             sentence, nexts = _kept(st, store, p.run_id, len(p.pairs))
-            events.flush_progress(
-                {
-                    "done": st.count(p.run_id),
-                    "kept": st.count(p.run_id),
-                    "errored": 0,
-                    "total": total,
-                }
-            )
-            events.emit("interrupted", {"kept": st.count(p.run_id), "status": "partial"})
+            kept = closing_progress()
+            events.emit("interrupted", {"kept": kept, "status": "partial"})
             raise Interrupted(f"interrupted: {sentence}", nexts) from exc
         raise
     except _REFUSABLE as exc:
         if p.run_id in st.runs():
+            begin()
             sentence, nexts = _kept(st, store, p.run_id, len(p.pairs))
-            raise Stopped(sentence, nexts, _final(f'{exc} (run "{p.run_id}")')) from exc
+            error = _final(f'{exc} (run "{p.run_id}")')
+            kept = closing_progress()
+            events.emit("interrupted", {"kept": kept, "status": "partial", "error": error})
+            raise Stopped(sentence, nexts, error) from exc
         raise
     begin()
     if before is not None:
@@ -2081,27 +2122,15 @@ def _local_run(
         begin()
         on_progress(done, total)
 
-    try:
-        return run_local(
-            p,
-            plan.rollout,
-            st,
-            episode_timeout=o.get("episode_timeout"),
-            max_rollouts=o.get("max_rollouts"),
-            batch_size=DEFAULT_BATCH_SIZE if batch is None else batch,
-            on_progress=progress,
-        )
-    except _Cancelled:
-        kept = st.count(p.run_id)
-        return RunSummary(
-            run_id=p.run_id,
-            n_ok=kept,
-            n_errored=0,
-            n_timeout=0,
-            wall_time=0.0,
-            stopped_by="cancel",
-            complete=False,
-        )
+    return run_local(
+        p,
+        plan.rollout,
+        st,
+        episode_timeout=o.get("episode_timeout"),
+        max_rollouts=o.get("max_rollouts"),
+        batch_size=DEFAULT_BATCH_SIZE if batch is None else batch,
+        on_progress=progress,
+    )
 
 
 def _sweep_result(

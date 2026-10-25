@@ -1,4 +1,4 @@
-"""M12 -- Trace: one immutable schema for what a target actually did.
+"""Trace: one immutable schema for what a target actually did.
 
 ``poisson-prove.trace/1`` carries a span forest with wall-clock start and end, parentage and
 code location, plus the three ways one gets built: converted from OpenTelemetry spans
@@ -6,14 +6,14 @@ code location, plus the three ways one gets built: converted from OpenTelemetry 
 explicitly by the user (:func:`collect` / :func:`record` / :func:`step`) for the calls
 nothing else can see.
 
-The module performs no acquisition of any kind (ADR-025): the converters parse mappings
+The module performs no acquisition of any kind: the converters parse mappings
 someone else collected and this file opens nothing, reads nothing and patches nothing. It
 imports only the standard library, so neither converter puts an OTel or LiteLLM package on
 core's import graph.
 
-Three values are built in exactly one place each, because a value built twice is ADR-021
-again: :data:`SCHEMA` (ADR-024), :data:`OTEL_SEMCONV_VERSION` (ADR-024) and the span clock
-helper that mints ``start_ns`` and ``end_ns`` (ADR-023).
+Three values are built in exactly one place each, because a value built twice drifts:
+:data:`SCHEMA`, :data:`OTEL_SEMCONV_VERSION` and the span clock helper that mints
+``start_ns`` and ``end_ns``.
 """
 
 from __future__ import annotations

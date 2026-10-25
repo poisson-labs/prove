@@ -1,9 +1,8 @@
-"""Per-run step statements: what a run declared against what its stored spans show (A10).
+"""Per-run step statements: what a run declared against what its stored spans show.
 
-This is A10's half of the module: ``DeclarationCheck`` and ``declaration_check``. A9 adds its
-half -- ``StepAggregates``, ``KindTally``, ``CaptureCheck`` -- to this file without touching
-this one. Everything here is a set or the difference of two sets; nothing is derived, nothing
-is persisted, no rate is computed and no trace object is constructed.
+``DeclarationCheck`` and ``declaration_check``. Everything here is a set or the difference of
+two sets; nothing is derived, nothing is persisted, no rate is computed and no trace object is
+constructed.
 """
 
 from __future__ import annotations
