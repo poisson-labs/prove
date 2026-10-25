@@ -76,6 +76,8 @@ class WrittenFiles(Result):
 
     KIND: ClassVar[str] = "written-files"
     paths: tuple[str, ...] = ()
+    #: The text that would be written, when nothing was (``init --agent --print``).
+    text: str = ""
 
 
 @dataclass(frozen=True, eq=False)
