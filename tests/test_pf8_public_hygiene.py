@@ -145,8 +145,7 @@ MOCK = "poisson_prove.examples.mock_agent"
 # ---------- what section 9 decides ----------
 
 #: Section 9.1: the files that leave the repository (Q35, Q36), as paths relative to the
-#: repository; a folder ends in ``/``. ``scripts/`` goes whole: its one file that stays,
-#: ``build_golden_fixture.py``, lives beside the fixture it builds.
+#: repository; a folder ends in ``/``. ``scripts/`` goes whole.
 REMOVED = (
     "CLAUDE.md",
     "SCOPE.md",
@@ -266,7 +265,7 @@ FAMILIES = (
              # this spec's and its siblings' ids
              "PF0.1", "PF10", "Q17", "TF1", "FD8", "BD3", "LST12", "K8", "R1"),
     ), passes=("HTTP 503", "Python 3.11", "gpt-4.1-mini", "v0.1.0", "sha256", "utf8", "x86_64", "int64", "h1",
-               "2026-10-24T17:16:53Z", "20260915T210140Z-4847", "cp1252", "U+2192", "a 2x2 table", "rule 10", "#F88685")),
+               "2026-10-24T17:16:53Z", "20260115T090000Z-7316", "cp1252", "U+2192", "a 2x2 table", "rule 10", "#F88685")),
     Family("session word", (
         term("Phase and a number", r"\bphase\s+[0-9]+\b", "Phase 2", "phase 3", flags=IC),
         term("Session A or B", r"\b[Ss]ession\s+[AB]\b", "Session A", "session B"),

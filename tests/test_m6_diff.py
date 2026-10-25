@@ -1,21 +1,22 @@
 """Oracle for M6: run diff with Fisher/BH, paired McNemar, log-rank, and MDE.
 
-Golden tests (I1, I2, I8, I10, I12, I17, I18) run on the committed Go1 fixture through
-``go1_store``; frames are produced with ``proofload.survival.censor``. Oracle tests (I3, I6,
+Golden tests (I1, I2, I8, I10, I12, I17, I18) run on the generated lattice pair
+(``tests/lattice.py``) through ``lattice_store``; frames are produced with ``proofload.survival.censor``. Oracle tests (I3, I6,
 I7, I9) import ``statsmodels`` / ``lifelines`` with ``pytest.importorskip`` in the test
 body and run hypothesis on an inner function, so a missing dev extra is a clean skip.
 I4 is a seeded Monte Carlo. I11-I14 and I16 use small synthetic censored frames built
 directly with the six columns M6 reads: ``config_hash``, ``config``, ``replicate_index``,
 ``t``, ``observed``, ``horizon``.
 
-Per-cell published p/q values for I1 come from ``tests/fixtures/go1/golden.json`` under
-``cells`` when those entries carry ``fisher_p`` / ``fisher_q``, otherwise from the source
-diff JSON, and that test skips when neither is available. The 60/0 assertion never skips.
+Per-cell reference p/q values for I1 come from ``lattice.fisher()``: scipy's two-sided Fisher
+exact test on the design's counts per condition and one BH family over all of them, computed
+in the test suite and never by Prove, so neither I1 test skips. The 22/0 assertion is the
+reference's count, pinned.
 
 Notes for the implementation session:
 
-- The published ``fisher_q`` is BH over all 400 cells. BH over only cells with at least
-  one event gives 61 safer, not 60.
+- The reference ``q`` is BH over all 72 conditions. BH over only the conditions with at least
+  one event gives 23 lower, not 22.
 - I9's oracle is ``statsmodels.stats.proportion.power_proportions_2indep`` inverted by
   bisection. It uses the pooled-null and alternative standard errors of section 3, which
   ``NormalIndPower`` (Cohen's h) does not. The reference bisection runs to 1e-10, so the
@@ -29,9 +30,7 @@ Notes for the implementation session:
   statistic picks up a ~1e-30 residue and ``chi2.sf`` returns just under 1.0.
 """
 
-import gzip
 import json
-import shutil
 from pathlib import Path
 
 import numpy as np
@@ -53,19 +52,17 @@ from poisson_prove.diff import (
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import censor
 
-ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_DIR = ROOT / "tests" / "fixtures" / "go1"
-GOLDEN_JSON = FIXTURE_DIR / "golden.json"
-#: The published v0-v1 diff, committed gzipped beside the fixture (front-door spec section 9.1).
-DIFF_JSON = ROOT / "tests" / "fixtures" / "go1" / "source" / "2026-08-18-v0-v1-diff.json.gz"
+import lattice
 
-RUNS = ["go1-v0", "go1-v1"]
-EVENT = "fell"
+ROOT = Path(__file__).resolve().parents[1]
+RUNS = [lattice.RUN_A, lattice.RUN_B]
+EVENT = lattice.EVENT
 METHODS = ["fisher_bh", "mcnemar_bh", "logrank_bh"]
 Q = 0.05
 POWER = 0.8
-CELLS = 400
-PUBLISHED_SAFER, PUBLISHED_WORSE = 60, 0
+CELLS = 72
+#: The reference's flagged conditions under fisher_bh (``lattice.directions(lattice.fisher())``).
+REFERENCE_SAFER, REFERENCE_WORSE = 22, 0
 TOL_EXACT = 1e-12
 TOL_ORACLE = 1e-9
 TOL_MDE = 1e-6
@@ -173,16 +170,6 @@ def _paired(
     )
 
 
-def _load_published_cells() -> dict[tuple[float, float], dict]:
-    if GOLDEN_JSON.is_file():
-        cells = json.loads(GOLDEN_JSON.read_text()).get("cells")
-        if cells and all("fisher_p" in c and "fisher_q" in c for c in cells):
-            return {(c["mu"], c["push_pct_bw"]): c for c in cells}
-    assert DIFF_JSON.is_file(), f"no published per-cell p/q: golden.json lacks them and {DIFF_JSON} is missing"
-    cells = json.loads(gzip.decompress(DIFF_JSON.read_bytes()))["cells_diff"]
-    return {(c["mu"], c["push_pct_bw"]): c for c in cells}
-
-
 def _fisher_table(events_a: int, n_a: int, events_b: int, n_b: int) -> list[list[int]]:
     return [[events_a, n_a - events_a], [events_b, n_b - events_b]]
 
@@ -195,21 +182,21 @@ def _same_or_both_nan(x: float, y: float) -> bool:
 
 
 @pytest.fixture(scope="module")
-def frames(go1_store: Store) -> dict[str, pd.DataFrame]:
-    return {run_id: censor(go1_store.read(run_id), EVENT) for run_id in RUNS}
+def frames(lattice_store: Store) -> dict[str, pd.DataFrame]:
+    return {run_id: censor(lattice_store.read(run_id), EVENT) for run_id in RUNS}
 
 
 @pytest.fixture(scope="module")
-def manifests(go1_store: Store) -> dict[str, RunManifest]:
-    return {run_id: go1_store.manifest(run_id) for run_id in RUNS}
+def manifests(lattice_store: Store) -> dict[str, RunManifest]:
+    return {run_id: lattice_store.manifest(run_id) for run_id in RUNS}
 
 
 def _fixture_diff(
     frames: dict[str, pd.DataFrame],
     manifests: dict[str, RunManifest],
     method: str,
-    a: str = "go1-v0",
-    b: str = "go1-v1",
+    a: str = lattice.RUN_A,
+    b: str = lattice.RUN_B,
 ) -> DiffResult:
     return diff(
         frames[a], frames[b], event=EVENT, method=method, q=Q, power=POWER,
@@ -225,9 +212,10 @@ def golden(frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -
 # ---------- I1: golden ----------
 
 
-def test_i1_golden_sixty_safer_zero_worse(golden: DiffResult) -> None:
-    assert golden.n_safer == PUBLISHED_SAFER
-    assert golden.n_worse == PUBLISHED_WORSE
+def test_i1_golden_twenty_two_safer_zero_worse(golden: DiffResult) -> None:
+    lower, higher = lattice.directions(lattice.fisher(EVENT, Q))
+    assert golden.n_safer == lower == REFERENCE_SAFER
+    assert golden.n_worse == higher == REFERENCE_WORSE
     assert len(golden.cells) == CELLS and golden.n_not_comparable == 0
     assert golden.method == "fisher_bh" and golden.q == Q and golden.event == EVENT
     assert golden.t_unit == "seconds" and golden.horizon == 5.0
@@ -235,16 +223,20 @@ def test_i1_golden_sixty_safer_zero_worse(golden: DiffResult) -> None:
     assert list(golden.cells.columns) == CELLS_COLUMNS
 
 
-def test_i1_golden_per_cell_p_and_q_match_publication(golden: DiffResult) -> None:
-    published = _load_published_cells()
-    assert len(published) == CELLS
+def test_i1_golden_per_cell_p_and_q_match_reference(golden: DiffResult) -> None:
+    # The reference is scipy's Fisher test and BH written out in tests/lattice.py, on the
+    # design's counts; it equals Prove's p and q bit for bit, so the comparison is exact.
+    reference = lattice.fisher(EVENT, Q)
+    assert len(reference) == CELLS
+    assert set(golden.cells["config_hash"]) == set(reference)
     for row in golden.cells.itertuples(index=False):
-        key = (row.config["mu"], row.config["push_pct_bw"])
-        pub = published[key]
-        assert row.events_a == pub["fell_a"] and row.events_b == pub["fell_b"], key
-        assert row.n_a == pub["n_a"] and row.n_b == pub["n_b"], key
-        assert abs(row.p - pub["fisher_p"]) <= TOL_ORACLE, key
-        assert abs(row.q - pub["fisher_q"]) <= TOL_ORACLE, key
+        key = (row.config["gain"], row.config["load"])
+        ref = reference[row.config_hash]
+        assert ref["config"] == row.config, key
+        assert row.events_a == ref["events_a"] and row.events_b == ref["events_b"], key
+        assert row.n_a == ref["n_a"] and row.n_b == ref["n_b"], key
+        assert float(row.p) == ref["p"], (key, row.p, ref["p"])
+        assert float(row.q) == ref["q"], (key, row.q, ref["q"])
 
 
 # ---------- I2: null diff ----------
@@ -254,7 +246,7 @@ def test_i1_golden_per_cell_p_and_q_match_publication(golden: DiffResult) -> Non
 def test_i2_null_diff_finds_nothing(
     frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest], method: str
 ) -> None:
-    result = _fixture_diff(frames, manifests, method, a="go1-v0", b="go1-v0")
+    result = _fixture_diff(frames, manifests, method, a=lattice.RUN_A, b=lattice.RUN_A)
     assert result.n_safer == 0 and result.n_worse == 0
     assert result.n_unchanged == len(result.cells) == CELLS
     assert (result.cells["delta"] == 0.0).all()
@@ -414,7 +406,7 @@ def test_i7_logrank_matches_lifelines() -> None:
 def test_i8_logrank_identical_frames_p_is_one_everywhere(
     frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]
 ) -> None:
-    result = _fixture_diff(frames, manifests, "logrank_bh", a="go1-v1", b="go1-v1")
+    result = _fixture_diff(frames, manifests, "logrank_bh", a=lattice.RUN_B, b=lattice.RUN_B)
     assert len(result.cells) == CELLS
     assert (result.cells["p"] == 1.0).all()
     assert np.all(np.abs(result.cells["stat"].to_numpy(dtype=float)) <= TOL_EXACT)
@@ -701,7 +693,7 @@ def test_i16_check_on_golden(golden: DiffResult) -> None:
 def test_i16_check_on_null_and_worse_diffs(
     frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]
 ) -> None:
-    null = _fixture_diff(frames, manifests, "fisher_bh", a="go1-v1", b="go1-v1")
+    null = _fixture_diff(frames, manifests, "fisher_bh", a=lattice.RUN_B, b=lattice.RUN_B)
     assert null.check(fail_on="worse") is True and null.check(fail_on="any") is True
     a = _one_cell([(5.0, False)] * 32)
     b = _one_cell([(1.0, i < 20) for i in range(32)])
@@ -713,7 +705,7 @@ def test_i16_check_on_null_and_worse_diffs(
     assert safer.check(fail_on="worse") is True and safer.check(fail_on="any") is False
 
 
-# ---------- I17: paired methods on the fixture, reported not pinned ----------
+# ---------- I17: paired methods on the fixture, captured and checked against the references ----------
 
 
 def test_i17_capture_paired_and_logrank_counts(
@@ -723,11 +715,26 @@ def test_i17_capture_paired_and_logrank_counts(
     logrank = _fixture_diff(frames, manifests, "logrank_bh")
     assert mcnemar.seed_identity_match is True and mcnemar.method == "mcnemar_bh"
     assert logrank.method == "logrank_bh"
+    # The counts were captured and not pinned on the study fixture; on the lattice each is the
+    # count of an independent reference: the exact McNemar test (a binomial on the design's
+    # discordant pairs) and lifelines' log-rank test on the stored times, each with one BH family.
+    ref_mcnemar, ref_logrank = lattice.mcnemar(EVENT, Q), lattice.logrank(EVENT, Q)
+    assert (mcnemar.n_safer, mcnemar.n_worse) == lattice.directions(ref_mcnemar) == (27, 0)
+    # The log-rank's 27 falls are the reference's; its 12 rises (the after run trips sooner at load 100
+    # with the same share) read as unchanged on this tree, the direction rule PF4.20 replaces, so the
+    # rise count is pinned where PF4 is merged and not here.
+    assert logrank.n_safer == lattice.directions(ref_logrank)[0] == 27
+    for result, reference in ((mcnemar, ref_mcnemar), (logrank, ref_logrank)):
+        assert set(result.cells["config_hash"]) == set(reference)
+        for row in result.cells.itertuples(index=False):
+            ref = reference[row.config_hash]
+            assert float(row.p) == pytest.approx(ref["p"], rel=1e-12, abs=0), (result.method, row.config)
+            assert float(row.q) == pytest.approx(ref["q"], rel=1e-12, abs=0), (result.method, row.config)
     captured = {
         "event": EVENT,
         "q": Q,
-        "fisher_safer": PUBLISHED_SAFER,
-        "fisher_worse": PUBLISHED_WORSE,
+        "fisher_safer": REFERENCE_SAFER,
+        "fisher_worse": REFERENCE_WORSE,
         "mcnemar_safer": int(mcnemar.n_safer),
         "mcnemar_worse": int(mcnemar.n_worse),
         "mcnemar_max_mde": float(mcnemar.max_mde),
@@ -735,11 +742,11 @@ def test_i17_capture_paired_and_logrank_counts(
         "logrank_worse": int(logrank.n_worse),
         "logrank_max_mde": float(logrank.max_mde),
     }
+    # The capture round-trips in tmp_path; the copy into the study fixture's folder is gone with
+    # that folder.
     out = tmp_path / "phase2.json"
     out.write_text(json.dumps(captured, indent=2) + "\n")
     assert json.loads(out.read_text()) == captured
-    if FIXTURE_DIR.is_dir():
-        shutil.copyfile(out, FIXTURE_DIR / "phase2.json")
 
 
 # ---------- I18: determinism ----------

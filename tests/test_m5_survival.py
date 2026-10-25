@@ -3,14 +3,13 @@
 Property tests (I2-I5, I7, I8) use hypothesis over ``t`` arrays drawn from a small grid,
 so ties are common, with random censoring masks. Oracle tests (I6, I9, I10) import
 ``lifelines`` / ``statsmodels`` through ``pytest.importorskip`` and skip when the dev
-extras are absent. Golden tests (I14-I18) run on the committed Go1 fixture through the
-``go1_store`` fixture in conftest.py.
+extras are absent. Golden tests (I14-I18) run on the generated lattice pair
+(``tests/lattice.py``) through the ``lattice_store`` fixture in conftest.py.
 
-Per-cell golden counts for I14/I15 come from ``tests/fixtures/go1/golden.json`` under a
-``cells`` key when present, as a list of ``{"mu", "push_pct_bw", "fell_a", "fell_b"}``
-objects. When that key is absent they are read from the published diff JSON in the
-source repo, and the tests skip if that file is absent too. Cells are matched on the
-decoded ``config`` (mu, push_pct_bw), never on ``config_hash``.
+Per-cell golden counts for I14/I15 come from the lattice's design (``lattice.design_cells()``,
+each condition's count of ``tripped`` in each run, written down before any run is generated),
+so they never skip. Cells are matched on the decoded ``config`` (gain, load), never on
+``config_hash``.
 
 Notes for the implementation session:
 
@@ -23,8 +22,6 @@ Notes for the implementation session:
   0), so the sum holds its last finite value there and ``var`` is 0 once ``S`` is 0.
 """
 
-import gzip
-import json
 import warnings
 from pathlib import Path
 
@@ -47,15 +44,16 @@ from poisson_prove.survival import (
     wilson,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
-GOLDEN_JSON = ROOT / "tests" / "fixtures" / "go1" / "golden.json"
-#: The published v0-v1 diff, committed gzipped beside the fixture (front-door spec section 9.1).
-DIFF_JSON = ROOT / "tests" / "fixtures" / "go1" / "source" / "2026-08-18-v0-v1-diff.json.gz"
+import lattice
 
-RUNS = ["go1-v0", "go1-v1"]
-FELL_KEY = {"go1-v0": "fell_a", "go1-v1": "fell_b"}
-PUBLISHED_FELL_FRACTION = {"go1-v0": 0.627, "go1-v1": 0.528}
-CELLS = 400
+ROOT = Path(__file__).resolve().parents[1]
+RUNS = [lattice.RUN_A, lattice.RUN_B]
+TRIPPED_KEY = {lattice.RUN_A: "tripped_a", lattice.RUN_B: "tripped_b"}
+#: Each run's share of ``tripped`` over its 2,304 episodes, from the design's counts
+#: (1,771 and 1,394), to three decimals.
+DESIGN_TRIPPED = {lattice.RUN_A: 1771, lattice.RUN_B: 1394}
+DESIGN_TRIPPED_FRACTION = {lattice.RUN_A: 0.769, lattice.RUN_B: 0.605}
+CELLS = 72
 HORIZON_S = 5.0
 TOL_EXACT = 1e-12
 TOL_ORACLE = 1e-9
@@ -178,25 +176,18 @@ def _greenwood_sum(curve: KMCurve) -> np.ndarray:
         return np.where(curve.survival > 0, curve.var / curve.survival**2, np.nan)
 
 
-def _load_golden_cells() -> dict[tuple[float, float], dict]:
-    if GOLDEN_JSON.is_file():
-        golden = json.loads(GOLDEN_JSON.read_text())
-        cells = golden.get("cells")
-        if cells is not None:
-            return {(c["mu"], c["push_pct_bw"]): c for c in cells}
-    assert DIFF_JSON.is_file(), f"no per-cell golden counts: golden.json has no 'cells' and {DIFF_JSON} is missing"
-    diff = json.loads(gzip.decompress(DIFF_JSON.read_bytes()))
-    return {(c["mu"], c["push_pct_bw"]): c for c in diff["cells_diff"]}
+def _load_golden_cells() -> dict[tuple[float, float], lattice.Cell]:
+    return {(c.gain, c.load): c for c in lattice.design_cells()}
 
 
 @pytest.fixture(scope="module")
-def frames(go1_store: Store) -> dict[str, pd.DataFrame]:
-    return {run_id: go1_store.read(run_id) for run_id in RUNS}
+def frames(lattice_store: Store) -> dict[str, pd.DataFrame]:
+    return {run_id: lattice_store.read(run_id) for run_id in RUNS}
 
 
 @pytest.fixture(scope="module")
 def km_tables(frames: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-    return {run_id: cell_table(frames[run_id], "fell") for run_id in RUNS}
+    return {run_id: cell_table(frames[run_id], lattice.EVENT) for run_id in RUNS}
 
 
 # ---------- I1: censor ----------
@@ -576,13 +567,14 @@ def test_i13_cell_table_km_silent_when_guard_empty() -> None:
 @pytest.mark.parametrize("run_id", RUNS)
 def test_i14_i15_golden_per_cell_event_counts(km_tables: dict[str, pd.DataFrame], run_id: str) -> None:
     golden_cells = _load_golden_cells()
+    assert len(golden_cells) == CELLS
     table = km_tables[run_id]
     assert len(table) == CELLS
     matched = 0
     for _, row in table.iterrows():
-        key = (row["config"]["mu"], row["config"]["push_pct_bw"])
+        key = (row["config"]["gain"], row["config"]["load"])
         assert key in golden_cells, key
-        assert row["n_events"] == golden_cells[key][FELL_KEY[run_id]], key
+        assert row["n_events"] == getattr(golden_cells[key], TRIPPED_KEY[run_id]), key
         assert row["n"] == 32 and row["n_errored"] == 0
         matched += 1
     assert matched == CELLS
@@ -592,10 +584,14 @@ def test_i14_i15_golden_per_cell_event_counts(km_tables: dict[str, pd.DataFrame]
 
 
 @pytest.mark.parametrize("run_id", RUNS)
-def test_i16_golden_aggregate_fell_fraction(km_tables: dict[str, pd.DataFrame], run_id: str) -> None:
+def test_i16_golden_aggregate_tripped_fraction(km_tables: dict[str, pd.DataFrame], run_id: str) -> None:
     table = km_tables[run_id]
     assert len(table) == CELLS
-    assert round(1.0 - float(table["s_at_horizon"].mean()), 3) == PUBLISHED_FELL_FRACTION[run_id]
+    # Every condition holds 32 episodes, so the mean over conditions is the run's share; the
+    # independent value is the design's count over the run's episodes.
+    assert int(table["n_events"].sum()) == lattice.tripped_total(run_id) == DESIGN_TRIPPED[run_id]
+    design = lattice.tripped_total(run_id) / lattice.ROWS
+    assert round(1.0 - float(table["s_at_horizon"].mean()), 3) == round(design, 3) == DESIGN_TRIPPED_FRACTION[run_id]
 
 
 # ---------- I17: no mid-horizon censoring on the fixture ----------
@@ -622,7 +618,7 @@ def test_i18_aj_single_event_matches_km_on_fixture(
     frames: dict[str, pd.DataFrame], km_tables: dict[str, pd.DataFrame], run_id: str
 ) -> None:
     km = km_tables[run_id]
-    aj = cell_table(frames[run_id], "fell", method="aj", events=["fell"])
+    aj = cell_table(frames[run_id], lattice.EVENT, method="aj", events=[lattice.EVENT])
     assert list(aj["config_hash"]) == list(km["config_hash"])
     np.testing.assert_allclose(
         aj["s_at_horizon"].to_numpy(dtype=float),
