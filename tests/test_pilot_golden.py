@@ -293,7 +293,8 @@ MODAL_PUBLIC = frozenset({
     "ModalTarget", "estimate_cost", "preflight_modal", "run_modal", "run_with_mapper",
     "worker_batch",
 })
-INIT_PUBLIC = frozenset({"Episode", "EpisodeValidationError", "Rollout", "record"})
+# PF5 (spec section 7.2, PF5.5): the top-level package gains ``step``.
+INIT_PUBLIC = frozenset({"Episode", "EpisodeValidationError", "Rollout", "record", "step"})
 
 
 # ---------- the mini-suite ----------

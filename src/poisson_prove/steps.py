@@ -1,9 +1,8 @@
-"""Per-run step statements: what a run declared against what its stored spans show (A10).
+"""Per-run step statements: what a run declared against what its stored spans show.
 
-This is A10's half of the module: ``DeclarationCheck`` and ``declaration_check``. A9 adds its
-half -- ``StepAggregates``, ``KindTally``, ``CaptureCheck`` -- to this file without touching
-this one. Everything here is a set or the difference of two sets; nothing is derived, nothing
-is persisted, no rate is computed and no trace object is constructed.
+``DeclarationCheck`` and ``declaration_check``. Everything here is a set or the difference of
+two sets; nothing is derived, nothing is persisted, no rate is computed and no trace object is
+constructed.
 """
 
 from __future__ import annotations
@@ -21,17 +20,16 @@ __all__ = ["DeclarationCheck", "declaration_check"]
 
 @dataclass(frozen=True)
 class DeclarationCheck:
-    """A run's declaration held against its stored envelopes.
+    """A run's declaration held against its stored spans.
 
-    ``never_reached`` is defined here and nowhere else (ADR-041): a name in ``declared_steps``
-    for which no span in this run carries that ``step_name``. It does not say the target cannot
-    reach the step, that the step was not instrumented, or that anything is wrong -- this run's
-    spans did not show it, and the declaration's owner said the step exists.
-    ``declared_never_reached`` is the same over the declared gates, computed from ``step_name``
-    and never from the ``"declared"`` stamp, which would report that the stamp ran and not that
-    the step did. ``emitted_not_declared`` is a finding about the declaration (ADR-074), never
-    a refusal. Sets and the sizes of sets only: a fraction of a declared set is a rate, and a
-    rate is a verdict.
+    ``never_reached`` is each name in ``declared_steps`` that no span of this run carries as its
+    ``step_name``. It does not say the target cannot reach the step, that the step was not
+    instrumented, or that anything is wrong: this run's spans did not show it, and the
+    declaration's owner said the step exists. ``declared_never_reached`` is the same over the
+    declared gates, read from ``step_name`` and never from the ``"declared"`` stamp, which would
+    say the stamp ran and not that the step did. ``emitted_not_declared`` is a finding about the
+    declaration, never a refusal. Sets and their sizes only: a fraction of a declared set is a
+    rate, and a rate is a verdict.
     """
 
     declared_steps: frozenset[str]
@@ -72,7 +70,7 @@ def declaration_check(manifest: RunManifest, frame: pd.DataFrame) -> Declaration
     every span whose ``gate`` is ``"emitted"`` (a marker with no name matches no declaration and
     is not an error); ``observed_outcomes`` every non-null value of the frame's ``outcome``
     column, so a row with no trace still counts and a run whose capture was off still has a
-    meaningful ``undeclared_outcomes``. Nullness is ``is None`` throughout (A8a section 3.10).
+    meaningful ``undeclared_outcomes``.
     """
     declared: Declaration | None = manifest.declared
     if declared is None or not (declared.steps or declared.outcomes or declared.gates):

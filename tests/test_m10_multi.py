@@ -42,6 +42,7 @@ Deliberately absent, reported to the spec author rather than adapted (see the se
 from __future__ import annotations
 
 import ast
+import importlib
 import importlib.machinery
 import importlib.util
 import json
@@ -488,7 +489,9 @@ def fake_run_modal(
 def modal_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
     # A missing modal package is now refused before the plan, so modal must import here.
     monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
-    monkeypatch.setattr(cli, "run_modal", fake_run_modal)
+    # PF5 (spec section 17; PF5.7): the face runs no backend; the core calls the Modal runner, so
+    # the stand-in replaces it where it is defined, which the core reads when it runs a plan.
+    monkeypatch.setattr(importlib.import_module("poisson_prove.executor_modal"), "run_modal", fake_run_modal)
 
 
 # ---------- argv builders ----------

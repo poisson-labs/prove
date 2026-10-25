@@ -240,7 +240,7 @@ from poisson_prove import diff as diff_mod
 from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
-from conftest import quickstart_design, without_method_lines
+from conftest import quickstart_design, without_method_lines, without_run_lines
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
@@ -1646,7 +1646,9 @@ def test_r2_the_clis_report_and_receipt_with_the_tree_digest_to_the_values_minte
         # which the library's render does not carry; compared without it.
         # PF4 re-freeze (PF4.32): every surface that prints a limit names its test, so the library's
         # render now carries a limits line naming Fisher too; both sides are compared without it.
-        assert_same_but_numbers(without_method_lines(page), without_method_lines(theirs), f"e14 {kind}")
+        # PF5 (spec section 4.3, reading o): the command line's files name each run with its id in
+        # the header, and the provenance list gives no id; both sides are compared without the two.
+        assert_same_but_numbers(without_run_lines(without_method_lines(page)), without_run_lines(without_method_lines(theirs)), f"e14 {kind}")
         secs = sections(page, kind)
         assert_omnibus("e14", kind, secs["Omnibus"], result)
         assert_fault_lines("e14", kind, secs["Fault lines"], result)
@@ -1682,8 +1684,11 @@ def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_ev
         md, html = without_method_lines(titled_by_ids(r.md, root, a, b)), without_method_lines(titled_by_ids(r.html, root, a, b))
         # PF4 re-freeze (PF4.32): every surface that prints a limit names its test, so the library's
         # tree-less render now carries a limits line naming Fisher too; both sides are compared without it.
-        assert_same_but_numbers(excised(md, md_bounds(md)), without_method_lines(tree_less.to_markdown()), name)
-        assert_same_but_numbers(excised(html, html_bounds(html)), without_method_lines(tree_less.to_html()), name)
+        # PF5 (spec section 4.3, reading o): the command line's files name each run with its id in
+        # the header, and the provenance list gives no id; both sides are compared without the two.
+        md, html = without_run_lines(md), without_run_lines(html)
+        assert_same_but_numbers(excised(md, md_bounds(md)), without_run_lines(without_method_lines(tree_less.to_markdown())), name)
+        assert_same_but_numbers(excised(html, html_bounds(html)), without_run_lines(without_method_lines(tree_less.to_html())), name)
         with_tree = _with_tree_for(name, synth_root)
         assert excised(with_tree.to_markdown(), md_bounds(with_tree.to_markdown())) == tree_less.to_markdown(), name
         assert excised(with_tree.to_html(), html_bounds(with_tree.to_html())) == tree_less.to_html(), name

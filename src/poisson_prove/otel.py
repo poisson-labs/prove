@@ -1,7 +1,7 @@
 """Episode correlation for OpenTelemetry capture — the stamper.
 
-``poisson_prove.run_id`` and ``poisson_prove.episode`` are the two attributes M12 never lifts, so
-they arrive in every span's ``attrs`` and are the whole mechanism for attaching captured
+``poisson_prove.run_id`` and ``poisson_prove.episode`` are the two attributes the trace never
+lifts, so they arrive in every span's ``attrs`` and are the whole mechanism for attaching captured
 spans to a rollout. The onboarding story assumed the executor would set them as a per-episode
 *resource* attribute; a 2026-09-04 spike against ``opentelemetry-sdk`` 1.44.0 found that
 cannot vary inside one process. ``Resource.attributes`` is immutable, ``TracerProvider.resource``
@@ -17,7 +17,7 @@ map is exactly where that is wanted.
 
 This module imports ``opentelemetry`` and therefore lives behind the ``agent`` extra. Core
 never reaches it: ``poisson_prove/__init__.py`` does not import it, and ``poisson_prove.trace``
-stays standard-library-only (T27).
+stays standard-library-only.
 
 Usage — register the stamper once, then wrap each episode::
 

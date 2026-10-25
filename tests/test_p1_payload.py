@@ -1354,7 +1354,8 @@ def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_
     # sat in a user-visible refusal for two packets while this clause looked for ``/3`` (spec LS section 0.1).
     assert viewer_mod.SCHEMA == "poisson-prove.viewpair/7"
     retired = tuple(f"proofload.viewpair/{n}" for n in (2, 3, 4, 5, 6))
-    hits = sorted(path.name for path in SRC.glob("*.py") if any(r in path.read_text(encoding="utf-8") for r in retired))
+    # PF5 (spec section 17): the core is a package now, so the grep reads src/ recursively.
+    hits = sorted(path.name for path in SRC.rglob("*.py") if any(r in path.read_text(encoding="utf-8") for r in retired))
     assert hits == [], hits
     lines = VIEWER_SOURCE.read_text(encoding="utf-8").splitlines()
     at = next(i for i, line in enumerate(lines) if line.startswith("SCHEMA = "))
@@ -1403,7 +1404,7 @@ def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at
     assert len(arithmetic) == 1 and isinstance(arithmetic[0], ast.BinOp) and isinstance(arithmetic[0].op, ast.Sub), [ast.dump(n)[:60] for n in arithmetic]
     assert arithmetic_nodes(closure(module, "render_html")) == []
     sites = []
-    for path in sorted(SRC.glob("*.py")):
+    for path in sorted(SRC.rglob("*.py")):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
         for node in ast.walk(parsed(path)):
             if isinstance(node, ast.keyword) and node.arg == "p_floor":
                 sites.append((path.name, node.lineno))

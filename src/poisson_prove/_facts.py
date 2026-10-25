@@ -15,7 +15,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from poisson_prove import _look, stats
+from poisson_prove import _look
+from poisson_prove.stats import POWER as _POWER
 
 if TYPE_CHECKING:
     from poisson_prove.diff import MultiDiffResult
@@ -47,9 +48,19 @@ def interval_method(method: str) -> str:
     return "Tango" if method == "mcnemar_bh" else "Miettinen-Nurminen"
 
 
-def power_words() -> str:
-    """The stated power in words, from the one setting: "4 times in 5" (PF4.32)."""
-    return stats.times_in(stats.POWER)
+def power_of(multi: MultiDiffResult) -> float:
+    """The power a comparison's limits were computed at, as its rows record it."""
+    for ev in multi.by_event.values():
+        if "mde_power" in ev.cells:
+            for value in ev.cells["mde_power"]:
+                if value is not None and value == value:
+                    return float(value)
+    return _POWER
+
+
+def power_words(power: float | None = None) -> str:
+    """The stated power in words: "4 times in 5"."""
+    return _look.times_in(_POWER if power is None else power)
 
 
 def condition_text(config: Any) -> str:
@@ -82,13 +93,13 @@ def limit_text(record: Mapping[str, Any]) -> str:
     return ", ".join(parts)
 
 
-def limits_caption() -> str:
+def limits_caption(power: float | None = None) -> str:
     """What a cell table's limit column is: the smallest change each way one condition alone
     would be flagged for, with the one number where both directions agree."""
     return (
         f"mde is the smallest rise and the smallest fall one condition alone would be flagged for, "
-        f"{power_words()}, if it alone changed, from where the condition was; one number is both "
-        "the rise's and the fall's, where the two agree to three decimals."
+        f"{power_words(power)}, if it alone changed, from where the condition was; one number is "
+        "both the rise's and the fall's, where the two agree to three decimals."
     )
 
 
@@ -96,7 +107,7 @@ def shares_caption(event: str, level: float) -> str:
     """What the share columns are, and that their intervals are per condition (PF4.3)."""
     return (
         f"share_a and share_b are each condition's share of runs that ended in {event} by the "
-        f"comparison's horizon, with a {stats.level_label(level)} Wilson interval per condition, "
+        f"comparison's horizon, with a {_look.level_label(level)} Wilson interval per condition, "
         "not adjusted for the number of conditions; the tests compare the rates, and * marks a "
         "share that is not its rate (a run censored before the horizon)."
     )
@@ -112,7 +123,7 @@ def limit_clause(multi: MultiDiffResult) -> str | None:
         f"{_look.fmt_rate(multi.threshold)}: the largest limit it read is "
         f"{multi.verdict_limit:.3f} "
         f"({test_name(multi.method)}, Holm q {multi.q:g} over {multi.n_tests} tests, "
-        f"{power_words()})"
+        f"{power_words(power_of(multi))})"
     )
 
 
@@ -182,13 +193,14 @@ def lines(multi: MultiDiffResult, names: Mapping[str, str] | None = None) -> lis
     out.append(
         (
             "limits",
-            f"the smallest change one condition alone would be flagged for, {power_words()}, "
+            "the smallest change one condition alone would be flagged for, "
+            f"{power_words(power_of(multi))}, "
             f"if it alone changed, from where the condition was ({test_name(multi.method)}, "
             f"q {q} over {m} tests){_without_limit(multi)}",
         )
     )
     if multi.interval_level is not None:
-        level = stats.level_label(multi.interval_level)
+        level = _look.level_label(multi.interval_level)
         if multi.n_rejected:
             rule = (
                 f"false coverage (Benjamini-Yekutieli) over the {multi.n_rejected} flagged; an "

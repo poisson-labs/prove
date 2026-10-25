@@ -31,8 +31,8 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import TYPE_CHECKING, Any
 
-from poisson_prove import _facts, stats
-from poisson_prove.diff import CELLS_COLUMNS, _native
+from poisson_prove import _facts, _look
+from poisson_prove.diff import CELLS_COLUMNS
 from poisson_prove.plain import build_summary
 from poisson_prove.report import (
     _EPISTEMIC_FENCE,
@@ -44,6 +44,7 @@ from poisson_prove.report import (
     _worst_header,
     _worst_table_rows,
 )
+from poisson_prove.stats import WILSON_LEVEL
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -442,7 +443,7 @@ def _panel(
         "n_worse": None if ev.kind is None else int(panel.n_worse),
         "n_higher": sum(1 for c in cells if c["direction"] == "higher"),
         "n_lower": sum(1 for c in cells if c["direction"] == "lower"),
-        "share_label": f"share [{stats.level_label(stats.WILSON_LEVEL)}], Wilson, per condition",
+        "share_label": f"share [{_look.level_label(_share_level(cells))}], Wilson, per condition",
         "threshold": threshold,
         "n_unchanged": int(panel.n_unchanged),
         "n_absent": int(panel.n_absent),
@@ -622,8 +623,6 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     W20 pins that this module's body imports ``poisson_prove.tree`` nowhere and that this closure
     applies exactly one arithmetic node, and a function-level import and a compare move neither.
     """
-    from poisson_prove.tree import agreement_digest
-
     if tuple(tree.root.events) != tuple(multi.events):
         raise ViewerError(
             f"the tree is over events {list(tree.root.events)}; this pair's diff is over "
@@ -656,7 +655,7 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
             f"{sum(carried.values())} cell-event units and this pair's diff tests "
             f"{sum(tested.values())}"
         )
-    if tree.agreement != agreement_digest(multi):
+    if tree.agreement != multi.agreement:
         raise ViewerError(
             "the tree's agreement digest is not this pair's; the tree was grown from a "
             "different pair with the same family shape, so nothing above can be named"
@@ -711,6 +710,16 @@ def _intervals(report: MultiReport, multi: MultiDiffResult) -> dict[str, Any]:
         "lines": list(report.interval_lines),
         "rows": rows,
     }
+
+
+
+def _share_level(cells: Any) -> float:
+    """The level the cells' shares were recorded at."""
+    for cell in cells:
+        share = cell.get("share_a") if isinstance(cell, dict) else None
+        if isinstance(share, dict) and share.get("level") is not None:
+            return float(share["level"])
+    return WILSON_LEVEL
 
 
 def build_structure(
@@ -782,7 +791,7 @@ def build_structure(
             "fragility": multi.fragility,
             "peeking": [dict(entry) for entry in multi.peeking],
             "errors_differ": [
-                {k: _native(v) for k, v in entry.items()} for entry in multi.errors_differ
+                {k: _look.native(v) for k, v in entry.items()} for entry in multi.errors_differ
             ],
             "facts": [{"label": label, "line": text} for label, text in _facts.lines(multi)],
             **build_summary(

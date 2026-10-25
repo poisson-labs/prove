@@ -1326,7 +1326,9 @@ def test_c12_the_modal_preflight_prints_the_capture_line_too(tmp_path: Path, mon
 
     # A missing modal package is now refused before the plan, so modal must import here.
     monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
-    monkeypatch.setattr(cli, "run_modal", fake_run_modal)
+    # PF5 (spec section 17; PF5.7): the face runs no backend; the core calls the Modal runner, so
+    # the stand-in replaces it where it is defined, which the core reads when it runs a plan.
+    monkeypatch.setattr(importlib.import_module("poisson_prove.executor_modal"), "run_modal", fake_run_modal)
     monkeypatch.syspath_prepend(str(register_fake_instrumentors(tmp_path / "fake")))
     toml = write(tmp_path / "sweep.toml", mock_toml(capture={"instrument": [FAKE_INSTRUMENTOR]}, replicates=1))
     out, err = StringIO(), StringIO()

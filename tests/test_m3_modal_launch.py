@@ -411,7 +411,9 @@ def captured_run_modal(monkeypatch: pytest.MonkeyPatch) -> CapturedRunModal:
     # A missing modal package is now refused before the plan, so modal must import here.
     monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
     captured = CapturedRunModal()
-    monkeypatch.setattr(cli, "run_modal", captured)
+    # PF5 (spec section 17; PF5.7): the face runs no backend; the core calls the Modal runner, so
+    # the stand-in replaces it where it is defined, which the core reads when it runs a plan.
+    monkeypatch.setattr(importlib.import_module("poisson_prove.executor_modal"), "run_modal", captured)
     return captured
 
 
@@ -614,17 +616,54 @@ def test_l2_well_shaped_unresolvable_path_is_accepted_on_the_modal_branch(
 
 
 def test_l3_cli_resolves_in_exactly_one_place() -> None:
-    source = CLI_SOURCE.read_text(encoding="utf-8")
-    assert source.count("resolve(") == 1
-    tree = ast.parse(source)
-    defs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_resolve_target"]
-    assert len(defs) == 1
-    assert "resolve(" in (ast.get_source_segment(source, defs[0]) or "")
-    call_lines = [
-        line for line in source.splitlines()
-        if "_resolve_target(" in line and not line.lstrip().startswith("def _resolve_target(")
+    # PF5 (spec section 17; PF5.7): the face resolves no target; the core plans the sweep, so the
+    # one local resolve site of ADR-029 is in the core: outside ``_resolve`` itself and the remote
+    # backends' container-side workers, ``_resolve.resolve`` is called in one function of
+    # ``src/``, by any import of it, and that function is called from one line. ``cli.py`` does
+    # not import ``_resolve`` in any form.
+    remote = {"_resolve.py", "executor_modal.py", "executor_burla.py", "_burla_submit.py"}
+    trees = {path: ast.parse(path.read_text(encoding="utf-8")) for path in sorted(PACKAGE.rglob("*.py"))}
+
+    def resolve_names(tree: ast.Module) -> tuple[set[str], set[str]]:
+        names: set[str] = set()
+        modules: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove._resolve":
+                names |= {a.asname or a.name for a in node.names if a.name == "resolve"}
+            elif isinstance(node, ast.ImportFrom) and node.module == "poisson_prove":
+                modules |= {a.asname or a.name for a in node.names if a.name == "_resolve"}
+            elif isinstance(node, ast.Import):
+                modules |= {a.asname or a.name for a in node.names if a.name == "poisson_prove._resolve"}
+        return names, modules
+
+    names, modules = resolve_names(trees[CLI_SOURCE])
+    assert not names and not modules, "cli.py imports _resolve"
+    sites: list[tuple[str, str]] = []
+    for path, tree in trees.items():
+        if path.name in remote:
+            continue
+        names, modules = resolve_names(tree)
+
+        def visit(node: ast.AST, fn: str | None, names: set[str] = names, modules: set[str] = modules, path: Path = path) -> None:
+            for child in ast.iter_child_nodes(node):
+                inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else fn
+                if isinstance(child, ast.Call):
+                    called = child.func
+                    if (isinstance(called, ast.Name) and called.id in names) or (
+                        isinstance(called, ast.Attribute) and called.attr == "resolve"
+                        and ast.unparse(called.value) in modules | {"poisson_prove._resolve"}
+                    ):
+                        sites.append((path.name, fn or "<module>"))
+                visit(child, inner, names, modules, path)
+
+        visit(tree, None)
+    assert len(sites) == 1, sites
+    function = sites[0][1]
+    calls = [
+        line for path in trees for line in path.read_text(encoding="utf-8").splitlines()
+        if re.search(rf"\b{re.escape(function)}\(", line) and not line.lstrip().startswith(f"def {function}(")
     ]
-    assert len(call_lines) == 1, call_lines
+    assert len(calls) == 1, calls
 
 
 # ---------- L4: a container-side resolve failure is one batch failure, retried, then recorded ----------

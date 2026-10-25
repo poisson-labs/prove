@@ -1907,7 +1907,7 @@ def test_o16_default_rng_is_called_in_exactly_one_function_and_it_lives_in_tree_
     name is kept so the row in the S25 oracle map still resolves.*"""
     sites: list[tuple[str, int, str]] = []
     legacy: list[tuple[str, int, str]] = []
-    for path in sorted(PACKAGE.glob("*.py")):
+    for path in sorted(PACKAGE.rglob("*.py")):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
         module = parsed(path)
         enclosing = enclosing_functions(module)
         for node in ast.walk(module):

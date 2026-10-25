@@ -1,4 +1,4 @@
-"""M11a -- the injection seam: one declared fault, keyed on (logical step, attempt).
+"""The injection seam: one declared fault, keyed on (logical step, attempt).
 
 The seam sits on the transport, below the target's own code. ``install()`` wraps
 ``httpx.Client.send`` and ``httpx.AsyncClient.send``; ``injecting(spec, seed)`` scopes one
