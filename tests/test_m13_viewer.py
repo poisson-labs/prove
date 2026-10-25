@@ -1181,9 +1181,11 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(lattic
     real_out, real_err = capfd.readouterr()
     assert statuses == [200, 200, 200] and missed == 404
     assert dropped is None or dropped.status >= 500, dropped
-    # PF2 (spec section 5.3): the only stdout line is serve's verdict line, which names both runs
-    # and carries the URL.
-    assert run.out.getvalue() == serving_line(run.server.server_address[1]) + "\n", run.out.getvalue()
+    # PF2 (spec section 5.3): the first stdout line is serve's verdict line, which names both runs
+    # and carries the URL; PF12 (spec section 18.2, Q59): then the one line naming what it saved.
+    lines = run.out.getvalue().splitlines()
+    assert lines[0] == serving_line(run.server.server_address[1]) and len(lines) == 2, run.out.getvalue()
+    assert re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]), run.out.getvalue()
     # The unpaired-analysis warning on the lattice pair is now a note line on stderr (spec section 5.4).
     assert without_notes(run.err.getvalue()) == "", run.err.getvalue()
     assert (real_out, real_err) == ("", ""), (real_out, real_err)
@@ -1199,10 +1201,15 @@ def test_v12_assembling_rendering_and_serving_touch_no_file(lattice_built: Built
 
     default_dir = tmp_path / f"prove-report-{LATTICE_A}-vs-{LATTICE_B}"
     named_dir = tmp_path / f"prove-report-{slugged(LATTICE_NAME_A)}-vs-{slugged(LATTICE_NAME_B)}"
-    before = (tree_snapshot(LATTICE_ROOT), tree_snapshot(tmp_path), tree_snapshot(default_dir), tree_snapshot(named_dir))
+    # PF12 (spec section 18.2, Q59): serve saves the comparison it shows under the store's
+    # ``.poisson/``; nothing else in the store, and nothing in the working folder, is touched.
+    def store_files() -> dict[str, int]:
+        return {k: v for k, v in tree_snapshot(LATTICE_ROOT).items() if not k.startswith(".poisson")}
+
+    before = (store_files(), tree_snapshot(tmp_path), tree_snapshot(default_dir), tree_snapshot(named_dir))
     with cli_served(monkeypatch, lattice_full_argv()) as run:
         assert get(run.server, "/").status == 200
-    after = (tree_snapshot(LATTICE_ROOT), tree_snapshot(tmp_path), tree_snapshot(default_dir), tree_snapshot(named_dir))
+    after = (store_files(), tree_snapshot(tmp_path), tree_snapshot(default_dir), tree_snapshot(named_dir))
     assert after == before
     assert not default_dir.exists() and not named_dir.exists()
 
@@ -1850,8 +1857,10 @@ def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(la
         port = run.server.server_address[1]
         assert isinstance(run.server, socketserver.BaseServer)
         assert run.out_at_bind == ""
-        # PF2 (spec section 5.3): the URL line is now serve's verdict line naming both runs.
-        assert run.out.getvalue() == serving_line(port) + "\n"
+        # PF2 (spec section 5.3): the URL line is now serve's verdict line naming both runs;
+        # PF12 (spec section 18.2, Q59): the line naming the saved comparison follows it.
+        lines = run.out.getvalue().splitlines()
+        assert lines[0] == serving_line(port) and len(lines) == 2 and re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]), lines
         assert get(run.server, "/").status == 200
     assert run.codes == [0], run.codes
     # The unpaired-analysis warning on the lattice pair is now a note line on stderr (spec section 5.4).
@@ -1884,7 +1893,10 @@ def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_trace
     lines = r.out.splitlines()
     # PF2 (spec section 5.3): the URL line is now serve's verdict line naming both runs.
     assert holder and lines[0] == serving_line(holder[0].server_address[1]), r.out
-    assert len(lines) == 2 and lines[1].startswith("stopped  "), r.out
+    # PF12 (spec section 18.2, Q59): the saved comparison's line comes between the two, and once serve
+    # has saved, its stopped line no longer says nothing was written (PF12 reading R41).
+    assert len(lines) == 3 and re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]) and lines[2].startswith("stopped  interrupted"), r.out
+    assert "nothing was written" not in lines[2], r.out
     assert holder[0].socket.fileno() == -1
 
 

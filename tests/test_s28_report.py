@@ -244,6 +244,8 @@ from conftest import quickstart_design, without_method_lines, without_run_lines
 
 import lattice
 
+import lattice
+
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 REPORT_SOURCE = PACKAGE / "report.py"
@@ -2405,7 +2407,10 @@ def test_r14_the_single_run_report_writes_none_of_the_four_headings_and_the_latt
     # line comes exactly what it printed before the paths: the headline (the lattice's names no run).
     names = ("report.md", "heatmap.svg", "receipt.html")
     wrote = f"ok  wrote {r.out_dir} ({len(names)} files)\n" + "".join(f"  wrote  {r.out_dir / name}\n" for name in names)
-    expected = wrote + "\n" + multi.headline() + "\n"
+    # PF12 (spec section 18.2, Q59): the saved comparison's line ends the first block.
+    saved = re.findall(r"^  saved  comparison [0-9a-f]{12}\n", r.out, re.MULTILINE)
+    assert len(saved) == 1, r.out
+    expected = wrote + saved[0] + "\n" + multi.headline() + "\n"
     assert r.out == expected, (r.out, expected)
 
 

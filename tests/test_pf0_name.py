@@ -64,11 +64,14 @@ from typing import Any
 import pyarrow.parquet as pq
 import pytest
 from test_pf4_stats import _ref_fisher_limits, _ref_limit, _ref_paired_power
+from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "poisson_prove"
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "stores-0.0.1"
-STORE = FIXTURE / "store"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+STORE = writable_copy(FIXTURE / "store")
 RECORDED = FIXTURE / "recorded"
 RUNS: dict[str, str] = json.loads((FIXTURE / "runs.json").read_text(encoding="utf-8"))
 QA, QB = RUNS["quickstart_before"], RUNS["quickstart_after"]
@@ -806,7 +809,10 @@ def test_pf0_5_with_the_compat_module_failing_no_reader_recognises_an_old_string
         assert sorted(sabotaged) == sorted(readers), way
         still_recognised = {name: reader for name, reader in sabotaged.items() if reader["with"] != reader["without"]}
         assert still_recognised == {}, (way, still_recognised)
-    assert tree_digest(STORE) == fixture_before
+    # PF12 (spec sections 14 and 18.2, PF12.1): the probes' report and serve save under ``.poisson/``;
+    # no byte the build wrote moves.
+    assert {k: v for k, v in tree_digest(STORE).items() if not k.startswith(".poisson/")} == {
+        k: v for k, v in fixture_before.items() if not k.startswith(".poisson/")}
 
 
 # ---------- PF0.6 the 0.0.1 stores are read, never rewritten ----------
@@ -818,8 +824,9 @@ def test_pf0_6_the_committed_fixture_is_intact() -> None:
     for line in (FIXTURE / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
         digest, name = line.split(maxsplit=1)
         sums[name.removeprefix("store/")] = digest
-    assert tree_digest(STORE) == sums
-    assert run_ids(STORE) == set(RUNS.values())
+    # PF12: the committed folder itself, which no test writes (STORE is its per-process copy).
+    assert tree_digest(FIXTURE / "store") == sums
+    assert run_ids(FIXTURE / "store") == set(RUNS.values())
 
 
 #: Per fixture run, the invocations a read verb applies to. Each exits 0 on 0.0.1 itself. Not
@@ -867,7 +874,12 @@ def test_pf0_6_every_pair_verb_exits_0_on_the_0_0_1_quickstart_pair_and_no_store
     for argv in invocations:
         r = run_cli(["--store", str(STORE), *argv])
         assert r.code == 0, (argv, r)
-    assert tree_digest(STORE) == before
+    # PF12 (spec sections 14 and 18.2, PF12.1): report and serve save the comparison they show under
+    # ``.poisson/``; no byte the build wrote moves.
+    def stored(digest: dict[str, str]) -> dict[str, str]:
+        return {k: v for k, v in digest.items() if not k.startswith(".poisson/")}
+
+    assert stored(tree_digest(STORE)) == stored(before)
 
 
 def test_pf0_6_runs_lists_every_0_0_1_run() -> None:
@@ -1529,6 +1541,10 @@ def test_pf0_11_every_install_hint_in_src_that_names_prove_is_the_quoted_distrib
     naming_prove = [h for h in hints if "burla==" not in h and "burla=={}" not in h]
     assert naming_prove, hints
     for hint in naming_prove:
+        # PF12 (PF12.4): a file in a newer format than this Prove reads is refused with the upgrade,
+        # which names the distribution alone.
+        if hint == "pip install -U poisson-prove":
+            continue
         assert re.search(r'pip install "poisson-prove\[(?:[a-z]+|\{\})\]"', hint), hint
 
 

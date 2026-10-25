@@ -1614,7 +1614,12 @@ def test_p7_6_store_append_is_the_only_writer_and_schema_the_only_declaration_of
         if any("trace_obs" in s for s in string_constants(tree)):
             obs_mentions.append(path.name)
     assert declared == ["store.py"], declared
-    assert writers == ["store.py::Store.append"], writers
+    # PF12 (Artifact Format section 5.3, PF12.3): a saved comparison's long-form table is the one
+    # other Parquet file Prove writes; it is written outside the store module, by a module that
+    # neither declares nor names the two columns, so Store.append stays their only writer.
+    assert [w for w in writers if w.startswith("store.py::")] == ["store.py::Store.append"], writers
+    others = sorted({w.split("::")[0] for w in writers if not w.startswith("store.py::")})
+    assert len(others) <= 1 and not set(others) & set(declared) and not set(others) & set(obs_mentions), writers
     assert obs_mentions == ["store.py"], obs_mentions
     assert "trace" not in RunManifest.from_dict(manifest("r").to_dict()).to_dict()
     for name in ("trace", "trace_obs"):

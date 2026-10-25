@@ -66,11 +66,14 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
 import lattice
 from test_pf4_stats import _ref_fisher_limits
+from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 TESTS = Path(__file__).resolve().parent
-OLD = TESTS / "fixtures" / "stores-0.0.1"
+# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
+OLD = writable_copy(TESTS / "fixtures" / "stores-0.0.1")
 OLD_RUNS: dict[str, str] = json.loads((OLD / "runs.json").read_text(encoding="utf-8"))
 
 A_ID = "20261020T100000Z-aaaa"

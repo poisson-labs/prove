@@ -1519,7 +1519,16 @@ def test_p10_17_the_check_and_the_report_write_nothing_under_the_store(tmp_path:
     check_of(store, a)
     run_cli(["--store", str(root), "report", a, b, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "r")])
     run_cli(["--store", str(root), "inspect", a, "--event", EVENT])
-    assert snapshot(root) == before
+    # PF12 (spec section 18.2, Q59): report saves the comparison it shows, under ``.poisson/``; no
+    # stored file outside it is written (bytes and mtimes), and check without --save writes nothing:
+    # the folder holds the store descriptor and that one comparison.
+    after = snapshot(root)
+    assert {k: v for k, v in after.items() if not k.startswith(".poisson")} == {k: v for k, v in before.items() if not k.startswith(".poisson")}
+    added = sorted(k for k in after if k.startswith(".poisson") and k not in before)
+    saved = [k for k in added if k != ".poisson/store.json"]
+    assert all(k.startswith(".poisson/artifacts/comparison/") for k in saved), added
+    assert len({k.split("/")[3] for k in saved}) <= 1, added
+    assert any(k.startswith(".poisson/artifacts/comparison/") for k in after), sorted(after)
 
 
 def test_p10_17_steps_has_no_writer_and_no_check_result_reaches_the_manifest() -> None:

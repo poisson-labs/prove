@@ -903,7 +903,10 @@ def test_i11_report_writes_exactly_three_files(lattice_store: Store, tmp_path: P
     verdict, _, rest = r.out.partition("\n\n")
     lines = verdict.splitlines()
     assert lines[0] == f"ok  wrote {out} ({len(REPORT_FILES)} files)", r.out
-    assert sorted(lines[1:]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
+    # PF12 (spec section 18.2, Q59): report saves the comparison it shows and says so on one
+    # detail line after its wrote lines, the id's first 12 hex.
+    assert re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[-1]), r.out
+    assert sorted(lines[1:-1]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
     assert "tripped: 22 lower, 0 higher" in rest
     for name in REPORT_FILES:
         assert name in r.out, name
