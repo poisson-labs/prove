@@ -1,0 +1,50 @@
+Poisson setup file, format 1: the shared text, byte for byte, as the page "Poisson — Spec Setup File"
+gives it on 2026-10-23 (sections 3, 4, 5 and 6). Each part runs from its marker line to the next.
+A tool fills <command>, <Product>, <docs-url>, <check>, <next command>, <tool> and <Product full name>.
+==> rules <==
+## Rules
+
+- Do only what these steps say. Change nothing outside the files listed under "Files you write".
+- Run nothing that can spend money or call a model. The only <command> commands you run are the ones
+  these steps show, and the check runs with its own flag that spends nothing.
+- Never pass --yes, or any flag that answers a question for the person.
+- Never read, print, copy or write an API key, a token or a .env file, and never ask the person for one.
+- Install nothing. If <command> is not installed where this repository runs, stop and tell the person
+  the install command from <docs-url>.
+- When something is unclear, choose the smaller change and say in the hand-over what you chose and why.
+- Quote <Product>'s output as it prints it. Never reword a verdict, a number or an error.
+- If you cannot finish, stop and say what blocked you.
+==> check <==
+## The check
+
+Run this. It reads what you wrote, spends nothing and changes nothing.
+
+```bash
+<check>
+```
+
+- If it exits 0, its first line starts with a word such as `plan` or `ok`: the setup is ready for the
+  person to review. Go to "Hand over".
+- If it exits 1, it printed `error:` and then `next:` lines. Do what the `error:` line names, using
+  the `next:` lines, and run the check again.
+- If it exits 2, the command line or a setting it needs was wrong; the `error:` line says which. Fix
+  what it names.
+- Fix at most three times. If the check still fails, stop and hand over what you have, with the last
+  output.
+==> prompt <==
+Use the poisson-<tool>-setup skill in this repository: set <Product full name> up for me to review, then stop.
+==> hand-over <==
+## Hand over
+
+Stop here and tell the person, in this order:
+
+1. Each file you wrote, with one line on why it is there.
+2. The last output of the check, exactly as printed.
+3. What they must confirm before running anything for real (the list below).
+4. The one command they run next themselves, in its own block:
+
+   ```text
+   <next command>
+   ```
+
+Do not run that command for them.

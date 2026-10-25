@@ -17,7 +17,7 @@ burla = ["burla==1.8.2"]
 agent = ["litellm", "openai>=2.20,<3", "opentelemetry-sdk"]
 viz = ["matplotlib"]
 all = ["modal>=0.73.76", "burla==1.8.2", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
-dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common"]
+dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common", "pyyaml"]
 
 [project.scripts]
 poisson-prove = "poisson_prove.cli:main"
