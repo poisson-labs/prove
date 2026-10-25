@@ -126,7 +126,7 @@ EXPECTED_DEFAULT = 0.20
 #: (spec section 3, W12), the four-condition ``spec_at(32)`` the other.
 LATTICE_REPLICATES = 32
 LATTICE_GAIN = [round(0.1 * k, 1) for k in range(1, 13)]
-LATTICE_LOAD = [10.0 * k for k in range(1, 7)]
+LATTICE_LOAD = [10.0, 20.0, 30.0, 40.0, 50.0, 100.0]
 LATTICE_TARGET = "lattice-before"
 assert (LATTICE_REPLICATES, tuple(LATTICE_GAIN), tuple(LATTICE_LOAD), LATTICE_TARGET) == (
     lattice.N, lattice.GAIN, lattice.LOAD, lattice.TARGET_A

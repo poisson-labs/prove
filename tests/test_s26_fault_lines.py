@@ -77,10 +77,10 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
    and fails ``[0.18, 0.26]`` alone.
 6. **The lattice's Level 2 golden** (``tests/lattice.py``; re-measured at B=4000, seed 0 on main's
    unchanged code when this file moved to it): by ``load`` exactly three groups reject (``10.0``,
-   ``20.0``, ``30.0``), all at the floor, ``50.0`` and ``60.0`` degenerate, ``40.0`` with one
+   ``20.0``, ``30.0``), all at the floor, ``50.0`` and ``100.0`` degenerate, ``40.0`` with one
    informative cell at p 1; by ``gain`` (at the admitting override) eleven reject, the ten
    ``0.1`` ... ``1.0`` at the floor under McNemar (``0.9`` at 2 / 4001 under Fisher) and ``1.2``
-   off it (33 / 4001 Fisher, 51 / 4001 McNemar), and ``1.1``, the eleventh label of twelve, does
+   off it (28 / 4001 Fisher, 38 / 4001 McNemar), and ``1.1``, the eleventh label of twelve, does
    not. All 22 (27) flat rejections lie inside rejecting groups on both axes, and under McNemar
    ``1.2`` rejects with no flat rejection inside it. BH with ``m = G``
    and ``m = informative`` differ on the load axis (two degenerate) and coincide on ``gain``, so
@@ -346,7 +346,7 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 #: By ``load`` at the default: 10, 20 and 30 reject at the floor; 40 has one informative condition
 #: (``gain`` 0.6, one discordant pair) at p exactly 1; 50 and 60 trip in every episode of both runs.
 LATTICE_LOAD_REJECTED = ("10.0", "20.0", "30.0")
-LATTICE_LOAD_DEGENERATE = ("50.0", "60.0")
+LATTICE_LOAD_DEGENERATE = ("50.0", "100.0")
 LATTICE_LOAD_ONE_INFORMATIVE = ("40.0",)
 #: By ``gain`` at ``ADMITTING_MAX_GROUP_MDE``: the ten groups 0.1 to 1.0 at the floor under McNemar,
 #: and 1.1 (eleventh of twelve, so not the last label) the one group not rejected.
@@ -354,10 +354,10 @@ LATTICE_GAIN_AT_FLOOR = tuple(str(v) for v in lattice.GAIN[:10])
 LATTICE_GAIN_NOT_REJECTED = "1.1"
 #: PF4 (PF4.18): with the permutations scored on the observed point's scale, the lattice by ``gain``
 #: under Fisher (B = 4,000, seed 0) rejects 11 of 12 groups, two of them off the floor: gain 0.9 at
-#: 2 / (B + 1) and gain 1.2 at 33 / (B + 1); gain 1.1 sits at 3777 / (B + 1). Re-measured on main's
+#: 3 / (B + 1) and gain 1.2 at 28 / (B + 1); gain 1.1 sits at 3797 / (B + 1). Re-measured on main's
 #: unchanged src when this file moved to the lattice (no independent value exists for a group p);
 #: each group q is recomputed from these counts by ``lattice.bh``.
-LATTICE_FISHER_GAIN_GROUP_COUNTS = {"0.9": 2, "1.1": 3777, "1.2": 33}
+LATTICE_FISHER_GAIN_GROUP_COUNTS = {"0.9": 3, "1.1": 3797, "1.2": 28}
 LATTICE_FISHER_GAIN_REJECTED = 11
 #: The flat family's rejections per scheme, as the references give them (22 and 27 lower, 0 higher).
 LATTICE_FLAT_REJECTIONS = {"fisher_bh": 22, "mcnemar_bh": 27}
@@ -1874,8 +1874,8 @@ def test_f17_golden_lattice_by_load_rejects_exactly_the_three_groups_up_to_30(by
 
 @pytest.mark.parametrize("method", TWO_SCHEMES)
 def test_f17_golden_lattice_by_gain_rejects_the_ten_at_the_floor_and_not_1_1(by_gain: Any, method: str) -> None:
-    """``gain = 1.1`` (the eleventh of twelve labels, not the last) sits at p 3777 / 4001 (Fisher)
-    and 3201 / 4001 (McNemar): the one group not rejected, with a rejected group on either side.
+    """``gain = 1.1`` (the eleventh of twelve labels, not the last) sits at p 3797 / 4001 (Fisher)
+    and 3256 / 4001 (McNemar): the one group not rejected, with a rejected group on either side.
     Under McNemar no independent group p exists, so the count is a range."""
     multi, result = by_gain[method]
     fault_lines = result.fault_lines
@@ -1919,7 +1919,7 @@ def test_f17_every_flat_rejection_lies_inside_a_rejecting_group_on_both_axes(by_
     references' counts, are a subset of the union of the rejecting groups' cells on both axes.
     **The spec's fixture-limit note is wrong in the safe direction**: it says a fixture of this
     kind cannot show a group rejecting with no flat rejection inside it, but by ``gain`` under
-    McNemar the group 1.2 rejects (51 / 4001) with none inside; the last assertion records that, and
+    McNemar the group 1.2 rejects (38 / 4001) with none inside; the last assertion records that, and
     that under Fisher every rejecting group holds a flat rejection. F18's axes pair is still the
     clean fixture, where no leaf is below 0.46 before correction."""
     multi, gain_tree = by_gain[method]

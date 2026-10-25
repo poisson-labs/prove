@@ -368,7 +368,7 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # (tests/lattice.py). Read off the two files after every other move.
 FROZEN_ORACLE_SHA256 = {
     "tests/test_s25_root.py": "7da856c7d618fb404f5c6a53a31e2763b7a9167c43985913b72e08ec928b3af1",
-    "tests/test_s26_fault_lines.py": "4d739eb68fcd03bc1562553a654b472de691f7a67bda79789df65daa98b59296",
+    "tests/test_s26_fault_lines.py": "1ea67ed48a15108902a7b8cd22689f3206bcf28f7a1d4a7232625abe00817a2b",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -387,7 +387,7 @@ TREE_PARAMETERS = (
 #: The lattice's labels and counts (step zero item 4), re-measured on the unchanged build.
 #: ``str(value)`` of the config floats.
 LATTICE_LOAD_REJECTED = ("10.0", "20.0", "30.0")
-LATTICE_LOAD_NOT_REJECTED = ("40.0", "50.0", "60.0")
+LATTICE_LOAD_NOT_REJECTED = ("40.0", "50.0", "100.0")
 LATTICE_LOAD_LEAVES = {"fisher_bh": (10, 11, 1), "mcnemar_bh": (10, 11, 8)}
 LATTICE_LOAD_UNION = {"fisher_bh": 25, "mcnemar_bh": 30}
 #: A family whose rejected leaves' ``q_within`` is neither ascending nor descending in hash order

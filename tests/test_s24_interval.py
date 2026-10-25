@@ -1267,7 +1267,7 @@ def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
     assert lattice_pair.check("any") is False
     assert lattice_logrank.headline() == LOGRANK_HEADLINE
     assert lattice_logrank.trade_line() is None
-    # PF4 (PF4.13): 12 cells rose under log-rank (lattice.logrank: the load 60 conditions).
+    # PF4 (PF4.13): 12 cells rose under log-rank (lattice.logrank: the load 100 conditions).
     # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the rise is counted in direction words
     # (n_higher), n_worse is None, check() is refused and check("higher") fails.
     tripped = lattice_logrank.by_event[EVENT]

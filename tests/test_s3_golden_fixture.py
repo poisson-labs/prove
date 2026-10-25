@@ -37,7 +37,7 @@ DESIGN_TRIPPED_PCT = {lattice.RUN_A: 76.9, lattice.RUN_B: 60.5}
 DESIGN_TRIPPED = {lattice.RUN_A: 1771, lattice.RUN_B: 1394}
 DESIGN_SAFER, DESIGN_WORSE = 22, 0
 GAIN_GRID = [round(0.1 * k, 1) for k in range(1, 13)]
-LOAD_GRID = [10.0 * k for k in range(1, 7)]
+LOAD_GRID = [10.0, 20.0, 30.0, 40.0, 50.0, 100.0]
 
 
 # ---------- fixtures ----------

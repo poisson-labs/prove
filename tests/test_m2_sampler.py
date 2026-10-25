@@ -53,7 +53,7 @@ values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
 
 [axes.load]
 type   = "continuous"
-values = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+values = [10.0, 20.0, 30.0, 40.0, 50.0, 100.0]
 """
 
 RATES = (0.0, 0.05, 0.10, 0.20, 0.30)
@@ -416,7 +416,7 @@ def test_i10_load_accepts_str_path_and_matches_grid(tmp_path: Path) -> None:
     path.write_text(LATTICE_TOML)
     spec = SweepSpec.load(str(path))
     gains = [round(0.1 * k, 1) for k in range(1, 13)]
-    loads = [10.0 * k for k in range(1, 7)]
+    loads = [10.0, 20.0, 30.0, 40.0, 50.0, 100.0]
     assert list(spec.configs) == grid({"gain": gains, "load": loads})
 
 

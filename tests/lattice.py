@@ -16,8 +16,8 @@ what a comparison must report from it with their own references, never from Prov
 
 What the design holds, and why (each is a property some test needs, named where it is used):
 
-- ``load`` 50 and 60: every episode trips in both runs (ceiling cells, saturated, no room for a
-  rise). At 60 the after run trips at 0.6 of the before run's time, so a log-rank test sees a
+- ``load`` 50 and 100: every episode trips in both runs (ceiling cells, saturated, no room for a
+  rise). At 100 the after run trips at 0.6 of the before run's time, so a log-rank test sees a
   rise there that a test on the share cannot; at 50 the times are the same, so nothing can see a change.
 - ``load`` 40: ceiling cells too, except one condition (``gain`` 0.6) where one episode the
   before run tripped held in the after run: the group's only informative condition, one
@@ -36,7 +36,7 @@ What the design holds, and why (each is a property some test needs, named where 
   differ from Fisher's and its per-group families differ from one family over their union. At
   ``load`` 20, ``gain`` 1.2 also trips twice on replicates the before run held, so under McNemar
   no condition of that column is flagged while the column, as a group, still rejects.
-- No condition trips significantly more in the after run, except through time at ``load`` 60.
+- No condition trips significantly more in the after run, except through time at ``load`` 100.
 
 The runs are written the way the private 0.0.1 builds wrote them before the trace columns
 existed (the thirteen columns of ``LEGACY_COLUMNS`` and a manifest with ``proofload_version``),
@@ -82,7 +82,8 @@ EVENT, OTHER = "tripped", "held"
 OUTCOMES = (EVENT, OTHER)
 X, Y = "gain", "load"
 GAIN: tuple[float, ...] = tuple(round(0.1 * k, 1) for k in range(1, 13))
-LOAD: tuple[float, ...] = tuple(10.0 * k for k in range(1, 7))
+#: Six values, the last of them 100.0, so the labels' text order is not their numeric order.
+LOAD: tuple[float, ...] = (10.0, 20.0, 30.0, 40.0, 50.0, 100.0)
 N = 32
 HORIZON = 5.0
 T_UNIT = "seconds"
@@ -91,7 +92,7 @@ SALT = "lattice:seed=500000+32*condition+replicate"
 SEED_BASE = 500_000
 #: The generator's own seed: where each count lands among the replicates, and every time.
 GENERATOR_SEED = 20260115
-#: At ``load`` 60 the after run trips at this share of the before run's time.
+#: At ``load`` 100 the after run trips at this share of the before run's time.
 SOONER = 0.6
 
 CELLS = len(GAIN) * len(LOAD)
