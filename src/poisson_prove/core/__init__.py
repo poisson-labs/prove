@@ -33,6 +33,8 @@ from poisson_prove.core._ops import (
     start,
 )
 from poisson_prove.core._results import (
+    Artifact,
+    ArtifactRef,
     CheckResult,
     Comparison,
     EpisodePage,
@@ -48,8 +50,12 @@ from poisson_prove.core._results import (
     RunResult,
     Spec,
     Stopped,
+    UiLocation,
+    Unsaved,
+    View,
     WrittenFiles,
 )
+from poisson_prove.core._views import artifact, artifacts, build_ui, save, view
 from poisson_prove.diff import _CAUSES as CAUSES
 from poisson_prove.diff import _PAIRED_METHODS as PAIRED_METHODS
 from poisson_prove.diff import COVERAGE_COLUMNS
@@ -64,6 +70,8 @@ from poisson_prove.tree import (
 )
 
 __all__ = [
+    "Artifact",
+    "ArtifactRef",
     "CAUSES",
     "COMMAND",
     "COVERAGE_COLUMNS",
@@ -96,8 +104,14 @@ __all__ = [
     "RunResult",
     "Spec",
     "Stopped",
+    "UiLocation",
+    "Unsaved",
+    "View",
     "WrittenFiles",
     "__version__",
+    "artifact",
+    "artifacts",
+    "build_ui",
     "check",
     "compare",
     "episodes",
@@ -111,5 +125,7 @@ __all__ = [
     "resume",
     "run",
     "runs",
+    "save",
     "start",
+    "view",
 ]

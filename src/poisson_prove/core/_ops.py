@@ -37,6 +37,7 @@ from poisson_prove._compat import (
 from poisson_prove._names import Index, NamesError, started, unfit
 from poisson_prove._names import index as names_index
 from poisson_prove._resolve import resolve as _resolve_import
+from poisson_prove.core import _artifacts
 from poisson_prove.core._results import (
     CheckResult,
     Comparison,
@@ -91,6 +92,7 @@ from poisson_prove.survival import SurvivalError, cell_table, competing_set
 from poisson_prove.trace import Trace, TraceValidationError
 from poisson_prove.tree import (
     DEFAULT_DEPTH,
+    DEFAULT_MAX_GROUP_MDE,
     DEFAULT_PERMUTATIONS,
     DEFAULT_SEED,
     TreeResult,
@@ -261,6 +263,13 @@ def open_store(path: Path | str | None = None, *, verb: str | None = None) -> Op
     note = retired_store_variable_note(seen, ENV_STORE)
     if note is not None:
         store.notes.append(note)
+    if verb != "init" and root.is_dir():
+        # A store written by a newer format than this Prove reads is refused by every verb
+        # before anything is planned or written.
+        try:
+            _artifacts.check_store(root)
+        except _artifacts.NewerFormat as exc:
+            raise refusal(str(exc), [_artifacts.UPGRADE]) from exc
     if verb is None:
         return store
     if not given and not env:
@@ -276,7 +285,7 @@ def open_store(path: Path | str | None = None, *, verb: str | None = None) -> Op
             f"no store at {root}. No directory exists at that path; {_store_source(given)}.",
             [_first_sweep(root), elsewhere],
         )
-    if verb != "runs" and not Store(root).runs():
+    if verb not in ("runs", "ui") and not Store(root).runs():
         raise refusal(
             f"no runs in {root}. No directory under it holds a manifest.json; "
             f"{_store_source(given)}.",
@@ -888,6 +897,13 @@ def compare(
     headline = _with_method(multi.headline().splitlines()[0], multi.method)
     sentence = _facts.verdict_sentence(word, headline, multi)
     nexts = _report_next(idx, run_a, run_b, manifests, a is not None) if verb == "diff" else []
+    tree_settings = {
+        "by": by,
+        "depth": DEFAULT_DEPTH if depth is None else depth,
+        "permutations": DEFAULT_PERMUTATIONS if permutations is None else permutations,
+        "seed": DEFAULT_SEED if seed is None else seed,
+        "max_group_mde": DEFAULT_MAX_GROUP_MDE if max_group_mde is None else max_group_mde,
+    }
 
     def document() -> dict[str, Any]:
         payload: dict[str, Any] = _method_first(multi.to_json(), multi.method, chosen)
@@ -926,6 +942,9 @@ def compare(
         writers=_old_writer(manifests),
         fixed=fixed,
         title=f"{idx.name_of(run_a)} vs {idx.name_of(run_b)}: {', '.join(multi.events)}",
+        tree_settings=tree_settings,
+        report_next=tuple(_report_next(idx, run_a, run_b, manifests, True)),
+        frames=frames,
         **extra,
     )
 
@@ -2007,6 +2026,10 @@ def start(
         if started_once["done"]:
             return
         started_once["done"] = True
+        try:
+            _artifacts.ensure_descriptor(store.root)
+        except OSError:
+            pass  # the run is written; the descriptor follows on the next write that can
         if p.resumed:
             events.emit(
                 "resumed",
@@ -2072,19 +2095,27 @@ def start(
     if before is not None:
         _record_resume(st, p, before)
     result = _sweep_result(plan, store, st, p, summary)
-    kept_now = result.payload.get("rows", 0)
+    for note in _notes:
+        events.emit("note", {"sentence": note})
+    # The closing progress reads the store: done is every stored rollout, errored those with no
+    # outcome, kept the rest, so the three always add up.
+    done_now = int(result.payload.get("rows", 0))
+    errored_now = int(result.payload.get("no_outcome", 0))
     events.flush_progress(
         {
-            "done": kept_now,
-            "kept": kept_now,
-            "errored": result.payload.get("no_outcome", 0),
+            "done": done_now,
+            "kept": done_now - errored_now,
+            "errored": errored_now,
             "total": len(p.pairs) + p.already_stored,
         }
     )
-    for note in _notes:
-        events.emit("note", {"sentence": note})
-    end = "interrupted" if stopped_by_cancel else "finished"
-    events.emit(end, {"status": result.payload.get("status"), "kept": kept_now})
+    # A run that stopped short (a cancel, a --max-rollouts stop) ends its segment with
+    # ``interrupted`` and is resumable; only a complete run ends with ``finished``.
+    end = "finished" if summary.complete and not stopped_by_cancel else "interrupted"
+    events.emit(end, {"status": result.payload.get("status"), "kept": done_now - errored_now})
+    from poisson_prove.core._views import refresh_ui
+
+    refresh_ui(store.root)
     return result
 
 

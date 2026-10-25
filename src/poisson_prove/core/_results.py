@@ -243,6 +243,13 @@ class Comparison(Result):
     fixed: Mapping[str, Any] = field(default_factory=dict)
     bundle: Any = None
     title: str = ""
+    #: The tree's settings as the comparison was asked for them, recorded when it is saved.
+    tree_settings: Mapping[str, Any] = field(default_factory=dict)
+    #: ``report``'s command with the runs' names, the ``next`` a saved comparison carries when
+    #: the verb that computed it printed none.
+    report_next: tuple[str, ...] = ()
+    #: Both runs' episodes, read once, for the charts a saved comparison draws.
+    frames: Any = field(default=None, repr=False)
 
     @property
     def method(self) -> str:
@@ -352,6 +359,83 @@ class CheckResult(Comparison):
 
 
 @dataclass(frozen=True, eq=False)
+class ArtifactRef:
+    """One saved artifact, as ``save`` and ``artifacts`` name it: its kind, its id and its
+    folder, relative to the store."""
+
+    kind: str
+    id: str
+    path: str
+
+    def to_json(self) -> dict[str, Any]:
+        """``{"schema": "poisson-prove.artifact-ref/1", "kind", "id", "path"}``."""
+        return {
+            "schema": "poisson-prove.artifact-ref/1",
+            "kind": self.kind,
+            "id": self.id,
+            "path": self.path,
+        }
+
+
+@dataclass(frozen=True, eq=False)
+class Artifact:
+    """One saved artifact read back: its descriptor and its result."""
+
+    kind: str
+    id: str
+    descriptor: Mapping[str, Any]
+    result: Mapping[str, Any]
+
+    def to_json(self) -> dict[str, Any]:
+        """The descriptor and the result under one document."""
+        doc = {
+            "schema": "poisson-prove.artifact/1",
+            "kind": self.kind,
+            "id": self.id,
+            "descriptor": dict(self.descriptor),
+            "result": dict(self.result),
+        }
+        out: dict[str, Any] = _look.strict(_look.native(doc))
+        return out
+
+
+@dataclass(frozen=True, eq=False)
+class UiLocation(Result):
+    """Where the static UI was built: its index page, as a path and as the address a browser
+    opens."""
+
+    KIND: ClassVar[str] = "ui"
+    index: str = ""
+    location: str = ""
+
+    def to_json(self) -> dict[str, Any]:
+        """``schema``, ``verdict``, ``sentence``, ``location``, ``next``."""
+        return _document(
+            self.KIND, self.verdict, self.sentence, {"location": self.location}, self.next
+        )
+
+
+@dataclass(frozen=True, eq=False)
+class View:
+    """The view behind one page of the UI: every fact the page shows, with the addresses of
+    the pages it links to, as one strict document."""
+
+    kind: str
+    address: str
+    document: Mapping[str, Any]
+
+    def to_json(self) -> dict[str, Any]:
+        """``schema`` (``poisson-prove.view/1``), ``view`` (which of the seven), ``address``
+        and the view's own fields."""
+        doc = {"schema": "poisson-prove.view/1", "view": self.kind, "address": self.address}
+        for key, value in self.document.items():
+            if key not in doc:
+                doc[key] = value
+        out: dict[str, Any] = _look.strict(_look.native(doc))
+        return out
+
+
+@dataclass(frozen=True, eq=False)
 class Plan(Result):
     """A sweep planned: what will run, where, at what cost, and the design's limit."""
 
@@ -418,6 +502,16 @@ class Refusal(Exception):
         self.usage = usage
         self.plan = plan
         self.notes = list(notes)
+
+
+class Unsaved(Exception):
+    """A result could not be saved into its store (the store cannot be written to): the words
+    a face prints after ``note:``. The command goes on."""
+
+    def __init__(self, kind: str, reason: str) -> None:
+        super().__init__(f"the comparison was not saved: {reason}")
+        self.kind = kind
+        self.reason = reason
 
 
 class Stopped(Exception):
