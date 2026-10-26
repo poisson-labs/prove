@@ -114,6 +114,26 @@ def fmt_duration(seconds: Any) -> str:
     return f"{hours} h {minutes} min"
 
 
+def fmt_signed(value: Any) -> str:
+    """A change with its sign, ``+0.309`` or ``-0.250``, a zero unsigned; ``none`` for none."""
+    if value is None:
+        return "none"
+    x = float(value)
+    if math.isnan(x):
+        return "nan"
+    text = fmt_rate(abs(x))
+    return f"+{text}" if x > 0 else f"-{text}" if x < 0 else text
+
+
+def condition_words(config: Mapping[str, Any]) -> str:
+    """A condition as its axis values, ``gain 0.5 · load 10``, each number as rule 10 prints it."""
+    parts = []
+    for key, value in config.items():
+        number = isinstance(value, (int, float)) and not isinstance(value, bool)
+        parts.append(f"{key} {fmt_num(value) if number else value}")
+    return " · ".join(parts)
+
+
 def fmt_hash(value: Any) -> str:
     """A hash at 12 hex characters in text."""
     text = str(value)

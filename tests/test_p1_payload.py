@@ -1450,5 +1450,10 @@ def test_y22_serve_and_serve_json_on_the_lattice_write_nothing_to_the_store_the_
     assert code == 0 and calls == [] and out.startswith('{\n  "schema": '), err
     code, out, err, calls = quiet(lambda: run_serve(argv))
     assert calls == ["serve_page"] and out == "", (code, out[:80])
-    assert snapshot(LATTICE_ROOT) == before_store and snapshot(tmp_path) == before_cwd
+    # PF12 (spec section 18.2, Q59): serve saves the comparison it shows under the store's
+    # ``.poisson/``; nothing else in the store, the working folder or the temp folder is written.
+    def stored(listing: dict[str, str]) -> dict[str, str]:
+        return {k: v for k, v in listing.items() if not k.startswith(".poisson")}
+
+    assert stored(snapshot(LATTICE_ROOT)) == stored(before_store) and snapshot(tmp_path) == before_cwd
     assert sorted(os.listdir(tmp_path)) == sorted(before_cwd) or before_cwd == {}

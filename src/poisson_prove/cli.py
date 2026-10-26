@@ -1,12 +1,13 @@
 """The command line, a face over the core.
 
-Nine verbs: ``init`` writes a sweep spec, ``prove.toml``, and nothing else; ``sweep`` runs a plan
+Ten verbs: ``init`` writes a sweep spec, ``prove.toml``, and nothing else; ``sweep`` runs a plan
 on a backend after showing the plan and asking; ``diff``, ``report``, ``check`` and ``serve``
 operate on stored runs; ``inspect`` prints the ``(config, seed)`` pairs behind an event plus a
 reproduction snippet; ``runs`` lists the store; ``paired`` asserts that a declaration's arms were
-the same request replayed and writes the paired-replay files. ``serve`` is the one verb that binds
-a socket: a loopback listener holding one page built before the bind, which writes nothing and
-dies with the process.
+the same request replayed and writes the paired-replay files; ``ui`` builds the static dashboard
+over the store. ``report`` and ``serve`` save the comparison they show into the store, ``diff``
+and ``check`` save theirs with ``--save``. ``serve`` is the one verb that binds a socket: a
+loopback listener holding one page built before the bind, which dies with the process.
 
 This module computes nothing and decides nothing: it parses arguments, calls the core
 (``poisson_prove.core``), and renders what comes back with the shared formatting. Every number it
@@ -104,7 +105,9 @@ _SERVE_FORM = (
 )
 #: The tool's own options, accepted before or after the verb.
 _GLOBAL_OPTIONS = ("--store", "--plain", "--debug")
-_VERB_NAMES = ("init", "sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs")
+_VERB_NAMES = (
+    "init", "sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs", "ui",
+)
 _SCHEMAS = {verb: f"{_COMMAND}.{verb}/1" for verb in _VERB_NAMES}
 _ERRORS_LOG = "~/.cache/poisson-prove/errors.log"
 
@@ -156,6 +159,9 @@ class _State:
     verb: str = ""
     debug: bool = False
     argv: list[str] = field(default_factory=list)
+    #: Whether the verb saved its comparison before it was interrupted (``serve``), so the
+    #: stopped line does not say nothing was written.
+    saved: bool = False
 
 
 class _Exit(Exception):
@@ -492,15 +498,22 @@ def _build_parser(io: _IO) -> _Parser:
         help="also run the other two methods and print them side by side (default: one method)",
     )
     _add_json_option(diff_p, "the comparison")
+    diff_p.add_argument(
+        "--save",
+        action="store_true",
+        help="save the comparison into the store, under .poisson/artifacts/ (default: not saved)",
+    )
     _add_tree_arguments(diff_p, defaults=True)
     _add_global_options(diff_p, top=False)
 
     report_p = sub.add_parser(
         "report",
-        help="write report.md, heatmap.svg and receipt.html for two runs, or one",
+        help="write report.md, heatmap.svg and receipt.html for two runs, or one, and save the "
+            "comparison",
         description=(
             "Write a report folder: two runs give the comparison with its heatmap, one run gives\n"
-            "its survival report. The folder holds report.md, heatmap.svg and receipt.html."
+            "its survival report. The folder holds report.md, heatmap.svg and receipt.html. A\n"
+            "comparison is also saved into the store, under .poisson/artifacts/."
         ),
         epilog=(
             "examples:\n"
@@ -647,14 +660,21 @@ def _build_parser(io: _IO) -> _Parser:
         "that rose (higher) or fell (lower); worse needs each event's kind (default: worse)",
     )
     _add_json_option(check_p, "the verdict and the comparison")
+    check_p.add_argument(
+        "--save",
+        action="store_true",
+        help="save the check into the store, under .poisson/artifacts/ (default: not saved)",
+    )
     _add_global_options(check_p, top=False)
 
     serve_p = sub.add_parser(
         "serve",
-        help="serve a read-only page comparing two runs on a loopback port",
+        help="serve a read-only page comparing two runs on a loopback port, and save the "
+            "comparison",
         description=(
             "Serve a read-only page for one pair of runs on an ephemeral loopback port, built\n"
-            "before the bind; Ctrl-C stops it and nothing is written."
+            "before the bind; the comparison it shows is saved into the store, under\n"
+            ".poisson/artifacts/, before the page is served; Ctrl-C stops it."
         ),
         epilog=(
             "examples:\n"
@@ -771,6 +791,24 @@ def _build_parser(io: _IO) -> _Parser:
     )
     _add_json_option(runs_p, "the list")
     _add_global_options(runs_p, top=False)
+
+    ui_p = sub.add_parser(
+        "ui",
+        help="build the static dashboard over the store and say where it is",
+        description=(
+            "Build the static dashboard in the store's .poisson/ui/: the runs, the saved\n"
+            "comparisons, their verdicts and charts, as pages opened from disk with nothing\n"
+            "loaded from the network. Every command that writes a run or saves a comparison\n"
+            "refreshes a dashboard the store already has."
+        ),
+        epilog=f"examples:\n  {_COMMAND} ui\n  {_COMMAND} ui --open",
+    )
+    ui_p.add_argument(
+        "--open", action="store_true", help="open the dashboard in the browser (default: not "
+            "opened)"
+    )
+    _add_json_option(ui_p, "where the dashboard is")
+    _add_global_options(ui_p, top=False)
 
     for p in (parser, *sub.choices.values()):
         if isinstance(p, _Parser):
@@ -1030,7 +1068,7 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
                 io.next(command)
         return 130
     except KeyboardInterrupt:
-        sentence = "interrupted; nothing was written"
+        sentence = "interrupted" if state.saved else "interrupted; nothing was written"
         if state.json:
             _write_json(io, state.verb, "stopped", sentence, {}, [])
         else:
@@ -1127,12 +1165,44 @@ def _two_runs(verb: str, words: Sequence[str]) -> tuple[str | None, str | None]:
 # ---------- rendering ----------
 
 
-def _verdict_block(io: _IO, result: core.Comparison) -> None:
-    """The verdict line, then its detail lines, as the result gives them; a blank line ends it."""
+def _verdict_block(io: _IO, result: core.Comparison, saved: core.ArtifactRef | None = None) -> None:
+    """The verdict line, then its detail lines, as the result gives them, then what was saved;
+    a blank line ends it."""
     io.line(f"{result.verdict}  {result.sentence}")
     for label, text in result.detail:
         io.detail(label, text)
+    if saved is not None:
+        io.detail("saved", f"{saved.kind} {_look.fmt_hash(saved.id)}")
     io.line()
+
+
+def _save(io: _IO, store: Any, result: core.Comparison) -> core.ArtifactRef | None:
+    """Save the result the verb computed; a store that cannot be written to gets one note and
+    the command goes on."""
+    try:
+        saved: core.ArtifactRef = core.save(store, result)
+    except core.Unsaved as exc:
+        io.err_line(f"note: {exc}")
+        return None
+    if saved.unrefreshed is not None:
+        # The pages are derived and the previous ones stand; the one line says so and names ui.
+        io.err_line(
+            f"note: the dashboard's pages were not refreshed ({saved.unrefreshed}); "
+            f"run {_COMMAND} ui"
+        )
+    return saved
+
+
+def _with_saved(doc: Mapping[str, Any], saved: core.ArtifactRef | None) -> dict[str, Any]:
+    """A result's document with ``saved`` (the artifact's folder, relative to the store) before
+    ``next``."""
+    if saved is None:
+        return dict(doc)
+    out = {k: v for k, v in doc.items() if k != "next"}
+    out["saved"] = saved.path
+    if "next" in doc:
+        out["next"] = doc["next"]
+    return out
 
 
 def _method_markdown(markdown: str, line: str, pair: Sequence[str] = ()) -> str:
@@ -1564,11 +1634,13 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
         permutations=ns.permutations, seed=ns.seed, max_group_mde=ns.max_group_mde, depth=ns.depth,
     )
     _notes_of(io, result)
+    saved = _save(io, store, result) if ns.save else None
     if ns.json:
-        _print_result(io, "diff", result)
+        doc = _with_saved(result.to_json(), saved)
+        _write_json(io, "diff", doc["verdict"], doc["sentence"], doc, doc["next"])
         return 0
     multi, nested = result.multi, result.tree
-    _verdict_block(io, result)
+    _verdict_block(io, result, saved)
     with _look.rule10():
         io.write(multi.to_markdown())
         if result.others:
@@ -1786,6 +1858,7 @@ def _report_pair(
     written = _write_report_files(
         io, out_dir, report, receipt, result.bundle, _method_of(result), pair
     )
+    saved = _save(io, store, result)
     if ns.json:
         doc = result.to_json()
         payload = {"out": str(out_dir), "wrote": [str(p) for p in written]}
@@ -1794,9 +1867,13 @@ def _report_pair(
         body = doc[result.method] if result.others else doc
         dropped = ("schema", "verdict", "sentence", "next", "omnibus", "tree")
         payload.update({k: v for k, v in body.items() if k not in dropped})
+        if saved is not None:
+            payload["saved"] = saved.path
         _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
         return 0
     _wrote(io, out_dir, written)
+    if saved is not None:
+        io.detail("saved", f"{saved.kind} {_look.fmt_hash(saved.id)}")
     io.line()
     _write_summary(io, multi)
     return 0
@@ -1912,10 +1989,12 @@ def _cmd_check(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
     )
     _notes_of(io, result)
     code = 0 if result.passed else 4
+    saved = _save(io, store, result) if ns.save else None
     if ns.json:
-        _print_result(io, "check", result)
+        doc = _with_saved(result.to_json(), saved)
+        _write_json(io, "check", doc["verdict"], doc["sentence"], doc, doc["next"])
         return code
-    _verdict_block(io, result)
+    _verdict_block(io, result, saved)
     _write_summary(io, result.multi)
     return code
 
@@ -1972,6 +2051,10 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
     structure = {"method": result.method, "method_chosen": result.method_chosen, **structure}
     a_name = result.names.get(result.run_a, result.run_a)
     b_name = result.names.get(result.run_b, result.run_b)
+    # The comparison the page shows is saved before anything binds; the page structure keeps
+    # its keys, so the save shows in the store and, once bound, on the line after the address.
+    saved = _save(io, store, result)
+    state.saved = saved is not None
     if ns.json:
         sentence = f'the page comparing "{a_name}" with "{b_name}", bound nowhere'
         structure = _add_names(structure, result.names)
@@ -1984,6 +2067,8 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
             f'ok  serving "{a_name}" against "{b_name}" at '
             f"http://{_HOST}:{srv.server_address[1]}/ (Ctrl-C stops)"
         )
+        if saved is not None:
+            io.detail("saved", f"{saved.kind} {_look.fmt_hash(saved.id)}")
         io.out.flush()
 
     serve_page(page, on_bind=announce)
@@ -2094,7 +2179,24 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
     return 0
 
 
+def _cmd_ui(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    """Build the dashboard and say where it is; ``--open`` opens it in the browser, once."""
+    import webbrowser
+
+    built = core.build_ui(store)
+    _notes_of(io, built)
+    if ns.json:
+        _print_result(io, "ui", built)
+    else:
+        io.line(f"ok  dashboard at {built.location}")
+    if ns.open:
+        io.out.flush()
+        webbrowser.open(built.location)
+    return 0
+
+
 _VERBS: dict[str, Callable[[argparse.Namespace, _IO, Any, _State], int]] = {
+    "ui": _cmd_ui,
     "init": _cmd_init,
     "sweep": _cmd_sweep,
     "diff": _cmd_diff,

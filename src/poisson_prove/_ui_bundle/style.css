@@ -1,0 +1,52 @@
+/* poisson-prove: the static dashboard's style. The colour tokens are the look's, light and dark;
+   the page follows the system's theme. Type is the system's own fonts. */
+:root{color-scheme:light dark;--bg:#fcfcfb;--surface:#f4f3ef;--rule:#dddcd6;--text:#0b0b0b;--dim:#5f5e59;
+--ok:#006300;--warn:#8a5800;--bad:#bf2626;--rise:#c4511f;--fall:#2a6fc4;--mid:#e9e8e3;--after:#5444c9}
+@media (prefers-color-scheme: dark){:root{--bg:#1a1a19;--surface:#242422;--rule:#3a3a37;--text:#f0efec;--dim:#a8a79f;
+--ok:#5cc45c;--warn:#e5b23c;--bad:#f07070;--rise:#e0703f;--fall:#4f94e8;--mid:#383835;--after:#9085e9}}
+
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;overflow-wrap:anywhere}
+.mono,code,table,dl,.verdict,nav,pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+header{border-bottom:1px solid var(--rule);padding:10px 24px;display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+header .tool{font-weight:700}
+nav{font-size:13px;color:var(--dim);min-width:0} nav a{color:var(--dim)}
+.store{margin-left:auto;font:13px ui-monospace,Menlo,Consolas,monospace;color:var(--dim)}
+main{max-width:1120px;margin:0 auto;padding:20px 24px 48px}
+h1{font-size:20px;font-weight:600;margin:4px 0 14px}
+h2{font-size:15px;font-weight:650;margin:30px 0 8px;padding-top:10px;border-top:1px solid var(--rule)}
+h3{font-size:14px;font-weight:650;margin:18px 0 6px}
+p{margin:6px 0;max-width:80ch}
+.verdict{font-size:15px;margin:6px 0 14px;padding:10px 12px;background:var(--surface);border-radius:6px;max-width:none}
+.verdict b{margin-right:1.2ch}
+.w-ok{color:var(--ok)}.w-warn{color:var(--warn)}.w-bad{color:var(--bad)}.w-res{color:var(--text);font-weight:700}
+.dim{color:var(--dim)}
+dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 18px;font-size:13px;margin:8px 0}
+dt{color:var(--dim)} dd{margin:0;min-width:0}
+dd dl{margin:2px 0;gap:2px 12px}
+a{color:inherit;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
+a:hover{text-decoration-color:currentColor}
+table{border-collapse:collapse;font-size:13px;margin:8px 0;width:100%}
+.tablewrap{overflow-x:auto;max-width:100%}
+th{font-weight:400;color:var(--dim);text-align:left;border-bottom:1px solid var(--rule);padding:4px 10px 4px 0;white-space:nowrap;vertical-align:bottom}
+table[data-sort] th{cursor:pointer;user-select:none}
+th.num,td.num{text-align:right}
+td{padding:3px 10px 3px 0;border-bottom:1px solid var(--surface);white-space:nowrap;vertical-align:top}
+tr.flagged td.cond,tr.asked td.cond{font-weight:600}
+td.wrap{white-space:normal;min-width:16ch}
+.note{font-size:13px;color:var(--dim);max-width:90ch}
+.filter{font:13px ui-monospace,Menlo,Consolas,monospace;padding:4px 8px;border:1px solid var(--rule);border-radius:4px;background:var(--bg);color:var(--text);margin:6px 0}
+.charts{display:grid;grid-template-columns:1fr;gap:18px;max-width:820px}
+figure{margin:8px 0;max-width:820px;padding:12px;background:var(--surface);border-radius:6px}
+figure.wide{max-width:none}
+figcaption{font-size:13px;margin-bottom:6px}
+svg{display:block;width:100%;height:auto}
+svg text{font:11px ui-monospace,Menlo,Consolas,monospace;fill:var(--text)}
+pre{font:13px ui-monospace,Menlo,Consolas,monospace;background:var(--surface);padding:10px 12px;border-radius:6px;overflow-x:auto;margin:8px 0}
+ul.plain{list-style:none;padding:0;margin:6px 0}
+ul.plain li{margin:3px 0}
+ul.rules{font-size:13px;color:var(--dim);padding-left:18px;max-width:90ch}
+.pair{display:flex;gap:1.5ch;flex-wrap:wrap}
+footer{max-width:1120px;margin:0 auto;padding:0 24px 32px;font-size:12px;color:var(--dim)}
+@media (max-width:640px){main,header,footer{padding-left:16px;padding-right:16px}dl{grid-template-columns:1fr}.store{margin-left:0}}
