@@ -60,7 +60,8 @@ def test_pyproject_core_deps_are_math_only():
     list the old parser fails."""
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
     core = {Requirement(d).name.lower() for d in data["project"]["dependencies"]}
-    assert core == {"numpy", "pandas", "scipy", "pyarrow"}
+    # PF6 (Q20, Q60): Rich for the pretty rendering and Textual for the terminal app join the core.
+    assert core == {"numpy", "pandas", "scipy", "pyarrow", "rich", "textual"}
 
 
 def test_python_floor():

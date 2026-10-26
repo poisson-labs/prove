@@ -1,0 +1,23 @@
+{
+  "base": "bfe802d.md",
+  "changes": [
+    {
+      "rule": 10,
+      "what": "rule 10: dollars below $0.10 take two significant digits",
+      "old": "    - dollars as `$1.00`, or with three significant digits below $0.10 (`$0.021`, `$0.0052`);\n",
+      "new": "    - dollars as `$1.00`, or with two significant digits below $0.10 (`$0.021`, `$0.0052`);\n"
+    },
+    {
+      "rule": 16,
+      "what": "rule 16: replaced by the two renderings, plain the contract and pretty the standard look",
+      "old": "16. **Plain text, no colour.** Output falls back to ASCII when stdout cannot encode the glyphs\n    (`·`, `–`, `×`).\n",
+      "new": "16. **Two renderings of one result, and plain is the contract.** Every verb builds one result:\n    the verdict word, its sentence, the detail and the next commands. It is printed one of two ways.\n    - **Plain**: text only, no escape sequence, standard library only. Tests, docs and the\n      conformance test pin this rendering. It falls back to ASCII when the stream cannot encode the\n      glyphs (`·`, `–`, `×`).\n    - **Pretty**: the same facts in the same order, drawn with Rich. It runs only when stdout and\n      stderr are both terminals, `NO_COLOR` is unset or empty, `CI` is unset, `TERM` is not `dumb`,\n      stdout is UTF-8, and neither `--json` nor `--plain` was given. Otherwise the plain rendering\n      runs, byte for byte.\n    - **Colour has four meanings and no others.** Green: the command did what was asked (`ok`,\n      `done`, `passed`). Yellow: it stopped short or cannot say (`stopped`, `refused`,\n      `too small to tell`, `note:`). Red: an error or a failed check (`error:`, `not ready`, `fail`).\n      Dim: secondary text. A verdict word that is neither good nor bad (`plan`, `different`) is bold\n      and has no colour. A number is never coloured.\n    - Only the terminal's 16 named colours, bold and dim are used, so the user's theme decides the\n      shades.\n    - A command printed for the user to copy is never hard-wrapped.\n    - Questions and progress stay on stderr. A live display is removed when the work ends, so what\n      remains on screen is the result.\n    - The conformance test runs each invocation both ways. Piped, the pretty build must equal the\n      plain build byte for byte. In a pseudo-terminal, with escape sequences removed, the first line\n      must carry the same verdict word and sentence, and the exit code must be the same. `--json`\n      must be identical.\n    - A top-level `--plain` forces the plain rendering. `NO_COLOR` turns off the whole pretty\n      rendering, not only its colour.\n    - Rich is an ordinary dependency, not an optional extra; a tool that cannot import it prints plain\n      and says nothing about it.\n    - In a terminal, plain wraps its own long lines at the terminal's width with a hanging indent;\n      piped, it prints one line per fact.\n    - When a table is too wide for the terminal, pretty moves a unit every cell repeats into the\n      header and prints a JSON key one field per line. Pretty is claimed on macOS and Linux\n      terminals; on Windows it is not claimed until someone has run it there; in CI it never runs.\n"
+    },
+    {
+      "rule": 15,
+      "what": "rule 15: the tool's own options before or after the verb, a verb's options after it",
+      "old": "15. **Options may come before or after the verb; abbreviations are refused.**\n",
+      "new": "15. **The tool's own options (such as `--store`, `--plain`, `--debug`) may come before or after the\n    verb; a verb's options follow the verb; abbreviations are refused.**\n"
+    }
+  ]
+}

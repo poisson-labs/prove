@@ -1,0 +1,49 @@
+poisson-prove · comparison  mock-agent@v0 2026-10-14 a → b            prove-runs
+────────────────────────────────────────────────────────────────────────────────
+  mixed  timeout: 1 lower, 1 higher · violated: 6 lower, 0 higher (paired test  
+         on shared seeds)                                                       
+                                                                                
+  method          paired test on shared seeds (McNemar), the default for runs   
+                  paired at sweep time                                          
+  before          mock-agent@v0 2026-10-14 a (20261014T035339Z-1add, complete)  
+  after           mock-agent@v0 2026-10-14 b (20261014T035345Z-8381, complete)  
+  trade           task_id refund · tool_fail_rate 0.55: violated fell, timeout  
+                  rose                                                          
+  22 more lines above the table: m shows them                                   
+  event     kind          higher  lower  unchanged  could not tell              
+› violated  not declared       0      6          3               0              
+  timeout   not declared       1      1          7               3              
+                                                                                
+  heatmap      comparisons/<comparison-id>/heatmap-violated.html               
+  differences  comparisons/<comparison-id>/differences-violated.html           
+  limits       comparisons/<comparison-id>/limits-violated.html                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+  ↑↓   enter   esc   t conditions   d   tab   y   m   ? help   q quit           
+
+BBBBBBBBBBBBBDDD          DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD            DDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BBBBB                                                                         
+                                                                                
+                                                                                
+  DDDDDD                                                                        
+                                                                                
+  DDDDDD                                                                        
+  DDDDD                                                                         
+  DDDDD                                                                         
+                                                                                
+  DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                   
+  DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD              
+VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+                                                                                
+                                                                                
+  DDDDDDD                                                                       
+  DDDDDDDDDDD                                                                   
+  DDDDDD                                                                        
+                                                                                
+                                                                                
+                                                                                
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BB   BBBBB   BBB   B DDDDDDDDDD   B   BBB   B   B   B DDDD   B DDDD           

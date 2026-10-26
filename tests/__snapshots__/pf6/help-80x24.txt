@@ -1,0 +1,49 @@
+poisson-prove · help                                                  prove-runs
+────────────────────────────────────────────────────────────────────────────────
+  keys on every screen                                                          
+  ↑ ↓                 move the focus one row                                    
+  PgUp PgDn Home End  move it a page, or to the first or last row               
+  enter               open the focused row's screen, or its link in the browser 
+  esc                 back, with the focus where it was                         
+  tab                 move the focus between the links and the table            
+  /                   filter the table's rows by text; esc clears it            
+  y                   copy the focused link's file:// address, or the focused   
+                      command or code                                           
+  m                   the lines the window has no room for, when a screen says  
+                      so                                                        
+  ?                   this help                                                 
+  q                   quit (exit 0); during a question, no                      
+  ctrl-c              quit (exit 130); in a sweep, stop and keep what is done   
+  keys of one screen                                                            
+  s                   home, runs                sweep the spec in this folder   
+                      (prove.toml)                                              
+  c                   home, runs                compare two runs                
+  ↓ 17 more                                                                     
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+  ↑↓ move   esc back   q quit                                                   
+
+BBBBBBBBBBBBBDDD                                                      DDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  DDDDDDDDDDDDDDDDDDDD                                                          
+  BBB                                                                           
+  BBBBBBBBBBBBBBBBBB                                                            
+  BBBBB                                                                         
+  BBB                                                                           
+  BBB                                                                           
+  B                                                                             
+  B                                                                             
+                                                                                
+  B                                                                             
+                                                                                
+  B                                                                             
+  B                                                                             
+  BBBBBB                                                                        
+  DDDDDDDDDDDDDDDDDD                                                            
+  B                                                                             
+                                                                                
+  B                                                                             
+  DDDDDDDDD                                                                     
+                                                                                
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BB DDDD   BBB DDDD   B DDDD                                                   

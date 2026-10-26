@@ -134,6 +134,24 @@ def condition_words(config: Mapping[str, Any]) -> str:
     return " · ".join(parts)
 
 
+_UTC = re.compile(r"^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)(:\d\d)(?:\.\d+)?Z$")
+
+
+def fmt_time(value: Any, *, minute: bool = False) -> str:
+    """A UTC time as text, ``2026-10-23T22:36:28Z``, or to the minute, ``2026-10-23 22:36Z``; a
+    value that is not a UTC time, as it is."""
+    m = _UTC.match(str(value))
+    if m is None:
+        return str(value)
+    return f"{m.group(1)} {m.group(2)}Z" if minute else f"{m.group(1)}T{m.group(2)}{m.group(3)}Z"
+
+
+def fmt_clock(value: Any) -> str:
+    """A UTC time's clock alone, ``22:36:28Z``; a value that is not a UTC time, as it is."""
+    m = _UTC.match(str(value))
+    return f"{m.group(2)}{m.group(3)}Z" if m else str(value)
+
+
 def fmt_hash(value: Any) -> str:
     """A hash at 12 hex characters in text."""
     text = str(value)

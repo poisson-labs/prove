@@ -9,7 +9,7 @@ description = "A statistical instrument for finding where autonomous and agentic
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-dependencies = ["numpy", "pandas>=2", "scipy", "pyarrow"]
+dependencies = ["numpy", "pandas>=2", "scipy", "pyarrow", "rich>=14.2.0", "textual>=6.4.0"]
 
 [project.optional-dependencies]
 modal = ["modal>=0.73.76"]
@@ -17,7 +17,7 @@ burla = ["burla==1.8.2"]
 agent = ["litellm", "openai>=2.20,<3", "opentelemetry-sdk"]
 viz = ["matplotlib"]
 all = ["modal>=0.73.76", "burla==1.8.2", "litellm", "openai>=2.20,<3", "matplotlib", "opentelemetry-sdk"]
-dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common", "jsonschema", "playwright", "pyyaml"]
+dev = ["cloudpickle", "pytest", "hypothesis", "mypy", "ruff", "lifelines", "statsmodels", "packaging", "opentelemetry-exporter-otlp-proto-common", "jsonschema", "playwright", "pyte", "pyyaml"]
 
 [project.scripts]
 poisson-prove = "poisson_prove.cli:main"

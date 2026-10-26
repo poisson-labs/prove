@@ -1,0 +1,49 @@
+poisson-prove · home                                                  prove-runs
+────────────────────────────────────────────────────────────────────────────────
+  ok  7 runs and 1 saved comparison in prove-runs                               
+                                                                                
+  latest     mock-agent@v0 2026-10-14 c (complete)                              
+  compared   mock-agent@v0 2026-10-14 a → b: mixed                              
+  next       poisson-prove diff                                                 
+  dashboard  index.html                                                         
+                                                                                
+  kind        name                             result    rows  created          
+› comparison  mock-agent@v0 2026-10-14 a → b   mixed           <time>
+  run         mock-agent@v0 2026-10-14 c       complete   180  2026-10-14 03:54Z
+  run         fixture-modal@v0 2026-10-14 a    complete    10  2026-10-14 03:54Z
+  run         fixture-chaotic@v0 2026-10-14 a  complete     8  2026-10-14 03:54Z
+  run         fixture-capture…v0 2026-10-14 a  complete     8  2026-10-14 03:54Z
+  run         fixture-mixed@v0 2026-10-14 a    complete     9  2026-10-14 03:53Z
+  run         mock-agent@v0 2026-10-14 b       complete   900  2026-10-14 03:53Z
+  run         mock-agent@v0 2026-10-14 a       complete   900  2026-10-14 03:53Z
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+  ↑↓   enter   tab links   s sweep   c compare   r runs   y   ? help   q quit   
+
+BBBBBBBBBBBBBDDD                                                      DDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  GG                                                                            
+                                                                                
+  DDDDDD                                                                        
+  DDDDDDDD                                                                      
+  DDDD                                                                          
+  DDDDDDDDD                                                                     
+                                                                                
+  DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD          
+VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BB   BBBBB   BBB DDDDD   B DDDDD   B DDDDDDD   B DDDD   B   B DDDD   B DDDD   
