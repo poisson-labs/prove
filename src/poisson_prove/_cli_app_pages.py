@@ -980,7 +980,8 @@ class Screens:
                     )
                     return True
                 if chosen.get(other) == str(r["run_id"]):
-                    chosen[other] = None  # a run is never compared with itself: choose the other again
+                    # a run is never compared with itself: choose the other again
+                    chosen[other] = None
                 chosen[turn[0]] = str(r["run_id"])
                 turn[0] = other
             else:
