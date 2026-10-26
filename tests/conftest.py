@@ -1,6 +1,9 @@
+import ast
 import functools
+import io
 import re
 import socket
+import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -433,10 +436,33 @@ _lattice_through_its_copy()
 
 @pytest.fixture(autouse=True)
 def _the_generator_reads_its_own_store(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The generator's own oracle (``test_s3_golden_fixture``) checks the store the generator wrote
+    """The generator's own frozen test (``test_s3_golden_fixture``) checks the store the generator wrote
     and how it rebuilds one, so its tests read the generator's ``root`` and ``intact`` themselves."""
     if request.module.__name__.rsplit(".", 1)[-1] == "test_s3_golden_fixture":
         import lattice
 
         monkeypatch.setattr(lattice, "root", _GENERATOR[0])
         monkeypatch.setattr(lattice, "intact", _GENERATOR[1])
+def code_of(source: str) -> str:
+    """``source`` with its comments and docstrings taken out and its blank lines dropped: the code
+    a change to words alone leaves as it was.
+
+    PF8 (front-door spec sections 9.2 and 14, Q37 and Q38): the plain-words pass rewrites the
+    docstrings and comments of ``src/`` and of the frozen tests, so a frozen digest over a symbol's
+    source or a test file's bytes is taken over this instead, and moves only when code does."""
+    lines = io.StringIO(source, newline="\n").readlines()
+
+    def column(row: int, byte_col: int) -> int:
+        return len(lines[row - 1].encode("utf-8")[:byte_col].decode("utf-8"))
+
+    cuts = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+                cuts.append((first.lineno, column(first.lineno, first.col_offset), first.end_lineno, column(first.end_lineno, first.end_col_offset)))
+    cuts += [(*tok.start, *tok.end) for tok in tokenize.generate_tokens(io.StringIO(source).readline) if tok.type == tokenize.COMMENT]
+    rows = [line.rstrip("\n") for line in lines]
+    for r0, c0, r1, c1 in sorted(cuts, reverse=True):
+        rows[r0 - 1:r1] = [rows[r0 - 1][:c0] + rows[r1 - 1][c1:]]
+    return "\n".join(row.rstrip() for row in rows if row.strip())

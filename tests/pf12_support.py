@@ -441,7 +441,7 @@ def shows_number(text: str, value: float) -> bool:
     return False
 
 
-# ---------- the format's schemas (Artifact Format sections 3 to 5, written by PF12 Session A) ----------
+# ---------- the format's schemas (Artifact Format sections 3 to 5, written when the PF12 tests were frozen) ----------
 
 _UTC = {"type": "string", "pattern": ISO_UTC.pattern}
 
@@ -933,12 +933,12 @@ def build_resume_old(folder: Path) -> dict[str, Any]:
     return {"store": str(store), "before": before, "after": listing(store), "result": result.__dict__}
 
 
-# ---------- the look's static-UI tokens (look file sha256 92e71488…d85f, ruled Y14) ----------
+# ---------- the look's static-UI tokens (look file sha256 92e71488…d85f, Y14) ----------
 
 
 def look_tokens() -> dict[str, tuple[str, str]]:
     """Each colour token of the look file's static-UI section with its light and dark value, read
-    from the section as the design session filed it (``tests/fixtures/pf12/look-static-ui.md``)."""
+    from the section as it was written (``tests/fixtures/pf12/look-static-ui.md``)."""
     text = (PF12_FIXTURES / "look-static-ui.md").read_text(encoding="utf-8")
     tokens = {}
     for m in re.finditer(r"^\| `(--[a-z]+)` \| [^|]+ \| `(#[0-9a-f]{6})` \| `(#[0-9a-f]{6})` \|$", text, re.MULTILINE):

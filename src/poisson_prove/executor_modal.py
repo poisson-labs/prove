@@ -1,4 +1,4 @@
-"""M3: the Modal backend.
+"""The Modal backend.
 
 Runs the plan the local executor runs, across parallel Modal containers, and lands the same
 rows in the same store. The local backend is the reference; this module adds placement (an
@@ -170,8 +170,8 @@ class ModalTarget:
 
 
 # A Modal secret is named here and never read here: the value stays in the Modal workspace,
-# so "no Prove output can carry it" is structural rather than a filter over strings
-# (ADR-030). The bounds below are Prove's own and deliberately narrower than whatever
+# so "no Prove output can carry it" is structural rather than a filter over strings.
+# The bounds below are Prove's own and deliberately narrower than whatever
 # Modal accepts; widening them is a one-constant change.
 _SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _SECRET_NAME_MAX = 64
@@ -181,7 +181,7 @@ _SECRET_CREATE_FORM = "modal secret create <name> KEY=VALUE"
 def _secret_names(value: object) -> tuple[str, ...]:
     """``[modal] secrets`` -> a tuple of names; ValueError on anything else.
 
-    A bare ``str`` is refused rather than iterated: ``"golden-pilot"`` silently becoming
+    A bare ``str`` is refused rather than iterated: ``"openai-token"`` silently becoming
     twelve one-character names is the worst available reading of a typo. No message below
     repeats an entry, because the likeliest malformed entry is a pasted credential and a
     refusal that echoed one would put it in the terminal, the shell history and the CI log.
@@ -407,7 +407,7 @@ def worker_batch(
         chaos_status = chaos_install(chaos_spec)
     status: CaptureStatus | None = None
     if capture_spec is not None:
-        # With a timeout each episode is a forked child, so the provider goes in there (C1)
+        # With a timeout each episode is a forked child, so the provider goes in there
         # and one probe child measures what those children will get.
         status = _capture_probe(capture_spec) if ctx is not None else install(capture_spec)
     results: list[Result] = []
@@ -446,7 +446,7 @@ def worker_batch(
             results.append(result)
         elif kind == _TIMEOUT_ERROR:
             # The dict form, exactly two keys, only when the terminated child drained a trace;
-            # the bare string otherwise, as the frozen I3 test sees it without capture.
+            # the bare string otherwise, as the timeout tests see it without capture.
             results.append(
                 {"error": _TIMEOUT_ERROR, "meta": {"trace": payload}}
                 if isinstance(payload, dict)
@@ -621,8 +621,8 @@ def _record(
     p: Plan, job: Job, result: Result, attempt: int, *, capture_active: bool = False
 ) -> EpisodeRecord:
     """A string is an error without meta, a dict with ``"error"`` is one with it, and any
-    other dict is an episode. A dict with ``"error"`` whose meta is not a mapping is refused
-    (E13), as an invalid episode dict is."""
+    other dict is an episode. A dict with ``"error"`` whose meta is not a mapping is refused,
+    as an invalid episode dict is."""
     config, seed, i, _config_hash, replicate_index = job
     if isinstance(result, str) or "error" in result:
         meta: Mapping[str, Any] | None = None
@@ -634,7 +634,7 @@ def _record(
             if not isinstance(carried, Mapping):
                 # The dict form is exactly {"error", "meta"} with a mapping meta. Anything else
                 # is a malformed worker result, refused like an invalid episode dict: a row
-                # stored without the meta it carried is the silent loss S16 exists to end.
+                # stored without the meta it carried is the silent loss this check prevents.
                 raise ModalBackendError(
                     f"worker returned an errored result with a non-mapping meta for job {i}: "
                     f"{type(carried).__name__}"
@@ -878,7 +878,7 @@ def _format_usd(amount: float) -> str:
 
 
 def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
-    """Text block describing the run. Non-interactive; M10 prints it and asks."""
+    """Text block describing the run. Non-interactive; the caller prints it and asks."""
     spec = p.spec
     image = target.image
     total = spec.total_rollouts()
@@ -1047,7 +1047,7 @@ def run_modal(
     counted and recorded), ``max_containers=concurrency`` and the named secrets of
     ``options.secrets`` mounted on that function; then ``run_with_mapper`` does the rest. The
     cost guard fires before the app starts. A secret is looked up by name in the caller's Modal
-    workspace: no value is read on this machine, and none is attached to the image (ADR-030).
+    workspace: no value is read on this machine, and none is attached to the image.
     """
     try:
         import modal

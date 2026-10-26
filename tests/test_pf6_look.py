@@ -2,7 +2,7 @@
 
 Written from the front-door spec's section 5.1 (the look file is Prove's), section 5.5 (pretty and
 plain), its invariants PF6.0 to PF6.7, the rulings Q20, Q25 (as amended 2026-10-23), Q51 and Q62,
-the look file the design session filed on 2026-10-23 (rulings Y1 to Y30, all as recommended) and the
+the look file as written on 2026-10-23 (rulings Y1 to Y30, all as recommended) and the
 test standard (section 10.6). ``tests/test_pf6_app.py`` holds the terminal app. The build is written
 against these files and does not edit them.
 
@@ -21,7 +21,7 @@ reproduce block, the files ``report`` writes and the ``--json`` of the verbs tha
 plan, on small stores so the whole corpus runs in seconds. PF1's corpus run both ways is the ``slow``
 test at the end (reading L3).
 
-**Readings, named here** (each is a yes/no in the session log, ``log/pf6/session-a.md``).
+**Readings, named here** (each is a yes/no in the freeze's records).
 
 - L1 PF6.0's "equal, byte for byte, the base with the three changes applied": the base is committed
   as ``tests/fixtures/cli-look/bfe802d.md`` with each change's old and new text in ``changes.json``

@@ -1,15 +1,15 @@
-"""PR-3 oracle, the replicates packet: k calls per item, of which a pair is the case k = 2 --
+"""PR-3 frozen tests, the replicates packet: k calls per item, of which a pair is the case k = 2 --
 invariants PR57 to PR76 of "Prove -- Spec PR Paired Replay", section 4.H, and named mutants 9 to
 16. PR77 (the rendered Replicates section) is the output packet's, with PR7 and PR40 to PR55,
-and is not here: section 7 lets a Session A cut PR-3 into two files, and this is the first.
+and is not here: section 7 lets a freeze cut PR-3 into two files, and this is the first.
 
-Written by Session A on 2026-09-22 off ``pr2-build`` ``7bb1a3b`` (phases 1 and 2 built) plus the
-two retrofits ruled the same day and committed first on this branch: R1 (``733ac35``, two names
-into the PR-1 oracle's ``SPEC_PUBLIC_NAMES``) and R3 (``fd4266d``, a ``Cut`` declares its
+Written on 2026-09-22 off ``pr2-build`` ``7bb1a3b`` (phases 1 and 2 built) plus the
+two updates ruled the same day and committed first on this branch: R1 (``733ac35``, two names
+into the PR-1 frozen tests' ``SPEC_PUBLIC_NAMES``) and R3 (``fd4266d``, a ``Cut`` declares its
 comparison, ``gt`` or ``ge``, with no default). **Frozen 2026-09-22 in one commit over both PR-3
-files, over the reviewed ``ef9f4ef``**, after Taylor approved the four tables in the handoff
-(``log/prove-pr3-session-a/README.md``) and an independent recompute of every hard-coded
-expectation passed (``recompute_expectations.py`` there, 83 of 83). Session B builds phase 3's
+files, over the reviewed ``ef9f4ef``**, after approval of the four tables in the handoff
+and an independent recompute of every hard-coded
+expectation passed (``recompute_expectations.py`` there, 83 of 83). The build adds phase 3's
 replicate half of ``src/proofload/paired.py``
 -- ``SweepPair.more``, the k-arm assertion, ``ReplicateResult`` and ``replicates`` -- against this
 file and does not edit it. Phase 3's names are read through ``getattr`` inside each test, so the
@@ -33,7 +33,7 @@ the spec's change log on the freeze):
 - *Arm labels.* ``a`` and ``b`` keep their names; the arms in ``more`` are labelled by their
   1-based position in the declared order, ``"3"`` to ``"k"``, as strings. ``pairs`` gains one
   column per extra arm, ``value_3`` to ``value_k`` (``Decimal``), beside ``value_a`` and
-  ``value_b``; at ``k = 2`` it has exactly the PR-1 oracle's nine columns.
+  ``value_b``; at ``k = 2`` it has exactly the PR-1 frozen tests' nine columns.
   ``environment["sweeps"][<sweep>]`` gains the same labels.
 - *``excluded`` at ``k > 2``.* One row per replicate set, as one pair is one row. ``arm`` keeps
   PR10's reading for ``unmatched`` -- the first arm, in declared order, that holds the key -- and
@@ -95,7 +95,7 @@ the spec's change log on the freeze):
   ``at_declared_concurrency_s = serial_s / concurrency`` when every arm's recorded
   ``environment["sweeps"][S][arm]["concurrency"]`` is one non-null number, else absent.
 
-**Invariant-to-test map** is in the handoff (``log/prove-pr3-session-a/README.md``). Every test
+**Invariant-to-test map** is in the handoff. Every test
 name starts ``test_prN_`` or ``test_control_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` is built in test code or by
@@ -345,7 +345,7 @@ def excluded_row(
 
 
 def counts_for(pairs: pd.DataFrame, excluded: pd.DataFrame, cuts: Sequence[str]) -> dict[str, Any]:
-    """PR20's block, consistent with the two frames, as the PR-2 oracle builds it."""
+    """PR20's block, consistent with the two frames, as the PR-2 frozen tests build it."""
     def block(kept: pd.DataFrame, dropped: pd.DataFrame) -> dict[str, Any]:
         unmatched = int((dropped["cause"] == "unmatched").sum()) if len(dropped) else 0
         ineligible = len(dropped) - unmatched

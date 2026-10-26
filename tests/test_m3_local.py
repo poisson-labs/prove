@@ -1,4 +1,4 @@
-"""Oracle for M3: the local executor.
+"""Frozen tests for M3: the local executor.
 
 Seed derivation, run ids, plan/pair/resume, pre-flight text, batched runs, per-episode
 error capture, timeout under fork, caps, progress, paired reproducibility, and trace
@@ -9,7 +9,7 @@ that need to single out a pair read module-level sets of seeds (``RAISE_SEEDS``,
 ``SLEEP_SEEDS``) that a test fills in from its plan before running; a forked child
 inherits them. An autouse fixture clears them between tests.
 
-Conventions the oracle fixes for the implementation session:
+Conventions the frozen tests fix for the implementation session:
 
 - ``derive_seed`` is ``int.from_bytes(sha256(f"{salt}:{hash}:{k}").digest()[:4], "big")``.
   The spec says "first 4 bytes as unsigned int" without naming byte order; big-endian is

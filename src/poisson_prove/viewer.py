@@ -1,17 +1,17 @@
-"""M13: the viewer. A versioned structure for one run pair, a renderer over it, and a server.
+"""The viewer. A versioned structure for one run pair, a renderer over it, and a server.
 
 Three halves that never reach back into each other. ``build_structure`` assembles the
 versioned structure ``SCHEMA`` -- identity and run tallies, diff parameters, panels, cells, holes,
-the flat family's intervals, M14's layered report, the plain-language summary and what could not
-be verified -- from M6's result, M7's report, M14's tree, the two ``RunManifest``s and the two
-``RunTally``s.
+the flat family's intervals, the tree's layered report, the plain-language summary and what could
+not be verified -- from the comparison's result, the report, the tree, the two ``RunManifest``s and
+the two ``RunTally``s.
 ``render_html`` turns that structure, and nothing else, into one page.
 ``serve_page`` holds the page on an ephemeral loopback port until Ctrl-C.
 
 **It renders, it does not compute.** Every rate, delta, p, q, MDE, verdict, count and colour
-bound comes from M6, M7 and M14 already formatted by M7's own ``_fmt``; the tree rides
-verbatim with a ``text`` member beside every float the page prints, so the renderer reads
-``text`` and never a raw number; reading a stored field off a
+bound comes from the comparison, the report and the tree already formatted by the report's own
+``_fmt``; the tree rides verbatim with a ``text`` member beside every float the page prints, so
+the renderer reads ``text`` and never a raw number; reading a stored field off a
 manifest and printing it is rendering. ``build_structure`` performs exactly one arithmetic
 operation, the ``created_at`` gap, computed once here so no consumer recomputes it;
 ``render_html`` performs none.
@@ -57,19 +57,20 @@ if TYPE_CHECKING:
 __all__ = ["ViewerError", "build_structure", "render_html", "serve_page"]
 
 # The version bumps whenever a key set changes, because this structure's consumers pin key
-# sets -- its own oracle does. ``/2`` adds the per-arm tally, four coverage integers and
-# ``config_text`` per cell, and the top-level ``holes`` list; ``/3`` adds ``tree``, M14's
+# sets -- its own frozen tests do. ``/2`` adds the per-arm tally, four coverage integers and
+# ``config_text`` per cell, and the top-level ``holes`` list; ``/3`` adds ``tree``, the tree's
 # layered report carried verbatim; ``/4`` adds ``agreement`` inside ``tree`` -- the digest of the
 # rebuild the tree's own construction verified, so a consumer holding this payload can check that
-# the tree is the tree of the pair beside it (A28) -- and then, behind A28 and under the same
-# version, P-1's thirteenth top-level key ``intervals``, the two provenance keys that replace
+# the tree is the tree of the pair beside it -- and then, behind that change and under the same
+# version, the thirteenth top-level key ``intervals``, the two provenance keys that replace
 # ``paired`` in the ``diff`` object, and ``p_floor`` inside ``tree.root``.
 #
-# **Two packets on one ``/4``, and why that is honest rather than a broken rule.** The rule above
-# is the one P-1 breaks: A28 had landed and been pushed before P-1 was written, so "lands with
-# A28" was not available. Nothing stores a structure (ADR-036; ``--json`` prints to stdout and
-# the page is a snapshot), the package is private at ``0.0.1`` with no tag, and no published
-# consumer read ``/4`` before P-1 -- so no stored shape can be misread. What keeps the one
+# **Two changes on one ``/4``, and why that is honest rather than a broken rule.** The rule above
+# is the one the second change breaks: the ``agreement`` change had landed and been pushed before
+# the second was written, so "lands with the ``agreement`` change" was not available. Nothing
+# stores a structure (``--json`` prints to stdout and the page is a snapshot), the package was
+# private at ``0.0.1`` with no tag, and no published consumer read ``/4`` before the second
+# change -- so no stored shape can be misread. What keeps the one
 # version honest is ``render_html``'s refusal below: a ``/4`` assembled before ``intervals``
 # joined it is refused by name rather than drawn with a section missing.
 #
@@ -91,12 +92,12 @@ SCHEMA = "poisson-prove.viewpair/7"
 #: would be the one number a reader could attribute to either.
 #:
 #: **Spelled here rather than imported**, deliberately: the set of names this module may take
-#: from ``report`` is frozen by two oracles (M13 V35, S21 E22) as assembly helpers plus render
-#: helpers, and a shared constant is neither. It must agree with the prose in
+#: from ``report`` is frozen by two tests as assembly helpers plus render helpers, and a shared
+#: constant is neither. It must agree with the prose in
 #: ``report._interval_lines`` -- *over the flat BH family* -- which is the one formatter every
-#: surface reads; P-1 Y10 pins this value and Y12 pins that prose, so the pair cannot drift
+#: surface reads; one test pins this value and another pins that prose, so the pair cannot drift
 #: unnoticed. The escape hatch, if a third spelling ever appears: widen the partition in those
-#: two oracles under their own re-freeze rather than adding a second constant here.
+#: two tests, in a change of their own, rather than adding a second constant here.
 _INTERVAL_FAMILY = "flat"
 
 _HOST = "127.0.0.1"
@@ -116,7 +117,7 @@ _HOLES_OPTGROUP = "holes"
 _HOLES_HEADER = ["where", "cause", "config_hash", "rows (a/b)", "no outcome (a/b)"]
 _OFF_GRID = "off grid: "
 
-# The seven float fields each cell carries raw, and the kind M7 formats each with.
+# The seven float fields each cell carries raw, and the kind the report formats each with.
 _FLOAT_KINDS: dict[str, str] = {
     "rate_a": "pp1",
     "rate_b": "pp1",
@@ -126,13 +127,13 @@ _FLOAT_KINDS: dict[str, str] = {
     "q": "sig3",
     "mde": "pp0",
 }
-# M14's tree, one row per (object, field) the page prints, keyed by the object's dotted path in
-# ``TreeResult.to_json()`` with list indices dropped. The table is S28 section 3.6's, restated
+# The tree, one row per (object, field) the page prints, keyed by the object's dotted path in
+# ``TreeResult.to_json()`` with list indices dropped. The table is the tree's own, restated
 # here rather than imported: ``report.py`` calls ``_fmt`` with a kind at each site and has no
 # table to import, and importing one would make this module's build depend on that one.
 # ``config`` is this module's own row -- a leaf's config value is spelled the way the
 # drill-down already spells it, through ``_config_text``, so every token on the page is a
-# string the structure carries (V16's rule, one object over).
+# string the structure carries (the no-formatter rule, one object over).
 _TREE_KINDS: dict[str, dict[str, str]] = {
     "root": {
         "p_floor": "sig3",
@@ -173,15 +174,15 @@ _TREE_KINDS: dict[str, dict[str, str]] = {
 _N_FIELDS = ("n_a", "n_b")
 _EVENT_FIELDS = ("events_a", "events_b")
 
-# M6's coverage integers, joined onto a cell (and onto a hole) by ``config_hash``. Read from
-# the coverage row, never recomputed: ``n_a + no_outcome_a`` would be arithmetic here and the
-# wrong number besides, because the coverage row already carries ``rows_a``.
+# The comparison's coverage integers, joined onto a cell (and onto a hole) by ``config_hash``.
+# Read from the coverage row, never recomputed: ``n_a + no_outcome_a`` would be arithmetic here
+# and the wrong number besides, because the coverage row already carries ``rows_a``.
 _COVERAGE_FIELDS = ("rows_a", "rows_b", "no_outcome_a", "no_outcome_b")
 _NO_COVERAGE: dict[str, int] = dict.fromkeys(_COVERAGE_FIELDS, 0)
 
-# PF4: the cell fields after ``verdict``, in the order the cell frame holds them, then each arm's
-# share (PF4.1b) and whether it differs from the arm's rate (PF4.37).
-_PF4_FIELDS = (
+# The cell fields after ``verdict``, in the order the cell frame holds them, then each arm's
+# share and whether it differs from the arm's rate.
+_CELL_DETAIL_FIELDS = (
     *CELLS_COLUMNS[CELLS_COLUMNS.index("direction") :],
     "share_a", "share_b", "share_a_differs", "share_b_differs",
 )
@@ -216,10 +217,10 @@ _UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
         None,
     ),
     (
-        # Reworded, not added, by P-1: after C18 the stored seeds *are* compared on every matched
+        # Reworded, not added: the stored seeds are now compared on every matched
         # row, so the old sentence -- "matching salts do not prove the two runs consumed their
         # seeds identically" -- no longer describes the check. What stays unverifiable is what
-        # the target did with a seed (ADR-076), which is a finding about the target and not a
+        # the target did with a seed, which is a finding about the target and not a
         # roadmap item, so ``blocked_by`` stays ``None``.
         "seed_identity_basis",
         "seed_identity_match is true when both manifests carry the same run_salt and every row "
@@ -261,7 +262,8 @@ def _axes(spec: ReportSpec) -> list[str]:
 
 
 def _coords(cell: Cell) -> tuple[str, ...]:
-    """The cell's axis values as M7 renders them in a table row, for joining worst rows back."""
+    """The cell's axis values as the report renders them in a table row, for joining worst rows
+    back."""
     return tuple(_fmt(value, "coord") for value in cell.coords)
 
 
@@ -278,10 +280,11 @@ def _finite(value: Any) -> float | None:
 
 def _gap_seconds(created_a: str, created_b: str) -> float | None:
     """The signed gap between two stored ``created_at`` values, or ``None`` when either is
-    unreadable. The viewer is read-only: M4 validates a manifest, this renders what is stored.
+    unreadable. The viewer is read-only: the store validates a manifest, this renders what is
+    stored.
 
     The one arithmetic operation in this half of the module. It lives here rather than in the
-    renderer so that the renderer, the ``--json`` consumer and the Phase 7 MCP server read one
+    renderer so that the renderer, the ``--json`` consumer and a later MCP server read one
     number instead of implementing the subtraction three times.
     """
     try:
@@ -296,8 +299,8 @@ def _arm(manifest: RunManifest, role: str, rows_stored: int, tally: RunTally) ->
     """One arm's identity, plus the run's own tally.
 
     ``rows_stored`` and ``tally["rows"]`` are two reads of the same parts -- one through the
-    Parquet footers, one through two columns -- and they agree. Nothing here assumes it: the
-    oracle asserts it, which is what would catch a tally that came from somewhere else.
+    Parquet footers, one through two columns -- and they agree. Nothing here assumes it: a
+    frozen test asserts it, which is what would catch a tally that came from somewhere else.
     """
     stored = manifest.to_dict()
     arm: dict[str, Any] = {"role": role}
@@ -331,9 +334,9 @@ def _arm(manifest: RunManifest, role: str, rows_stored: int, tally: RunTally) ->
 
 
 def _config_text(config: Mapping[str, Any]) -> dict[str, str | None]:
-    """M7's coordinate rendering of every scalar config value; ``None`` for anything else.
+    """The report's coordinate rendering of every scalar config value; ``None`` for anything else.
 
-    The server-rendered drill-down has to print the config and V16 forbids a formatter here,
+    The server-rendered drill-down has to print the config and this module may own no formatter,
     so this is one ``_fmt`` pass -- the same kind ``_coord_text`` uses -- over values the
     structure already carries. A list, a mapping or a null has no coordinate rendering and
     gets ``None``; a bool renders as ``True``, which is what an axis value of that kind
@@ -352,18 +355,19 @@ def _cell(
     record: Mapping[str, Any],
     coverage: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """One present cell: M6's own fields raw, plus M7's rendering of each float.
+    """One present cell: the comparison's own fields raw, plus the report's rendering of each
+    float.
 
     Both, never one alone. The raw float is canonical -- a consumer that has to parse ``"37.5"``
-    back into a number has lost the units and three significant figures. ``text`` is M7's
-    rendering of that same float, so no second formatter exists to drift from it.
+    back into a number has lost the units and three significant figures. ``text`` is the
+    report's rendering of that same float, so no second formatter exists to drift from it.
 
     ``rows_*`` and ``no_outcome_*`` are the coverage row's own integers, joined on
     ``config_hash`` the way ``events_a`` and ``config`` already are, so "ran 32, no outcome
     20, compared 12" is three integers on one screen. They have no ``text`` entry, as the
     other integers do not.
 
-    PF4: ``record`` is the cell as the comparison's JSON carries it (``EventDiff.records``): the
+    ``record`` is the cell as the comparison's JSON carries it (``EventDiff.records``): the
     verdict in the event's words, the direction, the limits, the interval and each arm's share,
     in the order the cell frame holds them.
     """
@@ -380,7 +384,7 @@ def _cell(
     for name in _FLOAT_KINDS:
         out[name] = _finite(row[name])
     out["verdict"] = str(record["verdict"])
-    for name in _PF4_FIELDS:
+    for name in _CELL_DETAIL_FIELDS:
         out[name] = record.get(name)
     out["config"] = row["config"]
     out["config_text"] = _config_text(row["config"])
@@ -391,10 +395,11 @@ def _cell(
 def _mde_unchanged(
     spec: ReportSpec, present: Sequence[Cell], value: float, cell_hash: str | None
 ) -> dict[str, Any]:
-    """The event's detection limit as a field: M6's ``max_mde_unchanged``, M7's rendering of it,
-    and the coordinate of the cell attaining it by the same three-step search ``_honesty`` does.
-    All three ``None`` when no cell is unchanged, which is when the honesty line says so; when
-    no unchanged cell has a limit, ``where`` is the one the honesty line names (PF4.27)."""
+    """The event's detection limit as a field: the comparison's ``max_mde_unchanged``, the
+    report's rendering of it, and the coordinate of the cell attaining it by the same three-step
+    search ``_honesty`` does. All three ``None`` when no cell is unchanged, which is when the
+    honesty line says so; when no unchanged cell has a limit, ``where`` is the one the honesty
+    line names."""
     unchanged = [c for c in present if c.verdict == "unchanged"]
     if not unchanged:
         return {"value": None, "text": None, "where": None}
@@ -497,12 +502,12 @@ def _hole(
 def _holes(
     spec: ReportSpec, report: MultiReport, coverage: Mapping[str, Mapping[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Every hole the pair has, once: M7's absent grid cells in grid order, then the
+    """Every hole the pair has, once: the report's absent grid cells in grid order, then the
     non-comparable coverage rows no grid cell carries, by hash.
 
     The grid is identical across panels -- every event's cells carry the same ``common`` -- so
     the list is built from the first panel and lives at the top level rather than once per
-    event. The off-grid half is real and is not drawn: M7's axis values come from the
+    event. The off-grid half is real and is not drawn: the report's axis values come from the
     *present* cells, so a non-comparable cell at an axis value no comparable cell has appears
     on no heatmap, and a ``--fix`` can exclude one that otherwise would. Carrying them here is
     what makes the count of holes on the page the count of holes in the data.
@@ -532,7 +537,7 @@ def _holes(
 
 
 def _pp_or_none(text: Mapping[str, Any], key: str) -> str:
-    """A tree limit as M7 rendered it, or ``none`` where it has none (PF4.27)."""
+    """A tree limit as the report rendered it, or ``none`` where it has none."""
     return f"{text[key]}pp" if key in text else "none"
 
 
@@ -544,7 +549,7 @@ def _leaf_limit(leaf: Mapping[str, Any]) -> str:
 
 
 def _tree_text(raw: Any, kind: str) -> Any:
-    """M7's rendering of one tree field, shaped like the field.
+    """The report's rendering of one tree field, shaped like the field.
 
     A mapping keyed by event gets a mapping over the same keys, a list gets a list of the same
     length, a scalar gets one string, and a config gets ``_config_text``'s coordinate rendering
@@ -568,7 +573,7 @@ def _tree_payload(raw: Any, path: str = "") -> Any:
     every object the kind table names gains a ``text`` member whose keys are exactly that
     object's printed floats. A field that is ``None`` prints nothing and gets no entry;
     ``root.units`` is named by no row and gets none, because the page never prints a unit.
-    Removing every ``text`` at every depth gives ``to_json()`` back (invariant W2), which is
+    Removing every ``text`` at every depth gives ``to_json()`` back, which is
     what makes the tree on the page and the tree in the JSON one object.
     """
     if isinstance(raw, dict):
@@ -594,13 +599,14 @@ def _tree_payload(raw: Any, path: str = "") -> Any:
 def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     """A tree is carried beside the diff it was grown from or not at all.
 
-    I18's shape at the assembly boundary, and M7's ``_check_tree`` one module over: the tree's
+    The tree's shape check at the assembly boundary, as the report's ``_check_tree`` is one
+    module over: the tree's
     events must be the family's, and its units -- one per cell per event -- must be the family's
     tests. Checked before anything is assembled, so a mismatched pair costs no page.
 
-    S29 amendment 5, built in A27: the third clause compares the ``(event, config_hash)``
+    The third clause compares the ``(event, config_hash)``
     multiset and not only its size. Arity alone accepts a tree grown on a different pair that
-    happens to have the same events and the same number of cells -- measured on this oracle's
+    happens to have the same events and the same number of cells -- measured on the frozen tests'
     own vocabulary and hostile pairs, whose ``task`` values and so whose hashes are disjoint --
     and a page assembled from one would carry another pair's cells under this pair's identity.
     A multiset rather than a set, because a cell repeated in one side and not the other is the
@@ -608,19 +614,20 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
     totals are equal and a difference has a cell on each side to name; ``none`` is spelled
     anyway rather than indexed, because a refusal that raises ``IndexError`` from inside its
     own message is worse than the mismatch it was reporting. One cell each way and not the
-    whole list: a Go1-sized mismatch is 656 hashes, and one is enough to name the other pair.
+    whole list: a mismatch on a large sweep can be 656 hashes, and one is enough to name the
+    other pair.
 
-    A28 appends two more and rewords none of the three above. The **agreement digest** closes
-    C16, which the multiset clause cannot: two pairs over the same events, the same cell count
+    Two more clauses follow and reword none of the three above. The **agreement digest** closes
+    the gap the multiset clause cannot: two pairs over the same events, the same cell count
     and the same config grid -- so the same ``(event, config_hash)`` multiset -- differing only
     in what happened, are accepted by all three clauses above and refused by this one. Its
     message names neither a cell nor a count because at that point there is no cell and no
     count that differs, which is also why it runs *last*: placed ahead of the multiset clause it
     still refuses, and the refusal simply stops naming the cell that would have been named.
     The **knob clause** follows it because the digest covers the cell set, the event set and the
-    four episode counts and nothing else (spec A28 section 3.3), so a tree grown under another
-    method or at another ``q`` passes it. ``agreement_digest`` is imported inside the function:
-    W20 pins that this module's body imports ``poisson_prove.tree`` nowhere and that this closure
+    four episode counts and nothing else, so a tree grown under another method or at another
+    ``q`` passes it. ``agreement_digest`` is imported inside the function: a frozen test pins
+    that this module's body imports ``poisson_prove.tree`` nowhere and that this closure
     applies exactly one arithmetic node, and a function-level import and a compare move neither.
     """
     if tuple(tree.root.events) != tuple(multi.events):
@@ -668,14 +675,14 @@ def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
 
 
 def _intervals(report: MultiReport, multi: MultiDiffResult) -> dict[str, Any]:
-    """The flat family's intervals as data: M6's fields, M7's one formatter's lines, and one row
-    per M6 interval row in M6's order.
+    """The flat family's intervals as data: the comparison's fields, the report's one
+    formatter's lines, and one row per interval row of the comparison, in its order.
 
     Always an object, never ``null``: ``R == 0`` is read from ``level: null``, ``rows: []`` and
     the one line, not from an absent key, because a consumer cannot tell an absent key from an
     older payload. Each row carries ``event`` **and** ``config_hash``; a panel cell carries
     ``config_hash``, and the join back is a string equality, which is the only arithmetic-free
-    join there is (ADR-032).
+    join there is.
 
     A ``None`` endpoint gets no ``text`` entry rather than a spelling of nothing, the rule the
     tree's decoration already uses: a field that prints nothing gets no entry.
@@ -735,15 +742,15 @@ def build_structure(
     tally_b: RunTally,
     store_root: str,
 ) -> dict[str, Any]:
-    """The pair as data, per the spec's section 3.3.
+    """The pair as data.
 
     Pure: equal inputs give an equal dict. Reads no file, opens no socket, writes nothing, and
-    derives no statistic -- every number here is already a field on M6's result, M7's report,
-    M14's tree, a stored manifest or a ``RunTally``. The single exception is
+    derives no statistic -- every number here is already a field on the comparison's result, the
+    report, the tree, a stored manifest or a ``RunTally``. The single exception is
     ``pair.created_at_gap_s``.
 
     ``tree`` is required: a structure that could be built without one could serve a page whose
-    honesty block is missing the bound, and ADR-033's rule is together or not at all.
+    honesty block is missing the bound, and the rule is together or not at all.
     """
     _check_tree(multi, tree)
     spec = report.spec
@@ -783,7 +790,7 @@ def build_structure(
         "headline": report.headline,
         "trade_line": report.trade_line,
         "summary": {
-            # PF4.5, PF4.34 to PF4.46: the comparison's word and what it rests on, first.
+            # The comparison's word and what it rests on, first.
             "verdict": multi.comparison_verdict(),
             "verdict_rule": "holm",
             "verdict_line": report.verdict_line,
@@ -980,10 +987,10 @@ def _summary_html(summary: Mapping[str, Any]) -> list[str]:
 # ---------- the tree on the page ----------
 
 #: What an untested level prints, by the reason's name. Four keys, and a reason this mapping
-#: does not carry raises rather than printing a sentence nobody wrote. M14's three reason tuples
-#: are never named here and never iterated for display order: precedence is M14's and is pinned
-#: there, so a renderer that read a tuple would couple presentation to precedence and the next
-#: person to reorder it for the page would "fix" M14's own guard (draft ADR-073).
+#: does not carry raises rather than printing a sentence nobody wrote. The tree's three reason
+#: tuples are never named here and never iterated for display order: precedence is the tree's and
+#: is pinned there, so a renderer that read a tuple would couple presentation to precedence and
+#: the next person to reorder it for the page would "fix" the tree's own guard.
 _NOT_TESTED_SENTENCES: dict[str, str] = {
     "depth": "depth {configured} configured",
     "root_not_rejected": "the root did not reject",
@@ -1077,8 +1084,8 @@ def _bound_html(bound: Mapping[str, Any]) -> str:
     """The rule's number with every term of the rule beside it -- the ``2`` and the ``x`` are
     text around four fields -- then the assumption the source's corollary rests on.
 
-    One paragraph, the last block of the honesty section: V19's rules hold for it as they do
-    for a panel's, because it is the second number of that block and not a footnote.
+    One paragraph, the last block of the honesty section: the honesty rules hold for it as they
+    do for a panel's, because it is the second number of that block and not a footnote.
     """
     text = bound["text"]
     rule = (
@@ -1126,7 +1133,7 @@ def _fault_lines_html(tree: Mapping[str, Any]) -> list[str]:
         )
     parts.append(_paragraph(null))
     if fault["tested"]:
-        # C33 (b), only where the level was tested: there is no floor under a p nobody drew.
+        # Only where the level was tested: there is no floor under a p nobody drew.
         parts.append(
             _paragraph(
                 f"group p floor {root['text']['p_floor']}: the same "
@@ -1332,10 +1339,10 @@ _SCRIPT = """
 })();
 """
 
-# Layout only: the base sheet is M7's own, and no rule here sets a colour.
+# Layout only: the base sheet is the report's own, and no rule here sets a colour.
 #
-# ``pointer-events`` is load-bearing and grid-shaped. M7 draws the significance glyph and the
-# trade notch in later sibling groups, painted over the cell rect but not descended from it, so
+# ``pointer-events`` is load-bearing and grid-shaped. The report draws the significance glyph and
+# the trade notch in later sibling groups, painted over the cell rect but not descended from it, so
 # without this a click on a significant cell resolves to no cell at all -- and those are the
 # cells a reader clicks first. ``[data-mde]`` is deliberately absent: it exists only in forest
 # mode, where it is a child of ``<g data-cell>`` and is the widest target in the row.
@@ -1366,7 +1373,7 @@ def render_html(structure: Mapping[str, Any]) -> str:
             f"unknown structure schema {schema!r}; this renderer reads {SCHEMA!r} only and "
             "does not attempt a best-effort render"
         )
-    # Two shapes cannot share a schema string silently. ``/4`` carries two packets (the comment
+    # Two shapes cannot share a schema string silently. ``/4`` carries two changes (the comment
     # above SCHEMA says why), so a ``/4`` assembled before the flat family's intervals joined it
     # is refused by name rather than drawn with a section missing. The dashboard's stored
     # fixtures are exactly such structures, which is the point.
@@ -1398,8 +1405,8 @@ def render_html(structure: Mapping[str, Any]) -> str:
         "<body>",
         f"<h1>{_html.escape(title)}</h1>",
     ]
-    # The answer first (LS D7): the plain summary above everything, the run identity beside the
-    # provenance it belongs with, and every region between them in its S29 order.
+    # The answer first: the plain summary above everything, the run identity beside the
+    # provenance it belongs with, and every region between them in its fixed order.
     parts.extend(_summary_html(structure["summary"]))
 
     events = ", ".join(str(name) for name in diff["events"])
@@ -1412,7 +1419,7 @@ def render_html(structure: Mapping[str, Any]) -> str:
 
     parts.append("<h2>Result</h2>")
     parts.append(f"<p>{_lines_html(str(structure['headline']))}</p>")
-    # LS21: the plain line beside the word "unpaired", carried by the payload and printed here.
+    # The plain line beside the word "unpaired", carried by the payload and printed here.
     if structure["summary"]["pairing"]["line"] is not None:
         parts.append(f"<p>{_html.escape(str(structure['summary']['pairing']['line']))}</p>")
     if structure["trade_line"] is not None:
@@ -1422,9 +1429,9 @@ def render_html(structure: Mapping[str, Any]) -> str:
     for panel in panels:
         parts.append(f"<h3>{_html.escape(str(panel['event']))}</h3>")
         parts.append(f"<p>{_lines_html(str(panel['honesty']))}</p>")
-    # ADR-060: the flat family's intervals are the last thing in the honesty band before the
+    # The flat family's intervals are the last thing in the honesty band before the
     # bound, and never beside a leaf row -- *Not verified*, *Fault lines* and *Cells* sit between
-    # this paragraph and the first leaf. One paragraph, the lines as M7 formatted them.
+    # this paragraph and the first leaf. One paragraph, the lines as the report formatted them.
     parts.append(_paragraph("\n".join(str(line) for line in structure["intervals"]["lines"])))
     # The bound is the second number of the honesty block, not a footnote: what this run could
     # not have seen, then what the whole procedure controls at, on one screen.
@@ -1439,7 +1446,7 @@ def render_html(structure: Mapping[str, Any]) -> str:
     parts.append("<h2>Heatmap</h2>")
     parts.append(f'<div id="pl-figure" class="figure">{svg}</div>')
     for panel in panels:
-        # PF4.1c: each panel's share interval, labelled from its recorded level.
+        # Each panel's share interval, labelled from its recorded level.
         if panel.get("share_label"):
             label = f"{panel['event']}: {panel['share_label']}"
             parts.append(f"<p>{_html.escape(label)}</p>")
@@ -1514,7 +1521,7 @@ def _handler(body: bytes) -> type[BaseHTTPRequestHandler]:
     """
 
     class _Page(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 - http.server's own dispatch name
+        def do_GET(self) -> None:  # noqa: N802 - the handler name http.server calls
             if self.path != "/":
                 self.send_error(404)
                 return

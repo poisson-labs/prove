@@ -1,9 +1,9 @@
-"""M5: per-cell survival estimation.
+"""Per-cell survival estimation.
 
 Derives censoring from a declared event, fits Kaplan-Meier or Aalen-Johansen per cell,
-attaches Wilson and Greenwood intervals, and returns the cell table M6 diffs and M7
-draws. Everything is hand-rolled in numpy. A cell is the set of rows sharing a
-``config_hash``; this module never reads the grid.
+attaches Wilson and Greenwood intervals, and returns the cell table the comparison
+(``diff.py``) diffs and the report draws. Everything is hand-rolled in numpy. A cell is
+the set of rows sharing a ``config_hash``; this module never reads the grid.
 """
 
 from __future__ import annotations
@@ -170,7 +170,7 @@ def competing_set(*frames: pd.DataFrame) -> tuple[str, ...]:
     """Every distinct non-null ``outcome`` across all frames, sorted.
 
     Empty frames contribute nothing. This is the ONLY supported way to build the event set
-    passed to aalen_johansen / cell_table (ADR-021): every terminal outcome present is an
+    passed to aalen_johansen / cell_table: every terminal outcome present is an
     absorbing competing risk, whether or not its CIF is being reported.
     """
     present: set[str] = set()
@@ -191,7 +191,7 @@ def multi_outcome_guard(df: pd.DataFrame, event: str) -> list[str]:
 
 def _early_others(df: pd.DataFrame, event: str, horizon: float) -> list[str]:
     """The outcomes other than ``event`` that end a run before the horizon, sorted: what
-    Kaplan-Meier treats as censoring when it is a competing ending (PF4.19). An outcome seen only
+    Kaplan-Meier treats as censoring when it is a competing ending. An outcome seen only
     at the horizon ends no run early."""
     valid = df.loc[df["outcome"].notna()]
     early = valid.loc[(valid["outcome"] != event) & (valid["t"].astype(float) < horizon), "outcome"]
@@ -236,7 +236,7 @@ def cell_table(
         if event not in aj_events:
             raise SurvivalError(f"events {aj_events} must include the declared event {event!r}")
 
-    # PF4.1b: the share's Wilson interval at the level every surface reads, recorded beside it,
+    # The share's Wilson interval at the level every surface reads, recorded beside it,
     # read when the table is computed. ``stats`` is imported here because it imports this module.
     from poisson_prove import stats
 

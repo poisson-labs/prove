@@ -1,8 +1,8 @@
-"""M4 read-amendment oracle: invariants R1-R9 of the M4 Store (read amendment) spec, written
+"""M4 read-amendment frozen tests: invariants R1-R9 of the M4 Store (read amendment) spec, written
 before ``Store.read(meta=, keys=)`` and ``Store.count`` exist.
 
-Stores are written under ``tmp_path`` in the M4 oracle's ``_rec``/``_manifest`` shape; the CLI
-is driven in-process through ``cli.main`` with ``StringIO`` streams, as the M10 oracle does; the
+Stores are written under ``tmp_path`` in the M4 frozen tests' ``_rec``/``_manifest`` shape; the CLI
+is driven in-process through ``cli.main`` with ``StringIO`` streams, as the M10 frozen tests do; the
 golden reads the generated lattice pair (``tests/lattice.py``) through the ``lattice_store``
 conftest fixture.
 
@@ -76,7 +76,7 @@ POISON = "not json"
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_SALT = "m4-read-oracle"
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 regex, verbatim (nine columns since A8a)
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
 
 PUBLIC_STORE_METHODS = {
     "create_run", "manifest", "mark_complete", "runs", "append", "read", "missing", "count",
@@ -120,7 +120,7 @@ MOCK_REPLICATES = 6
 MOCK_BATCH = 5
 
 
-# ---------- helpers: the M4 oracle's record shape ----------
+# ---------- helpers: the M4 frozen tests' record shape ----------
 
 
 def _manifest(run_id: str = "r1", **kw: Any) -> RunManifest:

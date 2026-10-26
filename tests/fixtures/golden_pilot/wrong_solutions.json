@@ -1,5 +1,0 @@
-{
-  "HumanEval/0": "    return False\n",
-  "HumanEval/2": "    return number\n",
-  "HumanEval/3": "    return False\n"
-}

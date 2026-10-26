@@ -1,6 +1,6 @@
 """Tiny CPU rollout shipped into the Modal image for the live parity test (M3 I19).
 
-Same formula as the M3 oracles' deterministic rollout so the local and Modal runs can be
+Same formula as the M3 frozen tests' deterministic rollout so the local and Modal runs can be
 compared cell for cell.
 """
 

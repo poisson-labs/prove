@@ -1,22 +1,22 @@
-"""FR oracle: invariants FR1 to FR20 of [[Proofload - Spec First Run Fixes]] section 4, written before the
+"""FR frozen tests: invariants FR1 to FR20 of the first-run-fixes spec section 4, written before the
 store check, the missing-flags refusal, the inference line's new wording and the parser edit exist, against
-``f9b881f`` -- main's HEAD on 2026-09-18: P-1's landed build (``fe7b50f``) plus A8b Session A's frozen
-oracle (``73a8ccb``, ``f9b881f``), which A8b Session B had not built when this was frozen.
+``f9b881f`` -- main's HEAD on 2026-09-18: P-1's landed build (``fe7b50f``) plus A8b's frozen
+test file (``73a8ccb``, ``f9b881f``), which the A8b build had not yet built when this was frozen.
 
 **The register, built to as ruled 2026-09-17 (spec sections 0 and 10).** D1 (a missing store refuses at exit
 2 on every verb that reads it, an empty one on every such verb but ``runs``, which exits 0 and says so on
 stderr), D5 bound by D14 (E3 reaches ``report``, ``serve``, ``check`` and ``inspect``, and ``check`` never
 passes on a missing argument), D7 (the ``Inferred events for this pair`` suggestion is retired) and D13
-(every template pinned verbatim, Taylor reviewing the wording in Session A's mapping table) are Taylor's and
-not reopened; FR19 and FR20 are his additions at the same ruling. Q1 to Q4 are closed. The three section 3.1
+(every template pinned verbatim, the wording reviewed in the freeze's mapping table) are settled and
+not reopened; FR19 and FR20 are additions at the same ruling. Q1 to Q4 are closed. The three section 3.1
 templates are pinned in each source form (``--store``, ``$PROOFLOAD_STORE``, the default), the seven section
 3.2 literals (now on the generated lattice pair, ``tests/lattice.py``) and the section 3.3 lines byte for byte, as literals and never as a template the build
 shares.
 
-**Two cells, and no invariant is cell-specific -- a result, not an assumption** (Master Action List section
-18 standing rule 15; spec section 7 binds one cell, this oracle reports two because the dispatch asked for
+**Two cells, and no invariant is cell-specific -- a result, not an assumption** (the project's standing rules, section
+18 standing rule 15; spec section 7 binds one cell, this file reports two because the request asked for
 both). pandas 2.3.3 and pandas 3.0.5: every test here is asserted in both cells, nothing here reads a stored
-null, and the map is the whole file twice: **106 + 106 = 212 ids over the two cells against the oracle's own
+null, and the map is the whole file twice: **106 + 106 = 212 ids over the two cells against this file's own
 106.** The ids by invariant: FR1 3, FR2 1, FR3 1, FR4 7, FR5 4, FR6 3, FR7 3, FR8 3, FR9 6, FR10 5, FR11 7,
 FR12 17, FR13 10, FR14 7, FR15 1, FR16 6, FR17 6, FR18 2, FR19 9, FR20 5.
 
@@ -32,8 +32,8 @@ predicted about the inference path moved: ``infer_events`` and the inference bra
 the method 698-750), the fixture pair infers its less frequent outcome over its more frequent one on the
 pair and on its first run alone (on the lattice: ``held`` over ``tripped``, 1,443 / 3,165 on the pair and
 533 / 1,771 on ``lattice-a``), and the mock pair infers ``violated, timeout`` over ``completed``. **What no longer holds:**
-the base is not green -- spec sections 7.3 and 9 assume a green dispatch commit, and ``f9b881f`` carries A8b's
-frozen oracle against a tree that does not build it yet (63 failed and 2 errors, identical in both cells:
+the base is not green -- spec sections 7.3 and 9 assume a green base commit, and ``f9b881f`` carries A8b's
+frozen test file against a tree that does not build it yet (63 failed and 2 errors, identical in both cells:
 53 in ``test_a8b_cut_and_cap.py``, 4 in ``test_m3_capture.py``, one each in ``test_a8a_span_schema.py``,
 ``test_m3_crash_trace.py``, ``test_m3_timeout_trace.py`` and one other test file, and two failures and
 two errors in a further test file); section 12's "P-1 will edit" is done, ``to_markdown``'s parameter
@@ -47,11 +47,11 @@ assertion here reads. (3) P-1 filed the whole-file route: ``ec05b676...`` in all
 to 750) ``6413b54a...``, and ``report.py``, ``viewer.py``, ``store.py`` and ``tree.py`` whole-file.
 ``store.py`` is byte-identical to ``a626cd3``'s: P-1 touched ``cli.py``, ``diff.py``, ``report.py``,
 ``tree.py`` and ``viewer.py`` only, and A8b's build (``trace``, ``capture``, ``sampler``, ``executor``,
-``executor_modal``) touches none of the five files this oracle pins. (5) ``Store.runs()`` and
+``executor_modal``) touches none of the five files this file pins. (5) ``Store.runs()`` and
 ``Store.manifest()`` are unchanged. (6) The shadow shim -- a scratch build of section 3 -- turns every test
 here green and leaves exactly group D red.
 
-**Where this oracle reads the spec differently, each with its hatch.** (a) FR20's explicit-event clause
+**Where this file reads the spec differently, each with its hatch.** (a) FR20's explicit-event clause
 carries its positive control in the same test, as FR20's own text says, so it is *red* on the bare tree;
 section 7.2 predicts it green before and after, and it cannot be both -- a negative with no control is the
 vacuous shape section 7.1's group E4-b exists to prevent. The tie clause is FR20's one green half. (b) FR11's
@@ -68,10 +68,10 @@ so it holds before the build as well: ``shlex`` may arrive and nothing else may.
 stay with A7's P7-10, which this file does not restate. (j) Not pinned: section 3.3's line lengths, and the
 ``inspect`` wrong-``--event`` neighbour that section 5 names as out of scope.
 
-**Standing rule 12 -- the classified red set on the retrofit commit with this file added, measured on two
-pristine ``git archive`` copies of ``f9b881f`` carrying the retrofit and this file, venvs from the repo venv's
+**Standing rule 12 -- the classified red set on the update commit with this file added, measured on two
+pristine ``git archive`` copies of ``f9b881f`` carrying the update and this file, venvs from the repo venv's
 freeze closure differing in exactly pandas, collection verified 2071 = 2071 = 2071 at ``f9b881f`` (both
-baseline cells and the repo) and 2177 = 2177 = 2177 = 2177 = 2177 with the retrofit and this file (both
+baseline cells and the repo) and 2177 = 2177 = 2177 = 2177 = 2177 with the update and this file (both
 red-set cells, both shim-control cells, and the clone at the tip), baselines 63 failed / 2001 passed / 5
 skipped / 2 errors in both cells at ``f9b881f``: 151 failed / 2019 passed / 5 skipped / 2 errors, identical
 test by test in both cells.** The 153 red are the base's 65 and **88 of this packet's**: **82** of this
@@ -79,7 +79,7 @@ file's 106 tests, each red for its expected cause (the store check, the missing-
 the new wording do not exist yet), and the six frozen tests V1 and V4 (renamed, amended to section 3.2's
 ``serve --x AXIS`` and ``serve --event NAME`` literals), A14, B9, B17 and C2 (``:504``), each for the new
 wording. **Nothing else is red beyond the base's 65, and none of the base's 65 turned green.** Group D (F28,
-L20, R19, W20, G20) is green on the retrofit commit and red once the build edits ``diff.py``; nothing in this
+L20, R19, W20, G20) is green on the update commit and red once the build edits ``diff.py``; nothing in this
 commit touches it. The shim control -- the same copies with the shim built -- is 68 failed / 2102 passed / 5
 skipped / 2 errors in both cells, identical test by test: the base's 65 and group D's five, nothing else.
 
@@ -92,9 +92,9 @@ carrying section 7.1's group E1 edit (I2 x3, I17 x2) and the four group E4-b neg
 E4-a are green before and after by construction**; the negatives are non-vacuous only because FR16 asserts
 the marker matches real inferred output in the same test.
 
-**Mutation list for Session B** (spec section 7.5's twenty-nine rows and eight this oracle added, measured
+**Mutation list for the build** (spec section 7.5's twenty-nine rows and eight this file added, measured
 on the shim control with one interpreter per row, each row applying exact replacements that fail loudly when
-a target is missing; control clean; **all 37 caught by this file alone**). The owners, by oracle test: 1
+a target is missing; control clean; **all 37 caught by this file alone**). The owners, by frozen test: 1
 ``exists()`` for ``is_dir()``: FR1's file-root pair alone. 2 and 3 missing and empty collapsed, and an empty
 store keeping ``unknown run``: FR2, FR4's empty-source trio, FR7's empty hint, FR12's empty-store row. 4 and
 5 ``runs`` on an empty store exiting 2, and its note on stdout: FR3, FR4's trio, FR6's empty-root test, FR7's
@@ -120,7 +120,7 @@ pair both leave 2), FR10, FR11, FR12. 27 the listing on stdout: FR19 both halves
 arity id alone; 32 a set-but-empty ``$PROOFLOAD_STORE`` named as the source: FR4's empty-env id alone; 33 axes
 from the first run only and 36 events from the first run only: the FR11 property alone each; 34 the hint's
 verb always ``runs``: seventeen ids in FR1, FR2, FR4, FR7 and FR12; 35 ``--store`` after the verb in the
-create line: thirteen ids in FR1, FR4, FR7 and FR12; 37 above. Session B re-applies every row against the
+create line: thirteen ids in FR1, FR4, FR7 and FR12; 37 above. The build re-applies every row against the
 build and reports where each lands; a row that needs both files (20) is two edits.
 """
 
@@ -397,7 +397,7 @@ def inference_line(events: Sequence[str], non_event: str) -> str:
 REPORT_FORMS = "report A B --x AXIS [...]  (two run ids: diff report) or report RUN --x AXIS [...]  (one run id: survival report)"
 SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a diff view)"
 
-# Minted at f9b881f, the commit this oracle was frozen against (FR17, FR18). Named for what they
+# Minted at f9b881f, the commit this file was frozen against (FR17, FR18). Named for what they
 # pin: none of the names below ends in the suffix the exclusion-record sweeps count.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py outside MultiDiffResult.to_markdown gains complementary_events and trade_line()'s complement branch; to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py outside MultiDiffResult.to_markdown: diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
@@ -406,7 +406,7 @@ SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a dif
 DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "0e1fa8a53987fbe8d2ac9b8fe32b4909341f7da9ffdeb3960972f19c497dcc87"
 # Re-minted 2026-09-20 (truncation surfacing): report.py and viewer.py move, because that packet edits both; store.py and tree.py do not.
 # Re-minted again 2026-09-20 (stored-trace read): store.py moves, because that packet edits it; report.py, viewer.py and tree.py do not.
-# CD Session B, 2026-09-21: re-minted off the built `report.py` at `234513c`. D9's "no change to
+# The CD build, 2026-09-21: re-minted off the built `report.py` at `234513c`. D9's "no change to
 # them" did not survive D3's "none" -- `_observation_cap`'s `isinstance(value, int)` filter drops
 # the string -- so that one function lets the word through and nothing else in the file moved,
 # which `test_cd_cap_declaration.py`'s digest over the file OUTSIDE `_observation_cap` is what

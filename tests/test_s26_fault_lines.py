@@ -1,16 +1,16 @@
-"""S26 -- the grouping resolver and the fault lines: the oracle for F1-F30.
+"""S26 -- the grouping resolver and the fault lines: the frozen tests for F1-F30.
 
 Written from "Proofload -- Spec S26 Layered Report P4.2 Resolver and Fault Lines" section 4 and
-"Handoff P4.2", against ``11502ba`` plus the retrofit commit ``082c87d`` (2026-09-07). Session B
-builds ``src/proofload/tree.py`` (the resolver, ``tree``, the four dataclasses) and the two flags,
+"Handoff P4.2", against ``11502ba`` plus the update commit ``082c87d`` (2026-09-07). The build
+adds ``src/proofload/tree.py`` (the resolver, ``tree``, the four dataclasses) and the two flags,
 one block and one key in ``src/proofload/cli.py`` against this file and does not edit it.
 
-**``proofload.tree``'s new names are imported inside each test body**, the way the S25 oracle
+**``proofload.tree``'s new names are imported inside each test body**, the way the S25 frozen tests
 reached the module before it existed: this file collects on the bare tree, its own tests fail
 there, and every other test in the repo still reports. The static tests read the source as text.
 
 **No test in this file carries the ``calibration`` marker, and none may.** Spec section 0.6,
-measured in ``log/phase4-p42-step-zero-slow.py`` (K=200 sharp-null resamples of the committed
+measured by the slow step-zero script (K=200 sharp-null resamples of the committed
 fixture of the time, grouped by its first axis, B=1000): Level 2 is gated on the root, so under
 the global sharp null the unconditional rate of any group rejecting is bounded by the root's own
 rate, which O10 already holds inside ``[0.020, 0.080]``. The measured gated rates, with BH and
@@ -20,7 +20,7 @@ correct Level 2 from one with no correction at all, and the only column that sep
 deterministically here (F13-F16), and F24 is the fast twin of the lane's one sole catch (S25 M3b).
 Nothing below loops over resamples; a property test over small synthetic pairs is not a lane.
 
-**Step zero, re-derived before a test was written** (``scratchpad/p42_session_a_step_zero.py``,
+**Step zero, re-derived before a test was written** (the step-zero script,
 89 s against the bare tree; every number below is that script's or the spec's script's):
 
 1. **The refusal rule is S23's gate at the family floor, on shape alone.** The step-zero script's
@@ -91,7 +91,7 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
    informative count recomputed from the frames. ``diff.py``'s bytes are pinned by their own digest
    rather than by a ``git diff``, which a scratch copy without ``.git`` cannot run.
 
-**Spec text this oracle could not use as written, each resolved here and reported.**
+**Spec text these frozen tests could not use as written, each resolved here and reported.**
 
 - F8's ``max_group_mde = 0.37`` cannot admit ``task`` on the axes pair: at N=8 the group MDE is the
   cap 0.5000 (the spec's own section 6 number); 0.37 is the value for a design at N=32. F8 uses the offered
@@ -115,14 +115,14 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
   gives 0.171705. Section 6's "MDE 0.49" for the imported pair's ``tool_fail_rate`` is 0.4597
   (0.49 is another row of the spec's table). Both still separate what they are meant to separate.
 - F15 names S25's three-cell identical pair, whose only axis refuses at the cap so the grouping
-  collapses to ``whole_grid`` and ``reason`` is ambiguous between the two untested cases. **This
-  oracle fixes root-first precedence**: when the root did not reject, ``reason`` is
+  collapses to ``whole_grid`` and ``reason`` is ambiguous between the two untested cases. **These
+  frozen tests fix root-first precedence**: when the root did not reject, ``reason`` is
   ``"root_not_rejected"`` whatever the grouping's cardinality, because the gate is evaluated before
   the level's shape and the more fundamental fact is the one stated. F15's full clause is asserted
   on an identical pair of the axes shape, where ``temp`` resolves to two groups.
 - S25 section A's "two decorator lines" on O10 is one line: one function parametrises into both.
 
-**Conventions this oracle fixes where the spec is silent. Session B builds to these.**
+**Conventions these frozen tests fix where the spec is silent. The build follows these.**
 
 - ``next_rung`` is the rung that makes the next attempt: ``"axis"`` when the axis rung refuses one
   axis and another remains, ``"task_family"`` when it refuses its last one, ``"trace"`` after the
@@ -263,7 +263,7 @@ CLI_GUARDED_NAMES = set(ROOT_GUARDED_FIELDS) | {
 #: The ``:g``-rendered fields the first block line must carry (F20).
 FIRST_LINE_NUMERIC_FIELDS = ("n_groups", "size_min", "size_median", "size_max", "n_resolvable_groups", "max_group_mde", "alpha_floor")
 
-#: F28. Minted on the bare tree at 082c87d (11502ba plus the marker retrofit), 2026-09-07, as a
+#: F28. Minted on the bare tree at 082c87d (11502ba plus the marker update), 2026-09-07, as a
 #: digest of ``omnibus(...).to_json()`` with the five p-driven keys removed; replaced by the facts it
 #: covered (``assert_the_omnibus_payload_is_the_design`` below). On the lattice the arm-label root
 #: has 35 informative cells of 72.
@@ -273,11 +273,11 @@ OMNIBUS_PAYLOAD_KEYS = frozenset({
 })
 LATTICE_INFORMATIVE_CELLS = 35
 #: ``src/proofload/diff.py``'s bytes, whole, unchanged since cd5f177 (``git diff --exit-code``).
-#: **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
+#: **A28's update, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
 #: A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted ``4b3c6ae``) both named
 #: ``A28`` as their retiring packet; both owners have landed and A28 rewrites every carrier (five literals, one per file:
 #: ``test_a28_agreement.py``, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``,
-#: ``test_s29_viewer.py``; "four" is ``FORMER_CARRIERS``, the set A28 sweeps beside itself -- LS retrofit, 2026-09-22 (local serve pass, Phase A)), so
+#: ``test_s29_viewer.py``; "four" is ``FORMER_CARRIERS``, the set A28 sweeps beside itself -- LS update, 2026-09-22 (local serve pass, Phase A)), so
 #: the value below is a read off the shipped file at ``38e8df9`` (byte-identical at ``03d7ed2``),
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
@@ -286,7 +286,7 @@ LATTICE_INFORMATIVE_CELLS = 35
 # PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
-#: S25's O14/O23 digests, restated rather than imported so two frozen oracles do not couple.
+#: S25's O14/O23 digests, restated rather than imported so two frozen test files do not couple.
 # PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): MULTI_JSON_SHA256 is no longer asserted. PF4 adds
 # columns to every cell and changes its limits and words, so the multi_diff test checks the facts
 # the digest guarded instead (LATTICE_DIRECTION_COUNTS and the per-cell references below).
@@ -1762,7 +1762,7 @@ def test_f15_the_identical_pair_is_not_tested_and_says_why_under_both_methods(sy
 def test_f15_the_three_cell_identical_pair_states_the_roots_reason_first() -> None:
     """S25's ``same-a``/``same-b`` restated. Its only axis refuses at the cap, so the grouping
     collapses to ``whole_grid``; the root did not reject either. **Root-first precedence**, the
-    convention this oracle fixes (module docstring): the reason is the root's."""
+    convention these frozen tests fix (module docstring): the reason is the root's."""
     cells = three_cell_identical()
     a, b = raw_frame("same3-a", cells), raw_frame("same3-b", cells)
     ma, mb = manifest("same3-a", SALT, {"task": "categorical"}), manifest("same3-b", SALT, {"task": "categorical"})
@@ -2855,7 +2855,7 @@ def test_f28_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     A27's own retirement sweep discharges empty: nothing carried an exclusion at ``101028c``, so
     there was no orphan to file.
 
-    **A22's retrofit, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
+    **A22's update, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
     existing record constant, not a fifth carrier. The per-record assertions now pin ``owner`` and
     ``minted_at`` per entry rather than one shared literal, because ``_coverage`` is minted at
     ``4b3c6ae`` and ``_pairing`` at ``101028c``. Two live regions on one file is ADR-077's
@@ -2863,7 +2863,7 @@ def test_f28_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     rather than assumed. Neither exclusion is retirable yet: both name ``A28`` as their retiring
     packet, and A22 is not it.
 
-    **A28's retrofit, 2026-09-13 -- both exclusions retired.** ``_pairing`` (A27, ``101028c``) and
+    **A28's update, 2026-09-13 -- both exclusions retired.** ``_pairing`` (A27, ``101028c``) and
     ``_coverage`` (A22, ``4b3c6ae``) both named ``A28``; both owners have landed and A28 rewrites
     every carrier, so ``DIFF_PY_SHA256`` is the whole-file value again, read off the shipped file,
     and this file carries no record. What stays is the sweep, asserted from a file that carries no

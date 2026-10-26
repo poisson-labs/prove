@@ -1,6 +1,6 @@
 """BU -- the Burla backend: ``proofload sweep … --backend burla`` on a fixed cluster, through Burla.
 
-The oracle for the vault's *Prove -- Spec Burla Backend* (section 4, lane P): the invariants R1-R7
+The frozen tests for the project's *Prove -- Spec Burla Backend* (section 4, lane P): the invariants R1-R7
 (the shared runner), M1-M11 (the host-side mapper), S1-S7 (the launcher), W1-W6 (the bundle and
 the worker), C1-C5 (chaos and capture), $1-$9 (cost, caps and the ledger), P1-P7 (pre-flight and
 CLI) and I1-I6 (imports and surface). Lane D, the demo package, lives in the ``burla-demo`` repo.
@@ -14,7 +14,7 @@ them, as it is to a node. The launcher seam, ``executor_burla._launcher_argv``, 
 real ``_burla_submit.py`` as ``__main__``. Every interpreter the fake or a test starts arms a
 network tripwire (a socket other than a Unix one raises); the pytest process never does.
 
-**What the tests fix that the spec leaves open** (for Session B, and listed in the session's
+**What the tests fix that the spec leaves open** (for the build, and listed in the session's
 invariant-to-test table):
 
 - The ledger is JSON lines. An open line carries ``event="open"``, ``run_id``, ``start`` (Unix
@@ -89,7 +89,7 @@ PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
 PIN = "1.8.2"
-# PF9 (PF0 Session A yes/no 5, ruled 2026-10-14): Burla's install line names Prove's extra.
+# PF9 (the PF0 freeze's yes/no 5, ruled 2026-10-14): Burla's install line names Prove's extra.
 INSTALL_HINT = 'pip install "poisson-prove[burla]"'
 HEAD = "http://localhost:5001"
 SALT = "bu-oracle-salt"

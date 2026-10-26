@@ -47,8 +47,8 @@ from poisson_prove.trace import _EPISODE_KEY, _RUN_ID_KEY
 
 __all__ = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
 
-#: The two attribute keys M12 deliberately never lifts. Still written in one place, and that
-#: place is now ``trace.py``: the storage split and the observation cut both have to exclude
+#: The two attribute keys the trace deliberately never lifts. Still written in one place, and
+#: that place is now ``trace.py``: the storage split and the observation cut both have to exclude
 #: them by name, and core cannot import this module, which puts the OTel SDK on the import
 #: graph at module scope. This is where callers read them; that is where they are built.
 RUN_ID_KEY = _RUN_ID_KEY

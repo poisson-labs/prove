@@ -29,8 +29,8 @@ T_UNIT = "tool_calls"
 
 #: Simulated wall clock. A simulation gets simulated time: reading the real clock would let two
 #: consecutive spans tie on ``start_ns``, and the mock would stop being a pure function of
-#: ``(cfg, seed)``. A later session that wants the mock to dogfood ``record()`` injects a fake
-#: clock through the same helper T17 pins.
+#: ``(cfg, seed)``. A later change that wants the mock to dogfood ``record()`` injects a fake
+#: clock through the same helper the tests pin.
 MOCK_EPOCH_NS = 1_700_000_000_000_000_000
 
 _MAX_CONSECUTIVE_FAILURES = 3

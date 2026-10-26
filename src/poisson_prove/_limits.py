@@ -1,17 +1,16 @@
-"""The detection limits: one function family for every limit Prove prints (section 8.10).
+"""The detection limits: one function family for every limit Prove prints.
 
 A condition's limit answers one question: if this condition alone had changed, from where it was,
 how large a change would the flag Prove raises catch at the stated power? The flag is the row's own
 test p below ``q / M`` (Benjamini-Hochberg flags any p below that whatever the other rows do, and
 Holm counts it) and the change in its direction, so each limit here is computed for the test the
 comparison used, at the level it is handed, by that test's exact power where one exists (Fisher,
-the paired test) and by expected moments for the log-rank test (PF4.22 to PF4.25, PF4.43).
+the paired test) and by expected moments for the log-rank test.
 
 Every limit is searched on a grid inside its room and is the smallest grid value whose power
 reaches the target **and stays there** at every larger grid value (exact power is not monotone for
-small samples); the grid never passes the room (PF4.48). A direction with no limit is null with one
-of four notes (PF4.27): ``no room``, ``none detectable``, ``cannot be flagged``, ``no matched
-pairs``.
+small samples); the grid never passes the room. A direction with no limit is null with one of four
+notes: ``no room``, ``none detectable``, ``cannot be flagged``, ``no matched pairs``.
 
 The comparison's rows (``diff``), the power gate at sweep time (``executor``), the single-run
 report's design limit and the fault-line groups (``tree``) all read their numbers here.
@@ -40,7 +39,7 @@ NO_ROOM = "no room"
 NONE_DETECTABLE = "none detectable"
 CANNOT_BE_FLAGGED = "cannot be flagged"
 NO_MATCHED_PAIRS = "no matched pairs"
-#: The closed list a null limit's note is taken from (PF4.27).
+#: The closed list a null limit's note is taken from.
 NOTES = (NO_ROOM, NONE_DETECTABLE, CANNOT_BE_FLAGGED, NO_MATCHED_PAIRS)
 
 #: scipy's ``fisher_exact`` counts a table as extreme as the observed one when its probability is
@@ -76,7 +75,7 @@ class Limits:
     room_fall: float
 
     def one_number(self) -> tuple[float | None, str | None]:
-        """Section 8.10's ``mde`` and ``mde_note``: the larger limit when both are numbers; the
+        """The row's one ``mde`` and ``mde_note``: the larger limit when both are numbers; the
         number when the other direction has no room; else None, with the note of the direction
         that made it null (the rise's when both did; a direction with no room never does)."""
         rise, fall = self.rise, self.fall
@@ -93,9 +92,10 @@ class Limits:
         return None, rise.note
 
     def could_tell(self, threshold: float) -> tuple[bool, float | None]:
-        """PF4.29's question: with ``T' = min(threshold, the larger room)``, every direction whose
-        room is at least ``T'`` must have a limit at or below ``T'``. Returns whether the row could
-        tell, and the largest limit the question read (the verdict limit's candidate, PF4.40)."""
+        """Whether the row could tell a change of ``threshold``: with ``T' = min(threshold, the
+        larger room)``, every direction whose room is at least ``T'`` must have a limit at or below
+        ``T'``. Returns whether the row could tell, and the largest limit the question read (the
+        verdict limit's candidate)."""
         asked = min(threshold, max(self.room_rise, self.room_fall))
         largest: float | None = None
         for limit, room in ((self.rise, self.room_rise), (self.fall, self.room_fall)):
@@ -111,7 +111,7 @@ class Limits:
 
 
 def _grid(room: float) -> NDArray[np.float64]:
-    """The multiples of the grid step from one step up to the room, never past it (PF4.48)."""
+    """The multiples of the grid step from one step up to the room, never past it."""
     steps = int(math.floor(room / GRID_STEP + 1e-9))
     grid = np.arange(1, steps + 1, dtype=np.float64) * GRID_STEP
     return grid[grid <= room + 1e-15]
@@ -215,7 +215,7 @@ def _binomial_mean(
 def fisher_power(
     p_a: float, n_a: int, n_b: int, level: float, changes: NDArray[np.float64], rise: bool
 ) -> NDArray[np.float64]:
-    """PF4.23: with A ~ Binomial(n_a, p_a) and B ~ Binomial(n_b, p_a +- change), the chance that
+    """With A ~ Binomial(n_a, p_a) and B ~ Binomial(n_b, p_a +- change), the chance that
     Fisher's p is below the level and B's share moved the way of the change."""
     weights = _fisher_weights(p_a, n_a, n_b, level, rise)
     rates = p_a + changes if rise else p_a - changes
@@ -308,7 +308,7 @@ def _paired_critical(pairs: int, level: float) -> NDArray[np.int64]:
 def paired_power(
     p_a: float, pairs: int, level: float, changes: NDArray[np.float64], rise: bool
 ) -> NDArray[np.float64]:
-    """PF4.24: the two arms independent within a pair at A's share, B's moved by the change; the
+    """The two arms independent within a pair at A's share, B's moved by the change; the
     chance that the paired p is below the level and the larger discordant count is the
     direction's. The pairs' multinomial is enumerated through the discordant total."""
     changes = np.asarray(changes, dtype=np.float64)
@@ -382,7 +382,7 @@ class _Template:
 def _logrank_moments(
     template: _Template, n_b: int, theta: NDArray[np.float64], level: float
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """PF4.43, for each hazard ratio: (the power, B's incidence at the horizon).
+    """For each hazard ratio: (the power, B's incidence at the horizon).
 
     At each of A's times B's hazard of the event is ``1 - (1 - h_A)^theta``, B's other endings
     take A's share of other endings among the runs that did not have the event, and the expected
@@ -450,8 +450,9 @@ def logrank_p_min(n_a: int, n_b: int) -> float:
 
 @lru_cache(maxsize=1024)
 def _zero_baseline_threshold(at_risk_a: int, at_risk_b: int, level: float) -> int | None:
-    """PF4.43's ``k*``: the fewest events in B, all at the horizon among its runs at risk there,
-    whose log-rank p against A's runs at risk there (none with the event) is below the level."""
+    """The zero-baseline threshold ``k*``: the fewest events in B, all at the horizon among its
+    runs at risk there, whose log-rank p against A's runs at risk there (none with the event) is
+    below the level."""
     horizon = 1.0
     t_a, o_a = np.full(at_risk_a, horizon), np.zeros(at_risk_a, bool)
     t_b = np.full(at_risk_b, horizon)
@@ -469,13 +470,13 @@ def logrank_limits(
     level: float,
     power: float,
 ) -> Limits:
-    """A condition's limits under the log-rank test, read from arm A's risk set (PF4.43).
+    """A condition's limits under the log-rank test, read from arm A's risk set.
 
     The rise searches ``log theta`` upward to ``THETA_MAX`` and the fall downward to its inverse,
     each grid point turned into the change it makes to the incidence at the horizon; every limit
     is at least one grid step of incidence. Where A's hazard reaches 1 at a time no theta lowers
-    B's there, so a fall the mapping cannot reach is ``none detectable`` (reading R40). With no
-    event in A the limit uses log-rank's own threshold for events at the horizon (reading R11)."""
+    B's there, so a fall the mapping cannot reach is ``none detectable``. With no event in A
+    the limit uses log-rank's own threshold for events at the horizon."""
     n_a = int(t_a.size)
     p_min = logrank_p_min(n_a, n_b)
     flaggable = p_min < level
@@ -496,7 +497,7 @@ def logrank_limits(
             found.append(Limit(None, NO_ROOM))
             continue
         if not flaggable:
-            # PF4.37a: a direction with no room says so even when nothing can be flagged.
+            # A direction with no room says so even when nothing can be flagged.
             found.append(Limit(None, CANNOT_BE_FLAGGED))
             continue
         reachable = change >= GRID_STEP - 1e-12
@@ -518,10 +519,11 @@ def _zero_baseline_limits(
     p_min: float,
     flaggable: bool,
 ) -> Limits:
-    """PF4.43 with no event in A: B's events placed at the horizon against A's runs at risk there,
-    B's at risk ``r_b = n_b r_a / n_a`` rounded; the power at a change is ``P(K >= k*)`` with ``K ~
-    Binomial(r_b, change n_b / r_b)`` up to the rise's room ``r_b / n_b``. No ``k*`` means no rise
-    (its power is 0 under the model), though an earlier event could still be flagged."""
+    """The log-rank limits with no event in A: B's events placed at the horizon against A's runs
+    at risk there, B's at risk ``r_b = n_b r_a / n_a`` rounded; the power at a change is ``P(K >=
+    k*)`` with ``K ~ Binomial(r_b, change n_b / r_b)`` up to the rise's room ``r_b / n_b``. No
+    ``k*`` means no rise (its power is 0 under the model), though an earlier event could still be
+    flagged."""
     n_a = int(t_a.size)
     at_risk_a = int(np.sum(t_a >= horizon))
     at_risk_b = int(math.floor(n_b * at_risk_a / n_a + 0.5))
@@ -548,7 +550,7 @@ def _zero_baseline_limits(
 
 
 def together_needed(p_mins: Sequence[float], q: float, family: int) -> int | None:
-    """PF4.28: the fewest rows that, all at their extremes together, Benjamini-Hochberg would
+    """The fewest rows that, all at their extremes together, Benjamini-Hochberg would
     flag: the smallest ``k`` whose ``k``-th smallest ``p_min`` is below ``q k / M``."""
     for k, p in enumerate(sorted(p_mins), start=1):
         if p < q * k / family:
@@ -558,7 +560,7 @@ def together_needed(p_mins: Sequence[float], q: float, family: int) -> int | Non
 
 @lru_cache(maxsize=1024)
 def replicates_for_lone_flag(test: str, level: float) -> int | None:
-    """PF4.28: the smallest equal number of runs a side at which a lone condition could be
+    """The smallest equal number of runs a side at which a lone condition could be
     flagged at all under ``test``."""
 
     def smallest(n: int) -> float:
@@ -572,7 +574,7 @@ def replicates_for_lone_flag(test: str, level: float) -> int | None:
     return None
 
 
-# ---------- the power gate (PF4.30, PF4.48a, PF4.49) ----------
+# ---------- the power gate ----------
 
 #: The gate's grid of base rates.
 _BASE_RATES = np.round(np.arange(0.0, 1.0 + 1e-9, 0.005), 3)
@@ -599,7 +601,7 @@ class Design:
     passes: bool
 
     def record(self) -> dict[str, Any]:
-        """What the manifest records as ``design_mde`` (PF4.30, PF4.48a)."""
+        """What the manifest records as ``design_mde``."""
         keys = (
             "mde",
             "base_rate",
@@ -636,12 +638,12 @@ def design(
     power: float,
     test: str,
 ) -> Design:
-    """The gate's limit (section 8.10): Fisher's test, or the paired test with independent arms
+    """The gate's limit: Fisher's test, or the paired test with independent arms
     under ``--pair-with``, at ``q / M`` with ``M`` the conditions times the events. A design
     passes when, at every base rate on a 0.005 grid with room for a change of ``threshold``, the
     power at exactly that change reaches the target; the worst base rate is the one with the
     lowest power, ties within 1e-12 going to the lower base rate and a rise before a fall. An
-    accepted change of 1 passes every design (PF4.49)."""
+    accepted change of 1 passes every design."""
     family = max(1, conditions * events)
     level = q / family
     p_min = paired_p_min(min(n_a, n_b)) if test == "mcnemar" else fisher_p_min(n_a, n_b)
@@ -685,7 +687,7 @@ def design(
     )
 
 
-# ---------- the fault-line groups (PF4.45) ----------
+# ---------- the fault-line groups ----------
 
 
 def group_limit(
@@ -703,10 +705,10 @@ def group_limit(
     of the group moved by ``delta`` from its own baseline (capped at its room) and nothing else
     moving, the tree flags the group with the root and the group both rejecting, unconditionally.
 
-    A normal approximation to the tree's location statistics, cautious by construction (reading
-    R14): the dispersion statistics and the root's Westfall-Young gain are left out, the group's
-    mean change is read at ``alpha`` (``q / G``), the root's mean over every condition at ``q /
-    (2K)`` over its ``2K`` statistics, and the two are treated as independent, so the power is
+    A normal approximation to the tree's location statistics, cautious by construction: the
+    dispersion statistics and the root's Westfall-Young gain are left out, the group's mean change
+    is read at ``alpha`` (``q / G``), the root's mean over every condition at ``q / (2K)`` over its
+    ``2K`` statistics, and the two are treated as independent, so the power is
     their product. 1.0 when the group has no room or nothing within it reaches the target."""
     rooms = 1.0 - p_a[members]
     if rooms.size == 0 or float(rooms.max()) <= 0.0:

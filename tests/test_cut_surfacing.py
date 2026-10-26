@@ -1,7 +1,7 @@
-"""Truncation-surfacing oracle: what the report, the receipt, the viewer and ``inspect`` say about a cut.
+"""Truncation-surfacing frozen tests: what the report, the receipt, the viewer and ``inspect`` say about a cut.
 
-Frozen 2026-09-20 off ``95471ba``, after the retrofit commit. The build is written against this
-file and does not edit it. The dispatch was "Proofload Truncation Surfacing" (CAP3's recommendation
+Frozen 2026-09-20 off ``95471ba``, after the update commit. The build is written against this
+file and does not edit it. The brief was "Proofload Truncation Surfacing" (CAP3's recommendation
 3: fix the surfacing first and separately from the cap). Nothing here changes the cap or its
 default, and Z13 pins that.
 
@@ -14,7 +14,7 @@ receipt both read ``truncated: 0`` over runs that dropped a third of their obser
 Nothing on any surface says a value was cut, how many, or at what limit, and
 ``inspect`` says outright that it prints none of it (``cli.py:1628``).
 
-**What a surface says now** (the names are this file's; the dispatch left them to the build):
+**What a surface says now** (the names are this file's; the brief left them to the build):
 
 | provenance key (pair; the single-run form has no ``_a``/``_b``) | rendered as | from |
 |---|---|---|
@@ -113,7 +113,7 @@ OWN_RUN_CUT_AT = 8192
 
 REPO = Path(__file__).resolve().parent.parent
 
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+# LS update, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
 NEW_SCHEMA = "poisson-prove.viewpair/7"
 EPOCH = 1_756_900_000_000_000_000
 TASKS = ("t0", "t1", "t2", "t3")
@@ -143,7 +143,7 @@ NEW_LABELS = (
     "episodes censored at horizon", "observation cap a", "observation cap b", "trace spans a", "trace spans b",
     "observation cut spans a", "observation cut spans b",
 )
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
+# LS update, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -383,7 +383,7 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(scope="module")
 def s1(corpus: Path, tmp_path_factory: pytest.TempPathFactory) -> Surfaces:
-    """A cap of 64 with cuts against a cap of 4096 with none: the dispatch's three-settings scenario."""
+    """A cap of 64 with cuts against a cap of 4096 with none: the brief's three-settings scenario."""
     return surfaces(corpus, "cut-a", "cut-b", tmp_path_factory.mktemp("s1"))
 
 
@@ -638,7 +638,7 @@ def test_z10_a_single_run_report_over_a_run_written_before_the_cut_says_not_coun
 def test_z11_the_structure_is_a_new_version_because_its_diff_key_set_changed(s1: Surfaces) -> None:
     assert SCHEMA == NEW_SCHEMA and s1.payload["schema"] == NEW_SCHEMA
     with pytest.raises(ViewerError, match="unknown structure schema"):
-        render_html({**s1.payload, "schema": "proofload.viewpair/5"})  # LS retrofit, 2026-09-22 (local serve pass, Phase A): the newest retired version
+        render_html({**s1.payload, "schema": "proofload.viewpair/5"})  # LS update, 2026-09-22 (local serve pass, Phase A): the newest retired version
 
 
 def test_z11_the_diff_object_is_the_pair_provenance_in_this_order(s1: Surfaces, hz: Surfaces) -> None:

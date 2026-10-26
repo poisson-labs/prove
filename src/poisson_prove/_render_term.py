@@ -7,7 +7,7 @@ a table, the live progress) by the face that wrote it, never by reading the text
 
 - a line longer than the terminal wraps at spaces with a hanging indent (the value's column for a
   detail line, the sentence's for a verdict line); a command to copy is never broken;
-- pretty (section 5.5's switch, decided by the face) adds the four meanings' colours through a
+- pretty (the pretty-or-plain switch, decided by the face) adds the four meanings' colours through a
   :class:`Styler`, folds a table wider than the terminal into one record per row, prints a
   condition as its axes instead of its JSON, and removes the progress line when the work ends.
 
@@ -26,7 +26,7 @@ from poisson_prove import _look
 
 __all__: list[str] = []
 
-#: Section 5.5's four meanings: green, the command did what was asked; yellow, it stopped short or
+#: The four meanings: green, the command did what was asked; yellow, it stopped short or
 #: cannot say; red, an error or a failed check. A verdict that is neither is a result, bold.
 GREEN = ("ok", "done", "passed", "under cap")
 YELLOW = ("stopped", "too small to tell", "no significant change")
@@ -192,7 +192,7 @@ class Terminal:
         return self._fold(rows, indent, key)
 
     def _fold(self, rows: Sequence[Sequence[str]], indent: int, key: int | None) -> str:
-        """A table too wide for the terminal, one record per row (item 27): the row's ``key``
+        """A table too wide for the terminal, one record per row: the row's ``key``
         cell (else its ``config`` cell, else its first), then every other cell as ``column value``,
         the column dim, as many whole pieces to a row as fit."""
         header, body = list(rows[0]), rows[1:]

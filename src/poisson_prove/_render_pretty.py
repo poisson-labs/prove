@@ -1,4 +1,4 @@
-"""Pretty: the command line's look drawn with Rich (section 5.5).
+"""Pretty: the command line's look drawn with Rich.
 
 The second rendering of the command line's lines. ``_render_term`` lays out each line on the
 terminal; this module draws its styles: the four meanings in the terminal's 16 named colours

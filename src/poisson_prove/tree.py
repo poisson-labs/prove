@@ -1,4 +1,4 @@
-"""M14: the dual root -- one permutation-calibrated omnibus over the cells x events family.
+"""The dual root -- one permutation-calibrated omnibus over the cells x events family.
 
 ``H0`` is the sharp null **"no cell changed"**: for every comparable cell and every episode in
 it, the outcome would have been the same under either arm. Under it, exchanging a matched
@@ -17,8 +17,8 @@ Two statistics per event ``k``, over the ``C`` comparable cells, with
 Both are **unweighted**, and both are monotone transforms of the plan's unweighted sum and
 unweighted sum of squares at a fixed ``C``, so every permutation p-value below is the sum's.
 Not a pooled-variance test and not Cochran's Q: ``Var(delta_i) = 2 p_i (1 - p_i) / N`` differs
-across cells, and ``Q`` degenerates wherever ``p-hat`` is 0 or 1 -- 77% of cells on the S18
-substrate.
+across cells, and ``Q`` degenerates wherever ``p-hat`` is 0 or 1 -- 77% of cells in one
+measured sweep.
 
 Extremeness is ``|location_k|`` (two-sided) and ``dispersion_k`` (upper): a signed location
 extremeness would be a one-sided test nobody asked for, and a signed dispersion is meaningless.
@@ -27,7 +27,7 @@ One set of ``B`` permutations yields all ``2K`` statistics; each gets a Phipson-
 **Ties are counted with ``>=``**: discrete outcomes tie constantly at N=32 and ``>`` would be
 anti-conservative. That is deliberate and is not a defect to fix.
 
-``diff.py`` does not know this module exists (draft ADR-058). ``omnibus`` consumes the
+``diff.py`` does not know this module exists. ``omnibus`` consumes the
 ``MultiDiffResult`` it must agree with -- events, method, ``q``, the horizon and the common
 cells are read from it and never re-decided -- plus the raw frames, from which it rebuilds the
 cell view with ``diff.py``'s own helpers and refuses if the rebuild disagrees.
@@ -62,10 +62,10 @@ from poisson_prove.store import RunManifest
 
 Scheme = Literal["pair_swap", "arm_label"]
 
-#: Draft ADR-057, spec section 0.2. The scheme follows ``method`` and never the run salt: two
+#: The scheme follows ``method`` and never the run salt: two
 #: runs that happen to share a salt must get the same root as two that do not, or the omnibus
 #: becomes a property of run provenance rather than of the request. Written once, read
-#: everywhere; nothing below dispatches on anything else.
+#: everywhere; nothing below branches on anything else.
 SCHEME_BY_METHOD: Mapping[str, Scheme] = {
     "mcnemar_bh": "pair_swap",
     "fisher_bh": "arm_label",
@@ -99,25 +99,25 @@ _CODE_COLUMN = "_root_code"
 #: verdict, the MDE -- belongs to the flat family and is none of the root's business.
 _REBUILD_COLUMNS = ("n_a", "n_b", "events_a", "events_b")
 
-#: The tag inside the agreement digest's hashed payload (spec A28 section 3.2). Not a
-#: compatibility promise and never a sibling key (section 10 Q9): it is ``/1`` so that a later
+#: The tag inside the agreement digest's hashed payload. Not a
+#: compatibility promise and never a sibling key: it is ``/1`` so that a later
 #: change to the canonical form is visible, and no consumer may compare digests across tags.
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 
 
-# ---------- S26: the resolver's vocabulary ----------
+# ---------- the resolver's vocabulary ----------
 
-#: Draft ADR-068, amending ADR-043. The rungs the resolver walks, in order. A tuple and not a
-#: chain of ``if``s, with the trace slot already in it, so Phase 6's kind-grouping lands by
-#: filling one function body and moving no entry (F1, F5).
+#: The rungs the resolver walks, in order. A tuple and not a chain of ``if``s, with the trace
+#: slot already in it, so a later grouping by kind lands by filling one function body and
+#: moving no entry.
 RUNG_ORDER: tuple[str, ...] = ("requested", "trace", "axis", "task_family", "whole_grid")
 
-#: The names the trace rung owns. None in 0.1.0 (PF4.6, Q30): a grouping by span kind is not
+#: The names the trace rung owns. None in 0.1.0: a grouping by span kind is not
 #: offered, so ``kind`` and ``step_kind`` are unknown groupings, refused with the supported list.
 TRACE_GROUPINGS: tuple[str, ...] = ()
 
-#: Draft ADR-061's order. Read from the configs, not from ``axis_types``: the rung exists for an
-#: imported run whose manifest declares fewer axes than its configs carry.
+#: The task-family keys, in order. Read from the configs, not from ``axis_types``: the rung
+#: exists for an imported run whose manifest declares fewer axes than its configs carry.
 TASK_FAMILY_KEYS: tuple[str, ...] = ("task_family", "task_id", "task")
 
 #: What ``--by`` types to ask for the whole grid; the key the resolved grouping reports.
@@ -125,30 +125,30 @@ WHOLE_GRID: str = "grid"
 WHOLE_GRID_KEY: str = "whole_grid"
 WHOLE_GRID_LABEL: str = "all"
 
-#: Every reason a rung may give. Phase 6 adds to this tuple; nothing dispatches on it.
+#: Every reason a rung may give. A later release may add to this tuple; nothing branches on it.
 REFUSAL_REASONS: tuple[str, ...] = ("unsupported", "underpowered", "one_group", "not_shared")
 
 #: What is not tested, when the level was not tested. The root's reason wins over the level's
 #: shape: the gate is evaluated before the grouping's cardinality and the more fundamental fact
-#: is the one stated (spec S26 section 3.4; the oracle's module docstring fixes the precedence).
+#: is the one stated.
 NOT_TESTED_REASONS: tuple[str, ...] = ("root_not_rejected", "one_group")
 
 #: The null every group is tested against, quoted on the block exactly as the root's is.
 GROUP_NULL: str = "no cell in the group changed"
 
-#: ADR-021's shape: one constant, two readers. The grouping gate and the sweep gate hold the
+#: One constant, two readers. The grouping gate and the sweep gate hold the
 #: **same object**, so the two cannot drift apart; re-typing ``0.20`` here would be the second
-#: site (F26). It moves only through ``--max-group-mde``.
+#: site. It moves only through ``--max-group-mde``.
 DEFAULT_MAX_GROUP_MDE: float = DEFAULT_MAX_MDE
 
-#: Draft ADR-067. Fewer than two groups that could each answer is one hypothesis dressed as a
+#: Fewer than two groups that could each answer is one hypothesis dressed as a
 #: family, and the whole-grid rung already offers one hypothesis.
 MIN_RESOLVABLE_GROUPS: int = 2
 
-#: ADR-021's shape, spec S27 section 3.9: the fewest groups that make Level 2 a family rather
+#: The fewest groups that make Level 2 a family rather
 #: than the root restated. One constant, three readers -- the resolver's one-group refusal in
 #: ``_consider``, the gate in ``_fault_lines``, and the depth reduction in ``_depth`` -- where
-#: the first two were a literal ``< 2`` and ``> 1`` before this packet and the third would have
+#: the first two were once a literal ``< 2`` and ``> 1`` and the third would have
 #: been a third site. Distinct from ``MIN_RESOLVABLE_GROUPS`` above, which is how many of a
 #: grouping's groups must resolve the accepted effect for the grouping to be *admitted*: the
 #: two are 2 for different reasons and move independently.
@@ -160,12 +160,12 @@ MIN_FAMILY_GROUPS: int = 2
 _NUMERIC_LABEL = re.compile(r"[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?")
 
 
-# ---------- S27: Level 3, and the bound the tree controls at ----------
+# ---------- Level 3, and the bound the tree controls at ----------
 
 #: How many levels the procedure tests: ``2`` stops at the fault lines, ``3`` adds the cells
-#: under each rejecting one. There is no ``1`` -- a one-level tree is ``omnibus`` and P4.1's
+#: under each rejecting one. There is no ``1`` -- a one-level tree is ``omnibus`` and its
 #: block, and a bound over a single hypothesis tested at ``q`` is a number that is true and
-#: confuses (spec S27 section 0.9 item 4).
+#: confuses.
 DEFAULT_DEPTH: int = 3
 DEPTHS: tuple[int, ...] = (2, 3)
 
@@ -182,7 +182,7 @@ DELTA_STAR: float = 1.44
 #: it could name none, and the root when it could name nothing below. His other universal bound
 #: is over the full tree, is depth-free and smaller, and is over a set padded with every
 #: finding's ancestors; it is not printed. Carried on the structure so the JSON says which
-#: error rate the number is (ADR-062).
+#: error rate the number is.
 BOUND_DISCOVERIES: str = "outer_nodes"
 
 #: The null every leaf is tested against, quoted on the block exactly as the root's and the
@@ -191,8 +191,8 @@ CELL_NULL: str = "this cell did not change"
 
 #: Why Level 3 was not tested, the more fundamental fact first: the procedure's configuration
 #: before the root, and the root before the level. The **first** that applies is the one
-#: stated, which is P4.2's precedence for ``FaultLines.reason`` extended by one (spec S27
-#: section 3.3). Read in order by ``_leaves_reason``; reordering this tuple reorders the
+#: stated, which is the precedence of ``FaultLines.reason`` extended by one. Read in order by
+#: ``_leaves_reason``; reordering this tuple reorders the
 #: precedence, which is the point of stating it once.
 LEAVES_NOT_TESTED_REASONS: tuple[str, ...] = ("depth", "root_not_rejected", "no_group_rejected")
 
@@ -209,10 +209,9 @@ class UnknownGrouping(TreeError):
     """``--by`` named something no rung owns.
 
     Not a trace grouping, not an axis either manifest declares, not a task-family key the
-    configs carry, and not ``WHOLE_GRID``. Refused outright and **never** a fallback: ADR-043
-    flagged the silent-but-stated fallback as its own hazard, and draft ADR-068 closes it by
-    refusing the names nothing can build a grouping from while letting the known-but-unsupported
-    ones fall through with a row (F6).
+    configs carry, and not ``WHOLE_GRID``. Refused outright and **never** a fallback: a
+    silent-but-stated fallback is its own hazard, so the names nothing can build a grouping from
+    are refused while the known-but-unsupported ones fall through with a row.
     """
 
 
@@ -221,8 +220,8 @@ class TraceGroupingUnsupported(TreeError):
 
     Caught by the resolver and recorded as a refusal, never propagated to the caller: a
     ``--by kind`` today produces one row at the trace rung and resolution continues, which is
-    exactly the path Phase 5.2 replaces with a resolution. Nothing downstream of the resolver
-    changes shape when it does (F5).
+    exactly the path a later release may replace with a resolution. Nothing downstream of the
+    resolver changes shape when it does.
     """
 
 
@@ -241,14 +240,14 @@ class RootResult:
     n_cells: int
     n_informative_cells: int
     #: ``n_cells - n_informative_cells``, carried rather than derived, so ``cli.py`` can print
-    #: the complement without doing the subtraction (spec section 0.4 and invariant O17).
+    #: the complement without doing the subtraction.
     n_uninformative_cells: int
     n_discordant: int | None
     n_permutations: int
     #: ``1 / (n_permutations + 1)``: the smallest p Phipson-Smyth's ``(1 + count) / (B + 1)`` can
     #: express over this draw, and so a floor under every permutation p in the tree -- the root's
     #: two and its omnibus, and each tested group's three. Carried rather than derived, so a
-    #: renderer can label an at-floor p without doing the arithmetic (ADR-032, ADR-086). Not a
+    #: renderer can label an at-floor p without doing the arithmetic. Not a
     #: statistic: it reads no row and is fixed before a permutation is drawn, the same kind of
     #: field as ``n_permutations`` beside it.
     p_floor: float
@@ -337,8 +336,8 @@ class _Design:
     ragged: bool
     #: Per cell, under the scheme in force: whether some exchange could move it, and how many
     #: matched pairs differ (``None`` under ``arm_label``). Carried per cell rather than only
-    #: as a total because S26's groups are row slices of exactly these cells and their counts
-    #: must sum back to the root's (F12).
+    #: as a total because the fault lines' groups are row slices of exactly these cells and their
+    #: counts must sum back to the root's.
     informative: NDArray[np.bool_]
     discordant: NDArray[np.int64] | None
     n_informative_cells: int
@@ -363,8 +362,8 @@ def _rebuild(
     intersect the hashes, sort them, group -- every step the one ``multi_diff`` takes, in the
     order it takes it, because the rebuild's whole purpose is to agree with it. A "simpler"
     rebuild that skips truncation counts a re-censored row as an event and lands a different
-    ``events_a`` on any pair whose two arms ran to different horizons; Go1 cannot express that,
-    which is exactly why the same call does it here.
+    ``events_a`` on any pair whose two arms ran to different horizons; no store measured so far
+    can express that, which is exactly why the same call does it here.
 
     The codebook is built from the truncated frames, so a re-censored outcome does not earn a
     code it can no longer carry, and it is sorted, so the mapping is a function of the data and
@@ -434,7 +433,7 @@ def _design(
     least one matched pair's two outcomes differ, under ``arm_label`` when its pooled
     ``n_a + n_b`` outcomes are not all identical. Everything else has a permutation
     distribution that is a point mass and contributes the same number under every draw. That
-    count is a printed fact and not a footnote (spec section 0.5); it is a count over
+    count is a printed fact and not a footnote; it is a count over
     *outcomes*, so a cell whose only movement is between two outcomes nobody asked about is
     informative here and degenerate in the statistic, which is recorded and not smoothed.
     """
@@ -511,10 +510,10 @@ def _observed(
 ) -> tuple[tuple[NDArray[np.int64], NDArray[np.int64]], NDArray[np.float64]]:
     """``((events_a, events_b), observed deltas)`` -- ``(C, K)`` twice, and no draw at all.
 
-    Split out of ``_draw`` for S26: the grouping is resolved from the design's per-arm unit
-    counts *before* a permutation exists, so a refused ``--by`` or an out-of-range
+    Split out of ``_draw`` for the fault lines: the grouping is resolved from the design's
+    per-arm unit counts *before* a permutation exists, so a refused ``--by`` or an out-of-range
     ``--max-group-mde`` returns in milliseconds at ``n_permutations = 10**6`` rather than after
-    the block is allocated (F6, F30). Nothing here touches the stream, so moving it out cannot
+    the block is allocated. Nothing here touches the stream, so moving it out cannot
     move a single permuted byte.
     """
     pooled = design.scheme == "arm_label"
@@ -531,11 +530,11 @@ def _draw(
 ) -> NDArray[np.float64]:
     """The ``(B, C, K)`` permuted deltas.
 
-    **The single construction site of the permutation stream** (draft ADR-058). One
-    ``default_rng(seed)``, consumed permutation-major, never stored: P4.2's per-group pass gets
+    **The single construction site of the permutation stream**. One
+    ``default_rng(seed)``, consumed permutation-major, never stored: the per-group pass gets
     the same draws by calling this function, not by re-deriving the stream. A second
     ``default_rng`` anywhere in the package would be a second stream free to disagree with this
-    one, and the oracle's ``ast`` guard exists to stop that arriving.
+    one, and a test's ``ast`` guard exists to stop that arriving.
 
     Outcomes are exchanged **whole**. Every event's indicator for permutation ``b`` is read off
     one exchanged code matrix, so a ``crashed -> failed_assertion`` pair moves both events
@@ -582,7 +581,7 @@ def _counts(
 
     Under ``arm_label`` both arms read the one pooled matrix through ``in_a`` / ``in_b``, so
     the first ``n_a`` of the permuted pool go to arm a and the per-cell arm sizes survive the
-    exchange (spec section 8 trap 5).
+    exchange.
     """
     events_a = np.empty((arm_a.shape[0], len(codes)), dtype=np.int64)
     events_b = np.empty((arm_b.shape[0], len(codes)), dtype=np.int64)
@@ -612,10 +611,10 @@ def _statistics(
     grid. **Unweighted**, and there is nowhere else a weight could enter: this is the one place
     the deltas become a statistic.
 
-    It returns the *signed* mean and the RMS beside the extremeness because after S26 this is
-    also where the **reported** ``location`` and ``dispersion`` come from, at the root and at
-    every group alike (ADR-066, spec S26 section 3.4). Computing the reported field a second
-    time beside the tested one is S25 M15's split, and closing it by construction is what makes
+    It returns the *signed* mean and the RMS beside the extremeness because this is also where
+    the **reported** ``location`` and ``dispersion`` come from, at the root and at every group
+    alike. Computing the reported field a second time beside the tested one is how the reported
+    and the tested values split apart, and closing it by construction is what makes
     the drift case fail loudly rather than quietly: every reduction that makes a statistic --
     every ``mean``, ``sqrt`` and ``average`` -- lives in this function and its callers hand it a
     bare array or a row slice of one, nothing else.
@@ -657,7 +656,7 @@ def _min_p(
     The two roots are one intersection hypothesis on the same deltas, not two hypotheses, so BH
     across them has no proof; calibrating their minimum by the same permutations costs nothing
     to that dependence. Each permutation gets its own rank-p per statistic on the observed
-    p's scale (PF4.18): ``(#{b' : S_b' >= S_b} + [S_obs >= S_b]) / (B + 1)``, the reference set
+    p's scale: ``(#{b' : S_b' >= S_b} + [S_obs >= S_b]) / (B + 1)``, the reference set
     being the ``B`` permutations and the observed point -- and the omnibus counts the
     permutations whose min-p reaches the observed one. That last count is what separates
     this from the bare minimum of the ``J`` p-values, which is the quantity Westfall-Young
@@ -691,8 +690,9 @@ def _require_knobs(n_permutations: Any, seed: Any) -> None:
 
 
 def _require_depth(value: Any) -> int:
-    """``--depth`` is refused here and not in ``cli.py``, by the analogy M6's ``0 < q < 1`` and
-    ``_require_max_group_mde`` already set: the CLI parses an int and decides nothing.
+    """``--depth`` is refused here and not in ``cli.py``, by the analogy the comparison's
+    ``0 < q < 1`` and ``_require_max_group_mde`` already set: the CLI parses an int and decides
+    nothing.
 
     Called before the rebuild, so a depth outside ``DEPTHS`` costs milliseconds at any number
     of permutations. ``bool`` is an ``int`` to Python and is refused anyway, and a ``"3"`` or a
@@ -707,7 +707,7 @@ def _require_depth(value: Any) -> int:
 
 
 def _agreement_of(rows: Sequence[tuple[str, str, int, int, int, int]]) -> str:
-    """The canonical form, written here and nowhere else (spec A28 section 3.2, invariant G16).
+    """The canonical form, written here and nowhere else.
 
     One line per ``(event, cell)`` carrying the four rebuild integers, sorted, JSON-serialised
     behind ``AGREEMENT_SCHEMA``, sha256, hex. **JSON and not a separator-joined string** because
@@ -733,8 +733,8 @@ def agreement_digest(multi: MultiDiffResult) -> str:
     off ``cells`` rather than off the frames, which is the whole point: a renderer holds a diff
     and a tree and nothing else, and this is how it asks whether the second was grown from the
     first. Covers the cell set, the event set and the four episode counts per cell per event,
-    and nothing else -- not the method, not ``q``, not the horizon or any permutation knob
-    (spec A28 section 3.3), which is why both renderers carry a second, separate knob clause.
+    and nothing else -- not the method, not ``q``, not the horizon or any permutation knob,
+    which is why both renderers carry a second, separate knob clause.
     """
     rows: list[tuple[str, str, int, int, int, int]] = []
     for event in multi.events:
@@ -767,7 +767,7 @@ def _require_agreement(
     different pair than the diff, and the refusal names the first mismatching cell in
     sorted-hash order.
 
-    **And it mints the agreement digest** (spec A28 section 10 Q3 (a)), over the tuples it
+    **And it mints the agreement digest**, over the tuples it
     rebuilt from the frames rather than over ``cells`` -- the two are equal by the time this
     returns, so the values are identical and the difference is what the field *means* to a
     consumer: under this mint the tree says *I recomputed these counts from the episodes and
@@ -836,7 +836,8 @@ def _prepared(
     """Everything that can refuse, then the design and the observed counts -- and no draw.
 
     Shared by ``omnibus`` and ``tree`` so the two build one design from one rebuild under one
-    guard, and so S26's resolver can read the per-arm unit counts before a permutation exists.
+    guard, and so the grouping resolver can read the per-arm unit counts before a permutation
+    exists.
     """
     _require_knobs(n_permutations, seed)
     if multi.n_tests == 0:
@@ -873,7 +874,7 @@ def _root(
     seed: int,
 ) -> RootResult:
     """The ``RootResult`` for one draw. The reported statistics and the tested ones are the
-    same two arrays, read off one ``_statistics`` call (ADR-066)."""
+    same two arrays, read off one ``_statistics`` call."""
     n_events = len(multi.events)
     observed_block = observed[None, :, :]
     location, dispersion, observed_statistics = _statistics(observed_block)
@@ -972,7 +973,7 @@ def _units(
 
 
 
-# ---------- S26: the grouping, the refusal chain, and the fault lines ----------
+# ---------- the grouping, the refusal chain, and the fault lines ----------
 
 
 @dataclass(frozen=True)
@@ -1018,16 +1019,16 @@ class Refusal:
 class Grouping:
     """Which grouping Level 2 tests, which rung resolved it, and every refusal on the way.
 
-    Draft ADR-061: the key, the rung, the group count, the cells-per-group distribution and the
+    The key, the rung, the group count, the cells-per-group distribution and the
     chain are stated **every time**, including when the grouping is the one requested. Every
     field a reader needs is carried rather than derived, so ``cli.py`` prints and computes
-    nothing (F21): ``size_min``, ``size_median``, ``size_max``, ``alpha_floor`` and
+    nothing: ``size_min``, ``size_median``, ``size_max``, ``alpha_floor`` and
     ``n_resolvable_groups`` are all here for that reason.
 
     The whole object is a function of the grouping's **shape** -- unit counts per arm and group
     cardinality -- and of nothing measured, so a grouping is admitted or refused before a single
-    delta is read (F7). That is B.7's pre-registration discipline at the level that most invites
-    choosing after the fact.
+    delta is read. That is pre-registration discipline at the level that most invites choosing
+    after the fact.
     """
 
     key: str
@@ -1072,12 +1073,12 @@ class GroupResult:
 
     The counts and the design numbers are present whether or not the level was tested; every
     ``p_*``, ``q_group`` and ``rejects`` is ``None`` when it was not. No p-value is computed for
-    an untested level, because a number that exists invites reading (spec S26 section 3.4).
+    an untested level, because a number that exists invites reading.
 
     ``degenerate`` is about what the exchange **could** move, not about what it did: a group with
-    informative cells can still sit at p exactly 1 (Go1's push 140 and 160, one informative cell
-    each) and is not degenerate. Flagging degeneracy from ``p == 1`` or from a zero delta is the
-    mutant F16 exists to catch.
+    informative cells can still sit at p exactly 1 (two groups of one measured sweep, one
+    informative cell each) and is not degenerate. Flagging degeneracy from ``p == 1`` or from a
+    zero delta is the mistake the tests are written to catch.
     """
 
     label: str
@@ -1134,7 +1135,7 @@ class GroupResult:
 class FaultLines:
     """Level 2: which kind of work moved, and nothing about where anything broke.
 
-    Draft ADR-069. Tested only when the root rejected and the grouping has more than one group;
+    Tested only when the root rejected and the grouping has more than one group;
     corrected by BH across **every** group at ``q``, degenerate ones included, because excluding
     the hopeless ones is Tarone's procedure and discrete BH's and neither is built -- the leak is
     ``n_degenerate_groups``, printed rather than recovered.
@@ -1153,7 +1154,7 @@ class FaultLines:
     n_rejected_groups: int
     rejected_groups: tuple[str, ...]
     groups: tuple[GroupResult, ...]
-    #: PF4.45: the group limit's power is the tree's whole flag, the root and the group rejecting.
+    #: The group limit's power is the tree's whole flag, the root and the group rejecting.
     mde_basis: str = "unconditional"
 
     def to_json(self) -> dict[str, Any]:
@@ -1176,18 +1177,18 @@ class CellResult:
     """One leaf: one ``(cell, event)`` under a group that rejected at Level 2.
 
     Every number but ``q_within`` and ``rejects`` is the flat family's own row, read from
-    ``multi.by_event[event].cells`` and never recomputed (draft ADR-071). ``p`` is whichever
+    ``multi.by_event[event].cells`` and never recomputed. ``p`` is whichever
     test the grid analysis ran on that cell -- Fisher exact, exact McNemar or log-rank -- so a
     reader finds the same p on the heatmap; ``delta`` is that row's Aalen-Johansen difference
-    at the horizon and not the root's proportion difference; ``mde`` is ADR-018's smallest
+    at the horizon and not the root's proportion difference; ``mde`` is the flat row's smallest
     detectable *increase* from arm A's rate, capped at the headroom, so one cell reads one MDE
     across the two surfaces. On a cell at ceiling that cap **is** the headroom and is not a
-    power number (spec S27 section 0.5); the honesty block says so and the row does not carry a
+    power number; the honesty block says so and the row does not carry a
     second MDE.
 
     **No interval, no per-group level, and no flat-family verdict or ``q``.** The nested and the
     flat rejected sets differ in both directions on a real axis, so a flat ``q`` beside a nested
-    verdict is the two-thresholds contradiction ADR-060 forbids; the flat verdict for the same
+    verdict is a two-thresholds contradiction; the flat verdict for the same
     cell stays where it is, on the grid.
     """
 
@@ -1207,7 +1208,7 @@ class CellResult:
     q_within: float
     rejects: bool
     mde: float
-    #: PF4.27: why a null limit is null, from the flat row; None when ``mde`` is a number.
+    #: Why a null limit is null, from the flat row; None when ``mde`` is a number.
     mde_note: str | None = None
 
     def to_json(self) -> dict[str, Any]:
@@ -1234,8 +1235,8 @@ class CellFamily:
     """The leaves under one rejected group: its ``C_g`` cells x the family's ``K`` events.
 
     **One family per rejected group**, never one family over the union of the rejecting groups'
-    cells -- the two give different rejected sets on every Go1 axis, in both directions (spec
-    S27 section 0.6). Every test is in it, a leaf at p exactly 1 included: a degenerate leaf is
+    cells -- the two give different rejected sets on every axis of a measured sweep, in
+    both directions. Every test is in it, a leaf at p exactly 1 included: a degenerate leaf is
     a hypothesis in the family and not an exclusion, because Tarone's procedure and discrete BH
     are not built and the leak is ``n_tests``, printed rather than recovered.
 
@@ -1252,7 +1253,7 @@ class CellFamily:
     mde_median: float
     mde_max: float
     #: In sorted-hash order, with the events in ``RootResult.events`` order under each hash --
-    #: the flat family's own row order, never by result (S26 section 5's rule, one level down).
+    #: the flat family's own row order, never by result, the same rule one level down.
     cells: tuple[CellResult, ...]
 
     def to_json(self) -> dict[str, Any]:
@@ -1274,7 +1275,7 @@ class Leaves:
 
     Tested when the configured depth is 3 and at least one group rejected at Level 2 -- or,
     under the one-group collapse, when the root rejected, where the one family is the flat
-    family bit for bit (spec S27 section 3.4).
+    family bit for bit.
 
     **No conditional claim.** "Given the group rejected, these cells are reliable at q" is
     false: if the global null holds and the gate passes by chance, the false discovery
@@ -1314,7 +1315,7 @@ class Leaves:
 class Bound:
     """The error rate the whole procedure controls at, computed from the tree's depth.
 
-    Yekutieli's Corollary A.2 (draft ADR-062). ``depth`` is the number of levels of the tree the
+    Yekutieli's Corollary A.2. ``depth`` is the number of levels of the tree the
     procedure **runs**: the configured depth, reduced by one only by the one-group collapse,
     which changes the procedure by shape before any delta is read. It is never the depth
     *reached* -- read off what a run found, the bound would be a random variable whose value
@@ -1357,7 +1358,7 @@ class TreeResult:
     fault_lines: FaultLines
     leaves: Leaves
     bound: Bound
-    #: The rebuild this tree's own construction verified, as a content digest (spec A28). No
+    #: The rebuild this tree's own construction verified, as a content digest. No
     #: default and last, so nothing can hand-build a partial result: a tree that carries one is
     #: a tree whose four rebuild columns were recomputed from the frames and matched the diff's.
     agreement: str
@@ -1365,7 +1366,7 @@ class TreeResult:
     def to_json(self) -> dict[str, Any]:
         """Native types throughout, lists for tuples, and a payload that survives a round trip.
 
-        Self-contained (ADR-033): the tree carries its own root rather than pointing at a
+        Self-contained: the tree carries its own root rather than pointing at a
         sibling key of whatever mapping ``cli.py`` composes around it.
         """
         return {
@@ -1382,7 +1383,7 @@ class TreeResult:
 class _CellTable:
     """The per-cell facts the resolver reads: a hash, a config, and the units each arm ran.
 
-    Units, not cells (spec S26 section 8 trap 3): under pair swap the unit is the matched pair
+    Units, not cells: under pair swap the unit is the matched pair
     and under arm label it is the episode, so ``n_a`` is scheme-dependent and the group MDE with
     it. The resolver follows the root rather than re-deciding.
     """
@@ -1391,16 +1392,17 @@ class _CellTable:
     configs: tuple[Mapping[str, Any], ...]
     n_a: NDArray[np.int64]
     n_b: NDArray[np.int64]
-    #: PF4.45: each compared event's baseline in every cell, arm A's share, in sorted event order;
-    #: a group's limit reads each cell's own (reading R41).
+    #: Each compared event's baseline in every cell, arm A's share, in sorted event order;
+    #: a group's limit reads each cell's own.
     baselines: tuple[NDArray[np.float64], ...] = ()
 
 
 @dataclass(frozen=True)
 class _Request:
     """What every rung is handed. ``frames`` is unread today and is what the trace rung will
-    read in Phase 6; ``seen`` and ``refused`` carry the chain so a key refused once is skipped
-    by every later rung without a second row a reader cannot tell from a second refusal."""
+    read in a later release; ``seen`` and ``refused`` carry the chain so a key refused once is
+    skipped by every later rung without a second row a reader cannot tell from a second
+    refusal."""
 
     requested: str | None
     manifest_a: RunManifest
@@ -1414,11 +1416,11 @@ class _Request:
 
 
 def _require_max_group_mde(value: Any) -> float:
-    """S23 W6 one level down, and the range check lives here rather than in ``cli.py``.
+    """The power gate's threshold one level down; the range check lives here, not in ``cli.py``.
 
-    By exact analogy with M6's ``0 < q < 1`` and ``check_power``: the CLI parses a float and
-    decides nothing statistical (F8). A string is refused rather than coerced -- ``float("0.3")``
-    would succeed and turn a typo into a threshold.
+    By exact analogy with the comparison's ``0 < q < 1`` and ``check_power``: the CLI parses a
+    float and decides nothing statistical. A string is refused rather than coerced --
+    ``float("0.3")`` would succeed and turn a typo into a threshold.
     """
     if value is None:
         return DEFAULT_MAX_GROUP_MDE
@@ -1467,7 +1469,7 @@ def _partition(table: _CellTable, key: str) -> dict[str, list[int]]:
     """``str(value) -> cell indices`` for one config key, over every comparable cell.
 
     A common cell whose config lacks the key is a corrupt pair, not a grouping question, and is
-    refused rather than dropped into a group of its own (spec S26 section 3.3).
+    refused rather than dropped into a group of its own.
     """
     out: dict[str, list[int]] = {}
     for index, config in enumerate(table.configs):
@@ -1491,13 +1493,13 @@ def _ordered_labels(partition: Mapping[str, Sequence[int]]) -> tuple[str, ...]:
 def _group_mdes(
     table: _CellTable, partition: Mapping[str, Sequence[int]], labels: Sequence[str], alpha: float
 ) -> tuple[float, ...]:
-    """PF4.45: each group's detection limit at the family's floor ``alpha`` (``q / G``).
+    """Each group's detection limit at the family's floor ``alpha`` (``q / G``).
 
     The smallest change that, made in every condition of the group from its own baseline and in
     no other condition, the tree would flag with the root and the group both rejecting, at the
     stated power, unconditionally (``_limits.group_limit``). With several events it is the largest
     over the events, from each event's own baselines, so whichever event moves the group can tell
-    it and the order the events were named in does not matter (reading R41). 1.0 when a group
+    it and the order the events were named in does not matter. 1.0 when a group
     has no room or nothing within its room is detectable.
     """
     sizes_a, sizes_b = table.n_a.astype(np.float64), table.n_b.astype(np.float64)
@@ -1512,7 +1514,7 @@ def _group_mdes(
     )
 
 
-# ---------- S26: the rungs ----------
+# ---------- the rungs ----------
 
 
 def _underpowered_detail(
@@ -1526,7 +1528,7 @@ def _underpowered_detail(
     alpha: float,
     offered: float | None,
 ) -> str:
-    """S23's message shape one level down: three facts and one instruction.
+    """The power gate's message shape one level down: three facts and one instruction.
 
     The MDE named is the ``MIN_RESOLVABLE_GROUPS``-th smallest -- the one that has to come down
     for the grouping to be admitted -- with the units of the group that carries it, so the
@@ -1534,7 +1536,7 @@ def _underpowered_detail(
     checked rather than argued: ``_offered_override`` rounds up, because rounding to nearest is
     the trap that makes a message whose one instruction refuses the same grouping again.
     """
-    # PF4.45, reading R41: a group with no room, or none detectable, has a limit of 1, which no
+    # A group with no room, or none detectable, has a limit of 1, which no
     # --max-group-mde admits (the flag refuses 1), so none is offered.
     admits = (
         "No --max-group-mde below 1 admits this grouping."
@@ -1556,7 +1558,7 @@ def _consider(
 
     Nothing here reads a delta. The partition, the per-arm unit counts and the group count are
     the whole input, which is what makes ``Grouping`` byte-identical on a pair and on its
-    unmoved twin (F7).
+    unmoved twin.
     """
     partition = _partition(request.table, key)
     labels = _ordered_labels(partition)
@@ -1640,14 +1642,14 @@ def _grouping(
 
 def _trace_refusal(key: str) -> Refusal:
     """The stub's one row. Recorded at the **trace** rung whoever asked for it, because the rung
-    that could not answer is the fact worth stating, and Phase 5.2 replaces this row with a
-    resolution at that same rung."""
+    that could not answer is the fact worth stating, and a later release may replace this row
+    with a resolution at that same rung."""
     return Refusal(
         key=key,
         rung="trace",
         reason="unsupported",
         detail=(
-            "grouping by a trace attribute is not supported until Phase 5.2 emits it; the "
+            "grouping by a trace attribute is not supported yet; the "
             "resolver continues at the next rung."
         ),
         next_rung="axis",
@@ -1662,10 +1664,9 @@ def _rung_requested(request: _Request) -> Grouping | Refusal | None:
 
     A name in ``TRACE_GROUPINGS`` is handed to the trace rung's check by falling through to it,
     so the row that comes back names the rung that could not answer -- the stub's slot is the
-    fact, and Phase 5.2 replaces that row with a resolution at that same rung. Every other name
-    is checked here, and a requested grouping that passes reads ``resolved_by == "requested"``
-    (ADR-043's *including when it is the one requested*) -- except ``WHOLE_GRID``, which is the
-    whole-grid rung answering and says so.
+    fact, and a later release may replace that row with a resolution at that same rung. Every
+    other name is checked here, and a requested grouping that passes reads ``resolved_by ==
+    "requested"`` -- except ``WHOLE_GRID``, which is the whole-grid rung answering and says so.
     """
     name = request.requested
     if name is None or name in request.seen or name in TRACE_GROUPINGS:
@@ -1705,7 +1706,7 @@ def _rung_requested(request: _Request) -> Grouping | Refusal | None:
 
 
 def _rung_trace(request: _Request) -> Grouping | Refusal | None:
-    """Phase 6 fills this body and moves no entry in ``RUNG_ORDER``.
+    """A later release fills this body and moves no entry in ``RUNG_ORDER``.
 
     It reads nothing today -- not ``request.frames``, which is what it will read -- and offers
     nothing unless a trace grouping was asked for, in which case it raises the named stub and the
@@ -1720,7 +1721,7 @@ def _rung_trace(request: _Request) -> Grouping | Refusal | None:
 def _rung_axis(request: _Request) -> Grouping | Refusal | None:
     """The sweep's declared axes, in **arm A's** declared order, intersected with arm B's.
 
-    Not sorted, not by group count, not the union (F29). Declared order is the rule until a
+    Not sorted, not by group count, not the union. Declared order is the rule until a
     measured substrate shows it choosing the wrong passing axis, and A's order is the one a
     reader of the baseline manifest can predict.
     """
@@ -1760,7 +1761,7 @@ def _rung_task_family(request: _Request) -> Grouping | Refusal | None:
     Vacuous on every store this project has: the task key is a declared axis everywhere, so the
     axis rung tries and refuses it first and this rung skips it without a second row. It exists
     for an imported run whose manifest was written after the fact and declares fewer axes than
-    its configs carry (draft ADR-061), and F10's fixture is what keeps it from being dead code.
+    its configs carry, and a test fixture is what keeps it from being dead code.
     """
     candidates = [
         key
@@ -1820,7 +1821,7 @@ def resolve_grouping(
     over a second candidate of its own -- the axis rung refuses one axis and reaches the next --
     and the key it refused is in the chain, so no later rung says the same thing twice.
 
-    ``frames`` is unread: it is what the trace rung will read in Phase 6, and the resolver's
+    ``frames`` is unread: it is what the trace rung will read in a later release, and the resolver's
     output is identical whether it is passed or not.
     """
     request = _Request(
@@ -1849,7 +1850,7 @@ def resolve_grouping(
     )
 
 
-# ---------- S26: Level 2, on the root's own draws ----------
+# ---------- Level 2, on the root's own draws ----------
 
 
 def _fault_lines(
@@ -1863,12 +1864,12 @@ def _fault_lines(
 
     **Slice the deltas, not the statistics.** A group's location is a mean over its own ``C_g``
     cells; a row slice of the root's mean would be a mean over ``C`` and would be wrong by a
-    constant that varies with the grouping (F12).
+    constant that varies with the grouping.
 
     **The draws are the root's.** The permuted block is the one ``_draw`` built, grouped
     afterwards, so a group's p is comparable to the root's and to every other group's and no
     second stream exists. A Level 2 that drew its own ``(C_g, W)`` block from the same seed gets
-    different bits, which F13 pins from the surface.
+    different bits, which a test pins from the surface.
 
     **BH over all G, then the gate, then the fields.** ``q_group`` is ``diff.bh`` over every
     group's p with ``m`` the group count; the gate decides whether any of it is computed at all,
@@ -1962,7 +1963,7 @@ def _fault_lines(
     )
 
 
-# ---------- S27: Level 3, on the flat family's own per-cell tests ----------
+# ---------- Level 3, on the flat family's own per-cell tests ----------
 
 
 def _flat_rows(multi: MultiDiffResult) -> dict[str, dict[str, Mapping[str, Any]]]:
@@ -2042,7 +2043,7 @@ def _leaves_reason(
     Stated in the tuple's order rather than by a chain of ``if``s, so the precedence lives in
     one place: the procedure's configuration first, then the root, then the level. A grouping
     that collapsed reaches none of them -- Level 2 is not a level there and the root's verdict
-    is the gate (spec S27 section 3.4).
+    is the gate.
     """
     applies = {
         "depth": depth_configured < DEFAULT_DEPTH,
@@ -2103,7 +2104,7 @@ def _depth(depth_configured: int, grouping: Grouping) -> int:
 
 
 def _bound(depth_configured: int, depth: int, q: float) -> Bound:
-    """Yekutieli's outer-nodes bound, minted here and nowhere else (draft ADR-062).
+    """Yekutieli's outer-nodes bound, minted here and nowhere else.
 
     The literal ``2`` beside the constant is his (A.7): a rejected outer node has at most one
     rejected ancestor per level, so ``R_Full + |J| <= 2 * R_Full <= 2 * L * R_Outer`` and the

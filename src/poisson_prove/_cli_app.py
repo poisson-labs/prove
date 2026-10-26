@@ -1,4 +1,4 @@
-"""The terminal app: ``poisson-prove`` with no verb on a terminal (section 19).
+"""The terminal app: ``poisson-prove`` with no verb on a terminal.
 
 A face over the core, as the command line is. It opens on home and reaches every screen by keys
 alone; each screen renders one core object (``core.view(store, address)``, the sweep's plan and
@@ -11,7 +11,7 @@ runs is the core's), never makes a network call and reads no key.
 (the tool, the screen's title and subject, the store at the right edge), a dim rule, the body, the
 message line, a dim rule, the key bar. The focus is reverse video with ``›`` in column 1. Colour is
 the four meanings in the terminal's 16 named colours; ``NO_COLOR`` set and not empty removes it
-(bold, dim and reverse stay), and set but empty changes nothing, as section 5.5 reads it.
+(bold, dim and reverse stay), and set but empty changes nothing, as the command line reads it.
 
 **Entry point.** ``ProveApp(store=None)``: ``store`` is the ``--store`` value as typed, ``None`` for
 the store every verb finds from the folder the app runs in; ``sweep`` reads that folder's
@@ -71,7 +71,7 @@ class ProveApp(App[int], Screens):
     def __init__(self, store: str | None = None) -> None:
         no_color = os.environ.get("NO_COLOR")
         super().__init__(ansi_color=True)
-        # Section 5.5: NO_COLOR set and not empty drops the colours; set but empty changes nothing.
+        # NO_COLOR set and not empty drops the colours; set but empty changes nothing.
         # Textual takes any NO_COLOR as set, so its own filter goes when the value is empty.
         self.mono = bool(no_color)
         if no_color == "":

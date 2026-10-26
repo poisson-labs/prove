@@ -262,7 +262,7 @@ def test_u8_the_warning_never_switches_the_test() -> None:
 
 
 def test_u9_the_headline_states_the_request_and_seed_identity_is_a_field_beside_it() -> None:
-    """**Inverted by P-1 (ADR-052; Master Action List C1).** Until P-1 this test pinned the
+    """**Inverted by P-1 (ADR-052; standing item C1).** Until P-1 this test pinned the
     defect: the headline printed ``paired`` next to the method that discarded the pairing, and
     this docstring called that something a reader could see. It was a fact about the *runs*
     printed where the reader reads about the *analysis*. Now the headline's last token is the

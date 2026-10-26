@@ -1,4 +1,4 @@
-"""The static UI's pages, rendered from the core's views (the front door's section 18.3).
+"""The static UI's pages, rendered from the core's views.
 
 One renderer, one page per view. A page shows every fact of its view and computes none: each
 element that shows a fact carries ``data-fact``, the fact's JSON pointer in the view, and

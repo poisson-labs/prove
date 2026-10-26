@@ -13,7 +13,7 @@ are PF4's: this file never pins a number a comparison computes, only that the ar
 number the comparison printed. The quickstart's counts are never pinned; its verdict word is
 ``mixed`` (its events are not declared) and its shape is what is pinned.
 
-**Readings** (each a yes/no in ``log/pf12/session-a.md``; the ids are the log's).
+**Readings** (each a yes/no in the freeze's records; the ids are the records').
 
 - R1 A save prints ``  saved  comparison <id>`` (``  saved  check <id>`` for ``check --save``) as
   the last detail line of the command's first block (after ``report``'s ``wrote`` lines; after

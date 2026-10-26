@@ -3,8 +3,8 @@
 Written from the front-door spec's section 8 (8.2 to 8.5, 8.10) and its invariants PF4.1b to PF4.51
 as they are read on a screen or in a file: ``diff``, ``check``, ``report`` and ``serve`` (text and
 ``--json``), ``report.md``, ``receipt.html``, the page and its Summary, ``paired``, ``sweep``'s plan,
-and what a sweep records. PF4 Session A froze PF4.1 to PF4.21 (2026-10-20); the statistics re-freeze of
-2026-10-24 adds PF4.22 to PF4.51 and moves what Taylor's rulings of that day on Argon's methodology
+and what a sweep records. The PF4 freeze covered PF4.1 to PF4.21 (2026-10-20); the statistics re-freeze of
+2026-10-24 adds PF4.22 to PF4.51 and moves what the rulings of that day on Argon's methodology
 review change. ``tests/test_pf4_stats.py`` holds the numbers underneath (the math suite) and
 ``tests/test_pf4_calibration.py`` the simulations. The build is written against this file and does
 not edit it.
@@ -15,9 +15,9 @@ not edit it.
 first stdout line. Each surface is reached through the command line in process, with ``HOME`` pointed
 at an empty folder.
 
-**Readings, named here** (each is a yes/no in the re-freeze's log, ``log/pf4/refreeze.md``).
+**Readings, named here** (each is a yes/no in the re-freeze's records).
 
-- Session A's, ruled 2026-10-24: the comparison's word is ``verdict`` in ``diff --json``,
+- The freeze's, ruled 2026-10-24: the comparison's word is ``verdict`` in ``diff --json``,
   ``comparison_verdict`` in ``report --json``, ``summary.verdict`` on the page, and ``report.md``'s
   first line after the title; ``diff --json`` carries ``threshold`` and ``threshold_source``
   (``recorded``, ``smaller``, ``default``); a kind is ``--event NAME:failure|success`` or the
@@ -516,7 +516,7 @@ def test_pf4_2_the_single_run_report_prints_each_share_with_its_interval_and_the
 
 
 def test_pf4_37_the_single_run_reports_share_counts_by_the_horizon_it_reads(standard: Path, tmp_path: Path) -> None:
-    """Reading R3, which reverses PF4 Session A's yes/no 10 here too: at ``--horizon 2`` a condition's
+    """Reading R3, which reverses the PF4 freeze's yes/no 10 here too: at ``--horizon 2`` a condition's
     share counts the falls by step 2, as its incidence does, so the two agree and nothing is marked."""
     doc = _json(_cli(standard, "report", A_ID, "--event", "fell", "--x", "cell", "--horizon", "2",
                      "--out", str(tmp_path / "r"), "--json"))
@@ -535,7 +535,7 @@ def test_pf4_37_the_single_run_reports_share_counts_by_the_horizon_it_reads(stan
 def test_pf4_37_a_two_run_share_counts_by_the_common_horizon_and_is_never_marked(tmp_path: Path) -> None:
     """A ran to step 10 and B to step 5, so the comparison's horizon is 5. In 'late' half of A's runs fell
     after step 5: by then A had none, so its share is 0 of 40, the rate the test compares, and no mark.
-    PF4 Session A's W17 counted the stored outcomes here (0.500); ruling 2 of 2026-10-24 reverses it."""
+    The PF4 freeze's W17 counted the stored outcomes here (0.500); ruling 2 of 2026-10-24 reverses it."""
     root = tmp_path / "prove-runs"
     a = {"late": [(i, "fell", 6.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)],
          "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)]}
@@ -845,7 +845,7 @@ def test_pf4_5_the_page_summarys_50_point_rule_is_gone(tmp_path: Path) -> None:
 
 
 def test_pf4_50_the_threshold_line_sits_under_the_nothing_moved_words_only(standard: Path, tmp_path: Path) -> None:
-    """PF2 Session B's yes/no 1: test_e12 moves for it."""
+    """The PF2 build's yes/no 1: test_e12 moves for it."""
     moved = _cli(standard, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
     assert _first_word(moved.out) == "trade" and _detail(moved.out, "threshold") == []
     root = _pair(tmp_path / "prove-runs", MID, MID)
@@ -896,7 +896,7 @@ def test_pf4_6_no_help_names_a_phase_or_offers_a_trace_grouping(verb: str, tmp_p
 
 @pytest.mark.parametrize("verb", ["diff", "diff --json", "check", "report", "serve"])
 def test_pf4_7_a_pair_with_no_comparable_condition_is_refused_naming_the_holes(verb: str, tmp_path: Path) -> None:
-    """PF4 Session A's yes/no 13, ruled 2026-10-24: every comparing verb refuses, not only diff."""
+    """The PF4 freeze's yes/no 13, ruled 2026-10-24: every comparing verb refuses, not only diff."""
     a = {"c1": _arm(4, 20), "c2": _arm(4, 20), "c3": _arm(4, 20)}
     b = {"d1": _arm(4, 20), "d2": _arm(4, 20)}
     root = _pair(tmp_path / "prove-runs", a, b)
@@ -1099,7 +1099,7 @@ def test_pf4_11_no_output_carries_the_store_path_the_platform_the_python_build_o
     for folder in ("r", "s"):
         for file in ("report.md", "receipt.html"):
             texts[f"{folder}/{file}"] = (work / folder / file).read_text(encoding="utf-8")
-    # PF4 Session A's yes/no 15 and the independent read's finding 4, ruled 2026-10-24: paired --json and
+    # The PF4 freeze's yes/no 15 and the independent read's finding 4, ruled 2026-10-24: paired --json and
     # sweep --json are in "any --json" too. sweep's plan names the target as it was typed (PF3's frozen
     # plan.target), so the import path is the one fact its scan leaves out (reading R19).
     spec = work / "spec.toml"
@@ -1254,7 +1254,7 @@ def test_pf4_32_every_surface_names_the_limits_test_level_family_and_power_from_
     assert "9 times in 10" in single_md and "4 times in 5" not in single_md and "over 9 tests" in single_md
     for name, text in _texts(s).items():
         if name == "check":
-            continue  # check prints no cell table (Session A's yes/no 14)
+            continue  # check prints no cell table (the freeze's yes/no 14)
         assert "9 times in 10" in text and "4 times in 5" not in text, name
         assert "Fisher" in text and "over 6 tests" in text, name
     for c in s["diff --json"]["by_event"]["fell"]["cells"]:

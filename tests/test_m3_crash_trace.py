@@ -1,6 +1,6 @@
-"""M3 -- the crashed episode's trace: the oracle for K1-K8.
+"""M3 -- the crashed episode's trace: the frozen tests for K1-K8.
 
-Written from "Proofload -- Spec M3 Executor (crashed episode trace)" section 4. Session B
+Written from "Proofload -- Spec M3 Executor (crashed episode trace)" section 4. The build
 builds the two touched files (``executor.py``, ``executor_modal.py``) against this file and
 does not edit it.
 
@@ -16,7 +16,7 @@ purges ``opentelemetry*`` from ``sys.modules`` earlier in the suite; the episode
 ``CaptureSpec`` fields plus ``run_id``. ``cli.main`` is driven in-process on a store a child
 wrote; ``inspect`` installs nothing. ``modal`` is never imported. Nothing sleeps.
 
-Conventions this oracle fixes where the spec is silent, recorded so they are not re-litigated:
+Conventions these frozen tests fix where the spec is silent, recorded so they are not re-litigated:
 
 - The row that crashes is chosen by config, as the timed-out row was: one categorical axis
   ``role`` over ``a``, ``b``, ``c`` and ``crash`` with one replicate, so every run has exactly
@@ -44,10 +44,10 @@ Conventions this oracle fixes where the spec is silent, recorded so they are not
   return and nothing is terminated, so ``n_timeout`` is 0 on that path by construction and
   the S16 drain never runs.
 - K7's ``--event`` is the stored row's ``error`` text verbatim, a multi-line traceback; the
-  block is read the way the M10 and S16 oracles read it. E9's "no ``Traceback`` in the output"
+  block is read the way the M10 and S16 frozen tests read it. E9's "no ``Traceback`` in the output"
   cannot hold here, because the traceback *is* the error line; ``stderr`` empty and exit 0
   stand in for it.
-- K8 pins the S16 oracle by the SHA-256 of its bytes (38 tests at that hash): a Session A that
+- K8 pins the S16 frozen file by the SHA-256 of its bytes (38 tests at that hash): a freeze that
   amends that file re-pins the hash in the same commit.
 """
 
@@ -80,6 +80,7 @@ from poisson_prove.executor_modal import Job, Mapper, ModalOptions, Result, run_
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
+from conftest import code_of
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
@@ -105,13 +106,15 @@ POISON = "the oracle broke Trace.to_dict in this child"
 NO_HANG_TIMEOUT_S = 30.0  # the fork path with nothing to terminate: every rollout here returns at once
 EPOCH = 1_756_900_000_000_000_000
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 regex, verbatim (nine columns since A8a)
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-# Re-minted by PF0 Session A over the file as its freeze commit moved it (the rename, Q4).
+# Re-minted by the PF0 freeze over the file as its freeze commit moved it (the rename, Q4).
 # Re-minted over the file as moved for 12-hex config hashes in inspect text (spec section 5.4, rule 10).
-S16_ORACLE_SHA256 = "cd33a676fdb6b93cd33f5998e5e0b29a5486e1b0b906d3ec199f184940f64207"  # 38 tests; re-minted by A10 Session B over the file A10 Session A amended (TRACE_EXPORTS gains Declaration, 5bb967c)
+# Re-minted for public hygiene (Q38): over the file's code with its docstrings and comments taken out
+# (``conftest.code_of``), which the plain-words pass edits; read off the file as it stands, not predicted.
+S16_ORACLE_SHA256 = "9ea86d2005d588bf50d6015580875bc172354e0f8058886d925424e514de5da9"  # 38 tests
 
 #: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
 DECLARED_LIMIT = 8192
@@ -403,7 +406,7 @@ def _defined(module: Any) -> set[str]:
     }
 
 
-# ---------- helpers: isolation (the M3 capture oracle's, verbatim in behaviour) ----------
+# ---------- helpers: isolation (the M3 capture frozen tests', verbatim in behaviour) ----------
 
 
 def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
@@ -910,7 +913,7 @@ def inspect_run(root: Path, run_id: str, event: str, *extra: str) -> CliResult:
 
 def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[str]]:
     """Split inspect output into per-row blocks (each starting at a line naming a config_hash)
-    and the trailing reproduction snippet. The M10 oracle's helper."""
+    and the trailing reproduction snippet. The M10 frozen tests' helper."""
     body, marker, tail = out.partition(SNIPPET_MARKER)
     assert marker, f"no {SNIPPET_MARKER!r} snippet in inspect output:\n{out}"
     blocks: list[list[str]] = []
@@ -996,7 +999,7 @@ def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_i
 
 def test_k8_the_s16_oracle_is_byte_identical() -> None:
     assert S16_ORACLE.is_file(), S16_ORACLE
-    assert hashlib.sha256(S16_ORACLE.read_bytes()).hexdigest() == S16_ORACLE_SHA256, "the S16 oracle moved"
+    assert hashlib.sha256(code_of(S16_ORACLE.read_text(encoding="utf-8")).encode("utf-8")).hexdigest() == S16_ORACLE_SHA256, "the S16 oracle moved"
 
 
 def test_k8_the_transport_aliases_and_signatures_are_untouched() -> None:

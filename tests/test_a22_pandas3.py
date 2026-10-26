@@ -1,8 +1,8 @@
-"""A22 + C13 oracle: invariants V1-V15 of [[Proofload - Spec A22 pandas 3 Port]] section 4,
+"""A22 + C13 frozen tests: invariants V1-V15 of the A22 pandas 3 port spec, section 4,
 written before ``store._NULLABLE_STRING_COLUMNS`` exists and before ``diff._coverage`` rebuilds
 its ``cause`` column from the records list.
 
-**This oracle runs in two cells and the invariant set does not partition between them.** The
+**This frozen file runs in two cells and the invariant set does not partition between them.** The
 packet's claim is a range -- *a stored null reads back as* ``None`` *on every pandas this
 package supports* -- and a single run proves one point in it. Every invariant here is asserted
 in both cells; what differs is which of them the **bare** tree already satisfies:
@@ -17,7 +17,7 @@ in both cells; what differs is which of them the **bare** tree already satisfies
   ``astype(object)`` guard at ``diff.py:945`` ever runs.
 
 Fifteen invariants, fifteen tests, one test per invariant in both cells: 15 + 15 = 30 ids over
-the two cells against the oracle's own 15, because no invariant is cell-specific. An invariant
+the two cells against the frozen file's own 15, because no invariant is cell-specific. An invariant
 that could only be asserted under one pandas would be named here with the cell it is missing
 from; there is none.
 
@@ -39,12 +39,12 @@ Fixture limits, stated rather than left to be rediscovered:
 - Nothing here measures a live provider or a Modal run. A24's W1-W7 are a
   different packet (spec section 11) and are not in this file.
 
-**A22 is a retrofit packet** (Master Action List section 18 standing rule 12). On Session A's
+**A22 is an update packet** (the project's standing rule 12). On the freeze
 commit V5, V12, V14 and V15 are red in both cells, and on pandas 3 so are V1, V2, V3, V7, V8,
 V9, V10 and V11 -- with the sixteen pre-existing pandas 3 failures of spec section 3.1 beside
-them. Session B reproduces that set before it builds. Every reference to a name the build has
+them. The build reproduces that set before it builds. Every reference to a name the build has
 not created yet sits **inside** a test function, never at module level, so ``--collect-only``
-gives an exact count on Session A's own commit.
+gives an exact count on the freeze's own commit.
 """
 
 from __future__ import annotations
@@ -237,7 +237,7 @@ def test_v3_the_two_nullable_string_columns_are_object_dtype_on_every_frame_shap
 def test_v4_the_three_nullable_float_columns_read_back_nan_and_not_none(two_records: Store) -> None:
     """The negative that stops a build from finishing the job on the floats (spec section 3.4).
     ``t``, ``horizon`` and ``confidence`` are NaN on pandas 2 and on pandas 3 alike; three
-    frozen oracles already spell them ``pd.isna`` and A22 does not move them."""
+    frozen tests already spell them ``pd.isna`` and A22 does not move them."""
     frame = two_records.read(RUN)
     by_hash = {str(h): i for i, h in enumerate(frame["config_hash"])}
     errored = by_hash[config_hash(ERRORED_CONFIG)]
@@ -407,7 +407,7 @@ def test_v12_no_astype_is_applied_to_the_cause_column_in_diff_py(mixed_pair: Any
 
 def test_v13_the_dependency_parser_reads_pep_508_names_off_every_operator() -> None:
     """C13's whole content, and the one assertion the *old* parser fails: it yields five names,
-    four with an operator still attached. Green the moment Session A commits it and nothing the
+    four with an operator still attached. Green the moment the freeze commits it and nothing the
     builder does can change that -- C13 has no build half (standing rule 12's
     green-before-and-after category)."""
     assert {Requirement(d).name.lower() for d in SYNTHETIC_REQUIREMENTS} == CORE_NAMES

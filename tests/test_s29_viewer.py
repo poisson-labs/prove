@@ -1,10 +1,10 @@
-"""S29 -- the viewer: the oracle for W1-W20.
+"""S29 -- the viewer: the frozen tests for W1-W20.
 
 Written from "Proofload -- Spec S29 Layered Report P4.4b The Viewer" section 4 and "Handoff
-P4.4b", against ``94152ec`` (2026-09-11), the retrofit commit that moved the M13 and S21 pins to
+P4.4b", against ``94152ec`` (2026-09-11), the update commit that moved the M13 and S21 pins to
 ``proofload.viewpair/3``, narrowed six ``serve --json`` digests to the tree-less projection and
 carved ``tree.root.seed`` out of two forbidden-key walks by path.
-Session B changes ``src/proofload/viewer.py`` (the schema, the required ``tree=``, the ``text``
+The build changes ``src/proofload/viewer.py`` (the schema, the required ``tree=``, the ``text``
 decoration, ``_TREE_KINDS``, the four regions, the bound paragraph, the reason mapping) and
 ``src/proofload/cli.py`` (``serve``'s call to the helper S28 minted, the frames bound instead of
 discarded, the one ``_diff_tree`` call) against this file, and does not edit it.
@@ -20,8 +20,8 @@ once at assembly by M7's ``_fmt``, so every assembly or rendering error is caugh
 deterministically and there is no rejection rate to hold in a band.
 
 **Step zero, six items, measured at ``f4e2845`` before a test was written**
-(``scratchpad/s29/step_zero.py``, ``collision_scan.py``, ``mint.py``). The grep report, over
-both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not here.
+(the step-zero, collision-scan and mint scripts). The grep report, over
+both dimensions, is in Handoff P4.4b's *freeze grep report* section, not here.
 
 1. **The grep found six files and seven clauses, not the handoff's five and five.** Dimension
    (a), the schema, key-set and flag-set pins: ``test_m13_viewer.py`` and
@@ -42,14 +42,14 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
    innermost enclosing ``FunctionDef`` gives six functions in ``viewer.py`` (``_axes``,
    ``_config_text``, ``_finite``, ``_gap_seconds``, ``_hole``, ``render_html``), 39 in
    ``report.py`` and 23 in ``cli.py``; counting the module body as one more scope, as
-   ``log/phase4-p44-collision-scan.py`` does, gives 7 / 40 / 24. Spec section 0.5's seven is the
+   the collision-scan script does, gives 7 / 40 / 24. Spec section 0.5's seven is the
    second rule; Handoff P4.4a's 37 / 6 / 22 was the first rule at ``aed3f11``, and S28's build
    moved ``report.py`` and ``cli.py`` since (``_check_tree`` now holds ``root``, ``events``,
    ``n_cells`` and the bare name ``tree`` inside a ``BinOp``; ``_report_pair`` holds one).
    Neither number is asserted here; ``viewer.py``'s empty collision set is what V17 rests on.
 3. **The ``seed`` collision, against the shape.** ``"seed"`` appears in exactly one ``to_json``
    body in ``tree.py``, ``RootResult``'s; on every fixture the tree JSON carries one key named
-   ``seed`` and one forbidden name, both at ``tree.root.seed``. V24 is two clauses; the retrofit
+   ``seed`` and one forbidden name, both at ``tree.root.seed``. V24 is two clauses; the update
    narrowed the structure walk by path and left the page-index walk as frozen.
 4. **The vocabulary, on today's page.** The 24 phrases are O19's nine, F19's nine and L10's
    six. On the ``/2`` page of every fixture ``where it`` reaches the *Not verified* region alone
@@ -58,19 +58,19 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
    study pair or the lattice (``seconds``); no string of any fixture's tree carries a phrase. The scope of W19 -- the three
    new regions, the bound paragraph and the tree's strings -- excludes all of them.
 5. **The kind table.** 27 (object, field) rows over eight objects; every field exists on the
-   dataclass it is attributed to. This oracle's literal adds one row the spec's table lacks
+   dataclass it is attributed to. This file's literal adds one row the spec's table lacks
    (below, *config on the leaf row*).
 6. **The fixtures that gain a tree.** ``test_m13_viewer.py``: ``build_pair`` (called for
    the study pair, ``hostile``, the V23 ``--fix`` slice and the V29 rebuild) and V32's two direct
    ``build_structure`` calls, which reuse the study pair's report and multi and so take its
    tree; ``test_s21_errors.py``: ``built()`` (``syn``, ``syn_fixed``, the study pair, the E-
-   determinism rebuild). Each reads both frames inline; the retrofit binds them and grows the
+   determinism rebuild). Each reads both frames inline; the update binds them and grows the
    tree once. A tree grown on ``meta=True`` frames is byte-identical to one grown on the CLI's
    ``meta=False`` frames (measured). The study pair's tree cost about a second; every
    builder-made pair under half a second. (On the lattice every tree is grown once per test
    session, ``conftest.SharedTrees``.)
 
-**Conventions this oracle fixes where the spec is silent. Session B builds to these.**
+**Conventions this file fixes where the spec is silent. The build follows these.**
 
 - **One element per line.** The page is ``"\\n".join(parts)`` and every part of the three new
   regions is one line: ``<h2>Omnibus</h2>``, ``<h2>Fault lines</h2>`` and ``<h2>Cells</h2>``
@@ -92,7 +92,7 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   family in ``families`` order a line carrying ``key=label`` and the four counts, then iff
   ``n_rejected > 0`` a table whose rows are ``[config, event, delta, q_within, mde + "pp"]`` for
   the rejected leaves in ``cells`` order. **``pp`` is text beside the number.**
-- **Config on the leaf row, and the one row this oracle adds to the kind table.** A leaf row's
+- **Config on the leaf row, and the one row this file adds to the kind table.** A leaf row's
   first cell is ``key=value`` over every key of ``config`` in the config's own order, joined by
   a comma and a space, where the value is ``text["config"][key]`` when that is a string and
   ``_scalar_text(value)`` otherwise -- exactly how ``_cell_rows`` prints a cell's config from
@@ -131,9 +131,9 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
 **A27's re-freeze, 2026-09-12 — what this pass added and what it stopped guarding.**
 
 - **The BH-shaped hostile pair** (``hgroup-a``/``hgroup-b``) is this packet's one new fixture and
-  is built identically in both re-frozen oracles, deliberately: built twice with different shapes
+  is built identically in both re-frozen test files, deliberately: built twice with different shapes
   it would give the two files two different power shapes to measure one guard against, and the two
-  oracles would then disagree about what an admitted grouping is. Its constants and its measured
+  frozen test files would then disagree about what an admitted grouping is. Its constants and its measured
   shape are restated in both files and asserted in both, never imported.
 - **The hostile-label guard is new coverage over already-correct behaviour**, so it is green
   before and after (standing rule 12's category). What makes it non-vacuous is measured rather
@@ -147,12 +147,12 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   ADR-077's plan for A27, which has A27 narrowing at ``_coverage`` for A22 on the stated basis that
   *A27's build does not touch ``diff.py``*. C18's message fix makes that false, measured: a copy
   carrying the restatement moves the whole-file digest, and a ``_coverage``-only exclusion does not
-  hold across it. ``_coverage`` is **not** minted here. It moves to A22's Session A, where the
+  hold across it. ``_coverage`` is **not** minted here. It moves to A22's freeze, where the
   exclusion and the ``tests/test_a22_pandas3.py`` cover it names land in one commit, which is
   ADR-077's own escape hatch for a packet that does touch the file -- and which keeps the
   cover-exists assertion below unconditional, rather than carving a named exception into the cover
   rule on the first packet to use it.
-- **A22's retrofit, 2026-09-13: the second region landed as planned above.**
+- **A22's update, 2026-09-13: the second region landed as planned above.**
   ``diff.py::_coverage`` is now a live exclusion beside ``_pairing`` in this same record, owned
   by A22, minted at ``4b3c6ae``, covered by ``tests/test_a22_pandas3.py``'s V9-V12, retiring at
   ``A28``. ``DIFF_PY_SHA256`` is re-minted over the file with both regions removed -- a read off
@@ -160,41 +160,41 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
   814-874, ``_coverage`` 908-946), which is ADR-077's permitted *adjacent* case.
 - **All four carriers of this digest are narrowed here, not two.** Measured on a copy carrying the
   restatement: every one of the four ``DIFF_PY_SHA256`` clauses goes red on the message change, so
-  narrowing only the two oracles this packet re-freezes would leave ``test_s26_fault_lines.py``
+  narrowing only the two frozen test files this packet re-freezes would leave ``test_s26_fault_lines.py``
   (F28) and ``test_s27_leaves.py`` (L20) red from this build until A22. The handoff excluded those
   two to avoid S27's ``FROZEN_ORACLE_SHA256`` cascade; the cascade is one literal, read off a file
   this packet itself wrote, and costs no red. A27 narrows all four and re-mints that literal after
   the ``s26`` edit.
-- **A28's retrofit, 2026-09-13.** ``SCHEMA`` moves to ``proofload.viewpair/4`` and ``/3`` joins
+- **A28's update, 2026-09-13.** ``SCHEMA`` moves to ``proofload.viewpair/4`` and ``/3`` joins
   the retired set (W12); the tree key set gains ``agreement`` (W12); both ``diff.py`` exclusions
   are retired and ``DIFF_PY_SHA256`` is whole-file again; ``REPORT_PY_SHA256`` is narrowed at
   ``_check_tree`` and ``REPORT_PY_EXCLUDED`` minted, owner A28, ``retire_at`` empty;
   ``TREE_PY_SHA256`` stays whole-file under spec A28 section 10 Q2 (b) and ADR-078, red from
-  Session B's build until a second Session A commit re-mints it off the shipped bytes; W16's
+  the build until a second freeze commit re-mints it off the shipped bytes; W16's
   same-events acceptance is re-grown under another ``seed`` rather than another method, because
   section 10 Q5 (b) makes a ``mcnemar_bh`` tree beside a ``fisher_bh`` diff a refusal. The
   sweep counts module-level ``*_PY_EXCLUDED`` constants by AST, not by text. The classified red
   set is in Handoff A28.
-- **P-1's retrofit, 2026-09-17 (P-1 section 7.2, 7.4).** The payload root is thirteen keys,
+- **P-1's update, 2026-09-17 (P-1 section 7.2, 7.4).** The payload root is thirteen keys,
   ``intervals`` after ``panels``; ``_TREE_KINDS["root"]`` gains ``p_floor``; the honesty band is
   ``2n + 2`` lines with the flat family's interval paragraph before the bound (W5); the fault-lines
   block gains the group floor line after the null line iff the level was tested (W9, W11);
   ``TREE_PY_SHA256`` is **narrowed** at ``("RootResult", "_root")`` and ``TREE_PY_EXCLUDED`` minted,
   owner P-1 -- ADR-077's clean case, measured identical on the bare tree and on P-1's prototype;
-  ``DIFF_PY_SHA256`` and ``REPORT_PY_SHA256`` stay as A28 left them, green on Session A's commit and
-  red from Session B's build until Session A's post-build commit re-mints both whole-file and
+  ``DIFF_PY_SHA256`` and ``REPORT_PY_SHA256`` stay as A28 left them, green on the freeze commit and
+  red from the build until the freeze's post-build commit re-mints both whole-file and
   retires ``REPORT_PY_EXCLUDED`` (ADR-078); ``SERVE_STRUCTURE_SHA256``, ``TREE_LESS_KEYS_SHA256``,
   the ``/2`` page digests, ``CHECK_STDOUT_SHA256`` and the E14 markdown and receipt digests are
-  re-minted off P-1 Session A's shadow shim, built to P-1 section 3's verbatim strings. The
+  re-minted off the P-1 freeze's shadow shim, built to P-1 section 3's verbatim strings. The
   classified red set is in ``tests/test_p1_payload.py``'s module docstring.
 
-**Spec text this oracle could not use as written, each resolved here and reported.**
+**Spec text this file could not use as written, each resolved here and reported.**
 
 - Section 3.7's and the handoff's "the whole suite is green on that commit alone" cannot hold
-  for a retrofit that moves pins to values only the build produces; ``85fea8f``, the ``/2``
-  precedent, was red the same way. The retrofit commit is red on exactly the moved pins and the
+  for an update that moves pins to values only the build produces; ``85fea8f``, the ``/2``
+  precedent, was red the same way. The update commit is red on exactly the moved pins and the
   fixtures that pass ``tree=``, green everywhere else, and the classified red set is the check
-  (handoff, *Session A's grep report*).
+  (handoff, *freeze grep report*).
 - Section 3.3 row 6 puts the MDE-meaning sentence in the bound paragraph; W10 and mutant 24 put
   it in *Cells*. It prints once, in *Cells*, as S28's receipt does; the bound paragraph is the
   rule line and the assumption line.
@@ -222,7 +222,7 @@ both dimensions, is in Handoff P4.4b's *Session A's grep report* section, not he
 - W1's "``serve --help`` lists exactly sixteen flags" is read over the option entries, not over
   every ``--word`` in the help text: the helper S28 minted says "the constant sweep's
   ``--max-mde`` uses" in ``--max-group-mde``'s help, so a whole-text flag regex reads seventeen.
-  M13's frozen V30 read the whole text and was red on the shim for that reason; the retrofit
+  M13's frozen V30 read the whole text and was red on the shim for that reason; the update
   narrows its extraction to option entries, which is the property V30 always meant.
 
 **Fixture limits, stated before anything is asserted on a fixture.** The lattice cannot show a
@@ -300,12 +300,12 @@ QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 # ---------- spec sections 2, 3.1, 3.2, 3.3: the literals ----------
 
 #: W1. The schema, the one W17's tree-less projection is minted at, and the two ``render_html`` refuses.
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key (spec LS D6, LS7, LS8).
+# LS update, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key (spec LS D6, LS7, LS8).
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/2"
 RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5", "proofload.viewpair/6")
 #: W1. The fourteen top-level keys, in order: P-1's ``intervals`` after ``panels``, and LS's ``summary``
-#: eighth, after ``trade_line`` (LS retrofit, 2026-09-22 (local serve pass, Phase A)).
+#: eighth, after ``trade_line`` (LS update, 2026-09-22 (local serve pass, Phase A)).
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -333,7 +333,7 @@ SERVE_PAGE_SIGNATURE = "(page: 'str', *, on_bind: 'Callable[[HTTPServer], None]'
 #: W1, W6. The reason mapping's keys (S28 R1's four), and the three tuples no renderer names.
 REASONS = frozenset({"depth", "root_not_rejected", "no_group_rejected", "one_group"})
 REASON_TUPLE_NAMES = ("LEAVES_NOT_TESTED_REASONS", "NOT_TESTED_REASONS", "REFUSAL_REASONS")
-#: W1, W3. The kind table (section 3.2) as this oracle's literal, keyed by the object's dotted
+#: W1, W3. The kind table (section 3.2) as this file's literal, keyed by the object's dotted
 #: path with list indices dropped, plus the ``config`` row the module docstring explains.
 TREE_KINDS: dict[str, dict[str, str]] = {
     "root": {"p_floor": "sig3", "p_omnibus": "sig3", "p_location": "sig3", "p_dispersion": "sig3", "q": "sig3", "location": "pp1", "dispersion": "pp1"},
@@ -346,14 +346,14 @@ TREE_KINDS: dict[str, dict[str, str]] = {
     "bound": {"bound": "sig3", "q": "sig3", "delta_star": "sig3"},
 }
 SCALAR = (bool, int, float, str)
-#: W5. The ``<h2>`` sequence of the page, in document order. LS retrofit, 2026-09-22 (local serve pass, Phase A): ``Summary`` is
+#: W5. The ``<h2>`` sequence of the page, in document order. LS update, 2026-09-22 (local serve pass, Phase A): ``Summary`` is
 #: inserted first and ``Run pair`` moves to thirteenth, before ``Provenance`` (spec LS D7, LS5).
 H2_SEQUENCE = (
     "Summary", "Events", "Omnibus", "Result", "Honesty", "Not verified", "Fault lines", "Cells", "Heatmap", "Cell",
     "Holes", "Worst cells", "Run pair", "Provenance",
 )
 NEW_REGIONS = ("Omnibus", "Fault lines", "Cells")
-#: LS retrofit, 2026-09-22 (local serve pass, Phase A): what ``excised()`` drops to recover the ``/2`` page is the three S29 regions
+#: LS update, 2026-09-22 (local serve pass, Phase A): what ``excised()`` drops to recover the ``/2`` page is the three S29 regions
 #: **and** LS's ``Summary``, which the ``/2`` page never had. ``NEW_REGIONS`` keeps its W19 meaning.
 EXCISED_REGIONS = (*NEW_REGIONS, "Summary")
 #: The three nulls, quoted verbatim on the page (W19).
@@ -387,12 +387,12 @@ TREE_LESS_KEYS_PAIRS = (
 #: W4. The pairs whose ``/2`` page was digested on the bare tree (the study pair's page digests, no longer
 #: asserted after PF4; the dead values are removed and the pair list kept): W4 asserts the facts.
 PAGE_2_PAIRS = ("lattice", "lattice-two-events")
-#: W20. ``diff.py`` whole again. **A28's retrofit, 2026-09-13 -- both exclusions retired** (ADR-077's
+#: W20. ``diff.py`` whole again. **A28's update, 2026-09-13 -- both exclusions retired** (ADR-077's
 #: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted
 #: ``4b3c6ae``) both named ``A28`` as their retiring packet; both owners have landed and A28 rewrites
 #: every carrier -- five literals, one per file (``test_a28_agreement.py``, ``test_s26_fault_lines.py``,
 #: ``test_s27_leaves.py``, ``test_s28_report.py``, this file); "four" is ``FORMER_CARRIERS``, the set A28
-#: sweeps beside itself (LS retrofit, 2026-09-22 (local serve pass, Phase A)) -- so the value is a read off the shipped file at ``38e8df9`` (byte-identical at
+#: sweeps beside itself (LS update, 2026-09-22 (local serve pass, Phase A)) -- so the value is a read off the shipped file at ``38e8df9`` (byte-identical at
 #: ``03d7ed2``): the whole-file sha256, never a prediction. Bytes, so a scratch copy without ``.git``
 #: can check.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
@@ -400,17 +400,17 @@ PAGE_2_PAIRS = ("lattice", "lattice-two-events")
 # PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
-#: W20, **narrowed by P-1 Session A under ADR-077 (P-1 section 7.4, the clean case)**: ``tree.py``'s
+#: W20, **narrowed by the P-1 freeze under ADR-077 (P-1 section 7.4, the clean case)**: ``tree.py``'s
 #: bytes outside ``RootResult`` and ``_root``, minted at ``a626cd3`` and measured identical on the
 #: P-1 prototype, because P-1's one ``tree.py`` edit -- the ``p_floor`` field, its ``to_json`` key and
-#: its single assignment site -- sits inside those two definitions. Green on Session A's commit and
+#: its single assignment site -- sits inside those two definitions. Green on the freeze commit and
 #: on the build; red on an edit anywhere else in the file. A28's whole-file ``7f9a4f08...`` (A28
 #: section 10 Q2 (b)) is replaced by this narrowed value and re-minted by nobody. A28's history
 #: stays in the module docstring.
 # PF0 (Q4): no longer asserted. The rename changes tree.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 TREE_PY_SHA256 = "83ec34949bf21026cd26a8f39f749740851f4ebf994146dccf7c23aeb7919b43"
-#: ADR-077's record for the two regions (P-1 section 7.4): ``cover`` is the P-1 oracle's Y16 and
+#: ADR-077's record for the two regions (P-1 section 7.4): ``cover`` is the P-1 frozen file's Y16 and
 #: Y18 tests, asserted to exist through the resolver; ``retire_at`` is empty because no queued
 #: packet re-freezes W20 after P-1; ``lines`` are the two spans over the file's lines at mint
 #: (ADR-077 Q2, lean (b)).
@@ -441,11 +441,11 @@ TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
 #: ``report.py``, read off the shipped file and never a prediction. No ``REPORT_PY_EXCLUDED`` is
 #: minted; ``TREE_PY_EXCLUDED`` above is now the file's only exclusion record.
 # Re-minted 2026-09-20 (truncation surfacing): report.py gains the observation block of the provenance list.
-#: CD Session A, 2026-09-20: `report.py` moves in CD Session B -- `_observation_cap` must let the
+#: The CD freeze, 2026-09-20: `report.py` moves in the CD build -- `_observation_cap` must let the
 #: string "none" through (CD9, and D9's "no change to them" does not hold for it). This literal and
 #: `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]` are the two carriers, both owed to
 #: CD's post-build re-mint. Correct at `1f5491b`; not re-minted here.
-# CD Session B, 2026-09-21: re-minted off the built `report.py` at `234513c`. CD's D9 moves
+# The CD build, 2026-09-21: re-minted off the built `report.py` at `234513c`. CD's D9 moves
 # exactly one function, `_observation_cap`, which now lets the declared word `none` through;
 # `test_cd_cap_declaration.py` pins the rest of the file by a digest that excludes it. The
 # other carrier is `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]`, re-minted in
@@ -462,7 +462,7 @@ REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa296
 CHECK_ARGV = ("check", LATTICE_A, LATTICE_B, "--event", EVENT, "--method", "fisher_bh", "--fail-on", "higher")
 # CHECK_STDOUT_SHA256 removed (dead since check's stdout changed shape); W20 asserts the facts it guarded.
 CHECK_EXIT = 0
-#: W20. S21's E14 as S28's retrofit left it: the SVG through the CLI, the markdown and the light
+#: W20. S21's E14 as S28's update left it: the SVG through the CLI, the markdown and the light
 #: receipt through the tree-less builder. Its digests (``E14_SHA256``) were taken over the study pair
 #: and no longer asserted after PF4; the dead values are removed and W20 asserts the facts they
 #: guarded (assert_e14_facts).
@@ -523,7 +523,7 @@ HOSTILE = "".join(["<", "/script><img src=x onerror=", chr(34), "alert(1)", chr(
 HOSTILE_TABLE = "".join(["<", "/table><script>alert(1)</script>&", chr(34)])
 HOSTILE_VALUES = (HOSTILE, HOSTILE_TABLE)
 #: A27's BH-shaped hostile pair, the one fixture R17 and W14 share, restated byte-identically in
-#: ``tests/test_s28_report.py`` so the two oracles cannot disagree about what an admitted grouping
+#: ``tests/test_s28_report.py`` so the two frozen test files cannot disagree about what an admitted grouping
 #: is. The grouping key ``task`` takes the two hostile strings as its values and ``cell`` supplies
 #: the cells inside each group, so the axis rung reaches ``task`` and the power rule **admits** it
 #: instead of refusing it ``underpowered`` and collapsing to ``whole_grid`` -- which is what the
@@ -541,7 +541,7 @@ HOSTILE_GROUP_CELLS = 8
 HOSTILE_GROUP_N = 32
 HOSTILE_GROUP_BASE = 2
 HOSTILE_GROUP_EXTRA = (14, 8)
-#: A27. The admitted grouping as both oracles read it: (key, resolved_by, n_groups,
+#: A27. The admitted grouping as both frozen test files read it: (key, resolved_by, n_groups,
 #: n_resolvable_groups). ``whole_grid`` in either of the first two is the collapse this fixture
 #: exists to avoid, and asserting this tuple is what stops the guard below going vacuous.
 HOSTILE_GROUP_ADMITTED = ("task", "axis", 2, 2)
@@ -808,7 +808,7 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
     for k, v in fixed.items():
         argv += ["--fix", f"{k}={json.dumps(v)}"]
     # PF3 (Q17, spec sections 4.4 and 14; R1): with no --method the default is now the paired test
-    # for runs that share a salt (the lattice among them); every pair here is checked against the oracle's
+    # for runs that share a salt (the lattice among them); every pair here is checked against this file's
     # own tree under ``method``, so the method is always named.
     argv += ["--method", method]
     for k, v in knobs.items():
@@ -818,7 +818,7 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
 
 def pair(name: str, root: Path, a: str, b: str, events: Sequence[str], x: str, y: str | None = None, *, fixed: Mapping[str, Any] | None = None, method: str = "fisher_bh", **knobs: Any) -> Pair:
     """One pair through ``serve --json`` (tripwired, exit 0, empty stderr), its page from
-    ``render_html``, and the oracle's own tree on the same frames and knobs; cached by name."""
+    ``render_html``, and this file's own tree on the same frames and knobs; cached by name."""
     if name not in _PAIRS:
         fixed = dict(fixed or {})
         code, out, err, calls = run_serve(serve_argv(root, a, b, events, x, y, fixed, method, knobs))
@@ -937,7 +937,7 @@ def excised(page: str) -> str:
     """The page with the three new regions and LS's ``Summary`` (heading line to next ``<h2>``) and
     the bound line removed, by index and never by the tail (W4). After LS the projection is to a
     page that no longer exists twice over: ``Run pair`` has moved, so the ``/2`` page digest is
-    re-minted off the built page by Phase C (LS retrofit, 2026-09-22 (local serve pass, Phase A))."""
+    re-minted off the built page by Phase C (LS update, 2026-09-22 (local serve pass, Phase A))."""
     lines = page.splitlines()
     marks = h2_lines(page)
     drop: set[int] = set()
@@ -1246,7 +1246,7 @@ def resolve_region(tree: ast.Module, qualified: str) -> ast.FunctionDef | ast.As
 
     Walks the module's direct children for the first segment and that node's children for the
     next, and refuses on anything but exactly one match -- ADR-072's collision discipline moved
-    from names to definitions. Restated rather than imported, as the frozen oracles' digests are.
+    from names to definitions. Restated rather than imported, as the frozen test files' digests are.
     """
     node: ast.AST = tree
     definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
@@ -1710,7 +1710,7 @@ def expected_text_value(raw: Any, kind: str) -> Any:
 
 
 def check_text(raw: Any, got: Any, path: str, name: str) -> None:
-    """Walk the oracle's ``to_json()`` and the structure's tree in parallel, visiting the keys both
+    """Walk this file's ``to_json()`` and the structure's tree in parallel, visiting the keys both
     carry: at every object the kind table names, ``text``'s key set is exactly the printed floats
     that are not ``None`` (plus ``config`` on a leaf) and each value is ``_fmt(raw, kind)``, a
     mapping or list field mapped over the same keys; every other object has no ``text``; a
@@ -1952,7 +1952,7 @@ def test_w5_the_h2_sequence_and_the_bound_paragraphs_position(every_pair: list[P
     """The ``<h2>`` sequence is exactly the thirteen in order; the bound ``<p>`` is the last line of
     *Honesty*, after the last panel's ``<h3>``, its paragraph and (P-1, ADR-060) the flat family's
     one interval paragraph, before the first ``<svg>``, outside ``<details>``, with no hidden
-    ancestor; *Fault lines* and *Cells* precede the ``<svg>``. **Amended by P-1 Session A**: the
+    ancestor; *Fault lines* and *Cells* precede the ``<svg>``. **Amended by the P-1 freeze**: the
     honesty band is ``2n + 2`` lines, the interval ``<p>`` sits immediately before the bound
     ``<p>`` (P-1 section 10 Q4, before) and carries the first interval line."""
     for p in every_pair:
@@ -2401,7 +2401,7 @@ def test_w14_a_hostile_value_in_a_group_label_renders_as_text_on_a_pair_whose_gr
     """Section 3.2's 2026-09-12 invariant, the one A27 gives a fixture and a test.
 
     The first assertion is the precondition and is not decoration: on every other pair in this
-    oracle the grouping collapses to ``whole_grid`` and the one label reads ``all``, which is why
+    file the grouping collapses to ``whole_grid`` and the one label reads ``all``, which is why
     mutant 31b survived S29. If a later power-rule change returns this fixture to the collapse,
     that assertion fails here rather than the guard below passing over a label that carries
     nothing. The round-trip clauses alone do not separate an escaped cell from a raw one -- an
@@ -2468,7 +2468,7 @@ def test_w16_a_tree_from_another_pair_is_refused_with_viewer_error_naming_the_ev
 
 def test_w16_a_tree_whose_cells_are_another_pairs_is_refused_at_the_same_arity_and_the_message_names_a_cell(every_pair: list[Pair]) -> None:
     """Section 4 W16's second clause, amended 2026-09-12: the ``(event, config_hash)`` multiset,
-    not the arity. The crossed pair is this oracle's own vocabulary and hostile pairs -- same one
+    not the arity. The crossed pair is this file's own vocabulary and hostile pairs -- same one
     event, two cells each, different ``task`` values and so different hashes -- measured at
     ``101028c`` as **accepted** by the arity clause, which is the hole. The second assertion is
     what keeps the first from passing for the wrong reason: the arity is equal, so a refusal here
@@ -2578,7 +2578,7 @@ def md_cells(line: str) -> list[str]:
 
 
 def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
-    """S21's E14 as S28's retrofit left it -- the tree-less builder's markdown, SVG and light
+    """S21's E14 as S28's update left it -- the tree-less builder's markdown, SVG and light
     receipt -- read as facts instead of digests (PF4.3, PF4.15, PF4.20; the same facts S28's R2
     asserts, restated here). The lattice declares no event kind, so the caption counts falls and rises, the
     honesty line names the count of rises, the verdict column is each condition's direction and no
@@ -2718,7 +2718,7 @@ def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     exclusions piling up unretired. A27's own retirement sweep discharges empty: nothing carried
     an exclusion at ``101028c``, so there was no orphan to file.
 
-    **A22's retrofit, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
+    **A22's update, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
     existing record constant, not a fifth carrier. The per-record assertions now pin ``owner`` and
     ``minted_at`` per entry rather than one shared literal, because ``_coverage`` is minted at
     ``4b3c6ae`` and ``_pairing`` at ``101028c``. Two live regions on one file is ADR-077's
@@ -2726,7 +2726,7 @@ def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     rather than assumed. Neither exclusion is retirable yet: both name ``A28`` as their retiring
     packet, and A22 is not it.
 
-    **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired, one ``report.py`` exclusion
+    **A28's update, 2026-09-13 -- both ``diff.py`` exclusions retired, one ``report.py`` exclusion
     minted.** ``_pairing`` and ``_coverage`` both named ``A28``; both owners have landed and A28
     rewrites every carrier, so ``DIFF_PY_SHA256`` is whole-file again. ``REPORT_PY_EXCLUDED`` is
     this packet's own, owner A28, ``retire_at`` empty (spec A28 D5), seven fields -- the entry's six
@@ -2735,12 +2735,12 @@ def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     the entry describes counts the three former carriers from their docstrings and sweep lines
     once their records are gone (measured). ``TREE_PY_EXCLUDED`` is not minted (section 10 Q2 (b)).
 
-    **P-1's retrofit, 2026-09-17: ``TREE_PY_EXCLUDED`` minted beside ``REPORT_PY_EXCLUDED``** (P-1
+    **P-1's update, 2026-09-17: ``TREE_PY_EXCLUDED`` minted beside ``REPORT_PY_EXCLUDED``** (P-1
     section 7.4). Still one file, now two record constants on it, so the sweep asserts the pair by
     name; the per-record assertions are per record (owner A28 at ``38e8df9``; owner P-1 at
     ``a626cd3``), and ``lines`` may carry two spans because ADR-077 Q2 (b)'s form lists every span
     the record excludes. ``REPORT_PY_EXCLUDED`` is retirable -- A28 is done and P-1 is the first
-    re-freeze to reach its carrier -- and P-1 section 7.4 retires it in Session A's post-build
+    re-freeze to reach its carrier -- and P-1 section 7.4 retires it in the freeze's post-build
     commit, when ``REPORT_PY_SHA256`` becomes whole-file off the built ``report.py``; until then it
     stays, so this sweep will move once more.
     """

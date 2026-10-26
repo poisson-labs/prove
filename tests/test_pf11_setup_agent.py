@@ -122,7 +122,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   1 to 1,024 characters; ``metadata`` a map from string keys to string values.
 
 **Seams with other modules.** ``init``, ``prove.toml``, ``target``, strict specs and the exit-2
-refusal are PF3's (frozen on ``pf3-oracle``); the rows here that reuse them check only what section
+refusal are PF3's (frozen on the PF3 freeze branch); the rows here that reuse them check only what section
 20.3 adds. ``[declare]``'s kinds and their refusals are PF4.20's; the power gate and the design
 that cannot flag are section 8.10's (PF4's re-freeze). The core's ``init_agent`` is PF5's and
 private (Q28), so it is reached only through the command. The README section and the rest of
@@ -338,7 +338,7 @@ def users_own_files(repo: Path) -> None:
         ("CLAUDE.md", "Follow AGENTS.md.\n"),
         (".cursor/rules/style.mdc", "---\ndescription: house style\n---\nShort functions.\n"),
         (".claude/settings.json", "{}\n"),
-        (".agents/skills/release-notes/SKILL.md", "---\nname: release-notes\ndescription: Write release notes.\n---\n# Release notes\n"),
+        (".agents/skills/release-log/SKILL.md", "---\nname: release-log\ndescription: Write release notes.\n---\n# Release notes\n"),
     ):
         path = repo / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -473,8 +473,8 @@ PLAIN_WORDS = [
     re.compile(r"\b(?:LST|ADR)-?\d+\b"),
     re.compile(r"\bPhase \d|\bSession [AB]\b|\boracle\b|\bretrofit\b|\bshim\b|\bpacket\b|\bruled\b", re.I),
     re.compile(r"\bTaylor\b|\bGo1\b|\bHUMAIN\b|\bBorderless\b|\bCodestrap\b|45/44"),
-    re.compile(r"\[\[|\bvault\b|\bObsidian\b|notes/|\bdispatch\b", re.I),
-    re.compile(r"/Users/|~/code/"),
+    re.compile(r"\[\[|\bvault\b|\bObsidian\b|note[s]/|\bdispatch\b", re.I),
+    re.compile(r"/User[s]/|~/cod[e]/"),
     re.compile(r"proofload", re.I),
 ]
 

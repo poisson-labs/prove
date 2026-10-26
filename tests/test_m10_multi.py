@@ -1,8 +1,8 @@
-"""M10 multi-event CLI oracle, generated from section 4 of the M10 multi-event amendment
+"""M10 multi-event CLI frozen tests, generated from section 4 of the M10 multi-event amendment
 before the CLI is amended.
 
 Every test drives ``proofload.cli.main(argv, stdout=, stderr=, stdin=)`` in-process with
-``StringIO`` streams, as the S10 oracle does. Stores live under ``tmp_path``; the generated
+``StringIO`` streams, as the S10 frozen tests do. Stores live under ``tmp_path``; the generated
 lattice pair (``tests/lattice.py``) is read in place and only ``--out`` directories are written.
 
 One plain assertion per invariant. The two mock-agent runs are swept once per module under
@@ -11,7 +11,7 @@ has worse cells in ``timeout`` only, and carries a trade line; that is the pair 
 C7, C9-C13 and C17 read. C6 does not rely on it: its pair is synthetic, with the worse cell
 found by searching counts.
 
-Reading notes for Session B:
+Reading notes for the build:
 
 - C11 asserts the flag reaches ``ReportSpec.forest`` by wrapping ``cli.build_multi_report``
   (the name must be bound in ``cli``, as ``run_modal`` is for I7) and reading the spec it is

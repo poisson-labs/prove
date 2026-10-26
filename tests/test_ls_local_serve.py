@@ -1,12 +1,12 @@
-"""LS -- the local serve pass: the oracle for LS1-LS20 and the ruled LS21.
+"""LS -- the local serve pass: the frozen tests for LS1-LS20 and the ruled LS21.
 
-**Frozen 2026-09-22.** Taylor approved the invariant-to-test table, the mutant-to-test table and the
+**Frozen 2026-09-22.** Approved: the invariant-to-test table, the mutant-to-test table and the
 conventions below (seven yes); the freeze is this docstring and nothing else. The mutation pass was
-re-run control-first after the freeze; its table is the handoff's. Session B builds against this
+re-run control-first after the freeze; its table is the handoff's. The build works against this
 file and does not edit it.
 
 Written from "Prove -- Spec Local Serve Pass" section 4 against ``f7af030`` (2026-09-22), on the
-retrofit commit that moves the schema pins to ``proofload.viewpair/6``, the top-level key tuple to
+update commit that moves the schema pins to ``proofload.viewpair/6``, the top-level key tuple to
 fourteen with ``summary`` eighth, ``PANEL_KEYS`` to fifteen, ``HOLE_KEYS`` to ten, the ``<h2>``
 sequence to ``Summary`` first and ``Run pair`` thirteenth, and the two-event complementary pair's trade line to the
 complement sentence. Phase B changes ``src/proofload/diff.py`` (``complementary_events``,
@@ -22,9 +22,9 @@ and ``viewer()``, so this file collects on the bare tree, its own tests fail the
 test in the repo still reports. Source is read through ``proofload.__file__``, never ``Path.cwd()``,
 so a run under ``PYTHONPATH`` reads the tree it was pointed at.
 
-**Step zero, nine items, measured at ``f7af030`` before a test was written** (the log at
-``.work/serve-pass-1/step-zero/`` in the worktree, filed in the vault under
-``log/prove-serve-pass-1/step-zero/``). The four reproductions hold: (3) on the then-fixture
+**Step zero, nine items, measured at ``f7af030`` before a test was written** (the log in
+a scratch folder of the worktree, filed in the project's records
+as the step-zero record). The four reproductions hold: (3) on the then-fixture
 pair's page every present cell has its centre under a label ``<text>`` drawn after its rect, and no
 ``pointer-events:none`` selector ends in ``text``; (4) on that pair's two-event figure exactly two
 ``<text>`` runs pass the box, both legend captions, and a 143-char ``--title`` runs past it too --
@@ -40,12 +40,12 @@ the honesty line prints, on all thirteen panels that have one. (8) ``MULTI_JSON_
 is a single-event comparison and ``to_json()`` has 25 keys, none named ``complementary_events``. (1) The
 section 7.1 greps: ``TOP_LEVEL_KEYS`` has **six** copies (``test_s29_viewer.py``,
 ``test_m13_viewer.py``, ``test_p1_payload.py``, ``test_s21_errors.py``, ``test_a28_agreement.py``,
-``test_cut_surfacing.py``), not the three section 0.2 counts; all six are retrofitted. (2)
+``test_cut_surfacing.py``), not the three section 0.2 counts; all six are updated. (2)
 ``origin/main`` is ``a1caa17``, four commits past ``f7af030`` (the PR-1 merge); this packet stays
 on ``f7af030`` as instructed and the line numbers in the spec were read there.
 
-**Conventions this oracle fixes where the spec is silent or disagrees with itself. Session B builds
-to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
+**Conventions this file fixes where the spec is silent or disagrees with itself. The build follows
+these; each was put to review and ruled on 2026-09-22 (seven yes).**
 
 - **The Summary region is one ``<p>`` per sentence, one element per line, no table, no list, no
   attribute, no ``<details>``**, in this order: the partial line (if any), the complement line (if
@@ -53,7 +53,7 @@ to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
   line, and last the pointer. Every ``<p>`` is one ``line`` value of ``summary`` through
   ``html.escape``, so LS20's two directions are one equality.
 - **The event name is spelled bare** in the counts and row sentences: ``tripped: 0 of 72 conditions
-  ...``. The spec writes the field in backticks in section 3.4, which this oracle reads as the spec's
+  ...``. The spec writes the field in backticks in section 3.4, which this file reads as the spec's
   own markdown and not as characters the page prints; the headline already spells events bare.
 - **``change`` is the cell's ``text["delta"]`` verbatim**, so a rise reads ``28.1`` and not
   ``+28.1``; section 3.3's example shows a plus sign and section 3.3's rule says verbatim, and
@@ -84,19 +84,19 @@ to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
   a space, and ``summary.partial["runs"]`` lists them in that order.
 - **LS2 is pinned over five texts**: the four D9 wraps -- the title (stacked and per panel), the
   headline lines (stacked header and panel caption), the trade or complement line, the legend caption
-  -- and, ruled 2026-09-22, the honesty lines, each identified by content through this oracle's
+  -- and, ruled 2026-09-22, the honesty lines, each identified by content through this file's
   restatement of ``_wrap`` and its budget. The spec's clause reads "every ``<text>``"; measured at
   step zero, that cannot hold on a box 200 px wide, whose legend swatch *rects* sit at a fixed 46 px
   pitch and already leave it; the swatch labels are the named exception.
 - **A wrapped text is drawn as one ``<text>`` per line, the continuation lines carrying
-  ``data-wrap="1"`` and the first line not**, so M7's oracle (retrofitted) can read a wrapped
+  ``data-wrap="1"`` and the first line not**, so M7's frozen file (updated) can read a wrapped
   text back as one, and so a reader of the SVG can tell a wrapped line from a new text.
 - **The tree refusal is left as it was.** Section 3.8 item 1 gives it "the same treatment for
   symmetry", but it carries no version literal to interpolate, and P-1's Y15 pins its text; LS8
   asserts it names no version, and the intervals refusal alone interpolates ``SCHEMA``.
 - **LS3's rect clause is "byte-identical up to the top growth"**: ``x``, ``width``, ``height``,
-  ``fill`` and the four ``data-`` attributes of every grid and glyph rect are the dispatch commit's,
-  and ``y`` is the dispatch commit's plus exactly the growth of ``top`` (``18`` per extra title
+  ``fill`` and the four ``data-`` attributes of every grid and glyph rect are the base commit's,
+  and ``y`` is the base commit's plus exactly the growth of ``top`` (``18`` per extra title
   line, ``12`` per extra headline line). The spec's "byte-identical" holds only where nothing
   above the grid wraps; on the narrow pairs the headline wraps, and a grid that did not move down
   would be drawn over its own title.
@@ -134,7 +134,7 @@ to these; each was put to Taylor and ruled on 2026-09-22 (seven yes).**
   suggested sentence, verbatim. Not a spec invariant: the ruling came after the spec was written.
 
 **Fixture limits, stated before anything is asserted on a fixture.** Every S29 pair is complete,
-so LS15 rests on this oracle's own partial pair (three holes, ``part-a`` never marked complete,
+so LS15 rests on this file's own partial pair (three holes, ``part-a`` never marked complete,
 both orders). No stored pair was taken at ``--q`` above 0.05, so the unlabelled row and the ``q``
 boundaries are exercised on a hand-built panel (LS10) and only the labels the real payloads reach
 are re-asserted on them. The two-event lattice pair (``tests/lattice.py``) is the only complementary fixture; the
@@ -253,7 +253,7 @@ H2_SEQUENCE = (
 )
 DISPATCH_H2 = frozenset(H2_SEQUENCE)
 #: LS19. The regions that keep their bytes but for the strings section 3.8 names (and the one this
-#: oracle's LS16 convention adds).
+#: file's LS16 convention adds).
 UNTOUCHED_REGIONS = ("Result", "Honesty", "Not verified", "Fault lines", "Cells", "Cell", "Worst cells", "Provenance")
 RETIRED_TAILS = (" (closed by B.1)", " (nothing on the roadmap closes this)")
 NEW_TAILS = (" (a change is planned that would close this)", " (nothing planned would close this; it is a limit of the instrument)")
@@ -300,7 +300,7 @@ MIN_BUDGET = 8
 # words. LS2 reads the caption off the figure (drawn_legend_caption) and asserts its facts.
 LEGEND_TAIL = "corner notches = trade (safer in one event, worse in another)"
 #: The honesty lines join the wrap set: D9 named four texts, step zero measured the honesty lines
-#: past the box on every narrow pair, and Taylor ruled on 2026-09-22 that they wrap too (a fifth
+#: past the box on every narrow pair, and it was ruled on 2026-09-22 that they wrap too (a fifth
 #: text, at the caption's 12 px pitch).
 WRAPPED_HONESTY = True
 
@@ -353,7 +353,7 @@ HOSTILE_TABLE = "".join(["<", "/table><script>alert(1)</script>&", chr(34)])
 HOSTILE_VALUES = (HOSTILE, HOSTILE_TABLE)
 PARTIAL_A, PARTIAL_B = "part-a", "full-b"
 TRADE_A, TRADE_B = "trade-a", "trade-b"
-LONG_TITLE = "A title long enough to wrap: the baseline against the candidate, both arms, every condition the two runs share, measured at the dispatch commit"
+LONG_TITLE = "A title long enough to wrap: the baseline against the candidate, both arms, every condition the two runs share, measured at the baseline commit"
 
 
 def manifest(run_id: str, salt: str, axis_types: Mapping[str, str]) -> RunManifest:
@@ -1036,7 +1036,7 @@ def expected_layout(p: Pair) -> dict[str, Any]:
 
 
 def build_synth_store(root: Path) -> None:
-    """Every builder-made pair: S29's nine, this oracle's partial pair and its traded pair."""
+    """Every builder-made pair: S29's nine, this file's partial pair and its traded pair."""
     store = Store(root)
     write_run(store, "axes-a", salt=AXES_SALT, axis_types=TASK_TEMP, cells=axes_cells(False))
     write_run(store, "axes-b", salt=AXES_SALT, axis_types=TASK_TEMP, cells=axes_cells(True))
@@ -1134,7 +1134,7 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
 
 # ---------- the bare-tree pins (LS3, LS19), minted at 2da9847 ----------
 
-# ---- pins begin: minted on the bare tree at 2da9847 by .work/serve-pass-1/mint_pins.py ----
+# ---- pins begin: minted on the bare tree at 2da9847 by the pin-minting script ----
 #: LS3. Per pair, the stacked figure's width and, per panel, its bare-tree body height and the sha256
 #: of its grid and glyph rects (``rect_set`` at shift 0). Green before and after: the grid does not
 #: move.

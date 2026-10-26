@@ -1504,7 +1504,7 @@ def init(
     )
 
 
-#: The setup a person's own coding agent follows (§20): the skill's folder, the two places the
+#: The setup a person's own coding agent follows: the skill's folder, the two places the
 #: agents read skills from, and the prompt the person gives their agent.
 AGENT_SKILL = "poisson-prove-setup"
 AGENT_FOLDERS = (f".agents/skills/{AGENT_SKILL}", f".claude/skills/{AGENT_SKILL}")
@@ -1616,7 +1616,7 @@ def read_spec(path: str | Path, *, _notes: list[str]) -> Spec:
 # ---------- sweeps ----------
 
 
-#: How long the check lets the target's import take (§20.3).
+#: How long the check lets the target's import take.
 IMPORT_LIMIT_S = 30
 _ERRORS_LOG = Path("~") / ".cache" / "poisson-prove" / "errors.log"
 
@@ -2081,7 +2081,7 @@ def plan(
     """What a sweep would run: the conditions and replicates, the backend and its cost, the
     design's detection limit and the power gate's answer. An underpowered design is refused
     with the plan attached, so a face can still show it. The target is imported with the spec
-    file's folder first on the import path; with ``overrides["dry_run"]`` (the check, §20.3) it
+    file's folder first on the import path; with ``overrides["dry_run"]`` (the check) it
     is imported with the network blocked and a time limit, its name and signature are checked,
     and it is never called."""
     with contextlib.ExitStack() as on_path:

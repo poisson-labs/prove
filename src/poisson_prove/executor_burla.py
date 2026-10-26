@@ -2,7 +2,7 @@
 
 Burla 1.8.2 ships only the ``.py`` files of the local modules a caller has imported, and refuses
 a call whose shipped code imports a local package inside a function. Prove as it stands trips
-that rule, and Poisson Tasks reads data files beside its own source. So this backend ships its
+that rule, and a target package may read data files beside its own source. So this backend ships its
 own bundle -- a deterministic tarball of the real package folders, data files included -- from a
 small launcher (``_burla_submit.py``) that imports none of them. The launcher calls
 ``remote_parallel_map`` on its own main thread and forwards every result over a pipe; each
@@ -614,7 +614,7 @@ def _head_line(options: BurlaOptions, bundle: _Bundle) -> str:
 
 def preflight_burla(p: Plan, import_path: str, options: BurlaOptions) -> str:
     """Build the bundle, check it covers the target, rehearse job 0 in the worker's view, read
-    the ledger and estimate. Any refusal happens here; returns the block M10 prints. The cap
+    the ledger and estimate. Any refusal happens here; returns the block the caller prints. The cap
     refusal is raised last and carries the block as its ``plan`` attribute, so the command line
     can keep the plan on screen when it refuses."""
     spec = p.spec

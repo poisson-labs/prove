@@ -1,4 +1,4 @@
-"""M10 CLI oracle, generated from section 4 of the M10 spec before the CLI is built.
+"""M10 CLI frozen tests, generated from section 4 of the M10 spec before the CLI is built.
 
 Every test drives ``proofload.cli.main(argv, stdout=, stderr=, stdin=)`` in-process with
 ``StringIO`` streams. The one exception is the entrypoint smoke test, which shells out to the
@@ -8,9 +8,9 @@ environment dependency S0's entrypoint test carries).
 Stores live under ``tmp_path``. Golden tests point ``--store`` at the generated lattice pair
 (``tests/lattice.py``) read-only and write report output under ``tmp_path``. The mock agent
 (``proofload.examples.mock_agent``) is imported lazily because it does not exist until
-Session B builds it; collection must not depend on it.
+the build adds it; collection must not depend on it.
 
-Two reading notes for Session B, recorded here so the oracle is not re-litigated:
+Two reading notes for the build, recorded here so the frozen tests are not re-litigated:
 
 - I4 drives the prompt through a ``StringIO`` whose ``isatty()`` returns True, so the
   prompt path is exercised under either reading of the non-TTY rule (section 3 says any
@@ -988,7 +988,7 @@ def test_i13_fix_on_unknown_key_exits_two_with_axis_error_message(lattice_store:
     out = tmp_path / "report"
     r = run_cli(report_argv(out, "--fix", "bogus=1"))
     assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
-    # LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): the refusal names the flag, not the parameter (spec LS section 3.8 item 4).
+    # LS update, 2026-09-22 (local serve pass, Phase A, found by the shim run): the refusal names the flag, not the parameter (spec LS section 3.8 item 4).
     # Errors show values bare, not as Python reprs, and prose is not pinned (spec section 5.4).
     assert "--fix" in r.err and "bogus" in r.err, r.text
     assert not out.exists() or not any(out.iterdir())

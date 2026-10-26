@@ -1,9 +1,0 @@
-{
-  "_task_id": "HumanEval/2",
-  "assertion": "    return number\n",
-  "raises": "    raise ValueError('the candidate raised on purpose')\n",
-  "hangs": "    import time\n    time.sleep(30)\n    return number % 1.0\n",
-  "allocates": "    block = bytearray(8 << 30)\n    return number % 1.0 if block else 0.0\n",
-  "socket": "    import socket\n    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n    sock.close()\n    return number % 1.0\n",
-  "long_reason": "    raise ValueError('L' * 5000)\n"
-}

@@ -1,4 +1,4 @@
-"""Oracle for M2: grid / sobol / scenarios samplers, axis typing, SweepSpec, TOML loader.
+"""Frozen tests for M2: grid / sobol / scenarios samplers, axis typing, SweepSpec, TOML loader.
 
 Property tests (I1, I2, I3, I5, I6, I7, I15) draw small mixed-type axis dicts with
 hypothesis; grids stay under about 200 configs. I10 is the golden: the lattice's sweep
@@ -7,7 +7,7 @@ its config_hash set is compared against the generated store through the ``lattic
 fixture and against the design's own condition keys. I12
 round-trips through ``to_dict()`` and ``json.dumps``.
 
-Conventions the oracle fixes for the implementation session:
+Conventions the frozen tests fix for the implementation session:
 
 - Axis values inside one axis are unique under Python equality, so ``1`` and ``True``
   never share an axis; across configs, value identity is checked by type as well as

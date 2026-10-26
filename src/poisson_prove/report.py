@@ -1,14 +1,15 @@
-"""M7: render diff results as Markdown, standalone SVG, and a single-file HTML receipt.
+"""Render diff results as Markdown, standalone SVG, and a single-file HTML receipt.
 
 Three public entry points share one private panel builder: ``build_report`` (one
 ``DiffResult``), ``build_multi_report`` (a ``MultiDiffResult``: one panel per event on a
-shared colour bound, headline and trade line first, and -- handed M14's ``TreeResult`` -- the
-layered report's four sections before the figure), and ``build_survival_report`` (one run,
-one rate panel per event from an M5 cell table). M7 computes no statistics. Every number it
-prints is a field on the diff result, on the tree, on the cell table, on the curve it is
-handed, or on the ``RunManifest``, or is a span count the caller read from a run's stored
-envelopes and handed in. One private formatting helper does every float-to-string
-conversion; that helper is the whole defence for byte determinism and for the no ``-0.0`` rule.
+shared colour bound, headline and trade line first, and -- handed the tree's ``TreeResult``
+-- the layered report's four sections before the figure), and ``build_survival_report`` (one
+run, one rate panel per event from a survival cell table). This module computes no
+statistics. Every number it prints is a field on the diff result, on the tree, on the cell
+table, on the curve it is handed, or on the ``RunManifest``, or is a span count the caller read
+from a run's stored envelopes and handed in. One private formatting helper does every
+float-to-string conversion; that helper is the whole defence for byte determinism and for the
+no ``-0.0`` rule.
 
 Sign convention: ``delta = rate_b - rate_a``; negative is *safer* only when ``event`` names
 a failure. The event is printed in the provenance and the legend so a reader can check.
@@ -79,9 +80,9 @@ def _old_writer_line(version_shown: str) -> str | None:
     return f"written by {RETIRED_NAME} {version_shown[: -len(suffix)]}"
 
 
-# The two causes only a grid can have, beside M6's five: a coordinate in the axis product no
-# row exists for, and one that more than one non-comparable coverage row maps to. Written
-# once here; M6 writes the other five.
+# The two causes only a grid can have, beside the comparison's five: a coordinate in the axis
+# product no row exists for, and one that more than one non-comparable coverage row maps to.
+# Written once here; ``diff.py`` writes the other five.
 _GRID_CAUSES = ("unsampled", "multiple")
 _UNSAMPLED, _MULTIPLE = _GRID_CAUSES
 
@@ -291,14 +292,14 @@ class Cell:
     verdict: str
     mde: float
     hole_cause: str | None = None
-    #: S24's interval on this cell's delta, joined by ``(event, config_hash)`` in
+    #: The interval on this cell's delta, joined by ``(event, config_hash)`` in
     #: ``build_multi_report``. Appended and defaulted because ``_absent`` builds a ``Cell``
     #: positionally; ``None`` on a censored row and on every single-event report.
     ci_lo: float | None = None
     ci_hi: float | None = None
     ci_basis: str | None = None
     mde_note: str | None = None
-    #: PF4.32: the way the condition's limit goes, ``rise`` or ``fall``; None on a single-event
+    #: The way the condition's limit goes, ``rise`` or ``fall``; None on a single-event
     #: report.
     mde_way: str | None = None
 
@@ -348,7 +349,7 @@ class Report:
     _intervals: bool = field(default=False, repr=False, compare=False)
     #: The panel's two words for a significant change, in the order of ``n_safer`` and
     #: ``n_worse``: ``safer`` and ``worse`` for an event whose kind is known (and for every
-    #: single-event report), ``lower`` and ``higher`` for one whose kind is not (PF4.20).
+    #: single-event report), ``lower`` and ``higher`` for one whose kind is not.
     _words: tuple[str, str] = field(default=("safer", "worse"), repr=False, compare=False)
 
     def to_markdown(self) -> str:
@@ -362,7 +363,7 @@ class Report:
 
     def shown_honesty(self, honesty: str | None = None) -> str:
         """The honesty block as every surface prints it: the claim's count named in the panel's
-        own word, ``"3 higher"`` for an event of unknown kind (PF4.20). ``honesty`` keeps M7's
+        own word, ``"3 higher"`` for an event of unknown kind. ``honesty`` keeps the report's
         encoding, ``"N worse"``, the count of the panel's second slot."""
         text = self.honesty if honesty is None else honesty
         if self._words[1] == "worse":
@@ -387,15 +388,15 @@ class MultiReport:
     #: The flat family's interval facts, one formatter (``_interval_lines``) for every surface:
     #: ``report.md``, the receipt, the page's honesty band, the payload and ``diff`` stdout.
     interval_lines: tuple[str, ...] = ()
-    #: M6's answer to whether the two events are exact complements, carried so the page and the
-    #: payload can say so as data; ``trade_line`` already says it as words.
+    #: The comparison's answer to whether the two events are exact complements, carried so the
+    #: page and the payload can say so as data; ``trade_line`` already says it as words.
     complement: tuple[str, ...] | None = None
-    #: PF4.5: the comparison's word and its sentence, the line after the title.
+    #: The comparison's word and its sentence, the line after the title.
     verdict_line: str | None = None
-    #: The sections after the intervals: each arm's shares (PF4.3) and what the verdict rests
-    #: on (PF4.34 to PF4.46), as Markdown lines the receipt renders too.
+    #: The sections after the intervals: each arm's shares and what the verdict rests
+    #: on, as Markdown lines the receipt renders too.
     extra_md: tuple[str, ...] = ()
-    #: The Methods table's two count columns, in the panels' words (PF4.20).
+    #: The Methods table's two count columns, in the panels' words.
     _method_words: tuple[str, str] = field(default=("safer", "worse"), repr=False, compare=False)
 
     def to_markdown(self) -> str:
@@ -414,9 +415,9 @@ class SurvivalReport:
     events: tuple[str, ...]
     panels: Mapping[str, Report]
     provenance: dict[str, object]
-    #: PF4.4: the design limit, under the title.
+    #: The design limit, under the title.
     header_lines: tuple[str, ...] = ()
-    #: PF4.2: each condition's share with its Wilson interval beside its incidence.
+    #: Each condition's share with its Wilson interval beside its incidence.
     extra_md: tuple[str, ...] = ()
 
     def to_markdown(self) -> str:
@@ -526,7 +527,7 @@ def _diff_cell(coords: tuple[object, ...], r: dict[str, Any]) -> Cell:
 
 
 def _way_of(r: Mapping[str, Any]) -> str | None:
-    """Which direction a cell's one limit is (PF4.32): the rise's or the fall's, whichever it
+    """Which direction a cell's one limit is: the rise's or the fall's, whichever it
     equals, the rise first; None when the cell has no limit or carries no directions."""
     def number(value: Any) -> float | None:
         missing = value is None or (isinstance(value, float) and math.isnan(value))
@@ -666,13 +667,15 @@ def _honesty(
     not_compared: int = 0,
 ) -> str:
     """Two lines: the worst-powered *unchanged* cell (what "0 worse" rests on), then the
-    worst-powered cell overall. Both values are M6 fields; M7 only names a cell attaining them.
+    worst-powered cell overall. Both values are fields of the comparison; the report only names a
+    cell attaining them.
 
-    PF4.27: a limit that is null is never printed as a number. When no unchanged condition has
+    A limit that is null is never printed as a number. When no unchanged condition has
     a limit, the first line names the first of them with its reason; a single-event cell whose
-    whole headroom is not detectable says so. PF4.17: with no unchanged condition, a two-run
-    report counts what was compared and what was not. The claim's count keeps M7's encoding,
-    ``"N worse"``; a surface names it in the panel's own word (``Report.shown_honesty``)."""
+    whole headroom is not detectable says so. With no unchanged condition, a two-run
+    report counts what was compared and what was not. The claim's count keeps the report's
+    encoding, ``"N worse"``; a surface names it in the panel's own word
+    (``Report.shown_honesty``)."""
     unchanged = [c for c in present if c.verdict == "unchanged"]
     without = [c for c in unchanged if c.mde_note is not None and math.isnan(c.mde)]
     if unchanged and math.isnan(max_mde_unchanged) and without:
@@ -707,7 +710,7 @@ def _honesty(
                 f"{cell.mde_note}."
             )
     if math.isnan(max_mde):
-        # PF4.27: no number for a null limit; the reason is on each condition's row.
+        # No number for a null limit; the reason is on each condition's row.
         second = "Worst-powered cell overall: no condition has a limit (each row says why)."
         return first + "\n" + second
     attaining = [c for c in present if c.mde == max_mde]
@@ -750,7 +753,7 @@ def _build_panel(
     """The one grid -> Report path. ``bound`` is injected (shared across a multi report) or
     derived from this panel's own cells; ``mode`` picks the diverging or the sequential ramp.
     ``words`` are the panel's two verdicts for a significant change, counted into ``n_safer`` and
-    ``n_worse`` in that order (PF4.20: ``lower`` and ``higher`` when the event's kind is not
+    ``n_worse`` in that order (``lower`` and ``higher`` when the event's kind is not
     known)."""
     if grid is None:
         grid = _grid(rows, spec, _diff_cell if mode == "diff" else _rate_cell)
@@ -806,8 +809,8 @@ def _build_panel(
     )
 
 
-#: Section 3.4's other branch, when nothing was rejected. The MDE lines are already above it.
-#: **Moved here from ``cli.py`` by P-1**, text unchanged but for the trailing newline, which the
+#: The interval block's other branch, when nothing was rejected. The MDE lines are already above it.
+#: **Moved here from ``cli.py``**, text unchanged but for the trailing newline, which the
 #: caller adds: every surface now reads one formatter and none of them rewords it.
 _NO_INTERVAL_LINE = (
     "intervals: none (nothing significant; the MDE lines above are the honest bound)"
@@ -821,7 +824,7 @@ def _interval_column() -> str:
 
 
 def _interval_lines(multi: MultiDiffResult) -> tuple[str, ...]:
-    """S24's three interval facts, or the one ``R == 0`` line, unindented and unstyled.
+    """The three interval facts, or the one ``R == 0`` line, unindented and unstyled.
 
     **One formatter.** ``diff`` stdout, ``report.md``, ``receipt.html``, the page's honesty band
     and the payload all print these strings; ``cli._interval_block`` indents the second and third
@@ -860,7 +863,7 @@ def _interval_lines(multi: MultiDiffResult) -> tuple[str, ...]:
 
 
 def _interval_text(cell: Cell) -> str:
-    """One worst-cells row's interval, in points. A row whose endpoints are ``None`` -- ADR-050's
+    """One worst-cells row's interval, in points. A row whose endpoints are ``None`` -- the
     censored basis, or a cell with no interval row -- prints ``censored`` rather than a bracket
     around nothing."""
     lo, hi = cell.ci_lo, cell.ci_hi
@@ -999,8 +1002,8 @@ def _observation_cap(manifest: RunManifest) -> dict[str, int | str] | None:
     limit written before the per-value cut bounded a different thing than one written after it,
     and only the name says which, so no name is spelled here.
 
-    A number, or the one word a run may record in a byte field: ADR-096 made *keep every value
-    whole* a declarable state, and ``none`` is how a run records it. Every other string is
+    A number, or the one word a run may record in a byte field: *keep every value
+    whole* is a declarable state, and ``none`` is how a run records it. Every other string is
     dropped, as it always was -- ``_UNKNOWN_READING`` below turns a missing entry into ``not
     recorded``, and a run that declared nothing and a run that declared *whole* must not print
     the same line.
@@ -1070,9 +1073,9 @@ def _run_declarations(
     provenance: dict[str, object],
     declarations: tuple[DeclarationCheck | None, DeclarationCheck | None] | None,
 ) -> None:
-    """A10's eight keys per run, suffixed ``_a`` / ``_b`` like the identity and observation
-    blocks -- and only for a run that declared. A run with no declaration gains no key: not
-    ``None``, not ``[]``. The keys are conditionally present (W8), which is what keeps every
+    """The declaration's eight keys per run, suffixed ``_a`` / ``_b`` like the identity and
+    observation blocks -- and only for a run that declared. A run with no declaration gains no
+    key: not ``None``, not ``[]``. The keys are conditionally present, which is what keeps every
     frozen output over a declaration-free run byte-identical; and a pair where one side declared
     says so by carrying that side's keys alone. ``declarations`` is what the caller computed
     with ``steps.declaration_check``; this module counts nothing.
@@ -1107,7 +1110,7 @@ def build_report(
     supply run identity and each run's recorded byte limit for the provenance block and are never
     invented when absent; observations, given with the manifests, adds each run's span count and
     how many of those spans were stamped as cut; declarations, one ``DeclarationCheck`` or
-    ``None`` per run, adds the eight declared-expectation lines for each run that declared (A10).
+    ``None`` per run, adds the eight declared-expectation lines for each run that declared.
     """
     _validate_spec(spec)
     for label, other in spec.comparison.items():
@@ -1163,7 +1166,7 @@ def _caption(
 
 
 def _method_label(method: str) -> str:
-    # PF4.41: log-rank tests the cause-specific hazard, and says so wherever it is named.
+    # Log-rank tests the cause-specific hazard, and says so wherever it is named.
     return f"{method} (cause-specific hazard)" if method == "logrank_bh" else method
 
 
@@ -1205,19 +1208,19 @@ def _multi_method_rows(
 
 
 def _check_tree(multi: MultiDiffResult, tree: TreeResult) -> None:
-    """A tree is rendered beside the diff it was grown from or not at all, I18's shape one object
-    over: its events and its cell count must be the family's. Checked before anything is built.
+    """A tree is rendered beside the diff it was grown from or not at all: its events and its
+    cell count must be the family's. Checked before anything is built.
 
-    A28 appends two clauses and rewords none, because the two it follows exist to *name* what
-    differs and a digest can name nothing (spec A28 section 10 Q4). The **agreement digest**
-    closes C16: two pairs over the same events with the same cell count and the same config
+    The last two clauses were added without rewording the first two, because those exist to
+    *name* what differs and a digest can name nothing. The **agreement digest** closes a gap the
+    first two leave: two pairs over the same events with the same cell count and the same config
     grid, differing only in what happened, pass the arity clause and are refused here. The
-    **knob clause** follows it because the digest is scheme-blind and q-blind by construction
-    (section 3.3), so a ``mcnemar_bh`` tree would otherwise render happily beside a
+    **knob clause** follows it because the digest is scheme-blind and q-blind by construction,
+    so a ``mcnemar_bh`` tree would otherwise render happily beside a
     ``fisher_bh`` diff. ``agreement_digest`` is imported inside the function: ``tree.py``
     imports ``diff``, ``executor`` and ``store`` and not ``report``, so a module-level import
-    would not be a cycle today, but it would be M7 depending on M14 -- and W20 pins that
-    ``report.py`` imports ``poisson_prove.tree`` under ``TYPE_CHECKING`` only.
+    would not be a cycle today, but it would be the report depending on the tree -- and a test
+    pins that ``report.py`` imports ``poisson_prove.tree`` under ``TYPE_CHECKING`` only.
     """
     if tuple(tree.root.events) != tuple(multi.events):
         raise ComparisonMismatch(
@@ -1254,7 +1257,7 @@ def build_multi_report(
 
     ``declarations`` -- one ``DeclarationCheck`` or ``None`` per run, computed by the caller --
     adds the eight declared-expectation lines to the provenance block for each run that
-    declared, and nothing for one that did not (A10).
+    declared, and nothing for one that did not.
 
     With ``tree`` the markdown and the receipt also carry the layered report -- the omnibus, the
     fault lines, the cells and the bound -- between the headline block and the figure. The SVG
@@ -1273,7 +1276,7 @@ def build_multi_report(
     # One hole map for every panel: each event's cells carry the same ``common``, so the grid
     # and its holes are identical across panels.
     holes = _hole_map(multi, spec)
-    # ADR-032: the join is by ``(event, config_hash)``, one index per event, because two events'
+    # The join is by ``(event, config_hash)``, one index per event, because two events'
     # intervals on the same cell are different numbers.
     grids = {
         e: _grid(rows_by_event[e], spec, _interval_cell(_interval_index(multi, e)), holes)
@@ -1382,14 +1385,14 @@ def _md_html(lines: Sequence[str]) -> list[str]:
 
 
 def _verdict_line(multi: MultiDiffResult) -> str:
-    """PF4.5: the comparison's word and its sentence, in direction words for every event."""
+    """The comparison's word and its sentence, in direction words for every event."""
     word = multi.comparison_verdict()
     counts = _facts.counts_text(multi, sorted(multi.events))
     return f"{word}  {_facts.verdict_sentence(word, counts, multi)}"
 
 
 def _shares_md(multi: MultiDiffResult, spec: ReportSpec, order: Sequence[str]) -> tuple[str, ...]:
-    """PF4.3, PF4.42: each condition's two shares with their Wilson intervals, the change with
+    """Each condition's two shares with their Wilson intervals, the change with
     its interval at the comparison's level, and the condition's limits, one table per event."""
     label = _look.level_label(WILSON_LEVEL)
     out = ["## Shares", ""]
@@ -1429,7 +1432,7 @@ def _shares_md(multi: MultiDiffResult, spec: ReportSpec, order: Sequence[str]) -
 
 
 def _change_head(multi: MultiDiffResult) -> str:
-    """The change column's header, with its interval's level and method (PF4.42)."""
+    """The change column's header, with its interval's level and method."""
     if multi.interval_level is None:
         return "change"
     level = _look.level_label(multi.interval_level)
@@ -1486,12 +1489,12 @@ def build_survival_report(
     shares: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     design_mde: Mapping[str, Any] | None = None,
 ) -> SurvivalReport:
-    """cells = M5 cell_table output; one rate panel per event, F_k(horizon) from its curve.
+    """cells = survival.cell_table output; one rate panel per event, F_k(horizon) from its curve.
 
     ``manifest`` adds the run's identity and recorded byte limit to the provenance block, and
     ``observations`` -- ``(spans, spans stamped as cut)``, counted by the caller -- the counts.
     ``declarations``, the run's ``DeclarationCheck``, adds the eight declared-expectation lines
-    when the run declared, and nothing when it did not (A10).
+    when the run declared, and nothing when it did not.
     """
     _validate_spec(spec)
     event_list = tuple(dict.fromkeys(str(e) for e in events))
@@ -1544,7 +1547,7 @@ def build_survival_report(
 
 
 def _design_line(design: Mapping[str, Any]) -> str:
-    """PF4.4, PF4.32: the run's design limit with its direction, test, level, family and power,
+    """The run's design limit with its direction, test, level, family and power,
     and whether it was recorded at sweep time or computed now from what the run recorded."""
     how = ("computed at read time from the recorded replicates" if design["computed_at_read_time"]
            else "recorded at sweep time")
@@ -1561,9 +1564,9 @@ def _design_line(design: Mapping[str, Any]) -> str:
 def _single_shares_md(
     shares: Mapping[str, Sequence[Mapping[str, Any]]], events: Sequence[str]
 ) -> tuple[str, ...]:
-    """PF4.2: each condition's share of episodes that ended in the event, with its Wilson interval
+    """Each condition's share of episodes that ended in the event, with its Wilson interval
     at its recorded level, beside the cumulative incidence at the horizon; a mark where the two
-    differ, which only a run censored before the horizon can make (PF4.37)."""
+    differ, which only a run censored before the horizon can make."""
     out = ["## Shares", ""]
     marked = False
     for e in events:
@@ -1687,7 +1690,7 @@ def _legend_caption(rep: Report) -> str:
             f"event={rep._event}; blank = no data"
         )
     if rep._words == ("lower", "higher"):
-        # PF4.20: an event of unknown kind is read in direction words, never judged.
+        # An event of unknown kind is read in direction words, never judged.
         caption = (
             f"delta = rate_b - rate_a {_in_pp()}; event={rep._event}; negative means the event's "
             "rate fell; corner square = significant; blank = no data"
@@ -1876,9 +1879,9 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
 
 def _forest_body(rep: Report) -> tuple[list[str], int, int]:
     """One row per category: a point at delta on the shared bound, a faint bracket of
-    half-width MDE on the same scale (M6's field, not an interval estimate), the significance
-    glyph, and n_a/n_b at the row end. Geometry is emitted as plain numbers so the point and
-    bracket are exact on the scale."""
+    half-width MDE on the same scale (the comparison's field, not an interval estimate), the
+    significance glyph, and n_a/n_b at the row end. Geometry is emitted as plain numbers so the
+    point and bracket are exact on the scale."""
     theme = rep.spec.theme
     font = 11
     row_h = 18
@@ -1892,7 +1895,7 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
     def caption_text() -> str:
         text = (
             f"point = delta (rate_b - rate_a, {_unit()}) on the shared scale; bracket = ±MDE, "
-            f"the minimum detectable effect from M6, not an interval estimate; "
+            f"the minimum detectable effect, not an interval estimate; "
             f"event={rep._event}; corner square = significant"
         )
         if rep._trades:
@@ -2095,15 +2098,15 @@ _METHOD_HEADER = ["method", "pairing", "safer", "worse", "unchanged", "max MDE",
 
 
 def _method_header(words: tuple[str, str]) -> list[str]:
-    """The Methods table's header, its count columns in the comparison's words (PF4.20)."""
+    """The Methods table's header, its count columns in the comparison's words."""
     return ["method", "pairing", *words, "unchanged", "max MDE", "q"]
 
 
 def _worst_header(rep: Report) -> list[str]:
     if rep._mode == "rate":
         return _axes_of(rep.spec) + _rate_header_tail()
-    # When ``R == 0`` M6 built no intervals and there is no column: a column that does not
-    # exist cannot be read (the fault-lines table's rule, one table over).
+    # When ``R == 0`` the comparison built no intervals and there is no column: a column that
+    # does not exist cannot be read (the fault-lines table's rule, one table over).
     tail = [*_worst_header_tail(), _interval_column()] if rep._intervals else _worst_header_tail()
     return _axes_of(rep.spec) + tail
 
@@ -2156,7 +2159,7 @@ def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
         elif isinstance(value, int):
             shown = _fmt(value, "int")
         elif isinstance(value, (list, tuple)):
-            # An empty list reads ``none``: "nothing was missed" is a finding (A10).
+            # An empty list reads ``none``: "nothing was missed" is a finding.
             shown = ", ".join(str(v) for v in value) if value else "none"
         elif isinstance(value, Mapping):
             shown = ", ".join(f"{name}={entry}" for name, entry in value.items())
@@ -2242,7 +2245,7 @@ def _render_multi_markdown(rep: MultiReport) -> str:
             panel.shown_honesty(),
             "",
         ]
-    # ADR-060: the flat family's intervals sit in the honesty band, after the last panel's
+    # The flat family's intervals sit in the honesty band, after the last panel's
     # honesty text and never beside a leaf row. The tree's *Cells* section is above the figure
     # and two sections away.
     parts += ["## Intervals", ""]
@@ -2294,11 +2297,11 @@ def _render_survival_markdown(rep: SurvivalReport) -> str:
 
 # ---------- the layered report: four sections from a TreeResult ----------
 
-#: What an untested level prints, by the reason's name (draft ADR-073). The keys are M14's three
-#: P4.3 reasons and its two P4.2 reasons, ``root_not_rejected`` serving both levels. Precedence is
-#: M14's and nothing here orders or re-derives it: a level's ``reason`` is looked up, never
-#: inferred from what rejected. ``{configured}`` is the one number an untested reason carries, put
-#: in after ``_fmt`` has formatted it.
+#: What an untested level prints, by the reason's name. The keys are the tree's three reasons
+#: for the leaves and its two for the fault lines, ``root_not_rejected`` serving both levels.
+#: Precedence is the tree's and nothing here orders or re-derives it: a level's ``reason`` is
+#: looked up, never inferred from what rejected. ``{configured}`` is the one number an untested
+#: reason carries, put in after ``_fmt`` has formatted it.
 _NOT_TESTED: dict[str, str] = {
     "depth": "depth {configured} configured",
     "root_not_rejected": "the root did not reject",
@@ -2306,7 +2309,7 @@ _NOT_TESTED: dict[str, str] = {
     "one_group": "one group is the whole family restated",
 }
 
-#: What the leaf row's MDE column means, said once on the page as S27 section 3.1 promised: free
+#: What the leaf row's MDE column means, said once on the page: free
 #: text with no number in it.
 _LEAF_MDE_MEANING = (
     "MDE is the smallest change one condition alone would be flagged for, from where the "
@@ -2329,8 +2332,8 @@ def _tree_markdown(tree: TreeResult, power: float | None = None) -> list[str]:
     """The four sections as markdown parts for ``_render_multi_markdown`` to extend with: each
     heading, then each line or table, every one followed by a blank line.
 
-    This function and ``_tree_html`` are the roots of the closure the S28 oracle's R11 reads
-    (draft ADR-075). Every function either reaches, ``_fmt`` and M7's three table and line
+    This function and ``_tree_html`` are the roots of the call closure a test walks.
+    Every function either reaches, ``_fmt`` and the report's three table and line
     helpers excepted, does no arithmetic and formats no number itself; a rendering function
     added later joins the closure through these two or is unguarded.
     """
@@ -2360,7 +2363,7 @@ def _tree_sections(
     tree: TreeResult, power: float | None = None
 ) -> list[tuple[str, list[_TreeItem]]]:
     """The layered report as four headed sections, in the order a reader acts on them. Every
-    number is a field of the tree through ``_fmt`` under the kind S28 section 3.6 assigns;
+    number is a field of the tree through ``_fmt`` under the kind assigned to that field;
     nothing here computes, sorts or ranks."""
     return [
         ("Omnibus", _omnibus_items(tree.root)),
@@ -2426,7 +2429,7 @@ def _fault_lines_items(tree: TreeResult, power: float | None = None) -> list[_Tr
             f'"{fault.null}" tested by BH across {_fmt(fault.n_groups, "int")} groups at q '
             f'{_fmt(fault.q, "sig3")}: {_fmt(fault.n_rejected_groups, "int")} rejected'
         )
-        # C33 (b): a group p is drawn from the same permutations the root was, so it has the
+        # A group p is drawn from the same permutations the root was, so it has the
         # same floor. Only where a level was tested -- there is no floor under a p nobody drew.
         items.append(
             f"group p floor {_fmt(tree.root.p_floor, 'sig3')}: the same "

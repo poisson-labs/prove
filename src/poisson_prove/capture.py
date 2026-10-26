@@ -1,35 +1,35 @@
-"""M3: in-process trace capture — the wire from a rollout's spans into ``Episode.meta``.
+"""In-process trace capture — the wire from a rollout's spans into ``Episode.meta``.
 
-M12 shipped the schema, the converters and the episode stamper; nothing carried a trace into
-an ``Episode``. This module is the missing half: it activates the instrumentors the user named
-in their sweep file, owns (or joins) the process's ``TracerProvider``, and hands the executor
-one ``Trace.to_dict()`` per episode.
+The trace schema and its converters (``trace.py``) and the episode stamper (``otel.py``) came
+first; nothing carried a trace into an ``Episode``. This module is the missing half: it activates
+the instrumentors the user named in their sweep file, owns (or joins) the process's
+``TracerProvider``, and hands the executor one ``Trace.to_dict()`` per episode.
 
 ``opentelemetry`` is imported **lazily, inside** ``install()`` — never at module scope, and
 ``poisson_prove.otel`` with it, since that module imports the SDK at import time. ``executor.py``
-can therefore import this file unconditionally and M12's T27 still holds: a run with no
-``[capture]`` table imports no OpenTelemetry module at all.
+can therefore import this file unconditionally and the trace layer's promise still holds: a run
+with no ``[capture]`` table imports no OpenTelemetry module at all.
 
-Three facts drive the design, all of them measured (spec §4):
+Three facts drive the design, all of them measured:
 
-* **C1** A ``TracerProvider`` set in a forking parent makes the child's ``set_tracer_provider``
+* A ``TracerProvider`` set in a forking parent makes the child's ``set_tracer_provider``
   a refused no-op, so the child captures nothing, silently. ``install()`` verifies it owns —
   or was added to — the global provider and reports ``active=False`` otherwise; on the forking
   paths the executor calls it in the child.
-* **C2** OTel's default ``RandomIdGenerator`` draws from the global ``random``, which Prove's
+* OTel's default ``RandomIdGenerator`` draws from the global ``random``, which Prove's
   own seeds collide. The provider this module builds carries an id generator seeded from
   ``os.urandom`` and never touches the global stream.
-* **C2a** Installing a provider is permanent: there is no ``remove_span_processor`` and
+* Installing a provider is permanent: there is no ``remove_span_processor`` and
   ``set_tracer_provider`` refuses a second call. Where the user already set an SDK provider we
   **add** our two processors to theirs and leave their exporters alone; ``install()`` is once
   per process and a second call adds no second collector.
 
-ADR-027: only instrumentors the user named are activated, resolved through the
+Only instrumentors the user named are activated, resolved through the
 ``opentelemetry_instrumentor`` entry-point group. No auto-discovery, no import hook, no wrapper
 of our own. An unknown name, a missing SDK or an instrumentor that raises all yield
 ``CaptureStatus(active=False, reason=...)`` and the run proceeds.
 
-The timed-out episode (ADR-028): the collector also remembers the live spans of each open
+The timed-out episode: the collector also remembers the live spans of each open
 episode from ``on_start`` to ``on_end``, and the private ``_snapshot(reason)`` hands the
 executor's ``SIGTERM`` handler the episode as it stands -- every closed span, then every open
 one with no end -- as a trace marked ``truncated=reason``. Every lock on that path is
@@ -82,7 +82,7 @@ _BUCKET: _Bucket | None = None
 class CaptureSpec:
     """The ``[capture]`` table of the sweep file, as the executor carries it.
 
-    ``kw_only`` (ADR-096) so the required field keeps its place in the declaration order:
+    ``kw_only`` so the required field keeps its place in the declaration order:
     ``_CAPTURE_FIELDS`` is that order in both the sampler and the Modal transport, and
     Python would otherwise force a required field in front of the defaulted ones. There is
     not one positional construction of this class anywhere in the package or its tests, so
@@ -93,9 +93,9 @@ class CaptureSpec:
     content: bool = False
     #: The bound on one stored observation value, whether or not ``content`` is on. Required,
     #: and supplied by nothing: every run says what it keeps whole, and ``None`` is *keep
-    #: every value whole* (ADR-096, the sweep file's ``"none"``).
+    #: every value whole* (the sweep file's ``"none"``).
     max_observation_bytes: int | None
-    #: The span cap, off by default (D6): ``None`` keeps every closed span. A runaway loop is
+    #: The span cap, off by default: ``None`` keeps every closed span. A runaway loop is
     #: bounded by ``episode_timeout`` and by the horizon, and when neither fires it is a
     #: finding the trace should show in full rather than a ``dropped`` count.
     max_spans: int | None = None
@@ -224,7 +224,7 @@ class Recorder:
             if cap is None or len(self._kept) < cap:
                 heapq.heappush(self._kept, entry)
                 return
-            # Full. The cap is in start order (C10): the earliest-started spans are kept, so
+            # Full. The cap is in start order: the earliest-started spans are kept, so
             # a capped trace keeps its root and loses its deepest spans. Spans end
             # innermost-first, and a cap applied in end order would keep the leaves.
             if self._kept and entry > self._kept[0]:
@@ -245,7 +245,7 @@ class _Bucket:
 
     Spans are bucketed by the two attributes ``EpisodeStamper`` wrote at ``on_start`` and read
     back off the span at ``on_end`` — not by a second ``ContextVar``. That is thread-safe
-    without a context, reuses exactly what M12 shipped, and makes a fire-and-forget span that
+    without a context, reuses exactly what the stamper writes, and makes a fire-and-forget span that
     closes after its episode ended fall on the floor instead of leaking into the next row.
     ``on_start`` routes the same way, one processor later than the stamper, so the open-span
     registry is per episode and goes away with the recorder when the episode closes.
@@ -278,7 +278,7 @@ class _Bucket:
         run_id = stamped.get(self._run_id_key)
         episode_id = stamped.get(self._episode_key)
         if not isinstance(run_id, str) or not isinstance(episode_id, str):
-            return None  # belongs to no rollout: dropped, never repaired (M12 T33)
+            return None  # belongs to no rollout: dropped, never repaired
         with self._lock:
             return self._open.get((run_id, episode_id))
 
@@ -311,7 +311,7 @@ def install(spec: CaptureSpec) -> CaptureStatus:
             return _STATUS
         try:
             status, bucket = _install(spec)
-        except Exception as exc:  # noqa: BLE001 - install() never raises (C4)
+        except Exception as exc:  # noqa: BLE001 - install() never raises
             status, bucket = _inactive(f"capture could not be installed: {exc!r}"), None
         _STATUS, _BUCKET = status, bucket
         return status
@@ -320,7 +320,7 @@ def install(spec: CaptureSpec) -> CaptureStatus:
 #: The spec of a recorder nothing feeds. ``capture()`` with no bucket yields a recorder no
 #: collector writes to and whose ``to_meta()`` returns None, so the cap it carries is never
 #: read -- and it is ``None`` rather than a number precisely so that no integer in this
-#: package can be mistaken for a cap that something supplies (ADR-096).
+#: package can be mistaken for a cap that something supplies.
 _INERT_SPEC = CaptureSpec(max_observation_bytes=None)
 
 
@@ -328,8 +328,8 @@ _INERT_SPEC = CaptureSpec(max_observation_bytes=None)
 def capture(run_id: str, episode_id: str) -> Iterator[Recorder]:
     """Collect the spans of one episode, keyed by ``(run_id, episode_id)``.
 
-    Mirrors M12's ``collect()`` / ``Collector.trace`` shape: the same house idiom for the same
-    job one layer up. Inert when ``install()`` did not activate — the recorder still yields,
+    Mirrors ``trace.py``'s ``collect()`` / ``Collector.trace`` shape: the same house idiom for the
+    same job one layer up. Inert when ``install()`` did not activate — the recorder still yields,
     and ``to_meta()`` returns None.
     """
     bucket = _BUCKET
@@ -354,7 +354,7 @@ def _snapshot(reason: str) -> dict[str, Any] | None:
     Private on purpose -- ``capture`` stays at five public symbols -- and reached by the
     executor's ``SIGTERM`` handler from the child that owns the spans. With no collector, or
     with anything but exactly one open episode, it answers None and the row keeps the bare
-    ``("timeout", None)`` it had before ADR-028.
+    ``("timeout", None)`` it would have without the snapshot.
     """
     bucket = _BUCKET
     if bucket is None:
@@ -426,14 +426,14 @@ def _activate(names: tuple[str, ...]) -> tuple[tuple[str, ...], str | None]:
     for name in names:
         try:
             found[name].load()().instrument()
-        except Exception as exc:  # noqa: BLE001 - an instrumentor never fails a run (C4)
+        except Exception as exc:  # noqa: BLE001 - an instrumentor never fails a run
             return (), f"instrumentor {name!r} could not be activated: {exc!r}"
         activated.append(name)
     return tuple(activated), None
 
 
 def _new_provider() -> TracerProvider:
-    """A provider whose span ids do not come from the global ``random`` (C2).
+    """A provider whose span ids do not come from the global ``random``.
 
     A rollout that re-seeds ``random`` between calls — which Prove's own per-episode seed
     invites — makes OTel's default generator emit identical span ids, and ``from_otel`` drops
@@ -495,7 +495,7 @@ def _is_content(key: str) -> bool:
     return key in CONTENT_KEYS
 
 
-#: OpenInference's prompt and answer on a span: content on a model call (PF4.10, Q32), and a
+#: OpenInference's prompt and answer on a span: content on a model call, and a
 #: tool's arguments and result elsewhere, which ``content = false`` leaves alone.
 _MODEL_CALL_VALUES = ("input.value", "output.value")
 
@@ -541,7 +541,7 @@ def _live_attributes(attributes: Mapping[str, Any] | None) -> list[tuple[str, An
 def _span_mapping(span: ReadableSpan, *, content: bool, live: bool = False) -> dict[str, Any]:
     """One span as the flat span mapping ``from_otel`` consumes.
 
-    Hand-rolled and standard-library-only on purpose: the OTLP encoder the stamper oracle uses
+    Hand-rolled and standard-library-only on purpose: the OTLP encoder the stamper's tests use
     lives in the ``dev`` extra, and making it a runtime dependency would put protobuf in the
     ``agent`` extra for nothing.
 

@@ -1,6 +1,6 @@
-"""M12 -- Trace: the test oracle.
+"""M12 -- Trace: the frozen tests.
 
-Generated from the invariants T1-T30 in "Proofload -- Spec M12 Trace" section 4. Session B
+Generated from the invariants T1-T30 in "Proofload -- Spec M12 Trace" section 4. The build
 builds ``src/proofload/trace.py`` against this file and does not edit it.
 
 Every test imports ``proofload.trace`` inside its own body rather than at module level, so
@@ -8,7 +8,7 @@ that the file collects (and every test fails honestly) while ``trace.py`` does n
 Strategy constants below are spelled from the spec, not read from the module, for the same
 reason; T3 pins the module's tuples to them.
 
-Reading notes for Session B, recorded here so the oracle is not re-litigated:
+Reading notes for the build, recorded here so the frozen tests are not re-litigated:
 
 - Span-level validation (T3, T4, T6) and trace-level validation (T7, T8) are asserted at
   *both* the constructor and ``from_dict``. The spec says ``from_dict`` is the validator and
@@ -23,7 +23,7 @@ Reading notes for Session B, recorded here so the oracle is not re-litigated:
 - The stored token shape ``{"in": ..., "out": ...}`` is taken from the section 3 example,
   which is the only place the spec spells it.
 - T17 is two tests: the vacuous half (no clock call outside ``trace.py``) passes at baseline;
-  the strong half (exactly one helper in ``trace.py`` making both calls) fails until Session B.
+  the strong half (exactly one helper in ``trace.py`` making both calls) fails until the build.
 - T30's first clause maps to the two amended M10 tests by name. The fourth column
   (``duration_ms``) is not read by M10's ``assert_trace_lines``, so a second T30 test here
   sweeps the mock agent through ``cli.main`` and reads it.

@@ -1,18 +1,18 @@
-"""PR-1 oracle: the declaration, the canonicaliser and the pair assertion of "Prove -- Spec PR
+"""PR-1 frozen tests: the declaration, the canonicaliser and the pair assertion of "Prove -- Spec PR
 Paired Replay" -- invariants PR1 to PR6, PR8 to PR21, and PR56 (the Modal manifest records
 ``infra_retries``).
 
-Frozen by Session A on 2026-09-21 off ``f7af030``, after Taylor approved the two tables and the
+Frozen on 2026-09-21 off ``f7af030``, after approval of the two tables and the
 conventions below (written the same day as ``624ce94``; the freeze changes this docstring only).
-Session B builds ``src/proofload/paired.py`` (phase 1's part of it) and one line of
-``executor_modal.py`` against this file and does not edit it. *Retrofit R1, ruled 2026-09-22
-(PR-3 Session A): ``SPEC_PUBLIC_NAMES`` gains ``ReplicateResult`` and ``replicates``, the two
+The build adds ``src/proofload/paired.py`` (phase 1's part of it) and one line of
+``executor_modal.py`` against this file and does not edit it. *Update R1, ruled 2026-09-22
+(the PR-3 freeze): ``SPEC_PUBLIC_NAMES`` gains ``ReplicateResult`` and ``replicates``, the two
 public names section 2 added with the k-replicate amendment; nothing else in this file moves for
-it, and nothing in the suite pins this file's bytes. Retrofit R3, ruled the same day: ``Cut``
+it, and nothing in the suite pins this file's bytes. Update R3, ruled the same day: ``Cut``
 gains ``comparison``, so every cut this file builds or writes carries ``"ge"`` (the reading PR23
 had), PR1 and PR8 gain the no-default and the two-words refusals for it, and PR6's field-change
-table gains ``cuts.comparison``. Every test that builds a cut is red on the bare tree until Session
-B lands the field; the two new refusals are red for the same reason.* ``proofload.paired`` is imported inside the test that needs it, so the bare tree fails test by
+table gains ``cuts.comparison``. Every test that builds a cut is red on the bare tree until the
+build lands the field; the two new refusals are red for the same reason.* ``proofload.paired`` is imported inside the test that needs it, so the bare tree fails test by
 test and never at collection.
 
 **What phase 1 is.** Two stored arms are only a pair if they were the same request twice, and the
@@ -25,7 +25,7 @@ that reconcile (PR9 to PR21). Nothing here computes a rate.
 spec's change log under 2026-09-21):
 
 - *The TOML layout.* Top-level keys are ``Declaration``'s field names. ``[[cuts]]`` tables carry
-  ``name``, ``threshold`` and ``comparison`` (retrofit R3, ruled 2026-09-22: the comparison the
+  ``name``, ``threshold`` and ``comparison`` (update R3, ruled 2026-09-22: the comparison the
   action is taken under, ``"gt"`` or ``"ge"``, with no default -- ADR-096's rule; a cut without
   one, or with any other word, is a ``DeclarationError``); ``[[sweeps]]`` tables carry ``name``,
   ``a`` and ``b``. ``threshold``,
@@ -111,7 +111,7 @@ takes a ``PairAssertion`` and nothing else) is unchanged by that.
 **Green before and after -- named so their green is not read as coverage.** None. Every test in
 this file is red on the bare tree: PR56's four ids on a Modal manifest with no ``infra_retries``,
 the other 173 on ``ModuleNotFoundError: proofload.paired``. A missing module is a weak red, so
-Session A also ran the file against a shadow shim (177 green) and 40 mutants of it (40 red, no
+the freeze also ran the file against a shadow shim (177 green) and 40 mutants of it (40 red, no
 survivor); the table is in the handoff.
 
 **The four ``hypothesis`` tests are derandomized,** so a run of this file is the same run every
@@ -168,7 +168,7 @@ EXEMPTIONS = ("x-request-id", "date")
 PYTHON = "3.11.7 (main, Feb 12 2026)"
 
 #: The spec's public names (section 2). Anything else public on the module is a spec violation.
-#: Retrofit R1, ruled 2026-09-22 (PR-3 Session A): ``ReplicateResult`` and ``replicates`` join
+#: Update R1, ruled 2026-09-22 (the PR-3 freeze): ``ReplicateResult`` and ``replicates`` join
 #: the set, as section 2 has carried them since the k-replicate amendment of the same day.
 SPEC_PUBLIC_NAMES = frozenset({
     "PairedError", "DeclarationError", "NotAssertable", "NoEligiblePairs",
@@ -472,7 +472,7 @@ def test_pr1_a_cut_without_a_threshold_is_refused_at_load(tmp_path: Path) -> Non
 
 
 def test_pr1_a_cut_without_a_comparison_is_refused_at_load(tmp_path: Path) -> None:
-    """Retrofit R3 (2026-09-22): the comparison is an estimator's parameter like the seed and
+    """Update R3 (2026-09-22): the comparison is an estimator's parameter like the seed and
     ``B``, and ADR-096's no-default rule applies -- a cut that does not say ``gt`` or ``ge``
     does not say which items act."""
     cuts = [{"name": '"c50"', "threshold": "0.50", "comparison": '"gt"'}, {"name": '"c60"', "threshold": "0.60"}]
@@ -647,7 +647,7 @@ def _field_changes() -> dict[str, Callable[[Any], Any]]:
         "stratum_key": lambda p: "band",
         "cuts.threshold": lambda p: tuple(p.Cut(name=n, threshold=Decimal(t) + Decimal("0.01"), comparison="ge") for n, t in CUTS),
         "cuts.name": lambda p: tuple(p.Cut(name=n + "x", threshold=Decimal(t), comparison="ge") for n, t in CUTS),
-        # Retrofit R3 (2026-09-22): the comparison is part of the pre-registered cut.
+        # Update R3 (2026-09-22): the comparison is part of the pre-registered cut.
         "cuts.comparison": lambda p: tuple(p.Cut(name=n, threshold=Decimal(t), comparison="gt") for n, t in CUTS),
         "sweeps": lambda p: (p.SweepPair(name="S1", a="s1-a", b="other-b"),),
         "request_span": lambda p: "scorer.other",
@@ -732,7 +732,7 @@ def test_pr8_an_unknown_key_inside_a_cut_is_refused(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("word", ['"eq"', '"gte"', '">="', '"GE"', "true"])
 def test_pr8_a_cuts_comparison_takes_only_its_two_words(tmp_path: Path, word: str) -> None:
-    """Retrofit R3 (2026-09-22): ``comparison`` is ``"gt"`` or ``"ge"`` and nothing else, as
+    """Update R3 (2026-09-22): ``comparison`` is ``"gt"`` or ``"ge"`` and nothing else, as
     ``headers`` and ``retries`` take only their two words."""
     load(tmp_path, decl_toml(cuts=[{"name": '"c50"', "threshold": "0.50", "comparison": '"gt"'}]), "control.toml")
     with pytest.raises(P().DeclarationError):

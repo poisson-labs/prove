@@ -1,5 +1,5 @@
 """The views behind the static UI's pages, the charts a saved comparison carries, and the
-operations that save results, list them and build the UI (the front door's section 18).
+operations that save results, list them and build the UI.
 
 A view is the object behind one page: every fact the page shows, as data, with the addresses of
 the pages it links to. The page renderer (``poisson_prove._render_ui``) formats a view and never
@@ -1419,7 +1419,7 @@ _GENERATOR = re.compile(r'<meta name="generator" content="([^"]*)">')
 def _reusable(ui: Path, ctx: _Context, cid: str) -> bool:
     """Whether the pages of a saved comparison can be carried over from the UI as it stands:
     they were built by this version from the same artifact, which never changes, for the same
-    two complete runs under the same names (R26: the same records give the same bytes)."""
+    two complete runs under the same names (the same records give the same bytes)."""
     page = ui / "comparisons" / f"{cid}.html"
     folder = ui / "comparisons" / cid
     if not page.is_file() or not folder.is_dir():
