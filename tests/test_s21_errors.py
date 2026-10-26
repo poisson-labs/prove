@@ -162,7 +162,7 @@ CELL_KEYS = (
 # PF4 (PF4.3, PF4.13 to PF4.15): every page cell also carries its direction, the direction and
 # detection-limit notes, its matched pairs and both arms' shares.
 PF4_CELL_KEYS = (
-    "direction", "direction_note", "pairs", "mde_note", "share_a", "share_b", "share_a_differs",
+    "direction", "direction_note", "pairs", "n01", "n10", "mde_note", "share_a", "share_b", "share_a_differs",
     "share_b_differs",
 ) + (
     # PF4 re-freeze (PF4.34, PF4.27, PF4.32, PF4.41, PF4.42, PF4.47): each page cell also carries

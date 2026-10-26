@@ -220,7 +220,7 @@ MDE_UNCHANGED_KEYS = ("value", "text", "where")
 CELL_KEYS = (
     "coords", "config_hash", "n_a", "n_b", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
-    "direction", "direction_note", "pairs", "mde_note",
+    "direction", "direction_note", "pairs", "n01", "n10", "mde_note",
     # PF4 re-freeze (PF4.34 to PF4.47): Holm's q and flag, the limit keys, the competing shift and the
     # interval, after mde_note; the order is the reference build's.
     "q_holm", "holm", "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test", "mde_basis",
@@ -2380,7 +2380,7 @@ JUDGEMENT_RE = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
 #: declares a kind, so the library's worse is a rise and its safer a fall).
 BARE_VERDICT = {"higher": "worse", "lower": "safer", "unchanged": "unchanged"}
 #: PF4 (PF4.13, PF4.14, PF4.15, PF4.3): the cell fields PF4 adds right after ``verdict``.
-PF4_CELL_KEYS = ("direction", "direction_note", "pairs", "mde_note", "share_a", "share_b", "share_a_differs", "share_b_differs")
+PF4_CELL_KEYS = ("direction", "direction_note", "pairs", "n01", "n10", "mde_note", "share_a", "share_b", "share_a_differs", "share_b_differs")
 CELL_INDEX_RE = re.compile(r'(<script type="application/json" id="proofload-cells">)(.*)(</script>)')
 #: PF4 (PF4.12, PF4.15, PF4.18): the regions whose numbers PF4 moves, not only their words: on the
 #: study pairs (now the lattice pairs) the fault lines' group p and q (Westfall-Young on one scale),

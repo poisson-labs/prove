@@ -1293,7 +1293,7 @@ def test_c14_the_cells_columns_are_unchanged(lattice_pair: Any) -> None:
     assert CELLS_COLUMNS == (
         "config_hash", "config", "n_a", "n_b", "events_a", "events_b",
         "rate_a", "rate_b", "delta", "stat", "p", "q", "verdict", "mde",
-        "direction", "direction_note", "pairs", "mde_note",
+        "direction", "direction_note", "pairs", "n01", "n10", "mde_note",
         "q_holm", "holm", "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test",
         "mde_basis", "mde_level", "mde_family", "mde_power", "mde_anchor", "mde_hr", "p_min",
         "flaggable", "mde_moves_with", "mde_rise_verdict", "mde_fall_verdict", "competing_shift",

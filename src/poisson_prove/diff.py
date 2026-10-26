@@ -53,10 +53,13 @@ CELLS_COLUMNS = (
     "verdict",
     "mde",
     # The way the test read the row, why a log-rank row's way is not its
-    # horizon difference's, the matched pairs under the paired test, and why a limit is null.
+    # horizon difference's, the matched pairs under the paired test with the discordant ones
+    # (``n01`` only after had the event, ``n10`` only before), and why a limit is null.
     "direction",
     "direction_note",
     "pairs",
+    "n01",
+    "n10",
     "mde_note",
     # Holm's adjusted p and whether the row counts for the verdict, both
     # directions' limits with what they were computed for, the competing outcomes that shifted
@@ -88,7 +91,8 @@ CELLS_COLUMNS = (
 # The columns that hold None, a string, a list or a bool: kept as objects, so an absent value
 # reads ``None`` and never the NaN a float column would put there.
 _OBJECT_COLUMNS = (
-    "config", "verdict", "direction", "direction_note", "pairs", "mde_note", "mde_rise_note",
+    "config", "verdict", "direction", "direction_note", "pairs", "n01", "n10", "mde_note",
+    "mde_rise_note",
     "mde_fall_note", "mde_test", "mde_basis", "mde_anchor", "mde_moves_with", "competing_shift",
     "ci_lo", "ci_hi", "ci_method", "mde_rise", "mde_fall", "mde_hr", "mde_rise_verdict",
     "mde_fall_verdict", "holm", "flaggable",
@@ -717,6 +721,7 @@ def diff(
         events_a, events_b = int(o_a.sum()), int(o_b.sum())
         rate_a, rate_b = events_a / n_a, events_b / n_b
         delta, signed, pairs = rate_b - rate_a, rate_b - rate_a, None
+        only_a = only_b = None
         if method == "fisher_bh":
             statistic, p = _fisher(events_a, n_a, events_b, n_b)
         elif method == "mcnemar_bh":
@@ -747,6 +752,8 @@ def diff(
                 "verdict": "unchanged",
                 "mde": mde,
                 "pairs": pairs,
+                "n01": only_b,
+                "n10": only_a,
                 "mde_note": mde_note,
                 "_signed": signed,
             }
@@ -2099,6 +2106,7 @@ def multi_diff(
             rate_b = min(max(cif_b.at(k, horizon), 0.0), 1.0) if k in competing else 0.0
             delta = signed = float(rate_b - rate_a)
             pairs: int | None = None
+            only_a = only_b = None
             if method == "fisher_bh":
                 statistic, p = _fisher(events_a, n_a, events_b, n_b)
             elif method == "mcnemar_bh":
@@ -2126,6 +2134,8 @@ def multi_diff(
                     "p": float(p),
                     "verdict": "unchanged",
                     "pairs": pairs,
+                    "n01": only_b,
+                    "n10": only_a,
                     "_signed": signed,
                     "_arms": _Arms(
                         t=(t_a, t_b),

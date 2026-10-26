@@ -174,7 +174,7 @@ condition.
 | `n_a`, `n_b`, `events_a`, `events_b`, `rate_a`, `rate_b` | each run's episodes, those that ended in the event, and the rates the test compared |
 | `share_a`, `share_b` | each run's share of episodes ending in the event with its Wilson interval: `value`, `lo`, `hi`, `level`, `method`; `share_a_differs`, `share_b_differs` mark a share that is not its rate (a run censored before the horizon) |
 | `delta` | the change, after minus before |
-| `pairs` | the pairs a paired test read |
+| `pairs`, `n01`, `n10` | the pairs a paired test read, and the discordant ones among them: `n01` where only the after run had the event, `n10` where only the before run had it (null under the other tests) |
 | `stat`, `p`, `q`, `q_holm`, `holm` | the test statistic, its p, the Benjamini-Hochberg q, Holm's adjusted p, and whether the condition counted for the verdict |
 | `direction`, `direction_note`, `verdict` | which way the rate moved, why no direction is given, and the condition's word (`worse`, `safer`, `higher`, `lower`, `unchanged`) |
 | `ci_lo`, `ci_hi`, `ci_level`, `ci_method` | the interval on the change, its level and its method (`tango` for the paired test, `miettinen-nurminen` otherwise) |

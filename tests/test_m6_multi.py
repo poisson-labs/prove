@@ -112,6 +112,8 @@ CELLS_COLUMNS = [
     "direction",
     "direction_note",
     "pairs",
+    "n01",
+    "n10",
     "mde_note",
     # PF4 re-freeze (PF4.34 to PF4.47): every cell row gains Holm's adjusted p and decision, the
     # limit keys both ways, the competing shift and the interval on the change; the order is the
