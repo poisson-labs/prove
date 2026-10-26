@@ -1892,7 +1892,7 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
     def caption_text() -> str:
         text = (
             f"point = delta (rate_b - rate_a, {_unit()}) on the shared scale; bracket = ±MDE, "
-            f"the minimum detectable effect from M6, not an interval estimate; "
+            f"the minimum detectable effect, not an interval estimate; "
             f"event={rep._event}; corner square = significant"
         )
         if rep._trades:

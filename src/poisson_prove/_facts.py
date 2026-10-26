@@ -264,7 +264,7 @@ def _without_limit(multi: MultiDiffResult) -> str:
     rows = "row" if n == 1 else "rows"
     return (
         f"; {_look.fmt_count(n)} {rows} that did not count have no limit ({counts}), so no "
-        "change of any size is ruled out there"
+        "change of any size can be excluded there"
     )
 
 

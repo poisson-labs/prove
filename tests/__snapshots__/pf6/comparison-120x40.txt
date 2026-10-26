@@ -10,7 +10,7 @@ poisson-prove · comparison  mock-agent@v0 2026-10-14 a → b                   
                   is Benjamini-Hochberg's, at the false discovery rate q 0.05 over 18 tests                             
   limits          the smallest change one condition alone would be flagged for, 4 times in 5, if it alone changed, from 
                   where the condition was (the paired test (McNemar), q 0.05 over 18 tests); 3 rows that did not count  
-                  have no limit (none detectable: 3), so no change of any size is ruled out there                       
+                  have no limit (none detectable: 3), so no change of any size can be excluded there                    
   intervals       on each condition's change: Tango at 97.778%, false coverage (Benjamini-Yekutieli) over the 8 flagged;
                   an unflagged row's interval is at the same level with no adjusted promise of its own                  
   fragility       10 outcomes would change the word (the search is not exhaustive: it may be fewer): 10 runs of B in    

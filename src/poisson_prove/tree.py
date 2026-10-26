@@ -1647,7 +1647,7 @@ def _trace_refusal(key: str) -> Refusal:
         rung="trace",
         reason="unsupported",
         detail=(
-            "grouping by a trace attribute is not supported until Phase 5.2 emits it; the "
+            "grouping by a trace attribute is not supported yet; the "
             "resolver continues at the next rung."
         ),
         next_rung="axis",

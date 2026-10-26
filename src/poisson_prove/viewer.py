@@ -181,7 +181,7 @@ _NO_COVERAGE: dict[str, int] = dict.fromkeys(_COVERAGE_FIELDS, 0)
 
 # PF4: the cell fields after ``verdict``, in the order the cell frame holds them, then each arm's
 # share (PF4.1b) and whether it differs from the arm's rate (PF4.37).
-_PF4_FIELDS = (
+_CELL_DETAIL_FIELDS = (
     *CELLS_COLUMNS[CELLS_COLUMNS.index("direction") :],
     "share_a", "share_b", "share_a_differs", "share_b_differs",
 )
@@ -380,7 +380,7 @@ def _cell(
     for name in _FLOAT_KINDS:
         out[name] = _finite(row[name])
     out["verdict"] = str(record["verdict"])
-    for name in _PF4_FIELDS:
+    for name in _CELL_DETAIL_FIELDS:
         out[name] = record.get(name)
     out["config"] = row["config"]
     out["config_text"] = _config_text(row["config"])
