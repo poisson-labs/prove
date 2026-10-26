@@ -9,7 +9,7 @@ description = "A statistical instrument for finding where autonomous and agentic
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-dependencies = ["numpy", "pandas>=2", "scipy", "pyarrow"]
+dependencies = ["numpy", "pandas>=2", "scipy", "pyarrow", "rich>=14.2.0", "textual>=6.4.0"]
 
 [project.optional-dependencies]
 modal = ["modal>=0.73.76"]

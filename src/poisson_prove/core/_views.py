@@ -708,6 +708,96 @@ def _run_shares(ctx: _Context, run: str, outcomes: Sequence[str]) -> dict[str, d
     return shares
 
 
+def home_view(ctx: _Context, shown: str) -> View:
+    """Home, the terminal app's first screen (it has no page: the static UI's runs view is its
+    home): the store as it was given, its runs and saved comparisons in one table newest first,
+    the latest of each, and the next thing to do. A store with no run yet, or no folder yet, is
+    the empty home."""
+    listed = runs_view(ctx).document
+    runs, comparisons = list(listed["runs"]), list(listed["comparisons"])
+    items: list[dict[str, Any]] = [
+        {
+            "kind": "comparison",
+            "name": c["name"],
+            "result": c["verdict"],
+            "rows": None,
+            "id": c["id"],
+            "created": c["saved_at"],
+            "limit": c.get("limit"),
+        }
+        for c in comparisons
+    ]
+    items += [
+        {
+            "kind": "run",
+            "name": r["name"],
+            "result": r["status"],
+            "rows": r["rows"],
+            "id": r["run_id"],
+            "created": r["created_at"],
+            "limit": None,
+        }
+        for r in runs
+    ]
+    items.sort(key=lambda item: str(item["created"]), reverse=True)
+    n, k = len(runs), len(comparisons)
+    if n:
+        sentence = (
+            f"{_look.fmt_count(n)} run{'s' if n != 1 else ''} and {_look.fmt_count(k)} saved "
+            f"comparison{'s' if k != 1 else ''} in {shown}"
+        )
+    else:
+        sentence = f"no runs in {shown}"
+    latest_run = None
+    if runs:
+        newest = runs[0]
+        environment = dict(ctx.manifest(str(newest["run_id"])).environment or {})
+        paired = environment.get("paired_with")
+        latest_run = {
+            "name": newest["name"],
+            "status": newest["status"],
+            "paired_with": ctx.run_name(paired) if isinstance(paired, str) else None,
+        }
+    latest_comparison = None
+    if comparisons:
+        latest_comparison = {
+            "name": comparisons[0]["name"],
+            "verdict": comparisons[0]["verdict"],
+            "limit": comparisons[0].get("limit"),
+        }
+    fields: dict[str, Any] = {
+        "verdict": "ok",
+        "sentence": sentence,
+        "store": shown,
+        "n_runs": n,
+        "n_comparisons": k,
+        "latest_run": latest_run,
+        "latest_comparison": latest_comparison,
+        "next": _home_next(ctx, runs, comparisons),
+        "ui": "index.html",
+        "items": items,
+    }
+    return _view("home", "home", **fields)
+
+
+def _home_next(
+    ctx: _Context, runs: Sequence[Mapping[str, Any]], comparisons: Sequence[Mapping[str, Any]]
+) -> list[str]:
+    """The next thing to do from home: a first sweep; a second; the comparison of previous and
+    latest; or, once that is saved, what its result names next."""
+    if not runs:
+        return [f"{COMMAND} init --example", f"{COMMAND} sweep"]
+    complete = [str(r["run_id"]) for r in runs if r["status"] == "complete"]
+    if len(complete) < 2:
+        return [f"{COMMAND} sweep"]
+    pair = [complete[1], complete[0]]
+    for c in comparisons:
+        descriptor, result, _ = ctx.comparisons[str(c["id"])]
+        if list(descriptor["inputs"]["runs"]) == pair and result.get("next"):
+            return [str(command) for command in result["next"]]
+    return [f"{COMMAND} diff"]
+
+
 def run_view(ctx: _Context, run: str) -> View:
     """View 2: one run's manifest facts, its outcomes per condition with their intervals, its
     design limit and its event log."""
@@ -1482,9 +1572,12 @@ def build_ui(store: Any, *, _notes: list[str]) -> UiLocation:
 
 @_operation
 def view(store: Any, address: str, *, _notes: list[str]) -> View:
-    """The view behind one page of the UI, by the page's address (``comparisons/<id>.html``)."""
+    """The view behind one page of the UI, by the page's address (``comparisons/<id>.html``), or
+    the terminal app's home, ``home``, which has no page."""
     store = _opened(store)
     try:
+        if address == "home":
+            return home_view(_Context(store.root), str(store.shown))
         return view_at(_Context(store.root), address)
     except A.NewerFormat as exc:
         raise refusal(str(exc), [A.UPGRADE]) from exc

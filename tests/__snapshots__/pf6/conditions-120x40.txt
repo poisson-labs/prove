@@ -1,0 +1,81 @@
+poisson-prove · conditions  mock-agent@v0 2026-10-14 a → b                                                    prove-runs
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  mixed  timeout: 1 lower, 1 higher · violated: 6 lower, 0 higher (paired test on shared seeds)                         
+                                                                                                                        
+  condition  task_id · tool_fail_rate; before and after are each run's share of episodes ending in the event            
+                                                                                                                        
+  condition       event            before [95%] after change       p       q verdict   rise            fall             
+› checkout · 0.3  violated 0.260 [0.184, 0.354] 0.010 -0.250 6.0e-08 1.8e-07 lower     0.274           0.201            
+  refund · 0.3    violated 0.300 [0.219, 0.396] 0.010 -0.290 3.7e-09 1.3e-08 lower     0.278           0.218            
+  refund · 0.55   violated 0.840 [0.756, 0.899] 0.290 -0.550 5.6e-17 3.3e-16 lower     0.148           0.253            
+  search · 0.3    violated 0.190 [0.125, 0.278] 0.000 -0.190 3.8e-06 8.6e-06 lower     0.262           0.166            
+  refund · 0      violated 0.000 [0.000, 0.037] 0.000  0.000   1.000   1.000 unchanged 0.123           no room          
+  search · 0.55   violated 0.800 [0.711, 0.867] 0.220 -0.580 6.9e-18 6.2e-17 lower     0.171           0.264            
+  checkout · 0.55 violated 0.900 [0.826, 0.945] 0.310 -0.590 3.5e-18 6.2e-17 lower     none detectable 0.229            
+  search · 0      violated 0.000 [0.000, 0.037] 0.000  0.000   1.000   1.000 unchanged 0.123           no room          
+  checkout · 0    violated 0.000 [0.000, 0.037] 0.000  0.000   1.000   1.000 unchanged 0.123           no room          
+  checkout · 0.3  timeout  0.010 [0.002, 0.054] 0.000 -0.010   1.000   1.000 unchanged 0.146           none detectable  
+  refund · 0.3    timeout  0.510 [0.413, 0.606] 0.020 -0.490 3.2e-13 1.4e-12 lower     0.268           0.271            
+  refund · 0.55   timeout  0.160 [0.101, 0.244] 0.470 +0.310 1.6e-06 4.2e-06 higher    0.253           0.148            
+  search · 0.3    timeout  0.000 [0.000, 0.037] 0.000  0.000   1.000   1.000 unchanged 0.123           no room          
+  refund · 0      timeout  0.000 [0.000, 0.037] 0.000  0.000   1.000   1.000 unchanged 0.123           no room          
+  search · 0.55   timeout  0.010 [0.002, 0.054] 0.000 -0.010   1.000   1.000 unchanged 0.146           none detectable  
+  checkout · 0.55 timeout  0.040 [0.016, 0.098] 0.020 -0.020   0.688   1.000 unchanged 0.183           none detectable  
+  search · 0      timeout  0.000 [0.000, 0.037] 0.000  0.000   1.000   1.000 unchanged 0.123           no room          
+  checkout · 0    timeout  0.000 [0.000, 0.037] 0.000  0.000   1.000   1.000 unchanged 0.123           no room          
+                                                                                                                        
+  before and after: each run's share of episodes ending in the event, with a 95% Wilson interval per condition, not     
+    adjusted for the number of conditions; change: after minus before, with its 97.778% interval; p is the paired test  
+    (McNemar)'s, q its Benjamini-Hochberg adjustment at the false discovery rate q 0.05 over 18 tests; rise and fall:   
+    the smallest rise and the smallest fall one condition alone would be flagged for, 4 times in 5, if it alone changed,
+    from where it was                                                                                                   
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ↑↓ move   enter open   esc back   / filter   v verdict   ? help   q quit                                              
+
+BBBBBBBBBBBBBDDD          DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                    DDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BBBBB                                                                                                                 
+                                                                                                                        
+  DDDDDDDDD                                                                                                             
+                                                                                                                        
+  DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD             
+VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+                                                                             BBBBB                                      
+                                                                             BBBBB                                      
+                                                                             BBBBB                                      
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBB                                      
+                                                                             BBBBB                                      
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBB                                      
+                                                                             BBBBBB                                     
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBBBBBB                                  
+                                                                             BBBBBBBBB                                  
+                                                                                                                        
+  DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BB DDDD   BBBBB DDDD   BBB DDDD   B DDDDDD   B DDDDDDD   B DDDD   B DDDD                                              

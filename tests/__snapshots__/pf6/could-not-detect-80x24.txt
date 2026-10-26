@@ -1,0 +1,49 @@
+poisson-prove · could not detect  mock-agent@v0 2026-10-14 a → b      prove-runs
+────────────────────────────────────────────────────────────────────────────────
+  mixed  timeout: 1 lower, 1 higher · violated: 6 lower, 0 higher (paired test  
+         on shared seeds)                                                       
+                                                                                
+  asked      could each unchanged condition have caught a change of 0.200, if it
+             alone changed, from where it was?                                  
+  answer     7 of 10 unchanged rows could; 3 could not tell                     
+  threshold  0.200 (recorded)                                                   
+  flaggable  18 of 18 rows can be flagged: with 100 pairs the smallest possible 
+             p is 1.6e-30, and a flag needs less than 0.003 (q 0.05 over 18     
+             tests)                                                             
+  design     0.262 at its worst base rate, 0.400 (Fisher, q 0.05 over 9 tests, 4
+             times in 5)                                                        
+  5 more lines above the table: m shows them                                    
+  task_id · tool_fail_rate  event     before  rise   fall             could tell
+› checkout · 0.3            timeout    0.010  0.146  none detectable  no        
+  search · 0.55             timeout    0.010  0.146  none detectable  no        
+  checkout · 0.55           timeout    0.040  0.183  none detectable  no        
+  refund · 0                violated   0.000  0.123  no room          yes       
+  ↓ 10 more                                                                     
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+  ↑↓   enter   esc   / filter   tab link   y copy   m more   ? help   q quit    
+
+BBBBBBBBBBBBBDDD                DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD      DDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BBBBB                                                                         
+                                                                                
+                                                                                
+  DDDDD                                                                         
+                                                                                
+  DDDDDD                                                                        
+  DDDDDDDDD                                                                     
+  DDDDDDDDD                                                                     
+                                                                                
+                                                                                
+  DDDDDD                                                                        
+                                                                                
+  DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                    
+  DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+                                                                                
+                                                                                
+                                                                                
+  DDDDDDDDD                                                                     
+                                                                                
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BB   BBBBB   BBB   B DDDDDD   BBB DDDD   B DDDD   B DDDD   B DDDD   B DDDD    

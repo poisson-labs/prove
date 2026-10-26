@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from _typeshed import SupportsWrite
 
 from poisson_prove import _look, core
+from poisson_prove._render_term import Terminal, is_table_line
 from poisson_prove.core import (
     CAUSES,
     COVERAGE_COLUMNS,
@@ -117,35 +118,143 @@ _ERRORS_LOG = "~/.cache/poisson-prove/errors.log"
 
 @dataclass
 class _IO:
+    """The streams, and what each kind of line is. Off a terminal every line is written as it is
+    (plain, one line per fact); on a terminal each stream draws through its ``Terminal`` (plain's
+    own wrapping, or pretty), told the kind of each line by the method that wrote it."""
+
     out: TextIO
     err: TextIO
     inp: TextIO
     #: True when stdout cannot carry the glyphs plain output uses: ASCII stands in.
     ascii: bool = False
+    #: How stdout and stderr draw on a terminal; ``None`` for a stream that is not one.
+    out_term: Terminal | None = None
+    err_term: Terminal | None = None
+    #: Body text written to a terminal and not yet drawn: a line not yet ended, a table not yet
+    #: whole.
+    _partial: str = ""
+    _table: list[str] = field(default_factory=list)
+
+    def _a(self, text: str) -> str:
+        return _look.ascii_only(text) if self.ascii else text
 
     def write(self, text: str) -> None:
-        self.out.write(_look.ascii_only(text) if self.ascii else text)
+        """Body text: on a terminal line by line, a markdown table as a whole."""
+        text = self._a(text)
+        if self.out_term is None:
+            self.out.write(text)
+            return
+        *lines, self._partial = (self._partial + text).split("\n")
+        for line in lines:
+            if is_table_line(line):
+                self._table.append(line)
+                continue
+            self._draw_table()
+            self.out.write(self.out_term.text(line))
+
+    def _draw_table(self) -> None:
+        if self._table and self.out_term is not None:
+            self.out.write(self.out_term.markdown_table(self._table))
+        self._table = []
+
+    def _drawn(self) -> Terminal | None:
+        """stdout's terminal, with the body text before this line drawn."""
+        if self.out_term is not None:
+            self._draw_table()
+            if self._partial:
+                self.out.write(self.out_term.text(self._partial))
+                self._partial = ""
+        return self.out_term
+
+    def flush(self) -> None:
+        """Everything written so far on its stream."""
+        self._drawn()
+        self.out.flush()
 
     def line(self, text: str = "") -> None:
         self.write(text + "\n")
+
+    def verdict(self, word: str, sentence: str) -> None:
+        """A verdict line: ``word  sentence``."""
+        term = self._drawn()
+        sentence = self._a(sentence)
+        self.out.write(f"{word}  {sentence}\n" if term is None else term.verdict(word, sentence))
+
+    def detail(self, label: str, value: str) -> None:
+        term = self._drawn()
+        value = self._a(value)
+        self.out.write(f"  {label}  {value}\n" if term is None else term.detail(label, value))
+
+    def next(self, command: str) -> None:
+        self.code(f"  next: {command}", "next:")
+
+    def code(self, line: str, label: str = "") -> None:
+        """A line carrying a command or code to copy, never broken."""
+        term = self._drawn()
+        line = self._a(line)
+        self.out.write(line + "\n" if term is None else term.command(line, label))
+
+    def table(
+        self,
+        rows: Sequence[Sequence[str]],
+        numeric: frozenset[int] = frozenset(),
+        key: int | None = None,
+    ) -> None:
+        """A table laid out by its columns, its first row the header."""
+        term = self._drawn()
+        rows = [[self._a(c) for c in row] for row in rows]
+        if term is not None:
+            self.out.write(term.table(rows, numeric, key=key))
+            return
+        widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+        for row in rows:
+            cells = (c.ljust(w) for c, w in zip(row, widths, strict=True))
+            self.out.write("  ".join(cells).rstrip() + "\n")
 
     def err_write(self, text: str) -> None:
         """A write to stderr, after stdout is flushed: when the two streams share a pipe, what
         was printed first arrives first."""
         try:
-            self.out.flush()
+            self.flush()
         except (OSError, ValueError):
             pass
-        self.err.write(_look.ascii_only(text) if self.ascii else text)
+        self.err.write(self._a(text))
 
     def err_line(self, text: str) -> None:
+        """A line on stderr that is none of the kinds below (a traceback's, under ``--debug``)."""
         self.err_write(text + "\n")
 
-    def detail(self, label: str, value: str) -> None:
-        self.line(f"  {label}  {value}")
+    def note(self, text: str) -> None:
+        """A ``note:`` line on stderr."""
+        self._err(f"note: {text}", lambda term, t: term.note(t[len("note: "):]))
 
-    def next(self, command: str) -> None:
-        self.line(f"  next: {command}")
+    def error(self, text: str) -> None:
+        """An ``error:`` line on stderr."""
+        self._err(f"error: {text}", lambda term, t: term.error(t[len("error: "):]))
+
+    def err_next(self, command: str) -> None:
+        self._err(f"  next: {command}", lambda term, t: term.command(t, "next:"))
+
+    def _err(self, line: str, draw: Callable[[Terminal, str], str]) -> None:
+        line = self._a(line)
+        if self.err_term is None:
+            self.err_write(line + "\n")
+            return
+        try:
+            self.flush()
+        except (OSError, ValueError):
+            pass
+        self.err.write(draw(self.err_term, line))
+
+    def progress(self, text: str) -> None:
+        """The live progress line on a terminal's stderr, drawn over itself."""
+        assert self.err_term is not None
+        self.err.write(self.err_term.progress(text))
+        self.err.flush()
+
+    def progress_end(self) -> None:
+        assert self.err_term is not None
+        self.err.write(self.err_term.progress_end())
 
 
 @dataclass
@@ -252,7 +361,10 @@ def _add_global_options(p: argparse.ArgumentParser, *, top: bool) -> None:
         "--plain",
         action="store_true",
         default=False if top else argparse.SUPPRESS,
-        help="print plain text (the only rendering in this build)",
+        help=(
+            "print plain text, as a pipe gets it, on a terminal too (default: pretty on a "
+            "terminal, plain otherwise)"
+        ),
     )
     p.add_argument(
         "--debug",
@@ -896,15 +1008,112 @@ def main(
     )
     io.ascii = not _look.can_encode(getattr(io.out, "encoding", None))
     args = list(sys.argv[1:] if argv is None else argv)
+    store = _app_store(args)
+    if store is not None and _app_wanted(io):
+        return _open_app(io, store or None)
+    _terminal_rendering(io, args)
     try:
         code = _run(args, io)
-        io.out.flush()
+        io.flush()
         io.err.flush()
         return code
     except BrokenPipeError:
         # The reader went away: nothing more to say, and nothing to say about it.
         _quiet_closed_pipe(io)
         return 0
+
+
+def _tty(stream: Any) -> bool:
+    try:
+        return bool(stream.isatty())
+    except (AttributeError, ValueError):
+        return False
+
+
+def _app_store(args: Sequence[str]) -> str | None:
+    """The store the terminal app opens on when the command line names no verb (section 19): ``""``
+    for none given, the ``--store`` value as typed; ``None`` when the command line is not one that
+    opens the app."""
+    if not args:
+        return ""
+    if len(args) == 2 and args[0] == "--store":
+        return args[1]
+    if len(args) == 1 and args[0].startswith("--store="):
+        return args[0].split("=", 1)[1]
+    return None
+
+
+def _app_wanted(io: _IO) -> bool:
+    """Section 19's switch: stdin and stdout terminals, ``CI`` unset (set to anything, empty
+    included, is CI) and ``TERM`` not ``dumb``."""
+    return (
+        _tty(io.inp) and _tty(io.out) and os.environ.get("CI") is None
+        and os.environ.get("TERM") != "dumb"
+    )
+
+
+def _open_app(io: _IO, store: str | None) -> int:
+    """The terminal app, until it is left; its exit code. A Prove that cannot import Textual says so
+    in one line (PF6.15). What the app leaves to say once it has left the terminal (a sweep stopped
+    by Ctrl-C) is printed as the command prints it."""
+    try:
+        from poisson_prove._cli_app import ProveApp
+    except ImportError:
+        io.error("the terminal app cannot start: Textual cannot be imported")
+        io.err_next(f"{_COMMAND} --help")
+        return 1
+    app = ProveApp(store=store)
+    # Textual draws on stderr; the app belongs on the terminal stdout is, so a piped stderr takes
+    # stdout's terminal for as long as the app runs (reading A21).
+    saved = None
+    if not _tty(sys.__stderr__):
+        saved = os.dup(2)
+        os.dup2(1, 2)
+    try:
+        app.run()
+    finally:
+        if saved is not None:
+            os.dup2(saved, 2)
+            os.close(saved)
+    if app.after is not None:
+        _terminal_rendering(io, [])
+        word, sentence, nexts = app.after
+        io.verdict(word, sentence)
+        for command in nexts:
+            io.next(command)
+        io.flush()
+    return int(app.return_code or 0)
+
+
+def _width(stream: Any) -> int:
+    try:
+        return os.get_terminal_size(stream.fileno()).columns
+    except (OSError, ValueError, AttributeError):
+        return shutil.get_terminal_size().columns
+
+
+def _terminal_rendering(io: _IO, args: Sequence[str]) -> None:
+    """Section 5.5's switch. A stream that is a terminal draws through a ``Terminal``: pretty when
+    stdout and stderr are both terminals, ``NO_COLOR`` unset or empty, ``CI`` unset, ``TERM`` not
+    ``dumb``, stdout UTF-8, and neither ``--json`` nor ``--plain`` was given, and Rich can be
+    imported; otherwise plain's own wrapping. ``--json`` keeps stdout's document as it is."""
+    words = list(args[: args.index("--")] if "--" in args else args)
+    asked_json, asked_plain = "--json" in words, "--plain" in words
+    out_tty, err_tty = _tty(io.out), _tty(io.err)
+    encoding = (getattr(io.out, "encoding", "") or "").lower().replace("-", "").replace("_", "")
+    styler = None
+    if (
+        out_tty and err_tty and not os.environ.get("NO_COLOR") and os.environ.get("CI") is None
+        and os.environ.get("TERM") != "dumb" and encoding == "utf8"
+        and not asked_json and not asked_plain
+    ):
+        from poisson_prove import _render_pretty
+
+        styler = _render_pretty.styler()
+    if out_tty and not asked_json:
+        io.out_term = Terminal(_width(io.out), styler)
+    if err_tty:
+        io.err_term = Terminal(_width(io.err), styler)
 
 
 def _quiet_closed_pipe(io: _IO) -> None:
@@ -958,23 +1167,23 @@ def _run(args: list[str], io: _IO) -> int:
 
 
 def _write_error(io: _IO, message: str, nexts: Sequence[str] = ()) -> None:
-    io.err_line(f"error: {_look.reprint(_look.one_line(_look.plain_words(message)))}")
+    io.error(_look.reprint(_look.one_line(_look.plain_words(message))))
     for command in nexts:
-        io.err_line(f"  next: {command}")
+        io.err_next(command)
 
 
 def _refused(io: _IO, exc: core.Refusal) -> None:
     """A core refusal: its sentence as it is, then its commands."""
     for note in exc.notes:
-        io.err_line(f"note: {note}")
-    io.err_line(f"error: {exc}")
+        io.note(note)
+    io.error(str(exc))
     for command in exc.next:
-        io.err_line(f"  next: {command}")
+        io.err_next(command)
 
 
 def _notes_of(io: _IO, result: Any) -> None:
     for note in getattr(result, "notes", ()):
-        io.err_line(f"note: {note}")
+        io.note(note)
 
 
 @contextmanager
@@ -992,7 +1201,7 @@ def _notes(io: _IO) -> Iterator[None]:
         if not module.startswith("poisson_prove") and not raised_here:
             return
         text = _look.one_line(_look.plain_words(str(message)))
-        io.err_line(f"note: {_look.reprint(text)}")
+        io.note(_look.reprint(text))
 
     with warnings.catch_warnings():
         warnings.simplefilter("always")
@@ -1017,7 +1226,7 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
                 )
             store = core.open_store(getattr(ns, "store", None), verb=ns.verb)
             for note in store.notes:
-                io.err_line(f"note: {note}")
+                io.note(note)
             return _VERBS[ns.verb](ns, io, store, state)
     except _Usage as exc:
         _write_error(io, str(exc), exc.nexts)
@@ -1035,16 +1244,16 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
         return 1
     except core.Stopped as exc:
         if not state.json:
-            io.line(f"stopped  {exc.sentence}")
+            io.verdict("stopped", exc.sentence)
             for command in exc.next:
                 io.next(command)
-        io.err_line(f"error: {exc.error}")
+        io.error(exc.error)
         return 3
     except core.Interrupted as exc:
         if state.json:
             _write_json(io, state.verb, "stopped", exc.sentence, {}, exc.next)
         else:
-            io.line(f"stopped  {exc.sentence}")
+            io.verdict("stopped", exc.sentence)
             for command in exc.next:
                 io.next(command)
         return 130
@@ -1053,7 +1262,7 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
         if state.json:
             _write_json(io, state.verb, "stopped", sentence, {}, [])
         else:
-            io.line(f"stopped  {sentence}")
+            io.verdict("stopped", sentence)
         return 130
     except BrokenPipeError:
         raise
@@ -1064,6 +1273,16 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
 def _unexpected(io: _IO, state: _State, exc: BaseException) -> int:
     """An unexpected failure: the log gets the command and the traceback, the user gets one
     line naming the log. Exit 3."""
+    sentence = _record_failure([_COMMAND, *state.argv], exc)
+    if state.debug:
+        io.err_write("".join(traceback.format_exception(exc)))
+    io.error(sentence)
+    return 3
+
+
+def _record_failure(typed: Sequence[str], exc: BaseException) -> str:
+    """Append the command as typed and the traceback to the errors log; the sentence that names
+    the failure and the log. The terminal app reports a failure inside it the same way."""
     where = _ERRORS_LOG
     try:
         home = Path.home()
@@ -1071,20 +1290,17 @@ def _unexpected(io: _IO, state: _State, exc: BaseException) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as fh:
             stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            fh.write(f"{stamp}  {shlex.join([_COMMAND, *state.argv])}\n")
+            fh.write(f"{stamp}  {shlex.join(typed)}\n")
             fh.write("".join(traceback.format_exception(exc)))
             fh.write("\n")
         if not path.is_relative_to(home):
             where = str(path)
     except Exception:  # noqa: BLE001 - the log is best effort; the line below is not
         pass
-    if state.debug:
-        io.err_write("".join(traceback.format_exception(exc)))
-    io.err_line(
-        f"error: an unexpected failure inside {_COMMAND} ({type(exc).__name__}); the details "
+    return (
+        f"an unexpected failure inside {_COMMAND} ({type(exc).__name__}); the details "
         f"are in {where}"
     )
-    return 3
 
 
 def _write_json(
@@ -1107,7 +1323,7 @@ def _write_json(
     text = json.dumps(
         _look.strict(document), indent=2, allow_nan=False, ensure_ascii=io.ascii
     )
-    io.out.write(text + "\n")
+    io.write(text + "\n")
 
 
 def _print_result(io: _IO, verb: str, result: Any) -> None:
@@ -1149,7 +1365,7 @@ def _two_runs(verb: str, words: Sequence[str]) -> tuple[str | None, str | None]:
 def _verdict_block(io: _IO, result: core.Comparison, saved: core.ArtifactRef | None = None) -> None:
     """The verdict line, then its detail lines, as the result gives them, then what was saved;
     a blank line ends it."""
-    io.line(f"{result.verdict}  {result.sentence}")
+    io.verdict(result.verdict, result.sentence)
     for label, text in result.detail:
         io.detail(label, text)
     if saved is not None:
@@ -1163,12 +1379,12 @@ def _save(io: _IO, store: Any, result: core.Comparison) -> core.ArtifactRef | No
     try:
         saved: core.ArtifactRef = core.save(store, result)
     except core.Unsaved as exc:
-        io.err_line(f"note: {exc}")
+        io.note(str(exc))
         return None
     if saved.unrefreshed is not None:
         # The pages are derived and the previous ones stand; the one line says so and names ui.
-        io.err_line(
-            f"note: the dashboard's pages were not refreshed ({saved.unrefreshed}); "
+        io.note(
+            f"the dashboard's pages were not refreshed ({saved.unrefreshed}); "
             f"run {_COMMAND} ui"
         )
     return saved
@@ -1448,13 +1664,13 @@ def _write_summary(io: _IO, multi: Any) -> None:
 
 
 class _Progress:
-    """The sweep's progress events as ``done/total`` on stderr: one rewritten line when stderr
-    is a terminal, else one line per tenth, counts with separators."""
+    """The sweep's progress events as ``done/total`` on stderr: one live line when stderr is a
+    terminal (pretty removes it when the work ends), else one line per tenth, counts with
+    separators."""
 
     def __init__(self, io: _IO) -> None:
         self.io = io
-        self.err = io.err
-        self.tty = bool(getattr(io.err, "isatty", lambda: False)())
+        self.live = io.err_term is not None
         self.decile = 0
         self.dirty = False
 
@@ -1464,24 +1680,24 @@ class _Progress:
             return
         done, total = int(doc["detail"]["done"]), int(doc["detail"]["total"])
         text = f"{_look.fmt_count(done)}/{_look.fmt_count(total)}"
-        if self.tty:
-            self.io.err_write(f"\r{text}")
-            self.err.flush()
+        if self.live:
+            self.io.flush()
+            self.io.progress(text)
             self.dirty = True
             return
         decile = done * 10 // total if total else 10
         if decile > self.decile:
             self.decile = decile
             self.io.err_write(f"{text}\n")
-            self.err.flush()
+            self.io.err.flush()
 
     def finish(self) -> None:
         if self.dirty:
-            self.err.write("\n")
+            self.io.progress_end()
 
 
 def _print_plan(io: _IO, p: core.Plan) -> None:
-    io.line(f"plan  {p.sentence}")
+    io.verdict("plan", p.sentence)
     for line in p.lines:
         io.line(f"  {line}")
     if p.design_line is not None:
@@ -1532,7 +1748,7 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
     if ns.json:
         _print_result(io, "sweep", result)
         return 3 if result.stopped else 0
-    io.line(f"{result.verdict}  {result.sentence}")
+    io.verdict(result.verdict, result.sentence)
     for label, value in result.details:
         io.detail(label, value)
     for command in result.next:
@@ -1551,7 +1767,7 @@ def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
     if ns.json:
         _print_result(io, "init", written)
         return 0
-    io.line(f"ok  {written.sentence}")
+    io.verdict("ok", written.sentence)
     for command in written.next:
         io.next(command)
     return 0
@@ -1683,7 +1899,7 @@ def _wrote_sentence(out_dir: Path, written: Sequence[Path]) -> str:
 
 
 def _wrote(io: _IO, out_dir: Path, written: Sequence[Path]) -> None:
-    io.line(f"ok  {_wrote_sentence(out_dir, written)}")
+    io.verdict("ok", _wrote_sentence(out_dir, written))
     for path in written:
         io.detail("wrote", str(path))
 
@@ -1893,7 +2109,7 @@ def _cmd_paired(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> i
         if ns.json:
             _print_result(io, "paired", result)
             return code
-        io.line(f"{result.verdict}  {result.sentence}")
+        io.verdict(result.verdict, result.sentence)
         for label, value in result.details:
             io.detail(label, value)
         return code
@@ -1996,13 +2212,14 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
     page = _method_html(render_html(structure), _method_of(result), summary=True)
 
     def announce(srv: Any) -> None:
-        io.line(
-            f'ok  serving "{a_name}" against "{b_name}" at '
-            f"http://{_HOST}:{srv.server_address[1]}/ (Ctrl-C stops)"
+        io.verdict(
+            "ok",
+            f'serving "{a_name}" against "{b_name}" at '
+            f"http://{_HOST}:{srv.server_address[1]}/ (Ctrl-C stops)",
         )
         if saved is not None:
             io.detail("saved", f"{saved.kind} {_look.fmt_hash(saved.id)}")
-        io.out.flush()
+        io.flush()
 
     serve_page(page, on_bind=announce)
     return 0
@@ -2019,7 +2236,7 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> 
     if ns.json:
         _print_result(io, "inspect", result)
         return 0
-    io.line(f"ok  {result.sentence}")
+    io.verdict("ok", result.sentence)
     if not result.rows:
         return 0
     for line in result.provenance:
@@ -2068,10 +2285,10 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> 
                 )
         io.line()
     reproduce = result.reproduce
-    io.line(_SNIPPET_MARKER)
-    io.line(f"from {reproduce['module']} import {reproduce['function']}")
+    io.code(_SNIPPET_MARKER)
+    io.code(f"from {reproduce['module']} import {reproduce['function']}")
     config = json.dumps(reproduce["config"], sort_keys=True)
-    io.line(f"{reproduce['function']}({config}, seed={reproduce['seed']})")
+    io.code(f"{reproduce['function']}({config}, seed={reproduce['seed']})")
     return 0
 
 
@@ -2080,10 +2297,10 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
     if ns.json:
         _print_result(io, "runs", listed)
         return 0
-    io.line(f"ok  {listed.sentence}")
+    io.verdict("ok", listed.sentence)
     if listed.unreadable:
-        io.err_line(
-            f"note: {_look.fmt_count(len(listed.unreadable))} of this store's runs could not be "
+        io.note(
+            f"{_look.fmt_count(len(listed.unreadable))} of this store's runs could not be "
             f"read and are not listed; each has a manifest.json that is damaged or carries no "
             f"start time: {', '.join(listed.unreadable)}"
         )
@@ -2104,11 +2321,8 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
             str(entry["target_id"]), _look.fmt_count(entry["rows"]),
             _look.fmt_count(entry["no_outcome"]), run.created,
         ))
-    widths = [max(len(line[i]) for line in lines) for i in range(len(header))]
     io.line()
-    for line in lines:
-        cells = (cell.ljust(w) for cell, w in zip(line, widths, strict=True))
-        io.line("  ".join(cells).rstrip())
+    io.table(lines, numeric=frozenset({0, 6, 7}), key=1)
     return 0
 
 
@@ -2121,9 +2335,9 @@ def _cmd_ui(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     if ns.json:
         _print_result(io, "ui", built)
     else:
-        io.line(f"ok  dashboard at {built.location}")
+        io.verdict("ok", f"dashboard at {built.location}")
     if ns.open:
-        io.out.flush()
+        io.flush()
         webbrowser.open(built.location)
     return 0
 

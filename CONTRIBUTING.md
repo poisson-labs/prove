@@ -19,10 +19,11 @@ run on `main` and nightly; the browser check needs Playwright's engines:
 
 ## Snapshots
 
-A few tests compare a page of the dashboard whole against a snapshot under `tests/snapshots/`.
-They are the one place output is pinned whole; everywhere else a test pins facts. When a change
-to a page is meant, rewrite the snapshots with the one command that does so and review the diff in
-the pull request:
+A few tests compare a page of the dashboard whole against a snapshot under `tests/snapshots/`,
+and a screen of the terminal app whole (its rows and each cell's colour role) against one under
+`tests/__snapshots__/`. They are the one place output is pinned whole; everywhere else a test pins
+facts. When a change to a page or a screen is meant, rewrite the snapshots with the one command
+that does so and review the diff in the pull request:
 
 ```
 python -m pytest tests -k snapshot --update-snapshots

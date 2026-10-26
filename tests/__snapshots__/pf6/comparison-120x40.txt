@@ -1,0 +1,81 @@
+poisson-prove · comparison  mock-agent@v0 2026-10-14 a → b                                                    prove-runs
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  mixed  timeout: 1 lower, 1 higher · violated: 6 lower, 0 higher (paired test on shared seeds)                         
+                                                                                                                        
+  method          paired test on shared seeds (McNemar), the default for runs paired at sweep time                      
+  before          mock-agent@v0 2026-10-14 a (20261014T035339Z-1add, complete)                                          
+  after           mock-agent@v0 2026-10-14 b (20261014T035345Z-8381, complete)                                          
+  trade           task_id refund · tool_fail_rate 0.55: violated fell, timeout rose                                     
+  verdict rule    the verdict counts changes at the family-wise level (Holm, q 0.05 over 18 tests); a condition's flag  
+                  is Benjamini-Hochberg's, at the false discovery rate q 0.05 over 18 tests                             
+  limits          the smallest change one condition alone would be flagged for, 4 times in 5, if it alone changed, from 
+                  where the condition was (the paired test (McNemar), q 0.05 over 18 tests); 3 rows that did not count  
+                  have no limit (none detectable: 3), so no change of any size is ruled out there                       
+  intervals       on each condition's change: Tango at 97.778%, false coverage (Benjamini-Yekutieli) over the 8 flagged;
+                  an unflagged row's interval is at the same level with no adjusted promise of its own                  
+  fragility       10 outcomes would change the word (the search is not exhaustive: it may be fewer): 10 runs of B in    
+                  task_id refund, tool_fail_rate 0.55 that ended in timeout made to end otherwise                       
+  threshold       0.200 (recorded)                                                                                      
+  tests           18 in one pass (9 conditions × 2 events), q 0.05                                                      
+  saved           comparison <comparison-id>, <time>                                                            
+  could not tell  3 unchanged conditions; d shows what it could not detect                                              
+                                                                                                                        
+  event     kind          higher  lower  unchanged  could not tell  conditions                                          
+› violated  not declared       0      6          3               0           9                                          
+  timeout   not declared       1      1          7               3           9                                          
+                                                                                                                        
+  violated heatmap      comparisons/<comparison-id>/heatmap-violated.html                                              
+  timeout heatmap       comparisons/<comparison-id>/heatmap-timeout.html                                               
+  violated differences  comparisons/<comparison-id>/differences-violated.html                                          
+  timeout differences   comparisons/<comparison-id>/differences-timeout.html                                           
+  violated limits       comparisons/<comparison-id>/limits-violated.html                                               
+  timeout limits        comparisons/<comparison-id>/limits-timeout.html                                                
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ↑↓ move   enter open   esc back   t conditions   d could not detect   tab links   y copy   ? help   q quit            
+
+BBBBBBBBBBBBBDDD          DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                                    DDDDDDDDDD
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BBBBB                                                                                                                 
+                                                                                                                        
+  DDDDDD                                                                                                                
+  DDDDDD                                                                                                                
+  DDDDD                                                                                                                 
+  DDDDD                                                                                                                 
+  DDDDDDDDDDDD                                                                                                          
+                                                                                                                        
+  DDDDDD                                                                                                                
+                                                                                                                        
+                                                                                                                        
+  DDDDDDDDD                                                                                                             
+                                                                                                                        
+  DDDDDDDDD                                                                                                             
+                                                                                                                        
+  DDDDDDDDD                                                                                                             
+  DDDDD                                                                                                                 
+  DDDDD                                                                                                                 
+  DDDDDDDDDDDDDD                                                                                                        
+                                                                                                                        
+  DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD                                          
+VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+                                                                                                                        
+                                                                                                                        
+  DDDDDDDDDDDDDDDD                                                                                                      
+  DDDDDDDDDDDDDDD                                                                                                       
+  DDDDDDDDDDDDDDDDDDDD                                                                                                  
+  DDDDDDDDDDDDDDDDDDD                                                                                                   
+  DDDDDDDDDDDDDDD                                                                                                       
+  DDDDDDDDDDDDDD                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+  BB DDDD   BBBBB DDDD   BBB DDDD   B DDDDDDDDDD   B DDDDDDDDDDDDDDDD   BBB DDDDD   B DDDD   B DDDD   B DDDD            
