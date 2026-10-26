@@ -386,12 +386,12 @@ def _build_parser(io: _IO) -> _Parser:
         description=(
             "A statistical instrument for finding where autonomous and agentic systems break.\n"
             "Run a sweep of your agent over its conditions, store every episode, and compare\n"
-            "two runs condition by condition with stated confidence."
+            "two runs condition by condition, with stated error bounds and detection limits."
         ),
         epilog=(
             "examples:\n"
             f"  {_COMMAND} sweep prove.toml --target my_agent:rollout\n"
-            f"  {_COMMAND} diff latest previous\n"
+            f"  {_COMMAND} diff previous latest\n"
             f"  {_COMMAND} runs"
         ),
     )
@@ -594,8 +594,8 @@ def _build_parser(io: _IO) -> _Parser:
         ),
         epilog=(
             "examples:\n"
-            f"  {_COMMAND} diff latest previous\n"
-            f"  {_COMMAND} diff latest previous --event violated --json"
+            f"  {_COMMAND} diff previous latest\n"
+            f"  {_COMMAND} diff previous latest --event violated --json"
         ),
     )
     diff_p.add_argument(
@@ -629,7 +629,7 @@ def _build_parser(io: _IO) -> _Parser:
         ),
         epilog=(
             "examples:\n"
-            f"  {_COMMAND} report latest previous --x tool_fail_rate --y task_id\n"
+            f"  {_COMMAND} report previous latest --x tool_fail_rate --y task_id\n"
             f"  {_COMMAND} report latest --x tool_fail_rate --event violated"
         ),
     )
@@ -749,8 +749,8 @@ def _build_parser(io: _IO) -> _Parser:
         ),
         epilog=(
             "examples:\n"
-            f"  {_COMMAND} check latest previous --event violated\n"
-            f"  {_COMMAND} check latest previous --event violated --fail-on any"
+            f"  {_COMMAND} check previous latest --event violated\n"
+            f"  {_COMMAND} check previous latest --event violated --fail-on any"
         ),
     )
     check_p.add_argument(
@@ -790,8 +790,8 @@ def _build_parser(io: _IO) -> _Parser:
         ),
         epilog=(
             "examples:\n"
-            f"  {_COMMAND} serve latest previous --x tool_fail_rate --event violated\n"
-            f"  {_COMMAND} serve latest previous --x tool_fail_rate --event violated --json"
+            f"  {_COMMAND} serve previous latest --x tool_fail_rate --event violated\n"
+            f"  {_COMMAND} serve previous latest --x tool_fail_rate --event violated --json"
         ),
     )
     serve_p.add_argument(
@@ -957,7 +957,10 @@ def _add_method_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None
         type=float,
         default=_DEFAULT_Q if defaults else None,
         metavar="Q",
-        help=f"the false discovery rate the verdicts are held to (default: {_DEFAULT_Q})",
+        help=(
+            "the level of the per-condition flags (false discovery rate) and of the verdict "
+            f"(family-wise) (default: {_DEFAULT_Q})"
+        ),
     )
 
 

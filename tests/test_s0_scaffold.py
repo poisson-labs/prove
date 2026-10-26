@@ -7,7 +7,9 @@ from pathlib import Path
 from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parents[1]
-EXTRAS_BANNED_FROM_CORE = {"modal", "litellm", "matplotlib"}
+# PF7 (Q14, Q31): the import names of what the extras bring; litellm and matplotlib are no
+# extra's any more.
+EXTRAS_BANNED_FROM_CORE = {"modal", "burla", "openai", "opentelemetry"}
 NETWORK_CLIENT_MODULES = {"requests", "httpx", "urllib", "socket"}
 LOOPBACK_SERVER_MODULE = "http.server"
 LOOPBACK_SERVER_HOME = "viewer.py"
@@ -45,8 +47,8 @@ def test_cli_version_via_module():
 def test_pyproject_extras_exact():
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
     extras = set(data["project"]["optional-dependencies"])
-    # PF9 (Q31): the [burla] extra joins the set.
-    assert extras == {"modal", "agent", "viz", "all", "dev", "burla"}
+    # PF9 (Q31): the [burla] extra joins the set. PF7 (Q14): the [viz] extra goes.
+    assert extras == {"modal", "agent", "all", "dev", "burla"}
 
 
 def test_pyproject_core_deps_are_math_only():

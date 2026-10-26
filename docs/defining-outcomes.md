@@ -1,7 +1,7 @@
 # Defining outcomes
 
-Proofload compares the rate of an outcome between two runs. Everything it
-reports — the delta, the verdict, the MDE, the honesty line — is downstream of
+Prove compares the rate of an outcome between two runs. Everything it
+reports — the change, the verdict, the detection limit — is downstream of
 one thing you choose before the first episode runs: **what the outcome labels
 mean.**
 
@@ -44,7 +44,7 @@ network. A system failure is a property of the thing you are comparing.
 
 ## The case: a legal outcome, a well-formed row, every gate green
 
-From the S18 golden-suite pilot.
+From an early pilot: an agent run against a suite of coding problems.
 
 The pilot agent had four outcomes: `passed`, `failed_assertion`, `timed_out`,
 `crashed`. Four separate places in the agent assigned `crashed`: the model call
@@ -60,8 +60,8 @@ call failed. Every episode ended `crashed`. And:
   `replicate_index`, all valid;
 - a **trace was attached** to every episode;
 - `t` was inside `[0, horizon]` and the `t_unit` matched the manifest;
-- after S21, `poisson-prove runs` reported **`no_outcome 0`** for that arm — and that
-  number was *correct*: every episode did have an outcome. Its label was
+- `poisson-prove runs` would have reported **0 rows without an outcome** for that arm — and
+  that number is *correct*: every episode did have an outcome. Its label was
   `crashed`.
 
 Every gate the tool has was green. Nothing anywhere was red. The arm was
@@ -70,7 +70,7 @@ worthless.
 At a 100% failure rate it was obvious within a minute of looking. The reason
 this page exists is the other case: **at 1%, split across two arms run hours
 apart under different provider load, it is invisible, and it reads as a real
-effect.** Arm B's "regression in crash rate" would have been the provider having
+effect.** Arm B's apparent rise in crash rate would have been the provider having
 a bad afternoon while arm B happened to be running.
 
 ---
@@ -84,12 +84,14 @@ distinguishable from the parse failures by that string.
 It made no difference, because **`diff` never reads `meta`.**
 
 The comparison verbs read the frame narrow — `config_hash`, `config`,
-`replicate_index`, `outcome`, `t`, `horizon` — and nothing else. This is not an
-oversight to be fixed. It is deliberate and it is load-bearing:
+`replicate_index`, `outcome`, `t`, `horizon`, and the `case_id` a rollout
+recorded, which they read only to refuse a condition that ran several cases —
+and nothing else. This is not an oversight to be fixed. It is deliberate and it
+is load-bearing:
 
-- Reading `meta` at Go1 scale — 25,600 rows, ~9.7 KB of trace per row — costs
-  6.1 s and 1.13 GB of peak heap, against 0.18 s without it, because `meta`
-  carries the traces. `diff`, `report` and `check` all read with `meta=False`,
+- Reading `meta` on a large store — 25,600 rows, about 9.7 KB of trace per
+  row — took 6.1 s and 1.13 GB of peak memory, against 0.18 s without it,
+  because `meta` carries the traces. `diff`, `report` and `check` all read with `meta=False`,
   and a deliberately poisoned-`meta` store in the test suite proves they never
   decode it.
 - More importantly, a comparison that reached into free-form metadata would be a
@@ -111,7 +113,7 @@ to look.
 
 ---
 
-## What Proofload does and does not check
+## What Prove does and does not check
 
 Worth being exact, because "every gate was green" is the part of the story people
 find hardest to believe.
@@ -120,10 +122,10 @@ find hardest to believe.
 |---|---|
 | the outcome is a string, and `t` is inside `[0, horizon]` | what the outcome *means* |
 | `t_unit` matches between the two runs being compared | that the two runs' labels were assigned by the same rule |
-| how many rows the executor stored **no** outcome for (`no_outcome`) | whether a stored outcome was the right one |
+| how many rows were stored with **no** outcome (`rows without an outcome`) | whether a stored outcome was the right one |
 | which cells are holes, and why (`unsampled`, `no_outcome_a`, …) | whether a *populated* cell is populated with garbage |
 | that a paired method is only run on pairable runs | that two pairable runs were run under the same conditions |
-| what size of effect the design could have detected (`mde`) | whether the effect it detected is an effect in your system |
+| what size of change each condition could have detected (the detection limit) | whether the change it detected is a change in your system |
 
 Every row on the left is a real guard and each is worth having. None of them
 would have caught the dead arm, and none of them is meant to.
@@ -166,16 +168,16 @@ recur:
 
 **6. Print the outcome distribution before you diff.**
 One line per label per arm. The dead arm was 100% one label; a glance would have
-caught it. Today this is a `poisson-prove inspect` call or three lines of pandas over
-the store — do it anyway, and do it before you look at the comparison.
+caught it. `poisson-prove inspect` on each label, or three lines of pandas over
+the store, does it — do it before you look at the comparison.
 
 **7. Decide what you will do if it happens anyway.**
 There is exactly one honest window to change the analysis after seeing the data:
 before any comparison is run, when the change is stated and recorded. The pilot
-amended its pre-registration to exclude API-error crashes by `crash_reason`
-prefix, in writing, before diffing. That is a stopgap and it is why the outcome
-change exists. Excluding rows *after* seeing which way the comparison went is
-not a repair; it is the finding being chosen.
+amended its written plan to exclude API-error crashes by their `crash_reason`
+prefix, before diffing. That was a stopgap; the fix is a separate outcome label.
+Excluding rows *after* seeing which way the comparison went is not a repair; it
+is the finding being chosen.
 
 ---
 

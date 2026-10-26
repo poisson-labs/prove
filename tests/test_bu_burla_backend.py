@@ -2022,7 +2022,8 @@ def test_i5_the_burla_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None
     # test_pf9_backends.py's.
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     extras = project["optional-dependencies"]
-    assert set(extras) == {"modal", "agent", "viz", "all", "dev", "burla"}
+    # PF7 (Q14): the [viz] extra goes; nothing imports matplotlib.
+    assert set(extras) == {"modal", "agent", "all", "dev", "burla"}
     assert any(req.split("=")[0].split(">")[0].split("<")[0].strip().lower() == "cloudpickle" for req in extras["dev"])
 
 

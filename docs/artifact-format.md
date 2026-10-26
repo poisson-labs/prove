@@ -17,7 +17,8 @@ page holds an absolute path, a platform string, a key or content a run captured.
 
 ## The layout of a store
 
-```
+<!-- docs-check: skip: a picture of a store's folders, not a command -->
+```text
 <store>/
   .poisson/
     store.json                      the store descriptor

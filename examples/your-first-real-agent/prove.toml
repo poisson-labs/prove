@@ -1,0 +1,19 @@
+# Your first real agent: three questions at two temperatures, graded by exact match.
+target = "agent:rollout"
+target_id = "first-real-agent"
+t_unit = "calls"
+replicates = 200
+
+[axes.case]
+type = "categorical"
+values = ["sum", "capital", "letters"]
+
+[axes.temperature]
+type = "continuous"
+values = [0.0, 1.0]
+
+# A wrong answer counts against the agent; a failed API call is the provider's, not the agent's.
+[declare]
+outcomes = ["correct", "wrong", "api_error"]
+failures = ["wrong"]
+successes = ["correct"]
