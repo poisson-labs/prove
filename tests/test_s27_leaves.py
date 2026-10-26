@@ -165,6 +165,7 @@ from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
 from poisson_prove.report import ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
+from conftest import code_of
 
 import lattice
 
@@ -366,9 +367,16 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # a package); test_s26_fault_lines.py is untouched. Read off the file after every other move.
 # Re-minted when both files moved off the committed study fixture onto the generated lattice pair
 # (tests/lattice.py). Read off the two files after every other move.
+# Re-minted again for public hygiene (front-door spec sections 9.2 and 14, Q37): test_s26_fault_lines.py no
+# longer pins an internal phase in a refusal's detail. Read off the two files after every other move, not
+# predicted. The re-minted serve --json digests of both files were unwound when the committed study fixture
+# left the tests (ruling of 2026-10-25); the generated fixture that replaces it comes with main.
+# Re-minted again for public hygiene (Q38): the plain-words pass edits the docstrings and comments of frozen test
+# files, so the pin is over each file's code with those taken out (``conftest.code_of``) and still moves the moment
+# an assertion does. Read off the two files after every other move, not predicted.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "c5fdb8d1daa184908528dc65c6fc1369eeb8684386392433043603074eb1022e",
-    "tests/test_s26_fault_lines.py": "faf67f4a0a03abc5532662a704ab814f93525f363c6fe056003b1a938c0ab700",
+    "tests/test_s25_root.py": "1b13d84c1097f616c43db318c3d40caef964379f566b341a4cb7e22292037894",
+    "tests/test_s26_fault_lines.py": "b3e636b28244360e3f2eda35e23602bfad8c1c8d544b12af52d1f385cbb524ef",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
@@ -2473,7 +2481,7 @@ def test_l20_diff_py_and_the_two_frozen_oracles_are_byte_untouched() -> None:
     ``.git`` can check (module docstring)."""
     # PF0 (Q4): the diff.py digest is no longer asserted; the rename changes diff.py.
     for relative, digest in FROZEN_ORACLE_SHA256.items():
-        assert hashlib.sha256((REPO / relative).read_bytes()).hexdigest() == digest, relative
+        assert hashlib.sha256(code_of((REPO / relative).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() == digest, relative
 
 
 def test_l20_omnibus_and_resolve_grouping_keep_their_signatures_and_tree_gains_only_depth() -> None:

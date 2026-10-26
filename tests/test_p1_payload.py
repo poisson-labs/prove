@@ -1378,15 +1378,9 @@ def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_
     # PF5 (spec section 17): the core is a package now, so the grep reads src/ recursively.
     hits = sorted(path.name for path in SRC.rglob("*.py") if any(r in path.read_text(encoding="utf-8") for r in retired))
     assert hits == [], hits
-    lines = VIEWER_SOURCE.read_text(encoding="utf-8").splitlines()
-    at = next(i for i, line in enumerate(lines) if line.startswith("SCHEMA = "))
-    comment = []
-    for line in reversed(lines[:at]):
-        if not line.startswith("#"):
-            break
-        comment.append(line)
-    text = "\n".join(reversed(comment))
-    assert "A28" in text and "P-1" in text and "intervals" in text, text
+    # PF8 (Q37, front-door spec sections 9.2 and 14): the comment above ``SCHEMA`` named the two packets
+    # that moved it; the plain-words pass rewrites every comment in src/ to say why in plain words, so
+    # what a comment says is no longer pinned. The schema and the retired versions above still are.
 
 
 def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_literals_and_nothing_says_paired(lattice_built: Built, k2: Built) -> None:
