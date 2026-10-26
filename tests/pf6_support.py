@@ -999,8 +999,11 @@ def shows_number(text: str, value: float) -> bool:
             shown /= 100.0
         if "e" in body.lower():
             mantissa, exponent = body.lower().split("e")
+            power = int(exponent.replace("\u2212", "-"))
+            if abs(power) > 400:
+                continue  # no float has this exponent: a whole token of digits, an e and digits
             decimals = len(mantissa.split(".")[1]) if "." in mantissa else 0
-            tolerance = 0.5 * 10 ** (int(exponent.replace("\u2212", "-")) - decimals)
+            tolerance = 0.5 * 10 ** (power - decimals)
         else:
             decimals = len(body.split(".")[1]) if "." in body else 0
             tolerance = 0.5 * 10 ** (-decimals) * (0.01 if percent else 1.0)

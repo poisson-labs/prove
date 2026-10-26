@@ -411,7 +411,8 @@ def shows_number(text: str, value: float) -> bool:
     """Whether ``text`` prints ``value`` as rule 10 does: some number in it equals the value at the
     precision it was printed to (a percentage read over 100, a duration read in seconds)."""
     plain = text.replace(",", "").replace("\u2212", "-")
-    for m in _NUMBER.finditer(plain):
+    # a whole token only: never a run of digits inside a hex id or a word (``c3bc1b052e785f44``)
+    for m in re.finditer(rf"(?<![0-9A-Za-z])(?>{_NUMBER.pattern})(?![0-9A-Za-z])", plain, re.IGNORECASE):
         token = m.group(0)
         percent = token.endswith("%")
         body = token.rstrip("%")
@@ -425,6 +426,8 @@ def shows_number(text: str, value: float) -> bool:
             mantissa = body.lower().split("e")[0]
             decimals = len(mantissa.split(".")[1]) if "." in mantissa else 0
             exponent = int(body.lower().split("e")[1].replace("\u2212", "-"))
+            if abs(exponent) > 400:
+                continue  # no float has this exponent: a whole token of digits, an e and digits
             tolerance = 0.5 * 10 ** (exponent - decimals)
         else:
             decimals = len(body.split(".")[1]) if "." in body else 0
