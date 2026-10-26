@@ -432,7 +432,10 @@ def blocks_with(page: check.Page, verb: str) -> list[check.Block]:
 
 
 def backticked(text: str) -> str:
-    return "\n".join(re.findall(r"`([^`]+)`", text))
+    # Inline code only: a fenced block (three or more backticks or tildes) is taken out first, so
+    # a fence never pairs with a later backtick.
+    prose = re.sub(r"^ {0,3}((`|~)\2{2,})[^\n]*\n.*?^ {0,3}\1\2*[ \t]*$", "", text, flags=re.M | re.S)
+    return "\n".join(re.findall(r"`([^`]+)`", prose))
 
 
 # ---------- PF7.1 the README ----------
