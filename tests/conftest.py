@@ -320,3 +320,14 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         entry.name.startswith(_PREFIX) for entry in Path(tmp).iterdir()
     ):
         _reap(tmp, None)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """``--update-snapshots``: the snapshot tests write the snapshots instead of comparing against
+    them (section 10.6, PF6.14 and PF12.13; the one documented command is in ``CONTRIBUTING.md``)."""
+    parser.addoption(
+        "--update-snapshots",
+        action="store_true",
+        default=False,
+        help="rewrite the snapshot files the snapshot tests compare against, instead of comparing",
+    )
