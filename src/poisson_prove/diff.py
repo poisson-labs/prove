@@ -1508,7 +1508,7 @@ def _truncate_raw(df: pd.DataFrame, h: float) -> tuple[pd.DataFrame, int]:
 
 
 def _cause(rows_a: int, rows_b: int, no_outcome_a: int, no_outcome_b: int) -> str:
-    """Section 0.3's five rules, in order. Presence is decided before errors: a cell A ran and
+    """The five rules, in order. Presence is decided before errors: a cell A ran and
     wholly errored that B never ran is ``only_a``, with ``no_outcome_a == rows_a`` beside it in
     the same row. The counts are always carried; the cause names the first reason, not the
     only one."""
@@ -2253,7 +2253,7 @@ def _resolve_kinds(
 
 
 def _threshold(manifest_a: RunManifest | None, manifest_b: RunManifest | None) -> tuple[float, str]:
-    """Section 8.4's threshold and its source: the ``max_mde_accepted`` both runs recorded
+    """The verdict's detection threshold and its source: the ``max_mde_accepted`` both runs recorded
     (``recorded``), the smaller of two different ones (``smaller``), or the default when neither
     recorded one (``default``)."""
     recorded = [
@@ -2291,9 +2291,9 @@ def _require_alpha(alpha: float) -> None:
 def _maximise(slope: Callable[[float], float], lo: float, hi: float) -> float:
     """The stationary point of a concave log-likelihood on ``[lo, hi]``, from its derivative.
 
-    Section 0.1 leaves the constrained MLE's route open between a Farrington-Manning cubic and
-    a one-dimensional maximisation along the constrained line, because a mistranscribed cubic
-    is a silent statistical bug no reviewer catches by reading. This is the maximisation. Every
+    The constrained MLE can be found by a Farrington-Manning cubic or by a one-dimensional
+    maximisation along the constrained line. This is the maximisation, because a mistranscribed
+    cubic is a silent statistical bug no reviewer catches by reading. Every
     term of both log-likelihoods below is concave, so ``slope`` is strictly decreasing and the
     root is unique -- which is what makes a bracketed root find correct here rather than merely
     convergent, and why no cubic needs transcribing.

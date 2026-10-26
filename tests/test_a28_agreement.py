@@ -24,7 +24,7 @@ that form: it reproduces the spec's values, and section 3.2's form does not. G17
 JSON form's digest in this file from the generated lattice pair's design counts
 (``lattice.counts``), at K = 1 and K = 2, and requires both methods to carry it.
 
-**The freeze commit is red here by construction** (Master Action List section 18 standing rule
+**The freeze commit is red here by construction** (the project's standing rule
 12). On the update commit, before any source edit, the red set in this file is **fifteen**:
 G1-G5, G7-G11, G13, G16, G17, G21 and G22. Every one reaches ``agreement_digest``,
 ``.agreement``, ``/4`` or a refusal that does not exist yet, inside a test body, so
@@ -65,7 +65,7 @@ left at ``/3`` -> G9 and the seven schema literals of M13, S21 and S29; 9 field 
 serialised -> G7, G8, G9, L10, W12; 10 digest compared to itself -> G10, G11, G13; 11 digest clause
 before the multiset clause -> G12 and W16, nothing else; 12 digest widened with ``multi.method`` ->
 G17, G21, G22; 13 viewer knob clause deleted -> G21 alone; 14 report knob clause deleted -> G22
-alone. The table is in the devlog entry for this freeze (``log/proofload-devlog.md``, 2026-09-13).
+alone. The table is in the project's records for this freeze (2026-09-13).
 
 Restated rather than imported, as every frozen test file's helpers are: the AST resolver, the
 closure and arithmetic scans, the store builders and the two-value cells.

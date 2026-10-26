@@ -11,7 +11,7 @@ refused with a ``ValueError`` naming both arguments; Q5 (a) no ``environment.cod
 C28 is measured and deferred, ``append`` stays refuse-on-overlap; Q7 (b) ``trace="none"`` strips a
 pre-A7 row's ``meta["trace"]``.
 
-**Two cells, and the invariant set does not partition between them** (Master Action List section
+**Two cells, and the invariant set does not partition between them** (the project's standing rules, section
 18 standing rule 15). The packet's claim spans pandas 2 and pandas 3 because six invariants --
 P7-2, P7-3, P7-7, P7-8, P7-9, P7-11 -- have null halves that **cannot disagree on pandas 2.3.3**:
 pyarrow gives an ``object`` column with ``None`` there whether or not the build registered the two
@@ -145,7 +145,7 @@ behind. Filed to C28's row, not to an invariant here.
 that no membership test can express. This file pins the eight exact keys and ``LOGPROBS_KEY`` as
 members, and pins the prefixed keys **by what the split does to them** -- moved to ``trace_obs``
 under the same key, absent from the envelope -- leaving the representation to the build. Reported
-as a finding in the freeze's devlog entry.
+as a finding in the freeze's records.
 
 Restated rather than imported, as every frozen test file's helpers are: the M4 record shape, the M3
 capture frozen file's forked child, A28's crossed cells and store writer, the CLI runner.

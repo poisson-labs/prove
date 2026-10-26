@@ -8,7 +8,7 @@ two updates ruled the same day and committed first on this branch: R1 (``733ac35
 into the PR-1 frozen tests' ``SPEC_PUBLIC_NAMES``) and R3 (``fd4266d``, a ``Cut`` declares its
 comparison, ``gt`` or ``ge``, with no default). **Frozen 2026-09-22 in one commit over both PR-3
 files, over the reviewed ``ef9f4ef``**, after approval of the four tables in the handoff
-(``log/prove-pr3-session-a/README.md``) and an independent recompute of every hard-coded
+and an independent recompute of every hard-coded
 expectation passed (``recompute_expectations.py`` there, 83 of 83). The build adds phase 3's
 replicate half of ``src/proofload/paired.py``
 -- ``SweepPair.more``, the k-arm assertion, ``ReplicateResult`` and ``replicates`` -- against this
@@ -95,7 +95,7 @@ the spec's change log on the freeze):
   ``at_declared_concurrency_s = serial_s / concurrency`` when every arm's recorded
   ``environment["sweeps"][S][arm]["concurrency"]`` is one non-null number, else absent.
 
-**Invariant-to-test map** is in the handoff (``log/prove-pr3-session-a/README.md``). Every test
+**Invariant-to-test map** is in the handoff. Every test
 name starts ``test_prN_`` or ``test_control_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` is built in test code or by

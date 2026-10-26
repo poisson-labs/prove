@@ -22,9 +22,9 @@ and ``viewer()``, so this file collects on the bare tree, its own tests fail the
 test in the repo still reports. Source is read through ``proofload.__file__``, never ``Path.cwd()``,
 so a run under ``PYTHONPATH`` reads the tree it was pointed at.
 
-**Step zero, nine items, measured at ``f7af030`` before a test was written** (the log at
-``.work/serve-pass-1/step-zero/`` in the worktree, filed in the project's records under
-``log/prove-serve-pass-1/step-zero/``). The four reproductions hold: (3) on the then-fixture
+**Step zero, nine items, measured at ``f7af030`` before a test was written** (the log in
+a scratch folder of the worktree, filed in the project's records
+as the step-zero record). The four reproductions hold: (3) on the then-fixture
 pair's page every present cell has its centre under a label ``<text>`` drawn after its rect, and no
 ``pointer-events:none`` selector ends in ``text``; (4) on that pair's two-event figure exactly two
 ``<text>`` runs pass the box, both legend captions, and a 143-char ``--title`` runs past it too --
@@ -1134,7 +1134,7 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
 
 # ---------- the bare-tree pins (LS3, LS19), minted at 2da9847 ----------
 
-# ---- pins begin: minted on the bare tree at 2da9847 by .work/serve-pass-1/mint_pins.py ----
+# ---- pins begin: minted on the bare tree at 2da9847 by the pin-minting script ----
 #: LS3. Per pair, the stacked figure's width and, per panel, its bare-tree body height and the sha256
 #: of its grid and glyph rects (``rect_set`` at shift 0). Green before and after: the grid does not
 #: move.

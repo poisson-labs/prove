@@ -10,7 +10,7 @@ reached the module before it existed: this file collects on the bare tree, its o
 there, and every other test in the repo still reports. The static tests read the source as text.
 
 **No test in this file carries the ``calibration`` marker, and none may.** Spec section 0.6,
-measured in ``log/phase4-p42-step-zero-slow.py`` (K=200 sharp-null resamples of the committed
+measured by the slow step-zero script (K=200 sharp-null resamples of the committed
 fixture of the time, grouped by its first axis, B=1000): Level 2 is gated on the root, so under
 the global sharp null the unconditional rate of any group rejecting is bounded by the root's own
 rate, which O10 already holds inside ``[0.020, 0.080]``. The measured gated rates, with BH and

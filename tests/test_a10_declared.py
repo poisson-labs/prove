@@ -1609,7 +1609,7 @@ def test_p10_20_an_emitted_marker_with_no_step_name_contributes_nothing(main_pai
 
 def test_p10_21_an_empty_list_or_tuple_renders_none_and_every_other_shape_as_shipped() -> None:
     """Behaviour-preserving only because no frozen output carries an empty list or tuple in its
-    provenance: measured at step zero over the whole suite (``step-zero/03-emptyprobe.jsonl``)."""
+    provenance: measured at step zero over the whole suite (an empty-probe run)."""
     assert report_module._provenance_lines(PROVENANCE_SHAPES) == PROVENANCE_RENDERED
 
 

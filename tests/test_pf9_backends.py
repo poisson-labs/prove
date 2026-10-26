@@ -25,7 +25,7 @@ is needed and a launcher that reaches Burla ends at once, with the call on recor
 (PF9.4), by ``conftest.py``'s guard; the fake's own interpreters arm their tripwire as before.
 
 **Readings this file freezes** (each owed as one yes/no in the project's
-``log/pf9/session-a.md``; the build is written against them unedited):
+the freeze's records; the build is written against them unedited):
 
 - **r1** The ``[burla]`` extra pins exactly the client the backend runs, ``burla==1.8.2`` (the spec's
   ``==1.8.1`` predates the 2026-10-14 pin): the extra admits a version exactly when the backend

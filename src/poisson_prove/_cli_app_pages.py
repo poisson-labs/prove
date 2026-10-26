@@ -1,4 +1,4 @@
-"""The terminal app's screens: what each shows of the core object it renders (section 19).
+"""The terminal app's screens: what each shows of the core object it renders.
 
 Each builder takes the document of one core object (a view's ``to_json()``, the sweep's plan, a
 comparison the store could not save) and lays it out for one width as the design draws it: the
@@ -121,7 +121,7 @@ class Page:
 
 
 def verdict_line(word: str, sentence: str) -> Line:
-    """``  word  sentence``, the word in its meaning's style (section 5.5)."""
+    """``  word  sentence``, the word in its meaning's style."""
     return Line(f"  {word}  {sentence}", [(2, 2 + len(word), meaning_of(word))])
 
 
@@ -294,7 +294,7 @@ def value_words(value: Any) -> str:
     return _look.fmt_time(value)
 
 
-#: The UI's own addresses and drawings: shown by their links, never as text (section 16.1).
+#: The UI's own addresses and drawings: shown by their links, never as text.
 _NOT_TEXT = ("schema", "view", "address", "svg")
 
 
@@ -316,7 +316,7 @@ def _plural(n: Any, word: str) -> str:
 
 
 def design_lines(design: Mapping[str, Any] | None, sentence: str | None) -> list[Detail]:
-    """Section 8.10's design limit: its sentence, then the facts it rests on."""
+    """The design's detection limit: its sentence, then the facts it rests on."""
     if not isinstance(design, Mapping):
         return [Detail("design", sentence)] if sentence else []
     out = [Detail("design", sentence)] if sentence else []
@@ -416,8 +416,8 @@ def lay_table(
 
 
 def verdict_style(word: str) -> str:
-    """A verdict word's style in a table cell: its meaning's colour, or bold for a result
-    (section 5.5); a run's status yellow when it stopped short."""
+    """A verdict word's style in a table cell: its meaning's colour, or bold for a result; a
+    run's status yellow when it stopped short."""
     if word == "partial":
         return "yellow"
     if word in ("complete", ""):
@@ -996,7 +996,7 @@ class Screens:
 
     def verdict_page(self, doc: dict[str, Any], *, saved: bool) -> Page:
         """The verdict screen: a saved comparison's view, or the comparison itself when it could not
-        be saved (section 18.2)."""
+        be saved."""
         name = str(doc.get("name") or "")
         page = Page(
             "comparison",
@@ -1033,7 +1033,7 @@ class Screens:
                 keys_ += ["n_higher", "n_lower"]
             columns.append(Column("unchanged", right=True))
             keys_.append("n_unchanged")
-            if saved:  # the could-not-tell count is the saved comparison's (section 8.10)
+            if saved:  # the could-not-tell count is the saved comparison's
                 columns.append(Column("could not tell", right=True))
                 keys_.append("n_could_not_tell")
             columns.append(Column("conditions", right=True, wide=True))

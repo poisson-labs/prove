@@ -6,7 +6,7 @@ cut PR-3 into the two files and freezes them in one pass.
 Written on 2026-09-22 on the PR-3 freeze branch over the replicates tests (``9e41c2b``) and
 the ruled update ``6f40d92`` (the two phase-2 artifacts print ``comparison``). **Frozen
 2026-09-22 in one commit over both PR-3 files, over the reviewed ``ef9f4ef``**, after approval of
-the four tables in the handoff (``log/prove-pr3-session-a/README.md``) and an
+the four tables in the handoff and an
 independent recompute of every hard-coded expectation passed (``recompute_expectations.py``
 there, 83 of 83). The build adds phase 3's output half against this file and does not edit
 it: ``WindowReport``,
@@ -87,7 +87,7 @@ into the spec's change log on the freeze):
   folded into the rendered strings by ``paired.py`` and ``cli.py``, and the whole-file digest
   ``REPORT_PY_SHA256`` two frozen tests carry is carried here too.
 
-**Invariant-to-test map** is in the handoff (``log/prove-pr3-session-a/README.md``).
+**Invariant-to-test map** is in the handoff.
 
 **Fixtures, and what each cannot express.** Every store is built under ``tmp_path`` by this file
 with timestamps and token counts chosen per arm and per item, so a window, a gap, a missing

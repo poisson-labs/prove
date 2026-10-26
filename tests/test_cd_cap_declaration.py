@@ -11,7 +11,7 @@ capture must say how large an observation it keeps whole, and the tool supplies 
 own. And the live defect underneath it -- **a declared cap above 8192 is not the cap in force**:
 the sweep declares it, the manifest records it, the receipt prints it, and the store cuts at the
 module default anyway. Both reproduced on the base tree at step zero
-(``log/proofload-cap-declaration/10-step-zero-cd-session-a.md``): a sweep declaring 131072 stored a
+(the step-zero record): a sweep declaring 131072 stored a
 value above 8,192 bytes as head 6144 + tail 2048, and at a declared 16384 a 10,000-byte value kept 8,192
 bytes while a 20,000-byte value kept 16,384. A mandatory declaration over a store that ignores it
 is ADR-096's own failure mode with a receipt attached, so CD5 and CD6 are as much this file's
@@ -1065,7 +1065,7 @@ def test_cd12_every_shipped_sweep_file_declares_and_loads(relative: str) -> None
     """Sole catch for a build that ships an example its own parser rejects: every sweep spec the
     repository ships loads, and one with a ``[capture]`` table declares its cap as a number.
 
-    PF8 (Q35): the golden-pilot and tau2 files this read, and the three tests that pinned the tau2
+    PF8 (Q35): the two example studies' files this read, and the three tests that pinned one
     study's pre-registered cap, its config hashes and its comment, left with the pilots; the rule
     stays, over the files that ship."""
     spec = SweepSpec.load(REPO / relative)

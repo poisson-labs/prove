@@ -97,7 +97,7 @@ SCHEMA = "poisson-prove.viewpair/7"
 #: ``report._interval_lines`` -- *over the flat BH family* -- which is the one formatter every
 #: surface reads; one test pins this value and another pins that prose, so the pair cannot drift
 #: unnoticed. The escape hatch, if a third spelling ever appears: widen the partition in those
-#: two tests under their own re-freeze rather than adding a second constant here.
+#: two tests, in a change of their own, rather than adding a second constant here.
 _INTERVAL_FAMILY = "flat"
 
 _HOST = "127.0.0.1"

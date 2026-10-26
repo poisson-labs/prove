@@ -15,7 +15,7 @@ not edit it.
 first stdout line. Each surface is reached through the command line in process, with ``HOME`` pointed
 at an empty folder.
 
-**Readings, named here** (each is a yes/no in the re-freeze's log, ``log/pf4/refreeze.md``).
+**Readings, named here** (each is a yes/no in the re-freeze's records).
 
 - The freeze's, ruled 2026-10-24: the comparison's word is ``verdict`` in ``diff --json``,
   ``comparison_verdict`` in ``report --json``, ``summary.verdict`` on the page, and ``report.md``'s

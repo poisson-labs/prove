@@ -27,7 +27,7 @@ commands. ``overrides`` takes the sweep's options by their flag names with under
 (``target``, ``replicates``, ``pair_with``, ``resume``, ``name``, ``max_mde``, ``salt``,
 ``max_rollouts``, ``backend``, ...). ``cancel`` is a ``threading.Event``.
 
-**Readings, named here** (each is a yes/no in the session log, ``log/pf5/session-a.md``; the
+**Readings, named here** (each is a yes/no in the freeze's records; the
 letters are the log's; every one is written under its recommended answer).
 
 - (a) PF5 builds the store, setup, sweeps and comparisons areas of section 17.1. ``init_agent`` is a

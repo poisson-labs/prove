@@ -26,7 +26,7 @@ pair of the mock agent, compared in well under a second, no comparison saved and
 and condition screens. Each is built once per session; every test that opens the app opens it on its
 own copy, since the app writes into the store it shows (Q59, R40).
 
-**Readings, named here** (each is a yes/no in the session log, ``log/pf6/session-a.md``).
+**Readings, named here** (each is a yes/no in the freeze's records).
 
 - A1 The app's entry point is ``poisson_prove._cli_app.ProveApp``, a Textual ``App`` built as
   ``ProveApp(store=None)``: ``store`` is the ``--store`` value as typed, ``None`` when none was given

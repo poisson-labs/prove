@@ -13,7 +13,7 @@ templates are pinned in each source form (``--store``, ``$PROOFLOAD_STORE``, the
 3.2 literals (now on the generated lattice pair, ``tests/lattice.py``) and the section 3.3 lines byte for byte, as literals and never as a template the build
 shares.
 
-**Two cells, and no invariant is cell-specific -- a result, not an assumption** (Master Action List section
+**Two cells, and no invariant is cell-specific -- a result, not an assumption** (the project's standing rules, section
 18 standing rule 15; spec section 7 binds one cell, this file reports two because the request asked for
 both). pandas 2.3.3 and pandas 3.0.5: every test here is asserted in both cells, nothing here reads a stored
 null, and the map is the whole file twice: **106 + 106 = 212 ids over the two cells against this file's own

@@ -42,7 +42,7 @@ both dimensions, is in Handoff P4.4b's *freeze grep report* section, not here.
    innermost enclosing ``FunctionDef`` gives six functions in ``viewer.py`` (``_axes``,
    ``_config_text``, ``_finite``, ``_gap_seconds``, ``_hole``, ``render_html``), 39 in
    ``report.py`` and 23 in ``cli.py``; counting the module body as one more scope, as
-   ``log/phase4-p44-collision-scan.py`` does, gives 7 / 40 / 24. Spec section 0.5's seven is the
+   the collision-scan script does, gives 7 / 40 / 24. Spec section 0.5's seven is the
    second rule; Handoff P4.4a's 37 / 6 / 22 was the first rule at ``aed3f11``, and S28's build
    moved ``report.py`` and ``cli.py`` since (``_check_tree`` now holds ``root``, ``events``,
    ``n_cells`` and the bare name ``tree`` inside a ``BinOp``; ``_report_pair`` holds one).

@@ -18,7 +18,7 @@ Two invariants are deliberately absent, reported to the spec author at the freez
 than adapted:
 
 - A4 names "the ordering helper" (delta desc, q asc, mde asc, config_hash) but section 2
-  declares no such public symbol, and CLAUDE.md forbids extra public symbols. M7's
+  declares no such public symbol, and the build rules forbid extra public symbols. M7's
   private ``_worst`` sorts by (delta desc, config_hash) and is covered by M7 I19.
 - A7 asks for early censoring from errored rows, but M4's ``EpisodeRecord`` requires
   ``t`` and ``horizon`` to be None on errored rows, so they carry no censoring time, and

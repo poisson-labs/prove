@@ -17,7 +17,7 @@ nothing: a leaf's ``p`` is the flat family's own per-cell test read from ``cells
 within a family is arithmetic on those numbers, so every Level 3 wiring error is caught
 deterministically (L2-L7, L21-L23) and there is no rejection rate to hold in a band. Spec
 section 0.4's outer-nodes FDR on a known mixture is a step-zero script
-(``log/phase4-p43-step-zero-slow.py``, twenty-four minutes), not a lane.
+(the slow step-zero script, twenty-four minutes), not a lane.
 
 **Step zero, re-derived before a test was written** (the step-zero script, 30 s
 against the bare tree; every number below is that script's). The grep report is in Handoff

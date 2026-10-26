@@ -39,7 +39,7 @@ Fixture limits, stated rather than left to be rediscovered:
 - Nothing here measures a live provider or a Modal run. A24's W1-W7 are a
   different packet (spec section 11) and are not in this file.
 
-**A22 is an update packet** (Master Action List section 18 standing rule 12). On the freeze
+**A22 is an update packet** (the project's standing rule 12). On the freeze
 commit V5, V12, V14 and V15 are red in both cells, and on pandas 3 so are V1, V2, V3, V7, V8,
 V9, V10 and V11 -- with the sixteen pre-existing pandas 3 failures of spec section 3.1 beside
 them. The build reproduces that set before it builds. Every reference to a name the build has

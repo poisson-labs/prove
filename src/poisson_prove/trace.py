@@ -1500,7 +1500,7 @@ def _status_code(raw: Mapping[str, Any]) -> str:
 
 
 def _otel_error(raw: Mapping[str, Any], error_type: Any) -> tuple[str | None, str | None]:
-    """``(error, unclaimed error.type)`` -- section 3 maps ``error`` from an ERROR status only."""
+    """``(error, unclaimed error.type)`` -- ``error`` comes from an ERROR status only."""
     status = raw.get("status")
     message = status.get("message") if isinstance(status, Mapping) else None
     is_error = _status_code(raw) == "ERROR"

@@ -181,7 +181,7 @@ _SECRET_CREATE_FORM = "modal secret create <name> KEY=VALUE"
 def _secret_names(value: object) -> tuple[str, ...]:
     """``[modal] secrets`` -> a tuple of names; ValueError on anything else.
 
-    A bare ``str`` is refused rather than iterated: ``"golden-pilot"`` silently becoming
+    A bare ``str`` is refused rather than iterated: ``"openai-token"`` silently becoming
     twelve one-character names is the worst available reading of a typo. No message below
     repeats an entry, because the likeliest malformed entry is a pasted credential and a
     refusal that echoed one would put it in the terminal, the shell history and the CI log.

@@ -12,7 +12,7 @@ it prints none. Q3 (a), ADR-086: ``RootResult.p_floor`` is a design constant of 
 count, not a statistic; Y21 guards the reading. Q4 lean: the page's interval paragraph sits before
 the bound. Q5 lean: the column is last, after ``MDE``. Q6 lean: no drill-down row.
 
-**Two cells, and no invariant is cell-specific -- a result, not an assumption** (Master Action List
+**Two cells, and no invariant is cell-specific -- a result, not an assumption** (the project's standing rules,
 section 18 standing rule 15; spec D7 binds one cell, this file reports two because the request
 asked for both). pandas 2.3.3 and pandas 3.0.5, A22's recipe: every test here is asserted in both
 cells, and the map is the whole file twice: **24 + 24 = 48 ids over the two cells against

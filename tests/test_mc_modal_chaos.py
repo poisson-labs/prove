@@ -17,7 +17,7 @@ second control arm that read as a clean measurement.
   mapper produced them. MC4 is its scope: a run without ``[chaos]``, and a chaos run's errored
   rows (which carry no ``backend_meta`` from a container), are not refused.
 
-**The harness is the check's** (the project's records, ``log/prove-modal-chaos-check/``). Only the ``modal``
+**The harness is the check's** (the project's records of the check). Only the ``modal``
 package is replaced: a stub placed in ``sys.modules`` before ``run_modal`` imports it, whose
 ``Function.map`` pickles the map items across a process boundary and calls the shipped function
 on each in a fresh spawned interpreter, which is what a Modal container does with it. Everything

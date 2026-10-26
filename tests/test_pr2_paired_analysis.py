@@ -89,7 +89,7 @@ each goes into the spec's change log on the freeze):
   **every ``net_swing`` mapping -- per sweep, pooled, and in ``intervals_json`` -- carries
   ``direction: "b_minus_a"``** so a reader never has to guess which way it subtracts.
 
-**Invariant-to-test map** is in the handoff (``log/prove-pr2-session-a/README.md``): 49 functions,
+**Invariant-to-test map** is in the handoff: 49 functions,
 72 collected ids, PR22 to PR39, approved as written. Every test name starts ``test_prN_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` but two is built in test code,
