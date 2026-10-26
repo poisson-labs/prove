@@ -4,9 +4,11 @@ A small agent that calls a real model: three short questions, each its own case,
 temperatures and graded by exact match. It shows the whole loop on something that costs a few
 cents: sweep it, change its prompt, sweep again on the same seeds, and compare.
 
-- `agent.py` is the agent and its rollout, in under twenty lines. The OpenAI client is made inside
-  the rollout, so importing the file needs no key, and a failed API call is an outcome of its own,
-  `api_error`, never counted as the agent's mistake.
+- `agent.py` is the agent and its rollout, in under twenty lines of code. The OpenAI client is made
+  inside the rollout, so importing the file needs no key, and a failed API call is an outcome of
+  its own, `api_error`, never counted as a wrong answer. It still competes with the other endings:
+  if one run hit more API errors, fewer of its episodes could end `wrong`, so read `api_error`'s own
+  line in the comparison before trusting a fall in `wrong`.
 - `prove.toml` is the sweep spec: the questions as one axis, the temperature as another, 200
   replicates each, and which outcomes count against the agent.
 

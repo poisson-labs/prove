@@ -108,6 +108,7 @@ $ poisson-prove init --example --out other.toml --json
   "verdict": "ok",
   "wrote": ["other.toml"],
   "next": ["poisson-prove sweep other.toml"]
+  …
 }
 ```
 

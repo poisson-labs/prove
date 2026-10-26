@@ -106,14 +106,16 @@ type = "categorical"
 values = ["pass-mark"]
 ```
 
-The two arms are two runs on the same seeds, so pair by pair they sent the same request:
+The declaration below names `rubric` as the stratum: each item is analysed under the cut whose
+name is its stratum's value, so `pass-mark` here is both the axis value and the cut's name. The two
+arms are two runs on the same seeds, so pair by pair they sent the same request:
 
 <!-- docs-check: run -->
 ```console
-$ poisson-prove sweep grading.toml --yes
+$ poisson-prove sweep grading.toml --yes --name grade-a
 plan  1,200 rollouts of grader: 6 cells x 200 replicates on local, $0 (local)
 …
-$ poisson-prove sweep grading.toml --yes --pair-with latest
+$ poisson-prove sweep grading.toml --yes --pair-with grade-a --name grade-b
 plan  1,200 rollouts of grader: 6 cells x 200 replicates on local, $0 (local)
 …
 ```
@@ -125,7 +127,8 @@ lines of Python write it:
 ```python
 from poisson_prove import compare
 
-before, after = [run.run_id for run in compare.runs("prove-runs")][::-1][:2]
+before = compare.resolve("prove-runs", "grade-a")
+after = compare.resolve("prove-runs", "grade-b")
 declaration = f"""value_key = "grade.score"
 cluster_key = "answer"
 stratum_key = "rubric"

@@ -86,6 +86,7 @@ $ poisson-prove inspect latest --event timeout --limit 1 --json
   "event": "timeout",
   "episodes": [{"config": {"task_id": "refund"}, "seed": 2226271928, "outcome": "timeout", "error": null}],
   "reproduce": {"module": "poisson_prove.examples.mock_agent", "function": "rollout_patched"}
+  …
 }
 ```
 

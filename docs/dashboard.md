@@ -19,8 +19,9 @@ ok  dashboard at file:///…/prove-runs/.poisson/ui/index.html
 ~~~
 
 Once a store has a dashboard, every command that writes to the store keeps it current: a `sweep`
-adds its run, and a comparison saved by `report`, `serve`, `diff --save` or `check --save` adds its
-pages. `diff` and `check` without `--save` save nothing, so they add nothing. The pages are derived
+adds its run, and a comparison saved by `report`, `serve` or `diff --save` adds its pages. `diff`
+and `check` without `--save` save no comparison, so they add nothing. A check saved with
+`check --save` is kept in the store but has no page of its own. The pages are derived
 from the runs and the saved comparisons, so deleting `.poisson/ui/` loses nothing: `ui` builds it
 again. [`poisson-prove ui`](commands/ui.md) has its options.
 

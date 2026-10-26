@@ -40,7 +40,9 @@ safe.
 
 ## Not verified
 
-What this page cannot confirm about the two runs, and whether a change is planned that would.
+What this page cannot confirm about the two runs: what an outcome label means, how a run's status
+was decided, what its creation time stands for when it was imported, and what the target did with
+a seed. Each item says whether it is a limit of the instrument.
 
 ## Fault lines
 

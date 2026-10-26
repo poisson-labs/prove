@@ -177,6 +177,7 @@ $ poisson-prove sweep --dry-run --json
   "sentence": "1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)",
   "plan": {"rollouts": 1746, "cells": 9, "replicates": 194, "backend": "local"},
   "design_mde": {"mde": 0.1991, "base_rate": 0.4, "direction": "rise"}
+  …
 }
 ```
 

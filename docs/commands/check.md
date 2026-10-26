@@ -36,8 +36,8 @@ options:
                         shared seeds, logrank_bh is time to the event
                         (default: mcnemar_bh for runs paired at sweep time,
                         else fisher_bh)
-  --q Q                 the false discovery rate the verdicts are held to
-                        (default: 0.05)
+  --q Q                 the level of the per-condition flags (false discovery
+                        rate) and of the verdict (family-wise) (default: 0.05)
   --fail-on {worse,any,higher,lower}
                         fail on a condition significantly worse, on any
                         significant change, or on a rate that rose (higher) or
@@ -54,8 +54,8 @@ options:
   --debug               also print the traceback of an unexpected failure
 
 examples:
-  poisson-prove check latest previous --event violated
-  poisson-prove check latest previous --event violated --fail-on any
+  poisson-prove check previous latest --event violated
+  poisson-prove check previous latest --event violated --fail-on any
 ```
 
 ## Options
@@ -65,10 +65,12 @@ examples:
 - `--event NAME` is required: each outcome the gate reads, once per event. Without it `check` is
   refused and lists the events the runs carry. When the runs do not declare whether an event is a
   failure or a success, the name can say it: `--event timeout:failure`.
-- `--fail-on` says what fails the gate. `worse` (the default) fails on any condition significantly
+- `--fail-on` says what fails the gate. `worse` (the default) fails on any condition that got
   worse, which needs each event's kind (its `[declare]` table says which outcomes are failures and
-  which successes); `any` fails on any significant change either way; `higher` and `lower` fail on
-  a rate that rose or fell, whatever the event's kind.
+  which successes); `any` fails on any change either way; `higher` and `lower` fail on a rate that
+  rose or fell, whatever the event's kind. The gate reads the same changes the verdict word does,
+  those that hold at the family-wise level: a condition flagged only at the false discovery rate is
+  counted on the first line and does not fail the gate.
 - `--method` and `--q Q` are `diff`'s: the per-condition test (the paired one by default for runs
   paired at sweep time) and the false discovery rate of the flags, 0.05 by default.
 - `--json` prints the verdict and the comparison as one JSON document, `poisson-prove.check/1`,
@@ -110,6 +112,7 @@ $ poisson-prove check --event timeout --fail-on any --json  # exits 4
   "passed": false,
   "fail_on": "any",
   "method": "mcnemar_bh"
+  …
 }
 ```
 

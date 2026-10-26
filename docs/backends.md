@@ -134,6 +134,10 @@ install line. Every Burla install line Prove prints is `pip install "poisson-pro
 
 The rows. A sweep's seeds come from its run salt, not from where it ran, so a local run and a
 Modal run of the same spec paired with `--pair-with` are compared episode by episode like any
-other pair. The store is always on this machine; nothing is uploaded to Poisson Labs or anyone
-else, and Prove makes no network call of its own: the backends talk to your own Modal account and
-your own cluster, and nothing else.
+other pair. The store is always on this machine.
+
+What leaves the machine is up to the backend you choose. Locally, nothing but your agent's own
+calls. On Modal, your rollout's code, the image you declare and each batch's conditions and seeds
+go to your Modal account, and the rows come back. On Burla, Prove's bundle of your code and the
+same inputs go to your cluster, through Burla's relay unless its head runs with
+`DISABLE_BURLA_RELAY=True`. Prove itself sends nothing to Poisson Labs or anyone else.

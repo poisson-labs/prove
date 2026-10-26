@@ -168,16 +168,16 @@ recur:
 
 **6. Print the outcome distribution before you diff.**
 One line per label per arm. The dead arm was 100% one label; a glance would have
-caught it. Today this is a `poisson-prove inspect` call or three lines of pandas over
-the store — do it anyway, and do it before you look at the comparison.
+caught it. `poisson-prove inspect` on each label, or three lines of pandas over
+the store, does it — do it before you look at the comparison.
 
 **7. Decide what you will do if it happens anyway.**
 There is exactly one honest window to change the analysis after seeing the data:
 before any comparison is run, when the change is stated and recorded. The pilot
-amended its pre-registration to exclude API-error crashes by `crash_reason`
-prefix, in writing, before diffing. That is a stopgap and it is why the outcome
-change exists. Excluding rows *after* seeing which way the comparison went is
-not a repair; it is the finding being chosen.
+amended its written plan to exclude API-error crashes by their `crash_reason`
+prefix, before diffing. That was a stopgap; the fix is a separate outcome label.
+Excluding rows *after* seeing which way the comparison went is not a repair; it
+is the finding being chosen.
 
 ---
 

@@ -42,15 +42,10 @@ all, and prints in different words.
 
 **A sweep file with no `[capture]` table declares nothing and is not refused.**
 It did not ask for capture, and what reaches the store on that path is a
-rollout's own `record()` trace, which is stored whole. Nothing is backfilled: a
-run stored by an older version keeps what it recorded, under the spelling it
-recorded it in.
+rollout's own `record()` trace, which is stored whole.
 
-**A sweep file written for an older version** has no `max_observation_bytes`:
-those versions stored every value up to 8192 bytes whole. Add
-`max_observation_bytes = 8192` to store what they stored — and to `--resume` a
-run one of them began, since a resume whose declaration differs from what the
-run recorded is refused rather than mixed into one run.
+**A resume keeps the declaration.** `--resume` of a run whose `[capture]` table
+differs from what the run recorded is refused rather than mixed into one run.
 
 **A cut is not silent.** `poisson-prove inspect` prints an `observation: cut (...)`
 line above the span lines of any row whose trace has a cut span, naming each cut

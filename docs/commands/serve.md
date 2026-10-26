@@ -43,8 +43,8 @@ options:
                         shared seeds, logrank_bh is time to the event
                         (default: mcnemar_bh for runs paired at sweep time,
                         else fisher_bh)
-  --q Q                 the false discovery rate the verdicts are held to
-                        (default: 0.05)
+  --q Q                 the level of the per-condition flags (false discovery
+                        rate) and of the verdict (family-wise) (default: 0.05)
   --x AXIS              required: the config key on the x axis (omitted: lists
                         the axes and events the runs carry; no default)
   --y AXIS              the config key on the y axis (default: none)
@@ -83,8 +83,8 @@ the fault lines under the omnibus:
                         grouping's shape, never from what rejected
 
 examples:
-  poisson-prove serve latest previous --x tool_fail_rate --event violated
-  poisson-prove serve latest previous --x tool_fail_rate --event violated --json
+  poisson-prove serve previous latest --x tool_fail_rate --event violated
+  poisson-prove serve previous latest --x tool_fail_rate --event violated --json
 ```
 
 ## Options
@@ -128,6 +128,7 @@ $ poisson-prove serve --event timeout --x task_id --fix tool_fail_rate=0.55 --js
   "verdict": "ok",
   "method": "mcnemar_bh",
   "pair": {"a": {"role": "baseline", "run_name": "mock-agent 2026-10-26 a"}}
+  …
 }
 ```
 

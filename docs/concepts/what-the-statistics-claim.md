@@ -35,9 +35,11 @@ explain. There are three, and the comparison names the one it used:
   moved at the same time.
 
 **q** is the false discovery rate, 0.05 by default. Many conditions times several events is many
-tests, and some would come out significant by chance alone. Prove adjusts each condition's p-value
-over the whole family (Benjamini and Hochberg) and flags a condition when its adjusted value is
-below q: of the conditions flagged, at most 5% on average are expected to be false alarms.
+tests, and some would come out significant by chance alone. Prove adjusts each p-value over the
+whole family of condition-event pairs (Benjamini and Hochberg) and flags a pair when its adjusted
+value is below q: of the pairs flagged, at most 5% on average are expected to be false alarms. That
+guarantee is proven for tests that are independent or positively related; the events of one
+condition compete with each other, so read it as close rather than exact.
 
 **The verdict word** is stricter than the flags. It counts only the changes that also hold at the
 family-wise level (Holm's procedure at q), where the chance of even one false alarm in the whole
@@ -71,10 +73,13 @@ The first word of `diff`, `report`, `serve` and the dashboard is one of these.
 - `safer`: at least one condition got significantly safer, and none got worse.
 - `trade`: at least one condition got worse and at least one got safer, in any events. One
   condition where one failure fell and another rose (a cell-level trade) counts as both.
-- `no significant change`: no condition moved either way, and every condition could have shown a
-  change of the threshold you accepted. The line says the largest limit it read.
-- `too small to tell`: no condition moved either way, and at least one could not have shown a
-  change of the threshold. It is not a pass: nothing was seen because not enough could be.
+- `no significant change`: no change counted at the family-wise level, and every condition that
+  did not count could have caught a change of the threshold you accepted, 4 times in 5. The line
+  says the largest limit it read. A condition flagged only at the false discovery rate can still be
+  there; the `flagged only` line says so.
+- `too small to tell`: no change counted at the family-wise level, and at least one condition could
+  not have caught a change of the threshold. It is not a pass: nothing was seen because not enough
+  could be.
   [When it says too small to tell](../recipes/when-it-says-too-small-to-tell.md) says what to
   change.
 
@@ -99,11 +104,14 @@ comparison's word is on its `comparison` line.
 - **What an outcome means.** Prove counts labels; whether `crashed` meant your agent or your
   provider is decided by your rollout. [Defining outcomes](../defining-outcomes.md) is about
   exactly this.
-- **No change.** `no significant change` says no change as large as the threshold happened in any
-  condition, with the stated chance of missing one; it does not say nothing changed.
-- **Error rates after peeking.** The error bounds hold for a comparison read once. A run resumed
-  with more replicates after a comparison was read carries a note saying so, and so does a
-  partial run.
+- **No change.** `no significant change` says a change as large as the threshold would have been
+  caught 4 times in 5 in every condition, and none was; a smaller change, or a missed one, can
+  still be there.
+- **Error rates after peeking.** The error bounds hold for a comparison read once. A partial run
+  carries a note saying so, and so does a run resumed with more replicates after a comparison of it
+  was read on this machine: Prove keeps the list of comparisons it has printed in
+  `~/.cache/poisson-prove/compared.jsonl`, so a comparison read on another machine, or in CI, is
+  not known to it.
 
 [The layered report](the-layered-report.md) covers the tests that sit above the conditions: the
 omnibus, the fault lines and the bound.

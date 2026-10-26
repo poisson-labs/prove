@@ -101,7 +101,8 @@ left the terminal it prints the same stopped line and the `next:` command that r
 
 ## What it never does
 
-It makes no network call, reads no key, and writes nothing of its own: a comparison it shows is
-saved through the same code `diff --save` uses, and a sweep is the same sweep `sweep --yes` runs.
+It makes no network call, reads no key, and writes only what the commands write: a comparison it
+shows is saved through the same code `diff --save` uses, a sweep is the same sweep `sweep --yes`
+runs, and like every command it keeps its notes under `~/.cache/poisson-prove/`.
 `prove.toml` is never written. If Textual, the library it is drawn with, cannot be imported, the
 app says it cannot start and exits 1; every verb still works.

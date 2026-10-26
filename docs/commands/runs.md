@@ -2,8 +2,10 @@
 
 Lists every run in the store, newest first, with its number, name, id, status, backend, target and
 row counts, so the next command can name a run. Any of the three works wherever a command takes a
-run: the name (`"mock-agent 2026-10-26 a"`), the id, or the number (`#1` is the newest). So do
-`latest` and `previous`, the two newest complete runs.
+run: the name (`"mock-agent 2026-10-26 a"`), the id, or the number (`#1` is the newest complete
+run). So do `latest` and `previous`, the two newest complete runs, and `latest:TARGET`, the newest
+complete run of one target. A partial run has no number and is never `latest`; name it by its name
+or id.
 
 <!-- docs-check: setup quickstart -->
 
@@ -62,6 +64,7 @@ $ poisson-prove runs --json
   "verdict": "ok",
   "store": "prove-runs",
   "runs": [{"run_id": "20261026T144648Z-0eef", "run_name": "mock-agent 2026-10-26 b", "status": "complete"}]
+  …
 }
 ```
 

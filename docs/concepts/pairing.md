@@ -2,9 +2,9 @@
 
 Two runs are paired when they share their seeds: replicate 7 of a condition gets the same seed in
 both. If your rollout seeds its randomness from `seed`, the two episodes start from the same draw,
-and the only thing that differs between them is what you changed. Prove can then compare each
-episode with its twin instead of two crowds, which needs far fewer episodes to see the same
-change.
+and much of what differs between them is what you changed (a model's own sampling can still
+differ, below). Prove can then compare each episode with its twin instead of two crowds, which
+sees a change more easily when the twins mostly end the same way.
 
 ## Seeds and the run salt
 
@@ -25,9 +25,11 @@ Fisher's test compares the two runs' rates as if they were two separate samples,
 both runs is in the comparison. The paired test (exact McNemar) looks only at the twin pairs that
 ended differently: pairs where both episodes failed, or both succeeded, say nothing about the
 change and are left out. When most episodes end the same way in both runs, as they do when only
-your change differs, those few discordant pairs carry the whole signal, and a smaller change is
-detectable from the same number of episodes. The plan shows it: a paired sweep states its
-smallest detectable change for the paired test.
+your change differs, those few discordant pairs carry the whole signal, and a smaller change can
+be flagged from the same number of episodes. The detection limits Prove prints do not count on
+that gain: the plan and the limits treat twins as if they were independent, the safe assumption
+when you cannot know in advance how far the runs will agree. So a paired plan states about the
+same limit as an unpaired one, and the gain shows only in what gets flagged.
 
 ## When Prove pairs by default
 

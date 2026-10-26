@@ -145,7 +145,7 @@ Building and reading traces. Its names, as its `__all__` lists them: `Span`, `Tr
 `TraceValidationError`, and these constants:
 
 - `SCHEMA`: the schema string every stored trace carries.
-- `KINDS`: the kinds a span may have, such as `llm`, `tool` and `step`.
+- `KINDS`: the kinds a span may have: `llm`, `tool`, `retrieval`, `db`, `http`, `agent` and `other`.
 - `CONTENT_KEYS`: the span keys that hold captured content, dropped when content is not kept.
 - `OBSERVATION_KEYS`: the span keys that hold what a step observed, stored apart from the envelope.
 - `OBSERVATION_ROUTING_BYTES`: the size over which an attribute is stored as an observation.

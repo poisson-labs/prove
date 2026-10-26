@@ -83,5 +83,5 @@ A model key your agent needs goes in the CI's secrets, as for any test that call
 Whether the main branch's run is still a fair baseline. A model's answers drift with its version
 and its provider's load, so a baseline swept weeks ago differs from today's run in more than your
 change. Re-sweep the baseline when the model or the provider changes, and when in doubt run both
-sides in the same job. A passing gate says no condition got worse by more than its detection limit
-on these conditions, not that nothing got worse.
+sides in the same job. A passing gate says no condition counted as worse; each condition's detection
+limit says how large a rise it would have caught 4 times in 5. It does not say nothing got worse.

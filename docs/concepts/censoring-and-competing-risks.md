@@ -47,10 +47,12 @@ run was censored before the horizon.
 
 ## Censoring
 
-An episode is censored when it stops being watched before anything happened to it: it ended
-before the horizon in an outcome that is none of the events compared. Its time still counts: it
-was at risk until then. The log-rank test (`--method logrank_bh`) reads these times directly and
-asks whether the event happens sooner, not only whether it happens by the horizon. It tests the
+For the rates above, an episode that ended in another outcome is not censored: it is counted as
+ending that way, a competing ending. Only an episode still running at the common horizon is
+censored there. The log-rank test (`--method logrank_bh`) reads time differently: for it, an
+episode that ended in any outcome other than the event is censored at its time, still at risk until
+then, and the test asks whether the event happens sooner, not only whether it happens by the
+horizon. It tests the
 event's own hazard among the episodes still running, so when a competing outcome moved too, the
 row says so: a lower hazard of one ending can come from a higher hazard of another.
 

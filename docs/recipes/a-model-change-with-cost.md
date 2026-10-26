@@ -79,24 +79,25 @@ the table says where.
 
 ## The cost
 
-Before the full sweep, check that a pilot pair stays inside your budget. The requests your arms
-recorded, with their token usage, are summed by `paired`'s cost check against a cap you declare
-(a paired-replay declaration whose `request_span` names the model call, with `token_cap` and
-`price_per_input_token`; [Paired replay](paired-replay.md) has its keys):
+Before the full sweep, check that a pilot pair stays inside your budget. `paired`'s cost check
+sums the input tokens recorded on the request spans of the runs a paired-replay declaration names,
+against the `token_cap` it declares. The declaration needs every key of
+[Paired replay](paired-replay.md), and its `request_span` must be the exact name of the span that
+holds the model call in both runs:
 
 <!-- docs-check: skip: needs two model keys -->
 ```bash
 poisson-prove paired --declaration pilot.toml --cap-check
 ```
 
-It exits 4 at or above the cap, so a script can stop before the full sweep spends more. The
-dollars are your price times the tokens the provider reported; Prove carries no price list for
-model providers. For the switch itself, compare the two runs' recorded tokens per episode at each
-model's own price.
+It exits 4 at or above the cap, so a script can stop before the full sweep spends more. It counts
+input tokens only, and the dollars are your declared price times those; Prove carries no price
+list for model providers. What the switch saves is yours to compute: each run's input and output
+tokens per episode, at each model's own prices.
 
 ## What this does not tell you
 
-That the cheaper model is as good. It says that on these ticket types, at these replicates, its
-failure rate did not rise by more than the detection limit each condition states. A smaller rise
-can still be there; a ticket type you did not sweep can behave differently; and a model's version
+That the cheaper model is as good. It says that on these ticket types, at these replicates, no rise
+in its failure rate counted, and that a rise as large as each condition's detection limit would
+have been caught 4 times in 5. A smaller rise, or a missed one, can still be there; a ticket type you did not sweep can behave differently; and a model's version
 can change behind its name, so record which version each run called.

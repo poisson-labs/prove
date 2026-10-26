@@ -63,7 +63,8 @@ a = "the run id of replay-a"
 b = "the run id of replay-b"
 ```
 
-A pair is eligible only when both arms sent one request, with the same body apart from the
+Each item is analysed under the cut whose `name` equals its value of the `stratum_key` axis, so
+name the cuts after that axis's values. A pair is eligible only when both arms sent one request, with the same body apart from the
 exemptions, to the pinned model, and recorded a score between 0 and 1. Every other pair is
 excluded under one named cause, and the counts reconcile.
 

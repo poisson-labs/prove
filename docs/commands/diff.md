@@ -37,8 +37,8 @@ options:
                         shared seeds, logrank_bh is time to the event
                         (default: mcnemar_bh for runs paired at sweep time,
                         else fisher_bh)
-  --q Q                 the false discovery rate the verdicts are held to
-                        (default: 0.05)
+  --q Q                 the level of the per-condition flags (false discovery
+                        rate) and of the verdict (family-wise) (default: 0.05)
   --methods {all}       also run the other two methods and print them side by
                         side (default: one method)
   --json                print the comparison as one JSON document instead of
@@ -70,8 +70,8 @@ the fault lines under the omnibus:
                         grouping's shape, never from what rejected
 
 examples:
-  poisson-prove diff latest previous
-  poisson-prove diff latest previous --event violated --json
+  poisson-prove diff previous latest
+  poisson-prove diff previous latest --event violated --json
 ```
 
 ## Options
@@ -80,9 +80,11 @@ examples:
   `previous` or `#1`, as `runs` numbers them. With none, `previous` and `latest`.
 - `--event NAME` is an outcome that counts as the event; give it once per event. Without it the
   events are inferred: every outcome but the most frequent, which is named as the non-event.
-  Whether a rise of an event is worse or safer comes from the runs' `[declare]` tables; for runs
-  that declare nothing, the name can carry it, `--event timeout:failure`, and otherwise the verdict
-  uses the kindless words `higher`, `lower` and `mixed`.
+  The inference does not read the runs' `[declare]` tables: when the most frequent outcome is a
+  failure, it is left out, so name the events you mean when it matters. Whether a rise of an event
+  is worse or safer comes from those tables; for runs that declare nothing, the name can carry it,
+  `--event timeout:failure`, and otherwise the verdict uses the kindless words `higher`, `lower`
+  and `mixed`.
 - `--method` is the test each condition gets. `mcnemar_bh` pairs the runs' episodes on their shared
   seeds, and is the default for runs paired at sweep time; `fisher_bh` treats the runs as two
   separate samples, the default otherwise; `logrank_bh` compares the time to the event. Naming
@@ -102,6 +104,15 @@ examples:
   [The layered report](../concepts/the-layered-report.md) explains the four layers.
 - `--store PATH` is the store folder; `--plain` prints plain text on a terminal too; `--debug`
   adds the traceback of an unexpected failure.
+
+## Reading the first line
+
+The first word is the verdict: `worse`, `safer`, `trade` (both), `no significant change` or
+`too small to tell` when nothing counted, or the kindless `higher`, `lower` and `mixed`.
+[What the statistics claim](../concepts/what-the-statistics-claim.md) defines each. Then, per
+event, how many conditions were flagged safer and worse at the false discovery rate, and the test.
+A clause after the test, `counted at the family-wise level`, gives the changes the word counts
+when they differ from the flags; an event it does not name counted as flagged.
 
 ## Examples
 
@@ -153,6 +164,7 @@ $ poisson-prove diff --json
   "sentence": "timeout: … safer, … worse · violated: … safer, … worse (paired test on shared seeds); …",
   "method": "mcnemar_bh",
   "method_chosen": "default"
+  …
 }
 ```
 

@@ -16,18 +16,20 @@ have shown.
     poisson-prove sweep --yes --target poisson_prove.examples.mock_agent:rollout_patched --pair-with latest
     poisson-prove diff
 
-- No key and no account for the example; your own agent runs on your machine.
-- Nothing is sent anywhere: no telemetry, no update check; `serve` binds to 127.0.0.1 only.
+- No key and no account for the example; your own agent runs on your machine by default.
+- Prove sends nothing anywhere: no telemetry, no update check; `serve` binds to 127.0.0.1 only.
 - Python 3.11 to 3.14 on macOS and Linux. MIT licensed.
 
+For your own agent you write one function that runs one case and says how it ended: see
+[Your own agent](https://github.com/poisson-labs/prove/blob/main/docs/your-own-agent.md).
 `uv tool install poisson-prove` or `pipx install poisson-prove` installs the command alone: enough
-for the example, not for importing your own agent, which needs Prove in the same environment.
+for the example, not for importing your agent.
 
 ## What the first run showed
 
-The example sweeps a small mock agent over three tasks and three tool failure rates, 194 runs of
-each of the nine conditions, then sweeps a patched version of it (it retries a failed tool call
-once) on the same seeds. `diff` compares the two:
+The example sweeps a small mock agent over three tasks and three tool failure rates, 194 episodes
+in each of the nine conditions, then sweeps a patched version of it (it retries a failed tool call
+once) on the same seeds. `diff` compares the two runs:
 
 <!-- docs-check: run -->
 ```console
@@ -41,17 +43,19 @@ trade  timeout: … safer, … worse · violated: … safer, … worse (paired t
 ```
 
 Read the first line word by word. `trade` is the verdict: some conditions got safer and at least
-one got worse. Then, per outcome, how many conditions it fell in (safer) and rose in (worse).
+one got worse. Then, per outcome, how many conditions were flagged as falling (safer) and rising
+(worse); the clause after the test names the changes that also hold at the stricter level the word
+is decided at, where they differ from the flags.
 `violated` (the agent took a forbidden fallback) falls in most conditions and rises in none;
 `timeout` (the agent ran out of its 20 tool calls) falls in some and rises in the hardest one. The
 patch trades one failure for another: retrying keeps the agent off the forbidden path, and where
 tools fail most the retries use up its budget. "Paired test on shared seeds" says the two runs drew
 the same random numbers, so each episode is compared with its twin. The counts move a little from
-one pair of sweeps to the next, since each pair draws fresh seeds; the verdict does not.
+one pair of sweeps to the next, since each pair draws fresh seeds; the verdict did not, in our runs.
 
-The lines under it name the method and the two runs; further down, every condition has its change,
-an interval on it and the smallest change it could have detected. The `next:` line is the command
-to run next, whole.
+The lines under it name the method and the two runs; the full output goes on, with every
+condition's change, an interval on it and the smallest change it could have detected. The `next:`
+line is the command to run next, whole.
 
 ## Let your coding agent set it up
 
@@ -173,15 +177,14 @@ example end to end and says what each piece does.
 
 Each condition's change is tested on its own, and the flags are held to a false discovery rate
 (Benjamini-Hochberg, q 0.05 by default); the verdict word counts only the changes that also hold
-at the family-wise level (Holm). Every condition that did not move says how large a change it could
-have caught, 4 times in 5. `no significant change` means nothing moved and every condition could
-have seen a change of the size you accepted; `too small to tell` means at least one could not.
-Before a sweep runs, the plan refuses a design too small to detect the change you accept.
+at the family-wise level (Holm). Every condition that did not move says how large a change it would
+have caught 4 times in 5. `no significant change` means no change counted and every condition could
+have caught one of the size you accepted; `too small to tell` means at least one could not. Before
+a sweep runs, the plan refuses a design too small to detect the change you accept.
 
 What Prove does not claim: that the change caused anything (it compares two runs), anything about
 conditions you did not sweep, or that an outcome label means what you meant by it. It is not a
-benchmark, an agent framework or an observability tool, and it never edits your code or your
-files. [What the statistics claim](https://github.com/poisson-labs/prove/blob/main/docs/concepts/what-the-statistics-claim.md)
+benchmark, an agent framework or an observability tool, and it never edits your code. [What the statistics claim](https://github.com/poisson-labs/prove/blob/main/docs/concepts/what-the-statistics-claim.md)
 says it in full, and [Defining outcomes](https://github.com/poisson-labs/prove/blob/main/docs/defining-outcomes.md)
 says how to choose labels that measure your agent and not your provider. The serve page and the
 traces have pages of their own:
@@ -191,8 +194,8 @@ traces have pages of their own:
 ## Where Prove sits beside Trace and Tasks
 
 Tasks makes the cases; Prove says whether a change moved the failure rate, and by how much it
-could have; Trace says where in a run it failed, and whether that moved. They share Prove's store
-format and nothing at runtime: each installs alone. See
+could have; Trace says where in a run it failed, and whether that moved. Prove installs alone and
+calls neither; Trace reads Prove's store. See
 [Prove with Trace and Tasks](https://github.com/poisson-labs/prove/blob/main/docs/with-trace-and-tasks.md).
 
 ## Backends
@@ -200,8 +203,8 @@ format and nothing at runtime: each installs alone. See
 Sweeps run on your machine by default. `--backend modal` runs them in parallel Modal containers on
 your own account (`pip install "poisson-prove[modal]"`), with a cost estimate in the plan.
 `--backend burla` runs them on your own Burla cluster (`pip install "poisson-prove[burla]"`); it is
-experimental. Either way the rows land in the same local store. See
-[Backends](https://github.com/poisson-labs/prove/blob/main/docs/backends.md).
+experimental. Your rollout's code and conditions go to the account you choose, and the rows come
+back to the same local store. See [Backends](https://github.com/poisson-labs/prove/blob/main/docs/backends.md).
 
 Prove never phones home. No telemetry, no analytics, no update checks. `poisson-prove serve` binds a
 loopback listener on request and makes no outbound connection: it holds one page built from data

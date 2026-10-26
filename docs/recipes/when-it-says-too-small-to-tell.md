@@ -49,38 +49,32 @@ says how large a change each condition could have caught; at 20 replicates most 
 ## Fix it
 
 Two levers, and the plan tells you how far to pull either before anything runs. More replicates:
-the plan's refusal names the number that reaches the change you accept.
+dry-run the design you would sweep, paired with the baseline as the real sweep will be, and the
+refusal names the replicates that reach the change you accept:
 
 <!-- docs-check: run -->
 ```console
-$ poisson-prove sweep --replicates 20 --dry-run  # exits 1
+$ poisson-prove sweep --replicates 20 --pair-with before --dry-run  # exits 1
 plan  180 rollouts of mock-agent: 9 cells x 20 replicates on local, $0 (local)
 …
-error: underpowered design: one condition alone would be flagged for a change of 0.519 at its worst base rate, 0.000, and you accept 0.200
-  next: poisson-prove sweep --replicates 193 --dry-run
-  next: poisson-prove sweep --replicates 20 --dry-run --max-mde 0.625
+error: underpowered design: one condition alone would be flagged for a change of 0.568 at its worst base rate, 0.000, and you accept 0.200
+  next: poisson-prove sweep --replicates 194 --pair-with before --dry-run
+  next: poisson-prove sweep --replicates 20 --pair-with before --dry-run --max-mde 0.662
+$ poisson-prove sweep --replicates 194 --pair-with before --dry-run
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+…
+  smallest rise one condition alone would be flagged for  0.200 at its worst base rate, 0.400 (the paired test, q 0.05 over 18 tests, 4 times in 5; you accept up to 0.200)
 ```
 
 Or fewer conditions: every condition and event is one more test in the family, and the test each
 one gets is stricter for it, so dropping axis values you do not need lowers every condition's
-limit at the same replicates. Either way, check the design before spending anything: at the
-replicates the refusal names, the plan accepts it.
-
-<!-- docs-check: run -->
-```console
-$ poisson-prove sweep --replicates 193 --dry-run
-plan  1,737 rollouts of mock-agent: 9 cells x 193 replicates on local, $0 (local)
-…
-  smallest rise one condition alone would be flagged for  … at its worst base rate, 0.400 (Fisher, q 0.05 over 18 tests, 4 times in 5; you accept up to 0.200)
-```
-
-Then sweep at that design, paired with the baseline, and compare the two. Every condition can now
-show a change of 0.20, so the word is `no significant change` when nothing moved, or names what
-did.
+limit at the same replicates. Then sweep the design the plan accepts, paired with the baseline, and
+compare the two. Every condition can now catch a change of 0.20, so the word is
+`no significant change` when nothing counted, or names what did.
 
 ## What this does not tell you
 
-That nothing changed. `no significant change` rules out a change as large as the threshold in each
-condition, 4 times in 5; a smaller change can still be there. And accepting a larger change with
+That nothing changed. `no significant change` says a change as large as the threshold would have been
+caught 4 times in 5 in each condition, and none was; a smaller change can still be there. And accepting a larger change with
 `--max-mde` lets a small design pass the plan without letting it see more: the quick check above
 could not have caught a change smaller than about 0.66 in its worst condition.

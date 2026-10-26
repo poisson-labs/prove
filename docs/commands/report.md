@@ -41,8 +41,8 @@ options:
                         shared seeds, logrank_bh is time to the event
                         (default: mcnemar_bh for runs paired at sweep time,
                         else fisher_bh)
-  --q Q                 the false discovery rate the verdicts are held to
-                        (default: 0.05)
+  --q Q                 the level of the per-condition flags (false discovery
+                        rate) and of the verdict (family-wise) (default: 0.05)
   --methods {all}       add the method comparison table (default: one method;
                         two runs only)
   --x AXIS              required: the config key on the x axis (omitted: lists
@@ -91,7 +91,7 @@ the fault lines under the omnibus:
                         grouping's shape, never from what rejected
 
 examples:
-  poisson-prove report latest previous --x tool_fail_rate --y task_id
+  poisson-prove report previous latest --x tool_fail_rate --y task_id
   poisson-prove report latest --x tool_fail_rate --event violated
 ```
 
@@ -159,6 +159,7 @@ $ poisson-prove report --x task_id --fix tool_fail_rate=0.55 --out hardest --jso
   "out": "hardest",
   "wrote": ["hardest/report.md", "hardest/heatmap.svg", "hardest/receipt.html"],
   "method": "mcnemar_bh"
+  …
 }
 ```
 

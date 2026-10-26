@@ -17,8 +17,8 @@ pip install -e ".[all,dev]"
 
 ## Running the tests
 
-The code suite runs on every pull request; the math suite (the statistics, marked `math`) on a
-pull request that changes statistics code, nightly, and before a release:
+Two suites. Run the code suite before every pull request, and the math suite (the statistics,
+marked `math`) when you change statistics code:
 
 <!-- docs-check: skip: runs the test suites of a checkout -->
 ```bash
@@ -30,14 +30,17 @@ python -m pytest tests -n 10 -m math
 suite takes a few minutes. Tests marked `calibration` are the slow statistical checks of the error
 rates; tests marked `backend` call a real Modal or Burla account and never run unless you opt in.
 
-Tests marked `slow` run on `main` and nightly: a browser check of the dashboard's pages, every
-docs page run again from the built wheel in a fresh environment, and the code suite with every
-requirement installed at its stated floor. The browser check needs Playwright's engines:
+Tests marked `slow` take longer and some reach the package index: a browser check of the
+dashboard's pages, every docs page run again from the built wheel in a fresh environment, and the
+code suite with every requirement installed at its stated floor on Python 3.11. At the floors,
+numpy and SciPy each start a BLAS thread pool in every process, so set `OPENBLAS_NUM_THREADS=1`
+for this run or the parallel workers swamp the machine. The browser check needs Playwright's
+engines:
 
 <!-- docs-check: skip: runs the slow tests of a checkout -->
 ```bash
 python -m playwright install chromium firefox webkit
-python -m pytest tests -n 6 -m "slow and not backend"
+OPENBLAS_NUM_THREADS=1 python -m pytest tests -n 6 -m "slow and not backend"
 ```
 
 ## The docs are tested
@@ -46,8 +49,8 @@ Every command block in the README and under `docs/` runs, from a folder of its o
 what its page shows: each block carries a mark in an HTML comment on the line before it
 (`run`, `skip: REASON`, or `file NAME`), and a block with no mark fails. A page's shown output is
 checked by its verdict word and its line labels, never by its counts, which change from one sweep
-to the next. `tests/pf7_docs_check.py` is the check, and its docstring defines the marks. When you
-change a command's output or its help, run the docs tests and update the pages they name.
+to the next. The docs check under `tests/` defines the marks in its docstring. When you change a
+command's output or its help, run the docs tests and update the pages they name.
 
 ## Snapshots
 
@@ -68,8 +71,8 @@ python -m pytest tests -k snapshot --update-snapshots
   OpenTelemetry SDK live behind their extras, and a bare install runs every verb locally.
 - Prove makes no network call of its own: no telemetry, no update check. `serve` binds 127.0.0.1
   only.
-- A test pins a fact, never prose. A frozen test (one a change was built against) is changed only
-  by a change that says why, in its own commit.
+- A test pins a fact, never prose. A test is changed only by a commit that says why, never to make
+  a change pass.
 - Every requirement has a floor that the slow floors test installs and runs; raise one only with
   the reason in the commit.
 

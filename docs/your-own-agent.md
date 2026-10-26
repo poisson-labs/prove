@@ -240,16 +240,21 @@ max_observation_bytes = 16384
 `instrument` lists instrumentors by the name they register under OpenTelemetry's
 `opentelemetry_instrumentor` entry points; only those are switched on. `content = false` (the
 default) keeps prompts and completions out of the store; `max_observation_bytes` has no default
-and bounds each stored value. [What capture stores](what-capture-stores.md) says exactly what is
-kept. A rollout can also record its own steps with `poisson_prove.record` and
+and bounds each stored value. An instrumentor that is not installed is not refused: the run goes
+on without capture and its manifest records why, so check that `inspect` shows spans after a first
+small sweep. [What capture stores](what-capture-stores.md) says exactly what is kept. A rollout can also record its own steps with `poisson_prove.record` and
 `poisson_prove.step`, with no OpenTelemetry at all; see [Traces](concepts/traces.md).
 
 ## What Prove does with your code
 
-It imports the module `target` names and calls the function. It never edits your code or your
-files and reads no key: your agent reads its own keys, as it does today. Only the tables you add
+It imports the module `target` names and calls the function. It never edits your code and reads
+no key: your agent reads its own keys, as it does today. What it writes is the store
+(`./prove-runs` or the one you name) and two files of its own under `~/.cache/poisson-prove/`:
+`compared.jsonl`, the comparisons it has printed (so a run resumed after one was read carries a
+note), and `errors.log`, the details of any unexpected failure. Only the tables you add
 change what happens around a call: `[capture]` switches on the instrumentors you name, and
 `[chaos]` injects the faults you name into your client's HTTP calls
 ([Fault injection](fault-injection.md)). On the local backend each call runs in Prove's own
 process, one after another; with `--episode-timeout` each runs in a child process, and one that
-runs past the limit is stopped and stored with no outcome, as an error of kind `timeout`. The other backends are on [Backends](backends.md).
+runs past the limit is stopped and stored with no outcome, as an error of kind `timeout`. The
+other backends are on [Backends](backends.md).

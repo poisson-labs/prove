@@ -52,7 +52,7 @@ bound: depth 3 (3 configured); …
 
 **The verdict line.** The first word is the verdict: `trade`, because some conditions got safer
 and at least one got worse. Then, per event, how many conditions it fell in and rose in, and the
-test. The counts move a little between pairs of sweeps; the word does not.
+test. The counts move a little between pairs of sweeps; the word did not, in our runs.
 
 **The detail lines.** `method` names the test and why it was chosen: the runs share their seeds,
 so each episode is compared with its twin. `before` and `after` are the runs, by name. A `trade`

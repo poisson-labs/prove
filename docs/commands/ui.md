@@ -67,6 +67,7 @@ $ poisson-prove ui --json
   "verdict": "ok",
   "sentence": "the dashboard over prove-runs",
   "location": "file:///…/prove-runs/.poisson/ui/index.html"
+  …
 }
 ```
 

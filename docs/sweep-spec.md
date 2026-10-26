@@ -106,7 +106,7 @@ the process that runs the rollout, and each episode's spans are stored with it. 
 
 | key | type | default | what it is |
 |---|---|---|---|
-| `instrument` | list of names | `[]` | instrumentors to switch on, by the name they register under OpenTelemetry's `opentelemetry_instrumentor` entry points (`openai` for `opentelemetry-instrumentation-openai-v2`); empty for an agent that makes its own spans |
+| `instrument` | list of names | `[]` | instrumentors to switch on, by the name they register under OpenTelemetry's `opentelemetry_instrumentor` entry points (`openai` for `opentelemetry-instrumentation-openai-v2`); empty for an agent that makes its own spans. A name that is not installed is not refused: the run goes on without capture, and its manifest says so |
 | `content` | `true` or `false` | `false` | whether prompts and completions are stored; with `false` they never leave the process |
 | `max_observation_bytes` | integer, 1 or more, or `"none"` | no default, required | the largest single value (one prompt, one tool result) stored whole; a larger one is stored as its head, its tail and its length. `"none"` stores every value whole |
 | `max_spans` | integer, 1 or more | no limit | the most spans one episode keeps: the earliest-started, so the root survives |
@@ -121,7 +121,7 @@ extra package: it hooks the `httpx` client the target's model client uses.
 
 | key | type | default | what it is |
 |---|---|---|---|
-| `fault` | a fault's name | `"none"` | which fault to inject; an unknown name is refused before the run |
+| `fault` | a fault's name | `"none"` | which fault to inject; an unknown name stops the sweep before its first episode |
 | `rate` | number from 0 to 1 | `1.0` | the share of eligible calls that get the fault |
 | `steps` | list of step names | every step | inject only inside these steps |
 
@@ -131,7 +131,8 @@ it share their seeds.
 ## `[modal]`
 
 How a `--backend modal` sweep runs. Every key is optional; the command line's `--concurrency`,
-`--infra-retries`, `--max-cost`, `--est-seconds` and `--app-name` override it for one run.
+`--infra-retries`, `--max-cost`, `--est-seconds`, `--app-name`, `--batch-size`,
+`--episode-timeout` and `--max-rollouts` override it for one run.
 [Backends](backends.md#modal) says what a Modal sweep needs.
 
 | key | type | default | what it is |

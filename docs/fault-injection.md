@@ -6,8 +6,8 @@ injects one such fault into the responses your agent's client receives, at a rat
 only where you say. Run the same spec with and without it, paired, and `diff` says per condition
 how much worse the fault made things.
 
-Nothing extra is installed for it. Prove hooks the `httpx` client your agent's model client is
-built on (the OpenAI client is), which the `agent` extra brings; the agent's code is not changed.
+It needs no package of its own: Prove hooks the `httpx` client your agent's model client is built
+on (the OpenAI client is, and the `agent` extra brings it), and the agent's code is not changed.
 
 ## Where a fault can land: `position()`
 
@@ -36,10 +36,12 @@ same places.
 | `rate` | `1.0` | the share of eligible positions that get the fault, from 0 to 1 |
 | `steps` | every step | only positions with one of these names are eligible |
 
-A fault that cannot apply is a refusal, never a quiet no-op: an unknown name, or a faulted run
-whose process has no `httpx` client loaded, is refused before the run starts, and a target path
-missing from a response, a mutation that changes nothing, or a streamed response at an eligible
-position fails the episode. The table is not part of the sweep's identity, so a faulted run
+A fault that cannot apply stops the sweep, never a quiet no-op. An unknown name, or a faulted run
+whose process has no `httpx` client loaded, passes `--dry-run` but stops the sweep before any
+episode runs, as an unexpected failure (exit 3) whose details are in
+`~/.cache/poisson-prove/errors.log`; nothing is stored, so check the name against the list below.
+A target path missing from a response, a mutation that changes nothing, or a streamed response at
+an eligible position fails the episode. The table is not part of the sweep's identity, so a faulted run
 paired with a clean one shares its seeds.
 
 ## The faults
