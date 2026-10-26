@@ -171,10 +171,10 @@ MIT_BODY = (
     "OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."
 )
 
-#: PF8.7 (r11): the canonical ``docs/repo-hygiene.md``, local-stack's ``docs/repo-hygiene.md`` at
-#: ``222ec08755eb754ab187bdaa8424e71cb009db80`` (github.com/poisson-labs/local-stack), 8,243 bytes,
-#: read 2026-10-24; Trace's copy has the same bytes. A new version of the standard moves this pin.
-REPO_HYGIENE_SHA256 = "802d0ff86e6a1b269c37281de749e57b9c5b069cd425aa91eed04edeba604131"
+#: PF8.7 (r11): the canonical ``docs/repo-hygiene.md``: local-stack's at
+#: ``222ec08755eb754ab187bdaa8424e71cb009db80`` in public wording (ruled 2026-10-26), 8,206 bytes,
+#: the same rules in other words. A new version of the standard moves this pin.
+REPO_HYGIENE_SHA256 = "5017a2b3b03e2f50bcc193fff79645498e4cb69df8c3bd26ef0420b205fe8366"
 
 #: Section 9.3: the two standards the plain-words test leaves out.
 STANDARDS = ("docs/cli-look.md", "docs/repo-hygiene.md")
