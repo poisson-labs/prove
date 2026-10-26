@@ -707,8 +707,8 @@ class Store:
 
         ``trace=`` selects how much of the trace is presented, and is orthogonal to ``meta=``:
         ``meta=`` says only whether the ``meta`` column is read. ``None`` resolves to ``"full"``
-        when ``meta=True`` and ``"none"`` when ``meta=False``, so every call written before A7
-        keeps its behaviour.
+        when ``meta=True`` and ``"none"`` when ``meta=False``, so every call written before the
+        trace had a column of its own keeps its behaviour.
 
         ``"full"``      the same columns as ever, with the trace reassembled into
                         ``meta["trace"]`` where one is stored. Refused with ``meta=False``:
@@ -717,13 +717,13 @@ class Store:
                         and a ``meta`` (where read) with no ``"trace"`` key. The observation
                         bodies are projected away at the Parquet reader and never decoded.
                         ``meta`` is decoded only when the run holds a part written *before*
-                        A7, whose envelope can come from nowhere else -- and then for the
-                        whole run, not only that part, because every part is read under one
-                        projection. A run resumed across the A7 boundary therefore pays
-                        meta's decode on its post-A7 rows too; that is the only way a mixed
+                        the split, whose envelope can come from nowhere else -- and then for
+                        the whole run, not only that part, because every part is read under
+                        one projection. A run resumed across the split therefore pays meta's
+                        decode on its newer rows too; that is the only way a mixed
                         run exists, and reading each part under its own schema is what would
                         make the saving per part.
-        ``"none"``      no trace anywhere: both columns projected away, and a pre-A7 row's
+        ``"none"``      no trace anywhere: both columns projected away, and an older row's
                         ``meta["trace"]`` stripped, so the two layouts stay indistinguishable.
 
         A stored null in a string column reads back as ``None``, on every pandas this package
@@ -791,7 +791,7 @@ class Store:
             df[_TRACE_KEY] = self._envelopes(df)
         if mode != "full" and "meta" in df.columns:
             # "envelope" and "none" both present a ``meta`` without the key, so a caller cannot
-            # tell a pre-A7 row from a post-A7 one by what ``meta`` still carries.
+            # tell an older row from a newer one by what ``meta`` still carries.
             for value in df["meta"]:
                 if isinstance(value, dict):
                     value.pop(_TRACE_KEY, None)
