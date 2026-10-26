@@ -2354,13 +2354,16 @@ def test_ls17_no_refusal_reachable_from_serve_names_a_python_parameter(lattice_o
 
 
 def test_ls18_the_readme_has_a_serve_section_and_the_docs_page_names_the_fourteen_headings_in_order() -> None:
+    # PF7 (sections 6.2 and 6.3): the README is the release's, its links absolute and its sections
+    # section 6.2's, so the serve section, its command and "Pre-release" move to serve's own page,
+    # which the README's Commands line links; the README still links this page.
     readme = README.read_text(encoding="utf-8")
-    heading = next((line for line in readme.splitlines() if line.startswith("#") and "serve" in line.lower()), None)
-    assert heading is not None, "no serve heading in README"
-    assert re.search(r"^\s*poisson-prove\b.*\bserve\b.*--event\b.*--x\b", readme, re.M), "no runnable serve command in README"
-    assert "docs/reading-a-serve-page.md" in readme
-    assert re.search(r"^- \[[^\]]+\]\(docs/reading-a-serve-page\.md\)", readme, re.M), "the docs list does not link the page"
-    assert "Pre-release" in readme
+    serve_page = (REPO / "docs" / "commands" / "serve.md").read_text(encoding="utf-8")
+    heading = next((line for line in serve_page.splitlines() if line.startswith("#") and "serve" in line.lower()), None)
+    assert heading is not None, "no serve heading on its page"
+    assert re.search(r"^\s*(?:\$ )?poisson-prove\b.*\bserve\b.*--event\b.*--x\b", serve_page, re.M), "no runnable serve command on its page"
+    assert re.search(r"\]\(https://github\.com/poisson-labs/prove/blob/main/docs/reading-a-serve-page\.md\)", readme), "the README does not link the page"
+    assert "Pre-release" not in readme
     assert SERVE_DOC.exists()
     doc = SERVE_DOC.read_text(encoding="utf-8")
     positions = [next((m.start() for m in re.finditer(rf"^#+ {re.escape(h)}\s*$", doc, re.M)), -1) for h in H2_SEQUENCE]

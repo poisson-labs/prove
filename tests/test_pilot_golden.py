@@ -1675,8 +1675,8 @@ def test_w2_pyproject_agent_and_all_carry_openai_2_and_leave_litellm_unbounded()
         spec = by_name["openai"].specifier
         assert Version("2.20.0") in spec, (name, str(spec))
         assert Version("3.0.0") not in spec, (name, str(spec))
-        assert "litellm" in by_name, (name, sorted(by_name))
-        assert not str(by_name["litellm"].specifier), (name, str(by_name["litellm"].specifier))
+        # PF7 (Q14): litellm leaves both extras; nothing in the package imports it.
+        assert "litellm" not in by_name, (name, sorted(by_name))
 
 
 def test_w3_the_installed_openai_is_major_2() -> None:
@@ -1807,8 +1807,8 @@ def test_p12_the_wheel_and_the_extras_are_unchanged() -> None:
     with (REPO / "pyproject.toml").open("rb") as fh:
         pyproject = tomllib.load(fh)
     assert pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["src/poisson_prove"]
-    # PF9 (Q31): the [burla] extra joins the set.
-    assert set(pyproject["project"]["optional-dependencies"]) == {"modal", "agent", "viz", "all", "dev", "burla"}
+    # PF9 (Q31): the [burla] extra joins the set. PF7 (Q14): the [viz] extra goes.
+    assert set(pyproject["project"]["optional-dependencies"]) == {"modal", "agent", "all", "dev", "burla"}
     assert "openai" not in str(pyproject["project"]["dependencies"])
 
 
