@@ -164,6 +164,12 @@ def _detail(text: str) -> str:
     return _look.reprint(text) if _look.active() else text
 
 
+def _in_words(honesty: str, n_worse: int, word: str) -> str:
+    """The honesty block's claim, ``"N worse"``, in the panel's own word: ``"N higher"`` for an
+    event whose kind is not known, which nothing calls worse, the library included."""
+    return honesty.replace(f'"{n_worse} worse"', f'"{n_worse} {word}"', 1)
+
+
 def _plain(make: Callable[[], str]) -> str:
     """``make()`` rendered in the library's forms whatever the caller is inside."""
     with _look.library():
@@ -363,8 +369,8 @@ class Report:
 
     def shown_honesty(self, honesty: str | None = None) -> str:
         """The honesty block as every surface prints it: the claim's count named in the panel's
-        own word, ``"3 higher"`` for an event of unknown kind. ``honesty`` keeps the report's
-        encoding, ``"N worse"``, the count of the panel's second slot."""
+        own word, ``"3 higher"`` for an event of unknown kind, as ``honesty`` already names it;
+        a text still in the ``"N worse"`` form is named here."""
         text = self.honesty if honesty is None else honesty
         if self._words[1] == "worse":
             return text
@@ -673,9 +679,8 @@ def _honesty(
     A limit that is null is never printed as a number. When no unchanged condition has
     a limit, the first line names the first of them with its reason; a single-event cell whose
     whole headroom is not detectable says so. With no unchanged condition, a two-run
-    report counts what was compared and what was not. The claim's count keeps the report's
-    encoding, ``"N worse"``; a surface names it in the panel's own word
-    (``Report.shown_honesty``)."""
+    report counts what was compared and what was not. The claim's count is written
+    ``"N worse"``; the report names it in the panel's own word before it keeps it."""
     unchanged = [c for c in present if c.verdict == "unchanged"]
     without = [c for c in unchanged if c.mde_note is not None and math.isnan(c.mde)]
     if unchanged and math.isnan(max_mde_unchanged) and without:
@@ -787,8 +792,8 @@ def _build_panel(
         x_values=x_values,
         y_values=y_values,
         headline=headline_of(present, n_safer, n_worse, n_unchanged),
-        honesty=honesty_of(present, n_worse),
-        _honesty_plain=_plain(lambda: honesty_of(present, n_worse)),
+        honesty=_in_words(honesty_of(present, n_worse), n_worse, words[1]),
+        _honesty_plain=_plain(lambda: _in_words(honesty_of(present, n_worse), n_worse, words[1])),
         provenance=provenance,
         n_safer=n_safer,
         n_worse=n_worse,

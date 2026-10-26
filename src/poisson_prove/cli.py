@@ -1457,9 +1457,10 @@ def _method_of(result: core.Comparison) -> str:
 
 def _method_table(results: Sequence[Any]) -> str:
     # The two count columns are an event's safer and worse with a kind, and its falls and rises
-    # without one; the header keeps its original names, which its frozen test reads.
+    # (lower, higher) without one, named so in the header.
     known = all(m.all_kinds_known() for m in results)
-    header = ("method", "event", "pairing", "safer", "worse", "unchanged", "max_mde")
+    down, up = ("safer", "worse") if known else ("lower", "higher")
+    header = ("method", "event", "pairing", down, up, "unchanged", "max_mde")
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     for m in results:
         pairing = "paired" if m.method in PAIRED_METHODS else "unpaired"

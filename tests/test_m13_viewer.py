@@ -1358,12 +1358,12 @@ def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(lattice_bui
         ev = lattice_built.multi.by_event[event]
         assert ev.kind is None
         library = lattice_built.report.panels[event].honesty
-        # PF4 re-freeze (PF4.20, kindless events): the library no longer counts a kindless event's
-        # rises as worse (n_worse is None, n_higher carries the count); the report's honesty line keeps
-        # its old encoding, the count of rises, which is n_higher.
+        # The library no longer counts a kindless event's rises as worse (n_worse is None, n_higher
+        # carries the count), and the report's own honesty line names that count in direction
+        # words too, as the page does.
         assert ev.n_worse is None
-        assert f'"{ev.n_higher} worse"' in library
-        honesty = library.replace(f'"{ev.n_higher} worse"', f'"{ev.n_higher} higher"')
+        assert f'"{ev.n_higher} higher"' in library and f'"{ev.n_higher} worse"' not in library
+        honesty = library
         assert panel["honesty"] == honesty
         lines = honesty.splitlines()
         assert '"' in honesty, "the honesty text has no double quote to escape"

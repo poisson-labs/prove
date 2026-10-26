@@ -835,8 +835,10 @@ def test_i9_diff_methods_all_markdown_has_method_table(lattice_store: Store) -> 
     assert r.code == 0, r.text
     for method in METHODS:
         assert method in r.out, method
-    for column in ("pairing", "safer", "worse", "unchanged", "max_mde"):
-        assert column in r.out, column
+    # The lattice declares no kind for its event, so the table's two count columns are named in
+    # direction words, falls then rises.
+    header = next(line for line in r.out.splitlines() if line.startswith("| method | event | pairing |"))
+    assert [c.strip() for c in header.strip().strip("|").split("|")] == ["method", "event", "pairing", "lower", "higher", "unchanged", "max_mde"], header
 
 
 # ---------- I10: diff refusals ----------
