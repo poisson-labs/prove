@@ -73,6 +73,8 @@ python -m pytest tests -k snapshot --update-snapshots
   only.
 - A test pins a fact, never prose. A test is changed only by a commit that says why, never to make
   a change pass.
+- Frozen tests are read-only. A test written before the code it checks is not edited, skipped or
+  marked to fail so that a change passes; if one looks wrong, say so in the pull request.
 - Every requirement has a floor that the slow floors test installs and runs; raise one only with
   the reason in the commit.
 

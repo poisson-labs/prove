@@ -1,8 +1,8 @@
-Proofload
-Copyright (c) Poisson Labs
+Poisson Prove
+Copyright (c) 2026 Taylor Kolasinski / Poisson Labs
 
-This product includes software and data from third parties, listed below. Proofload
-itself is distributed under the MIT licence; see LICENSE.
+This product includes data from a third party, listed below. Poisson Prove itself is
+distributed under the MIT licence; see LICENSE.
 
 --------------------------------------------------------------------------------
 AgentChaos
@@ -10,11 +10,11 @@ https://github.com/floritange/AgentChaos
 Distributed on PyPI as the agentchaos-sdk distribution, version 0.1.0
 Licence: MIT
 
-src/proofload/chaos_catalog.py carries a copy of AgentChaos's fault vocabulary: the
+src/poisson_prove/chaos_catalog.py carries a copy of AgentChaos's fault vocabulary: the
 fault names, their target paths and their literal replacement strings, read from
 agentchaos/fault_config.py of the 0.1.0 wheel. No AgentChaos code is included and
-AgentChaos is not a dependency of Proofload at any tier; the mutation semantics behind
-the copied names are Proofload's own.
+AgentChaos is not a dependency of Prove at any tier; the mutation semantics behind the
+copied names are Prove's own.
 
 MIT License
 
