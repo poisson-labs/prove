@@ -1,0 +1,23 @@
+# A sweep of the support agent's handle_ticket: two prompts by two temperatures, on each of the
+# four tickets (t1 to t4), each ticket its own condition.
+target = "prove_rollout:rollout"
+target_id = "support-agent"
+t_unit = "model_calls"
+replicates = 20
+
+[axes.prompt_version]
+type = "categorical"
+values = ["v1", "v2"]
+
+[axes.temperature]
+type = "continuous"
+values = [0.0, 0.7]
+
+[axes.ticket]
+type = "categorical"
+values = ["t1", "t2", "t3", "t4"]
+
+[declare]
+outcomes = ["resolved", "escalated", "wrong_refund", "timeout"]
+failures = ["wrong_refund", "timeout"]
+successes = ["resolved"]

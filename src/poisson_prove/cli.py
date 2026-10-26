@@ -301,12 +301,15 @@ def _build_parser(io: _IO) -> _Parser:
         description=(
             f"Write a sweep spec, ./{_DEFAULT_SPEC} unless --out names another file, and nothing\n"
             "else: a commented template to edit, or with --example the keyless quickstart,\n"
-            "runnable as it is. Nothing is asked."
+            "runnable as it is. With --agent, write instead the setup your own coding agent\n"
+            "follows (a skill and the prompt to give it), in the two folders coding agents read\n"
+            "skills from. Nothing is asked."
         ),
         epilog=(
             "examples:\n"
             f"  {_COMMAND} init --example\n"
-            f"  {_COMMAND} init --target my_agent:rollout"
+            f"  {_COMMAND} init --target my_agent:rollout\n"
+            f"  {_COMMAND} init --agent"
         ),
     )
     init_p.add_argument(
@@ -326,6 +329,22 @@ def _build_parser(io: _IO) -> _Parser:
     )
     init_p.add_argument(
         "--force", action="store_true", help="replace the file if it exists (default: refuse)"
+    )
+    init_p.add_argument(
+        "--agent",
+        action="store_true",
+        help="write the setup your own coding agent follows, a skill and its prompt, instead of "
+        "a sweep spec",
+    )
+    init_p.add_argument(
+        "--repo",
+        metavar="DIR",
+        help="with --agent: the repository to write the setup into (default: this folder)",
+    )
+    init_p.add_argument(
+        "--print",
+        action="store_true",
+        help="with --agent: print the skill and write nothing (default: write the files)",
     )
     _add_json_option(init_p, "the file written")
     _add_global_options(init_p, top=False)
@@ -1500,6 +1519,7 @@ def _sweep_overrides(ns: argparse.Namespace, state: _State) -> dict[str, Any]:
     out = {key: getattr(ns, key, None) for key in keys}
     out["typed"] = list(state.argv)
     out["spec_typed"] = ns.spec
+    out["dry_run"] = bool(ns.dry_run)
     return out
 
 
@@ -1544,7 +1564,37 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
 
 
 def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
-    """Write one sweep spec and nothing else. Asks nothing."""
+    """Write one sweep spec and nothing else, or with ``--agent`` the setup for the person's own
+    coding agent. Asks nothing."""
+    if ns.agent:
+        given = [
+            flag
+            for flag, on in (
+                ("--example", ns.example),
+                ("--target", ns.target is not None),
+                ("--out", ns.out is not None),
+            )
+            if on
+        ]
+        if given:
+            raise _Usage(
+                f"--agent writes the setup for your coding agent; it takes no {', '.join(given)}",
+                [f"{_COMMAND} init --agent", f"{_COMMAND} init --help"],
+            )
+        if ns.print and ns.json:
+            raise _Usage(
+                "--print prints the skill itself; it takes no --json",
+                [f"{_COMMAND} init --agent --print"],
+            )
+        return _cmd_init_agent(ns, io, state)
+    if ns.repo is not None or ns.print:
+        flag = "--repo" if ns.repo is not None else "--print"
+        repo = ["--repo", ns.repo] if ns.repo is not None else []
+        shown = _look.command(_COMMAND, "init", "--agent", *repo)
+        raise _Usage(
+            f"{flag} goes with --agent",
+            [shown + (" --print" if ns.print else ""), f"{_COMMAND} init --help"],
+        )
     written = core.init(
         ns.out, example=ns.example, target=ns.target, force=ns.force, typed=state.argv
     )
@@ -1554,6 +1604,23 @@ def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
     io.line(f"ok  {written.sentence}")
     for command in written.next:
         io.next(command)
+    return 0
+
+
+def _cmd_init_agent(ns: argparse.Namespace, io: _IO, state: _State) -> int:
+    written = core.init_agent(ns.repo, force=ns.force, write=not ns.print, typed=state.argv)
+    if ns.print:
+        io.write(written.text)
+        return 0
+    if ns.json:
+        _print_result(io, "init", written)
+        return 0
+    io.line(f"ok  {written.sentence}")
+    for path in written.payload["wrote"]:
+        io.detail("wrote", path)
+    io.detail("prompt", written.payload["prompt"])
+    for line in written.next:
+        io.next(line)
     return 0
 
 
