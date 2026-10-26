@@ -1,10 +1,10 @@
-"""P-1 oracle: invariants Y1 to Y22 of [[Proofload - Spec P-1 Payload Shape]] section 4, written
+"""P-1 frozen tests: invariants Y1 to Y22 of the P-1 payload-shape spec section 4, written
 before ``seed_identity_match``, ``unpaired_analysis``, ``_seed_identity``, ``RootResult.p_floor``,
 the ``intervals`` payload key, the interval column, the floor lines, the ``seed_identity_basis``
-statement and ``render_html``'s intervals refusal exist, against ``a626cd3`` -- A8a Session B's
+statement and ``render_html``'s intervals refusal exist, against ``a626cd3`` -- the A8a
 build and its filed close, the commit the spec was measured on.
 
-**The register, built to as decided at dispatch (spec sections 0 and 10):** D1-D6 are Taylor's and
+**The register, built to as decided at the start (spec sections 0 and 10):** D1-D6 are settled and
 not reopened. Q1 (a), ADR-084: seed identity is the salt plus the stored seed on every matched row,
 and A23/A26's two manifest fields join the same predicate later; Y1-Y6 are written against section
 3.1 as it stands. Q2 (a), ADR-085: ``check`` prints no permutation p, and Y17's last clause asserts
@@ -13,22 +13,22 @@ count, not a statistic; Y21 guards the reading. Q4 lean: the page's interval par
 the bound. Q5 lean: the column is last, after ``MDE``. Q6 lean: no drill-down row.
 
 **Two cells, and no invariant is cell-specific -- a result, not an assumption** (Master Action List
-section 18 standing rule 15; spec D7 binds one cell, this oracle reports two because the dispatch
+section 18 standing rule 15; spec D7 binds one cell, this file reports two because the request
 asked for both). pandas 2.3.3 and pandas 3.0.5, A22's recipe: every test here is asserted in both
 cells, and the map is the whole file twice: **24 + 24 = 48 ids over the two cells against
-the oracle's own 24.**
+this file's own 24.**
 
-**Standing rule 12 -- the classified red set on the retrofit commit with this file added, measured
-on two pristine ``git archive`` copies of ``a626cd3`` carrying the retrofit and this file, before any
+**Standing rule 12 -- the classified red set on the update commit with this file added, measured
+on two pristine ``git archive`` copies of ``a626cd3`` carrying the update and this file, before any
 source edit, venvs from the repo venv's freeze closure differing in exactly pandas, collection
 verified 1983 = 1983 = 1983 at ``a626cd3`` and then 2007 = 2007 = 2007 = 2007 (both cells, the shim, the
-repo) with the retrofit and this file, baselines 1978 passed / 5 skipped / 0 failed in both cells at
+repo) with the update and this file, baselines 1978 passed / 5 skipped / 0 failed in both cells at
 ``a626cd3``: 204 failed / 1798 passed / 5 skipped, identical test by test in both cells.** The 204:
 the **22** tests here that are not Y3's unchanged-manifest-sentence test and Y22 (every one for its expected cause -- the two fields,
 ``_seed_identity``'s refusals and warning, the headline token, the provenance keys, the thirteenth
 key, the column, the floor field and its lines, the refusal, the ``unverified`` id, the ``p_floor``
 assignment site do not exist yet; Y19's schema-comment clause is the one that stays red on a shim
-without the comment); and **182** retrofit reds by file -- ``test_m7_report.py`` 46 (the ``make_diff``
+without the comment); and **182** update reds by file -- ``test_m7_report.py`` 46 (the ``make_diff``
 builder's two keywords reach 44, I4's token, I16's key tuple), ``test_m7_multi.py`` 42 (both builders,
 B1's mapped record, B15), ``test_m6_multi.py`` 18, ``test_m6_diff.py`` 12 (``SUMMARY_FIELDS``, the
 reads, I13 renamed, I15's tokens), ``test_s29_viewer.py`` 9 (W1 x2, W3, W4, W5, W9 x2, W11, W17; W20's
@@ -39,7 +39,7 @@ R19's check and serve digests, R21 x2), ``test_s25_root.py`` 7, ``test_s26_fault
 hidden inside ``unpaired`` as a substring on the prototype -- I10, I20), ``test_m13_viewer.py`` 2 (V31,
 V33), ``test_a28_agreement.py`` 1 (G9; G18 amended per record, green before and after; G20 green until
 the build), ``test_a7_storage.py`` 1 (P7-10's verb digests), ``test_m11a_chaos.py`` 1 and
-``test_unpaired_warning.py`` 1 (U9 inverted). Against the spec's arithmetic of about 174 retrofit reds
+``test_unpaired_warning.py`` 1 (U9 inverted). Against the spec's arithmetic of about 174 update reds
 (187 minus the eight fixture-seed tests minus the five source-digest clauses), the measured 182
 reconciles exactly: of the eight fixture-seed tests only three go green (I6 x2, O21) and five stay red
 as ordinary renames (I6's statsmodels test, I13, I18[mcnemar_bh], R21 x2); of the five source-digest
@@ -52,14 +52,14 @@ movers the prototype hid or reached through a helper are new -- I9's column and 
 red.** The pandas 3 cell adds nothing: no P-1 field reaches disk. The copies skip 5 where the repo
 skips 3, the two extra being a real-suite pair whose data file is gitignored.
 
-**What step zero measured at ``a626cd3``, so the oracle rests on runs and not on reads.** (1) The
+**What step zero measured at ``a626cd3``, so the frozen file rests on runs and not on reads.** (1) The
 three fixtures spec section 7.3 names pair by dict position: ``test_s28_report.py``'s ``overlap``
 pair matches 24 rows and **24 of 24 disagree** (the spec's "16 of 48" is O21's figure, not this
 pair's); ``test_s25_root.py``'s O21 pair matches 48 and **16 of 48 disagree**; ``test_m6_diff.py``'s
 ``_one_cell`` has no ``seed`` column. (2) **A fourth fixture the spec does not name**:
 ``test_s21_errors.py``'s synthetic pair matches 128 raw rows and **16 disagree** (99 analysed rows
 under ``--methods all``, which is where E12 refused on the prototype). All four are made honest in
-the retrofit commit by a seed that is a function of ``(config, replicate_index)``; after the fix
+the update commit by a seed that is a function of ``(config, replicate_index)``; after the fix
 every pair matches with 0 disagreeing, measured. (3) A stored pair's ``heatmap.svg`` **does** move under
 D1: its subtitle is the headline's second line, so ``paired)`` became ``unpaired)`` in the SVG too;
 spec section 5's "the SVG's bytes do not move" is wrong and every E14 carrier's SVG digest is
@@ -71,11 +71,11 @@ missing-manifest test (the sentence is ``a626cd3``'s, byte for byte), Y22 (no st
 guard restated), Y6's claim (the statistic never followed provenance; the twin construction is U8's,
 C12's and O6's -- the test itself is red until the build only because it reads the renamed field), Y21's honesty and
 build-closure clauses (the strings are pinned to ``a626cd3``'s bytes and the closure's one ``Sub``
-is W20's rule), and the four fixture-seed edits in the retrofit (nothing on the bare tree reads a
+is W20's rule), and the four fixture-seed edits in the update (nothing on the bare tree reads a
 stored seed).
 
-**Mutation list for Session B** (spec section 7.5, twenty-one rows; the pass runs on the harness in
-[[Proofload - Mutation Harness]] after the build). The sole-catch claims this oracle is written to
+**Mutation list for the build** (spec section 7.5, twenty-one rows; the pass runs on the harness in
+the mutation harness after the build). The sole-catch claims this file is written to
 carry: mutant 2 (seeds compared positionally over all rows) by Y5's partial-overlap variant alone;
 mutant 3 (zero matched rows read as a match) by Y1's zero-overlap draws alone; mutant 13
 (``alpha*`` printed ``.4f``) by Y12's small-alpha family alone; mutant 15 (``p_floor = 1 / B``) by
@@ -84,7 +84,7 @@ Y15 alone; mutant 21 (intervals joined by ``config_hash`` alone) by Y14's two-ev
 whose endpoints differ across events on the same cell by construction. **One survivor predicted by
 the spec and not mutated here**: the seed check run over the raw frames instead of the analysed
 ones -- no fixture here carries an errored row whose seed disagrees while every analysed row agrees,
-and this oracle does not mint one; Session B names it as the survivor.
+and this file does not mint one; the build names it as the survivor.
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ MULTI_SUMMARY_FIELDS = (
     "n_not_comparable", "dropped_a", "dropped_b", "truncated", "inferred", "non_event",
 )
 #: Y9. ``build_multi_report``'s provenance keys in order; S21's tuple with the two keys in ``paired``'s slot.
-#: **Retrofitted 2026-09-20 (truncation surfacing):** ``truncated`` -- the horizon count -- is
+#: **Updated 2026-09-20 (truncation surfacing):** ``truncated`` -- the horizon count -- is
 #: ``episodes_censored_at_horizon`` in its slot, and the run-identity block is followed by each run's
 #: recorded byte limit, its span count and its count of spans stamped as cut, as the CLI passes them.
 MULTI_PROVENANCE_KEYS = (
@@ -155,7 +155,7 @@ MULTI_PROVENANCE_KEYS = (
     "observation_cut_spans_a", "observation_cut_spans_b",
 )
 #: Y10. Section 3.4's thirteen root keys, ``intervals`` after ``panels``, and the ten interval keys.
-#: LS retrofit, 2026-09-22 (local serve pass, Phase A): fourteen, ``summary`` eighth.
+#: LS update, 2026-09-22 (local serve pass, Phase A): fourteen, ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -215,7 +215,7 @@ CLI_GROUP_FLOOR_LINE = "  group p floor {p_floor}: the same {n_permutations} per
 M7_FLOOR_LINE = "p floor {p_floor}: the smallest p {n_permutations} permutations can express; a p at the floor is a bound, not a measurement"
 M7_GROUP_FLOOR_LINE = "group p floor {p_floor}: the same {n_permutations} permutations; a group p at the floor is a bound, not a measurement"
 #: Y15. Section 3.7's refusal, and the ``tree`` refusal it is modelled on (``viewer.py`` at ``a626cd3``).
-#: LS retrofit, 2026-09-22 (local serve pass, Phase A): the refusal interpolates ``SCHEMA`` (spec LS section 0.1 last row, LS8).
+#: LS update, 2026-09-22 (local serve pass, Phase A): the refusal interpolates ``SCHEMA`` (spec LS section 0.1 last row, LS8).
 NO_INTERVALS_REFUSAL = (
     "this structure carries no intervals; it was assembled before the flat family's intervals joined "
     "poisson-prove.viewpair/7 and is not a page this renderer will draw"
@@ -224,7 +224,7 @@ NO_TREE_REFUSAL = (
     "this structure carries no tree; a page whose honesty block cannot state the bound is not a page "
     "this renderer will draw, and the two ship together or not at all"
 )
-#: Y13. S29's ``<h2>`` sequence, unchanged by P-1; LS retrofit, 2026-09-22 (local serve pass, Phase A): ``Summary`` first, ``Run pair`` thirteenth.
+#: Y13. S29's ``<h2>`` sequence, unchanged by P-1; LS update, 2026-09-22 (local serve pass, Phase A): ``Summary`` first, ``Run pair`` thirteenth.
 H2_SEQUENCE = (
     "Summary", "Events", "Omnibus", "Result", "Honesty", "Not verified", "Fault lines", "Cells", "Heatmap", "Cell",
     "Holes", "Worst cells", "Run pair", "Provenance",
@@ -404,7 +404,7 @@ def build_pair(name: str, root: Path, a: str, b: str, *, events: Sequence[str], 
         multi = quiet(lambda: multi_diff(fa, fb, events=list(events), method=method, manifest_a=ma, manifest_b=mb))
         grown = tree(fa, fb, multi, manifest_a=ma, manifest_b=mb, **knobs)
         spec = ReportSpec(title=f"{a} vs {b}: {', '.join(events)}", x_axis=x, y_axis=y)
-        # Retrofitted 2026-09-20: the CLI hands the builders each run's span counts, read from its
+        # Updated 2026-09-20: the CLI hands the builders each run's span counts, read from its
         # envelopes. Every store this file builds or reads carries no trace, so the counts are (0, 0).
         counts = ((0, 0), (0, 0))
         report = build_multi_report(multi, spec, manifests=(ma, mb), tree=grown, observations=counts)
@@ -651,7 +651,7 @@ def operand_names(node: ast.AST) -> set[str]:
 
 @pytest.fixture(scope="module")
 def synth_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """One store holding every pair this oracle mints through the public ``Store`` API (spec
+    """One store holding every pair this file mints through the public ``Store`` API (spec
     section 6): C18's seed-disjoint pair and its two variants, the partial-overlap pair, the
     salt-differing twin, a two-event pair whose intervals vary across events, an ``R == 0`` pair,
     and the small-alpha family."""
@@ -1371,7 +1371,7 @@ def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_
 
 def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_comment_names_p1_beside_a28() -> None:
     """The grep clause is C34's whole close."""
-    # LS retrofit, 2026-09-22 (local serve pass, Phase A): the grep is widened from ``/3`` alone to every retired version, because ``/4``
+    # LS update, 2026-09-22 (local serve pass, Phase A): the grep is widened from ``/3`` alone to every retired version, because ``/4``
     # sat in a user-visible refusal for two packets while this clause looked for ``/3`` (spec LS section 0.1).
     assert viewer_mod.SCHEMA == "poisson-prove.viewpair/7"
     retired = tuple(f"proofload.viewpair/{n}" for n in (2, 3, 4, 5, 6))

@@ -1,12 +1,12 @@
-"""A8a oracle: invariants P8-1 to P8-6, P8-13 to P8-19, P8-21 and P8-22 of
-[[Proofload - Spec A8a Span Schema]] section 4, written before the eight span fields, the seventh
+"""A8a frozen tests: invariants P8-1 to P8-6, P8-13 to P8-19, P8-21 and P8-22 of
+the A8a span-schema spec, section 4, written before the eight span fields, the seventh
 trace key, ``OUTCOME_BY``, ``GATE``, ``ALIAS_MAP_VERSION``, the lifts, ``record()``'s three kwargs,
 ``inspect``'s four columns and the two renames exist, against ``0ef8c3c`` -- T.4 prep's closing
-commit, A8a's dispatch commit (the spec was written at ``afc1f3b`` and the probes first ran at
-``3bf4083``; ``src/`` and the nine retrofitted test files are byte-identical across all three,
+commit, A8a's base commit (the spec was written at ``afc1f3b`` and the probes first ran at
+``3bf4083``; ``src/`` and the nine updated test files are byte-identical across all three,
 measured by ``git diff --name-only``).
 
-**The register, built to as decided at dispatch (spec section 10):** Q1 (c) the alias map stays
+**The register, built to as decided at the start (spec section 10):** Q1 (c) the alias map stays
 GenAI-only and one real OpenInference payload went through ``from_otel`` at step zero -- 21 keys
 on a chat span, 0 aliased, 0 lifted, 10 routed as observation content, ``tokens`` and the model
 name lost for fields that already exist, none of A8a's eight carriers present; (b) is triggered
@@ -22,11 +22,11 @@ List section 18 standing rule 15, spec T7). pandas 2.3.3 and pandas 3.0.5, A22's
 one of A8a's nine fields reaches disk inside the ``trace`` / ``trace_obs`` JSON columns, never as
 a Parquet column, so the pandas major cannot see any of them; the cell that could disagree is the
 mutation table, not the red set. Every test here is asserted in both cells: **42 tests,
-42 + 42 = 84 ids over the two cells against the oracle's own 42.** Nullness is by identity in
+42 + 42 = 84 ids over the two cells against the frozen file's own 42.** Nullness is by identity in
 every clause (spec section 3.10): ``is None`` / ``is not None``, never ``pd.isna`` and never a bare
 truth test.
 
-**Standing rule 12 -- the classified red set on the retrofit commits (``9996ce3`` + ``268b64a``) with
+**Standing rule 12 -- the classified red set on the update commits (``9996ce3`` + ``268b64a``) with
 this file and its fixture added, measured on two pristine ``git archive`` copies before any source
 edit, venvs from the repo venv's freeze closure differing in exactly pandas, collection verified
 1941 = 1941 = 1941 and then 1983 with this file, baselines 1934 passed / 7 skipped / 0 failed in
@@ -34,7 +34,7 @@ both cells at ``0ef8c3c``: 90 failed / 1886 passed / 7 skipped, identical test b
 cells.** The ninety: the **39** tests here that are not P8-21's two or P8-22 (every one for its
 expected cause -- the eight fields, the seventh key, ``OUTCOME_BY`` / ``GATE`` / ``ALIAS_MAP_VERSION``,
 ``record()``'s kwargs, the lifts, the nine columns, the manifest key and the two renames do not exist
-yet); and **51** retrofit reds -- ``test_m12_trace.py`` 19 (fifteen tests reading the 21-key ``SPAN_A``
+yet); and **51** update reds -- ``test_m12_trace.py`` 19 (fifteen tests reading the 21-key ``SPAN_A``
 / ``SPAN_B`` through a 13-key ``from_dict``: T1 x2, T2 x2, T3 x2, T5 x3, T6, T7, T9, T11, T26 x2; T23
 on ``span.operation``; T29 on ``tries``; T30 on the nine-column regex), ``test_m3_timeout_trace.py`` 12
 (E7, E8 x3, E11 and E1's round trip, field-order, seven-key and eighth-key tests on the seven-key
@@ -47,7 +47,7 @@ nothing: every A8a field reaches disk inside a JSON string. The copies skip 7 wh
 the two extra being a real-suite pair that reads a gitignored data file; the other five are an
 example harness's not-installed pair and the three the repo always skips.
 
-**What step zero measured at ``3bf4083`` (spec section 7.4), so the oracle rests on runs and not
+**What step zero measured at ``3bf4083`` (spec section 7.4), so these frozen tests rest on runs and not
 on reads.** (1) The kind-ladder guard fires: adding ``openinference.span.kind`` to ``_LIFTED_KEYS``
 and nothing else turns nine tests in ``test_m12_kinds.py`` red (the seven T36 OpenInference
 parametrisations, the case-insensitive test, and T37's vendor-keys test); both vendor keys, thirteen.
@@ -60,18 +60,18 @@ three R6 tests) and **six negative sites, four of them unpaired and silently gre
 and ``test_m3_timeout_trace.py:1214`` E9 -- reached through the ``step_columns`` helper and named in
 no document). The spec's "five" counts ``test_m3_crash_trace.py:951`` and
 ``test_m3_timeout_trace.py:1164``, which sit inside K7 and E9 beside a positive count on the same
-block and went red with them, and misses ``:1214``. The retrofit pairs all six with an explicit
+block and went red with them, and misses ``:1214``. The update pairs all six with an explicit
 control and P8-21 scans for it. (3) ``split`` and ``assemble`` **do** name ``span_id``, ``attrs``
 and ``spans`` as literals, so P8-19's grep clause as the spec words it is false at ``3bf4083``; the
 clause asserted here is the one that catches the mutant -- no literal from the field set outside
 the navigation keys, and none of A8a's nine names. (4) ``ALIAS_MAP_VERSION`` has zero bindings and
 ``"1"`` zero literal sites in ``src/``. (5) ``test_a7_storage.py:933`` used ``alias_map_version`` as
-its example of a key ``from_dict`` rejects; A8a makes it a valid key, so that row is retrofitted to
+its example of a key ``from_dict`` rejects; A8a makes it a valid key, so that row is updated to
 an unknown key -- a site in no inventory.
 
 **Mutation pass, eighteen rows plus control, whole suite on rsync copies of the shadow shim under the
 thread caps (harness fact 6), pandas 2.3.3.** Measurement order: the control, rows 2-5 and the two
-oracle self-checks ran on the shim **before** the second retrofit commit and carry its three reds
+frozen-test self-checks ran on the shim **before** the second update commit and carry its three reds
 (P7-10, E1 x2 -- the sites that commit fixes) in every row, not counted below; the control is
 **3 failed / 1977 passed / 7 skipped** for exactly those three and the amended tests are green on
 the shim; rows 6-17 and 4b ran after. Eighteen caught, **no survivor**. Spelling recorded where a
@@ -97,8 +97,8 @@ sole catch is claimed.
 | 15 | the ``bytes_original``-without-``truncated`` clause dropped from ``Span.__post_init__`` | **P8-2 (that parametrisation) alone** |
 | 16 | a second ``ALIAS_MAP_VERSION = "1"`` binding in ``executor.py`` | **P8-13 binding test alone** |
 | 17 | ``record()`` defaults ``gate`` to ``"emitted"`` | P8-3 producer test, P8-3 contrapositive |
-| s1 | *(oracle self-check, four files)* one ``STEP_LINE_RE`` copy back to five columns | P8-21 copy test, I15, **and I16 -- the control line turns the vacuous negative red** |
-| s2 | *(oracle self-check, four files)* the control removed from I16 | **P8-21 pairing test alone** |
+| s1 | *(frozen-test self-check, four files)* one ``STEP_LINE_RE`` copy back to five columns | P8-21 copy test, I15, **and I16 -- the control line turns the vacuous negative red** |
+| s2 | *(frozen-test self-check, four files)* the control removed from I16 | **P8-21 pairing test alone** |
 
 **Green-before-and-after, named so its green is not read as evidence** (standing rule 12): P8-19's
 grep half (``split`` / ``assemble`` already pass it); P8-22 in its entirety (per-symbol digests of
@@ -184,7 +184,7 @@ A7_SURFACE: dict[str, dict[str, str]] = {
         # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
         "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
         "_ObservationKeys": "27ead8ed01df19d6fdc2e1ec09a6ff70d40348074e9c62ae48c99f1bfd8a3502",
-        # ``split`` retired from this table by A8b Session A, narrowed and never re-minted (ADR-077 / C19):
+        # ``split`` retired from this table by the A8b freeze, narrowed and never re-minted (ADR-077 / C19):
         # A8b widens its loop body, which is the one A7 symbol A8b may edit. Owner: A8b. Cover:
         # tests/test_a8b_cut_and_cap.py P8-25, which re-asserts every other symbol here byte-identical,
         # pins split's signature line and confines its edit to the loop. Digest at retirement: a63f24ba...13df24.

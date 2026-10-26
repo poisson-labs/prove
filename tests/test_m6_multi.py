@@ -1,4 +1,4 @@
-"""Oracle for the M6 multi-event amendment: per-event CIF diff over one BH family.
+"""Frozen tests for the M6 multi-event amendment: per-event CIF diff over one BH family.
 
 A1 is the gate. It asserts the single-event ``diff`` against a reference record of the
 lattice pair (``tests/lattice.py``), built in this file in the frozen record's shape from
@@ -11,10 +11,10 @@ golden.
 Fixture tests (A1, A2, A5, A6, A8, A10, A14, A19) run on the generated lattice pair
 through ``lattice_store``: raw frames go to ``multi_diff``, censored frames to ``diff``.
 Everything else uses small raw frames built directly with M4's thirteen columns, as the
-M5 oracle does; synthetic rows sit at the horizon unless a test needs otherwise, so the
+M5 frozen tests do; synthetic rows sit at the horizon unless a test needs otherwise, so the
 CIF at horizon equals the terminal rate and verdict direction follows the counts.
 
-Two invariants are deliberately absent, reported to the spec author in Session A rather
+Two invariants are deliberately absent, reported to the spec author at the freeze rather
 than adapted:
 
 - A4 names "the ordering helper" (delta desc, q asc, mde asc, config_hash) but section 2

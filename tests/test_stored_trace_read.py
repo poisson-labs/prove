@@ -1,7 +1,7 @@
-"""Stored-trace read oracle: a run stored before A8a opens, and the tolerance is exactly that wide.
+"""Stored-trace read frozen tests: a run stored before A8a opens, and the tolerance is exactly that wide.
 
 Frozen 2026-09-20 off ``1f5491b``. The build is written against this file and does not edit it. The
-dispatch was the surfacing cleanup's first item: ``proofload inspect`` cannot open any stored run that
+brief was the surfacing cleanup's first item: ``proofload inspect`` cannot open any stored run that
 carries a trace.
 
 **What is being fixed, measured at ``1f5491b`` on stored runs that carry a trace.**
@@ -62,7 +62,7 @@ R6 and R7 test that reads an old run are red.
 
 **Named gaps, not pinned.** (1) ``inspect`` prints no ``observation:`` line on an old run, because its spans
 carry no stamp: ``span.truncated`` is ``None`` and a pre-A8b marker is not read (A8b's P8-27 bars the text
-from ``src/``, and Taylor ruled on 2026-09-20 that no reader is written). Whether ``inspect`` should say
+from ``src/``, and a ruling of 2026-09-20 says no reader is written). Whether ``inspect`` should say
 ``not counted`` for such a row is a decision, not a fix, and nothing here decides it. (2) The write path is
 unchanged: ``Store.append`` still stores a dict in the old shape as written, in ``meta``, with both columns
 null (A7's P7-9); R8 reads that back, and does not ask ``append`` to accept it.

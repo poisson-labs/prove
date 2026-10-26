@@ -1,4 +1,4 @@
-"""S21 oracle: error visibility downstream (Action List B.6), from section 4 of the S21 spec.
+"""S21 frozen tests: error visibility downstream (Action List B.6), from section 4 of the S21 spec.
 
 Invariants E1-E27 map one test function each (several map more). Nothing here is built when
 this file is written: ``RunTally``, ``Store.tally``, ``COVERAGE_COLUMNS``, ``Cell.hole_cause``
@@ -29,7 +29,7 @@ What is asserted where:
   cases), and errors cycling through ``timeout`` / ``infra: RuntimeError('x')`` / ``boom`` so
   all four tally buckets are non-zero in both arms.
 
-Literals the spec leaves to the oracle, pinned here rather than buried in a test:
+Literals the spec leaves to the frozen tests, pinned here rather than buried in a test:
 
 - ``HOLES_HEADING``: the section's ``<h2>`` text is ``Holes``.
 - ``ZERO_HOLES_TEXT``: the zero-holes paragraph reads ``0 holes``.
@@ -37,7 +37,7 @@ Literals the spec leaves to the oracle, pinned here rather than buried in a test
 - ``DRILL_LABELS``: the drill-down rows are ``rows (a/b)`` and ``no outcome (a/b)`` and follow
   ``n (a/b)``; the script's ``order`` list, which carries keys and not labels, gains the four
   cell keys ``rows_a, rows_b, no_outcome_a, no_outcome_b`` right after ``n_a, n_b``.
-- ``coverage_block``: ``MultiDiffResult.to_markdown()`` is UNCHANGED (A20 in the M6 oracle
+- ``coverage_block``: ``MultiDiffResult.to_markdown()`` is UNCHANGED (A20 in the M6 frozen tests
   requires a diff with errored rows to render identically to one without); the ``diff``
   verb's text output appends the block instead, after the markdown and after the
   ``--methods all`` table, the way ``_method_table`` already is: the exact ``coverage:``
@@ -110,11 +110,11 @@ E14_ARGV = ("report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--x", lat
 # E14 checks the facts they guarded instead. An event of unknown kind prints in direction words, so the
 # library's own ``safer`` (the rate fell) and ``worse`` (it rose) read ``lower`` and ``higher``.
 E14_DIRECTION = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
-# PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the library's cells now hold the direction
+# PF4 re-freeze (the PF4 freeze's yes/no 18 ruled no): the library's cells now hold the direction
 # words themselves for an event of unknown kind, so they map to themselves.
 E14_DIRECTION.update({"lower": "lower", "higher": "higher"})
 
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+# LS update, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
@@ -133,7 +133,7 @@ MULTI_FIELDS = (
     "events", "by_event", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon", "n_tests",
     "n_not_comparable", "dropped_a", "dropped_b", "truncated", "trades", "inferred", "non_event",
 )
-#: Retrofitted 2026-09-20 (truncation surfacing): ``truncated`` -- the horizon count -- is
+#: Updated 2026-09-20 (truncation surfacing): ``truncated`` -- the horizon count -- is
 #: ``episodes_censored_at_horizon`` in its slot, and a report built with manifests and the counts the CLI hands
 #: the builders (this file's ``built()`` does) carries each run's recorded byte limit, its span count and its count
 #: of spans stamped as cut after ``run_salt``.
@@ -144,7 +144,7 @@ PROVENANCE_KEYS = (
     "observation_cut_spans_a", "observation_cut_spans_b",
 )
 
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
+# LS update, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -174,7 +174,7 @@ PF4_CELL_KEYS = (
     "flaggable", "mde_moves_with", "mde_rise_verdict", "mde_fall_verdict", "competing_shift",
     "ci_lo", "ci_hi", "ci_level", "ci_method",
 )
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``where`` after ``coords``; ``coords`` keeps its meaning (spec LS section 3.1 (c)).
+# LS update, 2026-09-22 (local serve pass, Phase A): ``where`` after ``coords``; ``coords`` keeps its meaning (spec LS section 3.1 (c)).
 HOLE_KEYS = (
     "coords", "where", "config_hash", "cause", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "config", "config_text",
@@ -243,7 +243,7 @@ IDENTITY_ROWS = ("with_outcome", "no_outcome", "timed_out", "infra", "other")
 DRILL_LABELS = ("n (a/b)", "rows (a/b)", "no outcome (a/b)")
 ORDER_KEYS_AFTER_N = ("rows_a", "rows_b", "no_outcome_a", "no_outcome_b")
 HOLES_HEADING = "Holes"
-# LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): ``coords`` is ``where`` in the header and the column prints the hole's ``where`` (spec LS D12).
+# LS update, 2026-09-22 (local serve pass, Phase A, found by the shim run): ``coords`` is ``where`` in the header and the column prints the hole's ``where`` (spec LS D12).
 HOLES_HEADER = ["where", "cause", "config_hash", "rows (a/b)", "no outcome (a/b)"]
 ZERO_HOLES_TEXT = "0 holes"
 HOLES_OPTGROUP = "holes"
@@ -732,8 +732,8 @@ def syn_manifest(run_id: str, note: str = "built by test_s21_errors") -> RunMani
 
 def seed_of(config: Mapping[str, Any], replicate_index: int) -> int:
     """A stored seed that is a function of ``(config, replicate_index)`` and never of the cell's
-    position in its dict. **C49's fourth fixture, found by P-1 Session A and fixed in its
-    retrofit** (the spec's section 7.3 names three): ``write_run`` seeded ``1000 * index + k`` by
+    position in its dict. **C49's fourth fixture, found at the P-1 freeze and fixed in its
+    update** (the spec's section 7.3 names three): ``write_run`` seeded ``1000 * index + k`` by
     dict position, and the synthetic pair's two arms enumerate different cell sets (``only_a`` and
     ``only_b`` holes are the point of the pair), so the same ``(config_hash, replicate_index)``
     carried a different seed in the two arms -- 16 of 99 matched rows disagreed, measured on the
@@ -916,7 +916,7 @@ def direct_counts(frame: pd.DataFrame, h: str) -> tuple[int, int]:
 
 
 def hand_built_multi(multi: MultiDiffResult) -> MultiDiffResult:
-    """The M7 oracle's ``make_multi`` shape: every existing field by keyword, ``coverage`` never
+    """The M7 frozen tests' ``make_multi`` shape: every existing field by keyword, ``coverage`` never
     named."""
     return MultiDiffResult(**{name: getattr(multi, name) for name in MULTI_FIELDS})
 
@@ -1652,7 +1652,7 @@ def test_e14_the_lattice_report_reproduces_the_three_digests_minted_on_the_bare_
     # every condition (``lattice.fisher``), in the report, the receipt and the heatmap.
     tripped = multi.by_event[lattice.EVENT]
     cells = tripped.cells
-    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the cells' verdict holds the direction words.
+    # PF4 re-freeze (the PF4 freeze's yes/no 18 ruled no): the cells' verdict holds the direction words.
     n_lower, n_higher = int((cells["verdict"] == "lower").sum()), int((cells["verdict"] == "higher").sum())
     assert (n_lower, n_higher) == lattice.directions(lattice.fisher(lattice.EVENT, 0.05)) == (22, 0)
     headline = f"{lattice.EVENT}: {n_lower} lower, {n_higher} higher"
@@ -1982,7 +1982,7 @@ def test_e21_with_holes_the_section_is_a_table_of_the_five_headers_and_one_row_p
         for h in syn.structure["holes"]
     ]
     assert table_rows(following[0]) == expected
-    # LS retrofit, 2026-09-22: an off-grid hole is in the fixture (``coords`` None) and its row no
+    # LS update, 2026-09-22: an off-grid hole is in the fixture (``coords`` None) and its row no
     # longer prints ``none`` -- ``where`` names its config on the report's axes (spec LS D12).
     assert any(h["coords"] is None for h in syn.structure["holes"]) and any(r[2] == NONE_TEXT for r in expected)
     assert not any(r[0] == NONE_TEXT for r in expected)

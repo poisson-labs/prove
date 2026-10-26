@@ -1,8 +1,8 @@
 """PF4, the statistics: the frozen tests at the library's level (the math suite).
 
 Written from the front-door spec's section 8 (8.2 to 8.5, 8.10) and its invariants PF4.1 to PF4.51.
-PF4.1 to PF4.21 were frozen by PF4 Session A (2026-10-20); PF4.22 to PF4.33 by the addendum of
-2026-10-23; PF4.34 to PF4.51 by the statistics re-freeze of 2026-10-24, from Taylor's twelve rulings
+PF4.1 to PF4.21 were frozen by the PF4 freeze (2026-10-20); PF4.22 to PF4.33 by the addendum of
+2026-10-23; PF4.34 to PF4.51 by the statistics re-freeze of 2026-10-24, from twelve rulings
 on Argon's methodology review. The build is written against this file and does not edit it.
 ``tests/test_pf4_surfaces.py`` holds what a user reads on a screen or in a file and the contract
 tests on the result objects (the code suite); ``tests/test_pf4_calibration.py`` simulates every
@@ -683,7 +683,7 @@ def test_pf4_43_a_zero_baseline_with_no_threshold_has_no_rise_and_says_none_dete
 
 
 def test_pf4_15_the_single_event_diff_also_reports_no_limit_at_ceiling() -> None:
-    """Session A's PF4.15 on the single-event ``diff()`` result, which keeps its own record (reading
+    """The freeze's PF4.15 on the single-event ``diff()`` result, which keeps its own record (reading
     R35): a condition that had the event in every run has no limit, and the largest is the other's."""
     from poisson_prove.diff import diff
     from poisson_prove.survival import censor

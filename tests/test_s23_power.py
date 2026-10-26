@@ -1,8 +1,8 @@
-"""S23 -- the power gate: the oracle for W1-W12.
+"""S23 -- the power gate: the frozen tests for W1-W12.
 
-Written from "Proofload -- Spec S23 Power Gate" section 4. Session B builds
+Written from "Proofload -- Spec S23 Power Gate" section 4. The build changes
 ``src/proofload/executor.py``, ``executor_modal.py`` and ``cli.py`` against this file and does
-not edit it. ``examples/quickstart.toml`` was rebalanced in step zero and is not Session B's.
+not edit it. ``examples/quickstart.toml`` was rebalanced in step zero and is not the build's.
 
 **What the packet is.** ``MDE at N=32 (worst case, rate 0.5): 0.3251`` printed before a single
 episode of an earlier sweep ran, was close to the realised per-cell maximum, and was read
@@ -11,19 +11,19 @@ in that sweep's README, so the prompt was never a gate either. The number gets a
 threshold fires before any spend, and clearing it costs a number rather than a shrug.
 
 No network, no backend, no dollar. The Modal half of W8 goes through ``run_with_mapper`` with an
-in-process mapper, which is how the M3 modal oracle reaches that path without ``modal``
+in-process mapper, which is how the M3 modal frozen tests reach that path without ``modal``
 installed.
 
 **The four S23 names are reached through the module** -- ``executor.check_power``, not
-``check_power`` -- for one reason: before Session B builds them, a ``from ... import`` of a name
+``check_power`` -- for one reason: before the build adds them, a ``from ... import`` of a name
 that does not exist yet is a *collection* error, and pytest abandons the whole run on one. That
 would leave the entire suite unrunnable for as long as this file sits frozen and unbuilt, which
 is exactly the window in which someone wants to run it. Qualified, this file collects, its own
 tests fail, and every other test in the repo still reports. The names that already exist
 (``Plan``, ``plan``, ``preflight``, ``ExecutorError``) are imported normally.
 
-**Conventions this oracle fixes where the spec is silent, recorded so they are not
-re-litigated. Session B builds to these.**
+**Conventions these frozen tests fix where the spec is silent, recorded so they are not
+re-litigated. The build follows these.**
 
 - **The seam that carries the accepted value to the manifest is ``Plan.max_mde_accepted``**, a
   field with a default of ``None`` set through ``plan(..., max_mde_accepted=...)``. Spec section
@@ -33,7 +33,7 @@ re-litigated. Session B builds to these.**
   *mutating* the plan, which this does not -- the CLI builds the plan with it. **Measured:** the
   obvious alternative, a keyword on ``run_local`` / ``run_with_mapper`` / ``run_modal``, breaks
   ten frozen tests whose fakes double those signatures (``CapturedRunModal`` and friends in the
-  M10 and M3-modal-launch oracles) for no gain. When ``None``, both runners record
+  M10 and M3-modal-launch frozen tests) for no gain. When ``None``, both runners record
   ``DEFAULT_MAX_MDE``: that is the threshold that was in force, and W8 requires every launched
   run to carry one.
 - **A resume inherits by the CLI resolving the effective threshold, not by skipping the gate.**
@@ -62,14 +62,14 @@ re-litigated. Session B builds to these.**
 
 **Three findings from the step-zero pass, recorded here because they contradict the spec.**
 
-1. **No test pinned ``worst case``.** Spec section 6 says the M3 local and modal oracles pin the
+1. **No test pinned ``worst case``.** Spec section 6 says the M3 local and modal frozen tests pin the
    pre-flight text including that label. They do not: both match the line with
    ``MDE at N=\\d+[^:]*:``, which swallows either label, and the string appears in no test in the
-   repo. Verified by making the W10 edit in ``src/`` and running the M3 and M10 oracles unchanged.
+   repo. Verified by making the W10 edit in ``src/`` and running the M3 and M10 frozen tests unchanged.
    W10 below is therefore the only guard the label has ever had.
 2. **The quickstart's headline is pinned nowhere.** M10's I20 asserts ``worse == 0 and safer >=
-   1``, never a cell count. ``8 of 15 cells safer`` lives in the vault's renders and in no test.
-3. **Four oracles pinned the quickstart grid, not one.** M10 (cells, replicates, axis width),
+   1``, never a cell count. ``8 of 15 cells safer`` lives in the project's records' renders and in no test.
+3. **Four frozen test files pinned the quickstart grid, not one.** M10 (cells, replicates, axis width),
    M12 (its own second copy of both), M13 (the BH family size) and M7 (the mock-agent trade
    golden). Spec section 3 expected M10 and explicitly not M7. All four moved in step zero.
 """
@@ -265,7 +265,7 @@ def enclosing_functions(tree: ast.Module) -> dict[ast.AST, str]:
 def in_process_mapper(
     batches: Sequence[Sequence[Job]],
 ) -> Iterator[tuple[int, list[ModalResult] | BaseException]]:
-    """The M3 modal oracle's shape: every batch run here, in submission order, no modal import."""
+    """The M3 modal frozen tests' shape: every batch run here, in submission order, no modal import."""
     for index, jobs in enumerate(batches):
         yield index, worker_batch(jobs, MOCK_ROLLOUT, None)
 
@@ -887,7 +887,7 @@ def test_w9_pair_with_does_not_inherit(tmp_path: Path) -> None:
 
 
 def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path: Path) -> None:
-    """The label the spec says three oracles pinned. None of them did -- see the module
+    """The label the spec says three frozen test files pinned. None of them did -- see the module
     docstring, finding 1 -- so this is the only guard it has."""
     from poisson_prove.executor_modal import ImageSpec, ModalTarget
 

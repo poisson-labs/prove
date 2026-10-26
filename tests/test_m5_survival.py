@@ -1,7 +1,7 @@
-"""Oracle for M5: derived censoring, Kaplan-Meier, Aalen-Johansen, Wilson, cell table.
+"""Frozen tests for M5: derived censoring, Kaplan-Meier, Aalen-Johansen, Wilson, cell table.
 
 Property tests (I2-I5, I7, I8) use hypothesis over ``t`` arrays drawn from a small grid,
-so ties are common, with random censoring masks. Oracle tests (I6, I9, I10) import
+so ties are common, with random censoring masks. Reference tests (I6, I9, I10) import
 ``lifelines`` / ``statsmodels`` through ``pytest.importorskip`` and skip when the dev
 extras are absent. Golden tests (I14-I18) run on the generated lattice pair
 (``tests/lattice.py``) through the ``lattice_store`` fixture in conftest.py.
@@ -103,7 +103,7 @@ def tied_competing_data(draw, events: tuple[str, ...], min_size: int = 1, max_si
 def distinct_competing_data(
     draw, events: tuple[str, ...], min_size: int = 4, max_size: int = 40
 ):
-    """(t, outcome) with strictly distinct times, for the tie-averse lifelines AJ oracle."""
+    """(t, outcome) with strictly distinct times, for the tie-averse lifelines AJ reference."""
     n = draw(st.integers(min_value=min_size, max_value=max_size))
     t = draw(
         st.lists(
@@ -320,7 +320,7 @@ def test_i5_greenwood_all_censored_has_no_variance() -> None:
     assert curve.at(10.0) == 1.0
 
 
-# ---------- I6: lifelines KM oracle ----------
+# ---------- I6: lifelines KM reference ----------
 
 
 def test_i6_km_matches_lifelines() -> None:
@@ -394,7 +394,7 @@ def test_i8_rows_outside_events_are_censored(data) -> None:
     assert only.at("fell", 1e9) >= both.at("fell", 1e9) - TOL_EXACT
 
 
-# ---------- I9: lifelines Aalen-Johansen oracle ----------
+# ---------- I9: lifelines Aalen-Johansen reference ----------
 
 
 def test_i9_aj_matches_lifelines() -> None:

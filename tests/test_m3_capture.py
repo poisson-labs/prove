@@ -1,12 +1,12 @@
-"""M3 -- trace capture: the oracle for C1-C12, C2a included.
+"""M3 -- trace capture: the frozen tests for C1-C12, C2a included.
 
-Written from "Proofload -- Spec M3 Executor (trace capture amendment)" section 4. Session B
+Written from "Proofload -- Spec M3 Executor (trace capture amendment)" section 4. The build
 builds ``src/proofload/capture.py`` and the four wiring changes against this file and does not
 edit it. Every test imports ``proofload.capture`` inside its own body, so the file collects
 while the module does not exist. The capture module lives behind the ``agent`` extra; the
-whole file skips without ``opentelemetry-sdk``, the way the stamper oracle does, and the one
+whole file skips without ``opentelemetry-sdk``, the way the stamper frozen tests do, and the one
 test that feeds finished spans through the OTLP encoder skips at that helper -- the encoder
-is a dev-only oracle, like lifelines.
+is a dev-only reference, like lifelines.
 
 C1 and C2 come first because both were found by running code and both fail silently: a run
 completes normally and every trace is empty or nearly empty. C1 uses a real fork, both ways,
@@ -23,7 +23,7 @@ OpenTelemetry objects are imported inside test bodies, never held at module leve
 purges ``opentelemetry*`` from ``sys.modules`` earlier in the suite, and a module-level
 reference would then point at a different copy of the SDK than the code under test.
 
-Conventions the oracle fixes where the spec is silent, recorded so they are not re-litigated:
+Conventions the frozen tests fix where the spec is silent, recorded so they are not re-litigated:
 
 - The episode id stamped as ``proofload.episode`` is ``f"{config_hash}:{replicate_index}"`` on
   every path. Section 3 derives it from those two fields inside ``worker_batch``; the local
@@ -34,7 +34,7 @@ Conventions the oracle fixes where the spec is silent, recorded so they are not 
   boundary it can only travel inside that dict.
 - ``CaptureSpec.instrument`` names resolve through the ``opentelemetry_instrumentor``
   entry-point group, the group every ``opentelemetry-instrumentation-*`` package registers
-  under; a name with no entry point is C4's "unknown instrumentor name". The oracle registers
+  under; a name with no entry point is C4's "unknown instrumentor name". The frozen tests register
   two fakes in a throwaway dist-info under ``tmp_path``, so no instrumentation package is
   installed and nothing is patched.
 - A ``[capture]`` table with ``instrument = []`` still installs the provider and is active:
@@ -92,7 +92,7 @@ PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; 
 RUN_ID_KEY = "poisson_prove.run_id"
 EPISODE_KEY = "poisson_prove.episode"
 #: A8b: test-local and narrower than the public ``trace.CONTENT_KEYS`` (six prefix families more);
-#: renamed so it cannot shadow it. C9 covers the shipped half only -- the widening is the A8b oracle's P8-10.
+#: renamed so it cannot shadow it. C9 covers the shipped half only -- the widening is the A8b frozen tests' P8-10.
 GENAI_CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
 OVERRIDE_MESSAGE = "Overriding of current TracerProvider is not allowed"
 PUBLIC_SURFACE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})

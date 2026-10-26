@@ -1,4 +1,4 @@
-"""Oracle for M3: the Modal backend.
+"""Frozen tests for M3: the Modal backend.
 
 Lazy import, the in-container worker contract, mapper-driven orchestration (chunking,
 out-of-order flush, infra retry and exhaustion, finally-flush, caps, resume), the modal
@@ -12,7 +12,7 @@ user's rollout inside a container; the ones that single out a job read module-le
 sets (``RAISE_SEEDS``, ``SLEEP_SEEDS``) that a test fills in from its plan. A forked child
 inherits them. An autouse fixture clears them between tests.
 
-Conventions the oracle fixes for the implementation session:
+Conventions the frozen tests fix for the implementation session:
 
 - The deterministic rollout is the M3-local one, formula included, so I5 compares like with
   like across ``run_local`` and ``run_with_mapper``.

@@ -1,4 +1,4 @@
-"""Oracle for the lattice fixture (``tests/lattice.py``), the pair the suite generates itself.
+"""Frozen tests for the lattice fixture (``tests/lattice.py``), the pair the suite generates itself.
 
 Every test runs against the generated store through the ``lattice_store`` fixture in
 conftest.py, and checks it against the design (``lattice.DESIGN``), which is written down

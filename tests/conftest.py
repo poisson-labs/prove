@@ -436,7 +436,7 @@ _lattice_through_its_copy()
 
 @pytest.fixture(autouse=True)
 def _the_generator_reads_its_own_store(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The generator's own oracle (``test_s3_golden_fixture``) checks the store the generator wrote
+    """The generator's own frozen test (``test_s3_golden_fixture``) checks the store the generator wrote
     and how it rebuilds one, so its tests read the generator's ``root`` and ``intact`` themselves."""
     if request.module.__name__.rsplit(".", 1)[-1] == "test_s3_golden_fixture":
         import lattice

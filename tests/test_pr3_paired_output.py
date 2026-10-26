@@ -1,14 +1,14 @@
-"""PR-3 oracle, the output packet: windows, cost and rendering of "Prove -- Spec PR Paired
+"""PR-3 frozen tests, the output packet: windows, cost and rendering of "Prove -- Spec PR Paired
 Replay" -- invariants PR7, PR40 to PR55 and PR77, with named mutants 5, 6 and 7. The
-replicates packet (PR57 to PR76) is ``tests/test_pr3_replicates.py``; section 7 lets a Session A
+replicates packet (PR57 to PR76) is ``tests/test_pr3_replicates.py``; section 7 lets a freeze
 cut PR-3 into the two files and freezes them in one pass.
 
-Written by Session A on 2026-09-22 on ``pr3-oracle`` over the replicates oracle (``9e41c2b``) and
-the ruled retrofit ``6f40d92`` (the two phase-2 artifacts print ``comparison``). **Frozen
-2026-09-22 in one commit over both PR-3 files, over the reviewed ``ef9f4ef``**, after Taylor
-approved the four tables in the handoff (``log/prove-pr3-session-a/README.md``) and an
+Written on 2026-09-22 on the PR-3 freeze branch over the replicates tests (``9e41c2b``) and
+the ruled update ``6f40d92`` (the two phase-2 artifacts print ``comparison``). **Frozen
+2026-09-22 in one commit over both PR-3 files, over the reviewed ``ef9f4ef``**, after approval of
+the four tables in the handoff (``log/prove-pr3-session-a/README.md``) and an
 independent recompute of every hard-coded expectation passed (``recompute_expectations.py``
-there, 83 of 83). Session B builds phase 3's output half against this file and does not edit
+there, 83 of 83). The build adds phase 3's output half against this file and does not edit
 it: ``WindowReport``,
 ``windows``, ``CostReport`` and ``cost`` in ``src/proofload/paired.py``, the ``paired`` verb and
 the ``--paired`` flag in ``cli.py``, and **nothing in ``report.py``**, whose whole-file digest two
@@ -29,7 +29,7 @@ into the spec's change log on the freeze):
 - *Timing rides on ``pairs``.* ``assert_pairs`` records, per eligible set and per arm label,
   ``start_ns_<label>`` and ``end_ns_<label>`` off the request span (``None`` where the span
   has none), after the value columns and in arm order -- at ``k = 2`` the four
-  ``TIMING_COLUMNS`` the replicates oracle names. ``windows`` reads them and reads nothing else,
+  ``TIMING_COLUMNS`` the replicates tests name. ``windows`` reads them and reads nothing else,
   so it takes a ``PairAssertion`` and nothing else (PR9) and an excluded set has no window.
 - *``WindowReport``.* ``per_sweep`` is one mapping per declared sweep in declaration order:
   ``sweep``, ``timing`` (``"available"`` or ``"unavailable"``), ``reason`` (``None`` or the
@@ -80,7 +80,7 @@ into the spec's change log on the freeze):
   digest``, ``bootstrap seed``, ``bootstrap b``, ``price per input token``, ``input tokens``,
   ``output tokens`` and ``artifacts`` (the filenames, six at ``k > 2``; R2).
 - *The comparison in the two phase-2 artifacts (ruled 2026-09-22).* ``CutResult``'s seven fields
-  are pinned by the frozen PR-2 oracle, so the cut's declared comparison rides on
+  are pinned by the frozen PR-2 tests, so the cut's declared comparison rides on
   ``CutResult.pooled["comparison"]`` and the two artifact writers print it beside the threshold;
   ``pooled``'s key set is not pinned and ``intervals_json`` prints its keys by name.
 - *``report.py`` is not edited.* PR53's byte identity holds by construction: the sections are

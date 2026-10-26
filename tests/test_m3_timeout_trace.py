@@ -1,7 +1,7 @@
-"""M3 -- the timed-out episode's trace: the oracle for E1-E12.
+"""M3 -- the timed-out episode's trace: the frozen tests for E1-E12.
 
 Written from "Proofload -- Spec M3 Executor (timed-out episode trace)" section 4, after the
-M12 oracle was amended for ADR-028 in its own commit. Session B builds the six touched files
+M12 frozen tests were amended for ADR-028 in their own commit. The build changes the six touched files
 (``trace.py``, ``capture.py``, ``executor.py``, ``executor_modal.py``, ``store.py``, ``cli.py``)
 against this file and does not edit it.
 
@@ -14,9 +14,9 @@ process never installs and the in-process tests can assert the global provider w
 M12's T27 purges ``opentelemetry*`` from ``sys.modules`` earlier in the suite; the episode id
 is ``f"{config_hash}:{replicate_index}"``; ``worker_batch``'s ``capture`` dict is the four
 ``CaptureSpec`` fields plus ``run_id``. ``cli.main`` is driven in-process on a store a child
-wrote, as the M10 oracle drives it; ``inspect`` installs nothing.
+wrote, as the M10 frozen tests drive it; ``inspect`` installs nothing.
 
-Conventions this oracle fixes where the spec is silent, recorded so they are not re-litigated:
+Conventions these frozen tests fix where the spec is silent, recorded so they are not re-litigated:
 
 - The row that hangs is chosen by config, not by a module-level seed set: the sweep has one
   categorical axis ``role`` over ``a``, ``b``, ``c`` and ``hang`` with one replicate, so every
@@ -36,7 +36,7 @@ Conventions this oracle fixes where the spec is silent, recorded so they are not
   ``SIGTERM``" -- and sleeps past the whole grace, so the parent's ``kill()`` is what ends it.
   The bound is asserted with 1.0 s of process slack over the sum the spec states, and
   ``_DRAIN_GRACE_S`` and ``_JOIN_GRACE_S`` are pinned at the values section 3 gives them.
-- E1's ``str | None`` is asserted at the constructor and at ``from_dict``, the M12 oracle's
+- E1's ``str | None`` is asserted at the constructor and at ``from_dict``, the M12 frozen tests'
   convention for every typed field of the schema.
 - E9 pins the errored row's three lines section 3 spells (``outcome: -``, ``t: -``,
   ``error: timeout``) and pins nothing about an ``outcome:`` line on an ok row, where section
@@ -44,7 +44,7 @@ Conventions this oracle fixes where the spec is silent, recorded so they are not
   ``no rows`` and the event name, not to its wording.
 - The wall-clock bounds are the only timing assertions, and every one is an upper bound.
 
-E13 and E14 (added after Session B, under Session A authority) pin two deviations back to the
+E13 and E14 (added after the build, under the freeze's authority) pin two deviations back to the
 spec: a Modal dict-form result whose ``meta`` is absent or not a Mapping raises
 ``ModalBackendError`` naming the job, as an invalid episode does, instead of being stored
 without it; and the drain pipe is created beside the outcome pipe on every
@@ -116,7 +116,7 @@ AFTER_KEY = "oracle.after"
 EPOCH = 1_756_900_000_000_000_000
 TRUNCATED_LINE = f"trace: truncated ({REASON})"
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 oracle's I15 regex, verbatim (nine columns since A8a)
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 #: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
@@ -398,7 +398,7 @@ def _tick() -> None:
         pass
 
 
-# ---------- helpers: isolation (the M3 capture oracle's, verbatim in behaviour) ----------
+# ---------- helpers: isolation (the M3 capture frozen tests', verbatim in behaviour) ----------
 
 
 class LogSink(logging.Handler):
@@ -637,7 +637,7 @@ def bare_timeout_run(tmp_path_factory: pytest.TempPathFactory) -> TimeoutRun:
     return _timeout_run(tmp_path_factory, capture=None)
 
 
-# ---------- hypothesis strategies: the M12 oracle's, plus the truncated draw ----------
+# ---------- hypothesis strategies: the M12 frozen tests', plus the truncated draw ----------
 
 hex_ids = st.text(alphabet="0123456789abcdef", min_size=16, max_size=16)
 json_scalars = (
@@ -1149,7 +1149,7 @@ def inspect_run(root: Path, run_id: str, event: str, *extra: str) -> CliResult:
 
 def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[str]]:
     """Split inspect output into per-row blocks (each starting at a line naming a config_hash)
-    and the trailing reproduction snippet. The M10 oracle's helper."""
+    and the trailing reproduction snippet. The M10 frozen tests' helper."""
     body, marker, tail = out.partition(SNIPPET_MARKER)
     assert marker, f"no {SNIPPET_MARKER!r} snippet in inspect output:\n{out}"
     blocks: list[list[str]] = []

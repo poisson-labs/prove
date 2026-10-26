@@ -1,8 +1,8 @@
-"""CD oracle: invariants CD1 to CD12 of "Proofload -- Spec CD Cap Declaration" -- the observation
+"""CD frozen tests: invariants CD1 to CD12 of "Proofload -- Spec CD Cap Declaration" -- the observation
 cap becomes a required per-target declaration with no default, and the store funnel is fixed to
 honour it in the same packet.
 
-Frozen by Session A on 2026-09-20 off ``1f5491b``, after the retrofit commit. Session B builds
+Frozen on 2026-09-20 off ``1f5491b``, after the update commit. The build is written
 against this file and does not edit it. Every name CD mints is imported inside the test that needs
 it, so the bare tree fails test by test and never at collection.
 
@@ -10,14 +10,14 @@ it, so the bare tree fails test by test and never at collection.
 capture must say how large an observation it keeps whole, and the tool supplies no number of its
 own. And the live defect underneath it -- **a declared cap above 8192 is not the cap in force**:
 the sweep declares it, the manifest records it, the receipt prints it, and the store cuts at the
-module default anyway. Both reproduced on the dispatch tree at step zero
+module default anyway. Both reproduced on the base tree at step zero
 (``log/proofload-cap-declaration/10-step-zero-cd-session-a.md``): a sweep declaring 131072 stored a
 value above 8,192 bytes as head 6144 + tail 2048, and at a declared 16384 a 10,000-byte value kept 8,192
 bytes while a 20,000-byte value kept 16,384. A mandatory declaration over a store that ignores it
 is ADR-096's own failure mode with a receipt attached, so CD5 and CD6 are as much this file's
 centre as CD1 is.
 
-**The answers this file is frozen against** (spec section 0, D1 to D14; D1 and D3 are Taylor's):
+**The answers this file is frozen against** (spec section 0, D1 to D14; D1 and D3 are rulings):
 D1 there is no default anywhere in ``src/``; D2 a sweep file with no ``[capture]`` table declares
 nothing, is not refused, and its rows are stored **uncut**; D3 "no cap" is declarable and its
 spelling is the string ``"none"``, and exactly that spelling; D4 the missing declaration and the
@@ -148,14 +148,14 @@ SHIPPED_SWEEP_FILES = tuple(
 )
 assert SHIPPED_SWEEP_FILES, "the packaged quickstart spec at least ships"
 
-#: D9: nothing downstream of the manifest is edited. Minted at the dispatch commit ``1f5491b``.
+#: D9: nothing downstream of the manifest is edited. Minted at the base commit ``1f5491b``.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
 # PF0 (Q4): no longer asserted. The rename changes viewer.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 UNTOUCHED_FILE_SHA256 = {
     "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
 }
-#: ``report.py`` with ``_observation_cap`` removed, whole lines, at the dispatch commit (CD9). The
+#: ``report.py`` with ``_observation_cap`` removed, whole lines, at the base commit (CD9). The
 #: whole-file value is ``5cfdf03b...`` and is **not** pinned here: D9's "no change to them" does not
 #: survive D3's ``"none"``, and this is the one region that moves.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py outside _observation_cap is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
@@ -163,7 +163,7 @@ UNTOUCHED_FILE_SHA256 = {
 # PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists (front-door spec section 14).
 REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "2e35cd3468dd170503d4ad3d7ec9fe1846d6349b84a577fc6de5bb60b74e8724"
-#: CD11: ``split``'s envelope/bodies partition over the fixture below, at the dispatch commit.
+#: CD11: ``split``'s envelope/bodies partition over the fixture below, at the base commit.
 SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
 
 
@@ -404,7 +404,7 @@ def test_cd1_a_sweep_file_with_no_capture_table_at_all_is_not_refused(tmp_path: 
 
 
 def test_cd2_none_is_the_second_spelling(tmp_path: Path) -> None:
-    """D3, Taylor's ruling. ``"none"`` parses to ``None``, which means *store every value whole*."""
+    """D3, the ruling. ``"none"`` parses to ``None``, which means *store every value whole*."""
     spec = SweepSpec.load(write(tmp_path / "none.toml", sweep_toml({"instrument": [], "max_observation_bytes": "none"})))
     assert spec.capture is not None and spec.capture.max_observation_bytes is None
 
@@ -461,7 +461,7 @@ def test_cd3_the_three_retired_constants_appear_nowhere_in_src() -> None:
 #: The only phrases that may put ``default`` on a line that names ``max_observation_bytes``, and
 #: each of them denies one.
 #:
-#: **Session A corrected CD3's grep twice, and says so.** Section 4 words it "neither does the string
+#: **The freeze corrected CD3's grep twice, and says so.** Section 4 words it "neither does the string
 #: ``default`` within three lines of ``max_observation_bytes``". Taken literally that forbids CD-E1's
 #: own first line -- which section 3.2 pins byte for byte, and which reads "is required and has no
 #: default" -- and it also catches ``max_spans``'s neighbouring docstring, "the span cap, off by
@@ -539,7 +539,7 @@ def test_cd4_a_limit_below_one_is_refused_naming_the_parameter(limit: int) -> No
 
 
 # ``test_cd4_finalizes_a10_guard_is_unchanged`` retired into A10's P10-9, 2026-09-25, as a recorded
-# A10 retrofit (spec A10 W2, section 7.1 group 2; Taylor's ruling 2 of 2026-09-25). Reason: it pinned
+# A10 update (spec A10 W2, section 7.1 group 2; ruling 2 of 2026-09-25). Reason: it pinned
 # that ``finalize`` refuses any non-``None`` declaration with a message naming A10, which was the
 # clause's job while A10 was unbuilt; A10 builds that half, so ``match="A10"`` is false by design.
 # Owner: A10. Cover: ``tests/test_a10_declared.py`` P10-9, which keeps the guard and re-aims it --
@@ -853,7 +853,7 @@ def test_cd9_every_surface_reads_the_declaration_as_declared(int_vs_none: dict[s
     ``"none"`` reads as ``none`` -- **not** as ``not recorded``, which is what a run that never
     asked for capture reads and is a different fact.
 
-    Measured at the dispatch commit and reported as a finding: ``report._observation_cap`` keeps an
+    Measured at the base commit and reported as a finding: ``report._observation_cap`` keeps an
     entry only when its value ``isinstance(value, int)``, so the string ``"none"`` is dropped and
     this test reads ``not recorded`` on the shipped build. D9's "with no change to them" does not
     hold for the ``"none"`` spelling; the clause is named in the handoff."""
@@ -952,7 +952,7 @@ def test_cd10_resume_is_gated_on_the_cap(
 
 
 def test_cd10_the_gate_does_not_spell_the_retired_name_in_src() -> None:
-    """**A collision Session A found and Taylor should see.** D14 says the gate compares the retired
+    """**A collision found at the freeze, for review.** D14 says the gate compares the retired
     ``max_span_bytes`` as the same field; A8b's P8-27 pins that the string appears **nowhere** in
     ``src/``. Both cannot hold as written, and a stand-in that spelled the name turned P8-27 red.
 
@@ -1040,7 +1040,7 @@ def test_cd11_splits_classification_is_byte_identical_to_the_dispatch_commits() 
     assert sorted(envelope["spans"][0]["attrs"]) == ["app.at", "app.under", "poisson_prove.episode", "poisson_prove.run_id"]
     assert sorted(next(iter(bodies.values()))["attrs"]) == ["app.over", "app.wrapped", "gen_ai.input.messages"]
     # PF0 (Q4, section 2.3): the trace schema string and the span key prefix are renamed; with the
-    # two renames undone, the partition is the dispatch commit's byte for byte.
+    # two renames undone, the partition is the base commit's byte for byte.
     as_written = json.dumps([envelope, bodies], sort_keys=True)
     assert '"poisson-prove.trace/1"' in as_written and '"poisson_prove.' in as_written and "proofload" not in as_written
     as_0_0_1 = as_written.replace('"poisson-prove.trace/1"', '"proofload.trace/1"').replace('"poisson_prove.', '"proofload.')

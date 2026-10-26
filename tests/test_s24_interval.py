@@ -1,11 +1,11 @@
-"""S24 -- the interval on the delta: the oracle for C1-C19.
+"""S24 -- the interval on the delta: the frozen tests for C1-C19.
 
 Written from "Proofload -- Spec S24 Interval on the Delta" section 4 as amended by S24.1.
-Session B builds ``src/proofload/diff.py`` and ``src/proofload/cli.py`` against this file and
+The build writes ``src/proofload/diff.py`` and ``src/proofload/cli.py`` against this file and
 does not edit it.
 
 **The S24 names are reached through the module** -- ``diff.score_p_rd``, not ``score_p_rd`` --
-for the reason the S23 oracle gives: before Session B builds them, a ``from ... import`` of a
+for the reason the S23 frozen file gives: before the build writes them, a ``from ... import`` of a
 name that does not exist is a *collection* error, and pytest abandons the whole run on one.
 Qualified, this file collects, its own tests fail, and every other test in the repo still
 reports. The names that already exist (``multi_diff``, ``CELLS_COLUMNS``, ``Store``) are
@@ -50,7 +50,7 @@ S24.1. They are restated here because they are why several tests below look the 
    handoff's "the censoring guard checks arm A only" mutant is uncatchable. Said here rather
    than left for someone to discover from a green suite.
 
-**Conventions this oracle fixes where the spec is silent. Session B builds to these.**
+**Conventions this file fixes where the spec is silent. The build follows these.**
 
 - **``n_rejected`` and ``alpha_star`` are fields** (spec section 2 as amended). Section 3.4
   requires the CLI to print ``q x R / m``; ``R`` was a field nowhere, and recovering it as
@@ -76,7 +76,7 @@ S24.1. They are restated here because they are why several tests below look the 
   Printing ``alpha_star`` with ``:g`` rather than ``:.4f`` also avoids section 3.4's own
   rounding defect, and the regex above accepts either.
 
-**One collision this oracle does not resolve, because it is not this session's to resolve.**
+**One collision this file does not resolve, because it is not this session's to resolve.**
 ``tests/test_s21_errors.py::test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block``
 asserts ``r.out == md + "\n" + block`` -- the *entire* stdout of the ``diff`` verb, by exact
 equality. Spec section 3.4 puts the interval block in that stream, so **E12 fails the moment
@@ -84,7 +84,7 @@ the block is added**, whatever it says. The S24 handoff's change table records "
 none touched", and that is wrong: this one is. Measured by running the whole suite against the
 shadow shim -- 1487 passed, and E12 the single failure. It is the only such site; the other
 exact-equality assertion on this stream, ``test_m4_read.py:619``, compares two runs of the same
-command and is unaffected. Session B cannot edit E12, so the placement or E12 has to give, and
+command and is unaffected. The build cannot edit E12, so the placement or E12 has to give, and
 that is a call for whoever owns the S21 packet.
 
 **Named non-observables.** The constrained MLE is not asserted anywhere: spec section 0.1
@@ -191,7 +191,7 @@ PAIR_HEADLINE = (
     "held: 0 lower, 22 higher · tripped: 22 lower, 0 higher\n"
     "(aalen_johansen + fisher_bh, BH q<0.05 over 144 tests, unpaired)"
 )
-#: LS retrofit, 2026-09-22 (local serve pass, Phase A): ``tripped`` and ``held`` are exact complements in all 72 cells and both arms
+#: LS update, 2026-09-22 (local serve pass, Phase A): ``tripped`` and ``held`` are exact complements in all 72 cells and both arms
 #: (spec LS section 3.6, D10, D11), so this pair's trade line is the complement sentence and the retired
 #: "moved failures" sentence appears in no file under ``src/`` (LS13).
 PAIR_TRADE_LINE = (
@@ -216,7 +216,7 @@ LOGRANK_HEADLINE = (
 LOGRANK_DIRECTIONS = (27, 12)
 
 #: C14, second half. The three digests S21's E14 already pins, restated rather than imported so
-#: two frozen oracles do not couple. Minted on the bare tree at b10a146 by ``report`` on the pair
+#: two frozen test files do not couple. Minted on the bare tree at b10a146 by ``report`` on the pair
 #: with one event and both axes.
 # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
 # test; the E14 facts and the heatmap are the unpaired test's, named.
@@ -839,7 +839,7 @@ def test_c2_the_level_follows_the_rejection_count_and_not_the_verdict_sum(
     """
     result = lattice_logrank
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
-    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): tripped has no kind, so n_safer and n_worse
+    # PF4 re-freeze (the PF4 freeze's yes/no 18 ruled no): tripped has no kind, so n_safer and n_worse
     # are None on the result and the verdict sum is the direction counts.
     assert all(ev.n_safer is None and ev.n_worse is None for ev in result.by_event.values())
     verdict_sum = sum(ev.n_lower + ev.n_higher for ev in result.by_event.values())
@@ -1162,7 +1162,7 @@ def test_c17_every_basis_on_every_frame_is_drawn_from_that_tuple(
 def test_c14_the_lattice_markdown_is_byte_identical_to_the_bare_tree(lattice_pair: Any) -> None:
     """``to_markdown()`` gains nothing from S24. It is the cheapest surface in the repo to break
     and the dearest to re-baseline, and S21 held the same line for ``coverage``. A digest minted
-    before the build exists, never a diff of two renders. **Re-minted by P-1 Session A** off its
+    before the build exists, never a diff of two renders. **Re-minted by the P-1 freeze** off its
     shadow shim: the parameter line now reads ``seed_identity_match=True, unpaired_analysis=True``
     where ``paired=True`` stood and the headline ends ``unpaired)`` (P-1 section 3.3); S24 section
     0.8's *does not gain a byte* was S24's rule for S24's packet and P-1 retires it (P-1 section 8).
@@ -1258,7 +1258,7 @@ def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
     assert {e: lattice.directions(lattice.fisher(e)) for e in (EVENT, OTHER)} == PAIR_DIRECTIONS
     assert {e: (lattice_pair.by_event[e].n_lower, lattice_pair.by_event[e].n_higher) for e in lattice_pair.events} == PAIR_DIRECTIONS
     assert lattice_pair.headline() == PAIR_HEADLINE
-    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no; PF4.20): the trade line is unchanged (its
+    # PF4 re-freeze (the PF4 freeze's yes/no 18 ruled no; PF4.20): the trade line is unchanged (its
     # words are fell and rose), and check()'s default gate on "worse" is refused (a DiffError) on the
     # kindless pair rather than failed; check("any") gates over the rows that count.
     assert lattice_pair.trade_line() == PAIR_TRADE_LINE
@@ -1268,7 +1268,7 @@ def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
     assert lattice_logrank.headline() == LOGRANK_HEADLINE
     assert lattice_logrank.trade_line() is None
     # PF4 (PF4.13): 12 cells rose under log-rank (lattice.logrank: the load 100 conditions).
-    # PF4 re-freeze (PF4 Session A's yes/no 18 ruled no): the rise is counted in direction words
+    # PF4 re-freeze (the PF4 freeze's yes/no 18 ruled no): the rise is counted in direction words
     # (n_higher), n_worse is None, check() is refused and check("higher") fails.
     tripped = lattice_logrank.by_event[EVENT]
     assert lattice.directions(lattice.logrank(EVENT)) == LOGRANK_DIRECTIONS
@@ -1280,7 +1280,7 @@ def test_c14_the_headline_the_trade_line_and_check_are_unchanged(
 
 def test_c14_the_cells_columns_are_unchanged(lattice_pair: Any) -> None:
     """ADR-051: the interval is its own frame, not two columns on ``cells``. ``CELLS_COLUMNS``
-    has twelve pin sites across ``diff.py`` and two frozen M6 oracles, and M7's multi oracles
+    has twelve pin sites across ``diff.py`` and two frozen M6 test files, and M7's multi frozen test files
     build that frame by hand; S21 measured this cost and declined to pay it for ``coverage``,
     and nothing about an interval makes it cheaper. This is the test that fails if someone pays
     it anyway."""
@@ -1442,7 +1442,7 @@ def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: 
 
 
 def test_c14_the_lattice_report_still_reproduces_the_three_digests_s21_minted(tmp_path: Path) -> None:
-    """The three digests S21's E14 pins, restated rather than imported so two frozen oracles do
+    """The three digests S21's E14 pins, restated rather than imported so two frozen test files do
     not couple. ``report`` renders through ``MultiDiffResult``; if S24 leaks a byte into
     ``to_markdown``, the receipt or the heatmap, one of these three moves.
 
@@ -1523,7 +1523,7 @@ def test_c15_to_json_gains_the_six_keys_and_keeps_every_key_it_had(lattice_pair:
 
 
 def test_c15_a_hand_built_result_still_constructs_without_any_new_field(lattice_pair: Any) -> None:
-    """Section 8's trap 8, and the S21 lesson repeated. M7's two oracles build
+    """Section 8's trap 8, and the S21 lesson repeated. M7's two frozen test files build
     ``MultiDiffResult`` by hand from keywords; an undefaulted new field breaks every one of
     them. Rebuilt here from the fields that existed before this packet, and the result must
     carry the absent-interval state rather than a half-populated one."""
@@ -1614,7 +1614,7 @@ def test_c18_the_diff_output_prints_the_alpha_star_arithmetic_and_names_the_fami
     ``R`` and ``m`` are captured from the line and checked against the fields rather than pinned
     as formatted floats: section 3.4's four-decimal example renders section 0.2's own motivating
     case (1200 cells, one rejection) as ``0.0000``, and pinning that format would freeze a
-    defect into the oracle.
+    defect into the frozen file.
     """
     result = synth_diff(synth_root, "moved-a", "moved-b", "fisher_bh")
     # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now

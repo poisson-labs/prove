@@ -1,13 +1,13 @@
-"""S27 -- the leaves and the bound: the oracle for L1-L24.
+"""S27 -- the leaves and the bound: the frozen tests for L1-L24.
 
 Written from "Proofload -- Spec S27 Layered Report P4.3 Leaves and the Bound" section 4 and
-"Handoff P4.3", against ``6fd3b9c`` (2026-09-08). Session B adds four dataclasses, two fields on
+"Handoff P4.3", against ``6fd3b9c`` (2026-09-08). The build adds four dataclasses, two fields on
 ``TreeResult`` with no defaults, the leaf pass, the bound function, ``depth`` on ``tree`` and
 ``MIN_FAMILY_GROUPS`` at three sites to ``src/proofload/tree.py``, and one flag, two blocks and
 two keys inside ``"tree"`` to ``src/proofload/cli.py``, against this file, and does not edit it.
 
 **``proofload.tree``'s new names are imported inside each test body**, the way the S25 and S26
-oracles reached the module before it existed: this file collects on the bare tree, its own tests
+frozen test files reached the module before it existed: this file collects on the bare tree, its own tests
 fail there, and every other test in the repo still reports. The static tests read the source as
 text; the pins on P4.2's build (L12, L13, L20) and the static guards (L11, L14's static clause)
 are green on the bare tree by design.
@@ -19,9 +19,9 @@ deterministically (L2-L7, L21-L23) and there is no rejection rate to hold in a b
 section 0.4's outer-nodes FDR on a known mixture is a step-zero script
 (``log/phase4-p43-step-zero-slow.py``, twenty-four minutes), not a lane.
 
-**Step zero, re-derived before a test was written** (``scratchpad/s27_step_zero.py``, 30 s
+**Step zero, re-derived before a test was written** (the step-zero script, 30 s
 against the bare tree; every number below is that script's). The grep report is in Handoff
-P4.3's *Session A's grep report* section, not here.
+P4.3's *freeze grep report* section, not here.
 
 1. **The multi-event pair could not be sized as spec section 6 writes it.** Eight ``task``
    groups of two cells at N=32 are 64 units per arm per group, and ``mde_two_proportion(0.5, 64,
@@ -85,7 +85,7 @@ P4.3's *Session A's grep report* section, not here.
    ``n_families``, ``mde_median``, ``mde_max``, and ``n_tests`` / ``rejected`` / ``cells`` /
    ``families`` / ``leaves`` as attributes of a P4.3 object (mutation table, rows 28c-28h).
 
-**Spec text this oracle could not use as written, each resolved here and reported.**
+**Spec text this file could not use as written, each resolved here and reported.**
 
 - Section 6's multi-event pair at N=32 (item 1) and its ``crash`` posture through the CLI
   (item 2).
@@ -103,11 +103,11 @@ P4.3's *Session A's grep report* section, not here.
   store carries ``axes-b-task-only`` (the moved frame declaring ``task`` alone) and ``--by
   temp`` against ``axes-a`` produces the ``not_shared`` row at the requested rung.
 - L20's "untouched (``git diff --exit-code tests/``)" is pinned as the sha256 of the two frozen
-  oracles' bytes at ``6fd3b9c``, F28's form for ``diff.py``, which a scratch copy without
+  test files' bytes at ``6fd3b9c``, F28's form for ``diff.py``, which a scratch copy without
   ``.git`` can check; ``tree``'s signature is pinned by parameter names, kinds and defaults so
   the new keyword is the only change.
 
-**Conventions this oracle fixes where the spec is silent. Session B builds to these.**
+**Conventions this file fixes where the spec is silent. The build follows these.**
 
 - A family line is a line of the ``cells:`` block indented by exactly two spaces; a leaf line
   is indented by four or more (section 3.8's example). Family lines come in ``families``
@@ -277,11 +277,11 @@ EVENT_COLLISION_LINE = 1318
 
 #: L20. F28's omnibus digest was taken over the study pair's omnibus; on the lattice it is replaced by
 #: the facts it guarded, recomputed from ``lattice.counts`` (``lattice_omnibus_facts`` below).
-#: **A28's retrofit, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
+#: **A28's update, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
 #: A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted ``4b3c6ae``) both named
 #: ``A28`` as their retiring packet; both owners have landed and A28 rewrites every carrier (five literals, one per file:
 #: ``test_a28_agreement.py``, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``,
-#: ``test_s29_viewer.py``; "four" is ``FORMER_CARRIERS``, the set A28 sweeps beside itself -- LS retrofit, 2026-09-22 (local serve pass, Phase A)), so
+#: ``test_s29_viewer.py``; "four" is ``FORMER_CARRIERS``, the set A28 sweeps beside itself -- LS update, 2026-09-22 (local serve pass, Phase A)), so
 #: the value below is a read off the shipped file at ``38e8df9`` (byte-identical at ``03d7ed2``),
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
@@ -327,28 +327,28 @@ ARM_KEYS = ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta")
 #: Keys that belong to the layered report's tree; none may appear outside ``tree`` on the page.
 #: (``bound`` is not among them: the page's ``view`` carries its own forest ``bound`` setting.)
 TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
-#: The two frozen oracles' bytes: L20's "untouched", in a form a scratch copy can check. Minted at
-#: ``6fd3b9c``; re-minted by S28's retrofit commit, which narrowed both files' E14 clause, and again
+#: The two frozen test files' bytes: L20's "untouched", in a form a scratch copy can check. Minted at
+#: ``6fd3b9c``; re-minted by S28's update commit, which narrowed both files' E14 clause, and again
 #: by S29's, which narrowed both files' ``serve --json`` digest to the tree-less projection (draft ADR-074);
 #: and again by A27's, which narrowed ``test_s26_fault_lines.py``'s own ``DIFF_PY_SHA256`` to exclude
-#: ``diff.py::_pairing``; and again by A22's retrofit, which added ``diff.py::_coverage`` to the same
-#: record; and again by A28's retrofit, which retired both exclusions from that file and left its
+#: ``diff.py::_pairing``; and again by A22's update, which added ``diff.py::_coverage`` to the same
+#: record; and again by A28's update, which retired both exclusions from that file and left its
 #: ``DIFF_PY_SHA256`` whole-file. Re-minted **after** that edit, off the shipped file -- a read, not a prediction,
-#: which is why ADR-077 does not narrow an oracle-pins-oracle digest. ``test_s25_root.py`` is untouched and
+#: which is why ADR-077 does not narrow an frozen-file-pins-frozen-file digest. ``test_s25_root.py`` is untouched and
 #: nothing pins this file, so the cascade is one literal deep and terminates here (measured).
 # Re-minted 2026-09-20 (truncation surfacing): both files moved -- their E14 and serve digests, and the dated notes above them --
 # so both values do, read off the two files as they stand and not predicted. Nothing pins this file, so the cascade ends here.
-# Re-minted 2026-09-22 (PR-2 Session B's retrofit of O16, ruled: two default_rng sites, tree.py _draw and paired.py
+# Re-minted 2026-09-22 (the PR-2 build's update of O16, ruled: two default_rng sites, tree.py _draw and paired.py
 # _cluster_bootstrap, ADR-058 widened to one stream per estimator): only ``test_s25_root.py`` moved, read off the
 # shipped file and not predicted; ``test_s26_fault_lines.py`` is untouched. Nothing pins this file, so the cascade ends here.
 # Re-minted 2026-09-25 (local serve pass, Phase C, last): both files moved. ``test_s25_root.py`` by Phase C's re-mint of O23's
-# ``SERVE_STRUCTURE_SHA256`` and its dated note; ``test_s26_fault_lines.py`` by Phase A's retrofit (the "five literals" comment
+# ``SERVE_STRUCTURE_SHA256`` and its dated note; ``test_s26_fault_lines.py`` by Phase A's update (the "five literals" comment
 # on ``DIFF_PY_SHA256``) and by Phase C's re-mint of its ``DIFF_PY_SHA256`` and ``SERVE_STRUCTURE_SHA256``. Read off the two
 # files as they stand after every other re-mint, not predicted. Nothing pins this file, so the cascade ends here.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, last): only ``test_s26_fault_lines.py`` moved, by this
 # re-mint of its ``DIFF_PY_SHA256`` (off the build at 662ceff) and the dated note above it; ``test_s25_root.py`` is untouched.
 # Read off the file as it stands after every other re-mint, not predicted. Nothing pins this file, so the cascade ends here.
-# Re-minted by PF0 Session A: both files as its freeze commit moved them (the rename, Q4, and the
+# Re-minted by the PF0 freeze: both files as its freeze commit moved them (the rename, Q4, and the
 # version field put back before their fixture digests). Read off the two files after every other move.
 # Re-minted for the command line's new look (front-door spec sections 5.2 to 5.6 and 14): both files
 # moved their CLI assertions. Read off the two files after every other move, not predicted.
@@ -1301,7 +1301,7 @@ def test_l5_the_root_before_the_level_on_the_identical_pair_the_bh_pair_and_the_
     """``depth=3``: the identical pair reads ``root_not_rejected`` under both schemes; the BH
     pair (root rejects, twenty groups tested, none rejected) reads ``no_group_rejected``; the
     discordant cell (grouping collapsed, root not rejected) reads ``root_not_rejected`` -- root
-    first, the precedence P4.2's oracle fixed, extended by one."""
+    first, the precedence P4.2's frozen file fixed, extended by one."""
     for method, (_, result) in identical_trees.items():
         assert result.root.rejects is False and result.grouping.n_groups == 2, method
         assert (result.leaves.tested, result.leaves.reason, result.leaves.families) == (False, "root_not_rejected", ()), method
@@ -2477,7 +2477,7 @@ def test_l20_omnibus_on_the_lattice_minus_the_p_driven_keys_is_the_payload_writt
 
 def test_l20_diff_py_and_the_two_frozen_oracles_are_byte_untouched() -> None:
     """``git diff --exit-code tests/`` and ``git diff --exit-code cd5f177 -- src/proofload/diff.py``
-    are Session B's acceptance; the same facts as digests, which a scratch copy without
+    are the build's acceptance; the same facts as digests, which a scratch copy without
     ``.git`` can check (module docstring)."""
     # PF0 (Q4): the diff.py digest is no longer asserted; the rename changes diff.py.
     for relative, digest in FROZEN_ORACLE_SHA256.items():
@@ -2605,7 +2605,7 @@ def test_l20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     A27's own retirement sweep discharges empty: nothing carried an exclusion at ``101028c``, so
     there was no orphan to file.
 
-    **A22's retrofit, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
+    **A22's update, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
     existing record constant, not a fifth carrier. The per-record assertions now pin ``owner`` and
     ``minted_at`` per entry rather than one shared literal, because ``_coverage`` is minted at
     ``4b3c6ae`` and ``_pairing`` at ``101028c``. Two live regions on one file is ADR-077's
@@ -2613,7 +2613,7 @@ def test_l20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     rather than assumed. Neither exclusion is retirable yet: both name ``A28`` as their retiring
     packet, and A22 is not it.
 
-    **A28's retrofit, 2026-09-13 -- both exclusions retired.** ``_pairing`` (A27, ``101028c``) and
+    **A28's update, 2026-09-13 -- both exclusions retired.** ``_pairing`` (A27, ``101028c``) and
     ``_coverage`` (A22, ``4b3c6ae``) both named ``A28``; both owners have landed and A28 rewrites
     every carrier, so ``DIFF_PY_SHA256`` is the whole-file value again, read off the shipped file,
     and this file carries no record. What stays is the sweep, asserted from a file that carries no

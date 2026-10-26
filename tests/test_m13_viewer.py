@@ -1,4 +1,4 @@
-"""M13 viewer oracle, generated from section 4 of the M13 spec before the viewer is built.
+"""M13 viewer frozen tests, generated from section 4 of the M13 spec before the viewer is built.
 
 Invariants V1-V40 map one test function each (several map more); V10 is withdrawn with
 ``--port`` and its number is retired. ``proofload.viewer`` does not exist when this file is
@@ -25,11 +25,11 @@ What is asserted where:
   lattice pair's 144 cells (its zero and ceiling conditions, over both events). V37 runs on that
   pair; V29 and V33 depend on the null-for-non-finite rule.
 
-Two literals the spec leaves to the oracle, recorded here rather than buried in a test:
+Two literals the spec leaves to the frozen tests, recorded here rather than buried in a test:
 
 - V25's hole message. The spec says "the no-comparable-data message string" without fixing
   it, and the ``hole_cause`` statement itself contains "no comparable data", so the phrase
-  cannot be what is counted. ``HOLE_MESSAGE`` is the sentence this oracle pins.
+  cannot be what is counted. ``HOLE_MESSAGE`` is the sentence these frozen tests pin.
 - V36's initial selection. The page's JavaScript is the named non-observable, so the
   initially-selected cell is pinned as the ``<option selected>`` of the picker.
 
@@ -94,7 +94,7 @@ ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 V22B_SALT = "00112233445566778899aabbccddeeff"
 
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+# LS update, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
@@ -114,7 +114,7 @@ CSP = (
     "img-src data:; form-action 'none'; base-uri 'none'"
 )
 CONTENT_TYPE = "text/html; charset=utf-8"
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
+# LS update, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -125,7 +125,7 @@ ARM_KEYS = (
     "rows_stored", "tally",
 )
 VIEW_KEYS = ("title", "x_axis", "y_axis", "fixed", "theme", "top_n", "forest", "bound", "sign_convention")
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): ``mde_unchanged`` after ``honesty`` (spec LS D4, section 3.5).
+# LS update, 2026-09-22 (local serve pass, Phase A): ``mde_unchanged`` after ``honesty`` (spec LS D4, section 3.5).
 # PF4 (PF4.20, PF4.3): each panel carries the event's ``kind`` beside ``n_safer`` and ``n_worse``
 # (null when the kind is not known) and ``n_higher`` / ``n_lower`` after them, then the label of its
 # per-condition share interval (``share_label``, the share caption's level and method) and the
@@ -1510,7 +1510,7 @@ def test_v25_holes_have_no_index_entry_and_the_hole_message_appears_once(hostile
 
 
 def test_v26_pointer_events_none_covers_the_glyph_the_notch_and_the_figures_text_and_nothing_else(lattice_dom: Dom) -> None:
-    """LS retrofit, 2026-09-22 (local serve pass, Phase A): the inert set gains the figure's ``<text>`` (spec LS D8, LS1) -- a cell's own
+    """LS update, 2026-09-22 (local serve pass, Phase A): the inert set gains the figure's ``<text>`` (spec LS D8, LS1) -- a cell's own
     label swallowed the click. The ``data-cell`` clause is re-asserted verbatim."""
     rules = css_rules(lattice_dom.html_style())
     inert = [s for selectors, decls in rules if decls.get("pointer-events") == "none" for s in selectors]
@@ -1942,7 +1942,7 @@ def test_v39_trade_line_appears_when_present_and_leaves_no_empty_element_when_nu
     assert holder, "the trade line is not the direct text of one element outside the SVG"
     without = json.loads(json.dumps(lattice_built.structure, allow_nan=False))
     without["trade_line"] = None
-    # LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): the Summary carries the same sentence as
+    # LS update, 2026-09-22 (local serve pass, Phase A, found by the shim run): the Summary carries the same sentence as
     # ``summary.complement.line`` on this pair (spec LS section 3.6), so a structure without the
     # trade line is one without the complement too.
     without["summary"]["complement"] = None

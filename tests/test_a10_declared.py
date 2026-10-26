@@ -1,22 +1,22 @@
-"""A10 oracle: invariants P10-1 to P10-22 of "Prove -- Spec A10 Declared Expectations".
+"""A10 frozen tests: invariants P10-1 to P10-22 of "Prove -- Spec A10 Declared Expectations".
 
-Frozen by Session A on 2026-09-25 off ``a8b7da2`` (``origin/main``, the local serve pass merged),
-after the six retrofit commits of spec section 7.1. Session B builds against this file and does not
+Frozen on 2026-09-25 off ``a8b7da2`` (``origin/main``, the local serve pass merged),
+after the six update commits of spec section 7.1. The build is written against this file and does not
 edit it. Every name A10 mints is imported inside the test that needs it (or inside a helper a test
 calls), so the bare tree fails test by test and never at collection, and no ``src/`` skeleton is
-needed: the skeleton this oracle needs to import is none.
+needed: the skeleton these frozen tests need to import is none.
 
 **What A10 buys.** A run says in advance which steps it expects to execute, which outcome labels its
 target can emit, and which of its steps are gates; the manifest records that declaration; a span
 whose step is a declared gate is stamped ``gate="declared"`` on its way to the store; and ``report``
 and ``inspect`` print ``never reached`` against the declaration, never against the absence of a span.
 
-**Taylor's rulings of 2026-09-25, which override the spec where they conflict.**
+**The rulings of 2026-09-25, which override the spec where they conflict.**
 1. Unmatched declared steps or gates print in full under ``never_reached`` and are never refused in
    A10 (W12 as specced; ADR-055's hatch superseded on this point). P10-15 pins it; the refusal is
    A9's, once ``CaptureCheck`` can tell capture-off from unreached.
 2. CD's ``test_cd4_finalizes_a10_guard_is_unchanged`` is retired into P10-9 as a recorded A10
-   retrofit (commit ``8a6f4e2``). ADR-077 stays limited to source-file byte digests and is not the
+   update (commit ``8a6f4e2``). ADR-077 stays limited to source-file byte digests and is not the
    authority for it.
 3. ADR-084 stands unchanged. ``DeclaredSetMismatch`` is raised in ``diff`` just before ``_pairing``,
    not inside it. P10-6 pins both halves: the refusal fires before ``_pairing`` runs (it wins over
@@ -26,7 +26,7 @@ and ``inspect`` print ``never reached`` against the declaration, never against t
    whose declared outcome sets differ it does not refuse). Because ``DIFF_MODULE_NAMES`` is exact,
    the check adds no module-level helper: it sits in ``diff()`` and ``multi_diff()`` themselves.
 
-**Conventions this oracle fixes where the spec is silent** (for review before Session B):
+**Conventions these frozen tests fix where the spec is silent** (for review before the build):
 - ``Declaration`` refuses a malformed value with ``ValueError`` (``TraceValidationError`` qualifies);
   the sampler refuses the same shapes with ``SamplerError`` naming the field and, where there is one,
   the offending value. An all-empty table's message carries section 3.1's words, ``[declare] declares
@@ -205,7 +205,7 @@ CHECK_FIELDS = (
     "observed_outcomes", "undeclared_outcomes", "declared_gates", "emitted_gates",
     "emitted_not_declared", "declared_never_reached",
 )
-#: ``RunManifest.to_dict()``'s twelve keys at the dispatch commit (``store.py:287``-``:303``,
+#: ``RunManifest.to_dict()``'s twelve keys at the base commit (``store.py:287``-``:303``,
 #: and a 0.0.1 manifest's twelve, such as the lattice pair's, with ``proofload_version`` in that slot).
 TWELVE = frozenset({
     "run_id", "target_id", "t_unit", "run_salt", "axis_types", "backend", "environment",
@@ -213,10 +213,10 @@ TWELVE = frozenset({
 })
 #: The names A9 owns in ``steps.py`` (W10); none may appear in A10's half.
 A9_NAMES = ("StepAggregates", "KindTally", "CaptureCheck", "capture_check")
-#: ``diff._pairing``'s manifest reads at the dispatch commit: ``t_unit`` and ``run_salt``, on both
+#: ``diff._pairing``'s manifest reads at the base commit: ``t_unit`` and ``run_salt``, on both
 #: sides (ruling 3: A10 adds no manifest comparison to ``_pairing``).
 PAIRING_MANIFEST_READS = frozenset({"t_unit", "run_salt"})
-#: P10-21: ``_provenance_lines`` as shipped at the dispatch commit, read off it for every shape but
+#: P10-21: ``_provenance_lines`` as shipped at the base commit, read off it for every shape but
 #: the empty list and tuple, whose shipped rendering is ``"- empty tuple: "``.
 PROVENANCE_SHAPES: dict[str, object] = {
     "empty_tuple": (), "empty_list": [], "one_tuple": ("verify",), "two_list": ["plan", "search"],
@@ -985,7 +985,7 @@ def test_p10_6_no_refusal_unless_both_declare_non_empty_differing_outcomes(
 
 @pytest.mark.parametrize("fn", FNS)
 def test_p10_6_the_refusal_is_raised_before_pairing_and_pairing_is_untouched(tmp_path: Path, fn: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Taylor's ruling 3: raised in ``diff`` just before ``_pairing``, never inside it. It wins over
+    """Ruling 3: raised in ``diff`` just before ``_pairing``, never inside it. It wins over
     ``_pairing``'s own refusals (a ``t_unit`` mismatch, a paired method on differing salts); with
     ``_pairing`` replaced by a tripwire it still fires; and with equal declarations ``_pairing`` runs
     exactly once, as it did."""

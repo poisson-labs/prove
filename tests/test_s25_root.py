@@ -1,10 +1,10 @@
-"""S25 -- the dual root: the oracle for O1-O23 except O15.
+"""S25 -- the dual root: the frozen tests for O1-O23 except O15.
 
 Written from "Proofload -- Spec S25 Layered Report P4.1 Dual Root" section B.4, under the two
-calls the step-zero report drew (2026-09-07). Session B builds ``src/proofload/tree.py`` and the
+calls the step-zero report drew (2026-09-07). The build adds ``src/proofload/tree.py`` and the
 ``diff`` block in ``src/proofload/cli.py`` against this file and does not edit it.
 
-**``proofload.tree`` is imported inside each test body**, the way the M12 oracle reached
+**``proofload.tree`` is imported inside each test body**, the way the M12 frozen tests reached
 ``proofload.trace`` before it existed: a module-level import of a module that is not there is a
 *collection* error, and pytest abandons the whole run on one. Imported lazily, this file collects,
 its own tests fail, and every other test in the repo still reports. The static tests read
@@ -22,7 +22,7 @@ they do.
    the arm-label test on it is not exact by theorem: measured at step zero, a pair-swap resample
    tested by arm label rejected far outside the band ``[0.020, 0.080]``, and the matched
    construction sat inside it. **The resample follows the scheme under test**, from a table that
-   is *this file's own literal* and never ``root.scheme`` -- so a dispatch that regresses to one
+   is *this file's own literal* and never ``root.scheme`` -- so a scheme choice that regresses to one
    scheme for both methods is resampled under the right scheme and tested under the wrong one, and
    O10 is written to see it. That is the sharpest guard in the packet
    and it is marked sole-catch in the mutation table. ``B`` is 1000, what the measurement used.
@@ -52,7 +52,7 @@ they do.
    B=1000 and 4000 under both schemes (PF4.18's scale; O9 says why), and a location-only root reads
    ``p_omnibus == 1.0`` on it.
 
-**Conventions this oracle fixes where the spec is silent. Session B builds to these.**
+**Conventions these frozen tests fix where the spec is silent. The build follows these.**
 
 - ``to_json()`` "bytes" means ``json.dumps(payload, sort_keys=True)``. ``json.dumps`` refusing a
   NumPy scalar is a failure, not a test defect: the CLI's ``--format json`` serialises the same
@@ -335,7 +335,7 @@ def manifest(run_id: str, salt: str) -> RunManifest:
 
 def seed_of(config: Mapping[str, Any], replicate_index: int) -> int:
     """A seed that is a function of ``(config, replicate_index)`` and never of the cell's position
-    in its dict. **C49 (P-1 section 7.3), fixed in P-1 Session A's retrofit.** The old
+    in its dict. **C49 (P-1 section 7.3), fixed in the P-1 freeze's update.** The old
     ``1000 * index + k`` seeded by dict position and ``replicate_index`` counted from
     ``replicate_start``, so O21's pair stored a different seed at the same
     ``(config_hash, replicate_index)`` in its two arms -- 16 of 48 matched rows disagreed, measured
@@ -623,7 +623,7 @@ def pair(lattice_trees: Any) -> tuple[pd.DataFrame, pd.DataFrame, RunManifest, R
 def lattice_roots(pair: Any, lattice_trees: Any) -> dict[str, tuple[Any, Any]]:
     """``(multi, root)`` per method on the lattice at ``events=(EVENT,)``, the golden knobs. Shared
     by O1, O2, O3, O6, O7, O8, O11 and O19/O20. Each comparison is the session's shared one; the
-    root is ``omnibus`` itself, the function this file is the oracle for."""
+    root is ``omnibus`` itself, the function these frozen tests cover."""
     a, b, _, _ = pair
     out = {}
     for method in METHODS:
@@ -1092,7 +1092,7 @@ def test_o6_the_pairable_pair_and_its_unpairable_twin_give_identical_json(synth_
 def test_o6_tree_never_names_paired() -> None:
     """**The rule, in prose.** The scheme is a function of ``method``; ``paired`` is provenance.
     No ``ast.Attribute`` with ``attr == "paired"`` and no ``ast.Name`` ``paired`` anywhere in
-    ``tree.py``, so the module cannot even read the field it must not dispatch on."""
+    ``tree.py``, so the module cannot even read the field it must not branch on."""
     offenders = [
         (node.lineno, type(node).__name__)
         for node in ast.walk(parsed(TREE_SOURCE))
@@ -1312,7 +1312,7 @@ def test_o10_the_root_is_calibrated_on_sharp_null_resamples_of_the_lattice(pair:
     without the ``+ 1``, ties counted with ``>``, a rank-p that excludes the permutation itself,
     an uncalibrated minimum over the ``2K`` p-values.
 
-    **The band catches the scheme mismatch** -- **sole catch** -- the dispatch regressing to one
+    **The band catches the scheme mismatch** -- **sole catch** -- the scheme choice regressing to one
     scheme for both methods, which under ``mcnemar_bh`` is resampled here under pair swap and tested
     by the build under arm label (which side of the band it lands on is the fixture's; the
     planted-defect pass measures it).
@@ -1805,7 +1805,7 @@ def test_o14_multi_diff_on_the_lattice_is_byte_identical_to_the_bare_tree(pair: 
 
 def test_o14_the_s24_column_digests_and_the_coverage_digest_are_unchanged(lattice_trees: Any) -> None:
     """S24's ``q``/``delta`` column digests and S21's coverage digest, restated rather than
-    imported so two frozen oracles do not share a helper."""
+    imported so two frozen test files do not share a helper."""
     both = lattice_trees.multi((EVENT, OTHER), "fisher_bh")
     logrank = lattice_trees.multi((EVENT,), "logrank_bh")
     # The four digests are replaced by the facts they guarded (S24's C15 and S21's coverage,
@@ -1977,7 +1977,7 @@ def test_o23_serve_json_on_the_lattice_prints_the_same_structure(lattice_trees: 
 
 
 def test_o16_default_rng_is_called_in_exactly_one_function_and_it_lives_in_tree_py() -> None:
-    """**The rule, in prose.** Draft ADR-058, widened 2026-09-22 (Taylor, PR-2 Session B): one
+    """**The rule, in prose.** Draft ADR-058, widened 2026-09-22 (PR-2 build): one
     seeded stream per estimator, each constructed in one function and never stored. The tree's
     permutation stream is built in ``tree.py``'s ``_draw`` and P4.2 obtains the same draws by
     calling that function; the paired replay's item-clustered bootstrap is built in
@@ -1986,9 +1986,9 @@ def test_o16_default_rng_is_called_in_exactly_one_function_and_it_lives_in_tree_
     to disagree with one of these, which is the ADR-021 shape this project has shipped twice, and
     the two named sites are the whole of the allowance. Legacy NumPy RNG entry points --
     ``np.random.seed``, ``RandomState``, any ``np.random.<fn>`` other than ``default_rng`` -- are
-    global state and are forbidden everywhere in ``src/``. *Retrofit, ruled 2026-09-22: this test
+    global state and are forbidden everywhere in ``src/``. *Updated, ruled 2026-09-22: this test
     read "exactly one site, in tree.py" from ``5143c8d`` until the paired bootstrap landed; the
-    name is kept so the row in the S25 oracle map still resolves.*"""
+    name is kept so the row in the S25 frozen-test map still resolves.*"""
     sites: list[tuple[str, int, str]] = []
     legacy: list[tuple[str, int, str]] = []
     for path in sorted(PACKAGE.rglob("*.py")):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
@@ -2239,7 +2239,7 @@ def test_o21_unmatched_replicates_are_dropped_by_the_join_and_not_mispaired() ->
     event counts are over the joined pairs only -- a's fails sit at ``0..7`` and are all outside
     the join, b's at ``16..19`` and all inside it -- and ``n_discordant`` counts joined pairs that
     differ. The two arms store the same seed at every matched ``(config_hash, replicate_index)``
-    since P-1 Session A's retrofit (C49; ``seed_of``): before it 16 of 48 matched rows disagreed and
+    since the P-1 freeze's update (C49; ``seed_of``): before it 16 of 48 matched rows disagreed and
     ``mcnemar_bh`` ran on them anyway."""
     a = raw_frame("um-a", {"u": ["fail"] * 8 + ["ok"] * 24, "v": ["fail"] * 3 + ["ok"] * 29})
     b = raw_frame("um-b", {"u": ["fail"] * 4 + ["ok"] * 28, "v": ["fail"] * 9 + ["ok"] * 23}, replicate_start={"u": 16})

@@ -31,10 +31,10 @@ commands. ``overrides`` takes the sweep's options by their flag names with under
 letters are the log's; every one is written under its recommended answer).
 
 - (a) PF5 builds the store, setup, sweeps and comparisons areas of section 17.1. ``init_agent`` is a
-  core operation PF11's Session B builds (PF11's frozen tests drive it through ``init --agent``);
+  core operation PF11's build adds (PF11's frozen tests drive it through ``init --agent``);
   ``save``, ``artifacts``, ``artifact`` and ``build_ui`` are PF12's; ``view`` is PF12's and PF6's.
   The design session's Y2 (ruled 2026-10-23) leaves the view field names to "PF5 and PF12" to
-  freeze; this file freezes none of them and leaves them to PF12, whose Session A holds the views,
+  freeze; this file freezes none of them and leaves them to PF12, whose freeze holds the views,
   and to PF6 (a yes/no in the log). Those operations may be in
   ``core.__all__`` already; this file requires only PF5's. PF5.11's ``save`` and "saved
   comparisons" are therefore checked by PF12; PF5.9's "and view" by PF6 and PF12.
@@ -71,7 +71,7 @@ letters are the log's; every one is written under its recommended answer).
 - (i) ``compare``'s public set is ``diff``, ``check``, ``runs``, ``resolve``, ``Comparison``,
   ``CheckResult``, ``RunInfo`` and ``Refusal``; ``compare.diff`` returns the core's ``Comparison``
   (section 7.2's ``DiffResult`` read as it); each takes the store as a path or a ``Store``.
-- (j) ``stats.__all__`` gains ``POWER`` (the item PF4 Session B left), beside ``WILSON_LEVEL``.
+- (j) ``stats.__all__`` gains ``POWER`` (the item the PF4 build left), beside ``WILSON_LEVEL``.
 - (k) ``stats.__all__`` gains ``KMCurve`` and ``CIFCurve``, the types two of its functions return.
 - (l) ``stats.fisher_test(events_a, n_a, events_b, n_b)`` gives ``(odds_ratio, p)``,
   ``mcnemar_test(only_a, only_b)`` gives ``(only_a - only_b, p)`` and ``logrank_test(t_a,
@@ -671,7 +671,7 @@ def _internal_words(text: str) -> list[str]:
 @pytest.mark.parametrize("module", sorted(PUBLIC))
 def test_pf5_2_every_public_name_has_a_plain_docstring_and_annotations(module: str) -> None:
     """PF5.2 and section 7.3: every function and class in a public ``__all__`` has its own
-    docstring with no internal id, spec section, ruling or vault trace in it (reading q); every
+    docstring with no internal id, spec section, ruling or private-notes trace in it (reading q); every
     function, and every public method a class defines, has every parameter and its return
     annotated."""
     problems: list[str] = []

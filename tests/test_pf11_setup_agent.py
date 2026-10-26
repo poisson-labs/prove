@@ -122,7 +122,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   1 to 1,024 characters; ``metadata`` a map from string keys to string values.
 
 **Seams with other modules.** ``init``, ``prove.toml``, ``target``, strict specs and the exit-2
-refusal are PF3's (frozen on ``pf3-oracle``); the rows here that reuse them check only what section
+refusal are PF3's (frozen on the PF3 freeze branch); the rows here that reuse them check only what section
 20.3 adds. ``[declare]``'s kinds and their refusals are PF4.20's; the power gate and the design
 that cannot flag are section 8.10's (PF4's re-freeze). The core's ``init_agent`` is PF5's and
 private (Q28), so it is reached only through the command. The README section and the rest of

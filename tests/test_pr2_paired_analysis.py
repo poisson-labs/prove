@@ -1,27 +1,27 @@
-"""PR-2 oracle: the per-cut paired analysis, the item-clustered bootstrap and the outcome of
+"""PR-2 frozen tests: the per-cut paired analysis, the item-clustered bootstrap and the outcome of
 "Prove -- Spec PR Paired Replay" -- invariants PR22 to PR39.
 
-Written by Session A on 2026-09-22 off ``pr1-build`` ``0f1e1e0`` (phase 1 built) plus a fixture
-retrofit (``86c1b4d``), as ``4106e54``. **Frozen 2026-09-22** after Taylor approved the two
+Written at the freeze on 2026-09-22 off ``pr1-build`` ``0f1e1e0`` (phase 1 built) plus a fixture
+update (``86c1b4d``), as ``4106e54``. **Frozen 2026-09-22** after approval of the two
 tables in the handoff and the conventions below, and ruled on the sign of the net swing (kept as
 PR26 writes it, the second arm minus the first, and the output labels which way it subtracts), the
 net swing under the fallback (``not_estimated``, null bounds) and spec section 9's
 ``PYTHONPATH=src``. The freeze changes this docstring and adds the one ``direction`` assertion the
-sign ruling asks for, in the two net-swing tests. Session B builds phase 2 of
+sign ruling asks for, in the two net-swing tests. The build adds phase 2 of
 ``src/proofload/paired.py`` -- ``CutResult``, ``PairedResult`` and ``analyse`` -- against this file
 and does not edit it. Phase 2's names are read through ``getattr`` inside each test, so
 the bare tree (phase 1 only) fails test by test on ``AttributeError`` and never at collection.
-*Retrofit R3, ruled 2026-09-22 (PR-3 Session A): ``Cut`` gains ``comparison`` with no default, so
+*Update R3, ruled 2026-09-22 (the PR-3 freeze): ``Cut`` gains ``comparison`` with no default, so
 every cut this file builds carries ``"ge"`` -- the one reading PR23 had, so no pinned number moves
 -- and the PR23 tests take the comparison as a parameter with ``"gt"`` rows beside the ``"ge"``
 ones; PR24 gains one test for the tie under ``"gt"``. Every test in this file is red on the tree
-this retrofit lands on, on ``TypeError`` from the missing field, until Session B builds it. Ruled
-the same day on the PR-3 Session A report: both artifacts print the cut's ``comparison`` beside
+this update lands on, on ``TypeError`` from the missing field, until the build adds it. Ruled
+the same day on the PR-3 freeze report: both artifacts print the cut's ``comparison`` beside
 its ``threshold``, pinned by one line in PR37's nesting test.*
 
 **What phase 2 is.** ``analyse`` takes a ``PairAssertion`` and nothing else (PR9, already pinned by
-the PR-1 oracle) and answers one question per declared cut: did the binary action at that cut
-reproduce? The action is ``value >= threshold`` on ``Decimal`` (PR23, PR24) -- under retrofit R3,
+the PR-1 frozen tests) and answers one question per declared cut: did the binary action at that cut
+reproduce? The action is ``value >= threshold`` on ``Decimal`` (PR23, PR24) -- under update R3,
 ruled 2026-09-22, ``value >= threshold`` when the cut declares ``comparison = "ge"`` and
 ``value > threshold`` when it declares ``"gt"``, a tie being action 1 under the first and action 0
 under the second and counted per arm under both; the 2x2, the flip rate
@@ -306,7 +306,7 @@ def declaration(
         "value_key": VALUE_KEY, "cluster_key": "item", "stratum_key": "cut",
         # A cut is ``(name, threshold)`` or ``(name, threshold, comparison)``; the comparison
         # defaults to ``"ge"`` here, in the helper, because that is the reading every test below
-        # was cut against. The module itself has no default (retrofit R3).
+        # was cut against. The module itself has no default (update R3).
         "cuts": tuple(
             paired.Cut(name=c[0], threshold=Decimal(c[1]), comparison=c[2] if len(c) > 2 else "ge")
             for c in cuts
@@ -564,7 +564,7 @@ def test_pr22_the_module_computes_the_rate_and_chooses_no_threshold_for_it() -> 
     ("comparison", "literal", "action"),
     [("ge", "0.59", 0), ("ge", "0.60", 1), ("ge", "0.61", 1), ("ge", "0.6", 1), ("ge", "0.599", 0),
      ("ge", "0.6000", 1), ("ge", "1", 1), ("ge", "0", 0),
-     # Retrofit R3 (2026-09-22): under ``gt`` the tie does not act, and nothing else moves.
+     # Update R3 (2026-09-22): under ``gt`` the tie does not act, and nothing else moves.
      ("gt", "0.59", 0), ("gt", "0.60", 0), ("gt", "0.61", 1), ("gt", "0.6", 0), ("gt", "0.599", 0),
      ("gt", "0.6000", 0), ("gt", "1", 1), ("gt", "0", 0), ("gt", "0.6000000000000000001", 1)],
 )
@@ -588,7 +588,7 @@ def test_pr23_the_action_is_value_at_or_above_the_threshold(comparison: str, lit
         # 0.1 + 0.2 is the double above 0.3; the literal is not, and is below a cut of 0.3.
         ("ge", "0.29999999999999998", "0.3", 0),
         ("ge", "0.3", "0.30000000000000004", 0),
-        # Retrofit R3 (2026-09-22), the same literals under ``gt``: the tie at 0.60 does not act,
+        # Update R3 (2026-09-22), the same literals under ``gt``: the tie at 0.60 does not act,
         # a float would call ``0.60000000000000000011 > 0.6000000000000000001`` a tie, and it is not.
         ("gt", "0.60", "0.60", 0),
         ("gt", "0.60000000000000000011", "0.6000000000000000001", 1),
@@ -652,7 +652,7 @@ def test_pr24_a_tie_is_action_one_and_is_counted_per_arm() -> None:
 
 
 def test_pr24_under_gt_a_tie_is_action_zero_and_is_still_counted_per_arm() -> None:
-    """Retrofit R3 (2026-09-22): the same five pairs as the test above under ``comparison =
+    """Update R3 (2026-09-22): the same five pairs as the test above under ``comparison =
     "gt"``. The ties change side -- 0.60 no longer acts -- and the tie counts do not move, because
     a tie is a value equal to the threshold whichever way the cut is declared."""
     rows = [
@@ -913,7 +913,7 @@ def test_pr29_property_any_row_order_gives_the_same_bytes(permutation: list[int]
 
 def test_pr30_the_bootstrap_resamples_whole_items_never_observations() -> None:
     """Named mutant 3. On a fixture with within-item correlation the observation bootstrap is
-    narrower -- right shape, wrong width -- and the oracle carries the fixture."""
+    narrower -- right shape, wrong width -- and the frozen test carries the fixture."""
     rows = grid(20, ["S1", "S2", "S3"], lambda i, s: (1, 0) if i < 5 else (1, 1))
     clusters = [r.cluster for r in rows]
     flips = [int(r.a != r.b) for r in rows]
@@ -1227,7 +1227,7 @@ def test_pr38_outcome_c_under_the_fallback_when_the_upper_bound_reaches_the_floo
     upper bound is 0.153 and clears a floor of 0.01, so the reading is C -- and under a floor of
     0.20 the same numbers read A. Once five items flip a bootstrap lower bound cannot be zero
     (the chance that a resample holds none of them is below e to the minus five), so C only ever
-    comes from the fallback, and the oracle says so rather than pretending otherwise."""
+    comes from the fallback, and the frozen test says so rather than pretending otherwise."""
     rows = grid(40, ["S1"], lambda i, s: (1, 0) if i < 2 else (1, 1))
     c = cut_of(analyse(assertion(rows, floor="0.01", b=50)))
     assert c.pooled["flip_rate"]["basis"] == "exact_upper_one_sided"

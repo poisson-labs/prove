@@ -1,8 +1,8 @@
-"""A7 oracle: invariants P7-1 to P7-12 of [[Proofload - Spec A7 Storage Split]] section 4, written
+"""A7 frozen tests: invariants P7-1 to P7-12 of the A7 storage-split spec section 4, written
 before ``Store.read(trace=)``, the two Parquet columns, ``split``, ``assemble``, ``OBSERVATION_KEYS``
-and ``LOGPROBS_KEY`` exist, against ``93bfa13`` -- the M11a merge, A7's dispatch commit.
+and ``LOGPROBS_KEY`` exist, against ``93bfa13`` -- the M11a merge, A7's base commit.
 
-**The register, built to as answered at dispatch (spec section 10):** Q1 (a) P7-12's fixture is
+**The register, built to as answered at the start (spec section 10):** Q1 (a) P7-12's fixture is
 A28's crossed shape stored twice, and it discriminates *layout*, not scale; Q2 (a) two cells,
 pandas 2.3.3 and pandas 3.0.5, A22's recipe; Q3 (c) ``meta=`` stays orthogonal to ``trace=`` --
 ``meta=False, trace="envelope"`` is twelve columns, ``meta=True, trace="envelope"`` fourteen with
@@ -16,14 +16,14 @@ pre-A7 row's ``meta["trace"]``.
 P7-2, P7-3, P7-7, P7-8, P7-9, P7-11 -- have null halves that **cannot disagree on pandas 2.3.3**:
 pyarrow gives an ``object`` column with ``None`` there whether or not the build registered the two
 columns in ``store._NULLABLE_STRING_COLUMNS``. Every invariant here is asserted in both cells;
-twelve tests, **12 + 12 = 24 ids over the two cells against the oracle's own 12**. No invariant is
+twelve tests, **12 + 12 = 24 ids over the two cells against this file's own 12**. No invariant is
 cell-specific, and none could be asserted in one cell only. **Nullness is by identity throughout**
 (spec S5): ``is None`` / ``is not None`` on every column in every clause, never ``pd.isna`` and never
 a bare truth test, and the on-disk ``trace_obs`` column -- which no read mode presents as a frame
 column -- is read raw through ``pyarrow`` and ``to_pylist()``, where a null is ``None`` on every
 pandas.
 
-**Standing rule 12 -- this is a retrofit packet, and the retrofit is seven sites in five files,
+**Standing rule 12 -- this is an update packet, and the update is seven sites in five files,
 not the spec's five in four.** R7's schema clause and R9's parameter list (``test_m4_read.py``) and
 the three ``TRACE_EXPORTS`` copies (``test_m3_crash_trace.py``, ``test_m3_timeout_trace.py`` and
 one more test module's) are the spec's. The sixth is ``test_m3_crash_trace.py``'s
@@ -38,7 +38,7 @@ full read; its raw byte-identity clause, rule zero's own claim, is untouched, an
 green before and after. Spec section 7.2's "no test in ``test_m3_capture.py`` is red" was wrong by
 that one test.
 
-**The classified red set on the retrofit commit, measured on two pristine ``git archive`` copies of
+**The classified red set on the update commit, measured on two pristine ``git archive`` copies of
 ``93bfa13`` before any source edit, venvs from the repo venv's freeze closure differing in exactly
 pandas, collection verified 1913 = 1913 = 1913 and then 1925 with this file, baselines 1908 passed /
 5 skipped / 0 failed in both cells: 17 failed / 1903 passed / 5 skipped, identically in both
@@ -47,15 +47,15 @@ P12. **The same set in both cells** -- the pandas 3 cell adds nothing, because A
 and the bare tree's reds are the four new names, the two new columns and the one new keyword, none
 of which pandas can see. Nothing outside the set is red. Every reference to a name the build has
 not created yet sits **inside** a test body or a fixture that runs at test time, never at module
-level, so ``--collect-only`` gives an exact count on the retrofit commit. **Green before and after,
+level, so ``--collect-only`` gives an exact count on the update commit. **Green before and after,
 named so their green is not read as evidence:** C7 above; R7's third clause (the manifest key set,
 A23/A26's); R9's other three tests and ``PUBLIC_STORE_SYMBOLS`` with its twin in
 ``test_s21_errors.py`` (A7 adds no public symbol to ``store.py``); A22's V5 (red only transiently
-inside Session B's build, between ``_SCHEMA`` gaining the fields and ``_NULLABLE_STRING_COLUMNS``
+inside the build, between ``_SCHEMA`` gaining the fields and ``_NULLABLE_STRING_COLUMNS``
 gaining them); and A28's G17 with every other ``G`` -- its stored pair is a pre-A7 store that is
 never rewritten, so the split never runs on it.
 
-**What the freeze showed the spec to be wrong about, beyond the retrofit count.** (1) **A22's V7
+**What the freeze showed the spec to be wrong about, beyond the update count.** (1) **A22's V7
 decides a composition the spec gets backwards.** Spec section 3.3 says retention "nulls both columns
 instead of popping ``meta``"; V7 (``test_a22_pandas3.py``) stores an *invalid* ``meta["trace"]`` on
 an unretained row and asserts the key is gone from the read-back ``meta``. P7-7 and P7-9 as written
@@ -65,8 +65,8 @@ unretained row whether or not the trace was valid**, and nulls the columns besid
 shim was red on V7 until it did. (2) ``OBSERVATION_KEYS`` typed as a frozenset cannot carry A6
 section 3.3's four prefix rows; pinned behaviourally here (see below).
 
-**Mutants, measured over the whole suite on ``rsync`` copies of the shadow shim at
-``/private/tmp/claude-501/proofload-a7/mutants/<row>``, seven rows in parallel under the thread
+**Mutants, measured over the whole suite on ``rsync`` copies of the shadow shim,
+one scratch copy per row, seven rows in parallel under the thread
 caps, pandas 2.3.3 unless named.** Measurement order: rows 1-6 ran before C7's amendment and carry
 its pre-amendment red in every row, not counted below; the control was re-run after the amendment
 and is **1922 passed / 3 skipped / 0 failed**; rows 7-12 and the pandas 3 row ran after it.
@@ -82,7 +82,7 @@ Twelve mutants, twelve caught, no survivor.
 | 5 | retention drops the errored row's trace too | P7-7, and K6 x2, E8 x2 -- the exemption was already pinned |
 | 6 | retention nulls ``trace`` and leaves ``trace_obs`` | **P7-7 alone** (its raw ``trace_obs`` clause) |
 | 7 | no empty envelope attached under active capture | **P7-8 alone** |
-| 8 | an invalid ``meta["trace"]`` raises in ``append`` | P7-9 (fixture error), and 13 older tests plus 10 fixture errors across K6, E8, C7, T30, I19, R1-R4, the M4 store oracle and V7 |
+| 8 | an invalid ``meta["trace"]`` raises in ``append`` | P7-9 (fixture error), and 13 older tests plus 10 fixture errors across K6, E8, C7, T30, I19, R1-R4, the M4 store frozen file and V7 |
 | 9 | ``trace="none"`` keeps a pre-A7 row's ``meta["trace"]`` (Q7 refused) | **P7-3 alone** |
 | 10 | ``read(meta=False, trace="full")`` silently ``"none"`` (Q4 (c)) | **P7-1 alone** |
 | 11 | the envelope read decodes ``trace_obs`` | **P7-5 alone** |
@@ -130,9 +130,9 @@ behind. Filed to C28's row, not to an invariant here.
   are A8b's and do not exist at A7.
 - **The mock quickstart pair** is stored at test time and its run ids are minted from the clock, so
   its bytes cannot be pinned here; P7-10 checks the **lattice pair's** verbs as facts and asserts the mock pair's verbs exit
-  0 with the shapes the M4 and M10 oracles pin. The mock pair's byte identity against the dispatch
-  commit is Session B's by-hand acceptance item (spec section 9, section 11).
-- **The capture-active runs** (F3) run ``run_local`` in a forked child, as the M3 capture oracle
+  0 with the shapes the M4 and M10 frozen test files pin. The mock pair's byte identity against the base
+  commit is the build's by-hand acceptance item (spec section 9, section 11).
+- **The capture-active runs** (F3) run ``run_local`` in a forked child, as the M3 capture frozen file
   does, because ``install()`` is once per process and claims the global provider. They cannot
   express the Modal row builder; A9's P9-6 fixture does.
 - **P7-5's poisoned run** is a post-A7 run whose ``meta`` and ``trace_obs`` cells were rewritten in
@@ -142,13 +142,13 @@ behind. Filed to C28's row, not to an invariant here.
 **What the spec types and A6 lists disagree on, pinned behaviourally.** Spec section 2 types
 ``OBSERVATION_KEYS`` as ``frozenset[str]``; A6 section 3.3's table has four **prefix** rows
 (``gen_ai.prompt.*``, ``gen_ai.completion.*``, ``llm.input_messages.*``, ``llm.output_messages.*``)
-that no membership test can express. This oracle pins the eight exact keys and ``LOGPROBS_KEY`` as
+that no membership test can express. This file pins the eight exact keys and ``LOGPROBS_KEY`` as
 members, and pins the prefixed keys **by what the split does to them** -- moved to ``trace_obs``
 under the same key, absent from the envelope -- leaving the representation to the build. Reported
 as a finding in the freeze's devlog entry.
 
-Restated rather than imported, as every frozen oracle's helpers are: the M4 record shape, the M3
-capture oracle's forked child, A28's crossed cells and store writer, the CLI runner.
+Restated rather than imported, as every frozen test file's helpers are: the M4 record shape, the M3
+capture frozen file's forked child, A28's crossed cells and store writer, the CLI runner.
 """
 
 from __future__ import annotations
@@ -250,7 +250,7 @@ EPOCH = 1_756_900_000_000_000_000
 POISON = "not json"
 
 #: G17's schema tag (``tree.AGREEMENT_SCHEMA``, A28 section 3.2), and the one the 0.0.1 builds
-#: hashed behind before PF0 Session A (Q4) renamed it.
+#: hashed behind before the PF0 freeze (Q4) renamed it.
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
 #: The lattice pair's events at K = 1 and K = 2.
@@ -273,7 +273,7 @@ def reference_agreement(events: Sequence[str], schema: str = AGREEMENT_SCHEMA) -
 
 #: Step zero item 2: A28's crossed P shape at ``93bfa13`` through the shipped writer, K = 1 and
 #: K = 2, the same value under both methods. P7-12 asserts both layouts equal these.
-# Re-minted by PF0 Session A (Q4): the schema string behind the agreement form is renamed. Computed on
+# Re-minted by the PF0 freeze (Q4): the schema string behind the agreement form is renamed. Computed on
 # the 0.0.1 tree (98dc6af) with that one string changed, through this file's own crossed-store
 # fixture; the same code with the old string gives the old values (b6daa2f1..., 83dcc3d9...).
 CROSSED_AGREEMENT = {
@@ -313,7 +313,7 @@ OUT_PLACEHOLDER = "<out>"
 #: P7-10. Every verb on the pre-A7 pair at ``93bfa13``, in-process through ``cli.main``, stdout digested after
 #: the store root (``runs``, ``serve --json``'s ``pair.store_root``) and the ``--out`` directory
 #: (``report``) are normalised. ``inspect`` and ``diff`` echo no path. Measured by
-#: ``lattice_verb_digests`` below on the dispatch commit; a later commit that moves one of these has
+#: ``lattice_verb_digests`` below on the base commit; a later commit that moves one of these has
 #: changed what a consumer sees.
 # Re-minted 2026-09-20 (truncation surfacing): five values move -- report A/report.md, report A/receipt.html, report A B/report.md,
 # report A B/receipt.html and serve --json -- because the provenance list gains the horizon rename and the observation
@@ -330,7 +330,7 @@ OUT_PLACEHOLDER = "<out>"
 SNIPPET_MARKER = "# reproduce one episode"
 
 
-# ---------- helpers: the M4 oracle's record shape ----------
+# ---------- helpers: the M4 frozen file's record shape ----------
 
 
 def manifest(run_id: str, **kw: Any) -> RunManifest:
@@ -507,7 +507,7 @@ def write_pre_a7_part(store: Store, run_id: str, records: Sequence[EpisodeRecord
 
 def poison_cells(part: Path, columns: Sequence[str]) -> None:
     """Rewrite ``part`` in place with ``POISON`` in every cell of ``columns``, keeping the part's
-    own schema (the M4 oracle's move, one column wider)."""
+    own schema (the M4 frozen file's move, one column wider)."""
     table = pq.read_table(part)
     for column in columns:
         index = table.schema.get_field_index(column)
@@ -1081,7 +1081,7 @@ def assert_lattice_verb_facts(results: Mapping[str, Result], out_dir: Path) -> N
         assert printed_as(fields["replicate_index"], int(row.replicate_index)) and printed_as(fields["t"], float(row.t)), block
 
 
-# ---------- helpers: the M3 capture oracle's forked child, restated ----------
+# ---------- helpers: the M3 capture frozen file's forked child, restated ----------
 
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 CAPTURE_SALT = "a7-capture-salt"

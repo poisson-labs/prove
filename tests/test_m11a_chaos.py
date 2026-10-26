@@ -1,8 +1,8 @@
-"""M11a -- the injection seam, the keying and the carrier: the oracle for M11a-1 to M11a-33.
+"""M11a -- the injection seam, the keying and the carrier: the frozen tests for M11a-1 to M11a-33.
 
 Written from "Proofload -- Spec M11 Injection Adapter" section 4 (as revised 2026-09-13, D1
 reversed: no ``agentchaos-sdk`` dependency, the hook and the applier are M11's own, the fault
-vocabulary is copied under MIT with attribution), against ``7b61bf5``. Session B builds
+vocabulary is copied under MIT with attribution), against ``7b61bf5``. The build adds
 ``src/proofload/chaos.py``, ``src/proofload/chaos_catalog.py``, ``NOTICE``, the ``[chaos]``
 table in ``sampler.py``, ``chaos_call`` on ``executor._call_in_process``, ``chaos`` on
 ``executor_modal.worker_batch``, ``environment["chaos"]`` and ``backend_meta["chaos"]`` against
@@ -13,7 +13,7 @@ the bare tree and its own tests fail there.
 **Isolation.** ``chaos.install()`` is once per process and memoized (spec section 2), and it
 patches ``httpx.Client.send`` and ``httpx.AsyncClient.send`` for the life of the process. Every
 test that installs therefore runs in a child forked from the pytest process (``isolated``, the
-M3 capture oracle's shape) and reads JSON-native results back through a pipe; the pytest process
+M3 capture frozen tests' shape) and reads JSON-native results back through a pipe; the pytest process
 never installs, so the in-process tests can assert the two ``send`` objects were left alone.
 Only ``_variate``, ``_content_seed``, ``position()``'s refusal, the dataclass shapes and the
 static scans run in-process.
@@ -31,16 +31,16 @@ static scans run in-process.
   boundaries, no rate limiter, no connection reset; the streaming clause is asserted as "the
   request body's ``stream`` was never rewritten", never as "the stream behaved".
 - ``chaos_rollout`` / ``chaos_otel_rollout`` -- the two-step keyless target, **in this file
-  rather than under ``examples/``** so that Session B cannot shape the fixture the oracle is
+  rather than under ``examples/``** so that the build cannot shape the fixture the frozen tests are
   read against. Each drives a real ``openai.OpenAI`` over the scripted transport at two declared
   positions (``plan``, ``solve``) and reports ``fell`` when anything it received differs from
   the script. Nothing it does is a source of a published number.
 - The shipped mock agent makes no HTTP call and is not a fixture here; nothing that needs a
   key is run.
 
-**Conventions this oracle fixes where the spec is silent. Session B builds to these.**
+**Conventions these frozen tests fix where the spec is silent. The build follows these.**
 
-- ``proofload.chaos_catalog.CATALOG`` is the one name the oracle reads from the catalogue
+- ``proofload.chaos_catalog.CATALOG`` is the one name the frozen tests read from the catalogue
   module: a mapping from fault name to the entries of that scenario, in order. A single-fault
   name may hold one entry or a one-tuple; a compound name holds a tuple. ``fault_names()`` and
   ``install()`` read it at call time, so the D19(b) test can reach the ``error`` action -- which
@@ -60,22 +60,22 @@ static scans run in-process.
 - ``delay`` entries are pinned with ``target_path`` ``"$"`` or ``None`` and their millisecond
   ``value``; whether the hook sleeps is not pinned, only ``FaultRecord.delay_ms``.
 
-**Where the oracle pins something narrower than the spec's sentence, measured:**
+**Where the frozen tests pin something narrower than the spec's sentence, measured:**
 
 - M11a-5 says the refused episode leaves ``store.manifest(run_id)`` raising ``StoreError``.
   ``run_local`` writes the manifest at ``executor.py:806`` before the first episode runs, and a
-  D16 refusal is decided per call, inside the episode; so the oracle pins what can hold --
+  D16 refusal is decided per call, inside the episode; so the frozen test pins what can hold --
   ``run_local`` raises ``ChaosError`` naming the path, the run holds no episode row and is never
   marked complete -- and leaves whether the run directory is removed to a spec amendment.
 - M11a-25 and M11a-26 say every applied fault changes the body. ``compound_slow_response`` is
-  the one delay-only scenario in the vocabulary and cannot change a body; for it the oracle
+  the one delay-only scenario in the vocabulary and cannot change a body; for it the frozen test
   pins ``FaultRecord.delay_ms == 5000`` on the applied record instead.
 - M11a-29 says ``corrupt`` differs across seeds. ``llm_corrupt_single`` is ``mojibake``, which
   section 3.2 defines as ``orig.encode("utf-8").decode("latin-1")`` -- deterministic -- so only
   ``tool_corrupt_single`` (``unicode`` mode) is asserted to differ; ``llm_corrupt_single`` is
   asserted identical, with the reason.
 
-**Standing rule 15.** This oracle does not span two cells. The previous revision's M11a-5
+**Standing rule 15.** These frozen tests do not span two cells. The previous revision's M11a-5
 asserted ``install()`` raises when the ``chaos`` extra is absent, and that extra no longer
 exists under D1; the only environment-shaped claim left is D1's "no new dependency at any
 tier", which ``test_m11a_23b`` asserts by blocking ``httpx``, ``openai`` and ``opentelemetry``
@@ -85,13 +85,13 @@ cannot be observed without an HTTP client. One cell: the repo venv's closure (pa
 openai 1.109.1, httpx 0.28.1); every test id is asserted in it once.
 
 **Three guards the tree already holds, which section 2's "chaos.py imports httpx" cannot
-satisfy and Session B builds around.** Under D1 ``chaos.py`` is core, and
+satisfy and the build works around.** Under D1 ``chaos.py`` is core, and
 ``test_s0_scaffold.py::test_no_network_imports_in_core`` and
 ``test_m13_viewer.py::test_v14_no_core_module_imports_a_network_client_by_dotted_path`` ban
 any ``import httpx`` in ``src/proofload`` at any nesting level (an AST walk, not a substring);
 ``test_m12_trace.py::test_t17_no_module_outside_trace_py_reads_the_span_clock`` bans
 ``time.time_ns()`` outside ``trace.py``, and ``FaultRecord`` carries ``start_ns``/``end_ns``.
-Measured on this oracle's shadow shim: a shim that imported ``httpx`` inside ``install()`` and
+Measured on these frozen tests' shadow shim: a shim that imported ``httpx`` inside ``install()`` and
 read ``time.time_ns()`` turned all three red on the whole suite; one that reaches the client
 through ``sys.modules["httpx"]`` (the client the target already loaded) and reads
 ``trace._span_clock()`` passes all three and this file. A faulted arm whose process has not
@@ -544,7 +544,7 @@ def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> No
 
 
 def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 240.0) -> Any:
-    """Run ``fn(*args)`` in a child process and return its result (the M3 capture oracle's shape)."""
+    """Run ``fn(*args)`` in a child process and return its result (the M3 capture frozen tests' shape)."""
     ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
@@ -1520,7 +1520,7 @@ def test_m11a_32_attribution_ships_in_the_docstring_and_in_notice() -> None:
     assert any(catalog_path.is_relative_to(ROOT / p) for p in packaged), (catalog_path, packaged)
 
 
-# ---------- the executor signatures the retrofit moved (spec section 0.1) ----------
+# ---------- the executor signatures the update moved (spec section 0.1) ----------
 
 
 def test_m11a_0_chaos_rides_beside_capture_on_both_funnels() -> None:

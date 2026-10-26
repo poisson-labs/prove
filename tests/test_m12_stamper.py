@@ -1,4 +1,4 @@
-"""M12 -- the episode stamper: the oracle for T31-T34.
+"""M12 -- the episode stamper: the frozen tests for T31-T34.
 
 Written from the invariants added to "Proofload -- Spec M12 Trace" section 4 after the
 2026-09-04 OTel spike, which found that a per-episode *resource* attribute cannot be varied
@@ -7,7 +7,7 @@ setter, and a second ``set_tracer_provider()`` is refused. Proofload therefore s
 ``proofload.run_id`` and ``proofload.episode`` as *span* attributes, which land in the same
 place once ``from_otel`` merges resource, scope and span attributes into ``attrs``.
 
-Every test imports ``proofload.otel`` inside its own body, the way the M12 oracle does, so the
+Every test imports ``proofload.otel`` inside its own body, the way the M12 frozen tests do, so the
 file collects while the module does not exist. The stamper lives behind the ``agent`` extra;
 the whole file skips when the SDK is absent so a core-only install still runs green.
 """

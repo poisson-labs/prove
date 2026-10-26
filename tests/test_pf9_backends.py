@@ -1,7 +1,7 @@
 """PF9 -- backends and platforms: the Modal extra's floor and its plan, the Burla extra and its
-label, and the refusal on Windows (vault *Prove -- Spec Front Door*, sections 3.2, 3.3, 8.6, 8.7
+label, and the refusal on Windows (*Prove -- Spec Front Door*, sections 3.2, 3.3, 8.6, 8.7
 and PF9.1 to PF9.4; Q31 and Q34, ruled yes 2026-10-13; the Burla pin moved to exactly 1.8.2 and its
-relay line rewritten by the pin fix of 2026-10-14; PF0 Session A's yes/no 5, ruled yes 2026-10-14,
+relay line rewritten by the pin fix of 2026-10-14; the PF0 freeze's yes/no 5, ruled yes 2026-10-14,
 which gives PF9 the Burla install line).
 
 **What is pinned is public behaviour.** The command line in this process (``cli.main`` with string
@@ -24,8 +24,8 @@ is needed and a launcher that reaches Burla ends at once, with the call on recor
 **Sockets are blocked** in this module and in every module that drives a remote backend offline
 (PF9.4), by ``conftest.py``'s guard; the fake's own interpreters arm their tripwire as before.
 
-**Readings this file freezes** (each owed to Taylor as one yes/no in the vault's
-``log/pf9/session-a.md``; Session B builds against them unedited):
+**Readings this file freezes** (each owed as one yes/no in the project's
+``log/pf9/session-a.md``; the build is written against them unedited):
 
 - **r1** The ``[burla]`` extra pins exactly the client the backend runs, ``burla==1.8.2`` (the spec's
   ``==1.8.1`` predates the 2026-10-14 pin): the extra admits a version exactly when the backend

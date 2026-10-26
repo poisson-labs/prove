@@ -1,4 +1,4 @@
-"""Oracle for the M7 multi-event amendment: per-event panels, trade line, saturation, forest,
+"""Frozen tests for the M7 multi-event amendment: per-event panels, trade line, saturation, forest,
 survival report.
 
 B1 is the gate. It once compared ``build_report`` against an S8.1 output frozen on disk (built
@@ -17,7 +17,7 @@ quickstart runs with ``cli.main`` under a fixed salt; everything else uses synth
 ``max_mde_unchanged`` / ``max_mde_unchanged_cell`` and ``trades`` derived the way M6
 derives them.
 
-Structural pins this oracle adds where the spec leaves the SVG open (as S8's did for
+Structural pins these frozen tests add where the spec leaves the SVG open (as S8's did for
 ``data-cell``):
 
 - **Panel captions.** ``<event>: <n_safer> safer, <n_worse> worse`` appears as a Markdown
@@ -120,7 +120,7 @@ CAPTION_RE = re.compile(r"^(\S+): (\d+) safer, (\d+) worse$")
 HEADLINE_EVENT_RE = re.compile(r"(\S+): (\d+) safer, (\d+) worse")
 COVERAGE_RE = re.compile(r"n=(\d+)\.\.(\d+) per cell, (\d+) cells with n < 16")
 SATURATION_LEGEND = "both 0% / both 100%"
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): the retired tail "The patch moved failures, it did not remove them." leaves every surface
+# LS update, 2026-09-22 (local serve pass, Phase A): the retired tail "The patch moved failures, it did not remove them." leaves every surface
 # (spec LS D2, D10, LS13); a trade line is recognised by its ``Trade:`` head alone.
 TRADE_MARK = "Trade:"
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
@@ -412,7 +412,7 @@ def panel_groups(root: ET.Element) -> list[ET.Element]:
 
 
 def texts(root: ET.Element) -> list[str]:
-    """Every ``<text>`` in document order. LS retrofit, 2026-09-22 (local serve pass, Phase A, found by the shim run): a long title, headline,
+    """Every ``<text>`` in document order. LS update, 2026-09-22 (local serve pass, Phase A, found by the shim run): a long title, headline,
     trade line or legend caption is drawn as several ``<text>`` elements, the continuation lines
     carrying ``data-wrap="1"`` (spec LS D9, section 3.1 (b)); those are joined back onto their first
     line with a space, so a text reads as one whatever the box width."""
@@ -508,7 +508,7 @@ def panel_kind(report: Report) -> str:
 
 
 def html_text(html: str) -> str:
-    # LS retrofit, 2026-09-25 (local serve pass, Phase C, ruled on Session B's finding): the inline figure's honesty
+    # LS update, 2026-09-25 (local serve pass, Phase C, ruled on the build's finding): the inline figure's honesty
     # lines wrap (ruling 2 of 2026-09-22), continuation lines carrying ``data-wrap="1"``; each is joined back onto
     # the line before with one space, the way ``texts()`` joins them, so a line reads as rendered whatever the box width.
     html = re.sub(r'</text>\s*<text[^>]*\bdata-wrap="1"[^>]*>', " ", html)
@@ -1726,7 +1726,7 @@ def test_b15_provenance_carries_the_multi_fields_and_run_ids_only_with_manifests
     with_runs = build_multi_report(multi, spec2(), manifests=(_manifest("run-a"), _manifest("run-b")))
     assert with_runs.provenance["run_id_a"] == "run-a" and with_runs.provenance["run_id_b"] == "run-b"
     assert "run-a" in with_runs.to_markdown() and "run-b" in with_runs.to_html()
-    # Retrofitted 2026-09-20 (truncation surfacing): the manifests also give each run's recorded byte
+    # Updated 2026-09-20 (truncation surfacing): the manifests also give each run's recorded byte
     # limit, an ``observation_cap_*`` key beside the ``run_*`` identity ones and no number of the report's.
     assert {k: v for k, v in with_runs.provenance.items() if not k.startswith(("run_", "observation_"))} == {
         k: v for k, v in bare.provenance.items() if not k.startswith(("run_", "observation_"))

@@ -1,4 +1,4 @@
-"""S13.1 competing-set hardening oracle, generated from section 4 of the S13.1 spec before
+"""S13.1 competing-set hardening frozen tests, generated from section 4 of the S13.1 spec before
 any of M5, M6, M7 or M10 is amended.
 
 ADR-021: the Aalen-Johansen competing set is every terminal outcome present in either run;
@@ -6,11 +6,11 @@ ADR-021: the Aalen-Johansen competing set is every terminal outcome present in e
 ``multi_diff`` and S13 hit it again in the single-run report path. This file makes the rule a
 test rather than a review step.
 
-Plain assertions over shared helpers, per S12's lesson: that oracle needed seven fixes and all
+Plain assertions over shared helpers, per S12's lesson: that frozen file needed seven fixes and all
 seven were inside clever helpers. There is one frame builder, one run writer and one CLI
 runner here; everything else is written out at the assertion.
 
-Reading notes for Session B:
+Reading notes for the build:
 
 - ``competing_set`` is reached module-qualified as ``survival.competing_set``, so this file
   still collects before S13.1 builds it. Every symbol that exists today is imported directly.
@@ -33,7 +33,7 @@ Reading notes for Session B:
   ``competing_set``; the one forwarding call inside ``cell_table`` itself is the plumbing that
   carries a caller's set, not a second construction, and is named as such in the test.
 
-H6 and H9 were rewritten by the spec author after the first pass of this oracle reported
+H6 and H9 were rewritten by the spec author after the first pass of these frozen tests reported
 that the original pair could not both hold. The tests below are written against the revised
 §2/§3-D3/§4: validation moved into the CLI, where every typo originates, and ``multi_diff``
 was pinned permissive instead. Two readings the revised text still leaves to the test:
@@ -42,12 +42,12 @@ was pinned permissive instead. Two readings the revised text still leaves to the
   shape with the verb name substituted. Asserted by containment, not as an exact string, so
   the wording stays the implementer's.
 - H9's "zero-count `EventDiff`". Read as the event counts, not the cell count -- see the
-  docstring of ``test_h9_absent_event_gets_a_zero_count_event_diff``. The frozen M6 oracle
+  docstring of ``test_h9_absent_event_gets_a_zero_count_event_diff``. The frozen M6 file
   forces this reading; an EventDiff with no cells would fail ``test_a9_counts_add_up_property``.
 
 Still not mapped, and reported rather than adapted:
 
-- H12's third clause, "suite totals for every prior oracle unchanged". A test cannot assert
+- H12's third clause, "suite totals for every prior frozen file unchanged". A test cannot assert
   the totals of the suite that contains it; that clause is the acceptance command's job. The
   two fixture clauses are mapped below.
 - §2's "``build_survival_report`` remains permissive" is not separately asserted. §4 pins only
@@ -727,7 +727,7 @@ def test_h9_multi_diff_does_not_raise_on_an_event_absent_from_the_data() -> None
 
 
 def test_h9_absent_event_gets_a_zero_count_event_diff() -> None:
-    """"Zero-count" is the event counts, not the cell count. The frozen M6 oracle asserts
+    """"Zero-count" is the event counts, not the cell count. The frozen M6 file asserts
     ``n_safer + n_worse + n_unchanged == len(cells) == len(common)`` for every requested event
     (tests/test_m6_multi.py:730-741), and ``test_a15_check_on_synthetic_cases`` asserts on a
     result for ``violated`` over a pair containing none -- so an absent event keeps one

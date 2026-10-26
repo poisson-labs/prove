@@ -1,4 +1,4 @@
-"""A28 oracle: invariants G1-G22 of [[Proofload - Spec A28 M14 Agreement Digest]] section 4,
+"""A28 frozen tests: invariants G1-G22 of the A28 M14 agreement-digest spec section 4,
 written before ``tree.agreement_digest``, ``TreeResult.agreement`` and the two renderers' digest
 clauses exist, against ``03d7ed2`` (A24's build; ``src/proofload/{tree,report,viewer,diff}.py``
 are byte-identical to the spec's ``38e8df9``, measured).
@@ -13,7 +13,7 @@ tree grown beside its own diff (G2, G10, G11).
 lean (b), taken as written: a second clause in each renderer comparing ``tree.root.method`` and
 ``tree.root.q`` to the diff's, with its own nameable message, after the digest clause. Measured
 cost the spec did not list: ``test_s29_viewer.py``'s first W16 test rendered a ``mcnemar_bh`` tree
-beside a ``fisher_bh`` diff to show a same-events tree is accepted; the retrofit re-grows that tree
+beside a ``fisher_bh`` diff to show a same-events tree is accepted; the update re-grows that tree
 under a different ``seed`` instead, which keeps the clause's point (events and cells decide, knobs
 the digest ignores do not) and no longer pins the behaviour Q5 (b) removes.
 
@@ -24,17 +24,17 @@ that form: it reproduces the spec's values, and section 3.2's form does not. G17
 JSON form's digest in this file from the generated lattice pair's design counts
 (``lattice.counts``), at K = 1 and K = 2, and requires both methods to carry it.
 
-**Session A's commit is red here by construction** (Master Action List section 18 standing rule
-12). On the retrofit commit, before any source edit, the red set in this file is **fifteen**:
+**The freeze commit is red here by construction** (Master Action List section 18 standing rule
+12). On the update commit, before any source edit, the red set in this file is **fifteen**:
 G1-G5, G7-G11, G13, G16, G17, G21 and G22. Every one reaches ``agreement_digest``,
 ``.agreement``, ``/4`` or a refusal that does not exist yet, inside a test body, so
 ``--collect-only`` is exact on the bare tree. **Green before and after, named so their green is
 not read as evidence:** G6 (``omnibus`` and ``RootResult`` do not move), G12 (the five older
 refusals and their messages -- a preservation clause, and the sole catch for mutant 11 all the
 same), G14 (W20's partition and arithmetic pins, restated), G15 (``cli.py`` never mentions
-``agreement``; the ``test_s27_leaves.py`` guard lists it from the retrofit on), G18, G19 and G20
-(ADR-077's record, sweep and whole-file ``diff.py`` digest, all facts of the retrofit commit
-itself -- red on the oracle commit alone, green from the retrofit commit on). Rule 15 does not
+``agreement``; the ``test_s27_leaves.py`` guard lists it from the update on), G18, G19 and G20
+(ADR-077's record, sweep and whole-file ``diff.py`` digest, all facts of the update commit
+itself -- red on the freeze commit alone, green from the update commit on). Rule 15 does not
 bind (section 10 Q10 (a)): one environment, one cell.
 
 **Fixture limits, stated rather than left to be rediscovered** (spec section 6):
@@ -67,7 +67,7 @@ before the multiset clause -> G12 and W16, nothing else; 12 digest widened with 
 G17, G21, G22; 13 viewer knob clause deleted -> G21 alone; 14 report knob clause deleted -> G22
 alone. The table is in the devlog entry for this freeze (``log/proofload-devlog.md``, 2026-09-13).
 
-Restated rather than imported, as every frozen oracle's helpers are: the AST resolver, the
+Restated rather than imported, as every frozen test file's helpers are: the AST resolver, the
 closure and arithmetic scans, the store builders and the two-value cells.
 """
 
@@ -113,10 +113,10 @@ LATTICE_ROOT = lattice.root()
 # ---------- spec sections 2, 3.2, 3.4: the literals ----------
 
 #: G9. The schema this packet moves to, and the two it retires.
-# LS retrofit, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+# LS update, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5", "proofload.viewpair/6")
-#: G9. The top-level keys, in order: the digest is inside ``tree``, not beside it. LS retrofit, 2026-09-22 (local serve pass, Phase A): fourteen, ``summary`` eighth.
+#: G9. The top-level keys, in order: the digest is inside ``tree``, not beside it. LS update, 2026-09-22 (local serve pass, Phase A): fourteen, ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -125,9 +125,9 @@ TOP_LEVEL_KEYS = (
 TREE_RESULT_FIELDS = ("root", "grouping", "fault_lines", "leaves", "bound", "agreement")
 #: G16, G17. The tag inside the hashed payload (section 3.2); never a sibling key (section 10 Q9).
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
-#: G17. The schema string the 0.0.1 builds hashed behind, before PF0 Session A (Q4) renamed it.
+#: G17. The schema string the 0.0.1 builds hashed behind, before the PF0 freeze (Q4) renamed it.
 OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
-# PF0 Session A (Q4) kept the old fixture's 0.0.1 digests beside its renamed ones; they were never
+# The PF0 freeze (Q4) kept the old fixture's 0.0.1 digests beside its renamed ones; they were never
 # asserted in this file (a dead digest) and went with that fixture. G17 now checks the old string's
 # digest differs from the new one's, from the reference. Lattice port, 2026-10-25.
 
@@ -169,9 +169,9 @@ LINES_FIELD = "lines"
 LINES_RE = re.compile(r"^(?P<spans>\d+-\d+(?:, \d+-\d+)*) of (?P<total>\d+)$")
 OWNER = "A28"
 MINTED_AT = "38e8df9"
-#: G18, per record since P-1's retrofit (2026-09-17): ``(owner, minted_at, cover file)`` for every
+#: G18, per record since P-1's update (2026-09-17): ``(owner, minted_at, cover file)`` for every
 #: exclusion record the carrier may hold. ``TREE_PY_EXCLUDED`` is P-1's (spec P-1 section 7.4,
-#: ADR-077's clean case at ``("RootResult", "_root")``), covered by the P-1 oracle, so the cover
+#: ADR-077's clean case at ``("RootResult", "_root")``), covered by the P-1 frozen file, so the cover
 #: is no longer always this file and ``lines`` may carry two spans.
 RECORD_OWNERS = {
     "REPORT_PY_EXCLUDED": ("A28", "38e8df9", "test_a28_agreement.py"),
@@ -183,7 +183,7 @@ PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REP
 #: G20. ``src/proofload/diff.py`` whole, read off the shipped file at ``38e8df9`` and unchanged at
 #: ``03d7ed2``: the value the retirement re-mints in every carrier -- five literals, one per file (this
 #: file, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``, ``test_s29_viewer.py``);
-#: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS retrofit, 2026-09-22 (local serve pass, Phase A)) -- a read and not a prediction.
+#: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS update, 2026-09-22 (local serve pass, Phase A)) -- a read and not a prediction.
 # Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
@@ -779,7 +779,7 @@ def test_g15_cli_neither_binds_nor_takes_agreement_and_the_s27_guard_lists_it() 
     """``cli.py`` serialises ``nested.to_json()`` wholesale and reads no attribute named
     ``agreement`` and binds no such name; and ``test_s27_leaves.py``'s ``TREE_RESULT_FIELDS`` carries
     it, so L11's ``BinOp`` guard would notice one. Green before and after on the ``cli.py`` half;
-    the ``s27`` half is a fact of the retrofit commit."""
+    the ``s27`` half is a fact of the update commit."""
     cli = parsed(CLI_SOURCE)
     assert [n.lineno for n in ast.walk(cli) if isinstance(n, ast.Attribute) and n.attr == "agreement"] == []
     assert [n.lineno for n in ast.walk(cli) if isinstance(n, ast.Name) and n.id == "agreement"] == []
@@ -847,7 +847,7 @@ def test_g18_every_exclusion_record_this_packet_mints_carries_adr_077s_fields_an
     cover exists and every test id resolves through the resolver; every region resolves to exactly
     one node of the pinned file; regions on one file disjoint.
 
-    **Amended by P-1's retrofit, 2026-09-17** (a site the P-1 spec's section 7.2 did not list; found
+    **Amended by P-1's update, 2026-09-17** (a site the P-1 spec's section 7.2 did not list; found
     by the shadow shim's whole-suite control): the carrier now holds two records, and owner, mint
     and cover are asserted per record through ``RECORD_OWNERS`` -- A28's ``report.py::_check_tree``
     covered by this file, P-1's ``tree.py`` regions covered by ``tests/test_p1_payload.py`` -- and

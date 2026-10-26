@@ -1,4 +1,4 @@
-"""Oracle for the M3 modal launch amendment (S19): invariants L1-L14.
+"""Frozen tests for the M3 modal launch amendment (S19): invariants L1-L14.
 
 The two things a first Modal sweep could not do: launch a Modal sweep for a target that only
 imports inside its container, and let a credential reach that container by name. Nothing here
@@ -7,17 +7,17 @@ touches the network. ``run_modal`` is exercised offline for the first time, thro
 else goes through the mapper seam or ``cli.main`` in-process. Every store lives under
 ``tmp_path``.
 
-Conventions this oracle fixes for the implementation session:
+Conventions these frozen tests fix for the implementation session:
 
-- The deterministic rollout is the M3 oracle's, formula included, so L11 compares the fake
+- The deterministic rollout is the M3 frozen tests', formula included, so L11 compares the fake
   ``run_modal`` run with ``run_with_mapper`` like with like under a shared salt.
-- The M10 oracle's ``MODAL_TABLES`` text and its ``run_modal`` capture are restated below;
+- The M10 frozen tests' ``MODAL_TABLES`` text and its ``run_modal`` capture are restated below;
   test modules never import each other.
 - The L1 refusing module is written to ``tmp_path`` and appended to ``sys.path`` by the test
   that needs it. It is never a real module under ``tests/``.
 - The L4 mapper runs ``worker_batch`` in-process, catches the worker's exception and yields
   ``(k, exc)``; it never raises from the generator. Calls are counted per batch by the tuple
-  of plan indices, the M3 oracle's convention.
+  of plan indices, the M3 frozen tests' convention.
 - The fake ``modal`` exposes exactly the surface spec section 3 pins and records every call
   it receives; ``Secret.from_dict`` and ``Secret.from_local_environ`` record rather than
   raise, so L11 reports a violation instead of crashing on it. Its ``map`` yields outputs in
@@ -120,7 +120,7 @@ type = "continuous"
 values = [0.1, 0.2]
 """
 
-# The M10 oracle's fixture text, verbatim: a [modal] table with every scalar and no secrets key.
+# The M10 frozen tests' fixture text, verbatim: a [modal] table with every scalar and no secrets key.
 MODAL_TABLES = """
 [modal]
 concurrency = 4
@@ -160,7 +160,7 @@ def rollout(cfg, seed):
 '''
 
 
-# ---------- the deterministic rollout (the M3 oracle's formula) ----------
+# ---------- the deterministic rollout (the M3 frozen tests' formula) ----------
 
 
 def _outcome(cfg: dict[str, Any], seed: int) -> str:
@@ -359,7 +359,7 @@ def _image_secret_objects(records: ModalRecords) -> list[FakeSecret]:
     return [s for _, args, kwargs in records.image_calls for s in _secret_objects_in((args, kwargs))]
 
 
-# ---------- the CLI harness (the M10 oracle's, restated) ----------
+# ---------- the CLI harness (the M10 frozen tests', restated) ----------
 
 
 @dataclasses.dataclass(frozen=True)

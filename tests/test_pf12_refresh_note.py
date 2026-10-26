@@ -1,9 +1,9 @@
 """PF12: a save whose page refresh fails says so in one line and leaves the previous pages.
 
-Taylor's ruling of 2026-10-25 on PF12 Session B's yes/no 5, changed from the recommendation:
+The ruling of 2026-10-25 on the PF12 build's yes/no 5, changed from the recommendation:
 when a write's page refresh fails, the saving command prints one plain line on stderr saying the
-pages were not refreshed and to run ``ui``; the previous pages stay as they are. Added by Session
-B beside the frozen oracle, which it does not edit.
+pages were not refreshed and to run ``ui``; the previous pages stay as they are. Added by the
+build beside the frozen tests, which it does not edit.
 """
 
 from __future__ import annotations

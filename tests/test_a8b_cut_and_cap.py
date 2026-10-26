@@ -1,11 +1,11 @@
-"""A8b oracle: invariants P8-7 to P8-12, P8-17, P8-20 and P8-23 to P8-27 of
+"""A8b frozen tests: invariants P8-7 to P8-12, P8-17, P8-20 and P8-23 to P8-27 of
 "Proofload -- Spec A8b Cut and Cap" -- the cut and the cap.
 
-Frozen by Session A on 2026-09-18 off ``a626cd3``, after the retrofit commit. Session B builds
+Frozen on 2026-09-18 off ``a626cd3``, after the update commit. The build is written
 against this file and does not edit it. Every name A8b mints is imported inside the test that
 needs it, so the bare tree fails test by test and never at collection.
 
-**The answers this file is frozen against** (spec section 10, all Taylor's): Q1 (a) the head and
+**The answers this file is frozen against** (spec section 10, all approved): Q1 (a) the head and
 tail bounds are the limit's split, ``limit - limit // 4`` and ``limit // 4`` (ADR-082); Q2 (b)
 ``CONTENT_KEYS`` is the shipped set plus the two ``llm.*`` families (ADR-083); Q3 (a)
 ``CONTENT_KEYS`` is a ``frozenset`` whose ``in`` answers exact members and dotted descendants, the
@@ -13,10 +13,10 @@ six bare prefixes staying exact members so the shipped ``key == prefix`` match s
 ``split`` routes a value to ``trace_obs`` when its key is an observation key, when it is already a
 wrapper, or when it is uncut and over the module default; Q5 (a) a low limit is a supported
 measure-without-storing configuration; Q6 ``t4.toml`` and its assertion were rewritten together in
-the retrofit; Q8 (a) the wrapper has exactly three keys; Q9 (a) two cells.
+the update; Q8 (a) the wrapper has exactly three keys; Q9 (a) two cells.
 
-**Invariant-to-test map** (38 functions, 63 collected ids; the id counts below sum to 63; CD
-Session A deleted one P8-26 function and its one id, and moved none of the others):
+**Invariant-to-test map** (38 functions, 63 collected ids; the id counts below sum to 63; the CD
+freeze deleted one P8-26 function and its one id, and moved none of the others):
 
 | Invariant | Tests |
 |---|---|
@@ -52,7 +52,7 @@ green while a ``Trace.from_dict`` is added on its path), the ``content-on`` id o
 five ids of ``test_p8_12_a_bad_value_is_refused_naming_the_field`` (the shipped parser already refuses
 three of them, and refuses ``max_observation_bytes`` as an unknown field, naming it, for another reason).
 
-**Amended 2026-09-20 by CD Session A** ("Proofload -- Spec CD Cap Declaration", section 0.2). Ten
+**Amended 2026-09-20 by the CD freeze** ("Proofload -- Spec CD Cap Declaration", section 0.2). Ten
 A8b clauses move and each is named there; what changed in this file is: section 2's export list and
 its two signatures (``limit`` keeps its name, place and keyword-only kind and loses its default,
 widened to ``int | None``); P8-7's two-constant sentence, retired with the constants it described;
@@ -141,7 +141,7 @@ CONTENT_DESCENDANTS = tuple(f"{family}.0.message.content" for family in CONTENT_
 RETAINED_TOOL_KEYS = ("gen_ai.tool.call.arguments", "gen_ai.tool.call.result", "input.value", "output.value")
 RETIRED_NAMES = ("_TRUNCATION_MARKER", "_apply_budget", "_json_size", "max_span_bytes")
 
-#: P8-25: sha256 of ``ast.get_source_segment`` per symbol, measured at the dispatch commit ``a626cd3``.
+#: P8-25: sha256 of ``ast.get_source_segment`` per symbol, measured at the base commit ``a626cd3``.
 #: ``split`` is absent on purpose -- it is the one A7 symbol A8b edits -- and is pinned structurally.
 # Re-minted 2026-10-24 (public hygiene, Q37): each digest is over the symbol's code with its comments and docstrings
 # taken out (``code_of``), so the plain-words pass over src/ moves none of them and a change to the code still does.
@@ -422,7 +422,7 @@ class TappedConnection:
 
 
 class TappingContext:
-    """The E-oracle's counting context, tapping what the parent reads instead of counting pipes."""
+    """The E-series frozen tests' counting context, tapping what the parent reads instead of counting pipes."""
 
     def __init__(self, ctx: Any) -> None:
         self._ctx = ctx

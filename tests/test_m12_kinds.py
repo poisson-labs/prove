@@ -1,4 +1,4 @@
-"""M12 -- the kind ladder: the oracle for T35-T37.
+"""M12 -- the kind ladder: the frozen tests for T35-T37.
 
 Written from the invariants added to "Proofload -- Spec M12 Trace" section 4 after the
 2026-09-04 kind-ratio spike, which ran real instrumentation and found two gaps:

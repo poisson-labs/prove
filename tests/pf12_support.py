@@ -441,7 +441,7 @@ def shows_number(text: str, value: float) -> bool:
     return False
 
 
-# ---------- the format's schemas (Artifact Format sections 3 to 5, written by PF12 Session A) ----------
+# ---------- the format's schemas (Artifact Format sections 3 to 5, written when the PF12 tests were frozen) ----------
 
 _UTC = {"type": "string", "pattern": ISO_UTC.pattern}
 

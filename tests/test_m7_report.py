@@ -1,4 +1,4 @@
-"""Oracle for M7: the report renderer.
+"""Frozen tests for M7: the report renderer.
 
 Every structural claim about SVG is asserted on the ``xml.etree.ElementTree`` tree, never
 on the raw string. Golden tests use the generated lattice pair (``tests/lattice.py``) through
@@ -6,7 +6,7 @@ on the raw string. Golden tests use the generated lattice pair (``tests/lattice.
 uses a synthetic ``DiffResult`` factory built directly from M6's ``cells`` columns. All
 temp output goes under tmp_path. No network, no clock.
 
-Two things the spec leaves open that this oracle pins, because I7, I11 and I19 are not
+Two things the spec leaves open that these frozen tests pin, because I7, I11 and I19 are not
 checkable without them:
 
 - **Cell identification in SVG.** Every cell ``<rect>`` carries ``data-cell="<config_hash>"``
@@ -237,7 +237,7 @@ def svg_root(report: Report) -> ET.Element:
 
 def _svg_text_rejoined(svg: str) -> str:
     """Every ``<text>`` in document order, one per line, a ``data-wrap="1"`` continuation joined back
-    onto the line before with a space. LS retrofit, 2026-09-25 (local serve pass, Phase C)."""
+    onto the line before with a space. LS update, 2026-09-25 (local serve pass, Phase C)."""
     out: list[str] = []
     for e in ET.fromstring(svg).iter():
         if _local(e.tag) != "text":
@@ -675,7 +675,7 @@ def _check_honesty(report: Report, diff_result: DiffResult) -> None:
     for line in lines:
         assert line in md, line
         assert html_escape(line) in html, line
-    # LS retrofit, 2026-09-25 (local serve pass, Phase C, ruled on Session B's finding): the honesty lines wrap
+    # LS update, 2026-09-25 (local serve pass, Phase C, ruled on the build's finding): the honesty lines wrap
     # (ruling 2 of 2026-09-22), so the figure is read as its ``<text>`` runs with each ``data-wrap="1"``
     # continuation joined back onto the line before by one space, the way M7's multi ``texts()`` reads it.
     svg = _svg_text_rejoined(svg)
