@@ -77,6 +77,7 @@ import os
 import platform
 import re
 import selectors
+import shlex
 import shutil
 import signal
 import subprocess
@@ -773,7 +774,15 @@ def test_pf1_6_ctrl_c_in_a_sweep_exits_130_keeps_what_was_stored_and_names_the_r
     assert 0 < kept < 1080
     stopped = [line for line in r.out.splitlines() if line.startswith("stopped  ")]
     assert len(stopped) == 1 and f"{kept:,}" in stopped[0], r.out
-    assert "  next: poisson-prove sweep --resume" in r.out.splitlines() + r.err.splitlines(), (r.out, r.err)
+    # The next line resumes the sweep as it was typed, as a sweep stopped short does: this one
+    # typed a spec path and --target, so the line carries the spec before --resume and that target.
+    spec, target = str(world.folders["spec"]), "pf1_targets:interrupted"
+    nexts = [line for line in r.out.splitlines() + r.err.splitlines() if line.startswith("  next: poisson-prove sweep ")]
+    assert len(nexts) == 1, (r.out, r.err)
+    words = shlex.split(nexts[0])[1:]
+    assert words[:2] == ["poisson-prove", "sweep"] and spec in words and "--resume" in words, nexts
+    assert words.index(spec) < words.index("--resume"), nexts
+    assert "--target" in words and words[words.index("--target") + 1] == target, nexts
     assert_clean_stderr(r.err)
 
 

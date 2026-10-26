@@ -2414,7 +2414,9 @@ class _Events:
         self.emit("progress", detail)
 
 
-def _kept(st: Store, idx_root: OpenedStore, run_id: str, planned: int) -> tuple[str, list[str]]:
+def _kept(
+    st: Store, idx_root: OpenedStore, run_id: str, planned: int, resume: str
+) -> tuple[str, list[str]]:
     try:
         kept = st.count(run_id)
     except Exception:  # noqa: BLE001
@@ -2427,7 +2429,7 @@ def _kept(st: Store, idx_root: OpenedStore, run_id: str, planned: int) -> tuple[
         f"{_look.fmt_count(kept)} of {_look.fmt_count(planned)} rollouts kept in run "
         f'"{name}" (partial)'
     )
-    return sentence, [f"{COMMAND} sweep --resume"]
+    return sentence, [resume]
 
 
 def _resume_before(store: Store, p: Any) -> dict[str, Any]:
@@ -2562,7 +2564,9 @@ def start(
     except KeyboardInterrupt as exc:
         if p.run_id in st.runs():
             begin()
-            sentence, nexts = _kept(st, store, p.run_id, len(p.pairs))
+            sentence, nexts = _kept(
+                st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
+            )
             kept = closing_progress()
             events.emit("interrupted", {"kept": kept, "status": "partial"})
             raise Interrupted(f"interrupted: {sentence}", nexts) from exc
@@ -2570,7 +2574,9 @@ def start(
     except _REFUSABLE as exc:
         if p.run_id in st.runs():
             begin()
-            sentence, nexts = _kept(st, store, p.run_id, len(p.pairs))
+            sentence, nexts = _kept(
+                st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
+            )
             error = _final(f'{exc} (run "{p.run_id}")')
             kept = closing_progress()
             events.emit("interrupted", {"kept": kept, "status": "partial", "error": error})
