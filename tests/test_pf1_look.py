@@ -392,7 +392,9 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> World:
 
     store = base / "store"
     # PF4 re-freeze (PF4.30, reading R33): both sweeps of the 120-replicate design accept MAX_MDE.
-    first = run_cli(["--store", str(store), "sweep", str(folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--max-mde", MAX_MDE])
+    # A fixed salt, so the pair's episodes are the same on every run of the suite (the second
+    # sweep shares it through --pair-with).
+    first = run_cli(["--store", str(store), "sweep", str(folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--max-mde", MAX_MDE, "--salt", "a1b2c3d4e5f60718"])
     assert first.code == 0, first
     (a,) = run_ids(store)
     second = run_cli(["--store", str(store), "sweep", str(folders["spec"]), "--target", f"{MOCK}:rollout_patched", "--pair-with", a, "--yes", "--max-mde", MAX_MDE])
