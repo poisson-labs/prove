@@ -148,12 +148,13 @@ safer  violated: … safer, … worse (two separate samples)
 …
 ```
 
-Saved, so the dashboard and the terminal app show it, and as JSON:
+One event saved, so the dashboard and the terminal app show it, and the whole comparison as
+JSON:
 
 <!-- docs-check: run -->
 ```console
-$ poisson-prove diff --save
-trade  timeout: … safer, … worse · violated: … safer, … worse (paired test on shared seeds); …
+$ poisson-prove diff --event violated --save
+safer  violated: … safer, … worse (paired test on shared seeds)
 …
   saved  comparison …
 …

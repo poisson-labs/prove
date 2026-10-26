@@ -78,15 +78,9 @@ along which task; the `cells` ask which conditions, within the tasks that change
 caps the false discoveries of the whole procedure. [The layered report](../concepts/the-layered-report.md)
 explains each.
 
-**The next command.** `next:` lines are whole commands. This one writes the comparison as a report
-with a heatmap, task across and tool failure rate down:
-
-<!-- docs-check: run -->
-```console
-$ poisson-prove report --x task_id --y tool_fail_rate
-ok  wrote prove-report-mock-agent-2026-10-26-a-vs-mock-agent-2026-10-26-b (3 files)
-…
-```
+**The next command.** `next:` lines are whole commands. This one,
+`poisson-prove report --x task_id --y tool_fail_rate`, writes the comparison as a report folder
+with a heatmap, task across and tool failure rate down; [`report`](../commands/report.md) shows it.
 
 ## What this does not tell you
 

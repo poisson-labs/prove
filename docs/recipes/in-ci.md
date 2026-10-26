@@ -32,7 +32,7 @@ every condition. Write it to a file, then turn it into the comment your bot post
 
 <!-- docs-check: run -->
 ```console
-$ poisson-prove check --event timeout --event violated --json > check.json  # exits 4
+$ poisson-prove check --event timeout --json > check.json  # exits 4
 ```
 
 <!-- docs-check: run -->

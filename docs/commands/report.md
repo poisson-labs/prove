@@ -148,20 +148,25 @@ ok  wrote one-run (3 files)
 …
 ```
 
-One axis, the other pinned to its hardest value, as JSON:
+The same survival report as JSON, for a script, written to its own folder:
 
 <!-- docs-check: run -->
 ```console
-$ poisson-prove report --x task_id --fix tool_fail_rate=0.55 --out hardest --json
+$ poisson-prove report latest --x task_id --y tool_fail_rate --event violated --out one-run-json --json
 {
   "schema": "poisson-prove.report/1",
   "verdict": "ok",
-  "out": "hardest",
-  "wrote": ["hardest/report.md", "hardest/heatmap.svg", "hardest/receipt.html"],
-  "method": "mcnemar_bh"
+  "out": "one-run-json",
+  "wrote": ["one-run-json/report.md", "one-run-json/heatmap.svg", "one-run-json/receipt.html"],
+  "run_name": "mock-agent 2026-10-26 b",
+  "events": ["violated"]
   …
 }
 ```
+
+With two axes and only `--x` named, `--fix` pins the other to one value:
+`poisson-prove report --x task_id --fix tool_fail_rate=0.55` draws the three tasks at the hardest
+tool failure rate.
 
 Without `--x`, the refusal lists the axes and events the runs carry:
 

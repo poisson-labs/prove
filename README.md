@@ -212,14 +212,15 @@ already on the machine, and dies with the process.
 
 ## Python
 
-The comparisons, the store and the statistics are importable:
+The comparisons, the store and the statistics are importable; `compare.diff` returns the result
+`diff` prints:
 
 <!-- docs-check: run -->
 ```python
 from poisson_prove import compare
 
-result = compare.diff("prove-runs")
-print(result.verdict, result.method)
+for run in compare.runs("prove-runs"):
+    print(run.run_name, run.run_id)
 ```
 
 See [Python API](https://github.com/poisson-labs/prove/blob/main/docs/python.md).
