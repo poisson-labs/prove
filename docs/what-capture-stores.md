@@ -18,10 +18,11 @@ true` keeps all of it.
 tell a wrong tool call from a right one. If they carry data you will not store,
 do not instrument that span.
 
-One gap, named rather than left to be discovered: `input.value` and
-`output.value` on an **`llm`** span are prompt content under OpenInference's
-convention, and the default keeps them. The strip runs on the attribute key
-alone, before a span's kind is known, so closing that is a later change.
+`input.value` and `output.value` are OpenInference's prompt and answer on a
+model call, and its arguments and result on a tool call. Under `content =
+false` they are dropped from a span that is a model call (its
+`gen_ai.operation.name`, or OpenInference's span kind, says `llm`) and kept on
+every other span, like the tool attributes above.
 
 **`max_observation_bytes` is required, and bounds one observation value.** Every
 `[capture]` table declares it and the tool supplies no number of its own: a
@@ -42,14 +43,14 @@ all, and prints in different words.
 **A sweep file with no `[capture]` table declares nothing and is not refused.**
 It did not ask for capture, and what reaches the store on that path is a
 rollout's own `record()` trace, which is stored whole. Nothing is backfilled: a
-run stored before this change keeps what it recorded, under the spelling it
+run stored by an older version keeps what it recorded, under the spelling it
 recorded it in.
 
-**Migrating a file written before this change:** add
-`max_observation_bytes = 8192`. That is exactly what such a file stored, so the
-run reproduces — and it is what `--resume` of a run begun before the change
-requires, since a resume whose declaration differs from what the run recorded is
-refused rather than mixed into one run directory.
+**A sweep file written for an older version** has no `max_observation_bytes`:
+those versions stored every value up to 8192 bytes whole. Add
+`max_observation_bytes = 8192` to store what they stored — and to `--resume` a
+run one of them began, since a resume whose declaration differs from what the
+run recorded is refused rather than mixed into one run.
 
 **A cut is not silent.** `poisson-prove inspect` prints an `observation: cut (...)`
 line above the span lines of any row whose trace has a cut span, naming each cut
@@ -58,17 +59,18 @@ limit the run recorded. `report` and `serve` print, for each run, the byte limit
 it recorded, how many spans its stored traces hold and how many of them were
 stamped as cut, in the provenance list of `report.md`, `receipt.html` and the
 viewer page. The count is over spans, read from the stored envelopes and nothing
-else, and a span with two cut values counts once. A run written before the
-per-value cut recorded its limit under another name and stamped nothing, so its
-counts read `not counted` and never `0`; a run with no capture record reads
+else, and a span with two cut values counts once. A run written by an older
+version that cut values differently recorded its limit under another name and
+stamped nothing, so its counts read `not counted` and never `0`; a run with no capture record reads
 `not recorded` for the limit.
 
 **A sweep file may declare what the run expects.** A `[declare]` table names
 the steps the target is expected to execute (`steps`), the outcome labels it
-can emit (`outcomes`) and which of those steps are gates (`gates`, a subset of
-`steps`). Any of the three may be absent; all three empty is refused, and so is
-a duplicate — a repeated name in a hand-written list is a typo, and collapsing
-it would be guessing at what was meant. The declaration is recorded on the
+can emit (`outcomes`), which of those steps are gates (`gates`, a subset of
+`steps`), and which outcomes are failures and which successes (`failures`,
+`successes`). Any of them may be absent; a table that declares nothing is
+refused, and so is a duplicate — a repeated name in a hand-written list is a
+typo, and collapsing it would be guessing at what was meant. The declaration is recorded on the
 run's manifest as `declared`. It is not part of the sweep's identity, so a
 declaring arm and a non-declaring arm derive the same seeds and still pair
 under `diff`. On the way to the store, a span whose `step_name` is a declared
@@ -94,8 +96,7 @@ outcome sets, since two competing sets are two quantities wearing one name;
 `--resume` refuses a sweep whose declaration differs from what the run
 recorded, while `--pair-with` does not.
 
-**A misspelled table name is ignored.** The sweep file refuses an unknown field
-inside `[declare]`, as it does inside `[capture]` and `[chaos]`, but not an
-unknown top-level table: a `[declair]` table is read by nothing and refused by
-nothing, exactly as it was before this change. A run that prints no declaration
-block declared nothing as far as the tool can see; check the spelling.
+**A misspelt table or key is refused.** The sweep file is checked whole when it
+is read: a `[declair]` table, or an unknown key inside `[declare]`, `[capture]`
+or `[chaos]`, is refused with its line and the nearest name the spec has, before
+anything runs. [The sweep spec](sweep-spec.md) lists every key.

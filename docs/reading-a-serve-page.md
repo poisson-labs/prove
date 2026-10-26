@@ -1,17 +1,21 @@
 # Reading a serve page
 
 `poisson-prove serve A B --event NAME --x AXIS` builds one page for one stored pair and holds it on a
-loopback port until Ctrl-C. The page is a snapshot: nothing on it is fetched, and it does not change
-while it is open. Fourteen sections, in page order. Each says what it answers and what it cannot.
+loopback port until Ctrl-C ([`serve`](commands/serve.md) has its options). The page is a snapshot:
+nothing on it is fetched, and it does not change while it is open. Fourteen sections, in page order. Each says what it answers and what it cannot.
 
 ## Summary
 
-The answer in plain words: whether either run stopped early, whether two named outcomes are exact
-complements of each other, then per outcome how many conditions got worse, how many got safer and
-how many show no significant change; the conditions that got worse, before and after, with how sure
-the run is of each; and the least sensitive condition the run did not call a change, which is the
-detection limit "0 worse" rests on. It states counts and never a verdict: whether a change should
-ship is not something the page knows. Every sentence is a field of `serve --json`.
+The answer in plain words. First the verdict word, the same one `diff` prints (`trade`, `worse`,
+`safer`, `no significant change`, `too small to tell`, or the kindless `higher`, `lower`,
+`mixed`), with the lines under it: the verdict rule, what the detection limits mean, how the
+intervals are computed, and how many outcomes would change the word. Then whether either run
+stopped early, whether two named outcomes are exact complements of each other, and per outcome how
+many conditions got worse, how many got safer and how many were not flagged; the conditions that
+got worse, before and after; and the least sensitive condition the run did not call a change,
+which is the detection limit "0 worse" rests on. When the runs errored at different rates in a
+condition, or a run was resumed after a comparison was read, a line says so. Whether a change
+should ship is not something the page knows. Every sentence is a field of `serve --json`.
 
 ## Events
 

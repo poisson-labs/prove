@@ -386,7 +386,7 @@ def _build_parser(io: _IO) -> _Parser:
         description=(
             "A statistical instrument for finding where autonomous and agentic systems break.\n"
             "Run a sweep of your agent over its conditions, store every episode, and compare\n"
-            "two runs condition by condition with stated confidence."
+            "two runs condition by condition, with stated error bounds and detection limits."
         ),
         epilog=(
             "examples:\n"

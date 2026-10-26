@@ -8,6 +8,8 @@ Everything else is private, whatever its spelling.
 The examples run from a folder whose `./prove-runs` holds a pair of runs, as the quickstart
 leaves it (`poisson-prove init --example`, then its two sweeps).
 
+<!-- docs-check: setup quickstart -->
+
 ## `poisson_prove`
 
 What a rollout needs.
@@ -19,6 +21,7 @@ What a rollout needs.
 - `step`: name a step of a rollout, for the trace.
 - `__version__`: the installed version of Prove, as a string such as `0.1.0`.
 
+<!-- docs-check: run -->
 ```python
 from poisson_prove import Episode, Rollout, __version__, record, step
 
@@ -49,6 +52,7 @@ reads them. Get its JSON with `to_json()`: `json.dumps` on the result, or on its
 anything has read it, is not supported. It pickles whether or not it has been read, building
 itself in full first, and the unpickled copy is equal to it.
 
+<!-- docs-check: run -->
 ```python
 from poisson_prove import compare
 
@@ -58,6 +62,7 @@ for row in result.rows[:3]:
     print(row["event"], row["config"], row["delta"], row["ci_lo"], row["ci_hi"])
 ```
 
+<!-- docs-check: run -->
 ```python
 from poisson_prove import compare
 
@@ -65,6 +70,7 @@ gate = compare.check("prove-runs", "previous", "latest", events=["violated"], fa
 print(gate.verdict, gate.passed)
 ```
 
+<!-- docs-check: run -->
 ```python
 from poisson_prove import compare
 
@@ -99,6 +105,7 @@ times.
 - `mcnemar_test`: the paired test on matched pairs (exact McNemar).
 - `logrank_test`: the two-sample log-rank test of the cause-specific hazard.
 
+<!-- docs-check: run -->
 ```python
 import numpy as np
 from poisson_prove import stats
