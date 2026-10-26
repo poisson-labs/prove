@@ -244,8 +244,6 @@ from conftest import quickstart_design, without_method_lines, without_run_lines
 
 import lattice
 
-import lattice
-
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 REPORT_SOURCE = PACKAGE / "report.py"
