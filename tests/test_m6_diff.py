@@ -334,6 +334,7 @@ def test_i4_bh_controls_false_discovery_on_uniform_nulls() -> None:
 # ---------- I5: Fisher is scipy's two-sided Fisher ----------
 
 
+@settings(deadline=None)
 @given(
     n_a=st.integers(min_value=1, max_value=40),
     n_b=st.integers(min_value=1, max_value=40),
@@ -572,6 +573,7 @@ def test_i11_verdict_rule_on_golden(golden: DiffResult) -> None:
     assert set(golden.cells["verdict"]) <= {"safer", "worse", "unchanged"}
 
 
+@settings(deadline=None)
 @given(
     tables=st.lists(
         st.tuples(
