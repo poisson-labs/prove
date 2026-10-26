@@ -389,7 +389,7 @@ def resume_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[s
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """``--update-snapshots``: the snapshot tests write the snapshots instead of comparing against
-    them (section 10.6, PF12.13; the one documented command is in ``CONTRIBUTING.md``)."""
+    them (section 10.6, PF6.14 and PF12.13; the one documented command is in ``CONTRIBUTING.md``)."""
     parser.addoption(
         "--update-snapshots",
         action="store_true",

@@ -418,7 +418,8 @@ def test_v14_the_real_core_dependencies_are_the_four_math_names_and_packaging_is
     the real file says nothing about an operator the list has and it does not. ``packaging`` is
     declared rather than leaned on through pytest, which is the thing C12 was about."""
     data = tomllib.loads(PYPROJECT.read_text())
-    assert {Requirement(d).name.lower() for d in data["project"]["dependencies"]} == CORE_NAMES
+    # PF6 (Q20, Q60): Rich and Textual join the core; the math names are still all there.
+    assert {Requirement(d).name.lower() for d in data["project"]["dependencies"]} == CORE_NAMES | {"rich", "textual"}
     assert "packaging" in {Requirement(d).name.lower() for d in data["project"]["optional-dependencies"]["dev"]}
 
 
