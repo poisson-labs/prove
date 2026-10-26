@@ -31,7 +31,7 @@ package.
 - **k6** PF7.5 is one slow test: on Python 3.11 it installs every requirement at exactly its
   stated floor (a constraints file of ``name==floor`` over the core and every extra; uv resolves
   what they bring), checks each is installed at its floor, then runs the code suite in that
-  environment. Section 3.4's ``--resolution lowest-direct`` is how Session B finds the floors; it
+  environment. Section 3.4's ``--resolution lowest-direct`` is how the build finds the floors; it
   is not the check, because it takes what the floors bring at their newest and then backtracks a
   direct requirement above its floor to fit them (Modal 1.6.1 for a floor of 0.73.76 that installs
   when asked). It needs the package index, so it is the main lane's, never a pull request's.
