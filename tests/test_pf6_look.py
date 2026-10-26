@@ -342,7 +342,7 @@ def _same_bytes(text: str) -> str:
     run ids, UTC times and durations, in text and in JSON."""
     text = RUN_ID.sub("<run-id>", text)
     text = re.sub(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z", "<time>", text)
-    text = re.sub(r'("(?:wall_time|elapsed|seconds)\w*": )[-0-9.eE+]+', r"\1<duration>", text)
+    text = re.sub(r'("(?:wall_time|elapsed|seconds)\w*": )[-0-9.eE+]+', r'\1"<duration>"', text)
     return re.sub(r"\b\d+(?:\.\d+)? (?:s|min|h)\b(?: \d+(?:\.\d+)? s)?", "<duration>", text)
 
 
@@ -767,13 +767,18 @@ def test_pf6_2_and_6_3_over_pf1s_corpus_both_ways(tmp_path_factory: pytest.TempP
     def same(text: str) -> str:
         return _without_progress(_same_bytes(text))
 
+    def unplain(text: str) -> str:
+        # a ``next:`` line repeats the command as typed, so ``--plain`` is taken out of it (as in PF6.1)
+        return "\n".join(line.replace(" --plain", "") if "next:" in line else line for line in text.split("\n"))
+
     for call in pf1.CORPUS:
         a = results["pipe"][call.name]
         for other in ("pipe-plain", "pipe-norich"):
             if other == "pipe-plain" and call.kind == "usage":
                 continue
             b = results[other][call.name]
-            assert (a["code"], same(a["out"]), same(a["err"])) == (b["code"], same(b["out"]), same(b["err"])), (call.name, other)
+            typed = unplain if other == "pipe-plain" else str
+            assert (a["code"], same(a["out"]), same(a["err"])) == (b["code"], typed(same(b["out"])), typed(same(b["err"]))), (call.name, other)
         t = results["pty"][call.name]
         if not t:
             continue

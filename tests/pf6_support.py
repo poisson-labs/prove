@@ -984,7 +984,8 @@ def shows_number(text: str, value: float) -> bool:
     # a value written as it was recorded, as an axis's value is (``tool_fail_rate 0.3``)
     if not whole and re.search(rf"(?<![\d.]){re.escape(repr(float(value)))}(?![\d])", plain):
         return True
-    for m in _NUMBER.finditer(plain):
+    # a whole token only: never a run of digits inside a hex id or a word (``c3bc1b052e785f44``)
+    for m in re.finditer(rf"(?<![0-9A-Za-z])(?>{_NUMBER.pattern})(?![0-9A-Za-z])", plain, re.IGNORECASE):
         token = m.group(0)
         percent = token.endswith("%")
         body = token.rstrip("%")
