@@ -360,9 +360,10 @@ SKIP_NAMES_A_PLACE = re.compile(r"(?:^|[\s:('\"=])(?:~|/[A-Za-z.]|[A-Za-z]:\\)|\
 #: r10: how a test module at ``tests/`` reaches outside the repository: the home folder by any
 #: spelling, a machine's own folders written out, or a folder beside the repository.
 OUTSIDE = re.compile(r"Path\.home\(|expanduser\(|/Users/|[A-Za-z]:\\\\?Users|\b(?:ROOT|REPO)\.parent\b|\.parents\[[2-9]\]")
-#: The one permitted read outside: a real-backend test (never run without the user's own account)
-#: looks for that account's credentials; it reads no data.
-OUTSIDE_ALLOWED = re.compile(r"\.modal\.toml")
+#: The permitted reads outside: a real-backend test (never run without the user's own account)
+#: looks for that account's credentials, and the browser check finds the browser engines the
+#: user installed (a package cache, as the slow test below keeps); neither reads data.
+OUTSIDE_ALLOWED = re.compile(r"\.modal\.toml|PLAYWRIGHT_BROWSERS_PATH")
 
 #: PF8.2: the ``.gitignore`` entries for the private notes folder, which section 9.1 removes.
 NOTES_ENTRIES = {"notes", "notes/", "/notes", "/notes/"}

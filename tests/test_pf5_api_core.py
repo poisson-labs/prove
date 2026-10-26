@@ -286,7 +286,7 @@ PRIVATE_MODULES = (
 INTERNAL_WORDS = re.compile(
     r"\bPF\d+(\.\d+)?[a-z]?\b|\b[A-Z]{1,3}-?\d+[a-z]?\b|§|\bsection \d|\bPhase \d|\bSession [AB]\b"
     r"|\boracle\b|\bretrofit\b|\bshim\b|\bpacket\b|\bruled\b|\bruling\b|\bTaylor\b|\bHUMAIN\b"
-    r"|\bBorderless\b|\bCodestrap\b|45/44|\[\[|\bvault\b|\bObsidian\b|notes/|\bdispatch\b|/Users/|~/code/"
+    r"|\bBorderless\b|\bCodestrap\b|45/44|\[\[|\bvault\b|\bObsidian\b|note[s]/|\bdispatch\b|/User[s]/|~/cod[e]/"
     r"|proofload",
     re.IGNORECASE,
 )

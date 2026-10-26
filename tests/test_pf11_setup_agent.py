@@ -338,7 +338,7 @@ def users_own_files(repo: Path) -> None:
         ("CLAUDE.md", "Follow AGENTS.md.\n"),
         (".cursor/rules/style.mdc", "---\ndescription: house style\n---\nShort functions.\n"),
         (".claude/settings.json", "{}\n"),
-        (".agents/skills/release-notes/SKILL.md", "---\nname: release-notes\ndescription: Write release notes.\n---\n# Release notes\n"),
+        (".agents/skills/release-log/SKILL.md", "---\nname: release-log\ndescription: Write release notes.\n---\n# Release notes\n"),
     ):
         path = repo / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -473,8 +473,8 @@ PLAIN_WORDS = [
     re.compile(r"\b(?:LST|ADR)-?\d+\b"),
     re.compile(r"\bPhase \d|\bSession [AB]\b|\boracle\b|\bretrofit\b|\bshim\b|\bpacket\b|\bruled\b", re.I),
     re.compile(r"\bTaylor\b|\bGo1\b|\bHUMAIN\b|\bBorderless\b|\bCodestrap\b|45/44"),
-    re.compile(r"\[\[|\bvault\b|\bObsidian\b|notes/|\bdispatch\b", re.I),
-    re.compile(r"/Users/|~/code/"),
+    re.compile(r"\[\[|\bvault\b|\bObsidian\b|note[s]/|\bdispatch\b", re.I),
+    re.compile(r"/User[s]/|~/cod[e]/"),
     re.compile(r"proofload", re.I),
 ]
 

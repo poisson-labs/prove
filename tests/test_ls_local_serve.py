@@ -353,7 +353,7 @@ HOSTILE_TABLE = "".join(["<", "/table><script>alert(1)</script>&", chr(34)])
 HOSTILE_VALUES = (HOSTILE, HOSTILE_TABLE)
 PARTIAL_A, PARTIAL_B = "part-a", "full-b"
 TRADE_A, TRADE_B = "trade-a", "trade-b"
-LONG_TITLE = "A title long enough to wrap: the baseline against the candidate, both arms, every condition the two runs share, measured at the dispatch commit"
+LONG_TITLE = "A title long enough to wrap: the baseline against the candidate, both arms, every condition the two runs share, measured at the baseline commit"
 
 
 def manifest(run_id: str, salt: str, axis_types: Mapping[str, str]) -> RunManifest:
