@@ -51,8 +51,8 @@ def _confidence(q: float) -> str | None:
 
 
 def _counts(panel: Mapping[str, Any], q: str) -> str:
-    """The event's counts: worse and safer when its kind is known, else what rose and what fell
-    (PF4.20); the rest were not flagged."""
+    """The event's counts: worse and safer when its kind is known, else what rose and what fell;
+    the rest were not flagged."""
     if panel.get("kind") is None:
         return (
             f"{panel['event']}: rose in {panel['n_higher']} of {panel['n_present']} conditions, "
@@ -91,7 +91,7 @@ def _row(event: str, cell: Mapping[str, Any], way: str) -> dict[str, Any]:
 
 def _worse(panel: Mapping[str, Any], top_n: int) -> list[dict[str, Any]]:
     """The conditions that changed for the worse: a rise of a failure, a fall of a success, and a
-    rise when the event's kind is not known (PF4.20)."""
+    rise when the event's kind is not known."""
     word = "higher" if panel.get("kind") is None else "worse"
     way = "fall" if panel.get("kind") == "success" else "rise"
     cells = sorted(
@@ -105,8 +105,8 @@ def _worse(panel: Mapping[str, Any], top_n: int) -> list[dict[str, Any]]:
 
 def _limit(panel: Mapping[str, Any], not_compared: int) -> dict[str, Any]:
     """The detection limit the event's conditions that did not move rest on. A condition with no
-    limit counts above every threshold (PF4.29) and is named with its reason; with no unchanged
-    condition the line counts what was compared and what was not (PF4.17)."""
+    limit counts above every threshold and is named with its reason; with no unchanged
+    condition the line counts what was compared and what was not."""
     block = panel["mde_unchanged"]
     threshold = panel.get("threshold", TOO_SMALL_TO_TELL)
     if block["value"] is None:
@@ -167,9 +167,9 @@ def _pairing(diff: Mapping[str, Any]) -> dict[str, Any]:
 def _complement(
     complement: tuple[str, ...] | None, trade_line: str | None
 ) -> dict[str, Any] | None:
-    """M6's answer as data, and M6's own sentence beside it: the complement line is ``trade_line``
-    verbatim, never composed here, so the page's Result block, report.md, the receipt and this
-    object say one thing from one source. ``None`` line when nothing traded."""
+    """The comparison's answer as data, and its own sentence beside it: the complement line is
+    ``trade_line`` verbatim, never composed here, so the page's Result block, report.md, the
+    receipt and this object say one thing from one source. ``None`` line when nothing traded."""
     if complement is None:
         return None
     return {"events": list(complement), "line": trade_line}

@@ -1,7 +1,7 @@
-"""M2: produce the list of configs a sweep will run, typed per axis, as a SweepSpec.
+"""Produce the list of configs a sweep will run, typed per axis, as a SweepSpec.
 
 The primitive is a list of dicts. ``grid``, ``sobol`` and ``scenarios`` are three ways to
-make one, and ``+`` is how you combine them. M2 knows nothing about seeds, execution, or
+make one, and ``+`` is how you combine them. This module knows nothing about seeds, execution, or
 results. Its one hard promise is determinism: the same inputs yield the same list in the
 same order, every time, on every machine.
 
@@ -181,16 +181,16 @@ def _checked_positive_int(value: Any, name: str) -> int:
 
 
 def _optional_positive_int(table: Mapping[str, Any], name: str) -> int | None:
-    """``max_spans``'s parse: absent is ``None`` (D6), present is an int >= 1."""
+    """``max_spans``'s parse: absent is ``None``, present is an int >= 1."""
     return None if name not in table else _checked_positive_int(table[name], name)
 
 
-#: CD-E1, the refusal a person meets who has never heard of the field (ADR-096, D4). It names
+#: The refusal a person meets who has never heard of the field. It names
 #: what the number is, two anchors an order of magnitude apart, the second spelling, the way to
 #: measure it from this target, and the one line that reproduces what a file without it stored.
 #: It names no corpus and no percentile, and recommends no single number: an error that hands
-#: out one value to everyone who meets it has restored by another route the thing ADR-096
-#: refused to ship.
+#: out one value to everyone who meets it has restored by another route the default this field
+#: refuses to have.
 _CAP_REQUIRED = """[capture].max_observation_bytes is required and has no default.
 It is the largest single observation value -- one prompt, one tool result -- that
 this target stores whole, in bytes; anything larger is stored as its head, its
@@ -203,9 +203,10 @@ though the values themselves are not kept. 8192 is what a sweep file without
 this line stored before this change.
 See docs/what-capture-stores.md."""
 
-#: D3, and exactly this spelling: a string that says what it means, where a large number is
-#: the thing being prevented, ``0`` reads at least as naturally as *cut everything*, ``false``
-#: reads as *no capture*, and TOML's ``inf`` is the one value a JSON manifest cannot carry.
+#: The spelling of *store whole*, and exactly this one: a string that says what it means, where a
+#: large number is the thing being prevented, ``0`` reads at least as naturally as *cut
+#: everything*, ``false`` reads as *no capture*, and TOML's ``inf`` is the one value a JSON
+#: manifest cannot carry.
 _NO_CAP = "none"
 
 
@@ -214,7 +215,7 @@ def _capture_cap(table: Mapping[str, Any]) -> int | None:
 
     The refusal is here rather than at the cut sites because here the run does not exist yet:
     a person who has to be told is told before anything is written, and a person who declared
-    a number gets it honoured end to end (ADR-096).
+    a number gets it honoured end to end.
     """
     if "max_observation_bytes" not in table:
         raise SamplerError(_CAP_REQUIRED)
@@ -294,7 +295,7 @@ def _chaos_table(table: Any) -> ChaosSpec | None:
 
 
 def _declare_table(table: Any) -> Declaration | None:
-    """The optional ``[declare]`` table of a sweep file, as a ``Declaration`` (A10).
+    """The optional ``[declare]`` table of a sweep file, as a ``Declaration``.
 
     Validated by field name the way ``[capture]`` is. The three lists are validated by
     ``Declaration`` itself -- non-empty names, no duplicates, gates among the steps, not all
@@ -454,12 +455,12 @@ class SweepSpec:
     #: sweeps the same sweep. The manifest records the request at ``environment["capture"]``.
     capture: CaptureSpec | None = None
     #: The ``[chaos]`` table, when the sweep file has one. It rides the spec and is absent
-    #: from ``to_dict()`` for the same reason ``capture`` is, and for one more: the whole of
-    #: D2 is that an injected fault must not touch ``config_hash``, because that is what
+    #: from ``to_dict()`` for the same reason ``capture`` is, and for one more: an injected
+    #: fault must never touch ``config_hash``, because that is what
     #: ``derive_seed`` reads and what makes two arms the same episode at the same seed.
     chaos: ChaosSpec | None = None
     #: The ``[declare]`` table, when the sweep file has one: the steps, outcomes and gates the
-    #: run expects (A10). It rides the spec and is absent from ``to_dict()`` for ``chaos``'s
+    #: run expects. It rides the spec and is absent from ``to_dict()`` for ``chaos``'s
     #: reason: a declaration must not touch ``config_hash``, so a declaring arm and a
     #: non-declaring arm derive the same seeds and pair under ``diff`` -- the comparison a
     #: declaration is most wanted for. The manifest records it as ``declared``.

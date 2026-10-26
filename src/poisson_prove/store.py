@@ -60,9 +60,9 @@ _PART_SUFFIX = ".parquet"
 
 # The two error marks ``tally`` partitions no-outcome rows on, written here because
 # ``executor`` imports this module and not the reverse. They are one vocabulary across three
-# modules, not three constants that happen to agree: the S21 oracle pins them equal to
+# modules, not three constants that happen to agree: a test pins them equal to
 # ``executor._TIMEOUT_ERROR`` and ``executor_modal._INFRA_PREFIX``, so a change to any one of
-# them is a cross-module change (ADR-037).
+# them is a cross-module change.
 _TIMEOUT_MARK = "timeout"
 _INFRA_MARK = "infra: "
 
@@ -81,24 +81,24 @@ _SCHEMA = pa.schema(
         pa.field("error", pa.string(), nullable=True),
         pa.field("wall_time", pa.float64(), nullable=False),
         pa.field("backend_meta", pa.string(), nullable=False),
-        # A7: the trace, split in two and appended. ``trace`` is the envelope -- the span
-        # forest with no content -- and ``trace_obs`` the observation bodies it was carrying,
-        # keyed by span id. Appended, never inserted, and ``schema_version`` stays 1: the
-        # fallback for a part written before A7 is presence-of-column (ADR-047), so there is
-        # nothing for a version to select.
+        # The trace, split in two and appended. ``trace`` is the envelope -- the span forest
+        # with no content -- and ``trace_obs`` the observation bodies it was carrying, keyed by
+        # span id. Appended, never inserted, and ``schema_version`` stays 1: the fallback for a
+        # part written before the split is presence-of-column, so there is nothing for a
+        # version to select.
         pa.field("trace", pa.string(), nullable=True),
         pa.field("trace_obs", pa.string(), nullable=True),
-        # PF4.38 (reading R5): the case the rollout named in ``meta["case_id"]``, copied to its own
-        # column when the episode is appended, so a comparison reads it without decoding ``meta``.
-        # Appended like A7's columns: a part written before it reads the column as null.
+        # The case the rollout named in ``meta["case_id"]``, copied to its own column when the
+        # episode is appended, so a comparison reads it without decoding ``meta``. Appended like
+        # the two trace columns: a part written before it reads the column as null.
         pa.field("case_id", pa.string(), nullable=True),
     ]
 )
 _JSON_COLUMNS = ("config", "meta", "backend_meta")
 #: Every nullable ``pa.string()`` field of ``_SCHEMA``, spelled out rather than derived from it:
-#: a field added to the schema must be added here by hand, and A22's V5 is what fails until it
-#: is. Derived, the assertion would follow the schema silently and A7 would inherit a read path
-#: whose nulls are NaN under ``row.trace is not None``.
+#: a field added to the schema must be added here by hand, and a schema test is what fails
+#: until it is. Derived, the assertion would follow the schema silently and the split would
+#: inherit a read path whose nulls are NaN under ``row.trace is not None``.
 _NULLABLE_STRING_COLUMNS = ("outcome", "error", "trace", "trace_obs", "case_id")
 _META_COLUMNS = ("meta", "backend_meta")
 #: The two columns the split writes. Not in ``_META_COLUMNS``: ``meta=`` and ``trace=`` are
@@ -106,10 +106,11 @@ _META_COLUMNS = ("meta", "backend_meta")
 #: (it gives the right projection for "full" and "none" and the wrong one for "envelope").
 _TRACE_COLUMNS = ("trace", "trace_obs")
 _TRACE_MODES = ("full", "envelope", "none")
-#: A trace as a build before A8a stored it: six trace keys, and spans of thirteen. Spelled out as
-#: history and never derived from ``Trace`` or ``Span``, so a field added to either later leaves
-#: this saying what the old writer wrote. A8a added the rest -- ``alias_map_version`` and the
-#: eight span fields -- and ``Trace.from_dict`` demands the exact key set of the current schema.
+#: A trace as a build before the span schema's eight fields stored it: six trace keys, and
+#: spans of thirteen. Spelled out as history and never derived from ``Trace`` or ``Span``, so a
+#: field added to either later leaves this saying what the old writer wrote. The rest came later
+#: -- ``alias_map_version`` and the eight span fields -- and ``Trace.from_dict`` demands the
+#: exact key set of the current schema.
 _SPLIT_TRACE_KEYS = frozenset(
     {"schema", "source", "source_version", "dropped", "spans", "truncated"}
 )
@@ -201,8 +202,8 @@ def _encode_json(m: Mapping[str, Any], label: str) -> str:
 def _resolve_trace_mode(trace: str | None, *, meta: bool) -> str:
     """The read's trace mode, resolved from ``trace=`` and ``meta=`` and nothing else.
 
-    ``trace=None`` is every call site written before A7: ``"full"`` where ``meta`` is read and
-    ``"none"`` where it is not, so each keeps its exact behaviour without being edited.
+    ``trace=None`` is every call site written before the split: ``"full"`` where ``meta`` is read
+    and ``"none"`` where it is not, so each keeps its exact behaviour without being edited.
     """
     if trace is None:
         return "full" if meta else "none"
@@ -223,21 +224,22 @@ def _resolve_trace_mode(trace: str | None, *, meta: bool) -> str:
 
 
 def _split_trace_as_current(stored: Any) -> Any:
-    """``stored`` as the current schema reads it, when it is exactly a trace as A7 stored it.
+    """``stored`` as the current schema reads it, when it is exactly a trace as the split first
+    stored it.
 
-    A trace stored before A8a has six keys and spans of thirteen, and ``Trace.from_dict``, which
-    demands the exact key set, rejects it: ``Store.read`` raised on every such row and
-    ``inspect`` exited 3 (measured on the four runs of that age in the default store that keep
-    their trace in the ``trace`` column; the eight that keep it in ``meta`` on a part before A7
-    read back unvalidated and ``inspect`` printed nothing for them). The store knows what it
-    wrote, so it recognises that shape here and adds what the shape lacked, each ``None``, which
-    is what ``Span`` says a field A8a added means when it is ``None``: not recorded. Never a zero
-    and never a blank.
+    A trace stored before the span schema's eight fields has six keys and spans of thirteen, and
+    ``Trace.from_dict``, which demands the exact key set, rejects it: ``Store.read`` raised on
+    every such row and ``inspect`` exited 3 (measured on the four runs of that age in the default
+    store that keep their trace in the ``trace`` column; the eight that keep it in ``meta`` on a
+    part before the split read back unvalidated and ``inspect`` printed nothing for them). The
+    store knows what it wrote, so it recognises that shape here and adds what the shape lacked,
+    each ``None``, which is what ``Span`` says one of the eight added fields means when it is
+    ``None``: not recorded. Never a zero and never a blank.
 
     Exact, and nothing wider. A trace with a key the old shape did not have, one missing a key it
     did, one whose spans are not all thirteen keys, and one already in the current shape all come
     back as they came, so ``from_dict`` says about them what it always said. The recognition is
-    here and not in ``from_dict`` because A8a's P8-1 pins that ``from_dict`` rejects both old
+    here and not in ``from_dict`` because a test pins that ``from_dict`` rejects both old
     shapes, and because a dict handed to it is not a row this store wrote. It reads and never
     writes: nothing stored is rewritten.
     """
@@ -257,8 +259,8 @@ def _legacy_envelope(meta: Any) -> dict[str, Any] | None:
     """The envelope of a row written before the split, computed from ``meta["trace"]`` at read.
 
     A trace ``from_dict`` rejects is an absent trace, the same posture ``append`` and
-    ``inspect`` already take: no error, no envelope. One stored as A7 stored it is not rejected:
-    it is read as the current schema first (``_split_trace_as_current``).
+    ``inspect`` already take: no error, no envelope. One stored as the split first stored it is
+    not rejected: it is read as the current schema first (``_split_trace_as_current``).
     """
     if not isinstance(meta, Mapping):
         return None
@@ -295,10 +297,11 @@ class RunManifest:
     created_at: str = field(default_factory=_now_iso_utc)
     poisson_prove_version: str = field(default_factory=lambda: __version__)
     schema_version: int = _SCHEMA_VERSION
-    #: What the run's sweep declared it expects -- steps, outcomes, gates -- or ``None`` (A10).
+    #: What the run's sweep declared it expects -- steps, outcomes, gates -- or ``None``.
     #: A thirteenth top-level field and not an ``environment`` entry: ``diff`` reads it as part
-    #: of run identity beside ``t_unit`` and ``run_salt``. A manifest written before A10 has no
-    #: key and reads back ``None``; no ``_SCHEMA_VERSION`` bump, the version gates the rows.
+    #: of run identity beside ``t_unit`` and ``run_salt``. A manifest written before the field
+    #: existed has no key and reads back ``None``; no ``_SCHEMA_VERSION`` bump, the version gates
+    #: the rows.
     declared: Declaration | None = None
     #: The name given at sweep time, or ``None``.
     name: str | None = None
@@ -508,7 +511,7 @@ class RunTally:
 
 
 def _case_id(meta: Any) -> str | None:
-    """PF4.38 (reading R5): the case a rollout named in ``meta["case_id"]``, a non-empty string,
+    """The case a rollout named in ``meta["case_id"]``, a non-empty string,
     copied into the episode's ``case_id`` column; None when it named none."""
     case = meta.get("case_id") if isinstance(meta, Mapping) else None
     return case if isinstance(case, str) and case else None
@@ -563,7 +566,7 @@ class Store:
         return RunManifest.from_dict(json.loads(path.read_text()))
 
     def _record_resume(self, run_id: str, entry: Mapping[str, Any]) -> None:
-        """PF4.39: append one resume to the run's ``environment["resumes"]``: what a sweep
+        """Append one resume to the run's ``environment["resumes"]``: what a sweep
         ``--resume`` added and whether a comparison of the run was read before it."""
         manifest = self.manifest(run_id)
         environment = dict(manifest.environment)
@@ -599,10 +602,10 @@ class Store:
                 raise DuplicateEpisode(f"duplicate (config_hash, replicate_index) in batch: {key}")
             seen.add(key)
             meta = dict(r.meta)
-            # A7: the trace leaves ``meta`` here, at the one site every stored trace passes
+            # The split: the trace leaves ``meta`` here, at the one site every stored trace passes
             # through, and nothing downstream splits it again. The pop is unconditional --
             # retention decides only whether the two columns are written beside it, never
-            # whether the key goes (A22's V7 pins that on an invalid trace too). Retention is a
+            # whether the key goes (a test pins that on an invalid trace too). Retention is a
             # policy over outcomes and an errored row has none, so its trace -- the snapshot of
             # the episode that hung -- is kept whatever ``retain_traces_for`` says.
             stored = meta.pop(_TRACE_KEY, None)
@@ -800,26 +803,26 @@ class Store:
         return df[columns + ([_TRACE_KEY] if mode == "envelope" else [])]
 
     def _has_pre_split_part(self, run_id: str) -> bool:
-        """Whether any part of this run was written before A7 -- read off each part's own
+        """Whether any part of this run was written before the split -- read off each part's own
         Parquet footer and never off the manifest, because the fallback is presence-of-column
-        and a run resumed across the A7 boundary holds parts of both kinds.
+        and a run resumed across the split holds parts of both kinds.
 
-        Per run and not per row, which is the conservative half of the trade: one pre-A7 part
+        Per run and not per row, which is the conservative half of the trade: one pre-split part
         makes the whole run's envelope read decode ``meta``. Splitting it per part means
         reading each part under its own schema instead of one concatenation under ``_SCHEMA``,
         which is a change to ``_read_table``'s shape and to where the sort and the key mask
-        run; A9 is the packet that should want it, and nothing before then reads a mixed run.
+        run; no reader yet needs that, and nothing today reads a mixed run.
         """
         return any(_TRACE_KEY not in pq.read_schema(p).names for p in self._parts(run_id))
 
     def _reassemble(self, df: pd.DataFrame) -> None:
         """Put each stored trace back where every consumer already reads it, ``meta["trace"]``.
 
-        A row whose ``trace`` column is null keeps whatever ``meta`` holds: on a pre-A7 part
-        that is the trace itself, whole and needing no reassembly; on a post-A7 row it is either
-        nothing or the invalid value ``append`` left exactly as it was written. A trace stored as
-        A7 stored it, in either place, is read as the current schema (``_split_trace_as_current``);
-        anything else is returned, or rejected, as it always was.
+        A row whose ``trace`` column is null keeps whatever ``meta`` holds: on a pre-split part
+        that is the trace itself, whole and needing no reassembly; on a post-split row it is
+        either nothing or the invalid value ``append`` left exactly as it was written. A trace
+        stored as the split first stored it, in either place, is read as the current schema
+        (``_split_trace_as_current``); anything else is returned, or rejected, as it always was.
         """
         for envelope_json, obs_json, value in zip(
             df[_TRACE_KEY], df["trace_obs"], df["meta"], strict=True

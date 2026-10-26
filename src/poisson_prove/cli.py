@@ -807,8 +807,8 @@ def _build_parser(io: _IO) -> _Parser:
     _add_method_arguments(serve_p, defaults=True)
     # ``serve`` takes the five tree flags through the helper ``report`` already uses, with
     # ``defaults=True``: like ``diff`` and unlike ``report``, it takes two runs, has no
-    # single-run form to refuse, and so needs no ``None`` to tell an unset flag from M14's own
-    # value.
+    # single-run form to refuse, and so needs no ``None`` to tell an unset flag from the tree's
+    # own value.
     _add_tree_arguments(serve_p, defaults=True)
     sx = serve_p.add_argument(
         "--x",
@@ -1053,7 +1053,7 @@ def _tty(stream: Any) -> bool:
 
 
 def _app_store(args: Sequence[str]) -> str | None:
-    """The store the terminal app opens on when the command line names no verb (section 19): ``""``
+    """The store the terminal app opens on when the command line names no verb: ``""``
     for none given, the ``--store`` value as typed; ``None`` when the command line is not one that
     opens the app."""
     if not args:
@@ -1066,8 +1066,8 @@ def _app_store(args: Sequence[str]) -> str | None:
 
 
 def _app_wanted(io: _IO) -> bool:
-    """Section 19's switch: stdin and stdout terminals, ``CI`` unset (set to anything, empty
-    included, is CI) and ``TERM`` not ``dumb``."""
+    """Whether the bare command opens the terminal app: stdin and stdout terminals, ``CI`` unset
+    (set to anything, empty included, is CI) and ``TERM`` not ``dumb``."""
     return (
         _tty(io.inp) and _tty(io.out) and os.environ.get("CI") is None
         and os.environ.get("TERM") != "dumb"
@@ -1076,7 +1076,7 @@ def _app_wanted(io: _IO) -> bool:
 
 def _open_app(io: _IO, store: str | None) -> int:
     """The terminal app, until it is left; its exit code. A Prove that cannot import Textual says so
-    in one line (PF6.15). What the app leaves to say once it has left the terminal (a sweep stopped
+    in one line. What the app leaves to say once it has left the terminal (a sweep stopped
     by Ctrl-C) is printed as the command prints it."""
     try:
         from poisson_prove._cli_app import ProveApp
@@ -1086,7 +1086,7 @@ def _open_app(io: _IO, store: str | None) -> int:
         return 1
     app = ProveApp(store=store)
     # Textual draws on stderr; the app belongs on the terminal stdout is, so a piped stderr takes
-    # stdout's terminal for as long as the app runs (reading A21).
+    # stdout's terminal for as long as the app runs.
     saved = None
     if not _tty(sys.__stderr__):
         saved = os.dup(2)
@@ -1115,7 +1115,7 @@ def _width(stream: Any) -> int:
 
 
 def _terminal_rendering(io: _IO, args: Sequence[str]) -> None:
-    """Section 5.5's switch. A stream that is a terminal draws through a ``Terminal``: pretty when
+    """How output renders. A stream that is a terminal draws through a ``Terminal``: pretty when
     stdout and stderr are both terminals, ``NO_COLOR`` unset or empty, ``CI`` unset, ``TERM`` not
     ``dumb``, stdout UTF-8, and neither ``--json`` nor ``--plain`` was given, and Rich can be
     imported; otherwise plain's own wrapping. ``--json`` keeps stdout's document as it is."""
@@ -1457,7 +1457,7 @@ def _method_of(result: core.Comparison) -> str:
 
 def _method_table(results: Sequence[Any]) -> str:
     # The two count columns are an event's safer and worse with a kind, and its falls and rises
-    # without one; the header keeps M10's names, which its frozen test reads.
+    # without one; the header keeps its original names, which its frozen test reads.
     known = all(m.all_kinds_known() for m in results)
     header = ("method", "event", "pairing", "safer", "worse", "unchanged", "max_mde")
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]

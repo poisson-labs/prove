@@ -57,9 +57,9 @@ __all__ = [
     "position",
 ]
 
-#: A6 section 3.13's two reserved span attributes. A8a mints the public constants with the
-#: rest of the span vocabulary and its step zero re-points these two literals at them; until
-#: then they live here, module-private, once each in the whole of ``src/``.
+#: The two reserved span attributes an injected fault is written under. Until the span
+#: vocabulary has public constants for them, they live here, module-private, once each in the
+#: whole of ``src/``.
 _FAULT_KEY = "poisson_prove.fault"
 _FAULT_POSITION_KEY = "poisson_prove.fault.position"
 
@@ -137,9 +137,9 @@ class _Decision:
 
 
 #: The episode block is a module global rather than a context variable on purpose: a target
-#: that dispatches its own calls to a thread pool must still be injected, and a worker thread
+#: that hands its own calls to a thread pool must still be injected, and a worker thread
 #: starts from an empty context. The *position* is context-local, so the pool's threads do
-#: not inherit the caller's position -- which is the asymmetry M11a-13 pins.
+#: not inherit the caller's position -- which is the asymmetry a test pins.
 _BLOCK: _Block | None = None
 
 _POSITION: contextvars.ContextVar[tuple[str, int] | None] = contextvars.ContextVar(
@@ -412,7 +412,7 @@ def _stamp(fault: str, rendered: str) -> None:
 
 
 def _observed(body: Any, status: int) -> dict[str, Any]:
-    """The pre-injection view of one response, in the shape M11b maps."""
+    """The pre-injection view of one response, in the shape a fault record stores."""
     message: Any = {}
     finish = None
     if isinstance(body, dict):

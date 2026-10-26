@@ -1,4 +1,4 @@
-"""The frozen fault vocabulary M11 injects, and the attribution it ships under.
+"""The frozen fault vocabulary ``poisson_prove.chaos`` injects, and the attribution it ships under.
 
 **Attribution.** The fault *names*, their ``target_path`` values and their literal
 replacement strings are copied from AgentChaos -- ``github.com/floritange/AgentChaos``,
@@ -7,18 +7,18 @@ wheel at ``agentchaos/fault_config.py:19``-``:284``. AgentChaos is published und
 **MIT** licence and Prove is published under the MIT licence, which is what makes the
 copy clean and the attribution mandatory. The repository root's ``NOTICE`` says the same.
 
-**No code is taken and no dependency is carried** (spec M11 D1): the mutation semantics
+**No code is taken and no dependency is carried**: the mutation semantics
 behind these names are Prove's own, in ``poisson_prove.chaos``, and this module imports
 nothing but the standard library.
 
-**The entries carry no state** (D17). Each is a frozen five-field record --
+**The entries carry no state.** Each is a frozen five-field record --
 ``(name, intercept, action, target_path, value)`` -- with no ``probability``, no
 ``max_count``, no ``min_count`` and no ``_count``: ``poisson_prove.chaos`` owns the firing
 decision, so an entry has nothing to count and the exhausted-singleton failure mode is
 unrepresentable rather than guarded against.
 
 **What is not here.** The ``persistent`` / ``intermittent`` / ``burst`` strategies and the
-nine positional variants are policies over a global call ordinal, which ADR-075 refuses;
+nine positional variants are policies over a global call ordinal, which Prove leaves out by design;
 ``rate`` and ``steps`` keyed on ``(step_name, attempt)`` supply the same expressiveness.
 ``compound_stale_cache`` is dropped because its action replays the previous response,
 which is a policy across calls rather than a mutation of one.

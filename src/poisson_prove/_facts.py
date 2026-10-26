@@ -1,12 +1,12 @@
-"""The facts every surface prints about a comparison's verdict, written once (PF4.34 to PF4.47).
+"""The facts every surface prints about a comparison's verdict, written once.
 
 ``diff`` and ``check`` print them as the verdict block's detail lines, ``report.md`` and the receipt
 as a section, the page in its Summary; each is a ``(label, text)`` pair so every surface says the
-same thing in the same words. The binding words of PF4.35 (``Benjamini``, ``Hochberg``, ``false
+same thing in the same words. The words that name each method (``Benjamini``, ``Hochberg``, ``false
 discovery rate``, ``Holm``, ``family-wise``, ``cause-specific hazard``, ``Miettinen-Nurminen``,
 ``Tango``, ``simultaneous``, ``Bonferroni``, ``false coverage``, ``Benjamini-Yekutieli``) are in
 these lines. Levels and powers are read from ``poisson_prove.stats`` when a line is written, never
-typed in (PF4.1c, PF4.32).
+typed in.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def test_name(method: str) -> str:
 
 
 def interval_method(method: str) -> str:
-    """The interval on the change a test's rows carry (PF4.42)."""
+    """The interval on the change a test's rows carry."""
     return "Tango" if method == "mcnemar_bh" else "Miettinen-Nurminen"
 
 
@@ -81,7 +81,7 @@ def _number(value: Any) -> float | None:
 def limit_text(record: Mapping[str, Any]) -> str:
     """A condition's limits as a cell table prints them: each direction's number or, when it has
     none, the reason in words (``rise 0.568, fall: none detectable``); the one number when the two
-    directions agree to three decimals, which the table's caption says (PF4.27, PF4.32)."""
+    directions agree to three decimals, which the table's caption says."""
     rise, fall = _number(record.get("mde_rise")), _number(record.get("mde_fall"))
     if rise is not None and fall is not None and abs(rise - fall) < 0.001:
         return f"{rise:.3f}"
@@ -104,7 +104,7 @@ def limits_caption(power: float | None = None) -> str:
 
 
 def shares_caption(event: str, level: float) -> str:
-    """What the share columns are, and that their intervals are per condition (PF4.3)."""
+    """What the share columns are, and that their intervals are per condition."""
     return (
         f"share_a and share_b are each condition's share of runs that ended in {event} by the "
         f"comparison's horizon, with a {_look.level_label(level)} Wilson interval per condition, "
@@ -114,8 +114,8 @@ def shares_caption(event: str, level: float) -> str:
 
 
 def limit_clause(multi: MultiDiffResult) -> str | None:
-    """The verdict limit on the no-significant-change line (PF4.40, reading R8): the largest limit
-    the verdict's question read, with its test, level, family and power."""
+    """The verdict limit on the no-significant-change line: the largest limit the verdict's
+    question read, with its test, level, family and power."""
     if multi.verdict_limit is None:
         return None
     return (
@@ -129,7 +129,7 @@ def limit_clause(multi: MultiDiffResult) -> str | None:
 
 def verdict_sentence(word: str, base: str, multi: MultiDiffResult) -> str:
     """The verdict line's sentence: the counts, then, when they differ from the flags', the
-    counts that decided the word (PF4.35); under ``no significant change`` the limit first."""
+    counts that decided the word; under ``no significant change`` the limit first."""
     sentence = base
     decided = []
     for event in sorted(multi.events):
@@ -249,7 +249,7 @@ def lines(multi: MultiDiffResult, names: Mapping[str, str] | None = None) -> lis
 
 def _without_limit(multi: MultiDiffResult) -> str:
     """The rows that did not count and have no limit, by reason: a largest limit elsewhere says
-    nothing about them, so a claim that nothing changed holds at no size there (PF4.27, PF4.29)."""
+    nothing about them, so a claim that nothing changed holds at no size there."""
     reasons: dict[str, int] = {}
     for event in multi.events:
         for record in multi.by_event[event].records():
@@ -269,7 +269,7 @@ def _without_limit(multi: MultiDiffResult) -> str:
 
 
 def _fragility_text(multi: MultiDiffResult) -> str:
-    """PF4.44: how many stored outcomes would change the word, and which."""
+    """How many stored outcomes would change the word, and which."""
     if multi.fragility is None:
         return f"none: {multi.fragility_note}"
     exact = "" if multi.fragility_exact else " (the search is not exhaustive: it may be fewer)"

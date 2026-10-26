@@ -1,11 +1,11 @@
-"""M3: the local executor.
+"""The local executor.
 
 Turns a ``SweepSpec`` into a completed run in the store: one seed per (config, replicate),
 one call of the user's ``rollout`` per pair, every misbehavior caught and recorded as an
 errored row, episodes written in resumable batches, and the run marked complete. Serial
 and in-process by design; it is the reference behavior the Modal backend must match.
 
-M3 mints the four manifest fields no other module owns: ``run_id``, ``run_salt``,
+This module mints the four manifest fields no other module owns: ``run_id``, ``run_salt``,
 ``backend``, ``environment``.
 """
 
@@ -156,7 +156,7 @@ class Plan:
     #: The name given at sweep time, recorded in the new run's manifest.
     name: str | None = None
     #: Under ``pair_with=``, the earlier run's replicates: the gate then asks the paired test, its
-    #: pairs the smaller of the two runs' (PF4.30). None for a run paired with nothing.
+    #: pairs the smaller of the two runs'. None for a run paired with nothing.
     paired_replicates: int | None = None
 
 
@@ -273,12 +273,12 @@ def plan(
 #: The largest minimum detectable effect a sweep may carry without saying so on the command
 #: line. A policy choice, stated rather than derived: the MDE at base rate 0.5 is roughly
 #: ``1.98 / sqrt(N)``, so 0.20 is about a hundred replicates per cell, and below that a cell
-#: cannot see a twenty-point move. It refuses **both** designs this project has actually run --
-#: S18 and the Go1 sweep, both N=32, both 0.3251 -- and a default that let those through would
-#: be calibrated to let everything through. Go1 still produced a real finding, because its
-#: effects were enormous, and that is the case ``--max-mde`` exists for: it proceeds under
-#: ``--max-mde 0.35``, which states on the command line that it was only ever looking for
-#: effects bigger than thirty-five points.
+#: cannot see a twenty-point move. It refuses **both** designs of two earlier sweeps this
+#: default was checked against, both N=32, both 0.3251 -- and a default that let those through
+#: would be calibrated to let everything through. One of them still produced a real finding,
+#: because its effects were enormous, and that is the case ``--max-mde`` exists for: it
+#: proceeds under ``--max-mde 0.35``, which states on the command line that it was only ever
+#: looking for effects bigger than thirty-five points.
 #:
 #: Deliberately not readable from the environment: a threshold set once in a shell profile is a
 #: threshold nobody ever sees again, which is the defect this gate exists to fix.
@@ -292,16 +292,16 @@ def preflight_mde(spec: SweepSpec) -> float:
     """The design's minimum detectable effect, at base rate 0.5, in event-rate points.
 
     **The one construction.** Both pre-flight lines read this function, and so does everything
-    S23 builds on it, so a change to the statistic cannot move the printed number without
-    moving whatever is compared against it (W2). It was computed inline in ``preflight`` and
+    built on it, so a change to the statistic cannot move the printed number without
+    moving whatever is compared against it. It was computed inline in ``preflight`` and
     ``preflight_modal`` would have been a second site.
 
     Base rate 0.5 is the right design-time anchor: it needs no data, and there is none before
     the run. It is **not** an upper bound over the cells. ``mde_two_proportion`` guards a rate
     of exactly 0 with ``0.5/n`` and returns the largest possible increase when even that is
-    undetectable, so cells at extreme base rates exceed this value -- measured on the Go1
-    fixture, the realised per-cell maximum was 0.34 against this function's 0.3251, 1.6 points
-    higher. That gap is why the printed line no longer calls itself the largest case; anyone
+    undetectable, so cells at extreme base rates exceed this value -- measured on a sweep
+    fixture at N=32, the realised per-cell maximum was 0.34 against this function's 0.3251, 1.6
+    points higher. That gap is why the printed line no longer calls itself the largest case; anyone
     tempted to make it exact should note that an exact number needs the base rates, and those
     do not exist before the run.
     """
@@ -322,12 +322,12 @@ def _offered_override(mde: float) -> float:
     return offered if offered >= mde else offered + 1e-4
 
 
-#: The comparison's default ``q``: the gate asks each lone condition's flag at ``q / M`` (PF4.30).
+#: The comparison's default ``q``: the gate asks each lone condition's flag at ``q / M``.
 _GATE_Q = 0.05
 
 
 def _design_events(declared: Declaration | None) -> int:
-    """Section 8.10's count of the events a comparison of a sweep will test: the outcomes it
+    """The count of the events a comparison of a sweep will test: the outcomes it
     declares failures or successes; with no kinds, its declared outcomes but one; with no
     outcomes, one."""
     if declared is None:
@@ -339,7 +339,7 @@ def _design_events(declared: Declaration | None) -> int:
 
 
 def _design(spec: SweepSpec, *, threshold: float, paired_replicates: int | None) -> Design:
-    """The gate's reading of a design (section 8.10): Fisher's test, or the paired test with
+    """The gate's reading of a design: Fisher's test, or the paired test with
     independent arms when the run is paired with an earlier one, over the conditions times the
     events, at the worst base rate with room for the accepted change."""
     test = "fisher" if paired_replicates is None else "mcnemar"
@@ -356,12 +356,12 @@ def _plan_design(p: Plan) -> Design:
 
 
 def _design_record(p: Plan) -> dict[str, Any]:
-    """What a new run's manifest records as ``design_mde`` on every backend (PF4.30, PF4.48a)."""
+    """What a new run's manifest records as ``design_mde`` on every backend."""
     return _plan_design(p).record()
 
 
 def _recorded_design(manifest: RunManifest) -> dict[str, Any] | None:
-    """PF4.4: the design limit a run recorded at sweep time; for a run that recorded none (every
+    """The design limit a run recorded at sweep time; for a run that recorded none (every
     0.0.1 run), the gate's reading of its recorded replicates, conditions and declaration,
     computed now and labelled so. None when the run recorded no replicates."""
     recorded = manifest.environment.get("design_mde")
@@ -431,18 +431,20 @@ def _smallest_accepted(
 def check_power(p: Plan, *, max_mde: float | None = None) -> None:
     """Refuse a design that cannot resolve an effect as small as the caller accepts.
 
-    Section 8.10's gate (PF4.30): a design passes when a change of the accepted size, from every
+    The gate: a design passes when a change of the accepted size, from every
     base rate with room for it, would be flagged in one condition alone at the stated power.
     ``max_mde=None`` means ``DEFAULT_MAX_MDE``; any value above 0 and up to 1 is accepted, and 1
-    admits every design (PF4.49). On the passing path it returns None and does nothing at all --
+    admits every design. On the passing path it returns None and does nothing at all --
     it never prints, never touches the store, and never mutates the plan.
 
     Raises ``UnderpoweredDesign`` carrying the replicates that pass and, where a limit exists,
     the ``--max-mde`` that admits the design; a design in which no lone condition can be flagged
-    is refused with section 8.10's facts and no ``--max-mde`` offer.
+    is refused with the smallest possible p, the level a flag needs, and no ``--max-mde``
+    offer.
 
     The range check on ``max_mde`` lives here rather than in the CLI, by exact analogy with
-    M6's ``0 < q < 1``: the CLI parses a float and decides nothing statistical.
+    the comparison's ``0 < q < 1`` in ``diff.py``: the CLI parses a float and decides nothing
+    statistical.
     """
     accepted = DEFAULT_MAX_MDE if max_mde is None else float(max_mde)
     if not 0.0 < accepted <= 1.0:
@@ -475,7 +477,7 @@ def check_power(p: Plan, *, max_mde: float | None = None) -> None:
 def _capture_line(spec: CaptureSpec | None) -> str | None:
     """The one ``Capture:`` line of the pre-flight, or None when nothing was requested.
 
-    ADR-027 turns on only what the user named, so the pre-flight names it back to them before
+    Capture turns on only what the user named, so the pre-flight names it back to them before
     the prompt. Building this line activates nothing.
     """
     if spec is None:
@@ -488,7 +490,7 @@ def _capture_line(spec: CaptureSpec | None) -> str | None:
 
 
 def preflight(p: Plan, *, cost_estimate: str | None = None) -> str:
-    """Text block describing the run. Non-interactive; M10 prints it and asks."""
+    """Text block describing the run. Non-interactive; the CLI prints it and asks."""
     spec = p.spec
     total = spec.total_rollouts()
     lines = [
@@ -541,9 +543,9 @@ def _merge_capture(meta: dict[str, Any], captured: dict[str, Any]) -> None:
 
     Absent: attach. A valid ``poisson-prove.trace/1`` dict: merge. A ``span_id`` collision: keep
     the rollout's trace, drop the capture, warn once — rewriting span ids to dodge the
-    collision would violate M12's "``parent_id`` is never rewritten", and an errored row is
-    far worse than a missing trace. Anything else in ``meta["trace"]``: leave it exactly as
-    the rollout wrote it.
+    collision would violate the trace schema's "``parent_id`` is never rewritten", and an
+    errored row is far worse than a missing trace. Anything else in ``meta["trace"]``: leave it
+    exactly as the rollout wrote it.
     """
     existing = meta.get("trace")
     if existing is None:
@@ -610,7 +612,7 @@ def _call_in_process(
 
     Local-no-timeout calls this in the caller's process, local-with-timeout inside the forked
     child, and both ``worker_batch`` branches the same two ways. Capture is installed here, so
-    on the forking paths it is installed in the child and never in the forking parent (C1),
+    on the forking paths it is installed in the child and never in the forking parent,
     and the trace is merged before the outcome tuple is built and therefore before anything
     is pickled.
 
@@ -656,12 +658,12 @@ def _call_in_process(
 def _arm_drain(drain: Connection) -> None:
     """Install the child's SIGTERM handler: snapshot, send on the drain pipe, ``os._exit``.
 
-    Only a child with a capture call gets one (C3: a run that did not ask keeps the default
+    Only a child with a capture call gets one (a run that did not ask keeps the default
     disposition, and this is the only place the child's signal state is touched). The handler
     runs between two bytecodes of whatever the rollout was doing, so it never returns into it
     -- no ``finally`` blocks, no ``atexit``; the rollout is the thing that hung -- and never
     raises: whatever fails inside it, the parent sees the pipe close and records
-    ``("timeout", None)``, exactly as before ADR-028.
+    ``("timeout", None)``, exactly as it did before the drain existed.
     """
 
     def handler(signum: int, frame: FrameType | None) -> None:
@@ -689,8 +691,8 @@ def _child_main(
     capture_call: _CaptureCall | None = None,
     chaos_call: _ChaosCall | None = None,
 ) -> None:
-    # The drain pipe always arrives (E14); only a child with a capture call arms the handler
-    # that writes to it, so a run that did not ask keeps the default SIGTERM disposition (C3).
+    # The drain pipe always arrives; only a child with a capture call arms the handler
+    # that writes to it, so a run that did not ask keeps the default SIGTERM disposition.
     if capture_call is not None:
         _arm_drain(drain)
     try:
@@ -719,7 +721,7 @@ def _probe_main(conn: Connection, spec: CaptureSpec) -> None:
 def _capture_probe(spec: CaptureSpec) -> CaptureStatus:
     """What ``install()`` will do in the episode children, measured by doing it in one.
 
-    A forking path must not install in the parent (C1), so the host cannot learn the status by
+    A forking path must not install in the parent, so the host cannot learn the status by
     installing. It learns it by forking one throwaway child that installs exactly as every
     episode child will, from the same inherited state. Reporting the request alone would leave
     the manifest saying ``active=False`` for a run whose rows all carry traces.
@@ -783,7 +785,7 @@ def _call_with_timeout(
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     # The drain: a second pipe, because the outcome pipe may be mid-send when SIGTERM lands and
     # two writers on one pipe interleave. Created beside the outcome pipe on every call, capture
-    # call or not (E14): the handler that writes to it exists only with a capture call, and a
+    # call or not: the handler that writes to it exists only with a capture call, and a
     # handler whose channel might not exist is a state that costs an afternoon the first time
     # the two conditions are computed slightly differently. The pipe is cheap; only the handler
     # and the parent's poll below are gated on the capture call.
@@ -876,11 +878,11 @@ def _environment(spec: SweepSpec) -> dict[str, Any]:
 
 
 def _declaration(spec: CaptureSpec) -> int | str:
-    """What a ``[capture]`` table declared, in the words it declared it in (D9).
+    """What a ``[capture]`` table declared, in the words it declared it in.
 
     The manifest is a record of the *request*, so a cap of ``None`` -- which is the string the
-    sweep file carried -- goes back to that string rather than to JSON ``null``: the surfacing
-    packet's provenance echo then prints ``none`` without being touched, where a ``null`` would
+    sweep file carried -- goes back to that string rather than to JSON ``null``: the report's
+    provenance echo then prints ``none`` without being touched, where a ``null`` would
     be dropped by its ``*_bytes`` filter or printed in Python's spelling.
     """
     return "none" if spec.max_observation_bytes is None else spec.max_observation_bytes
@@ -890,9 +892,10 @@ def _spec_declaration(spec: SweepSpec) -> int | str | None:
     """The cap a sweep declared, or ``None`` when it carries no ``[capture]`` table at all.
 
     Deliberately not ``_declared_limit``: the cut sites are right not to tell the two nothings
-    apart (D5), and the resume gate is right to (D14). A run that recorded *keep every value
-    whole* and a sweep that asked for no capture are two different requests, and continuing one
-    run directory under the other is this packet's own failure mode reached by a flag.
+    apart, and the resume gate is right to. A run that recorded *keep every value whole* and a
+    sweep that asked for no capture are two different requests, and continuing one run
+    directory under the other is a row cut at a limit its sweep did not declare, reached by a
+    flag.
     """
     return None if spec.capture is None else _declaration(spec.capture)
 
@@ -901,8 +904,8 @@ def _recorded_cap(manifest: RunManifest) -> tuple[str, int | str] | None:
     """The observation cap a stored run recorded -- the name it used and the value it wrote.
 
     Read by the ``_bytes`` suffix, the idiom ``report._observation_cap`` already uses one file
-    over and for the same reason: a run written before A8b recorded this same field under a
-    spelling this package has retired, and comparing it as the same field must not put that
+    over and for the same reason: a run written by an earlier version recorded this same field
+    under a spelling this package has retired, and comparing it as the same field must not put that
     spelling back. A third spelling reads the same way, and the name travels into the refusal
     as data rather than as a literal.
     """
@@ -918,21 +921,21 @@ def _recorded_cap(manifest: RunManifest) -> tuple[str, int | str] | None:
 
 
 def _reads(entry: tuple[str, int | str] | None) -> str:
-    """CD-E4's recorded half. A run with no capture record recorded no cap, which is a different
-    fact from a run that recorded one, and is said in different words."""
+    """The resume gate's recorded half. A run with no capture record recorded no cap, which is a
+    different fact from a run that recorded one, and is said in different words."""
     return "recorded no observation cap" if entry is None else f"recorded {entry[0]} {entry[1]!r}"
 
 
 def _declares(value: int | str | None) -> str:
-    """CD-E4's declared half, in the same two shapes."""
+    """The resume gate's declared half, in the same two shapes."""
     return "has no [capture] table" if value is None else f"declares {value!r}"
 
 
 def _spec_declared(spec: SweepSpec) -> Declaration | None:
-    """The ``[declare]`` table a sweep carries, or ``None`` (A10).
+    """The ``[declare]`` table a sweep carries, or ``None``.
 
-    Deliberately not ``_declaration``, which is the cap's. Imported by ``executor_modal`` on
-    D6's argument: the mapping from a spec to what the manifest and the funnel take exists once.
+    Deliberately not ``_declaration``, which is the cap's. Imported by ``executor_modal`` for
+    one reason: the mapping from a spec to what the manifest and the funnel take exists once.
     """
     return spec.declare
 
@@ -961,7 +964,7 @@ def _declares_declaration(d: Declaration | None) -> str:
 def _capture_record(spec: CaptureSpec, status: CaptureStatus) -> dict[str, Any]:
     """``manifest.environment["capture"]``: the request and what became of it, once per run.
 
-    This is also where M12 §3's semconv pin lands in the run manifest, which until now was
+    This is also where the trace schema's semconv pin lands in the run manifest, which until now was
     owned by nobody. The ``[capture]`` table itself is deliberately not part of
     ``SweepSpec.to_dict()``: a capture request is not what makes two sweeps the same sweep.
     """
@@ -997,7 +1000,7 @@ def _chaos_record(spec: ChaosSpec, status: ChaosStatus, hooks: Sequence[str]) ->
 
 
 def _empty_envelope() -> dict[str, Any]:
-    """D9's zero-span envelope: *capture ran and this episode emitted nothing*, which is a
+    """The zero-span envelope: *capture ran and this episode emitted nothing*, which is a
     different fact from *capture never ran* and has to be stored as one.
 
     Constructed and never spelled as a literal. ``Trace.to_dict()``'s key set is exact in both
@@ -1021,9 +1024,9 @@ def _declared_limit(spec: SweepSpec) -> int | None:
     """What the sweep declared, as the cut sites take it: ``None`` when nothing was declared and
     when ``"none"`` was, an int otherwise. The one place the two are the same thing.
 
-    D6: the mapping exists once and ``executor_modal`` imports it. A field list copied into the
-    Modal transport is how a rename went silently wrong across a process boundary once already
-    (U5), and two copies of a two-case mapping is that shape one size down.
+    The mapping exists once and ``executor_modal`` imports it. A field list copied into the
+    Modal transport is how a rename went silently wrong across a process boundary once already,
+    and two copies of a two-case mapping is that shape one size down.
     """
     return None if spec.capture is None else spec.capture.max_observation_bytes
 
@@ -1034,21 +1037,22 @@ def _finalized(
     """``finalize`` over a row's own trace, on its way to the store.
 
     **It never raises.** ``record.meta["trace"]`` is a plain dict that nothing has validated,
-    and A7's P7-9 pins that one which is not a valid trace dict is stored exactly as written,
-    both trace columns null, with ``Store.append`` not raising. ``Trace.from_dict`` here runs
-    one frame before the guard written for it, so the guard has to be here too.
+    and the store's contract is that one which is not a valid trace dict is stored exactly as
+    written, both trace columns null, with ``Store.append`` not raising. ``Trace.from_dict``
+    here runs one frame before the guard written for it, so the guard has to be here too.
 
     The record comes back untouched when nothing was stamped and nothing was cut --
     ``finalize`` returns the trace itself in that case -- so a trace that needed neither is
     stored byte for byte as it arrived, and no existing run's stored bytes move.
 
-    ``declaration`` is the run's own too (A10): its gates are stamped on the parsed trace inside
+    ``declaration`` is the run's own too: its gates are stamped on the parsed trace inside
     ``finalize``, after the guard above, so a declaration adds no raise one frame earlier.
 
-    ``limit`` is the run's own (D5). A8b wired this site with none, so every stored row of both
-    backends was cut at a module constant whatever its sweep file declared, while the manifest,
-    the receipt and the viewer all reported the declaration. ``None`` is *cut nothing*, which is
-    what a sweep declaring ``"none"`` and a sweep with no ``[capture]`` table both asked for.
+    ``limit`` is the run's own. An earlier version wired this site with none, so every stored row
+    of both backends was cut at a module constant whatever its sweep file declared, while the
+    manifest, the receipt and the viewer all reported the declaration. ``None`` is *cut
+    nothing*, which is what a sweep declaring ``"none"`` and a sweep with no ``[capture]`` table
+    both asked for.
     """
     try:
         parsed = Trace.from_dict(record.meta["trace"])
@@ -1067,18 +1071,18 @@ def _with_capture_envelope(
     declaration: Declaration | None = None,
 ) -> EpisodeRecord:
     """The one funnel every stored row passes through: ``finalize`` over a trace it carries,
-    D9's empty envelope for a row that ran under active capture and carries none.
+    the empty envelope for a row that ran under active capture and carries none.
 
-    ``declaration`` (A10) reaches ``finalize`` through ``_finalized`` the way ``limit`` does.
+    ``declaration`` reaches ``finalize`` through ``_finalized`` the way ``limit`` does.
     Both backends' call sites pass ``_spec_declared(p.spec)``; it defaults to ``None`` so a
     caller with three arguments keeps the meaning it had, and the stamp is host-side on Modal
     because this funnel is.
 
     The shipped shape returned early on ``"trace" in record.meta`` -- exactly the branch that
-    needs the cut -- so the two branches are separated rather than collapsed. Rule zero (C7) is
-    untouched either way: this runs on the built row, after ``_merge_capture`` has already
-    declined to write an empty capture over a rollout's own trace. Inside ``_classify`` it
-    would break that; here it cannot.
+    needs the cut -- so the two branches are separated rather than collapsed. The rule that a
+    rollout's own trace wins is untouched either way: this runs on the built row, after
+    ``_merge_capture`` has already declined to write an empty capture over a rollout's own
+    trace. Inside ``_classify`` it would break that; here it cannot.
     """
     if "trace" in record.meta:
         return _finalized(record, limit, declaration)
@@ -1181,7 +1185,7 @@ def run_local(
 
     # Capture, before the manifest is written and after the run is known to be startable. With
     # a timeout every episode runs in a forked child, so the provider must be installed there:
-    # a provider set here would make the child's set_tracer_provider a refused no-op (C1).
+    # a provider set here would make the child's set_tracer_provider a refused no-op.
     ctx = _mp_context() if episode_timeout is not None else None
     capture_spec = p.spec.capture
     capture_status: CaptureStatus | None = None

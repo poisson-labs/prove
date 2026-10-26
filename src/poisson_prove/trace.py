@@ -75,7 +75,7 @@ __all__ = [
 
 # ---------- constants ----------
 
-#: The one place the schema id is written (ADR-024). Every other site reaches it from here.
+#: The one place the schema id is written. Every other site reaches it from here.
 SCHEMA = "poisson-prove.trace/1"
 
 KINDS: tuple[str, ...] = ("llm", "tool", "retrieval", "db", "http", "agent", "other")
@@ -87,32 +87,33 @@ DROP_REASONS: tuple[str, ...] = (
     "unparseable",
 )
 
-#: Who judged a span's ``outcome`` (ADR-053). A span whose emitter does not say carries None,
+#: Who judged a span's ``outcome``. A span whose emitter does not say carries None,
 #: never a guess.
 OUTCOME_BY: tuple[str, ...] = ("code", "llm", "self", "human")
 
-#: How a span came to be a gate (ADR-074). ``"emitted"``: the target's own instrumentation marked
+#: How a span came to be a gate. ``"emitted"``: the target's own instrumentation marked
 #: the span as a check its control flow consulted. ``"declared"``: the sweep's manifest names the
 #: step as one -- which is why a span arriving with ``poisson_prove.gate = "declared"`` is refused.
 GATE: tuple[str, ...] = ("emitted", "declared")
 
-#: The one place the semantic-convention pin is written (ADR-024). The GenAI conventions are
+#: The one place the semantic-convention pin is written. The GenAI conventions are
 #: badged Development, so a stored trace records which vocabulary it was read under.
 OTEL_SEMCONV_VERSION = "1.42.0"
 
-#: Which alias map a stored ``from_otel`` trace was normalised under (CAP1). ``source_version``
+#: Which alias map a stored ``from_otel`` trace was normalised under. ``source_version``
 #: names a *core* semconv release; the GenAI conventions live in
 #: ``open-telemetry/semantic-conventions-genai``, which has no release, and the operation list
 #: this module reads was taken at commit ``94f432d7``. What identifies the vocabulary is the map,
 #: so the map gets the version.
 #:
 #: Bumped, with a visible diff, by any change to ``ATTRIBUTE_ALIASES``, ``OTEL_KIND_MAP``,
-#: ``_VENDOR_KIND_MAPS``, ``_LIFTED_KEYS``, ``OBSERVATION_KEYS`` or ``CONTENT_KEYS``. The rule binds
-#: from A8a forward: A7's observation keys, A8a's lifts and A8b's content keys are not bumps but
-#: the state this value is first minted against.
+#: ``_VENDOR_KIND_MAPS``, ``_LIFTED_KEYS``, ``OBSERVATION_KEYS`` or ``CONTENT_KEYS``. The rule
+#: binds from the first minted value forward: the split's observation keys, the lifted span
+#: fields and the OpenInference content keys are not bumps but the state this value is first
+#: minted against.
 ALIAS_MAP_VERSION: str = "1"
 
-#: A21's surrogate field. An observation value like any other, and a member of
+#: The logprobs surrogate field. An observation value like any other, and a member of
 #: ``OBSERVATION_KEYS``: written here so the name a sweep declares and the name the split routes
 #: on are the same string.
 LOGPROBS_KEY = "poisson_prove.logprobs"
@@ -152,7 +153,7 @@ class _ObservationKeys(frozenset[str]):
 
 
 #: Every attribute key whose value is observation content rather than envelope structure. These
-#: leave the envelope at the store boundary so it stays bounded by step count alone (ADR-047).
+#: leave the envelope at the store boundary so it stays bounded by step count alone.
 #: The two routing stamps (``poisson_prove.run_id``, ``poisson_prove.episode``) are never
 #: observation values whatever their size, and are not here.
 OBSERVATION_KEYS: frozenset[str] = _ObservationKeys(
@@ -185,16 +186,16 @@ _RUN_ID_KEY = "poisson_prove.run_id"
 _EPISODE_KEY = "poisson_prove.episode"
 _ROUTING_STAMPS: frozenset[str] = frozenset({_RUN_ID_KEY, _EPISODE_KEY})
 
-#: The wrapper key a cut observation value is stored under (A8b). A value is a wrapper iff it
+#: The wrapper key a cut observation value is stored under. A value is a wrapper iff it
 #: is a mapping whose *sole* key is this one -- detection is on the key and never on the shape.
 TRUNCATED_KEY = "poisson_prove.truncated"
 
 #: The byte size at which ``split`` moves an attribute nobody named out of the envelope and
-#: into ``trace_obs`` (ADR-090). **It decides which column a value is stored in and never
-#: whether a value is cut.** There is no observation cap here or anywhere else in the package:
-#: every run declares its own (ADR-096).
+#: into ``trace_obs``. **It decides which column a value is stored in and never whether a
+#: value is cut.** There is no observation cap here or anywhere else in the package: every run
+#: declares its own.
 #:
-#: The value is the one ADR-090's classification was measured at, and it does not move with the
+#: The value is the one the routing classification was measured at, and it does not move with the
 #: rename: changing the number would be a storage-layout change wearing a rename's clothes.
 OBSERVATION_ROUTING_BYTES: int = 8192
 
@@ -229,7 +230,7 @@ class _ContentKeys(frozenset[str]):
 
 #: Prompt and completion content, which never leaves the process unless ``content`` is on. The
 #: two GenAI semconv keys, the two Traceloop entity families, the two ``gen_ai`` families and --
-#: added by A8b (ADR-083) -- OpenInference's two flattened-message families, because a default
+#: added later -- OpenInference's two flattened-message families, because a default
 #: that strips a prompt in one convention's spelling and keeps it in another's is a gap left by
 #: the order the conventions arrived in, not a default anyone chose.
 #:
@@ -237,7 +238,7 @@ class _ContentKeys(frozenset[str]):
 #: the cut, not by the strip. ``input.value`` / ``output.value`` on an ``llm``-kind span are
 #: prompt content under OpenInference and are **not** stripped: this is a key test, called
 #: before a span's ``kind`` exists, and a kind-aware rule is not a membership test. That row is
-#: owed to a later packet and is named rather than silently absent.
+#: left to a later release and is named rather than silently absent.
 CONTENT_KEYS: frozenset[str] = _ContentKeys(
     {
         "gen_ai.input.messages",
@@ -350,7 +351,7 @@ _TRACE_FIELDS: tuple[str, ...] = (
 _TRACE_KEYS = frozenset(_TRACE_FIELDS)
 _CODE_KEYS = frozenset({"filepath", "function", "lineno"})
 
-#: Attributes read into a first-class field and therefore removed from ``attrs`` (T20).
+#: Attributes read into a first-class field and therefore removed from ``attrs``.
 _LIFTED_KEYS: tuple[str, ...] = (
     "gen_ai.request.model",
     "gen_ai.tool.name",
@@ -361,7 +362,7 @@ _LIFTED_KEYS: tuple[str, ...] = (
     "code.function.name",
     "code.line.number",
     "error.type",
-    # A8a: the carriers of the eight span fields. graph.node.id and graph.node.parent_id are
+    # The carriers of the eight span fields. graph.node.id and graph.node.parent_id are
     # deliberately absent -- they stay in attrs, because parent_id already carries parentage.
     "openinference.span.kind",
     "traceloop.span.kind",
@@ -374,9 +375,9 @@ _LIFTED_KEYS: tuple[str, ...] = (
 )
 
 #: An ``error.type`` on a span whose status is not an error travels under a key of Prove's
-#: own: the key it arrived under is lifted, T20 bans a lifted key from ``attrs``, and no span
-#: field holds it. Dropping it instead would be silent data loss. (An unrecognized operation
-#: name needed the same stash until A8a gave it ``operation``.)
+#: own: the key it arrived under is lifted, a lifted key may not appear in ``attrs``, and no
+#: span field holds it. Dropping it instead would be silent data loss. (An unrecognized
+#: operation name needed the same stash until the span gained an ``operation`` field.)
 _ORIGINAL_ERROR_TYPE = "poisson_prove.error_type"
 
 #: The two attributes ``_otel_span`` writes rather than reads: the OTel trace id a user's own
@@ -393,11 +394,11 @@ class TraceValidationError(ValueError):
     """Raised when a Trace, a Span or a stored trace dict violates one of its invariants."""
 
 
-# ---------- the span clock (ADR-023): the only place a span timestamp is minted ----------
+# ---------- the span clock: the only place a span timestamp is minted ----------
 
 
 def _span_clock() -> tuple[int, int]:
-    """The wall clock and the monotonic clock, read together, in one place (T17).
+    """The wall clock and the monotonic clock, read together, in one place.
 
     ``time.time_ns()`` is not monotonic -- an NTP step mid-block would otherwise produce a
     span whose end precedes its start. Callers open a span on the wall reading and close it
@@ -463,23 +464,23 @@ class Span:
     error: str | None = None
     code: Mapping[str, Any] | None = None
     attrs: Mapping[str, Any] = field(default_factory=dict)
-    # A8a's eight. None on every one means *not recorded*, and no other default exists: a
-    # reader asks ``is None``, never a truth test, because an empty-string outcome and an
-    # unrecorded one are different facts (ADR-039).
+    # The eight span fields. None on every one means *not recorded*, and no other default
+    # exists: a reader asks ``is None``, never a truth test, because an empty-string outcome and
+    # an unrecorded one are different facts.
     #: The source operation name, stripped and lowercased, never checked against a vocabulary.
     operation: str | None = None
-    #: The logical step this span is an execution of (ADR-055). Never derived from ``name``.
+    #: The logical step this span is an execution of. Never derived from ``name``.
     step_name: str | None = None
-    #: The verdict a judge recorded, as a free label (ADR-039). None is never a pass.
+    #: The verdict a judge recorded, as a free label. None is never a pass.
     outcome: str | None = None
     #: Who judged ``outcome``: one of ``OUTCOME_BY``. Set only beside an ``outcome``.
     outcome_by: str | None = None
-    #: Which try of ``step_name`` this is, from 1 (ADR-054, ADR-075). Read from an emitted
+    #: Which try of ``step_name`` this is, from 1. Read from an emitted
     #: counter, never derived from ordering, name repetition or nesting.
     attempt: int | None = None
-    #: One of ``GATE`` when the span is a check the control flow consulted (ADR-074).
+    #: One of ``GATE`` when the span is a check the control flow consulted.
     gate: str | None = None
-    #: ``"observation"`` when an observation value of this span was cut. A8a ships no writer.
+    #: ``"observation"`` when an observation value of this span was cut (the observation cut).
     truncated: str | None = None
     #: The cut values' original byte lengths, summed; set only beside ``truncated``.
     bytes_original: int | None = None
@@ -530,7 +531,7 @@ class Span:
             raise TraceValidationError("attrs must be a mapping")
         object.__setattr__(self, "attrs", dict(self.attrs))
         # The free-text four: a str or None, and nothing else is checked. ``operation`` in
-        # particular is never held to a vocabulary (D7) -- that is what ``kind`` is for.
+        # particular is never held to a vocabulary -- that is what ``kind`` is for.
         for label, value in (
             ("operation", self.operation),
             ("step_name", self.step_name),
@@ -613,7 +614,7 @@ class Trace:
     source: str
     source_version: str | None = None
     dropped: int = 0
-    #: ADR-028: why the forest stops where it does. ``"timeout"`` on the snapshot the executor
+    #: Why the forest stops where it does. ``"timeout"`` on the snapshot the executor
     #: drains from an episode it terminated; None on every trace a converter or the recorder
     #: builds. A trace-level fact, not a span-level one: a snapshot with no open span is
     #: otherwise indistinguishable from a complete trace, and a trace is meant to be readable
@@ -751,7 +752,7 @@ def merge(*traces: Trace) -> Trace:
     )
 
 
-# ---------- the observation cut (A8b) ----------
+# ---------- the observation cut ----------
 
 
 def _byte_form(value: Any) -> bytes:
@@ -812,7 +813,7 @@ def _longest_suffix(raw: bytes, bound: int) -> str:
 def _wrap(value: Any, limit: int) -> dict[str, Any]:
     """One over-limit value as its wrapper: head, tail and the original byte length.
 
-    The bounds are the limit's split (ADR-082) -- ``limit - limit // 4`` and ``limit // 4``,
+    The bounds are the limit's split -- ``limit - limit // 4`` and ``limit // 4``,
     which sum to exactly ``limit`` at every positive integer limit -- and not the two module
     constants, which are that split at the default and bound nothing anywhere else.
     """
@@ -985,10 +986,10 @@ class Declaration:
 
 def _stamp_gates(trace: Trace, gates: tuple[str, ...]) -> Trace:
     """``gate="declared"`` on every span whose ``step_name`` is a declared gate and whose ``gate``
-    is ``None``. ``"emitted"`` is never overwritten (ADR-074's precedence); a span with no step
-    name, or whose step is not a declared gate, is untouched; and the trace itself comes back
-    when nothing was stamped -- ``truncate_observations``'s own idiom, so a run that declares
-    gates and reaches none stores the bytes it would have stored declaring nothing.
+    is ``None``. ``"emitted"`` is never overwritten (an emitted gate takes precedence); a span
+    with no step name, or whose step is not a declared gate, is untouched; and the trace itself
+    comes back when nothing was stamped -- ``truncate_observations``'s own idiom, so a run that
+    declares gates and reaches none stores the bytes it would have stored declaring nothing.
     """
     spans: list[Span] = []
     changed = False
@@ -1024,7 +1025,7 @@ def finalize(trace: Trace, *, declaration: Declaration | None, limit: int | None
     return truncate_observations(stamped, limit=limit)
 
 
-# ---------- the storage split (A7) ----------
+# ---------- the storage split ----------
 
 
 def split(trace: Trace) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1611,7 +1612,7 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
     )
 
 
-# ---------- A8a's carriers: one reader per field; a refused value is logged, not guessed ----------
+# ---------- the carriers: one reader per field; a refused value is logged, not guessed ----------
 
 
 def _carried_str(label: str, key: str, value: Any) -> str | None:
@@ -1623,7 +1624,7 @@ def _carried_str(label: str, key: str, value: Any) -> str | None:
 
 def _operation(lifted: Mapping[str, Any]) -> str | None:
     """The source operation name, verbatim but for ``strip().lower()``: the GenAI key when
-    present, else OpenInference's span kind, else Traceloop's. Held to no vocabulary (D7)."""
+    present, else OpenInference's span kind, else Traceloop's. Held to no vocabulary."""
     for key in ("gen_ai.operation.name", "openinference.span.kind", "traceloop.span.kind"):
         value = lifted[key]
         if value is not None:
@@ -1632,7 +1633,7 @@ def _operation(lifted: Mapping[str, Any]) -> str | None:
 
 
 def _step_name(label: str, lifted: Mapping[str, Any]) -> str | None:
-    """``graph.node.name``, else ``poisson_prove.step_name`` (ADR-055). Never the span's name."""
+    """``graph.node.name``, else ``poisson_prove.step_name``. Never the span's name."""
     for key in ("graph.node.name", "poisson_prove.step_name"):
         if lifted[key] is not None:
             return _carried_str(label, key, lifted[key])
@@ -1680,7 +1681,7 @@ def _gate(label: str, lifted: Mapping[str, Any]) -> str | None:
     ``poisson_prove.gate = "emitted"``; otherwise None. Never inferred from the span's name.
 
     ``EVALUATOR`` is not a gate marker: an evaluator scores and may not gate, so the allowlist
-    starts at one entry (spec A8a section 10 Q6). And a ``"declared"`` gate comes from the
+    starts at one entry. And a ``"declared"`` gate comes from the
     sweep's manifest, never from a span, so one arriving on the wire is dropped and logged.
     """
     gate: str | None = None

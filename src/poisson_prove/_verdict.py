@@ -1,14 +1,14 @@
-"""The comparison's word (PF4.34, PF4.29, PF4.20) and how many outcomes would change it (PF4.44).
+"""The comparison's word and how many outcomes would change it.
 
 The word is read over the rows that count at the family-wise level, by Holm's procedure at ``q``:
-section 8.4's table when every compared event's kind is known (``trade``, ``worse``, ``safer``),
-PF4.20's direction words when one is not (``mixed``, ``higher``, ``lower``), and, when no row
-counts, one of the two nothing-moved words, decided by PF4.29's question over every row that does
+the table of words by event kind when every compared event's kind is known (``trade``, ``worse``,
+``safer``), the direction words when one is not (``mixed``, ``higher``, ``lower``), and, when no
+row counts, one of the two nothing-moved words, decided by one question over every row that does
 not count: ``no significant change`` when each could have told a change of the threshold, from
 where it was, at the verdict's level ``q / M``; ``too small to tell`` otherwise.
 
 The fragility is the fewest stored outcomes, over both runs, whose flipping gives a different word.
-A flip moves one run's outcome, keeping its time, so that it moves exactly one row (reading R26): a
+A flip moves one run's outcome, keeping its time, so that it moves exactly one row: a
 run that ended in the row's event is made to end outside the compared events, and a run that ended
 outside them is made to end in the event. The search tries three ways the word can change, cheapest
 first, and decides the word again on the flipped rows before it accepts a set, so the flips it names
@@ -25,9 +25,9 @@ always change the word:
 
 Within a row the cheapest move is exhaustive for Fisher's test and the paired test, whose p-values
 are functions of counts; under the log-rank test it is a greedy path, each step the one flip that
-moves the statistic most (reading R13). The result is exact when the test is not log-rank and one
+moves the statistic most. The result is exact when the test is not log-rank and one
 event is compared: with two or more, a run moving between two compared events would move two rows
-at once, which no one-row search can see (reading R26).
+at once, which no one-row search can see.
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ class RowFacts:
 @dataclass(frozen=True)
 class Verdict:
     """The word and what it rests on: which rows count, each other row's answer to the
-    nothing-moved question, and the verdict limit (PF4.40)."""
+    nothing-moved question, and the verdict limit."""
 
     word: str
     counts: tuple[bool, ...]
@@ -456,7 +456,7 @@ class LogrankRow:
 
     def cheapest_tell(self, could: bool, threshold: float, cap: int = _CAP) -> Move | None:
         """Not searched: a log-rank limit reads A's whole risk set, not a count a flip moves by
-        one, and the result already says the search is not exact (reading R13)."""
+        one, and the result already says the search is not exact."""
         return None
 
     def after(self, move: Move) -> LogrankRow:
@@ -640,7 +640,7 @@ Row = FisherRow | PairedRow | LogrankRow
 
 @dataclass(frozen=True)
 class Fragility:
-    """PF4.44: the fewest outcomes that would change the word, one such set of flips, why there
+    """The fewest outcomes that would change the word, one such set of flips, why there
     is none when there is none, and whether the search was exhaustive."""
 
     value: int | None
