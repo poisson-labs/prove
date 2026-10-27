@@ -1093,7 +1093,7 @@ def drawn_sentence_problems(svg: str, opening: str, sentence: str) -> list[str]:
 
 
 def test_pr53_a_report_without_paired_writes_the_library_rendering_and_the_lattice_reports_facts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The facts W20's three digests guarded, on the lattice pair, over the
+    """The lattice report's facts, on the lattice pair, over the
     library's rendering of what the CLI built, and the CLI's three files carrying that rendering's facts."""
     calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
     real = report_module.build_multi_report

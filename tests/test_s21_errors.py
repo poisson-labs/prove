@@ -1540,7 +1540,7 @@ def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: 
         assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
 
 
-def test_e14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(tmp_path: Path) -> None:
+def test_e14_the_lattice_report_carries_the_librarys_facts(tmp_path: Path) -> None:
     """``report`` on a pair renders the layered report into ``report.md`` and ``receipt.html``,
     and those two files through the CLI are S28's to pin. The surface S21 owns is the tree-less
     M7 builder: the markdown and HTML facts are read off
