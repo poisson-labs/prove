@@ -53,7 +53,7 @@ from poisson_prove.report import NEUTRAL_FILL
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 import lattice
-from conftest import quickstart_design
+from conftest import STEP_LINE_RE, quickstart_design
 
 LATTICE_ROOT = lattice.root()
 # The packaged spec's design at 100 replicates, the count this file's numbers are for.
@@ -88,7 +88,6 @@ QUICKSTART_BUDGET_S = 30.0
 HEADLINE_RE = re.compile(
     r"(\d+) of (\d+) cells safer, (\d+) worse \((\S+), BH q<([^,]+), (paired|unpaired)\)\."
 )
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # nine tab-delimited columns (A8a: step_name, attempt, outcome, gate after error)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 SNIPPET_CALL_RE = re.compile(r"(\w+)\((\{.*\}),\s*seed=(\d+)\)")
 SNIPPET_MARKER = "# reproduce one episode"

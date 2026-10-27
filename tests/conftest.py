@@ -41,6 +41,9 @@ def quickstart_design(replicates: int = 100) -> Path:
 
 #: PF3: each statistical test's own name, which every surface prints on a line of its own.
 METHOD_OWN_NAMES = ("Fisher", "McNemar", "log-rank")
+#: A step row of ``inspect``'s text output: the step's index, then eight more tab-separated
+#: columns.
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")
 
 
 def without_method_lines(text: str) -> str:

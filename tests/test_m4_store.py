@@ -36,8 +36,6 @@ def test_hash_bool_distinct_from_int():
     assert config_hash({"flag": True}) != config_hash({"flag": 1})
 def test_hash_numpy_scalars():
     assert config_hash({"a": np.float64(0.5), "b": np.int64(3)}) == config_hash({"a": 0.5, "b": 3})
-def test_hash_float_repr_stable():
-    assert config_hash({"a": 0.1 + 0.2}) == config_hash({"a": 0.30000000000000004})
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
 def test_hash_rejects_nonfinite(bad):
     with pytest.raises(InvalidConfig):

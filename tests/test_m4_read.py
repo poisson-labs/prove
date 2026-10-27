@@ -51,6 +51,7 @@ from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, StoreError, config_hash
 
 import lattice
+from conftest import STEP_LINE_RE
 
 ROOT = Path(__file__).resolve().parents[1]
 LATTICE_ROOT = lattice.root()
@@ -74,7 +75,6 @@ POISON = "not json"
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_SALT = "m4-read-oracle"
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
 
 # The keyed run: four cells x three replicates over three parts, appended out of key order,
 # with one errored row. Its key set is computable at import time, which is what lets the R3
@@ -395,7 +395,7 @@ def assert_inspect_prints_exactly(r: Result, rows: pd.DataFrame, hashes: set[str
 # ---------- R1: the default read is unchanged, and meta=True is the default ----------
 
 
-def test_r1_default_read_is_the_thirteen_column_frame(keyed: tuple[Store, pd.DataFrame]) -> None:
+def test_r1_default_read_is_the_fourteen_column_frame(keyed: tuple[Store, pd.DataFrame]) -> None:
     _, frame = keyed
     assert list(frame.columns) == FRAME
     assert len(frame) == len(PRESENT_KEYS)
@@ -421,7 +421,7 @@ def test_r1_meta_true_is_the_default_read(keyed: tuple[Store, pd.DataFrame]) -> 
 # ---------- R2: meta=False is the eleven-column projection ----------
 
 
-def test_r2_narrow_read_is_the_eleven_columns_of_the_default_frame(
+def test_r2_narrow_read_is_the_twelve_columns_of_the_default_frame(
     keyed: tuple[Store, pd.DataFrame],
 ) -> None:
     store, frame = keyed

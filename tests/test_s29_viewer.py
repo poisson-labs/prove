@@ -1284,20 +1284,12 @@ def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[st
     }
 
 
-def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
-    """PF0: the version key of the page structure is ``poisson_prove_version``, in both arms
-    and in the provenance block, whose value also says when the runs were written by 0.0.1. First
-    assert that key is there and ``proofload_version`` is not, then put both back as 0.0.1 wrote
-    them before the rest of the structure is checked."""
+def assert_version_keys(structure: dict[str, Any]) -> None:
+    """The page structure's version key is ``poisson_prove_version``, in both arms and in the
+    provenance block, and ``proofload_version`` is in neither."""
     for arm in ("a", "b"):
         assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
     assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
-    arms = {
-        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
-        for arm in ("a", "b")
-    }
-    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
-    return {**structure, "pair": {**structure["pair"], **arms}, "diff": {**diff, "proofload_version": "0.0.1"}}
 
 
 def page_as_0_0_1_wrote_it(page: str) -> str:
@@ -1585,7 +1577,7 @@ def test_w4_the_excised_page_and_the_tree_less_keys_do_not_read_the_tree(every_p
         assert again.structure["tree"]["root"]["seed"] == 1
 
 
-def test_w17_the_narrowed_payload_and_the_tree_less_keys_carry_the_facts_their_old_digests_guarded(every_pair: list[Pair]) -> None:
+def test_w17_the_narrowed_payload_and_the_tree_less_keys_carry_the_librarys_facts(every_pair: list[Pair]) -> None:
     """S25's O23 narrowed: ``serve --json`` on the lattice, with ``tree`` and the leading verdict
     fields set aside, carries the facts of the six tree-less keys against the library's frame;
     and so does every pair ``TREE_LESS_KEYS_PAIRS`` names."""
@@ -1605,12 +1597,12 @@ def test_w17_the_narrowed_payload_and_the_tree_less_keys_carry_the_facts_their_o
     # then set aside.
     structure = structure_as_ids_named_it(structure, EVENT)
     pairs = by_name(every_pair)
-    structure_as_0_0_1_wrote_it(structure)
+    assert_version_keys(structure)
     assert_tree_less_facts(pairs["lattice"], structure)
     for name in TREE_LESS_KEYS_PAIRS:
         # PF2: serve's default title names the runs by name.
         assert pairs[name].structure["view"]["title"] == named_title(pairs[name]), name
-        structure_as_0_0_1_wrote_it(pairs[name].structure)
+        assert_version_keys(pairs[name].structure)
         assert_tree_less_facts(pairs[name], pairs[name].structure)
 
 
@@ -2279,7 +2271,7 @@ def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
     assert svg.count('data-sig="1"') == int((ev.cells["verdict"] != "unchanged").sum())
 
 
-def test_w20_check_on_the_lattice_and_the_e14_family_carry_the_facts_their_old_digests_guarded(tmp_path: Path) -> None:
+def test_w20_check_on_the_lattice_and_the_e14_family_carry_the_librarys_facts(tmp_path: Path) -> None:
     code, out, err = run_cli(["--store", str(LATTICE_ROOT), *CHECK_ARGV])
     # The lattice's runs share a salt, so the unpaired default adds one "note: " line on stderr.
     # check's stdout (its verdict line first, PF1) is checked by its facts: passed, the event

@@ -140,6 +140,7 @@ from poisson_prove.sampler import SamplerError, SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.survival import cell_table, censor, competing_set
 from poisson_prove.trace import Span, Trace, collect, finalize, record, truncate_observations
+from isolated_support import isolated as run_isolated
 
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
@@ -1094,48 +1095,9 @@ def _child_cut_run(store_root: str, toml_path: str) -> str:
     return str(p.run_id)
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    import traceback
-
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
 def _isolated(fn: Callable[..., Any], *args: Any, timeout: float = 180.0) -> Any:
     """Run ``fn(*args)`` in a child process, so no OTel provider is installed in pytest's."""
-    import multiprocessing
-    import time
-
-    ctx = multiprocessing.get_context("fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
+    return run_isolated(fn, *args, timeout=timeout)
 
 
 # ---------- P10-11: the manifest field ----------

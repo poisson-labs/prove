@@ -1775,7 +1775,7 @@ def test_ls7_the_fourteen_top_level_keys_the_schema_the_panel_keys_and_the_cell_
             assert tuple(hole) == HOLE_KEYS
 
 
-def test_ls7_the_summary_object_has_section_3_3s_shape(all_pairs: list[Pair]) -> None:
+def test_ls7_the_summary_object_has_its_keys_in_order(all_pairs: list[Pair]) -> None:
     for p in all_pairs:
         s = p.structure["summary"]
         assert tuple(s) == SUMMARY_KEYS, (p.name, tuple(s))

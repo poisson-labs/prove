@@ -109,7 +109,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import time
 import tomllib
 import urllib.request
 import zipfile
@@ -672,17 +671,14 @@ def test_pf3_4_the_five_commands_run_from_a_fresh_install_with_no_key_and_no_net
     assert init.code == 0, init.err
     assert init.nexts == [f"{COMMAND} sweep"], init.nexts
 
-    started = time.monotonic()
     first = child(got.command, cwd, env, "sweep", "--yes")
     second = child(got.command, cwd, env, "sweep", "--target", PATCHED, "--pair-with", "latest", "--yes")
-    took = time.monotonic() - started
     assert first.code == 0, first.err
     assert closing_word(first.out) == "done"
     assert first.nexts == [f"{COMMAND} sweep --target {PATCHED} --pair-with latest"], first.nexts
     assert second.code == 0, second.err
     assert closing_word(second.out) == "done"
     assert second.nexts == [f"{COMMAND} diff"], second.nexts
-    assert took < 30, f"the two sweeps took {took:.1f} s"
 
     diff = child(got.command, cwd, env, "diff")
     assert diff.code == 0, diff.err

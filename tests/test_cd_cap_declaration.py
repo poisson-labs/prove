@@ -57,10 +57,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-import multiprocessing
 import re
-import time
-import traceback
 from collections.abc import Callable, Mapping, Sequence
 from io import StringIO
 from pathlib import Path
@@ -76,13 +73,13 @@ from poisson_prove.executor import NotResumable, plan, run_local
 from poisson_prove.sampler import SamplerError, SweepSpec
 from poisson_prove.store import RunManifest, Store
 from poisson_prove.trace import Span, Trace, assemble, split
+from isolated_support import isolated as run_isolated
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parent.parent
-FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 
 RUN_SALT = "cd-oracle-salt"
 HORIZON = 10.0
@@ -213,43 +210,9 @@ def full_traces(store: Store, run_id: str) -> dict[int, Any]:
 # ---------- helpers: child processes (module-level, so they pickle by reference) ----------
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
 def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 180.0) -> Any:
-    """Run ``fn(*args)`` in a child process, so no OTel provider is ever installed in pytest's."""
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
+    """``isolated_support.isolated`` with this file's longer default wait."""
+    return run_isolated(fn, *args, timeout=timeout)
 
 
 def _tracer() -> Any:

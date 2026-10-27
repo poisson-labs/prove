@@ -1449,18 +1449,11 @@ def test_e13_a_result_without_coverage_and_a_single_event_report_leave_hole_caus
     assert all(c.hole_cause is None and c.config_hash is None for c in single.cells if not c.present)
 
 
-def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0: the one field the rename changes in a rendered report, receipt or page
-    is the version in its provenance list. First assert it is there as the rename writes it -- one
-    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
-    drop any separate ``written by proofload`` entry, so the text can be compared with 0.0.1's
-    byte for byte."""
+def assert_one_prove_version_entry(text: str) -> None:
+    """A rendered report or receipt carries one ``Prove version:`` entry in its provenance list
+    and no ``proofload version:``."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
-    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
-    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
-    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
-    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
 def e14_multi() -> MultiDiffResult:
@@ -1572,7 +1565,7 @@ def test_e14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(
     assert rendered_problems(texts["heatmap.svg"].replace(old_title, new_title), written, "heatmap.svg") == []
     assert_cli_heatmap_is_the_builders_under_rule_10(written, texts["heatmap.svg"], multi.by_event[lattice.EVENT].cells)
     for name in ("report.md", "receipt.html"):
-        as_0_0_1_wrote_it(texts[name])
+        assert_one_prove_version_entry(texts[name])
     # PF4.3, PF4.15, PF4.20: the facts the three files carry. First
     # S21's own: attaching the coverage moves no byte of any of the three files.
     assert e14_builder_texts(replace(multi, coverage=None)) == texts

@@ -948,20 +948,12 @@ def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[st
     }
 
 
-def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
-    """PF0: the page structure carries the version under ``poisson_prove_version`` in both
-    arms and in the provenance block, whose value also says when the runs were written by 0.0.1.
-    Assert the key is there and ``proofload_version`` is not, then return the structure with both
-    put back as 0.0.1 wrote them."""
+def assert_version_keys(structure: dict[str, Any]) -> None:
+    """The page structure carries the version under ``poisson_prove_version`` in both arms and in
+    the provenance block, and ``proofload_version`` in neither."""
     for arm in ("a", "b"):
         assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
     assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
-    arms = {
-        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
-        for arm in ("a", "b")
-    }
-    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
-    return {**structure, "pair": {**structure["pair"], **arms}, "diff": {**diff, "proofload_version": "0.0.1"}}
 
 
 def test_l1_the_module_constants_are_the_spec_literals() -> None:
@@ -1896,7 +1888,7 @@ def test_l20_check_and_serve_on_the_lattice_carry_the_flat_familys_counts_and_ce
     # then put back as before names.
     structure = structure_as_ids_named_it(structure, EVENT)
     # PF0's version-field check still holds on the page.
-    structure_as_0_0_1_wrote_it(structure)
+    assert_version_keys(structure)
     # PF4 (PF4.3, PF4.11, PF4.17, PF4.20): the structure is checked by its facts; the tree
     # travels under its own key only.
     assert "tree" in structure

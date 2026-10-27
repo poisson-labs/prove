@@ -43,7 +43,6 @@ import multiprocessing
 import pickle
 import socket
 import sys
-import time
 import traceback
 import types
 from collections.abc import Callable, Iterator, Sequence
@@ -56,6 +55,7 @@ import pytest
 from poisson_prove import chaos
 from poisson_prove.episode import Episode
 from poisson_prove.store import Store, StoreError
+from isolated_support import isolated as run_isolated
 
 MODULE = __name__
 TARGET = f"{MODULE}:rollout"
@@ -301,44 +301,9 @@ def child_mapper(root: str, table: dict[str, Any] | None, target: str, hands_ove
 # ---------- running an arm in its own interpreter ----------
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    _arm_tripwire()
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
 def isolated(fn: Callable[..., Any], *args: Any) -> Any:
     """Run ``fn(*args)`` in a fresh spawned interpreter with the tripwire armed; return its result."""
-    ctx = multiprocessing.get_context("spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + ARM_DEADLINE_S
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {ARM_DEADLINE_S}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
+    return run_isolated(fn, *args, timeout=ARM_DEADLINE_S, method="spawn", prepare=_arm_tripwire)
 
 
 def rows(root: Path, run_id: str) -> list[dict[str, Any]]:

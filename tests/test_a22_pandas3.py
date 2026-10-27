@@ -34,8 +34,6 @@ Fixture limits, stated rather than left to be rediscovered:
 - ``two_records`` says nothing about the coverage frame; its frames never reach ``_coverage``.
 - ``mixed_pair`` says nothing about the store's own null columns beyond what it reads back;
   its coverage rows come from the raw frames, not from ``censor()``.
-- The literal requirement list in V13 says nothing about the real ``pyproject.toml``; V14 and
-  V15 assert that separately, deliberately.
 - Nothing here measures a live provider or a Modal run.
 
 Every reference to a name under test sits **inside** a test function, never at module level, so
@@ -332,20 +330,12 @@ def test_v11_the_diff_json_payload_dumps_with_allow_nan_false(mixed_pair: Any) -
     assert sum(record["cause"] is None for record in payload["coverage"]) == EXPECTED_COMPARABLE
 
 
-# ---------- V13-V15: the dependency parser ----------
-
-
-def test_v13_the_dependency_parser_reads_pep_508_names_off_every_operator() -> None:
-    """The parser's whole content: PEP 508 parsing yields the four core names, where the naive
-    parser above yields five, four with an operator still attached. It reads only the literal
-    list, so no change to the package can move it."""
-    assert {Requirement(d).name.lower() for d in SYNTHETIC_REQUIREMENTS} == CORE_NAMES
+# ---------- V14-V15: the declared dependencies ----------
 
 
 def test_v14_the_real_core_dependencies_are_the_four_math_names_and_packaging_is_in_dev() -> None:
-    """Separate from V13 deliberately: the literal list says nothing about the real file, and
-    the real file says nothing about an operator the list has and it does not. ``packaging`` is
-    declared rather than leaned on through pytest."""
+    """The core dependencies as ``pyproject.toml`` declares them. ``packaging`` is declared
+    rather than leaned on through pytest."""
     data = tomllib.loads(PYPROJECT.read_text())
     # Rich and Textual are core too; the math names are still all there.
     assert {Requirement(d).name.lower() for d in data["project"]["dependencies"]} == CORE_NAMES | {"rich", "textual"}

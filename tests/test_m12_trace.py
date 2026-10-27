@@ -35,7 +35,6 @@ import functools
 import itertools
 import json
 import logging
-import re
 import subprocess
 import sys
 import time
@@ -52,7 +51,7 @@ import poisson_prove.cli as cli
 from poisson_prove.episode import Episode
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
-from conftest import quickstart_design
+from conftest import STEP_LINE_RE, quickstart_design
 
 # PF3: the one copy is the packaged spec; this is its design at
 # 100 replicates.
@@ -124,7 +123,6 @@ OTEL_KIND_MAP_SPEC = {
 AGENT_ID = "b7ad6b7169203331"
 CHAT_ID = "0af7651916cd43dd"
 EPOCH = 1_756_900_000_000_000_000
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the same nine columns M10 I15 reads, tab-delimited (A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 # The format's example span, as a dict. Tests copy it with dict(...) before mutating.

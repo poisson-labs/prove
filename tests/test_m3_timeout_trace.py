@@ -50,8 +50,7 @@ import os
 import re
 import signal
 import time
-import traceback
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -70,6 +69,8 @@ from poisson_prove.executor_modal import (
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace, TraceValidationError, merge
+from isolated_support import isolated
+from conftest import STEP_LINE_RE
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
@@ -95,7 +96,6 @@ PID_KEY = "oracle.pid"
 EPOCH = 1_756_900_000_000_000_000
 TRUNCATED_LINE = f"trace: truncated ({REASON})"
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 #: CD: the cap a [capture] table must declare, and the one these tests declare.
@@ -336,50 +336,6 @@ def watch_logs() -> LogSink:
     sink = LogSink()
     logging.getLogger().addHandler(sink)
     return sink
-
-
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
-def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
-    """Run ``fn(*args)`` in a child process and return its (pickle-native) result.
-
-    Forked when the platform allows, so the child inherits this process's imports and its
-    untouched OTel globals; spawned otherwise, which works because ``fn`` and everything it
-    reaches live in this real file.
-    """
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
 
 
 # ---------- the children: everything that installs a provider runs here ----------

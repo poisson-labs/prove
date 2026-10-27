@@ -91,12 +91,10 @@ import importlib
 import inspect
 import json
 import math
-import multiprocessing
 import re
-import traceback
 import warnings
 import xml.etree.ElementTree as ET
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
@@ -123,6 +121,7 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
 from poisson_prove.tree import agreement_digest
 from poisson_prove.tree import tree as grow_tree
+from isolated_support import isolated
 
 MODULE = __name__
 LATTICE_ROOT = lattice.root()
@@ -205,7 +204,6 @@ CROSSED_AGREEMENT = {
     1: "f57096cddf8e00b356ad1949f848e1e7e411aa22fa1b3885100e6fab43158cb1",
     2: "d45463a2d5c94fc6093134f80765949838f509f7a4d1857468e486e16195e93f",
 }
-HEX64_LEN = 64
 
 # ---------- A28's crossed store, restated ----------
 
@@ -233,8 +231,6 @@ MOCK_CONFIGS = [
 MOCK_REPLICATES = 8
 MOCK_BATCH = 5
 MOCK_EVENT = "violated"
-STORE_PLACEHOLDER = "<store>"
-OUT_PLACEHOLDER = "<out>"
 # P7-10 checks every verb's output on the pre-A7 pair as facts, read against ``diff --json`` and
 # the store (``assert_lattice_verb_facts``), not as digests: the command line's look and the page
 # structure inside ``serve --json`` print the same facts in forms that change.
@@ -529,145 +525,86 @@ def run_cli(argv: Sequence[str]) -> Result:
     return Result(code, out.getvalue(), err.getvalue())
 
 
-def sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0: the one field the rename changes in a rendered report, receipt or page
-    is the version in its provenance list. First assert it is there as the rename writes it -- one
-    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
-    drop any separate ``written by proofload`` entry before the text is digested (P7-10 checks only
-    that each digest is taken)."""
+def assert_one_prove_version_entry(text: str) -> None:
+    """A rendered report or receipt carries one ``Prove version:`` entry in its provenance list
+    and no ``proofload version:``."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
-    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
-    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
-    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
-    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
-    """PF2: ``serve --json`` on the lattice pair moves in two places only: ``run_name`` beside
-    each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
-    the figure's title line). First assert each is there as PF2 writes it and nowhere else the
-    digest reads, then put the structure back as it was before names (no ``run_name``, the title by
-    id) before the structure is digested."""
-    arms = {}
+def assert_names_beside_ids(structure: dict[str, Any], events: str) -> None:
+    """``serve --json`` on the lattice pair carries ``run_name`` right after each arm's ``run_id``,
+    and its default title names the runs by name (``view.title`` and the figure's title line)."""
     for role, run_id, name in (("a", lattice.RUN_A, lattice.NAME_A), ("b", lattice.RUN_B, lattice.NAME_B)):
         arm = structure["pair"][role]
         keys = list(arm)
         assert (arm["run_id"], arm.get("run_name")) == (run_id, name), arm
         assert keys.index("run_name") == keys.index("run_id") + 1, keys
-        arms[role] = {k: v for k, v in arm.items() if k != "run_name"}
-    named, by_id = f"{lattice.NAME_A} vs {lattice.NAME_B}: {events}", f"{lattice.RUN_A} vs {lattice.RUN_B}: {events}"
+    named = f"{lattice.NAME_A} vs {lattice.NAME_B}: {events}"
     assert structure["view"]["title"] == named, structure["view"]["title"]
-    line = f'font-size="13">{named}</text>'
-    assert structure["heatmap_svg"].count(line) == 1, structure["heatmap_svg"][:600]
-    return {
-        **structure,
-        "pair": {**structure["pair"], **arms},
-        "view": {**structure["view"], "title": by_id},
-        "heatmap_svg": structure["heatmap_svg"].replace(line, f'font-size="13">{by_id}</text>'),
-    }
+    assert structure["heatmap_svg"].count(f'font-size="13">{named}</text>') == 1, structure["heatmap_svg"][:600]
 
 
-def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
-    """PF0: the page structure's schema string and its version key, in both arms and in the
-    provenance block. First assert they are there as the rename writes them, then put them back as
-    0.0.1 wrote them before the structure is digested."""
+def assert_version_keys(structure: dict[str, Any]) -> None:
+    """The page structure's schema string, and its version key in both arms and in the provenance
+    block, as this version writes them."""
     assert structure["schema"] == "poisson-prove.viewpair/7", structure["schema"]
     for arm in ("a", "b"):
         assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
     assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
-    arms = {
-        arm: {("proofload_version" if key == "poisson_prove_version" else key): value for key, value in structure["pair"][arm].items()}
-        for arm in ("a", "b")
-    }
-    diff = {key: value for key, value in structure["diff"].items() if key != "poisson_prove_version"}
-    return {
-        **structure, "schema": "proofload.viewpair/6", "pair": {**structure["pair"], **arms},
-        "diff": {**diff, "proofload_version": "0.0.1"},
-    }
 
 
-def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_dir: Path, method: tuple[str, ...] = ()) -> tuple[dict[str, str], dict[str, Result]]:
-    """Every verb, on one stored pair, exit codes kept and stdout digested with the
-    store root and the ``--out`` directory normalised."""
+def assert_agreement_schema(text: str) -> None:
+    """The tree's agreement digest on the lattice pair is hashed behind the current schema string,
+    not the old one."""
+    assert reference_agreement(LATTICE_EVENTS[1]) in text
+    assert reference_agreement(LATTICE_EVENTS[1], OLD_AGREEMENT_SCHEMA) not in text
+
+
+def run_every_verb(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_dir: Path, method: tuple[str, ...] = ()) -> dict[str, Result]:
+    """Every verb, on one stored pair, each result kept; the files report writes, their version
+    entries and the page structure ``serve --json`` prints are checked as they come."""
     # PF3: ``method`` is appended to every verb that compares the
     # two runs (diff, check, report A B, serve), so a caller can name the method its numbers were computed under.
     store_arg = str(root)
     results: dict[str, Result] = {}
-    digests: dict[str, str] = {}
-
-    def norm(text: str, out: Path | None = None) -> str:
-        text = text.replace(store_arg, STORE_PLACEHOLDER)
-        return text if out is None else text.replace(str(out), OUT_PLACEHOLDER)
-
-    results["runs"] = r = run_cli(["--store", store_arg, "runs"]); digests["runs"] = sha256_text(norm(r.out))
-    results["diff"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, *method]); digests["diff"] = sha256_text(norm(r.out))
+    results["runs"] = run_cli(["--store", store_arg, "runs"])
+    results["diff"] = run_cli(["--store", store_arg, "diff", a, b, "--event", event, *method])
     # diff's --format json is now --json.
     results["diff --json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--json", *method])
-    # PF0: the tree's agreement digest is hashed behind the renamed schema string; the 0.0.1 value
-    # is put back before the output is digested.
-    as_0_0_1 = norm(r.out)
     if root == LATTICE_ROOT:
-        assert reference_agreement(LATTICE_EVENTS[1]) in as_0_0_1
-        assert reference_agreement(LATTICE_EVENTS[1], OLD_AGREEMENT_SCHEMA) not in as_0_0_1
-        for events in LATTICE_EVENTS.values():
-            as_0_0_1 = as_0_0_1.replace(reference_agreement(events), reference_agreement(events, OLD_AGREEMENT_SCHEMA))
-    digests["diff --json"] = sha256_text(as_0_0_1)
+        assert_agreement_schema(r.out)
     # PF4 (PF4.20): neither pair's event carries a kind, so check's default --fail-on worse is refused;
     # --fail-on higher is the same gate (fail when a rate rose).
-    results["check"] = r = run_cli(["--store", store_arg, "check", a, b, "--event", event, "--fail-on", "higher", *method]); digests["check"] = sha256_text(norm(r.out))
+    results["check"] = run_cli(["--store", store_arg, "check", a, b, "--event", event, "--fail-on", "higher", *method])
     for label, runs in (("report A", [a]), ("report A B", [a, b])):
         out = out_dir / label.replace(" ", "_")
-        results[label] = r = run_cli(["--store", store_arg, "report", *runs, "--event", event, "--x", x, "--y", y, "--out", str(out), *(method if len(runs) == 2 else ())])
-        digests[label] = sha256_text(norm(r.out, out))
+        results[label] = run_cli(["--store", store_arg, "report", *runs, "--event", event, "--x", x, "--y", y, "--out", str(out), *(method if len(runs) == 2 else ())])
         for name in ("report.md", "heatmap.svg", "receipt.html"):
-            if not (out / name).is_file():
-                digests[f"{label}/{name}"] = ""
-            elif name == "heatmap.svg":
-                digests[f"{label}/{name}"] = sha256_file(out / name)
-            else:
-                digests[f"{label}/{name}"] = sha256_text(as_0_0_1_wrote_it((out / name).read_text(encoding="utf-8")))
+            assert (out / name).is_file(), (label, name)
+            if name != "heatmap.svg":
+                assert_one_prove_version_entry((out / name).read_text(encoding="utf-8"))
     results["serve --json"] = r = run_cli(["--store", store_arg, "serve", a, b, "--event", event, "--x", x, "--y", y, "--json", *method])
-    try:
-        # serve --json now leads with verdict and sentence before the page structure.
-        # PF3: it also adds method and method_chosen right after sentence; neither
-        # is the page structure the digest is taken of, so they are dropped as verdict and sentence are.
-        structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
-        # PF4 (PF4.11): the structure carries no absolute path of the store, so there is nothing to
-        # normalise.
-        assert "store_root" not in structure["pair"], structure["pair"]
-        if root == LATTICE_ROOT:
-            # PF2: run_name beside each arm's run_id and the title by name are
-            # asserted, then put back as before names, before the rest is digested.
-            structure = structure_as_ids_named_it(structure, event)
-        as_0_0_1 = json.dumps(structure_as_0_0_1_wrote_it(structure), sort_keys=True)
-        if root == LATTICE_ROOT:
-            assert reference_agreement(LATTICE_EVENTS[1]) in as_0_0_1
-            assert reference_agreement(LATTICE_EVENTS[1], OLD_AGREEMENT_SCHEMA) not in as_0_0_1
-            for events in LATTICE_EVENTS.values():
-                as_0_0_1 = as_0_0_1.replace(reference_agreement(events), reference_agreement(events, OLD_AGREEMENT_SCHEMA))
-        digests["serve --json"] = sha256_text(as_0_0_1)
-    except (ValueError, KeyError, TypeError):
-        digests["serve --json"] = ""
-    results["inspect"] = r = run_cli(["--store", store_arg, "inspect", a, "--event", event]); digests["inspect"] = sha256_text(norm(r.out))
-    return digests, results
+    # serve --json leads with verdict and sentence, then method and method_chosen (PF3), before
+    # the page structure.
+    structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
+    # PF4 (PF4.11): the structure carries no absolute path of the store.
+    assert "store_root" not in structure["pair"], structure["pair"]
+    if root == LATTICE_ROOT:
+        assert_names_beside_ids(structure, event)
+        assert_agreement_schema(json.dumps(structure, sort_keys=True))
+    assert_version_keys(structure)
+    results["inspect"] = run_cli(["--store", store_arg, "inspect", a, "--event", event])
+    return results
 
 
-def lattice_verb_digests(out_dir: Path) -> tuple[dict[str, str], dict[str, Result]]:
+def run_every_verb_on_the_lattice(out_dir: Path) -> dict[str, Result]:
     # PF3: the lattice runs share a salt, so the default is the paired
     # test; the facts are the unpaired test's, named.
-    return verb_digests(LATTICE_ROOT, lattice.RUN_A, lattice.RUN_B, event=lattice.EVENT, x=lattice.X, y=lattice.Y, out_dir=out_dir, method=("--method", "fisher_bh"))
+    return run_every_verb(LATTICE_ROOT, lattice.RUN_A, lattice.RUN_B, event=lattice.EVENT, x=lattice.X, y=lattice.Y, out_dir=out_dir, method=("--method", "fisher_bh"))
 
 
-# ---------- helpers: the facts the verb output digests guarded, on the lattice pair ----------
+# ---------- helpers: the facts every verb prints on the lattice pair ----------
 
 REPORT_NAMES = ("report.md", "heatmap.svg", "receipt.html")
 NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?(?:e[-+]?\d+)?")
@@ -842,7 +779,7 @@ def check_heatmap(path: Path, cells: Mapping[str, Mapping[str, Any]], label_key:
 
 
 def assert_lattice_verb_facts(results: Mapping[str, Result], out_dir: Path) -> None:
-    """The facts the verb digests guarded, on the lattice pair, read against ``diff --json`` and the store: the runs and
+    """The facts every verb prints on the lattice pair, read against ``diff --json`` and the store: the runs and
     their counts, every cell of the diff with its numbers and verdict, check's verdict, the files
     report wrote, the report's tables, the bound and the honesty block's figure, the heatmaps' cells
     and labels, and inspect's rows."""
@@ -1003,7 +940,6 @@ def assert_lattice_verb_facts(results: Mapping[str, Result], out_dir: Path) -> N
 
 # ---------- helpers: the M3 capture frozen file's forked child, restated ----------
 
-FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 CAPTURE_SALT = "a7-capture-salt"
 CAPTURE_AXES = {"x": [0.1, 0.2, 0.3]}
 CAPTURE_REPLICATES = 2
@@ -1047,39 +983,6 @@ def child_run_local(store_root: str, toml_path: str, target: str, salt: str) -> 
     p = plan(SweepSpec.load(toml_path), store, run_salt=salt, import_path=target)
     summary = run_local(p, _resolve(target), store)
     return {"run_id": p.run_id, "n_ok": summary.n_ok, "n_errored": summary.n_errored}
-
-
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
-def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
-    """Run ``fn(*args)`` in a forked child: ``install()`` is once per process and claims the
-    global provider, so nothing that installs runs in the test process."""
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    try:
-        if not parent_conn.poll(timeout):
-            pytest.fail(f"isolated {fn.__name__} produced nothing within {timeout}s")
-        kind, payload = parent_conn.recv()
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
 
 
 # ---------- hypothesis strategies: the M12 span strategy, extended with observation attributes ----------
@@ -1658,20 +1561,18 @@ def test_p7_10_every_verb_exits_0_on_the_lattice_and_the_mock_pair_and_the_latti
         assert all(row.trace is not None and isinstance(row.trace, dict) for row in frame.itertuples(index=False))
     for part in (LATTICE_ROOT / lattice.RUN_A / "episodes" / "part-00000.parquet", LATTICE_ROOT / lattice.RUN_B / "episodes" / "part-00000.parquet"):
         assert pq.read_schema(part).names == THIRTEEN, part
-    digests, results = lattice_verb_digests(tmp_path / "lattice")
+    results = run_every_verb_on_the_lattice(tmp_path / "lattice")
     # The pre-A7 pair's bytes: every file is the one the generator wrote, after every verb ran on it.
     assert lattice.intact()
     # A shared-salt pair now carries one note: line on stderr; nothing else.
     for verb, r in results.items():
         assert r.code == 0 and err_lines(r) == [], (verb, r.code, r.err)
-    # PF4 (PF4.3, PF4.11, PF4.13 to PF4.20): no digest is kept; every verb, the page structure
-    # included, is checked as facts.
-    assert all(len(d) == HEX64_LEN for d in digests.values()), digests
+    # PF4 (PF4.3, PF4.11, PF4.13 to PF4.20): every verb, the page structure included, is checked
+    # as facts.
     assert_lattice_verb_facts(results, tmp_path / "lattice")
-    mock_digests, mock_results = verb_digests(mock_pair.root, mock_pair.a, mock_pair.b, event=MOCK_EVENT, x="tool_fail_rate", y="task_id", out_dir=tmp_path / "mock")
+    mock_results = run_every_verb(mock_pair.root, mock_pair.a, mock_pair.b, event=MOCK_EVENT, x="tool_fail_rate", y="task_id", out_dir=tmp_path / "mock")
     for verb, r in mock_results.items():
         assert r.code == 0 and err_lines(r) == [], (verb, r.code, r.err)
-    assert all(len(d) == HEX64_LEN for d in mock_digests.values()), mock_digests
     r = mock_results["runs"]
     # PF2: the verdict line, a blank line and the header come first, and the rows
     # lead with the number and the name, newest first; each row is read by the id it carries.

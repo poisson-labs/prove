@@ -104,9 +104,7 @@ import json
 import multiprocessing
 import subprocess
 import sys
-import time
 import tomllib
-import traceback
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -124,6 +122,7 @@ from poisson_prove.sampler import SamplerError, SweepSpec
 from poisson_prove.store import Store, StoreError
 from poisson_prove.survival import censor
 from poisson_prove.trace import Trace
+from isolated_support import isolated as run_isolated
 
 openai = pytest.importorskip("openai", reason="the injection oracle drives the openai SDK over a scripted transport")
 
@@ -450,43 +449,9 @@ def chaos_otel_rollout(cfg: dict[str, Any], seed: int) -> Episode:
 # ---------- the children: everything that installs runs here ----------
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
 def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 240.0) -> Any:
-    """Run ``fn(*args)`` in a child process and return its result (the M3 capture frozen tests' shape)."""
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
+    """``isolated_support.isolated`` with this file's longer default wait."""
+    return run_isolated(fn, *args, timeout=timeout)
 
 
 def _send(call: dict[str, Any], transport: ScriptedTransport, sync_client: httpx.Client, oai: Any) -> httpx.Response | None:

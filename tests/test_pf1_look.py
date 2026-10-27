@@ -1062,14 +1062,45 @@ def visible_text(markup: str) -> str:
     return " ".join(re.findall(r">([^<]+)<", markup))
 
 
-def number_problems(text: str) -> list[str]:
+#: A hex id of the length Prove stores (config hashes, digests, comparison ids); text shows its
+#: first twelve characters.
+HEX_ID = re.compile(r"[0-9a-f]{16,}")
+
+
+def ids_given(corpus: dict[str, Ran], world: World) -> frozenset[str]:
+    """Every hex id in the corpus's JSON output and in the world's JSON files, whole and as the
+    twelve characters text prints. An id that comes out all digits is still an id, not a count."""
+    found: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str) and HEX_ID.fullmatch(value):
+            found.update((value, value[:12]))
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                walk(key)
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    for r in corpus.values():
+        if r.call.kind == "json" and r.out.strip():
+            walk(json.loads(r.out))
+    for path in world.base.rglob("*.json"):
+        walk(json.loads(path.read_text(encoding="utf-8")))
+    return frozenset(found)
+
+
+def number_problems(text: str, ids: frozenset[str] = frozenset()) -> list[str]:
     """Every number in ``text`` that rule 10 (as amended) does not allow.
 
-    Not numbers in this sense: run ids, anything with a slash (paths, URLs, ``n_a/n_b``), dates,
-    versions, a year cited in parentheses, a seed or a salt (no separators on seeds, as in
-    Trace), and a UTC time with ``Z``."""
+    Not numbers in this sense: run ids, the hex ids in ``ids``, anything with a slash (paths, URLs,
+    ``n_a/n_b``), dates, versions, a year cited in parentheses, a seed or a salt (no separators on
+    seeds, as in Trace), and a UTC time with ``Z``."""
     problems: list[str] = []
     t = RUN_ID.sub(" ", text)
+    if ids:
+        t = re.sub(r"\b(?:" + "|".join(sorted(ids, key=len, reverse=True)) + r")\b", " ", t)
     t = re.sub(r"\S*/\S*", " ", t)
     t = re.sub(r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?Z", " ", t)
     problems += [f"time not in UTC with Z: {m}" for m in re.findall(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}\S*", t)]
@@ -1105,7 +1136,8 @@ def test_pf1_10_every_number_in_text_output_and_in_the_reports_follows_rule_10(c
         texts[f"{folder}/report.md"] = (world.base / folder / "report.md").read_text(encoding="utf-8")
         texts[f"{folder}/receipt.html"] = visible_text((world.base / folder / "receipt.html").read_text(encoding="utf-8"))
         texts[f"{folder}/heatmap.svg"] = visible_text((world.base / folder / "heatmap.svg").read_text(encoding="utf-8"))
-    found = {where: number_problems(text) for where, text in texts.items()}
+    ids = ids_given(corpus, world)
+    found = {where: number_problems(text, ids) for where, text in texts.items()}
     found = {where: problems for where, problems in found.items() if problems}
     assert not found, found
 

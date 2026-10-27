@@ -121,10 +121,10 @@ COMPLETED_T = 1.0
 VIOLATED_T = 3.0
 TIMEOUT_T = 5.0
 
-# H12 is "golden untouched": four files (the single-event diff record and the report's
-# Markdown, heatmap and receipt), each checked by the facts it holds, on what the code writes
-# for the lattice pair, against the lattice's references.
-H12_FILES = ("diff_regression.json", "heatmap.svg", "receipt.html", "report.md")
+# H12: the four files the code writes for the lattice pair (the single-event diff record and the
+# report's Markdown, heatmap and receipt), each checked by the facts it holds, against the
+# lattice's references.
+WRITTEN_FILES = ("diff_regression.json", "heatmap.svg", "receipt.html", "report.md")
 H12_TITLE = "lattice before -> after"
 LATTICE_EVENT = lattice.EVENT
 LATTICE_CELLS = 72
@@ -1037,7 +1037,7 @@ def _check_receipt(text: str, record: dict[str, Any], svg: str) -> None:
     assert first in plain and second in plain
 
 
-@pytest.mark.parametrize("name", H12_FILES, ids=lambda name: name)
+@pytest.mark.parametrize("name", WRITTEN_FILES, ids=lambda name: name)
 def test_h12_regression_facts_hold_on_what_the_build_writes(name: str, h12_written: Path) -> None:
     """Each of H12's files checked by the facts it holds, on what the code writes, against the
     lattice's reference record (``test_m6_multi.reference_record``): the headline counts,

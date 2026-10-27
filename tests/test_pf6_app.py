@@ -742,7 +742,7 @@ def _has_in_order(line: str, words: tuple[str, ...]) -> bool:
 
 
 @pytest.mark.parametrize("size", list(SIZES))
-def test_pf6_each_tables_columns_at_80_and_120_are_the_designs(size: str, tours: Callable[[str], dict[str, Any]]) -> None:
+def test_pf6_each_tables_columns_at_80_and_120_are_the_ones_columns_lists(size: str, tours: Callable[[str], dict[str, Any]]) -> None:
     """Each table's columns at 80 and 120, as ``COLUMNS`` gives them, in their order, and
     the columns 120 adds absent at 80; at 80 the conditions screen's ``limit`` is each row's larger
     limit, or its note when neither direction has one (reading A18)."""

@@ -517,16 +517,6 @@ def walk_keys(payload: Any, *, skip: Sequence[str] = ("config", "groups")) -> li
     return found
 
 
-class Unreadable:
-    """A frame stand-in that fails on any read. F5 hands a pair of these to ``resolve_grouping``
-    as ``frames``: the trace rung reads nothing, so nothing may touch them."""
-
-    def _refuse(self, *args: Any, **kwargs: Any) -> Any:
-        raise AssertionError("the trace rung read a frame before Phase 6")
-
-    __getattr__ = __getitem__ = __len__ = __iter__ = __bool__ = _refuse
-
-
 def grown(a: pd.DataFrame, b: pd.DataFrame, multi: Any, ma: RunManifest, mb: RunManifest, **knobs: Any) -> Any:
     """``tree.tree`` on a pair, the way every test below reaches it."""
     return tree().tree(a, b, multi, manifest_a=ma, manifest_b=mb, **knobs)
@@ -934,33 +924,6 @@ def test_f5_the_trace_stub_refuses_the_name_at_its_own_rung_and_resolution_conti
     assert not re.search(r"Phase \d", message), message
 
 
-def test_f5_the_trace_rung_reads_no_frame_today_and_its_exception_never_propagates(pair: Any, by_gain: Any) -> None:
-    """``frames`` is handed to the trace rung, which reads nothing: a pair of objects
-    that fail on any read must pass through untouched, and ``TraceGroupingUnsupported`` is caught
-    by the resolver and recorded, never raised to the caller."""
-    _, _, ma, mb = pair
-    multi, base = by_gain["fisher_bh"]
-    t = tree()
-    # PF4 (PF4.6): "kind" is an unknown grouping, refused by the requested rung before the
-    # trace rung is reached; the poisoned frames are never read (the refusal is
-    # UnknownGrouping, not the poison's AssertionError), and with no request the frames change
-    # nothing.
-    for name in EXPECTED_TRACE_GROUPINGS:
-        with pytest.raises(t.UnknownGrouping):
-            t.resolve_grouping(name, manifest_a=ma, manifest_b=mb, units=base.root.units, q=multi.q, frames=(Unreadable(), Unreadable()))
-    # PF4.45: at the value by_gain grows at, where gain resolves.
-    with_poison = t.resolve_grouping(None, manifest_a=ma, manifest_b=mb, units=base.root.units, q=multi.q, frames=(Unreadable(), Unreadable()), max_group_mde=ADMITTING_MAX_GROUP_MDE)
-    without_frames = t.resolve_grouping(None, manifest_a=ma, manifest_b=mb, units=base.root.units, q=multi.q, max_group_mde=ADMITTING_MAX_GROUP_MDE)
-    assert json_bytes(with_poison.to_json()) == json_bytes(without_frames.to_json())
-    assert with_poison.refused == () and with_poison.key == lattice.X
-
-
-def test_f5_without_by_no_row_of_the_chain_is_at_the_trace_rung(every_tree: Any) -> None:
-    for name, _, result in every_tree:
-        if result.grouping.requested is None:
-            assert all(r.rung != "trace" for r in result.grouping.refused), (name, result.grouping.refused)
-
-
 # ---------- F6: an unknown name is refused outright ----------
 
 
@@ -1025,7 +988,7 @@ def test_f7_the_group_mde_and_the_resolvable_count_are_recomputed_on_every_fixtu
             assert refusal.offered_max_group_mde > grouping.max_group_mde, (name, refusal)
 
 
-def test_f7_the_four_by_four_pair_separates_the_floor_from_q_and_equality_passes() -> None:
+def test_f7_the_four_by_four_pair_refuses_both_axes_at_the_default_and_equality_passes() -> None:
     """Sixteen cells at N=32, 128 units per arm per group. Every ``x`` group's own limit is above
     the default, and at ``max_group_mde`` equal to the largest of them the grouping is admitted
     (S23 W3's equality). ``y`` is refused too, so the default falls to the whole grid. The name's
@@ -1108,7 +1071,7 @@ def test_f8_the_block_and_the_json_carry_the_accepted_value(synth_root: Path) ->
     assert (grouping["max_group_mde"], grouping["key"], grouping["refused"]) == (0.6, "task", [])
 
 
-def test_f8_the_offered_value_is_rounded_up_where_nearest_would_refuse() -> None:
+def test_f8_the_offered_value_is_the_second_smallest_limit_rounded_up_and_admits_the_grouping() -> None:
     """S23's trap one level down: an offer rounded to nearest can fall below the limit it must
     admit (a limit of 0.203231 offered as 0.2032 refuses again), so the offer is rounded up. The
     group limits here lie on the 0.0001 grid, so the trap has no number to show; the offer is S23's

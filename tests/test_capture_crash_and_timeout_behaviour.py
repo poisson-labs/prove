@@ -16,8 +16,7 @@ import dataclasses
 import json
 import multiprocessing
 import time
-import traceback
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +28,7 @@ from poisson_prove.executor_modal import Job, worker_batch
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import Store
 from poisson_prove.trace import Span, Trace
+from isolated_support import isolated
 
 try:
     import opentelemetry.sdk  # noqa: F401
@@ -203,47 +203,6 @@ def _resolve(import_path: str) -> Any:
 
     module_name, attr = import_path.split(":", 1)
     return getattr(importlib.import_module(module_name), attr)
-
-
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
-def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
-    """Run ``fn(*args)`` in a child process and return its (pickle-native) result."""
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                # The child may have sent its result and exited since the poll above.
-                outcome = parent_conn.recv() if parent_conn.poll() else (
-                    "error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
 
 
 def child_worker_batch(jobs: list[Job], import_path: str, episode_timeout: float | None) -> list[Any]:

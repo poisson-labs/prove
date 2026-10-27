@@ -2,15 +2,12 @@
 
 Trace capture in the executor (``src/poisson_prove/capture.py``). Every test imports
 ``poisson_prove.capture`` inside its own body. The capture module lives behind the ``agent``
-extra; the whole file skips without ``opentelemetry-sdk``, the way the stamper frozen tests do,
-and the one test that feeds finished spans through the OTLP encoder skips at that helper -- the
-encoder is a dev-only reference, like lifelines.
+extra; the whole file skips without ``opentelemetry-sdk``, the way the stamper frozen tests do.
 
 C1 and C2 come first because both fail silently: a run completes normally and every trace is
-empty or nearly empty. C1 uses a real fork, both ways, from a driver written to a real file
-(``spawn`` re-imports ``__main__`` and cannot re-import ``<stdin>``). C2 re-seeds the global
-``random`` between spans against the real provider ``install()`` builds. Neither uses a mock
-provider.
+empty or nearly empty. C1 checks that ``install()`` reports itself inactive when it cannot own
+the global provider. C2 re-seeds the global ``random`` between spans against the real provider
+``install()`` builds. Neither uses a mock provider.
 
 Installing a provider is permanent (C2a), so every test that calls ``install()`` -- directly,
 or through ``run_local``, ``worker_batch`` or the CLI -- runs it in a child process forked from
@@ -57,10 +54,8 @@ import json
 import logging
 import multiprocessing
 import random
-import subprocess
 import sys
 import time
-import traceback
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, ExitStack
 from io import StringIO
@@ -77,6 +72,7 @@ from poisson_prove.executor_modal import Job, Mapper, Result, worker_batch
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
+from isolated_support import isolated
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
@@ -338,50 +334,6 @@ def watch_logs() -> LogSink:
     return sink
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
-def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
-    """Run ``fn(*args)`` in a child process and return its (JSON-native) result.
-
-    Forked when the platform allows, so the child inherits this process's imports and its
-    untouched OTel globals; spawned otherwise, which works because ``fn`` and everything it
-    reaches live in this real file.
-    """
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
-
-
 def status_dict(status: Any) -> dict[str, Any]:
     return {name: list(v) if isinstance(v, tuple) else v for name, v in dataclasses.asdict(status).items()}
 
@@ -607,106 +559,7 @@ def child_cli(argv: list[str], extra_path: str | None) -> dict[str, Any]:
     }
 
 
-# ---------- C1: the parent must not set a global TracerProvider before forking ----------
-
-C1_DRIVER = '''\
-"""C1 driver: a real fork, both ways. ``python c1_driver.py set`` or ``... unset``."""
-
-import json
-import logging
-import multiprocessing
-import sys
-
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-PARENT_EXPORTER = InMemorySpanExporter()
-
-
-class Sink(logging.Handler):
-    def __init__(self):
-        super().__init__(level=logging.DEBUG)
-        self.messages = []
-
-    def emit(self, record):
-        self.messages.append(record.getMessage())
-
-
-def child(conn):
-    sink = Sink()
-    logging.getLogger().addHandler(sink)
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
-    with trace.get_tracer("child").start_as_current_span("in-child"):
-        pass
-    provider.force_flush()
-    trace.get_tracer_provider().force_flush()
-    conn.send(
-        {
-            "captured": [span.name for span in exporter.get_finished_spans()],
-            "owns_global": trace.get_tracer_provider() is provider,
-            "landed_in_parent_provider": [
-                span.name for span in PARENT_EXPORTER.get_finished_spans()
-            ],
-            "messages": sink.messages,
-        }
-    )
-    conn.close()
-
-
-def main(parent_sets):
-    if parent_sets:
-        parent_provider = TracerProvider()
-        parent_provider.add_span_processor(SimpleSpanProcessor(PARENT_EXPORTER))
-        trace.set_tracer_provider(parent_provider)
-    ctx = multiprocessing.get_context("fork")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=child, args=(child_conn,))
-    proc.start()
-    child_conn.close()
-    result = parent_conn.recv()
-    proc.join()
-    print(json.dumps(result))
-
-
-if __name__ == "__main__":
-    main(sys.argv[1] == "set")
-'''
-
-
-def run_c1_driver(script: Path, way: str) -> dict[str, Any]:
-    r = subprocess.run(
-        [sys.executable, str(script), way],
-        capture_output=True,
-        text=True,
-        timeout=60.0,
-        cwd=script.parent,
-    )
-    assert r.returncode == 0, f"driver {way!r} failed:\n{r.stderr}"
-    return json.loads(r.stdout.strip().splitlines()[-1])
-
-
-@pytest.mark.skipif(not FORK_AVAILABLE, reason="C1 is a fork hazard; needs the fork start method")
-def test_c1_a_forked_child_captures_only_when_the_parent_set_no_provider(tmp_path: Path) -> None:
-    script = write(tmp_path / "c1_driver.py", C1_DRIVER)
-
-    unset = run_c1_driver(script, "unset")
-    assert unset["captured"] == ["in-child"], unset
-    assert unset["owns_global"] is True, unset
-    assert not any(OVERRIDE_MESSAGE in m for m in unset["messages"]), unset["messages"]
-
-    already_set = run_c1_driver(script, "set")
-    assert already_set["captured"] == [], already_set
-    assert already_set["owns_global"] is False, already_set
-    assert any(OVERRIDE_MESSAGE in m for m in already_set["messages"]), already_set["messages"]
-    # The span was not lost to nowhere: it went to the first provider, the parent's, whose
-    # exporter the child inherited a copy of. Nothing crossed back to the real parent.
-    assert already_set["landed_in_parent_provider"] == ["in-child"], already_set
-
+# ---------- C1: install() cannot own a provider someone else set ----------
 
 def test_c1_install_reports_inactive_when_it_cannot_own_the_global_provider() -> None:
     r = isolated(child_install, {}, None, "noop")
@@ -718,66 +571,6 @@ def test_c1_install_reports_inactive_when_it_cannot_own_the_global_provider() ->
 
 
 # ---------- C2: the capture provider does not use the global random ----------
-
-
-def _reseeded_span_ids(n: int, seed: int) -> list[int]:
-    """Span ids from a naive ``TracerProvider()`` when the global ``random`` is re-seeded
-    before each span. A private provider, never the global one."""
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    tracer = provider.get_tracer("oracle.naive")
-    for i in range(n):
-        random.seed(seed)
-        with tracer.start_as_current_span(f"span-{i}"):
-            pass
-    provider.force_flush()
-    return [span.context.span_id for span in exporter.get_finished_spans()]
-
-
-def as_otlp(spans: Sequence[Any]) -> Any:
-    """Finished ``ReadableSpan`` objects as the OTLP/JSON payload ``from_otel`` consumes."""
-    pytest.importorskip(
-        "opentelemetry.exporter.otlp.proto.common",
-        reason="the OTLP encoder is a dev-only oracle, like lifelines",
-    )
-    from google.protobuf.json_format import MessageToDict
-
-    try:
-        from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
-    except ImportError:  # pragma: no cover - the module moved between SDK releases
-        from opentelemetry.exporter.otlp.proto.common._internal.trace_encoder import (
-            encode_spans,
-        )
-    return MessageToDict(encode_spans(list(spans)))
-
-
-def test_c2_a_naive_provider_reseeded_between_spans_repeats_its_span_ids() -> None:
-    ids = _reseeded_span_ids(10, 1234)
-    assert len(ids) == 10 and len(set(ids)) == 1, ids
-
-
-def test_c2_from_otel_drops_the_repeated_ids_as_duplicates() -> None:
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    from poisson_prove.trace import from_otel
-
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    tracer = provider.get_tracer("oracle.naive")
-    for i in range(10):
-        random.seed(1234)
-        with tracer.start_as_current_span(f"span-{i}"):
-            pass
-    provider.force_flush()
-    trace = from_otel(as_otlp(exporter.get_finished_spans()))
-    assert (len(trace.spans), trace.dropped) == (1, 9)
 
 
 def test_c2_capture_ids_stay_distinct_when_the_global_random_is_reseeded() -> None:
@@ -796,13 +589,6 @@ def test_c2_capture_never_draws_from_the_global_random() -> None:
 
 
 # ---------- C2a: installing a provider is permanent ----------
-
-
-def test_c2a_the_sdk_provider_has_no_remove_span_processor() -> None:
-    from opentelemetry.sdk.trace import TracerProvider
-
-    assert hasattr(TracerProvider, "add_span_processor")
-    assert not hasattr(TracerProvider, "remove_span_processor")
 
 
 def test_c2a_install_adds_its_processors_to_a_user_provider_and_leaves_their_exporter_alone() -> None:

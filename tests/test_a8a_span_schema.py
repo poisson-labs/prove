@@ -26,7 +26,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-import re
 from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
@@ -41,7 +40,7 @@ import poisson_prove.cli as cli
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace, TraceValidationError
-from conftest import quickstart_design
+from conftest import STEP_LINE_RE, quickstart_design
 
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS / "fixtures" / "trace"
@@ -137,7 +136,6 @@ def inspect_lines(root: Path, run_id: str, event: str) -> list[str]:
     return out.getvalue().splitlines()
 
 
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")
 
 
 # ---------- P8-1: the twenty-one-key span and the seven-key trace ----------

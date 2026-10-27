@@ -22,14 +22,11 @@ library ``multi_diff``, the command line, and the chaos seam's public ``install`
 from __future__ import annotations
 
 import json
-import multiprocessing
 import os
 import subprocess
 import sys
-import time
-import traceback
 import warnings
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
@@ -44,9 +41,9 @@ from poisson_prove.executor import plan, run_local
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace
+from isolated_support import isolated
 
 MODULE = __name__
-FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 SALT = "storage-behaviour-salt"
 TARGET_ID = "storage-behaviour@v0"
 HORIZON = 10.0
@@ -121,48 +118,6 @@ def only_span(trace: Mapping[str, Any], name: str) -> Span:
 
 
 # ---------- child processes (module-level, so a forked child resolves them by import path) ----------
-
-
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
-def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
-    """Run ``fn(*args)`` in a child process: capture installs a provider once per process, so
-    nothing that installs runs in pytest's."""
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                # The child may have sent its result and exited since the poll above.
-                outcome = parent_conn.recv() if parent_conn.poll() else (
-                    "error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
 
 
 def child_run_local(store_root: str, toml_path: str, target: str, salt: str) -> str:

@@ -314,7 +314,7 @@ def test_u13_every_method_either_refuses_or_warns() -> None:
         assert refuses != warns, (method, refuses, warns)
 
 
-def test_u16_a_cli_diff_warns_and_the_artifact_is_unchanged_by_it(tmp_path: Path) -> None:
+def test_u16_a_cli_diff_with_the_unpaired_test_warns_once_as_a_note_on_stderr(tmp_path: Path) -> None:
     """End to end: the CLI's diff on a pairable pair raises the warning, which reaches the
     CLI's stderr as one ``note:`` line and nowhere else; outside that line ``mcnemar_bh`` is named
     on neither stream. The output itself does depend on whether the runs share a salt:

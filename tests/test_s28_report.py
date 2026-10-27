@@ -954,18 +954,11 @@ def config_text(config: Mapping[str, Any]) -> str:
     return ", ".join(f"{k}={v}" for k, v in config.items())
 
 
-def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0: the one field the rename changes in a rendered report, receipt or page
-    is the version in its provenance list. First assert it is there as the rename writes it -- one
-    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
-    drop any separate ``written by proofload`` entry, so the text can be compared with 0.0.1's
-    byte for byte."""
+def assert_one_prove_version_entry(text: str) -> None:
+    """A rendered report, receipt or page carries one ``Prove version:`` entry in its provenance
+    list and no ``proofload version:``."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
-    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
-    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
-    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
-    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
 def sha256_of_text(text: str) -> str:
@@ -1179,8 +1172,10 @@ def assert_tree_less_facts(report: Any, light: Any, multi: Any, event: str) -> N
     assert (ev.n_safer, ev.n_worse) == (None, None)
     assert f'"{ev.n_higher} worse"' in library or f'"{ev.n_higher} higher"' in library, library
     honesty = library.replace(f'"{ev.n_higher} worse"', f'"{ev.n_higher} higher"').splitlines()
-    md = as_0_0_1_wrote_it(report.to_markdown())
-    html = html_mod.unescape(as_0_0_1_wrote_it(light.to_html()))
+    md, html = report.to_markdown(), light.to_html()
+    assert_one_prove_version_entry(md)
+    assert_one_prove_version_entry(html)
+    html = html_mod.unescape(html)
     svg = report.to_svg()
     svg_texts = [html_mod.unescape(t) for t in SVG_TEXT_RE.findall(svg)]
     md_lines = md.splitlines()
@@ -1258,7 +1253,7 @@ def test_r2_the_clis_report_and_receipt_with_the_tree_are_the_librarys_render_an
     _, result = store_tree(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), max_group_mde=float(override[1]))
     library = built(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), x=X, y=Y, with_tree=True, theme="light", counted=True, max_group_mde=float(override[1]))
     for kind, page, theirs in (("md", r.md, library.to_markdown()), ("html", r.html, library.to_html())):
-        as_0_0_1_wrote_it(page)
+        assert_one_prove_version_entry(page)
         # PF3 (PF3.6b): the command line's files carry a line naming the method,
         # which the library's render does not carry; compared without it.
         # PF4.32: every surface that prints a limit names its test, so the library's

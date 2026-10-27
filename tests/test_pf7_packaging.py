@@ -56,8 +56,8 @@ before release (the hygiene tests); the version, set by the release.
 | invariant | tests |
 |---|---|
 | PF7.4 the release metadata, k1's description | ``test_pf7_4_pyproject_carries_the_release_metadata`` (one case per field) |
-| PF7.4 the extras | ``test_pf7_4_the_extras_are_section_3_3s`` (one case per extra) |
-| PF7.4 a floor on every dependency (k4) | ``test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_section_3_3s`` (one case per group) |
+| PF7.4 the extras | ``test_pf7_4_each_extra_carries_what_it_needs`` (one case per extra) |
+| PF7.4 a floor on every dependency (k4) | ``test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_openai_and_burla`` (one case per group) |
 | PF7.5 the code suite passes with every dependency at its floor | ``test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor`` (slow) |
 | PF7.6 the wheel and the sdist hold exactly their sets; the example spec ships | ``test_pf7_6_each_archive_holds_exactly_its_set`` (wheel, sdist) |
 | PF7.6 the PyPI page is the README | ``test_pf7_6_the_pypi_page_is_the_readme`` |
@@ -212,7 +212,7 @@ EXTRA_CASES = {
 
 
 @pytest.mark.parametrize("case", list(EXTRA_CASES))
-def test_pf7_4_the_extras_are_section_3_3s(case: str) -> None:
+def test_pf7_4_each_extra_carries_what_it_needs(case: str) -> None:
     assert EXTRA_CASES[case](), pyproject()["project"]["optional-dependencies"]
 
 
@@ -223,7 +223,7 @@ GROUPS = ["core", "build", *sorted(EXTRAS - {"all"}), "all"]
 
 
 @pytest.mark.parametrize("group", GROUPS)
-def test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_section_3_3s(group: str) -> None:
+def test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_openai_and_burla(group: str) -> None:
     problems = []
     for req in requirements(group):
         name = name_of(req)

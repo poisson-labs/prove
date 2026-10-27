@@ -555,7 +555,7 @@ def test_fr2_an_empty_store_refuses_on_every_read_verb_but_runs(tmp_path: Path) 
         assert "unknown run" not in r.err, label
 
 
-def test_fr3_runs_on_an_empty_store_exits_zero_says_so_on_stderr_and_keeps_its_stdout(tmp_path: Path) -> None:
+def test_fr3_runs_on_an_empty_store_exits_zero_says_so_on_stdout_and_writes_nothing_to_stderr(tmp_path: Path) -> None:
     root = make_empty_root(tmp_path)
     r = run_cli(["--store", str(root), "runs"])
     assert r.code == 0, r
