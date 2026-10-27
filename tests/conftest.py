@@ -287,12 +287,48 @@ def lattice_trees(tmp_path_factory: pytest.TempPathFactory) -> SharedTrees:
     return SharedTrees(folder)
 
 
+def _a_home_of_its_own() -> None:
+    """The suite runs with ``HOME`` in a folder of its own, made once for the session and shared
+    with its workers, so what a test provokes (the errors log and the record of compared runs
+    under ``~/.cache/poisson-prove``) never reaches the user's own. The tools the slow tests run
+    keep their folders: uv's cache and Pythons, pyenv's, and Playwright's browsers. A suite this
+    one starts (the floors run) keeps the folder it was given."""
+    import os
+    import shutil
+    import subprocess
+    import sys
+    import tempfile
+
+    if os.environ.get("PROVE_TESTS_HOME"):
+        return
+    real = os.environ.get("HOME")
+    if real:
+        caches = "Library/Caches" if sys.platform == "darwin" else ".cache"
+        keep = {"PLAYWRIGHT_BROWSERS_PATH": Path(real) / caches / "ms-playwright", "PYENV_ROOT": Path(real) / ".pyenv"}
+        uv = shutil.which("uv")
+        for var, args in (("UV_CACHE_DIR", ("cache", "dir")), ("UV_PYTHON_INSTALL_DIR", ("python", "dir"))):
+            found = subprocess.run([uv, *args], capture_output=True, text=True, timeout=60) if uv else None
+            if found is not None and found.returncode == 0 and found.stdout.strip():
+                keep[var] = Path(found.stdout.strip())
+        for var, path in keep.items():
+            if var not in os.environ and path.exists():
+                os.environ[var] = str(path)
+    os.environ["HOME"] = os.environ["PROVE_TESTS_HOME"] = tempfile.mkdtemp(prefix="prove-tests-home-")
+    _MADE_HOME.append(os.environ["HOME"])
+
+
+#: The ``HOME`` this process made, which only it removes.
+_MADE_HOME: list[str] = []
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Check both generated stores before any test runs, rebuilding one that fails (a crash or an
     earlier session left it), then mark them checked for this session and its workers: from here
-    on a store that fails was written by a test, and ``lattice.cached_store`` refuses it."""
+    on a store that fails was written by a test, and ``lattice.cached_store`` refuses it. First,
+    the session's own ``HOME`` (``_a_home_of_its_own``)."""
     if hasattr(config, "workerinput"):
         return
+    _a_home_of_its_own()
     import os
 
     import lattice
@@ -302,6 +338,14 @@ def pytest_configure(config: pytest.Config) -> None:
     lattice.root()
     replay_arms.root()
     os.environ[lattice.CHECKED] = "1"
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """The session's own ``HOME`` goes with the session that made it."""
+    import shutil
+
+    for home in _MADE_HOME:
+        shutil.rmtree(home, ignore_errors=True)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
