@@ -411,7 +411,10 @@ def _build_parser(io: _IO) -> _Parser:
 
     init_p = sub.add_parser(
         "init",
-        help=f"write {_DEFAULT_SPEC}, a sweep spec to edit, or the keyless example",
+        help=(
+            f"write {_DEFAULT_SPEC}, a sweep spec to edit, or the keyless example; with --agent, "
+            "your coding agent's setup"
+        ),
         description=(
             f"Write a sweep spec, ./{_DEFAULT_SPEC} unless --out names another file, and nothing\n"
             "else: a commented template to edit, or with --example the keyless quickstart,\n"

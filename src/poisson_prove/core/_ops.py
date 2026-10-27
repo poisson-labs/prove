@@ -1374,6 +1374,10 @@ def inspect(
         raise _missing_flags_refusal(
             st, "inspect", [run_id], typed, idx, x_missing=False, event_missing=True
         )
+    if limit is not None and limit < 1:
+        raise refusal(
+            f"--limit must be 1 or more, got {limit}", [f"{COMMAND} inspect --help"], usage=True
+        )
     checked = _declaration_check(st, run_id)
     provenance = () if checked is None else tuple(_provenance_lines(checked.provenance()))
     rows = _selected(st, run_id, event, _parse_pairs(where, "--where"))
@@ -1511,6 +1515,13 @@ values = ["search", "refund"]
 [axes.temperature]
 type = "continuous"
 values = [0.0, 0.7]
+
+# The outcomes your rollout returns that count against it (failures) and for it (successes).
+# With them a comparison compares exactly these and says "worse" and "safer"; without them it
+# says "higher" and "lower". Name your own outcomes and remove the comment marks.
+# [declare]
+# failures = ["error", "timeout"]
+# successes = ["resolved"]
 """
 
 
