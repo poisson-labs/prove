@@ -280,7 +280,8 @@ def test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor(tmp_pat
     assert off == [], off
     run_env = dict(env, PATH=f"{venv / 'bin'}:{env.get('PATH', '')}")
     run_env.pop("PYTHONDONTWRITEBYTECODE", None)
-    suite = subprocess.run([str(python), "-m", "pytest", "-q", "-x", "-n", "auto", "-p", "no:cacheprovider", "-m", CODE_SUITE, "tests"],
+    # A fixed eight workers: at -n auto the suite's own load fails whichever timing-bound test it lands on.
+    suite = subprocess.run([str(python), "-m", "pytest", "-q", "-x", "-n", "8", "-p", "no:cacheprovider", "-m", CODE_SUITE, "tests"],
                            cwd=ROOT, env=run_env, capture_output=True, text=True, timeout=3600)
     assert suite.returncode == 0, suite.stdout[-6000:] + suite.stderr[-2000:]
 
