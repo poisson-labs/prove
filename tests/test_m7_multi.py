@@ -80,7 +80,7 @@ from poisson_prove.report import (
 )
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import cell_table, censor
-from conftest import quickstart_design
+from conftest import blas_thread_cap, quickstart_design
 from test_pf4_stats import POWER, _ref_fisher_power
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1656,7 +1656,7 @@ def test_b14_multi_report_is_byte_identical_across_hash_seeds(
             [sys.executable, str(script), str(lattice.root()), lattice.RUN_A, lattice.RUN_B, lattice.EVENT, lattice.OTHER,
              lattice.Y, lattice.X, LATTICE_TITLE],
             capture_output=True, text=True, cwd=ROOT,
-            env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path)},
+            env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path), **blas_thread_cap()},
         )
         assert proc.returncode == 0, proc.stderr
         assert proc.stdout.split() == local, seed

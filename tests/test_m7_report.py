@@ -42,6 +42,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import lattice
+from conftest import blas_thread_cap
 from poisson_prove.diff import DiffResult, diff
 from poisson_prove.report import (
     ABSENT_FILL,
@@ -394,7 +395,7 @@ def test_i1_outputs_are_byte_identical_across_hash_seeds(golden_report: Report, 
         proc = subprocess.run(
             [sys.executable, str(script), str(lattice.root()), lattice.RUN_A, lattice.RUN_B, lattice.EVENT, lattice.Y, lattice.X],
             capture_output=True, text=True, cwd=ROOT,
-            env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path)},
+            env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path), **blas_thread_cap()},
         )
         assert proc.returncode == 0, proc.stderr
         assert proc.stdout.split() == local, seed

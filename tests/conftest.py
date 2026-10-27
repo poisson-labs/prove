@@ -1,6 +1,7 @@
 import ast
 import functools
 import io
+import os
 import re
 import socket
 import tokenize
@@ -44,6 +45,12 @@ METHOD_OWN_NAMES = ("Fisher", "McNemar", "log-rank")
 #: A step row of ``inspect``'s text output: the step's index, then eight more tab-separated
 #: columns.
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")
+
+
+def blas_thread_cap() -> dict[str, str]:
+    """The BLAS thread cap the suite runs under, for a child whose environment is built from nothing:
+    without it an old OpenBLAS (numpy at its floor) runs a thread on every core in every child."""
+    return {name: os.environ[name] for name in ("OPENBLAS_NUM_THREADS",) if name in os.environ}
 
 
 def without_method_lines(text: str) -> str:

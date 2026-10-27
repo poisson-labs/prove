@@ -168,6 +168,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from conftest import blas_thread_cap
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 FIXTURES = ROOT / "tests" / "fixtures" / "setup-agent"
@@ -571,6 +573,7 @@ def run_child(repo: Path, base: Path, *argv: str, hide: tuple[str, ...] = (), ex
         "PYTHONIOENCODING": "utf-8",
         "LANG": "C.UTF-8",
         "TMPDIR": str(home),
+        **blas_thread_cap(),
         **(extra or {}),
     }
     spec = repo / "prove.toml"

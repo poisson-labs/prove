@@ -97,6 +97,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from conftest import blas_thread_cap
+
 ROOT = Path(__file__).resolve().parents[1]
 
 #: The lab's two standards are copied byte for byte from their canonical copies, so they carry no
@@ -483,6 +485,7 @@ def environment(install: Install, home: Path, guard: Path, network_log: Path) ->
         "BROWSER": "true",
         "TMPDIR": str(home.parent / "tmp"),
         "DOCS_CHECK_NETWORK": str(network_log),
+        **blas_thread_cap(),
     }
     if install.kind == "wheel":
         env["UV_PYTHON_PREFERENCE"] = "only-system"

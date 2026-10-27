@@ -122,6 +122,8 @@ from typing import Any
 
 import pytest
 
+from conftest import blas_thread_cap
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGED = SRC / "poisson_prove" / "examples" / "quickstart.toml"
@@ -365,6 +367,7 @@ def guarded_env(home: Path, guard: Path, *, bindir: Path, src: Path | None) -> d
         "PYTHONIOENCODING": "utf-8",
         "LANG": "C.UTF-8",
         "TMPDIR": str(home),
+        **blas_thread_cap(),
     }
 
 
