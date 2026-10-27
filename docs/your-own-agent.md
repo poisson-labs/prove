@@ -256,5 +256,5 @@ change what happens around a call: `[capture]` switches on the instrumentors you
 `[chaos]` injects the faults you name into your client's HTTP calls
 ([Fault injection](fault-injection.md)). On the local backend each call runs in Prove's own
 process, one after another; with `--episode-timeout` each runs in a child process, and one that
-runs past the limit is stopped and stored with no outcome, as an error of kind `timeout`. The
+runs past the limit is stopped and stored with no outcome, as an error of kind `episode_timeout`. The
 other backends are on [Backends](backends.md).

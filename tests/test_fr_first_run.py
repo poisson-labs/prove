@@ -922,10 +922,10 @@ OUTCOME_TIMEOUT_CELLS = [({"cell": "c0"}, {"fell": 4, "timeout": 6}, {"timeout":
 
 @pytest.mark.parametrize(
     ("cells", "events"),
-    [(TIMEOUT_CELLS, "fell, ok, timeout"), (QUIET_CELLS, "fell, ok"), (OUTCOME_TIMEOUT_CELLS, "fell, timeout")],
+    [(TIMEOUT_CELLS, "episode_timeout, fell, ok"), (QUIET_CELLS, "fell, ok"), (OUTCOME_TIMEOUT_CELLS, "episode_timeout, fell, timeout")],
     ids=["timed-out rows and timeout is not an outcome", "no timed-out rows", "timed-out rows and timeout is already an outcome"],
 )
-def test_fr10_inspect_adds_timeout_only_when_rows_timed_out_and_it_is_not_already_an_outcome(tmp_path: Path, cells: list[Any], events: str) -> None:
+def test_fr10_inspect_adds_episode_timeout_only_when_rows_timed_out(tmp_path: Path, cells: list[Any], events: str) -> None:
     write_run(Store(tmp_path), "t1", cells)
     r = run_cli(["--store", str(tmp_path), "inspect", "t1"])
     # A refusal exits 1; its facts, not its line layout.
@@ -998,12 +998,12 @@ def test_fr11_the_listed_axes_and_events_are_the_stored_ones(a: list[Any], b: li
 
 @PROPERTY
 @given(a=run_specs())
-def test_fr11_the_listed_events_of_a_single_run_are_its_outcomes_and_timeout_only_when_a_row_timed_out(a: list[Any]) -> None:
+def test_fr11_the_listed_events_of_a_single_run_are_its_outcomes_and_episode_timeout_only_when_a_row_timed_out(a: list[Any]) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(tmp)
         write_spec(store, "ra", a)
         frame = store.read("ra", meta=False)
-        events = set(competing_set(frame)) | ({"timeout"} if store.tally("ra").timed_out else set())
+        events = set(competing_set(frame)) | ({"episode_timeout"} if store.tally("ra").timed_out else set())
         r = run_cli(["--store", tmp, "inspect", "ra"])
         # A refusal exits 1.
         assert r.code == 1 and r.out == "", r

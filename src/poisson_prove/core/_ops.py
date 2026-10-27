@@ -632,8 +632,8 @@ def _missing_flags_refusal(
     frames = [store.read(run, meta=False) for run in runs_]
     axes = sorted({str(key) for frame in frames for config in frame["config"] for key in config})
     events = list(competing_set(*frames))
-    if verb == "inspect" and "timeout" not in events and store.tally(runs_[0]).timed_out:
-        events = sorted({*events, "timeout"})
+    if verb == "inspect" and store.tally(runs_[0]).timed_out:
+        events = sorted({*events, EPISODE_TIMEOUT})
     flags = " and ".join(
         flag
         for flag, missing in (("--x AXIS", x_missing), ("--event NAME", event_missing))
@@ -1261,11 +1261,16 @@ def run(
     )
 
 
+#: The kind a face names an episode stopped at ``--episode-timeout`` by: the store marks it
+#: ``timeout``, which an agent's own outcome is often called too.
+EPISODE_TIMEOUT = "episode_timeout"
+
+
 def _error_kind(error: Any) -> str | None:
     if not isinstance(error, str) or not error:
         return None
     if error == "timeout":
-        return "timeout"
+        return EPISODE_TIMEOUT
     last = [line for line in error.splitlines() if line.strip()]
     if not last:
         return None
@@ -1288,7 +1293,12 @@ def _stored_trace(meta: Any) -> Trace | None:
 def _selected(st: Store, run_id: str, event: str, where: Mapping[str, Any]) -> pd.DataFrame:
     df = st.read(run_id, meta=False)
     kinds = df["error"].map(_error_kind)
-    rows = df[(df["outcome"] == event) | (df["error"] == event) | (kinds == event)]
+    # ``timeout`` is an outcome when the run has one by that name; otherwise it still reaches the
+    # episodes stopped at --episode-timeout, as it did before they had a name of their own.
+    by_error = df["error"] == event
+    if event == "timeout" and (df["outcome"] == event).any():
+        by_error = by_error & False
+    rows = df[(df["outcome"] == event) | by_error | (kinds == event)]
     for key, value in where.items():
         keep = [
             label
@@ -2497,8 +2507,8 @@ def _commonest_error(store: Store, run_id: str) -> str | None:
     if not kinds:
         return None
     top = max(kinds.values())
-    if kinds.get("timeout") == top:
-        return "timeout"
+    if kinds.get(EPISODE_TIMEOUT) == top:
+        return EPISODE_TIMEOUT
     return next(kind for kind, count in kinds.items() if count == top)
 
 

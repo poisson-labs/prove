@@ -4,7 +4,8 @@ when the runs declare failures and successes; a refusal's suggested event; plan-
 an unknown fault and the name of a missing instrumentor; the store a sweep's next lines keep; the
 next line of a missing ``--x``; ``paired``'s refusal with no eligible pair and its run names;
 ``inspect --limit 0``; ``init``'s template and help; pairing and a mixed pair's older writer in the
-views; and the missing capture limit's refusal as one paragraph.
+views; the missing capture limit's refusal as one paragraph; and the name an episode stopped at
+``--episode-timeout`` is reached by.
 
 Every sweep here is the packaged mock agent at a few replicates with ``--max-mde 1``, so nothing
 waits on the design gate and the module's stores build in a few seconds."""
@@ -391,3 +392,57 @@ def test_the_missing_capture_limit_is_refused_in_one_paragraph_with_its_values_a
     assert ".;" not in line and "before this change" not in line
     for typed in ('"max_observation_bytes = 64"', '"max_observation_bytes = 1024"', '"max_observation_bytes = 8192"'):
         assert typed in line, typed
+
+
+def _timed_out_store(root: Path, outcomes: dict[str, int]) -> Path:
+    """One complete run, ``t1``: the outcomes named, then three episodes stopped at
+    ``--episode-timeout`` (the store marks those ``timeout``)."""
+    store = Store(root)
+    store.create_run(RunManifest(
+        run_id="t1", target_id="agent", t_unit="steps", run_salt=SALT, axis_types={"cell": "categorical"},
+        backend="local", environment={"python": "3.11.7", "platform": "test",
+                                      "poisson_prove_version": poisson_prove.__version__},
+    ))
+    config = {"cell": "c0"}
+    records, k = [], 0
+    for name, n in outcomes.items():
+        for _ in range(n):
+            records.append(EpisodeRecord.from_episode(
+                Episode(outcome=name, t=3.0, horizon=10.0), run_id="t1", config=config,
+                seed=derive_seed(SALT, config_hash(config), k), replicate_index=k, wall_time=0.0,
+            ))
+            k += 1
+    for _ in range(3):
+        records.append(EpisodeRecord.errored(
+            run_id="t1", config=config, seed=derive_seed(SALT, config_hash(config), k), replicate_index=k,
+            error="timeout", wall_time=0.0,
+        ))
+        k += 1
+    store.append("t1", records)
+    store.mark_complete("t1")
+    return root
+
+
+def _inspected(root: Path, event: str) -> list[dict]:
+    code, out, err = run(["--store", str(root), "inspect", "t1", "--event", event, "--limit", "50", "--json"])
+    assert code == 0, err
+    return json.loads(out)["episodes"]
+
+
+def test_episode_timeout_reaches_the_timed_out_episodes_and_timeout_does_too_where_no_outcome_has_that_name(
+    tmp_path: Path,
+) -> None:
+    root = _timed_out_store(tmp_path / "store", {"fell": 2, "ok": 2})
+    for event in ("episode_timeout", "timeout"):
+        episodes = _inspected(root, event)
+        assert len(episodes) == 3 and all(e["outcome"] is None for e in episodes), (event, episodes)
+
+
+def test_where_an_outcome_is_named_timeout_timeout_is_that_outcome_and_episode_timeout_the_stopped_episodes(
+    tmp_path: Path,
+) -> None:
+    root = _timed_out_store(tmp_path / "store", {"fell": 2, "timeout": 2})
+    outcome = _inspected(root, "timeout")
+    assert len(outcome) == 2 and all(e["outcome"] == "timeout" for e in outcome), outcome
+    stopped = _inspected(root, "episode_timeout")
+    assert len(stopped) == 3 and all(e["outcome"] is None for e in stopped), stopped
