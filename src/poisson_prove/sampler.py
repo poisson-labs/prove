@@ -191,17 +191,18 @@ def _optional_positive_int(table: Mapping[str, Any], name: str) -> int | None:
 #: It names no corpus and no percentile, and recommends no single number: an error that hands
 #: out one value to everyone who meets it has restored by another route the default this field
 #: refuses to have.
-_CAP_REQUIRED = """[capture].max_observation_bytes is required and has no default.
-It is the largest single observation value -- one prompt, one tool result -- that
-this target stores whole, in bytes; anything larger is stored as its head, its
-tail and its original length. Set it to "none" to store every value whole.
-Sizing it: an LLM agent whose prompt carries a system prompt and tool schemas
-needs tens of thousands of bytes; a target whose observations are scalars is
-served by 1024. To size it from this target, run a short sweep at a low limit
-such as 64 and read `poisson-prove inspect`: every value's true length is recorded,
-though the values themselves are not kept. 8192 is what a sweep file without
-this line stored before this change.
-See docs/what-capture-stores.md."""
+_CAP_REQUIRED = (
+    "[capture].max_observation_bytes is required and has no default.\n"
+    "It is the largest single observation value (one prompt, one tool result) this target "
+    "stores whole, in bytes; anything larger is stored as its head, its tail and its original "
+    'length. Set it to "none" to store every value whole. To size it from this target, run a '
+    'short sweep with "max_observation_bytes = 64" and read `poisson-prove inspect`, which '
+    "records every value's true length though not the values; an LLM agent whose prompt carries "
+    "a system prompt and tool schemas needs tens of thousands of bytes, and a target whose "
+    'observations are scalars is served by "max_observation_bytes = 1024". Releases before '
+    '0.1.0 stored "max_observation_bytes = 8192" for a spec without this line. See '
+    "docs/what-capture-stores.md."
+)
 
 #: The spelling of *store whole*, and exactly this one: a string that says what it means, where a
 #: large number is the thing being prevented, ``0`` reads at least as naturally as *cut
