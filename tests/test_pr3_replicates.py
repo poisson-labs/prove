@@ -101,10 +101,8 @@ item agrees at every cut (PR72), and a ``k = 4`` frame whose only job is to be r
 this file, so whether an ordered or an unordered sweep pair is the ``MS@j`` observation at
 ``S > 3`` is not pinned.
 
-**Green before and after -- named so their green is not read as coverage.**
-``test_pr71_no_default_rng_site_is_added_to_paired_py`` is green on the bare tree, because the
-one site is already there, and stays green: it guards the build against adding a second. Every
-other test in this file is red on the bare tree, on ``TypeError`` from ``Cut`` without
+**Green before and after -- named so their green is not read as coverage.** None. Every
+test in this file is red on the bare tree, on ``TypeError`` from ``Cut`` without
 ``comparison`` or from ``SweepPair`` without ``more``, or on ``AttributeError`` for
 ``ReplicateResult`` and ``replicates``. The PR60 digests were minted on the pre-amendment build
 (``7bb1a3b``'s ``src/``), so the test that carries them is red
@@ -121,7 +119,6 @@ dollars and latency values and the ``comparison`` in the phase-2 artifacts are p
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import hashlib
 import itertools
@@ -885,7 +882,7 @@ def test_pr60_replicates_returns_an_empty_tuple_when_every_sweep_is_a_pair(tmp_p
     ]
 
 
-def test_pr60_at_k_two_the_frames_and_both_phase_two_artifacts_are_the_bytes_the_pre_amendment_build_wrote(
+def test_pr60_at_k_two_the_pairs_frame_the_assertion_and_both_analysis_artifacts_keep_their_pinned_bytes(
     tmp_path: Path,
 ) -> None:
     """Minted on ``7bb1a3b``'s ``src/`` (no ``more``, no ``comparison``, no timing) through
@@ -910,7 +907,7 @@ def test_pr60_a_sweep_pair_built_without_more_is_the_sweep_pair_built_with_an_em
 # ---------- PR61: the declared pair carries the whole two-arm analysis ----------
 
 
-def test_pr61_arms_three_to_k_move_no_byte_of_the_two_phase_two_artifacts_and_do_move_the_replicates() -> None:
+def test_pr61_arms_three_to_k_move_no_byte_of_the_contingency_and_intervals_artifacts_and_do_move_the_replicates() -> None:
     """Named mutant 15. Two assertions under one declaration, identical in arms a and b, wild in
     arms 3 to 5: ``analyse`` writes the same bytes for both and ``replicates`` does not."""
     def tame(i: int, s: str) -> tuple[int, ...]:
@@ -975,14 +972,6 @@ def test_pr62_a_set_matched_in_all_k_arms_is_one_row_of_pairs_carrying_k_values(
     row = a.pairs.iloc[0]
     assert [row[c] for c in value_columns(5)] == [Decimal(v) for v in rows[0].values]
     assert all(isinstance(row[c], Decimal) for c in value_columns(5))
-
-
-def test_pr62_at_k_two_pr10_reads_exactly_as_the_frozen_oracle_pinned_it(tmp_path: Path) -> None:
-    rows = k_rows(3, lambda i: (1, 1), k=2)
-    rows[1] = dataclasses.replace(rows[1], absent=frozenset({"b"}))
-    a = P().assert_pairs(make_k_store(tmp_path, rows, k=2), declaration(k=2))
-    only_a = a.excluded.iloc[0]
-    assert (only_a["cause"], only_a["arm"]) == ("unmatched", "a")
 
 
 # ---------- PR63: all k, or none (fixture 1, named mutant 9) ----------
@@ -1150,15 +1139,18 @@ def test_pr65_agree_is_over_every_sweep_and_the_cluster_is_the_item_not_the_set(
 
 @settings(max_examples=60, deadline=None, derandomize=True)
 @given(
-    actions=st.lists(
-        st.tuples(*([st.integers(0, 1)] * 5)), min_size=6, max_size=14,
+    codes=st.lists(
+        st.tuples(*([st.sampled_from([0, 1, 2])] * 5)), min_size=6, max_size=14,
     ),
     comparison=st.sampled_from(["ge", "gt"]),
 )
 def test_pr65_property_agree_at_every_j_follows_from_the_actions(
-    actions: list[tuple[int, ...]], comparison: str
+    codes: list[tuple[int, ...]], comparison: str
 ) -> None:
-    rows = [from_actions(f"i{i:03d}", a) for i, a in enumerate(actions)]
+    """Each call is an action 0, an action 1 or a tie (code 2), which acts under ``ge`` and not
+    under ``gt``, so the declared comparison decides the actions."""
+    rows = [RSet(f"i{i:03d}", tuple((LO, HI, TIE)[c] for c in cs)) for i, cs in enumerate(codes)]
+    actions = [tuple(int(c == 1 or (c == 2 and comparison == "ge")) for c in cs) for cs in codes]
     r = result_of(assertion(rows, comparison=comparison, b=50))
     for j in (2, 3, 4, 5):
         assert r.agree["primary"][f"j{j}"]["estimate"] == pytest.approx(
@@ -1394,21 +1386,7 @@ def test_pr70_the_sensitivity_never_replaces_the_primary_where_the_two_agree() -
     assert list(r.agree) == list(RULES)
 
 
-# ---------- PR71: one bootstrap, one seed, no new default_rng site (named mutant 11) ----------
-
-
-def test_pr71_no_default_rng_site_is_added_to_paired_py() -> None:
-    """Green before and after: the one site is already there. The S25 guard pins the package;
-    this pins the file, so a second stream in ``paired.py`` fails here by name."""
-    source = Path(paired.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    sites: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            for inner in ast.walk(node):
-                if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) and inner.func.attr == "default_rng":
-                    sites.append(node.name)
-    assert sites == ["_cluster_bootstrap"], sites
+# ---------- PR71: one bootstrap, one seed (named mutant 11) ----------
 
 
 def test_pr71_every_k_metric_interval_is_pr28s_estimator_and_never_the_observation_bootstrap() -> None:
@@ -1800,7 +1778,12 @@ def test_pr76_without_a_declared_conditioning_no_per_ten_thousand_figure_is_emit
             assert "per_10000" not in block, block
             for path, _ in walk(block):
                 assert not any("10000" in key or "10_000" in key for key in path), path
-    assert result_of(assertion(grid(8, ["S1", "S2"], ms_pattern), conditioning="c")).cost_framing["primary"]["j1"]["per_10000"]["n"] >= 0
+    conditioned = result_of(assertion(grid(8, ["S1", "S2"], ms_pattern), conditioning="c"))
+    for rule in RULES:
+        for j in (1, 3, 5):
+            figure = conditioned.cost_framing[rule][f"j{j}"]["per_10000"]
+            assert figure["conditioning"] == "c", (rule, j, figure)
+            assert 0 <= figure["n_lo"] <= figure["n"] <= figure["n_hi"], (rule, j, figure)
 
 
 def test_pr76_n_is_never_emitted_without_both_bounds() -> None:

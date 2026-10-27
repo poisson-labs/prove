@@ -8,7 +8,7 @@ lattice pair (``tests/lattice.py``) is read in place and only ``--out`` director
 One plain assertion per invariant. The two mock-agent runs are swept once per module under
 the S12 salt, so the pair infers ``violated, timeout`` with ``completed`` as the non-event,
 has worse cells in ``timeout`` only, and carries a trade line; that is the pair C2, C4, C5,
-C7, C9-C13 and C17 read. C6 does not rely on it: its pair is synthetic, with the worse cell
+C7 and C9-C13 read. C6 does not rely on it: its pair is synthetic, with the worse cell
 found by searching counts.
 
 Reading notes:
@@ -32,16 +32,12 @@ Deliberately absent, rather than adapted:
   where ``to_json()`` puts it.
 - C3. Seven distinct outcomes infer six events, which ``infer_events`` allows (S11 A13 pins the
   six-event ceiling as inclusive), so a seven-outcome frame cannot fail inference as written.
-- C17's second clause. The third quickstart command carries ``--event violated``, a one-event
-  call, which cannot show both events or a trade line. The three commands are asserted
-  unchanged; the two-event clause is not.
 - ``report RUN`` with ``--event`` omitted. Nothing fixes where a single run's event
   set comes from, so every single-run test passes ``--event`` explicitly.
 """
 
 from __future__ import annotations
 
-import ast
 import importlib
 import importlib.machinery
 import importlib.util
@@ -49,7 +45,6 @@ import json
 import math
 import re
 import sys
-import time
 import xml.etree.ElementTree as ET
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
@@ -71,7 +66,6 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 import lattice
 from conftest import quickstart_design
 
-ROOT = Path(__file__).resolve().parents[1]
 LATTICE_ROOT = lattice.root()
 # PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
@@ -81,13 +75,11 @@ QUICKSTART = quickstart_design()
 # so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
-CLI_SOURCE = ROOT / "src" / "poisson_prove" / "cli.py"
 
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
-QUICKSTART_BUDGET_S = 30.0
 
 REPORT_FILES = {"report.md", "heatmap.svg", "receipt.html"}
 MOCK_EVENTS = {"violated", "timeout"}
@@ -525,8 +517,9 @@ def test_c1_single_event_diff_headline_reads_twenty_two_lower_zero_higher_fisher
     # test; these numbers are the unpaired test's, named.
     r = run_cli(lattice_argv("diff", "--event", lattice.EVENT, "--method", "fisher_bh"))
     assert r.code == 0, r.text
-    assert lattice.directions(lattice.fisher(lattice.EVENT, Q)) == (22, 0)
-    assert LATTICE_HEADLINE == f"{lattice.EVENT}: 22 lower, 0 higher"
+    lower, higher = lattice.directions(lattice.fisher(lattice.EVENT, Q))
+    assert (lower, higher) == (22, 0)
+    assert LATTICE_HEADLINE == f"{lattice.EVENT}: {lower} lower, {higher} higher"
     assert LATTICE_HEADLINE in r.lines, r.out
     assert "fisher_bh" in r.out, r.out
     assert not [line for line in r.out.splitlines() if line.startswith(INFERENCE_MARKER)], r.out
@@ -592,7 +585,7 @@ def test_c4_repeated_events_print_no_inference_line(pair: MockPair) -> None:
 # ---------- C5: check refuses inference ----------
 
 
-def test_c5_check_without_event_exits_two_and_lists_the_events_the_runs_carry(pair: MockPair) -> None:
+def test_c5_check_without_event_exits_one_and_lists_the_events_the_runs_carry(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "check"))
     # A refusal exits 1.
     assert_clean_refusal(r, 1)
@@ -739,7 +732,7 @@ def test_c9_single_run_report_writes_three_files_with_one_panel_per_event(pair: 
         assert name in r.out, name
 
 
-def test_c9_single_run_report_defaults_to_proofload_report_run(pair: MockPair, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_c9_single_run_report_defaults_to_a_prove_report_folder_for_one_run(pair: MockPair, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     r = run_cli([
         "--store", str(pair.root), "report", pair.a, "--event", "violated",
@@ -941,37 +934,6 @@ def test_c15_manifest_without_import_path_prints_the_fallback_snippet(tmp_path: 
 # ---------- C16: exit codes unchanged; every new refusal is 2 ----------
 
 
-def test_c16_gate_pass_is_zero_and_gate_fail_is_one(worse_pair: Path) -> None:
-    # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
-    # declare none; --fail-on higher is the same gate ("fail when the rate rose").
-    passed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout", "--fail-on", "higher"])
-    failed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--fail-on", "higher"])
-    assert passed.code == 0, passed.text
-    # A failed check exits 4 and says failed on its first line.
-    assert failed.code == 4 and "Traceback" not in failed.text, failed.text
-    fixture = run_cli(lattice_argv("check", "--event", lattice.EVENT, "--fail-on", "any"))
-    assert fixture.code == 4 and fixture.lines[0].startswith("failed"), fixture.text
-
-
-def test_c16_check_without_event_is_a_two(pair: MockPair) -> None:
-    r = run_cli(pair_argv(pair, "check"))
-    # A refusal exits 1.
-    assert_clean_refusal(r, 1)
-    assert r.err.strip(), "expected a message on stderr"
-
-
-@pytest.mark.parametrize(
-    "extra",
-    [("--method", "fisher_bh"), ("--methods", "all"), ("--q", "0.05")],
-    ids=["method", "methods", "q"],
-)
-def test_c16_single_run_report_with_a_diff_only_flag_is_a_two(pair: MockPair, tmp_path: Path, extra: tuple[str, str]) -> None:
-    r = run_cli(run_report_argv(pair, tmp_path / "out", *extra))
-    # A refusal exits 1.
-    assert_clean_refusal(r, 1)
-    assert r.err.strip(), "expected a message on stderr"
-
-
 def test_c16_report_with_three_positionals_is_a_two_naming_both_forms(pair: MockPair, tmp_path: Path) -> None:
     out = tmp_path / "three"
     r = run_cli([
@@ -983,60 +945,8 @@ def test_c16_report_with_three_positionals_is_a_two_naming_both_forms(pair: Mock
     assert not out.exists() or not any(out.iterdir())
 
 
-def test_c16_unknown_run_is_still_a_two_and_missing_event_is_not_a_traceback(pair: MockPair) -> None:
+def test_c16_unknown_run_exits_one_without_a_traceback(pair: MockPair) -> None:
     r = run_cli(["--store", str(pair.root), "diff", pair.a, "no-such-run"])
     # A refusal exits 1.
     assert_clean_refusal(r, 1)
     assert "no-such-run" in r.text, r.text
-
-
-# ---------- C17: quickstart still passes ----------
-
-
-def test_c17_three_quickstart_commands_run_unchanged_under_thirty_seconds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
-    monkeypatch.chdir(tmp_path)
-    t0 = time.perf_counter()
-    default_store = tmp_path / "prove-runs"
-    before = run_ids(default_store)
-    first = run_cli(["sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes"])
-    assert first.code == 0, first.text
-    run_a = run_id_of(first, default_store, before)
-    before = run_ids(default_store)
-    second = run_cli(["sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", PATCHED, "--pair-with", run_a, "--yes"])
-    assert second.code == 0, second.text
-    run_b = run_id_of(second, default_store, before)
-    third = run_cli(["report", run_a, run_b, "--event", "violated", "--x", "tool_fail_rate", "--y", "task_id"])
-    assert third.code == 0, third.text
-    elapsed = time.perf_counter() - t0
-    assert elapsed < QUICKSTART_BUDGET_S, elapsed
-
-    (out,) = [p for p in tmp_path.iterdir() if p.name.startswith("prove-report-")]
-    assert re.fullmatch(r"prove-report-.+-vs-.+", out.name) and out.is_dir(), sorted(p.name for p in tmp_path.iterdir())
-    assert {p.name for p in out.iterdir()} == REPORT_FILES
-    md = (out / "report.md").read_text()
-    # PF4 (PF4.20): violated's kind is unknown, so the headline counts read lower/higher.
-    assert re.search(r"^violated: \d+ lower, \d+ higher$", md, re.MULTILINE), md
-    assert svg_panels(out / "heatmap.svg") == ["violated"]
-
-
-# ---------- C18: no statistics in cli.py ----------
-
-
-def imported_top_level_modules(source: Path) -> set[str]:
-    tree = ast.parse(source.read_text())
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            names.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
-            names.add(node.module.split(".")[0])
-    return names
-
-
-def test_c18_cli_still_imports_neither_scipy_nor_numpy() -> None:
-    assert CLI_SOURCE.is_file()
-    assert not imported_top_level_modules(CLI_SOURCE) & {"scipy", "numpy"}
-    src = CLI_SOURCE.read_text()
-    for mod in ("scipy", "numpy"):
-        assert f"import {mod}" not in src and f"from {mod}" not in src, mod

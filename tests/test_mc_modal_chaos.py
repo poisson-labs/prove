@@ -29,9 +29,8 @@ spawned interpreter and hands JSON-native results back through a pipe, and the p
 never installs. Spawn rather than fork, so an arm inherits nothing the pytest process holds.
 
 **The target** is in this file, not under ``examples/``: one chat completion at the declared
-position ``solve`` over ``httpx.MockTransport`` (no socket). It records the injection block the
-executor opened around the episode, if any, and the content it received. A faulted episode
-falls; an untouched one survives.
+position ``solve`` over ``httpx.MockTransport`` (no socket). It records the content it received.
+A faulted episode falls; an untouched one survives.
 """
 
 from __future__ import annotations
@@ -94,8 +93,6 @@ def _handler(request: httpx.Request) -> httpx.Response:
 
 
 def rollout(cfg: dict[str, Any], seed: int) -> Episode:
-    block = chaos._BLOCK
-    seen = None if block is None else {"fault": block.spec.fault, "rate": block.spec.rate, "steps": list(block.spec.steps)}
     with httpx.Client(transport=httpx.MockTransport(_handler), base_url="http://scripted.invalid") as client:
         with chaos.position("solve", 1):
             response = client.post("/v1/chat/completions", json={"model": "scripted-model", "messages": [{"role": "user", "content": "hi"}]})
@@ -105,7 +102,7 @@ def rollout(cfg: dict[str, Any], seed: int) -> Episode:
         outcome="fell" if injected else "survived",
         t=1.0 if injected else HORIZON,
         horizon=HORIZON,
-        meta={"chaos_block": seen, "content": content},
+        meta={"content": content},
     )
 
 
@@ -359,7 +356,6 @@ def rows(root: Path, run_id: str) -> list[dict[str, Any]]:
                 "key": (row.config["body"], int(row.replicate_index)),
                 "outcome": row.outcome if isinstance(row.outcome, str) else None,
                 "error": row.error if isinstance(row.error, str) else None,
-                "saw": meta.get("chaos_block"),
                 "content": meta.get("content"),
                 "record": backend_meta.get("chaos"),
             }
@@ -404,10 +400,9 @@ def test_mc1_a_chaos_sweep_on_the_modal_path_hands_each_rollout_the_chaos_settin
     assert modal["modal_file"] == STUB_FILE and modal["shipped"] and set(modal["shipped"]) == {"poisson_prove.executor_modal._container_batch"}, modal
     local_rows = rows(local_root, local["run_id"])
     modal_rows = rows(modal_root, modal["run_id"])
-    assert len(local_rows) == N_ROWS and all(r["saw"] == CHAOS and r["outcome"] == "fell" for r in local_rows), local_rows  # the reference arm
+    assert len(local_rows) == N_ROWS and all(r["outcome"] == "fell" for r in local_rows), local_rows  # the reference arm
     assert len(modal_rows) == N_ROWS and all(r["error"] is None for r in modal_rows), modal_rows
-    assert {r["key"]: r["saw"] for r in modal_rows} == {r["key"]: r["saw"] for r in local_rows}, "the Modal path's rollouts did not receive [chaos]"
-    assert {r["key"]: (r["outcome"], r["content"]) for r in modal_rows} == {r["key"]: (r["outcome"], r["content"]) for r in local_rows}
+    assert {r["key"]: (r["outcome"], r["content"]) for r in modal_rows} == {r["key"]: (r["outcome"], r["content"]) for r in local_rows}, "the Modal path's rollouts did not receive [chaos]"
     assert modal["summary"] == local["summary"] == {"n_ok": N_ROWS, "n_errored": 0, "complete": True}
 
 

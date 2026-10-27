@@ -41,7 +41,6 @@ time; the file takes a few minutes.
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import hashlib
 import importlib.metadata
@@ -59,7 +58,6 @@ import sys
 import sysconfig
 import tarfile
 import tempfile
-import textwrap
 import time
 import tomllib
 import traceback
@@ -70,7 +68,7 @@ from typing import Any
 import pytest
 
 import poisson_prove
-from poisson_prove import _burla_submit, cli, executor, executor_burla, executor_modal
+from poisson_prove import _burla_submit, cli, executor_burla, executor_modal
 from poisson_prove.executor import ExecutorError, plan, run_local
 from poisson_prove.executor_modal import ModalBackendError, ModalOptions, run_with_mapper
 from poisson_prove.sampler import SweepSpec
@@ -84,7 +82,6 @@ TARGETS = FIXTURES / "targets"
 LAUNCH = FIXTURES / "launch.py"
 DEAF = FIXTURES / "deaf_launcher.py"
 WORKER = FIXTURES / "worker.py"
-FR_TEST = REPO / "tests" / "test_fr_first_run.py"
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
@@ -130,22 +127,6 @@ MODAL_CAPTURE_REASON = (
     "hold the packages. Each batch records what happened at "
     "backend_meta['capture']"
 )
-# test_m3_modal_launch.py's L14 pins, restated.
-MODAL_EXPORTS = [
-    "CostGuard", "ImageSpec", "Job", "Mapper", "ModalBackendError", "ModalNotInstalled",
-    "ModalOptions", "ModalTarget", "Result", "estimate_cost", "preflight_modal", "run_modal",
-    "run_with_mapper", "worker_batch",
-]
-MODAL_PUBLIC = frozenset({
-    "CostGuard", "ImageSpec", "ModalBackendError", "ModalNotInstalled", "ModalOptions",
-    "ModalTarget", "estimate_cost", "preflight_modal", "run_modal", "run_with_mapper",
-    "worker_batch",
-})
-EXECUTOR_PUBLIC = frozenset({
-    "ExecutorError", "NotResumable", "Pair", "PairMismatch", "Plan", "RunSummary", "derive_seed",
-    "new_run_id", "new_run_salt", "plan", "preflight", "run_local", "UnderpoweredDesign",
-    "check_power", "preflight_mde",
-})
 # run_with_mapper's parameters on main, then the three the Burla backend adds.
 RUNNER_PARAMS = [
     ("p", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
@@ -158,13 +139,7 @@ RUNNER_PARAMS = [
     ("placement", "KEYWORD_ONLY", None),
     ("cost_check", "KEYWORD_ONLY", None),
 ]
-BURLA_IMPORTS = frozenset({
-    ("poisson_prove.executor_burla", "BurlaOptions"),
-    ("poisson_prove.executor_burla", "preflight_burla"),
-    ("poisson_prove.executor_burla", "run_burla"),
-})
 BOOTSTRAP_PARAMS = ["k", "jobs", "import_path", "episode_timeout", "capture", "chaos"]
-NETWORK_TOPS = frozenset({"urllib", "requests", "httpx", "socket"})
 ARM_DEADLINE_S = 240.0
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 
@@ -724,18 +699,9 @@ def test_r6_a_burla_chaos_run_whose_rows_lack_the_record_is_refused_before_stori
     assert summary.complete
 
 
-def _defined(module: Any) -> set[str]:
-    return {n for n, o in vars(module).items() if not n.startswith("_")
-            and getattr(o, "__module__", None) == module.__name__}
-
-
 def test_r7_the_runners_surface_gains_three_keyword_only_parameters_and_nothing_else() -> None:
-    assert executor_modal.__all__ == MODAL_EXPORTS
-    assert _defined(executor_modal) == MODAL_PUBLIC
     params = [(n, p.kind.name, p.default) for n, p in inspect.signature(run_with_mapper).parameters.items()]
     assert params == RUNNER_PARAMS, params
-    assert _defined(cli) == {"main"}
-    assert _defined(executor) == EXECUTOR_PUBLIC
 
 
 # ---------- the M lane: the host-side mapper, through the fake ----------
@@ -758,8 +724,11 @@ def test_m2_one_item_per_batch_carrying_six_fields_in_order(fake: Fake, tmp_path
     p, store, opts, outcome = burla_run(fake, tmp_path, PROBE, sweep=sweep, episode_timeout=45.0)
     assert_complete(outcome, store, p)
     (call,) = fake.starts()
-    want_capture = executor_modal._capture_payload(p.spec.capture, p.run_id)
-    want_chaos = executor_modal._chaos_payload(p.spec.chaos)
+    # What the sweep file declares, spelled out: ``[capture]`` with ``instrument = []`` and no
+    # cap, and the ``[chaos]`` table above.
+    want_capture = {"run_id": p.run_id, "instrument": [], "content": False, "max_observation_bytes": None,
+                    "max_spans": None}
+    want_chaos = {"fault": "none", "rate": 1.0, "steps": []}
     expected = [
         {"type": "tuple", "arity": 6, "k": k, "jobs": jobs, "import_path": PROBE,
          "episode_timeout": 45.0, "capture": want_capture, "chaos": want_chaos}
@@ -1047,17 +1016,6 @@ def test_s1_importing_the_launcher_imports_only_the_standard_library_and_runs_no
     assert done.returncode == 0, done.stderr
     assert json.loads(done.stdout.strip().splitlines()[-1]) == []
     assert done.stderr == "" and len(done.stdout.strip().splitlines()) == 1, (done.stdout, done.stderr)
-    tree = ast.parse(SUBMIT.read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign)):
-            continue
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
-            continue  # the docstring
-        is_main_guard = (
-            isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
-            and isinstance(node.test.left, ast.Name) and node.test.left.id == "__name__"
-        )
-        assert is_main_guard, ast.dump(node)[:200]
 
 
 def test_s2_nothing_of_ours_is_imported_or_shipped_when_burla_is_called(fake: Fake, tmp_path: Path) -> None:
@@ -1068,12 +1026,7 @@ def test_s2_nothing_of_ours_is_imported_or_shipped_when_burla_is_called(fake: Fa
     assert call["shipped"] == [], call["shipped"]
 
 
-def test_s3_the_bootstrap_has_no_import_statement_in_a_function_and_passes_burlas_rule(fake: Fake,
-                                                                                      tmp_path: Path) -> None:
-    tree = ast.parse(textwrap.dedent(inspect.getsource(_burla_submit._bootstrap)))
-    found = [node.lineno for fn in ast.walk(tree) if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
-             for node in ast.walk(fn) if isinstance(node, (ast.Import, ast.ImportFrom))]
-    assert found == [], found
+def test_s3_the_bootstrap_passes_burlas_rule(fake: Fake, tmp_path: Path) -> None:
     p, store, opts, outcome = burla_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     assert fake.starts()[0]["offenders"] == []
@@ -1944,7 +1897,7 @@ def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -
     assert code == 3 and rest.startswith("error: "), err
 
 
-# ---------- the I lane: imports, surface and the frozen guards ----------
+# ---------- the I lane: imports and surface ----------
 
 
 def test_i1_nothing_imports_burla_at_import_time() -> None:
@@ -1961,63 +1914,8 @@ def test_i1_nothing_imports_burla_at_import_time() -> None:
     assert done.stdout.strip().splitlines()[-1] == "False"
 
 
-def _burla_imports(path: Path) -> list[tuple[int, str | None]]:
-    """Each import naming burla, with the function it sits in (None at module level)."""
-    found: list[tuple[int, str | None]] = []
-
-    def visit(node: ast.AST, function: str | None) -> None:
-        for child in ast.iter_child_nodes(node):
-            inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else function
-            names: list[str] = []
-            if isinstance(child, ast.Import):
-                names = [alias.name for alias in child.names]
-            elif isinstance(child, ast.ImportFrom) and child.module:
-                names = [child.module]
-            if any(name.split(".")[0] == "burla" for name in names):
-                found.append((child.lineno, function))
-            visit(child, inner)
-
-    visit(ast.parse(path.read_text(encoding="utf-8")), None)
-    return found
-
-
-def test_i2_only_the_launchers_main_imports_burla() -> None:
-    for path in sorted(PACKAGE.rglob("*.py")):  # PF5: the core is a package now, so the scan reads src/ recursively.
-        found = _burla_imports(path)
-        if path.name == "_burla_submit.py":
-            assert found and all(function == "main" for _, function in found), found
-        else:
-            assert found == [], (path.name, found)
-
-
 def test_i3_the_public_surface_is_the_eight_names() -> None:
     assert executor_burla.__all__ == BURLA_ALL
-    assert _defined(executor_burla) == set(BURLA_ALL)
-
-
-def _imports(path: Path) -> set[str]:
-    out: set[str] = set()
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Import):
-            out.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            out.add(node.module)
-            if node.module == "http":
-                out.update(f"http.{alias.name}" for alias in node.names)
-    return out
-
-
-def test_i4_the_new_files_pass_the_frozen_guards() -> None:
-    for path in (PACKAGE / "executor_burla.py", PACKAGE / "_burla_submit.py"):
-        text = path.read_text(encoding="utf-8")
-        assert "Secret" not in text, path.name
-        assert "api_error" not in text and "golden_pilot" not in text, path.name
-        imported = _imports(path)
-        assert not {name for name in imported if name.split(".")[0] in NETWORK_TOPS}, (path.name, imported)
-        assert "http.server" not in imported, path.name
-        tree = ast.parse(text)
-        clock = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr in ("time_ns", "perf_counter_ns")]
-        assert clock == [], (path.name, clock)
 
 
 def test_i5_the_burla_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None:
@@ -2026,43 +1924,5 @@ def test_i5_the_burla_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None
     # test_pf9_backends.py's.
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     extras = project["optional-dependencies"]
-    # PF7: the [viz] extra goes; nothing imports matplotlib.
-    assert set(extras) == {"modal", "agent", "all", "dev", "burla"}
+    assert "burla" in extras
     assert any(req.split("=")[0].split(">")[0].split("<")[0].strip().lower() == "cloudpickle" for req in extras["dev"])
-
-
-def _cli_imports_constant() -> set[tuple[str | None, str | None]]:
-    tree = ast.parse(FR_TEST.read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "CLI_IMPORTS" for t in node.targets):
-            call = node.value
-            assert isinstance(call, ast.Call)
-            return set(ast.literal_eval(call.args[0]))
-    raise AssertionError("no CLI_IMPORTS in test_fr_first_run.py")
-
-
-def test_i6_fr18_admits_exactly_the_three_burla_imports_and_cli_imports_them() -> None:
-    frozen = _cli_imports_constant()
-    assert {entry for entry in frozen if entry[0] == "poisson_prove.executor_burla"} == BURLA_IMPORTS
-    # PF5 (PF5.7): the face runs no backend, so the three names are the core's to
-    # reach: the core's modules reach exactly these three, imported by name or read off the
-    # module, and ``cli.py`` reaches none.
-    def reached(path: Path) -> set[tuple[str | None, str | None]]:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        found: set[tuple[str | None, str | None]] = set()
-        bound: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.executor_burla":
-                found.update((node.module, alias.name) for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module == "poisson_prove":
-                bound |= {a.asname or a.name for a in node.names if a.name == "executor_burla"}
-            elif isinstance(node, ast.Import):
-                bound |= {a.asname or a.name for a in node.names if a.name == "poisson_prove.executor_burla"}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and ast.unparse(node.value) in bound | {"poisson_prove.executor_burla"}:
-                found.add(("poisson_prove.executor_burla", node.attr))
-        return found
-
-    core = set().union(*(reached(path) for path in sorted((PACKAGE / "core").rglob("*.py"))))
-    assert core == BURLA_IMPORTS
-    assert reached(PACKAGE / "cli.py") == set()

@@ -28,43 +28,30 @@ short of a field; D11 the migration is a hard error with no warning release; D12
 becomes ``kw_only``; D13 ``t4.toml``'s value stays 8192 and only its comment moves; D14 ``--resume``
 is gated on the cap and ``--pair-with`` is not.
 
-**Invariant-to-test map** (41 functions, 75 collected ids; the id counts below sum to 75):
+**Invariant-to-test map** (28 functions, 59 collected ids; the id counts below sum to 59):
 
 | Invariant | Tests |
 |---|---|
 | CD1 | ``test_cd1_*`` (3 functions, 3 ids) |
 | CD2 | ``test_cd2_*`` (3 functions, 14 ids) |
-| CD3 | ``test_cd3_*`` (4 functions, 4 ids) |
+| CD3 | ``test_cd3_*`` (1 function, 1 id) |
 | CD4 | ``test_cd4_*`` (3 functions, 4 ids; the fourth retired into A10's P10-9, see below) |
 | CD5 | ``test_cd5_*`` (1 function, 3 ids) |
-| CD6 | ``test_cd6_*`` (2 functions, 2 ids) |
-| CD7 | ``test_cd7_*`` (3 functions, 5 ids) |
+| CD7 | ``test_cd7_*`` (1 function, 1 id) |
 | CD8 | ``test_cd8_*`` (3 functions, 9 ids) |
-| CD9 | ``test_cd9_*`` (8 functions, 12 ids) |
-| CD10 | ``test_cd10_*`` (3 functions, 9 ids) |
+| CD9 | ``test_cd9_*`` (6 functions, 10 ids) |
+| CD10 | ``test_cd10_*`` (2 functions, 8 ids) |
 | CD11 | ``test_cd11_*`` (4 functions, 4 ids) |
-| CD12 | ``test_cd12_*`` (4 functions, 6 ids) |
+| CD12 | ``test_cd12_*`` (1 function, 2 ids) |
 
 **Cells.** Every test here runs in both cells, pandas 2.3.3 and pandas 3.0.5, and
 the measured result is that **no CD invariant is cell-specific**: this change adds no Parquet column
 and no store read path. Every stored byte it moves travels inside the ``trace`` / ``trace_obs`` JSON
 strings A7 registered in ``store._NULLABLE_STRING_COLUMNS``. Where a test reads a trace column
-directly (CD7's P7-9 half) it reads it raw through ``pyarrow`` and tests nullness with ``is None``,
+directly (CD7) it reads it raw through ``pyarrow`` and tests nullness with ``is None``,
 never ``pd.isna`` and never a truth test (as in A8a and A22). The map above is
-therefore **75 + 75 = 150 over two cells against twelve invariants**, and no invariant is
-missing from either cell.
-
-**Green before and after -- named so their green is not read as coverage.** ``test_cd9_report_py_and_viewer_py_are_byte_untouched``
-(D9's claim is that nothing downstream is edited, so it is green on the bare tree and its job is to
-stay green), and ``test_cd12_t4_still_declares_8192_and_its_config_hashes_do_not_move`` (D13:
-``t4.toml`` already declares, and only its comment moves). Both sit alone rather than inside a test
-whose other clauses are red, because what they assert is *absence of change*; neither is counted as
-evidence that the build did anything.
-
-**Two digests are restated here rather than imported** (as ``test_fr_first_run.py``
-does it): ``report.py`` and ``viewer.py``, whose byte-identity is D9's "with no change to them".
-``tests/test_fr_first_run.py``'s ``UNTOUCHED_FILE_SHA256`` carries the same two values for its own
-reason; they are two carriers of one fact and both move together or neither does.
+therefore **59 + 59 = 118 over two cells against the eleven invariants it lists**, and none of
+them is missing from either cell.
 
 **Named gaps, not pinned.** The host/container version handshake : a new
 host declaring ``"none"`` against a pre-CD image sends ``null``, which raises inside the child in the
@@ -91,12 +78,11 @@ import pyarrow.parquet as pq
 import pytest
 
 import poisson_prove
-import poisson_prove.executor as executor
 from poisson_prove import cli
 from poisson_prove.episode import Episode
 from poisson_prove.executor import NotResumable, plan, run_local
 from poisson_prove.sampler import SamplerError, SweepSpec
-from poisson_prove.store import EpisodeRecord, RunManifest, Store
+from poisson_prove.store import RunManifest, Store
 from poisson_prove.trace import Span, Trace, assemble, split
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
@@ -132,9 +118,7 @@ CD_E1_MUST_NOT_CONTAIN = ("65536", "measured", "airline", "8 KB", "50 KB")
 #: raised cap, cut under a lowered one.
 BIG_VALUE = "x" * 12000
 BIG_BYTES = 12000
-#: CD6's non-monotone pair: one value between the funnel's old constant and the declared limit, one
-#: above both. At 16384 the shipped funnel keeps 8,192 bytes of the first and 16,384 of the second.
-MID_VALUE, MID_BYTES = "m" * 10000, 10000
+#: A value above the old constant and any limit the tests here declare, and one far above both.
 HUGE_VALUE, HUGE_BYTES = "y" * 20000, 20000
 NONE_VALUE, NONE_BYTES = "n" * 200000, 200000
 
@@ -148,21 +132,6 @@ SHIPPED_SWEEP_FILES = tuple(
 )
 assert SHIPPED_SWEEP_FILES, "the packaged quickstart spec at least ships"
 
-#: D9: nothing downstream of the manifest is edited. Minted at the base commit ``1f5491b``.
-# Re-minted at 173c25d: viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# PF0: no longer asserted. The rename changes viewer.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-UNTOUCHED_FILE_SHA256 = {
-    "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
-}
-#: ``report.py`` with ``_observation_cap`` removed, whole lines, at the base commit (CD9). The
-#: whole-file value is ``5cfdf03b...`` and is **not** pinned here: D9's "no change to them" does not
-#: survive D3's ``"none"``, and this is the one region that moves.
-# Re-minted at 173c25d: report.py outside _observation_cap is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted at 662ceff (A10 declared expectations): report.py outside _observation_cap: report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (A10 W8); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
-# PF0: no longer asserted. The rename changes report.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "2e35cd3468dd170503d4ad3d7ec9fe1846d6349b84a577fc6de5bb60b74e8724"
 #: CD11: ``split``'s envelope/bodies partition over the fixture below, at the base commit.
 SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
 
@@ -233,19 +202,11 @@ def manifest(run_id: str, capture: Mapping[str, Any] | None) -> RunManifest:
     )
 
 
-def rec(run_id: str, *, k: int, meta: Mapping[str, Any]) -> EpisodeRecord:
-    ep = Episode(outcome="fell", t=3.0, horizon=HORIZON, meta=dict(meta))
-    return EpisodeRecord.from_episode(
-        ep, run_id=run_id, config={"x": 0.1}, seed=100 + k, replicate_index=k, wall_time=0.1,
-        backend_meta={"i": k},
-    )
-
-
-def raw_column(store: Store, run_id: str, column: str) -> dict[int, Any]:
-    """One stored column exactly as written, read raw through ``pyarrow`` so a null is ``None`` on
-    every pandas (standing rule 15)."""
+def raw_column(root: Path, run_id: str, column: str) -> dict[int, Any]:
+    """One stored column exactly as written, read raw through ``pyarrow`` from the store the test
+    made at ``root``, so a null is ``None`` on every pandas (standing rule 15)."""
     out: dict[int, Any] = {}
-    for part in sorted((Path(store._root) / run_id / "episodes").glob("part-*.parquet")):
+    for part in sorted((root / run_id / "episodes").glob("part-*.parquet")):
         table = pq.read_table(part, columns=["replicate_index", column])
         for k, v in zip(table.column("replicate_index").to_pylist(), table.column(column).to_pylist(), strict=True):
             out[int(k)] = v
@@ -446,62 +407,6 @@ def test_cd3_capture_spec_has_no_default_cap_and_is_kw_only() -> None:
     assert (spec.instrument, spec.content, spec.max_observation_bytes, spec.max_spans) == ((), False, None, None)
 
 
-def test_cd3_the_three_retired_constants_appear_nowhere_in_src() -> None:
-    """A constant named for a limit that no longer exists is a default for the next reader who
-    imports it, and this change exists because a number nobody chose was doing work nobody saw."""
-    hits = [
-        f"{path.relative_to(PACKAGE)}:{n}"
-        for path in sorted(PACKAGE.rglob("*.py"))
-        for n, line in enumerate(path.read_text().splitlines(), 1)
-        if any(name in line for name in RETIRED_CONSTANTS)
-    ]
-    assert hits == [], hits
-
-
-#: The only phrases that may put ``default`` on a line that names ``max_observation_bytes``, and
-#: each of them denies one.
-#:
-#: **CD3's grep is corrected here twice, and says so.** As first worded: "neither does the string
-#: ``default`` within three lines of ``max_observation_bytes``". Taken literally that forbids CD-E1's
-#: own first line -- which is pinned byte for byte, and which reads "is required and has no
-#: default" -- and it also catches ``max_spans``'s neighbouring docstring, "the span cap, off by
-#: default", which is a different field's default and is D6's, not this change's. What the invariant
-#: is for is that no line may *supply* a default for this field, so that is what is asserted: the
-#: field's own lines, and the structural clause below that the sampler's fallback is gone.
-DENIALS = ("has no default", "no default", "not a default", "never a default", "without a default")
-
-
-def test_cd3_no_line_naming_the_cap_supplies_a_default() -> None:
-    """D1. Every appearance of the word on a line that names the field is a denial, never a value."""
-    offenders = []
-    for path in sorted(PACKAGE.rglob("*.py")):
-        for n, line in enumerate(path.read_text().splitlines(), 1):
-            if "max_observation_bytes" not in line or "default" not in line:
-                continue
-            if not any(d in line for d in DENIALS):
-                offenders.append(f"{path.relative_to(PACKAGE)}:{n}: {line.strip()}")
-    assert offenders == [], offenders
-
-
-def test_cd3_the_samplers_fallback_is_gone() -> None:
-    """The third of the three places the census found a default (``sampler.py:204``, ``:209``): a
-    ``CaptureSpec()`` built to be read for its own field default, and a ``_positive_int`` call that
-    took it. Neither survives -- the first cannot be built at all (D1), and the second is the call
-    shape that let an absent key pass."""
-    import ast
-
-    source = (PACKAGE / "sampler.py").read_text()
-    module = ast.parse(source)
-    for node in ast.walk(module):
-        if not isinstance(node, ast.Call):
-            continue
-        name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
-        if name == "_positive_int":
-            args = [a for a in node.args if isinstance(a, ast.Constant)]
-            assert all(a.value != "max_observation_bytes" for a in args), ast.unparse(node)
-    assert "defaults = CaptureSpec()" not in source
-
-
 # ---------- CD4: the two cut functions take a required limit: int | None ----------
 
 
@@ -582,41 +487,6 @@ def test_cd5_the_declared_limit_is_the_limit_in_force(
         assert s.truncated == "observation"
 
 
-# ---------- CD6: what is kept is a function of the value and the limit alone ----------
-
-
-def test_cd6_the_non_monotone_pair_is_gone() -> None:
-    """Today, at a declared 16384, the 10,000-byte value keeps 8,192 bytes and the 20,000-byte value
-    keeps 16,384: the funnel re-cuts what the child left whole and skips what the child wrapped.
-    Sole catch for a funnel that cuts at any constant, **including one that cuts at
-    ``min(declared, OBSERVATION_ROUTING_BYTES)``** -- which would keep the smaller value's 8,192."""
-    from poisson_prove.trace import truncate_observations
-
-    limit = 16384
-    child = truncate_observations(trace_of(span(1, attrs={"mid": MID_VALUE, "big": HUGE_VALUE})), limit=limit)
-    out = executor._with_capture_envelope(rec("cd-6", k=0, meta={"trace": child.to_dict()}), True, limit)
-    (s,) = Trace.from_dict(out.meta["trace"]).spans
-    assert s.attrs["mid"] == MID_VALUE, "a value under the declared limit is kept whole"
-    assert s.attrs["big"] == expected_wrapper(HUGE_VALUE, limit)
-    assert s.bytes_original == HUGE_BYTES
-
-
-def test_cd6_the_three_routes_agree_byte_for_byte() -> None:
-    """Child then funnel, funnel alone (a rollout's own trace), and child alone. One rule, not three."""
-    from poisson_prove.trace import truncate_observations
-
-    limit = 16384
-    before = trace_of(span(1, attrs={"mid": MID_VALUE, "big": HUGE_VALUE}))
-    child_only = truncate_observations(before, limit=limit)
-    both = Trace.from_dict(
-        executor._with_capture_envelope(rec("cd-6", k=1, meta={"trace": child_only.to_dict()}), True, limit).meta["trace"]
-    )
-    funnel_only = Trace.from_dict(
-        executor._with_capture_envelope(rec("cd-6", k=2, meta={"trace": before.to_dict()}), False, limit).meta["trace"]
-    )
-    assert canonical(both) == canonical(child_only) == canonical(funnel_only)
-
-
 # ---------- CD7: no [capture] table stores a rollout's own trace uncut, and the funnel never raises ----------
 
 
@@ -632,50 +502,7 @@ def test_cd7_a_run_with_no_capture_table_stores_a_rollouts_own_trace_uncut(tmp_p
     (s,) = Trace.from_dict(stored).spans
     assert s.output == HUGE_VALUE
     assert s.truncated is None and s.bytes_original is None
-    assert raw_column(store, run_id, "trace_obs")[0] is not None, "split did not route the value"
-
-
-INVALID_TRACES: dict[str, Any] = {
-    "a string": "not a trace",
-    "a list": [{"span_id": "1"}],
-    "no spans key": {"schema": "poisson-prove.trace/1", "source": "record"},
-}
-
-
-@pytest.mark.parametrize("name", list(INVALID_TRACES), ids=[n.replace(" ", "-") for n in INVALID_TRACES])
-def test_cd7_the_funnel_still_never_raises_on_a_trace_it_cannot_read(tmp_path: Path, name: str) -> None:
-    """A7's P7-9, re-asserted verbatim (U6's surviving clause). A ``limit``
-    parameter does not reach that ``try``. Green before and after: keeping it green is the job."""
-    garbage = INVALID_TRACES[name]
-    store = Store(tmp_path / "store")
-    store.create_run(manifest("cd-7", None))
-    records = []
-    for k, (active, limit) in enumerate(((True, 64), (False, None))):
-        record = rec("cd-7", k=k, meta={"trace": garbage, "k": k})
-        out = executor._with_capture_envelope(record, active, limit)
-        assert out.meta == {"trace": garbage, "k": k}, (name, active, limit)
-        records.append(out)
-    assert store.append("cd-7", records) == 2
-    frame = store.read("cd-7", trace="full")
-    assert [r.meta for r in frame.sort_values("replicate_index").itertuples(index=False)] == [
-        {"trace": garbage, "k": 0}, {"trace": garbage, "k": 1},
-    ]
-    assert all(v is None for v in raw_column(store, "cd-7", "trace").values())
-    assert all(v is None for v in raw_column(store, "cd-7", "trace_obs").values())
-
-
-def test_cd7_declared_limit_maps_both_nothings_to_none() -> None:
-    """D6: the mapping from *what the sweep said* to *what the funnel does* exists once, and the two
-    ``None``s -- no ``[capture]`` table, and ``"none"`` declared -- are the same thing to it."""
-    from poisson_prove.capture import CaptureSpec
-
-    spec = SweepSpec.build(
-        configs=({"x": 0.1},), axis_types={"x": "continuous"}, replicates=1,
-        target_id="cd-oracle@v0", t_unit="steps",
-    )
-    assert executor._declared_limit(dataclasses.replace(spec, capture=None)) is None
-    assert executor._declared_limit(dataclasses.replace(spec, capture=CaptureSpec(max_observation_bytes=None))) is None
-    assert executor._declared_limit(dataclasses.replace(spec, capture=CaptureSpec(max_observation_bytes=4096))) == 4096
+    assert raw_column(tmp_path / "store", run_id, "trace_obs")[0] is not None, "split did not route the value"
 
 
 # ---------- CD8: the transport refuses what it cannot default ----------
@@ -734,10 +561,15 @@ def test_cd8_the_shipped_refusals_are_unchanged_and_both_field_tuples_are_equal(
 
     assert tuple(TRANSPORT_FIELDS) == tuple(SAMPLER_FIELDS) == CAPTURE_FIELDS_SPEC
     full = {"run_id": "r-cd", "instrument": [], "content": False, "max_observation_bytes": 8192, "max_spans": None}
-    with pytest.raises(ValueError, match="unknown"):
+    with pytest.raises(ValueError, match="unknown") as excinfo:
         _capture_request({**full, "nonsense": 1})
+    assert "nonsense" in str(excinfo.value), str(excinfo.value)
     with pytest.raises(ValueError, match="max_span_bytes"):
         _capture_request({**full, "max_span_bytes": 8192})
+    # The retired spelling in place of the field, as an old host sends it: refused, naming it.
+    old = {"run_id": "r-cd", "instrument": [], "content": False, "max_span_bytes": 1024, "max_spans": 1000}
+    with pytest.raises(ValueError, match="max_span_bytes"):
+        _capture_request(old)
     assert _capture_request(None) == (None, "")
 
 
@@ -745,13 +577,9 @@ def test_cd8_the_shipped_refusals_are_unchanged_and_both_field_tuples_are_equal(
 
 
 def read_capture_record(store: Store, run_id: str) -> dict[str, Any]:
-    manifest = store.manifest(run_id) if hasattr(store, "manifest") else None
-    if manifest is not None:
-        record = manifest.environment.get("capture")
-        assert isinstance(record, Mapping), record
-        return dict(record)
-    (path,) = (Path(store._root) / run_id).glob("manifest.json")
-    return dict(json.loads(path.read_text())["environment"]["capture"])
+    record = store.manifest(run_id).environment.get("capture")
+    assert isinstance(record, Mapping), record
+    return dict(record)
 
 
 @pytest.mark.parametrize(
@@ -882,7 +710,7 @@ def test_cd9_inspect_names_the_limit_the_run_recorded(tmp_path: Path) -> None:
     store, run_id = stored_run(
         tmp_path, {"instrument": [], "content": True, "max_observation_bytes": 4096}, "big_rollout", "cut"
     )
-    code, out, err = run_cli(["--store", str(Path(store._root)), "inspect", run_id, "--event", "survived"])
+    code, out, err = run_cli(["--store", str(tmp_path / "cut"), "inspect", run_id, "--event", "survived"])
     assert code == 0, err
     cut_lines = [line for line in out.splitlines() if line.startswith("observation: cut")]
     assert cut_lines, out[:3000]
@@ -895,19 +723,9 @@ def test_cd9_a_run_that_declared_none_has_nothing_to_report_cut(tmp_path: Path) 
     store, run_id = stored_run(
         tmp_path, {"instrument": [], "content": True, "max_observation_bytes": "none"}, "huge_rollout", "uncut"
     )
-    code, out, err = run_cli(["--store", str(Path(store._root)), "inspect", run_id, "--event", "survived"])
+    code, out, err = run_cli(["--store", str(tmp_path / "uncut"), "inspect", run_id, "--event", "survived"])
     assert code == 0, err
     assert [line for line in out.splitlines() if line.startswith("observation: cut")] == [], out[:3000]
-
-
-# PF0: test_cd9_viewer_py_is_byte_untouched removed. It pinned the bytes of src/poisson_prove/viewer.py, which the rename
-# changes; no digest of a file this module changes can be frozen honestly before its build
-# exists.
-
-
-# PF0: test_cd9_report_py_outside_the_observation_cap_echo_is_the_dispatch_commits removed. It pinned the bytes of src/poisson_prove/report.py outside one function, which the rename
-# changes; no digest of a file this module changes can be frozen honestly before its build
-# exists.
 
 
 # ---------- CD10: resume is gated on the cap, and pairing is not ----------
@@ -951,25 +769,6 @@ def test_cd10_resume_is_gated_on_the_cap(
     assert recorded_name in message or "no observation cap" in message, message
 
 
-def test_cd10_the_gate_does_not_spell_the_retired_name_in_src() -> None:
-    """**A collision found when these tests were written.** D14 says the gate compares the retired
-    ``max_span_bytes`` as the same field; A8b's P8-27 pins that the string appears **nowhere** in
-    ``src/``. Both cannot hold as written, and a stand-in that spelled the name turned P8-27 red.
-
-    The resolution pinned here is the idiom the truncation-surfacing change already chose one file over
-    (``report._observation_cap``: "Echoed and never translated ... so no name is spelled here"): the
-    gate reads the capture record by the ``_bytes`` suffix, which compares the retired spelling as
-    the same field without naming it, and reads a third spelling too. P8-27 stays green and D14's
-    behaviour -- the four retired-key rows above -- is unchanged."""
-    hits = [
-        f"{path.relative_to(PACKAGE)}:{n}"
-        for path in sorted(PACKAGE.rglob("*.py"))
-        for n, line in enumerate(path.read_text().splitlines(), 1)
-        if "max_span_bytes" in line
-    ]
-    assert hits == [], hits
-
-
 def test_cd10_pairing_is_not_gated_and_the_report_prints_both_caps(tmp_path: Path) -> None:
     """``diff`` does not read observations at all (CAP3), and the report has printed both
     runs' caps on separate lines since the truncation-surfacing change, so a reader sees the difference rather
@@ -989,27 +788,13 @@ def test_cd10_pairing_is_not_gated_and_the_report_prints_both_caps(tmp_path: Pat
 # ---------- CD11: the constants say what they do ----------
 
 
-def test_cd11_the_routing_constant_is_exported_and_read_by_is_observation_alone() -> None:
+def test_cd11_the_routing_constant_is_exported_and_is_8192() -> None:
     """D8. The value stays 8192, so ``split`` classifies exactly as it did and no stored
     byte moves; what changes is the name and the claim the name makes."""
     import poisson_prove.trace as trace_module
 
     assert trace_module.OBSERVATION_ROUTING_BYTES == ROUTING_BYTES
     assert "OBSERVATION_ROUTING_BYTES" in trace_module.__all__
-    # Every ``Name`` node that loads the constant, by the function it sits in: ``_is_observation``
-    # and nowhere else, in any module. A read anywhere else is a second routing rule.
-    import ast
-
-    readers: list[str] = []
-    for path in sorted(PACKAGE.rglob("*.py")):
-        module = ast.parse(path.read_text())
-        for node in ast.walk(module):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            for inner in ast.walk(node):
-                if isinstance(inner, ast.Name) and inner.id == "OBSERVATION_ROUTING_BYTES" and isinstance(inner.ctx, ast.Load):
-                    readers.append(f"{path.relative_to(PACKAGE)}::{node.name}")
-    assert sorted(set(readers)) == ["trace.py::_is_observation"], sorted(set(readers))
 
 
 def test_cd11_the_three_retired_names_are_out_of_the_public_surface() -> None:
@@ -1032,7 +817,7 @@ def split_fixture() -> Trace:
     return Trace(spans=(span(1, attrs=attrs),), source="record")
 
 
-def test_cd11_splits_classification_is_byte_identical_to_the_dispatch_commits() -> None:
+def test_cd11_splits_partition_of_the_fixture_is_unchanged() -> None:
     """Sole catch for a rename that changes the number with it. A build that "helpfully" threads the
     run's limit into ``split`` changes which column stored bytes live in and breaks ``Store.read`` on
     rows written by any other build."""

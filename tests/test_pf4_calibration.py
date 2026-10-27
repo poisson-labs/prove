@@ -9,8 +9,8 @@ of the intervals on the change and of the Wilson shares.
 
 **How a draw runs Prove's comparison.** Twenty thousand
 draws of ``multi_diff`` per design would take hours, so each draw takes its per-row p-value from Prove's
-own test (``diff._fisher``, ``diff._mcnemar``, ``diff._logrank``, the functions ``multi_diff`` calls for
-each row), its correction from Prove's own ``diff.bh`` and ``diff.holm``, and its direction from the
+own test (``stats.fisher_test``, ``stats.mcnemar_test``, ``stats.logrank_test``, the public forms of the
+tests ``multi_diff`` runs on each row), its correction from Prove's own ``diff.bh`` and ``diff.holm``, and its direction from the
 rule PF4.13 and PF4.14 freeze (B's observed minus expected events under log-rank). For **every design**
 the first ``SUBSET`` draws (40) are also run through ``multi_diff`` itself on the drawn runs, every row
 real, and must flag the same rows the same way, count the same rows by Holm, and give the word those
@@ -45,7 +45,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from poisson_prove import diff
+from poisson_prove import stats
 from poisson_prove.diff import bh, holm, interval_rd, interval_rd_paired, multi_diff
 from poisson_prove.store import RunManifest
 
@@ -154,22 +154,19 @@ def _fisher_table(n_a: int, n_b: int) -> np.ndarray:
     out = np.empty((n_a + 1, n_b + 1))
     for xa in range(n_a + 1):
         for xb in range(n_b + 1):
-            out[xa, xb] = diff._fisher(xa, n_a, xb, n_b)[1]
+            out[xa, xb] = stats.fisher_test(xa, n_a, xb, n_b)[1]
     return out
 
 
 @lru_cache(maxsize=100_000)
-def _mcnemar_p(only_a: int, only_b: int, pairs: int) -> float:
-    a = pd.DataFrame({"replicate_index": range(pairs), "observed": [i < only_a for i in range(pairs)]})
-    b = pd.DataFrame({"replicate_index": range(pairs), "observed": [only_a <= i < only_a + only_b for i in range(pairs)]})
-    return float(diff._mcnemar(a, b, "c")[1])
+def _mcnemar_p(only_a: int, only_b: int) -> float:
+    return float(stats.mcnemar_test(only_a, only_b)[1])
 
 
 def _paired_p(ya: np.ndarray, yb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Per row (axis 0) of matched indicators: Prove's paired p and B's signed discordance."""
     only_a, only_b = (ya & ~yb).sum(axis=1), (~ya & yb).sum(axis=1)
-    n = ya.shape[1]
-    p = np.array([_mcnemar_p(int(x), int(y), n) for x, y in zip(only_a, only_b, strict=True)])
+    p = np.array([_mcnemar_p(int(x), int(y)) for x, y in zip(only_a, only_b, strict=True)])
     return p, (only_b - only_a).astype(float)
 
 
@@ -186,7 +183,7 @@ def _o_minus_e_b(a: tuple[np.ndarray, np.ndarray], b: tuple[np.ndarray, np.ndarr
 
 def _logrank(a: tuple[np.ndarray, np.ndarray], b: tuple[np.ndarray, np.ndarray]) -> tuple[float, float]:
     """Prove's log-rank p for the row and its signed direction."""
-    return float(diff._logrank(a[0], a[1], b[0], b[1])[1]), _o_minus_e_b(a, b)
+    return float(stats.logrank_test(a[0], a[1], b[0], b[1])[1]), _o_minus_e_b(a, b)
 
 
 def _flags(p: np.ndarray, signed: np.ndarray, correction: Callable[..., np.ndarray]) -> np.ndarray:
@@ -305,7 +302,8 @@ def test_pf4_36_when_some_conditions_truly_fell_the_word_rarely_names_a_rise(met
             _through_prove(drawn, method, ("fell",), flagged, counted, (method, d))
     rate = rise_word / NULL_DRAWS
     assert rate <= Q + 3 * _se(Q, NULL_DRAWS), rate
-    assert flagged_rise >= rise_word
+    # Read from the flags instead, the word would name a rise past the same bound.
+    assert flagged_rise / NULL_DRAWS > Q + 3 * _se(Q, NULL_DRAWS), flagged_rise
 
 
 def _two_cause_arm(rng: np.random.Generator, n: int, fell: float, stuck: float) -> tuple[np.ndarray, np.ndarray]:
@@ -609,7 +607,7 @@ def _paired_power_at(base: float, pairs: int, level: float, change: float, rise:
             continue
         for larger in range((d // 2) + 1, d + 1):
             only_b, only_a = (larger, d - larger) if rise else (d - larger, larger)
-            if _mcnemar_p(only_a, only_b, pairs) < level:
+            if _mcnemar_p(only_a, only_b) < level:
                 total += w * binom.pmf(larger, d, (p01 if rise else p10) / s)
     return total
 

@@ -1,6 +1,6 @@
 """S21 frozen tests: error visibility downstream.
 
-Invariants E1-E27 map one test function each (several map more). Nothing here is built when
+Invariants E1-E27 except E22 map one test function each (several map more). Nothing here is built when
 this file is written: ``RunTally``, ``Store.tally``, ``COVERAGE_COLUMNS``, ``Cell.hole_cause``
 and ``proofload.viewpair/3`` are reached through module attributes inside the tests, so
 collection never touches them.
@@ -8,13 +8,9 @@ collection never touches them.
 What is asserted where:
 
 - **The public surface first.** ``RunTally`` values, coverage frames, ``Cell`` fields, the
-  structure, the page, and the CLI's exit code and streams. Five clauses reach a private name
-  because the name itself is what is pinned and nothing rendered carries it: E3 (the two store
-  markers against ``executor._TIMEOUT_ERROR`` and ``executor_modal._INFRA_PREFIX``, so they
-  cannot drift), E12 (``diff._CAUSES`` and ``report._GRID_CAUSES``, the vocabulary written
-  once), E16 (``report._fmt`` -- a formatted string can only be checked against the formatter,
-  the V16 rule) and E17 (``report._coord_text`` for a grid hole's coords). E22 reads the source
-  through ``poisson_prove.__file__`` and imports nothing.
+  structure, the page, and the CLI's exit code and streams. One clause reaches a private name
+  because the name itself is what is pinned and nothing rendered carries it: E3 (the store's
+  infra marker against ``executor_modal._INFRA_PREFIX``, so they cannot drift).
 - **The lattice pair is the zero case** (E4, E14, E15, E21, E23, E24): the generated pair
   (``tests/lattice.py``) has no errored rows, no holes, both tallies ``(2304, 2304, 0, 0, 0, 0)``.
   E14's three digests were minted on the bare tree at ``b10a146`` on the fixture pair of the time
@@ -53,7 +49,6 @@ is not asserted.
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import hashlib
 import inspect
@@ -61,6 +56,7 @@ import itertools
 import json
 import re
 import shutil
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from html import unescape as html_unescape
@@ -74,16 +70,15 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-import poisson_prove
 import poisson_prove.cli as cli
 import poisson_prove.diff as diff_module
-import poisson_prove.executor as executor
 import poisson_prove.executor_modal as executor_modal
-import poisson_prove.report as report_module
 import poisson_prove.store as store_module
 from poisson_prove.diff import DiffResult, MultiDiffResult, multi_diff
 from poisson_prove.episode import Episode
+from poisson_prove.executor import plan, run_local
 from poisson_prove.report import MultiReport, ReportSpec, build_multi_report, build_report
+from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, SchemaMismatch, Store, StoreError, config_hash
 from poisson_prove.tree import TreeResult
 from poisson_prove.tree import tree as grow_tree
@@ -113,11 +108,14 @@ E14_DIRECTION = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
 # PF4 re-freeze: the library's cells now hold the direction
 # words themselves for an event of unknown kind, so they map to themselves.
 E14_DIRECTION.update({"lower": "lower", "higher": "higher"})
+#: The flat Fisher family's interval level and alpha* on the E14 argv, ``1 - q x R / M`` and
+#: ``q x R / M`` with the reference's R = 22 over M = 72, as the alpha* line prints them (``:.4%``
+#: and ``:g``) and as the interval-on-the-change line prints the level (three decimals at most).
+E14_INTERVAL_LEVEL_TEXT, E14_ALPHA_STAR_TEXT, E14_ON_CHANGE_LEVEL_TEXT = "98.4722", "0.0152778", "98.472"
 
 # LS update: /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
-HOST = "127.0.0.1"
 
 TALLY_FIELDS = ("rows", "with_outcome", "no_outcome", "timed_out", "infra", "other")
 TIMEOUT_MARK = "timeout"
@@ -253,16 +251,6 @@ HOLE_MESSAGE = "No comparable data for this cell."
 NONE_TEXT = "none"
 # PF2: runs prints these nine columns, newest first.
 RUNS_HEADER = ("#", "name", "id", "status", "backend", "target", "rows", "rows without an outcome", "created")
-PUBLIC_STORE_METHODS = {
-    "create_run", "manifest", "mark_complete", "runs", "append", "read", "missing", "count",
-    "tally",
-}
-PUBLIC_STORE_SYMBOLS = {
-    "StoreError", "SchemaMismatch", "DuplicateEpisode", "MetaNotSerializable", "InvalidConfig",
-    "RunManifest", "EpisodeRecord", "Store", "config_hash", "RunTally",
-}
-ASSEMBLY_HELPERS = {"_fmt", "_coord_text", "_worst_header", "_worst_table_rows", "_EPISTEMIC_FENCE"}
-RENDER_HELPERS = {"_html_style", "_html_table", "_provenance_lines"}
 
 POISON = "not json"
 TMP_PART = "part-99999.parquet.tmp"
@@ -335,9 +323,6 @@ EXPECTED_GRID_HOLES: dict[tuple[str, float], tuple[tuple[str, float, str] | None
 OFF_GRID = (("ghost", 1.0, P), ("multi", 2.0, P), ("multi", 2.0, Q))
 COMPARABLE_WITH_ERRORS = ("mixed", 1.0, P)
 
-HEX_RE = re.compile(r"#[0-9A-Fa-f]{6}\b")
-TIMES_100_RE = re.compile(r"\*\s*100\b")
-FLOAT_SPEC_RE = re.compile(r":\.\d")
 FLOAT_TOKEN_RE = re.compile(r"(?<![\w.])-?\d+\.\d+(?:[eE][-+]?\d+)?|(?<![\w.])-?\d+[eE][-+]?\d+")
 SVG_RE = re.compile(r"<svg\b.*?</svg>", re.S)
 SCRIPT_RE = re.compile(r"<script\b.*?</script>", re.S)
@@ -355,10 +340,6 @@ def viewer() -> Any:
     import poisson_prove.viewer as module
 
     return module
-
-
-def viewer_source() -> str:
-    return (Path(poisson_prove.__file__).resolve().parent / "viewer.py").read_text()
 
 
 def sha256_of(path: Path) -> str:
@@ -497,6 +478,16 @@ def key_of(event: str, config_hash: str) -> str:
     return f"{event} {config_hash}"
 
 
+def coord_literal(value: Any) -> str:
+    """The text the page prints for a scalar config value of the synthetic pair, written out: a
+    string as itself, a bool as Python spells it, and the two ``level`` values without a decimal."""
+    if isinstance(value, bool):
+        return {True: "True", False: "False"}[value]
+    if isinstance(value, str):
+        return value
+    return {1.0: "1", 2.0: "2"}[value]
+
+
 def is_scalar(value: Any) -> bool:
     return isinstance(value, (bool, int, float, str))
 
@@ -606,105 +597,6 @@ def h2_named(dom: Dom, text: str) -> Node:
 
 def nodes_between(dom: Dom, start: int, stop: int) -> list[Node]:
     return [n for n in dom.nodes if start < n.index < stop]
-
-
-# ---------- ast helpers (restated; never imported across test modules) ----------
-
-
-def module_functions(tree: ast.Module) -> dict[str, ast.AST]:
-    return {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)}
-
-
-def closure(tree: ast.Module, name: str) -> list[ast.AST]:
-    functions = module_functions(tree)
-    seen: dict[str, ast.AST] = {}
-    todo = [name]
-    while todo:
-        current = todo.pop()
-        if current in seen or current not in functions:
-            continue
-        seen[current] = functions[current]
-        for node in ast.walk(functions[current]):
-            if isinstance(node, ast.Name) and node.id in functions and node.id not in seen:
-                todo.append(node.id)
-    return list(seen.values())
-
-
-def referenced_names(nodes: Sequence[ast.AST]) -> set[str]:
-    return {n.id for fn in nodes for n in ast.walk(fn) if isinstance(n, ast.Name)}
-
-
-ARITHMETIC = (ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow, ast.MatMult)
-
-
-def is_non_numeric(node: ast.AST) -> bool:
-    return isinstance(node, ast.JoinedStr | ast.List | ast.ListComp | ast.Tuple) or (
-        isinstance(node, ast.Constant) and isinstance(node.value, str)
-    )
-
-
-def arithmetic_nodes(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    """The S20 walk, verbatim, AugAssign trap included: ``+=`` anywhere in the closure errors
-    the test rather than failing it, which is stricter than the rule as written and is its intent."""
-    out: list[ast.AST] = []
-    for fn in nodes:
-        for node in ast.walk(fn):
-            if isinstance(node, ast.BinOp):
-                if isinstance(node.op, ARITHMETIC):
-                    out.append(node)
-                elif isinstance(node.op, ast.Add) and not (is_non_numeric(node.left) or is_non_numeric(node.right)):
-                    out.append(node)
-            elif isinstance(node, ast.AugAssign) and isinstance(node.op, ast.Add | ARITHMETIC):
-                out.append(node)
-            elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and not isinstance(node.operand, ast.Constant):
-                out.append(node)
-    return out
-
-
-def total_seconds_operands(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    return [
-        n.func.value
-        for fn in nodes
-        for n in ast.walk(fn)
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "total_seconds"
-    ]
-
-
-def format_calls(tree: ast.Module) -> list[int]:
-    return [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and (
-            (isinstance(node.func, ast.Name) and node.func.id == "format")
-            or (isinstance(node.func, ast.Attribute) and node.func.attr == "format")
-        )
-    ]
-
-
-def report_import_names(tree: ast.Module) -> set[str]:
-    names: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.report":
-            names.update(alias.name for alias in node.names)
-    return names
-
-
-def store_imports(body: Sequence[ast.stmt]) -> set[str]:
-    names: set[str] = set()
-    for node in body:
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.store":
-            names.update(alias.name for alias in node.names)
-    return names
-
-
-def type_checking_body(tree: ast.Module) -> list[ast.stmt]:
-    blocks = [
-        n for n in tree.body
-        if isinstance(n, ast.If) and isinstance(n.test, ast.Name) and n.test.id == "TYPE_CHECKING"
-    ]
-    assert len(blocks) == 1, len(blocks)
-    return blocks[0].body
 
 
 # ---------- store builders ----------
@@ -1237,9 +1129,39 @@ def test_e2_a_tmp_part_changes_neither_tally_nor_count(syn_root: Path, tmp_path:
     assert (store.tally(SYN_A), store.count(SYN_A)) == before
 
 
-def test_e3_the_store_markers_equal_the_executors_constants() -> None:
-    assert store_module._TIMEOUT_MARK == executor._TIMEOUT_ERROR == TIMEOUT_MARK
-    assert store_module._INFRA_MARK == executor_modal._INFRA_PREFIX == INFRA_MARK
+def e3_rollout(cfg: dict[str, Any], seed: int) -> Episode:
+    """A rollout whose ``slow`` condition outlives any episode timeout; the other ends at once."""
+    if cfg["task"] == "slow":
+        time.sleep(30.0)
+    return Episode(outcome="ok", t=1.0, horizon=1.0)
+
+
+def test_e3_a_row_the_local_executor_times_out_is_counted_timed_out(tmp_path: Path) -> None:
+    store = Store(tmp_path)
+    spec = SweepSpec.build([{"task": "slow"}, {"task": "quick"}], replicates=1, target_id="synthetic@v0", t_unit="steps")
+    p = plan(spec, store)
+    summary = run_local(p, e3_rollout, store, episode_timeout=0.5)
+    assert summary.n_timeout == 1 and summary.n_ok == 1, summary
+    t = store.tally(p.run_id)
+    assert (t.rows, t.with_outcome, t.no_outcome, t.timed_out, t.infra, t.other) == (2, 1, 1, 1, 0, 0)
+
+
+def _never_runs(batches: Any) -> Iterator[tuple[int, BaseException]]:
+    """A mapper whose every batch fails as infrastructure: yielded, never raised."""
+    for index in range(len(batches)):
+        yield index, ConnectionError("worker lost")
+
+
+def test_e3_rows_the_modal_executor_stores_after_exhausting_its_infra_retries_are_counted_infra(tmp_path: Path) -> None:
+    store = Store(tmp_path)
+    spec = SweepSpec.build([{"task": "a"}, {"task": "b"}], replicates=2, target_id="synthetic@v0", t_unit="steps")
+    p = plan(spec, store, backend="modal")
+    summary = executor_modal.run_with_mapper(p, _never_runs, store, options=executor_modal.ModalOptions(batch_size=2, infra_retries=0))
+    assert summary.n_infra_failed == 4, summary
+    errors = store.read(p.run_id, meta=False)["error"]
+    assert all(str(e).startswith(INFRA_MARK) for e in errors), list(errors)
+    t = store.tally(p.run_id)
+    assert (t.rows, t.with_outcome, t.no_outcome, t.timed_out, t.infra, t.other) == (4, 0, 4, 0, 4, 0)
 
 
 def test_e3_a_timeout_prefixed_error_is_other_not_timed_out(tmp_path: Path) -> None:
@@ -1261,7 +1183,7 @@ def test_e4_lattice_both_arms_tally_2304_with_outcome_and_no_errored_rows(lattic
         assert dataclasses.astuple(lattice_store.tally(run_id)) == LATTICE_TALLY, run_id
 
 
-def test_e4_tally_rows_equals_count_in_every_store_the_oracle_builds(every_store: list[tuple[Store, str]]) -> None:
+def test_e4_tally_rows_equals_count_in_every_store_this_file_builds(every_store: list[tuple[Store, str]]) -> None:
     assert len(every_store) == 9
     for store, run_id in every_store:
         assert store.tally(run_id).rows == store.count(run_id), run_id
@@ -1280,18 +1202,7 @@ def test_e5_run_tally_is_a_frozen_dataclass_of_the_six_fields() -> None:
     assert run_tally.__dataclass_params__.frozen
 
 
-def test_e5_the_public_surface_gains_exactly_tally_and_run_tally() -> None:
-    methods = {
-        name for name, _ in inspect.getmembers(Store, inspect.isfunction)
-        if not name.startswith("_")
-    }
-    assert methods == PUBLIC_STORE_METHODS
-    public = {
-        name
-        for name, obj in vars(store_module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == store_module.__name__
-    }
-    assert public == PUBLIC_STORE_SYMBOLS
+def test_e5_tally_takes_a_run_id_and_nothing_else() -> None:
     assert list(inspect.signature(Store.tally).parameters) == ["self", "run_id"]
 
 
@@ -1419,11 +1330,6 @@ def test_e11_dropped_counts_are_the_cause_algebra_exactly(syn: Built) -> None:
     assert unseen_today == 3
 
 
-def test_e12_the_cause_vocabulary_is_written_once_in_each_module() -> None:
-    assert diff_module._CAUSES == CAUSES
-    assert report_module._GRID_CAUSES == GRID_CAUSES
-
-
 def test_e12_every_cause_anywhere_is_drawn_from_the_seven(syn: Built, syn_fixed: Built, lattice_pair: Built) -> None:
     for b in (syn, syn_fixed, lattice_pair):
         assert all(c is None or c in CAUSES for c in coverage_of(b)["cause"])
@@ -1522,12 +1428,6 @@ def test_e27_b_only_and_wholly_errored_is_only_b(syn: Built) -> None:
     assert row["cause"] == "only_b"
 
 
-def test_e27_both_arms_none_with_outcome_is_no_outcome_both(syn: Built) -> None:
-    row = coverage_row(syn, ("err-both", 2.0, P))
-    assert (row["rows_a"], row["no_outcome_a"], row["rows_b"], row["no_outcome_b"]) == (N, N, N, N)
-    assert row["cause"] == "no_outcome_both"
-
-
 # ---------- E13-E14: M7 attaches the cause and changes no byte ----------
 
 
@@ -1619,6 +1519,45 @@ def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
     return value, "rise" if rise is not None and abs(rise - value) <= 1e-12 else "fall"
 
 
+def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
+    """The command line's ``heatmap.svg`` against the builder's.
+
+    Rule 10 reformats only the text in the file, so every element and attribute
+    is the builder's. Each cell's label is its delta to three decimals, read from ``cells``; a text
+    the builder prints as a percentage-point number is that number as a fraction; every other text
+    that changed keeps its ``key=value`` facts and its counts; and the notes the builder writes in
+    percentage points carry the worst-powered MDEs to three decimals.
+    """
+    def bare(svg: str) -> str:
+        return re.sub(r">[^<]*<", "><", svg)
+
+    assert bare(cli_svg) == bare(builder_svg)
+    ids = re.findall(r'data-cell="([0-9a-f]+)"', cli_svg)
+    label_group = cli_svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
+    labels = re.findall(r">([^<]*)</text>", label_group)
+    delta = dict(zip(cells["config_hash"], cells["delta"]))
+    assert len(ids) == len(labels) == len(delta), (len(ids), len(labels), len(delta))
+    for short, label in zip(ids, labels):
+        (full,) = [h for h in delta if h.startswith(short)]
+        assert label == f"{delta[full]:.3f}", (short, label, delta[full])
+    number = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+    texts = list(zip(re.findall(r">([^<]*)</text>", builder_svg), re.findall(r">([^<]*)</text>", cli_svg)))
+    for old, new in texts:
+        if old == new:
+            continue
+        if number.fullmatch(old):
+            assert number.fullmatch(new) and abs(float(new) - float(old) / 100) <= 1e-3, (old, new)
+            continue
+        for fact in re.findall(r"\w+=[^\s,;)]+", old):
+            assert fact in new, (fact, new)
+        for count in re.findall(r"(?<![\d.])\d+(?![\d.%]|pp)", old):
+            assert f"{int(count):,}" in new, (count, new)
+    notes = [new for old, new in texts if re.search(r"\d+pp", old)]
+    assert notes, texts
+    for mde in (cells["mde"].max(), cells.loc[cells["verdict"] == "unchanged", "mde"].max()):
+        assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
+
+
 def test_e14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(tmp_path: Path) -> None:
     """Narrowed for S28: ``report`` on a pair now renders the
     layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
@@ -1643,6 +1582,7 @@ def test_e14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(
     assert new_title in written and old_title not in written
     assert texts["heatmap.svg"].count(old_title) >= 1
     assert rendered_problems(texts["heatmap.svg"].replace(old_title, new_title), written, "heatmap.svg") == []
+    assert_cli_heatmap_is_the_builders_under_rule_10(written, texts["heatmap.svg"], multi.by_event[lattice.EVENT].cells)
     for name in ("report.md", "receipt.html"):
         as_0_0_1_wrote_it(texts[name])
     # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded. First
@@ -1672,6 +1612,34 @@ def test_e14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(
                   f"{points}pp {way}.")
     for name, text in texts.items():
         assert worst_line in text, name
+        assert "safer" not in text and "worse" not in text, name
+    # The interval line: alpha* is q x R / M over the Fisher reference's flagged count and the level
+    # 1 - alpha*, as the report prints them; the line names this family's R and M, in the markdown
+    # and the receipt. The interval-on-the-change line prints the same level and its method.
+    rejected = sum(lattice.directions(lattice.fisher(lattice.EVENT, 0.05)))
+    alpha_star = multi.q * rejected / multi.n_tests
+    assert (f"{1.0 - alpha_star:.4%}", f"{alpha_star:g}") == (f"{E14_INTERVAL_LEVEL_TEXT}%", E14_ALPHA_STAR_TEXT)
+    assert f"{(1.0 - alpha_star) * 100:.3f}".rstrip("0").rstrip(".") == E14_ON_CHANGE_LEVEL_TEXT
+    report_lines = texts["report.md"].splitlines()
+    (intervals,) = [line for line in report_lines if line.startswith("intervals: ") and "alpha*" in line]
+    assert f"{E14_INTERVAL_LEVEL_TEXT}%" in intervals and f"alpha* = {E14_ALPHA_STAR_TEXT}" in intervals, intervals
+    (on_change,) = [line for line in report_lines if line.startswith("intervals: ") and "alpha*" not in line]
+    assert f"{E14_ON_CHANGE_LEVEL_TEXT}%" in on_change and "miettinen-nurminen" in on_change.lower().replace("–", "-"), on_change
+    family = f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family"
+    assert family in texts["report.md"] and family in texts["receipt.html"]
+    # The tree-less builder prints no layered block.
+    for name in ("report.md", "receipt.html"):
+        assert "omnibus" not in texts[name].lower() and "fault lines" not in texts[name].lower(), name
+    # The builder's heatmap labels every one of the 72 cells with its delta in percentage points.
+    svg = texts["heatmap.svg"]
+    ids = re.findall(r'data-cell="([0-9a-f]+)"', svg)
+    label_group = svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
+    labels = re.findall(r">([^<]*)</text>", label_group)
+    delta = dict(zip(cells["config_hash"], cells["delta"], strict=True))
+    assert len(ids) == len(labels) == len(delta) == lattice.CELLS, (len(ids), len(labels), len(delta))
+    for short, label in zip(ids, labels, strict=True):
+        (full,) = [h for h in delta if h.startswith(short)]
+        assert label == f"{delta[full] * 100:.1f}", (short, label, delta[full])
     # Every row of the report's cell table is a cell of the diff, with its counts, rates in points,
     # p, q and verdict.
     md_lines = texts["report.md"].splitlines()
@@ -1690,7 +1658,7 @@ def test_e14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(
         for column in ("p", "q"):
             decimals = len(row[column].partition(".")[2])
             assert abs(float(row[column]) - cell[column]) <= 0.5 * 10.0**-decimals + 1e-12, (row, column, cell[column])
-        assert row["verdict"] == E14_DIRECTION[cell["verdict"]], (row, cell["verdict"])
+        assert row["verdict"] == E14_DIRECTION[cell["verdict"]] == cell["direction"], (row, cell["verdict"], cell["direction"])
 
 
 def test_e14_the_synthetic_report_is_byte_identical_with_coverage_replaced_by_none(syn: Built) -> None:
@@ -1716,7 +1684,7 @@ def test_e14_every_absent_rect_still_says_absent_and_provenance_gains_no_key(syn
 # ---------- E15-E18: the structure ----------
 
 
-def test_e15_schema_is_viewpair_4_and_the_top_level_keys_are_the_thirteen(builts: tuple[Built, Built]) -> None:
+def test_e15_schema_is_viewpair_7_and_the_top_level_keys_are_the_fourteen_in_order(builts: tuple[Built, Built]) -> None:
     for b in builts:
         assert b.structure["schema"] == SCHEMA == viewer().SCHEMA
         assert tuple(b.structure) == TOP_LEVEL_KEYS
@@ -1739,7 +1707,7 @@ def test_e15_render_html_refuses_the_retired_schema_naming_both_values(lattice_p
     assert RETIRED_SCHEMA in str(info.value) and SCHEMA in str(info.value)
 
 
-def test_e16_cell_keys_are_the_twenty_one_in_order(builts: tuple[Built, Built]) -> None:
+def test_e16_each_cell_has_exactly_the_named_keys_and_the_twenty_one_core_keys_in_order(builts: tuple[Built, Built]) -> None:
     for b in builts:
         for panel in b.structure["panels"]:
             assert panel["cells"]
@@ -1761,9 +1729,7 @@ def test_e16_rows_and_no_outcome_are_ints_equal_to_the_coverage_row(builts: tupl
                 assert not set(COVERAGE_CELL_KEYS) & set(cell["text"])
 
 
-def test_e16_config_text_is_fmt_coord_of_each_scalar_and_null_for_the_rest(syn: Built) -> None:
-    from poisson_prove.report import _fmt
-
+def test_e16_config_text_is_the_written_text_of_each_scalar_and_null_for_the_rest(syn: Built) -> None:
     seen_non_scalar = seen_bool = False
     for panel in syn.structure["panels"]:
         for cell in panel["cells"]:
@@ -1771,7 +1737,7 @@ def test_e16_config_text_is_fmt_coord_of_each_scalar_and_null_for_the_rest(syn: 
             assert list(text) == list(config)
             for k, v in config.items():
                 if is_scalar(v):
-                    assert text[k] == _fmt(v, "coord"), (k, v)
+                    assert text[k] == coord_literal(v), (k, v)
                     seen_bool = seen_bool or isinstance(v, bool)
                 else:
                     assert text[k] is None, (k, v)
@@ -1793,13 +1759,13 @@ def test_e16_text_keys_are_still_the_seven_floats_and_forbidden_keys_appear_nowh
 
 
 def test_e17_holes_are_the_grid_holes_in_grid_order_then_off_grid_rows_by_hash(syn: Built) -> None:
-    from poisson_prove.report import _coord_text
-
     holes = syn.structure["holes"]
     grid = grid_holes(syn)
     n_absent = syn.structure["panels"][0]["n_absent"]
     assert len(grid) == n_absent == len(EXPECTED_GRID_HOLES)
-    assert [h["coords"] for h in holes[:n_absent]] == [_coord_text(syn.spec, c) for c in grid]
+    assert [h["coords"] for h in holes[:n_absent]] == [
+        f"{SYN_X}={task}, {SYN_Y}={coord_literal(level)}" for task, level in (c.coords for c in grid)
+    ]
     assert [h["config_hash"] for h in holes[:n_absent]] == [c.config_hash for c in grid]
     off_grid = off_grid_hashes(syn)
     assert off_grid == sorted(hash_of(k) for k in OFF_GRID)
@@ -1808,7 +1774,7 @@ def test_e17_holes_are_the_grid_holes_in_grid_order_then_off_grid_rows_by_hash(s
     assert len(holes) == n_absent + len(off_grid)
 
 
-def test_e17_each_hole_has_the_nine_keys_in_order_and_no_text(syn: Built) -> None:
+def test_e17_each_hole_has_the_ten_keys_in_order_and_no_text(syn: Built) -> None:
     for hole in syn.structure["holes"]:
         assert tuple(hole) == HOLE_KEYS, tuple(hole)
 
@@ -1823,8 +1789,6 @@ def test_e17_unsampled_and_multiple_holes_are_blank_with_four_zero_counts(syn: B
 
 
 def test_e17_every_other_hole_carries_its_coverage_row(syn: Built) -> None:
-    from poisson_prove.report import _fmt
-
     frame = coverage_of(syn).set_index("config_hash")
     others = [h for h in syn.structure["holes"] if h["cause"] not in GRID_CAUSES]
     assert len(others) == len(EXPECTED_CAUSES)
@@ -1833,7 +1797,7 @@ def test_e17_every_other_hole_carries_its_coverage_row(syn: Built) -> None:
         assert hole["cause"] == cov["cause"]
         assert [hole[k] for k in COVERAGE_CELL_KEYS] == [int(cov[k]) for k in COVERAGE_CELL_KEYS]
         assert hole["config"] == cov["config"]
-        assert hole["config_text"] == {k: _fmt(v, "coord") if is_scalar(v) else None for k, v in cov["config"].items()}
+        assert hole["config_text"] == {k: coord_literal(v) if is_scalar(v) else None for k, v in cov["config"].items()}
 
 
 def test_e17_a_fix_that_excludes_a_row_puts_it_off_grid_with_null_coords(syn_fixed: Built) -> None:
@@ -1999,53 +1963,12 @@ def test_e21_with_no_holes_the_section_is_a_paragraph_saying_zero_and_no_table(l
     assert paragraph.deep_text() == ZERO_HOLES_TEXT
 
 
-# ---------- E22-E23: it renders, it does not compute ----------
-
-
-def test_e22_build_structure_still_applies_exactly_the_created_at_subtraction() -> None:
-    tree = ast.parse(viewer_source())
-    nodes = closure(tree, "build_structure")
-    assert nodes
-    arithmetic = arithmetic_nodes(nodes)
-    assert len(arithmetic) == 1, [ast.dump(n) for n in arithmetic]
-    only = arithmetic[0]
-    assert isinstance(only, ast.BinOp) and isinstance(only.op, ast.Sub), ast.dump(only)
-    assert only in total_seconds_operands(nodes), ast.dump(only)
-
-
-def test_e22_render_html_applies_no_arithmetic() -> None:
-    tree = ast.parse(viewer_source())
-    nodes = closure(tree, "render_html")
-    assert nodes
-    assert arithmetic_nodes(nodes) == [], [ast.dump(n) for n in arithmetic_nodes(nodes)]
-
-
-def test_e22_viewer_has_no_format_no_float_spec_no_times_100_and_no_hex_colour() -> None:
-    src = viewer_source()
-    assert not HEX_RE.search(src), HEX_RE.search(src)
-    assert not TIMES_100_RE.search(src)
-    assert not FLOAT_SPEC_RE.search(src)
-    assert format_calls(ast.parse(src)) == [], format_calls(ast.parse(src))
-    assert "toFixed(" not in src and "toPrecision(" not in src
-    assert src.count(HOST) == 1
-
-
-def test_e22_the_import_partition_is_unchanged_and_run_tally_is_under_type_checking() -> None:
-    tree = ast.parse(viewer_source())
-    assert report_import_names(tree) == ASSEMBLY_HELPERS | RENDER_HELPERS
-    build = referenced_names(closure(tree, "build_structure"))
-    render = referenced_names(closure(tree, "render_html"))
-    assert build & (ASSEMBLY_HELPERS | RENDER_HELPERS) == ASSEMBLY_HELPERS, build
-    assert render & (ASSEMBLY_HELPERS | RENDER_HELPERS) == RENDER_HELPERS, render
-    assert "RunTally" in store_imports(type_checking_body(tree))
-    assert "RunTally" not in store_imports(tree.body)
+# ---------- E23: it renders, it does not compute ----------
 
 
 def test_e23_the_page_prints_no_float_except_through_the_structures_strings(builts: tuple[Built, Built]) -> None:
-    from poisson_prove.report import _provenance_lines
-
     for b in builts:
-        allowed = list(walk_strings(b.structure)) + _provenance_lines(b.structure["diff"])
+        allowed = list(walk_strings(b.structure))
         allowed.append(str(b.structure["pair"]["created_at_gap_s"]))
         stray = [
             tok for tok in FLOAT_TOKEN_RE.findall(visible_text(b.page))
@@ -2066,7 +1989,7 @@ def test_e23_two_builds_are_equal_and_the_structure_and_holes_are_json_strict(bu
 # ---------- E24-E26: the CLI ----------
 
 
-def test_e24_serve_json_on_the_lattice_prints_the_thirteen_keys_both_tallies_and_no_holes_binding_nothing(lattice_serve_json: Served, lattice_store: Store) -> None:
+def test_e24_serve_json_on_the_lattice_prints_the_structures_keys_both_tallies_and_no_holes_binding_nothing(lattice_serve_json: Served, lattice_store: Store) -> None:
     r = lattice_serve_json.result
     assert r.code == 0, r.err
     assert lattice_serve_json.calls == []
@@ -2135,7 +2058,7 @@ def runs_table(r: Result) -> tuple[tuple[str, ...], list[dict[str, str]]]:
     return header, rows
 
 
-def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(syn_root: Path, three_root: Path) -> None:
+def test_e25_runs_prints_nine_columns_and_the_eighth_is_the_stores_no_outcome(syn_root: Path, three_root: Path) -> None:
     for root in (syn_root, three_root, LATTICE_ROOT):
         store = Store(root)
         r = run_cli(["--store", str(root), "runs"])

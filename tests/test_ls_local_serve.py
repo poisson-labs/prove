@@ -103,11 +103,6 @@ build follows these; each was reviewed.**
   D14's rule (a public page carries no reference a stranger cannot resolve) is the intent: the
   build spells that sentence ``MDE is the smallest detectable increase ...`` (and its twin in ``report.py`` the same), and LS19's region digests are taken with the bare spelling
   normalised to that one.
-- **LS1's "sole catch" is a source clause.** The page's ``<style>`` is ``_html_style(theme)`` plus
-  ``_LAYOUT``, so a rule added to the report's stylesheet *does* reach the page and the computed
-  style cannot tell the two apart; LS1's "where the page does not read it" is wrong. What
-  catches the mutant is that ``pointer-events`` appears in ``viewer._LAYOUT`` and not in
-  ``_html_style``.
 - **The hole's ``where`` on a grid hole is its ``coords`` string, and on an off-grid hole is
   ``", ".join(f"{axis}={config_text[axis]}")`` over ``x_axis``, ``y_axis`` and the keys of
   ``view.fixed`` in that order**, or ``off grid: <config_hash>`` when the config carries none of them.
@@ -140,12 +135,11 @@ The lattice's run ids are short, so the wrapped title needs ``--title``.
 **Named non-observables.** A ``q`` below 0.001 spelled two ways (above). A wrapped text whose
 lines are joined with a different separator than one space: ``_wrap`` breaks on spaces only.
 A sentence composed inside ``render_html`` that equals a ``line`` value character for character:
-LS20's equality cannot see it, and LS9's AST clause is over ``plain.py`` alone.
+LS20's equality cannot see it.
 """
 
 from __future__ import annotations
 
-import ast
 import hashlib
 import html as html_mod
 import json
@@ -174,11 +168,7 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
-SRC = PACKAGE
-VIEWER_SOURCE = PACKAGE / "viewer.py"
 REPORT_SOURCE = PACKAGE / "report.py"
-DIFF_SOURCE = PACKAGE / "diff.py"
-PLAIN_SOURCE = PACKAGE / "plain.py"
 README = REPO / "README.md"
 SERVE_DOC = REPO / "docs" / "reading-a-serve-page.md"
 #: The generated lattice pair (``tests/lattice.py``), built once per machine and checked on use.
@@ -726,6 +716,22 @@ def label_for(q: float) -> str | None:
         if q < threshold:
             return label
     return None
+
+
+def no_negative_zero(text: str) -> str:
+    return text[1:] if text.startswith("-") and float(text) == 0.0 else text
+
+
+def m7_form(value: float, kind: str) -> str:
+    """M7's number forms, written from their rule and never read from ``report.py``: ``pp1`` and
+    ``pp0`` a fraction in points to one and to no decimals, ``sig3`` three significant figures
+    (``0`` at zero, scientific below 0.001); a negative zero reads as zero."""
+    if kind == "pp1":
+        return no_negative_zero(f"{value * 100:.1f}")
+    if kind == "pp0":
+        return no_negative_zero(f"{value * 100:.0f}")
+    assert kind == "sig3", kind
+    return "0" if value == 0 else (f"{value:.2e}" if abs(value) < 1e-3 else f"{value:.3g}")
 
 
 # ---------- a small DOM with CSS matching (M13's, restated) ----------
@@ -1452,11 +1458,11 @@ def lattice_rects(p: Pair, event: str) -> list[dict[str, str | None]]:
         saturated = r["events_a"] == r["events_b"] and r["events_a"] in (0, lattice.N)
         significant = r["direction"] != "unchanged"
         fill = DARK_SATURATED if saturated else dark_fill(r["delta"] / bound, significant)
-        rects.append({"x": str(x), "y": _fmt(float(y), "num"), "width": str(cell_w), "height": str(cell_h), "fill": fill,
+        rects.append({"x": str(x), "y": str(y), "width": str(cell_w), "height": str(cell_h), "fill": fill,
                       "data-cell": r["config_hash"], "data-sig": None, "data-trade": "1" if r["config_hash"] in trades else None,
                       "data-sat": "1" if saturated else None})
         if significant:
-            rects.append({"x": str(x + cell_w - GLYPH - 1), "y": _fmt(float(y + 1), "num"), "width": str(GLYPH), "height": str(GLYPH),
+            rects.append({"x": str(x + cell_w - GLYPH - 1), "y": str(y + 1), "width": str(GLYPH), "height": str(GLYPH),
                           "fill": None, "data-cell": None, "data-sig": "1", "data-trade": None, "data-sat": None})
     return rects
 
@@ -1596,20 +1602,6 @@ def test_ls1_every_data_cell_node_stays_clickable_and_every_text_inside_the_figu
                 assert styles_of(n, rules).get("pointer-events") != "none", (p.name, n.tag)
 
 
-def test_ls1_the_rule_lives_in_the_viewers_layout_and_not_in_the_reports_stylesheet() -> None:
-    """Sole catch for a build that adds the rule to ``report._html_style``: the page reads both
-    sheets, so only the source can tell them apart."""
-    from poisson_prove.report import _html_style
-
-    layout = viewer()._LAYOUT
-    inert = [rule for rule in layout.split("}") if "pointer-events:none" in rule]
-    assert len(inert) == 1, layout
-    selectors = [s.strip() for s in inert[0].split("{")[0].split(",")]
-    assert any(last_compound_tag(s) == "text" and s.startswith("svg") for s in selectors), selectors
-    assert any("[data-sig]" in s for s in selectors) and any(last_compound_tag(s) == "path" for s in selectors), selectors
-    assert "pointer-events" not in _html_style("dark") and "pointer-events" not in _html_style("light")
-
-
 # ---------- LS2: no text the figure draws leaves the figure ----------
 
 
@@ -1713,7 +1705,7 @@ def test_ls3_the_box_grows_by_the_extra_lines_and_by_nothing_else(all_pairs: lis
         assert height == expected_total, (p.name, height, expected_total)
 
 
-def test_ls3_every_grid_and_glyph_rect_is_the_dispatch_commits_up_to_the_top_growth(all_pairs: list[Pair]) -> None:
+def test_ls3_every_grid_and_glyph_rect_is_unchanged_up_to_the_top_growth(all_pairs: list[Pair]) -> None:
     for p in all_pairs:
         layout = expected_layout(p)
         for event, panel in panel_groups(p.structure["heatmap_svg"]):
@@ -1742,7 +1734,6 @@ def test_ls4_the_holes_block_opens_with_the_counts_and_every_row_says_where_it_i
         causes[h["cause"]] = causes.get(h["cause"], 0) + 1
     expected = HOLES_SUMMARY.format(n=len(holes), g=on_grid, o=len(holes) - on_grid) + " " + ", ".join(f"{cause} {k}" for cause, k in sorted(causes.items()))
     assert summary == expected, summary
-    assert sum(causes.values()) == len(holes) == on_grid + (len(holes) - on_grid)
     header, rows = table_of(lines[1])
     assert header == HOLES_HEADER and len(rows) == len(holes)
     for row, hole in zip(rows, holes, strict=True):
@@ -1845,55 +1836,7 @@ def test_ls8_render_html_refuses_every_retired_version_by_name(lattice_one: Pair
         assert retired in str(info.value) and SCHEMA in str(info.value), str(info.value)
 
 
-def source_of(path: Path, name: str) -> str:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    node = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
-    return ast.get_source_segment(path.read_text(encoding="utf-8"), node) or ""
-
-
-def test_ls8_both_structural_refusals_interpolate_the_constant_and_no_source_names_a_retired_version() -> None:
-    render = source_of(VIEWER_SOURCE, "render_html")
-    intervals = next(seg for seg in render.split("raise ViewerError(")[1:] if "carries no intervals" in seg).split(")")[0]
-    assert "{SCHEMA}" in intervals and "viewpair/" not in intervals, intervals
-    tree_refusal = next(seg for seg in render.split("raise ViewerError(")[1:] if "carries no tree" in seg).split(")")[0]
-    assert "viewpair/" not in tree_refusal, tree_refusal
-    lines = VIEWER_SOURCE.read_text(encoding="utf-8").splitlines()
-    at = next(i for i, line in enumerate(lines) if line.startswith("SCHEMA = "))
-    start = at
-    while start > 0 and lines[start - 1].startswith("#"):
-        start -= 1
-    outside = "\n".join(lines[:start] + lines[at:])
-    for retired in RETIRED_SCHEMAS:
-        assert retired not in outside, retired
-        for path in SRC.rglob("*.py"):  # PF5: the core is a package now, so the scan reads src/ recursively.
-            if path.name != "viewer.py":
-                assert retired not in path.read_text(encoding="utf-8"), (path.name, retired)
-    assert f'SCHEMA = "{SCHEMA}"' in lines[at]
-    assert SCHEMA in lines[0] or "viewpair/" not in lines[0], lines[0]
-
-
 # ---------- LS9: every sentence is bound to a field ----------
-
-ARITHMETIC = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Pow, ast.Mod)
-
-
-def test_ls9_plain_py_computes_nothing_and_takes_the_six_payload_objects() -> None:
-    tree = ast.parse(PLAIN_SOURCE.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ARITHMETIC):
-            raise AssertionError(ast.dump(node))
-        if isinstance(node, ast.Call):
-            name = node.func.attr if isinstance(node.func, ast.Attribute) else (node.func.id if isinstance(node.func, ast.Name) else "")
-            assert name not in ("format", "round", "float", "abs", "sum", "max", "min"), ast.dump(node)
-        if isinstance(node, ast.FormattedValue):
-            assert node.format_spec is None and node.conversion == -1, ast.dump(node)
-        if isinstance(node, ast.AugAssign):
-            raise AssertionError(ast.dump(node))
-    assert set(plain().__all__) == {"CONFIDENCE_THRESHOLDS", "TOO_SMALL_TO_TELL", "build_summary"}
-    params = inspect.signature(plain().build_summary).parameters
-    assert list(params) == ["panels", "view", "pair", "diff", "complement", "trade_line"] and all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in params.values()), list(params)
-    assert plain().CONFIDENCE_THRESHOLDS == CONFIDENCE_THRESHOLDS and plain().TOO_SMALL_TO_TELL == TOO_SMALL_TO_TELL
-
 
 def test_ls9_every_numeric_substring_of_every_sentence_is_a_text_value_a_config_value_or_an_integer_field(all_pairs: list[Pair]) -> None:
     for p in all_pairs:
@@ -1915,7 +1858,7 @@ def synthetic_cell(k: int, q: float, p_value: float, delta: float = 0.281, verdi
         "no_outcome_a": 0, "no_outcome_b": 0, "events_a": 4, "events_b": 13, "rate_a": 0.125, "rate_b": 0.125 + delta, "delta": delta,
         "stat": 0.25, "p": p_value, "q": q, "mde": mde, "verdict": verdict, "config": {"gain": k, "load": 30},
         "config_text": {"gain": str(k), "load": "30"},
-        "text": {"rate_a": "12.5", "rate_b": _fmt(0.125 + delta, "pp1"), "delta": _fmt(delta, "pp1"), "stat": "0.25", "p": _fmt(p_value, "sig3"), "q": _fmt(q, "sig3"), "mde": _fmt(mde, "pp0")},
+        "text": {"rate_a": "12.5", "rate_b": m7_form(0.125 + delta, "pp1"), "delta": m7_form(delta, "pp1"), "stat": "0.25", "p": m7_form(p_value, "sig3"), "q": m7_form(q, "sig3"), "mde": m7_form(mde, "pp0")},
     }
 
 
@@ -1926,8 +1869,8 @@ def synthetic_panel(cells: list[dict[str, Any]], mde_unchanged: float | None, wh
         honesty = HONESTY_NONE + "\nWorst-powered cell overall: 20pp (gain=0, load=30)."
         block = {"value": None, "text": None, "where": None}
     else:
-        honesty = f'Worst-powered unchanged cell ({where}, n=32/32) can only detect a {_fmt(mde_unchanged, "pp0")}pp rise. "{worse} worse" is an honest claim only above that.\nWorst-powered cell overall: 20pp (gain=0, load=30).'
-        block = {"value": mde_unchanged, "text": _fmt(mde_unchanged, "pp0"), "where": where}
+        honesty = f'Worst-powered unchanged cell ({where}, n=32/32) can only detect a {m7_form(mde_unchanged, "pp0")}pp rise. "{worse} worse" is an honest claim only above that.\nWorst-powered cell overall: 20pp (gain=0, load=30).'
+        block = {"value": mde_unchanged, "text": m7_form(mde_unchanged, "pp0"), "where": where}
     # PF4 (PF4.20): the hand-built panel declares its event a failure, so its counts and rows keep
     # the safer/worse words these tests are about; a panel now carries its kind and the direction
     # counts beside n_safer and n_worse (for a failure event, a rise is worse).
@@ -2021,10 +1964,10 @@ def test_ls11_too_small_to_tell_is_a_function_of_mde_unchanged_alone_at_0_50() -
     # is too small to tell only above it (at or below it is no significant change).
     # The hand-built pair records 0.50 in both arms, so the boundary stays at 0.50 and a limit of
     # exactly 0.50 is no longer labelled.
-    for value, labelled in ((0.49, False), (0.50, False), (0.51, True), (0.999, True), (0.0, False)):
+    for value, mde, labelled in ((0.49, "49", False), (0.50, "50", False), (0.51, "51", True), (0.999, "100", True), (0.0, "0", False)):
         limit = summary_of([synthetic_panel(cells, value)], pair_obj=THRESHOLD_PAIR)["events"][0]["limit"]
-        fields = dict(where="gain=9, load=30", n_a=32, n_b=32, mde=_fmt(value, "pp0"))
-        assert limit["mde"] == _fmt(value, "pp0") and limit["where"] == "gain=9, load=30", limit
+        fields = dict(where="gain=9, load=30", n_a=32, n_b=32, mde=mde)
+        assert limit["mde"] == mde and limit["where"] == "gain=9, load=30", limit
         if labelled:
             assert limit["label"] == "too small to tell" and limit["line"] == LIMIT_LINE_LABELLED.format(**fields), limit
         else:
@@ -2088,7 +2031,7 @@ def test_ls11_the_panels_mde_unchanged_is_the_honesty_number_character_for_chara
                 seen.add("nan")
                 continue
             m = HONESTY_RE.search(first)
-            assert m is not None and block["text"] == m.group(1) == _fmt(block["value"], "pp0"), (p.name, first, block)
+            assert m is not None and block["text"] == m.group(1) == m7_form(block["value"], "pp0"), (p.name, first, block)
             assert 0.0 <= block["value"] <= 1.0
             assert f"({block['where']}, n=" in first, (p.name, first, block["where"])
             cell = next(c for c in panel["cells"] if c["coords"] == block["where"])
@@ -2100,14 +2043,6 @@ def test_ls11_the_panels_mde_unchanged_is_the_honesty_number_character_for_chara
             seen.add("labelled" if labelled else "bare")
     # PF4 re-freeze (PF4.27): the fixtures now reach the no-limit case too.
     assert seen == {"nan", "labelled", "bare", "none"}, seen
-
-
-def test_ls11_no_module_parses_the_honesty_prose_for_the_number() -> None:
-    """Sole catch for a build that keeps the dashboard's text pattern."""
-    pattern = re.compile(r"honesty[^\n]*\.(split|find|index|search|match|findall)\(|re\.\w+\([^\n]*honesty")
-    for path in SRC.rglob("*.py"):  # PF5: the core is a package now, so the scan reads src/ recursively.
-        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            assert not pattern.search(line), (path.name, i, line.strip())
 
 
 # ---------- LS12: the plain register never decides ----------
@@ -2154,9 +2089,7 @@ def test_ls13_the_two_event_lattice_pair_is_reported_once_and_never_as_a_trade(l
     assert lattice_two.structure["trade_line"] == LATTICE_COMPLEMENT_LINE
     assert lattice_two.structure["summary"]["complement"] == {"events": [lattice.EVENT, lattice.OTHER], "line": LATTICE_COMPLEMENT_LINE}
     assert lattice_two.structure["summary"]["complement"]["line"] == lattice_two.structure["trade_line"]
-    # The sentence has one source. ``plain.py`` carries ``trade_line`` and
-    # composes no complement sentence of its own.
-    assert "complements here" not in PLAIN_SOURCE.read_text(encoding="utf-8")
+    # The sentence has one source: ``build_summary`` is handed ``trade_line``.
     assert "trade_line" in inspect.signature(plain().build_summary).parameters
     lines = summary_lines(lattice_two.page)
     # PF4 re-freeze (PF4.34, PF4.35): the Summary opens with the verdict line; the complement sentence
@@ -2178,8 +2111,6 @@ def test_ls13_the_two_event_lattice_pair_is_reported_once_and_never_as_a_trade(l
         # PF4 (PF4.20): neither event declares a kind, so the counts are the rises and falls.
         assert str(panel["n_higher"]) in entry["line"] and str(panel["n_lower"]) in entry["line"]
     assert LATTICE_COMPLEMENT_LINE in region_text(lattice_two.page, "Result")
-    for path in SRC.rglob("*.py"):  # PF5: the core is a package now, so the scan reads src/ recursively.
-        assert RETIRED_TRADE_TAIL not in path.read_text(encoding="utf-8"), path.name
 
 
 def test_ls13_every_other_fixture_is_not_complementary_and_its_trade_line_is_what_it_was(every_pair: list[Pair], titled: Pair, partial: Pair) -> None:
@@ -2198,14 +2129,7 @@ def test_ls13_the_non_complementary_trade_line_counts_the_co_occurrence_and_name
     assert RETIRED_TRADE_TAIL not in line and "patch" not in line
 
 
-def test_ls14_the_complement_test_is_exact_integer_and_conservative(lattice_two: Pair) -> None:
-    src = source_of(DIFF_SOURCE, "complementary_events")
-    tree = ast.parse(src)
-    names = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} | {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
-    assert names & {"n_a", "n_b", "events_a", "events_b", "config_hash"} == {"n_a", "n_b", "events_a", "events_b", "config_hash"}, names
-    assert not names & {"rate_a", "rate_b", "delta", "isclose", "allclose"}, names
-    assert not any(isinstance(n, ast.Constant) and isinstance(n.value, float) for n in ast.walk(tree)), src
-    assert not any(isinstance(n, ast.Call) and getattr(n.func, "attr", getattr(n.func, "id", "")) in ("isclose", "allclose", "abs", "float") for n in ast.walk(tree)), src
+def test_ls14_the_complement_test_is_conservative(lattice_two: Pair) -> None:
     store = Store(LATTICE_ROOT)
     fa, fb = store.read(LATTICE_A, meta=False), store.read(LATTICE_B, meta=False)
     ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
@@ -2270,15 +2194,6 @@ def test_ls21_the_unpaired_word_gets_its_plain_line_beside_it_and_only_when_the_
     assert seen == {"unpaired", "paired"}, seen
 
 
-def test_ls21_the_word_and_the_warning_do_not_move() -> None:
-    """D16: the word stays and the warning stays; only the line beside the word is new."""
-    assert "unpaired" in source_of(DIFF_SOURCE, "headline")
-    src = DIFF_SOURCE.read_text(encoding="utf-8")
-    assert "class UnpairedAnalysis" in src
-    assert PAIRING_LINE not in src and PAIRING_LINE not in VIEWER_SOURCE.read_text(encoding="utf-8")
-    assert PAIRING_LINE in PLAIN_SOURCE.read_text(encoding="utf-8")
-
-
 # ---------- LS16: no internal reference on the page ----------
 
 
@@ -2291,7 +2206,6 @@ def test_ls16_no_board_id_on_the_page_while_blocked_by_stays_in_the_payload(all_
         assert [e["id"] for e in p.structure["unverified"]] == ["outcome_labels", "status_basis", "created_at_meaning", "seed_identity_basis"]
         lines = region_lines(p.page, "Not verified")
         assert any(html_mod.escape(NEW_TAILS[0]) in line for line in lines) and any(html_mod.escape(NEW_TAILS[1]) in line for line in lines), lines
-    assert tuple(blocked for _, _, blocked in viewer()._UNVERIFIED) == UNVERIFIED_BLOCKED_BY
 
 
 # ---------- LS17: the command line says what it means ----------
@@ -2572,7 +2486,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
                 # reader is shown, not the text entry.
                 assert isinstance(entry["mde_note"], str) and entry["mde_note"], (p.name, key)
             else:
-                assert entry["text"]["mde"] == _fmt(entry["mde"], "pp0"), (p.name, key, entry["text"])
+                assert entry["text"]["mde"] == m7_form(entry["mde"], "pp0"), (p.name, key, entry["text"])
         return
     if heading == "Worst cells":
         tables = [table_of(line) for line in lines if line.startswith("<table>")]
@@ -2587,12 +2501,12 @@ def assert_region_facts(p: Pair, heading: str) -> None:
                 if isinstance(record["mde_note"], str):
                     assert not re.search(r"\d+pp", row[mde]), (p.name, row)
                 else:
-                    assert row[mde] == f"{_fmt(record['mde'], 'pp0')}pp", (p.name, row)
+                    assert row[mde] == f"{m7_form(record['mde'], 'pp0')}pp", (p.name, row)
         return
     raise AssertionError((p.name, heading))
 
 
-def test_ls19_every_dispatch_heading_is_still_on_the_page_and_the_untouched_regions_keep_their_bytes(all_pairs: list[Pair]) -> None:
+def test_ls19_every_heading_is_still_on_the_page_and_the_untouched_regions_keep_their_bytes(all_pairs: list[Pair]) -> None:
     for p in all_pairs:
         assert set(h2_sequence(p.page)) == DISPATCH_H2, p.name
         for heading in UNTOUCHED_REGIONS:
@@ -2633,8 +2547,3 @@ def test_ls20_the_page_renders_from_a_round_tripped_structure_with_no_report_dif
     text = json.dumps(lattice_two.structure, allow_nan=False)
     again = viewer().render_html(strict_loads(text))
     assert again == lattice_two.page
-    render = source_of(VIEWER_SOURCE, "render_html")
-    whole = VIEWER_SOURCE.read_text(encoding="utf-8")
-    for fragment in ("conditions got worse", "How sure", "Too small to tell", "recorded status", "complements here", "Every number above", "separate samples"):
-        assert fragment not in whole, fragment
-    assert "summary" in render

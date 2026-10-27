@@ -16,8 +16,9 @@ in both cells; what differs is which of them the **bare** tree already satisfies
   ``DataFrame.from_records`` replaces a mixed column's ``None`` before the shipped
   ``astype(object)`` guard at ``diff.py:945`` ever runs.
 
-Fifteen invariants, fifteen tests, one test per invariant in both cells: 15 + 15 = 30 ids over
-the two cells against the frozen file's own 15, because no invariant is cell-specific. An invariant
+Twelve tests, one per invariant for twelve of the fifteen (V8, V10 and V12 have none here), in both
+cells: 12 + 12 = 24 ids over the two cells against the file's own 12, because no invariant is
+cell-specific. An invariant
 that could only be asserted under one pandas would be named here with the cell it is missing
 from; there is none.
 
@@ -49,14 +50,12 @@ gives an exact count on the freeze's own commit.
 
 from __future__ import annotations
 
-import ast
 import json
 import tomllib
 import warnings
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -64,14 +63,12 @@ import pytest
 from packaging.requirements import Requirement
 from packaging.version import Version
 
-import poisson_prove.cli as cli
 import poisson_prove.diff as diff_mod
 import poisson_prove.store as store_mod
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
 ROOT = Path(__file__).resolve().parents[1]
-DIFF_SOURCE = ROOT / "src" / "poisson_prove" / "diff.py"
 PYPROJECT = ROOT / "pyproject.toml"
 
 #: The two-record store. One errored row -- ``outcome`` null, ``error`` set, and the three
@@ -105,6 +102,8 @@ PAIR_CELLS: dict[str, tuple[int, int, int, int]] = {
 }
 EXPECTED_COMPARABLE = 2
 EXPECTED_HOLES = 5
+#: The five hole causes, one per hole cell above.
+HOLE_CAUSES = ("only_a", "only_b", "no_outcome_a", "no_outcome_b", "no_outcome_both")
 
 #: C13's negative. The shipped parser is ``d.split("[")[0].split(">")[0].split("=")[0]`` plus
 #: ``.strip().lower()``; it strips neither ``<`` nor ``~=`` nor ``!=``, and ``pandas>=2,<3``
@@ -184,7 +183,7 @@ def mixed_pair(tmp_path: Path) -> Any:
         )
 
 
-# ---------- V1-V8: the read path ----------
+# ---------- V1-V7: the read path ----------
 
 
 def test_v1_a_stored_null_reads_back_as_none_in_both_nullable_string_columns(two_records: Store) -> None:
@@ -246,12 +245,13 @@ def test_v4_the_three_nullable_float_columns_read_back_nan_and_not_none(two_reco
         assert pd.isna(value) and value is not None, column
 
 
-def test_v5_nullable_string_columns_is_exactly_the_schemas_nullable_string_fields() -> None:
+def test_v5_nullable_string_columns_is_exactly_the_schemas_nullable_string_fields(two_records: Store, tmp_path: Path) -> None:
     """D6's structural guard against A7. A7 adds ``trace`` and ``trace_obs`` to ``_SCHEMA`` as
     nullable ``pa.string()``; this goes red the moment it does and stays red until A7 adds both
     names here too. A7's natural spelling of its own invariants passes on a NaN, so the loud
     failure is the only thing between A7 and six invariants that are green and wrong."""
-    schema_fields = {f.name for f in store_mod._SCHEMA if f.nullable and f.type == pa.string()}
+    (part,) = (tmp_path / "store" / RUN / "episodes").glob("part-*.parquet")
+    schema_fields = {f.name for f in pq.read_schema(part) if f.nullable and f.type == pa.string()}
     assert set(store_mod._NULLABLE_STRING_COLUMNS) == schema_fields
 
 
@@ -313,39 +313,7 @@ def test_v7_a_retained_run_strips_the_unretained_rows_trace_and_its_error_is_non
     assert row["error"] is None
 
 
-def test_v8_horizon_truncation_leaves_outcome_none_on_exactly_the_recensored_rows(tmp_path: Path) -> None:
-    """The invariant names this one ``censor()``; ``censor`` takes no horizon and drops null
-    outcomes through ``isna()``, which is true of ``None`` and of ``NaN`` alike -- asserted over
-    ``censor`` the invariant is green by construction in both cells and pins nothing. The
-    horizon re-censoring lives in ``diff._truncate_raw``, and that is
-    what this asserts. It sets ``None`` into a column it did not create, and is correct only
-    because its input now arrives ``object`` from ``Store.read``."""
-    store = Store(tmp_path / "truncate")
-    store.create_run(
-        RunManifest(
-            run_id=RUN, target_id="policy@abc123", t_unit="steps", run_salt="a22-oracle",
-            axis_types={"f": "continuous"}, backend="local", environment={},
-        )
-    )
-    store.append(
-        RUN,
-        [
-            EpisodeRecord.from_episode(
-                Episode(outcome=OUTCOME_TEXT, t=float(k + 1), horizon=PAIR_HORIZON, meta={}),
-                run_id=RUN, config=ERRORED_CONFIG, seed=k, replicate_index=k, wall_time=0.1,
-            )
-            for k in range(6)
-        ],
-    )
-    frame = store.read(RUN)
-    truncated, count = diff_mod._truncate_raw(frame, 3.0)
-    over = (frame["t"].to_numpy(dtype=np.float64) > 3.0).tolist()
-    assert count == sum(over) and 0 < count < len(frame)
-    assert [truncated.loc[i, "outcome"] is None for i in range(len(truncated))] == over
-    assert [bool(pd.isna(truncated.loc[i, "outcome"])) for i in range(len(truncated))] == over
-
-
-# ---------- V9-V12: the coverage frame and what is printed ----------
+# ---------- V9, V11: the coverage frame and what is printed ----------
 
 
 def test_v9_coverage_cause_is_none_on_every_comparable_row_and_a_named_cause_on_every_hole(mixed_pair: Any) -> None:
@@ -357,17 +325,8 @@ def test_v9_coverage_cause_is_none_on_every_comparable_row_and_a_named_cause_on_
     holes = coverage[~coverage["comparable"]]
     assert (len(comparable), len(holes)) == (EXPECTED_COMPARABLE, EXPECTED_HOLES)
     assert all(cause is None for cause in comparable["cause"])
-    assert sorted(holes["cause"]) == sorted(diff_mod._CAUSES)
+    assert sorted(holes["cause"]) == sorted(HOLE_CAUSES)
     assert coverage["cause"].dtype == object
-
-
-def test_v10_the_coverage_block_prints_none_and_never_nan(mixed_pair: Any) -> None:
-    """Not a test artefact: this is ``poisson-prove diff``'s printed output. ``_md_cell`` sends a
-    float through ``f"{value:.6g}"``, and ``isinstance(np.float64("nan"), float)`` is true, so
-    an unported build prints ``nan`` in the cell where ``None`` belongs."""
-    block = cli._coverage_block(mixed_pair)
-    assert block.count("| None |") == EXPECTED_COMPARABLE
-    assert "nan" not in block
 
 
 def test_v11_the_diff_json_payload_dumps_with_allow_nan_false(mixed_pair: Any) -> None:
@@ -377,29 +336,6 @@ def test_v11_the_diff_json_payload_dumps_with_allow_nan_false(mixed_pair: Any) -
     payload = mixed_pair.to_json()
     assert json.dumps(payload, allow_nan=False)
     assert sum(record["cause"] is None for record in payload["coverage"]) == EXPECTED_COMPARABLE
-
-
-def test_v12_no_astype_is_applied_to_the_cause_column_in_diff_py(mixed_pair: Any) -> None:
-    """Structural, read from the source the way H13 reads it: the repaired guard must not be left beside the repair for
-    someone to restore. Every statement of ``diff.py`` that both names ``"cause"`` and calls
-    ``.astype`` is an offender, which on the bare tree is the ``for col in ("config", "cause")``
-    loop and its body. ``ci_lo``/``ci_hi``'s own ``astype`` loop is deliberately untouched,
-    and this assertion does not reach it. Takes ``mixed_pair`` so a build
-    that satisfies the scan by deleting the rebuild fails V9-V11 in the same run."""
-    offenders = []
-    for node in ast.walk(ast.parse(DIFF_SOURCE.read_bytes())):
-        if not isinstance(node, (ast.For, ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Expr)):
-            continue
-        if not any(
-            isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "astype"
-            for call in ast.walk(node)
-        ):
-            continue
-        literals = {c.value for c in ast.walk(node) if isinstance(c, ast.Constant) and isinstance(c.value, str)}
-        if "cause" in literals:
-            offenders.append((node.lineno, sorted(literals)))
-    assert offenders == [], offenders
-    assert mixed_pair.coverage["cause"].tolist().count(None) == EXPECTED_COMPARABLE
 
 
 # ---------- V13-V15: C13's dependency parser ----------

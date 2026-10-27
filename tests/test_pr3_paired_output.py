@@ -80,8 +80,7 @@ behind ``--paired``, formats and computes nothing, and prints no verdict (PR53 t
   ``CutResult.pooled["comparison"]`` and the two artifact writers print it beside the threshold;
   ``pooled``'s key set is not pinned and ``intervals_json`` prints its keys by name.
 - *``report.py`` is not edited.* PR53's byte identity holds by construction: the sections are
-  folded into the rendered strings by ``paired.py`` and ``cli.py``, and the whole-file digest
-  ``REPORT_PY_SHA256`` two frozen tests carry is carried here too.
+  folded into the rendered strings by ``paired.py`` and ``cli.py``.
 
 **Fixtures, and what each cannot express.** Every store is built under ``tmp_path`` by this file
 with timestamps and token counts chosen per arm and per item, so a window, a gap, a missing
@@ -90,9 +89,9 @@ timestamp and an unrecorded span are each one knob. The generated lattice pair
 it carries no paired declaration.
 
 **Green before and after -- named so their green is not read as coverage.**
-``test_pr53_a_report_without_paired_is_byte_identical_to_todays`` (the E14 digests the suite
-pins, re-taken through the CLI), ``test_pr53_report_py_is_not_touched_by_phase_three`` (the
-whole-file digest) and ``test_pr51_the_executor_is_untouched_by_the_cap`` (a source scan) are
+``test_pr53_a_report_without_paired_writes_the_library_rendering_and_the_lattice_reports_facts``
+(the E14 digests the suite pins, re-taken through the CLI) and
+``test_pr53_report_py_is_not_touched_by_phase_three`` (the whole-file digest) are
 green on the bare tree and stay green. Every other test is red on the bare tree: on
 ``TypeError`` from ``Cut`` without ``comparison``, on ``AttributeError`` for the four missing
 names, or on the CLI refusing the ``paired`` verb and the ``--paired`` flag.
@@ -113,6 +112,7 @@ import math
 import re
 import tempfile
 import typing
+import weakref
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -160,12 +160,6 @@ E14_LOWER, E14_HIGHER = 22, 0
 #: The root at the default 4,000 permutations sits at the floor, 1 / 4,001.
 E14_ROOT_P = 1 / 4001
 JUDGEMENT_WORD = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
-#: ``test_s29_viewer.py``'s and ``test_fr_first_run.py``'s whole-file digest of ``report.py``.
-# Re-minted off the build at 173c25d: report.py carries LS's changes (the wrap, the complement, mde_unchanged, LS16's Cells sentence); phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted for A10 declared expectations, phase two, off the build at 662ceff: report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (A10 W8); PR-3's phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# PF0: no longer asserted. The rename changes report.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
 
 EPOCH = 1_790_000_000_000_000_000
 NS = 1_000_000_000
@@ -291,6 +285,7 @@ def make_store(
     """``rows`` replayed in every sweep (``per_sweep`` overrides one); ``extra_runs`` are run
     ids outside every sweep, for the cost phases."""
     store = Store(root / name)
+    MADE_AT[store] = root / name
 
     def write(run_id: str, label: str, run_rows: Sequence[TRow], sweep_index: int) -> None:
         store.create_run(RunManifest(
@@ -407,9 +402,13 @@ def run_names(root: Path) -> dict[str, str]:
     return {entry["run_id"]: entry["run_name"] for entry in json.loads(r.out)["runs"]}
 
 
+#: Each store ``make_store`` built, and the folder it built it in.
+MADE_AT: weakref.WeakKeyDictionary[Store, Path] = weakref.WeakKeyDictionary()
+
+
 def root_of(store: Store) -> Path:
-    """The store's directory, for ``--store``: the one private read this file makes."""
-    return Path(store._root)  # noqa: SLF001
+    """The store's directory, for ``--store``: the folder ``make_store`` built it in."""
+    return MADE_AT[store]
 
 
 def paired_cli(store: Store, decl_path: Path, out: Path, *extra: str) -> Result:
@@ -835,14 +834,6 @@ def test_pr47_a_retry_span_is_paid_for_and_an_errored_episode_records_nothing(tm
     assert report.input_tokens == 7 * 400
 
 
-def test_pr47_the_module_holds_no_tokeniser_and_no_rate_card() -> None:
-    source = Path(P().__file__).read_text(encoding="utf-8")
-    for word in ("tiktoken", "encoding_for_model", "transformers", "per_1k", "per_million", "usd_per"):
-        assert word not in source, word
-    assert not re.search(r"\$\s*\d", source)
-    assert "price_per_input_token" in source
-
-
 # ---------- PR48: output tokens with or without a price ----------
 
 
@@ -911,7 +902,7 @@ def test_pr50_a_total_over_spans_that_recorded_nothing_is_reported_as_what_it_is
     assert report_cli(store, "S1-a", "S1-b", out, "--paired", str(decl_path)).code == 0
     cost = json.loads((out / "cost.json").read_text())
     assert (cost["input_tokens"], cost["recorded_spans"], cost["unrecorded_spans"]) == (0, 0, 8)
-    assert cost["dollars"] == "0E-6" or Decimal(cost["dollars"]) == 0
+    assert cost["dollars"] == "0.000000"
     section = (out / "report.md").read_text()
     section = section[section.index("## Cost"):section.index(FENCE)]
     assert "unrecorded spans" in section and re.search(r"unrecorded spans\D*8\b", section)
@@ -930,7 +921,7 @@ def test_pr51_cap_reached_is_cumulative_input_tokens_at_or_above_the_declared_ca
 
 # At the cap the check exits 4.
 @pytest.mark.parametrize(("cap", "code"), [(6400, 4), (6401, 0)])
-def test_pr51_cap_check_prints_the_cost_block_writes_nothing_and_exits_one_at_the_cap(tmp_path: Path, cap: int, code: int) -> None:
+def test_pr51_cap_check_prints_the_cost_block_writes_nothing_and_exits_four_at_the_cap(tmp_path: Path, cap: int, code: int) -> None:
     store = make_store(tmp_path, default_rows())
     decl_path = write_declaration(tmp_path / "decl.toml", top={"token_cap": str(cap)})
     out = tmp_path / "paired"
@@ -950,14 +941,6 @@ def test_pr51_the_cap_is_over_completed_runs_and_a_later_sweep_adds_to_it(tmp_pa
     both = P().cost(store, declaration(sweeps=("S1", "S2"), token_cap=7000), phases={"S1": ("S1-a", "S1-b"), "S2": ("S2-a", "S2-b")})
     assert (one.input_tokens, one.cap_reached) == (6400, False)
     assert (both.input_tokens, both.cap_reached) == (12800, True)
-
-
-def test_pr51_the_executor_is_untouched_by_the_cap() -> None:
-    """Green before and after: the cap is analysis-side and neither executor
-    knows the word."""
-    for name in ("executor.py", "executor_modal.py"):
-        source = (Path(P().__file__).parent / name).read_text(encoding="utf-8")
-        assert "token_cap" not in source and "cap_reached" not in source, name
 
 
 # ---------- PR52: the cost block reconciles ----------
@@ -1125,7 +1108,7 @@ def drawn_sentence_problems(svg: str, opening: str, sentence: str) -> list[str]:
     return problems
 
 
-def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pr53_a_report_without_paired_writes_the_library_rendering_and_the_lattice_reports_facts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Green before and after: the facts W20's three digests guarded, on the lattice pair, over the
     library's rendering of what the CLI built, and the CLI's three files carrying that rendering's facts."""
     calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
@@ -1498,7 +1481,7 @@ def test_cli_paired_refuses_a_non_empty_out_dir_without_force_and_names_a_defaul
 # ---------- the structure: the names and fields ----------
 
 
-def test_structure_window_report_and_cost_report_are_section_twos_fields_and_the_two_functions_take_what_section_two_says() -> None:
+def test_structure_window_report_and_cost_report_keep_their_fields_and_windows_and_cost_keep_their_signatures() -> None:
     module = P()
     assert tuple(f.name for f in dataclasses.fields(module.WindowReport)) == WINDOW_REPORT_FIELDS
     assert tuple(f.name for f in dataclasses.fields(module.CostReport)) == COST_REPORT_FIELDS

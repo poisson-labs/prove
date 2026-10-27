@@ -131,7 +131,7 @@ def wrong_type_rollout(cfg: dict[str, Any], seed: int) -> Any:
 
 def sleeping_rollout(cfg: dict[str, Any], seed: int) -> Episode:
     if seed in SLEEP_SEEDS:
-        time.sleep(3.0)
+        time.sleep(12.0)  # past the test's 5 s bound: an executor that waits instead of killing fails it
     return deterministic_rollout(cfg, seed)
 
 

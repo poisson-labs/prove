@@ -1,6 +1,6 @@
 """Frozen tests for M2: grid / sobol / scenarios samplers, axis typing, SweepSpec, TOML loader.
 
-Property tests (I1, I2, I3, I5, I6, I7, I15) draw small mixed-type axis dicts with
+Property tests (I1, I2, I5, I6, I7, I15) draw small mixed-type axis dicts with
 hypothesis; grids stay under about 200 configs. I10 is the golden: the lattice's sweep
 TOML (``tests/lattice.py``'s two axes) is written to tmp_path inside the test, loaded, and
 its config_hash set is compared against the generated store through the ``lattice_store``
@@ -188,24 +188,11 @@ def test_i2_grid_worked_example() -> None:
         {"x": 2, "y": "b"},
         {"x": 2, "y": "c"},
     ]
-
-
-# ---------- I3: value types ----------
-
-
-@given(axes=axes_dicts())
-def test_i3_grid_preserves_value_types(axes) -> None:
-    for cfg in grid(axes):
-        for k, v in cfg.items():
-            match = [a for a in axes[k] if a == v and type(a) is type(v)]
-            assert match, (k, v, type(v))
-
-
-def test_i3_grid_worked_example_int_float_str_bool() -> None:
-    out = grid({"n": [5, 5.0], "s": ["a"], "f": [True]})
-    assert type(out[0]["n"]) is int and type(out[1]["n"]) is float
-    assert type(out[0]["s"]) is str and type(out[0]["f"]) is bool
-    assert out[0]["n"] == 5 and out[1]["n"] == 5.0
+    # Value types survive: 5 and 5.0 are two values of one axis, an int and a float.
+    typed = grid({"n": [5, 5.0], "s": ["a"], "f": [True]})
+    assert type(typed[0]["n"]) is int and type(typed[1]["n"]) is float
+    assert type(typed[0]["s"]) is str and type(typed[0]["f"]) is bool
+    assert typed[0]["n"] == 5 and typed[1]["n"] == 5.0
 
 
 # ---------- I4: sobol ----------

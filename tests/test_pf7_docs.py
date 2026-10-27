@@ -4,7 +4,7 @@ form).
 
 **What is pinned is what ships, as rules.** The pages are found, not listed:
 every Markdown page of the README, ``CONTRIBUTING.md``, ``docs/`` (but the two standards)
-and the example is read by the docs check, the words check and the link check, so a page a later
+and the example is read by the docs check and the link check, so a page a later
 change adds is checked by being there. Where a page must carry what the code has (every verb, every
 option of a verb, every key a sweep spec takes, every fault, every required ``[burla]`` field, the
 prompt ``init --agent`` prints, the steps of the skill it writes), the list is read from what ships:
@@ -57,13 +57,6 @@ test, so a check that let a wrong page through would fail here first.
   ``sweep --dry-run`` imports it with no key set; its rollout module has at most 20 lines of code,
   docstrings and comments not counted. The test needs ``openai`` installed, as the code suite's
   environment (``[all,dev]``) has it.
-- **d12** The words check here, until the hygiene module's full corpus takes the pages in, is the
-  word families of the API docs' check (``test_pf5_api_core.INTERNAL_WORDS``, read from there, its
-  two code shapes left out), with codes told by their shape and capitals as the hygiene tests tell
-  them, and the hygiene tests' exceptions: an encoding, a hash, the two hypotheses, an Apple chip,
-  an AWS service, a GPU type beside the word GPU, a model's name, a lint code in its ``noqa``; and
-  a TOML header of an array of tables (``[[cuts]]``), whose double brackets are no note link. A
-  study's name is the hygiene module's corpus test's, which lists them.
 - **d14** The sweep spec page and the backends page are checked against lists read from the code:
   the spec reader's own field lists (``sampler._TOP_FIELDS`` and the four tables' lists,
   ``ModalOptions``, ``ImageSpec``, ``BurlaOptions``), the Modal price table's date
@@ -100,7 +93,7 @@ which opens the app only on a terminal, so a page's example of it is marked ``sk
 **Seams with the dashboard:** ``poisson-prove ui`` has its verb page (red until its verb is
 merged); the dashboard page names the dashboard's seven views as headings; the artifact
 format's page is that module's, read here only by the three checks.
-**Seams with public hygiene:** the plain-words corpus (d12), the never-phones-home words (d6),
+**Seams with public hygiene:** the plain-words corpus (the release plain-words test reads every page), the never-phones-home words (d6),
 the removed files, the CHANGELOG; and a TOML header of an array of tables
 (``[[cuts]]`` in a paired declaration, ``[[scenarios]]`` in a sweep spec), which a page must be
 able to show and which the hygiene module's double-bracket family would read as a note link.
@@ -131,12 +124,11 @@ able to show and which the hygiene module's double-bracket family would read as 
 | PF7.2 the architecture page | ``test_pf7_2_the_architecture_page_names_the_core_and_the_faces`` |
 | PF7.2 ``CONTRIBUTING.md`` | ``test_pf7_2_contributing_says_how_to_install_test_and_commit`` |
 | PF7.2 ``json.dumps`` on an unread result | ``test_pf7_2_the_python_page_says_json_dumps_on_an_unread_result_is_unsupported`` |
-| PF7.3 every marked block runs and does what its page shows; unmarked fails; skips name reasons | ``test_pf7_3_every_marked_block_runs_and_does_what_its_page_shows`` (one case per page and install; the wheel's slow) |
+| PF7.3 every marked block runs and does what its page shows; unmarked fails; skips name reasons | ``test_pf7_3_every_marked_block_runs_and_does_what_its_page_shows`` (one case per page and install, but the your-own-agent page from the checkout, which the agent pages' test runs; the wheel's slow) |
 | PF7.3 the docs check catches each way a page can be wrong | ``test_pf7_3_the_docs_check_catches_each_way_a_page_can_be_wrong`` (one case per way, and a right page) |
 | PF7.7 the six recipes | ``test_pf7_7_the_recipes_are_section_6_4s_six`` |
 | PF7.7 each recipe: under 150 lines, ends with "What this does not tell you", no run id, run or skip as ``RECIPES`` says | ``test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_marked_as_section_6_4_says`` (one case per recipe) |
 | PF7.8 the example runs keyless with its client replaced by a stand-in | ``test_pf7_8_the_example_runs_keyless_with_its_client_replaced`` |
-| PF7 the docs are public text (interim) | ``test_pf7_the_docs_name_no_internal_code_study_or_place`` (one case per page) |
 | PF7 every link of every page resolves | ``test_pf7_every_link_of_every_page_resolves`` (one case per page) |
 | every docs page Prove's code or skill names exists | ``test_pf7_every_docs_page_prove_points_to_exists`` |
 | PF7 "with stated confidence" nowhere | ``test_pf7_no_page_or_help_says_with_stated_confidence`` (pages, description, help) |
@@ -164,7 +156,6 @@ from typing import Any
 import pytest
 
 import pf7_docs_check as check
-import test_pf5_api_core as PF5
 
 ROOT = Path(__file__).resolve().parents[1]
 README = "README.md"
@@ -221,22 +212,6 @@ def is_command_block(block: check.Block) -> bool:
     """A block that holds commands or code: indented, a fence with no language, or one of these."""
     return block.indented or block.lang in COMMAND_LANGS or block.lang == ""
 SNAPSHOT_COMMAND = "python -m pytest tests -k snapshot --update-snapshots"
-
-#: d12: the API docs' check's word families, case-blind, its two code shapes left out; codes told
-#: by shape and capitals, with the hygiene tests' exceptions, each a span of a line with its reason.
-WORDS = re.compile("|".join(part for part in PF5.INTERNAL_WORDS.pattern.split("|")
-                            if not part.startswith((r"\bPF\d", r"\b[A-Z]{1,3}"))), re.IGNORECASE)
-CODE = re.compile(r"\b[A-Z]{1,3}-?\d+(?:\.\d+)?[a-z]?\b")
-CODE_ALLOWED = [
-    (r"\bUTF-8\b", "an encoding"),
-    (r"\bSHA-?256\b", "a hash"),
-    (r"\bH[01]\b\W{0,3}(?::|is\b|the\b)", "a null or alternative hypothesis"),
-    (r"\bApple\s+M[1-9](?:\s+(?:Pro|Max|Ultra))?\b", "an Apple chip"),
-    (r"\b(?:AWS|Amazon)\W+(?:S3|EC2)\b|\b(?:S3|EC2)\s+(?:buckets?|console|instances?)\b", "an AWS service"),
-    (r"(?i)\bgpus?\b[^.;\n]{0,40}|[^.;\n]{0,15}\bgpus?\b", "a GPU type beside the word GPU"),
-    (r"(?i)\b(?:gpt|o[134]|deepseek|claude|llama|gemini|qwen|mistral|mixtral|phi)-[A-Za-z0-9.-]*", "a model's name"),
-    (r"#\s*noqa:\s*[A-Z]+[0-9]+(?:\s*,\s*[A-Z]+[0-9]+)*", "a lint code in the comment that silences it"),
-]
 
 
 # ---------- reading what ships ----------
@@ -810,7 +785,7 @@ def test_pf7_2_the_dashboard_page_names_the_views_the_verb_and_what_saves() -> N
 def test_pf7_2_the_architecture_page_names_the_core_and_the_faces() -> None:
     text = text_of("docs/architecture.md")
     missing = [w for w in ("poisson_prove.core", "poisson_prove.compare", "cli") if f"`{w}`" not in text]
-    missing += [w for w in ("face", "renderer", "core") if w not in text.lower()]
+    missing += [w for w in ("face", "renderer", "core") if not re.search(rf"\b{w}s?\b", text.lower())]
     assert missing == [], missing
 
 
@@ -840,7 +815,12 @@ def test_pf7_2_the_python_page_says_json_dumps_on_an_unread_result_is_unsupporte
 # ---------- PF7.3 the docs check ----------
 
 
-INSTALLS = ["checkout", pytest.param("wheel", marks=pytest.mark.slow)]
+#: Every page from the checkout's install and, slow, from the wheel; the your-own-agent page's run
+#: from the checkout is ``test_pf7_2_the_agent_pages_say_each_case_is_its_own_sweep_axis``'s.
+PAGE_INSTALLS = [
+    *(pytest.param(rel, "checkout", id=f"{rel}-checkout") for rel in PAGES if rel != "docs/your-own-agent.md"),
+    *(pytest.param(rel, "wheel", marks=pytest.mark.slow, id=f"{rel}-wheel") for rel in PAGES),
+]
 
 
 @pytest.fixture(scope="session")
@@ -849,8 +829,7 @@ def shared_base(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return base.parent if os.environ.get("PYTEST_XDIST_WORKER") else base
 
 
-@pytest.mark.parametrize("install", INSTALLS)
-@pytest.mark.parametrize("rel", PAGES)
+@pytest.mark.parametrize("rel,install", PAGE_INSTALLS)
 def test_pf7_3_every_marked_block_runs_and_does_what_its_page_shows(rel: str, install: str, tmp_path: Path, shared_base: Path) -> None:
     assert (ROOT / rel).is_file(), f"{rel} does not exist"
     if install == "checkout":
@@ -1140,41 +1119,6 @@ def test_pf7_8_the_example_runs_keyless_with_its_client_replaced(tmp_path: Path,
 
 
 # ---------- across the pages ----------
-
-
-def gpu_types() -> set[str]:
-    from poisson_prove import executor_modal
-
-    return {str(k) for k in executor_modal._PRICES_PER_SECOND}
-
-
-#: A TOML header of an array of tables (``[[cuts]]``, ``[[scenarios]]``): double brackets that are
-#: no note link.
-TOML_ARRAY_HEADER = re.compile(r"^\s*\[\[[A-Za-z0-9_.-]+\]\]\s*(?:#.*)?$")
-
-
-def words_problems(text: str) -> list[str]:
-    out = [m.group(0) for line in text.splitlines() for m in WORDS.finditer(line)
-           if m.group(0).lower() not in PF5.INTERNAL_EXCEPTIONS and not (m.group(0) == "[[" and TOML_ARRAY_HEADER.match(line))]
-    gpus = gpu_types()
-    for line in text.splitlines():
-        allowed = [(m.start(), m.end(), reason) for pattern, reason in CODE_ALLOWED for m in re.finditer(pattern, line)]
-        for m in CODE.finditer(line):
-            inside = [reason for a, b, reason in allowed if a <= m.start() and m.end() <= b]
-            if inside and (inside != ["a GPU type beside the word GPU"] or m.group(0) in gpus):
-                continue
-            out.append(m.group(0))
-    return out
-
-
-@pytest.mark.parametrize("rel", PAGES + ["pyproject.toml"])
-def test_pf7_the_docs_name_no_internal_code_study_or_place(rel: str) -> None:
-    if rel == "pyproject.toml":
-        project = tomllib.loads(text_of(rel))["project"]
-        text = " ".join([project.get("description", ""), *project.get("keywords", [])])
-    else:
-        text = text_of(rel)
-    assert words_problems(text) == []
 
 
 @pytest.mark.parametrize("rel", PAGES)

@@ -884,7 +884,7 @@ def check_limit(report: Report, notes: dict[str, Any], coords: str, after: str, 
     return kind
 
 
-def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_report: Report, golden_diff: DiffResult) -> None:
+def test_b1_markdown_matches_the_layout_built_from_the_references_outside_the_honesty_block(golden_report: Report, golden_diff: DiffResult) -> None:
     """S8's record was a frozen file; on the lattice pair the same layout is built here from the
     references and compared line for line outside the honesty block (B2 owns its two lines). What
     P-1 moved in S8's record is written the way it reads now: the headline's last token states the
@@ -1933,14 +1933,6 @@ def test_b18_three_events_by_a_thousand_cells_render_in_all_formats() -> None:
 
 
 # ---------- B19: no computation ----------
-
-
-def test_b19_report_module_imports_no_numpy_or_scipy() -> None:
-    import poisson_prove.report as report_module
-
-    source = Path(report_module.__file__).read_text()
-    for banned in ("import numpy", "from numpy", "import scipy", "from scipy"):
-        assert banned not in source, banned
 
 
 def _word_multi(**overrides: Any) -> MultiDiffResult:

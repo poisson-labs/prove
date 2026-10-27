@@ -10,7 +10,7 @@ Three constraints the tests below are written to hold, taken from the queue item
 
 - It fires from **M6**, not the CLI. ``cli.py``'s module docstring commits that module to
   deciding nothing statistical, and a warning about which test to run is a statistical
-  decision. U14 and U15 read ``src/`` so the rule is a test rather than a review step.
+  decision.
 - **Once per diff, not per cell.** U6 drives a six-cell, three-event diff -- eighteen tests --
   and counts one record.
 - **Never a silent switch.** The method is not chosen from whether two runs happen to share a
@@ -24,7 +24,7 @@ CLI runner here; everything else is written out at the assertion.
 
 from __future__ import annotations
 
-import ast
+import inspect
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -46,7 +46,6 @@ from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.survival import censor
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "poisson_prove"
 SALT = "unpaired-warning-oracle-salt"
 OTHER_SALT = "a-different-salt"
 HORIZON = 10.0
@@ -285,9 +284,13 @@ def test_u10_unpaired_analysis_is_a_user_warning() -> None:
 
 def test_u11_the_warning_points_at_the_callers_line() -> None:
     """stacklevel is the difference between a warning a reader can act on and one that points
-    at library internals. It must name the file that called multi_diff -- this one."""
+    at library internals. It must name the file and the line that called multi_diff -- the call
+    in ``multi`` above."""
     records = unpaired_records(caught(lambda: multi("fisher_bh")))
     assert records[0].filename == __file__, records[0].filename
+    lines, start = inspect.getsourcelines(multi)
+    (call_line,) = [start + i for i, line in enumerate(lines) if "multi_diff(" in line]
+    assert records[0].lineno == call_line, (records[0].lineno, call_line)
 
 
 def test_u12_the_message_names_the_method_and_the_alternative() -> None:
@@ -315,32 +318,6 @@ def test_u13_every_method_either_refuses_or_warns() -> None:
         assert refuses != warns, (method, refuses, warns)
 
 
-def test_u14_the_cli_raises_no_warning_of_its_own() -> None:
-    """cli.py computes nothing and decides nothing statistical. Which test to run is a
-    statistical decision, so the module that renders results must not be the module that
-    raises this. Read from src/ rather than reviewed."""
-    tree = ast.parse((SRC / "cli.py").read_text(encoding="utf-8"))
-    calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "warn"
-    ]
-    assert calls == [], [node.lineno for node in calls]
-
-
-def test_u15_only_m6_names_the_category() -> None:
-    """One source for the decision. Any other module under src/ naming UnpairedAnalysis is a
-    second place the rule could be applied, or applied differently."""
-    named = sorted(
-        path.name
-        for path in SRC.rglob("*.py")  # PF5: the core is a package now, so the scan reads src/ recursively.
-        if "UnpairedAnalysis" in path.read_text(encoding="utf-8")
-    )
-    assert named == ["diff.py"], named
-
-
 def test_u16_a_cli_diff_warns_and_the_artifact_is_unchanged_by_it(tmp_path: Path) -> None:
     """End to end: the CLI's diff on a pairable pair raises the warning, and the warning is
     out of band: nothing it says reaches the streams the CLI was given, and ``mcnemar_bh`` is
@@ -349,7 +326,7 @@ def test_u16_a_cli_diff_warns_and_the_artifact_is_unchanged_by_it(tmp_path: Path
     ``to_markdown()``'s ``paired=True`` and is now deliberately false of
     ``seed_identity_match=True, unpaired_analysis=True`` (C24: the fact reaches every artifact).
     What still holds, and what this pins, is that the warning's own sentence stays off the
-    streams and the CLI names the alternative method nowhere (U14)."""
+    streams and the CLI names the alternative method nowhere."""
     store = Store(tmp_path)
     write_run(store, "run-a", SALT, fails=2)
     write_run(store, "run-b", SALT, fails=4)

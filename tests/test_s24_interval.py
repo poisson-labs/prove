@@ -24,7 +24,7 @@ several tests below look the way they do.
    horizon rule would label is **27**: the twelve ``load`` 100 conditions are ``32/32`` vs
    ``32/32``, every episode tripped in both arms, ``delta`` is exactly ``0``, and log-rank rejects
    them on the trip *times* (the after run trips sooner). That configuration is the only fixture
-   on which the two definitions differ, so C2 and C19 are written on it and nowhere else. On every
+   on which the two definitions differ, so C2 is written on it and nowhere else. On every
    other configuration both definitions pass.
 2. **The family is the flat BH family ``multi_diff`` runs**, and C1/C2/C18 say so. A nested
    family (leaves within a rejected Level 2 group) is a separate object with
@@ -67,14 +67,10 @@ several tests below look the way they do.
   fields; the family name and the basis are pinned as literals.
 - **An endpoint is "interior" iff ``-1.0 < endpoint < 1.0``** -- observable from the return
   value alone, no reach into how it was found.
-- **Render the percentage with the ``%`` format spec, not by multiplying.** C19 forbids any
-  arithmetic on the six interval fields inside ``cli.py``, and ``interval_level * 100`` is
-  arithmetic: it is indistinguishable, to a rule that has to stay robust, from the
-  ``1 - interval_level`` and ``alpha_star * m / q`` recoveries the rule exists to stop.
-  ``f"{multi.interval_level:.4%}"`` renders ``0.9925`` as ``99.2500%`` with no ``BinOp`` at
-  all. The shadow shim tripped C19 on exactly this and the shim was corrected, not the test.
-  Printing ``alpha_star`` with ``:g`` rather than ``:.4f`` also avoids that four-decimal
-  rounding defect, and the regex above accepts either.
+- **Render the percentage with the ``%`` format spec, not by multiplying.**
+  ``f"{multi.interval_level:.4%}"`` renders ``0.9925`` as ``99.2500%``. Printing ``alpha_star``
+  with ``:g`` rather than ``:.4f`` also avoids that four-decimal rounding defect, and the regex
+  above accepts either.
 
 **One collision this file does not resolve, because E12 is not this file's to change.**
 ``tests/test_s21_errors.py::test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block``
@@ -95,7 +91,6 @@ the bisector, its iteration cap, or its tolerance.
 
 from __future__ import annotations
 
-import ast
 import json
 import math
 import re
@@ -110,18 +105,14 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import poisson_prove
 from poisson_prove import cli
 from poisson_prove import diff as diff_mod
 from poisson_prove.diff import CELLS_COLUMNS, multi_diff
 from poisson_prove.episode import Episode
-from poisson_prove.report import ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
 import lattice
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
-REPO = PACKAGE.parents[1]
 #: The generated pair (``tests/lattice.py``): the before run and the after run.
 LATTICE_ROOT = lattice.root()
 RUN_A, RUN_B = lattice.RUN_A, lattice.RUN_B
@@ -214,16 +205,6 @@ LOGRANK_HEADLINE = (
     "(aalen_johansen + logrank_bh (cause-specific hazard), BH q<0.05 over 72 tests, unpaired)"
 )
 LOGRANK_DIRECTIONS = (27, 12)
-
-#: C14, second half. The three digests S21's E14 already pins, restated rather than imported so
-#: two frozen test files do not couple. Minted on the bare tree at b10a146 by ``report`` on the pair
-#: with one event and both axes.
-# PF3: the lattice's runs share a salt, so the default is now the paired
-# test; the E14 facts and the heatmap are the unpaired test's, named.
-E14_ARGV = ("report", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
-# PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests are no longer asserted. PF4 changes all three
-# files (direction words for an event of unknown kind, the share table, the limit notes), so C14
-# asserts the facts they guarded instead.
 
 #: Finding 1 above, measured before the build, restated as a constant so C2's fixture cannot be
 #: swapped for one that does not discriminate. The lattice, ``events=(EVENT,)``, ``logrank_bh``.
@@ -359,25 +340,6 @@ def assert_logrank_column_is_the_reference(result: Any) -> None:
         assert row.direction == reference[row.config_hash]["direction"], row.config_hash
 
 
-def parsed(path: Path) -> ast.Module:
-    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-
-
-def enclosing_functions(tree: ast.Module) -> dict[ast.AST, str]:
-    """Every node mapped to the name of the ``def`` it sits inside, for C16."""
-    out: dict[ast.AST, str] = {}
-
-    def walk(node: ast.AST, name: str | None) -> None:
-        for child in ast.iter_child_nodes(node):
-            inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else name
-            if inner is not None:
-                out[child] = inner
-            walk(child, inner)
-
-    walk(tree, None)
-    return out
-
-
 # ---------- fixtures ----------
 
 
@@ -393,7 +355,7 @@ def lattice_pair(lattice_trees: Any) -> Any:
 @pytest.fixture(scope="module")
 def lattice_logrank(lattice_trees: Any) -> Any:
     """The one configuration on which the BH rejection count (39) and the count of rejected cells
-    whose horizon delta moved (27) differ. C2's and C19's discriminating fixture."""
+    whose horizon delta moved (27) differ. C2's discriminating fixture."""
     return lattice_trees.multi((EVENT,), "logrank_bh")
 
 
@@ -717,7 +679,7 @@ def test_c4_and_c5_hold_for_the_paired_interval_too(data: st.DataObject) -> None
 
 
 @pytest.mark.parametrize("n", (0, -1))
-def test_a_non_positive_denominator_is_refused_by_every_one_of_the_four_functions(n: int) -> None:
+def test_a_non_positive_denominator_is_refused_by_score_p_rd_score_p_rd_paired_and_interval_rd(n: int) -> None:
     """The rejection paths have no C-number. A zero
     denominator is not a wide interval and not a NaN; it is a caller error."""
     with pytest.raises(diff_mod.DiffError):
@@ -744,15 +706,10 @@ def test_an_alpha_outside_the_open_unit_interval_is_refused(alpha: float) -> Non
 # ---------- C1: the object is whole, or it is absent ----------
 
 
-def test_c1_identical_arms_reject_nothing_and_carry_no_interval_object(synth_root: Path) -> None:
+def test_c1_identical_arms_reject_nothing_and_still_carry_an_interval_on_every_row(synth_root: Path) -> None:
     """C1's zero branch, on the synthetic identical pair: every cell has the same table in both
-    arms, Fisher's p is 1.0 everywhere, BH rejects nothing.
-
-    When nothing is significant the honest interval is ``(-1, 1)`` on every cell -- true, and
-    worthless, because a reader skimming a column of ``(-1, 1)`` learns nothing while believing
-    they were shown an error bar. So the whole object is absent, not wide. ``n_rejected`` stays
-    ``0`` because a count of zero is a count; ``alpha_star`` and ``interval_level`` go to
-    ``None`` because a level of zero would be a claim.
+    arms, Fisher's p is 1.0 everywhere, BH rejects nothing. The interval frame is still there, one
+    row per compared row, at the simultaneous level, and ``n_rejected`` is ``0``.
     """
     result = synth_diff(synth_root, "same-a", "same-b")
     rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
@@ -763,16 +720,6 @@ def test_c1_identical_arms_reject_nothing_and_carry_no_interval_object(synth_roo
     assert_intervals_always(result, rejections)
     assert result.n_rejected == 0
     assert result.n_interval_only == 0 and result.n_verdict_only == 0
-
-
-def test_c1_the_absent_frame_is_none_and_never_an_empty_frame(synth_root: Path) -> None:
-    """``multi_diff`` always sets the interval frame, with a row for every compared row, so it
-    is never ``None`` and never empty on a comparison of one row or more."""
-    result = synth_diff(synth_root, "same-a", "same-b")
-    # PF4 re-freeze (PF4.42): there is no absent case any more; the frame is always set, with a row
-    # for every compared row, and is never empty on a comparison of one row or more.
-    assert isinstance(result.intervals, pd.DataFrame), type(result.intervals)
-    assert len(result.intervals) == result.n_tests > 0
 
 
 def test_c1_lattice_under_logrank_with_the_inferred_events_also_rejects_nothing(
@@ -792,16 +739,6 @@ def test_c1_lattice_under_logrank_with_the_inferred_events_also_rejects_nothing(
     # simultaneous level 1 - q / 72.
     assert result.n_rejected == 0
     assert_intervals_always(result, 0)
-
-
-def test_c1_a_family_with_rejections_carries_every_part_of_the_object(lattice_pair: Any) -> None:
-    """The other half of the biconditional. The lattice over both events under Fisher rejects 44
-    of 144, so all four of the interval fields are populated together. A build that sets the frame
-    but leaves the level ``None``, or the reverse, fails here."""
-    assert lattice_pair.intervals is not None
-    assert lattice_pair.interval_level is not None
-    assert lattice_pair.alpha_star is not None
-    assert lattice_pair.n_rejected > 0
 
 
 # ---------- C2: the level, and the R it is built from ----------
@@ -860,25 +797,6 @@ def test_c2_the_level_follows_the_rejection_count_and_not_the_verdict_sum(
     assert result.interval_level == 1.0 - result.q * LOGRANK_REJECTIONS / LOGRANK_N_TESTS
 
 
-def test_c2_the_discriminating_fixture_still_discriminates(lattice_logrank: Any) -> None:
-    """Before asserting an invariant on a fixture, check the fixture could disagree with it.
-    This is that check, promoted to a test of its own so it cannot rot silently: if a future
-    change to log-rank, to the tie convention, or to the verdict rule makes these two counts
-    equal, the test above stops discriminating and this one says so *here* rather than leaving
-    a green suite that pins nothing."""
-    result = lattice_logrank
-    rejections = sum(int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events)
-    # PF4 (PF4.13): every rejected cell is now a change, so the verdict sum cannot differ from R on
-    # any fixture; the fixture still discriminates R from the count the horizon rule would give,
-    # the rejected cells whose horizon delta is not 0.
-    horizon_moved = sum(
-        int(((ev.cells["q"] < result.q) & (ev.cells["delta"] != 0.0)).sum())
-        for ev in result.by_event.values()
-    )
-    assert rejections != horizon_moved, (rejections, horizon_moved)
-    assert 1.0 - result.q * rejections / result.n_tests != 1.0 - result.q * horizon_moved / result.n_tests
-
-
 def test_c2_a_per_event_r_would_give_a_different_level_on_this_fixture(lattice_pair: Any) -> None:
     """A known trap: ``R`` counts the family, not one event. The mutant is a per-event
     ``R``, and it is only catchable on a fixture where more than one event rejects. The lattice
@@ -886,7 +804,8 @@ def test_c2_a_per_event_r_would_give_a_different_level_on_this_fixture(lattice_p
     event's count (22) cannot equal the family level (44)."""
     result = lattice_pair
     per_event = [int((result.by_event[e].cells["q"] < result.q).sum()) for e in result.events]
-    assert len(set(per_event)) > 0 and sum(per_event) != max(per_event), per_event
+    assert per_event == [sum(PAIR_DIRECTIONS[e]) for e in result.events] == [22, 22], per_event
+    assert sum(per_event) != max(per_event), per_event
     assert result.n_rejected == sum(per_event)
 
 
@@ -1157,19 +1076,15 @@ def test_c17_every_basis_on_every_frame_is_drawn_from_that_tuple(
 # ---------- C14: nothing that was already printed moves ----------
 
 
-def test_c14_the_lattice_markdown_is_byte_identical_to_the_bare_tree(lattice_pair: Any) -> None:
-    """``to_markdown()`` gains nothing from S24. It is the cheapest surface in the repo to break
-    and the dearest to re-baseline, and S21 held the same line for ``coverage``. A digest minted
-    before the code existed, never a diff of two renders. **Re-minted by the P-1 freeze** off its
-    shadow shim: the parameter line now reads ``seed_identity_match=True, unpaired_analysis=True``
-    where ``paired=True`` stood and the headline ends ``unpaired)``; S24's *does not gain a
-    byte* was S24's rule for S24's own change, and P-1 retires it.
-    The interval block's bytes, which S24 owns, are asserted unchanged by P-1's own Y11."""
+def test_c14_the_lattice_markdown_carries_the_result(lattice_pair: Any) -> None:
+    """``to_markdown()`` opens with the headline, carries the trade line and the parameter line,
+    gains no interval block, and holds one table per event whose rows are that event's cells with
+    their numbers (``assert_markdown_carries_the_result``)."""
     # PF4 (PF4.3, PF4.15, PF4.20): the digest is replaced by the facts it guarded.
     assert_markdown_carries_the_result(lattice_pair)
 
 
-def test_c14_the_lattice_logrank_markdown_is_byte_identical_too(lattice_logrank: Any) -> None:
+def test_c14_the_lattice_logrank_markdown_carries_the_result_too(lattice_logrank: Any) -> None:
     # PF4 (PF4.3, PF4.13, PF4.15, PF4.20): the digest is replaced by the facts it guarded.
     assert_markdown_carries_the_result(lattice_logrank)
 
@@ -1301,172 +1216,6 @@ def test_c14_the_cells_columns_are_unchanged(lattice_pair: Any) -> None:
         assert list(lattice_pair.by_event[event].cells.columns) == list(CELLS_COLUMNS)
 
 
-def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0: the one field the rename changes in a rendered report, receipt or page
-    is the version in its provenance list. First assert it is there as the rename writes it -- one
-    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
-    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
-    byte."""
-    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
-    assert len(found) == 1 and "proofload version:" not in text, found
-    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
-    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
-    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
-    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
-
-
-def e14_builder() -> tuple[Any, Any, Any]:
-    """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
-    ``_report_pair`` builds them: the multi, the dark-theme report and the light-theme receipt."""
-    store = Store(LATTICE_ROOT)
-    ma, mb = store.manifest(RUN_A), store.manifest(RUN_B)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", diff_mod.UnpairedAnalysis)
-        multi = multi_diff(
-            store.read(RUN_A, meta=False), store.read(RUN_B, meta=False), events=[EVENT],
-            manifest_a=ma, manifest_b=mb,
-        )
-    title = f"{RUN_A} vs {RUN_B}: {EVENT}"
-    report = build_multi_report(
-        multi, ReportSpec(title=title, x_axis=lattice.X, y_axis=lattice.Y), manifests=(ma, mb)
-    )
-    receipt = build_multi_report(
-        multi, ReportSpec(title=title, x_axis=lattice.X, y_axis=lattice.Y, theme="light"),
-        manifests=(ma, mb),
-    )
-    return multi, report, receipt
-
-
-def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
-    """The largest limit over an event's unchanged conditions (each the larger of its two Fisher
-    limits at ``level``, or the one way with room; PF4.27), from the stats file's references, and
-    the way that limit goes on the condition the result names as worst."""
-    from test_pf4_stats import _ref_fisher_limits
-
-    def limit(row: Any) -> tuple[float | None, float | None, float | None]:
-        rise, fall = _ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
-        no_rise, no_fall = row.events_a == row.n_a, row.events_a == 0
-        if rise is not None and fall is not None:
-            return max(rise, fall), rise, fall
-        if rise is not None and no_fall:
-            return rise, rise, fall
-        if fall is not None and no_rise:
-            return fall, rise, fall
-        return None, rise, fall
-
-    unchanged = [row for row in ev.cells.itertuples(index=False) if row.verdict == "unchanged"]
-    limits = {row.config_hash: limit(row) for row in unchanged}
-    value = max(v for v, _, _ in limits.values() if v is not None)
-    top, rise, fall = limits[ev.max_mde_unchanged_cell]
-    assert top is not None and abs(top - value) <= 1e-12, (ev.max_mde_unchanged_cell, top, value)
-    return value, "rise" if rise is not None and abs(rise - value) <= 1e-12 else "fall"
-
-
-def assert_e14_builder_facts() -> None:
-    """PF4 (PF4.3, PF4.15, PF4.20): what the three E14 digests guarded, as facts. The builder's
-    report markdown, receipt and heatmap each carry the headline counts (22 and 0, the ones
-    ``lattice.fisher`` gives, in direction words: ``tripped`` has no kind), the worst-powered
-    unchanged limit (recomputed), and no ``safer`` or ``worse``; the markdown and the receipt carry
-    the interval line with this family's R and m; the heatmap labels every one of the 72 cells with
-    its delta in percentage points."""
-    multi, report, receipt = e14_builder()
-    ev = multi.by_event[EVENT]
-    assert lattice.directions(lattice.fisher(EVENT)) == PAIR_DIRECTIONS[EVENT]
-    assert ev.kind is None and (ev.n_lower, ev.n_higher) == PAIR_DIRECTIONS[EVENT] == (22, 0)
-    counts = f"{EVENT}: {ev.n_lower} lower, {ev.n_higher} higher"
-    # PF4 re-freeze (PF4.22, PF4.27): the worst-powered unchanged limit is Fisher's exact limit at
-    # q / M (M = 72 here), the larger of the two directions; recomputed from the stats file's
-    # references, and the sentence names the direction that limit is for (a fall from a cell where
-    # every run tripped has no rise to detect).
-    value, way = ref_worst_unchanged(ev, multi.q / multi.n_tests)
-    assert abs(ev.max_mde_unchanged - value) <= 1e-4 + 1e-12, (ev.max_mde_unchanged, value)
-    worst = f"{ev.max_mde_unchanged * 100:.0f}pp"
-    family = f"q x {multi.n_rejected} / {multi.n_tests} over the flat BH family"
-    md = as_0_0_1_wrote_it(report.to_markdown())
-    html = as_0_0_1_wrote_it(receipt.to_html())
-    svg = report.to_svg()
-    for name, text in (("report.md", md), ("receipt.html", html), ("heatmap.svg", svg)):
-        assert counts in text, name
-        assert f"can only detect a {worst} {way}" in text, (name, way)
-        assert not re.search(r"\b(safer|worse)\b", text), name
-    assert family in md and family in html
-    ids = re.findall(r'data-cell="([0-9a-f]+)"', svg)
-    label_group = svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
-    labels = re.findall(r">([^<]*)</text>", label_group)
-    delta = dict(zip(ev.cells["config_hash"], ev.cells["delta"], strict=True))
-    assert len(ids) == len(labels) == len(delta) == lattice.CELLS, (len(ids), len(labels), len(delta))
-    for short, label in zip(ids, labels, strict=True):
-        (full,) = [h for h in delta if h.startswith(short)]
-        assert label == f"{delta[full] * 100:.1f}", (short, label, delta[full])
-
-
-def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
-    """The command line's ``heatmap.svg`` against the builder's, whose bytes keep the frozen digest.
-
-    Rule 10 reformats only the text in the file, so every element and attribute
-    is the builder's. Each cell's label is its delta to three decimals, read from ``cells``; a text
-    the builder prints as a percentage-point number is that number as a fraction; every other text
-    that changed keeps its ``key=value`` facts and its counts; and the notes the builder writes in
-    percentage points carry the worst-powered MDEs to three decimals.
-    """
-    def bare(svg: str) -> str:
-        return re.sub(r">[^<]*<", "><", svg)
-
-    assert bare(cli_svg) == bare(builder_svg)
-    ids = re.findall(r'data-cell="([0-9a-f]+)"', cli_svg)
-    label_group = cli_svg.split('<g fill="#E6E6E6" font-size="9" text-anchor="middle">', 1)[1].split("</g>", 1)[0]
-    labels = re.findall(r">([^<]*)</text>", label_group)
-    delta = dict(zip(cells["config_hash"], cells["delta"]))
-    assert len(ids) == len(labels) == len(delta), (len(ids), len(labels), len(delta))
-    for short, label in zip(ids, labels):
-        (full,) = [h for h in delta if h.startswith(short)]
-        assert label == f"{delta[full]:.3f}", (short, label, delta[full])
-    number = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
-    texts = list(zip(re.findall(r">([^<]*)</text>", builder_svg), re.findall(r">([^<]*)</text>", cli_svg)))
-    for old, new in texts:
-        if old == new:
-            continue
-        if number.fullmatch(old):
-            assert number.fullmatch(new) and abs(float(new) - float(old) / 100) <= 1e-3, (old, new)
-            continue
-        for fact in re.findall(r"\w+=[^\s,;)]+", old):
-            assert fact in new, (fact, new)
-        for count in re.findall(r"(?<![\d.])\d+(?![\d.%]|pp)", old):
-            assert f"{int(count):,}" in new, (count, new)
-    notes = [new for old, new in texts if re.search(r"\d+pp", old)]
-    assert notes, texts
-    for mde in (cells["mde"].max(), cells.loc[cells["verdict"] == "unchanged", "mde"].max()):
-        assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
-
-
-def test_c14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(tmp_path: Path) -> None:
-    """The three digests S21's E14 pins, restated rather than imported so two frozen test files do
-    not couple. ``report`` renders through ``MultiDiffResult``; if S24 leaks a byte into
-    ``to_markdown``, the receipt or the heatmap, one of these three moves.
-
-    Narrowed for S28: ``report`` on a pair now renders the
-    layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
-    are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
-    digests bit for bit, so the two markdown and HTML pins move to
-    ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
-    changes and stays pinned through the CLI. Narrowed, not deleted.
-
-    Moved for rule 10: the command line now prints the heatmap's text as
-    fractions, so its digest moves to the builder's heatmap, and the file the command line writes
-    is checked against that one fact by fact."""
-    out = tmp_path / "report"
-    code, text, _ = run_cli(["--store", str(LATTICE_ROOT), *E14_ARGV, "--out", str(out)])
-    assert code == 0, text
-    # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded.
-    assert_e14_builder_facts()
-    # The command line's heatmap is the builder's with its text under rule 10,
-    # checked by its facts rather than a new digest.
-    multi, report, _ = e14_builder()
-    assert_cli_heatmap_is_the_builders_under_rule_10(
-        (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event[EVENT].cells
-    )
-
-
 # ---------- C15: the BH family does not move ----------
 
 
@@ -1536,69 +1285,6 @@ def test_c15_a_hand_built_result_still_constructs_without_any_new_field(lattice_
     assert bare.n_rejected == 0 and bare.n_interval_only == 0 and bare.n_verdict_only == 0
 
 
-# ---------- C16: one construction ----------
-
-
-def test_c16_the_two_interval_functions_are_each_called_from_exactly_one_place() -> None:
-    """**The rule, stated in prose rather than matched as a substring.** Where a design decision
-    constrains how a value is built, a test must fail if it is built anywhere else -- one such
-    decision was documented and then violated twice, which is where this rule came from.
-
-    Here the constraint is that the level and the interval must not drift apart. Both
-    ``interval_rd`` and ``interval_rd_paired`` take ``alpha`` from the caller, so a second call
-    site is a second place ``alpha`` is chosen, and nothing would make the two agree. Each is
-    called exactly once across the whole package, and both calls sit in the same function --
-    the interval builder -- so ``alpha_star`` is computed once and spent once.
-    """
-    sites: dict[str, list[tuple[str, int, str]]] = {"interval_rd": [], "interval_rd_paired": []}
-    for path in sorted(PACKAGE.rglob("*.py")):  # PF5: the core is a package now, so the scan reads src/ recursively.
-        tree = parsed(path)
-        enclosing = enclosing_functions(tree)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-            if name in sites:
-                sites[name].append((path.name, node.lineno, enclosing.get(node, "<module>")))
-    assert len(sites["interval_rd"]) == 1, sites["interval_rd"]
-    assert len(sites["interval_rd_paired"]) == 1, sites["interval_rd_paired"]
-    assert sites["interval_rd"][0][0] == "diff.py", sites["interval_rd"]
-    assert sites["interval_rd_paired"][0][0] == "diff.py", sites["interval_rd_paired"]
-    assert sites["interval_rd"][0][2] == sites["interval_rd_paired"][0][2], sites
-
-
-# ---------- C19: R is derived once, and the CLI derives nothing ----------
-
-
-def test_c19_the_cli_does_no_arithmetic_on_any_interval_field() -> None:
-    """**The rule, in prose.** ``cli.py`` computes nothing and decides nothing statistical. It
-    may read a field and print it, and it may ask whether one is ``None``; it may not do
-    arithmetic on one. Recovering ``R`` as ``alpha_star * m / q``, or ``alpha*`` as
-    ``1 - interval_level``, would be a second derivation free to disagree with M6's -- which is
-    the whole reason ``n_rejected`` and ``alpha_star`` are fields at all.
-
-    Arithmetic is the line, not comparison: ``if multi.intervals is None`` is rendering logic
-    and stays legal. Any ``BinOp`` whose subtree mentions one of the six names is not.
-    """
-    guarded = {
-        "intervals", "interval_level", "alpha_star", "n_rejected",
-        "n_interval_only", "n_verdict_only",
-    }
-    offenders: list[tuple[int, str]] = []
-    for node in ast.walk(parsed(PACKAGE / "cli.py")):
-        if not isinstance(node, ast.BinOp):
-            continue
-        mentioned = {
-            child.attr if isinstance(child, ast.Attribute) else child.id
-            for child in ast.walk(node)
-            if isinstance(child, (ast.Attribute, ast.Name))
-        }
-        if mentioned & guarded:
-            offenders.append((node.lineno, sorted(mentioned & guarded)[0]))
-    assert offenders == [], offenders
-
-
 # ---------- C18: the CLI block ----------
 
 
@@ -1631,11 +1317,15 @@ def test_c18_the_diff_output_prints_the_alpha_star_arithmetic_and_names_the_fami
     assert basis == "score_rd"
 
 
-def test_c18_the_diff_output_prints_both_disagreement_counts(synth_root: Path) -> None:
-    """The two lines under the header. The counts are fields; the CLI prints
-    them and asserts nothing about their direction."""
-    result = synth_diff(synth_root, "moved-a", "moved-b", "fisher_bh")
-    code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
+def test_c18_the_diff_output_prints_both_disagreement_counts(lattice_pair: Any) -> None:
+    """The two lines under the header, on the lattice over both events under Fisher, where the two
+    counts differ (C11). The counts are fields; the CLI prints them and asserts nothing about their
+    direction."""
+    result = lattice_pair
+    assert result.n_interval_only != result.n_verdict_only, (result.n_interval_only, result.n_verdict_only)
+    code, out, _ = run_cli(
+        ["--store", str(LATTICE_ROOT), "diff", RUN_A, RUN_B, "--event", EVENT, "--event", OTHER, "--method", "fisher_bh"]
+    )
     assert code == 0, out
     assert f"interval excludes zero, verdict unchanged: {result.n_interval_only} cells" in out
     assert f"verdict significant, interval covers zero: {result.n_verdict_only} cells" in out

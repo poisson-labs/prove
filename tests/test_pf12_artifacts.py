@@ -87,7 +87,7 @@ number the comparison printed. The quickstart's counts are never pinned; its ver
 - The resumed 0.0.1 run's ``events.jsonl`` starts at ``resumed``, as PF12.1 says.
 
 **Lanes.** The code suite, every test. The stores the tests read are built once per session
-(``pf12_support.shared_world``); one test sweeps a small spec of its own.
+(``pf12_support.shared_world``); one test sweeps a small spec of its own, and PF12.2 a slowed one.
 """
 
 from __future__ import annotations
@@ -287,17 +287,61 @@ def test_pf12_readers_ignore_the_poisson_folder(old_world: tuple[Path, dict[str,
 
 # ---------- PF12.2 events.jsonl ----------
 
+#: A rollout of the mock agent slowed to a quarter of a second, so a sweep of the small spec's
+#: twelve rollouts takes about three seconds and reports progress more than twice.
+SLOW_ROLLOUT = """\
+import time
 
-@pytest.mark.parametrize("which", ["complete", "resumed", "paired", "errored"])
-def test_pf12_2_every_new_run_writes_its_events_in_section_17_2s_order(which: str, sweep_world: tuple[Path, dict[str, Any]]) -> None:
+from poisson_prove.examples import mock_agent
+
+
+def rollout(cfg, seed):
+    time.sleep(0.25)
+    return mock_agent.rollout(cfg, seed)
+"""
+
+
+@pytest.fixture(scope="module")
+def slow_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, Any]]:
+    """One complete run of the small spec, swept with the slowed rollout."""
+    work = tmp_path_factory.mktemp("slow") / "work"
+    work.mkdir()
+    (work / "pf12_slow.py").write_text(SLOW_ROLLOUT, encoding="utf-8")
+    spec = work / "spec.toml"
+    spec.write_text(SMALL_SPEC, encoding="utf-8")
+    store = work / "prove-runs"
+    old = sys.path[:]
+    sys.path.insert(0, str(work))
+    sys.modules.pop("pf12_slow", None)
+    try:
+        swept = cli(store, "sweep", spec, "--target", "pf12_slow:rollout", "--yes", *LOOSE, cwd=work)
+    finally:
+        sys.path[:] = old
+        sys.modules.pop("pf12_slow", None)
+    assert swept.code == 0, swept.err
+    (run,) = [p.name for p in store.iterdir() if (p / "manifest.json").is_file()]
+    return work, {"store": str(store), "runs": {"slow": run}}
+
+
+def _seconds(at: str) -> float:
+    """An event's ``at`` (``YYYY-MM-DDTHH:MM:SS.ffffffZ``) as seconds since the epoch."""
+    from datetime import datetime
+
+    return datetime.fromisoformat(at.replace("Z", "+00:00")).timestamp()
+
+
+@pytest.mark.parametrize("which", ["complete", "resumed", "paired", "errored", "slow"])
+def test_pf12_2_every_new_run_writes_its_events_in_section_17_2s_order(which: str, request: pytest.FixtureRequest) -> None:
     """Each line is one ``poisson.run-event/1`` object (``schema`` first, then ``at``, ``kind``,
     ``detail``) in the grammar ``planned started (progress|note)* (finished|interrupted)``, a resume
     adding ``resumed (progress|note)* (finished|interrupted)``; times never go back; ``progress``
     comes at most once a second plus once just before the segment ends, with counts that add up;
-    a stopped run's lines stay as they were when the resume appends (append, never rewrite)."""
-    facts = sweep_world[1]
+    a stopped run's lines stay as they were when the resume appends (append, never rewrite). The
+    slowed run reports progress three times or more, so its pace is measured."""
+    world = request.getfixturevalue("slow_world" if which == "slow" else "sweep_world")
+    facts = world[1]
     run = facts["runs"][which]
-    text = (_store(sweep_world) / run / "events.jsonl").read_text(encoding="utf-8")
+    text = (_store(world) / run / "events.jsonl").read_text(encoding="utf-8")
     assert text.endswith("\n")
     events = [json.loads(line) for line in text.splitlines()]
     for event in events:
@@ -320,8 +364,12 @@ def test_pf12_2_every_new_run_writes_its_events_in_section_17_2s_order(which: st
             counts = e["detail"]
             assert all(isinstance(counts[k], int) and counts[k] >= 0 for k in PROGRESS_KEYS), counts
             assert counts["kept"] + counts["errored"] == counts["done"] <= counts["total"], counts
-        paced = [e["at"] for e in progress[:-1]]
-        assert len(set(paced)) == len(paced), paced  # whole seconds apart, so at most once a second
+        paced = [_seconds(e["at"]) for e in progress[:-1]]
+        if which == "slow":
+            assert len(paced) >= 2, [e["at"] for e in progress]
+        # At most once a second; the hundredth allows for the clock the time is read from.
+        gaps = [later - earlier for earlier, later in zip(paced, paced[1:])]
+        assert all(gap >= 0.99 for gap in gaps), [e["at"] for e in progress]
     last = events[-1]
     assert last["kind"] == "finished", letters
     if which == "resumed":
@@ -534,7 +582,8 @@ def test_pf12_3_the_table_is_long_form_with_the_formats_key_columns_and_every_ro
                     assert row["condition"] == canonical(cell["config"]), row
                     assert row["value"] == cell[metric], (name, metric, row, cell[metric])
                     level = LEVELLED.get(metric)
-                    assert row["level"] == (cell[level] if level and cell[metric] is not None else row["level"] if level else None), (name, row)
+                    # A null value of a metric with a level keeps the level it was sought at.
+                    assert row["level"] == (cell[level] if level else None), (name, row)
                     if row["value"] is None:
                         assert row["note"], (name, row)
                         if metric in ("mde_rise", "mde_fall"):

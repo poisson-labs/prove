@@ -267,8 +267,10 @@ def _assert_limit(got: Any, want: float | None, what: Any) -> None:
 def test_pf4_1_wilson_returns_its_bounds_level_z_and_method_at_each_level(level: float | None, k: int, n: int) -> None:
     """Trimmed by the PF4 re-freeze: the default level and other levels in one
     test. scipy documents ``norm.isf(q)`` as the inverse survival function: the two-sided quantile at
-    level L leaves (1 - L) / 2 in the upper tail."""
+    level L leaves (1 - L) / 2 in the upper tail. statsmodels documents
+    ``proportion_confint(count, nobs, alpha, method="wilson")``; ``alpha`` is 1 - L."""
     from scipy.stats import norm
+    from statsmodels.stats.proportion import proportion_confint
 
     from poisson_prove.stats import WILSON_LEVEL, WilsonInterval, wilson
 
@@ -279,24 +281,27 @@ def test_pf4_1_wilson_returns_its_bounds_level_z_and_method_at_each_level(level:
     assert isinstance(w, WilsonInterval) and w.method == "wilson"
     assert w.level == want
     assert abs(w.z - float(norm.isf((1.0 - want) / 2.0))) <= 1e-12
-    lo, hi = survival.wilson(k, n, z=w.z)
-    assert abs(w.lo - lo) <= 1e-12 and abs(w.hi - hi) <= 1e-12
+    lo, hi = proportion_confint(k, n, alpha=1.0 - want, method="wilson")
+    assert abs(w.lo - float(lo)) <= 1e-12 and abs(w.hi - float(hi)) <= 1e-12
 
 
-def test_pf4_1_wilson_bounds_equal_the_private_two_tuple_over_the_existing_grid() -> None:
+def test_pf4_1_wilson_bounds_are_statsmodels_at_each_level_over_the_existing_grid() -> None:
     """The grid of ``test_m5_survival``'s Wilson tests (n up to 500, k from 0 to n), sampled on a
-    fixed lattice so the comparison is the same on every run."""
+    fixed lattice so the comparison is the same on every run, at the levels 0.95, 0.90, 0.975 and
+    0.5 against statsmodels' ``proportion_confint(k, n, alpha=1 - level, method="wilson")``."""
+    from statsmodels.stats.proportion import proportion_confint
+
     from poisson_prove.stats import wilson
 
     for n in (1, 2, 3, 5, 10, 32, 99, 100, 257, 500):
         for k in sorted({0, 1, n // 3, n // 2, n - 1, n} - {-1}):
             if not 0 <= k <= n:
                 continue
-            for level in (0.95, 0.90):
+            for level in (0.95, 0.90, 0.975, 0.5):
                 w = wilson(k, n, level=level)
-                lo, hi = survival.wilson(k, n, z=w.z)
-                assert abs(w.lo - lo) <= 1e-12, (k, n, level)
-                assert abs(w.hi - hi) <= 1e-12, (k, n, level)
+                lo, hi = proportion_confint(k, n, alpha=1.0 - level, method="wilson")
+                assert abs(w.lo - float(lo)) <= 1e-12, (k, n, level)
+                assert abs(w.hi - float(hi)) <= 1e-12, (k, n, level)
 
 
 @pytest.mark.parametrize("level", [0.0, 1.0, -0.1, 1.5])
@@ -305,14 +310,6 @@ def test_pf4_1_a_level_outside_zero_and_one_is_refused(level: float) -> None:
 
     with pytest.raises(ValueError):
         wilson(3, 10, level=level)
-
-
-def test_pf4_1_the_private_wilson_two_tuple_is_unchanged() -> None:
-    out = survival.wilson(5, 10)
-    assert isinstance(out, tuple) and len(out) == 2
-    out_z = survival.wilson(5, 10, z=1.0)
-    assert isinstance(out_z, tuple) and len(out_z) == 2
-    assert out_z[1] - out_z[0] < out[1] - out[0]
 
 
 # ---------- PF4.1b: the cell table records the level beside the interval ----------
@@ -1054,24 +1051,6 @@ def test_pf4_16_the_default_wilson_interval_is_statsmodels_at_alpha_0_05_without
             ref_lo, ref_hi = proportion_confint(k, n, alpha=0.05, method="wilson")
             assert abs(w.lo - float(ref_lo)) <= 1e-12, (k, n)
             assert abs(w.hi - float(ref_hi)) <= 1e-12, (k, n)
-
-
-def test_pf4_16_the_private_wilson_keeps_its_default_z_of_1_96() -> None:
-    """statsmodels documents its quantile as ``norm.isf(alpha / 2)``, so z = 1.96 is ``alpha =
-    2 * norm.sf(1.96)``. This passes on today's code and fails a default of any other z (the
-    re-check's 1.645 mutant went uncaught by the whole suite)."""
-    from scipy.stats import norm
-    from statsmodels.stats.proportion import proportion_confint
-
-    alpha = 2.0 * float(norm.sf(1.96))
-    for n in (1, 4, 10, 32, 100):
-        for k in sorted({0, 1, n // 2, n - 1, n}):
-            if not 0 <= k <= n:
-                continue
-            lo, hi = survival.wilson(k, n)
-            ref_lo, ref_hi = proportion_confint(k, n, alpha=alpha, method="wilson")
-            assert abs(lo - float(ref_lo)) <= 1e-12, (k, n)
-            assert abs(hi - float(ref_hi)) <= 1e-12, (k, n)
 
 
 # ---------- PF4.18: Westfall-Young on one scale ----------

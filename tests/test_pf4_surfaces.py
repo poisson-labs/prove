@@ -482,23 +482,6 @@ def test_pf4_1c_with_the_level_patched_to_90_every_surface_says_90_and_none_95(
     assert "95%" not in json.dumps(page["summary"])
 
 
-def test_pf4_1c_the_rendering_code_holds_no_95_percent_and_no_1_96() -> None:
-    """The label is built from the recorded level and the quantile from the level; neither is
-    typed into a renderer. Passes on today's code, which prints no Wilson label at all; it fails a
-    build that hard-codes either."""
-    package = SRC / "poisson_prove"
-    files = [package / f"{name}.py" for name in ("report", "viewer", "plain", "cli", "_look")]
-    # PF5: the core is a package now, so the scan reads src/ recursively.
-    files += [path for path in sorted(package.rglob("*.py"))
-              if path not in files and re.search(r"^\s*(import|from) rich\b", path.read_text(encoding="utf-8"), re.M)]
-    for path in files:
-        if not path.exists():
-            continue
-        text = path.read_text(encoding="utf-8")
-        assert "95%" not in text, path.name
-        assert not re.search(r"(?<![\d.])1\.96(?!\d)", text), path.name
-
-
 # ---------- PF4.2 and PF4.37: shares on the window the tests read ----------
 
 

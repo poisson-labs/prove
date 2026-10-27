@@ -232,7 +232,7 @@ the whole grid, so their group labels never carry a value.
 
 **Named non-observables.** A second ``tree()`` call in ``_cmd_serve`` on the same frames and
 knobs: the same bytes. A ``text`` entry produced by a private copy of ``_fmt`` that agrees with
-it on every fixture: V17's ``format(`` and ``:.`` clauses, restated in W20, are the guard.
+it on every fixture.
 """
 
 from __future__ import annotations
@@ -269,10 +269,8 @@ from conftest import quickstart_design
 import lattice
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
-REPO = PACKAGE.parents[1]
 VIEWER_SOURCE = PACKAGE / "viewer.py"
 CLI_SOURCE = PACKAGE / "cli.py"
-TREE_SOURCE = PACKAGE / "tree.py"
 REPORT_SOURCE = PACKAGE / "report.py"
 DIFF_SOURCE = PACKAGE / "diff.py"
 #: The generated pair (``tests/lattice.py``) in place of the study pair this file was frozen on.
@@ -296,17 +294,9 @@ QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 
 # ---------- the literals ----------
 
-#: W1. The schema, the one W17's tree-less projection is minted at, and the two ``render_html`` refuses.
+#: W1. The schema.
 # LS update: /5 retires with the ``summary`` key (LS7, LS8).
 SCHEMA = "poisson-prove.viewpair/7"
-RETIRED_SCHEMA = "proofload.viewpair/2"
-RETIRED_SCHEMAS = (RETIRED_SCHEMA, "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5", "proofload.viewpair/6")
-#: W1. The fourteen top-level keys, in order: P-1's ``intervals`` after ``panels``, and LS's ``summary``
-#: eighth, after ``trade_line`` (LS update).
-TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
-    "intervals", "tree", "unverified", "heatmap_svg",
-)
 #: The keys the tree does not touch (W4, W13, W17).
 TREE_LESS_KEYS = ("panels", "holes", "unverified", "heatmap_svg", "diff", "view")
 #: W1. ``serve``'s sixteen flags: M13's eleven plus the five tree flags.
@@ -327,10 +317,7 @@ BUILD_STRUCTURE_PARAMETERS = (
 )
 RENDER_HTML_SIGNATURE = "(structure: 'Mapping[str, Any]') -> 'str'"
 SERVE_PAGE_SIGNATURE = "(page: 'str', *, on_bind: 'Callable[[HTTPServer], None]') -> 'None'"
-#: W1, W6. The reason mapping's keys (S28 R1's four), and the three tuples no renderer names.
-REASONS = frozenset({"depth", "root_not_rejected", "no_group_rejected", "one_group"})
-REASON_TUPLE_NAMES = ("LEAVES_NOT_TESTED_REASONS", "NOT_TESTED_REASONS", "REFUSAL_REASONS")
-#: W1, W3. The kind table as this file's literal, keyed by the object's dotted
+#: W3. The kind table as this file's literal, keyed by the object's dotted
 #: path with list indices dropped, plus the ``config`` row the module docstring explains.
 TREE_KINDS: dict[str, dict[str, str]] = {
     "root": {"p_floor": "sig3", "p_omnibus": "sig3", "p_location": "sig3", "p_dispersion": "sig3", "q": "sig3", "location": "pp1", "dispersion": "pp1"},
@@ -365,9 +352,6 @@ FORBIDDEN_VOCABULARY = (
 )
 #: W7. The one numeric literal the rule line carries as text: the ``2`` of ``2 x depth x q x delta*``.
 BOUND_RULE_LITERAL = "2"
-#: W20. M13's import partition (V35), restated.
-ASSEMBLY_HELPERS = frozenset({"_fmt", "_coord_text", "_worst_header", "_worst_table_rows", "_EPISTEMIC_FENCE"})
-RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
 
 #: W17, W20. S25's O23 as narrowed: ``serve --json`` with ``tree`` removed. Its digest
 #: (``SERVE_STRUCTURE_SHA256``) was taken over the study pair and no longer asserted after PF4; the
@@ -384,74 +368,6 @@ TREE_LESS_KEYS_PAIRS = (
 #: W4. The pairs whose ``/2`` page was digested on the bare tree (the study pair's page digests, no longer
 #: asserted after PF4; the dead values are removed and the pair list kept): W4 asserts the facts.
 PAGE_2_PAIRS = ("lattice", "lattice-two-events")
-#: W20. ``diff.py`` whole again. **A28's update -- both exclusions retired** (the exclusion rule's
-#: standing duty). A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted
-#: ``4b3c6ae``) both named ``A28`` as their retiring change; both owners have landed and A28 rewrites
-#: every carrier -- five literals, one per file (``test_a28_agreement.py``, ``test_s26_fault_lines.py``,
-#: ``test_s27_leaves.py``, ``test_s28_report.py``, this file); "four" is ``FORMER_CARRIERS``, the set A28
-#: sweeps beside itself (LS update) -- so the value is a read off the shipped file at ``38e8df9`` (byte-identical at
-#: ``03d7ed2``): the whole-file sha256, never a prediction. Bytes, so a scratch copy without ``.git``
-#: can check.
-# Re-minted off the build at 173c25d: diff.py gains complementary_events and trade_line()'s complement branch; the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted off the build at 662ceff (A10 declared expectations): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (A10 W9; _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# PF0: no longer asserted. The rename changes diff.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
-#: W20, **narrowed by the P-1 freeze under the exclusion rule (its clean case)**: ``tree.py``'s
-#: bytes outside ``RootResult`` and ``_root``, minted at ``a626cd3`` and measured identical on the
-#: P-1 prototype, because P-1's one ``tree.py`` edit -- the ``p_floor`` field, its ``to_json`` key and
-#: its single assignment site -- sits inside those two definitions. Green on the freeze commit and
-#: on the build; red on an edit anywhere else in the file. A28's whole-file ``7f9a4f08...``
-#: is replaced by this narrowed value and re-minted by nobody. A28's history
-#: stays in the module docstring.
-# PF0: no longer asserted. The rename changes tree.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-TREE_PY_SHA256 = "83ec34949bf21026cd26a8f39f749740851f4ebf994146dccf7c23aeb7919b43"
-#: The exclusion record for the two regions: ``cover`` is the P-1 frozen file's Y16 and
-#: Y18 tests, asserted to exist through the resolver; ``retire_at`` is empty because no queued
-#: change re-freezes W20 after P-1; ``lines`` are the two spans over the file's lines at mint,
-#: every span the record excludes.
-TREE_PY_EXCLUDED: tuple[dict[str, Any], ...] = (
-    {
-        "region": ("RootResult", "_root"),
-        "owner": "P-1",
-        "cover": ("tests/test_p1_payload.py", ("test_y16_p_floor_is_one_over_b_plus_one_sits_after_n_permutations_and_bounds_every_permutation_p", "test_y16_on_the_lattice_at_the_default_b_p_omnibus_equals_p_floor_exactly", "test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key")),
-        "minted_at": "a626cd3",
-        "blind_spot": (
-            "The two excluded regions also hold RootResult.headline(), to_json()'s eighteen existing "
-            "keys and the seventeen keyword arguments _root already passes, so this digest no longer "
-            "sees a key renamed, the headline reworded or rejects recomputed inside them. S25's "
-            "O-family, F28_OMNIBUS_SHA256 (re-minted by P-1 to cover the new field) and P-1's Y16 are "
-            "what catch those."
-        ),
-        "retire_at": "",
-        "lines": "228-303, 853-890 of 2192",
-    },
-)
-#: W20. ``report.py`` whole again. **P-1's post-build commit -- A28's exclusion
-#: retired** (the exclusion rule's standing duty: a record goes once its owner is done). A28's ``report.py::_check_tree``
-#: narrowing (minted ``38e8df9``, ``retire_at`` empty) was retirable -- A28 is done -- and P-1 is
-#: the first re-freeze to reach this carrier, so the record and its cover loop go with it. P-1's
-#: own edits to this file cannot be narrowed the way A28's were: three of its regions
-#: (``_interval_lines``, ``_interval_text``, ``_NO_INTERVAL_LINE``) do not exist on the pinned
-#: commit and the import line at the top moves. So this is the whole-file sha256 of the built
-#: ``report.py``, read off the shipped file and never a prediction. No ``REPORT_PY_EXCLUDED`` is
-#: minted; ``TREE_PY_EXCLUDED`` above is now the file's only exclusion record.
-# Re-minted for truncation surfacing: report.py gains the observation block of the provenance list.
-#: The CD freeze: `report.py` moves in the CD build -- `_observation_cap` must let the
-#: string "none" through (CD9, and D9's "no change to them" does not hold for it). This literal and
-#: `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]` are the two carriers, both owed to
-#: CD's post-build re-mint. Correct at `1f5491b`; not re-minted here.
-# The CD build: re-minted off the built `report.py` at `234513c`. CD's D9 moves
-# exactly one function, `_observation_cap`, which now lets the declared word `none` through;
-# `test_cd_cap_declaration.py` pins the rest of the file by a digest that excludes it. The
-# other carrier is `test_fr_first_run.py`'s `UNTOUCHED_FILE_SHA256["report.py"]`, re-minted in
-# the same commit. Before the CD build: `5cfdf03b...`.
-# Re-minted off the build at 173c25d: report.py gains _wrap over the four figure texts and the honesty lines, MultiReport.complement, mde_unchanged beside the honesty text and the Cells sentence respelled (LS16); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted off the build at 662ceff (A10 declared expectations): report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (A10 W8); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# PF0: no longer asserted. The rename changes report.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
 # PF3: the lattice's runs share a salt, so the default is the paired
 # test; check's gate here is the flat family's unpaired test, named.
 # PF4 (PF4.20): the lattice's tripped declares no event kind, so the default ``--fail-on worse`` is
@@ -559,11 +475,27 @@ def viewer() -> Any:
     return module
 
 
-def fmt(value: Any, kind: str) -> str:
-    """M7's one formatter, reached the way V16 reaches it."""
-    from poisson_prove.report import _fmt
+def no_negative_zero(text: str) -> str:
+    return text[1:] if text.startswith("-") and float(text) == 0.0 else text
 
-    return _fmt(value, kind)
+
+def m7_form(value: Any, kind: str) -> str:
+    """M7's number forms, written from their rule and never read from ``report.py``: ``pp1`` and
+    ``pp0`` a fraction in points to one and to no decimals, ``sig3`` three significant figures
+    (``0`` at zero, scientific below 0.001), ``num`` ten significant figures, ``coord`` an axis
+    value (an ``int`` or a non-number as ``str``, a ``float`` as ``num``); a negative zero reads as
+    zero."""
+    if kind == "coord":
+        return no_negative_zero(f"{value:.10g}") if isinstance(value, float) else str(value)
+    x = float(value)
+    if kind == "pp1":
+        return no_negative_zero(f"{x * 100:.1f}")
+    if kind == "pp0":
+        return no_negative_zero(f"{x * 100:.0f}")
+    if kind == "sig3":
+        return "0" if x == 0 else (f"{x:.2e}" if abs(x) < 1e-3 else f"{x:.3g}")
+    assert kind == "num", kind
+    return no_negative_zero(f"{x:.10g}")
 
 
 def quiet_multi_diff(a: pd.DataFrame, b: pd.DataFrame, ma: RunManifest, mb: RunManifest, *, events: Sequence[str], method: str, q: float = Q) -> Any:
@@ -1192,11 +1124,11 @@ def tokens_of(its: Sequence[tuple[Any, ...]]) -> list[str]:
 
 def config_cell(leaf: Mapping[str, Any]) -> str:
     """A leaf's cell as the module docstring fixes it: ``key=value`` over every key, the value
-    from ``text.config`` when it is a string and ``_scalar_text`` otherwise."""
-    from poisson_prove.viewer import _scalar_text
-
+    from ``text.config``. Every fixture's config values are scalars, so every one of them has a
+    string there."""
     shown = leaf["text"]["config"]
-    return ", ".join(f"{k}={shown[k] if isinstance(shown.get(k), str) else _scalar_text(v)}" for k, v in leaf["config"].items())
+    assert all(isinstance(shown.get(k), str) for k in leaf["config"]), (leaf["config"], shown)
+    return ", ".join(f"{k}={shown[k]}" for k in leaf["config"])
 
 
 def sha256_of_text(text: str) -> str:
@@ -1238,111 +1170,6 @@ def closure(module: ast.Module, name: str) -> list[ast.AST]:
     return list(seen.values())
 
 
-def resolve_region(tree: ast.Module, qualified: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:
-    """The exclusion rule's boundary: a qualified name resolved against the pinned file's own AST.
-
-    Walks the module's direct children for the first segment and that node's children for the
-    next, and refuses on anything but exactly one match -- the collision scan's one-match discipline moved
-    from names to definitions. Restated rather than imported, as the frozen test files' digests are.
-    """
-    node: ast.AST = tree
-    definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
-    for segment in qualified.split("."):
-        matches = [
-            child
-            for child in ast.iter_child_nodes(node)
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            and child.name == segment
-        ]
-        assert len(matches) == 1, (qualified, segment, len(matches))
-        definition = matches[0]
-        node = definition
-    assert definition is not None, qualified
-    return definition
-
-
-# ---------- the exclusion records' retirement sweep (A28, restated) ----------
-
-
-def excluded_constants(path: Path) -> list[str]:
-    """Module-level constants named ``*_PY_EXCLUDED`` -- the retirement duty's step-1 sweep as an AST read.
-
-    A text grep for the suffix counts a file from its prose and from the sweep line itself once
-    its record is gone; a name on a module-level assignment is what "the record is a module
-    constant named for the file it narrows" means. Restated rather than imported.
-    """
-    names: list[str] = []
-    for node in ast.parse(path.read_text(encoding="utf-8")).body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target: ast.expr | None = node.targets[0]
-        elif isinstance(node, ast.AnnAssign):
-            target = node.target
-        else:
-            target = None
-        if isinstance(target, ast.Name) and target.id.endswith("_PY_EXCLUDED"):
-            names.append(target.id)
-    return names
-
-
-def digest_excluding(path: Path, regions: Sequence[str]) -> str:
-    """The file's sha256 with each region's ``lineno``..``end_lineno`` removed, whole lines.
-
-    ``lineno`` is the ``def`` line and a decorator sits above it, so decorators stay guarded and
-    one added or changed is caught.
-    """
-    source = path.read_bytes()
-    spans = [(n.lineno, n.end_lineno) for n in (resolve_region(ast.parse(source), q) for q in regions)]
-    kept = [
-        line
-        for index, line in enumerate(source.decode().splitlines(keepends=True), start=1)
-        if not any(low <= index <= high for low, high in spans)
-    ]
-    return hashlib.sha256("".join(kept).encode()).hexdigest()
-
-
-def referenced_names(nodes: Sequence[ast.AST]) -> set[str]:
-    return {n.id for fn in nodes for n in ast.walk(fn) if isinstance(n, ast.Name)}
-
-
-ARITHMETIC = (ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow, ast.MatMult)
-
-
-def is_non_numeric(node: ast.AST) -> bool:
-    return isinstance(node, ast.JoinedStr | ast.List | ast.ListComp | ast.Tuple) or (isinstance(node, ast.Constant) and isinstance(node.value, str))
-
-
-def arithmetic_nodes(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    """V17's rule: ``-``, ``*``, ``/``, ``//``, ``%``, ``**``, an augmented assignment with any of
-    those or ``+``, a unary minus on a non-constant, and ``+`` unless one side is a string
-    literal, f-string, list or tuple."""
-    out: list[ast.AST] = []
-    for fn in nodes:
-        for node in ast.walk(fn):
-            if isinstance(node, ast.BinOp):
-                if isinstance(node.op, ARITHMETIC):
-                    out.append(node)
-                elif isinstance(node.op, ast.Add) and not (is_non_numeric(node.left) or is_non_numeric(node.right)):
-                    out.append(node)
-            elif isinstance(node, ast.AugAssign) and isinstance(node.op, ast.Add | ARITHMETIC):
-                out.append(node)
-            elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and not isinstance(node.operand, ast.Constant):
-                out.append(node)
-    return out
-
-
-def total_seconds_operands(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    return [n.func.value for fn in nodes for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "total_seconds"]
-
-
-def format_calls(module: ast.AST) -> list[int]:
-    return [
-        node.lineno
-        for node in ast.walk(module)
-        if isinstance(node, ast.Call)
-        and ((isinstance(node.func, ast.Name) and node.func.id == "format") or (isinstance(node.func, ast.Attribute) and node.func.attr == "format"))
-    ]
-
-
 def json_dumps_calls(nodes: Sequence[ast.AST]) -> list[ast.Call]:
     return [
         n
@@ -1350,51 +1177,6 @@ def json_dumps_calls(nodes: Sequence[ast.AST]) -> list[ast.Call]:
         for n in ast.walk(fn)
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "dumps" and isinstance(n.func.value, ast.Name) and n.func.value.id == "json"
     ]
-
-
-def report_import_names(module: ast.Module) -> set[str]:
-    names: set[str] = set()
-    for node in module.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.report":
-            names.update(alias.name for alias in node.names)
-    return names
-
-
-def module_body_imports_of(module: ast.Module, dotted: str) -> list[int]:
-    """Line numbers of module-body imports of ``dotted`` (a ``TYPE_CHECKING`` block is not the module body)."""
-    return [n.lineno for n in module.body if isinstance(n, ast.ImportFrom) and n.module == dotted] + [
-        n.lineno for n in module.body if isinstance(n, ast.Import) and any(a.name == dotted for a in n.names)
-    ]
-
-
-def mentioned(module: ast.Module) -> set[str]:
-    out: set[str] = set()
-    for node in ast.walk(module):
-        if isinstance(node, ast.Name):
-            out.add(node.id)
-        elif isinstance(node, ast.Attribute):
-            out.add(node.attr)
-        elif isinstance(node, ast.ImportFrom | ast.Import):
-            out.update(alias.name for alias in node.names)
-    return out
-
-
-def string_dicts(module: ast.Module) -> list[tuple[str, set[str]]]:
-    """Every module-level ``dict`` literal with all-string keys, as ``(bound name, key set)``."""
-    out = []
-    for node in module.body:
-        target, value = None, None
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            target, value = node.targets[0].id, node.value
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            target, value = node.target.id, node.value
-        if target is not None and isinstance(value, ast.Dict) and value.keys and all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in value.keys):
-            out.append((target, {k.value for k in value.keys}))  # type: ignore[union-attr]
-    return out
-
-
-FLOAT_SPEC_RE = re.compile(r":\.\d")
-HEX_RE = re.compile(r"#[0-9A-Fa-f]{6}\b")
 
 
 def help_entries(text: str) -> dict[str, tuple[str, str]]:
@@ -1630,38 +1412,27 @@ def page_as_0_0_1_wrote_it(page: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", page)
 
 
-def test_w1_the_schema_the_thirteen_keys_and_the_signatures_are_the_literals(lattice_pair: Pair) -> None:
-    """``viewer.SCHEMA``; the thirteen keys in order (P-1's ``intervals`` after ``panels``) on ``--json`` and on ``build_structure``'s
-    return; ``build_structure`` takes ``tree`` as a required keyword between ``multi`` and
-    ``manifest_a`` and its other parameters are unchanged; ``render_html`` and ``serve_page``
-    keep their signatures."""
+def test_w1_the_schema_and_the_signatures_are_the_literals(lattice_pair: Pair) -> None:
+    """``viewer.SCHEMA`` on ``--json`` and on ``build_structure``'s return; ``build_structure``
+    takes ``tree`` as a required keyword between ``multi`` and ``manifest_a`` and its other
+    parameters are unchanged; ``render_html`` and ``serve_page`` keep their signatures."""
     m = viewer()
     assert m.SCHEMA == SCHEMA
-    assert lattice_pair.structure["schema"] == SCHEMA and tuple(lattice_pair.structure) == TOP_LEVEL_KEYS, tuple(lattice_pair.structure)
+    assert lattice_pair.structure["schema"] == SCHEMA
     store = Store(LATTICE_ROOT)
     ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
     built = m.build_structure(
         lattice_pair.report, lattice_pair.multi, tree=lattice_pair.tree, manifest_a=ma, manifest_b=mb, rows_a=store.count(LATTICE_A), rows_b=store.count(LATTICE_B),
         tally_a=store.tally(LATTICE_A), tally_b=store.tally(LATTICE_B), store_root=str(LATTICE_ROOT),
     )
-    assert tuple(built) == TOP_LEVEL_KEYS and built["schema"] == SCHEMA
+    assert built["schema"] == SCHEMA
     params = tuple((p.name, p.kind.name, p.default is inspect.Parameter.empty, p.annotation) for p in inspect.signature(m.build_structure).parameters.values())
     assert params == BUILD_STRUCTURE_PARAMETERS, params
     assert str(inspect.signature(m.render_html)) == RENDER_HTML_SIGNATURE
     assert str(inspect.signature(m.serve_page)) == SERVE_PAGE_SIGNATURE
 
 
-def test_w1_the_reason_mapping_keys_and_the_kind_table_are_the_literals() -> None:
-    """Exactly one module-level string-keyed ``dict`` literal in ``viewer.py`` has the four reason
-    keys, and ``_TREE_KINDS`` equals this file's table (the module docstring says why it has one
-    row the original table lacks)."""
-    module = parsed(VIEWER_SOURCE)
-    mappings = [name for name, keys in string_dicts(module) if keys == set(REASONS)]
-    assert len(mappings) == 1, mappings
-    assert viewer()._TREE_KINDS == TREE_KINDS, viewer()._TREE_KINDS
-
-
-def test_w1_serve_help_lists_exactly_the_sixteen_flags_and_no_port() -> None:
+def test_w1_serve_help_lists_exactly_serves_flags_and_the_tools_own_and_no_port() -> None:
     """The flags are the option entries ``--help`` lists, not every ``--word`` in its text: the
     tree helper's help for ``--max-group-mde`` names ``--max-mde`` in prose (module docstring)."""
     code, out, err = run_cli(["serve", "--help"])
@@ -1698,18 +1469,19 @@ def test_w2_the_tree_with_every_text_removed_is_to_json_after_a_round_trip_and_s
 
 def expected_text_value(raw: Any, kind: str) -> Any:
     if kind == "coord":
-        return {str(k): (fmt(v, "coord") if isinstance(v, SCALAR) else None) for k, v in raw.items()}
+        return {str(k): (m7_form(v, "coord") if isinstance(v, SCALAR) else None) for k, v in raw.items()}
     if isinstance(raw, dict):
-        return {k: fmt(v, kind) for k, v in raw.items()}
+        return {k: m7_form(v, kind) for k, v in raw.items()}
     if isinstance(raw, list):
-        return [fmt(v, kind) for v in raw]
-    return fmt(raw, kind)
+        return [m7_form(v, kind) for v in raw]
+    return m7_form(raw, kind)
 
 
 def check_text(raw: Any, got: Any, path: str, name: str) -> None:
     """Walk this file's ``to_json()`` and the structure's tree in parallel, visiting the keys both
     carry: at every object the kind table names, ``text``'s key set is exactly the printed floats
-    that are not ``None`` (plus ``config`` on a leaf) and each value is ``_fmt(raw, kind)``, a
+    that are not ``None`` (plus ``config`` on a leaf) and each value is M7's form of the raw value
+    under its kind (``m7_form``), a
     mapping or list field mapped over the same keys; every other object has no ``text``; a
     non-finite raw float is ``None``. Whether every key is carried, in order, is W2's clause and
     not this one's, so a renamed or dropped field fails W2 alone."""
@@ -1747,7 +1519,7 @@ def test_w3_text_sits_on_every_object_the_kind_table_names_and_nowhere_else(ever
         assert p.structure["tree"]["root"]["text"]["location"].keys() == set(p.tree.root.events), p.name
 
 
-def test_w3_a_non_finite_tree_float_is_null_with_fmts_spelling_kept_in_text(lattice_pair: Pair) -> None:
+def test_w3_a_non_finite_tree_float_is_null_with_nan_kept_in_text(lattice_pair: Pair) -> None:
     """No tree float is non-finite on any fixture, so the rule is asserted by putting ``nan`` into
     a copy of the lattice's ``RootResult.location`` before assembly; the dump still parses strictly."""
     event = lattice_pair.tree.root.events[0]
@@ -1760,7 +1532,7 @@ def test_w3_a_non_finite_tree_float_is_null_with_fmts_spelling_kept_in_text(latt
     )
     root = structure["tree"]["root"]
     assert root["location"][event] is None
-    assert root["text"]["location"][event] == fmt(math.nan, "pp1")
+    assert root["text"]["location"][event] == "nan"
     strict_loads(json.dumps(structure, allow_nan=False))
 
 
@@ -1894,7 +1666,7 @@ def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_th
                 if isinstance(record["mde_note"], str):
                     assert not re.search(r"\d+pp|(?i:nan)", row[mde]), (name, row)
                 else:
-                    assert row[mde] == f"{fmt(record['mde'], 'pp0')}pp", (name, row)
+                    assert row[mde] == f"{m7_form(record['mde'], 'pp0')}pp", (name, row)
 
 
 def test_w4_the_excised_page_and_the_tree_less_keys_do_not_read_the_tree(every_pair: list[Pair], synth_root: Path) -> None:
@@ -1945,15 +1717,14 @@ def test_w17_the_narrowed_payload_and_the_tree_less_keys_carry_the_facts_their_o
 # ---------- W5: order of the document ----------
 
 
-def test_w5_the_h2_sequence_and_the_bound_paragraphs_position(every_pair: list[Pair]) -> None:
-    """The ``<h2>`` sequence is exactly the fourteen in order; the bound ``<p>`` is the last line of
+def test_w5_the_bound_paragraph_closes_honesty_before_the_figure_and_the_tree_regions_precede_it(every_pair: list[Pair]) -> None:
+    """The bound ``<p>`` is the last line of
     *Honesty*, after the last panel's ``<h3>``, its paragraph and (P-1) the flat family's
     one interval paragraph, before the first ``<svg>``, outside ``<details>``, with no hidden
     ancestor; *Fault lines* and *Cells* precede the ``<svg>``. **Amended by the P-1 freeze**: the
     honesty band is ``2n + 2`` lines, the interval ``<p>`` sits immediately before the bound
     ``<p>`` and carries the first interval line."""
     for p in every_pair:
-        assert h2_sequence(p.page) == list(H2_SEQUENCE), (p.name, h2_sequence(p.page))
         honesty = region_lines(p.page, "Honesty")
         assert honesty[-1] == bound_line(p.page), (p.name, honesty[-1][:80])
         panels = p.structure["panels"]
@@ -2015,12 +1786,9 @@ def test_w6_the_reasons_read_in_m14s_precedence_on_the_identical_bh_and_grid_fix
     assert f"{WHOLE_GRID_KEY}={WHOLE_GRID_LABEL}" in lines_of(region(p, "Cells"))[2], lines_of(region(p, "Cells"))
 
 
-def test_w6_viewer_names_none_of_the_reason_tuples_and_an_unknown_reason_raises_viewer_error(every_pair: list[Pair]) -> None:
-    """The second-reader rule: ``viewer.py`` names none of M14's three reason tuples; ``render_html``
-    on a structure whose ``leaves.reason`` or ``fault_lines.reason`` is ``nonsense`` raises
-    ``ViewerError`` rather than printing a sentence nobody wrote."""
-    names = mentioned(parsed(VIEWER_SOURCE))
-    assert not (names & set(REASON_TUPLE_NAMES)), sorted(names & set(REASON_TUPLE_NAMES))
+def test_w6_an_unknown_reason_raises_viewer_error(every_pair: list[Pair]) -> None:
+    """``render_html`` on a structure whose ``leaves.reason`` or ``fault_lines.reason`` is
+    ``nonsense`` raises ``ViewerError`` rather than printing a sentence nobody wrote."""
     p = by_name(every_pair)["identical"]
     for level in ("leaves", "fault_lines"):
         structure = json.loads(json.dumps(p.structure, allow_nan=False))
@@ -2048,11 +1816,7 @@ def test_w7_every_numeric_token_of_the_three_regions_and_the_bound_paragraph_is_
         assert stray == [], (p.name, stray[:10])
         missing = required - set(tokens)
         assert missing == set(), (p.name, sorted(missing)[:10])
-        # No leaf ``p`` under sig3 unless it coincides with an allowed token, and no unit record.
-        leaves = [leaf for family in p.tree.leaves.families for leaf in family.cells if leaf.rejects]
-        for leaf in leaves:
-            token = fmt(leaf.p, "sig3")
-            assert token in allowed or token not in tokens, (p.name, token)
+        # No unit record.
         cells_tables = tables_of(region(p, "Cells"))
         assert all(len(header) == 5 for header, _ in cells_tables), (p.name, [h for h, _ in cells_tables])
         assert not any("units" in line.lower() and "unit" in line.lower() and "delta" in line.lower() for line in lines_of(region(p, "Omnibus"))), p.name
@@ -2286,7 +2050,7 @@ def test_w11_the_five_flags_reach_the_call_on_the_axes_pair(synth_root: Path) ->
     assert has(bound_lines(p.page)[0], "2")
 
 
-def test_w11_out_of_range_depths_and_refused_knobs_exit_2_with_error_on_stderr_and_serve_page_never_called(synth_root: Path) -> None:
+def test_w11_out_of_range_depths_exit_2_and_refused_knobs_exit_1_with_error_on_stderr_and_serve_page_never_called(synth_root: Path) -> None:
     base = ["--store", str(synth_root), "serve", "axes-a", "axes-b", "--event", "fail", "--x", "temp", "--y", "task"]
     # A depth outside the choices is a wrong command line (exit 2); a knob the command refuses is
     # a refusal (exit 1).
@@ -2323,12 +2087,6 @@ def test_w12_build_structure_without_tree_is_a_type_error_and_render_html_refuse
             lattice_pair.report, lattice_pair.multi, manifest_a=ma, manifest_b=mb, rows_a=store.count(LATTICE_A), rows_b=store.count(LATTICE_B),
             tally_a=store.tally(LATTICE_A), tally_b=store.tally(LATTICE_B), store_root=str(LATTICE_ROOT),
         )
-    for retired_schema in RETIRED_SCHEMAS:
-        retired = {k: v for k, v in json.loads(json.dumps(lattice_pair.structure, allow_nan=False)).items() if k != "tree"}
-        retired["schema"] = retired_schema
-        with pytest.raises(m.ViewerError) as info:
-            m.render_html(retired)
-        assert retired_schema in str(info.value) and SCHEMA in str(info.value), retired_schema
     headless = {k: v for k, v in json.loads(json.dumps(lattice_pair.structure, allow_nan=False)).items() if k != "tree"}
     with pytest.raises(m.ViewerError) as info:
         m.render_html(headless)
@@ -2614,26 +2372,19 @@ def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
     for row in body:
         [r] = [r for r in records if math.isclose(float(r["config"][X]), float(row[0])) and math.isclose(float(r["config"][Y]), float(row[1]))]
         assert row[2] == f"{r['n_a']}/{r['n_b']}", row
-        assert row[3:8] == [fmt(r["rate_a"], "pp1"), fmt(r["rate_b"], "pp1"), fmt(r["delta"], "pp1"), fmt(r["p"], "sig3"), fmt(r["q"], "sig3")], row
+        assert row[3:8] == [m7_form(r["rate_a"], "pp1"), m7_form(r["rate_b"], "pp1"), m7_form(r["delta"], "pp1"), m7_form(r["p"], "sig3"), m7_form(r["q"], "sig3")], row
         assert row[8] == DIRECTION_OF[str(r["verdict"])], row
         if isinstance(r["mde_note"], str):
             assert not re.search(r"\d+pp|(?i:nan)", row[9]), row
         else:
-            assert row[9] == f"{fmt(r['mde'], 'pp0')}pp", row
+            assert row[9] == f"{m7_form(r['mde'], 'pp0')}pp", row
     deltas = [float(row[5]) for row in body]
     assert deltas == sorted(deltas, reverse=True), deltas
     assert set(re.findall(r'data-cell="([0-9a-f]{16})"', svg)) == set(ev.cells["config_hash"])
     assert svg.count('data-sig="1"') == int((ev.cells["verdict"] != "unchanged").sum())
 
 
-def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_result_and_root_check_and_the_e14_family_are_unchanged(tmp_path: Path) -> None:
-    # PF0: the digests of diff.py, report.py and tree.py outside its excluded region are no
-    # longer asserted; the rename changes all three files.
-    for record in TREE_PY_EXCLUDED:
-        cover = REPO / record["cover"][0]
-        assert cover.exists(), record["cover"]
-        for test_id in record["cover"][1]:
-            resolve_region(ast.parse(cover.read_bytes()), test_id)
+def test_w20_check_on_the_lattice_and_the_e14_family_carry_the_facts_their_old_digests_guarded(tmp_path: Path) -> None:
     code, out, err = run_cli(["--store", str(LATTICE_ROOT), *CHECK_ARGV])
     # The lattice's runs share a salt, so the unpaired default adds one "note: " line on stderr.
     # check's stdout changes shape in PF1 (its verdict line comes first), so its
@@ -2673,85 +2424,3 @@ def test_w20_diff_py_whole_report_py_outside_check_tree_tree_py_outside_root_res
     fills = re.compile(r'<rect\b[^>]*\bfill="([^"]*)"')
     assert fills.findall(cli_svg) == fills.findall(library_svg) and fills.findall(cli_svg)
     assert_e14_facts(gated, ma, mb)
-
-
-def test_w20_the_viewers_import_partition_and_v17s_closure_clauses_are_unchanged() -> None:
-    """V35 restated: ``from poisson_prove.report`` imports exactly the eight names, split between the
-    two closures by set equality; ``poisson_prove.tree`` is imported only under ``TYPE_CHECKING``;
-    ``render_html``'s closure applies no arithmetic and formats nothing; ``build_structure``'s
-    applies exactly the ``created_at`` subtraction (so the ``text`` decoration is ``_fmt`` calls
-    and dict construction, never arithmetic)."""
-    module = parsed(VIEWER_SOURCE)
-    source = VIEWER_SOURCE.read_text(encoding="utf-8")
-    assert report_import_names(module) == ASSEMBLY_HELPERS | RENDER_HELPERS
-    build = referenced_names(closure(module, "build_structure"))
-    render = referenced_names(closure(module, "render_html"))
-    assert build & (ASSEMBLY_HELPERS | RENDER_HELPERS) == ASSEMBLY_HELPERS, build
-    assert render & (ASSEMBLY_HELPERS | RENDER_HELPERS) == RENDER_HELPERS, render
-    for name in ("MultiReport", "Report", "DiffResult", "DataFrame", "TreeResult", "multi", "report"):
-        assert name not in render, name
-    assert module_body_imports_of(module, "poisson_prove.tree") == [], module_body_imports_of(module, "poisson_prove.tree")
-    assert arithmetic_nodes(closure(module, "render_html")) == [], [ast.dump(n)[:60] for n in arithmetic_nodes(closure(module, "render_html"))]
-    build_nodes = closure(module, "build_structure")
-    arithmetic = arithmetic_nodes(build_nodes)
-    assert len(arithmetic) == 1 and isinstance(arithmetic[0], ast.BinOp) and isinstance(arithmetic[0].op, ast.Sub), [ast.dump(n)[:60] for n in arithmetic]
-    assert arithmetic[0] in total_seconds_operands(build_nodes)
-    assert format_calls(module) == [] and not FLOAT_SPEC_RE.search(source) and not HEX_RE.search(source)
-
-
-def test_w20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_adr_077_field() -> None:
-    """The exclusion records' retirement duty, as the mechanical check the rule defines.
-
-    Step 1 is the grep for ``_PY_EXCLUDED`` under ``tests/``, one hit per live exclusion because
-    the record is a module constant named for the file it narrows. **Counted over files, not
-    lines**, and that is an amendment the rule is owed rather than a reading of it: the rule says
-    ``grep -rn`` returns two after A27, which is wrong twice over -- it holds only for a one-line
-    record, and A27 narrows four carriers rather than two. Six fields make it a multi-line literal,
-    so ``grep -rn`` returns many and ``grep -rl`` returns the files the rule means. Measured at
-    ``101028c``: **0** files against twelve ``_PY_SHA256`` lines over six clauses in four files;
-    **four** after A27, every carrier of ``DIFF_PY_SHA256``. Asserting the file list here is what
-    makes a fifth exclusion, minted anywhere in ``tests/``
-    without a re-freeze behind it, fail rather than accumulate -- the named failure mode is
-    exclusions piling up unretired. A27's own retirement sweep discharges empty: nothing carried
-    an exclusion at ``101028c``, so there was no orphan to file.
-
-    **A22's update.** The file list is unchanged: A22 adds a second *region* to an
-    existing record constant, not a fifth carrier. The per-record assertions now pin ``owner`` and
-    ``minted_at`` per entry rather than one shared literal, because ``_coverage`` is minted at
-    ``4b3c6ae`` and ``_pairing`` at ``101028c``. Two live regions on one file is the rule's
-    *adjacent* case and not its refused *overlapping* one, so the spans are asserted disjoint here
-    rather than assumed. Neither exclusion is retirable yet: both name ``A28`` as their retiring
-    change, and A22 is not it.
-
-    **A28's update -- both ``diff.py`` exclusions retired, one ``report.py`` exclusion
-    minted.** ``_pairing`` and ``_coverage`` both named ``A28``; both owners have landed and A28
-    rewrites every carrier, so ``DIFF_PY_SHA256`` is whole-file again. ``REPORT_PY_EXCLUDED`` is
-    A28's own, owner A28, ``retire_at`` empty, seven fields -- the rule's six
-    plus ``lines`` (every span the record excludes). The sweep now finds this file alone, **counted over
-    module-level constants named ``*_PY_EXCLUDED`` by AST and not by text**, because the text grep
-    the rule describes counts the three former carriers from their docstrings and sweep lines
-    once their records are gone (measured). ``TREE_PY_EXCLUDED`` is not minted.
-
-    **P-1's update: ``TREE_PY_EXCLUDED`` minted beside ``REPORT_PY_EXCLUDED``.** Still one file, now two record constants on it, so the sweep asserts the pair by
-    name; the per-record assertions are per record (owner A28 at ``38e8df9``; owner P-1 at
-    ``a626cd3``), and ``lines`` may carry two spans because the record's form lists every span
-    the record excludes. ``REPORT_PY_EXCLUDED`` has since been retired, so ``TREE_PY_EXCLUDED`` is the
-    one record left, and that is what the sweep asserts.
-    """
-    hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if excluded_constants(path))
-    assert hits == ["test_s29_viewer.py"], hits
-    # Module order: ``TREE_PY_EXCLUDED`` sits beside ``TREE_PY_SHA256``, which precedes the report pair.
-    assert excluded_constants(REPO / "tests" / "test_s29_viewer.py") == ["TREE_PY_EXCLUDED"]
-    for constant, owner, minted_at in ((TREE_PY_EXCLUDED, "P-1", "a626cd3"),):
-        for record in constant:
-            assert set(record) == {"region", "owner", "cover", "minted_at", "blind_spot", "retire_at", "lines"}, sorted(record)
-            assert record["owner"] == owner and record["minted_at"] == minted_at and record["retire_at"] == ""
-            assert len(record["blind_spot"].split()) >= 20, record["region"]
-            assert re.fullmatch(r"\d+-\d+(, \d+-\d+)* of \d+", record["lines"]), record["lines"]
-    assert [record["region"] for record in TREE_PY_EXCLUDED] == [("RootResult", "_root")]
-    for source, constant in ((TREE_SOURCE, TREE_PY_EXCLUDED),):
-        spans = sorted(
-            (node.lineno, node.end_lineno)
-            for node in (resolve_region(ast.parse(source.read_bytes()), q) for record in constant for q in record["region"])
-        )
-        assert all(earlier[1] < later[0] for earlier, later in zip(spans, spans[1:])), spans

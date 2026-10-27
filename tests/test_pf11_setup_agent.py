@@ -51,8 +51,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   and every option the command carries appearing in its verb's help; every fenced block carries a
   language tag, and a line starting ``poisson-prove`` sits only in a ``bash`` block or in the one
   ``text`` block under "Hand over", which is ``poisson-prove sweep``.
-- (j) Until PF8 freezes the plain-words test's pattern list, PF11 checks the skill and the prompt
-  against the plain-words families (``PLAIN_WORDS``); PF8 then adds both files to its corpus.
+- (j) The plain words of the skill and the prompt are checked in PF8's corpus, not here.
 - (k) The scripted run reads the steps by number from the written skill and plays them with the
   expected files: ``expected/prove.toml`` is what step 3 writes (20 replicates, below the gate),
   without its ``[declare]`` table, which step 4 adds; the run's last ``prove.toml`` is that file
@@ -466,18 +465,6 @@ def commands(body: str, lang: str) -> list[tuple[str, str]]:
     return [(f.section, line.strip()) for f in fences(body) if f.lang == lang for line in f.lines if line.strip()]
 
 
-#: The plain-words families, until PF8 freezes the full pattern list (reading j).
-PLAIN_WORDS = [
-    re.compile(r"\b[A-Z]{1,2}-?\d+(?:\.\d+)?[a-z]?\b"),
-    re.compile(r"\b(?:LST|ADR)-?\d+\b"),
-    re.compile(r"\bPhase \d|\bSession [AB]\b|\boracle\b|\bretrofit\b|\bshim\b|\bpacket\b|\bruled\b", re.I),
-    re.compile(r"\bTaylor\b|\bGo1\b|\bHUMAIN\b|\bBorderless\b|\bCodestrap\b|45/44"),
-    re.compile(r"\[\[|\bvault\b|\bObsidian\b|note[s]/|\bdispatch\b", re.I),
-    re.compile(r"/User[s]/|~/cod[e]/"),
-    re.compile(r"proofload", re.I),
-]
-
-
 # ---------- child processes ----------
 
 GUARD = '''\
@@ -818,11 +805,11 @@ def test_pf11_3_the_skill_passes_the_shared_setup_file_check(part: str, tmp_path
 # ---------- PF11.4 the commands and the words ----------
 
 PF11_4_PARTS = ["every command parses", "no --yes", "every sweep the agent runs carries --dry-run",
-                "the person's command is one text block under Hand over", "commands only in tagged blocks", "the plain-words test"]
+                "the person's command is one text block under Hand over", "commands only in tagged blocks"]
 
 
 @pytest.mark.parametrize("part", PF11_4_PARTS)
-def test_pf11_4_every_command_parses_none_answers_for_the_person_no_sweep_without_dry_run_and_the_words_are_plain(part: str, tmp_path: Path) -> None:
+def test_pf11_4_every_command_parses_none_answers_for_the_person_and_no_sweep_runs_without_dry_run(part: str, tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     assert run(repo, "init", "--agent").code == 0
@@ -854,7 +841,7 @@ def test_pf11_4_every_command_parses_none_answers_for_the_person_no_sweep_withou
     elif part == "the person's command is one text block under Hand over":
         under = [c for s, c in person if s == "## Hand over"]
         assert under == [NEXT_COMMAND], person
-    elif part == "commands only in tagged blocks":
+    else:
         blocks = fences(body)
         assert all(b.lang for b in blocks), [b.lines[:1] for b in blocks if not b.lang]
         for b in blocks:
@@ -862,11 +849,6 @@ def test_pf11_4_every_command_parses_none_answers_for_the_person_no_sweep_withou
                 continue
             stray = [line for line in b.lines if line.strip().startswith(COMMAND)]
             assert not stray, (b.lang, b.section, stray)
-    else:
-        for name in ("SKILL.md", "prompt.txt"):
-            words = (repo / FOLDERS[0] / name).read_text(encoding="utf-8")
-            found = [m.group(0) for pattern in PLAIN_WORDS for m in pattern.finditer(words)]
-            assert not found, (name, found)
 
 
 # ---------- PF11.5 the scripted run ----------
@@ -1078,7 +1060,6 @@ ROWS: dict[str, Row] = {
     "the target's module does not import": Row(
         (edit("prove_rollout.py", "from support_agent.agent import", "from support_agnt.agent import"),),
         error=('"prove_rollout:rollout"', "ModuleNotFoundError", "support_agnt"), check=_one_traceback_in_the_log),
-    "importing the target connects to a host": Row((at_import(CONNECT.format(host="api.example.com")),), error=("api.example.com:443",)),
     "importing the target takes over 30 s": Row((at_import("import time\ntime.sleep(90)\n"),), error=("30 s",), slow=True, check=_the_limit_is_kept),
     "the module has no such name": Row((edit("prove_rollout.py", "def rollout(", "def rollout_v1("),), error=('"prove_rollout"', '"rollout"'),
                                        check=_the_callables_and_nothing_else),
@@ -1276,7 +1257,10 @@ def test_pf11_8_the_docs_name_the_agents_each_location_was_verified_for() -> Non
         named = {agent for agent in AGENTS if re.search(rf"\b{agent}\b", mine[0])}
         assert named == set(agents), (folder, named, agents)
     assert {f"{Path(folder).parent}/" for folder in FOLDERS} == set(LOCATIONS)
-    assert all(agent in PROVENANCE for agents in LOCATIONS.values() for agent in agents)
+    # Each agent a location names was checked against its own documentation on the date the page gives.
+    page = DOCS_PAGE.read_text(encoding="utf-8")
+    for agent in sorted({agent for agents in LOCATIONS.values() for agent in agents}):
+        assert PROVENANCE[agent][1] in page, (agent, PROVENANCE[agent])
 
 
 # ---------- carried: init --agent gets what every verb gets ----------

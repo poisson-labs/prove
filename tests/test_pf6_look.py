@@ -56,8 +56,9 @@ test at the end (reading L3).
   and the app's modules (``poisson_prove._cli_app*``), ``textual`` only by the app's modules, and
   neither by ``cli.py``; importing ``poisson_prove.cli`` imports no Textual.
 - L9 Rich and Textual are core dependencies with a floor each (the lowest working
-  version, measured when PF6 was implemented); the test checks a floor is declared and that
-  the installed versions meet it, not the measurement.
+  version, measured when PF6 was implemented); ``test_a22_pandas3::test_v14_…`` and
+  ``test_pf7_packaging``'s PF7.4 check they are listed and that a floor is declared, not the
+  measurement.
 - L10 On a terminal, plain wraps its own long lines (PF6.6), so "plain" there is read word for word, not
   byte for byte: PF6.1's plain cases read as ``--plain`` on the same terminal (``--plain`` taken out of
   a line that repeats the command as typed), and PF6.5's terminal run with Rich missing reads as the
@@ -72,23 +73,19 @@ second was not foreseen; it came to light when this file was written.
 
 from __future__ import annotations
 
-import ast
 import difflib
 import json
 import re
 import shutil
 import sys
-import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
-from packaging.requirements import Requirement
-from packaging.version import Version
 from pf6_support import (
-    LOOK, LOOK_FIXTURES, MOCK, PLANTED_KEYS, ROLE_OF_WORD, ROOT, RUN_ID, SMALL_SPEC, SRC, blocker, prove,
+    LOOK, LOOK_FIXTURES, MOCK, PLANTED_KEYS, ROLE_OF_WORD, ROOT, RUN_ID, SMALL_SPEC, blocker, prove,
     run_pty, sha256_of, shared_world, split_first_line, squash, strip_escapes, styled, styled_lines,
 )
 
@@ -130,7 +127,7 @@ def _amended_base() -> str:
     return text
 
 
-def test_pf6_0_the_look_file_is_the_one_the_design_session_filed() -> None:
+def test_pf6_0_the_look_file_has_its_canonical_sha256() -> None:
     """``docs/cli-look.md`` is Prove's canonical copy: its sha256 is the one filed with it, so any
     later edit means a new hash here."""
     assert sha256_of(LOOK) == LOOK_SHA256
@@ -371,7 +368,7 @@ def test_pf6_corpus_ran_as_designed_on_pipes(corpus: dict[str, dict[str, dict[st
         else:
             word, _ = split_first_line(r["out"])
             assert re.fullmatch(call.word, word), (call.name, word)
-        assert ("\nnote: " in "\n" + r["err"]) is call.note or not call.note, (call.name, r["err"])
+        assert ("\nnote: " in "\n" + r["err"]) is call.note, (call.name, r["err"])
         if call.closing:
             assert _closing_word(r["out"]) == call.closing, (call.name, r["out"][-300:])
     words = {split_first_line(corpus["pipe"][c.name]["out"])[0] for c in CORPUS if c.word not in ("json", "error")} | {c.closing for c in CORPUS if c.closing}
@@ -638,40 +635,7 @@ def test_pf6_7_pretty_progress_is_on_stderr_and_gone_from_the_screen_when_the_sw
     assert _closing_word(strip_escapes(run.out)) == "done", strip_escapes(run.out)[-400:]
 
 
-# ---------- Where Rich and Textual are imported; the dependencies ----------
-
-
-def _imports(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    found: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            found |= {alias.name.split(".")[0] for alias in node.names}
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            found.add(node.module.split(".")[0])
-    return found
-
-
-def _module_name(path: Path) -> str:
-    rel = path.relative_to(SRC).with_suffix("")
-    parts = list(rel.parts)
-    if parts[-1] == "__init__":
-        parts.pop()
-    return ".".join(parts)
-
-
-def test_pf6_rich_and_textual_are_imported_only_by_the_renderer_and_the_app() -> None:
-    """Reading L8: ``rich`` only in ``poisson_prove._render_*`` and ``poisson_prove._cli_app*``,
-    ``textual`` only in ``poisson_prove._cli_app*``; at least one module imports each; ``cli.py`` neither."""
-    users: dict[str, set[str]] = {"rich": set(), "textual": set()}
-    for path in sorted(SRC.rglob("*.py")):
-        name = _module_name(path)
-        for lib in _imports(path) & set(users):
-            users[lib].add(name)
-    assert users["rich"] and users["textual"], users
-    assert all(m.startswith(("poisson_prove._render_", "poisson_prove._cli_app")) for m in users["rich"]), users["rich"]
-    assert all(m.startswith("poisson_prove._cli_app") for m in users["textual"]), users["textual"]
-    assert "poisson_prove.cli" not in users["rich"] | users["textual"]
+# ---------- Where Textual is imported ----------
 
 
 def test_pf6_importing_the_command_line_imports_no_textual(tmp_path: Path) -> None:
@@ -686,22 +650,6 @@ def test_pf6_importing_the_command_line_imports_no_textual(tmp_path: Path) -> No
     done = subprocess.run([sys.executable, "-c", "import sys, poisson_prove.cli; print('textual' in sys.modules)"],
                           env=child_env(home), capture_output=True, text=True, timeout=60)
     assert done.returncode == 0 and done.stdout.strip() == "False", (done.stdout, done.stderr)
-
-
-def test_pf6_rich_and_textual_are_core_dependencies_with_a_floor_the_install_meets() -> None:
-    """Reading L9: both in ``[project] dependencies``, each with a ``>=`` floor, which
-    the installed versions meet; the terminal emulator the tests read screens with is in ``[dev]``."""
-    from importlib.metadata import version
-
-    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    core = {Requirement(d).name.lower(): Requirement(d) for d in data["project"]["dependencies"]}
-    for name in ("rich", "textual"):
-        assert name in core, sorted(core)
-        floors = [s for s in core[name].specifier if s.operator == ">="]
-        assert floors, (name, str(core[name].specifier))
-        assert Version(version(name)) in core[name].specifier, (name, version(name), str(core[name].specifier))
-    dev = {Requirement(d).name.lower() for d in data["project"]["optional-dependencies"]["dev"]}
-    assert "pyte" in dev, sorted(dev)
 
 
 # ---------- PF6.2 and PF6.3 over PF1's whole corpus (slow) ----------

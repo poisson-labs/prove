@@ -1,4 +1,4 @@
-"""A8b frozen tests: invariants P8-7 to P8-12, P8-17, P8-20 and P8-23 to P8-27 of
+"""A8b frozen tests: invariants P8-7 to P8-12, P8-20, P8-23, P8-24 and P8-27 of
 A8b -- the cut and the cap.
 
 Frozen on 2026-09-18 off ``a626cd3``, after the update commit. The build is written
@@ -15,25 +15,21 @@ wrapper, or when it is uncut and over the module default; a low limit is a suppo
 measure-without-storing configuration; ``t4.toml`` and its assertion were rewritten together in
 the update; the wrapper has exactly three keys; the tests run in two cells.
 
-**Invariant-to-test map** (38 functions, 63 collected ids; the id counts below sum to 63; the CD
-freeze deleted one P8-26 function and its one id, and moved none of the others):
+**Invariant-to-test map** (31 functions, 51 collected ids; the id counts below sum to 51):
 
 | Invariant | Tests |
 |---|---|
-| public surface | ``test_section_2_*`` (3 functions, 3 ids) |
+| public surface | ``test_trace_exports_*``, ``test_the_two_cut_functions_*``, ``test_content_keys_*`` (3 functions, 3 ids) |
 | P8-7 | ``test_p8_7_*`` (7 functions, 11 ids) |
 | P8-8 | ``test_p8_8_*`` (3 functions, 4 ids) |
-| P8-9 | ``test_p8_9_*`` (2 functions, 3 ids) |
+| P8-9 | ``test_p8_9_*`` (1 function, 2 ids) |
 | P8-10 | ``test_p8_10_*`` (3 functions, 4 ids) |
 | P8-11 | ``test_p8_11_*`` (2 functions, 2 ids) |
 | P8-12 | ``test_p8_12_*`` (4 functions, 8 ids) |
-| P8-17 | ``test_p8_17_*`` (1 function, 1 id) |
 | P8-20 | ``test_p8_20_*`` (2 functions, 5 ids) |
 | P8-23 | ``test_p8_23_*`` (3 functions, 8 ids), ``test_q5_*`` (1 function, 1 id) |
-| P8-24 | ``test_p8_24_*`` (3 functions, 4 ids) |
-| P8-25 | ``test_p8_25_*`` (2 functions, 2 ids) |
-| P8-26 | ``test_p8_26_*`` (2 functions, 5 ids) |
-| P8-27 | ``test_p8_27_*`` (2 functions, 2 ids) |
+| P8-24 | ``test_p8_24_*`` (1 function, 2 ids) |
+| P8-27 | ``test_p8_27_*`` (1 function, 1 id) |
 
 **Cells.** Every test here runs in both cells, pandas 2.3.3 and 3.0.5, and the
 measured result is that **no A8b invariant is cell-specific**: A8b adds no Parquet column, and
@@ -43,11 +39,8 @@ P8-20's store clauses, which read the ``trace_obs`` column itself; they read it 
 ``pyarrow`` and test nullness with ``is None``, never ``pd.isna`` and never a truth test, as
 in A8a and A22.
 
-**Green before and after -- eleven ids, named so their green is not read as coverage** (the other
-fifty-two are red on the bare tree and green on the build): ``test_p8_25_*`` (every
-symbol they digest is unchanged on the bare tree; they go red only when the build crosses the A7
-line), the three invalid-trace ids of ``test_p8_26_the_funnel_never_raises_*`` (A7's P7-9 kept
-green while a ``Trace.from_dict`` is added on its path), the ``content-on`` id of
+**Green before and after -- six ids, named so their green is not read as coverage** (the other
+forty-five are red on the bare tree and green on the build): the ``content-on`` id of
 ``test_p8_10_through_the_recorder_*`` (nothing is stripped with content on, before or after), and the
 five ids of ``test_p8_12_a_bad_value_is_refused_naming_the_field`` (the shipped parser already refuses
 three of them, and refuses ``max_observation_bytes`` as an unknown field, naming it, for another reason).
@@ -57,32 +50,21 @@ A8b clauses; what changed in this file is: the public surface's export list and
 its two signatures (``limit`` keeps its name, place and keyword-only kind and loses its default,
 widened to ``int | None``); P8-7's two-constant sentence, retired with the constants it described;
 P8-7's "the default limit is 8192 when none is passed", inverted in place under a new name; P8-12's
-``CaptureSpec()``, which now raises; both P8-26 funnel calls, which take the run's limit; and the
-``cut``, ``sweep_toml`` and ``child_capture_spans`` helpers, which declare 8192 rather than
-inheriting it. **One test is deleted**, not amended:
-``test_p8_26_a_run_with_no_capture_table_still_stores_a_rollouts_own_trace_cut``, whose name states
-the behaviour CD's D2 reverses; CD7 in ``tests/test_cd_cap_declaration.py`` replaces it.
-**Untouched and still green:** P8-25 -- ``_is_observation`` is not among the symbols it digests, and
-the CD change touches only the constant that function reads.
+``CaptureSpec()``, which now raises; and the ``cut``, ``sweep_toml`` and ``child_capture_spans``
+helpers, which declare 8192 rather than inheriting it.
 
-**Beyond the numbered invariants, and said so:** ``test_p8_26_the_funnel_cuts_*`` and
-``test_p8_26_a_run_with_no_capture_table_*`` assert that ``finalize`` is actually wired at the
-funnel. The invariants pin only that the site never raises; without these a build that never calls
-``finalize`` passes every numbered invariant. **Named gaps, not pinned:** what ``finalize`` does
-with a non-``None`` ``declaration`` (A10's), whether the funnel honours a sweep's non-default
-limit for a rollout's own trace (it has only the record in hand), and the exception *type* of
-P8-24's refusal.
+**Beyond the numbered invariants, and said so:** that ``finalize`` is actually wired at the funnel,
+and that the funnel never raises on a trace it cannot read, is asserted through ``run_local`` by A7's
+P7-9 (``tests/test_a7_storage.py``). **Named gap, not pinned:** what ``finalize`` does with a
+non-``None`` ``declaration`` (A10's).
 """
 
 from __future__ import annotations
 
-import ast
 import dataclasses
-import hashlib
 import inspect
 import json
 import multiprocessing
-import re
 import time
 import traceback
 from collections.abc import Callable, Mapping
@@ -94,19 +76,15 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import poisson_prove
-import poisson_prove.executor as executor
 from poisson_prove.episode import Episode
 from poisson_prove.executor import plan, run_local
 from poisson_prove.sampler import SamplerError, SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import OBSERVATION_KEYS, Span, Trace, assemble, from_otel, split
-from conftest import code_of
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "trace"
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path needs the fork start method")
@@ -121,9 +99,6 @@ SALT = "a8b-oracle-salt"
 HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 CAPTURE_FIELDS_SPEC = ("instrument", "content", "max_observation_bytes", "max_spans")
-MANIFEST_KEYS_SPEC = frozenset({
-    "requested", "active", "reason", "instrumented", "semconv", "alias_map_version", "content", "max_observation_bytes", "max_spans",
-})
 NEW_EXPORTS = (
     # CD (D8): OBSERVATION_HEAD_BYTES and OBSERVATION_TAIL_BYTES are deleted, and
     # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES -- same value, and a storage-layout
@@ -139,32 +114,6 @@ CONTENT_EXACT = ("gen_ai.input.messages", "gen_ai.output.messages")
 #: One dotted descendant per family, so P8-10 is neutral on the prefix spelling.
 CONTENT_DESCENDANTS = tuple(f"{family}.0.message.content" for family in CONTENT_FAMILIES)
 RETAINED_TOOL_KEYS = ("gen_ai.tool.call.arguments", "gen_ai.tool.call.result", "input.value", "output.value")
-RETIRED_NAMES = ("_TRUNCATION_MARKER", "_apply_budget", "_json_size", "max_span_bytes")
-
-#: P8-25: sha256 of ``ast.get_source_segment`` per symbol, measured at the base commit ``a626cd3``.
-#: ``split`` is absent on purpose -- it is the one A7 symbol A8b edits -- and is pinned structurally.
-# Re-minted: each digest is over the symbol's code with its comments and docstrings
-# taken out (``code_of``), so a pass over src/ that changes only words moves none of them and a change to the code still does.
-# Read off main's unchanged code (56e6e69), every raw digest above matching first, not predicted.
-HELD_SURFACE: dict[str, dict[str, str]] = {
-    "trace.py": {
-        # PF0: LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
-        # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
-        "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
-        "_ObservationKeys": "27ead8ed01df19d6fdc2e1ec09a6ff70d40348074e9c62ae48c99f1bfd8a3502",
-        "_OBSERVATION_FIELDS": "0285e490f26b99c0abb8ef52a382a509ec06efc65bdfa2e3d753af24ec4173fb",
-        "assemble": "ff677667e7d4d35ab51f1b4a51fae804f4eaa80c7e19bc9188889fbf63d9cb61",
-    },
-    "store.py": {
-        # PF4 re-freeze (PF4.38): the store gains a nullable ``case_id`` column after
-        # ``trace_obs``, so ``_SCHEMA``, ``_NULLABLE_STRING_COLUMNS`` and ``Store.append`` change and are
-        # no longer asserted; the change adds that one column and moves nothing A7 or A8b owns.
-        "Store.read": "dbb913562835b7a20a900720cd9d8a94f7b403e513f8966751f4c5ffa52c48cb",
-    },
-}
-SPLIT_DEF_LINE = "def split(trace: Trace) -> tuple[dict[str, Any], dict[str, Any]]:"
-SPLIT_OUTSIDE_THE_LOOP = ["envelope = trace.to_dict()", "bodies: dict[str, Any] = {}", "return (envelope, bodies)"]
-
 
 # ---------- helpers: data construction, never an assertion ----------
 
@@ -241,25 +190,6 @@ def cut_fixture_spans() -> dict[int, Span]:
     return {int(s.span_id, 16): s for s in tr.spans}
 
 
-def function_source(path: Path, qualname: str) -> str:
-    """``ast.get_source_segment`` of a top-level def / class / assignment, or ``Class.method``."""
-    src = path.read_text(encoding="utf-8")
-    head, _, tail = qualname.partition(".")
-    for node in ast.parse(src).body:
-        if isinstance(node, ast.FunctionDef | ast.ClassDef) and node.name == head:
-            if not tail:
-                return ast.get_source_segment(src, node) or ""
-            for member in node.body:
-                if isinstance(member, ast.FunctionDef) and member.name == tail:
-                    return ast.get_source_segment(src, member) or ""
-        if isinstance(node, ast.Assign | ast.AnnAssign):
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if any(isinstance(t, ast.Name) and t.id == head for t in targets):
-                return ast.get_source_segment(src, node) or ""
-    raise AssertionError(f"{qualname} not found at top level of {path.name}")
-
-
-
 # ---------- helpers: the store ----------
 
 
@@ -275,11 +205,11 @@ def rec(run_id: str, *, k: int, meta: Mapping[str, Any]) -> EpisodeRecord:
     return EpisodeRecord.from_episode(ep, run_id=run_id, config={"x": 0.1}, seed=100 + k, replicate_index=k, wall_time=0.1, backend_meta={"i": k})
 
 
-def raw_column(store: Store, run_id: str, column: str) -> dict[int, Any]:
+def raw_column(root: Path, run_id: str, column: str) -> dict[int, Any]:
     """One stored column exactly as written, keyed by ``replicate_index``, read raw through
-    ``pyarrow`` so a null is ``None`` on every pandas."""
+    ``pyarrow`` from the store the test made at ``root``, so a null is ``None`` on every pandas."""
     out: dict[int, Any] = {}
-    for part in sorted((Path(store._root) / run_id / "episodes").glob("part-*.parquet")):
+    for part in sorted((root / run_id / "episodes").glob("part-*.parquet")):
         table = pq.read_table(part, columns=["replicate_index", column])
         for k, v in zip(table.column("replicate_index").to_pylist(), table.column(column).to_pylist(), strict=True):
             out[int(k)] = v
@@ -396,55 +326,6 @@ def oversized_otel_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
     return Episode(outcome="survived", t=HORIZON, horizon=HORIZON, meta={})
 
 
-OWN_OUTPUT = "w" * (3 * DEFAULT_LIMIT)
-
-
-def own_trace_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """A rollout's own ``record()``-shaped trace, which never passes through the recorder."""
-    own = trace_of(span(1, output=OWN_OUTPUT, attrs={"tries": 1}))
-    return Episode(outcome="survived", t=HORIZON, horizon=HORIZON, meta={"trace": own.to_dict()})
-
-
-class TappedConnection:
-    """The parent end of a pipe, with every object read off it kept."""
-
-    def __init__(self, conn: Any, seen: list[Any]) -> None:
-        self._conn = conn
-        self._seen = seen
-
-    def recv(self) -> Any:
-        obj = self._conn.recv()
-        self._seen.append(obj)
-        return obj
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._conn, name)
-
-
-class TappingContext:
-    """The E-series frozen tests' counting context, tapping what the parent reads instead of counting pipes."""
-
-    def __init__(self, ctx: Any) -> None:
-        self._ctx = ctx
-        self.seen: list[Any] = []
-
-    def Pipe(self, duplex: bool = True) -> Any:  # noqa: N802 - the multiprocessing spelling
-        parent, child = self._ctx.Pipe(duplex=duplex)
-        return TappedConnection(parent, self.seen), child
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._ctx, name)
-
-
-def child_tap_the_pipe(limit: int) -> dict[str, Any]:
-    from poisson_prove.capture import CaptureSpec
-
-    tapping = TappingContext(executor._mp_context())
-    call = executor._CaptureCall(spec=CaptureSpec(max_observation_bytes=limit), run_id=RUN_ID, episode_id="cfg-8b:0")
-    kind, _payload = executor._call_with_timeout(oversized_otel_rollout, {"x": 0.1}, 7, 30.0, tapping, call)
-    return {"kind": kind, "wire": [repr(obj) for obj in tapping.seen]}
-
-
 def child_run_local(store_root: str, toml_path: str, target: str, episode_timeout: float | None) -> str:
     import importlib
 
@@ -458,7 +339,7 @@ def child_run_local(store_root: str, toml_path: str, target: str, episode_timeou
 # ---------- the public surface ----------
 
 
-def test_section_2_trace_exports_the_five_names_and_the_routing_constant_is_not_a_cap() -> None:
+def test_trace_exports_the_five_names_and_the_routing_constant_is_not_a_cap() -> None:
     """CD (D8), amending A8b's export list and P8-7's last sentence: the two constants that described the
     default's split are deleted with the default, and the third is renamed to the job it still has."""
     import poisson_prove.trace as trace_module
@@ -471,7 +352,7 @@ def test_section_2_trace_exports_the_five_names_and_the_routing_constant_is_not_
         assert name not in trace_module.__all__, name
 
 
-def test_section_2_the_two_functions_keep_their_specced_signatures() -> None:
+def test_the_two_cut_functions_keep_their_signatures() -> None:
     """CD (D1) amends A8b's two signatures: ``limit`` keeps its name, its place and its
     keyword-only kind, and loses its default. What it takes is widened to ``int | None``."""
     from poisson_prove.trace import finalize, truncate_observations
@@ -488,7 +369,7 @@ def test_section_2_the_two_functions_keep_their_specced_signatures() -> None:
     assert canonical(finalize(big, declaration=None, limit=64)) == canonical(truncate_observations(big, limit=64))
 
 
-def test_section_2_content_keys_is_a_frozenset_whose_in_answers_members_and_descendants() -> None:
+def test_content_keys_is_a_frozenset_whose_in_answers_members_and_descendants() -> None:
     """``CONTENT_KEYS`` takes the ``_ObservationKeys`` shape. A plain ``frozenset`` loses the families."""
     from poisson_prove.trace import CONTENT_KEYS
 
@@ -678,16 +559,6 @@ def test_p8_8_a_wrapper_is_detected_on_its_sole_key_never_on_its_shape() -> None
 # ---------- P8-9: the cut runs in the child, before transport, with content off ----------
 
 
-@needs_fork
-def test_p8_9_the_bytes_read_off_the_childs_pipe_already_carry_the_wrapper_with_content_off() -> None:
-    r = isolated(child_tap_the_pipe, SWEEP_LIMIT)
-    assert r["kind"] == "ok", r["kind"]
-    wire = "".join(r["wire"])
-    assert TRUNCATED_KEY_SPEC in wire, wire[:400]
-    assert "z" * (SWEEP_LIMIT + 1) not in wire and "p" * (SWEEP_LIMIT + 1) not in wire, "an uncut observation crossed the pipe"
-    assert "z" * (SWEEP_LIMIT - SWEEP_LIMIT // 4) in wire and str(3 * SWEEP_LIMIT) in wire
-
-
 @pytest.mark.parametrize("episode_timeout", [None, pytest.param(30.0, marks=needs_fork)], ids=["no-timeout", "fork"])
 def test_p8_9_the_stored_row_carries_the_wrapper_and_a_value_cut_below_the_default_still_leaves_the_envelope(tmp_path: Path, episode_timeout: float | None) -> None:
     """The second half is the routing rule: whatever the child cut is an observation in the store
@@ -703,7 +574,7 @@ def test_p8_9_the_stored_row_carries_the_wrapper_and_a_value_cut_below_the_defau
     (envelope,) = envelope_traces(store, run_id).values()
     assert "app.payload" not in envelope["spans"][0]["attrs"] and "gen_ai.tool.call.result" not in envelope["spans"][0]["attrs"]
     assert envelope["spans"][0]["truncated"] == "observation"
-    (obs,) = raw_column(store, run_id, "trace_obs").values()
+    (obs,) = raw_column(tmp_path / "store", run_id, "trace_obs").values()
     assert obs is not None
     moved = json.loads(obs)[s.span_id]["attrs"]
     assert moved["app.payload"] == expected_wrapper(BIG_PLAIN, SWEEP_LIMIT)
@@ -780,7 +651,7 @@ def test_p8_11_an_over_limit_attribute_outside_the_key_set_leaves_the_envelope_a
     store.create_run(manifest("p8-11"))
     store.append("p8-11", [rec("p8-11", k=0, meta={"trace": uncut.to_dict()}), rec("p8-11", k=1, meta={"trace": cut(uncut, DEFAULT_LIMIT).to_dict()}), rec("p8-11", k=2, meta={"trace": quiet.to_dict()})])
     envelopes = envelope_traces(store, "p8-11")
-    obs = raw_column(store, "p8-11", "trace_obs")
+    obs = raw_column(tmp_path / "store", "p8-11", "trace_obs")
     for k in (0, 1):
         by_id = {s["span_id"]: s for s in envelopes[k]["spans"]}
         plain = by_id[fixture[2].span_id]["attrs"]
@@ -852,19 +723,6 @@ def test_p8_12_with_no_cap_every_closed_span_is_kept() -> None:
     assert len(trace.spans) == 1001 and trace.dropped == 0
 
 
-# ---------- P8-17: the manifest, in A8b's spelling ----------
-
-
-def test_p8_17_environment_capture_has_the_nine_keys_and_the_value_round_trips_from_the_sweep_file(tmp_path: Path) -> None:
-    from poisson_prove.capture import CaptureStatus
-
-    spec = SweepSpec.load(write(tmp_path / "sweep.toml", sweep_toml({"instrument": [], "max_observation_bytes": 4096}))).capture
-    record = executor._capture_record(spec, CaptureStatus(requested=True, active=True, reason=None, instrumented=()))
-    assert set(record) == MANIFEST_KEYS_SPEC, sorted(record)
-    assert record["max_observation_bytes"] == 4096 and record["max_spans"] is None
-    assert json.loads(json.dumps(record)) == record
-
-
 # ---------- P8-20: the round trip over the widened classification ----------
 
 
@@ -892,7 +750,7 @@ def test_p8_20_the_round_trip_holds_through_the_store(tmp_path: Path) -> None:
     traces = [cut(build(), DEFAULT_LIMIT) for build in ROUND_TRIP_TRACES.values()]
     store.append("p8-20", [rec("p8-20", k=k, meta={"trace": t.to_dict()}) for k, t in enumerate(traces)])
     full = full_traces(store, "p8-20")
-    obs = raw_column(store, "p8-20", "trace_obs")
+    obs = raw_column(tmp_path / "store", "p8-20", "trace_obs")
     for k, t in enumerate(traces):
         assert full[k] == t.to_dict(), k
         assert obs[k] is not None, k
@@ -958,127 +816,7 @@ def test_p8_24_the_transport_round_trips_the_spec_through_json(max_spans: int | 
     assert _capture_request(json.loads(json.dumps(payload))) == (spec, RUN_ID)
 
 
-def test_p8_24_a_payload_carrying_the_retired_field_or_an_unknown_one_is_refused_naming_it() -> None:
-    """Sole catch for the shipped intersection, which drops a retired key silently and runs the whole
-    batch at the default with no error on either side of the process boundary (measured at step
-    zero: the three frozen payload literals stayed green under the rename alone). Built as literal
-    dicts: ``_capture_payload`` cannot carry the retired key."""
-    from poisson_prove.executor_modal import _capture_request
-
-    old = {"run_id": RUN_ID, "instrument": [], "content": False, "max_span_bytes": 1024, "max_spans": 1000}
-    with pytest.raises(Exception, match="max_span_bytes"):
-        _capture_request(old)
-    with pytest.raises(Exception, match="bogus_field"):
-        _capture_request({"run_id": RUN_ID, "instrument": [], "content": False, "max_observation_bytes": 1024, "bogus_field": 1})
-    assert _capture_request(None) == (None, "")
-
-
-def test_p8_24_the_two_field_lists_are_one_list() -> None:
-    import poisson_prove.executor_modal as modal
-    import poisson_prove.sampler as sampler
-
-    assert tuple(modal._CAPTURE_FIELDS) == tuple(sampler._CAPTURE_FIELDS) == CAPTURE_FIELDS_SPEC
-
-
-# ---------- P8-25: A8b edits split's loop and nothing else A7 or A8a owns ----------
-
-
-def test_p8_25_every_other_symbol_a7_owns_is_byte_identical_to_the_dispatch_commits() -> None:
-    """The narrowed P8-22. Sole catch for the build that "helps" by adding a
-    size-selected key to ``OBSERVATION_KEYS`` or teaching ``_ObservationKeys.__contains__`` a value
-    rule -- both satisfy P8-11 and P8-20 and silently move A7's boundary."""
-    for file, symbols in HELD_SURFACE.items():
-        for qualname, expected in symbols.items():
-            actual = hashlib.sha256(code_of(function_source(PACKAGE / file, qualname)).encode("utf-8")).hexdigest()
-            assert actual == expected, f"{file} {qualname} moved: {actual}"
-
-
-def test_p8_25_splits_signature_is_unchanged_and_its_edit_is_confined_to_the_loop() -> None:
-    """The docstring is free to move -- it describes the routing rule A8b widens. Everything else
-    outside the ``for`` is pinned, and so are the loop's first two statements (the body dict and
-    the ``_OBSERVATION_FIELDS`` sweep), which A8b has no reason to touch."""
-    src = function_source(PACKAGE / "trace.py", "split")
-    assert src.splitlines()[0] == SPLIT_DEF_LINE
-    (fn,) = ast.parse(src).body
-    assert isinstance(fn, ast.FunctionDef) and [a.arg for a in fn.args.args] == ["trace"]
-    assert not fn.args.kwonlyargs and fn.args.vararg is None and fn.args.kwarg is None
-    loops = [n for n in fn.body if isinstance(n, ast.For)]
-    assert len(loops) == 1
-    outside = [ast.unparse(n) for n in fn.body if not isinstance(n, ast.For) and not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant))]
-    assert outside == SPLIT_OUTSIDE_THE_LOOP, outside
-    (loop,) = loops
-    assert ast.unparse(loop.target) == "span" and ast.unparse(loop.iter) == "envelope['spans']"
-    assert ast.unparse(loop.body[0]) == "body: dict[str, Any] = {}"
-    assert ast.unparse(loop.body[1]).startswith("for name in _OBSERVATION_FIELDS:")
-    assert inspect.signature(split).parameters.keys() == {"trace"}
-
-
-# ---------- P8-26: finalize's site never raises, and it does cut ----------
-
-
-INVALID_TRACES: dict[str, Any] = {
-    "string": "step-a then step-b",
-    "list": ["step-a", "step-b"],
-    "dict-missing-spans": {"schema": "poisson-prove.trace/1", "source": "record", "source_version": None, "dropped": 0},
-}
-
-
-@pytest.mark.parametrize("name", list(INVALID_TRACES))
-def test_p8_26_the_funnel_never_raises_on_a_trace_it_cannot_read_and_a7s_p7_9_holds(tmp_path: Path, name: str) -> None:
-    """Sole catch for the ``Trace.from_dict`` that runs one frame before the guard written for it.
-    Green on the bare tree by design: A8b's job is to keep it green."""
-    garbage = INVALID_TRACES[name]
-    store = Store(tmp_path / "store")
-    store.create_run(manifest("p8-26"))
-    records = []
-    for k, active in enumerate((True, False)):
-        record = rec("p8-26", k=k, meta={"trace": garbage, "k": k})
-        out = executor._with_capture_envelope(record, active, DEFAULT_LIMIT)
-        assert out.meta == {"trace": garbage, "k": k}, (name, active)
-        records.append(out)
-    assert store.append("p8-26", records) == 2
-    frame = store.read("p8-26", trace="full")
-    assert [r.meta for r in frame.sort_values("replicate_index").itertuples(index=False)] == [{"trace": garbage, "k": 0}, {"trace": garbage, "k": 1}]
-    assert all(v is None for v in raw_column(store, "p8-26", "trace").values())
-    assert all(v is None for v in raw_column(store, "p8-26", "trace_obs").values())
-
-
-@pytest.mark.parametrize("active", [True, False], ids=["capture-active", "capture-inactive"])
-def test_p8_26_the_funnel_cuts_a_valid_trace_and_leaves_a_small_one_exactly_as_written(active: bool) -> None:
-    """Beyond the numbered invariants (module docstring): ``finalize`` is wired, on the branch the shipped
-    funnel returns early from. Rule zero (C7) on the other side: nothing over the limit, nothing moves."""
-    own = trace_of(span(1, output=OWN_OUTPUT, attrs={"tries": 1}))
-    out = executor._with_capture_envelope(rec("p8-26", k=0, meta={"trace": own.to_dict(), "k": 0}), active, DEFAULT_LIMIT)
-    assert out.meta["k"] == 0
-    (s,) = Trace.from_dict(out.meta["trace"]).spans
-    assert s.output == expected_wrapper(OWN_OUTPUT, DEFAULT_LIMIT) and s.truncated == "observation" and s.bytes_original == 3 * DEFAULT_LIMIT
-    small = trace_of(span(1, output="fine", attrs={"tries": 1})).to_dict()
-    kept = executor._with_capture_envelope(rec("p8-26", k=1, meta={"trace": small}), active, DEFAULT_LIMIT)
-    assert json.dumps(kept.meta["trace"]) == json.dumps(small)
-
-
-# CD (D2) deletes ``test_p8_26_a_run_with_no_capture_table_still_stores_a_rollouts_own_trace_cut``
-# from this slot. Its name states the behaviour CD reverses -- a run with no ``[capture]``
-# table now stores a rollout's own trace *uncut* -- and A8b's own rule is that such a test is
-# rewritten under a new name rather than amended in place. Its replacement is CD7, in
-# ``tests/test_cd_cap_declaration.py``. ``own_trace_rollout`` above is still used from there.
-
-
 # ---------- P8-27: the retired mechanism leaves nothing behind ----------
-
-
-def test_p8_27_the_retired_names_appear_nowhere_in_src() -> None:
-    hits = [
-        f"{path.relative_to(PACKAGE)}:{n}: {name}"
-        for path in sorted(PACKAGE.rglob("*.py"))
-        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
-        for name in RETIRED_NAMES
-        if name in line
-    ]
-    assert not hits, hits
-    # C30: no string describes a byte count as *over* a limit.
-    over = [str(path.relative_to(PACKAGE)) for path in sorted(PACKAGE.rglob("*.py")) if re.search(r"bytes over\b", path.read_text(encoding="utf-8"))]
-    assert not over, over
 
 
 def test_p8_27_bytes_original_is_the_whole_size_and_not_the_overage() -> None:

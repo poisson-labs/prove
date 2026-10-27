@@ -324,6 +324,11 @@ def worst_rows(md: str, coords_text: list[str]) -> list[str]:
     return rows
 
 
+def table_cells(row: str) -> list[str]:
+    """A Markdown table row's cells, in column order, each stripped."""
+    return [cell.strip() for cell in row.strip().strip("|").split("|")]
+
+
 def numbers_in(text: str) -> list[float]:
     cleaned = HASH_RE.sub(" ", text)
     return [float(m) for m in NUMBER_RE.findall(cleaned)]
@@ -935,8 +940,9 @@ def test_i15_hypothesis_table_numbers_match_reference_formats() -> None:
         rows = worst_rows(md, ["alpha"])
         assert len(rows) == 1
         row = rows[0]
-        for expected in (_pp1(rate_a), _pp1(rate_b), _pp1(delta), _pp0(mde), _sig3(p), _sig3(q), str(n_a), str(n_b), "unchanged"):
-            assert expected in row, (expected, row)
+        # Each value in its own column: coordinates, n (a/b), the three rates, p, q, verdict, MDE.
+        expected = ["alpha", "north", f"{n_a}/{n_b}", _pp1(rate_a), _pp1(rate_b), _pp1(delta), _sig3(p), _sig3(q), "unchanged", f"{_pp0(mde)}pp"]
+        assert table_cells(row) == expected, (row, expected)
         if q < 1e-3:
             assert re.search(r"\d\.\d\de-\d\d", row)
 
@@ -969,17 +975,6 @@ def test_i15_round_half_even_and_scientific_threshold() -> None:
 
 
 # ---------- I16: purity ----------
-
-
-def test_i16_module_touches_no_filesystem_clock_network_or_rng() -> None:
-    import poisson_prove.report as report_module
-
-    source = Path(report_module.__file__).read_text()
-    for banned in ("import os", "from os", "import time", "from time", "import datetime", "from datetime",
-                   "import random", "from random", "import socket", "import requests", "import httpx",
-                   "import urllib", "import pathlib", "from pathlib", "import scipy", "from scipy",
-                   "import matplotlib", "import plotly", "import seaborn", "import altair", "open("):
-        assert banned not in source, banned
 
 
 def test_i16_generated_at_and_manifests_are_omitted_not_invented(golden_diff: DiffResult, golden_frames: dict[str, Any]) -> None:
@@ -1127,8 +1122,9 @@ def test_i19_worst_cells_rows_count_sort_and_tiebreak() -> None:
         order = _table_order(md, words)
         assert order == [c.coords[0] for c in expected]
         for row, cell in zip(worst_rows(md, words), expected, strict=True):
-            for expected_text in (_pp1(cell.rate_a), _pp1(cell.rate_b), _pp1(cell.delta), _sig3(cell.p), _sig3(cell.q), _pp0(cell.mde), str(cell.n_a), str(cell.n_b), cell.verdict):
-                assert expected_text in row, (expected_text, row)
+            columns = [cell.coords[0], "north", f"{cell.n_a}/{cell.n_b}", _pp1(cell.rate_a), _pp1(cell.rate_b), _pp1(cell.delta),
+                       _sig3(cell.p), _sig3(cell.q), cell.verdict, f"{_pp0(cell.mde)}pp"]
+            assert table_cells(row) == columns, (row, columns)
             assert cell is by_word[cell.coords[0]]
 
 

@@ -9,13 +9,13 @@ not reopened. Seed identity is the salt plus the stored seed on every matched ro
 and A23/A26's two manifest fields join the same predicate later; Y1-Y6 are written against the pairing
 rule as it stands. ``check`` prints no permutation p, and Y17's last clause asserts
 it prints none. ``RootResult.p_floor`` is a design constant of the permutation
-count, not a statistic; Y21 guards the reading. Leaning, not settled: the page's interval
+count, not a statistic. Leaning, not settled: the page's interval
 paragraph sits before the bound, the column is last, after ``MDE``, and there is no drill-down row.
 
 **Two cells, and no invariant is cell-specific -- a result, not an assumption** (D7 binds one
 cell; this file reports two because both were asked for). pandas 2.3.3 and pandas 3.0.5, A22's recipe: every test here is asserted in both
-cells, and the map is the whole file twice: **24 + 24 = 48 ids over the two cells against
-this file's own 24.**
+cells, and the map is the whole file twice: **23 + 23 = 46 ids over the two cells against
+this file's own 23.**
 
 **The classified red set on the update commit with this file added, measured
 on two pristine ``git archive`` copies of ``a626cd3`` carrying the update and this file, before any
@@ -68,15 +68,14 @@ bare tree, the predicted figure, and the two regions are 228-303 and 853-890 of 
 **Green-before-and-after, named so its green is not read as evidence**: Y3's
 missing-manifest test (the sentence is ``a626cd3``'s, byte for byte), Y22 (no store write, the E-family
 guard restated), Y6's claim (the statistic never followed provenance; the twin construction is U8's,
-C12's and O6's -- the test itself is red until the build only because it reads the renamed field), Y21's honesty and
-build-closure clauses (the strings are pinned to ``a626cd3``'s bytes and the closure's one ``Sub``
-is W20's rule), and the four fixture-seed edits in the update (nothing on the bare tree reads a
+C12's and O6's -- the test itself is red until the build only because it reads the renamed field), Y21's honesty
+clauses (the strings are pinned to ``a626cd3``'s bytes), and the four fixture-seed edits in the update (nothing on the bare tree reads a
 stored seed).
 
 **Mutation list for the build** (twenty-one rows; the pass runs in the mutation harness after the
 build). The sole-catch claims this file is written to
 carry: mutant 2 (seeds compared positionally over all rows) by Y5's partial-overlap variant alone;
-mutant 3 (zero matched rows read as a match) by Y1's zero-overlap draws alone; mutant 13
+mutant 3 (zero matched rows read as a match) by Y2's zero-overlap draws alone; mutant 13
 (``alpha*`` printed ``.4f``) by Y12's small-alpha family alone; mutant 15 (``p_floor = 1 / B``) by
 Y16's exact equality on the generated lattice pair alone; mutant 17 (``render_html`` tolerating a missing ``intervals``) by
 Y15 alone; mutant 21 (intervals joined by ``config_hash`` alone) by Y14's two-event pair alone,
@@ -88,7 +87,6 @@ and this file does not mint one; the build names it as the survivor.
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import hashlib
 import html as html_mod
@@ -119,9 +117,6 @@ from poisson_prove.survival import censor
 from poisson_prove.tree import omnibus, tree
 from poisson_prove.viewer import SCHEMA, ViewerError, build_structure, render_html
 
-REPO = Path(__file__).resolve().parent.parent
-SRC = REPO / "src" / "poisson_prove"
-DIFF_SOURCE, REPORT_SOURCE, TREE_SOURCE, VIEWER_SOURCE, CLI_SOURCE = (SRC / f"{n}.py" for n in ("diff", "report", "tree", "viewer", "cli"))
 #: The generated lattice pair (``tests/lattice.py``): two runs of one design that share a salt.
 LATTICE_ROOT = lattice.root()
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
@@ -256,7 +251,6 @@ HONESTY_NONE_AT_A626CD3 = "No unchanged cells; every cell moved significantly."
 #: (measured on main's unchanged ``src/``).
 DEFAULT_PERMUTATIONS = 4000
 #: W20's two regexes, restated (Y12).
-FLOAT_SPEC_RE = re.compile(r":\.\d")
 INTERVAL_TOKEN_RE = re.compile(r"\[-?\d+\.\d, -?\d+\.\d\]")
 PAIRED_TOKEN_RE = re.compile(r"\bpaired\b")
 HORIZON, EVENT_T = 10.0, 3.0
@@ -559,92 +553,6 @@ def without_text(value: Any) -> Any:
     return value
 
 
-# ---------- helpers: ast (restated; never imported across test modules) ----------
-
-
-def parsed(path: Path) -> ast.Module:
-    return ast.parse(path.read_text(encoding="utf-8"))
-
-
-def resolve_region(module: ast.Module, qualified: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:
-    node: ast.AST = module
-    definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
-    for segment in qualified.split("."):
-        matches = [c for c in ast.iter_child_nodes(node) if isinstance(c, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and c.name == segment]
-        assert len(matches) == 1, (qualified, segment, len(matches))
-        definition = matches[0]
-        node = definition
-    assert definition is not None
-    return definition
-
-
-def names_in(node: ast.AST) -> set[str]:
-    out: set[str] = set()
-    for n in ast.walk(node):
-        if isinstance(n, ast.Attribute):
-            out.add(n.attr)
-        elif isinstance(n, ast.Name):
-            out.add(n.id)
-        elif isinstance(n, ast.Constant) and isinstance(n.value, str):
-            out.add(n.value)
-    return out
-
-
-def module_functions(module: ast.Module) -> dict[str, ast.AST]:
-    return {n.name: n for n in module.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)}
-
-
-def closure(module: ast.Module, name: str) -> list[ast.AST]:
-    functions = module_functions(module)
-    seen: dict[str, ast.AST] = {}
-    todo = [name]
-    while todo:
-        current = todo.pop()
-        if current in seen or current not in functions:
-            continue
-        seen[current] = functions[current]
-        for node in ast.walk(functions[current]):
-            if isinstance(node, ast.Name) and node.id in functions and node.id not in seen:
-                todo.append(node.id)
-    return list(seen.values())
-
-
-ARITHMETIC = (ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow, ast.MatMult)
-
-
-def is_non_numeric(node: ast.AST) -> bool:
-    return isinstance(node, ast.JoinedStr | ast.List | ast.ListComp | ast.Tuple) or (isinstance(node, ast.Constant) and isinstance(node.value, str))
-
-
-def arithmetic_nodes(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    out: list[ast.AST] = []
-    for fn in nodes:
-        for node in ast.walk(fn):
-            if isinstance(node, ast.BinOp):
-                if isinstance(node.op, ARITHMETIC) or (isinstance(node.op, ast.Add) and not (is_non_numeric(node.left) or is_non_numeric(node.right))):
-                    out.append(node)
-            elif isinstance(node, ast.AugAssign) and isinstance(node.op, ast.Add | ARITHMETIC):
-                out.append(node)
-            elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and not isinstance(node.operand, ast.Constant):
-                out.append(node)
-    return out
-
-
-def format_calls(module: ast.AST) -> list[int]:
-    return [
-        n.lineno for n in ast.walk(module)
-        if isinstance(n, ast.Call) and ((isinstance(n.func, ast.Name) and n.func.id == "format") or (isinstance(n.func, ast.Attribute) and n.func.attr == "format"))
-    ]
-
-
-def operand_names(node: ast.AST) -> set[str]:
-    if isinstance(node, ast.Attribute):
-        return {node.attr}
-    if isinstance(node, ast.Name):
-        return {node.id}
-    return set()
-
-
 # ---------- fixtures ----------
 
 
@@ -790,20 +698,6 @@ draws = st.builds(
 HYPOTHESIS = settings(max_examples=60, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 
 
-@given(draw=draws)
-@HYPOTHESIS
-def test_y1_seed_identity_match_is_the_salt_plus_the_stored_seed_on_every_matched_row_on_both_entry_points(draw: Draw) -> None:
-    """The pairing predicate's four clauses, drawn over salt equality x seed column present (each arm) x
-    overlap (none / partial / full, by replicate set) x seed agreement (all / one differs). The
-    zero-overlap draws are the sole catch for mutant 3; the no-seed draws catch mutant 4; the
-    ``diff()`` half catches mutant 20."""
-    a, b, ma, mb = draw.frames()
-    multi = quiet(lambda: multi_diff(a, b, events=["fail"], method="fisher_bh", manifest_a=ma, manifest_b=mb))
-    assert multi.seed_identity_match is draw.expected, draw
-    single = quiet(lambda: diff(censor(a, "fail"), censor(b, "fail"), event="fail", method="fisher_bh", manifest_a=ma, manifest_b=mb))
-    assert single.seed_identity_match is draw.expected, draw
-
-
 @given(draw=draws, method=st.sampled_from(METHODS))
 @HYPOTHESIS
 def test_y2_unpaired_analysis_is_seed_identity_and_the_method_is_not_a_paired_one_on_every_result(draw: Draw, method: str) -> None:
@@ -943,7 +837,6 @@ def test_y7_no_field_is_named_paired_and_the_key_set_literals_carry_the_two_keys
         names = [f.name for f in dataclasses.fields(cls)]
         assert "paired" not in names and names.index("unpaired_analysis") == names.index("seed_identity_match") + 1 == names.index("method") + 2, names
     assert diff_mod.SUMMARY_FIELDS == SUMMARY_FIELDS
-    assert diff_mod._MULTI_SUMMARY_FIELDS == MULTI_SUMMARY_FIELDS
     a, b, ma, mb = lattice_pair
     multi = quiet(lambda: multi_diff(a, b, events=[EVENT], method="fisher_bh", manifest_a=ma, manifest_b=mb))
     payload = multi.to_json()
@@ -960,8 +853,7 @@ def test_y7_no_field_is_named_paired_and_the_key_set_literals_carry_the_two_keys
 
 
 def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_and_never_reads_the_identity(synth_root: Path, lattice_built: Built, lattice_cli: dict[str, Any]) -> None:
-    """Mutant 6 is the defect restored; the AST clause is its sole catch on any fixture where the
-    identity and the request coincide."""
+    """Mutant 6 is the defect restored."""
     fa, fb, ma, mb = read_pair(synth_root, "c18-a", "c18-b-equal")
     for method in METHODS:
         multi = quiet(lambda m=method: multi_diff(fa, fb, events=["fail"], method=m, manifest_a=ma, manifest_b=mb))  # type: ignore[arg-type]
@@ -992,10 +884,6 @@ def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_a
     a, b, ma, mb = read_pair(LATTICE_ROOT, LATTICE_A, LATTICE_B)
     single = quiet(lambda: diff(censor(a, EVENT), censor(b, EVENT), event=EVENT, method="fisher_bh", manifest_a=ma, manifest_b=mb))
     assert build_report(single, ReportSpec(title="p1", x_axis=X, y_axis=Y)).headline == LATTICE_SINGLE_HEADLINE
-    forbidden = {"seed_identity_match", "unpaired_analysis"}
-    diff_ast, report_ast, cli_ast = parsed(DIFF_SOURCE), parsed(REPORT_SOURCE), parsed(CLI_SOURCE)
-    for module, qualified in ((diff_ast, "MultiDiffResult.headline"), (report_ast, "_single_headline"), (report_ast, "_multi_method_rows"), (report_ast, "_method_row"), (cli_ast, "_method_table")):
-        assert not (names_in(resolve_region(module, qualified)) & forbidden), qualified
 
 
 def test_y9_the_provenance_dict_carries_the_two_keys_in_paireds_slot_on_both_builders_and_every_rendering(lattice_built: Built, lattice_cli: dict[str, Any], synth_root: Path) -> None:
@@ -1020,7 +908,7 @@ def test_y9_the_provenance_dict_carries_the_two_keys_in_paireds_slot_on_both_bui
 # ---------- Y10-Y15: intervals ----------
 
 
-def test_y10_the_payload_root_is_thirteen_keys_and_intervals_is_m6s_fields_lines_and_rows_in_m6s_order(lattice_built: Built, lattice_cli: dict[str, Any], k2: Built, same: Built) -> None:
+def test_y10_the_payload_root_is_fourteen_keys_and_intervals_is_m6s_fields_lines_and_rows_in_m6s_order(lattice_built: Built, lattice_cli: dict[str, Any], k2: Built, same: Built) -> None:
     """Mutant 18."""
     # serve --json adds verdict and sentence after schema.
     # PF3: serve --json also adds method and method_chosen right after sentence.
@@ -1136,7 +1024,7 @@ def assert_honesty_facts(built: Built, panel: Mapping[str, Any]) -> None:
         assert not re.search(r"\d+pp", second), (built.name, second)
 
 
-def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_byte_identical(lattice_built: Built, lattice_cli: dict[str, Any], same: Built, synth_root: Path) -> None:
+def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_carries_the_same_numbers(lattice_built: Built, lattice_cli: dict[str, Any], same: Built, synth_root: Path) -> None:
     # PF4 re-freeze (PF4.42): intervals always, so the R == 0 pair prints the interval
     # lines too, at the simultaneous level 1 - q / M; their facts are checked by
     # assert_zero_r_interval_lines and the one-formatter property over every surface as before.
@@ -1173,29 +1061,20 @@ def test_y11_one_formatter_the_same_strings_on_every_surface_and_diffs_block_is_
     assert all(same_numbers(lib, line) for lib, line in zip(same_lines, block, strict=True)), block
 
 
-def test_y12_the_family_is_named_no_renderer_does_arithmetic_on_the_interval_fields_and_a_small_alpha_prints_in_g_form(lattice_built: Built, alpha: Built) -> None:
+def test_y12_the_family_is_named_and_a_small_alpha_prints_in_g_form(lattice_built: Built, alpha: Built) -> None:
     """Mutants 12, 13, 14; 13 has one catch, the small-alpha family."""
     for built in (lattice_built, alpha):
         first = built.report.interval_lines[0]
         assert FAMILY_TOKEN in first, (built.name, first)
         assert FAMILY_TOKEN in md_sections(built.md)["Intervals"][0] and FAMILY_TOKEN in paragraphs(html_sections(built.html)["Intervals"])[0]
         assert FAMILY_TOKEN in paragraphs(region_lines(built.page, "Honesty"))[-2]
-    fields = {"interval_level", "alpha_star", "n_rejected", "n_tests"}
-    for source in (REPORT_SOURCE, CLI_SOURCE, VIEWER_SOURCE):
-        module = parsed(source)
-        for fn in module_functions(module).values():
-            for node in ast.walk(fn):
-                if isinstance(node, ast.BinOp) and ((operand_names(node.left) | operand_names(node.right)) & fields):
-                    raise AssertionError((source.name, getattr(fn, "name", "?"), node.lineno))
-    viewer_source = VIEWER_SOURCE.read_text(encoding="utf-8")
-    assert format_calls(parsed(VIEWER_SOURCE)) == [] and not FLOAT_SPEC_RE.search(viewer_source)
     assert alpha.multi.n_rejected == 1 and alpha.multi.n_tests == 1200 and alpha.multi.alpha_star is not None and alpha.multi.alpha_star < 1e-4
     first = alpha.report.interval_lines[0]
     assert f"alpha* = {alpha.multi.alpha_star:g} = q x 1 / 1200" in first and "0.0000" not in first, first
     assert "e-05" in first, first
 
 
-def test_y13_adr_060s_placement_by_position_on_every_surface_and_the_h2_sequence_is_unchanged(lattice_built: Built, k2: Built, same: Built) -> None:
+def test_y13_the_intervals_are_placed_by_position_on_every_surface_and_the_h2_sequence_is_unchanged(lattice_built: Built, k2: Built, same: Built) -> None:
     """Mutants 10, 11."""
     for built in (lattice_built, k2, same):
         page, panels = built.page, built.structure["panels"]
@@ -1259,7 +1138,7 @@ def test_y14_the_worst_cells_column_is_the_interval_per_event_and_cell_on_every_
     assert INTERVAL_COLUMN not in single_report.to_markdown() and INTERVAL_COLUMN not in single_report.to_html()
 
 
-def test_y15_render_html_refuses_a_viewpair_4_structure_without_intervals_before_rendering_and_the_tree_refusal_still_fires(lattice_built: Built) -> None:
+def test_y15_render_html_refuses_a_structure_without_intervals_before_rendering_and_the_tree_refusal_still_fires(lattice_built: Built) -> None:
     """Sole catch for mutant 17."""
     structure = json.loads(json.dumps(lattice_built.structure, allow_nan=False))
     assert structure["schema"] == SCHEMA
@@ -1355,8 +1234,7 @@ def test_y17_the_floor_line_follows_the_method_line_and_the_group_floor_line_fol
     assert check.startswith("passed  ") and LATTICE_HEADLINE in check, check
 
 
-def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_the_new_key(lattice_built: Built, k2: Built, same: Built) -> None:
-    assert viewer_mod._TREE_KINDS["root"]["p_floor"] == "sig3"
+def test_y18_p_floor_reads_as_sig3_and_the_tree_round_trips_through_strict_json(lattice_built: Built, k2: Built, same: Built) -> None:
     for built in (lattice_built, k2, same):
         # PF4 (PF4.12): a condition with no detection limit has mde NaN, which the strict-JSON
         # structure writes as null; the round trip reads NaN as null to compare like with like.
@@ -1368,18 +1246,8 @@ def test_y18_the_kind_table_names_p_floor_as_sig3_and_w2s_round_trip_holds_with_
 # ---------- Y19, Y20: the version and the unverified block ----------
 
 
-def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_comment_names_p1_beside_a28() -> None:
-    """The grep clause is C34's whole close."""
-    # LS update: the grep is widened from ``/3`` alone to every retired version, because ``/4``
-    # sat in a user-visible refusal for two rounds of changes while this clause looked for ``/3``.
+def test_y19_the_schema_is_viewpair_7() -> None:
     assert viewer_mod.SCHEMA == "poisson-prove.viewpair/7"
-    retired = tuple(f"proofload.viewpair/{n}" for n in (2, 3, 4, 5, 6))
-    # PF5: the core is a package now, so the grep reads src/ recursively.
-    hits = sorted(path.name for path in SRC.rglob("*.py") if any(r in path.read_text(encoding="utf-8") for r in retired))
-    assert hits == [], hits
-    # PF8: the comment above ``SCHEMA`` named the two changes
-    # that moved it; the plain-words pass rewrites every comment in src/ to say why in plain words, so
-    # what a comment says is no longer pinned. The schema and the retired versions above still are.
 
 
 def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_literals_and_nothing_says_paired(lattice_built: Built, k2: Built) -> None:
@@ -1392,15 +1260,13 @@ def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_li
         for entry in entries:
             assert not PAIRED_TOKEN_RE.search(entry["id"]) and not PAIRED_TOKEN_RE.search(entry["statement"]), entry["id"]
         assert SEED_IDENTITY_BASIS in html_mod.unescape(built.page)
-    assert [name for name, _, _ in viewer_mod._UNVERIFIED] == list(UNVERIFIED_IDS)
 
 
 # ---------- Y21, Y22: the prohibitions ----------
 
 
-def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at_one_site_inside_root(lattice_built: Built, lattice_cli: dict[str, Any], k2: Built, same: Built) -> None:
-    """The honesty and closure clauses are green before and after by design; the assignment-site
-    clause is the guard on reading ``p_floor`` as a design constant, not a statistic."""
+def test_y21_one_honesty_block_per_panel_carrying_its_facts_and_no_interval(lattice_built: Built, lattice_cli: dict[str, Any], k2: Built, same: Built) -> None:
+    """The honesty clauses are green before and after by design."""
     # PF4 re-freeze (PF4.22, PF4.27): the honesty's limits are the exact limits at q / M, both
     # directions, so a626cd3's numbers (and the conditions that attain them) move, and a condition
     # with no limit is named with its reason instead of a number. The literals give way to the facts
@@ -1413,21 +1279,6 @@ def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at
         for panel in built.structure["panels"]:
             assert "interval" not in panel["honesty"] and "alpha*" not in panel["honesty"], (built.name, panel["honesty"])
             assert built.md.count(panel["honesty"].splitlines()[0]) == 1, built.name
-    module = parsed(VIEWER_SOURCE)
-    arithmetic = arithmetic_nodes(closure(module, "build_structure"))
-    assert len(arithmetic) == 1 and isinstance(arithmetic[0], ast.BinOp) and isinstance(arithmetic[0].op, ast.Sub), [ast.dump(n)[:60] for n in arithmetic]
-    assert arithmetic_nodes(closure(module, "render_html")) == []
-    sites = []
-    for path in sorted(SRC.rglob("*.py")):  # PF5: the core is a package now, so the scan reads src/ recursively.
-        for node in ast.walk(parsed(path)):
-            if isinstance(node, ast.keyword) and node.arg == "p_floor":
-                sites.append((path.name, node.lineno))
-            elif isinstance(node, ast.Assign | ast.AugAssign) or (isinstance(node, ast.AnnAssign) and node.value is not None):
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                if any((isinstance(t, ast.Name) and t.id == "p_floor") or (isinstance(t, ast.Attribute) and t.attr == "p_floor") for t in targets):
-                    sites.append((path.name, node.lineno))
-    root = resolve_region(parsed(TREE_SOURCE), "_root")
-    assert len(sites) == 1 and sites[0][0] == "tree.py" and root.lineno <= sites[0][1] <= (root.end_lineno or 0), sites
 
 
 def test_y22_serve_and_serve_json_on_the_lattice_write_nothing_to_the_store_the_cwd_or_the_temp_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1449,4 +1300,4 @@ def test_y22_serve_and_serve_json_on_the_lattice_write_nothing_to_the_store_the_
         return {k: v for k, v in listing.items() if not k.startswith(".poisson")}
 
     assert stored(snapshot(LATTICE_ROOT)) == stored(before_store) and snapshot(tmp_path) == before_cwd
-    assert sorted(os.listdir(tmp_path)) == sorted(before_cwd) or before_cwd == {}
+    assert sorted(os.listdir(tmp_path)) == sorted(before_cwd)

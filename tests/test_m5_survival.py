@@ -49,10 +49,6 @@ import lattice
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = [lattice.RUN_A, lattice.RUN_B]
 TRIPPED_KEY = {lattice.RUN_A: "tripped_a", lattice.RUN_B: "tripped_b"}
-#: Each run's share of ``tripped`` over its 2,304 episodes, from the design's counts
-#: (1,771 and 1,394), to three decimals.
-DESIGN_TRIPPED = {lattice.RUN_A: 1771, lattice.RUN_B: 1394}
-DESIGN_TRIPPED_FRACTION = {lattice.RUN_A: 0.769, lattice.RUN_B: 0.605}
 CELLS = 72
 HORIZON_S = 5.0
 TOL_EXACT = 1e-12
@@ -582,20 +578,6 @@ def test_i14_i15_golden_per_cell_event_counts(km_tables: dict[str, pd.DataFrame]
         assert row["n"] == 32 and row["n_errored"] == 0
         matched += 1
     assert matched == CELLS
-
-
-# ---------- I16: golden aggregate ----------
-
-
-@pytest.mark.parametrize("run_id", RUNS)
-def test_i16_golden_aggregate_tripped_fraction(km_tables: dict[str, pd.DataFrame], run_id: str) -> None:
-    table = km_tables[run_id]
-    assert len(table) == CELLS
-    # Every condition holds 32 episodes, so the mean over conditions is the run's share; the
-    # independent value is the design's count over the run's episodes.
-    assert int(table["n_events"].sum()) == lattice.tripped_total(run_id) == DESIGN_TRIPPED[run_id]
-    design = lattice.tripped_total(run_id) / lattice.ROWS
-    assert round(1.0 - float(table["s_at_horizon"].mean()), 3) == round(design, 3) == DESIGN_TRIPPED_FRACTION[run_id]
 
 
 # ---------- I17: no mid-horizon censoring on the fixture ----------

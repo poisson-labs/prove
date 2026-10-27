@@ -547,8 +547,8 @@ def test_pf6_9_each_screen_shows_every_fact_of_the_object_it_renders(
 @pytest.mark.parametrize("world", ["old", "qs", "small"])
 def test_pf6_9_a_result_screen_opens_with_its_views_verdict_line(world: str, request: pytest.FixtureRequest, spy: Spy, tmp_path: Path) -> None:
     """The look file's layout: a screen that shows a result opens its body with that result's verdict
-    line, the view's word and sentence, at column 3 (home, runs, the verdict, conditions, could not
-    detect, episodes); the verdict screen's is ``diff``'s for the same pair (A7) when the picker compared."""
+    line, the view's word and sentence, at column 3 (home, runs, the verdict, could not detect,
+    episodes); the verdict screen's is ``diff``'s for the same pair (A7) when the picker compared."""
     w = request.getfixturevalue(f"{world}_world")
     folder = _copy(w, tmp_path)
     saved = world != "small"
@@ -1575,8 +1575,8 @@ def test_pf6_14_the_snapshots_are_few_and_written_only_by_the_documented_command
     for name, (size, _) in SNAPSHOT_SCREENS.items():
         w, h = SIZES[size]
         rows, masks = (SNAPSHOTS / f"{name}.txt").read_text(encoding="utf-8").rstrip("\n").split("\n\n", 1)
-        assert [len(r) for r in rows.split("\n")] == [w] * h or len(rows.split("\n")) == h, name
-        assert len(masks.split("\n")) == h and set("".join(masks.split("\n"))) <= set(" BDGYRV"), name
+        assert len(rows.split("\n")) == h, name
+        assert [len(m) for m in masks.split("\n")] == [w] * h and set("".join(masks.split("\n"))) <= set(" BDGYRV"), name
     contributing = ROOT / "CONTRIBUTING.md"
     assert contributing.is_file() and SNAPSHOT_COMMAND in contributing.read_text(encoding="utf-8")
 

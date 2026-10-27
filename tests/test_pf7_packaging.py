@@ -25,8 +25,9 @@ package.
   ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.2``.
 - **k5** ``[dev]`` carries what the contributors' lanes need that this file and the docs check
   read: ``pytest-xdist`` (the suite runs on parallel workers), ``hypothesis`` (the property tests), ``hatchling`` (the archives built
-  here), ``markdown-it-py`` (the docs check reads pages with it) and ``pyyaml`` (it parses YAML
-  blocks). Other modules' test tools are theirs to pin.
+  here), ``markdown-it-py`` (the docs check reads pages with it), ``pyyaml`` (it parses YAML
+  blocks) and ``pyte`` (the terminal emulator the app's tests read screens with). Other modules'
+  test tools are theirs to pin.
 - **k6** PF7.5 is one slow test: on Python 3.11 it installs every requirement at exactly its
   stated floor (a constraints file of ``name==floor`` over the core and every extra; uv resolves
   what they bring), checks each is installed at its floor, then runs the code suite in that
@@ -95,7 +96,7 @@ PYTHONS = ("3.11", "3.12", "3.13", "3.14")
 EXTRAS = {"modal", "agent", "burla", "all", "dev"}
 MODAL_FLOOR = "modal>=0.73.76"
 BURLA_PIN = "burla==1.8.2"
-DEV_NEEDS = ("pytest-xdist", "hypothesis", "hatchling", "markdown-it-py", "pyyaml")
+DEV_NEEDS = ("pytest-xdist", "hypothesis", "hatchling", "markdown-it-py", "pyyaml", "pyte")
 SDIST_FILES = {"PKG-INFO", "pyproject.toml", ".gitignore", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"}
 SDIST_FOLDERS = ("src", "tests", "docs", "examples")
 DIST_INFO = {"METADATA", "WHEEL", "RECORD", "entry_points.txt", "licenses/LICENSE", "licenses/NOTICE"}
@@ -348,6 +349,8 @@ def test_pf7_6_each_archive_holds_exactly_its_set(kind: str, archives: dict[str,
     assert {"missing": sorted(want - names)[:40], "extra": sorted(names - want)[:40]} == {"missing": [], "extra": []}
     spec = "poisson_prove/examples/quickstart.toml" if kind == "wheel" else "src/poisson_prove/examples/quickstart.toml"
     assert archives[kind].files[spec] == (ROOT / "src/poisson_prove/examples/quickstart.toml").read_bytes()
+    # The package marks itself typed, and both archives carry the marker.
+    assert ("poisson_prove/py.typed" if kind == "wheel" else "src/poisson_prove/py.typed") in names
 
 
 def test_pf7_6_the_pypi_page_is_the_readme(archives: dict[str, Archive]) -> None:

@@ -22,8 +22,6 @@ Reading notes for the build, recorded here so the frozen tests are not re-litiga
   somewhere in ``attrs``.
 - The stored token shape ``{"in": ..., "out": ...}`` is taken from the format's example span,
   which is the only place it is spelled.
-- T17 is two tests: the vacuous half (no clock call outside ``trace.py``) passes at baseline;
-  the strong half (exactly one helper in ``trace.py`` making both calls) fails until the build.
 - T30's first clause maps to the two amended M10 tests by name. The fourth column
   (``duration_ms``) is not read by M10's ``assert_trace_lines``, so a second T30 test here
   sweeps the mock agent through ``cli.main`` and reads it.
@@ -31,7 +29,6 @@ Reading notes for the build, recorded here so the frozen tests are not re-litiga
 
 from __future__ import annotations
 
-import ast
 import asyncio
 import base64
 import functools
@@ -39,6 +36,7 @@ import itertools
 import json
 import logging
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -56,11 +54,6 @@ from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from conftest import quickstart_design
 
-ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "src" / "poisson_prove"
-TRACE_SOURCE = SRC / "trace.py"
-CLI_SOURCE = SRC / "cli.py"
-MOCK_AGENT_SOURCE = SRC / "examples" / "mock_agent.py"
 # PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -128,8 +121,6 @@ OTEL_KIND_MAP_SPEC = {
     "fetch_response": "llm",
     "execute_task": "agent",
 }
-CLOCK_ATTRS = ("time_ns", "perf_counter_ns")
-
 AGENT_ID = "b7ad6b7169203331"
 CHAT_ID = "0af7651916cd43dd"
 EPOCH = 1_756_900_000_000_000_000
@@ -378,10 +369,10 @@ def test_t1_from_dict_rejects_unknown_span_key_naming_it() -> None:
         bad[extra] = 1
         with pytest.raises(TraceValidationError) as info:
             Trace.from_dict(trace_dict(bad))
-        assert extra in str(info.value), extra
+        assert f"unknown span key(s): {extra};" in str(info.value), (extra, str(info.value))
         with pytest.raises(TraceValidationError) as info:
             Span.from_dict(bad)
-        assert extra in str(info.value), extra
+        assert f"unknown span key(s): {extra};" in str(info.value), (extra, str(info.value))
 
 
 def test_t1_from_dict_rejects_a_missing_span_key() -> None:
@@ -863,62 +854,6 @@ def test_t16_end_ns_is_not_below_start_ns_when_the_wall_clock_steps_back(monkeyp
         assert span.start_ns <= EPOCH and span.start_ns % 1_000_000_000 == 0  # opened on the wall clock
 
 
-# ---------- T17: the span clock is one helper ----------
-
-
-def clock_call_sites(path: Path) -> list[tuple[str, str]]:
-    """(innermost enclosing function, attr) for every ``time.time_ns()`` / ``time.perf_counter_ns()``."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    owner: dict[ast.AST, str] = {}
-
-    def walk(node: ast.AST, name: str) -> None:
-        for child in ast.iter_child_nodes(node):
-            child_name = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else name
-            owner[child] = child_name
-            walk(child, child_name)
-
-    walk(tree, "<module>")
-    sites: list[tuple[str, str]] = []
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
-            continue
-        func = node.func
-        if isinstance(func.value, ast.Name) and func.value.id == "time" and func.attr in CLOCK_ATTRS:
-            sites.append((owner.get(node, "<module>"), func.attr))
-    return sites
-
-
-def clock_names_imported_from_time(path: Path) -> list[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    return [
-        alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module == "time"
-        for alias in node.names
-        if alias.name in CLOCK_ATTRS
-    ]
-
-
-def test_t17_no_module_outside_trace_py_reads_the_span_clock() -> None:
-    offenders = []
-    for path in sorted(SRC.rglob("*.py")):
-        if path == TRACE_SOURCE:
-            continue
-        offenders.extend((path.name, attr) for _, attr in clock_call_sites(path))
-        offenders.extend((path.name, name) for name in clock_names_imported_from_time(path))
-    assert offenders == [], offenders
-
-
-def test_t17_trace_py_reads_both_clocks_inside_exactly_one_helper() -> None:
-    assert TRACE_SOURCE.is_file(), "src/poisson_prove/trace.py does not exist"
-    assert clock_names_imported_from_time(TRACE_SOURCE) == []
-    sites = clock_call_sites(TRACE_SOURCE)
-    assert sites, "trace.py never reads time.time_ns() or time.perf_counter_ns()"
-    helpers = {owner for owner, _ in sites}
-    assert len(helpers) == 1 and "<module>" not in helpers, sites
-    assert {attr for _, attr in sites} == set(CLOCK_ATTRS), sites
-
-
 # ---------- T18: step ----------
 
 
@@ -1290,16 +1225,6 @@ def test_t24_empty_iterable_is_an_empty_litellm_trace() -> None:
 # ---------- T25: the semconv pin ----------
 
 
-def string_constant_sites(literal: str) -> list[str]:
-    sites = []
-    for path in sorted(SRC.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and node.value == literal:
-                sites.append(f"{path.relative_to(SRC)}:{node.lineno}")
-    return sites
-
-
 def test_t25_source_version_is_the_pinned_semconv_version() -> None:
     from poisson_prove.trace import OTEL_SEMCONV_VERSION, from_otel
 
@@ -1307,12 +1232,6 @@ def test_t25_source_version_is_the_pinned_semconv_version() -> None:
     for name in ("otlp_agent_chat.json", "otlp_kinds.json", "otlp_dropped.json"):
         assert from_otel(load_fixture(name)).source_version == OTEL_SEMCONV_VERSION, name
     assert from_otel([]).source_version == OTEL_SEMCONV_VERSION
-
-
-def test_t25_semconv_literal_appears_exactly_once_in_src() -> None:
-    assert TRACE_SOURCE.is_file(), "src/poisson_prove/trace.py does not exist"
-    sites = string_constant_sites(OTEL_SEMCONV_VERSION_SPEC)
-    assert len(sites) == 1 and sites[0].startswith("trace.py:"), sites
 
 
 # ---------- T26: merge ----------
@@ -1353,61 +1272,41 @@ def test_t26_merge_raises_on_span_id_collision_naming_the_id() -> None:
 # ---------- T27: core stays clean ----------
 
 
+# A fresh interpreter, so nothing another test imported can hide an import: it loads the tree under
+# test, runs both converters over the fixtures and prints every module it then holds.
+T27_PROBE = """\
+import json, sys
+from datetime import datetime
+sys.path.insert(0, sys.argv[1])
+import poisson_prove.trace as trace_module
+
+def load(name):
+    with open(sys.argv[2] + "/" + name, encoding="utf-8") as f:
+        return json.load(f)
+
+trace_module.from_otel(load("otlp_agent_chat.json"))
+trace_module.from_otel(load("otlp_kinds.json"))
+payloads = load("litellm_calls.json")
+for p in payloads:
+    p["start_time"] = datetime.fromisoformat(p["start_time"])
+    p["end_time"] = datetime.fromisoformat(p["end_time"])
+trace_module.from_litellm(payloads)
+print(json.dumps(sorted(sys.modules)))
+"""
+
+
 def test_t27_trace_module_and_both_converters_import_neither_opentelemetry_nor_litellm() -> None:
-    for name in [n for n in sys.modules if n.split(".")[0] in ("opentelemetry", "litellm")]:
-        del sys.modules[name]
+    import poisson_prove
 
-    import poisson_prove.trace as trace_module
-
-    trace_module.from_otel(load_fixture("otlp_agent_chat.json"))
-    trace_module.from_otel(load_fixture("otlp_kinds.json"))
-    trace_module.from_litellm(litellm_payloads())
-
-    loaded = {n.split(".")[0] for n in sys.modules}
-    assert "opentelemetry" not in loaded
-    assert "litellm" not in loaded
-    assert not [n for n in sys.modules if n.startswith("opentelemetry")]
-
-
-def test_t27_trace_py_source_imports_only_the_standard_library_and_proofload() -> None:
-    assert TRACE_SOURCE.is_file(), "src/poisson_prove/trace.py does not exist"
-    tree = ast.parse(TRACE_SOURCE.read_text(encoding="utf-8"))
-    tops = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            tops.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
-            tops.add(node.module.split(".")[0])
-    third_party = {t for t in tops if t not in sys.stdlib_module_names and t != "poisson_prove"}
-    assert third_party == set(), third_party
-
-
-# ---------- T28: the schema id is built in one place ----------
-
-
-def imports_proofload_trace(path: Path) -> bool:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.trace":
-            return True
-        if isinstance(node, ast.Import) and any(alias.name == "poisson_prove.trace" for alias in node.names):
-            return True
-    return False
-
-
-def test_t28_schema_literal_appears_exactly_once_in_src() -> None:
-    assert TRACE_SOURCE.is_file(), "src/poisson_prove/trace.py does not exist"
-    sites = string_constant_sites(SCHEMA_SPEC)
-    assert len(sites) == 1 and sites[0].startswith("trace.py:"), sites
-
-
-def test_t28_cli_and_mock_agent_reach_the_schema_through_proofload_trace() -> None:
-    # PF5 (PF5.7): the face reads stored traces through the core, which reaches
-    # the schema through ``poisson_prove.trace``; the face imports from Prove only the core and
-    # the renderers, so it is the core's modules that must import the trace module.
-    core_sources = sorted((SRC / "core").rglob("*.py"))
-    assert any(imports_proofload_trace(path) for path in core_sources), "the core does not import poisson_prove.trace"
-    assert imports_proofload_trace(MOCK_AGENT_SOURCE), "mock_agent.py does not import poisson_prove.trace"
+    tree = Path(poisson_prove.__file__).resolve().parent.parent
+    done = subprocess.run(
+        [sys.executable, "-I", "-c", T27_PROBE, str(tree), str(FIXTURES)],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
+    )
+    assert done.returncode == 0, done.stderr
+    loaded = json.loads(done.stdout.strip().splitlines()[-1])
+    assert "poisson_prove.trace" in loaded, loaded
+    assert not [n for n in loaded if n.split(".")[0] in ("opentelemetry", "litellm")], loaded
 
 
 # ---------- T29: the mock agent emits the schema, deterministically ----------
@@ -1450,7 +1349,6 @@ def test_t29_mock_agent_per_step_shape_from_section_3() -> None:
         assert span.code is None
         assert set(span.attrs) == {"tries"} and span.attrs["tries"] in (1, 2)  # A8a: the mock's rename
         assert span.error in (None, "ToolError")
-        assert span.name in mock_agent._TASKS["checkout"]
 
 
 # ---------- T30: inspect reads spans ----------

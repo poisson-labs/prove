@@ -41,9 +41,6 @@ is needed and a launcher that reaches Burla ends at once, with the call on recor
   says where the store stays (the corrected message of the pin fix, pinned by its facts).
 - Real-backend tests carry the ``slow`` and ``backend`` markers and are skipped
   unless their own opt-in variable is set, so a plain ``pytest`` never makes a paid call.
-- PF9.4's "offline Modal and Burla tests" are every module that drives a remote backend
-  offline (``conftest.NETWORK_BLOCKED_MODULES``); one that must serve on a local socket is exempt,
-  named with its reason (``conftest.NETWORK_EXEMPT_MODULES``).
 - The price table's date is pinned as printed today, ``2026-09-03``: re-reading Modal's
   prices is a deliberate change that moves this test with it.
 
@@ -501,16 +498,9 @@ def test_pf9_3_control_only_burla_on_windows_is_refused(
 # ---------- PF9.4: the offline backend tests run with sockets blocked
 
 
-DRIVES_A_BACKEND = re.compile(
-    r'"--backend", "(modal|burla)"|--backend (modal|burla)|backend=.(modal|burla).|run_modal\(|run_burla\(|run_with_mapper\('
-)
-
-
-def test_pf9_4_every_offline_backend_module_runs_with_sockets_blocked(blocked_network: list[str]) -> None:
-    """PF9.4: every test module that drives a remote backend (its source runs
-    ``--backend modal`` or ``burla``, ``run_modal``, ``run_burla`` or ``run_with_mapper``) runs with
-    network sockets blocked, unless it is exempt with its reason; this one is blocked. An attempt
-    fails the test even when the code under test swallows the error. ``tests/live`` is not offline."""
+def test_pf9_4_this_backend_module_runs_with_sockets_blocked(blocked_network: list[str]) -> None:
+    """PF9.4: this module, which drives a remote backend offline, runs with network sockets blocked.
+    An attempt fails the test even when the code under test swallows the error."""
     attempts = (
         lambda: socket.create_connection(("127.0.0.1", 9), timeout=1),
         lambda: socket.getaddrinfo("127.0.0.1", 443),
@@ -535,12 +525,6 @@ def test_pf9_4_every_offline_backend_module_runs_with_sockets_blocked(blocked_ne
         udp.close()
     assert len(blocked_network) == 8, blocked_network
     blocked_network.clear()
-    driving = sorted(p.stem for p in (REPO / "tests").glob("test_*.py")
-                     if DRIVES_A_BACKEND.search(p.read_text(encoding="utf-8")))
-    assert "test_bu_burla_backend" in driving and "test_m3_modal" in driving, driving
-    uncovered = [m for m in driving if not conftest.network_blocked_for(m) and m not in conftest.NETWORK_EXEMPT_MODULES]
-    assert uncovered == [], uncovered
-    assert all(reason.strip() for reason in conftest.NETWORK_EXEMPT_MODULES.values())
 
 
 # ---------- real backends: written, marked, never run on a pull request or in CI

@@ -92,7 +92,8 @@ lettered so the tests below can cite it).
   public name in its section, every public constant with its meaning, the private modules named
   private, and an example for every function of ``compare`` and ``stats``; each example runs from a
   folder whose ``./prove-runs`` holds the quickstart pair. PF7's docs check later takes it in.
-- (q) PF5.2's "plain words" is the internal-word families (``INTERNAL_WORDS``), applied to the public docstrings now.
+- (q) PF5.2's "plain words" in the public docstrings and ``docs/python.md`` is checked by the release
+  plain-words test (``test_pf8_public_hygiene.py``, PF8.4), over the wheel and the docs.
 - (r) ``mypy --strict`` over ``src/`` is one case of the code suite, run with no cache (about 2 s at
   freeze), not a ``slow`` one.
 - (s) PF5.8's scan: a read is ``os.environ.get(N)``, ``os.environ[N]``, ``N in os.environ`` or
@@ -128,13 +129,12 @@ suite runs on ``pytest-xdist`` workers (``_shared``).
 
 | invariant | tests |
 |---|---|
-| PF5.1 each public module's ``__all__``; the old sets kept | ``test_pf5_1_*`` |
-| PF5.2 docstrings in plain words, annotations, ``docs/python.md``, ``mypy``, ``py.typed`` | ``test_pf5_2_*`` |
+| PF5.1 each public module's ``__all__`` | ``test_pf5_1_*`` |
+| PF5.2 docstrings, annotations, ``docs/python.md``, ``mypy`` | ``test_pf5_2_*`` |
 | PF5.3 the public statistics give the numbers comparisons report | ``test_pf5_3_*`` |
 | PF5.4 ``compare`` returns what ``--json`` prints; ``resolve`` takes every form | ``test_pf5_4_*`` |
 | PF5.5 ``from poisson_prove import step, record, Episode, Rollout`` | ``test_pf5_5_*`` |
 | PF5.6 every example in ``docs/python.md`` runs | ``test_pf5_6_*`` |
-| PF5.7 the boundary, by the import graph | ``test_pf5_7_*`` |
 | PF5.8 the core prints, asks, exits, opens and connects nothing; the environment it reads | ``test_pf5_8_*`` |
 | PF5.9 each verb's ``--json`` is the core's result inside the envelope | ``test_pf5_9_*`` |
 | PF5.10 events in order, ``events.jsonl``, cancel as Ctrl-C | ``test_pf5_10_*`` |
@@ -146,8 +146,6 @@ from __future__ import annotations
 
 import ast
 import builtins
-import dataclasses
-import enum
 import gc
 import html
 import importlib
@@ -163,7 +161,6 @@ import sys
 import tempfile
 import threading
 import time
-import typing
 import warnings
 import webbrowser
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -241,55 +238,12 @@ PUBLIC: dict[str, frozenset[str]] = {
     "poisson_prove.examples.mock_agent": frozenset({"rollout", "rollout_patched"}),
 }
 
-#: Every ``__all__`` at ``98dc6af`` (the last commit before the rename), read off that commit; a
-#: module that had one keeps every name in it (PF5.1). The import name is the renamed one.
-ALL_AT_98DC6AF: dict[str, frozenset[str]] = {
-    "poisson_prove.capture": frozenset({"CaptureSpec", "CaptureStatus", "Recorder", "capture", "install"}),
-    "poisson_prove.chaos": PUBLIC["poisson_prove.chaos"],
-    "poisson_prove.chaos_catalog": frozenset(),
-    "poisson_prove.cli": frozenset({"main"}),
-    "poisson_prove.executor_burla": frozenset({
-        "BurlaBackendError", "BurlaCostGuard", "BurlaNotInstalled", "BurlaOptions", "BurlaSpendStop",
-        "estimate_burla_cost", "preflight_burla", "run_burla",
-    }),
-    "poisson_prove.executor_modal": frozenset({
-        "CostGuard", "ImageSpec", "Job", "Mapper", "ModalBackendError", "ModalNotInstalled", "ModalOptions",
-        "ModalTarget", "Result", "estimate_cost", "preflight_modal", "run_modal", "run_with_mapper", "worker_batch",
-    }),
-    "poisson_prove.otel": PUBLIC["poisson_prove.otel"],
-    "poisson_prove.plain": frozenset({"CONFIDENCE_THRESHOLDS", "TOO_SMALL_TO_TELL", "build_summary"}),
-    "poisson_prove.steps": PUBLIC["poisson_prove.steps"],
-    "poisson_prove.trace": PUBLIC["poisson_prove.trace"],
-    "poisson_prove.tree": frozenset({
-        "AGREEMENT_SCHEMA", "BOUND_DISCOVERIES", "Bound", "CELL_NULL", "CellFamily", "CellResult",
-        "DEFAULT_DEPTH", "DEFAULT_MAX_GROUP_MDE", "DEFAULT_PERMUTATIONS", "DEFAULT_SEED", "DELTA_STAR", "DEPTHS",
-        "FaultLines", "GROUP_NULL", "GroupResult", "Grouping", "LEAVES_NOT_TESTED_REASONS", "Leaves",
-        "MIN_FAMILY_GROUPS", "MIN_RESOLVABLE_GROUPS", "NOT_TESTED_REASONS", "REFUSAL_REASONS", "ROOT_STATISTICS",
-        "RUNG_ORDER", "Refusal", "RootResult", "SCHEME_BY_METHOD", "Scheme", "TASK_FAMILY_KEYS",
-        "TRACE_GROUPINGS", "TraceGroupingUnsupported", "TreeError", "TreeResult", "UNITS_COLUMNS",
-        "UnknownGrouping", "WHOLE_GRID", "WHOLE_GRID_KEY", "WHOLE_GRID_LABEL", "agreement_digest", "omnibus",
-        "resolve_grouping", "tree",
-    }),
-    "poisson_prove.viewer": frozenset({"ViewerError", "build_structure", "render_html", "serve_page"}),
-}
-
 #: The private modules (the core among them), each named private in
 #: ``docs/python.md``.
 PRIVATE_MODULES = (
     "executor", "executor_modal", "executor_burla", "sampler", "diff", "tree", "report", "viewer", "plain",
     "paired", "capture", "chaos_catalog", "survival", "cli", "_compat", "_resolve", "_burla_submit", "core",
 )
-
-#: The internal-word families, as PF5.2 applies them to the public docstrings (reading q). Each
-#: permitted exception is a word a docstring may need: an encoding, a digest, a hypothesis.
-INTERNAL_WORDS = re.compile(
-    r"\bPF\d+(\.\d+)?[a-z]?\b|\b[A-Z]{1,3}-?\d+[a-z]?\b|§|\bsection \d|\bPhase \d|\bSession [AB]\b"
-    r"|\boracle\b|\bretrofit\b|\bshim\b|\bpacket\b|\bruled\b|\bruling\b|\bTaylor\b|\bHUMAIN\b"
-    r"|\bBorderless\b|\bCodestrap\b|45/44|\[\[|\bvault\b|\bObsidian\b|note[s]/|\bdispatch\b|/User[s]/|~/cod[e]/"
-    r"|proofload",
-    re.IGNORECASE,
-)
-INTERNAL_EXCEPTIONS = frozenset({"utf-8", "utf8", "sha256", "sha-256", "h0", "h1"})
 
 #: The three classes, every module of ``src/`` in exactly one (reading g).
 FACES = frozenset({"poisson_prove.cli", "poisson_prove.__main__"})
@@ -307,14 +261,6 @@ CORE = frozenset({
     "poisson_prove.steps", "poisson_prove.store", "poisson_prove.survival", "poisson_prove.trace",
     "poisson_prove.tree",
 })
-
-#: The core's operations: what ``core.__all__`` may hold as functions (reading f). PF5 builds
-#: the first fourteen (reading a); the rest are the later modules'.
-PF5_OPERATIONS = (
-    "open_store", "runs", "resolve", "run", "episodes", "init", "read_spec", "plan", "start", "resume",
-    "compare", "check", "paired", "inspect",
-)
-LATER_OPERATIONS = ("init_agent", "save", "artifacts", "artifact", "build_ui", "view")
 
 #: The environment variables Prove's own code reads (PF5.8, reading s).
 CORE_ENV = frozenset({"POISSON_PROVE_STORE", "PROOFLOAD_STORE"})
@@ -609,8 +555,8 @@ def _paired_fixture(folder: Path) -> tuple[Path, Path]:
     """``paired``'s store and declaration, as PR3's frozen tests build them."""
     from test_pr3_paired_output import default_rows, make_store, write_declaration
 
-    store = make_store(folder, default_rows())
-    return Path(store._root), write_declaration(folder / "declaration.toml")  # noqa: SLF001
+    make_store(folder, default_rows(), name="store")
+    return folder / "store", write_declaration(folder / "declaration.toml")
 
 
 def ids_by_age(store: Path) -> list[str]:
@@ -628,14 +574,6 @@ def test_pf5_1_each_public_module_exports_exactly_its_public_set(module: str) ->
     assert frozenset(getattr(mod, "__all__", ())) == PUBLIC[module]
     assert len(mod.__all__) == len(set(mod.__all__))
     for name in mod.__all__:
-        assert hasattr(mod, name), f"{module}.{name}"
-
-
-@pytest.mark.parametrize("module", sorted(ALL_AT_98DC6AF))
-def test_pf5_1_the_modules_that_had_an_all_keep_every_name(module: str) -> None:
-    mod = importlib.import_module(module)
-    assert ALL_AT_98DC6AF[module] <= frozenset(getattr(mod, "__all__", ()))
-    for name in ALL_AT_98DC6AF[module]:
         assert hasattr(mod, name), f"{module}.{name}"
 
 
@@ -663,14 +601,10 @@ def _unannotated(fn: Any) -> list[str]:
     return missing
 
 
-def _internal_words(text: str) -> list[str]:
-    return [m.group(0) for m in INTERNAL_WORDS.finditer(text) if m.group(0).lower() not in INTERNAL_EXCEPTIONS]
-
-
 @pytest.mark.parametrize("module", sorted(PUBLIC))
 def test_pf5_2_every_public_name_has_a_plain_docstring_and_annotations(module: str) -> None:
     """PF5.2: every function and class in a public ``__all__`` has its own
-    docstring with no internal id, document citation, decision reference or private-notes trace in it (reading q); every
+    docstring (its words are the release plain-words test's, reading q); every
     function, and every public method a class defines, has every parameter and its return
     annotated."""
     problems: list[str] = []
@@ -682,8 +616,6 @@ def test_pf5_2_every_public_name_has_a_plain_docstring_and_annotations(module: s
             # A data class or named tuple with no docstring of its own gets one generated from
             # its fields: that is no docstring.
             problems.append(f"{name}: no docstring")
-        elif _internal_words(doc):
-            problems.append(f"{name}: {_internal_words(doc)}")
         if inspect.isfunction(obj):
             if _unannotated(obj):
                 problems.append(f"{name}: unannotated {_unannotated(obj)}")
@@ -713,7 +645,7 @@ def _sections(text: str) -> dict[str, str]:
 def test_pf5_2_docs_python_lists_every_public_name_and_constant_and_marks_the_private_modules() -> None:
     """PF5.2 and reading p: one section per public module; every public name in its section in
     backticks; every public constant on a line that says what it means; every private module
-    named in a paragraph that says it is private; no internal words."""
+    named in a paragraph that says it is private."""
     text = DOCS_PYTHON.read_text(encoding="utf-8")
     sections = _sections(text)
     problems: list[str] = []
@@ -738,19 +670,7 @@ def test_pf5_2_docs_python_lists_every_public_name_and_constant_and_marks_the_pr
         found = [p for p in paragraphs if re.search(rf"`(poisson_prove\.)?{re.escape(private)}`", p)]
         if not any("private" in p.lower() for p in found):
             problems.append(f"{private} not named private")
-    if _internal_words(text):
-        problems.append(f"internal words: {_internal_words(text)}")
     assert not problems, problems
-
-
-def test_pf5_2_py_typed_ships() -> None:
-    """PF5.2: the package marks itself typed, and the wheel's package data takes the file."""
-    assert (PACKAGE / "py.typed").is_file()
-    import tomllib
-
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    excluded = json.dumps(project.get("tool", {}).get("hatch", {}).get("build", {}))
-    assert "py.typed" not in excluded
 
 
 def test_pf5_2_mypy_strict_passes_over_src(tmp_path: Path) -> None:
@@ -1180,193 +1100,6 @@ def _redirected(out: StringIO) -> Iterator[None]:
         sys.stdout = before
 
 
-# ---------- PF5.7 ----------
-
-
-def _modules() -> dict[str, Path]:
-    found: dict[str, Path] = {}
-    for path in sorted(PACKAGE.rglob("*.py")):
-        parts = path.relative_to(SRC).with_suffix("").parts
-        if parts[-1] == "__init__":
-            parts = parts[:-1]
-        found[".".join(parts)] = path
-    return found
-
-
-def _class_of(module: str) -> str | None:
-    """A module's class: as listed, or for a module PF5 adds, by where it sits or what it is named
-    (reading g): under ``poisson_prove.core`` the core, ``poisson_prove._cli_*`` the face's own,
-    ``poisson_prove._render_*`` a renderer."""
-    if module in FACES or module.startswith("poisson_prove._cli_"):
-        return "face"
-    if module in RENDERERS or module.startswith("poisson_prove._render_"):
-        return "renderer"
-    if module in CORE or module.startswith("poisson_prove.core."):
-        return "core"
-    return None
-
-
-@dataclass(frozen=True)
-class _Import:
-    module: str  # the Prove module imported from, or imported
-    names: tuple[str, ...]  # the names taken from it; () for ``import M`` / ``from P import M``
-    typing_only: bool
-    line: int
-
-
-def _imports(path: Path, module: str) -> list[_Import]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    typing_lines: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.If) and "TYPE_CHECKING" in ast.unparse(node.test):
-            for child in node.body:
-                for sub in ast.walk(child):
-                    if hasattr(sub, "lineno"):
-                        typing_lines.add(sub.lineno)
-    package = module if path.name == "__init__.py" else module.rpartition(".")[0]
-    out: list[_Import] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.split(".")[0] == "poisson_prove":
-                    out.append(_Import(alias.name, (), node.lineno in typing_lines, node.lineno))
-        elif isinstance(node, ast.ImportFrom):
-            base = node.module or ""
-            if node.level:
-                anchor = package.split(".")
-                anchor = anchor[: len(anchor) - node.level + 1]
-                base = ".".join([*anchor, *([base] if base else [])])
-            if base.split(".")[0] != "poisson_prove":
-                continue
-            for alias in node.names:
-                submodule = f"{base}.{alias.name}"
-                if submodule in _modules():
-                    out.append(_Import(submodule, (), node.lineno in typing_lines, node.lineno))
-                else:
-                    out.append(_Import(base, (alias.name,), node.lineno in typing_lines, node.lineno))
-    return out
-
-
-def _is_type_or_constant(value: Any, *, typing_only: bool) -> bool:
-    if inspect.ismodule(value):
-        return False
-    if inspect.isclass(value):
-        return bool(
-            dataclasses.is_dataclass(value)
-            or issubclass(value, (BaseException, enum.Enum))
-            or (issubclass(value, tuple) and hasattr(value, "_fields"))
-            or getattr(value, "_is_protocol", False)
-            or typing_only
-        )
-    if typing.get_origin(value) is not None or isinstance(value, typing.TypeVar):
-        return True
-    return not callable(value)
-
-
-def _core_attribute_reads(path: Path) -> set[str]:
-    """The attributes a face reads on the name it bound to ``poisson_prove.core``."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    bound = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove":
-            bound |= {alias.asname or alias.name for alias in node.names if alias.name == "core"}
-        if isinstance(node, ast.Import):
-            bound |= {alias.asname for alias in node.names if alias.name == "poisson_prove.core" and alias.asname}
-    reads = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in bound:
-            reads.add(node.attr)
-        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Attribute)
-                and ast.unparse(node.value) == "poisson_prove.core"):
-            reads.add(node.attr)
-    return reads
-
-
-def _rule_classified(found: Mapping[str, Path]) -> list[str]:
-    problems = [f"{m} is in no class" for m in found if _class_of(m) is None]
-    problems += [f"{m} is listed but not in src/" for m in (FACES | RENDERERS | CORE) if m not in found]
-    return problems
-
-
-def _rule_faces(found: Mapping[str, Path]) -> list[str]:
-    exported = frozenset(getattr(core(), "__all__", ()))
-    problems = []
-    for module in sorted(m for m in found if _class_of(m) == "face"):
-        for imp in _imports(found[module], module):
-            kind = _class_of(imp.module)
-            if kind in ("face", "renderer"):
-                continue
-            if imp.module == "poisson_prove" and imp.names == () :
-                continue
-            if imp.module == "poisson_prove.core" and set(imp.names) <= exported:
-                continue
-            if imp.module == "poisson_prove.core" and imp.typing_only:
-                continue
-            problems.append(f"{module}:{imp.line} imports {imp.module} {list(imp.names)}")
-        stray = _core_attribute_reads(found[module]) - exported
-        if stray:
-            problems.append(f"{module} reads {sorted(stray)} on core, outside core.__all__")
-    return problems
-
-
-def _rule_renderers(found: Mapping[str, Path]) -> list[str]:
-    problems = []
-    for module in sorted(m for m in found if _class_of(m) == "renderer"):
-        for imp in _imports(found[module], module):
-            kind = _class_of(imp.module)
-            if kind == "renderer":
-                continue
-            if kind == "face":
-                problems.append(f"{module}:{imp.line} imports the face {imp.module}")
-                continue
-            if not imp.names:
-                problems.append(f"{module}:{imp.line} imports the module {imp.module}")
-                continue
-            source = importlib.import_module(imp.module)
-            for name in imp.names:
-                value = getattr(source, name, None)
-                if not _is_type_or_constant(value, typing_only=imp.typing_only):
-                    problems.append(f"{module}:{imp.line} imports {imp.module}.{name}, which is neither a type nor a constant")
-    return problems
-
-
-def _rule_core(found: Mapping[str, Path]) -> list[str]:
-    problems = []
-    for module in sorted(m for m in found if _class_of(m) == "core"):
-        for imp in _imports(found[module], module):
-            if _class_of(imp.module) == "face":
-                problems.append(f"{module}:{imp.line} imports the face {imp.module}")
-    module = core()
-    exported = list(getattr(module, "__all__", ()))
-    missing = [op for op in PF5_OPERATIONS if op not in exported or not callable(getattr(module, op, None))]
-    if missing:
-        problems.append(f"core lacks the operations {missing}")
-    for name in exported:
-        value = getattr(module, name)
-        if inspect.isfunction(value) and name not in (*PF5_OPERATIONS, *LATER_OPERATIONS):
-            problems.append(f"core.__all__ exports the function {name}, which is no operation")
-        elif inspect.isclass(value) and not (_is_type_or_constant(value, typing_only=False) or hasattr(value, "to_json")):
-            problems.append(f"core.__all__ exports the class {name}, which is not a result, view or error type")
-    return problems
-
-
-PF5_7_RULES: dict[str, Callable[[Mapping[str, Path]], list[str]]] = {
-    "every module in one class": _rule_classified,
-    "faces import only the core and renderers": _rule_faces,
-    "renderers import only types and constants": _rule_renderers,
-    "the core imports no face and exports only operations": _rule_core,
-}
-
-
-@pytest.mark.parametrize("rule", sorted(PF5_7_RULES))
-def test_pf5_7_the_import_graph_holds_the_boundary(rule: str) -> None:
-    """PF5.7 with readings f and g, by the import graph of ``src/``."""
-    found = _modules()
-    assert _class_of("poisson_prove.core") == "core" and "poisson_prove.core" in found
-    problems = PF5_7_RULES[rule](found)
-    assert not problems, problems
-
-
 # ---------- PF5.8 ----------
 
 
@@ -1477,6 +1210,29 @@ def test_pf5_8_core_operations_print_ask_exit_open_and_connect_nothing(
     assert (out, err) == ("", ""), (out, err)
     assert used == []
     assert [str(w.message) for w in caught if _provess(w)] == []
+
+
+def _modules() -> dict[str, Path]:
+    found: dict[str, Path] = {}
+    for path in sorted(PACKAGE.rglob("*.py")):
+        parts = path.relative_to(SRC).with_suffix("").parts
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        found[".".join(parts)] = path
+    return found
+
+
+def _class_of(module: str) -> str | None:
+    """A module's class: as listed, or for a module PF5 adds, by where it sits or what it is named
+    (reading g): under ``poisson_prove.core`` the core, ``poisson_prove._cli_*`` the face's own,
+    ``poisson_prove._render_*`` a renderer."""
+    if module in FACES or module.startswith("poisson_prove._cli_"):
+        return "face"
+    if module in RENDERERS or module.startswith("poisson_prove._render_"):
+        return "renderer"
+    if module in CORE or module.startswith("poisson_prove.core."):
+        return "core"
+    return None
 
 
 def _env_reads(path: Path) -> tuple[set[str], list[str]]:

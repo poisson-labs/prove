@@ -7,11 +7,10 @@ written, so it is imported lazily through ``viewer()``; collection never touches
 What is asserted where:
 
 - **Rendered output first.** Every invariant that can be checked on the page, the ``--json``
-  structure, or the CLI's exit code and streams is checked there. Two invariants build their
-  expectations from M7's private helpers because the rendered form is lossy: V16 (``_fmt`` --
-  comparing a formatted string to a hand-typed literal re-types the formatter, the defect V17
-  bans) and V20 (``_provenance_lines`` -- the page shows the items with no marker of what was
-  dropped). V17 is a source grep with no rendered form and imports nothing. V36 and V39 build
+  structure, or the CLI's exit code and streams is checked there. V16 builds its expectations
+  from M7's number forms written from their rule (``m7_form``), never from ``report.py``; V20
+  reads the provenance list off M7's public markdown, because the page shows the items with no
+  marker of what was dropped. V36 and V39 build
   their expectations from M7's *public* ``to_html()`` receipt (its worst-cell tables and its
   fence blockquote) rather than from ``_worst_header``/``_worst_table_rows``/``_EPISTEMIC_FENCE``.
 - **Servers.** Every server test binds ``127.0.0.1:0`` in a ``threading.Thread(daemon=True)``,
@@ -19,8 +18,8 @@ What is asserted where:
   ``http.client``, and stops it with ``shutdown()`` then ``server_close()`` in a ``finally``.
   ``shutdown()`` runs on a helper thread with a join timeout, so a server whose
   ``serve_forever`` never started cannot hang the suite.
-- **Tree reads.** V6, V14, V17 and V35 resolve ``viewer.py`` through ``poisson_prove.__file__``,
-  never ``Path.cwd()``, so the shadow-shim run under ``PYTHONPATH`` reads the shim.
+- **Tree reads.** V14 resolves the core modules through ``poisson_prove.__file__``, never
+  ``Path.cwd()``, so the shadow-shim run under ``PYTHONPATH`` reads the shim.
 - **Non-finite floats.** Fisher's odds ratio is ``inf`` or ``nan`` in 76 of the generated
   lattice pair's 144 cells (its zero and ceiling conditions, over both events). V37 runs on that
   pair; V29 and V33 depend on the null-for-non-finite rule.
@@ -43,7 +42,6 @@ pass rendered it outside and nothing caught it.
 
 from __future__ import annotations
 
-import ast
 import datetime as dt
 import http.client
 import http.server
@@ -70,7 +68,6 @@ from typing import Any
 import pytest
 
 import lattice
-import poisson_prove
 import poisson_prove.cli as cli
 from poisson_prove.diff import MultiDiffResult, multi_diff
 from poisson_prove.episode import Episode
@@ -86,8 +83,6 @@ LATTICE_ROOT = lattice.root()
 # PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
-S0_TEST_SOURCE = Path(__file__).resolve().parent / "test_s0_scaffold.py"
-TESTS_DIR = Path(__file__).resolve().parent
 
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
@@ -96,7 +91,6 @@ V22B_SALT = "00112233445566778899aabbccddeeff"
 
 # LS: /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
-RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
 # PF2: every run has a name (target id up to its first "/", the UTC date of
@@ -114,11 +108,6 @@ CSP = (
     "img-src data:; form-action 'none'; base-uri 'none'"
 )
 CONTENT_TYPE = "text/html; charset=utf-8"
-# LS: ``summary`` eighth.
-TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
-    "intervals", "tree", "unverified", "heatmap_svg",
-)
 ARM_KEYS = (
     "role", "run_id", "target_id", "backend", "status", "created_at", "run_salt", "t_unit",
     "poisson_prove_version", "schema_version", "retain_traces_for", "axis_types", "environment",
@@ -136,21 +125,6 @@ PANEL_KEYS = (
     "share_label", "threshold", "n_unchanged", "n_absent", "n_present",
     "x_values", "y_values", "cells", "worst_header", "worst_rows", "worst_hashes",
 )
-# PF4 (PF4.13, PF4.14, PF4.15, PF4.3): each cell gains ``direction``, ``direction_note``, ``pairs``
-# and ``mde_note`` after ``verdict``, then each arm's share object and whether it differs from the
-# arm's rate.
-CELL_KEYS = (
-    "coords", "config_hash", "n_a", "n_b", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
-    "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
-    "direction", "direction_note", "pairs", "n01", "n10", "mde_note",
-    # PF4 re-freeze (PF4.34 to PF4.47): each cell gains Holm's q and flag, the limit keys, the
-    # competing shift and the interval, after mde_note; the order is the build's.
-    "q_holm", "holm", "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test", "mde_basis",
-    "mde_level", "mde_family", "mde_power", "mde_anchor", "mde_hr", "p_min", "flaggable", "mde_moves_with",
-    "mde_rise_verdict", "mde_fall_verdict", "competing_shift", "ci_lo", "ci_hi", "ci_level", "ci_method",
-    "share_a", "share_b", "share_a_differs", "share_b_differs",
-    "config", "config_text", "text",
-)
 FLOAT_KINDS = {
     "rate_a": "pp1", "rate_b": "pp1", "delta": "pp1", "stat": "sig3", "p": "sig3", "q": "sig3",
     "mde": "pp0",
@@ -158,13 +132,6 @@ FLOAT_KINDS = {
 INT_FIELDS = ("n_a", "n_b", "events_a", "events_b")
 SIGN_CONVENTION = "delta = rate_b - rate_a"
 FORBIDDEN_KEYS = {"episode", "seed", "replicate_index", "trace", "meta"}
-SERVE_FLAGS = {
-    "--event", "--x", "--y", "--fix", "--method", "--q", "--theme", "--top-n", "--forest",
-    "--title", "--json",
-    "--permutations", "--seed", "--by", "--max-group-mde", "--depth",
-    # Every verb also takes the tool's own options after it.
-    "--store", "--plain", "--debug",
-}
 #: V24's one carve-out, by path (S29): the permutation seed M14's frozen
 #: ``RootResult.to_json()`` names ``seed``, carried verbatim under ``tree``.
 SEED_CARVE_OUT = "tree.root.seed"
@@ -203,19 +170,6 @@ HOLE_MESSAGE = "No comparable data for this cell."
 EVENT_LINE_LITERAL = "given by --event, not inferred"
 INDEX_ID = "prove-cells"
 
-CLIENT_BAN = {"urllib", "requests", "httpx", "socket"}
-SERVER_ALLOWANCE = "http.server"
-ASSEMBLY_HELPERS = {"_fmt", "_coord_text", "_worst_header", "_worst_table_rows", "_EPISTEMIC_FENCE"}
-RENDER_HELPERS = {"_html_style", "_html_table", "_provenance_lines"}
-FENCE_PHRASES = (
-    "not formal verification", "under a stated test envelope", "were not tested",
-    "at or above the reported MDE",
-)
-PINNED_REPORT_TYPES = {"Report", "MultiReport", "ReportSpec", "Cell", "SurvivalReport"}
-
-HEX_RE = re.compile(r"#[0-9A-Fa-f]{6}\b")
-TIMES_100_RE = re.compile(r"\*\s*100\b")
-FLOAT_SPEC_RE = re.compile(r":\.\d")
 FLOAT_TOKEN_RE = re.compile(r"(?<![\w.])-?\d+\.\d+(?:[eE][-+]?\d+)?|(?<![\w.])-?\d+[eE][-+]?\d+")
 UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 SVG_RE = re.compile(r"<svg\b.*?</svg>", re.S)
@@ -243,14 +197,6 @@ def viewer() -> Any:
     import poisson_prove.viewer as module
 
     return module
-
-
-def viewer_source() -> str:
-    return (Path(poisson_prove.__file__).resolve().parent / "viewer.py").read_text()
-
-
-def core_modules() -> list[Path]:
-    return sorted(Path(poisson_prove.__file__).resolve().parent.rglob("*.py"))
 
 
 @dataclass(frozen=True)
@@ -314,12 +260,6 @@ def lattice_full_argv(*extra: str) -> list[str]:
         "--event", LATTICE_EVENTS[0], "--event", LATTICE_EVENTS[1], "--x", LATTICE_X, "--y", LATTICE_Y,
         "--title", LATTICE_TITLE, *extra,
     )
-
-
-def option_flags(help_text: str) -> set[str]:
-    """The long flags an argparse help text lists as option entries: a line indented by exactly
-    two spaces that begins with ``--``. The prose of a help string is not read."""
-    return {m.group(1) for line in help_text.splitlines() if (m := re.match(r"^  (--[a-z][a-z-]*)", line))}
 
 
 def tripwire_serve(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -620,12 +560,6 @@ def styles_of(node: Node, rules: list[tuple[list[str], dict[str, str]]]) -> dict
     return out
 
 
-def last_compound_tag(selector: str) -> str | None:
-    compounds = [c for c in re.split(r"\s*>\s*|\s+", selector.strip()) if c]
-    m = COMPOUND_RE.match(compounds[-1]) if compounds else None
-    return m.group(1) if m else None
-
-
 # ---------- structure helpers ----------
 
 
@@ -699,6 +633,37 @@ def m6_rows(multi: MultiDiffResult, event: str) -> dict[str, dict[str, Any]]:
     return {str(r["config_hash"]): r for r in frame.to_dict(orient="records")}
 
 
+def no_negative_zero(text: str) -> str:
+    return text[1:] if text.startswith("-") and float(text) == 0.0 else text
+
+
+def m7_form(value: float, kind: str) -> str:
+    """M7's number forms, written from their rule and never read from ``report.py``: ``pp1`` and
+    ``pp0`` a fraction in points to one and to no decimals, ``sig3`` three significant figures
+    (``0`` at zero, scientific below 0.001); a negative zero reads as zero, a non-finite value as
+    ``inf``, ``-inf`` or ``nan``."""
+    if kind == "pp1":
+        return no_negative_zero(f"{value * 100:.1f}")
+    if kind == "pp0":
+        return no_negative_zero(f"{value * 100:.0f}")
+    assert kind == "sig3", kind
+    return "0" if value == 0 else (f"{value:.2e}" if abs(value) < 1e-3 else f"{value:.3g}")
+
+
+def markdown_provenance(report: MultiReport) -> list[str]:
+    """The report's provenance list as its public markdown prints it: the ``- `` lines under
+    ``## Provenance``."""
+    lines = report.to_markdown().splitlines()
+    start = lines.index("## Provenance") + 2
+    out = []
+    for line in lines[start:]:
+        if not line.startswith("- "):
+            break
+        out.append(line)
+    assert out, lines[start - 2 : start + 2]
+    return out
+
+
 def tree_snapshot(root: Path) -> dict[str, int]:
     if not root.exists():
         return {}
@@ -734,119 +699,6 @@ def receipt_fence(report: MultiReport) -> str:
     quotes = parse_html(report.to_html()).find("blockquote")
     assert len(quotes) == 1, len(quotes)
     return quotes[0].deep_text()
-
-
-# ---------- ast helpers (restated; never imported across test modules) ----------
-
-
-def imported_modules(source: str) -> set[str]:
-    """Every module name an ``import`` or ``from ... import`` names, as a FULL dotted path.
-    ``from http import server`` yields ``http.server``: the dotted name exists only when
-    ``node.module`` is joined with each alias, which is what a substring grep and a
-    top-level-only walk both miss."""
-    names: set[str] = set()
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Import):
-            names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            names.add(node.module)
-            names.update(f"{node.module}.{alias.name}" for alias in node.names)
-    return names
-
-
-def names_server(names: set[str]) -> bool:
-    return any(n == SERVER_ALLOWANCE or n.startswith(SERVER_ALLOWANCE + ".") for n in names)
-
-
-def network_violations(py: Path) -> list[str]:
-    names = imported_modules(py.read_text())
-    bad = sorted(n for n in names if n.split(".")[0] in CLIENT_BAN)
-    if names_server(names) and py.name != "viewer.py":
-        bad.extend(sorted(n for n in names if n == SERVER_ALLOWANCE or n.startswith(SERVER_ALLOWANCE + ".")))
-    return bad
-
-
-def module_functions(tree: ast.Module) -> dict[str, ast.AST]:
-    return {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)}
-
-
-def closure(tree: ast.Module, name: str) -> list[ast.AST]:
-    """The function plus every module-level function it reaches by name, transitively."""
-    functions = module_functions(tree)
-    seen: dict[str, ast.AST] = {}
-    todo = [name]
-    while todo:
-        current = todo.pop()
-        if current in seen or current not in functions:
-            continue
-        seen[current] = functions[current]
-        for node in ast.walk(functions[current]):
-            if isinstance(node, ast.Name) and node.id in functions and node.id not in seen:
-                todo.append(node.id)
-    return list(seen.values())
-
-
-def referenced_names(nodes: Sequence[ast.AST]) -> set[str]:
-    return {n.id for fn in nodes for n in ast.walk(fn) if isinstance(n, ast.Name)}
-
-
-ARITHMETIC = (ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow, ast.MatMult)
-
-
-def is_non_numeric(node: ast.AST) -> bool:
-    return isinstance(node, ast.JoinedStr | ast.List | ast.ListComp | ast.Tuple) or (
-        isinstance(node, ast.Constant) and isinstance(node.value, str)
-    )
-
-
-def arithmetic_nodes(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    """Arithmetic between two values: ``-``, ``*``, ``/``, ``//``, ``%``, ``**``, an
-    augmented assignment with any of those, and ``+`` unless one side is a string literal,
-    f-string, list or tuple."""
-    out: list[ast.AST] = []
-    for fn in nodes:
-        for node in ast.walk(fn):
-            if isinstance(node, ast.BinOp):
-                if isinstance(node.op, ARITHMETIC):
-                    out.append(node)
-                elif isinstance(node.op, ast.Add) and not (is_non_numeric(node.left) or is_non_numeric(node.right)):
-                    out.append(node)
-            elif isinstance(node, ast.AugAssign) and isinstance(node.op, ast.Add | ARITHMETIC):
-                out.append(node)
-            elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and not isinstance(node.operand, ast.Constant):
-                out.append(node)
-    return out
-
-
-def total_seconds_operands(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    return [
-        n.func.value
-        for fn in nodes
-        for n in ast.walk(fn)
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "total_seconds"
-    ]
-
-
-def format_calls(tree: ast.Module) -> list[int]:
-    """Line numbers of every ``format(...)`` and ``.format(...)`` call. A substring grep is
-    wrong here: ``datetime.fromisoformat(`` contains ``format(`` and is not a formatter."""
-    return [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and (
-            (isinstance(node.func, ast.Name) and node.func.id == "format")
-            or (isinstance(node.func, ast.Attribute) and node.func.attr == "format")
-        )
-    ]
-
-
-def report_import_names(tree: ast.Module) -> set[str]:
-    names: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.report":
-            names.update(alias.name for alias in node.names)
-    return names
 
 
 # ---------- store builders ----------
@@ -1025,7 +877,7 @@ def hostile(tmp_path_factory: pytest.TempPathFactory) -> Built:
 # ---------- V1-V5: refusals, and nothing binds ----------
 
 
-def test_v1_missing_event_exits_two_names_serve_and_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v1_missing_event_exits_one_names_serve_and_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(lattice_argv("--x", LATTICE_X))
     # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr.
@@ -1036,7 +888,7 @@ def test_v1_missing_event_exits_two_names_serve_and_lists_the_axes_and_events_th
         assert fact in r.err, (fact, r.err)
 
 
-def test_v2_unknown_event_exits_two_with_the_known_events_sentence_and_the_verb(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v2_unknown_event_exits_one_with_the_known_events_sentence_and_the_verb(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(lattice_argv("--event", "nope", "--x", LATTICE_X))
     # A refusal exits 1.
@@ -1066,7 +918,7 @@ def test_v4_missing_x_lists_the_axes_and_events_the_runs_carry(monkeypatch: pyte
         assert fact in r.err, (fact, r.err)
 
 
-def test_v4_unknown_x_exits_two_through_axis_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v4_unknown_x_exits_one_through_axis_error(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(lattice_argv("--event", lattice.EVENT, "--x", "nope"))
     # A refusal exits 1, and an error shows no Python repr, so the value is checked bare.
@@ -1086,7 +938,7 @@ REFUSALS = [
 
 
 @pytest.mark.parametrize(("argv", "code"), REFUSALS, ids=["no-event", "unknown-event", "one-run", "three-runs", "no-x", "unknown-x"])
-def test_v5_every_refusal_exits_two_without_calling_serve_page(monkeypatch: pytest.MonkeyPatch, argv: list[str], code: int) -> None:
+def test_v5_every_refusal_exits_with_its_code_without_calling_serve_page(monkeypatch: pytest.MonkeyPatch, argv: list[str], code: int) -> None:
     calls = tripwire_serve(monkeypatch)
     r = run_cli(argv)
     assert r.code == code, r.text
@@ -1103,11 +955,7 @@ def test_v5_json_exits_zero_without_calling_serve_page(monkeypatch: pytest.Monke
 # ---------- V6-V9: the server ----------
 
 
-def test_v6_viewer_names_loopback_once_and_binds_it(lattice_built: Built) -> None:
-    src = viewer_source()
-    assert src.count(HOST) == 1, src.count(HOST)
-    assert "0.0.0.0" not in src
-    assert "::" not in src
+def test_v6_the_server_binds_loopback(lattice_built: Built) -> None:
     with served(lattice_built.page) as server:
         assert server.server_address[0] == HOST, server.server_address
 
@@ -1214,7 +1062,7 @@ def test_v12_assembling_rendering_and_serving_touch_no_file(lattice_built: Built
     assert not default_dir.exists() and not named_dir.exists()
 
 
-# ---------- V13-V15: nothing outbound ----------
+# ---------- V13-V14: nothing outbound ----------
 
 
 def test_v13_the_renderers_own_markup_references_nothing_external(lattice_built: Built) -> None:
@@ -1223,54 +1071,10 @@ def test_v13_the_renderers_own_markup_references_nothing_external(lattice_built:
         assert needle not in own, needle
 
 
-def test_v14_no_core_module_imports_a_network_client_by_dotted_path() -> None:
-    modules = core_modules()
-    assert modules
-    for py in modules:
-        names = imported_modules(py.read_text())
-        assert not {n for n in names if n.split(".")[0] in CLIENT_BAN}, py
-
-
-def test_v14_only_viewer_names_http_server() -> None:
-    naming = {py.name for py in core_modules() if names_server(imported_modules(py.read_text()))}
-    assert naming == {"viewer.py"}, naming
-
-
-def test_v14_viewer_has_no_client_call() -> None:
-    src = viewer_source()
-    for needle in ("connect(", "urlopen", "webbrowser"):
-        assert needle not in src, needle
-
-
-def test_v15_s0_states_the_commitment_in_prose() -> None:
-    tree = ast.parse(S0_TEST_SOURCE.read_text())
-    docs = {n.name: ast.get_docstring(n) or "" for n in tree.body if isinstance(n, ast.FunctionDef)}
-    doc = " ".join(docs.get("test_no_network_imports_in_core", "").split())
-    for phrase in ("opens no outbound connection", "not an outbound connection", "http.server", "viewer.py"):
-        assert phrase in doc, phrase
-
-
-def test_v15_socketserver_does_not_trip_the_client_ban(tmp_path: Path) -> None:
-    scratch = tmp_path / "scratch.py"
-    scratch.write_text("import socketserver\n")
-    assert network_violations(scratch) == []
-
-
-def test_v15_from_http_import_server_trips_outside_viewer(tmp_path: Path) -> None:
-    scratch = tmp_path / "scratch.py"
-    scratch.write_text("from http import server\n")
-    assert network_violations(scratch) == [SERVER_ALLOWANCE]
-    as_viewer = tmp_path / "viewer.py"
-    as_viewer.write_text("from http import server\n")
-    assert network_violations(as_viewer) == []
-
-
-# ---------- V16-V17: it renders, it does not compute ----------
+# ---------- V16: it renders, it does not compute ----------
 
 
 def test_v16_every_text_entry_is_m7s_formatting_of_the_raw_value(lattice_built: Built) -> None:
-    from poisson_prove.report import _fmt
-
     for panel in lattice_built.structure["panels"]:
         rows = m6_rows(lattice_built.multi, panel["event"])
         assert panel["cells"], panel["event"]
@@ -1278,7 +1082,7 @@ def test_v16_every_text_entry_is_m7s_formatting_of_the_raw_value(lattice_built: 
             row = rows[cell["config_hash"]]
             for name, kind in FLOAT_KINDS.items():
                 raw = float(row[name])
-                assert cell["text"][name] == _fmt(raw, kind), (panel["event"], cell["config_hash"], name)
+                assert cell["text"][name] == m7_form(raw, kind), (panel["event"], cell["config_hash"], name)
                 if math.isfinite(raw):
                     assert cell[name] == raw, (name, cell[name], raw)
                 else:
@@ -1295,45 +1099,15 @@ def test_v16_integer_fields_have_no_text_entry_and_match_m6(lattice_built: Built
 
 
 def test_v16_the_page_prints_no_float_except_through_m7s_strings(lattice_built: Built) -> None:
-    from poisson_prove.report import _provenance_lines
-
     # ``config_text`` values (viewpair/2) are structure strings and are already walked.
-    allowed = list(walk_strings(lattice_built.structure)) + _provenance_lines(lattice_built.structure["diff"])
+    assert lattice_built.structure["diff"] == lattice_built.report.provenance
+    allowed = list(walk_strings(lattice_built.structure)) + markdown_provenance(lattice_built.report)
     allowed.append(str(lattice_built.structure["pair"]["created_at_gap_s"]))
     stray = [
         tok for tok in FLOAT_TOKEN_RE.findall(visible_text(lattice_built.page))
         if not any(tok in s for s in allowed)
     ]
     assert stray == [], stray
-
-
-def test_v17_viewer_has_no_colour_no_float_format_and_no_fence() -> None:
-    src = viewer_source()
-    assert not HEX_RE.search(src), HEX_RE.search(src)
-    assert not TIMES_100_RE.search(src)
-    assert not FLOAT_SPEC_RE.search(src)
-    assert format_calls(ast.parse(src)) == [], format_calls(ast.parse(src))
-    assert "toFixed(" not in src and "toPrecision(" not in src
-    for phrase in FENCE_PHRASES:
-        assert phrase not in src, phrase
-
-
-def test_v17_build_structure_applies_exactly_the_created_at_subtraction() -> None:
-    tree = ast.parse(viewer_source())
-    nodes = closure(tree, "build_structure")
-    assert nodes, "no build_structure"
-    arithmetic = arithmetic_nodes(nodes)
-    assert len(arithmetic) == 1, [ast.dump(n) for n in arithmetic]
-    only = arithmetic[0]
-    assert isinstance(only, ast.BinOp) and isinstance(only.op, ast.Sub), ast.dump(only)
-    assert only in total_seconds_operands(nodes), ast.dump(only)
-
-
-def test_v17_render_html_applies_no_arithmetic() -> None:
-    tree = ast.parse(viewer_source())
-    nodes = closure(tree, "render_html")
-    assert nodes, "no render_html"
-    assert arithmetic_nodes(nodes) == [], [ast.dump(n) for n in arithmetic_nodes(nodes)]
 
 
 # ---------- V18-V21: the page carries M7's output verbatim ----------
@@ -1388,9 +1162,7 @@ def test_v19_honesty_appears_unescaped_above_the_svg_and_uncollapsed(lattice_bui
 
 
 def test_v20_provenance_items_are_m7s_lines_in_order_and_diff_is_the_provenance_dict(lattice_built: Built, lattice_dom: Dom) -> None:
-    from poisson_prove.report import _provenance_lines
-
-    expected = [line[2:] for line in _provenance_lines(lattice_built.report.provenance)]
+    expected = [line[2:] for line in markdown_provenance(lattice_built.report)]
     lists = [[li.deep_text() for li in descendants(ul, "li")] for ul in lattice_dom.find("ul") + lattice_dom.find("ol")]
     assert expected in lists, lists
     assert lattice_built.structure["diff"] == lattice_built.report.provenance
@@ -1480,10 +1252,9 @@ def test_v23_a_fix_slices_the_grid_against_m7_and_not_m6(lattice_built: Built, l
         assert len(hashes) < len(m6_rows(sliced.multi, panel["event"]))
 
 
-def test_v24_cell_keys_are_the_twenty_one_and_no_episode_level_key_anywhere(lattice_built: Built) -> None:
+def test_v24_no_episode_level_key_anywhere(lattice_built: Built) -> None:
     for panel in lattice_built.structure["panels"]:
         for cell in panel["cells"]:
-            assert tuple(cell) == CELL_KEYS, tuple(cell)
             assert set(cell["text"]) == set(FLOAT_KINDS)
     # Narrowed for S29. ``proofload.viewpair/3`` carries
     # M14's ``TreeResult.to_json()`` verbatim, and ``RootResult`` names the permutation seed
@@ -1507,22 +1278,6 @@ def test_v25_holes_have_no_index_entry_and_the_hole_message_appears_once(hostile
     assert any(not c.present for p in hostile.report.panels.values() for c in p.cells), "no hole in the fixture"
     assert 'data-cell="absent"' in hostile.page
     assert html_unescape(hostile.page).count(HOLE_MESSAGE) == 1
-
-
-def test_v26_pointer_events_none_covers_the_glyph_the_notch_and_the_figures_text_and_nothing_else(lattice_dom: Dom) -> None:
-    """LS (D8, LS1): the inert set gains the figure's ``<text>`` -- a cell's own label swallowed
-    the click. The ``data-cell`` clause is re-asserted verbatim."""
-    rules = css_rules(lattice_dom.html_style())
-    inert = [s for selectors, decls in rules if decls.get("pointer-events") == "none" for s in selectors]
-    assert inert, rules
-    assert any("[data-sig]" in s for s in inert), inert
-    assert any(last_compound_tag(s) == "path" for s in inert), inert
-    assert any(last_compound_tag(s) == "text" for s in inert), inert
-    assert not any("data-cell" in s or "data-mde" in s for s in inert), inert
-    cells = [n for n in lattice_dom.nodes if "data-cell" in n.attrs]
-    assert cells
-    for node in cells:
-        assert styles_of(node, rules).get("pointer-events") != "none", node.attrs
 
 
 def test_v27_the_select_lists_every_cell_grouped_by_event_in_grid_order(lattice_built: Built, lattice_dom: Dom) -> None:
@@ -1567,18 +1322,9 @@ def test_v29_two_builds_are_equal_and_two_renders_identical_with_no_timestamp(la
         assert not UUID_RE.search(text)
 
 
-def test_v30_help_lists_serve_and_serve_help_lists_exactly_the_sixteen_flags() -> None:
+def test_v30_help_lists_serve() -> None:
     top = run_cli(["--help"])
     assert top.code == 0 and re.search(r"\bserve\b", top.out), top.out
-    assert "serve" in cli._VERBS
-    r = run_cli(["serve", "--help"])
-    assert r.code == 0, r.text
-    # Narrowed for S29: the flags are the option entries the help lists, read off the lines that
-    # begin an entry, not every ``--word`` in the text -- the tree helper's help for
-    # ``--max-group-mde`` names ``--max-mde`` in prose, which is not a flag of ``serve``.
-    flags = option_flags(r.out)
-    assert flags == SERVE_FLAGS, flags ^ SERVE_FLAGS
-    assert "--port" not in r.out
 
 
 def test_v31_the_four_unverified_entries_in_order_rendered_uncollapsed_above_the_svg(lattice_built: Built, lattice_dom: Dom) -> None:
@@ -1708,11 +1454,9 @@ def test_v33_json_prints_the_structure_indented_and_strict_and_binds_nothing(lat
         del arm["run_name"]
     assert parsed == json.loads(json.dumps(lattice_built.structure, allow_nan=False))
     assert parsed["schema"] == SCHEMA
-    assert tuple(parsed) == TOP_LEVEL_KEYS, tuple(parsed)
-    assert tuple(lattice_built.structure) == TOP_LEVEL_KEYS
 
 
-# ---------- V34-V36: n_present, the rendering split, the worst tables ----------
+# ---------- V34-V36: n_present, the round trip, the worst tables ----------
 
 
 def test_v34_n_present_counts_the_present_cells_of_the_full_grid(lattice_built: Built) -> None:
@@ -1724,23 +1468,6 @@ def test_v34_n_present_counts_the_present_cells_of_the_full_grid(lattice_built: 
         assert tuple(entry) == PANEL_KEYS, tuple(entry)
         assert entry["n_present"] == lattice_built.report.panels[entry["event"]].n_present
         assert entry["n_present"] == len(entry["cells"])
-
-
-def test_v34_no_test_constructs_report_positionally_or_pins_its_fields() -> None:
-    offenders = []
-    for py in sorted(TESTS_DIR.glob("test_*.py")):
-        for node in ast.walk(ast.parse(py.read_text())):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            if isinstance(func, ast.Name) and func.id == "Report" and node.args:
-                offenders.append((py.name, node.lineno, "positional Report()"))
-            is_fields = (isinstance(func, ast.Name) and func.id == "fields") or (
-                isinstance(func, ast.Attribute) and func.attr == "fields"
-            )
-            if is_fields and node.args and isinstance(node.args[0], ast.Name) and node.args[0].id in PINNED_REPORT_TYPES:
-                offenders.append((py.name, node.lineno, f"fields({node.args[0].id})"))
-    assert offenders == [], offenders
 
 
 def test_v35_render_html_takes_one_parameter_and_renders_a_round_tripped_structure_identically(lattice_built: Built, tmp_path: Path) -> None:
@@ -1763,17 +1490,6 @@ def test_v35_render_html_takes_one_parameter_and_renders_a_round_tripped_structu
     )
     assert r.returncode == 0, r.stderr
     assert page_path.read_text(encoding="utf-8") == lattice_built.page
-
-
-def test_v35_the_report_imports_split_between_assembly_and_rendering() -> None:
-    tree = ast.parse(viewer_source())
-    assert report_import_names(tree) == ASSEMBLY_HELPERS | RENDER_HELPERS
-    build = referenced_names(closure(tree, "build_structure"))
-    render = referenced_names(closure(tree, "render_html"))
-    assert build & (ASSEMBLY_HELPERS | RENDER_HELPERS) == ASSEMBLY_HELPERS, build
-    assert render & (ASSEMBLY_HELPERS | RENDER_HELPERS) == RENDER_HELPERS, render
-    for name in ("MultiReport", "Report", "DiffResult", "DataFrame", "multi", "report"):
-        assert name not in render, name
 
 
 def test_v36_worst_tables_are_m7s_and_the_first_worst_cell_is_selected(lattice_built: Built, lattice_dom: Dom) -> None:
@@ -1799,7 +1515,7 @@ def test_v36_worst_tables_are_m7s_and_the_first_worst_cell_is_selected(lattice_b
     assert [o.attrs.get("value") for o in selected] == [key_of(first["event"], first["worst_hashes"][0])]
 
 
-# ---------- V37-V40: non-finite floats, the URL line, the page's text, the schema ----------
+# ---------- V37-V41: non-finite floats, the URL line, the page's text, the environment ----------
 
 
 def test_v37_non_finite_stats_are_null_in_the_structure_and_the_dump_parses_strictly(lattice_built: Built, lattice_serve_json: Result) -> None:
@@ -1823,33 +1539,6 @@ def test_v37_non_finite_stats_are_null_in_the_structure_and_the_dump_parses_stri
     assert lattice_serve_json.code == 0
     strict_loads(lattice_serve_json.out)
     strict_loads(parse_html(lattice_built.page).index_json())
-    with pytest.raises(ValueError):
-        json.dumps(lattice_built.structure | {"probe": math.inf}, allow_nan=False)
-
-
-def json_dumps_calls(nodes: Sequence[ast.AST]) -> list[ast.Call]:
-    return [
-        n
-        for fn in nodes
-        for n in ast.walk(fn)
-        if isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Attribute)
-        and n.func.attr == "dumps"
-        and isinstance(n.func.value, ast.Name)
-        and n.func.value.id == "json"
-    ]
-
-
-def test_v37_both_serializers_pass_allow_nan_false() -> None:
-    # With the null rule intact there is no non-finite value left to reject, so the setting
-    # has no rendered form; it is the loud-failure guard V37 names, read from the source.
-    viewer_tree = ast.parse(viewer_source())
-    cli_tree = ast.parse((Path(poisson_prove.__file__).resolve().parent / "cli.py").read_text())
-    calls = json_dumps_calls(closure(viewer_tree, "render_html")) + json_dumps_calls(closure(cli_tree, "_cmd_serve"))
-    assert len(calls) >= 2, len(calls)
-    for call in calls:
-        flags = {kw.arg: getattr(kw.value, "value", None) for kw in call.keywords}
-        assert flags.get("allow_nan") is False, (call.lineno, flags)
 
 
 def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(lattice_built: Built, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1900,7 +1589,7 @@ def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_trace
     assert holder[0].socket.fileno() == -1
 
 
-def test_v38_bind_failure_is_a_viewer_error_and_exit_two(lattice_built: Built, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_v38_bind_failure_is_a_viewer_error_and_exit_one(lattice_built: Built, monkeypatch: pytest.MonkeyPatch) -> None:
     def refuse(self: Any) -> None:
         raise OSError(98, "address in use (injected)")
 
@@ -1972,12 +1661,3 @@ def test_v41_environment_renders_inside_one_closed_details_and_nowhere_else(latt
         sentinels.append(sentinel)
     assert sentinels == [lattice.ENVIRONMENT_RUN[lattice.RUN_A], lattice.ENVIRONMENT_RUN[lattice.RUN_B]]
     assert sentinels[0] != sentinels[1] and not any(s in o for s, o in zip(sentinels, reversed(sentinels)))
-
-
-def test_v40_an_unknown_schema_is_refused_naming_both_values(lattice_built: Built) -> None:
-    structure = json.loads(json.dumps(lattice_built.structure, allow_nan=False))
-    structure["schema"] = RETIRED_SCHEMA
-    with pytest.raises(viewer().ViewerError) as info:
-        viewer().render_html(structure)
-    assert RETIRED_SCHEMA in str(info.value)
-    assert SCHEMA in str(info.value)

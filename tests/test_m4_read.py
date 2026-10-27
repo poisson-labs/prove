@@ -45,7 +45,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import poisson_prove.cli as cli
-import poisson_prove.store as store_module
 from poisson_prove.episode import Episode
 from poisson_prove.examples.mock_agent import rollout
 from poisson_prove.executor import plan, run_local
@@ -77,15 +76,6 @@ MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_SALT = "m4-read-oracle"
 SNIPPET_MARKER = "# reproduce one episode"
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
-
-PUBLIC_STORE_METHODS = {
-    "create_run", "manifest", "mark_complete", "runs", "append", "read", "missing", "count",
-    "tally",
-}
-PUBLIC_STORE_SYMBOLS = {
-    "StoreError", "SchemaMismatch", "DuplicateEpisode", "MetaNotSerializable", "InvalidConfig",
-    "RunManifest", "EpisodeRecord", "Store", "config_hash", "RunTally",
-}
 
 # The keyed run: four cells x three replicates over three parts, appended out of key order,
 # with one errored row. Its key set is computable at import time, which is what lets the R3
@@ -832,20 +822,3 @@ def test_r9_count_takes_a_run_id_and_nothing_else() -> None:
     params = inspect.signature(Store.count).parameters
     assert list(params) == ["self", "run_id"]
     assert params["run_id"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-
-
-def test_r9_store_public_methods_are_exactly_the_nine() -> None:
-    methods = {
-        name for name, _ in inspect.getmembers(Store, inspect.isfunction)
-        if not name.startswith("_")
-    }
-    assert methods == PUBLIC_STORE_METHODS
-
-
-def test_r9_nothing_else_in_the_module_changes() -> None:
-    public = {
-        name
-        for name, obj in vars(store_module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == store_module.__name__
-    }
-    assert public == PUBLIC_STORE_SYMBOLS

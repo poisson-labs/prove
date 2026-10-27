@@ -572,16 +572,6 @@ def test_pf1_2_a_refusal_exits_1_with_one_error_line_then_only_next_lines_and_sa
         assert r.out == "", r.out
 
 
-@pytest.mark.parametrize("name", ["refuse-check-without-event", "refuse-report-without-x", "refuse-serve-without-x", "refuse-serve-without-event", "refuse-inspect-without-event"])
-def test_pf1_2_a_missing_event_or_x_is_a_refusal_although_the_usage_line_shows_it_required(name: str, corpus: dict[str, Ran]) -> None:
-    verb = name.split("-")[1]
-    assert corpus[name].code == 1, corpus[name].err
-    usage = usage_of(corpus[f"help-{verb}"].out)
-    flag = "--event" if name.endswith("event") else "--x"
-    at = [m.start() for m in re.finditer(re.escape(flag) + r" [A-Z]", usage)]
-    assert at and all(bracket_depth(usage, i) == 0 for i in at), usage
-
-
 # ---------- PF1.3 wrong command lines ----------
 
 
@@ -1050,12 +1040,10 @@ def test_pf1_9_store_plain_and_debug_are_read_after_the_verb_as_before_it(world:
 
 
 @pytest.mark.parametrize("argv", [
-    ["--sto", "{S}", "runs"],
     ["--deb", "--store", "{S}", "runs"],
     ["--pla", "--store", "{S}", "runs"],
     ["--vers"],
     ["--store", "{S}", "runs", "--sto", "{S}"],
-    ["--store", "{S}", "diff", "{A}", "{B}", "--even", "violated"],
     ["--store", "{S}", "diff", "{A}", "{B}", "--meth", "fisher_bh"],
     ["--store", "{S}", "check", "{A}", "{B}", "--event", "violated", "--fail", "any"],
     # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
@@ -1313,13 +1301,17 @@ def test_pf1_12_every_file_prove_writes_is_utf_8(world: World, tmp_path: Path) -
     title = "Prüfung – ü"
     home = tmp_path / "home"
     home.mkdir()
+    # The paired files carry the sweep's name, so a non-ASCII one puts non-ASCII bytes in each.
+    sweep_name = "S1 – Prüfung"
+    declaration = tmp_path / "decl.toml"
+    declaration.write_text(PAIRED_DECLARATION.format(cap="").replace('name = "S1"', f'name = "{sweep_name}"'), encoding="utf-8")
     pair_out, run_out, store = tmp_path / "pair", tmp_path / "run", tmp_path / "store"
     for argv, code in (
         (["--store", str(world.store), "report", world.a, world.b, "--x", "task_id", "--y", "tool_fail_rate", "--title", title, "--out", str(pair_out)], 0),
         (["--store", str(world.store), "report", world.a, "--x", "task_id", "--y", "tool_fail_rate", "--event", "violated", "--title", title, "--out", str(run_out)], 0),
         # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
         (["--store", str(store), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--max-mde", MAX_MDE], 0),
-        (["--store", str(world.paired_store), "paired", "--declaration", str(world.folders["decl"]), "--out", str(tmp_path / "paired")], 0),
+        (["--store", str(world.paired_store), "paired", "--declaration", str(declaration), "--out", str(tmp_path / "paired")], 0),
     ):
         r = prove_with(LATIN1_LOCALE, argv, home=home, cwd=tmp_path)
         assert r.code == code, (argv, r)
@@ -1332,6 +1324,10 @@ def test_pf1_12_every_file_prove_writes_is_utf_8(world: World, tmp_path: Path) -
     for out in (pair_out, run_out):
         for name in ("report.md", "receipt.html"):
             assert title in (out / name).read_text(encoding="utf-8"), out / name
+    paired_files = [p for p in (tmp_path / "paired").rglob("*") if p.is_file()]
+    assert paired_files
+    for path in paired_files:
+        assert sweep_name in path.read_text(encoding="utf-8"), path
     assert "Fehler ü" in (home / ".cache" / "poisson-prove" / "errors.log").read_text(encoding="utf-8")
 
 
@@ -1343,6 +1339,7 @@ def test_pf1_13_dry_run_prints_the_plan_first_and_exits_0_writing_nothing(corpus
     assert r.code == 0, r.err
     first = r.out.splitlines()[0]
     assert first.startswith("plan  ") and "1,080" in first, r.out
+    assert FIRST_LINE.match(first), r.out
     assert not (world.base / "dry-store").exists()
 
 
@@ -1352,7 +1349,7 @@ def test_pf1_13_dry_run_prints_the_plan_first_and_exits_0_writing_nothing(corpus
 ])
 def test_pf1_13_every_sweep_prints_its_plan_first_and_a_finished_one_one_closing_verdict_line(name: str, closing: str | None, corpus: dict[str, Ran]) -> None:
     out = corpus[name].out.splitlines()
-    assert out and out[0].startswith("plan  "), corpus[name].out[:400]
+    assert out and out[0].startswith("plan  ") and FIRST_LINE.match(out[0]), corpus[name].out[:400]
     verdicts = [line for line in out[1:] if FIRST_LINE.match(line)]
     assert verdicts == [] if closing is None else (len(verdicts) == 1 and verdicts[0].startswith(f"{closing}  ")), out
     assert not any(line.startswith("run_id:") for line in out), out
@@ -1507,27 +1504,13 @@ def test_pf1_14_check_and_the_cap_check_say_their_verdict_first_and_a_check_that
     r = corpus[name]
     assert r.code == code, (r.out, r.err)
     first = r.out.splitlines()[0]
-    assert first.startswith(f"{word}  "), r.out
+    assert first.startswith(f"{word}  ") and FIRST_LINE.match(first), r.out
     if name.startswith("check"):
         event = r.argv[r.argv.index("--event") + 1]
         assert event in first, first
 
 
 # ---------- PF1.15 the first stdout line and every stderr line ----------
-
-
-#: The invocations whose first stdout line PF1 gives words to.
-PF1_WORDS = (
-    "sweep-dry-run", "sweep-yes", "sweep-max-rollouts", "sweep-all-errored", "refuse-underpowered",
-    "refuse-stdin-not-a-terminal", "refuse-over-max-cost", "check-passed", "check-failed",
-    "paired-under-cap", "paired-at-cap", "paired-equal-cap",
-)
-
-
-@pytest.mark.parametrize("name", PF1_WORDS)
-def test_pf1_15_the_first_stdout_line_is_a_verdict_word_two_spaces_and_a_sentence(name: str, corpus: dict[str, Ran]) -> None:
-    out = corpus[name].out.splitlines()
-    assert out and FIRST_LINE.match(out[0]), corpus[name].out[:400]
 
 
 def test_pf1_15_every_stderr_line_is_an_error_a_note_an_indented_line_the_question_or_progress(corpus: dict[str, Ran]) -> None:

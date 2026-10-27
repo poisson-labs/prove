@@ -89,8 +89,8 @@ open):
   **every ``net_swing`` mapping -- per sweep, pooled, and in ``intervals_json`` -- carries
   ``direction: "b_minus_a"``** so a reader never has to guess which way it subtracts.
 
-**Invariant-to-test map**, kept outside this file: 49 functions,
-72 collected ids, PR22 to PR39, approved as written. Every test name starts ``test_prN_``.
+**Invariant-to-test map**, kept outside this file: 49 functions (two of them the control),
+86 collected ids, PR22 to PR39, approved as written. Every test name starts ``test_prN_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` but two is built in test code,
 frame by frame -- that is the intended way in for phase 2, and it is
@@ -619,16 +619,17 @@ def test_pr23_no_rounding_is_applied_before_the_comparison() -> None:
 @settings(max_examples=150, deadline=None, derandomize=True)
 @given(
     value=st.decimals(min_value=Decimal(0), max_value=Decimal(1), places=22, allow_nan=False),
+    value_b=st.decimals(min_value=Decimal(0), max_value=Decimal(1), places=22, allow_nan=False),
     threshold=st.decimals(min_value=Decimal("0.0001"), max_value=Decimal(1), places=22, allow_nan=False),
     comparison=st.sampled_from(["ge", "gt"]),
 )
 def test_pr23_property_the_action_is_the_decimal_comparison_at_any_length(
-    value: Decimal, threshold: Decimal, comparison: str
+    value: Decimal, value_b: Decimal, threshold: Decimal, comparison: str
 ) -> None:
     decl = declaration(cuts=((CUT, str(threshold), comparison),))
-    result = analyse(assertion([Pair("i0", str(value), "1")], decl=decl))
+    result = analyse(assertion([Pair("i0", str(value), str(value_b))], decl=decl))
     acted_a = value >= threshold if comparison == "ge" else value > threshold
-    acted_b = Decimal(1) >= threshold if comparison == "ge" else Decimal(1) > threshold
+    acted_b = value_b >= threshold if comparison == "ge" else value_b > threshold
     expected = {(True, True): (1, 0, 0, 0), (True, False): (0, 1, 0, 0), (False, True): (0, 0, 1, 0), (False, False): (0, 0, 0, 1)}
     assert two_by_two(cut_of(result)) == expected[(acted_a, acted_b)], (value, threshold, comparison)
 
@@ -636,32 +637,18 @@ def test_pr23_property_the_action_is_the_decimal_comparison_at_any_length(
 # ---------- PR24: a tie is action 1 and is counted, per cut and per arm ----------
 
 
-def test_pr24_a_tie_is_action_one_and_is_counted_per_arm() -> None:
+@pytest.mark.parametrize(("comparison", "table"), [("ge", (3, 1, 0, 1)), ("gt", (0, 1, 1, 3))], ids=["ge", "gt"])
+def test_pr24_a_tie_acts_only_under_ge_and_is_counted_per_arm_under_both(comparison: str, table: tuple[int, ...]) -> None:
+    """The same five pairs under each comparison. Under ``ge`` every tie acts; under ``gt`` the
+    ties change side -- 0.60 no longer acts -- and the tie counts do not move, because a tie is a
+    value equal to the threshold whichever way the cut is declared."""
     rows = [
         Pair("i0", "0.60", "0.60"), Pair("i1", "0.60", "0.90"), Pair("i2", "0.70", "0.6"),
         Pair("i3", "0.50", "0.50"), Pair("i4", "0.6000", "0.25"),
     ]
-    result = analyse(assertion(rows))
+    result = analyse(assertion(rows, decl=declaration(cuts=((CUT, THRESHOLD, comparison),))))
     cut = cut_of(result)
-    assert two_by_two(cut) == (3, 1, 0, 1)  # every tie acted
-    assert cut.ties == {"a": 3, "b": 2}
-    assert sweep_of(cut)["ties"] == {"a": 3, "b": 2}
-    contingency, _ = artifacts(result)
-    assert contingency["cuts"][CUT]["ties"] == {"a": 3, "b": 2}
-    assert contingency["cuts"][CUT]["per_sweep"]["S1"]["ties"] == {"a": 3, "b": 2}
-
-
-def test_pr24_under_gt_a_tie_is_action_zero_and_is_still_counted_per_arm() -> None:
-    """The ``comparison`` update: the same five pairs as the test above under ``comparison =
-    "gt"``. The ties change side -- 0.60 no longer acts -- and the tie counts do not move, because
-    a tie is a value equal to the threshold whichever way the cut is declared."""
-    rows = [
-        Pair("i0", "0.60", "0.60"), Pair("i1", "0.60", "0.90"), Pair("i2", "0.70", "0.6"),
-        Pair("i3", "0.50", "0.50"), Pair("i4", "0.6000", "0.25"),
-    ]
-    result = analyse(assertion(rows, decl=declaration(cuts=((CUT, THRESHOLD, "gt"),))))
-    cut = cut_of(result)
-    assert two_by_two(cut) == (0, 1, 1, 3)  # no tie acted
+    assert two_by_two(cut) == table
     assert cut.ties == {"a": 3, "b": 2}
     assert sweep_of(cut)["ties"] == {"a": 3, "b": 2}
     contingency, _ = artifacts(result)
@@ -1213,7 +1200,7 @@ def test_pr37_a_cuts_result_does_not_depend_on_any_other_cut() -> None:
     assert dataclasses.asdict(cut_of(alone)) == dataclasses.asdict(cut_of(with_others))
 
 
-def test_pr37_phase_two_adds_exactly_its_three_public_names_and_no_function_returns_a_cross_cut_figure() -> None:
+def test_pr37_analyse_and_its_two_result_types_are_public_and_no_function_returns_a_cross_cut_figure() -> None:
     module = P()
     public = {
         name for name, value in vars(module).items()
@@ -1240,11 +1227,6 @@ def test_pr38_outcome_a_flips_ruled_out_below_the_floor_needs_a_large_stratum() 
     c = cut_of(analyse(assertion(grid(10, ["S1"], concordant), floor="0.01", b=50)))
     assert c.outcome == "C"
     assert c.pooled["flip_rate"]["hi"] >= 0.01 and c.pooled["flip_rate"]["lo"] == 0.0
-
-
-def test_pr38_outcome_b_flips_detected_when_the_lower_bound_leaves_zero() -> None:
-    b = cut_of(analyse(assertion(grid(20, ["S1", "S2", "S3"], correlated), floor="0.01")))
-    assert b.pooled["flip_rate"]["lo"] > 0.0 and b.outcome == "B"
 
 
 def test_pr38_outcome_c_under_the_fallback_when_the_upper_bound_reaches_the_floor() -> None:
@@ -1276,10 +1258,11 @@ def test_pr38_the_outcome_is_per_cut_and_is_emitted_with_the_interval_it_was_dec
         assert decided["basis"] == block["flip_rate"]["basis"]
 
 
-def test_pr38_with_no_floor_the_outcome_is_null_and_nothing_else_moves() -> None:
+def test_pr38_outcome_b_when_the_lower_bound_leaves_zero_and_with_no_floor_the_outcome_is_null() -> None:
     rows = grid(20, ["S1", "S2", "S3"], correlated)
     with_floor = analyse(assertion(rows, floor="0.01"))
     without = analyse(assertion(rows))
+    assert cut_of(with_floor).pooled["flip_rate"]["lo"] > 0.0
     assert cut_of(with_floor).outcome == "B" and cut_of(without).outcome is None
     _, intervals = artifacts(without)
     assert intervals["cuts"][CUT]["outcome"] is None

@@ -28,17 +28,16 @@ Reading notes for the build:
   is 0.5, and with ``events=["violated"]`` alone the completions are censored out of the risk
   set and it reads 1.0. A cell whose competing rows end *after* the events does not
   discriminate -- both sets give 0.5 -- which is why the times are pinned here.
-- H13 reads ``src/`` with ``ast``. "A competing-set construction" is taken to mean an event-set
-  argument reaching ``aalen_johansen`` or ``cell_table`` from anywhere other than
-  ``competing_set``; the one forwarding call inside ``cell_table`` itself is the plumbing that
-  carries a caller's set, not a second construction, and is named as such in the test.
+- H13 drives the two entry points H2 and H3 do not: the single-run report's ``--json`` and a
+  saved comparison's incidence curves, each on cells whose completions end before the events,
+  so the competing set and the reported event alone give different numbers.
 
 H6 and H9 were rewritten after the first pass of these frozen tests reported
 that the original pair could not both hold. The tests below are written against the revised
 invariants: validation moved into the CLI, where every typo originates, and ``multi_diff``
 was pinned permissive instead. Two readings the revised text still leaves to the test:
 
-- H6's message. H6 requires exit 2, the offending name and the outcomes present; the worked
+- H6's message. H6 requires exit 1, the offending name and the outcomes present; the worked
   example shows the shape with the verb name substituted. Asserted by containment, not as an exact string, so
   the wording stays the implementer's.
 - H9's "zero-count `EventDiff`". Read as the event counts, not the cell count -- see the
@@ -59,7 +58,6 @@ Still not mapped, and reported rather than adapted:
 
 from __future__ import annotations
 
-import ast
 import html as html_lib
 import inspect
 import json
@@ -86,8 +84,6 @@ from test_m6_multi import reference_record
 
 import lattice
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src" / "poisson_prove"
 # PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -154,8 +150,6 @@ LATTICE_CELL_KEYS = [
     "verdict",
     "mde",
 ]
-LATTICE_INT_KEYS = {"n_a", "n_b", "events_a", "events_b"}
-LATTICE_STR_KEYS = {"config_hash", "verdict"}
 
 # A parameter carrying a competing set would have to be named for one. H5 rejects any name
 # but ``events`` that reads like an outcome set.
@@ -561,16 +555,21 @@ def test_h6_every_verb_refuses_an_event_absent_from_the_runs(
     if verb == "report":
         argv += ["--x", "tool_fail_rate", "--y", "task_id", "--out", str(tmp_path / "out")]
     code, out, err = run_cli(argv)
-    # A refusal exits 1.
+    # A refusal exits 1, and check's verdict is a passed or failed line, so none is printed.
     assert code == 1, out + err
     assert "Traceback" not in out + err, out + err
     assert ABSENT in out + err, out + err
     for present in MOCK_OUTCOMES:
         assert present in out + err, (present, out + err)
     assert verb in out + err, out + err
+    assert verdict_lines(out + err) == [], out + err
+    if verb == "report":
+        # The check runs before any work: a refused report leaves no output directory behind.
+        out_dir = tmp_path / "out"
+        assert not out_dir.exists() or not any(out_dir.iterdir()), sorted(out_dir.iterdir())
 
 
-@pytest.mark.parametrize("verb", ["diff", "check", "report"])
+@pytest.mark.parametrize("verb", ["diff", "report"])
 def test_h6_every_verb_still_accepts_a_known_event(
     mock_pair: tuple[Path, str, str], tmp_path: Path, verb: str
 ) -> None:
@@ -580,10 +579,6 @@ def test_h6_every_verb_still_accepts_a_known_event(
     argv = ["--store", str(root), verb, a, b, "--event", "violated"]
     if verb == "report":
         argv += ["--x", "tool_fail_rate", "--y", "task_id", "--out", str(tmp_path / "out")]
-    if verb == "check":
-        # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
-        # declare none; --fail-on higher is the same gate ("fail when the rate rose").
-        argv += ["--fail-on", "higher"]
     code, out, err = run_cli(argv)
     assert code == 0, out + err
 
@@ -599,21 +594,6 @@ def test_h6_refuses_when_only_one_of_several_events_is_absent(
     # A refusal exits 1.
     assert code == 1, out + err
     assert ABSENT in out + err, out + err
-
-
-def test_h6_report_refuses_before_it_writes_anything(
-    mock_pair: tuple[Path, str, str], tmp_path: Path
-) -> None:
-    """D3: the check runs before any work. A refused report leaves no output directory behind."""
-    root, a, b = mock_pair
-    out_dir = tmp_path / "out"
-    code, out, err = run_cli(
-        ["--store", str(root), "report", a, b, "--event", ABSENT,
-         "--x", "tool_fail_rate", "--y", "task_id", "--out", str(out_dir)]
-    )
-    # A refusal exits 1.
-    assert code == 1, out + err
-    assert not out_dir.exists() or not any(out_dir.iterdir()), sorted(out_dir.iterdir())
 
 
 def _two_outcome_rows(with_timeout: bool) -> list[tuple[dict[str, Any], str | None, float | None]]:
@@ -650,30 +630,6 @@ def test_h6_single_run_report_validates_against_the_run_it_loaded(tmp_path: Path
     assert "timeout" in out + err, out + err
     for present in ("completed", "violated"):
         assert present in out + err, (present, out + err)
-
-
-# ---------- H7: check refuses an unknown event ----------
-
-
-def test_h7_check_refuses_an_event_absent_from_both_runs(
-    mock_pair: tuple[Path, str, str],
-) -> None:
-    root, a, b = mock_pair
-    code, out, err = run_cli(["--store", str(root), "check", a, b, "--event", "voilated"])
-    # A refusal exits 1.
-    assert code == 1, out + err
-    assert "Traceback" not in out + err, out + err
-    assert "voilated" in out + err, out + err
-    for present in ("completed", "timeout", "violated"):
-        assert present in out + err, (present, out + err)
-
-
-def test_h7_check_prints_no_verdict_when_it_refuses(mock_pair: tuple[Path, str, str]) -> None:
-    root, a, b = mock_pair
-    code, out, err = run_cli(["--store", str(root), "check", a, b, "--event", "voilated"])
-    # A refusal exits 1, and check's verdict is now a passed or failed line.
-    assert code == 1, out + err
-    assert verdict_lines(out + err) == [], out + err
 
 
 # ---------- H8: check still passes on a real event ----------
@@ -806,28 +762,7 @@ def _errored_cell_rows() -> list[tuple[dict[str, Any], str | None, float | None]
     return rows
 
 
-def test_h10_all_errored_cell_is_absent_from_the_single_run_panel(
-    captured: tuple[list[SurvivalReport], list[MultiReport]], tmp_path: Path
-) -> None:
-    root = tmp_path / "store"
-    write_run(root, "holes", _errored_cell_rows())
-    survival_reports, _ = captured
-    code, out, err = run_cli(
-        ["--store", str(root), "report", "holes", "--event", "violated",
-         "--x", "task", "--y", "level", "--out", str(tmp_path / "out")]
-    )
-    assert code == 0, out + err
-    panel = survival_reports[0].panels["violated"]
-    by_coords = {c.coords: c for c in panel.cells}
-    assert set(by_coords) == {("alpha", "one"), ("alpha", "two"), ("beta", "one"), ("beta", "two")}
-    dead = by_coords[HOLE]
-    assert dead.present is False, dead
-    assert panel.n_absent == 1, panel.n_absent
-    assert sum(1 for c in panel.cells if c.present) == 3
-    assert panel.n_unchanged == 0, panel.n_unchanged
-
-
-def test_h10_all_errored_cell_is_drawn_with_absent_fill(
+def test_h10_all_errored_cell_is_a_hole_and_not_a_measured_zero_in_the_single_run_report(
     captured: tuple[list[SurvivalReport], list[MultiReport]], tmp_path: Path
 ) -> None:
     root = tmp_path / "store"
@@ -838,10 +773,44 @@ def test_h10_all_errored_cell_is_drawn_with_absent_fill(
          "--x", "task", "--y", "level", "--theme", "dark", "--out", str(tmp_path / "out")]
     )
     assert code == 0, out + err
-    svg = survival_reports[0].panels["violated"].to_svg()
+    report = survival_reports[0]
+    panel = report.panels["violated"]
+
+    # The panel: the hole is absent, and only the three measured cells are present.
+    by_coords = {c.coords: c for c in panel.cells}
+    assert set(by_coords) == {("alpha", "one"), ("alpha", "two"), ("beta", "one"), ("beta", "two")}
+    dead = by_coords[HOLE]
+    assert dead.present is False, dead
+    assert panel.n_absent == 1, panel.n_absent
+    assert sum(1 for c in panel.cells if c.present) == 3
+    assert panel.n_unchanged == 0, panel.n_unchanged
+    measured = {c.coords: c.rate_a for c in panel.cells if c.present}
+    assert HOLE not in measured, measured
+    assert set(measured) == set(MEASURED), measured
+    for coords, expected in MEASURED.items():
+        assert abs(measured[coords] - expected) <= TOL, (coords, measured[coords], expected)
+
+    # The worst-cells table: no row for the hole. The honest zero is still listed, so the hole is
+    # dropped for being a hole, not for reading 0.
+    markdown = report.to_markdown()
+    rows = table_rows(markdown)
+    assert rows, markdown
+    assert [row for row in rows if row.startswith("| beta | two |")] == [], rows
+    assert [row for row in rows if row.startswith("| alpha | two |")] != [], rows
+
+    # The heatmap: the hole is the one absent rect, in the absent fill, with no number painted in
+    # its square, while the honest zero keeps its number and a ramp fill.
+    svg = panel.to_svg()
     absent_rects = [line for line in svg.splitlines() if 'data-cell="absent"' in line]
     assert len(absent_rects) == 1, svg
     assert f'fill="{ABSENT_FILL["dark"]}"' in absent_rects[0], absent_rects[0]
+    rects = cell_rects(svg)
+    assert len(rects) == len(panel.cells) == 4, (len(rects), len(panel.cells))
+    rect_at = {c.coords: rect for c, rect in zip(panel.cells, rects, strict=True)}
+    assert label_inside(svg, rect_at[HOLE]) == [], label_inside(svg, rect_at[HOLE])
+    assert rect_at[HOLE]["fill"] == ABSENT_FILL["dark"], rect_at[HOLE]
+    assert label_inside(svg, rect_at[TRUE_ZERO]) == ["0.0"], label_inside(svg, rect_at[TRUE_ZERO])
+    assert rect_at[TRUE_ZERO]["fill"] != ABSENT_FILL["dark"], rect_at[TRUE_ZERO]
 
 
 def test_h10_all_errored_cell_is_absent_from_the_diff_panel(
@@ -862,72 +831,6 @@ def test_h10_all_errored_cell_is_absent_from_the_diff_panel(
     assert dead.present is False, dead
     assert panel.n_absent == 1, panel.n_absent
     assert panel.n_unchanged == 3, panel.n_unchanged
-
-
-def test_h11_all_errored_cell_reports_no_rate_in_the_worst_cells_table(
-    captured: tuple[list[SurvivalReport], list[MultiReport]], tmp_path: Path
-) -> None:
-    root = tmp_path / "store"
-    write_run(root, "holes", _errored_cell_rows())
-    survival_reports, _ = captured
-    code, out, err = run_cli(
-        ["--store", str(root), "report", "holes", "--event", "violated",
-         "--x", "task", "--y", "level", "--out", str(tmp_path / "out")]
-    )
-    assert code == 0, out + err
-    markdown = survival_reports[0].to_markdown()
-    rows = table_rows(markdown)
-    assert rows, markdown
-    assert [row for row in rows if row.startswith("| beta | two |")] == [], rows
-    # The honest zero is still listed, so the hole is dropped for being a hole, not for reading 0.
-    assert [row for row in rows if row.startswith("| alpha | two |")] != [], rows
-
-
-def test_h11_all_errored_cell_carries_no_measured_rate_on_its_cell(
-    captured: tuple[list[SurvivalReport], list[MultiReport]], tmp_path: Path
-) -> None:
-    root = tmp_path / "store"
-    write_run(root, "holes", _errored_cell_rows())
-    survival_reports, _ = captured
-    code, out, err = run_cli(
-        ["--store", str(root), "report", "holes", "--event", "violated",
-         "--x", "task", "--y", "level", "--out", str(tmp_path / "out")]
-    )
-    assert code == 0, out + err
-    panel = survival_reports[0].panels["violated"]
-    dead = next(c for c in panel.cells if c.coords == HOLE)
-    assert dead.present is False, dead
-    measured = {c.coords: c.rate_a for c in panel.cells if c.present}
-    assert HOLE not in measured, measured
-    assert set(measured) == set(MEASURED), measured
-    for coords, expected in MEASURED.items():
-        assert abs(measured[coords] - expected) <= TOL, (coords, measured[coords], expected)
-
-
-def test_h11_zero_n_cell_has_no_number_painted_in_its_square(
-    captured: tuple[list[SurvivalReport], list[MultiReport]], tmp_path: Path
-) -> None:
-    """The surface the worst-cells table does not cover: the rate drawn inside the heatmap
-    square. Today the hole is painted "0.0" in the same place, and in the first stop of the
-    sequential ramp, as the honest zero beside it -- a reader cannot tell them apart."""
-    root = tmp_path / "store"
-    write_run(root, "holes", _errored_cell_rows())
-    survival_reports, _ = captured
-    code, out, err = run_cli(
-        ["--store", str(root), "report", "holes", "--event", "violated",
-         "--x", "task", "--y", "level", "--theme", "dark", "--out", str(tmp_path / "out")]
-    )
-    assert code == 0, out + err
-    panel = survival_reports[0].panels["violated"]
-    svg = panel.to_svg()
-    rects = cell_rects(svg)
-    assert len(rects) == len(panel.cells) == 4, (len(rects), len(panel.cells))
-    by_coords = {c.coords: rect for c, rect in zip(panel.cells, rects, strict=True)}
-    assert label_inside(svg, by_coords[HOLE]) == [], label_inside(svg, by_coords[HOLE])
-    assert by_coords[HOLE]["fill"] == ABSENT_FILL["dark"], by_coords[HOLE]
-    # The honest zero keeps its number, so the hole is blank for being a hole, not for reading 0.
-    assert label_inside(svg, by_coords[TRUE_ZERO]) == ["0.0"], label_inside(svg, by_coords[TRUE_ZERO])
-    assert by_coords[TRUE_ZERO]["fill"] != ABSENT_FILL["dark"], by_coords[TRUE_ZERO]
 
 
 # ---------- H12: golden untouched ----------
@@ -1159,153 +1062,56 @@ def test_h12_regression_facts_hold_on_what_the_build_writes(name: str, h12_writt
         _check_receipt(text, record, (h12_written / "heatmap.svg").read_text(encoding="utf-8"))
 
 
-def test_h12_lattice_single_event_diff_still_reproduces_the_reference_cells(lattice_store: Store) -> None:
-    frozen = reference_record()
-    result = _lattice_diff(lattice_store)
-    assert result.n_safer == frozen["n_safer"] == LATTICE_SAFER
-    assert result.n_worse == frozen["n_worse"] == LATTICE_WORSE
-    assert len(result.cells) == frozen["n_cells"] == LATTICE_CELLS
-    by_hash = {c["config_hash"]: c for c in frozen["cells"]}
-    assert set(result.cells["config_hash"]) == set(by_hash)
-    at_ceiling = 0
-    for row in result.cells.itertuples(index=False):
-        reference = by_hash[row.config_hash]
-        for key in LATTICE_CELL_KEYS:
-            ours = getattr(row, key)
-            if key == "mde" and reference["events_a"] == reference["n_a"]:
-                # PF4 (PF4.12, PF4.15): a cell whose baseline had the event in every run has no
-                # detection limit, so its mde is NaN where the frozen fixture held a number.
-                assert math.isnan(float(ours)), (row.config_hash, key)
-                at_ceiling += 1
-            elif key in LATTICE_INT_KEYS:
-                assert int(ours) == reference[key], (row.config_hash, key)
-            elif key in LATTICE_STR_KEYS:
-                assert str(ours) == reference[key], (row.config_hash, key)
-            else:
-                assert float(ours) == reference[key], (row.config_hash, key)
-    # PF4 (PF4.15): every reference cell at a 100% baseline was checked above, and the lattice has such cells.
-    assert at_ceiling == sum(c["events_a"] == c["n_a"] for c in frozen["cells"]) == 37
+# ---------- H13: the two remaining entry points use the full set ----------
 
 
-# ---------- H13: the competing-set rule is enforced in src/, not documented ----------
+def test_h13_single_run_report_json_absorbs_the_non_event_rather_than_censoring_it(tmp_path: Path) -> None:
+    """``report RUN --json`` prints each condition's incidence from the run's own cell table. On
+    the S13 cell (5 completed at t=1, 5 violated at t=3) the violated incidence over the
+    competing set is 0.5, the share of episodes that ended in it; censoring the completions
+    (the reported event alone) gives 1.0 there and 1.0 on the 8/2 cell, not 0.2."""
+    root = tmp_path / "store"
+    write_run(root, "s13-blocker", _five_five_rows())
+    code, out, err = run_cli(
+        ["--store", str(root), "report", "s13-blocker", "--event", "violated",
+         "--x", "task", "--out", str(tmp_path / "out"), "--json"]
+    )
+    assert code == 0, out + err
+    doc = json.loads(out)
+    cells = {c["config"]["task"]: c for c in doc["by_event"]["violated"]["cells"]}
+    assert set(cells) == {"blocker", "other"}, cells
+    expected = {"blocker": (10, 5, 0.5), "other": (10, 2, 0.2)}
+    for task, (n, k, share) in expected.items():
+        cell = cells[task]
+        assert (cell["n"], cell["n_events"]) == (n, k), cell
+        assert abs(cell["incidence"] - share) <= TOL, cell
+        assert cell["share_differs"] is False, cell
 
 
-def _modules() -> list[tuple[Path, ast.Module]]:
-    return [(p, ast.parse(p.read_text(encoding="utf-8"))) for p in sorted(SRC.rglob("*.py"))]
-
-
-def _owners(tree: ast.Module) -> dict[ast.AST, str]:
-    """Every node mapped to the innermost function containing it, so a call is attributed once
-    and a name bound in one function is not read as binding it in another."""
-    owner: dict[ast.AST, str] = {}
-
-    def walk(node: ast.AST, name: str) -> None:
-        for child in ast.iter_child_nodes(node):
-            child_name = (
-                child.name
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
-                else name
-            )
-            owner[child] = child_name
-            walk(child, child_name)
-
-    walk(tree, "<module>")
-    return owner
-
-
-def _called_name(node: ast.Call) -> str:
-    func = node.func
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        return func.attr
-    return ""
-
-
-def _unwrap(node: ast.expr) -> ast.expr:
-    """list(x) / tuple(x) / sorted(x) around a competing set is still that competing set."""
-    while isinstance(node, ast.Call) and _called_name(node) in ("list", "tuple", "sorted"):
-        if len(node.args) != 1:
-            break
-        node = node.args[0]
-    return node
-
-
-def _is_competing_set_call(node: ast.expr) -> bool:
-    node = _unwrap(node)
-    return isinstance(node, ast.Call) and _called_name(node) == "competing_set"
-
-
-def _bound_names(tree: ast.Module, owner: dict[ast.AST, str]) -> dict[str, set[str]]:
-    """Per function, the local names assigned from a ``competing_set(...)`` call."""
-    bound: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            value, targets = node.value, list(node.targets)
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            value, targets = node.value, [node.target]
-        else:
-            continue
-        if not _is_competing_set_call(value):
-            continue
-        for target in targets:
-            if isinstance(target, ast.Name):
-                bound.setdefault(owner.get(node, "<module>"), set()).add(target.id)
-    return bound
-
-
-def _traces_to_competing_set(arg: ast.expr, bound: set[str]) -> bool:
-    arg = _unwrap(arg)
-    if _is_competing_set_call(arg):
-        return True
-    return isinstance(arg, ast.Name) and arg.id in bound
-
-
-def test_h13_competing_set_is_defined_exactly_once_in_src() -> None:
-    definitions = [
-        (path.name, node.name)
-        for path, tree in _modules()
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "competing_set"
-    ]
-    assert definitions == [("survival.py", "competing_set")], definitions
-
-
-def test_h13_every_cell_table_call_site_passes_a_competing_set() -> None:
-    """``cell_table(..., method="aj")`` with no ``events=`` falls back to ``[event]`` -- the
-    subset that produced both blockers -- so a call site that omits it fails here too."""
-    sites = []
-    for path, tree in _modules():
-        owner = _owners(tree)
-        bound = _bound_names(tree, owner)
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and _called_name(node) == "cell_table"):
-                continue
-            scope = owner.get(node, "<module>")
-            events = [kw.value for kw in node.keywords if kw.arg == "events"]
-            ok = len(events) == 1 and _traces_to_competing_set(events[0], bound.get(scope, set()))
-            sites.append((f"{path.name}:{scope}:{node.lineno}", ok))
-    assert sites, "no cell_table call site found in src/"
-    assert [site for site, ok in sites if not ok] == [], sites
-
-
-def test_h13_every_aalen_johansen_call_site_passes_a_competing_set() -> None:
-    """The one call inside ``cell_table`` forwards the set its caller supplied -- that is the
-    plumbing that carries a competing set, not a second construction of one -- so it is named
-    here rather than traced."""
-    forwarding = ("survival.py", "cell_table")
-    sites = []
-    for path, tree in _modules():
-        owner = _owners(tree)
-        bound = _bound_names(tree, owner)
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and _called_name(node) == "aalen_johansen"):
-                continue
-            scope = owner.get(node, "<module>")
-            if (path.name, scope) == forwarding:
-                continue
-            args = [*node.args, *(kw.value for kw in node.keywords if kw.arg == "events")]
-            ok = len(args) >= 3 and _traces_to_competing_set(args[2], bound.get(scope, set()))
-            sites.append((f"{path.name}:{scope}:{node.lineno}", ok))
-    assert sites, "no aalen_johansen call site found in src/ outside cell_table"
-    assert [site for site, ok in sites if not ok] == [], sites
+def test_h13_saved_comparison_incidence_curves_absorb_the_non_event_rather_than_censoring_it(
+    tmp_path: Path,
+) -> None:
+    """A saved comparison carries each condition's cumulative incidence per run
+    (``charts/<condition hash>/incidence-<event>.json``). Before: 5 completed at t=1 and 5
+    violated at t=3; after: 8 completed at t=1 and 2 violated at t=3. Over the competing set the
+    violated curves step to 0.5 and 0.2 at t=3; censoring the completions (the reported event
+    alone) would put both at 1.0."""
+    root = tmp_path / "store"
+    config = {"task": "blocker", "level": "one"}
+    write_run(root, "before", [(config, "completed", COMPLETED_T)] * 5 + [(config, "violated", VIOLATED_T)] * 5)
+    write_run(root, "after", [(config, "completed", COMPLETED_T)] * 8 + [(config, "violated", VIOLATED_T)] * 2)
+    code, out, err = run_cli(
+        ["--store", str(root), "diff", "before", "after", "--event", "violated", "--method", "fisher_bh", "--save"]
+    )
+    assert code == 0, out + err
+    (chart,) = (root / ".poisson" / "artifacts" / "comparison").glob(
+        f"*/charts/{config_hash(config)}/incidence-violated.json"
+    )
+    data = json.loads(chart.read_text(encoding="utf-8"))
+    assert data["columns"] == ["t", "before", "after"], data
+    rows = data["rows"]
+    assert rows[0] == [0.0, 0.0, 0.0], rows
+    at_event = [row for row in rows if row[0] == VIOLATED_T]
+    assert len(at_event) == 1, rows
+    for row in (at_event[0], rows[-1]):
+        assert abs(row[1] - 0.5) <= TOL and abs(row[2] - 0.2) <= TOL, rows

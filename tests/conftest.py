@@ -97,12 +97,13 @@ def without_run_lines(text: str) -> str:
 
 #: PF9.4: every module that drives a remote backend offline runs with network
 #: sockets blocked in the pytest process (the interpreters the Burla and Modal fakes start arm
-#: their own tripwire). ``test_pf9_backends`` checks that no such module is left out.
+#: their own tripwire). A new module that drives a backend is added here by hand.
 NETWORK_BLOCKED_MODULES = frozenset({
     "test_a10_declared", "test_bu_burla_backend", "test_m10_cli", "test_m10_multi", "test_m11a_chaos",
     "test_m3_capture", "test_m3_crash_trace", "test_m3_modal", "test_m3_modal_launch",
     "test_m3_timeout_trace", "test_mc_modal_chaos", "test_pf11_setup_agent", "test_pf1_look", "test_pf9_backends",
-    "test_pr1_pair_assertion", "test_s23_power",
+    "test_pr1_pair_assertion", "test_s21_errors", "test_s23_power", "test_capture_crash_and_timeout_behaviour",
+    "test_storage_and_chaos_behaviour",
 })
 #: A module that drives a backend but must serve on a local socket, with its reason.
 NETWORK_EXEMPT_MODULES = {

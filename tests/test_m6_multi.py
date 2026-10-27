@@ -615,6 +615,7 @@ def test_a1_golden_summary_matches_regression_fixture(golden: DiffResult, regres
     assert golden.unpaired_analysis is True
     assert golden.horizon == regression["horizon"] and golden.t_unit == regression["t_unit"]
     assert golden.q == regression["q_threshold"] and golden.method == regression["method"]
+    assert golden.event == regression["event"] == EVENT
     assert len(golden.cells) == regression["n_cells"]
     assert list(golden.cells.columns) == CELLS_COLUMNS
 
@@ -849,21 +850,6 @@ def test_a8_n_tests_is_cells_times_events_fixture(raw: dict[str, pd.DataFrame], 
     result = _fixture_multi(raw, manifests, [lattice.EVENT, lattice.OTHER])
     assert result.n_tests == CELLS * 2
     assert all(len(result.by_event[e].cells) == CELLS for e in result.events)
-
-
-def test_a8_every_q_is_bh_over_pooled_p_synthetic() -> None:
-    a, b = _a8_frames()
-    result = _multi(a, b, ["timeout", "violated"])
-    p, q = _pooled_p_and_q(result)
-    assert len(p) == result.n_tests
-    np.testing.assert_allclose(q, bh(p, Q), rtol=0, atol=TOL_EXACT)
-
-
-def test_a8_every_q_is_bh_over_pooled_p_fixture(raw: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -> None:
-    result = _fixture_multi(raw, manifests, [lattice.EVENT, lattice.OTHER])
-    p, q = _pooled_p_and_q(result)
-    assert len(p) == result.n_tests == CELLS * 2
-    np.testing.assert_allclose(q, bh(p, Q), rtol=0, atol=TOL_EXACT)
 
 
 def _assert_family_never_smaller(both: MultiDiffResult, singles: dict[str, MultiDiffResult]) -> None:

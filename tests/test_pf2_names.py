@@ -1487,9 +1487,11 @@ def test_pf2_carried_a_pair_of_an_old_run_and_a_new_one_says_which_run_proofload
 
 def test_pf2_carried_prove_has_no_name_verb_and_reads_names_from_trace(tmp_path: Path) -> None:
     root = pair_store(tmp_path / "store")
+    before = listing(root)
     r = at(root, "name", A_ID, "something")
     assert r.code == 2 and r.out == "", r
     help_text = cli("--help").out
     verbs = re.findall(r"^    (\w+)\s", help_text, flags=re.M)
     assert verbs and "name" not in verbs, help_text
     assert not (root / NAMES_FILE).exists()
+    assert listing(root) == before

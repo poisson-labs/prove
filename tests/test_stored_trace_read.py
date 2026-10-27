@@ -25,12 +25,12 @@ symbol, and would leave every unmigrated store failing as before.
 ``Span``'s own comment says ``None`` means on A8a's eight, so a reader asks ``is None`` and reads the truth. It
 is never a zero and never an empty string.
 
-**Invariant-to-test map** (R-numbers are this file's; 64 collected ids):
+**Invariant-to-test map** (R-numbers are this file's; 54 collected ids):
 
 | Invariant | Tests |
 |---|---|
 | R1 a run stored before A8a opens in full: every row reads as the trace it was | ``test_r1_*`` |
-| R2 what the old shape lacked reads ``None``, field by field | ``test_r2_*`` |
+| R2 what the old shape lacked reads ``None``, field by field | ``test_r1_*`` (each row equals the trace rebuilt with ``None`` there) |
 | R3 a trace already in the current shape is not touched | ``test_r3_*`` |
 | R4 the tolerance is exactly the old shape: near misses still raise | ``test_r4_*`` |
 | R5 ``from_dict`` is unchanged: the fix is not there | ``test_r5_*`` |
@@ -49,15 +49,15 @@ trace back inside ``meta`` and dropping both trace columns. The expected trace o
 from the same recipe with ``make_trace``, never read off a store, so a broken twin cannot make a test
 vacuous; and R7 counts the span lines it expects, because two silent outputs are equal.
 
-**Green before and after -- 37 of the 64 ids**, named so their green is not read as coverage (the other 27 are
-red on the bare tree: 17 raise ``missing trace key(s): alias_map_version`` from ``Store.read``, the defect itself, and 10
+**Green before and after -- 37 of the 54 ids**, named so their green is not read as coverage (the other 17 are
+red on the bare tree: 7 raise ``missing trace key(s): alias_map_version`` from ``Store.read``, the defect itself, and 10
 fail on what ``inspect`` does or on a ``meta`` or an envelope that comes back unread): R1's fixture precondition; both
 R3 tests (the current shape round-trips today); all twenty-six R4 tests (a near miss raises today and must go on raising,
 so they pin what must NOT change: six mixtures of the two shapes, and each of the six trace keys and thirteen span keys
 the old shape had, missing in turn); both R5 tests (``from_dict`` is strict today and must stay so); R8's five (a
 current-shape trace and something that is no trace, inside ``meta``, are returned as written today, ``inspect`` prints
 no trace lines for the second, and the envelope of the first is the current writer's while the second has none); and
-R9's one (the envelope read of a written column is raw today and must stay raw). R10's second test and every R1, R2,
+R9's one (the envelope read of a written column is raw today and must stay raw). R10's second test and every R1,
 R6 and R7 test that reads an old run are red.
 
 **Named gaps, not pinned.** (1) ``inspect`` prints no ``observation:`` line on an old run, because its spans
@@ -100,9 +100,6 @@ A7_SPAN_KEYS = (
     "span_id", "parent_id", "kind", "name", "start_ns", "end_ns", "input", "output", "tokens",
     "confidence", "error", "code", "attrs",
 )
-#: What A8a added: one trace key and eight span keys.
-A8A_TRACE_KEYS = ("alias_map_version",)
-A8A_SPAN_KEYS = ("operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original")
 
 
 # ---------- helpers: data construction, never an assertion ----------
@@ -344,29 +341,6 @@ def test_r1_the_run_reads_exactly_as_the_current_writer_stored_the_same_traces(r
 def test_r1_every_stored_trace_validates_under_the_current_schema_once_read(root: Path) -> None:
     for key, trace in read_traces(root, "old"):
         assert Trace.from_dict(trace).to_dict() == expected(key), key
-
-
-# ---------- R2: what the old shape lacked reads None, field by field ----------
-
-
-@pytest.mark.parametrize("name", A8A_TRACE_KEYS)
-def test_r2_each_trace_key_the_old_shape_lacked_reads_none(root: Path, name: str) -> None:
-    for key, trace in read_traces(root, "old"):
-        assert name in trace and trace[name] is None, (name, key, trace.get(name, "<absent>"))
-
-
-@pytest.mark.parametrize("name", A8A_SPAN_KEYS)
-def test_r2_each_span_key_the_old_shape_lacked_reads_none_and_never_a_zero_or_a_blank(root: Path, name: str) -> None:
-    for key, trace in read_traces(root, "old"):
-        for span in trace["spans"]:
-            assert name in span and span[name] is None, (name, key, span.get(name, "<absent>"))
-
-
-def test_r2_what_the_old_shape_had_is_where_it_was_and_the_read_trace_has_exactly_the_current_keys(root: Path) -> None:
-    for key, trace in read_traces(root, "old"):
-        assert set(trace) == {*A7_TRACE_KEYS, *A8A_TRACE_KEYS}, key
-        for span in trace["spans"]:
-            assert set(span) == {*A7_SPAN_KEYS, *A8A_SPAN_KEYS}, key
 
 
 # ---------- R3: a trace already in the current shape is not touched ----------

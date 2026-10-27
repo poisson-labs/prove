@@ -4,6 +4,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 # PF7: the import names of what the extras bring; litellm and matplotlib are no
@@ -19,15 +21,24 @@ def test_import_and_version():
     assert isinstance(poisson_prove.__version__, str) and poisson_prove.__version__
 
 
-def test_core_import_pulls_no_extras():
-    for name in list(sys.modules):
-        if name.split(".")[0] in EXTRAS_BANNED_FROM_CORE:
-            del sys.modules[name]
-    import importlib
-    import poisson_prove
-    importlib.reload(poisson_prove)
-    loaded = {n.split(".")[0] for n in sys.modules}
-    assert not loaded & EXTRAS_BANNED_FROM_CORE
+#: The modules a bare install imports: the package, its public modules but ``otel`` (which needs the
+#: ``agent`` extra), the core and the command line.
+CORE_MODULES = (
+    "poisson_prove", "poisson_prove.compare", "poisson_prove.stats", "poisson_prove.store",
+    "poisson_prove.trace", "poisson_prove.steps", "poisson_prove.chaos",
+    "poisson_prove.examples.mock_agent", "poisson_prove.core", "poisson_prove.cli",
+)
+
+
+@pytest.mark.parametrize("module", CORE_MODULES)
+def test_core_import_pulls_no_extras(module):
+    """Each core module, imported alone in a fresh interpreter, loads no extra's package."""
+    r = subprocess.run([sys.executable, "-I", "-c", f"import sys, {module}; print(*sorted(sys.modules))"],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    loaded = {n.split(".")[0] for n in r.stdout.split()}
+    assert module in r.stdout.split(), r.stdout[-500:]
+    assert not loaded & EXTRAS_BANNED_FROM_CORE, (module, sorted(loaded & EXTRAS_BANNED_FROM_CORE))
 
 
 def test_cli_version_via_entrypoint():
@@ -48,8 +59,6 @@ def test_python_floor():
     assert data["project"]["requires-python"] == ">=3.11"
 
 
-#: ``SCOPE.md`` folds into the README, and its
-#: never-phones-home paragraph is kept word for word, with the names as the rename gives them.
 def imported_modules(py: Path) -> set[str]:
     """Every module an ``import`` or ``from ... import`` names, as a full dotted path.
 

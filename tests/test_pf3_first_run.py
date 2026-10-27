@@ -958,6 +958,10 @@ def test_pf3_7_fix_reads_its_value_by_the_axis_type_and_refuses_a_value_not_on_t
     else:
         # The same report as the value spelt the way a TOML scalar always read.
         spelt = f'{key}="{pinned}"' if isinstance(pinned, str) else f"{key}={pinned!r}"
+        if spelt == fix:
+            # Typed as the scalar already reads: the same number in exponent form instead.
+            spelt = f"{key}={pinned:e}"
+        assert spelt != fix, spelt
         same = run(r.cwd, "report", r.a, r.b, "--x", x, "--fix", spelt, "--out", tmp_path / "spelt")
         assert same.code == 0, same.err
         assert (tmp_path / "out" / "report.md").read_bytes() == (tmp_path / "spelt" / "report.md").read_bytes()

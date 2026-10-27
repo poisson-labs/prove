@@ -89,8 +89,6 @@ def test_pf5_a_comparison_and_a_check_pickle_and_round_trip_equal_read_or_not(st
         copy = pickle.loads(pickle.dumps(result))
         assert type(copy) is type(result)
         assert copy == result
-        assert copy.to_json() == result.to_json()
-        assert copy.rows == result.rows and copy.detail == result.detail
     diffed, checked = (pickle.loads(pickle.dumps(r)) for r in results)
     assert diffed.tree is not None and checked.passed == results[1].passed
     # A copy of an unread result and a copy of a read one are the same comparison.

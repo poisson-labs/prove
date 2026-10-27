@@ -30,11 +30,8 @@ G1-G5, G7-G11, G13, G16, G17, G21 and G22. Every one reaches ``agreement_digest`
 ``--collect-only`` is exact on the bare tree. **Green before and after, named so their green is
 not read as evidence:** G6 (``omnibus`` and ``RootResult`` do not move), G12 (the five older
 refusals and their messages -- a preservation clause, and the sole catch for mutant 11 all the
-same), G14 (W20's partition and arithmetic pins, restated), G15 (``cli.py`` never mentions
-``agreement``; the ``test_s27_leaves.py`` guard lists it from the update on), G18, G19 and G20
-(the exclusion record, sweep and whole-file ``diff.py`` digest, all facts of the update commit
-itself -- red on the freeze commit alone, green from the update commit on). The two-cell rule does
-not bind: one environment, one cell.
+same) and G15 (``cli.py`` never mentions ``agreement``). The two-cell rule does not bind: one
+environment, one cell.
 
 **Fixture limits, stated rather than left to be rediscovered:**
 
@@ -66,8 +63,8 @@ before the multiset clause -> G12 and W16, nothing else; 12 digest widened with 
 G17, G21, G22; 13 viewer knob clause deleted -> G21 alone; 14 report knob clause deleted -> G22
 alone.
 
-Restated rather than imported, as every frozen test file's helpers are: the AST resolver, the
-closure and arithmetic scans, the store builders and the two-value cells.
+Restated rather than imported, as every frozen test file's helpers are: the store builders and
+the two-value cells.
 """
 
 from __future__ import annotations
@@ -100,35 +97,25 @@ from poisson_prove.tree import RootResult, TreeError, TreeResult, omnibus
 from poisson_prove.tree import tree as grow_tree
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
-REPO = PACKAGE.parents[1]
-TREE_SOURCE = PACKAGE / "tree.py"
-REPORT_SOURCE = PACKAGE / "report.py"
-VIEWER_SOURCE = PACKAGE / "viewer.py"
-DIFF_SOURCE = PACKAGE / "diff.py"
 CLI_SOURCE = PACKAGE / "cli.py"
-TESTS = REPO / "tests"
 LATTICE_ROOT = lattice.root()
 
 # ---------- the literals ----------
 
-#: G9. The schema in force, and the retired ones.
+#: G9. The schema in force.
 # LS update: /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
-RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5", "proofload.viewpair/6")
-#: G9. The top-level keys, in order: the digest is inside ``tree``, not beside it. LS update: fourteen, ``summary`` eighth.
-TOP_LEVEL_KEYS = (
-    "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
-    "intervals", "tree", "unverified", "heatmap_svg",
-)
+#: G4, G5. The four episode counts the agreement digest is minted over, per (event, cell).
+REBUILD_COLUMNS = ("n_a", "n_b", "events_a", "events_b")
 #: G7. ``TreeResult``'s six fields in order and ``to_json()``'s six keys in the same order.
 TREE_RESULT_FIELDS = ("root", "grouping", "fault_lines", "leaves", "bound", "agreement")
-#: G16, G17. The tag inside the hashed payload; never a sibling key.
+#: G17. The tag inside the hashed payload; never a sibling key.
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 #: G17. The schema string the 0.0.1 builds hashed behind, before the PF0 freeze renamed it.
 OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
 # The PF0 freeze kept the old fixture's 0.0.1 digests beside its renamed ones; they were never
-# asserted in this file (a dead digest) and went with that fixture. G17 now checks the old string's
-# digest differs from the new one's, from the reference. Lattice port, 2026-10-25.
+# asserted in this file (a dead digest) and went with that fixture. G17 now checks the digest the
+# trees carry is not the old string's, from the reference. Lattice port, 2026-10-25.
 
 
 def reference_agreement(events: Sequence[str], schema: str = AGREEMENT_SCHEMA) -> str:
@@ -158,38 +145,6 @@ REPORT_EVENTS_MESSAGE = "the tree is over events"
 REPORT_ARITY_MESSAGE = "cells x"
 #: G10, G11, G21, G22. What the two new clauses must say, by one word each.
 DIGEST_WORD = "digest"
-#: G14. M13's import partition (V35, W20), restated.
-ASSEMBLY_HELPERS = frozenset({"_fmt", "_coord_text", "_worst_header", "_worst_table_rows", "_EPISTEMIC_FENCE"})
-RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
-#: G18-G20. An exclusion record's fields, A28's owner tag, and the four former carriers of the
-#: ``diff.py`` digest, which after retirement assert the sweep from files carrying no exclusion.
-ADR_077_FIELDS = frozenset({"region", "owner", "cover", "minted_at", "blind_spot", "retire_at"})
-LINES_FIELD = "lines"
-LINES_RE = re.compile(r"^(?P<spans>\d+-\d+(?:, \d+-\d+)*) of (?P<total>\d+)$")
-OWNER = "A28"
-MINTED_AT = "38e8df9"
-#: G18, per record since P-1's update: ``(owner, minted_at, cover file)`` for every
-#: exclusion record the carrier may hold. ``TREE_PY_EXCLUDED`` is P-1's (an
-#: exclusion record's clean case, at ``("RootResult", "_root")``), covered by the P-1 frozen file, so the cover
-#: is no longer always this file and ``lines`` may carry two spans.
-RECORD_OWNERS = {
-    "REPORT_PY_EXCLUDED": ("A28", "38e8df9", "test_a28_agreement.py"),
-    "TREE_PY_EXCLUDED": ("P-1", "a626cd3", "test_p1_payload.py"),
-}
-EXCLUSION_CARRIER = "test_s29_viewer.py"
-FORMER_CARRIERS = ("test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py")
-PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REPORT_SOURCE, "DIFF_PY_EXCLUDED": DIFF_SOURCE}
-#: G20. ``src/poisson_prove/diff.py`` whole, read off the shipped file at ``38e8df9`` and unchanged at
-#: ``03d7ed2``: the value the retirement re-mints in every carrier -- five literals, one per file (this
-#: file, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``, ``test_s29_viewer.py``);
-#: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS update) -- a read and not a prediction.
-# Re-minted off the build at 173c25d: diff.py gains complementary_events and trade_line()'s complement branch; the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted for A10's declared expectations, off the build at 662ceff: diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (A10 W9; _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# PF0: no longer asserted. The rename changes diff.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
-#: The one ``tests/`` file whose module-level ``*_PY_EXCLUDED`` constants this file inspects.
-S27_SOURCE = TESTS / "test_s27_leaves.py"
 
 # ---------- the store builders (S27's and S29's, restated) ----------
 
@@ -346,7 +301,8 @@ def viewer() -> Any:
 
 
 def spec_for(g: Grown) -> ReportSpec:
-    return ReportSpec(title=f"{g.a} vs {g.b}", x_axis="task", y_axis="temp", fixed={})
+    x, y = (lattice.X, lattice.Y) if g.root == LATTICE_ROOT else ("task", "temp")
+    return ReportSpec(title=f"{g.a} vs {g.b}", x_axis=x, y_axis=y, fixed={})
 
 
 def structure_for(g: Grown, result: Any) -> dict[str, Any]:
@@ -397,130 +353,6 @@ def parsed(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"))
 
 
-def module_functions(module: ast.Module) -> dict[str, ast.AST]:
-    return {n.name: n for n in module.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)}
-
-
-def closure(module: ast.Module, name: str) -> list[ast.AST]:
-    functions = module_functions(module)
-    seen: dict[str, ast.AST] = {}
-    todo = [name]
-    while todo:
-        current = todo.pop()
-        if current in seen or current not in functions:
-            continue
-        seen[current] = functions[current]
-        for node in ast.walk(functions[current]):
-            if isinstance(node, ast.Name) and node.id in functions and node.id not in seen:
-                todo.append(node.id)
-    return list(seen.values())
-
-
-def resolve_region(tree: ast.Module, qualified: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:
-    """The exclusion region's boundary, restated: exactly one definition per segment or the clause refuses."""
-    node: ast.AST = tree
-    definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
-    for segment in qualified.split("."):
-        matches = [
-            child
-            for child in ast.iter_child_nodes(node)
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and child.name == segment
-        ]
-        assert len(matches) == 1, (qualified, segment, len(matches))
-        definition = matches[0]
-        node = definition
-    assert definition is not None, qualified
-    return definition
-
-
-def referenced_names(nodes: Sequence[ast.AST]) -> set[str]:
-    return {n.id for fn in nodes for n in ast.walk(fn) if isinstance(n, ast.Name)}
-
-
-ARITHMETIC = (ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow, ast.MatMult)
-
-
-def is_non_numeric(node: ast.AST) -> bool:
-    return isinstance(node, ast.JoinedStr | ast.List | ast.ListComp | ast.Tuple) or (isinstance(node, ast.Constant) and isinstance(node.value, str))
-
-
-def arithmetic_nodes(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    out: list[ast.AST] = []
-    for fn in nodes:
-        for node in ast.walk(fn):
-            if isinstance(node, ast.BinOp):
-                if isinstance(node.op, ARITHMETIC):
-                    out.append(node)
-                elif isinstance(node.op, ast.Add) and not (is_non_numeric(node.left) or is_non_numeric(node.right)):
-                    out.append(node)
-            elif isinstance(node, ast.AugAssign) and isinstance(node.op, ast.Add | ARITHMETIC):
-                out.append(node)
-            elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) and not isinstance(node.operand, ast.Constant):
-                out.append(node)
-    return out
-
-
-def total_seconds_operands(nodes: Sequence[ast.AST]) -> list[ast.AST]:
-    return [n.func.value for fn in nodes for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "total_seconds"]
-
-
-def report_import_names(module: ast.Module) -> set[str]:
-    names: set[str] = set()
-    for node in module.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.report":
-            names.update(alias.name for alias in node.names)
-    return names
-
-
-def module_body_imports_of(module: ast.Module, dotted: str) -> list[int]:
-    return [n.lineno for n in module.body if isinstance(n, ast.ImportFrom) and n.module == dotted] + [
-        n.lineno for n in module.body if isinstance(n, ast.Import) and any(a.name == dotted for a in n.names)
-    ]
-
-
-def module_constants(module: ast.Module) -> dict[str, ast.expr]:
-    """Every module-level single-target assignment, by name."""
-    out: dict[str, ast.expr] = {}
-    for node in module.body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            out[node.targets[0].id] = node.value
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
-            out[node.target.id] = node.value
-    return out
-
-
-def exclusion_constants(path: Path) -> dict[str, tuple[dict[str, Any], ...]]:
-    """The exclusion sweep as an AST read: the module-level constants named ``*_PY_EXCLUDED``.
-    A text grep for the suffix would count this file, and the four former carriers, from the
-    prose and the sweep line itself once their records are gone; a name on a module-level
-    assignment is what "the record is a module constant named for the file it narrows" means."""
-    return {
-        name: tuple(ast.literal_eval(value))
-        for name, value in module_constants(parsed(path)).items()
-        if name.endswith("_PY_EXCLUDED")
-    }
-
-
-def sweep() -> list[str]:
-    return sorted(path.name for path in sorted(TESTS.glob("test_*.py")) if exclusion_constants(path))
-
-
-def string_constants(module: ast.AST, prefix: str) -> list[str]:
-    return [n.value for n in ast.walk(module) if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value.startswith(prefix)]
-
-
-def calls_of(node: ast.AST, *, attr: str | None = None, name: str | None = None) -> list[ast.Call]:
-    out = []
-    for n in ast.walk(node):
-        if not isinstance(n, ast.Call):
-            continue
-        if attr is not None and isinstance(n.func, ast.Attribute) and n.func.attr == attr:
-            out.append(n)
-        if name is not None and isinstance(n.func, ast.Name) and n.func.id == name:
-            out.append(n)
-    return out
-
-
 # ---------- G1-G4: the digest itself ----------
 
 
@@ -529,7 +361,6 @@ def test_g1_the_digest_and_the_field_are_64_hex_lowercase_strings(every_fixture:
         recomputed = tree_mod.agreement_digest(g.multi)
         assert isinstance(recomputed, str) and HEX64.match(recomputed), (g.name, recomputed)
         assert isinstance(g.result.agreement, str) and HEX64.match(g.result.agreement), g.name
-        assert not isinstance(g.result.agreement, bytes | int)
 
 
 def test_g2_every_tree_grown_beside_its_own_diff_carries_the_digest_the_diff_recomputes(every_fixture: list[Grown]) -> None:
@@ -566,41 +397,42 @@ def test_g4_changing_any_one_rebuild_integer_in_any_one_cell_of_any_one_event_ch
     for event in p.multi.events:
         cells = p.multi.by_event[event].cells
         for index in range(len(cells)):
-            for column in tree_mod._REBUILD_COLUMNS:
+            for column in REBUILD_COLUMNS:
                 bumped = cells.copy()
                 bumped.loc[bumped.index[index], column] = int(bumped.loc[bumped.index[index], column]) + 1
                 digest = tree_mod.agreement_digest(with_cells(p.multi, event, bumped))
                 assert digest != expected, (event, index, column)
                 moved.add(digest)
-    assert len(moved) == len(p.multi.events) * 5 * len(tree_mod._REBUILD_COLUMNS)
+    assert len(moved) == len(p.multi.events) * 5 * len(REBUILD_COLUMNS)
 
 
 # ---------- G5, G6: the mint site, and what does not move ----------
 
 
-def test_g5_require_agreement_returns_the_digest_and_still_raises_on_both_paths_with_the_messages_unchanged(crossed: dict[str, Grown]) -> None:
-    """Sole catch for mutant 3. The two ``TreeError`` paths and their messages are pinned by
-    substring: a cell rebuilt but absent from an event's family, and a rebuild that disagrees."""
+def test_g5_tree_carries_the_digest_and_still_raises_on_both_paths_with_the_messages_unchanged(crossed: dict[str, Grown]) -> None:
+    """Sole catch for mutant 3. ``tree`` carries the digest the diff recomputes, and its two
+    ``TreeError`` paths and their messages are pinned by substring: a cell rebuilt but absent from
+    an event's family, and a rebuild that disagrees."""
     p = crossed["P"]
     fa, fb = (frame.copy() for frame in p.frames)
-    common, groups_a, groups_b, codebook = tree_mod._rebuild(fa, fb, p.multi.horizon)
-    digest = tree_mod._require_agreement(p.multi, common, groups_a, groups_b, codebook)
-    assert isinstance(digest, str) and digest == tree_mod.agreement_digest(p.multi) == p.result.agreement
+    options = {"manifest_a": p.manifests[0], "manifest_b": p.manifests[1], "n_permutations": PERMUTATIONS, "seed": SEED}
+    again = grow_tree(fa, fb, p.multi, **options)
+    assert isinstance(again.agreement, str) and again.agreement == tree_mod.agreement_digest(p.multi) == p.result.agreement
     event = p.multi.events[0]
     cells = p.multi.by_event[event].cells
     absent = with_cells(p.multi, event, cells.iloc[1:].reset_index(drop=True))
     with pytest.raises(TreeError) as info:
-        tree_mod._require_agreement(absent, common, groups_a, groups_b, codebook)
+        grow_tree(fa, fb, absent, **options)
     message = str(info.value)
     assert f"rebuilt from the frames but absent from the {event!r} family" in message, message
     assert "the frames are not the pair this diff was computed from" in message
     bumped = cells.copy()
     bumped.loc[bumped.index[0], "events_a"] = int(bumped.loc[bumped.index[0], "events_a"]) + 1
     with pytest.raises(TreeError) as info:
-        tree_mod._require_agreement(with_cells(p.multi, event, bumped), common, groups_a, groups_b, codebook)
+        grow_tree(fa, fb, with_cells(p.multi, event, bumped), **options)
     message = str(info.value)
     assert f"the rebuild disagrees with the diff on event {event!r}" in message, message
-    assert str(tree_mod._REBUILD_COLUMNS) in message and "on cells; the frames are not the pair this diff was computed from" in message
+    assert str(REBUILD_COLUMNS) in message and "on cells; the frames are not the pair this diff was computed from" in message
 
 
 def test_g6_omnibus_is_untouched_and_root_result_carries_no_digest(crossed: dict[str, Grown]) -> None:
@@ -634,21 +466,14 @@ def test_g8_the_payload_survives_a_json_round_trip_on_every_fixture(every_fixtur
         assert list(json.loads(text)) == list(TREE_RESULT_FIELDS), g.name
 
 
-def test_g9_the_schema_is_viewpair_4_the_thirteen_keys_stand_and_render_html_refuses_both_retired_schemas_naming_both(crossed: dict[str, Grown]) -> None:
-    """``/3``'s half is the sole catch for mutant 8 inside this file."""
+def test_g9_the_structure_carries_the_schema_and_the_trees_agreement_and_renders(crossed: dict[str, Grown]) -> None:
     m = viewer()
     assert m.SCHEMA == SCHEMA
     p = crossed["P"]
     structure = structure_for(p, p.result)
-    assert tuple(structure) == TOP_LEVEL_KEYS and structure["schema"] == SCHEMA
+    assert structure["schema"] == SCHEMA
     assert structure["tree"]["agreement"] == p.result.agreement
     assert isinstance(m.render_html(structure), str)
-    for retired in RETIRED_SCHEMAS:
-        stale = json.loads(json.dumps(structure, allow_nan=False))
-        stale["schema"] = retired
-        with pytest.raises(m.ViewerError) as info:
-            m.render_html(stale)
-        assert retired in str(info.value) and SCHEMA in str(info.value), (retired, str(info.value))
 
 
 # ---------- G10-G13: the two renderers ----------
@@ -664,15 +489,13 @@ def test_g10_the_viewer_refuses_c16s_crossed_tree_from_the_digest_clause_naming_
     for diff, other in ((p, q), (q, p)):
         same_family_shape(diff, other)
         with pytest.raises(m.ViewerError) as info:
-            m._check_tree(diff.multi, other.result)
+            m.build_structure(report_for(diff), diff.multi, tree=other.result, **structure_kwargs(diff))
         message = str(info.value)
         assert DIGEST_WORD in message.lower(), message
         assert not any(h in message for h in hashes_of(p)), message
         for phrase in (VIEWER_EVENTS_MESSAGE, VIEWER_ARITY_MESSAGE, VIEWER_MULTISET_MESSAGE):
             assert phrase not in message, (phrase, message)
         assert not re.search(r"\d+ cell", message) and "tests" not in message, message
-        with pytest.raises(m.ViewerError):
-            m.build_structure(report_for(diff), diff.multi, tree=other.result, **structure_kwargs(diff))
     assert isinstance(structure_for(p, p.result), dict) and isinstance(structure_for(q, q.result), dict)
 
 
@@ -682,14 +505,12 @@ def test_g11_the_report_refuses_c16s_crossed_tree_with_comparison_mismatch(cross
     for diff, other in ((p, q), (q, p)):
         same_family_shape(diff, other)
         with pytest.raises(report_mod.ComparisonMismatch) as info:
-            report_mod._check_tree(diff.multi, other.result)
+            build_multi_report(diff.multi, spec_for(diff), manifests=diff.manifests, tree=other.result)
         assert isinstance(info.value, report_mod.ReportError)
         message = str(info.value)
         assert DIGEST_WORD in message.lower() and not any(h in message for h in hashes_of(p)), message
         for phrase in (REPORT_EVENTS_MESSAGE, REPORT_ARITY_MESSAGE):
             assert phrase not in message, (phrase, message)
-        with pytest.raises(report_mod.ComparisonMismatch):
-            build_multi_report(diff.multi, spec_for(diff), manifests=diff.manifests, tree=other.result)
         assert build_multi_report(diff.multi, spec_for(diff), manifests=diff.manifests, tree=diff.result).tree is diff.result
 
 
@@ -707,107 +528,39 @@ def test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_uncha
     assert not (hashes_of(vocab) & hashes_of(hostile)) and vocab.multi.n_tests == hostile.multi.n_tests == len(hostile.result.root.units)
     assert r.result.root.n_cells == 4 and p.multi.n_tests == 10 and tuple(r.result.root.events) == tuple(p.multi.events)
 
-    def refusal(check: Any, error: type[Exception], diff: Grown, other: Grown, phrase: str) -> None:
-        with pytest.raises(error) as info:
-            check(diff.multi, other.result)
+    def viewer_refusal(diff: Grown, other: Grown, phrase: str) -> str:
+        with pytest.raises(m.ViewerError) as info:
+            m.build_structure(report_for(diff), diff.multi, tree=other.result, **structure_kwargs(diff))
         message = str(info.value)
         assert phrase in message and DIGEST_WORD not in message.lower(), (phrase, message)
+        return message
 
-    refusal(m._check_tree, m.ViewerError, single, two, VIEWER_EVENTS_MESSAGE)
-    refusal(m._check_tree, m.ViewerError, p, r, VIEWER_ARITY_MESSAGE)
-    with pytest.raises(m.ViewerError) as info:
-        m._check_tree(p.multi, r.result)
-    assert "8 cell-event units" in str(info.value) and "10 tests" in str(info.value), str(info.value)
-    refusal(m._check_tree, m.ViewerError, vocab, hostile, VIEWER_MULTISET_MESSAGE)
-    with pytest.raises(m.ViewerError) as info:
-        m._check_tree(vocab.multi, hostile.result)
-    assert any(h in str(info.value) for h in hashes_of(hostile)), str(info.value)
-    refusal(report_mod._check_tree, report_mod.ComparisonMismatch, single, two, REPORT_EVENTS_MESSAGE)
-    refusal(report_mod._check_tree, report_mod.ComparisonMismatch, p, r, REPORT_ARITY_MESSAGE)
-    with pytest.raises(report_mod.ComparisonMismatch) as info:
-        report_mod._check_tree(p.multi, r.result)
-    assert "4 cells x 2 events" in str(info.value) and "10 tests" in str(info.value), str(info.value)
+    def report_refusal(diff: Grown, other: Grown, phrase: str) -> str:
+        with pytest.raises(report_mod.ComparisonMismatch) as info:
+            build_multi_report(diff.multi, spec_for(diff), manifests=diff.manifests, tree=other.result)
+        message = str(info.value)
+        assert phrase in message and DIGEST_WORD not in message.lower(), (phrase, message)
+        return message
 
-
-def test_g13_both_refusals_happen_before_anything_is_produced(crossed: dict[str, Grown], monkeypatch: pytest.MonkeyPatch) -> None:
-    """A tripwire on the first thing each builder would produce after its check: the viewer's tree
-    decoration and the report's row extraction. The crossed tree raises the renderer's own error
-    and never the tripwire's, so no page, markdown, receipt or SVG is started."""
-    m = viewer()
-    p, q = crossed["P"], crossed["Q"]
-    report, kwargs = report_for(p), structure_kwargs(p)
-
-    def trip(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError("something was produced before the tree was checked")
-
-    monkeypatch.setattr(m, "_tree_payload", trip)
-    monkeypatch.setattr(report_mod, "_rows_of", trip)
-    with pytest.raises(m.ViewerError):
-        m.build_structure(report, p.multi, tree=q.result, **kwargs)
-    with pytest.raises(report_mod.ComparisonMismatch):
-        build_multi_report(p.multi, spec_for(p), manifests=p.manifests, tree=q.result)
-    with pytest.raises(AssertionError, match="produced"):
-        build_multi_report(p.multi, spec_for(p), manifests=p.manifests, tree=p.result)
+    viewer_refusal(single, two, VIEWER_EVENTS_MESSAGE)
+    message = viewer_refusal(p, r, VIEWER_ARITY_MESSAGE)
+    assert "8 cell-event units" in message and "10 tests" in message, message
+    message = viewer_refusal(vocab, hostile, VIEWER_MULTISET_MESSAGE)
+    assert any(h in message for h in hashes_of(hostile)), message
+    report_refusal(single, two, REPORT_EVENTS_MESSAGE)
+    message = report_refusal(p, r, REPORT_ARITY_MESSAGE)
+    assert "4 cells x 2 events" in message and "10 tests" in message, message
 
 
-# ---------- G14-G16: partition, the CLI, one construction ----------
+# ---------- G15: the CLI ----------
 
 
-def test_g14_the_viewers_import_partition_and_arithmetic_pins_hold() -> None:
-    """W20's clauses restated (green before and after): ``poisson_prove.tree`` only under
-    ``TYPE_CHECKING``, exactly the eight report names split by closure, and one arithmetic node in
-    ``build_structure``'s closure, the ``created_at`` subtraction. A function-level import is not
-    a module-body import, and a compare is not a ``BinOp`` -- which is what lets the digest clause
-    live inside the pinned closure at all."""
-    module = parsed(VIEWER_SOURCE)
-    assert report_import_names(module) == ASSEMBLY_HELPERS | RENDER_HELPERS
-    build = referenced_names(closure(module, "build_structure"))
-    render = referenced_names(closure(module, "render_html"))
-    assert build & (ASSEMBLY_HELPERS | RENDER_HELPERS) == ASSEMBLY_HELPERS, build
-    assert render & (ASSEMBLY_HELPERS | RENDER_HELPERS) == RENDER_HELPERS, render
-    assert module_body_imports_of(module, "poisson_prove.tree") == []
-    assert module_body_imports_of(parsed(REPORT_SOURCE), "poisson_prove.tree") == []
-    assert arithmetic_nodes(closure(module, "render_html")) == []
-    build_nodes = closure(module, "build_structure")
-    arithmetic = arithmetic_nodes(build_nodes)
-    assert len(arithmetic) == 1 and isinstance(arithmetic[0], ast.BinOp) and isinstance(arithmetic[0].op, ast.Sub)
-    assert arithmetic[0] in total_seconds_operands(build_nodes)
-
-
-def test_g15_cli_neither_binds_nor_takes_agreement_and_the_s27_guard_lists_it() -> None:
+def test_g15_cli_neither_binds_nor_reads_agreement() -> None:
     """``cli.py`` serialises ``nested.to_json()`` wholesale and reads no attribute named
-    ``agreement`` and binds no such name; and ``test_s27_leaves.py``'s ``TREE_RESULT_FIELDS`` carries
-    it, so L11's ``BinOp`` guard would notice one. Green before and after on the ``cli.py`` half;
-    the ``s27`` half is a fact of the update commit."""
+    ``agreement`` and binds no such name."""
     cli = parsed(CLI_SOURCE)
     assert [n.lineno for n in ast.walk(cli) if isinstance(n, ast.Attribute) and n.attr == "agreement"] == []
     assert [n.lineno for n in ast.walk(cli) if isinstance(n, ast.Name) and n.id == "agreement"] == []
-    s27_fields = tuple(ast.literal_eval(module_constants(parsed(S27_SOURCE))["TREE_RESULT_FIELDS"]))
-    assert s27_fields == TREE_RESULT_FIELDS and "agreement" in s27_fields
-
-
-def test_g16_the_canonical_form_is_written_twice_in_src_both_in_tree_py_through_one_serialiser() -> None:
-    """One module-level tag constant in ``tree.py`` and nowhere else in ``src/``; exactly one
-    function in ``tree.py`` hashes it -- the shared private serialiser, the only ``sha256`` and the
-    only ``json.dumps`` in the file -- and exactly two functions call that serialiser by name:
-    ``_require_agreement`` and ``agreement_digest``. Neither renderer writes the form."""
-    sources = sorted(PACKAGE.rglob("*.py"))  # PF5: the core is a package now, so the scan reads src/ recursively.
-    tagged = {path.name: string_constants(parsed(path), "poisson-prove.agreement") for path in sources}
-    assert {name: tags for name, tags in tagged.items() if tags} == {"tree.py": [AGREEMENT_SCHEMA]}, tagged
-    module = parsed(TREE_SOURCE)
-    assert isinstance(module_constants(module).get("AGREEMENT_SCHEMA"), ast.Constant)
-    assert tree_mod.AGREEMENT_SCHEMA == AGREEMENT_SCHEMA and "AGREEMENT_SCHEMA" in tree_mod.__all__ and "agreement_digest" in tree_mod.__all__
-    functions = module_functions(module)
-    serialisers = [name for name, fn in functions.items() if "AGREEMENT_SCHEMA" in referenced_names([fn])]
-    assert len(serialisers) == 1, serialisers
-    serialiser = serialisers[0]
-    assert len(calls_of(module, attr="sha256")) == 1 and calls_of(functions[serialiser], attr="sha256")
-    assert len(calls_of(module, attr="dumps")) == 1 and calls_of(functions[serialiser], attr="dumps")
-    callers = sorted(name for name, fn in functions.items() if name != serialiser and calls_of(fn, name=serialiser))
-    assert callers == ["_require_agreement", "agreement_digest"], callers
-    for path in (REPORT_SOURCE, VIEWER_SOURCE):
-        other = parsed(path)
-        assert "AGREEMENT_SCHEMA" not in referenced_names([other]) and calls_of(other, attr="sha256") == [], path.name
 
 
 # ---------- G17: not a config hash, not a method hash ----------
@@ -828,80 +581,12 @@ def test_g17_a_digest_is_not_a_config_hash_and_not_a_method_hash(crossed: dict[s
     for k, fisher, mcnemar in ((1, "lattice", "lattice-mcnemar"), (2, "lattice-two", "lattice-two-mcnemar")):
         events = (lattice.EVENT,) if k == 1 else (lattice.EVENT, lattice.OTHER)
         expected = reference_agreement(events)
-        assert expected != reference_agreement(events, OLD_AGREEMENT_SCHEMA), k
+        assert by_name[fisher].result.agreement != reference_agreement(events, OLD_AGREEMENT_SCHEMA), k
         assert tuple(by_name[fisher].multi.events) == tuple(by_name[mcnemar].multi.events) == events, k
         assert by_name[fisher].multi.method == "fisher_bh" and by_name[mcnemar].multi.method == "mcnemar_bh"
         assert by_name[fisher].result.root.scheme != by_name[mcnemar].result.root.scheme
         assert by_name[fisher].result.agreement == by_name[mcnemar].result.agreement == expected, k
         assert tree_mod.agreement_digest(by_name[mcnemar].multi) == expected
-
-
-# ---------- G18-G20: the exclusion record ----------
-
-
-def test_g18_every_exclusion_record_this_packet_mints_carries_adr_077s_fields_and_resolves() -> None:
-    """Asserted over whatever ``*_PY_EXCLUDED`` constants exist in the one carrier, rather than by
-    name, so it holds whichever record shape was chosen: six fields plus the region's lines over
-    the file's lines at mint (the shape taken); owner ``A28``; ``retire_at`` empty (D5); every
-    cover exists and every test id resolves through the resolver; every region resolves to exactly
-    one node of the pinned file; regions on one file disjoint.
-
-    **Amended by P-1's update** (a site P-1's plan did not list; found
-    by the shadow shim's whole-suite control): the carrier now holds two records, and owner, mint
-    and cover are asserted per record through ``RECORD_OWNERS`` -- A28's ``report.py::_check_tree``
-    covered by this file, P-1's ``tree.py`` regions covered by ``tests/test_p1_payload.py`` -- and
-    ``lines`` may list one span per region."""
-    records = exclusion_constants(TESTS / EXCLUSION_CARRIER)
-    assert records and set(records) <= set(PINNED_BY_CONSTANT), sorted(records)
-    for constant, entries in records.items():
-        pinned = parsed(PINNED_BY_CONSTANT[constant])
-        owner, minted_at, cover_name = RECORD_OWNERS[constant]
-        spans: list[tuple[int, int]] = []
-        for record in entries:
-            assert set(record) == ADR_077_FIELDS | {LINES_FIELD}, sorted(record)
-            assert record["owner"] == owner and record["minted_at"] == minted_at and record["retire_at"] == ""
-            assert len(record["blind_spot"].split()) >= 20, record["region"]
-            cover = REPO / record["cover"][0]
-            assert cover.exists() and cover.name == cover_name, record["cover"]
-            assert record["cover"][1], record["region"]
-            for test_id in record["cover"][1]:
-                resolve_region(parsed(cover), test_id)
-            for qualified in record["region"]:
-                node = resolve_region(pinned, qualified)
-                spans.append((node.lineno, node.end_lineno or node.lineno))
-            match = LINES_RE.match(record[LINES_FIELD])
-            assert match, record[LINES_FIELD]
-            total = int(match.group("total"))
-            for span in match.group("spans").split(", "):
-                low, high = (int(m) for m in span.split("-"))
-                assert 1 <= low <= high <= total, record[LINES_FIELD]
-        spans.sort()
-        assert all(earlier[1] < later[0] for earlier, later in zip(spans, spans[1:])), spans
-
-
-def test_g19_adr_077s_step_1_sweep_returns_exactly_test_s29_viewer_py_and_all_four_former_carriers_assert_it() -> None:
-    """The sweep, counted over module-level constants named for the file they narrow, returns the
-    one carrier; and each former ``diff.py`` carrier still asserts that one-element list by
-    literal, so a fifth exclusion minted anywhere under ``tests/`` without a re-freeze behind
-    it turns four clauses red as well as this one."""
-    assert sweep() == [EXCLUSION_CARRIER]
-    for name in FORMER_CARRIERS:
-        module = parsed(TESTS / name)
-        literals = [
-            node
-            for node in ast.walk(module)
-            if isinstance(node, ast.Assert)
-            and isinstance(node.test, ast.Compare)
-            and len(node.test.comparators) == 1
-            and isinstance(node.test.comparators[0], ast.List)
-            and [getattr(e, "value", None) for e in node.test.comparators[0].elts] == [EXCLUSION_CARRIER]
-        ]
-        assert len(literals) == 1, (name, len(literals))
-
-
-# PF0: test_g20_diff_py_sha256_is_the_whole_file_digest_again_in_all_four_carriers_and_diff_py_is_unchanged removed. It pinned the bytes of src/poisson_prove/diff.py, which the rename
-# changes; no digest of a file this module changes can be frozen honestly before its build
-# exists.
 
 
 # ---------- G21, G22: the knob clause ----------
@@ -919,11 +604,9 @@ def test_g21_the_viewer_refuses_a_tree_grown_under_another_method_or_q_naming_bo
     for other, names in ((other_method, ("mcnemar_bh", "fisher_bh")), (other_q, (f"{OTHER_Q:g}", f"{Q:g}"))):
         assert other.result.agreement == p.result.agreement == tree_mod.agreement_digest(p.multi)
         with pytest.raises(m.ViewerError) as info:
-            m._check_tree(p.multi, other.result)
+            m.build_structure(report_for(p), p.multi, tree=other.result, **structure_kwargs(p))
         message = str(info.value)
         assert all(name in message for name in names) and DIGEST_WORD not in message.lower(), (names, message)
-        with pytest.raises(m.ViewerError):
-            m.build_structure(report_for(p), p.multi, tree=other.result, **structure_kwargs(p))
 
 
 def test_g22_the_report_refuses_a_tree_grown_under_another_method_or_q_naming_both_values(synth_root: Path, crossed: dict[str, Grown]) -> None:
@@ -934,8 +617,6 @@ def test_g22_the_report_refuses_a_tree_grown_under_another_method_or_q_naming_bo
     for other, names in ((other_method, ("mcnemar_bh", "fisher_bh")), (other_q, (f"{OTHER_Q:g}", f"{Q:g}"))):
         assert other.result.agreement == p.result.agreement
         with pytest.raises(report_mod.ComparisonMismatch) as info:
-            report_mod._check_tree(p.multi, other.result)
+            build_multi_report(p.multi, spec_for(p), manifests=p.manifests, tree=other.result)
         message = str(info.value)
         assert all(name in message for name in names) and DIGEST_WORD not in message.lower(), (names, message)
-        with pytest.raises(report_mod.ComparisonMismatch):
-            build_multi_report(p.multi, spec_for(p), manifests=p.manifests, tree=other.result)

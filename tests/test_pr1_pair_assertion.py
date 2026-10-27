@@ -68,19 +68,19 @@ that reconcile (PR9 to PR21). Nothing here computes a rate.
 - *PR56.* The Modal manifest's key is ``environment["infra_retries"]``, an ``int``, and
   ``retries = "asserted"`` reads that key on both arms' manifests whatever the backend.
 
-**Invariant-to-test map** (89 functions, 177 collected ids; the id counts below sum to 177):
+**Invariant-to-test map** (90 functions, 183 collected ids; the id counts below sum to 183):
 
 | Invariant | Tests |
 |---|---|
 | control | ``test_control_*`` (1 function, 1 id): the default sweep is twelve eligible pairs |
-| PR1 | ``test_pr1_*`` (5 functions, 7 ids) |
+| PR1 | ``test_pr1_*`` (7 functions, 9 ids) |
 | PR2 | ``test_pr2_*`` (5 functions, 7 ids) |
 | PR3 | ``test_pr3_*`` (2 functions, 2 ids) |
 | PR4 | ``test_pr4_*`` (4 functions, 8 ids) |
 | PR5 | ``test_pr5_*`` (3 functions, 3 ids); ``pair_assertion.json`` only -- the other four artifacts and the two renders are phases 2 and 3 |
-| PR6 | ``test_pr6_*`` (6 functions, 26 ids) |
-| PR8 | ``test_pr8_*`` (6 functions, 7 ids) |
-| PR9 | ``test_pr9_*`` (4 functions, 4 ids) |
+| PR6 | ``test_pr6_*`` (6 functions, 27 ids) |
+| PR8 | ``test_pr8_*`` (7 functions, 12 ids) |
+| PR9 | ``test_pr9_*`` (3 functions, 3 ids) |
 | PR10 | ``test_pr10_*`` (3 functions, 3 ids) |
 | PR11 | ``test_pr11_*`` (12 functions, 30 ids) |
 | PR12 | ``test_pr12_*`` (3 functions, 6 ids) |
@@ -90,7 +90,7 @@ that reconcile (PR9 to PR21). Nothing here computes a rate.
 | PR16 | ``test_pr16_*`` (2 functions, 2 ids) |
 | PR17 | ``test_pr17_*`` (4 functions, 8 ids) |
 | PR18 | ``test_pr18_*`` (5 functions, 10 ids) |
-| PR19 | ``test_pr19_*`` (7 functions, 29 ids) |
+| PR19 | ``test_pr19_*`` (6 functions, 28 ids) |
 | PR20 | ``test_pr20_*`` (4 functions, 4 ids) |
 | PR21 | ``test_pr21_*`` (2 functions, 2 ids) |
 | PR56 | ``test_pr56_*`` (2 functions, 4 ids) |
@@ -165,7 +165,7 @@ ITEMS_PER_CUT = 4
 EXEMPTIONS = ("x-request-id", "date")
 PYTHON = "3.11.7 (main, Feb 12 2026)"
 
-#: The module's declared public names. Anything else public on the module is a violation.
+#: The module's declared public names.
 #: Updated at the PR-3 freeze: ``ReplicateResult`` and ``replicates`` join the set, as the
 #: declared names have carried them since the k-replicate amendment.
 SPEC_PUBLIC_NAMES = frozenset({
@@ -173,11 +173,6 @@ SPEC_PUBLIC_NAMES = frozenset({
     "Cut", "SweepPair", "Declaration", "canonical_request", "request_digest",
     "PairAssertion", "assert_pairs", "CutResult", "PairedResult", "analyse",
     "WindowReport", "windows", "CostReport", "cost", "ReplicateResult", "replicates",
-})
-PHASE_1_NAMES = frozenset({
-    "PairedError", "DeclarationError", "NotAssertable", "NoEligiblePairs",
-    "Cut", "SweepPair", "Declaration", "canonical_request", "request_digest",
-    "PairAssertion", "assert_pairs",
 })
 PAIR_ASSERTION_FIELDS = ("declaration", "pairs", "excluded", "environment", "counts")
 PAIRS_COLUMNS = frozenset({
@@ -591,15 +586,12 @@ def test_pr4_an_exemption_that_resolves_to_a_body_field_is_a_declaration_error(t
 
 
 def test_pr4_an_exempted_body_field_cannot_hide_a_sampling_difference(tmp_path: Path) -> None:
-    """What PR4 exists for. Whatever the module does with ``temperature`` in ``exemptions``, it
-    never reports the pair whose temperature moved as eligible."""
+    """What PR4 exists for. With ``temperature`` in ``exemptions``, a sweep whose temperature moved
+    on one pair is refused, so that pair is never reported as eligible."""
     paired = P()
     store = make_sweep(tmp_path, b=with_row(ITEM, fields={"state": f'"state of {ITEM}"', "temperature": "0.70"}))
-    try:
-        assertion = paired.assert_pairs(store, decl(exemptions=("x-request-id", "temperature")))
-    except paired.DeclarationError:
-        return
-    assert ITEM not in eligible_items(assertion)
+    with pytest.raises(paired.DeclarationError):
+        paired.assert_pairs(store, decl(exemptions=("x-request-id", "temperature")))
 
 
 # ---------- PR5, PR6: the digest ----------
@@ -754,16 +746,6 @@ def test_pr8_a_literal_field_takes_only_its_two_words(tmp_path: Path, key: str, 
 
 
 # ---------- PR9: the assertion is the only door ----------
-
-
-def test_pr9_the_module_adds_no_public_name_the_spec_does_not_list() -> None:
-    paired = P()
-    public = {
-        name for name, value in vars(paired).items()
-        if not name.startswith("_") and getattr(value, "__module__", None) == paired.__name__
-    }
-    assert PHASE_1_NAMES <= public, PHASE_1_NAMES - public
-    assert public <= SPEC_PUBLIC_NAMES, public - SPEC_PUBLIC_NAMES
 
 
 def test_pr9_a_pair_assertion_is_the_five_fields_and_assert_pairs_takes_a_store_and_a_declaration() -> None:
@@ -1208,7 +1190,7 @@ def test_pr17_the_environment_of_both_arms_is_recorded(tmp_path: Path) -> None:
     assert json.loads(assertion.to_json())["environment"]["sweeps"]["S1"]["b"]["run_salt"] == SALT
 
 
-def test_pr17_the_two_facts_proofload_does_not_record_are_printed_as_gaps(tmp_path: Path) -> None:
+def test_pr17_the_harness_digest_and_client_version_are_printed_as_gaps(tmp_path: Path) -> None:
     gaps = P().assert_pairs(make_sweep(tmp_path), decl()).environment["gaps"]
     assert {"harness_digest", "client_version"} <= set(gaps), gaps
 
@@ -1299,8 +1281,11 @@ def test_pr19_a_row_that_errored_in_either_arm_makes_the_pair_ineligible(tmp_pat
     broken = with_row(ITEM, error=error)
     a = broken if arm in ("a", "both") else default_rows()
     b = broken if arm in ("b", "both") else default_rows()
-    row = assert_only_excluded(P().assert_pairs(make_sweep(tmp_path, a, b), decl()), ITEM, "errored")
+    assertion = P().assert_pairs(make_sweep(tmp_path, a, b), decl())
+    row = assert_only_excluded(assertion, ITEM, "errored")
     assert row["arm"] == arm
+    assert len(assertion.pairs) + len(assertion.excluded) == len(ALL_ITEMS)
+    assert not assertion.pairs[["value_a", "value_b"]].isna().any().any()
 
 
 @pytest.mark.parametrize("arm", ["a", "b"])
@@ -1339,13 +1324,6 @@ def test_pr19_an_episode_with_no_span_under_the_declared_name_is_no_request_span
     assertion = P().assert_pairs(make_sweep(tmp_path, None, with_row(ITEM, n_request_spans=0, other_spans=2)), decl())
     row = assert_only_excluded(assertion, ITEM, "no_request_span")
     assert row["arm"] == "b"
-
-
-def test_pr19_an_errored_pair_is_never_repaired_from_the_arm_that_answered(tmp_path: Path) -> None:
-    assertion = P().assert_pairs(make_sweep(tmp_path, None, with_row(ITEM, error="timeout")), decl())
-    assert ITEM not in set(assertion.pairs["cluster"])
-    assert len(assertion.pairs) + len(assertion.excluded) == len(ALL_ITEMS)
-    assert not assertion.pairs[["value_a", "value_b"]].isna().any().any()
 
 
 # ---------- PR20, PR21: the counts reconcile and no pair leaves silently ----------

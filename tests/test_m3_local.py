@@ -21,8 +21,8 @@ Conventions the frozen tests fix for the implementation:
   flushed and the run stops there.
 - ``Episode`` carries a ``MappingProxyType`` and does not pickle; a forked child must
   send ``episode.to_dict()`` (or the record) back, not the ``Episode`` itself.
-- The pre-flight MDE is compared to ``mde_two_proportion(0.5, N, N)`` to 5e-3, so two
-  decimals of formatting are fine.
+- The pre-flight prints no ``MDE at N=`` line at a base rate of 0.5; the plan's one limit is
+  the power gate's.
 """
 
 import dataclasses
@@ -96,7 +96,7 @@ def wrong_type_rollout(cfg: dict[str, Any], seed: int) -> Any:
 
 def sleeping_rollout(cfg: dict[str, Any], seed: int) -> Episode:
     if seed in SLEEP_SEEDS:
-        time.sleep(3.0)
+        time.sleep(12.0)  # past the test's 5 s bound: an executor that waits instead of killing fails it
     return deterministic_rollout(cfg, seed)
 
 

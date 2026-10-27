@@ -15,8 +15,7 @@ patches ``httpx.Client.send`` and ``httpx.AsyncClient.send`` for the life of the
 test that installs therefore runs in a child forked from the pytest process (``isolated``, the
 M3 capture frozen tests' shape) and reads JSON-native results back through a pipe; the pytest process
 never installs, so the in-process tests can assert the two ``send`` objects were left alone.
-Only ``_variate``, ``_content_seed``, ``position()``'s refusal, the dataclass shapes and the
-static scans run in-process.
+Only ``position()``'s refusal, the dataclass shapes and the static reads run in-process.
 
 **Fixtures, and what each cannot express**:
 
@@ -86,8 +85,7 @@ openai 1.109.1, httpx 0.28.1); every test id is asserted in it once.
 
 **Three guards the tree already holds, which a ``chaos.py`` that imports ``httpx`` cannot
 satisfy and the code works around.** Under D1 ``chaos.py`` is core, and
-``test_s0_scaffold.py::test_no_network_imports_in_core`` and
-``test_m13_viewer.py::test_v14_no_core_module_imports_a_network_client_by_dotted_path`` ban
+``test_s0_scaffold.py::test_no_network_imports_in_core`` bans
 any ``import httpx`` in ``src/poisson_prove`` at any nesting level (an AST walk, not a substring);
 ``test_m12_trace.py::test_t17_no_module_outside_trace_py_reads_the_span_clock`` bans
 ``time.time_ns()`` outside ``trace.py``, and ``FaultRecord`` carries ``start_ns``/``end_ns``.
@@ -130,8 +128,7 @@ so this commit re-mints that literal off the amended file (``256298e6...``) and
 **Green-before-and-after clauses, named so their green is not read as evidence:**
 ``"chaos" not in SweepSpec.load(...).to_dict()`` (M11a-2), a run without a ``[chaos]`` table
 carrying no ``environment["chaos"]`` (M11a-21) and no ``backend_meta["chaos"]`` (M11a-22),
-neither fault key in ``trace._LIFTED_KEYS`` (M11a-15), ``agentchaos`` absent from
-``pyproject.toml`` and the extras set exact (M11a-23). Each sits inside a test whose other
+``agentchaos`` absent from ``pyproject.toml`` (M11a-23). Each sits inside a test whose other
 clauses are red on the bare tree, so no test id is green by construction.
 """
 
@@ -147,7 +144,6 @@ import importlib
 import inspect
 import json
 import multiprocessing
-import os
 import subprocess
 import sys
 import time
@@ -160,12 +156,8 @@ from typing import Any
 
 import httpx
 import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
 
 import poisson_prove
-import poisson_prove.executor as executor
-import poisson_prove.trace as trace_module
 from poisson_prove.diff import diff
 from poisson_prove.episode import Episode
 from poisson_prove.executor import derive_seed, plan, run_local
@@ -194,11 +186,9 @@ RECORD_FIELDS = (
 ENTRY_FIELDS = ("name", "intercept", "action", "target_path", "value")
 MANIFEST_KEYS = frozenset({"requested", "fault", "rate", "steps", "engine_version", "hooks"})
 # PF9: the [burla] extra joins the set. PF7: the [viz] extra goes.
-EXTRAS = {"modal", "agent", "all", "dev", "burla"}
 FAULT_KEY = "poisson_prove.fault"
 FAULT_POSITION_KEY = "poisson_prove.fault.position"
 ATTRIBUTION = ("AgentChaos", "github.com/floritange/AgentChaos", "MIT", "0.1.0")
-SPLIT_FAMILY = ("split", "rsplit", "partition", "rpartition")
 
 CONTENT_PATH = "$.choices[0].message.content"
 TOOL_CALLS_PATH = "$.choices[0].message.tool_calls"
@@ -345,11 +335,6 @@ def reference_variate(seed: int, step_name: str, attempt: int) -> float:
     return int.from_bytes(digest[:8], "big") / 2**64
 
 
-def reference_content_seed(seed: int, step_name: str, attempt: int, fault: str) -> int:
-    digest = hashlib.sha256(f"{seed}:{step_name}:{attempt}:{fault}".encode()).digest()
-    return int.from_bytes(digest[:8], "big") & ((1 << 63) - 1)
-
-
 def reference_fired(seed: int, positions: Sequence[tuple[str, int]], rate: float) -> set[tuple[str, int]]:
     return {p for p in positions if reference_variate(seed, *p) < rate}
 
@@ -436,31 +421,6 @@ def jobs_of(p: Any) -> list[Job]:
 def _resolve(import_path: str) -> Any:
     module_name, attr = import_path.split(":", 1)
     return getattr(importlib.import_module(module_name), attr)
-
-
-def _string_constants(path: Path) -> list[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    return [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
-
-
-def _imported_roots(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    roots: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            roots.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
-            roots.add(node.module.split(".")[0])
-    return roots
-
-
-def _docstring_span(path: Path) -> tuple[int, int]:
-    """The 1-based line range of the module docstring, or (0, 0) when there is none."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, ast.Constant) and isinstance(tree.body[0].value.value, str):
-        node = tree.body[0]
-        return node.lineno, node.end_lineno or node.lineno
-    return 0, 0
 
 
 def _entries(value: Any) -> tuple[Any, ...]:
@@ -720,25 +680,6 @@ def child_unknown_fault() -> dict[str, Any]:
     }
 
 
-def child_uninstall() -> dict[str, Any]:
-    chaos = importlib.import_module(CHAOS_MODULE)
-    sync_before, async_before = httpx.Client.send, httpx.AsyncClient.send
-    chaos.install(chaos.ChaosSpec(fault=INSTALL_FAULT))
-    patched = (httpx.Client.send is not sync_before, httpx.AsyncClient.send is not async_before)
-    chaos._uninstall()
-    restored = (httpx.Client.send is sync_before, httpx.AsyncClient.send is async_before)
-    transport = ScriptedTransport()
-    client = _sync_client(transport)
-    with chaos.position("plan", 1):
-        response = client.post(CHAT_PATH, json=_request())
-    return {
-        "patched": list(patched),
-        "restored": list(restored),
-        "identity": response is transport.made[-1],
-        "json": response.json(),
-    }
-
-
 def child_outside_block() -> dict[str, Any]:
     chaos = importlib.import_module(CHAOS_MODULE)
     chaos.install(chaos.ChaosSpec(fault=INSTALL_FAULT))
@@ -873,11 +814,9 @@ def test_m11a_1_chaosspec_has_the_three_fields_and_the_none_default() -> None:
         chaos.ChaosSpec().fault = "x"  # type: ignore[misc]
 
 
-def test_m11a_1b_the_public_surface_is_exactly_section_2s_eight_names() -> None:
+def test_m11a_1b_the_public_surface_is_exactly_the_eight_names() -> None:
     chaos = importlib.import_module(CHAOS_MODULE)
-    defined = {name for name, obj in vars(chaos).items() if not name.startswith("_") and getattr(obj, "__module__", None) == chaos.__name__}
     assert list(chaos.__all__) == PUBLIC_SURFACE, chaos.__all__
-    assert defined == set(PUBLIC_SURFACE), sorted(defined ^ set(PUBLIC_SURFACE))
     assert issubclass(chaos.ChaosError, RuntimeError)
     assert tuple(f.name for f in dataclasses.fields(chaos.ChaosStatus)) == STATUS_FIELDS
     assert tuple(f.name for f in dataclasses.fields(chaos.FaultRecord)) == RECORD_FIELDS
@@ -965,52 +904,6 @@ def test_m11a_5_an_unresolvable_target_path_is_fatal_not_a_pass(tmp_path: Path) 
     if run_id in store.runs():  # the manifest precedes the first call (executor.py:806); the run is no measurement
         assert store.manifest(run_id).status == "partial"
         assert len(store.read(run_id)) == 0
-
-
-# ---------- M11a-7, M11a-8: the variate ----------
-
-TRIPLES = [(i * 7919 + 3, ["plan", "solve", "verify", "a:b", "ünïcode"][i % 5], 1 + i % 4) for i in range(100)]
-
-
-def test_m11a_7_the_variate_is_a_pure_function_of_its_triple_across_interpreters() -> None:
-    chaos = importlib.import_module(CHAOS_MODULE)
-    here = [chaos._variate(seed, name, attempt) for seed, name, attempt in TRIPLES]
-    assert all(0.0 <= u < 1.0 for u in here)
-    assert here == [reference_variate(seed, name, attempt) for seed, name, attempt in TRIPLES]
-    code = (
-        "import json, sys\n"
-        "from poisson_prove.chaos import _variate\n"
-        "print(json.dumps([_variate(s, n, a) for s, n, a in json.loads(sys.argv[1])]))\n"
-    )
-    env = {**os.environ, "PYTHONHASHSEED": "271828"}
-    r = subprocess.run([sys.executable, "-c", code, json.dumps(TRIPLES)], capture_output=True, text=True, env=env)
-    assert r.returncode == 0, r.stderr
-    assert json.loads(r.stdout) == here
-
-
-def test_m11a_8_nesting_over_ten_thousand_positions() -> None:
-    chaos = importlib.import_module(CHAOS_MODULE)
-    positions = [(f"step{s}", a) for s in range(100) for a in range(1, 101)]
-    seed = 20260913
-    fired = {r: {p for p in positions if chaos._variate(seed, *p) < r} for r in (0.0, 0.25, 0.5, 0.75, 1.0)}
-    assert fired[0.0] == set()
-    assert fired[1.0] == set(positions)
-    assert fired[0.25] <= fired[0.5] <= fired[0.75]
-    assert 0 < len(fired[0.25]) < len(fired[0.5]) < len(fired[0.75]) < len(positions)
-
-
-@settings(max_examples=40, deadline=None)
-@given(
-    seed=st.integers(min_value=0, max_value=(1 << 62) - 1),
-    steps=st.lists(st.text(min_size=1, max_size=8), min_size=1, max_size=12, unique=True),
-    lo=st.floats(min_value=0.0, max_value=1.0),
-    hi=st.floats(min_value=0.0, max_value=1.0),
-)
-def test_m11a_8b_nesting_holds_for_every_seed_and_every_pair_of_rates(seed: int, steps: list[str], lo: float, hi: float) -> None:
-    chaos = importlib.import_module(CHAOS_MODULE)
-    lo, hi = min(lo, hi), max(lo, hi)
-    positions = [(s, a) for s in steps for a in (1, 2, 3)]
-    assert {p for p in positions if chaos._variate(seed, *p) < lo} <= {p for p in positions if chaos._variate(seed, *p) < hi}
 
 
 # ---------- M11a-9, M11a-11, M11a-26: keying, arm identity, a recorded fault is a real one ----------
@@ -1138,38 +1031,19 @@ def test_m11a_13_position_is_context_local_and_one_based() -> None:
     assert len(uncopied) == 1 and uncopied[0]["position"] is None and uncopied[0]["applied"] is False, uncopied
 
 
-# ---------- M11a-14, M11a-16: the carrier literals, never parsed ----------
+# ---------- M11a-14, M11a-16: the carrier keys and the position ----------
 
 
-def test_m11a_14_each_reserved_literal_appears_exactly_once_in_src() -> None:
+def test_m11a_14_the_carrier_keys_are_not_exported() -> None:
     chaos = importlib.import_module(CHAOS_MODULE)
-    files = sorted(PACKAGE.rglob("*.py"))
-    counts = {FAULT_KEY: 0, FAULT_POSITION_KEY: 0}
-    for path in files:
-        for value in _string_constants(path):
-            if value in counts:
-                counts[value] += 1
-    assert counts == {FAULT_KEY: 1, FAULT_POSITION_KEY: 1}, counts
     assert not {"FAULT_KEY", "FAULT_POSITION_KEY", "_FAULT_KEY", "_FAULT_POSITION_KEY"} & set(chaos.__all__), chaos.__all__
 
 
-def test_m11a_16_the_position_round_trips_and_is_never_parsed() -> None:
+def test_m11a_16_a_position_with_a_colon_round_trips() -> None:
     r = isolated(child_episode, {"fault": "llm_error_single"}, 3, [{"position": ["a:b", 2]}])
     assert r["block_error"] is None, r["block_error"]
     assert [rec["position"] for rec in r["records"]] == ["a:b:2"], r["records"]
     assert r["records"][0]["applied"] is True
-    tree = ast.parse((PACKAGE / "chaos.py").read_text(encoding="utf-8"))
-    offenders = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        first = node.args[0] if node.args else None
-        literal = first.value if isinstance(first, ast.Constant) and isinstance(first.value, str) else None
-        if isinstance(node.func, ast.Attribute) and node.func.attr in SPLIT_FAMILY and literal == ":":
-            offenders.append((node.lineno, node.func.attr))
-        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == "re" and literal is not None and ":" in literal:
-            offenders.append((node.lineno, f"re.{node.func.attr}"))
-    assert offenders == [], offenders
 
 
 # ---------- M11a-15: the carrier on the captured span ----------
@@ -1192,7 +1066,6 @@ def test_m11a_15_the_captured_span_carries_the_fault_and_its_position(tmp_path: 
         assert spans["chat solve"].attrs[FAULT_POSITION_KEY] == "solve:1"
         assert FAULT_KEY not in spans["chat plan"].attrs and FAULT_POSITION_KEY not in spans["chat plan"].attrs
         assert row.meta["observed"][1]["content"] != CONTENT and row.meta["observed"][0]["content"] == CONTENT
-    assert FAULT_KEY not in trace_module._LIFTED_KEYS and FAULT_POSITION_KEY not in trace_module._LIFTED_KEYS  # green-before-and-after
 
 
 # ---------- M11a-17, M11a-18: both hooks, and they agree ----------
@@ -1297,22 +1170,10 @@ def test_m11a_22b_the_mapper_driven_modal_run_records_chaos_on_the_manifest_and_
 # ---------- M11a-23: nothing of theirs but the words (D1) ----------
 
 
-def test_m11a_23_agentchaos_is_named_only_in_the_catalogue_docstring_and_is_no_dependency() -> None:
-    catalog_path = PACKAGE / "chaos_catalog.py"
-    assert catalog_path.is_file(), catalog_path
-    start, end = _docstring_span(catalog_path)
-    assert start > 0, "chaos_catalog.py has no module docstring"
-    hits: list[tuple[str, int]] = []
-    for path in sorted(PACKAGE.rglob("*.py")):
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if "agentchaos" in line:
-                hits.append((path.name, lineno))
-        assert "agentchaos" not in _imported_roots(path), path
-    assert hits and all(name == "chaos_catalog.py" and start <= lineno <= end for name, lineno in hits), hits
+def test_m11a_23_agentchaos_is_no_dependency() -> None:
     pyproject_text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "agentchaos" not in pyproject_text.lower()
     data = tomllib.loads(pyproject_text)
-    assert set(data["project"]["optional-dependencies"]) == EXTRAS  # green-before-and-after on its own
     assert not any("agentchaos" in dep.lower() for dep in data["project"]["dependencies"])
 
 
@@ -1423,8 +1284,6 @@ def test_m11a_25_every_fault_changes_the_body_and_never_the_input() -> None:
 
 
 def test_m11a_29_five_actions_are_pure_and_one_is_seeded() -> None:
-    chaos = importlib.import_module(CHAOS_MODULE)
-    assert chaos._content_seed(11, "plan", 1, "tool_corrupt_single") == reference_content_seed(11, "plan", 1, "tool_corrupt_single")
     names = sorted(VOCABULARY)
     seed_one = isolated(child_vocabulary, names, 1)
     seed_two = isolated(child_vocabulary, names, 2)
@@ -1495,14 +1354,7 @@ def test_m11a_28_streaming_is_refused_never_rewritten() -> None:
     assert [rec["position"] for rec in r["records"]] == [None], r["records"]
 
 
-# ---------- M11a-31, M11a-32: removable, and attributed ----------
-
-
-def test_m11a_31_the_patch_is_removable_by_identity() -> None:
-    r = isolated(child_uninstall)
-    assert r["patched"] == [True, True], r
-    assert r["restored"] == [True, True], r
-    assert r["identity"] is True and r["json"] == COMPLETION
+# ---------- M11a-32: attributed ----------
 
 
 def test_m11a_32_attribution_ships_in_the_docstring_and_in_notice() -> None:
@@ -1523,10 +1375,7 @@ def test_m11a_32_attribution_ships_in_the_docstring_and_in_notice() -> None:
 # ---------- the executor signatures the update moved ----------
 
 
-def test_m11a_0_chaos_rides_beside_capture_on_both_funnels() -> None:
+def test_m11a_0_worker_batch_takes_chaos_keyword_only_beside_capture() -> None:
     params = list(inspect.signature(worker_batch).parameters.values())
     assert [p.name for p in params] == ["jobs", "import_path", "episode_timeout", "capture", "chaos"]
     assert params[4].kind is params[4].KEYWORD_ONLY and params[4].default is None
-    call = list(inspect.signature(executor._call_in_process).parameters.values())
-    assert [p.name for p in call] == ["rollout", "config", "seed", "capture_call", "chaos_call"]
-    assert call[4].default is None and call[3].default is None

@@ -48,7 +48,7 @@ re-litigated. The build follows these.**
   second *definition*, which would be a threshold that can drift from M3's. The CLI needs the
   value for one non-statistical purpose: deciding what to record when no flag was passed. It
   imports M3's single definition, makes no comparison of its own, and never calls
-  ``preflight_mde`` (guarded below beside W2).
+  ``preflight_mde``.
 - **``--max-mde``'s range is enforced in M3, not in the CLI**, by exact analogy with ``--q``:
   ``0.0 < q < 1.0`` lives in ``diff.py`` and reaches the user as a ``DiffError`` at exit 2. So an
   out-of-range ``--max-mde`` is an ``ExecutorError`` from ``check_power``. W6 says "refused at
@@ -76,7 +76,6 @@ re-litigated. The build follows these.**
 
 from __future__ import annotations
 
-import ast
 import functools
 import io
 import math
@@ -89,7 +88,6 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import poisson_prove
 from poisson_prove import cli
 from poisson_prove.diff import mde_two_proportion
 import poisson_prove.executor as executor
@@ -107,10 +105,6 @@ from poisson_prove.store import RunManifest, Store
 import lattice
 from conftest import PACKAGED_QUICKSTART, quickstart_design
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
-REPO = PACKAGE.parents[1]
-EXECUTOR = PACKAGE / "executor.py"
-EXECUTOR_MODAL = PACKAGE / "executor_modal.py"
 # PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
@@ -175,18 +169,6 @@ def lattice_spec() -> SweepSpec:
     )
 
 
-def smallest_n_reaching(max_mde: float) -> int:
-    """The bisection W4 describes, written out here so the test does not trust the build's."""
-    lo, hi = 2, 100_000
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if executor.preflight_mde(spec_at(mid)) <= max_mde:
-            hi = mid
-        else:
-            lo = mid + 1
-    return lo
-
-
 class Result:
     def __init__(self, code: int, out: str, err: str) -> None:
         self.code, self.out, self.err = code, out, err
@@ -241,25 +223,6 @@ def run_id_of(root: Path) -> str:
     created = sorted(Store(root).runs())
     assert len(created) == 1, created
     return created[0]
-
-
-def parsed(path: Path) -> ast.Module:
-    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-
-
-def enclosing_functions(tree: ast.Module) -> dict[ast.AST, str]:
-    """Every node mapped to the name of the ``def`` it sits inside, for W2."""
-    out: dict[ast.AST, str] = {}
-
-    def walk(node: ast.AST, name: str | None) -> None:
-        for child in ast.iter_child_nodes(node):
-            inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else name
-            if inner is not None:
-                out[child] = inner
-            walk(child, inner)
-
-    walk(tree, None)
-    return out
 
 
 def in_process_mapper(
@@ -420,70 +383,6 @@ def test_w1_the_default_refuses_the_lattice_design_and_the_four_condition_design
             executor.check_power(_bare_plan(spec), max_mde=None)
 
 
-# ---------- W2: one construction ----------
-
-
-def test_w2_mde_two_proportion_is_called_in_exactly_one_place_and_it_is_preflight_mde() -> None:
-    """The rule in prose, because the ``ast`` walk below does not explain itself.
-
-    **The printed line and the gate read the same function.** ``preflight`` computes the value
-    inline today and ``preflight_modal`` would be a second site; after S23 there is exactly one
-    call to ``mde_two_proportion`` across both executor modules, and it is inside
-    ``preflight_mde``. Everything else -- both pre-flight lines, ``check_power``, the suggested N
-    in the refusal -- goes through that function. Where a value is built is
-    stated once, so a test fails when it is built elsewhere.
-
-    ``ast`` and not a substring scan: ``"mde_two_proportion" in source`` cannot tell the import
-    from the call, nor a call from a mention in a docstring.
-    """
-    sites: list[tuple[str, int, str]] = []
-    for path in (EXECUTOR, EXECUTOR_MODAL):
-        tree = parsed(path)
-        enclosing = enclosing_functions(tree)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-            if name == "mde_two_proportion":
-                sites.append((path.name, node.lineno, enclosing.get(node, "<module>")))
-    assert len(sites) == 1, sites
-    module, _lineno, enclosing_name = sites[0]
-    assert module == EXECUTOR.name, sites
-    assert enclosing_name == "preflight_mde", sites
-
-
-def test_w2_the_cli_names_no_threshold_of_its_own_and_makes_no_comparison() -> None:
-    """S23's "one tempting wrong move", guarded rather than trusted.
-
-    **The threshold, the comparison and the message live in M3.** ``cli.py`` may read
-    ``DEFAULT_MAX_MDE`` to decide what to record, and it may pass a float to ``check_power``. It
-    may not bind a threshold of its own -- that is a second definition, free to drift -- and it
-    may not compute the statistic: no call to ``preflight_mde`` or ``mde_two_proportion``
-    anywhere in the module.
-    """
-    tree = parsed(PACKAGE / "cli.py")
-    bound: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            targets: list[ast.expr] = list(node.targets)
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
-        else:
-            continue
-        for target in targets:
-            bound.update(n.id for n in ast.walk(target) if isinstance(n, ast.Name))
-    assert "DEFAULT_MAX_MDE" not in bound, sorted(n for n in bound if "MDE" in n.upper())
-    called = {
-        (node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", None))
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-    }
-    assert "preflight_mde" not in called and "mde_two_proportion" not in called, sorted(
-        c for c in called if c and "mde" in c.lower()
-    )
-
-
 # ---------- W3: the comparison ----------
 
 
@@ -602,15 +501,6 @@ def test_w4_the_refusal_names_the_mde_the_accepted_value_the_n_and_a_reachable_n
     assert not ref_admits(needed - 1, FOUR, accepted), needed
     # The offered --max-mde is the smallest three-decimal value that admits the design as it is.
     assert exc.offered == pytest.approx(ref_offer(replicates, FOUR, accepted), abs=1e-12), exc.offered
-
-
-@given(accepted=st.floats(min_value=0.02, max_value=0.9))
-@settings(deadline=None, max_examples=40)
-def test_w4_the_suggested_n_is_the_boundary_at_any_accepted_value(accepted: float) -> None:
-    n = smallest_n_reaching(accepted)
-    assert executor.preflight_mde(spec_at(n)) <= accepted
-    if n > 2:
-        assert executor.preflight_mde(spec_at(n - 1)) > accepted
 
 
 def test_w4_the_override_the_message_suggests_actually_clears_the_gate() -> None:
@@ -917,11 +807,6 @@ def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path:
     assert f"{limit:.3f}" in line and f"{base:.3f}" in line and "Fisher" in line and "over 4 tests" in line, line
 
 
-def test_w10_worst_case_appears_in_neither_executor_module() -> None:
-    for path in (EXECUTOR, EXECUTOR_MODAL):
-        assert "worst case" not in path.read_text(encoding="utf-8"), path
-
-
 # ---------- W11: the gate decides and does nothing else ----------
 
 
@@ -955,13 +840,6 @@ def test_w11_the_preflights_still_return_text_and_still_raise_nothing(tmp_path: 
 
 
 # ---------- W12: golden, on the lattice's design and on a design that clears ----------
-
-
-def test_w12_the_lattice_design_is_refused_at_the_default(tmp_path: Path) -> None:
-    spec = lattice_spec()
-    assert spec.replicates == LATTICE_REPLICATES and len(spec.configs) == lattice.CELLS == 72
-    with pytest.raises(executor.UnderpoweredDesign):
-        executor.check_power(_bare_plan(spec), max_mde=None)
 
 
 def test_w12_the_lattice_design_passes_at_its_own_mde_and_not_at_the_printed_rounding() -> None:

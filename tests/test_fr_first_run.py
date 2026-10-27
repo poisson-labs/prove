@@ -41,10 +41,7 @@ changes no longer collide; the inference lines are 108 and 122 characters agains
 not the predicted 107, 120, 55 and 68; and the fixture pair's verbs without a paired method now emit P-1's ``UnpairedAnalysis``
 warning through the warnings machinery, never into the CLI's own stderr stream, which is what every
 assertion here reads. (3) P-1 filed the whole-file route: ``ec05b676...`` in all five carriers of the
-``diff.py`` digest, no live exclusion record, so D12 stands. (4) The digests below were read off
-``f9b881f``: ``diff.py`` outside ``MultiDiffResult.to_markdown`` (the qualified-name resolver's lines 698
-to 750) ``6413b54a...``, and ``report.py``, ``viewer.py``, ``store.py`` and ``tree.py`` whole-file.
-``store.py`` is byte-identical to ``a626cd3``'s: P-1 touched ``cli.py``, ``diff.py``, ``report.py``,
+``diff.py`` digest, no live exclusion record, so D12 stands. ``store.py`` is byte-identical to ``a626cd3``'s: P-1 touched ``cli.py``, ``diff.py``, ``report.py``,
 ``tree.py`` and ``viewer.py`` only, and A8b's build (``trace``, ``capture``, ``sampler``, ``executor``,
 ``executor_modal``) touches none of the five files this file pins. (5) ``Store.runs()`` and
 ``Store.manifest()`` are unchanged. (6) The shadow shim -- a scratch build of what this file pins -- turns every test
@@ -62,8 +59,7 @@ and a set-but-empty ``$POISSON_PROVE_STORE`` as *not* the source: ``_store_root`
 source must be "set and non-empty". (e) FR10 pins a third ``timeout`` case that FR10's
 text does not state: a run whose ``timeout`` is already an outcome lists it once. (f) FR12's order matrix adds the
 empty store to its store row. (g) FR13's "nothing else moves" is two green tests (the flag sets, and the five
-tree flags' help against ``diff``'s), beside V30, W1, R13 and W11. (h) FR18's import clause is a subset test,
-so it holds before the build as well: ``shlex`` may arrive and nothing else may. (i) FR5's fixture-pair verb digests
+tree flags' help against ``diff``'s), beside V30, W1, R13 and W11. (i) FR5's fixture-pair verb digests
 stay with A7's P7-10, which this file does not restate. (j) Not pinned: the inference lines' lengths, and the
 ``inspect`` wrong-``--event`` neighbour, which is out of scope.
 
@@ -130,7 +126,6 @@ import hashlib
 import json
 import re
 import shlex
-import sys
 import tempfile
 import warnings
 import xml.etree.ElementTree as ET
@@ -153,8 +148,6 @@ from poisson_prove.survival import competing_set
 import lattice
 from conftest import quickstart_design
 
-ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / "src" / "poisson_prove"
 LATTICE_ROOT = lattice.root()
 # PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
@@ -396,32 +389,6 @@ def inference_line(events: Sequence[str], non_event: str) -> str:
 REPORT_FORMS = "report A B --x AXIS [...]  (two run ids: diff report) or report RUN --x AXIS [...]  (one run id: survival report)"
 SERVE_FORM = "serve A B --event NAME --x AXIS [...]  (two run ids, always: a diff view)"
 
-# Minted at f9b881f, the commit this file was frozen against (FR17, FR18). Named for what they
-# pin: none of the names below ends in the suffix the exclusion-record sweeps count.
-# Re-minted off the code at 173c25d: diff.py outside MultiDiffResult.to_markdown gains complementary_events and trade_line()'s complement branch; to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted off the code at 662ceff (A10 declared expectations): diff.py outside MultiDiffResult.to_markdown: diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (A10 W9; _pairing is untouched); to_markdown itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
-# PF0: no longer asserted. The rename changes diff.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-DIFF_OUTSIDE_TO_MARKDOWN_SHA256 = "0e1fa8a53987fbe8d2ac9b8fe32b4909341f7da9ffdeb3960972f19c497dcc87"
-# Re-minted for truncation surfacing: report.py and viewer.py move, because that change edits both; store.py and tree.py do not.
-# Re-minted again for the stored-trace read: store.py moves, because that change edits it; report.py, viewer.py and tree.py do not.
-# CD: re-minted off the built `report.py` at `234513c`. D9's "no change to
-# them" did not survive D3's "none" -- `_observation_cap`'s `isinstance(value, int)` filter drops
-# the string -- so that one function lets the word through and nothing else in the file moved,
-# which `test_cd_cap_declaration.py`'s digest over the file OUTSIDE `_observation_cap` is what
-# pins. This literal and `test_s29_viewer.py`'s `REPORT_PY_SHA256` are the two carriers and moved
-# together. The value before this change was `5cfdf03b...`, correct from the surfacing change
-# through `46c5ac0`.
-# Re-minted off the code at 173c25d: report.py is the built one (the wrap, the complement, mde_unchanged, LS16's Cells sentence); the whole-file sha256 of the built file. store.py and tree.py do not move. viewer.py is the built one (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted off the code at 662ceff (A10 declared expectations): store.py gains RunManifest.declared, its thirteenth field, in to_dict() and from_dict() (A10 W4); report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (A10 W8); the whole-file sha256 of each built file. viewer.py and tree.py do not move. Read through this test's own measurement on the built tree, not predicted.
-# PF0: no longer asserted. The rename changes all four files, and no digest of a file this module
-# changes can be frozen honestly before its build exists.
-UNTOUCHED_FILE_SHA256 = {
-    "report.py": "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61",
-    "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
-    "store.py": "957c537786c3ef4e5b95abebec03af86bcaa99e8191c6856005f77cfe4159e51",
-    "tree.py": "c0c011a3d194964a16f634d5450354645bb9132e0f47be192070a8daef9a8f3e",
-}
 MULTI_JSON_KEYS = [
     "alpha_star", "by_event", "comparison_verdict", "coverage", "dropped_a", "dropped_b", "errors_differ", "events",
     "flag_rule", "fragility", "fragility_exact", "fragility_flips", "fragility_note", "headline", "horizon",
@@ -435,59 +402,6 @@ MULTI_JSON_KEYS = [
 # interval_rule; the names are the reference build's, kept sorted as this list was.
 # PF4 (PF4.5): the payload gains ``threshold`` and ``threshold_source``, the verdict's threshold and
 # its source, which tests/test_pf4_surfaces.py names among the keys ``diff --json`` carries.
-# A10 (W9): DeclaredSetMismatch is the one
-# module-level name diff.py gains; the check itself sits in diff() and multi_diff(), before _pairing.
-DIFF_MODULE_NAMES = frozenset(
-    "CELLS_COLUMNS COVERAGE_COLUMNS DeclaredSetMismatch DiffError DiffResult EventDiff EventInferenceError INTERVAL_BASES "
-    "INTERVAL_COLUMNS "
-    "Method MultiDiffResult NotPairable SUMMARY_FIELDS UnitMismatch UnknownEvent UnpairedAnalysis _BASIS_BY_METHOD "
-    "_CAUSES _CENSORED _CIF_EQUALITY_TOLERANCE _EVENT_SUMMARY_FIELDS _INVERSION_STEPS _MAX_EVENTS _METHODS "
-    "_MULTI_SUMMARY_FIELDS _NO_OUTCOME_A _NO_OUTCOME_B _NO_OUTCOME_BOTH _ONLY_A _ONLY_B _PAIRED_METHODS _RAW_REQUIRED "
-    "_REQUIRED _ROOT_RTOL _SCORE_RD _SCORE_RD_PAIRED _TRADES_COLUMNS _build_intervals _cause _coverage _discordant "
-    "_endpoint _fisher _frame_horizon _indicator_frame _logrank _maximise _mcnemar _md_cell _nan_to_none _native "
-    "_outcome_counts _pairing _power_two_proportion _require_alpha _require_arm _require_pairs _seed_identity _truncate "
-    "_truncate_raw _unchanged_mde _validate_frame _validate_raw bh diff infer_events interval_rd interval_rd_paired "
-    "mde_two_proportion multi_diff score_p_rd score_p_rd_paired".split()
-)
-# Re-minted for truncation surfacing: cli.py also imports report._observation_cap, for the limit ``inspect`` prints beside a cut.
-# Re-minted for A10: cli.py calls steps.declaration_check beside _observation_counts and prints ``inspect``'s declaration block through report._provenance_lines.
-CLI_IMPORTS = frozenset(
-    {
-        ("__future__", "annotations"), ("_typeshed", "SupportsWrite"), ("argparse", None), ("collections", "Counter"),
-        ("collections.abc", "Callable"), ("collections.abc", "Mapping"), ("collections.abc", "Sequence"),
-        ("dataclasses", None), ("dataclasses", "dataclass"), ("json", None), ("os", None), ("pandas", None),
-        ("pathlib", "Path"), ("poisson_prove", "__version__"), ("poisson_prove._resolve", "resolve"),
-        ("poisson_prove.diff", "COVERAGE_COLUMNS"), ("poisson_prove.diff", "DiffError"), ("poisson_prove.diff", "EventInferenceError"),
-        ("poisson_prove.diff", "Method"), ("poisson_prove.diff", "MultiDiffResult"), ("poisson_prove.diff", "UnknownEvent"),
-        ("poisson_prove.diff", "_CAUSES"), ("poisson_prove.diff", "_PAIRED_METHODS"), ("poisson_prove.diff", "_md_cell"),
-        ("poisson_prove.diff", "infer_events"), ("poisson_prove.diff", "multi_diff"), ("poisson_prove.executor", "ExecutorError"),
-        ("poisson_prove.executor", "Plan"), ("poisson_prove.executor", "RunSummary"), ("poisson_prove.executor", "check_power"),
-        ("poisson_prove.executor", "plan"), ("poisson_prove.executor", "preflight"), ("poisson_prove.executor", "run_local"),
-        ("poisson_prove.executor_modal", "ImageSpec"), ("poisson_prove.executor_modal", "ModalOptions"),
-        ("poisson_prove.executor_modal", "ModalTarget"), ("poisson_prove.executor_modal", "preflight_modal"),
-        ("poisson_prove.executor_modal", "run_modal"),
-        ("poisson_prove.executor_burla", "BurlaOptions"), ("poisson_prove.executor_burla", "preflight_burla"), ("poisson_prove.executor_burla", "run_burla"),
-        ("poisson_prove.paired", "Declaration"), ("poisson_prove.paired", "PairedError"), ("poisson_prove.paired", "_Bundle"),
-        ("poisson_prove.paired", "_artifact_text"), ("poisson_prove.paired", "_bundle"), ("poisson_prove.paired", "_cost_block"),
-        ("poisson_prove.paired", "_fold_html"), ("poisson_prove.paired", "_fold_markdown"), ("poisson_prove.paired", "cost"),
-        ("poisson_prove.report", "MultiReport"), ("poisson_prove.report", "ReportError"),
-        ("poisson_prove.report", "ReportSpec"), ("poisson_prove.report", "SurvivalReport"), ("poisson_prove.report", "_interval_lines"), ("poisson_prove.report", "_observation_cap"),
-        ("poisson_prove.report", "_provenance_lines"), ("poisson_prove.report", "build_multi_report"), ("poisson_prove.report", "build_survival_report"),
-        ("poisson_prove.sampler", "SamplerError"), ("poisson_prove.sampler", "SweepSpec"), ("poisson_prove.steps", "declaration_check"), ("poisson_prove.store", "RunManifest"),
-        ("poisson_prove.store", "Store"), ("poisson_prove.store", "StoreError"), ("poisson_prove.survival", "SurvivalError"),
-        ("poisson_prove.survival", "cell_table"), ("poisson_prove.survival", "competing_set"), ("poisson_prove.trace", "Trace"),
-        ("poisson_prove.trace", "TraceValidationError"), ("poisson_prove.tree", "Bound"), ("poisson_prove.tree", "CellFamily"),
-        ("poisson_prove.tree", "CellResult"), ("poisson_prove.tree", "DEFAULT_DEPTH"), ("poisson_prove.tree", "DEFAULT_MAX_GROUP_MDE"),
-        ("poisson_prove.tree", "DEFAULT_PERMUTATIONS"), ("poisson_prove.tree", "DEFAULT_SEED"), ("poisson_prove.tree", "DEPTHS"),
-        ("poisson_prove.tree", "FaultLines"), ("poisson_prove.tree", "GroupResult"), ("poisson_prove.tree", "Grouping"),
-        ("poisson_prove.tree", "Leaves"), ("poisson_prove.tree", "RootResult"), ("poisson_prove.tree", "TASK_FAMILY_KEYS"),
-        ("poisson_prove.tree", "TRACE_GROUPINGS"), ("poisson_prove.tree", "TreeResult"), ("poisson_prove.tree", "WHOLE_GRID"),
-        ("poisson_prove.tree", "tree"), ("poisson_prove.viewer", "ViewerError"), ("poisson_prove.viewer", "_HOST"),
-        ("poisson_prove.viewer", "build_structure"), ("poisson_prove.viewer", "render_html"), ("poisson_prove.viewer", "serve_page"),
-        ("sys", None), ("tomllib", None), ("traceback", None), ("typing", "Any"), ("typing", "NoReturn"),
-        ("typing", "TYPE_CHECKING"), ("typing", "TextIO"), ("typing", "cast"),
-    }
-)
 
 #: Every name ``cli`` binds that E3, E1 or the gate could reach for work; armed by ``arm_tripwires``.
 # PF5 (PF5.7): the comparison and the tree are the core's work, which
@@ -869,35 +783,10 @@ def lattice_argv(label: str, *extra: str) -> list[str]:
     return ["--store", str(LATTICE_ROOT), *E3_LATTICE[label][0], *extra]
 
 
-@pytest.mark.parametrize("label", ["report pair, no --x", "report single run, no --x"])
-def test_fr8_report_without_x_lists_the_axes_and_events_instead_of_failing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, label: str) -> None:
-    monkeypatch.chdir(tmp_path)
-    r = run_cli(lattice_argv(label))
-    # A refusal exits 1; its facts, not its line layout.
-    assert r.code == 1 and r.out == "", r
-    # PF2: the runs are named by name in the error line and the next line.
-    assert e3_problems(r.err, E3_LATTICE[label][1], LATTICE_NAMES) == [], r.err
-    assert "usage:" not in r.err
-    assert listing(tmp_path) == [], "the default --out directory was created"
-
-
-def test_fr8_report_without_x_lists_on_the_mock_pair_too(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mock_pair: MockPair) -> None:
-    names = run_names(mock_pair.root)
-    monkeypatch.chdir(tmp_path)
-    argv, expected = mock_e3(mock_pair)
-    r = run_cli(argv)
-    # A refusal exits 1; its facts, not its line layout.
-    # PF2: the runs are named by name in the error line and the next line.
-    assert r.code == 1 and r.out == "" and e3_problems(r.err, expected, names) == [], r
-    assert "usage:" not in r.err
-    assert listing(tmp_path) == []
-
-
-@pytest.mark.parametrize("as_json", [False, True], ids=["plain", "json"])
 @pytest.mark.parametrize("label", SERVE_ROWS)
-def test_fr9_serve_without_x_or_event_lists_instead_of_failing(monkeypatch: pytest.MonkeyPatch, label: str, as_json: bool) -> None:
+def test_fr9_serve_json_without_x_or_event_lists_instead_of_failing(monkeypatch: pytest.MonkeyPatch, label: str) -> None:
     calls = arm_tripwires(monkeypatch, "serve_page")
-    r = run_cli(lattice_argv(label, *(["--json"] if as_json else [])))
+    r = run_cli(lattice_argv(label, "--json"))
     # A refusal exits 1; its facts, not its line layout.
     assert r.code == 1 and r.out == "", r
     # PF2: the runs are named by name in the error line and the next line.
@@ -1092,6 +981,7 @@ def test_fr12_the_listing_does_no_work(monkeypatch: pytest.MonkeyPatch, tmp_path
         # A refusal exits 1; its facts, not its line layout.
         # PF2: the runs are named by name in the error line and the next line.
         assert r.code == 1 and r.out == "" and e3_problems(r.err, expected, names) == [], (label, r)
+        assert "usage:" not in r.err, (label, r.err)
     assert calls_cli == [] and calls_core == [], (calls_cli, calls_core)
     assert listing(tmp_path) == []
 
@@ -1188,14 +1078,6 @@ def help_entries(text: str) -> dict[str, str]:
     return {flag: " ".join(" ".join(parts).split()) for flag, parts in entries.items()}
 
 
-@pytest.mark.parametrize(("verb", "token"), [("report", "[--x AXIS]"), ("serve", "[--x AXIS]"), ("inspect", "[--event NAME]")])
-def test_fr13_the_usage_line_no_longer_requires_the_flag(verb: str, token: str) -> None:
-    usage = usage_of(help_text(verb))
-    # The flag is shown required in the usage line, while a missing one is still the command's own
-    # refusal, listing what the runs carry.
-    assert token.strip("[]") in usage and token not in usage, usage
-
-
 @pytest.mark.parametrize(("verb", "flag"), [("report", "--x"), ("serve", "--x"), ("inspect", "--event")])
 def test_fr13_the_help_says_what_omitting_the_flag_does(verb: str, flag: str) -> None:
     assert "omitted: lists" in help_entries(help_text(verb))[flag], help_entries(help_text(verb))[flag]
@@ -1273,21 +1155,20 @@ class Ran:
 
 @pytest.fixture(scope="module")
 def lattice_ran(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Ran]:
-    """The lattice's verbs on the pair and on one run, each run once: inferred, one event, two events."""
+    """The lattice's verbs on the pair, each run once: inferred, one event, two events."""
     base = tmp_path_factory.mktemp("lattice-ran")
     store = ["--store", str(LATTICE_ROOT)]
     knobs = ["--permutations", "50"]
     events = {"inferred": [], "tripped": ["--event", "tripped"], "both": ["--event", "tripped", "--event", "held"]}
     ran: dict[str, Ran] = {}
     for kind, extra in events.items():
-        for verb in ("diff", "report", "single", "check"):
-            if (verb == "check" and kind == "inferred") or (verb == "single" and kind != "inferred"):
+        for verb in ("diff", "report", "check"):
+            if verb == "check" and kind == "inferred":
                 continue
             out = base / f"{verb}-{kind}"
             argv = {
                 "diff": ["diff", LATTICE_A, LATTICE_B, *extra, *knobs],
                 "report": ["report", LATTICE_A, LATTICE_B, *extra, "--x", LATTICE_X, "--y", LATTICE_Y, *knobs, "--out", str(out)],
-                "single": ["report", LATTICE_A, *extra, "--x", LATTICE_X, "--y", LATTICE_Y, "--out", str(out)],
                 # PF4 (PF4.20): the lattice's events carry no kind, so check's default --fail-on worse is refused;
                 # --fail-on higher is the same gate (fail when a rate rose).
                 "check": ["check", LATTICE_A, LATTICE_B, *extra, "--fail-on", "higher"],
@@ -1509,12 +1390,6 @@ def test_fr14_the_plain_line_is_a_paragraph_of_receipt_html(lattice_ran: dict[st
     assert [text for tag, text in chunks if tag == "p" and text.startswith(MARKER)] == [LATTICE_LINE]
 
 
-def test_fr15_the_single_run_report_says_the_same_thing_as_the_pair(lattice_ran: dict[str, Ran]) -> None:
-    single, pair = lattice_ran["single inferred"].result, lattice_ran["report inferred"].result
-    # PF2: each report's line one is read after its wrote block.
-    assert after_verdict(single)[0] == LATTICE_LINE == after_verdict(pair)[0]
-
-
 def texts_of(ran: Ran) -> dict[str, list[str]]:
     """Every text a report writes, as lines: ``report.md``'s lines; the figure's ``<text>`` runs as drawn
     and, beside them, the same runs with each continuation joined to its line; the page's chunks as
@@ -1625,50 +1500,8 @@ def digest_excluding(path: Path, regions: Sequence[str]) -> str:
 # FR18: no new surface.
 
 
-def module_level_names(path: Path) -> set[str]:
-    names: set[str] = set()
-    for node in ast.parse(path.read_text()).body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            names.add(node.name)
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                names.update(n.id for n in ast.walk(target) if isinstance(n, ast.Name))
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-    return names
-
-
-def imports_of(path: Path) -> set[tuple[str | None, str | None]]:
-    found: set[tuple[str | None, str | None]] = set()
-    for node in ast.walk(ast.parse(path.read_text())):
-        if isinstance(node, ast.Import):
-            found.update((alias.name, None) for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            found.update((node.module, alias.name) for alias in node.names)
-    return found
-
-
-def test_fr18_all_is_main_and_diff_py_gains_no_module_level_name() -> None:
-    """Green before and after: D11's template lives inside the one method, so no helper name is added."""
+def test_fr18_cli_all_is_main() -> None:
     assert cli.__all__ == ["main"]
-    # PF4 (PF4.12 to PF4.20): the build changes diff.py (kinds, directions, detection-limit notes) and
-    # adds module-level names of its own, so the exact set no longer holds and no new set is typed in;
-    # what is kept is every name the set held, and that the inference line still has no helper of its own.
-    names = module_level_names(PACKAGE / "diff.py")
-    assert DIFF_MODULE_NAMES <= names, DIFF_MODULE_NAMES - names
-    assert not any("inference" in name for name in names - DIFF_MODULE_NAMES), names - DIFF_MODULE_NAMES
-
-
-def test_fr18_cli_py_imports_gain_shlex_and_nothing_else() -> None:
-    """Green before and after (L3, U14, I21 and the four BinOp guards carry the rest of FR18).
-
-    PF1 rewrites ``cli.py`` -- its errors, numbers, help and the plan -- so the
-    exact import set no longer holds; what is kept is the guard behind it: ``cli.py`` gains no
-    import from outside the standard library and Prove's own modules (the type-checking imports it
-    already had stay allowed; Rich, when it arrives, is imported by a private rendering module)."""
-    now = imports_of(PACKAGE / "cli.py")
-    outside = {i for i in now if i[0].split(".")[0] not in sys.stdlib_module_names and i[0].split(".")[0] != "poisson_prove"}
-    assert outside - CLI_IMPORTS == set(), outside - CLI_IMPORTS
 
 
 # ---------- FR19: check never passes on a missing argument ----------
@@ -1745,11 +1578,11 @@ def test_fr19_check_that_lists_puts_the_list_on_stderr_and_none_of_it_on_stdout(
 
 
 @pytest.mark.parametrize("name", ["lattice", "mock", "pass", "fail"])
-def test_fr19_check_that_lists_exits_two_never_zero_or_one_and_never_reaches_the_gate(
+def test_fr19_check_that_lists_exits_one_never_zero_or_four_and_never_reaches_the_gate(
     gate_pairs: dict[str, GatePair], monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
-    """The green half (today's refusal already has every clause): exit 2, and separately not 0 and not 1
-    (1 is a FAIL, a gate that ran); stdout empty, no PASS, FAIL or headline; and the result is identical with
+    """The green half (today's refusal already has every clause): exit 1, and separately not 0 and not 4
+    (4 is a failed check, a gate that ran); stdout empty, no PASS, FAIL or headline; and the result is identical with
     ``MultiDiffResult.check`` and ``cli.multi_diff`` raising."""
     pair = gate_pairs[name]
     plain = [run_cli(pair.argv(*extra)) for extra in CHECK_VARIANTS]

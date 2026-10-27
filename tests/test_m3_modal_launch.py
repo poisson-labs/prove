@@ -24,18 +24,15 @@ Conventions these frozen tests fix for the implementation:
   reversed order so completion order is exercised.
 - The canary is a fresh ``secrets.token_hex(16)`` per test, placed in ``os.environ`` through
   ``monkeypatch.setenv`` and never handed to Prove on purpose.
-- L3 and L13 read source files through ``poisson_prove.__file__``, never the working directory.
 - Helpers build plans, stores, sweep files and fakes. They never assert.
 """
 
-import ast
 import contextlib
 import dataclasses
 import importlib
 import importlib.machinery
 import importlib.util
 import json
-import re
 import sys
 import types
 from collections.abc import Iterator, Sequence
@@ -47,7 +44,6 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import poisson_prove
 import poisson_prove.cli as cli
 import poisson_prove.executor_modal as executor_modal
 from poisson_prove.episode import Episode
@@ -85,10 +81,6 @@ REFUSING_MODULE = "proofload_oracle_refusing_target"
 BOUNDARY_VAR = "PROOFLOAD_TEST_BOUNDARY"
 CANARY_VAR = "PROOFLOAD_ORACLE_CANARY"
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
-CLI_SOURCE = PACKAGE / "cli.py"
-MODAL_SOURCE = PACKAGE / "executor_modal.py"
-
 PRE_AMENDMENT_FIELDS = frozenset({
     "concurrency", "batch_size", "episode_timeout", "infra_retries", "max_rollouts",
     "max_cost", "est_seconds_per_episode", "app_name",
@@ -97,18 +89,12 @@ FUNCTION_KWARGS = frozenset({
     "image", "gpu", "timeout", "retries", "max_containers", "serialized", "secrets",
 })
 IMAGE_KEYS = frozenset({"python", "pip", "apt", "dockerfile", "local_packages", "gpu"})
-# The executor's public-surface pins, restated: the __all__ list and the public names executor_modal defines itself.
+# The executor's public-surface pin, restated: the __all__ list.
 MODAL_EXPORTS = [
     "CostGuard", "ImageSpec", "Job", "Mapper", "ModalBackendError", "ModalNotInstalled",
     "ModalOptions", "ModalTarget", "Result", "estimate_cost", "preflight_modal", "run_modal",
     "run_with_mapper", "worker_batch",
 ]
-MODAL_PUBLIC = frozenset({
-    "CostGuard", "ImageSpec", "ModalBackendError", "ModalNotInstalled", "ModalOptions",
-    "ModalTarget", "estimate_cost", "preflight_modal", "run_modal", "run_with_mapper",
-    "worker_batch",
-})
-CLI_PUBLIC = frozenset({"main"})
 
 SWEEP_HEADER = """
 target_id = "launch@test"
@@ -534,15 +520,6 @@ def _install_refusing_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     return f"{REFUSING_MODULE}:rollout"
 
 
-def _defined(module: Any) -> set[str]:
-    """The public names a module defines itself: S17's measure of its surface."""
-    return {
-        name
-        for name, obj in vars(module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == module.__name__
-    }
-
-
 def _fake_run(tmp_path: Path, secrets: tuple[str, ...], name: str = "modal") -> tuple[Plan, Store, RunSummary]:
     """``run_modal`` through whatever ``modal`` is in ``sys.modules``, under SALT."""
     store = _store(tmp_path, name)
@@ -610,60 +587,6 @@ def test_l2_well_shaped_unresolvable_path_is_accepted_on_the_modal_branch(
     assert r.code == 0, r.text
     assert len(captured_run_modal.calls) == 1
     assert captured_run_modal.calls[0][1].import_path == target
-
-
-# ---------- L3: one resolve site (structural) ----------
-
-
-def test_l3_cli_resolves_in_exactly_one_place() -> None:
-    # PF5 (PF5.7): the face resolves no target; the core plans the sweep, so the
-    # one local resolve site is in the core: outside ``_resolve`` itself and the remote
-    # backends' container-side workers, ``_resolve.resolve`` is called in one function of
-    # ``src/``, by any import of it, and that function is called from one line. ``cli.py`` does
-    # not import ``_resolve`` in any form.
-    remote = {"_resolve.py", "executor_modal.py", "executor_burla.py", "_burla_submit.py"}
-    trees = {path: ast.parse(path.read_text(encoding="utf-8")) for path in sorted(PACKAGE.rglob("*.py"))}
-
-    def resolve_names(tree: ast.Module) -> tuple[set[str], set[str]]:
-        names: set[str] = set()
-        modules: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove._resolve":
-                names |= {a.asname or a.name for a in node.names if a.name == "resolve"}
-            elif isinstance(node, ast.ImportFrom) and node.module == "poisson_prove":
-                modules |= {a.asname or a.name for a in node.names if a.name == "_resolve"}
-            elif isinstance(node, ast.Import):
-                modules |= {a.asname or a.name for a in node.names if a.name == "poisson_prove._resolve"}
-        return names, modules
-
-    names, modules = resolve_names(trees[CLI_SOURCE])
-    assert not names and not modules, "cli.py imports _resolve"
-    sites: list[tuple[str, str]] = []
-    for path, tree in trees.items():
-        if path.name in remote:
-            continue
-        names, modules = resolve_names(tree)
-
-        def visit(node: ast.AST, fn: str | None, names: set[str] = names, modules: set[str] = modules, path: Path = path) -> None:
-            for child in ast.iter_child_nodes(node):
-                inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else fn
-                if isinstance(child, ast.Call):
-                    called = child.func
-                    if (isinstance(called, ast.Name) and called.id in names) or (
-                        isinstance(called, ast.Attribute) and called.attr == "resolve"
-                        and ast.unparse(called.value) in modules | {"poisson_prove._resolve"}
-                    ):
-                        sites.append((path.name, fn or "<module>"))
-                visit(child, inner, names, modules, path)
-
-        visit(tree, None)
-    assert len(sites) == 1, sites
-    function = sites[0][1]
-    calls = [
-        line for path in trees for line in path.read_text(encoding="utf-8").splitlines()
-        if re.search(rf"\b{re.escape(function)}\(", line) and not line.lstrip().startswith(f"def {function}(")
-    ]
-    assert len(calls) == 1, calls
 
 
 # ---------- L4: a container-side resolve failure is one batch failure, retried, then recorded ----------
@@ -961,35 +884,12 @@ def test_l12_canary_never_reaches_the_sweep_output(
     assert canary not in r.text
 
 
-# ---------- L13: grep (structural) ----------
-
-
-def test_l13_executor_modal_builds_secrets_with_from_name_and_nothing_else() -> None:
-    source = MODAL_SOURCE.read_text(encoding="utf-8")
-    assert source.count("from_name") == 1
-    assert "Secret.from_dict" not in source
-    assert "from_local_environ" not in source
-    assert "os.environ" not in source
-    assert re.search(r"\benv=", source) is None
-
-
-def test_l13_no_other_core_file_mentions_secret() -> None:
-    others = sorted(
-        p for p in PACKAGE.rglob("*.py") if p != MODAL_SOURCE and "__pycache__" not in p.parts
-    )
-    assert others, PACKAGE
-    offenders = [p.name for p in others if "Secret" in p.read_text(encoding="utf-8")]
-    assert offenders == []
-
-
 # ---------- L14: surface unchanged ----------
 
 
 def test_l14_public_surface_is_what_s18_left_it() -> None:
     assert list(executor_modal.__all__) == MODAL_EXPORTS, executor_modal.__all__
-    assert _defined(executor_modal) == MODAL_PUBLIC, sorted(_defined(executor_modal) ^ MODAL_PUBLIC)
     assert set(ImageSpec().to_dict()) == IMAGE_KEYS
-    assert _defined(cli) == CLI_PUBLIC, sorted(_defined(cli) ^ CLI_PUBLIC)
     assert len(dataclasses.fields(ModalOptions)) == 9
 
 

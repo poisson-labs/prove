@@ -904,8 +904,8 @@ def test_pf8_1_no_file_section_9_1_removes_ships(kind: str, archives: dict[str, 
 def test_pf8_1_contributing_md_carries_the_three_rules(archives: dict[str, Archive]) -> None:
     assert "CONTRIBUTING.md" in archives["sdist"].files
     text = " ".join(archives["sdist"].text("CONTRIBUTING.md").split())
-    assert re.search(r"(?i)\bnetwork\b", text) and re.search(r"(?i)\bcore\b", text), "the core imports no network library"
-    assert re.search(r"(?i)\bfrozen\b", text), "frozen tests are not edited"
+    assert re.search(r"(?i)\bthe core imports no network librar(?:y|ies)\b", text), "the core imports no network library"
+    assert re.search(r"(?i)\bfrozen tests are (?:read-only|not edited)\b", text), "frozen tests are not edited"
     assert re.search(r"(?i)conventional commits|conventionalcommits\.org", text), "commits are Conventional Commits"
 
 
@@ -966,6 +966,8 @@ def test_pf8_4_each_family_catches_its_terms_and_passes_ordinary_words(family: F
 
 @pytest.mark.parametrize("part", PARTS)
 def test_pf8_4_the_plain_words_test_passes_over_its_whole_corpus(part: str, request: pytest.FixtureRequest, tmp_path: Path) -> None:
+    """The plain-words test over each part of what ships. Its ``tests`` case is a release lint of
+    the repository's own text (the test files the sdist carries), not a check of Prove's behaviour."""
     factory = request.getfixturevalue("tmp_path_factory")
     if part in ("package", "docs", "tests", "terminal-app"):
         archives = request.getfixturevalue("archives")
@@ -991,6 +993,8 @@ def test_pf8_4_the_plain_words_test_passes_over_its_whole_corpus(part: str, requ
 
 
 def test_pf8_5_no_test_names_a_place_outside_the_repository(archives: dict[str, Archive]) -> None:
+    """A release lint of the repository's own text, not a check of Prove's behaviour: no test file
+    the sdist carries names a place outside the repository."""
     found = []
     for name, data in sorted(archives["sdist"].files.items()):
         if name.startswith("tests/") and name.endswith(".py") and name != THIS_FILE:
