@@ -133,6 +133,16 @@ def _search(power: NDArray[np.float64], grid: NDArray[np.float64], target: float
     return Limit(float(grid[index]), None)
 
 
+def _search_reached(reached: NDArray[np.bool_], grid: NDArray[np.float64]) -> Limit:
+    """``_search`` read from whether the power reaches the target at each grid value: the first
+    index after the last value that does not."""
+    short = np.nonzero(~reached)[0]
+    index = 0 if short.size == 0 else int(short[-1]) + 1
+    if index >= reached.size:
+        return Limit(None, NONE_DETECTABLE)
+    return Limit(float(grid[index]), None)
+
+
 # ---------- Fisher's exact test ----------
 
 
@@ -335,6 +345,96 @@ def paired_power(
     return out
 
 
+#: How far from the target the quick paired power must fall before its side of the target is
+#: taken without ``paired_power``: a million times the largest difference between the two
+#: measured on 200 to 2,000 pairs (about 1e-12).
+_PAIRED_GUARD = 1e-6
+
+
+def _paired_power_quick(
+    p_a: float, pairs: int, level: float, changes: NDArray[np.float64], rise: bool
+) -> tuple[NDArray[np.float64], NDArray[np.bool_]]:
+    """``paired_power`` by a walk over the discordant total instead of a binomial tail per total:
+    the chance of the direction's count reaching its critical value at ``d + 1`` pairs is the
+    chance at ``d`` plus the share times the chance of being one short, and moving the critical
+    value adds or takes one probability. Returns the power and where it may be read (both
+    shares strictly between 0 and 1, and finite); elsewhere only ``paired_power`` decides."""
+    changes = np.asarray(changes, dtype=np.float64)
+    if rise:
+        only_b = (1.0 - p_a) * (p_a + changes)
+        only_a = p_a * (1.0 - p_a - changes)
+    else:
+        only_b = (1.0 - p_a) * (p_a - changes)
+        only_a = p_a * (1.0 - p_a + changes)
+    only_a, only_b = np.clip(only_a, 0.0, 1.0), np.clip(only_b, 0.0, 1.0)
+    discordant = np.clip(only_a + only_b, 0.0, 1.0)
+    toward = only_b if rise else only_a
+    share = np.divide(toward, discordant, out=np.zeros_like(discordant), where=discordant > 0)
+    usable = (discordant > 0) & (discordant < 1) & (share > 0) & (share < 1)
+    d_, s_ = np.where(usable, discordant, 0.5), np.where(usable, share, 0.5)
+    log_d, log_not_d = np.log(d_), np.log1p(-d_)
+    log_s, log_not_s = np.log(s_), np.log1p(-s_)
+    log_fact = special.gammaln(np.arange(pairs + 1, dtype=np.float64) + 1.0)
+    critical = _paired_critical(pairs, level)
+
+    def chance(total: int, count: int) -> NDArray[np.float64]:
+        """The chance of exactly ``count`` toward the direction among ``total`` discordant."""
+        out: NDArray[np.float64] = np.exp(
+            log_fact[total]
+            - log_fact[count]
+            - log_fact[total - count]
+            + count * log_s
+            + (total - count) * log_not_s
+        )
+        return out
+
+    power = np.zeros_like(changes)
+    reach: NDArray[np.float64] | None = None
+    at = 0
+    for total in range(pairs + 1):
+        needed = int(critical[total])
+        if needed > total:
+            reach = None
+            continue
+        if reach is None:
+            reach = np.zeros_like(changes)
+            for count in range(needed, total + 1):
+                reach = reach + chance(total, count)
+        else:
+            if at >= 1:
+                reach = reach + s_ * chance(total - 1, at - 1)
+            while at < needed:
+                reach = reach - chance(total, at)
+                at += 1
+            while at > needed:
+                at -= 1
+                reach = reach + chance(total, at)
+        at = needed
+        weight = np.exp(
+            log_fact[pairs]
+            - log_fact[total]
+            - log_fact[pairs - total]
+            + total * log_d
+            + (pairs - total) * log_not_d
+        )
+        power += weight * reach
+    return power, usable & np.isfinite(power)
+
+
+def _paired_reaches(
+    p_a: float, pairs: int, level: float, grid: NDArray[np.float64], rise: bool, target: float
+) -> NDArray[np.bool_]:
+    """Whether ``paired_power`` reaches ``target`` at each grid value, the same answer at every
+    value: the quick power answers where it is more than ``_PAIRED_GUARD`` from the target, and
+    ``paired_power`` itself, over those values alone, everywhere else."""
+    quick, usable = _paired_power_quick(p_a, pairs, level, grid, rise)
+    reached = quick >= target
+    unsure = ~usable | (np.abs(quick - target) <= _PAIRED_GUARD)
+    if unsure.any():
+        reached[unsure] = paired_power(p_a, pairs, level, grid[unsure], rise) >= target
+    return reached
+
+
 @lru_cache(maxsize=1 << 16)
 def paired_limits(events_a: int, pairs: int, level: float, power: float) -> Limits:
     """A condition's limits under the paired test, from A's ``events_a`` events over its
@@ -352,7 +452,8 @@ def paired_limits(events_a: int, pairs: int, level: float, power: float) -> Limi
         elif not p_min < level:
             found.append(Limit(None, CANNOT_BE_FLAGGED))
         else:
-            found.append(_search(paired_power(p_a, pairs, level, grid, rise), grid, power))
+            reached = _paired_reaches(p_a, pairs, level, grid, rise, power)
+            found.append(_search_reached(reached, grid))
     return Limits(found[0], found[1], p_min, "mcnemar", "test", 1.0 - p_a, p_a)
 
 
