@@ -387,20 +387,27 @@ def _version(name: str) -> str | None:
 
 def _build_bundle(packages: Sequence[str]) -> _Bundle:
     """``poisson_prove`` and each named package, as a deterministic gzip'd tar: sorted entries,
-    mtimes and owners zeroed, modes 0644 and 0755, gzip mtime zero, no caches."""
+    mtimes and owners zeroed, modes 0644 and 0755, gzip mtime zero, no caches.
+
+    Each named package is recorded with its version, commit and whether it has uncommitted
+    changes; ``poisson_prove`` with its version only, since a commit of the tool says nothing
+    about the user's code."""
     names = ["poisson_prove", *[name for name in packages if name != "poisson_prove"]]
     raw = io.BytesIO()
     info: dict[str, dict[str, Any]] = {}
     members: list[tuple[str, Path]] = []
     for name in names:
         folder = _package_folder(name)
-        commit = _git(folder, "rev-parse", "HEAD")
-        status = _git(folder, "status", "--porcelain", "--", ".") if commit else None
-        info[name] = {
-            "version": _version(name),
-            "commit": commit,
-            "dirty": None if status is None else bool(status),
-        }
+        if name == "poisson_prove":
+            info[name] = {"version": _version(name)}
+        else:
+            commit = _git(folder, "rev-parse", "HEAD")
+            status = _git(folder, "status", "--porcelain", "--", ".") if commit else None
+            info[name] = {
+                "version": _version(name),
+                "commit": commit,
+                "dirty": None if status is None else bool(status),
+            }
         for root, dirs, files in os.walk(folder):
             dirs[:] = sorted(d for d in dirs if d != "__pycache__")
             rel_root = Path(root).relative_to(folder)
@@ -607,6 +614,9 @@ def _head_line(options: BurlaOptions, bundle: _Bundle) -> str:
     parts = []
     for name, info in bundle.packages.items():
         version = info.get("version") or "unversioned"
+        if "commit" not in info:
+            parts.append(f"{name} {version}")
+            continue
         commit = info.get("commit")
         tag = "no git" if commit is None else str(commit)[:7]
         if info.get("dirty"):

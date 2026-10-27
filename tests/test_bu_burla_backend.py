@@ -1224,7 +1224,7 @@ def test_w1_the_bundle_is_deterministic_and_complete(tmp_path: Path, monkeypatch
     assert files == want, sorted(set(files) ^ set(want))
 
 
-def test_w1_the_manifest_records_the_bundle_and_each_packages_version_commit_and_dirty_flag(
+def test_w1_the_manifest_records_the_bundle_prove_s_version_and_each_package_s_version_commit_and_dirty_flag(
     fake: Fake, tmp_path: Path
 ) -> None:
     p, store, opts, outcome = burla_run(fake, tmp_path)
@@ -1232,7 +1232,7 @@ def test_w1_the_manifest_records_the_bundle_and_each_packages_version_commit_and
     record = store.manifest(p.run_id).environment["bundle"]
     rebuilt = eb._build_bundle(("bu_targets",))
     assert record["sha256"] == rebuilt.sha256 and record["size"] == len(rebuilt.data)
-    assert record["packages"] == {"poisson_prove": _expected_package("poisson_prove"),
+    assert record["packages"] == {"poisson_prove": {"version": _expected_version("poisson_prove")},
                                   "bu_targets": _expected_package("bu_targets")}
 
 
@@ -1880,6 +1880,7 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     bundle = eb._build_bundle(("bu_targets", "bu_dirty"))
     for name in ("poisson_prove", "bu_targets", "bu_dirty"):
         assert name in bundle_line, (name, bundle_line)
+    assert f"Bundle: poisson_prove {_expected_version('poisson_prove') or 'unversioned'}, " in bundle_line, bundle_line
     commit = _git(tmp_path / "checkout", "rev-parse", "HEAD")
     assert commit and commit[:7] in bundle_line and bundle.sha256 in bundle_line, bundle_line
     assert "uncommitted changes" in bundle_line
@@ -1887,7 +1888,7 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     assert not any(line.startswith("MDE at N=") for line in lines), lines
     plain = eb.preflight_burla(p, PLAIN, options(tmp_path, packages=("bu_targets",)))
     plain_bundle = next(line for line in plain.splitlines() if line.startswith("Bundle: "))
-    dirty = any(_expected_package(name)["dirty"] for name in ("poisson_prove", "bu_targets"))
+    dirty = bool(_expected_package("bu_targets")["dirty"])
     assert ("uncommitted changes" in plain_bundle) == dirty, (dirty, plain_bundle)
 
 
