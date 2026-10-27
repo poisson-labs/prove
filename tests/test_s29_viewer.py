@@ -1910,7 +1910,7 @@ def test_w4_the_excised_page_and_the_tree_less_keys_do_not_read_the_tree(every_p
         assert again.structure["tree"]["root"]["seed"] == 1
 
 
-def test_w17_the_narrowed_o23_and_the_tree_less_keys_digest_to_the_values_minted_on_the_bare_tree(every_pair: list[Pair]) -> None:
+def test_w17_the_narrowed_payload_and_the_tree_less_keys_carry_the_facts_their_old_digests_guarded(every_pair: list[Pair]) -> None:
     """S25's O23 as narrowed: ``serve --json`` on the lattice with ``tree`` removed and ``schema`` set to
     ``/2``, ``store_root`` normalised, digests to S25's literal. And on every pair the six keys
     the tree does not touch digest to the values minted at f4e2845 (quickstart excluded: its run

@@ -1803,7 +1803,7 @@ def test_o14_multi_diff_on_the_lattice_is_byte_identical_to_the_bare_tree(pair: 
     assert_lattice_multi_json_carries_the_facts(multi, method, a, b)
 
 
-def test_o14_the_s24_column_digests_and_the_coverage_digest_are_unchanged(lattice_trees: Any) -> None:
+def test_o14_the_columns_and_the_coverage_carry_the_facts_their_old_digests_guarded(lattice_trees: Any) -> None:
     """S24's ``q``/``delta`` column digests and S21's coverage digest, restated rather than
     imported so two frozen test files do not share a helper."""
     both = lattice_trees.multi((EVENT, OTHER), "fisher_bh")
@@ -1887,7 +1887,7 @@ def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: 
         assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
 
 
-def test_o14_and_o23_the_lattice_report_still_reproduces_the_three_digests_s21_minted(pair: Any, tmp_path: Path) -> None:
+def test_o14_and_o23_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(pair: Any, tmp_path: Path) -> None:
     """E14's three digests, restated. ``report`` renders through ``MultiDiffResult`` and the root
     reaches no other verb (O23); if a byte leaks into ``to_markdown``, the receipt or the heatmap,
     one of these three moves.

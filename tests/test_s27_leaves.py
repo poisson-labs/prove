@@ -374,7 +374,9 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # files, so the pin is over each file's code with those taken out (``conftest.code_of``) and still moves the moment
 # an assertion does. Read off the two files after every other move, not predicted.
 FROZEN_ORACLE_SHA256 = {
-    "tests/test_s25_root.py": "1b13d84c1097f616c43db318c3d40caef964379f566b341a4cb7e22292037894",
+    # Re-minted when two of s25's tests were renamed for what they now check (their old names said
+    # digests, which they no longer compare); the code is otherwise as it was.
+    "tests/test_s25_root.py": "bebfe0c6a6c8ecfe2a40de14740414874dfc5d94e845f87b02f514eab0b6fe4a",
     "tests/test_s26_fault_lines.py": "b3e636b28244360e3f2eda35e23602bfad8c1c8d544b12af52d1f385cbb524ef",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.

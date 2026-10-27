@@ -1439,7 +1439,7 @@ def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: 
         assert any(f"{mde:.3f}" in note for note in notes), (mde, notes)
 
 
-def test_c14_the_lattice_report_still_reproduces_the_three_digests_s21_minted(tmp_path: Path) -> None:
+def test_c14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(tmp_path: Path) -> None:
     """The three digests S21's E14 pins, restated rather than imported so two frozen test files do
     not couple. ``report`` renders through ``MultiDiffResult``; if S24 leaks a byte into
     ``to_markdown``, the receipt or the heatmap, one of these three moves.

@@ -1619,7 +1619,7 @@ def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
     return value, "rise" if rise is not None and abs(rise - value) <= 1e-12 else "fall"
 
 
-def test_e14_the_lattice_report_reproduces_the_three_digests_minted_on_the_bare_tree(tmp_path: Path) -> None:
+def test_e14_the_lattice_report_carries_the_facts_its_three_old_digests_guarded(tmp_path: Path) -> None:
     """Narrowed for S28: ``report`` on a pair now renders the
     layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
