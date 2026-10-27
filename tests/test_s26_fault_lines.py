@@ -335,8 +335,6 @@ REFERENCE_BY_METHOD = {"fisher_bh": lattice.fisher, "mcnemar_bh": lattice.mcnema
 #: the reference's R = 22 over M = 72, as the alpha* line prints them (``:.4%`` and ``:g``) and as the
 #: interval-on-the-change line prints the level (three decimals at most).
 INTERVAL_LEVEL_TEXT, ALPHA_STAR_TEXT, ON_CHANGE_LEVEL_TEXT = "98.4722", "0.0152778", "98.472"
-#: The per-cell keys every method's JSON must carry as the design gives them.
-ARM_KEYS = ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta")
 #: Keys that belong to the layered report's tree; none may appear outside ``tree`` on the page.
 #: (``bound`` is not among them: the page's ``view`` carries its own forest ``bound`` setting.)
 TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
@@ -613,54 +611,6 @@ def assert_q_column_is_bh_over_its_p_column(result: Any, reference: Mapping[str,
         ref_p = [reference[e][h]["p"] for e in result.events for h in result.by_event[e].cells["config_hash"]]
         assert ps == ref_p
         assert qs == bh_over(ref_p)
-
-
-def assert_delta_column_is_the_naive_difference(result: Any, events: tuple[str, ...]) -> None:
-    """What the delta-column digest guarded: the family covers ``events`` in that order, each in
-    sorted-hash order; every row's delta is ``events_b/n_b - events_a/n_a`` exactly, with the
-    reference's sign of zero (the digest printed ``-0`` apart from ``0``), and its counts and delta
-    are the design's (``lattice.fisher``'s)."""
-    assert tuple(result.events) == events and result.n_tests == len(events) * lattice.CELLS, (result.events, result.n_tests)
-    for event in result.events:
-        reference = lattice.fisher(event)
-        cells = result.by_event[event].cells
-        assert list(cells["config_hash"]) == sorted(reference), event
-        for row in cells.itertuples(index=False):
-            ref = reference[row.config_hash]
-            assert (row.n_a, row.n_b, row.events_a, row.events_b) == (ref["n_a"], ref["n_b"], ref["events_a"], ref["events_b"]), (event, row.config_hash)
-            assert row.delta == row.events_b / row.n_b - row.events_a / row.n_a == ref["delta"], (event, row.config_hash)
-            assert math.copysign(1.0, row.delta) == math.copysign(1.0, ref["delta"]), (event, row.config_hash, row.delta)
-
-
-def assert_coverage_is_the_design(result: Any) -> None:
-    """What the coverage digest guarded, as facts: ``coverage.to_json(orient="records")``, the
-    string the digest hashed, is the one the design gives -- one record per condition in
-    sorted-hash order, each with its own condition, every row of both runs present and holding an
-    outcome, every condition comparable with no cause -- with its columns in order and its
-    integers, booleans and nulls typed as written."""
-    design = {lattice.config_hash(c.config): c.config for c in lattice.design_cells()}
-    assert len(result.coverage) == len(design) == lattice.CELLS
-    expected = [
-        {"config_hash": h, "config": design[h], "rows_a": lattice.N, "rows_b": lattice.N, "no_outcome_a": 0,
-         "no_outcome_b": 0, "comparable": True, "cause": None}
-        for h in sorted(design)
-    ]
-    assert result.coverage.to_json(orient="records") == json.dumps(expected, separators=(",", ":"))
-
-
-def assert_logrank_column_is_the_reference(result: Any) -> None:
-    """The log-rank family (one event, the design's conditions in sorted-hash order) has its q
-    column BH over its p column exactly, and each condition's p, q and direction are the
-    independent log-rank reference's (``lattice.logrank``: lifelines on the stored times, BH
-    written out) to 1e-12 relative."""
-    assert_q_column_is_bh_over_its_p_column(result, None, (EVENT,))
-    reference = lattice.logrank(EVENT)
-    cells = result.by_event[EVENT].cells
-    assert set(cells["config_hash"]) == set(reference)
-    for row in cells.itertuples(index=False):
-        assert row.p == pytest.approx(reference[row.config_hash]["p"], rel=1e-12, abs=0), row.config_hash
-        assert row.q == pytest.approx(reference[row.config_hash]["q"], rel=1e-12, abs=0), row.config_hash
-        assert row.direction == reference[row.config_hash]["direction"], row.config_hash
 
 
 def assert_the_omnibus_payload_is_the_design(payload: Mapping[str, Any], a: pd.DataFrame, b: pd.DataFrame) -> None:
@@ -2329,24 +2279,6 @@ def direction_word(n_lower: int, n_higher: int) -> str:
     return "mixed" if n_lower and n_higher else ("higher" if n_higher else "lower")
 
 
-def mcnemar_reference(a: pd.DataFrame, b: pd.DataFrame, event: str) -> dict[str, float]:
-    """PF4 (PF4.14): each cell's exact McNemar p from its matched pairs, by statsmodels' documented
-    ``mcnemar(table, exact=True)`` with ``table = [[n11, n10], [n01, n00]]`` (rows: arm A with and
-    without the event; columns: arm B); a cell with no discordant pair has p 1."""
-    from statsmodels.stats.contingency_tables import mcnemar
-
-    keys = ["config_hash", "replicate_index"]
-    pairs = a[[*keys, "outcome"]].merge(b[[*keys, "outcome"]], on=keys, suffixes=("_a", "_b"))
-    out: dict[str, float] = {}
-    for cell_hash, group in pairs.groupby("config_hash"):
-        ea = (group["outcome_a"] == event).to_numpy()
-        eb = (group["outcome_b"] == event).to_numpy()
-        table = [[int((ea & eb).sum()), int((ea & ~eb).sum())], [int((~ea & eb).sum()), int((~ea & ~eb).sum())]]
-        discordant = table[0][1] + table[1][0]
-        out[str(cell_hash)] = 1.0 if discordant == 0 else float(mcnemar(table, exact=True).pvalue)
-    return out
-
-
 #: PF4 re-freeze (PF4.22, PF4.48): limits are multiples of this grid step.
 LIMIT_GRID_STEP = 1e-4
 
@@ -2378,36 +2310,6 @@ def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | No
     return None
 
 
-def assert_the_limits_follow_the_rule(cell: Mapping[str, Any], row: Mapping[str, Any], level: float, method: str) -> None:
-    """PF4 re-freeze (PF4.22, PF4.23, PF4.27): the JSON carries the frame's limits;
-    a baseline with the event in every run has no rise (``no room``) and its fall is computed; ``mde``
-    follows the ``mde`` rule (``reference_mde``), with a note when it is null, and a number is a positive grid value;
-    under Fisher both limits are the stats file's reference at the lone-change level ``q / M``."""
-    what = (method, cell["config_hash"])
-    for key in ("mde", "mde_rise", "mde_fall"):
-        assert is_null(cell[key]) == is_null(row[key]), (what, key)
-        assert is_null(cell[key]) or cell[key] == row[key], (what, key)
-    rise, fall = cell["mde_rise"], cell["mde_fall"]
-    if cell["events_a"] == cell["n_a"]:
-        assert is_null(rise) and cell["mde_rise_note"] == "no room", what
-    if not is_null(rise) and not is_null(fall):
-        want = max(rise, fall)
-    elif not is_null(rise) and cell["mde_fall_note"] == "no room":
-        want = rise
-    elif not is_null(fall) and cell["mde_rise_note"] == "no room":
-        want = fall
-    else:
-        want = None
-    if want is None:
-        assert is_null(cell["mde"]) and cell["mde_note"], (what, cell["mde"], cell["mde_note"])
-    else:
-        assert cell["mde"] == want and cell["mde"] >= LIMIT_GRID_STEP - 1e-12, (what, cell["mde"], want)
-    if method == "fisher_bh":
-        assert abs(cell["mde_level"] - level) <= 1e-15, what
-        for got, ref in zip((rise, fall), reference_fisher_limits(cell["events_a"], cell["n_a"], cell["n_b"], level), strict=True):
-            assert (ref is None and is_null(got)) or (ref is not None and not is_null(got) and abs(got - ref) <= LIMIT_GRID_STEP + 1e-12), (what, got, ref)
-
-
 def worst_unchanged(multi: Any) -> tuple[set[str], int]:
     """PF4 re-freeze (PF4.22, PF4.23): the lattice's worst-powered unchanged condition under Fisher,
     from the stats file's reference: every unchanged condition whose recomputed ``mde`` is the
@@ -2423,65 +2325,6 @@ def worst_unchanged(multi: Any) -> tuple[set[str], int]:
             limits[f"{lattice.X}={row['config'][lattice.X]:g}, {lattice.Y}={row['config'][lattice.Y]:g}"] = value
     worst = max(limits.values())
     return {where for where, value in limits.items() if abs(value - worst) <= LIMIT_GRID_STEP + 1e-12}, round(100 * worst)
-
-
-def assert_lattice_multi_json_carries_the_facts(multi: Any, method: str, a: pd.DataFrame, b: pd.DataFrame) -> None:
-    """PF4: the facts the ``to_json()`` digest guarded, with no digest over bytes PF4 changes.
-
-    Every cell's counts, rates and delta equal the frame's and the design's (``lattice.counts``:
-    each rate its count over 32, each delta the naive difference); p and q equal the frame's, and
-    are the independent reference's (``REFERENCE_BY_METHOD``): exactly under Fisher and McNemar
-    (scipy's Fisher test and exact binomial McNemar, one BH family), with the exact McNemar p also
-    statsmodels' and its BH q statsmodels', and to 1e-12 relative under log-rank (lifelines on the stored
-    times), whose q column is also BH over its p column exactly. A condition whose baseline had the
-    event in every run has no rise and its fall computed, and every limit follows the ``mde``
-    rule at ``q / M``, Fisher's recomputed from the stats file's reference (PF4.22, PF4.27). Each
-    cell's JSON verdict is its direction (tripped has no kind, PF4.20) and the reference's; a cell
-    moves exactly when it is rejected, in the direction of its delta except under log-rank (PF4.13);
-    and the counts are the references' (``LATTICE_DIRECTION_COUNTS``)."""
-    from statsmodels.stats.multitest import multipletests
-
-    payload = json.loads(json.dumps(multi.to_json(), sort_keys=True))
-    assert (payload["method"], payload["n_tests"], payload["events"]) == (method, lattice.CELLS, [EVENT]), method
-    event = payload["by_event"][EVENT]
-    n_lower, n_higher = LATTICE_DIRECTION_COUNTS[method]
-    reference = REFERENCE_BY_METHOD[method](EVENT)
-    assert lattice.directions(reference) == (n_lower, n_higher), method
-    assert (event["kind"], event["n_safer"], event["n_worse"]) == (None, None, None), method
-    assert (event["n_lower"], event["n_higher"], event["n_unchanged"]) == (n_lower, n_higher, lattice.CELLS - n_lower - n_higher), method
-    rows = multi.by_event[EVENT].cells.to_dict(orient="records")
-    assert [c["config_hash"] for c in event["cells"]] == [r["config_hash"] for r in rows], method
-    assert set(reference) == {r["config_hash"] for r in rows}, method
-    reference_p = mcnemar_reference(a, b, EVENT) if method == "mcnemar_bh" else {}
-    for cell, row in zip(event["cells"], rows, strict=True):
-        ref = reference[cell["config_hash"]]
-        design = {**ref, "rate_a": ref["events_a"] / ref["n_a"], "rate_b": ref["events_b"] / ref["n_b"]}
-        for key in ARM_KEYS:
-            assert cell[key] == row[key] == design[key], (method, cell["config_hash"], key)
-        assert (cell["p"], cell["q"]) == (row["p"], row["q"]), (method, cell["config_hash"])
-        if method in ("fisher_bh", "mcnemar_bh"):
-            assert (cell["p"], cell["q"]) == (ref["p"], ref["q"]), (method, cell["config_hash"])
-        else:
-            assert cell["p"] == pytest.approx(ref["p"], rel=1e-12, abs=0) and cell["q"] == pytest.approx(ref["q"], rel=1e-12, abs=0), cell["config_hash"]
-        if method == "mcnemar_bh":
-            assert abs(cell["p"] - reference_p[cell["config_hash"]]) <= 1e-12, (cell["config_hash"], cell["p"])
-            assert cell["pairs"] == ref["n_a"] == ref["n_b"], cell["config_hash"]
-        # PF4 re-freeze (PF4.22, PF4.23, PF4.27): each limit is the exact test's at q / M both ways,
-        # a 100% baseline has its fall computed, and Fisher's are recomputed from the stats file's
-        # reference.
-        assert_the_limits_follow_the_rule(cell, row, multi.q / multi.n_tests, method)
-        rejected = cell["q"] < multi.q
-        assert cell["verdict"] == cell["direction"] == row["direction"] == ref["direction"], (method, cell["config_hash"])
-        assert (cell["direction"] != "unchanged") == rejected, (method, cell["config_hash"])
-        if rejected and method != "logrank_bh":
-            assert cell["direction"] == ("higher" if cell["delta"] > 0 else "lower"), (method, cell["config_hash"])
-    directions = [c["direction"] for c in event["cells"]]
-    assert (directions.count("lower"), directions.count("higher")) == (n_lower, n_higher), method
-    if method == "mcnemar_bh":
-        bh = multipletests([reference_p[r["config_hash"]] for r in rows], method="fdr_bh")[1]
-        assert max(abs(r["q"] - float(x)) for r, x in zip(rows, bh, strict=True)) <= 1e-12
-    if method == "logrank_bh":
-        assert_logrank_column_is_the_reference(multi)
 
 
 def assert_e14_builder_carries_the_result(multi: Any, report: Any, receipt: Any) -> None:
@@ -2589,28 +2432,6 @@ def assert_lattice_page_carries_the_diff(structure: Mapping[str, Any], multi: An
     assert structure["summary"]["verdict"] == direction_word(n_lower, n_higher)
     assert structure["headline"] == multi.headline()
     assert not set(TREE_ONLY_KEYS) & nested_keys({k: v for k, v in structure.items() if k != "tree"})
-
-
-@pytest.mark.parametrize("method", METHODS)
-def test_f28_multi_diff_on_the_lattice_is_byte_identical_to_the_bare_tree(pair: Any, lattice_trees: Any, method: str) -> None:
-    a, b, _, _ = pair
-    multi = lattice_trees.multi((EVENT,), method)
-    # PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): the digest is replaced by the facts it guarded, each
-    # checked against a value known outside the build (the lattice's references and their counts).
-    assert_lattice_multi_json_carries_the_facts(multi, method, a, b)
-
-
-def test_f28_the_q_and_delta_columns_and_the_coverage_rows_are_the_designs(lattice_trees: Any) -> None:
-    both = lattice_trees.multi((EVENT, OTHER), "fisher_bh")
-    logrank = lattice_trees.multi((EVENT,), "logrank_bh")
-    # The four digests are replaced by the facts they guarded (S24's C15 and S21's coverage,
-    # restated): each q column is BH over its p column and the references' exactly (Fisher) or to
-    # 1e-12 (log-rank); the delta column is the naive difference of the design's counts; the
-    # coverage frame is the design, condition for condition.
-    assert_q_column_is_bh_over_its_p_column(both, {e: lattice.fisher(e) for e in both.events}, (EVENT, OTHER))
-    assert_delta_column_is_the_naive_difference(both, (EVENT, OTHER))
-    assert_logrank_column_is_the_reference(logrank)
-    assert_coverage_is_the_design(both)
 
 
 def as_0_0_1_wrote_it(text: str) -> str:

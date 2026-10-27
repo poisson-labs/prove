@@ -37,13 +37,6 @@ def span(span_id: str, name: str, **attrs: Any) -> dict[str, Any]:
 # ---------- T35: the two operation values the spike found missing ----------
 
 
-def test_t35_fetch_response_and_execute_task_are_mapped() -> None:
-    from poisson_prove.trace import OTEL_KIND_MAP
-
-    assert OTEL_KIND_MAP["fetch_response"] == "llm"
-    assert OTEL_KIND_MAP["execute_task"] == "agent"
-
-
 @pytest.mark.parametrize(
     ("operation", "kind"), [("fetch_response", "llm"), ("execute_task", "agent")]
 )

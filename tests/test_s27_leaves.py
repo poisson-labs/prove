@@ -375,9 +375,11 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # an assertion does. Read off the two files after every other move, not predicted.
 FROZEN_ORACLE_SHA256 = {
     # Re-minted when two of s25's tests were renamed for what they now check (their old names said
-    # digests, which they no longer compare); the code is otherwise as it was.
-    "tests/test_s25_root.py": "bebfe0c6a6c8ecfe2a40de14740414874dfc5d94e845f87b02f514eab0b6fe4a",
-    "tests/test_s26_fault_lines.py": "b3e636b28244360e3f2eda35e23602bfad8c1c8d544b12af52d1f385cbb524ef",
+    # digests, which they no longer compare), and again when the release trim removed the copies of
+    # tests another file holds: s25's and s26's columns-and-coverage checks (s24's c15 runs the same
+    # helpers on the same comparisons) and s26's multi_diff facts (s27's l20 checks a superset).
+    "tests/test_s25_root.py": "d4ac849fdaca24cd7a583c80dbcfc14c1c58b019974e4d92cd8e6fff2559a14a",
+    "tests/test_s26_fault_lines.py": "195ab70a31bc653501920729fbc4521cbbef3950439a30f723427a91ec39c8a8",
 }
 #: L20: the two signatures that must not move, as ``str(inspect.signature(...))`` at ``6fd3b9c``.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"

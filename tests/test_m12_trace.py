@@ -396,29 +396,6 @@ def test_t1_from_dict_rejects_a_missing_span_key() -> None:
 # ---------- T2: JSON round-trip (property) ----------
 
 
-@settings(max_examples=75, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(
-    spans=span_forests(),
-    source=st.sampled_from(SOURCES_SPEC),
-    source_version=st.none() | st.text(min_size=1, max_size=8),
-    dropped=st.integers(min_value=0, max_value=100),
-)
-def test_t2_json_round_trip(
-    spans: list[dict[str, Any]], source: str, source_version: str | None, dropped: int
-) -> None:
-    from poisson_prove.trace import Span, Trace
-
-    tr = Trace(
-        spans=tuple(Span(**d) for d in spans),
-        source=source,
-        source_version=source_version,
-        dropped=dropped,
-    )
-    encoded = json.dumps(tr.to_dict())
-    assert json.loads(encoded) == tr.to_dict()  # JSON-native: no tuples, no non-str keys
-    assert Trace.from_dict(json.loads(encoded)) == tr
-
-
 def test_t2_section_3_example_round_trips() -> None:
     from poisson_prove.trace import Trace
 

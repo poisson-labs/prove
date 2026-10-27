@@ -538,39 +538,6 @@ def assert_q_column_is_bh_over_its_p_column(result: Any, reference: Mapping[str,
         assert qs == bh_over(ref_p)
 
 
-def assert_delta_column_is_the_naive_difference(result: Any, events: tuple[str, ...]) -> None:
-    """What the delta-column digest guarded: the family covers ``events`` in that order, each in
-    sorted-hash order; every row's delta is ``events_b/n_b - events_a/n_a`` exactly, with the
-    reference's sign of zero (the digest printed ``-0`` apart from ``0``), and its counts and delta
-    are the design's (``lattice.fisher``'s)."""
-    assert tuple(result.events) == events and result.n_tests == len(events) * lattice.CELLS, (result.events, result.n_tests)
-    for event in result.events:
-        reference = lattice.fisher(event)
-        cells = result.by_event[event].cells
-        assert list(cells["config_hash"]) == sorted(reference), event
-        for row in cells.itertuples(index=False):
-            ref = reference[row.config_hash]
-            assert (row.n_a, row.n_b, row.events_a, row.events_b) == (ref["n_a"], ref["n_b"], ref["events_a"], ref["events_b"]), (event, row.config_hash)
-            assert row.delta == row.events_b / row.n_b - row.events_a / row.n_a == ref["delta"], (event, row.config_hash)
-            assert math.copysign(1.0, row.delta) == math.copysign(1.0, ref["delta"]), (event, row.config_hash, row.delta)
-
-
-def assert_coverage_is_the_design(result: Any) -> None:
-    """What the coverage digest guarded, as facts: ``coverage.to_json(orient="records")``, the
-    string the digest hashed, is the one the design gives -- one record per condition in
-    sorted-hash order, each with its own condition, every row of both runs present and holding an
-    outcome, every condition comparable with no cause -- with its columns in order and its
-    integers, booleans and nulls typed as written."""
-    design = {lattice.config_hash(c.config): c.config for c in lattice.design_cells()}
-    assert len(result.coverage) == len(design) == lattice.CELLS
-    expected = [
-        {"config_hash": h, "config": design[h], "rows_a": lattice.N, "rows_b": lattice.N, "no_outcome_a": 0,
-         "no_outcome_b": 0, "comparable": True, "cause": None}
-        for h in sorted(design)
-    ]
-    assert result.coverage.to_json(orient="records") == json.dumps(expected, separators=(",", ":"))
-
-
 def assert_logrank_column_is_the_reference(result: Any) -> None:
     """The log-rank family (one event, the design's conditions in sorted-hash order) has its q
     column BH over its p column exactly, and each condition's p, q and direction are the
@@ -1801,21 +1768,6 @@ def test_o14_multi_diff_on_the_lattice_is_byte_identical_to_the_bare_tree(pair: 
     # PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): the digest is replaced by the facts it guarded, each
     # checked against a value known outside the build (the lattice's references and their counts).
     assert_lattice_multi_json_carries_the_facts(multi, method, a, b)
-
-
-def test_o14_the_columns_and_the_coverage_carry_the_facts_their_old_digests_guarded(lattice_trees: Any) -> None:
-    """S24's ``q``/``delta`` column digests and S21's coverage digest, restated rather than
-    imported so two frozen test files do not share a helper."""
-    both = lattice_trees.multi((EVENT, OTHER), "fisher_bh")
-    logrank = lattice_trees.multi((EVENT,), "logrank_bh")
-    # The four digests are replaced by the facts they guarded (S24's C15 and S21's coverage,
-    # restated): each q column is BH over its p column and the references' exactly (Fisher) or to
-    # 1e-12 (log-rank); the delta column is the naive difference of the design's counts; the
-    # coverage frame is the design, condition for condition.
-    assert_q_column_is_bh_over_its_p_column(both, {e: lattice.fisher(e) for e in both.events}, (EVENT, OTHER))
-    assert_delta_column_is_the_naive_difference(both, (EVENT, OTHER))
-    assert_logrank_column_is_the_reference(logrank)
-    assert_coverage_is_the_design(both)
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
