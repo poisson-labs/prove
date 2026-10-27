@@ -266,7 +266,7 @@ def function_source(path: Path, qualname: str) -> str:
 def manifest(run_id: str) -> RunManifest:
     return RunManifest(
         run_id=run_id, target_id="policy@a8b", t_unit="steps", run_salt=SALT,
-        axis_types={"x": "continuous"}, backend="local", environment={"note": "built by a8b session a"},
+        axis_types={"x": "continuous"}, backend="local", environment={"note": "built by these tests"},
     )
 
 

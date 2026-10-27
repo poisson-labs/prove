@@ -748,7 +748,7 @@ observed["store variable"] = {
 old_default, empty = os.path.join(work, "old-default"), os.path.join(work, "empty")
 copy(args["qa"], os.path.join(old_default, "proofload-runs"))
 os.makedirs(empty)
-# A missing store now exits 1 like the old-store refusal (front-door spec section 5.2), so each is
+# A missing store now exits 1 like the old-store refusal (a refusal exits 1), so each is
 # read as its exit code and whether its stderr names the old folder.
 def default_store(cwd):
     code, _, err = run(["runs"], cwd, {})

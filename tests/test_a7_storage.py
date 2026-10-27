@@ -334,7 +334,7 @@ SNIPPET_MARKER = "# reproduce one episode"
 def manifest(run_id: str, **kw: Any) -> RunManifest:
     base: dict[str, Any] = dict(
         run_id=run_id, target_id="policy@abc123", t_unit="steps", run_salt="a7-salt",
-        axis_types={"x": "continuous"}, backend="local", environment={"note": "built by a7 session a"},
+        axis_types={"x": "continuous"}, backend="local", environment={"note": "built by these tests"},
     )
     base.update(kw)
     return RunManifest(**base)
@@ -527,7 +527,7 @@ def rows_by_key(frame: pd.DataFrame) -> dict[tuple[str, int], Any]:
 def a28_manifest(run_id: str) -> RunManifest:
     return RunManifest(
         run_id=run_id, target_id="synthetic@v0", t_unit="steps", run_salt=SALT,
-        axis_types=dict(TYPES), backend="synthetic", environment={"note": "built by a7 session a"},  # type: ignore[arg-type]
+        axis_types=dict(TYPES), backend="synthetic", environment={"note": "built by these tests"},  # type: ignore[arg-type]
     )
 
 

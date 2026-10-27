@@ -235,7 +235,7 @@ def test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_section_3_3s(gro
             problems.append(f"{req}: no floor")
         allowed = {">="} | ({"<"} if name == "openai" else set())
         if operators - allowed:
-            problems.append(f"{req}: a bound section 3.3 does not have")
+            problems.append(f"{req}: a bound the requirements do not allow (only a floor, and a ceiling on openai)")
         if name == "openai" and req.specifier != SpecifierSet(">=2.20,<3"):
             problems.append(f"{req}: openai keeps its own floor and ceiling")
     assert problems == [], problems

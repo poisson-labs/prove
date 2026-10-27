@@ -356,7 +356,7 @@ LONG_TITLE = "A title long enough to wrap: the baseline against the candidate, b
 def manifest(run_id: str, salt: str, axis_types: Mapping[str, str]) -> RunManifest:
     return RunManifest(
         run_id=run_id, target_id="synthetic@v0", t_unit="steps", run_salt=salt,
-        axis_types=dict(axis_types), backend="synthetic", environment={"note": "built by ls step zero"},  # type: ignore[arg-type]
+        axis_types=dict(axis_types), backend="synthetic", environment={"note": "built by these tests"},  # type: ignore[arg-type]
     )
 
 

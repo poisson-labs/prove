@@ -222,7 +222,7 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
 
 
 def manifest(run_id: str, capture: Mapping[str, Any] | None) -> RunManifest:
-    environment: dict[str, Any] = {"note": "built by cd session a"}
+    environment: dict[str, Any] = {"note": "built by these tests"}
     if capture is not None:
         environment["capture"] = dict(capture)
     return RunManifest(

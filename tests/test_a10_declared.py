@@ -523,7 +523,7 @@ def local_run(root: Path, text: str, rollout: Callable[..., Episode], *, salt: s
 def manifest(run_id: str, *, declared: Any = None, t_unit: str = T_UNIT, salt: str = RUN_SALT, with_field: bool = True) -> RunManifest:
     kwargs: dict[str, Any] = dict(
         run_id=run_id, target_id=TARGET, t_unit=t_unit, run_salt=salt,
-        axis_types={"x": "continuous"}, backend="local", environment={"note": "built by a10 session a"},
+        axis_types={"x": "continuous"}, backend="local", environment={"note": "built by these tests"},
     )
     if with_field:
         kwargs["declared"] = declared
