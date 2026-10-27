@@ -1,14 +1,13 @@
 """PF6, the terminal app: the frozen tests (the code suite).
 
 Written from what the terminal app must do (what a face may do, and that the app saves the
-comparison it shows), the invariants PF6.8 to PF6.15, the app's screen designs (``screens/*.md``,
-their grids at 80 × 24 and 120 × 40 with colour masks), ``views.md`` (where the chart links land),
-the look file's terminal-app section, PF12's frozen view field names (``test_pf12_ui.VIEW_FIELDS``)
-and the test standard. The implementation is written against this file and does not edit it.
+comparison it shows), the invariants PF6.8 to PF6.15, each screen's layout (its grid at 80 × 24
+and 120 × 40, with colour masks), where the chart links land, the terminal-app section of
+``docs/cli-look.md`` (the look file) and PF12's view field names (``test_pf12_ui.VIEW_FIELDS``).
 
 **How the app is reached.** Two ways, as a user reaches it. Textual's test pilot runs the app in
 this process, presses keys and reads the screen cell by cell, with each cell's colour role (``V``
-reverse, ``G`` green, ``Y`` yellow, ``R`` red, ``B`` bold, ``D`` dim), as the design's masks mark them.
+reverse, ``G`` green, ``Y`` yellow, ``R`` red, ``B`` bold, ``D`` dim).
 A pseudo-terminal runs ``python -m poisson_prove`` with no arguments, as a shell does, for what
 happens before the app opens and after it leaves (PF6.8, PF6.15, Ctrl-C in a sweep). What the core
 returned to the app is recorded by wrapping the operations on ``poisson_prove.core`` (faces call
@@ -17,7 +16,7 @@ own.
 
 **The stores.** ``old``: the committed 0.0.1 store (its quickstart pair, compared and saved, so the
 same records every time: the snapshots read it). ``qs``: the quickstart as a stranger runs it with
-this build (``init --example``, two sweeps of ``prove.toml``, ``diff --save``, ``ui``); its counts change
+this version (``init --example``, two sweeps of ``prove.toml``, ``diff --save``, ``ui``); its counts change
 from one sweep to the next, so no test pins them, only words and structure. ``small``: a small paired
 pair of the mock agent, compared in well under a second, no comparison saved and no UI built.
 ``stats``: hand-written pairs, one store each, for the facts the statistics give the verdict
@@ -32,24 +31,24 @@ own copy, since the app writes into the store it shows.
   that folder's ``prove.toml``. Its exit code is Textual's ``return_code``; ``poisson-prove`` with no
   verb on a terminal returns it.
 - A2 Each screen's header begins ``poisson-prove · <title>``: ``home``, ``runs``, ``run``, ``sweep``,
-  ``compare``, ``comparison`` (the verdict screen, as the design draws it), ``conditions``, ``condition``,
+  ``compare``, ``comparison`` (the verdict screen), ``conditions``, ``condition``,
   ``episodes``, ``could not detect``, ``help``.
-- A3 The keys that reach each screen from home are the design's: ``r`` runs, ``Enter`` on a run its
+- A3 The keys that reach each screen from home: ``r`` runs, ``Enter`` on a run its
   screen, ``Enter`` there its focused condition's episodes, ``s`` sweep, ``c`` compare, ``Enter`` in the
   picker the verdict (``previous`` and ``latest`` chosen), ``Enter`` on a home row that is a saved
   comparison its verdict, ``t`` conditions, ``Enter`` there a condition, ``d`` could not detect, ``?`` help.
-- A4 What each screen renders: the core's ``view(store, address)`` at the addresses ``views.md`` gives,
-  home's address being ``home``; the episodes of a run that is in no saved comparison, which
+- A4 What each screen renders: the core's ``view(store, address)`` at the screen's address in the
+  static UI, home's address being ``home``; the episodes of a run that is in no saved comparison, which
   has no page, the core's ``episodes`` page for that run, event and
   condition; the sweep screen renders the core's ``plan`` result, then the events ``start`` reports
   and its result; the verdict and conditions screens the two halves of the ``comparison`` view, or,
   when the comparison could not be saved, of the ``compare`` result itself.
-- A5 Home's view carries the fields ``screens/01-home.md`` names (``HOME_FIELDS``, frozen here as PF12
-  froze the seven static views'), each item also its ``limit`` (a saved comparison's verdict limit, null
+- A5 Home's view carries the fields ``HOME_FIELDS`` names (pinned here as PF12 pins the seven
+  static views'), each item also its ``limit`` (a saved comparison's verdict limit, null
   for a run), so home's row can carry it beside ``no significant change`` (PF4.40); ``plan``'s and
-  ``progress``'s are the core's ``Plan`` and events, which PF5 froze.
+  ``progress``'s are the core's ``Plan`` and events, which PF5 pins.
 - A6 "Shows every fact that view carries", at 120 columns and 60 rows with the screen's table read
-  through to its end (at 80 columns columns drop by design and are checked by their headers):
+  through to its end (at 80 columns some columns are left out on purpose and are checked by their headers):
   every scalar of the view's document is on the screen, a number as rule 10 prints it (a share 0.448 as
   ``0.448``, a level 0.975 as ``97.5%``, 1746 as ``1,746``), a hash by its first 12 hex, a UTC time as
   written, to the minute or as its clock time, a code (``mcnemar_bh``) verbatim or by its words, any other
@@ -60,14 +59,14 @@ own copy, since the app writes into the store it shows.
   ``_note`` beside a value that is not null (a note gives a null value's reason, PF1.11). A value that
   is not a whole number is shown only by a number with two decimals or more, a ``2.3e-08`` form or a
   percentage, so a ``0`` or a ``1`` elsewhere never shows it; a word of three letters or fewer is matched
-  as a word. A table's rows are checked row by row, each row's columns the design gives that table at
-  120 columns (``TABLE_COLUMNS`` in ``pf6_support``) on one line; a row's other facts are on the screen
+  as a word. A table's rows are checked row by row, each row's columns that ``TABLE_COLUMNS`` in
+  ``pf6_support`` gives that table at 120 columns on one line; a row's other facts are on the screen
   the row opens. A true or false fact (``could_tell``) is not read as text.
 - A7 The compare the picker starts is ``diff`` of the two chosen runs with no options (the default test
   for the pair, the events declared or inferred, ``q`` 0.05), and the app saves it: the verdict
   screen's first line is ``diff``'s, word and sentence.
-- A8 PF6.11's "a link to that view's chart anchor" is the chart's own page at the address ``views.md``
-  gives; Enter on a focused link calls ``webbrowser`` once with
+- A8 PF6.11's "a link to that view's chart anchor" is the chart's own page at its address in the
+  static UI; Enter on a focused link calls ``webbrowser`` once with
   ``file://<the store>/.poisson/ui/<address>``, and ``y`` copies that same address (Textual's
   ``copy_to_clipboard``).
 - A9 PF4.20's direction words (``mixed``, ``higher``, ``lower``) and a row's ``unchanged`` are results, bold
@@ -80,7 +79,7 @@ own copy, since the app writes into the store it shows.
   command prints for the same request (``runs`` for a store, ``diff`` for a pair, ``sweep`` for ``prove.toml``,
   which refuses at the plan before it asks), with that command's ``next`` commands on the screen; when the
   sentence is wider than the window the message line begins it and the whole sentence is on the screen;
-  the app stays open and ``q`` exits 0. Choosing a partial run in the picker is the app's own refusal (the design's ``05-compare``), naming
+  the app stays open and ``q`` exits 0. Choosing a partial run in the compare screen's picker is the app's own refusal, naming
   the run and saying it is partial.
 - A12 The snapshots (PF6.14) are eight screens of the 0.0.1 quickstart pair, each saved as its rows and
   its colour roles, with the saved comparison's id, the times it was saved and the running version
@@ -101,7 +100,7 @@ own copy, since the app writes into the store it shows.
   direction word (``mixed``); the qs pair's kinds are declared (``prove.toml``), so its word is a
   kinded one (``safer``, ``worse``, ``trade`` or a nothing-moved word); neither pins a count.
 - A18 At 80 columns the conditions screen's ``limit`` column is the larger of the two limits the row
-  carries (``07-conditions``), chosen from the view, not computed; at 120 both show.
+  carries, chosen from the view, not computed; at 120 both show.
 - A19 The verdict screen's detail lines are ``diff``'s verdict block for the same comparison, each
   label in ``diff``'s order and each line carrying that line's facts (its numbers as rule 10 prints
   them, the run names it gives, the binding words of PF4.35, PF4.41 and PF4.42), not its exact words:
@@ -126,10 +125,8 @@ own copy, since the app writes into the store it shows.
   home's empty state, ``ok`` and no runs, naming ``init --example`` and the sweep key, not ``runs``'s
   refusal; a store named by ``--store`` that does not exist is that refusal (A11).
 
-**Frozen assertions this file's commit moves:** none. PF1.3's "no arguments exits 2" holds as frozen,
-since its process's stdin is not a terminal; PF6.8 adds the terminal case.
-
-**Lanes.** The code suite.
+PF1.3's "no arguments exits 2" still holds, since its process's stdin is not a terminal; PF6.8
+covers the terminal case.
 """
 
 from __future__ import annotations
@@ -154,7 +151,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BIG = (120, 60)
 SIZES = {"80x24": (80, 24), "120x40": (120, 40)}
 
-#: Home's view, frozen here from ``screens/01-home.md`` (reading A5). A view may hold more.
+#: Home's view, the fields home's screen shows (reading A5). A view may hold more.
 HOME_FIELDS: dict[str, set[str]] = {
     "": {"store", "n_runs", "n_comparisons", "verdict", "sentence", "latest_run", "latest_comparison", "next", "ui", "items"},
     "/items/*": {"kind", "name", "result", "rows", "id", "created", "limit"},
@@ -721,7 +718,7 @@ FIRST_WORD = re.compile(r"^  ([a-z][a-z ]*?)  \S")
 
 # ---------- widths: the columns each screen keeps at 80 and adds at 120 ----------
 
-#: Each screen's table header words in order, at 80 and at 120 columns (``screens/*.md``, Widths).
+#: Each screen's table header words in order, at 80 and at 120 columns (the look file, Widths).
 COLUMNS = {
     "home": (("kind", "name", "result", "rows", "created"), ("kind", "name", "result", "rows", "id", "created")),
     "runs": (("#", "name", "status", "rows", "no outcome", "created"), ("#", "name", "id", "status", "backend", "target", "rows", "no outcome", "created")),
@@ -746,7 +743,7 @@ def _has_in_order(line: str, words: tuple[str, ...]) -> bool:
 
 @pytest.mark.parametrize("size", list(SIZES))
 def test_pf6_each_tables_columns_at_80_and_120_are_the_designs(size: str, tours: Callable[[str], dict[str, Any]]) -> None:
-    """Each table's columns at 80 and 120, as ``screens/*.md`` gives them, in their order, and
+    """Each table's columns at 80 and 120, as ``COLUMNS`` gives them, in their order, and
     the columns 120 adds absent at 80; at 80 the conditions screen's ``limit`` is each row's larger
     limit, or its note when neither direction has one (reading A18)."""
     at = 0 if size == "80x24" else 1
@@ -1194,7 +1191,7 @@ def test_pf6_10_yes_writes_the_run_sweep_yes_writes_with_live_progress_and_the_r
 
 
 def test_pf6_10_an_underpowered_spec_keeps_its_plan_and_p_plans_again_with_the_named_replicates(spy: Spy, tmp_path: Path) -> None:
-    """The design's sweep refusal: the quickstart at 100 replicates: the plan stays with
+    """The sweep screen's refusal: the quickstart at 100 replicates: the plan stays with
     ``sweep``'s ``error:`` line and its ``next`` commands; ``p`` plans again with the replicates
     the refusal names, which pass, and never writes the spec; nothing runs until ``y``."""
     folder = _sweep_folder(tmp_path, "low", replicates=100)
@@ -1292,7 +1289,7 @@ def test_pf6_10_ctrl_c_during_the_apps_sweep_keeps_the_partial_run_and_says_so(t
 
 #: A page's address inside the UI, as a link on a screen shows it.
 LINK = re.compile(r"(?<![\w/.])((?:comparisons|runs)/[\w./-]+\.html|index\.html)")
-#: (screen, the kind of page its link opens, from ``views.md``'s table).
+#: (screen, the kind of page its link opens).
 LINK_CASES = (
     ("home", "runs"), ("run", "run"), ("episodes", "episodes"), ("comparison", "chart"), ("condition", "chart"), ("could not detect", "chart"),
 )
@@ -1302,7 +1299,7 @@ LINK_CASES = (
 def test_pf6_11_each_link_names_a_page_that_exists_and_enter_opens_it_once(
     screen: str, page: str, qs_world: tuple[Path, dict[str, Any]], spy: Spy, opener: list[str], clipboard: list[str], tmp_path: Path
 ) -> None:
-    """Reading A8: the screen's links are the addresses inside the UI ``views.md`` names for it (the
+    """Reading A8: the screen's links are the addresses inside the UI of its pages (the
     verdict's the charts the comparison view lists, for the focused event at 80 columns and all at
     120); after the app shows a link its page exists, though the store had no UI before the app
     opened (the app builds the first); ``Tab`` focuses the first link, ``Enter`` opens it in the
@@ -1691,8 +1688,8 @@ async def _links_follow(s: Session, w: dict[str, Any]) -> None:
     assert len(set(second)) == 1 and set(second) != set(first), (first, second)
 
 
-#: (the key, the size, what it does): the design's screen letters and the shared keys,
-#: each shown doing what its screen's page says, on the quickstart as this build sweeps it.
+#: (the key, the size, what it does): each screen's own letter keys and the shared keys,
+#: each shown doing what its screen's key bar says, on the quickstart as this version sweeps it.
 KEY_CASES: dict[str, tuple[tuple[int, int], Callable[[Session, dict[str, Any]], Awaitable[None]]]] = {
     "v back to the verdict": ((120, 40), _key_v),
     "l previous and latest": ((120, 40), _key_l),
@@ -1750,7 +1747,7 @@ def test_pf6_help_lists_every_key_and_every_screen(small_world: tuple[Path, dict
 
 
 def test_pf6_a_0_0_1_run_says_its_events_were_not_recorded(old_world: tuple[Path, dict[str, Any]], tmp_path: Path) -> None:
-    """The run screen's old state (the design's ``03-run``): a 0.0.1 run says its events
+    """The run screen's old state: a 0.0.1 run says its events
     were not recorded, in the words every static view uses; its design limit is whatever the run view
     carries for it (computed at read time, PF4.4), held by the facts test."""
     folder = _copy(old_world, tmp_path)

@@ -9,11 +9,10 @@ that need to single out a pair read module-level sets of seeds (``RAISE_SEEDS``,
 ``SLEEP_SEEDS``) that a test fills in from its plan before running; a forked child
 inherits them. An autouse fixture clears them between tests.
 
-Conventions the frozen tests fix for the implementation:
+Conventions the frozen tests fix:
 
 - ``derive_seed`` is ``int.from_bytes(sha256(f"{salt}:{hash}:{k}").digest()[:4], "big")``.
-  The definition says "first 4 bytes as unsigned int" without naming byte order; big-endian is
-  pinned here by a reference-implementation test.
+  The byte order is big-endian, pinned here by a reference-implementation test.
 - ``new_run_id`` matches ``^\\d{8}T\\d{6}Z-[0-9a-fA-F]{4}$``; ``new_run_salt`` is 16 hex.
 - ``backend_meta["i"]`` is the execution index within one ``run_local`` call, starting
   at 0 in plan-pair order. Only fresh runs are checked for it.
@@ -526,8 +525,8 @@ def test_i12_preflight_fresh_plan(tmp_path: Path) -> None:
     backend_line = _line_with(text, "Backend: local")
     assert TARGET in backend_line and T_UNIT in backend_line
     cost_line = _line_with(text, "Cost: $0")
-    # PF4 re-freeze (PF4.22): the preflight block no longer prints the old limit at a base
-    # rate of 0.5 (the normal approximation, beside the gate's own); the plan's one limit is the gate's.
+    # PF4.22: the preflight block prints no limit at a base rate of 0.5 (the normal
+    # approximation, beside the gate's own); the plan's one limit is the gate's.
     assert "MDE at N=" not in text and "base rate 0.5" not in text
     assert len({sweep_line, backend_line, cost_line}) == 3
     assert "Resuming" not in text

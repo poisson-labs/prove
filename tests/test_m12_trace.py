@@ -1,14 +1,14 @@
 """M12 -- Trace: the frozen tests.
 
-Generated from the invariants T1-T30 of the trace format. The build
-builds ``src/poisson_prove/trace.py`` against this file and does not edit it.
+Tests of the invariants T1-T30 of the trace format, which ``src/poisson_prove/trace.py``
+implements.
 
 Every test imports ``poisson_prove.trace`` inside its own body rather than at module level, so
-that the file collects (and every test fails honestly) while ``trace.py`` does not exist.
-Strategy constants below are spelled from the format, not read from the module, for the same
-reason; T3 pins the module's tuples to them.
+that a broken ``trace.py`` fails each test on its own rather than the whole file at collection.
+Strategy constants below are spelled from the format, not read from the module, so a wrong value
+there cannot pass by being compared with itself; T3 pins the module's tuples to them.
 
-Reading notes for the build, recorded here so the frozen tests are not re-litigated:
+How these tests read the format where it leaves room:
 
 - Span-level validation (T3, T4, T6) and trace-level validation (T7, T8) are asserted at
   *both* the constructor and ``from_dict``. The format says ``from_dict`` is the validator and
@@ -22,7 +22,7 @@ Reading notes for the build, recorded here so the frozen tests are not re-litiga
   somewhere in ``attrs``.
 - The stored token shape ``{"in": ..., "out": ...}`` is taken from the format's example span,
   which is the only place it is spelled.
-- T30's first clause maps to the two amended M10 tests by name. The fourth column
+- T30's first clause is checked by two tests in M10's file. The fourth column
   (``duration_ms``) is not read by M10's ``assert_trace_lines``, so a second T30 test here
   sweeps the mock agent through ``cli.main`` and reads it.
 """
@@ -55,16 +55,16 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from conftest import quickstart_design
 
 # PF3: the one copy is the packaged spec; this is its design at
-# the 100 replicates this file was frozen at.
+# 100 replicates.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
+# PF4.30, PF4.48a: the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
-# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# so its sweep is refused; every sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "trace"
 
-# ---------- the format's constants, spelled here so the file collects at baseline ----------
+# ---------- the format's constants, spelled here rather than read from the module ----------
 
 SCHEMA_SPEC = "poisson-prove.trace/1"
 KINDS_SPEC = ("llm", "tool", "retrieval", "db", "http", "agent", "other")
@@ -1406,7 +1406,7 @@ def test_t30_inspect_prints_ordered_spans_with_duration_ms_in_the_fourth_column(
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()
-    # A sweep now ends with a verdict line, not 'run_id: <id>'; the run is
+    # A sweep ends with a verdict line, not 'run_id: <id>'; the run is
     # the one the empty store gained.
     assert [line for line in out.getvalue().splitlines() if line.strip()], out.getvalue()
     (run_id,) = Store(root).runs()

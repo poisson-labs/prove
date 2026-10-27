@@ -2,8 +2,7 @@
 
 Written from what the store holds and how a comparison is saved, the invariants PF12.1 to PF12.5
 and PF12.12, the shared artifact format (``docs/artifact-format.md``) and the test standard.
-``tests/test_pf12_ui.py`` holds PF12.6 to PF12.11 and PF12.13, the static UI. The implementation is
-written against these files and does not edit them.
+``tests/test_pf12_ui.py`` holds PF12.6 to PF12.11 and PF12.13, the static UI.
 
 **What this file reads.** The files a command writes into the store (``.poisson/store.json``,
 ``.poisson/artifacts/<kind>/<id>/``, each run's ``events.jsonl``), what the commands print (text and
@@ -22,7 +21,7 @@ number the comparison printed. The quickstart's counts are never pinned; its ver
   plain commands' output is unchanged.
 - ``serve --json`` saves the comparison as ``serve`` does: ``--json`` changes how the page is
   printed, not what the command does. Its document is the page structure (``poisson-prove.viewpair/7``),
-  whose keys stay as frozen: it gains no ``saved`` key, and the save shows in the store.
+  whose keys stay as they are: it gains no ``saved`` key, and the save shows in the store.
 - An unwritable store: exactly one ``note: the comparison was not saved: <the system's words>``
   line, the words carrying ``os.strerror`` of the error; stdout and the exit code are what the same
   command prints on a writable store, less the ``saved`` line. The same sentence for a check.
@@ -73,20 +72,20 @@ number the comparison printed. The quickstart's counts are never pinned; its ver
   ``interrupted``" is the event immediately before it (no ``note`` between them).
 - Only a run a 0.1.0 sweep starts or resumes has ``events.jsonl``; a run written through the
   ``Store`` alone, like every 0.0.1 run, has none.
-- Lanes: every PF12 test is in the code suite, but the browser check and the wheel's bytes
-  (``slow``), like every browser and wheel build.
-- ``jsonschema`` (the format's schemas) and ``playwright`` (the browser check) join ``[dev]``.
+- Markers: every PF12 test is in the code suite; the browser check and the wheel's bytes are
+  marked ``slow``, like every browser and wheel build.
+- ``jsonschema`` (the format's schemas) and ``playwright`` (the browser check) are in ``[dev]``.
 - Frozen tests that run ``report`` or ``serve`` read a per-process copy of the generated lattice
   store and the committed 0.0.1 fixture (``conftest.writable_copy``), so no test writes into either; a copy of a
   committed store made for a shared world leaves out any ``.poisson/`` (``copy_fixture``).
-- Once ``serve`` has saved, its help and its Ctrl-C line no longer say nothing was written: the
-  help says it saves, and the stopped line says it was interrupted without that clause.
+- ``serve`` saves, so neither its help nor its Ctrl-C line says nothing was written: the help
+  says it saves, and the stopped line says it was interrupted without that clause.
 - ``docs/artifact-format.md`` names, in backticks, every key at every depth of every JSON file
   Prove writes under the format (``store.json``, ``artifact.json``, the event lines, ``comparison.json``,
   ``check.json``, the charts' data) and every table column and metric.
 - The resumed 0.0.1 run's ``events.jsonl`` starts at ``resumed``, as PF12.1 says.
 
-**Lanes.** The code suite, every test. The stores the tests read are built once per session
+**Suite.** The code suite, every test. The stores the tests read are built once per session
 (``pf12_support.shared_world``); one test sweeps a small spec of its own, and PF12.2 a slowed one.
 """
 
@@ -956,8 +955,8 @@ def test_pf12_5_a_comparison_refused_for_its_cases_saves_nothing(verb: str, stat
 
 
 def test_pf12_5_the_help_says_which_commands_save() -> None:
-    """The help: ``report`` and ``serve`` say they save the comparison they show and no
-    longer say nothing is written; ``diff`` and ``check`` offer ``--save``; ``ui`` says it builds the
+    """The help: ``report`` and ``serve`` say they save the comparison they show and do
+    not say nothing is written; ``diff`` and ``check`` offer ``--save``; ``ui`` says it builds the
     dashboard and offers ``--open``."""
     texts = {verb: cli(None, verb, "--help") for verb in ("report", "serve", "diff", "check", "ui")}
     for verb, r in texts.items():

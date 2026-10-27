@@ -5,8 +5,7 @@ what the static UI and the terminal app read from the core, and invariants PF5.1
 items earlier work left for PF5: ``POWER``'s place in ``stats.__all__``; the method
 lines the command line adds to the rendered files and the notes ``diff --methods all`` keeps; the
 report header's ``NAME (ID)`` pairing; the core's ``init_agent``; and everything the statistics now
-return, which the API exposes and no face recomputes. The code is written against this file and does
-not edit it.
+return, which the API exposes and no face recomputes.
 
 What PF5 promises, in one line: one core under every face. The plain commands, ``--json``, the
 rendered report and the page, and later the terminal app, the static UI and a local server, all show
@@ -26,16 +25,14 @@ commands. ``overrides`` takes the sweep's options by their flag names with under
 (``target``, ``replicates``, ``pair_with``, ``resume``, ``name``, ``max_mde``, ``salt``,
 ``max_rollouts``, ``backend``, ...). ``cancel`` is a ``threading.Event``.
 
-**Readings, named here** (each a point the design left open, read one way and
+**Readings, named here** (each a point the invariants leave open, read one way and
 lettered so the tests below can cite it).
 
-- (a) PF5 builds the store, setup, sweeps and comparisons areas of the table above. ``init_agent`` is a
-  core operation PF11's build adds (PF11's frozen tests drive it through ``init --agent``);
-  ``save``, ``artifacts``, ``artifact`` and ``build_ui`` are PF12's; ``view`` is PF12's and PF6's.
-  The view field names are left to "PF5 and PF12" to
-  freeze; this file freezes none of them and leaves them to PF12, whose freeze holds the views,
-  and to PF6. Those operations may be in
-  ``core.__all__`` already; this file requires only PF5's. PF5.11's ``save`` and "saved
+- (a) PF5 covers the store, setup, sweeps and comparisons areas of the table above. ``init_agent`` is
+  PF11's core operation (PF11's tests drive it through ``init --agent``); ``save``,
+  ``artifacts``, ``artifact`` and ``build_ui`` are PF12's; ``view`` is PF12's and PF6's. This
+  file pins none of the view field names; PF12's and PF6's tests hold the views. Those
+  operations may be in ``core.__all__``; this file requires only PF5's. PF5.11's ``save`` and "saved
   comparisons" are therefore checked by PF12; PF5.9's "and view" by PF6 and PF12.
 - (b) PF5 writes each new run's ``events.jsonl`` (PF5.10 asks for it); PF12 documents it and adds
   the store descriptor. A resume of a run that has no ``events.jsonl`` (a 0.0.1 run) starts none.
@@ -43,7 +40,7 @@ lettered so the tests below can cite it).
 - (d) ``resume(store, ref)`` continues a partial run from what its manifest recorded (conditions,
   replicates, target), on this machine, asking nothing; ``sweep --resume`` stays ``plan`` with
   ``overrides={"resume": ...}`` then ``start``, so a resume still reads the spec's replicates
-  (frozen ``test_s23_power::test_w9``).
+  (``test_s23_power::test_w9``).
 - (e) Every core refusal is a ``core.Refusal`` whose ``str()`` is the face's ``error:`` sentence
   exactly; an underpowered design's refusal comes from ``plan``, after which the face still shows
   the plan (rule 7). ``compare.Refusal`` is the public name of the same class.
@@ -70,8 +67,8 @@ lettered so the tests below can cite it).
 - (i) ``compare``'s public set is ``diff``, ``check``, ``runs``, ``resolve``, ``Comparison``,
   ``CheckResult``, ``RunInfo`` and ``Refusal``; ``compare.diff`` returns the core's ``Comparison``
   (the documented ``DiffResult`` read as it); each takes the store as a path or a ``Store``.
-- (j) ``stats.__all__`` gains ``POWER`` (the item the PF4 build left), beside ``WILSON_LEVEL``.
-- (k) ``stats.__all__`` gains ``KMCurve`` and ``CIFCurve``, the types two of its functions return.
+- (j) ``stats.__all__`` holds ``POWER``, beside ``WILSON_LEVEL``.
+- (k) ``stats.__all__`` holds ``KMCurve`` and ``CIFCurve``, the types two of its functions return.
 - (l) ``stats.fisher_test(events_a, n_a, events_b, n_b)`` gives ``(odds_ratio, p)``,
   ``mcnemar_test(only_a, only_b)`` gives ``(only_a - only_b, p)`` and ``logrank_test(t_a,
   observed_a, t_b, observed_b)`` gives ``(chi_square, p)``. PF5.3's "what the private functions
@@ -94,8 +91,8 @@ lettered so the tests below can cite it).
   folder whose ``./prove-runs`` holds the quickstart pair. PF7's docs check later takes it in.
 - (q) PF5.2's "plain words" in the public docstrings and ``docs/python.md`` is checked by the release
   plain-words test (``test_pf8_public_hygiene.py``, PF8.4), over the wheel and the docs.
-- (r) ``mypy --strict`` over ``src/`` is one case of the code suite, run with no cache (about 2 s at
-  freeze), not a ``slow`` one.
+- (r) ``mypy --strict`` over ``src/`` is one case of the code suite, run with no cache (about 2 s),
+  not a ``slow`` one.
 - (s) PF5.8's scan: a read is ``os.environ.get(N)``, ``os.environ[N]``, ``N in os.environ`` or
   ``os.getenv(N)`` with ``N`` a string or a module constant; copying the environment whole for a
   child process is not a read; any other use of ``os.environ`` is a failure. The core may also
@@ -108,20 +105,20 @@ lettered so the tests below can cite it).
 - (v) PF5.8's "the quickstart fixtures" is the packaged quickstart pair at 194 replicates.
 - (w) The face writes the report folder (``report.md``, ``heatmap.svg``, ``receipt.html``, and
   ``paired``'s files) with the renderers it imports: the folder is the person's, outside the store,
-  and neither a store file nor an artifact, and frozen tests stand in for
-  ``cli.build_multi_report``, ``cli.build_survival_report`` and ``cli.serve_page``. The design's
+  and neither a store file nor an artifact, and other test files stand in for
+  ``cli.build_multi_report``, ``cli.build_survival_report`` and ``cli.serve_page``. The rule
   "the core calls renderers when it writes a file (a report, ...)" is read as the saved artifact
   (PF12's), not this folder.
 - (x) The two checks against an outside library (``kaplan_meier`` against lifelines,
   ``mde_two_proportion`` against statsmodels) are marked ``math``: agreement with
   an outside library belongs in the math suite. Every other case is in the code suite.
 - (y) The core runs a remote backend through its module's attribute (``executor_modal.run_modal``,
-  read when the plan runs), where the four moved frozen tests put their stand-ins.
+  read when the plan runs), where four tests in other files put their stand-ins.
 - (z) ``resume`` continues a run recorded on this machine's backend; a run recorded on Modal or
   Burla is refused, naming ``sweep --resume`` with its backend, since its image or bundle comes from
   the spec. No test here reaches a remote run.
 
-**Lanes.** The code suite, but for reading (x)'s two ``math`` cases. The shared stores and
+**Suites.** The code suite, but for reading (x)'s two ``math`` cases. The shared stores and
 the comparison documents PF5.3 reads are built once per test session, and once in all when the
 suite runs on ``pytest-xdist`` workers (``_shared``).
 
@@ -675,7 +672,7 @@ def test_pf5_2_docs_python_lists_every_public_name_and_constant_and_marks_the_pr
 
 def test_pf5_2_mypy_strict_passes_over_src(tmp_path: Path) -> None:
     """PF5.2, reading r: ``mypy --strict`` over ``src/``, with a fresh cache, in the code suite (it
-    took about 2 s at freeze)."""
+    takes about 2 s)."""
     done = subprocess.run(
         [sys.executable, "-m", "mypy", "--strict", f"--cache-dir={tmp_path / 'mypy'}", "src/poisson_prove"],
         cwd=ROOT, capture_output=True, text=True, timeout=900,

@@ -1,4 +1,4 @@
-"""M10 CLI frozen tests, written before the CLI was built.
+"""M10 -- the command line's frozen tests.
 
 Every test drives ``poisson_prove.cli.main(argv, stdout=, stderr=, stdin=)`` in-process with
 ``StringIO`` streams. The one exception is the entrypoint smoke test, which shells out to the
@@ -7,18 +7,18 @@ environment dependency S0's entrypoint test carries).
 
 Stores live under ``tmp_path``. Golden tests point ``--store`` at the generated lattice pair
 (``tests/lattice.py``) read-only and write report output under ``tmp_path``. The mock agent
-(``poisson_prove.examples.mock_agent``) is imported lazily because it does not exist until
-the build adds it; collection must not depend on it.
+(``poisson_prove.examples.mock_agent``) is imported lazily, so collection does not depend on
+it.
 
-Two reading notes for the build, recorded here so the frozen tests are not re-litigated:
+Two reading notes:
 
 - I4 drives the prompt through a ``StringIO`` whose ``isatty()`` returns True, so the
   prompt path is exercised under either reading of the non-TTY rule (the general rule says any
   non-TTY stdin without ``--yes`` exits 2; I4 says a piped ``y`` proceeds). I5 uses a plain,
   empty ``StringIO``, which both readings refuse with a message naming ``--yes``.
-- Since the M10 multi-event amendment the local backend records ``environment["import_path"]``
-  like the Modal backend, so the reproduction snippet's import line is checked exactly on a
-  local run, as the ``rollout(<config JSON>, seed=<seed>)`` line always was.
+- The local backend records ``environment["import_path"]`` like the Modal backend, so the
+  reproduction snippet's import line is checked exactly on a local run, as the
+  ``rollout(<config JSON>, seed=<seed>)`` line is.
 """
 
 from __future__ import annotations
@@ -56,13 +56,12 @@ import lattice
 from conftest import quickstart_design
 
 LATTICE_ROOT = lattice.root()
-# PF3: the one copy is the packaged spec; this is its design at
-# the 100 replicates this file was frozen at.
+# The packaged spec's design at 100 replicates, the count this file's numbers are for.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
-# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
-# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
-# above the limit.
+# PF4.30, PF4.48a: the quickstart design at 100 replicates with nothing declared has a
+# detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20, so its
+# sweep is refused; every sweep of it in this file accepts 0.3, the smallest round value above
+# the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
@@ -1384,9 +1383,8 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     tail = re.search(r"over (\d+) tests, (paired|unpaired)\)", md)
     assert tail, md
     assert int(tail.group(1)) == QUICKSTART_CELLS
-    # P-1: the quickstart diffs under the default fisher_bh, and the token states the request.
-    # PF3: the second sweep is --pair-with the first, so the two
-    # share a salt and the default is now mcnemar_bh; the token states that request.
+    # The second sweep is --pair-with the first, so the two share a salt and the default
+    # method is mcnemar_bh; the token states that request.
     assert tail.group(2) == "paired"
     assert "mcnemar_bh" in md, md
     assert Store(tmp_path / "prove-runs").runs() == sorted([run_a, run_b])

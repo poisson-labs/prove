@@ -1,9 +1,9 @@
 """BU -- the Burla backend: ``poisson-prove sweep … --backend burla`` on a fixed cluster, through Burla.
 
-The frozen tests for the Burla backend (lane P): the invariants R1-R7
-(the shared runner), M1-M11 (the host-side mapper), S1-S7 (the launcher), W1-W6 (the bundle and
-the worker), C1-C5 (chaos and capture), $1-$9 (cost, caps and the ledger), P1-P7 (pre-flight and
-CLI) and I1-I6 (imports and surface). Lane D, the demo package, lives in the ``burla-demo`` repo.
+The frozen tests for the Burla backend: the invariants R1-R7 (the shared runner), M1-M11 (the
+host-side mapper), S1-S7 (the launcher), W1-W6 (the bundle and the worker), C1-C5 (chaos and
+capture), $1-$9 (cost, caps and the ledger), P1-P7 (pre-flight and CLI) and I1-I6 (imports and
+surface).
 
 **No Burla, no network.** Burla is replaced by a fake of the 1.8.1 client, ``tests/bu_fixtures/
 burla``, which cites the tag's lines and runs each call over a pool of local fake workers:
@@ -14,8 +14,7 @@ them, as it is to a node. The launcher seam, ``executor_burla._launcher_argv``, 
 real ``_burla_submit.py`` as ``__main__``. Every interpreter the fake or a test starts arms a
 network tripwire (a socket other than a Unix one raises); the pytest process never does.
 
-**What the tests fix that the invariants leave open** (for the build, and listed in the
-invariant-to-test table):
+**What the tests fix that the invariants leave open:**
 
 - The ledger is JSON lines. An open line carries ``event="open"``, ``run_id``, ``start`` (Unix
   seconds), ``estimate``, ``nodes``, ``machine_type``, ``usd_per_node_hour``, ``price_asof``,
@@ -121,13 +120,13 @@ MODAL_ENV_KEYS = frozenset({
 SHARED_KEYS = ("python", "platform", "poisson_prove_version", "sweep", "infra_retries", "import_path",
                "max_mde_accepted")
 MODAL_ONLY_KEYS = ("image", "modal_app", "concurrency", "secrets")
-# main's capture reason for a Modal run, byte for byte (executor_modal.py at 91d2071).
+# The capture reason a Modal run records, byte for byte.
 MODAL_CAPTURE_REASON = (
     "the host installs nothing for a Modal run; the container may not even "
     "hold the packages. Each batch records what happened at "
     "backend_meta['capture']"
 )
-# run_with_mapper's parameters on main, then the three the Burla backend adds.
+# run_with_mapper's shared parameters, then the three the Burla backend adds.
 RUNNER_PARAMS = [
     ("p", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
     ("mapper", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
@@ -525,7 +524,7 @@ def child_burla(root: str, argv: list[str], target: str, sweep: dict[str, Any],
     return result
 
 
-# ---------- the R lane: hand-built results, no worker, nothing armed ----------
+# ---------- R: hand-built results, no worker, nothing armed ----------
 
 
 def ok_result(i: int, chaos_record: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -569,15 +568,16 @@ PLACEMENT = {"burla": {"nodes": 3, "machine_type": "m7i.2xlarge"}, "bundle": {"s
 
 
 def test_r1_without_the_new_keywords_the_modal_manifest_and_cost_guard_are_mains(tmp_path: Path) -> None:
-    """Green on the skeleton by design: it pins what the runner change must not move."""
+    """Without the Burla keywords, a Modal run through the shared runner keeps the Modal manifest
+    keys and capture reason, and its cost guard refuses before the mapper is called."""
     p, store = r_plan(tmp_path / "plain", capture=True)
     run_with_mapper(p, RecordingMapper(), store, options=ModalOptions(batch_size=2))
     m = store.manifest(p.run_id)
     assert m.backend == "modal"
-    # PF4 (PF4.4): every backend now records the design detection limit as design_mde
-    # ({"mde", "base_rate"}) beside max_mde_accepted; every other key is main's.
+    # PF4.4: every backend records the design detection limit as design_mde
+    # ({"mde", "base_rate"}) beside max_mde_accepted; every other key is a Modal run's.
     assert set(m.environment) == MODAL_ENV_KEYS | {"capture", "design_mde"}, sorted(m.environment)
-    # PF4 re-freeze (PF4.30): design_mde now records which test, level and family the gate used and
+    # PF4.30: design_mde also records which test, level and family the gate used and
     # whether a lone condition can be flagged, beside mde and base_rate.
     assert set(m.environment["design_mde"]) == {
         "mde", "base_rate", "direction", "test", "level", "family", "conditions", "events", "q", "power",
@@ -585,7 +585,7 @@ def test_r1_without_the_new_keywords_the_modal_manifest_and_cost_guard_are_mains
     assert m.environment["capture"]["reason"] == MODAL_CAPTURE_REASON
     pc, cstore = r_plan(tmp_path / "chaos", chaos=CHAOS)
     run_with_mapper(pc, RecordingMapper(chaos_record(CHAOS)), cstore, options=ModalOptions(batch_size=2))
-    # PF4 (PF4.4): design_mde is recorded on a chaos run too.
+    # PF4.4: design_mde is recorded on a chaos run too.
     assert set(cstore.manifest(pc.run_id).environment) == MODAL_ENV_KEYS | {"chaos", "design_mde"}
     pg, gstore = r_plan(tmp_path / "guard")
     mapper = RecordingMapper()
@@ -704,7 +704,7 @@ def test_r7_the_runners_surface_gains_three_keyword_only_parameters_and_nothing_
     assert params == RUNNER_PARAMS, params
 
 
-# ---------- the M lane: the host-side mapper, through the fake ----------
+# ---------- M: the host-side mapper, through the fake ----------
 
 
 def test_m1_one_call_per_round_with_the_declared_shape(fake: Fake, tmp_path: Path) -> None:
@@ -975,7 +975,7 @@ def test_m11_busy_past_the_deadline_fires_the_stop(fake: Fake, tmp_path: Path) -
     assert closed["ended"] == "stopped" and closed["end"] - start <= 3.0 + 5.0 + 2.0, closed
 
 
-# ---------- the S lane: the launcher ----------
+# ---------- S: the launcher ----------
 
 
 def test_s1_the_launcher_runs_in_its_own_session(fake: Fake, tmp_path: Path) -> None:
@@ -1103,7 +1103,7 @@ def test_s7_without_burla_importable_run_burla_raises_burla_not_installed(fake: 
 
 
 
-# ---------- the W lane: the bundle and the worker ----------
+# ---------- W: the bundle and the worker ----------
 
 
 def _source_files(folder: Path) -> dict[str, bytes]:
@@ -1191,7 +1191,7 @@ def test_w1_the_manifest_records_the_bundle_prove_s_version_and_each_package_s_v
 
 def _outside_repo(path: str) -> bool:
     """Not the project, its source or its tests. The venv's ``site-packages`` may sit under the
-    worktree; it stands for the distributions a node installs, and is allowed."""
+    checkout; it stands for the distributions a node installs, and is allowed."""
     real = os.path.realpath(path)
     project = str(REPO.resolve())
     if real == project:
@@ -1308,7 +1308,7 @@ def test_w6_a_target_that_does_not_import_in_the_worker_is_stored_as_infra_rows(
     assert {s["kind"] for s in fake.served()} == {"ok"}, "the bootstrap raised instead of returning (k, None, traceback)"
 
 
-# ---------- the C lane: chaos and capture on Burla ----------
+# ---------- C: chaos and capture on Burla ----------
 
 
 def _chaos_rows(store: Store, run_id: str) -> dict[tuple[str, int], tuple[Any, ...]]:
@@ -1398,7 +1398,7 @@ def test_c5_a_capture_sweeps_rows_carry_what_the_worker_saw(fake: Fake, tmp_path
         assert seen["requested"] is True and seen["active"] is True, seen
 
 
-# ---------- the $ lane: cost, caps and the ledger ----------
+# ---------- $: cost, caps and the ledger ----------
 
 
 def _table_file(root: Path, table: dict[str, Any]) -> Path:
@@ -1659,7 +1659,7 @@ def test_dollar9_the_preflight_shows_the_declaration_and_the_manifest_keeps_it(f
     assert abs(kept["estimate"] - estimate) < 1e-9 and abs(kept["ledger_total"] - 0.37) < 1e-9
 
 
-# ---------- the P lane: the pre-flight and the CLI ----------
+# ---------- P: the pre-flight and the CLI ----------
 
 
 def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
@@ -1669,16 +1669,16 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
 
 
 def new_run(store_root: Path, before: set[str]) -> str:
-    """The one run a sweep added. A sweep no longer ends with its run id as the last word of
-    stdout; it ends with a verdict line, so the id is read from the store."""
+    """The one run a sweep added. A sweep ends with a verdict line, not its run id, so the id is
+    read from the store."""
     added = set(Store(store_root).runs()) - before
     assert len(added) == 1, added
     return added.pop()
 
 
 def sweep_argv(root: Path, spec: Path, target: str = PLAIN, *extra: str, backend: str = "burla") -> list[str]:
-    # PF4 re-freeze (PF4.30): no lone condition of these small designs can be flagged,
-    # which any accepted change below 1 refuses; --max-mde 1 admits them as 0.99 did.
+    # PF4.30: no lone condition of these small designs can be flagged, which any accepted change
+    # below 1 refuses; --max-mde 1 admits them.
     return ["--store", str(root / "store"), "sweep", str(spec), "--target", target, "--backend", backend,
             "--salt", "0123456789abcdef", "--max-mde", "1", "--yes", *extra]
 
@@ -1729,9 +1729,9 @@ def test_p1_an_unknown_burla_field_is_a_refusal(fake: Fake, tmp_path: Path) -> N
 def test_p2_the_target_resolves_here_first_with_the_local_refusal(fake: Fake, tmp_path: Path) -> None:
     bad = "bu_targets.nope:rollout"
     good = write_sweep(tmp_path / "good", burla=burla_table())
-    # PF3 (PF3.3): an unknown key in [burla] is now refused when the spec is read, before the
-    # target; the [burla] table is broken here in a way strict key checking does not see (nodes, a known
-    # field, out of range), so the test still says the target resolves before the table's values are checked.
+    # PF3.3: an unknown key in [burla] is refused when the spec is read, before the target; the
+    # [burla] table is broken here in a way strict key checking does not see (nodes, a known field,
+    # out of range), so the test says the target resolves before the table's values are checked.
     broken = write_sweep(tmp_path / "broken", burla=burla_table(nodes=0))
     local = run_cli(sweep_argv(tmp_path / "good", good, bad, backend="local"))
     # A refusal exits 1.
@@ -1800,9 +1800,8 @@ def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake
     assert code == 0, err
 
 
-# PF4 re-freeze (PF4.22): the preflight block no longer prints "MDE at N=..." (the old
-# normal approximation at base 0.5); the plan's one limit is the gate's line. The other lines keep
-# their order.
+# PF4.22: the preflight block prints no "MDE at N=..." line; the plan's one limit is the gate's
+# line. The other lines keep this order.
 PREFLIGHT_ORDER = ["Backend: burla", "Cluster: ", "Bundle: ", "Worker view: ", "Traffic: ", "Cost: ", "Chaos: "]
 
 
@@ -1837,7 +1836,7 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     commit = _git(tmp_path / "checkout", "rev-parse", "HEAD")
     assert commit and commit[:7] in bundle_line and bundle.sha256 in bundle_line, bundle_line
     assert "uncommitted changes" in bundle_line
-    # PF4 re-freeze (PF4.22): the old limit line is gone from the preflight block.
+    # PF4.22: no "MDE at N=" line in the preflight block.
     assert not any(line.startswith("MDE at N=") for line in lines), lines
     plain = eb.preflight_burla(p, PLAIN, options(tmp_path, packages=("bu_targets",)))
     plain_bundle = next(line for line in plain.splitlines() if line.startswith("Bundle: "))
@@ -1855,7 +1854,7 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     assert code == 0, err
     remote = new_run(store_root, {local})
     code, out, err = run_cli(["--store", str(store_root), "runs"])
-    # PF2: runs rows now lead with # and the name, so the row is found by
+    # PF2: runs rows lead with # and the name, so the row is found by
     # the id, and the status and backend are the two cells after it.
     assert code == 0 and any(
         line.split()[line.split().index(remote):][:3] == [remote, "complete", "burla"]
@@ -1869,8 +1868,8 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     # --json replaces --format json on diff.
     code, out, err = run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell", "--json"])
     fell = json.loads(out)["by_event"]["fell"]
-    # PF4 (PF4.20): "fell" has no declared kind, so the JSON gives direction counts and leaves the
-    # safer/worse counts null; the fact pinned (no condition moved, two unchanged) is the same.
+    # PF4.20: "fell" has no declared kind, so the JSON gives direction counts and leaves the
+    # safer/worse counts null; the fact pinned is that no condition moved and two are unchanged.
     assert fell["n_worse"] is None and fell["n_safer"] is None and fell["kind"] is None, fell
     assert fell["n_higher"] == 0 and fell["n_lower"] == 0 and fell["n_unchanged"] == 2, fell
     assert comparable(stored(Store(store_root), local)) == comparable(stored(Store(store_root), remote))
@@ -1891,13 +1890,13 @@ def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -
     fake.script(default={"refuse": "NoNodes"})
     refused = write_sweep(tmp_path / "refused", burla=burla_table())
     code, out, err = run_cli(sweep_argv(refused.parent, refused))
-    # PF4 re-freeze (PF4.49): under --max-mde 1 this design, in which no lone condition
-    # can be flagged, gets the gate's facts as a note: line first; the backend's refusal is the next.
+    # PF4.49: under --max-mde 1 this design, in which no lone condition can be flagged, gets the
+    # gate's facts as a note: line first; the backend's refusal is the next.
     rest = "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
     assert code == 3 and rest.startswith("error: "), err
 
 
-# ---------- the I lane: imports and surface ----------
+# ---------- I: imports and surface ----------
 
 
 def test_i1_nothing_imports_burla_at_import_time() -> None:
@@ -1920,8 +1919,7 @@ def test_i3_the_public_surface_is_the_eight_names() -> None:
 
 def test_i5_the_burla_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None:
     # PF9: Burla ships as an experimental backend with a [burla] extra
-    # pinning the client the backend runs, so the extra is no longer absent; what it pins is
-    # test_pf9_backends.py's.
+    # pinning the client the backend runs; what it pins is test_pf9_backends.py's.
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     extras = project["optional-dependencies"]
     assert "burla" in extras

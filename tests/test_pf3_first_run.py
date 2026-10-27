@@ -1,10 +1,10 @@
 """PF3, ``init`` and the first run: the frozen tests.
 
-Written from the invariants PF3.1 to PF3.8 (PF3.6b included), with the decisions taken on
-them (among them: the paired test as the default when the runs share a salt, an ``init`` that asks
-nothing, and a packaged example that runs 194 replicates), and the two things PF2
-left to PF3: the bare ``sweep --resume`` that PF1's ``next:`` line names, and taking the spec out
-of the resume command. The build is written against this file and does not edit it.
+Written from the invariants PF3.1 to PF3.8 (PF3.6b included), with the choices they leave
+settled (among them: the paired test as the default when the runs share a salt, an ``init`` that
+asks nothing, and a packaged example that runs 194 replicates), and two carried behaviours: the
+bare ``sweep --resume`` that PF1's ``next:`` line names, and a resume command that does not carry
+the spec.
 
 What PF3 promises, in one line: a new user gets from install to a first proved comparison with
 no key and no id pasted. ``init`` writes ``prove.toml``; ``sweep`` reads it and its ``target``;
@@ -16,7 +16,7 @@ sweep time uses the paired test unless told otherwise, saying which test it used
 - (a) PF3.4's "with the counts" is read as the verdict word and the shape of the
   result, not the counts: each sweep draws a fresh salt, so the counts move from run to run.
   ``trade`` first, the paired test named, a ``trade`` detail line, the runs by name.
-- (b) The ``next:`` lines of the first run are frozen as the first run prints them: after
+- (b) The ``next:`` lines of the first run are pinned as the first run prints them: after
   ``init --example``, ``poisson-prove sweep``; after a sweep of the packaged mock agent's
   ``rollout``, the sweep of ``rollout_patched`` paired with ``latest``; after a paired sweep,
   ``poisson-prove diff``. After ``init --target T``, ``poisson-prove sweep``; after
@@ -36,10 +36,10 @@ sweep time uses the paired test unless told otherwise, saying which test it used
   table under ``[modal]`` is known and its keys are checked; ``[[scenarios]]`` entries are
   configs and hold any key. Every other table and key is checked against the spec's own set,
   whatever the backend, and the nearest known key is the closest spelling.
-- (g) PF3.5's ``[declare]`` failures ``timeout`` and ``violated`` are frozen in PF3's packaged
-  file, so PF3's build reads ``failures`` (and ``successes``) in ``[declare]``, recorded as
-  PF4.20 records them; what they change in the words is PF4's.
-- (h) The method's JSON keeps ``method`` as the method's name (the JSON keeps today's keys)
+- (g) PF3.5's ``[declare]`` failures ``timeout`` and ``violated`` are in the packaged file, so
+  ``sweep`` reads ``failures`` (and ``successes``) in ``[declare]``, recorded as PF4.20 records
+  them; what they change in the words is PF4's.
+- (h) The method's JSON keeps ``method`` as the method's name (the JSON keeps its other keys)
   and adds ``method_chosen`` (``"default"`` or ``"named"``) right after it; ``serve --json``, the
   page structure, gains both at its top level, right after ``sentence``. ``diff --methods all
   --json`` keeps its shape (one object per method) and is not pinned here.
@@ -50,8 +50,8 @@ sweep time uses the paired test unless told otherwise, saying which test it used
   have one line (one block) carrying the method's own name (McNemar, Fisher, log-rank) and
   ``default`` or ``named``.
 - (p) On those files the method's words stand on a line of their own (in ``report.md`` a
-  paragraph: the line and a blank line after it), so taking them out gives today's bytes: the
-  moved frozen digests hold over ``conftest.without_method_lines``.
+  paragraph: the line and a blank line after it), so taking them out leaves the rest of the file
+  as it was: the pinned digests are taken over ``conftest.without_method_lines``.
 - (j) The pairing ``note:`` is a stderr line beginning ``note:`` that mentions seeds; other
   notes may come and go.
 - (k) ``--fix KEY=VALUE`` on a categorical axis matches VALUE against the axis's values as
@@ -66,7 +66,7 @@ sweep time uses the paired test unless told otherwise, saying which test it used
 - (q) ``init`` gets what every verb gets: help naming each option and an
   example, ``--json`` (``poisson-prove.init/1``, ``next`` last), abbreviations refused, the tool's
   own options after the verb, ``python -m`` the same; and it asks nothing (stderr empty).
-- (r) The manifest records the target run as ``environment.import_path`` (as today) and the
+- (r) The manifest records the target run as ``environment.import_path`` and the
   replicates run as ``environment.sweep.replicates`` (the spec's record, which ``--replicates``
   overrides).
 
@@ -74,11 +74,11 @@ sweep time uses the paired test unless told otherwise, saying which test it used
 tested here, and the refusal without a spec leaves room for its ``next:`` line (d). The
 ``target`` and ``outcomes`` plan lines with "(imports, takes cfg and seed)" are PF11's; this
 file asks only that the plan name the target used (c). Opening the terminal app is PF6's.
-``compare``'s result objects naming the method are PF5.4's. That the corrected power gate
-accepts 194 and refuses 193 is PF4.30's; PF3.8 is checked by running the offered command, so it
-holds under either gate. ``diff``'s verdict word is PF4's rule; PF3.4 reads ``trade``.
+``compare``'s result objects naming the method are PF5.4's. That the power gate accepts 194
+and refuses 193 is PF4.30's; PF3.8 is checked by running the offered command, so it does not
+depend on the gate's arithmetic. ``diff``'s verdict word is PF4's rule; PF3.4 reads ``trade``.
 
-**Lanes.** The code suite. PF3.4 and PF3.5 each have one case marked ``slow`` (the wheel built
+**Suite.** The code suite. PF3.4 and PF3.5 each have one case marked ``slow`` (the wheel built
 and installed into a fresh environment with ``uv``, which needs ``uv`` and the dependencies in
 its cache or the network for the install; the five commands themselves run offline); every other
 case is fast. The module fixtures sweep the keyless mock agent at small sizes.

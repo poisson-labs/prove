@@ -11,7 +11,7 @@ of the intervals on the change and of the Wilson shares.
 draws of ``multi_diff`` per design would take hours, so each draw takes its per-row p-value from Prove's
 own test (``stats.fisher_test``, ``stats.mcnemar_test``, ``stats.logrank_test``, the public forms of the
 tests ``multi_diff`` runs on each row), its correction from Prove's own ``diff.bh`` and ``diff.holm``, and its direction from the
-rule PF4.13 and PF4.14 freeze (B's observed minus expected events under log-rank). For **every design**
+rule PF4.13 and PF4.14 fix (B's observed minus expected events under log-rank). For **every design**
 the first ``SUBSET`` draws (40) are also run through ``multi_diff`` itself on the drawn runs, every row
 real, and must flag the same rows the same way, count the same rows by Holm, and give the word those
 rows make (``comparison_verdict()``: the direction words, or one of the two nothing-moved words when no
@@ -28,7 +28,7 @@ under log-rank, whose power is an approximation. Seeds are fixed here.
 **Runtime.** Each test records its wall time as the junit property ``seconds``, so a run's times can
 be read against the suite's time budgets.
 
-**Lanes.** The math suite (``math``), and each test is ``calibration``: it runs on main, nightly and
+**Markers.** The math suite (``math``), and each test is ``calibration``: it runs on main, nightly and
 before a release, and on a pull request that changes the statistics.
 """
 

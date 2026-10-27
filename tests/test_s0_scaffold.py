@@ -8,8 +8,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# PF7: the import names of what the extras bring; litellm and matplotlib are no
-# extra's any more.
+# PF7: the import names of what the extras bring; none may load in a core module.
 EXTRAS_BANNED_FROM_CORE = {"modal", "burla", "openai", "opentelemetry"}
 NETWORK_CLIENT_MODULES = {"requests", "httpx", "urllib", "socket"}
 LOOPBACK_SERVER_MODULE = "http.server"

@@ -3,6 +3,9 @@
 Hand-built payload dicts for `tests/test_m12_trace.py`, written from the shapes the
 trace schema reads. Nothing here was captured live: no network, no API key.
 
+The `proofload.` attribute keys in these files are the retired prefix that 0.0.1 wrote; the
+reader maps each to `poisson_prove.` with the same name after it.
+
 - `otlp_agent_chat.json` — a full OTLP/JSON payload (`resourceSpans` → `scopeSpans` → `spans`)
   with `proofload.run_id` / `proofload.episode` resource attributes, one scope attribute, and an
   `invoke_agent` root span with a `chat` child. Timestamps are protobuf-JSON strings; span ids
@@ -26,8 +29,8 @@ trace schema reads. Nothing here was captured live: no network, no API key.
   counted attempts; a `gen_ai.operation.name` conflicting with a vendor kind; one
   `traceloop.span.kind`; one unrecognised operation spelled with case and whitespace; and one status
   of each of `OK`, `UNSET`, `ERROR`. Used by `tests/test_a8a_span_schema.py` (P8-4, P8-5, P8-6,
-  P8-14, P8-16). **A8b does not extend this file**, though it was first planned to: A8a's frozen `loop_spans()` helper asserts
-  `len(tr.spans) == 16`, so a seventeenth span would turn five A8a tests red. A8b's over-limit spans
+  P8-14, P8-16). **Do not add spans to this file**: the `loop_spans()` helper in that test file asserts
+  `len(tr.spans) == 16`, so a seventeenth span would fail five of its tests. The over-limit spans
   are in `otlp_cut.json` below; every span here is A8a's.
 - `otlp_cut.json` — **A8b's fixture**, a flat span list of two spans built at the default limit of 8192 bytes by
   a fixed recipe. Span 1 is an `execute_tool` span whose `gen_ai.tool.call.result` is 24,576 bytes (3 × limit): `"r" * 6143`, a

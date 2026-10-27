@@ -1,59 +1,55 @@
-"""S13.1 competing-set hardening frozen tests, written from the S13.1 invariants before
-any of M5, M6, M7 or M10 is amended.
+"""S13.1 -- the competing set: frozen tests for the S13.1 invariants.
 
 The rule: the Aalen-Johansen competing set is every terminal outcome present in either run;
-``events`` selects which CIFs are compared, not which outcomes are absorbing. S11 hit this in
-``multi_diff`` and S13 hit it again in the single-run report path. This file makes the rule a
-test rather than a review step.
+``events`` selects which CIFs are compared, not which outcomes are absorbing. It holds in
+``multi_diff`` and in the single-run report path alike, and this file makes it a test.
 
-Plain assertions over shared helpers, per S12's lesson: that frozen file needed seven fixes and all
-seven were inside clever helpers. There is one frame builder, one run writer and one CLI
+Plain assertions over shared helpers: there is one frame builder, one run writer and one CLI
 runner here; everything else is written out at the assertion.
 
-Reading notes for the build:
+Reading notes:
 
-- ``competing_set`` is reached module-qualified as ``survival.competing_set``, so this file
-  still collects before S13.1 builds it. Every symbol that exists today is imported directly.
-  ``import poisson_prove.cli as cli`` is the S10 and S12 idiom; this extends it to the new name.
+- ``competing_set`` is reached module-qualified as ``survival.competing_set``; every other
+  symbol is imported directly. ``import poisson_prove.cli as cli`` lets a test wrap a name the
+  CLI looks up on its module.
 - H3, H4 and H10 drive ``poisson_prove.cli.main`` and read the report objects the CLI built, by
-  wrapping ``cli.build_survival_report`` / ``cli.build_multi_report`` (the S12 C11 idiom; the
-  name must be bound in ``cli``). The wrappers call the real builders, so the files are still
-  written. Reading the rendered Markdown instead would not work: ``_fmt(..., "pp1")`` rounds
-  every rate to a tenth of a percentage point, and H4 is a 1e-12 comparison.
+  wrapping ``cli.build_survival_report`` / ``cli.build_multi_report`` (the name must be bound in
+  ``cli``). The wrappers call the real builders, so the files are still written. Reading the
+  rendered Markdown instead would not work: ``_fmt(..., "pp1")`` rounds every rate to a tenth
+  of a percentage point, and H4 is a 1e-12 comparison.
 - Each ``report`` invocation builds two report objects when the theme is dark -- the report
   and the light-themed receipt -- so the tests read index 0, the one the CLI renders.
-- H4 is the test that would have caught the S13 blocker, so it is first in the file.
-- H3's cell is the exact 5-completed / 5-violated cell from the S13 report. The completions
-  end at t=1 and the violations at t=3: with the competing set the violated CIF at the horizon
-  is 0.5, and with ``events=["violated"]`` alone the completions are censored out of the risk
-  set and it reads 1.0. A cell whose competing rows end *after* the events does not
-  discriminate -- both sets give 0.5 -- which is why the times are pinned here.
+- H4, the single-run report and the pair report agreeing on ``rate_a`` for every cell, is the
+  most direct check of the rule, so it is first in the file.
+- H3's cell is 5 completed and 5 violated rows. The completions end at t=1 and the violations
+  at t=3: with the competing set the violated CIF at the horizon is 0.5, and with
+  ``events=["violated"]`` alone the completions are censored out of the risk set and it reads
+  1.0. A cell whose competing rows end *after* the events does not discriminate -- both sets
+  give 0.5 -- which is why the times are pinned here.
 - H13 drives the two entry points H2 and H3 do not: the single-run report's ``--json`` and a
   saved comparison's incidence curves, each on cells whose completions end before the events,
   so the competing set and the reported event alone give different numbers.
 
-H6 and H9 were rewritten after the first pass of these frozen tests reported
-that the original pair could not both hold. The tests below are written against the revised
-invariants: validation moved into the CLI, where every typo originates, and ``multi_diff``
-was pinned permissive instead. Two readings the revised text still leaves to the test:
+An unknown event name is refused by the CLI, where every typo originates (H6), and
+``multi_diff`` is permissive (H9). Two readings the invariants leave to the test:
 
 - H6's message. H6 requires exit 1, the offending name and the outcomes present; the worked
-  example shows the shape with the verb name substituted. Asserted by containment, not as an exact string, so
-  the wording stays the implementer's.
+  example shows the shape with the verb name substituted. Asserted by containment, not as an
+  exact string, so the wording is free.
 - H9's "zero-count `EventDiff`". Read as the event counts, not the cell count -- see the
-  docstring of ``test_h9_absent_event_gets_a_zero_count_event_diff``. The frozen M6 file
-  forces this reading; an EventDiff with no cells would fail ``test_a9_counts_add_up_property``.
+  docstring of ``test_h9_absent_event_gets_a_zero_count_event_diff``. The M6 tests force this
+  reading; an EventDiff with no cells would fail ``test_a9_counts_add_up_property``.
 
-Still not mapped, and reported rather than adapted:
+Not asserted here:
 
-- H12's third clause, "suite totals for every prior frozen file unchanged". A test cannot assert
-  the totals of the suite that contains it; that clause is the acceptance command's job. The
-  two fixture clauses are mapped below.
-- "``build_survival_report`` remains permissive" is not separately asserted. The invariants pin only
-  ``multi_diff`` (H9), and once H13 routes ``cell_table`` through ``competing_set`` an absent
-  event is no longer a key on the cell table's ``CIFCurve``, so ``_cif_at`` raises
-  ``SurvivalError`` there rather than returning zero. That path is unreachable from the CLI,
-  which now refuses first, and what "permissive" should mean at that boundary is not stated.
+- H12's third clause, that the suite totals of the other test files are unchanged. A test
+  cannot assert the totals of the suite that contains it. The two fixture clauses are mapped
+  below.
+- "``build_survival_report`` remains permissive". The invariants pin only ``multi_diff`` (H9),
+  and since H13 routes ``cell_table`` through ``competing_set`` an absent event is not a key on
+  the cell table's ``CIFCurve``, so ``_cif_at`` raises ``SurvivalError`` there rather than
+  returning zero. That path is unreachable from the CLI, which refuses first, and what
+  "permissive" should mean at that boundary is not stated.
 """
 
 from __future__ import annotations
@@ -84,13 +80,12 @@ from test_m6_multi import reference_record
 
 import lattice
 
-# PF3: the one copy is the packaged spec; this is its design at
-# the 100 replicates this file was frozen at.
+# The packaged spec's design at 100 replicates, the count this file's numbers are for.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
-# declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
-# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
-# above the limit.
+# PF4.30, PF4.48a: the quickstart design at 100 replicates with nothing declared has a
+# detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20, so its
+# sweep is refused; every sweep of it in this file accepts 0.3, the smallest round value above
+# the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
@@ -117,25 +112,25 @@ M4_COLUMNS = [
 HORIZON = 10.0
 TOL = 1e-12
 
-# The S13 typo, and the outcomes the mock-agent pair actually produces.
+# A typo of ``violated``, and the outcomes the mock-agent pair actually produces.
 ABSENT = "voilated"
 MOCK_OUTCOMES = ("completed", "timeout", "violated")
 
-# The S13 blocker's cell: 5 completed ending at t=1, 5 violated ending at t=3.
+# H3's cell: 5 completed ending at t=1, 5 violated ending at t=3.
 COMPLETED_T = 1.0
 VIOLATED_T = 3.0
 TIMEOUT_T = 5.0
 
-# H12 is "golden untouched". The four frozen files (the single-event diff record and the S8
-# report's Markdown, heatmap and receipt) went with the study fixture; each is now the facts it
-# held, asserted on what the build writes for the lattice pair, against the lattice's references.
+# H12 is "golden untouched": four files (the single-event diff record and the report's
+# Markdown, heatmap and receipt), each checked by the facts it holds, on what the code writes
+# for the lattice pair, against the lattice's references.
 H12_FILES = ("diff_regression.json", "heatmap.svg", "receipt.html", "report.md")
 H12_TITLE = "lattice before -> after"
 LATTICE_EVENT = lattice.EVENT
 LATTICE_CELLS = 72
 LATTICE_SAFER, LATTICE_WORSE = 22, 0
 LATTICE_Q, LATTICE_POWER = 0.05, 0.8
-# The frozen cells carry no ``stat``; these are exactly the keys S8 wrote.
+# The reference cells carry no ``stat``; these are the keys every reference cell holds.
 LATTICE_CELL_KEYS = [
     "config_hash",
     "n_a",
@@ -330,7 +325,7 @@ def captured(monkeypatch: pytest.MonkeyPatch) -> tuple[list[SurvivalReport], lis
 
 @pytest.fixture(scope="module")
 def mock_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str]:
-    """The two quickstart runs under the S12 salt: outcomes completed, timeout, violated.
+    """The two quickstart runs under ``QUICKSTART_SALT``: outcomes completed, timeout, violated.
     Never mutated by a test."""
     root = tmp_path_factory.mktemp("competing-set-store")
     a = sweep(root, ROLLOUT, "--salt", QUICKSTART_SALT)
@@ -338,7 +333,7 @@ def mock_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str]
     return root, a, b
 
 
-# ---------- H4: cross-form agreement, the property the S13 blocker violated ----------
+# ---------- H4: cross-form agreement ----------
 
 
 @pytest.mark.parametrize(
@@ -456,11 +451,11 @@ def test_h2_multi_diff_absorbs_the_non_event_rather_than_censoring_it() -> None:
     assert abs(rate[config_hash({"task": "y", "level": "one"})] - 0.2) <= TOL, rate
 
 
-# ---------- H3: the single-run path uses the full set (the S13 5/5 cell) ----------
+# ---------- H3: the single-run path uses the full set (the 5/5 cell) ----------
 
 
 def _five_five_rows() -> list[tuple[dict[str, Any], str | None, float | None]]:
-    """The S13 cell: 5 completed ending at t=1, 5 violated ending at t=3, plus a second cell
+    """H3's cell: 5 completed ending at t=1, 5 violated ending at t=3, plus a second cell
     so the report has a varying axis."""
     rows: list[tuple[dict[str, Any], str | None, float | None]] = []
     blocker = {"task": "blocker", "level": "one"}
@@ -683,7 +678,7 @@ def test_h9_multi_diff_does_not_raise_on_an_event_absent_from_the_data() -> None
 
 
 def test_h9_absent_event_gets_a_zero_count_event_diff() -> None:
-    """"Zero-count" is the event counts, not the cell count. The frozen M6 file asserts
+    """"Zero-count" is the event counts, not the cell count. The M6 tests assert
     ``n_safer + n_worse + n_unchanged == len(cells) == len(common)`` for every requested event
     (tests/test_m6_multi.py:730-741), and ``test_a15_check_on_synthetic_cases`` asserts on a
     result for ``violated`` over a pair containing none -- so an absent event keeps one
@@ -691,8 +686,8 @@ def test_h9_absent_event_gets_a_zero_count_event_diff() -> None:
     frame."""
     a, b = _absent_event_pair()
     event = multi_diff(a, b, events=[ABSENT]).by_event[ABSENT]
-    # PF4 re-freeze (PF4.20, the library follows the screen): the event has no kind, so n_safer and
-    # n_worse are null and its zero counts are the direction counts.
+    # PF4.20 (the library follows the screen): the event has no kind, so n_safer and n_worse
+    # are null and its zero counts are the direction counts.
     assert (event.n_safer, event.n_worse) == (None, None)
     assert (event.n_lower, event.n_higher) == (0, 0)
     assert len(event.cells) == 2
@@ -728,8 +723,8 @@ def test_h9_multi_diff_stays_permissive_when_every_requested_event_is_absent() -
     assert result.events == (ABSENT, "alsonotthere")
     for name in result.events:
         event = result.by_event[name]
-        # PF4 re-freeze (PF4.20, the library follows the screen): no kind, so the zero counts are
-        # n_lower and n_higher, and n_safer and n_worse are null.
+        # PF4.20 (the library follows the screen): no kind, so the zero counts are n_lower and
+        # n_higher, and n_safer and n_worse are null.
         assert (event.n_safer, event.n_worse) == (None, None)
         assert (event.n_lower, event.n_higher) == (0, 0)
         assert len(event.cells) == 2
@@ -851,8 +846,8 @@ def _lattice_diff(store: Store) -> Any:
 
 @pytest.fixture(scope="module")
 def h12_written(lattice_store: Store, tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """What the build writes now for the lattice pair, as the four frozen files were written: the
-    single-event fisher_bh diff's JSON and the S8 report (dark theme, ``x=load``, ``y=gain``)."""
+    """What the code writes for the lattice pair, as H12's four files: the single-event
+    fisher_bh diff's JSON and the report (dark theme, ``x=load``, ``y=gain``)."""
     out = tmp_path_factory.mktemp("h12")
     result = _lattice_diff(lattice_store)
     report = report_module.build_report(
@@ -892,7 +887,7 @@ def _pp0(value: float) -> int:
 
 
 def _worst_ten(record: dict[str, Any]) -> list[dict[str, Any]]:
-    """The single-event report's worst cells: delta descending, then the condition's key (S8)."""
+    """The single-event report's worst cells: delta descending, then the condition's key."""
     return sorted(record["cells"], key=lambda c: (-c["delta"], c["config_hash"]))[:10]
 
 
@@ -1044,8 +1039,8 @@ def _check_receipt(text: str, record: dict[str, Any], svg: str) -> None:
 
 @pytest.mark.parametrize("name", H12_FILES, ids=lambda name: name)
 def test_h12_regression_facts_hold_on_what_the_build_writes(name: str, h12_written: Path) -> None:
-    """Each frozen file's digest becomes the facts it held, asserted on what the build writes now
-    against the lattice's reference record (``test_m6_multi.reference_record``): the headline counts,
+    """Each of H12's files checked by the facts it holds, on what the code writes, against the
+    lattice's reference record (``test_m6_multi.reference_record``): the headline counts,
     the cell set and every cell's values, the worst cells, the methods row, the honesty sentences,
     the grid and its marks."""
     path = h12_written / name
@@ -1067,7 +1062,7 @@ def test_h12_regression_facts_hold_on_what_the_build_writes(name: str, h12_writt
 
 def test_h13_single_run_report_json_absorbs_the_non_event_rather_than_censoring_it(tmp_path: Path) -> None:
     """``report RUN --json`` prints each condition's incidence from the run's own cell table. On
-    the S13 cell (5 completed at t=1, 5 violated at t=3) the violated incidence over the
+    H3's cell (5 completed at t=1, 5 violated at t=3) the violated incidence over the
     competing set is 0.5, the share of episodes that ended in it; censoring the completions
     (the reported event alone) gives 1.0 there and 1.0 on the 8/2 cell, not 0.2."""
     root = tmp_path / "store"

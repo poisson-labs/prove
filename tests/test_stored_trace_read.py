@@ -1,18 +1,17 @@
 """Stored-trace read frozen tests: a run stored before A8a opens, and the tolerance is exactly that wide.
 
-Frozen off ``1f5491b``. The code is written against this file and does not edit it. The
-problem: ``poisson-prove inspect`` cannot open any stored run that
-carries a trace.
+The problem these tests guard against: without the read below, ``poisson-prove inspect`` cannot
+open a stored run that carries a trace in the old shape.
 
-**What is being fixed, measured at ``1f5491b`` on stored runs that carry a trace.**
+**What the read fixes, on stored runs that carry a trace.**
 A8a added one trace key (``alias_map_version``) and eight span keys, and ``Trace.from_dict`` demands the
 exact key set, so a trace stored before it is rejected. Every trace stored before A8a is exactly the old
 shape: six trace keys, spans of thirteen. A run written after A7 holds it in the ``trace`` column, and
-``Store.read`` reassembles it through ``from_dict`` and raises, so ``inspect`` exits 3 on it. A run written
-before A7 holds it in ``meta["trace"]``: ``Store.read`` hands it back as stored, ``inspect`` validates it,
-rejects it and prints no trace lines and no error (the posture M12's T30 pins for a rejected dict), so
-the older runs are silent where the newer are loud. Adding exactly those nine keys, each ``None``, makes
-every such trace validate and changes nothing else.
+without the read ``Store.read`` reassembles it through ``from_dict`` and raises, so ``inspect`` exits 3 on
+it. A run written before A7 holds it in ``meta["trace"]``: ``Store.read`` hands it back as stored,
+``inspect`` validates it, rejects it and prints no trace lines and no error (the posture M12's T30 pins for
+a rejected dict), so the older runs would be silent where the newer are loud. Adding exactly those nine
+keys, each ``None``, makes every such trace validate and changes nothing else.
 
 **The fix is a read, at the store, and only the store.** ``from_dict`` stays strict: A8a's P8-1 pins that it
 rejects thirteen-key spans and a six-key trace, and a stored dict that is *not* the old shape must keep
@@ -49,16 +48,15 @@ trace back inside ``meta`` and dropping both trace columns. The expected trace o
 from the same recipe with ``make_trace``, never read off a store, so a broken twin cannot make a test
 vacuous; and R7 counts the span lines it expects, because two silent outputs are equal.
 
-**Green before and after -- 37 of the 54 ids**, named so their green is not read as coverage (the other 17 are
-red on the bare tree: 7 raise ``missing trace key(s): alias_map_version`` from ``Store.read``, the defect itself, and 10
-fail on what ``inspect`` does or on a ``meta`` or an envelope that comes back unread): R1's fixture precondition; both
-R3 tests (the current shape round-trips today); all twenty-six R4 tests (a near miss raises today and must go on raising,
-so they pin what must NOT change: six mixtures of the two shapes, and each of the six trace keys and thirteen span keys
-the old shape had, missing in turn); both R5 tests (``from_dict`` is strict today and must stay so); R8's five (a
-current-shape trace and something that is no trace, inside ``meta``, are returned as written today, ``inspect`` prints
-no trace lines for the second, and the envelope of the first is the current writer's while the second has none); and
-R9's one (the envelope read of a written column is raw today and must stay raw). R10's second test and every R1,
-R6 and R7 test that reads an old run are red.
+**What must not change -- 37 of the 54 ids** pass with or without the read, so their passing is not
+coverage of it: R1's fixture precondition; both R3 tests (the current shape round-trips); all twenty-six
+R4 tests (a near miss raises and must go on raising: six mixtures of the two shapes, and each of the six
+trace keys and thirteen span keys the old shape had, missing in turn); both R5 tests (``from_dict`` is
+strict and must stay so); R8's five (a current-shape trace and something that is no trace, inside
+``meta``, are returned as written, ``inspect`` prints no trace lines for the second, and the envelope of
+the first is the current writer's while the second has none); and R9's one (the envelope read of a
+written column is raw and must stay raw). R10's second test and every R1, R6 and R7 test that reads an
+old run need the read.
 
 **Named gaps, not pinned.** (1) ``inspect`` prints no ``observation:`` line on an old run, because its spans
 carry no stamp: ``span.truncated`` is ``None`` and a pre-A8b marker is not read (A8b's P8-27 bars the text

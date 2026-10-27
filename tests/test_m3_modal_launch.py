@@ -1,13 +1,13 @@
-"""Frozen tests for the M3 modal launch amendment (S19): invariants L1-L14.
+"""Frozen tests for the M3 modal launch (S19): invariants L1-L14.
 
-The two things a first Modal sweep could not do: launch a Modal sweep for a target that only
-imports inside its container, and let a credential reach that container by name. Nothing here
-touches the network. ``run_modal`` is exercised offline for the first time, through a fake
+Two things a Modal sweep must do: launch for a target that only imports inside its container,
+and let a credential reach that container by name. Nothing here touches the network.
+``run_modal`` is exercised offline, through a fake
 ``modal`` module installed in ``sys.modules`` for the test's duration (L11, L12); everything
 else goes through the mapper seam or ``cli.main`` in-process. Every store lives under
 ``tmp_path``.
 
-Conventions these frozen tests fix for the implementation:
+Conventions these frozen tests fix:
 
 - The deterministic rollout is the M3 frozen tests', formula included, so L11 compares the fake
   ``run_modal`` run with ``run_with_mapper`` like with like under a shared salt.
@@ -394,7 +394,7 @@ class CapturedRunModal:
 
 @pytest.fixture
 def captured_run_modal(monkeypatch: pytest.MonkeyPatch) -> CapturedRunModal:
-    # A missing modal package is now refused before the plan, so modal must import here.
+    # A missing modal package is refused before the plan, so modal must import here.
     monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
     captured = CapturedRunModal()
     # PF5 (PF5.7): the face runs no backend; the core calls the Modal runner, so
@@ -489,7 +489,7 @@ def _with_modal_key(tables: str, line: str) -> str:
 #: invocation here states what it accepts. The flag is the honest answer -- these runs
 #: really can only see a fifty-point move -- and it is what the gate exists to make
 #: people say out loud.
-# PF4 re-freeze (PF4.30): at 1, 2 or 4 replicates a side no lone condition of these
+# PF4.30: at 1, 2 or 4 replicates a side no lone condition of these
 # grids can be flagged at q / M, so any accepted change below 1 refuses them (no fifty-point limit
 # exists any more); --max-mde 1 admits any design, which is what 0.5 did here.
 PLUMBING_MAX_MDE = ("--max-mde", "1")

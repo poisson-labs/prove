@@ -1,9 +1,7 @@
-"""M3 -- the timed-out episode's trace: the frozen tests for E1-E12.
+"""M3 -- the timed-out episode's trace: the frozen tests for E1-E13.
 
-Written after the M12 frozen tests were amended, in their own commit, for the trace-level ``truncated``
-key. The implementation changes the six touched files
-(``trace.py``, ``capture.py``, ``executor.py``, ``executor_modal.py``, ``store.py``, ``cli.py``)
-against this file and does not edit it.
+The timed-out path and the trace-level ``truncated`` key run through six files
+(``trace.py``, ``capture.py``, ``executor.py``, ``executor_modal.py``, ``store.py``, ``cli.py``).
 
 The conventions of ``tests/test_m3_capture.py`` carry over unchanged: the whole file skips
 without ``opentelemetry-sdk``; every test that installs capture -- through ``run_local`` or
@@ -14,7 +12,7 @@ is ``f"{config_hash}:{replicate_index}"``; ``worker_batch``'s ``capture`` dict i
 ``CaptureSpec`` fields plus ``run_id``. ``cli.main`` is driven in-process on a store a child
 wrote, as the M10 frozen tests drive it; ``inspect`` installs nothing.
 
-Conventions these frozen tests fix where the design is silent, recorded so they are not re-litigated:
+Conventions these frozen tests fix where the invariants are silent:
 
 - The row that hangs is chosen by config, not by a module-level seed set: the sweep has one
   categorical axis ``role`` over ``a``, ``b``, ``c`` and ``hang`` with one replicate, so every
@@ -32,12 +30,11 @@ Conventions these frozen tests fix where the design is silent, recorded so they 
   convention for every typed field of the schema.
 - E9 pins the errored row's three lines (``outcome: -``, ``t: -``,
   ``error: timeout``) and pins nothing about an ``outcome:`` line on an ok row, where the
-  design can be read two ways; the "no rows" message is pinned to the words
+  invariant can be read two ways; the "no rows" message is pinned to the words
   ``no rows`` and the event name, not to its wording.
 - The wall-clock bounds are the only timing assertions, and every one is an upper bound.
 
-E13 (added after the implementation) pins one of its deviations back to the intended
-behaviour: a Modal dict-form result whose ``meta`` is absent or not a Mapping raises
+E13: a Modal dict-form result whose ``meta`` is absent or not a Mapping raises
 ``ModalBackendError`` naming the job, as an invalid episode does, instead of being stored
 without it.
 """
@@ -85,7 +82,7 @@ EPISODE_KEY = "poisson_prove.episode"
 RUN_ID = "r-2026-09-05-timeout-oracle"
 EPISODE = "cfg-7:1"
 SALT = "timeout-oracle-salt"
-REASON = "timeout"  # the executor's error and the reason the drain mints: one vocabulary
+REASON = "timeout"  # the executor's error and the reason the drain records: one vocabulary
 HANG = "hang"
 ROLES = ("a", "b", "c", HANG)
 HORIZON = 10.0
@@ -101,7 +98,7 @@ SNIPPET_MARKER = "# reproduce one episode"
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
-#: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
+#: CD: the cap a [capture] table must declare, and the one these tests declare.
 DECLARED_LIMIT = 8192
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 TRACE_FIELDS = ("spans", "source", "source_version", "dropped", "truncated", "alias_map_version")  # A8a: the seventh field
@@ -245,8 +242,8 @@ def sweep_toml(
         kind = "continuous" if all(isinstance(v, float) for v in values) else "categorical"
         lines += [f"[axes.{name}]", f'type = "{kind}"', f"values = {json.dumps(values)}", ""]
     if capture is not None:
-        # CD (D1): a [capture] table declares its cap. DECLARED_LIMIT is what these callers were
-        # getting from the dataclass before, so nothing they measure moves.
+        # CD: a [capture] table declares its cap. A caller that names none gets DECLARED_LIMIT;
+        # a caller that names one, including a bad one, is left alone.
         if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
             capture = {**capture, "max_observation_bytes": DECLARED_LIMIT}
         lines.append("[capture]")

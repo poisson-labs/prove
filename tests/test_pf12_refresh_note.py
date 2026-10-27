@@ -1,8 +1,7 @@
 """PF12: a save whose page refresh fails says so in one line and leaves the previous pages.
 
 When a write's page refresh fails, the saving command prints one plain line on stderr saying the
-pages were not refreshed and to run ``ui``; the previous pages stay as they are. Added by the
-build beside the frozen tests, which it does not edit.
+pages were not refreshed and to run ``ui``; the previous pages stay as they are.
 """
 
 from __future__ import annotations

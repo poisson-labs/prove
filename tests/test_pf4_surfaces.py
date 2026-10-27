@@ -2,21 +2,19 @@
 
 Written from the invariants PF4.1b to PF4.51 as they are read on a screen or in a file: ``diff``,
 ``check``, ``report`` and ``serve`` (text and ``--json``), ``report.md``, ``receipt.html``, the page
-and its Summary, ``paired``, ``sweep``'s plan, and what a sweep records. The PF4 freeze covered
-PF4.1 to PF4.21; the statistics re-freeze adds PF4.22 to PF4.51 and moves what the methodology
-review changed. ``tests/test_pf4_stats.py`` holds the numbers underneath (the math suite) and
-``tests/test_pf4_calibration.py`` the simulations. The build is written against this file and does
-not edit it.
+and its Summary, ``paired``, ``sweep``'s plan, and what a sweep records.
+``tests/test_pf4_stats.py`` holds the numbers underneath (the math suite) and
+``tests/test_pf4_calibration.py`` the simulations.
 
-**What this file can rely on.** PF4 is built on ``main`` with PF0 to PF3 and PF9 merged: run names
-(PF2), the paired default and the method lines (PF3). These tests name runs by id, always pass
+**What this file can rely on:** run names (PF2), the paired default and the method lines (PF3).
+These tests name runs by id, always pass
 ``--method`` unless the default is the point, and read the verdict word from ``--json`` and from the
 first stdout line. Each surface is reached through the command line in process, with ``HOME`` pointed
 at an empty folder.
 
 **Readings, named here.**
 
-- The freeze's: the comparison's word is ``verdict`` in ``diff --json``,
+- The comparison's word is ``verdict`` in ``diff --json``,
   ``comparison_verdict`` in ``report --json``, ``summary.verdict`` on the page, and ``report.md``'s
   first line after the title; ``diff --json`` carries ``threshold`` and ``threshold_source``
   (``recorded``, ``smaller``, ``default``); a kind is ``--event NAME:failure|success`` or the
@@ -25,7 +23,7 @@ at an empty folder.
   ``poisson_prove.stats.WILSON_LEVEL`` is read when a surface computes; PF4.11's "any ``--json``" is
   every comparing verb's, ``runs``', ``paired``'s and ``sweep``'s, and ``inspect`` keeps the import
   path; ``check`` prints no cell table.
-- Re-freeze readings: shares count by the common horizon and the single-run report's by the
+- Shares count by the common horizon and the single-run report's by the
   horizon it reads, so no share differs from its rate in a store 0.1.0 writes; the verdict
   block's detail lines are found by their label, ``  <label>  `` (``method``, ``comparison`` on
   ``check``, ``threshold``, ``before``, ``after``, ``trade``, ``verdict rule``, ``flagged only``, ``fragility``, ``peeking``, ``errors``,
@@ -40,7 +38,7 @@ at an empty folder.
   ``Episode.meta["case_id"]``, which the store copies into its ``case_id`` column; ``--max-mde 1`` admits any design; PF4.32's patched constant
   is ``poisson_prove.stats.POWER``, read when a surface computes, as ``WILSON_LEVEL`` is.
 
-**Lanes.** The code suite. The tests that sweep take a few seconds each; the gate's paired design at
+**Suite.** The code suite. The tests that sweep take a few seconds each; the gate's paired design at
 194 replicates sweeps 1,746 rollouts and is marked ``slow``.
 """
 
@@ -498,7 +496,7 @@ def test_pf4_2_the_single_run_report_prints_each_share_with_its_interval_and_the
 
 
 def test_pf4_37_the_single_run_reports_share_counts_by_the_horizon_it_reads(standard: Path, tmp_path: Path) -> None:
-    """The re-freeze reverses the PF4 freeze here too: at ``--horizon 2`` a condition's
+    """At ``--horizon 2`` a condition's
     share counts the falls by step 2, as its incidence does, so the two agree and nothing is marked."""
     doc = _json(_cli(standard, "report", A_ID, "--event", "fell", "--x", "cell", "--horizon", "2",
                      "--out", str(tmp_path / "r"), "--json"))
@@ -516,8 +514,8 @@ def test_pf4_37_the_single_run_reports_share_counts_by_the_horizon_it_reads(stan
 
 def test_pf4_37_a_two_run_share_counts_by_the_common_horizon_and_is_never_marked(tmp_path: Path) -> None:
     """A ran to step 10 and B to step 5, so the comparison's horizon is 5. In 'late' half of A's runs fell
-    after step 5: by then A had none, so its share is 0 of 40, the rate the test compares, and no mark.
-    The PF4 freeze's W17 counted the stored outcomes here (0.500); the re-freeze reverses it."""
+    after step 5: by then A had none, so its share is 0 of 40, the rate the test compares, and no mark,
+    not the 0.500 the stored outcomes would give."""
     root = tmp_path / "prove-runs"
     a = {"late": [(i, "fell", 6.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)],
          "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)]}
@@ -827,7 +825,8 @@ def test_pf4_5_the_page_summarys_50_point_rule_is_gone(tmp_path: Path) -> None:
 
 
 def test_pf4_50_the_threshold_line_sits_under_the_nothing_moved_words_only(standard: Path, tmp_path: Path) -> None:
-    """From the PF2 build: test_e12 moves for it."""
+    """A comparison that moved (a trade) prints no threshold line; one where nothing moved prints it
+    once, after the method line and before the before line."""
     moved = _cli(standard, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
     assert _first_word(moved.out) == "trade" and _detail(moved.out, "threshold") == []
     root = _pair(tmp_path / "prove-runs", MID, MID)
@@ -851,7 +850,7 @@ def test_pf4_6_by_kind_is_refused_as_an_unknown_grouping_listing_the_supported_o
     if verb == "report":
         argv += ["--out", str(tmp_path / "r")]
     if verb == "serve":
-        argv += ["--json"]  # a build that accepted the grouping would otherwise bind and wait
+        argv += ["--json"]  # a version that accepted the grouping would otherwise bind and wait
     result = _cli(standard, *argv)
     assert result.code == 1, (result.code, result.err)
     assert result.out == ""
@@ -889,7 +888,7 @@ def test_pf4_7_a_pair_with_no_comparable_condition_is_refused_naming_the_holes(v
     if name == "report":
         argv += ["--out", str(tmp_path / "r")]
     if name == "serve":
-        argv += ["--json"]  # a build that did not refuse would otherwise bind and wait
+        argv += ["--json"]  # a version that did not refuse would otherwise bind and wait
     if name == "check":
         argv += ["--fail-on", "any"]
     result = _cli(root, *argv)
@@ -1082,7 +1081,7 @@ def test_pf4_11_no_output_carries_the_store_path_the_platform_the_python_build_o
         for file in ("report.md", "receipt.html"):
             texts[f"{folder}/{file}"] = (work / folder / file).read_text(encoding="utf-8")
     # paired --json and sweep --json are in "any --json" too. sweep's plan names the target as it
-    # was typed (PF3's frozen plan.target), so the import path is the one fact its scan leaves out.
+    # was typed (PF3's plan.target), so the import path is the one fact its scan leaves out.
     spec = work / "spec.toml"
     spec.write_text(SMALL_SPEC, encoding="utf-8")
     swept = _cli("prove-runs", "sweep", "spec.toml", "--target", "poisson_prove.examples.mock_agent:rollout",
@@ -1106,7 +1105,7 @@ def test_pf4_11_no_output_carries_the_store_path_the_platform_the_python_build_o
     own = Store(root).manifest(new_run).environment
     for secret in [*secrets[:3], own["platform"], own["python"]]:
         assert secret not in swept.out, ("sweep --json", secret)
-    # The page shows the run's Python version and nothing more of the build.
+    # The page shows the run's Python version and nothing more of its environment.
     assert "3.11.7" in texts["page"]
 
 

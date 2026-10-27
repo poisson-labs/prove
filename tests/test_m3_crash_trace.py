@@ -1,7 +1,7 @@
 """M3 -- the crashed episode's trace: the frozen tests for K1-K8.
 
-What the executor records when a rollout raises. The two touched files (``executor.py``,
-``executor_modal.py``) are written against this file, which is not edited to fit them.
+What the executor records when a rollout raises, in ``executor.py`` and
+``executor_modal.py``.
 
 The conventions of ``tests/test_m3_capture.py`` and ``tests/test_m3_timeout_trace.py`` carry
 over unchanged: the whole file skips without ``opentelemetry-sdk``; every test that installs
@@ -13,7 +13,7 @@ OpenTelemetry objects are imported inside test bodies, never at module level; th
 ``CaptureSpec`` fields plus ``run_id``. ``cli.main`` is driven in-process on a store a child
 wrote; ``inspect`` installs nothing. ``modal`` is never imported. Nothing sleeps.
 
-Conventions these frozen tests fix, recorded so they are not re-litigated:
+Conventions these tests fix:
 
 - The row that crashes is chosen by config, as the timed-out row was: one categorical axis
   ``role`` over ``a``, ``b``, ``c`` and ``crash`` with one replicate, so every run has exactly
@@ -22,7 +22,7 @@ Conventions these frozen tests fix, recorded so they are not re-litigated:
 - The crashing rollout opens an ``invoke_agent`` root, closes a ``chat`` child, opens an
   ``execute_tool`` child and raises ``RuntimeError`` inside it; span names carry the seed. A
   second rollout returns a dict instead of an ``Episode`` after the same two closed spans.
-- **What the SDK marks, measured against opentelemetry-sdk before this file was written.**
+- **What the SDK marks, measured against opentelemetry-sdk.**
   ``start_as_current_span`` sets ``ERROR`` status on *every* span the exception unwinds
   through, not only the innermost: with the shape above both ``execute_tool`` and the
   ``invoke_agent`` root close with ``error == "RuntimeError: boom <seed>"``, and only ``chat``,
@@ -91,18 +91,14 @@ SNIPPET_MARKER = "# reproduce one episode"
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
-#: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
+#: The cap a [capture] table must declare; the value the dataclass's old default supplied.
 DECLARED_LIMIT = 8192
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
-    # A7: four mints; A8a: three constants --
-    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b: five constants and two
-    # functions. CD (D8) retires three of A8b's five -- OBSERVATION_HEAD_BYTES and
-    # OBSERVATION_TAIL_BYTES are deleted with the default they described, and
-    # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES, which sorts one place later.
-    # A10 (W1): Declaration joins, minted in trace.py, among the classes.
-    # trace.py's own order: constants, classes, functions, each sorted. 31 names.
+    # trace.py's public names, in its own order: constants, classes, functions, each sorted.
+    # 31 names. There is no OBSERVATION_HEAD_BYTES or OBSERVATION_TAIL_BYTES (the observation
+    # cap has no default), and the routing threshold is OBSERVATION_ROUTING_BYTES.
     "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
     "OBSERVATION_KEYS", "OBSERVATION_ROUTING_BYTES",
     "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES", "TRUNCATED_KEY",
@@ -247,8 +243,8 @@ def sweep_toml(
         kind = "continuous" if all(isinstance(v, float) for v in values) else "categorical"
         lines += [f"[axes.{name}]", f'type = "{kind}"', f"values = {json.dumps(values)}", ""]
     if capture is not None:
-        # CD (D1): a [capture] table declares its cap. DECLARED_LIMIT is what these callers were
-        # getting from the dataclass before, so nothing they measure moves.
+        # A [capture] table must declare its cap. DECLARED_LIMIT is the dataclass's old default,
+        # so nothing these callers measure moves.
         if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
             capture = {**capture, "max_observation_bytes": DECLARED_LIMIT}
         lines.append("[capture]")

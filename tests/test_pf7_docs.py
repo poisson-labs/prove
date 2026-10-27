@@ -1,5 +1,5 @@
 """PF7 -- the README, the docs, the recipes and a real agent's example (PF7.1 to PF7.3, PF7.7 and
-PF7.8; each case its own sweep axis; the amended description words; a comparison result's JSON
+PF7.8; each case its own sweep axis; the description words; a comparison result's JSON
 form).
 
 **What is pinned is what ships, as rules.** The pages are found, not listed:
@@ -16,7 +16,7 @@ description words, the never-phones-home paragraph, "its own sweep axis", and th
 "does what its page shows"). Its own behaviour is pinned here too, on small pages written by the
 test, so a check that let a wrong page through would fail here first.
 
-**Choices this file freezes** (the code follows them):
+**Choices this file fixes** (the code follows them):
 
 - **d1** A block's mark is an HTML comment alone on the line directly before it, with three kinds
   (``run``, ``skip: REASON``, ``file NAME``) and one page mark (``setup quickstart``), as the check's
@@ -35,8 +35,8 @@ test, so a check that let a wrong page through would fail here first.
   is ``FIRST_COMMANDS``' six lines exactly, fenced or indented.
 - **d5** The README's sections are ``SECTIONS``' headings, word for word, as ``##`` headings in that
   order, and no other ``##`` heading.
-- **d6** The never-phones-home paragraph is ``SCOPE.md``'s, word for word with the names as the
-  rename gives them ("Prove", ``poisson-prove serve``), the same words the hygiene tests pin.
+- **d6** The never-phones-home paragraph is ``NEVER_PHONES_HOME``, word for word with Prove's
+  names ("Prove", ``poisson-prove serve``), the same words the hygiene tests pin.
 - **d7** "With stated confidence" is on no page and in no help: the README, the docs, the PyPI
   description and every ``--help``, the top-level one included.
 - **d8** The quickstart's verdict is ``trade``: its packaged spec declares ``timeout`` and
@@ -48,9 +48,8 @@ test, so a check that let a wrong page through would fail here first.
   ``console`` block marked ``run``, printed at 80 columns through a pipe (its usage block read with
   its line breaks evened out, as the docs check reads it); and two or more of its other examples
   are marked ``run`` with a printed line shown.
-- **d10** The layered-report page works on the quickstart pair: the committed two-run fixture it was
-  to use came out of the tests, and a reader can make the
-  quickstart pair.
+- **d10** The layered-report page works on the quickstart pair, which a reader can make, rather
+  than on a committed two-run fixture.
 - **d11** The example's client is replaced in the test by a stand-in for ``openai.OpenAI`` (the
   Chat Completions call), with ``OPENAI_API_KEY`` set to a placeholder that is no key while the
   stand-in is in place; the example makes its client inside the rollout, never at import, so
@@ -90,8 +89,7 @@ snapshots (``CONTRIBUTING.md`` names it whole); the pretty rendering (the docs d
 plain output: no escape and no box drawing in a command's shown output); the ``[dev]`` test tools
 it adds, which take floors here; the core dependencies it adds; ``poisson-prove`` with no verb,
 which opens the app only on a terminal, so a page's example of it is marked ``skip``.
-**Seams with the dashboard:** ``poisson-prove ui`` has its verb page (red until its verb is
-merged); the dashboard page names the dashboard's seven views as headings; the artifact
+**Seams with the dashboard:** ``poisson-prove ui`` has its verb page; the dashboard page names the dashboard's seven views as headings; the artifact
 format's page is that module's, read here only by the three checks.
 **Seams with public hygiene:** the plain-words corpus (the release plain-words test reads every page), the never-phones-home words (d6),
 the removed files, the CHANGELOG; and a TOML header of an array of tables
@@ -118,7 +116,7 @@ able to show and which the hygiene module's double-bracket family would read as 
 | PF7.2 the fault-injection page | ``test_pf7_2_the_fault_injection_page_names_every_fault_and_the_chaos_table`` |
 | PF7.2 each case its own sweep axis; the refusal | ``test_pf7_2_the_agent_pages_say_each_case_is_its_own_sweep_axis`` (two pages) |
 | PF7.2 the setup page around its table | ``test_pf7_2_the_setup_page_carries_the_prompt_the_steps_and_the_options`` |
-| PF11.8 the setup page's table, kept | ``test_pf11_setup_agent::test_pf11_8_…`` (frozen, unchanged) |
+| PF11.8 the setup page's table, kept | ``test_pf11_setup_agent::test_pf11_8_…`` (in that file) |
 | PF7.2 the terminal app's page (shape) | ``test_pf7_2_the_terminal_app_page_says_how_it_opens_and_its_keys`` |
 | PF7.2 the dashboard's page (shape) | ``test_pf7_2_the_dashboard_page_names_the_views_the_verb_and_what_saves`` |
 | PF7.2 the architecture page | ``test_pf7_2_the_architecture_page_names_the_core_and_the_faces`` |

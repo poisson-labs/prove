@@ -1,30 +1,23 @@
 """S25 -- the dual root: the frozen tests for O1-O13 and O18-O22.
 
-Tests for the layered report's dual root (P4.1), under the two calls the measurements taken
-before the build drew. The build adds ``src/poisson_prove/tree.py`` and the
-``diff`` block in ``src/poisson_prove/cli.py`` against this file and does not edit it.
+Tests for the layered report's dual root (P4.1): ``src/poisson_prove/tree.py`` and the
+``diff`` block in ``src/poisson_prove/cli.py``.
 
-**``poisson_prove.tree`` is imported inside each test body**, the way the M12 frozen tests reached
-``poisson_prove.trace`` before it existed: a module-level import of a module that is not there is a
-*collection* error, and pytest abandons the whole run on one. Imported lazily, this file collects,
-its own tests fail, and every other test in the repo still reports.
+**``poisson_prove.tree`` is imported inside each test body**: a module-level import of a module
+that fails to import is a *collection* error, and pytest abandons the whole run on one. Imported
+lazily, this file collects, its own tests fail, and every other test in the repo still reports.
 
-**Measured before the build, re-derived before a test was written.** Five things the spec asserts were checked
-against the measurement script and, where the script could not speak, measured again on the
-committed fixture of the time; the numbers below are the lattice's (``tests/lattice.py``), measured
-when this file moved to it. They are restated here because they are why several tests look the way
-they do.
+**Measured facts the tests rest on.** The numbers below are the lattice's (``tests/lattice.py``).
+They are restated here because they are why several tests look the way they do.
 
-1. **O10's resample as the spec wrote it is not a sharp null for the arm-label test.** The spec
-   said a ``pair_swap`` exchange "produces a sharp-null dataset whatever the method under test".
-   A uniform draw from the pair-swap orbit is not invariant under the larger arm-label group, so
-   the arm-label test on it is not exact by theorem: measured before the build, a pair-swap resample
-   tested by arm label rejected far outside the band ``[0.020, 0.080]``, and the matched
-   construction sat inside it. **The resample follows the scheme under test**, from a table that
+1. **A pair-swap resample is not a sharp null for the arm-label test.** A uniform draw from the
+   pair-swap orbit is not invariant under the larger arm-label group, so the arm-label test on
+   it is not exact by theorem: measured, a pair-swap resample tested by arm label rejected far
+   outside the band ``[0.020, 0.080]``, and the matched construction sat inside it. **The resample follows the scheme under test**, from a table that
    is *this file's own literal* and never ``root.scheme`` -- so a scheme choice that regresses to one
    scheme for both methods is resampled under the right scheme and tested under the wrong one, and
-   O10 is written to see it. That is the sharpest guard in this file
-   and it is marked sole-catch in the mutation table. ``B`` is 1000, what the measurement used.
+   O10 is written to see it. That is the sharpest guard in this file, and no other test
+   catches that regression. ``B`` is 1000, what the measurement used.
 2. **O7's byte-identical clause holds only under pair swap.** Under arm label a cell is
    informative when its pooled outcomes are not all identical, and ``b = a.copy()`` of the
    lattice's before run has 33 such cells. The clause is split: ``n_informative_cells == 0`` and ``n_discordant == 0``
@@ -33,17 +26,16 @@ they do.
 3. **The lattice's uniform n = 32 cannot catch n-weighting.** Its unequal rates catch a variance-weighted
    statistic, and only that. O1 is asserted on the unequal-n fixture (O22) as well, where an
    n-weighted mean differs from the unweighted one.
-4. **The spec's block example is illustrative.** The lattice has 35 informative cells under
-   either reading, and 38 cells with ``delta == 0``, one of which (``gain`` 1.1 at ``load`` 30)
-   carries discordant pairs, so 34 have a nonzero delta. Nothing here pins the example; O7 recomputes, and the ``delta == 0`` count
-   is asserted to differ from the informative count so a builder counting nonzero deltas fails.
-5. **The pre-build log's addendum numbers (mirrored, calibration) were produced by code not in
-   the committed script.** Re-derived on the mirrored lattice: ``location`` is exactly ``0.0``,
-   ``p_location`` ``1.0``, ``p_dispersion`` at the floor and ``p_omnibus`` at ``2 / (B + 1)`` at
+4. **No example count is pinned.** The lattice has 35 informative cells under either reading,
+   and 38 cells with ``delta == 0``, one of which (``gain`` 1.1 at ``load`` 30) carries
+   discordant pairs, so 34 have a nonzero delta. O7 recomputes the count, and the
+   ``delta == 0`` count is asserted to differ from the informative count so a builder counting
+   nonzero deltas fails.
+5. **The mirrored lattice's numbers.** ``location`` is exactly ``0.0``, ``p_location`` ``1.0``, ``p_dispersion`` at the floor and ``p_omnibus`` at ``2 / (B + 1)`` at
    B=1000 and 4000 under both schemes (PF4.18's scale; O9 says why), and a location-only root reads
    ``p_omnibus == 1.0`` on it.
 
-**Conventions these frozen tests fix where the spec is silent. The build follows these.**
+**Conventions these frozen tests fix.**
 
 - ``to_json()`` "bytes" means ``json.dumps(payload, sort_keys=True)``. ``json.dumps`` refusing a
   NumPy scalar is a failure, not a test defect: the CLI's ``--format json`` serialises the same
@@ -52,18 +44,17 @@ they do.
   is dropped before pairing, so under ``pair_swap`` its replicate is unmatched; the holes fixture
   is asserted under ``fisher_bh`` and ``logrank_bh`` only, and the truncation fixture under all
   three. O21 pins the unmatched case.
-- **O7's "informative" is the spec's operational, outcome-level reading**: a cell is informative
+- **O7's "informative" is the operational, outcome-level reading**: a cell is informative
   under ``pair_swap`` when some matched pair's two outcomes differ, and under ``arm_label`` when
   its pooled outcomes are not all identical. On a three-outcome vocabulary with a partial event set
   that is not "the statistics' permutation distribution is not a point mass" (a cell varying only
   among unrequested outcomes is outcome-informative and statistic-degenerate). Recorded, not
   resolved; O7 is asserted only on fixtures where no row is errored or truncated.
-- **The informative line is pinned by its three numbers, not its wording.** The spec's tail,
-  "identical across arms in every episode", is the pair-swap reading and is wrong under arm
+- **The informative line is pinned by its three numbers, not its wording.** A tail such as
+  "identical across arms in every episode" is the pair-swap reading and is wrong under arm
   label. The regex captures the counts and leaves the tail free.
 - **The CLI block is the ``omnibus:`` line plus every following line indented by two spaces.**
-  Never the tail of stdout: a later change may append after it (E12's
-  precedent).
+  Never the tail of stdout: a later change may append after it.
 - **O12's three-outcome pair is built by hand.** S24's ``write_run`` takes a fail count and a
   fixed ``fail``/``ok`` vocabulary, not an outcome vocabulary.
 - **O13's "before any permutation is drawn" is pinned by cost.** With ``n_permutations = 10**6``
@@ -76,8 +67,8 @@ they do.
   ``rejects True`` and ``q = 0.2`` gives ``False`` on the same ``p``, which is what catches a
   builder comparing to ``0.05`` instead of ``multi.q``.
 
-**Two guards the spec does not number.** The mirrored lattice (O9) is the sole catch for a location-only
-root; nothing in the spec catches a *dispersion-only* omnibus, because on every named fixture the
+**Two guards no invariant numbers.** The mirrored lattice (O9) is the sole catch for a location-only
+root; no numbered invariant catches a *dispersion-only* omnibus, because on every named fixture the
 dispersion root rejects wherever the dual root does. The one-discordant-pair-per-cell fixture
 below has ``p_dispersion == 1.0`` exactly (the sum of squares is invariant under every exchange)
 and ``p_location`` at the floor, so it is the mirror image of O9. And the trap of
@@ -88,10 +79,10 @@ independent exchange breaks.
 
 **Named non-observables.** ``units.delta`` versus ``cells.delta`` on censored data has no fixture:
 ``_truncate_raw`` censors at the horizon, so the Aalen-Johansen estimate equals the naive
-proportion on every input (S24 finding 6). Under ``arm_label`` with unequal ``n``, a builder that
+proportion on every input. Under ``arm_label`` with unequal ``n``, a builder that
 assigns the first ``n_b`` of the pool to arm a is a valid permutation of a mirrored design and is
 not distinguishable from the surface. The ``--methods all --format json`` shape and the exit code
-of ``diff`` on a pair with no comparable cell are spec amendments, not pins: ``test_i9`` fixes the
+of ``diff`` on a pair with no comparable cell are not pinned here: ``test_i9`` fixes the
 former's top-level key set to the three methods, and nothing pins the latter.
 """
 
@@ -143,7 +134,7 @@ GOLDEN_PERMUTATIONS = 4000
 GOLDEN_SEED = 0
 
 #: O10. ``K = 200`` resamples at ``B = 1000`` (the measurement's own B), test seed ``1000 + k``.
-#: The band is the spec's literal; its derivation is in the O10 docstring.
+#: The band is a literal; its derivation is in the O10 docstring.
 CALIBRATION_RESAMPLES = 200
 CALIBRATION_PERMUTATIONS = 1000
 CALIBRATION_SEED_OFFSET = 1000
@@ -242,12 +233,10 @@ def manifest(run_id: str, salt: str) -> RunManifest:
 
 def seed_of(config: Mapping[str, Any], replicate_index: int) -> int:
     """A seed that is a function of ``(config, replicate_index)`` and never of the cell's position
-    in its dict. **C49, fixed in a later update.** The old
-    ``1000 * index + k`` seeded by dict position and ``replicate_index`` counted from
-    ``replicate_start``, so O21's pair stored a different seed at the same
-    ``(config_hash, replicate_index)`` in its two arms -- 16 of 48 matched rows disagreed, measured
-    at ``a626cd3`` -- while ``mcnemar_bh`` ran on it. Green before and after on the bare tree
-    (nothing reads a stored seed there), so its green is not evidence."""
+    in its dict, so O21's pair stores the same seed at the same ``(config_hash,
+    replicate_index)`` in its two arms. A seed of ``1000 * index + k`` by dict position, with
+    ``replicate_index`` counted from ``replicate_start``, disagrees on 16 of 48 matched rows of
+    that pair. No test reads a stored seed, so no test fails if this regresses."""
     return 1000 * (int(config_hash(config)[:6], 16) % 100_000) + replicate_index
 
 
@@ -564,8 +553,8 @@ PROPERTY_SETTINGS = settings(deadline=None, max_examples=40, suppress_health_che
 def test_o1_location_is_the_mean_and_dispersion_the_rms_of_units_delta_on_the_lattice(
     lattice_roots: dict[str, tuple[Any, Any]], method: str
 ) -> None:
-    """The plan's unweighted sum and unweighted sum of squares, in mean and RMS
-    form. Recomputed from ``units`` rather than read back. **The lattice's unequal rates are the catch**
+    """Location and dispersion are the unweighted sum and unweighted sum of squares, in mean
+    and RMS form. Recomputed from ``units`` rather than read back. **The lattice's unequal rates are the catch**
     for a variance-weighted or pooled statistic, so the test also says the rates are unequal.
     ``delta`` is the naive proportion difference, ``+ 0.0`` so zero is unsigned, exactly."""
     _, root = lattice_roots[method]
@@ -583,7 +572,7 @@ def test_o1_holds_where_n_differs_across_cells_so_n_weighting_is_caught(
     unequal_n: dict[str, tuple[Any, Any, pd.DataFrame, pd.DataFrame]]
 ) -> None:
     """Item 3 of the module docstring. The lattice's n is 32 everywhere, so an n-weighted mean equals the unweighted one
-    there and only the variance-weighted mutant is caught. On the O22 fixture the cell sizes
+    there and only a variance-weighted statistic is caught. On the O22 fixture the cell sizes
     differ, and the test says the two means differ before asserting the unweighted one."""
     _, root, _, _ = unequal_n["mixed"]
     sub = root.units[root.units["event"] == "fail"]
@@ -846,7 +835,7 @@ def test_o6_the_scheme_table_is_the_spec_table_and_every_root_follows_it(
 def test_o6_the_pairable_pair_and_its_unpairable_twin_give_identical_json(synth_root: Path) -> None:
     """The unpairable twin, S24's C12 construction restated. ``moved-b`` and ``moved-b-unpaired`` hold
     identical episodes and differ only in ``run_salt``, so the two diffs below see the same frames
-    and differ only in ``seed_identity_match`` (``paired`` until P-1). A root that dispatched on it would take pair swap on
+    and differ only in ``seed_identity_match``. A root that dispatched on it would take pair swap on
     the first and arm label on the second, and the ``scheme`` field alone would separate the two
     payloads."""
     paired_multi, paired_root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=300, seed=GOLDEN_SEED)
@@ -907,7 +896,7 @@ def test_o7_the_byte_identical_pair_is_a_point_mass_under_pair_swap(identical_la
 def test_o7_the_byte_identical_pair_keeps_its_mixed_cells_informative_under_arm_label(
     pair: Any, identical_lattice: dict[str, tuple[Any, Any]]
 ) -> None:
-    """Item 2 of the module docstring, the half the spec got wrong. Under arm label a cell with mixed outcomes
+    """Item 2 of the module docstring, the arm-label half. Under arm label a cell with mixed outcomes
     is informative even when the two arms are identical: permuting its labels moves the
     statistic away from the observed zero. The lattice's before run has 33 such cells. The statistics and the
     p-values are still ``0.0`` and ``1.0``, because the observed statistic is the minimum of its
@@ -979,8 +968,8 @@ def test_o9_the_mirrored_lattice_is_invisible_to_location_and_rejected_by_disper
 ) -> None:
     """**Sole-catch guard for a location-only root.** On the lattice as stored every root is at the floor,
     so a location-only omnibus is byte-identical to the dual root there (O8) and blind here: it
-    reads ``p_omnibus == 1.0`` on this fixture, measured before the build under both schemes. The
-    ladder's F3 -- half the cells break and half improve -- in fixture form. ``> 0.5`` rather
+    reads ``p_omnibus == 1.0`` on this fixture, measured under both schemes. Half the cells break
+    and half improve. ``> 0.5`` rather
     than ``== 1.0`` because floating accumulation can leave ``location`` at ``1e-17`` and a
     permutation can tie it."""
     _, root = mirrored_lattice[method]
@@ -989,7 +978,7 @@ def test_o9_the_mirrored_lattice_is_invisible_to_location_and_rejected_by_disper
     assert abs(root.location[EVENT]) < 1e-9
     assert root.p_location[EVENT] > 0.5
     assert root.p_dispersion[EVENT] == floor
-    # PF4 (PF4.18): the omnibus now ranks every permutation on the observed point's scale, a
+    # PF4.18: the omnibus ranks every permutation on the observed point's scale, a
     # permutation's p being (#{b' : S_b' >= S_b} + [S_obs >= S_b]) / (B + 1). Dispersion's observed
     # statistic exceeds every permuted one, so no permutation reaches the floor there; location's
     # observed statistic is 0, so the one permutation holding location's largest value, when no
@@ -1051,14 +1040,14 @@ def test_o10_the_root_is_calibrated_on_sharp_null_resamples_of_the_lattice(pair:
     ``arm_label`` for ``fisher_bh`` -- from ``RESAMPLE_SCHEME_BY_METHOD``, this file's literal.
     That produces a dataset uniform on the orbit of the group the test then uses, which is the
     condition the theorem needs. ``multi_diff`` runs afresh on it (O13 refuses the stored pair's
-    result), then ``omnibus`` at ``B = 1000`` with seed ``1000 + k``. The spec as first written
-    resampled with ``pair_swap`` under both methods, and a draw uniform on the pair-swap orbit is
-    not invariant under the larger arm-label group, so the arm-label test on it is not exact by
-    theorem; a measurement before the build put that mismatch far outside the band and the matched construction
+    result), then ``omnibus`` at ``B = 1000`` with seed ``1000 + k``. Resampling with
+    ``pair_swap`` under both methods would be wrong: a draw uniform on the pair-swap orbit is not
+    invariant under the larger arm-label group, so the arm-label test on it is not exact by
+    theorem; measured, that mismatch lands far outside the band and the matched construction
     inside it.
 
     **The band.** ``0.05 +- 1.96 * sqrt(0.05 * 0.95 / 200) = [0.0198, 0.0802]``, the 95% Monte
-    Carlo band for a true rate of 0.05 at ``K = 200``, kept as the spec's literal
+    Carlo band for a true rate of 0.05 at ``K = 200``, written as the literal
     ``[0.020, 0.080]``. If a NumPy bump moves the rate out of it, that is a
     Monte Carlo event to re-run with more ``K``, not a reason to loosen the band.
 
@@ -1069,14 +1058,13 @@ def test_o10_the_root_is_calibrated_on_sharp_null_resamples_of_the_lattice(pair:
 
     **The band catches the scheme mismatch** -- **sole catch** -- the scheme choice regressing to one
     scheme for both methods, which under ``mcnemar_bh`` is resampled here under pair swap and tested
-    by the build under arm label (which side of the band it lands on is the fixture's; the
-    planted-defect pass measures it).
+    under arm label (which side of the band it lands on depends on the fixture).
 
     **Below 0.020 catches conservative wiring**: Bonferroni stacked on top of the calibrated
     min-p, the calibration applied twice, or ``p_omnibus`` compared against a halved ``q``. A
     stream re-seeded on every draw is *not* conservative: every permutation is the same draw, the
     p-value collapses to the floor whenever that one draw is less extreme than the observed
-    statistic, and on the fixture these tests were first written against it read far above the band, not below it.
+    statistic, and measured on a fixture it read far above the band, not below it.
 
     Wall time is dominated by the 200 fresh ``multi_diff`` calls and is printed.
     """
@@ -1098,11 +1086,11 @@ def test_o10_the_root_is_calibrated_on_sharp_null_resamples_of_the_lattice(pair:
 
 
 def test_the_omnibus_p_is_the_calibrated_count_and_not_the_bare_minimum_p() -> None:
-    """**Not a numbered invariant: the deterministic guard for an uncalibrated min-p.** Section
-    0.1's ``p_omnibus`` counts the permutations whose own min-p reaches the observed one; the
-    bare minimum over the ``2K`` p-values is what Westfall-Young exists to correct. On the fixture
-    these tests were first written against that mutant read one resample above O10's ceiling, so
-    O10 alone catches it with no margin. Here the relation is pinned instead. Writing ``c*`` for the count
+    """**Not a numbered invariant: the deterministic guard for an uncalibrated min-p.**
+    ``p_omnibus`` counts the permutations whose own min-p reaches the observed one; the bare
+    minimum over the ``2K`` p-values is what Westfall-Young exists to correct. Measured on a
+    fixture, the bare minimum read one resample above O10's ceiling, so O10 alone catches it
+    with no margin. Here the relation is pinned instead. Writing ``c*`` for the count
     behind the smallest per-statistic p, each of those ``c*`` permutations has rank-p at most
     ``c*/B <= (1 + c*)/(B + 1)``, so ``p_omnibus >= min p`` always. The strict half needs the two
     statistics' extreme sets to differ: six cells of 32 with a small net move and some spread put
@@ -1130,7 +1118,7 @@ def test_o11_more_permutations_move_only_the_p_driven_fields(pair: Any, lattice_
     few = tree().omnibus(a, b, multi, n_permutations=100, seed=GOLDEN_SEED).to_json()
     many = tree().omnibus(a, b, multi, n_permutations=400, seed=GOLDEN_SEED).to_json()
     assert few["n_permutations"] == 100 and many["n_permutations"] == 400
-    # ``p_floor`` is ``1 / (n_permutations + 1)`` (P-1), so it moves with ``n_permutations`` and is excluded beside it.
+    # ``p_floor`` is ``1 / (n_permutations + 1)``, so it moves with ``n_permutations`` and is excluded beside it.
     assert without(few, (*P_DRIVEN_KEYS, "n_permutations", "p_floor")) == without(many, (*P_DRIVEN_KEYS, "n_permutations", "p_floor"))
 
 
@@ -1167,8 +1155,7 @@ def test_complementary_events_give_exact_duplicate_p_values_and_negated_location
     duplicates and the p-values agree exactly. Exchanging per-event indicators independently is a
     different null under which a pair can be ``fail`` in both arms; the two events then ride
     different draws and their p-values part company. **The lattice cannot catch that**: its effect puts
-    both events at the floor under any draw, and the shim's independent-exchange mutant passed
-    there. The six-cell mid-range pair puts both p-values where two draws differ."""
+    both events at the floor under any draw, and an independent exchange passes there. The six-cell mid-range pair puts both p-values where two draws differ."""
     a = raw_frame("mid-a", {f"c{i}": ["fail"] * 4 + ["ok"] * 28 for i in range(6)})
     b = raw_frame("mid-b", {f"c{i}": ["fail"] * k + ["ok"] * (32 - k) for i, k in enumerate((6, 3, 6, 3, 6, 4))})
     multi = quiet_multi_diff(a, b, manifest("mid-a", SALT), manifest("mid-b", SALT), events=("fail", "ok"), method=method)
@@ -1375,7 +1362,7 @@ def test_o19_no_headline_uses_the_forbidden_vocabulary(
     identical_lattice: dict[str, tuple[Any, Any]],
     three_outcome_roots: dict[str, tuple[Any, Any]],
 ) -> None:
-    """The plan's two prohibitions -- nothing shaped like "given the root passed", nothing in the
+    """The two prohibitions -- nothing shaped like "given the root passed", nothing in the
     "where it broke" vocabulary -- applied to the first rendered byte of the nested family. A
     root has no leaves and no groups, so neither sentence is natural here; the invariant exists
     so the rule is already in force when they arrive. ``headline()`` is one line and is pinned by
@@ -1390,7 +1377,7 @@ def test_o19_no_headline_uses_the_forbidden_vocabulary(
 
 def test_o19_the_cli_block_uses_none_of_the_forbidden_vocabulary(synth_root: Path) -> None:
     """On the block only, extracted by its own shape. The synthetic store's ``t_unit`` is
-    ``steps``, so a block that printed the unit would trip ``step``; the spec's block does not
+    ``steps``, so a block that printed the unit would trip ``step``; the block does not
     print it."""
     for a, b, events in (("moved-a", "moved-b", ("fail",)), ("same-a", "same-b", ("fail",)), ("tri-a", "tri-b", ("x", "y"))):
         argv = ["--store", str(synth_root), "diff", a, b]
@@ -1446,8 +1433,7 @@ def test_o21_unmatched_replicates_are_dropped_by_the_join_and_not_mispaired() ->
     event counts are over the joined pairs only -- a's fails sit at ``0..7`` and are all outside
     the join, b's at ``16..19`` and all inside it -- and ``n_discordant`` counts joined pairs that
     differ. The two arms store the same seed at every matched ``(config_hash, replicate_index)``
-    since the P-1 freeze's update (C49; ``seed_of``): before it 16 of 48 matched rows disagreed and
-    ``mcnemar_bh`` ran on them anyway."""
+    (``seed_of``)."""
     a = raw_frame("um-a", {"u": ["fail"] * 8 + ["ok"] * 24, "v": ["fail"] * 3 + ["ok"] * 29})
     b = raw_frame("um-b", {"u": ["fail"] * 4 + ["ok"] * 28, "v": ["fail"] * 9 + ["ok"] * 23}, replicate_start={"u": 16})
     multi = quiet_multi_diff(a, b, manifest("um-a", SALT), manifest("um-b", SALT), events=("fail",), method="mcnemar_bh")

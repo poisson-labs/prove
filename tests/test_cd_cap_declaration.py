@@ -1,63 +1,55 @@
 """CD frozen tests: invariants CD1 to CD12 of the cap declaration -- the observation
-cap becomes a required per-target declaration with no default, and the store funnel is fixed to
-honour it in the same change.
+cap is a required per-target declaration with no default, and the store funnel honours it.
 
-Frozen off ``1f5491b``, after the update commit. The code is written
-against this file and does not edit it. Every name CD mints is imported inside the test that needs
-it, so the bare tree fails test by test and never at collection.
+Every name CD tests is imported inside the test that needs it, so a missing name fails test by
+test and never at collection.
 
-**The two things this change ships, and why they are one change.** First: a sweep that asks for
-capture must say how large an observation it keeps whole, and the tool supplies no number of its
-own. And the live defect underneath it -- **a declared cap above 8192 is not the cap in force**:
-the sweep declares it, the manifest records it, the receipt prints it, and the store cuts at the
-module default anyway. Both reproduced on the base tree before
-these tests were written: a sweep declaring 131072 stored a
-value above 8,192 bytes as head 6144 + tail 2048, and at a declared 16384 a 10,000-byte value kept 8,192
-bytes while a 20,000-byte value kept 16,384. A mandatory declaration over a store that ignores it
-is the very failure the declaration exists to prevent, with a receipt attached, so CD5 and CD6 are as much this file's
-centre as CD1 is.
+**The two halves, and why they belong together.** First: a sweep that asks for capture must say
+how large an observation it keeps whole, and the tool supplies no number of its own. Second:
+**a declared cap above 8192 is the cap in force** -- the sweep declares it, the manifest records
+it, the receipt prints it, and the store cuts at it, not at a module default. A mandatory
+declaration over a store that ignores it would be the very failure the declaration exists to
+prevent, with a receipt attached, so CD5 and CD6 are as much this file's centre as CD1 is.
 
-**The answers this file is frozen against** (D1 to D14):
-D1 there is no default anywhere in ``src/``; D2 a sweep file with no ``[capture]`` table declares
-nothing, is not refused, and its rows are stored **uncut**; D3 "no cap" is declarable and its
-spelling is the string ``"none"``, and exactly that spelling; D4 the missing declaration and the
-malformed one are two refusals; D5 the funnel takes the run's limit as ``int | None``; D6 one
-``_declared_limit`` helper; D7 the cut's arithmetic does not move; D8 one constant renamed, two
-deleted; D9 the manifest records the declaration as declared; D10 the container refuses a payload
-short of a field; D11 the migration is a hard error with no warning release; D12 ``CaptureSpec``
-becomes ``kw_only``; D13 ``t4.toml``'s value stays 8192 and only its comment moves; D14 ``--resume``
-is gated on the cap and ``--pair-with`` is not.
+**What this file pins.** There is no default anywhere in ``src/``. A sweep file with no
+``[capture]`` table declares nothing, is not refused, and its rows are stored **uncut**. "No cap"
+is declarable and its spelling is the string ``"none"``, and exactly that spelling. The missing
+declaration and the malformed one are two refusals. The funnel takes the run's limit as
+``int | None``, read by one ``_declared_limit`` helper; declaring a cap moves where the cut falls,
+not how it is computed. ``OBSERVATION_ROUTING_BYTES`` (8192) decides where a stored value lives
+and is not a cap. The manifest records the declaration as declared. The container refuses a
+payload short of a field. A sweep file that asks for capture without a cap is a hard error, with
+no warning first. ``CaptureSpec`` is ``kw_only``. ``--resume`` is gated on the cap and
+``--pair-with`` is not.
 
-**Invariant-to-test map** (28 functions, 59 collected ids; the id counts below sum to 59):
+**Invariant-to-test map**
 
 | Invariant | Tests |
 |---|---|
-| CD1 | ``test_cd1_*`` (3 functions, 3 ids) |
-| CD2 | ``test_cd2_*`` (3 functions, 14 ids) |
-| CD3 | ``test_cd3_*`` (1 function, 1 id) |
-| CD4 | ``test_cd4_*`` (3 functions, 4 ids; the fourth retired into A10's P10-9, see below) |
-| CD5 | ``test_cd5_*`` (1 function, 3 ids) |
-| CD7 | ``test_cd7_*`` (1 function, 1 id) |
-| CD8 | ``test_cd8_*`` (3 functions, 9 ids) |
-| CD9 | ``test_cd9_*`` (6 functions, 10 ids) |
-| CD10 | ``test_cd10_*`` (2 functions, 8 ids) |
-| CD11 | ``test_cd11_*`` (4 functions, 4 ids) |
-| CD12 | ``test_cd12_*`` (1 function, 2 ids) |
+| CD1 | ``test_cd1_*`` |
+| CD2 | ``test_cd2_*`` |
+| CD3 | ``test_cd3_*`` |
+| CD4 | ``test_cd4_*`` |
+| CD5 | ``test_cd5_*`` |
+| CD7 | ``test_cd7_*`` |
+| CD8 | ``test_cd8_*`` |
+| CD9 | ``test_cd9_*`` |
+| CD10 | ``test_cd10_*`` |
+| CD11 | ``test_cd11_*`` |
+| CD12 | ``test_cd12_*`` |
 
-**Cells.** Every test here runs in both cells, pandas 2.3.3 and pandas 3.0.5, and
-the measured result is that **no CD invariant is cell-specific**: this change adds no Parquet column
-and no store read path. Every stored byte it moves travels inside the ``trace`` / ``trace_obs`` JSON
-strings A7 registered in ``store._NULLABLE_STRING_COLUMNS``. Where a test reads a trace column
+**pandas.** No CD invariant depends on the pandas major version: CD adds no Parquet column and no
+store read path. Every stored byte it moves travels inside the ``trace`` / ``trace_obs`` JSON
+strings registered in ``store._NULLABLE_STRING_COLUMNS``. Where a test reads a trace column
 directly (CD7) it reads it raw through ``pyarrow`` and tests nullness with ``is None``,
-never ``pd.isna`` and never a truth test (as in A8a and A22). The map above is
-therefore **59 + 59 = 118 over two cells against the eleven invariants it lists**, and none of
-them is missing from either cell.
+never ``pd.isna`` and never a truth test (as in A8a and A22).
 
-**Named gaps, not pinned.** The host/container version handshake : a new
-host declaring ``"none"`` against a pre-CD image sends ``null``, which raises inside the child in the
-wrong place with the wrong words, and nothing here catches it because nothing can from either side.
-The Modal path is asserted at the transport functions only (CD8) and never through a container.
-``diff``'s ``truncated`` is still the horizon count and still owed from the truncation-surfacing change.
+**Named gaps, not pinned.** The host/container version handshake: a new host declaring
+``"none"`` against a container image from before the declaration sends ``null``, which raises
+inside the child in the wrong place with the wrong words, and nothing here catches it because
+nothing can from either side. The Modal path is asserted at the transport functions only (CD8)
+and never through a container. ``diff``'s ``truncated`` is the horizon count, not a count of cut
+observations.
 """
 
 from __future__ import annotations
@@ -97,7 +89,7 @@ HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 TRUNCATED_KEY = "poisson_prove.truncated"
 
-#: D8: the value does not move, only the name and the job the name claims.
+#: ``OBSERVATION_ROUTING_BYTES``: where a stored value lives, not where it is cut.
 ROUTING_BYTES = 8192
 RETIRED_CONSTANTS = ("OBSERVATION_LIMIT_BYTES", "OBSERVATION_HEAD_BYTES", "OBSERVATION_TAIL_BYTES")
 CAPTURE_FIELDS_SPEC = ("instrument", "content", "max_observation_bytes", "max_spans")
@@ -110,21 +102,20 @@ MANIFEST_CAPTURE_KEYS = frozenset({
 CD_E1_FIRST_LINE = "[capture].max_observation_bytes is required and has no default."
 #: What the rest of CD-E1 must contain, and what it must not. The second list is the whole of
 #: what it must never say: an error message that hands out one number to everyone who meets it has
-#: restored the removed default, by another route.
+#: put a default back, by another route.
 CD_E1_MUST_CONTAIN = ("max_observation_bytes", '"none"', "1024", "8192", "64", "docs/what-capture-stores.md")
 CD_E1_MUST_NOT_CONTAIN = ("65536", "measured", "airline", "8 KB", "50 KB")
 
-#: A value between the funnel's old constant (8,192 bytes) and twice it: kept whole under a
-#: raised cap, cut under a lowered one.
+#: A value between 8,192 bytes and twice that: kept whole under a raised cap, cut under a
+#: lowered one.
 BIG_VALUE = "x" * 12000
 BIG_BYTES = 12000
-#: A value above the old constant and any limit the tests here declare, and one far above both.
+#: A value above 8,192 bytes and any limit the tests here declare, and one far above both.
 HUGE_VALUE, HUGE_BYTES = "y" * 20000, 20000
 NONE_VALUE, NONE_BYTES = "n" * 200000, 200000
 
 #: CD12, as a rule over what ships: every sweep spec under ``examples/`` and the packaged one.
-#: PF8: the pilot specs this named left the repository,
-#: so the files are found, not listed; a ``.toml`` there with no ``target_id`` is not a sweep spec.
+#: The files are found, not listed; a ``.toml`` there with no ``target_id`` is not a sweep spec.
 SHIPPED_SWEEP_FILES = tuple(
     str(path.relative_to(REPO))
     for path in sorted([*REPO.glob("examples/**/*.toml"), *(REPO / "src" / "poisson_prove" / "examples").glob("*.toml")])
@@ -132,7 +123,8 @@ SHIPPED_SWEEP_FILES = tuple(
 )
 assert SHIPPED_SWEEP_FILES, "the packaged quickstart spec at least ships"
 
-#: CD11: ``split``'s envelope/bodies partition over the fixture below, at the base commit.
+#: CD11: ``split``'s envelope/bodies partition over the fixture below, hashed with the old
+#: ``proofload.`` schema string and span prefix put back (see the test).
 SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
 
 
@@ -204,7 +196,7 @@ def manifest(run_id: str, capture: Mapping[str, Any] | None) -> RunManifest:
 
 def raw_column(root: Path, run_id: str, column: str) -> dict[int, Any]:
     """One stored column exactly as written, read raw through ``pyarrow`` from the store the test
-    made at ``root``, so a null is ``None`` on every pandas (standing rule 15)."""
+    made at ``root``, so a null is ``None`` on every pandas."""
     out: dict[int, Any] = {}
     for part in sorted((root / run_id / "episodes").glob("part-*.parquet")):
         table = pq.read_table(part, columns=["replicate_index", column])
@@ -327,7 +319,8 @@ def one_stored_span(store: Store, run_id: str) -> Span:
 
 
 def test_cd1_a_capture_table_with_no_cap_is_refused_with_cd_e1(tmp_path: Path) -> None:
-    """D1 and D4. Sole catch for a build that defaults in the sampler and errors nowhere.
+    """No default, and a missing cap is its own refusal. The only test that catches code which
+    defaults in the sampler and errors nowhere.
 
     The first line is pinned byte for byte; the rest by clause, in both directions -- what CD-E1
     must say and what it must never say."""
@@ -355,8 +348,9 @@ def test_cd1_the_cli_refuses_the_same_file_and_creates_no_run_directory(tmp_path
 
 
 def test_cd1_a_sweep_file_with_no_capture_table_at_all_is_not_refused(tmp_path: Path) -> None:
-    """D2's first half, and the reason CD-E1 is at ``_capture_table`` and not at ``load``: a sweep
-    that never asked for capture is not made to declare a cap for capture it will not do."""
+    """A sweep with no ``[capture]`` table is not refused, and the reason CD-E1 is at
+    ``_capture_table`` and not at ``load``: a sweep that never asked for capture is not made to
+    declare a cap for capture it will not do."""
     spec = SweepSpec.load(write(tmp_path / "bare.toml", sweep_toml(None)))
     assert spec.capture is None
 
@@ -365,15 +359,17 @@ def test_cd1_a_sweep_file_with_no_capture_table_at_all_is_not_refused(tmp_path: 
 
 
 def test_cd2_none_is_the_second_spelling(tmp_path: Path) -> None:
-    """D3. ``"none"`` parses to ``None``, which means *store every value whole*."""
+    """``"none"`` is the spelling of no cap: it parses to ``None``, which means *store every value
+    whole*."""
     spec = SweepSpec.load(write(tmp_path / "none.toml", sweep_toml({"instrument": [], "max_observation_bytes": "none"})))
     assert spec.capture is not None and spec.capture.max_observation_bytes is None
 
 
 @pytest.mark.parametrize("value", ["None", "NONE", "None ", "unbounded", "", "8192", 0, -1, 1.0, True, [], {}])
 def test_cd2_every_other_spelling_is_refused_with_cd_e2(tmp_path: Path, value: Any) -> None:
-    """Exactly that spelling. ``"8192"`` is here because a person who quotes the number is the one
-    D4 says already knows what the field is: one line, naming the field and both accepted forms."""
+    """Exactly that spelling. ``"8192"`` is here because a person who quotes the number already
+    knows what the field is, so the malformed refusal is its own: one line, naming the field and
+    both accepted forms."""
     with pytest.raises(SamplerError) as excinfo:
         SweepSpec.load(write(tmp_path / "bad.toml", sweep_toml({"instrument": [], "max_observation_bytes": value})))
     message = str(excinfo.value)
@@ -392,7 +388,8 @@ def test_cd2_one_is_one(tmp_path: Path) -> None:
 
 
 def test_cd3_capture_spec_has_no_default_cap_and_is_kw_only() -> None:
-    """D1 and D12. Sole catch for a build that moves the default from three places to one."""
+    """No default, and ``CaptureSpec`` is keyword-only. The only test that catches code which moves
+    the default from three places to one."""
     from poisson_prove.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == CAPTURE_FIELDS_SPEC
@@ -411,7 +408,7 @@ def test_cd3_capture_spec_has_no_default_cap_and_is_kw_only() -> None:
 
 
 def test_cd4_neither_cut_function_has_a_default_limit() -> None:
-    """D1: a keyword default is a default. Both are public, and both now raise without one."""
+    """No default: a keyword default is a default. Both are public, and both raise without a limit."""
     from poisson_prove.trace import finalize, truncate_observations
 
     big = trace_of(span(1, output=BIG_VALUE))
@@ -422,8 +419,9 @@ def test_cd4_neither_cut_function_has_a_default_limit() -> None:
 
 
 def test_cd4_limit_none_returns_the_trace_itself_at_both() -> None:
-    """D3 and D2 share this code path, and ``is`` rather than ``==`` is the point: a trace that is
-    not cut is stored byte for byte as it arrived, and ``replace(trace)`` would not be."""
+    """``"none"`` and a run with no table share this code path, and ``is`` rather than ``==`` is the
+    point: a trace that is not cut is stored byte for byte as it arrived, and ``replace(trace)``
+    would not be."""
     from poisson_prove.trace import finalize, truncate_observations
 
     big = trace_of(span(1, output=HUGE_VALUE, attrs={"app.big": HUGE_VALUE}))
@@ -433,7 +431,7 @@ def test_cd4_limit_none_returns_the_trace_itself_at_both() -> None:
 
 @pytest.mark.parametrize("limit", [0, -1])
 def test_cd4_a_limit_below_one_is_refused_naming_the_parameter(limit: int) -> None:
-    """``None`` is *no cut*; ``0`` is not a spelling of it (D3), and neither function may read it as one."""
+    """``None`` is *no cut*; ``0`` is not a spelling of it, and neither function may read it as one."""
     from poisson_prove.trace import finalize, truncate_observations
 
     big = trace_of(span(1, output=BIG_VALUE))
@@ -441,16 +439,6 @@ def test_cd4_a_limit_below_one_is_refused_naming_the_parameter(limit: int) -> No
         with pytest.raises(ValueError) as excinfo:
             call()
         assert "limit" in str(excinfo.value), str(excinfo.value)
-
-
-# ``test_cd4_finalizes_a10_guard_is_unchanged`` retired into A10's P10-9, as a recorded
-# A10 update (A10 W2). Reason: it pinned
-# that ``finalize`` refuses any non-``None`` declaration with a message naming A10, which was the
-# clause's job while A10 was unbuilt; A10 builds that half, so ``match="A10"`` is false by design.
-# Owner: A10. Cover: ``tests/test_a10_declared.py`` P10-9, which keeps the guard and re-aims it --
-# ``declaration=object()`` and ``declaration="verify"`` each still raise ``TypeError``, now naming
-# ``Declaration``, and a real ``Declaration`` does not raise. Body at retirement:
-# ``with pytest.raises(TypeError, match="A10"): finalize(trace_of(span(1)), declaration=object(), limit=64)``.
 
 
 # ---------- CD5: what is declared is what the store does, read back through the store ----------
@@ -468,12 +456,12 @@ def test_cd4_a_limit_below_one_is_refused_naming_the_parameter(limit: int) -> No
 def test_cd5_the_declared_limit_is_the_limit_in_force(
     tmp_path: Path, declared: Any, target: str, value_bytes: int, whole: bool
 ) -> None:
-    """**The defect this change exists to fix.** Measured at ``1f5491b``: the raised case stores
-    6144 + 2048 under a manifest reading 131072. Sole catch for the shipped funnel, and the one leg
-    A8b's P8-23 does not reach -- its raised-limit case stops at the recorder.
+    """**A declared cap above 8192 is the cap in force.** A store that cut at a module default would
+    keep 6144 + 2048 under a manifest reading 131072. The only test of the store funnel, and the one
+    leg A8b's P8-23 does not reach -- its raised-limit case stops at the recorder.
 
     A real sweep file, a real local run, a real ``Store.append``, and the value read back through
-    ``Store.read``. Nothing here is hand-built (standing rule 14)."""
+    ``Store.read``. Nothing here is hand-built."""
     store, run_id = stored_run(tmp_path, {"instrument": [], "content": True, "max_observation_bytes": declared}, target)
     s = one_stored_span(store, run_id)
     got = s.attrs["gen_ai.input.messages"]
@@ -491,9 +479,9 @@ def test_cd5_the_declared_limit_is_the_limit_in_force(
 
 
 def test_cd7_a_run_with_no_capture_table_stores_a_rollouts_own_trace_uncut(tmp_path: Path) -> None:
-    """D2, **inverting** A8b's ``test_p8_26_a_run_with_no_capture_table_still_stores_a_rollouts_own_trace_cut``,
-    which this replaces. What reaches the funnel on that path is a rollout's own ``record()`` trace,
-    which the tool never promised to bound; uncut loses nothing, and its cost is disk, which is loud.
+    """No ``[capture]`` table: the run declares nothing and its rows are stored uncut. What reaches
+    the funnel on that path is a rollout's own ``record()`` trace, which the tool never promised to
+    bound; uncut loses nothing, and its cost is disk, which is loud.
 
     ``split`` has still routed the value out of the envelope -- by ``OBSERVATION_ROUTING_BYTES`` and
     not by any cap, because the store's layout is not a property of the run that wrote it."""
@@ -510,11 +498,12 @@ def test_cd7_a_run_with_no_capture_table_stores_a_rollouts_own_trace_uncut(tmp_p
 
 @pytest.mark.parametrize("missing", list(CAPTURE_FIELDS_SPEC))
 def test_cd8_a_payload_missing_a_field_is_refused_naming_it(missing: str) -> None:
-    """D10, CD-E3. A ``ValueError`` in the shipped shape and **not** a ``TypeError`` out of the
-    dataclass constructor: a ``TypeError`` inside a container names Python's contract, not the tool's.
+    """The container refuses a payload short of a field (CD-E3). A ``ValueError`` in the shipped
+    shape and **not** a ``TypeError`` out of the dataclass constructor: a ``TypeError`` inside a
+    container names Python's contract, not the tool's.
 
-    Under D1 there is no default to fall back to, so an intersection over a short payload would
-    build a spec with no cap -- which is the same silent skew the unknown-field check exists for."""
+    There is no default to fall back to, so an intersection over a short payload would build a spec
+    with no cap -- which is the same silent skew the unknown-field check exists for."""
     from poisson_prove.capture import CaptureSpec
     from poisson_prove.executor_modal import _capture_payload, _capture_request
 
@@ -553,8 +542,8 @@ def test_cd8_the_round_trip_reconstructs_the_spec_exactly(spec_kwargs: dict[str,
 
 
 def test_cd8_the_shipped_refusals_are_unchanged_and_both_field_tuples_are_equal() -> None:
-    """A8b's P8-24, carried through: an unknown key and the retired spelling are still refused, and
-    the sampler's copy of the field names still equals the transport's."""
+    """As in A8b's P8-24: an unknown key and the retired spelling are refused, and the sampler's copy
+    of the field names equals the transport's."""
     from poisson_prove.executor_modal import _CAPTURE_FIELDS as TRANSPORT_FIELDS
     from poisson_prove.executor_modal import _capture_request
     from poisson_prove.sampler import _CAPTURE_FIELDS as SAMPLER_FIELDS
@@ -588,11 +577,12 @@ def read_capture_record(store: Store, run_id: str) -> dict[str, Any]:
     ids=["int", "none", "one"],
 )
 def test_cd9_the_manifest_records_the_declaration_as_declared(tmp_path: Path, declared: Any, recorded: Any) -> None:
-    """D9: the manifest is a record of the *request*, so it carries what was requested in the words
-    it was requested in. ``None`` maps back to the string at ``_capture_record`` and at that one site.
+    """The manifest records the declaration as declared: it is a record of the *request*, so it
+    carries what was requested in the words it was requested in. ``None`` maps back to the string at
+    ``_capture_record`` and at that one site.
 
-    Sole catch for a build that records JSON ``null`` for ``"none"`` -- which would reach the
-    truncation-surfacing change's echo as the Python spelling ``None`` or be dropped by its ``*_bytes`` filter."""
+    The only test that catches code which records JSON ``null`` for ``"none"`` -- which the report's
+    cap echo would print as the Python spelling ``None`` or drop with its ``*_bytes`` filter."""
     store, run_id = stored_run(
         tmp_path, {"instrument": [], "content": True, "max_observation_bytes": declared}, "outcome_rollout"
     )
@@ -603,8 +593,9 @@ def test_cd9_the_manifest_records_the_declaration_as_declared(tmp_path: Path, de
 
 
 def test_cd9_a_run_with_no_capture_table_writes_no_capture_record(tmp_path: Path) -> None:
-    """D2's manifest half, and the reason D9 mints no ``none declared`` spelling for it: there is
-    no record at all, and the truncation-surfacing change's ``not recorded`` already says exactly that."""
+    """A run with no table, in the manifest, and the reason the manifest has no ``none declared``
+    spelling for it: there is no record at all, and the report's ``not recorded`` already says
+    exactly that."""
     store, run_id = stored_run(tmp_path, None, "outcome_rollout")
     manifest = store.manifest(run_id) if hasattr(store, "manifest") else None
     assert manifest is not None
@@ -677,21 +668,19 @@ def int_vs_none(declared_runs: dict[str, Any]) -> dict[str, str]:
 
 @pytest.mark.parametrize("surface", ["report.md", "receipt.html", "viewer page"])
 def test_cd9_every_surface_reads_the_declaration_as_declared(int_vs_none: dict[str, str], surface: str) -> None:
-    """D9, through the CLI on stored runs. The int reads as the number, and
+    """The declaration as declared, through the CLI on stored runs. The int reads as the number, and
     ``"none"`` reads as ``none`` -- **not** as ``not recorded``, which is what a run that never
     asked for capture reads and is a different fact.
 
-    Measured at the base commit and reported as a finding: ``report._observation_cap`` keeps an
-    entry only when its value ``isinstance(value, int)``, so the string ``"none"`` is dropped and
-    this test reads ``not recorded`` on the shipped build. D9's "with no change to them" does not
-    hold for the ``"none"`` spelling."""
+    ``report._observation_cap`` keeps the string ``"none"`` as well as ints; dropping it would print
+    ``not recorded`` for a run that declared every value whole."""
     labels = provenance_of(int_vs_none[surface], html=surface != "report.md")
     assert labels["observation cap a"] == "max_observation_bytes=65536", labels
     assert labels["observation cap b"] == "max_observation_bytes=none", labels
 
 
 def test_cd9_a_run_with_no_capture_table_still_reads_not_recorded(declared_runs: dict[str, Any]) -> None:
-    """The fourth case, a run with no table, and the one the truncation-surfacing change already gets right."""
+    """The fourth case, a run with no table, which reads ``not recorded``."""
     root, ids, out = declared_runs["root"], declared_runs["ids"], declared_runs["out"] / "bare"
     code, _, err = run_cli(["--store", str(root), "report", ids["int"], ids["bare"], "--event", "fell",
                             "--x", "x", "--out", str(out), "--permutations", "50", "--seed", "0"])
@@ -718,8 +707,9 @@ def test_cd9_inspect_names_the_limit_the_run_recorded(tmp_path: Path) -> None:
 
 
 def test_cd9_a_run_that_declared_none_has_nothing_to_report_cut(tmp_path: Path) -> None:
-    """D3 end to end: ``"none"`` is *store every value whole*, so a 200,000-byte observation produces
-    no cut line at all. Sole catch, with CD5's third id, for a build that reads ``"none"`` as a number."""
+    """``"none"`` end to end: it is *store every value whole*, so a 200,000-byte observation produces
+    no cut line at all. With CD5's third case, the only test that catches code which reads
+    ``"none"`` as a number."""
     store, run_id = stored_run(
         tmp_path, {"instrument": [], "content": True, "max_observation_bytes": "none"}, "huge_rollout", "uncut"
     )
@@ -746,12 +736,13 @@ RESUME_ROWS: tuple[tuple[str, dict[str, Any] | None, dict[str, Any] | None, bool
 def test_cd10_resume_is_gated_on_the_cap(
     tmp_path: Path, name: str, recorded: dict[str, Any] | None, declared: dict[str, Any] | None, resumes: bool
 ) -> None:
-    """D14, CD-E4, and the seven ``RESUME_ROWS``. One run directory whose rows were cut at two limits
-    under a manifest naming one is this change's own failure mode, reachable by a flag.
+    """``--resume`` is gated on the cap (CD-E4), over the seven ``RESUME_ROWS``. One run directory
+    whose rows were cut at two limits under a manifest naming one is the failure the declaration
+    exists to prevent, reachable by a flag.
 
     The retired spelling ``max_span_bytes`` is compared as the same field, and "recorded nothing"
-    against "declares something" counts as a difference in **both** directions. Sole catch for a
-    gate that compares only when both keys are ``max_observation_bytes``."""
+    against "declares something" counts as a difference in **both** directions. The only test that
+    catches a gate which compares only when both keys are ``max_observation_bytes``."""
     base = {"requested": True, "active": True, "reason": None, "instrumented": [],
             "semconv": "1.42.0", "alias_map_version": "1", "content": True, "max_spans": 1000}
     store = Store(tmp_path / "store")
@@ -770,9 +761,8 @@ def test_cd10_resume_is_gated_on_the_cap(
 
 
 def test_cd10_pairing_is_not_gated_and_the_report_prints_both_caps(tmp_path: Path) -> None:
-    """``diff`` does not read observations at all (CAP3), and the report has printed both
-    runs' caps on separate lines since the truncation-surfacing change, so a reader sees the difference rather
-    than being protected from it."""
+    """``diff`` does not read observations at all, and the report prints both runs' caps on
+    separate lines, so a reader sees the difference rather than being protected from it."""
     base = {"requested": True, "active": True, "reason": None, "instrumented": [],
             "semconv": "1.42.0", "alias_map_version": "1", "content": True, "max_spans": 1000}
     store = Store(tmp_path / "store")
@@ -789,8 +779,8 @@ def test_cd10_pairing_is_not_gated_and_the_report_prints_both_caps(tmp_path: Pat
 
 
 def test_cd11_the_routing_constant_is_exported_and_is_8192() -> None:
-    """D8. The value stays 8192, so ``split`` classifies exactly as it did and no stored
-    byte moves; what changes is the name and the claim the name makes."""
+    """The routing constant is 8192, so ``split`` classifies every stored row the way it was
+    written; its name says it routes, not that it caps."""
     import poisson_prove.trace as trace_module
 
     assert trace_module.OBSERVATION_ROUTING_BYTES == ROUTING_BYTES
@@ -818,14 +808,14 @@ def split_fixture() -> Trace:
 
 
 def test_cd11_splits_partition_of_the_fixture_is_unchanged() -> None:
-    """Sole catch for a rename that changes the number with it. A build that "helpfully" threads the
-    run's limit into ``split`` changes which column stored bytes live in and breaks ``Store.read`` on
-    rows written by any other build."""
+    """The only test that catches a change of the routing number. Code that threads the run's limit
+    into ``split`` changes which column stored bytes live in and breaks ``Store.read`` on rows
+    written with any other limit."""
     envelope, bodies = split(split_fixture())
     assert sorted(envelope["spans"][0]["attrs"]) == ["app.at", "app.under", "poisson_prove.episode", "poisson_prove.run_id"]
     assert sorted(next(iter(bodies.values()))["attrs"]) == ["app.over", "app.wrapped", "gen_ai.input.messages"]
-    # PF0: the trace schema string and the span key prefix are renamed; with the
-    # two renames undone, the partition is the base commit's byte for byte.
+    # PF0: the trace schema string and the span key prefix carry the new names; with the old
+    # names put back, the partition hashes to SPLIT_PARTITION_SHA256 byte for byte.
     as_written = json.dumps([envelope, bodies], sort_keys=True)
     assert '"poisson-prove.trace/1"' in as_written and '"poisson_prove.' in as_written and "proofload" not in as_written
     as_0_0_1 = as_written.replace('"poisson-prove.trace/1"', '"proofload.trace/1"').replace('"poisson_prove.', '"proofload.')
@@ -847,12 +837,8 @@ def test_cd11_split_does_not_take_a_limit() -> None:
 
 @pytest.mark.parametrize("relative", SHIPPED_SWEEP_FILES)
 def test_cd12_every_shipped_sweep_file_declares_and_loads(relative: str) -> None:
-    """Sole catch for a build that ships an example its own parser rejects: every sweep spec the
-    repository ships loads, and one with a ``[capture]`` table declares its cap as a number.
-
-    PF8: the two example studies' files this read, and the three tests that pinned one
-    study's pre-registered cap, its config hashes and its comment, left with the pilots; the rule
-    stays, over the files that ship."""
+    """The only test that catches an example the parser rejects: every sweep spec the repository
+    ships loads, and one with a ``[capture]`` table declares its cap as a number."""
     spec = SweepSpec.load(REPO / relative)
     if spec.capture is not None:
         cap = spec.capture.max_observation_bytes

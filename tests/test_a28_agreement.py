@@ -1,67 +1,52 @@
-"""A28 frozen tests: invariants G1-G22 of M14's agreement digest,
-written before ``tree.agreement_digest``, ``TreeResult.agreement`` and the two renderers' digest
-clauses exist, against ``03d7ed2`` (A24's build; ``src/poisson_prove/{tree,report,viewer,diff}.py``
-are byte-identical to ``38e8df9``, measured).
+"""A28 frozen tests: invariants G1-G22 of M14's agreement digest -- ``tree.agreement_digest``,
+``TreeResult.agreement`` and the two renderers' digest clauses.
 
-**What closes.** C16: two 5-cell pairs over ``('fail', 'crash')`` with the same salt and the same
-five configs, different outcome mixes, crossed, are accepted by both renderers at ``03d7ed2`` --
-one root reading *rejected, p = 0.0033* beside the other's *not rejected, p = 0.90* -- and are
-refused on all four crossings by a source carrying the digest's interface, without refusing any
-tree grown beside its own diff (G2, G10, G11).
+**What the digest closes.** Two 5-cell pairs over ``('fail', 'crash')`` with the same salt and the
+same five configs, different outcome mixes, crossed -- one root reading *rejected, p = 0.0033*
+beside the other's *not rejected, p = 0.90* -- pass the events, arity and multiset clauses, so
+without the digest both renderers would draw a tree grown on one pair beside the other's diff.
+They refuse all four crossings, without refusing any tree grown beside its own diff (G2, G10,
+G11). The test names call this crossed pair C16's.
 
-**Twenty-two invariants, not twenty.** G1-G20 were specified in advance. G21 and G22 are the knob
-clause, taken as written: a second clause in each renderer comparing ``tree.root.method`` and
-``tree.root.q`` to the diff's, with its own nameable message, after the digest clause. Measured
-cost the spec did not list: ``test_s29_viewer.py``'s first W16 test rendered a ``mcnemar_bh`` tree
-beside a ``fisher_bh`` diff to show a same-events tree is accepted; the update re-grows that tree
-under a different ``seed`` instead, which keeps the clause's point (events and cells decide, knobs
-the digest ignores do not) and no longer pins the behaviour the knob clause removes.
+**The knob clause (G21, G22).** A second clause in each renderer compares ``tree.root.method`` and
+``tree.root.q`` to the diff's, with its own nameable message, after the digest clause. So
+``test_s29_viewer.py``'s first W16 test shows that a same-events tree is accepted by growing it
+under a different ``seed``: events and cells decide, and knobs the digest ignores do not.
 
-**The canonical form is the ``json.dumps`` one, and G17's reference is written from it.** The
-first published ``b1423bc1...`` / ``1ac9386b...`` were measured on a prototype, which
-joined rows with ``\\x1f`` and newlines rather than ``json.dumps`` -- measured here by re-running
-that form: it reproduces those values, and the ``json.dumps`` form does not. G17 recomputes the
-JSON form's digest in this file from the generated lattice pair's design counts
-(``lattice.counts``), at K = 1 and K = 2, and requires both methods to carry it.
+**The canonical form is the ``json.dumps`` one, and G17's reference is written from it.** A join
+of rows with ``\\x1f`` and newlines gives other values. G17 recomputes the JSON form's digest in
+this file from the generated lattice pair's design counts (``lattice.counts``), at K = 1 and
+K = 2, and requires both methods to carry it.
 
-**The freeze commit is red here by construction.** On the update commit, before any source edit, the red set in this file is **fifteen**:
-G1-G5, G7-G11, G13, G16, G17, G21 and G22. Every one reaches ``agreement_digest``,
-``.agreement``, ``/4`` or a refusal that does not exist yet, inside a test body, so
-``--collect-only`` is exact on the bare tree. **Green before and after, named so their green is
-not read as evidence:** G6 (``omnibus`` and ``RootResult`` do not move), G12 (the five older
-refusals and their messages -- a preservation clause, and the sole catch for mutant 11 all the
-same) and G15 (``cli.py`` never mentions ``agreement``). The two-cell rule does not bind: one
-environment, one cell.
+**Every test reaches** ``agreement_digest``, ``.agreement`` and the digest refusals inside its
+body. G6 (``omnibus`` and ``RootResult`` do not move), G12 (the five older refusals and their
+messages) and G15 (``cli.py`` never mentions ``agreement``) are preservation clauses.
 
 **Fixture limits, stated rather than left to be rediscovered:**
 
 - **The lattice pair** (``tests/lattice.py``) is one pair and cannot be crossed with anything; it
-  guards G2, G6, G17's method half and every round trip, and nothing about C16.
-- **The crossed pair P/Q** is the smallest shape that reproduces the measured hole; it says nothing
+  guards G2, G6, G17's method half and every round trip, and nothing about the crossed pair.
+- **The crossed pair P/Q** is the smallest shape that reproduces the hole; it says nothing
   about how a refusal reads on a 656-hash mismatch. **R**, four cells over the same events and salt,
   exists only so the arity clause has a same-events input to fire on (G12).
 - **A27's vocabulary and hostile pairs** have disjoint ``task`` values and so disjoint hashes; they
-  exercise the multiset clause (G12) and can never reach the digest clause. Their red or green says
-  nothing about A28's guard, and G10's fixture is deliberately not them.
+  exercise the multiset clause (G12) and can never reach the digest clause. Their passing says
+  nothing about the digest, and G10's fixture is deliberately not them.
 - **The holed pair** (five configs in arm a, four in arm b, plus an event nobody ran) is one shape
   of hole; it does not exercise a diff whose ``cells`` carry a hash the rebuild lacks.
 - **A ``mcnemar_bh`` lattice pair** shows the digest is scheme-blind, not how far ``units`` and ``cells``
   can drift apart.
 
-**Mutants, measured over the whole suite on copies of the shadow shim** (the planned
-twelve plus 13 and 14 for the knob clause; control 1866 passed with W20's whole-file ``tree.py`` clause the
-one expected red, present in every row and not counted): 1 viewer digest clause deleted -> G10, G13;
-2 report digest clause deleted -> G11, G13; 3 ``_require_agreement`` stops raising -> G5, and S25's
-O13, S26's F30 and S27's L24, which already pinned that refusal -- the spec's "G5 alone" holds in
-this file only; 4 mint from ``cells`` instead of the rebuilt tuples -> survives by construction, as
-predicted; 5 sort dropped -> every render refuses, 18 failures and 131 fixture errors; 6
-``AGREEMENT_SCHEMA`` dropped -> G16, G17; 7 separator join instead of ``json.dumps`` -> G16, G17,
-**not** the survivor the spec predicted, because G17 pins values of the JSON form; 8 ``SCHEMA``
-left at ``/3`` -> G9 and the seven schema literals of M13, S21 and S29; 9 field carried but not
-serialised -> G7, G8, G9, L10, W12; 10 digest compared to itself -> G10, G11, G13; 11 digest clause
-before the multiset clause -> G12 and W16, nothing else; 12 digest widened with ``multi.method`` ->
-G17, G21, G22; 13 viewer knob clause deleted -> G21 alone; 14 report knob clause deleted -> G22
-alone.
+**Which tests fail on which defect**: the viewer's digest clause deleted -> G10, G13; the report's
+-> G11, G13; ``_require_agreement`` not raising -> G5 here (and S25's O13, S26's F30 and S27's
+L24, which pin that refusal too); the digest computed from ``cells`` instead of the rebuilt tuples
+-> nothing, by construction (no fixture lets the two drift apart); the sort dropped -> every
+render refuses; ``AGREEMENT_SCHEMA`` dropped -> G16, G17; a separator join instead of
+``json.dumps`` -> G16, G17, because G17 pins values of the JSON form; ``SCHEMA`` left at an older
+version -> G9 and the schema literals of M13, S21 and S29; the field carried but not serialised
+-> G7, G8, G9, L10, W12; the digest compared to itself -> G10, G11, G13; the digest clause before
+the multiset clause -> G12 and W16, nothing else; the digest widened with ``multi.method`` ->
+G17, G21, G22; the viewer's knob clause deleted -> G21 alone; the report's -> G22 alone.
 
 Restated rather than imported, as every frozen test file's helpers are: the store builders and
 the two-value cells.
@@ -103,19 +88,18 @@ LATTICE_ROOT = lattice.root()
 # ---------- the literals ----------
 
 #: G9. The schema in force.
-# LS update: /5 retires with the ``summary`` key.
+# The ``summary`` key (LS) took the schema past /5.
 SCHEMA = "poisson-prove.viewpair/7"
-#: G4, G5. The four episode counts the agreement digest is minted over, per (event, cell).
+#: G4, G5. The four episode counts the agreement digest is computed over, per (event, cell).
 REBUILD_COLUMNS = ("n_a", "n_b", "events_a", "events_b")
 #: G7. ``TreeResult``'s six fields in order and ``to_json()``'s six keys in the same order.
 TREE_RESULT_FIELDS = ("root", "grouping", "fault_lines", "leaves", "bound", "agreement")
 #: G17. The tag inside the hashed payload; never a sibling key.
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
-#: G17. The schema string the 0.0.1 builds hashed behind, before the PF0 freeze renamed it.
+#: G17. The schema string version 0.0.1 hashed behind.
 OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
-# The PF0 freeze kept the old fixture's 0.0.1 digests beside its renamed ones; they were never
-# asserted in this file (a dead digest) and went with that fixture. G17 now checks the digest the
-# trees carry is not the old string's, from the reference. Lattice port, 2026-10-25.
+# G17 checks that the digest the trees carry is not the one this older string gives, from the
+# reference.
 
 
 def reference_agreement(events: Sequence[str], schema: str = AGREEMENT_SCHEMA) -> str:
@@ -136,7 +120,7 @@ HEX64 = re.compile(r"^[0-9a-f]{64}$")
 #: G6. ``omnibus``'s signature as ``test_s27_leaves.py`` pins it, restated.
 OMNIBUS_SIGNATURE = "(a: 'pd.DataFrame', b: 'pd.DataFrame', multi: 'MultiDiffResult', *, n_permutations: 'int' = 4000, seed: 'int' = 0) -> 'RootResult'"
 #: G12. The five pre-existing refusal messages, as substrings, so a digest clause placed ahead of
-#: them (mutant 11) or a reworded clause is noticed. The digest clause's own message must not
+#: them or a reworded clause is noticed. The digest clause's own message must not
 #: carry any of these, because at that point no cell and no count differs.
 VIEWER_EVENTS_MESSAGE = "the tree is over events"
 VIEWER_ARITY_MESSAGE = "cell-event units"
@@ -366,7 +350,7 @@ def test_g1_the_digest_and_the_field_are_64_hex_lowercase_strings(every_fixture:
 def test_g2_every_tree_grown_beside_its_own_diff_carries_the_digest_the_diff_recomputes(every_fixture: list[Grown]) -> None:
     """The invariant that makes the guard usable: over the lattice pair under both schemes at K = 1 and 2, the
     three crossed pairs, the holed pair with an event nobody ran, and A27's two pairs -- and the
-    holed pair's shape is asserted, so its green is the over-refusal check it is meant to be."""
+    holed pair's shape is asserted, so its passing is the over-refusal check it is meant to be."""
     for g in every_fixture:
         assert g.result.agreement == tree_mod.agreement_digest(g.multi), g.name
     holed = next(g for g in every_fixture if g.name == "holed")
@@ -406,11 +390,12 @@ def test_g4_changing_any_one_rebuild_integer_in_any_one_cell_of_any_one_event_ch
     assert len(moved) == len(p.multi.events) * 5 * len(REBUILD_COLUMNS)
 
 
-# ---------- G5, G6: the mint site, and what does not move ----------
+# ---------- G5, G6: where the digest is computed, and what does not move ----------
 
 
 def test_g5_tree_carries_the_digest_and_still_raises_on_both_paths_with_the_messages_unchanged(crossed: dict[str, Grown]) -> None:
-    """Sole catch for mutant 3. ``tree`` carries the digest the diff recomputes, and its two
+    """The one test here that fails if ``_require_agreement`` stops raising. ``tree`` carries the
+    digest the diff recomputes, and its two
     ``TreeError`` paths and their messages are pinned by substring: a cell rebuilt but absent from
     an event's family, and a rebuild that disagrees."""
     p = crossed["P"]
@@ -436,7 +421,7 @@ def test_g5_tree_carries_the_digest_and_still_raises_on_both_paths_with_the_mess
 
 
 def test_g6_omnibus_is_untouched_and_root_result_carries_no_digest(crossed: dict[str, Grown]) -> None:
-    """Green before and after: the signature literal, the return type, the
+    """Nothing here moves: the signature literal, the return type, the
     byte-equality of ``tree(...).root`` with ``omnibus(...)`` on the same knobs, and no digest on
     ``RootResult``, in either its fields or its payload."""
     p = crossed["P"]
@@ -480,7 +465,7 @@ def test_g9_the_structure_carries_the_schema_and_the_trees_agreement_and_renders
 
 
 def test_g10_the_viewer_refuses_c16s_crossed_tree_from_the_digest_clause_naming_neither_a_cell_nor_a_count(crossed: dict[str, Grown]) -> None:
-    """Sole catch for mutant 1. Both crossings; the three older clauses are shown unable to fire
+    """Fails if the viewer's digest clause is deleted. Both crossings; the three older clauses are shown unable to fire
     first (same events, same arity, same multiset), and the message names no hash of either pair
     and none of the three older clauses' phrases, because nothing they could name differs."""
     m = viewer()
@@ -500,7 +485,8 @@ def test_g10_the_viewer_refuses_c16s_crossed_tree_from_the_digest_clause_naming_
 
 
 def test_g11_the_report_refuses_c16s_crossed_tree_with_comparison_mismatch(crossed: dict[str, Grown]) -> None:
-    """Sole catch for mutant 2."""
+    """Fails if the report's digest clause is deleted: both crossings refused with a
+    ``ComparisonMismatch`` naming the digest and no hash, each pair's own tree accepted."""
     p, q = crossed["P"], crossed["Q"]
     for diff, other in ((p, q), (q, p)):
         same_family_shape(diff, other)
@@ -515,7 +501,7 @@ def test_g11_the_report_refuses_c16s_crossed_tree_with_comparison_mismatch(cross
 
 
 def test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_unchanged(crossed: dict[str, Grown], every_fixture: list[Grown]) -> None:
-    """Sole catch for mutant 11 (the digest clause ahead of the multiset clause), and the reason the
+    """Fails if the digest clause is placed ahead of the multiset clause, and is the reason the
     digest is an addition rather than a replacement. The viewer's events, arity and
     multiset clauses and the report's events and arity clauses each fire on the input that fired
     them before, with their vocabulary, and none of those refusals mentions the digest. The
@@ -567,12 +553,12 @@ def test_g15_cli_neither_binds_nor_reads_agreement() -> None:
 
 
 def test_g17_a_digest_is_not_a_config_hash_and_not_a_method_hash(crossed: dict[str, Grown], every_fixture: list[Grown]) -> None:
-    """The discrimination half on C16's fixture (identical ``config_hash`` sets, different
+    """The discrimination half on the crossed pair (identical ``config_hash`` sets, different
     counts, different digests) and the method-equality half on the lattice pair at K = 1 and K = 2:
     both methods carry the one digest this file's reference recomputes from the design's counts in
     the canonical form, so a later change that makes the form scheme-sensitive -- or drops the
-    schema tag (mutant 6), or widens it with ``multi.method`` (mutant 12), or changes the
-    serialiser (mutant 7) -- is caught rather than welcomed. The digest is not the one the 0.0.1
+    schema tag, or widens it with ``multi.method``, or changes the
+    serialiser -- is caught rather than welcomed. The digest is not the one the 0.0.1
     schema string gives."""
     p, q = crossed["P"], crossed["Q"]
     assert hashes_of(p) == hashes_of(q)
@@ -593,7 +579,7 @@ def test_g17_a_digest_is_not_a_config_hash_and_not_a_method_hash(crossed: dict[s
 
 
 def test_g21_the_viewer_refuses_a_tree_grown_under_another_method_or_q_naming_both_values(synth_root: Path, crossed: dict[str, Grown]) -> None:
-    """Sole catch for mutant 13. The digest is scheme-blind and q-blind by construction, so a tree
+    """Fails if the viewer's knob clause is deleted. The digest is scheme-blind and q-blind by construction, so a tree
     grown under ``mcnemar_bh`` or at ``q = 0.01`` passes the digest clause beside this pair's
     ``fisher_bh`` diff at ``q = 0.05`` -- asserted first -- and the knob clause is what refuses,
     naming both values. Not the digest's message: nothing the digest covers differs."""
@@ -610,7 +596,8 @@ def test_g21_the_viewer_refuses_a_tree_grown_under_another_method_or_q_naming_bo
 
 
 def test_g22_the_report_refuses_a_tree_grown_under_another_method_or_q_naming_both_values(synth_root: Path, crossed: dict[str, Grown]) -> None:
-    """Sole catch for mutant 14."""
+    """Fails if the report's knob clause is deleted: a tree grown under another method or ``q``
+    passes the digest, and the refusal names both values and not the digest."""
     p = crossed["P"]
     other_method = grown("P-mcnemar", synth_root, "p-a", "p-b", method="mcnemar_bh")
     other_q = grown("P-q", synth_root, "p-a", "p-b", q=OTHER_Q)

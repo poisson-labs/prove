@@ -1,25 +1,24 @@
-"""A22 + C13 frozen tests: invariants V1-V15 of the A22 pandas 3 port,
-written before ``store._NULLABLE_STRING_COLUMNS`` exists and before ``diff._coverage`` rebuilds
-its ``cause`` column from the records list.
+"""Invariants V1-V15 of the pandas 3 port: ``store._NULLABLE_STRING_COLUMNS`` reads a stored null
+back as ``None``, ``diff._coverage`` rebuilds its ``cause`` column from the records list, and the
+dependency parser reads PEP 508 names.
 
-**This frozen file runs in two cells and the invariant set does not partition between them.** The
-port's claim is a range -- *a stored null reads back as* ``None`` *on every pandas this
-package supports* -- and a single run proves one point in it. Every invariant here is asserted
-in both cells; what differs is which of them the **bare** tree already satisfies:
+**This file runs under two pandas versions and the invariant set does not partition between
+them.** The port's claim is a range -- *a stored null reads back as* ``None`` *on every pandas
+this package supports* -- and a single run proves one point in it. Every invariant here is
+asserted under both:
 
-- **pandas 2.3.3.** V1-V4, V6-V11 and V13 pass on the bare tree. The store normalisation and
-  the coverage rebuild are identities there (measured), so their green is
-  not evidence the builder did anything -- it is the port's "no-op on pandas 2" claim, and
-  it is asserted rather than assumed. V5, V12, V14 and V15 are the four that bite here.
-- **pandas 3.0.5.** V1, V2, V3, V7, V8, V9, V10 and V11 bite as well, because
+- **pandas 2.3.3.** The store normalisation and the coverage rebuild are identities here
+  (measured), so the read-path and coverage tests check the port's "no-op on pandas 2" claim:
+  it is asserted rather than assumed. V5, V14 and V15 do not depend on the pandas version.
+- **pandas 3.0.5.** V1, V2, V3, V7, V9 and V11 catch an unported read as well, because
   ``pyarrow.Table.to_pandas`` gives a ``str`` column with ``NaN`` for null and
-  ``DataFrame.from_records`` replaces a mixed column's ``None`` before the shipped
-  ``astype(object)`` guard at ``diff.py:945`` ever runs.
+  ``DataFrame.from_records`` replaces a mixed column's ``None`` before an ``astype(object)``
+  guard in ``diff.py`` ever runs.
 
 Twelve tests, one per invariant for twelve of the fifteen (V8, V10 and V12 have none here), in both
-cells: 12 + 12 = 24 ids over the two cells against the file's own 12, because no invariant is
-cell-specific. An invariant
-that could only be asserted under one pandas would be named here with the cell it is missing
+versions: 12 + 12 = 24 ids over the two runs against the file's own 12, because no invariant is
+version-specific. An invariant
+that could only be asserted under one pandas would be named here with the version it is missing
 from; there is none.
 
 **The two fixtures have opposite rules and that is the trap this file exists to avoid.** A
@@ -37,15 +36,10 @@ Fixture limits, stated rather than left to be rediscovered:
   its coverage rows come from the raw frames, not from ``censor()``.
 - The literal requirement list in V13 says nothing about the real ``pyproject.toml``; V14 and
   V15 assert that separately, deliberately.
-- Nothing here measures a live provider or a Modal run. A24's W1-W7 are a
-  different change and are not in this file.
+- Nothing here measures a live provider or a Modal run.
 
-**A22 updates existing behaviour**, so its tests start red. On the freeze
-commit V5, V12, V14 and V15 are red in both cells, and on pandas 3 so are V1, V2, V3, V7, V8,
-V9, V10 and V11 -- with the sixteen pandas 3 failures that predate the port beside
-them. The build reproduces that set before it builds. Every reference to a name the build has
-not created yet sits **inside** a test function, never at module level, so ``--collect-only``
-gives an exact count on the freeze's own commit.
+Every reference to a name under test sits **inside** a test function, never at module level, so
+``--collect-only`` gives an exact count even when one is missing.
 """
 
 from __future__ import annotations
@@ -105,8 +99,8 @@ EXPECTED_HOLES = 5
 #: The five hole causes, one per hole cell above.
 HOLE_CAUSES = ("only_a", "only_b", "no_outcome_a", "no_outcome_b", "no_outcome_both")
 
-#: C13's negative. The shipped parser is ``d.split("[")[0].split(">")[0].split("=")[0]`` plus
-#: ``.strip().lower()``; it strips neither ``<`` nor ``~=`` nor ``!=``, and ``pandas>=2,<3``
+#: The dependency parser's negative. A naive parser, ``d.split("[")[0].split(">")[0].split("=")[0]``
+#: plus ``.strip().lower()``, strips neither ``<`` nor ``~=`` nor ``!=``, and ``pandas>=2,<3``
 #: survives it only because ``>`` happens to come first. Four of these five come out with an
 #: operator attached under it.
 SYNTHETIC_REQUIREMENTS = ["pandas<3", "numpy~=2.0", "scipy!=1.0", "pyarrow[compute]>=1", "pandas >= 2"]
@@ -189,7 +183,7 @@ def mixed_pair(tmp_path: Path) -> Any:
 def test_v1_a_stored_null_reads_back_as_none_in_both_nullable_string_columns(two_records: Store) -> None:
     """``is None``, not ``pd.isna``. Under pandas 3 an unported ``to_pandas`` gives a ``str``
     column whose null is ``NaN``, on which ``row.outcome is not None`` is true and wrong -- the
-    trap A7 meets twice over."""
+    trap ``trace`` and ``trace_obs`` meet twice over."""
     frame = two_records.read(RUN)
     by_hash = {str(h): i for i, h in enumerate(frame["config_hash"])}
     errored, with_outcome = by_hash[config_hash(ERRORED_CONFIG)], by_hash[config_hash(OUTCOME_CONFIG)]
@@ -236,7 +230,7 @@ def test_v3_the_two_nullable_string_columns_are_object_dtype_on_every_frame_shap
 def test_v4_the_three_nullable_float_columns_read_back_nan_and_not_none(two_records: Store) -> None:
     """The negative that stops a build from finishing the job on the floats.
     ``t``, ``horizon`` and ``confidence`` are NaN on pandas 2 and on pandas 3 alike; three
-    frozen tests already spell them ``pd.isna`` and A22 does not move them."""
+    frozen tests already spell them ``pd.isna`` and the port does not move them."""
     frame = two_records.read(RUN)
     by_hash = {str(h): i for i, h in enumerate(frame["config_hash"])}
     errored = by_hash[config_hash(ERRORED_CONFIG)]
@@ -246,10 +240,10 @@ def test_v4_the_three_nullable_float_columns_read_back_nan_and_not_none(two_reco
 
 
 def test_v5_nullable_string_columns_is_exactly_the_schemas_nullable_string_fields(two_records: Store, tmp_path: Path) -> None:
-    """D6's structural guard against A7. A7 adds ``trace`` and ``trace_obs`` to ``_SCHEMA`` as
-    nullable ``pa.string()``; this goes red the moment it does and stays red until A7 adds both
-    names here too. A7's natural spelling of its own invariants passes on a NaN, so the loud
-    failure is the only thing between A7 and six invariants that are green and wrong."""
+    """A structural guard: every nullable ``pa.string()`` field of ``_SCHEMA`` (``trace`` and
+    ``trace_obs`` among them) must be in ``_NULLABLE_STRING_COLUMNS``, so a field added to one and
+    not the other fails here. A test of the new field spelled naturally passes on a NaN, so this
+    loud failure is what stops invariants that are green and wrong."""
     (part,) = (tmp_path / "store" / RUN / "episodes").glob("part-*.parquet")
     schema_fields = {f.name for f in pq.read_schema(part) if f.nullable and f.type == pa.string()}
     assert set(store_mod._NULLABLE_STRING_COLUMNS) == schema_fields
@@ -289,7 +283,7 @@ def test_v6_tally_succeeds_on_a_store_whose_meta_is_not_json_and_read_raises(tmp
 def test_v7_a_retained_run_strips_the_unretained_rows_trace_and_its_error_is_none(tmp_path: Path) -> None:
     """The retention path and the null path meet on one row: ``append`` pops ``trace`` out of
     ``meta`` for an outcome ``retain_traces_for`` does not name, and the same row's ``error`` is
-    the null the read path has to bring back. K6 is the frozen test that found this pairing."""
+    the null the read path has to bring back."""
     store = Store(tmp_path / "retain")
     store.create_run(
         RunManifest(
@@ -338,23 +332,22 @@ def test_v11_the_diff_json_payload_dumps_with_allow_nan_false(mixed_pair: Any) -
     assert sum(record["cause"] is None for record in payload["coverage"]) == EXPECTED_COMPARABLE
 
 
-# ---------- V13-V15: C13's dependency parser ----------
+# ---------- V13-V15: the dependency parser ----------
 
 
 def test_v13_the_dependency_parser_reads_pep_508_names_off_every_operator() -> None:
-    """C13's whole content, and the one assertion the *old* parser fails: it yields five names,
-    four with an operator still attached. Green the moment the freeze commits it and nothing the
-    builder does can change that -- C13 has no build half (it is
-    green before and after)."""
+    """The parser's whole content: PEP 508 parsing yields the four core names, where the naive
+    parser above yields five, four with an operator still attached. It reads only the literal
+    list, so no change to the package can move it."""
     assert {Requirement(d).name.lower() for d in SYNTHETIC_REQUIREMENTS} == CORE_NAMES
 
 
 def test_v14_the_real_core_dependencies_are_the_four_math_names_and_packaging_is_in_dev() -> None:
     """Separate from V13 deliberately: the literal list says nothing about the real file, and
     the real file says nothing about an operator the list has and it does not. ``packaging`` is
-    declared rather than leaned on through pytest, which is the thing C12 was about."""
+    declared rather than leaned on through pytest."""
     data = tomllib.loads(PYPROJECT.read_text())
-    # PF6: Rich and Textual join the core; the math names are still all there.
+    # Rich and Textual are core too; the math names are still all there.
     assert {Requirement(d).name.lower() for d in data["project"]["dependencies"]} == CORE_NAMES | {"rich", "textual"}
     assert "packaging" in {Requirement(d).name.lower() for d in data["project"]["optional-dependencies"]["dev"]}
 

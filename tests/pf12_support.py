@@ -226,7 +226,7 @@ def environment(**variables: str | None) -> Iterator[None]:
 # ---------- the core, through its public boundary ----------
 #
 # Every name PF12's tests take from PF5 is used through the three functions below, so the two
-# freezes can be checked against each other in one place (the seams S1 to S12).
+# test sets can be checked against each other in one place (the seams S1 to S12).
 
 
 def core() -> Any:
@@ -238,9 +238,9 @@ def core() -> Any:
 
 def as_document(obj: Any) -> dict[str, Any]:
     """S2: a core result or view's ``to_json()`` gives one strict JSON document with a ``schema``
-    (PF5.9). PF12 reads it as a string of JSON text and also accepts the parsed mapping, since PF5
-    is frozen in parallel and either is "one strict JSON document"; whichever PF5 freezes, the
-    document must survive a strict round trip."""
+    (PF5.9). PF12 reads it as a string of JSON text and also accepts the parsed mapping, since
+    either is "one strict JSON document"; whichever form ``to_json()`` returns, the document must
+    survive a strict round trip."""
     raw = obj.to_json()
     if isinstance(raw, (bytes, bytearray)):
         raw = raw.decode("utf-8")
@@ -444,7 +444,7 @@ def shows_number(text: str, value: float) -> bool:
     return False
 
 
-# ---------- the format's schemas (from the artifact format, written when the PF12 tests were frozen) ----------
+# ---------- the format's schemas (as docs/artifact-format.md gives them) ----------
 
 _UTC = {"type": "string", "pattern": ISO_UTC.pattern}
 

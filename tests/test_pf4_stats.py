@@ -1,8 +1,6 @@
 """PF4, the statistics: the frozen tests at the library's level (the math suite).
 
-Written from the invariants PF4.1 to PF4.51. PF4.1 to PF4.21 were frozen first; PF4.22 to PF4.33
-were added after them; PF4.34 to PF4.51 by the statistics re-freeze, after a review of the
-methodology. The implementation is written against this file and does not edit it.
+Written from the invariants PF4.1 to PF4.51.
 ``tests/test_pf4_surfaces.py`` holds what a user reads on a screen or in a file and the contract
 tests on the result objects (the code suite); ``tests/test_pf4_calibration.py`` simulates every
 claim Prove prints. This file holds the numbers underneath them.
@@ -20,8 +18,8 @@ ways, one condition, ties.
 
 **Readings, named here.**
 
-- ``poisson_prove.stats`` holds ``wilson``, ``WilsonInterval`` and ``WILSON_LEVEL`` (PF5 adds the
-  rest). A refused level raises ``ValueError``.
+- ``poisson_prove.stats`` holds ``wilson``, ``WilsonInterval`` and ``WILSON_LEVEL`` (the module's
+  other names are PF5's). A refused level raises ``ValueError``.
 - The library's cell frames (``EventDiff.cells``) carry every per-condition field as
   columns: ``direction``, ``direction_note``, ``pairs``, ``q_holm``, ``holm``, the limit keys of
   PF4.32 with ``mde_hr``, ``mde_moves_with``, ``mde_rise_verdict`` and ``mde_fall_verdict``,
@@ -48,7 +46,7 @@ ways, one condition, ties.
   fragility. A flip moves one row: a run is made to end in the event only from an
   outcome outside the compared events, and a run that ended in it is made to end outside them.
 
-**Lanes.** The math suite (marker ``math``). Most tests here run in seconds; the exhaustive fragility
+**Suite.** The math suite (marker ``math``). Most tests here run in seconds; the exhaustive fragility
 searches make a few thousand ``multi_diff`` calls and take longer. The simulations are in ``tests/test_pf4_calibration.py``.
 """
 
@@ -265,7 +263,7 @@ def _assert_limit(got: Any, want: float | None, what: Any) -> None:
 @pytest.mark.parametrize("level,k,n", [(None, 10, 32), (0.90, 7, 20), (0.975, 7, 20), (0.5, 7, 20)],
                          ids=["default", "0.90", "0.975", "0.5"])
 def test_pf4_1_wilson_returns_its_bounds_level_z_and_method_at_each_level(level: float | None, k: int, n: int) -> None:
-    """Trimmed by the PF4 re-freeze: the default level and other levels in one
+    """The default level and other levels in one
     test. scipy documents ``norm.isf(q)`` as the inverse survival function: the two-sided quantile at
     level L leaves (1 - L) / 2 in the upper tail. statsmodels documents
     ``proportion_confint(count, nobs, alpha, method="wilson")``; ``alpha`` is 1 - L."""
@@ -695,7 +693,7 @@ def test_pf4_15_the_single_event_diff_also_reports_no_limit_at_ceiling() -> None
 
 
 def test_pf4_27_at_a_baseline_of_one_the_rise_has_no_room_and_the_fall_is_the_limit() -> None:
-    """Amends PF4.15: a cell whose baseline had the event in every run, decided from the
+    """Refines PF4.15: a cell whose baseline had the event in every run, decided from the
     counts, has no rise, a computed fall, and enters the maxima."""
     a = {
         "all_fell": [(i, "fell", 0.01 * (i + 1)) for i in range(40)],
@@ -1122,7 +1120,7 @@ def _one_competitor_frame() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
 @pytest.mark.parametrize("case", ["one-competitor-early", "others-only-at-the-horizon", "names-each-early-outcome",
                                   "aalen-johansen"])
 def test_pf4_19_the_kaplan_meier_warning_names_each_outcome_that_ends_runs_early_and_only_then(case: str) -> None:
-    """Trimmed by the PF4 re-freeze: PF4.19's four cases as one test. One other
+    """PF4.19's four cases as one test. One other
     outcome that ends runs early draws the warning (lifelines documents
     ``KaplanMeierFitter().fit(durations, event_observed)`` and ``AalenJohansenFitter().fit(durations,
     event_observed, event_of_interest)`` with the event coded as an integer per cause; they disagree
@@ -1998,7 +1996,7 @@ def test_pf4_33_the_limits_and_the_fragility_cost_what_the_spec_allows_on_the_ru
 ) -> None:
     """The limits of a comparison of the quickstart's shape (9 conditions by 2 events at 194 a side)
     within 2 s and its fragility within 5 s more; one condition of 5,000 runs a side within 5 s. Measured
-    always and recorded; asserted only where ``POISSON_PROVE_TIMING=assert`` (the runner's lane), never by
+    always and recorded; asserted only where ``POISSON_PROVE_TIMING=assert`` is set, never by
     wall clock on a laptop."""
     import os
 

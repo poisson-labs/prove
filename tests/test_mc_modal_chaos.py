@@ -1,22 +1,22 @@
 """MC -- the Modal backend hands a sweep's ``[chaos]`` table to its containers, and the shared
 orchestration refuses a chaos run whose rows come back without the per-row chaos record.
 
-Two fixes from the check that found ``run_modal`` never passing ``[chaos]`` into its containers:
-every episode of a faulted Modal arm ran with no fault while its manifest recorded the fault as
-requested, so the arm was a second control arm that read as a clean measurement.
+What goes wrong without them: if ``run_modal`` does not pass ``[chaos]`` into its containers,
+every episode of a faulted Modal arm runs with no fault while its manifest records the fault as
+requested, so the arm is a second control arm that reads as a clean measurement.
 
-- **MC1, MC2** (fix 1): the chaos settings travel into the containers the way the capture
+- **MC1, MC2** (the hand-off): the chaos settings travel into the containers the way the capture
   settings already do, and ``worker_batch`` receives them. Driven through the real
   ``run_modal``, ``_ModalMapper`` and ``_container_batch``: a chaos sweep's rollouts see the
   same chaos settings on the Modal path as on ``run_local``, and every ok Modal row carries
   ``backend_meta["chaos"]``, the record of what its container armed.
-- **MC3, MC4** (fix 2): ``run_with_mapper`` is the orchestration every mapper backend shares
+- **MC3, MC4** (the refusal): ``run_with_mapper`` is the orchestration every mapper backend shares
   (Modal's, and the seam a Burla backend plugs into). It refuses a chaos run whose ok rows come
   back without ``backend_meta["chaos"]``, loudly, naming the run and the missing record, whichever
   mapper produced them. MC4 is its scope: a run without ``[chaos]``, and a chaos run's errored
   rows (which carry no ``backend_meta`` from a container), are not refused.
 
-**The harness is the check's.** Only the ``modal``
+**The harness.** Only the ``modal``
 package is replaced: a stub placed in ``sys.modules`` before ``run_modal`` imports it, whose
 ``Function.map`` pickles the map items across a process boundary and calls the shipped function
 on each in a fresh spawned interpreter, which is what a Modal container does with it. Everything
@@ -461,7 +461,7 @@ def test_mc3b_the_modal_path_is_refused_when_its_containers_return_rows_without_
 
 
 def test_mc4_a_run_without_chaos_and_a_chaos_runs_errored_rows_are_not_refused(tmp_path: Path) -> None:
-    """Green before and after on its own: it pins the refusal's reach, not the fix."""
+    """Passes with or without the refusal: it pins the refusal's reach, not the refusal."""
     bare = isolated(child_mapper, str(tmp_path / "bare"), None, TARGET, False)
     assert bare.get("summary") == {"n_ok": N_ROWS, "n_errored": 0, "complete": True}, bare
     assert "chaos" not in Store(tmp_path / "bare" / "store").manifest(bare["run_id"]).environment

@@ -1,20 +1,13 @@
 """Truncation-surfacing frozen tests: what the report, the receipt, the viewer and ``inspect`` say about a cut.
 
-Frozen off ``95471ba``, after the update commit. The build is written against this
-file and does not edit it. The aim is CAP3's recommendation
-3: fix the surfacing first and separately from the cap. Nothing here changes the cap or its
-default, and Z13 pins that.
+**Two different things are called ``truncated``.** ``diff.truncated`` is the count of episodes
+re-censored at the common horizon (``diff._truncate``: rows with ``t > horizon``); the observation
+cut is another thing. Printed as ``truncated: N``, the horizon count would read as a statement
+about the cut, and a pair whose runs dropped a third of their observation values would read
+``truncated: 0``. So the horizon count is named for what it counts, and every surface says
+whether a value was cut, in how many spans, and at what limit.
 
-**What is being fixed, measured at ``95471ba``.** Two different things are called ``truncated``.
-``build_report`` and ``build_multi_report`` put ``diff.truncated`` into the provenance dict, and
-that is the count of episodes re-censored at the common horizon (``diff._truncate``: rows with
-``t > horizon``). ``report.md``, ``receipt.html`` and the viewer page print it as ``truncated: N``,
-which reads as a statement about the observation cut and is not one: a published pair's report and
-receipt both read ``truncated: 0`` over runs that dropped a third of their observation values.
-Nothing on any surface says a value was cut, how many, or at what limit, and
-``inspect`` says outright that it prints none of it (``cli.py:1628``).
-
-**What a surface says now** (the names are this file's):
+**What a surface says** (the names are this file's):
 
 | provenance key (pair; the single-run form has no ``_a``/``_b``) | rendered as | from |
 |---|---|---|
@@ -27,11 +20,11 @@ The unit is the span and the read is the envelope alone (as A6 has it: A9 counts
 ``truncated`` per kind from the envelope column and nothing reads ``trace_obs``). A count is
 ``None``, never ``0``, for a run whose capture record carries a byte limit under any name but
 ``max_observation_bytes``: that run was written before the per-value cut, its spans carry no stamp
-to count, and a ``0`` there is the lie this change exists to remove. The reader names no retired
-identifier -- A8b's P8-27 bans them from ``src/`` -- it echoes whichever ``*_bytes`` entry the run's
-own build recorded, so a pre-A8b run's ``max_span_bytes`` reads as itself.
+to count, and a ``0`` there would be false. The reader names no retired
+identifier -- P8-27 keeps them out of ``src/`` -- it echoes whichever ``*_bytes`` entry the run's
+own version recorded, so a pre-A8b run's ``max_span_bytes`` reads as itself.
 
-**Invariant-to-test map** (Z-numbers are this file's; 55 collected ids, and the counts below sum to 55):
+**Invariant-to-test map** (Z-numbers are this file's):
 
 | Invariant | Tests |
 |---|---|
@@ -47,14 +40,14 @@ own build recorded, so a pre-A8b run's ``max_span_bytes`` reads as itself.
 | Z10 the single-run report says the same things | ``test_z10_*`` (2) |
 | Z11 the payload's version and its ``diff`` key set | ``test_z11_*`` (3) |
 | Z12 ``inspect`` prints the cut | ``test_z12_*`` (4) |
-| Z13 the cap, its default and the stored field names are untouched | ``test_z13_*`` (2) |
+| Z13 there is no default cap, the routing constant is not one, and the stored field names stay | ``test_z13_*`` (2) |
 | Z14 the builders' interface | ``test_z14_*`` (4) |
 | Z15 the generated lattice pair (``tests/lattice.py``): no capture record, no traces, nothing censored at the horizon | ``test_z15_*`` (4) |
 
 **Real frames, round-tripped.** Every store here is written by ``Store.append`` from traces cut by
 ``truncate_observations``, and read back by the CLI, never hand-built. Seven
 runs: ``cut-a`` (cap 64, spans cut), ``cut-b`` (cap 4096, nothing over it), ``legacy`` (a capture
-record carrying ``max_span_bytes``, its envelopes rewritten to the shape a build before A8a stored),
+record carrying ``max_span_bytes``, its envelopes rewritten to the shape a version before A8a stored),
 ``bare`` (no capture record, no trace), ``own`` (no capture record, a trace the default cut bounded)
 and ``hz10`` / ``hz5`` (horizons 10 and 5, so 24 episodes are re-censored). The legacy shape is made by
 rewriting the ``trace`` column of a written part -- no alias map, thirteen span keys, no stamp --
@@ -62,18 +55,13 @@ because ``Store.append`` refuses to write that shape and a fixture that was not 
 nothing about it; Z6's first test asserts the fixture is what it claims. The expected counts are
 arithmetic on the fixture's own span sizes and never a read of a stamp.
 
-**Green before and after -- seven of the 55 ids**, named so their green is not read as coverage (the
-other 48 are red on the bare tree): Z2 (the diff layer is not touched), Z6's fixture precondition, Z9
-(``report``, ``serve`` and ``inspect`` write nothing on the bare tree either), the ``TOP_LEVEL_KEYS``
-test of Z11, the no-cut-and-nine-columns test of Z12, and both tests of Z13.
-
 **Named gaps, not pinned.** (1) ``inspect`` cannot open a run stored before A8a: ``Store.read`` with the
-full trace raises ``TraceValidationError`` on the missing ``alias_map_version`` (measured on all four
-post-A7 runs in a local store, and pre-A7 runs, such as the generated lattice pair, read as having no trace); Z9's
+full trace raises ``TraceValidationError`` on the missing ``alias_map_version`` (pre-A7 runs, such
+as the generated lattice pair, read as having no trace); Z9's
 ``inspect`` loop leaves the ``legacy`` run out on purpose, and no test here asserts the defect. (2)
-``diff`` and ``check`` still say ``truncated=N`` for the horizon count (``diff.py``, byte-fenced by A28
-and FR); Z2 pins that the layer keeps its name, not that it should. (3) A pre-A8b marker is not read: A8b's
-P8-27 bans its text and its name from ``src/``, so a run written before A8b reads ``not counted``, and
+``diff`` and ``check`` say ``truncated=N`` for the horizon count; Z2 pins that the layer keeps its
+name, not that it should. (3) A pre-A8b marker is not read: P8-27 bans its text and its name from
+``src/``, so a run written before A8b reads ``not counted``, and
 what its values would give is a measurement, not a surface. (4) The unit is
 the span, as A6 counts it; a count of values would need the bodies, which Z8 forbids.
 """
@@ -105,15 +93,14 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace, truncate_observations
 from poisson_prove.viewer import SCHEMA, ViewerError, render_html
 
-#: CD (D8) renames ``OBSERVATION_LIMIT_BYTES`` to ``OBSERVATION_ROUTING_BYTES`` and takes away its
-#: second job: it is the size at which ``split`` moves an unnamed attribute to ``trace_obs``, and
-#: never a cap. The two fixtures below that used it as a *cut* limit now name their own number --
-#: which is what they always meant, and is the value that constant still holds.
+#: ``OBSERVATION_ROUTING_BYTES`` is the size at which ``split`` moves an unnamed attribute to
+#: ``trace_obs``, and never a cap. The two fixtures below that cut at that size name their own
+#: number, the same value.
 OWN_RUN_CUT_AT = 8192
 
 REPO = Path(__file__).resolve().parent.parent
 
-# LS update: /5 retires with the ``summary`` key.
+# The ``summary`` key (LS) took the schema past /5.
 NEW_SCHEMA = "poisson-prove.viewpair/7"
 EPOCH = 1_756_900_000_000_000_000
 TASKS = ("t0", "t1", "t2", "t3")
@@ -143,7 +130,7 @@ NEW_LABELS = (
     "episodes censored at horizon", "observation cap a", "observation cap b", "trace spans a", "trace spans b",
     "observation cut spans a", "observation cut spans b",
 )
-# LS update: ``summary`` eighth.
+# ``summary`` eighth (LS).
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -264,7 +251,7 @@ def rewrite_column(root: Path, run_id: str, column: str, fn: Callable[[str | Non
 
 
 def to_pre_a8a(value: str | None) -> str | None:
-    """A stored envelope as a build before A8a wrote it: no alias map, thirteen span keys."""
+    """A stored envelope as a version before A8a wrote it: no alias map, thirteen span keys."""
     if value is None:
         return None
     envelope = json.loads(value)
@@ -368,7 +355,7 @@ def surfaces(root: Path, a: str, b: str, out: Path, *, x: str = "task", knobs: S
 @pytest.fixture(scope="module")
 def corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Nine runs, each a real writer's output. ``legacy`` and ``legacy-b`` are rewritten to the shape
-    a build before A8a stored; the rest are what the current build writes."""
+    a version before A8a stored; the rest are what this version writes."""
     root = tmp_path_factory.mktemp("cut-surfacing") / "store"
     write_run(root, "cut-a", capture=capture_record(max_observation_bytes=64), traces=True, cut_at=64)
     write_run(root, "cut-b", capture=capture_record(max_observation_bytes=4096), traces=True, cut_at=4096)
@@ -638,7 +625,7 @@ def test_z10_a_single_run_report_over_a_run_written_before_the_cut_says_not_coun
 def test_z11_the_structure_is_a_new_version_because_its_diff_key_set_changed(s1: Surfaces) -> None:
     assert SCHEMA == NEW_SCHEMA and s1.payload["schema"] == NEW_SCHEMA
     with pytest.raises(ViewerError, match="unknown structure schema"):
-        render_html({**s1.payload, "schema": "proofload.viewpair/5"})  # LS update: the newest retired version
+        render_html({**s1.payload, "schema": "proofload.viewpair/5"})  # the newest retired version
 
 
 def test_z11_the_diff_object_is_the_pair_provenance_in_this_order(s1: Surfaces, hz: Surfaces) -> None:
@@ -731,14 +718,13 @@ def test_z12_the_trace_level_line_and_the_observation_line_are_two_lines_and_the
     assert block.index("trace: truncated (timeout)") + 1 == block.index(cut_line("limit max_observation_bytes=64", 1, 1, BIG))
 
 
-# ---------- Z13: the cap, its default and the stored field names are untouched ----------
+# ---------- Z13: no default cap, and the stored field names keep their names ----------
 
 
 def test_z13_there_is_no_default_cap_and_the_routing_constant_is_not_one() -> None:
-    """CD (D1, D8) inverts this test in place, keeping Z13's slot. It was frozen just before the
-    default was removed: correct for the surfacing work, which left the
-    cap alone, and wrong the moment the default went. Nothing about the surfacing work's own
-    behaviour moves -- the value 8192 is still there, under the name of the job it still does."""
+    """There is no default cap: ``CaptureSpec()`` with no arguments is refused, and ``trace`` holds no
+    limit, head or tail constant. The value 8192 stays, as ``OBSERVATION_ROUTING_BYTES``, the size at
+    which values are routed, which is not a cap."""
     import poisson_prove.trace as trace_module
     from poisson_prove.capture import CaptureSpec
 

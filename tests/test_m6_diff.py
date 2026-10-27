@@ -8,19 +8,19 @@ I4 is a seeded Monte Carlo. I11-I14 and I16 use small synthetic censored frames 
 directly with the six columns M6 reads: ``config_hash``, ``config``, ``replicate_index``,
 ``t``, ``observed``, ``horizon``.
 
-Notes for the implementation:
+Notes on the references:
 
 - The reference ``q`` is BH over all 72 conditions. BH over only the conditions with at least
   one event gives 23 lower, not 22.
 - I9's reference is ``statsmodels.stats.proportion.power_proportions_2indep`` inverted by
   bisection. It uses the pooled-null and alternative standard errors, which
-  ``NormalIndPower`` (Cohen's h) does not. The reference bisection runs to 1e-10, so the
-  implementation's own bisection must converge to well under 1e-6.
+  ``NormalIndPower`` (Cohen's h) does not. The reference bisection runs to 1e-10, so Prove's
+  own bisection must converge to well under 1e-6.
 - I7 draws times from a short grid so ties and censoring are both exercised; lifelines'
   ``logrank_test`` counts all ties at a time in that time's ``d_j``.
 - I6 includes a cell where one arm lacks a replicate; the pair must be dropped, and the
   test is built so that positional mis-pairing changes ``stat``.
-- I8 asserts ``p == 1.0`` exactly on identical arms. Compute the expected count as
+- I8 asserts ``p == 1.0`` exactly on identical arms. The expected count must be computed as
   ``n_a_j * d_j / n_j`` (integer-exact) rather than ``n_a_j * (d_j / n_j)``, or the
   statistic picks up a ~1e-30 residue and ``chi2.sf`` returns just under 1.0.
 """
@@ -77,7 +77,7 @@ CELLS_COLUMNS = [
     "q",
     "verdict",
     "mde",
-    # PF4 (PF4.13, PF4.14, PF4.15): every cell now carries its direction from the test, the
+    # PF4 (PF4.13, PF4.14, PF4.15): every cell carries its direction from the test, the
     # log-rank timing note, the matched-pair count and the note on a missing detection limit.
     "direction",
     "direction_note",
@@ -85,9 +85,8 @@ CELLS_COLUMNS = [
     "n01",
     "n10",
     "mde_note",
-    # PF4 re-freeze (PF4.34 to PF4.47): every cell row gains Holm's adjusted p and decision, the
-    # limit keys both ways, the competing shift and the interval on the change; the order is the
-    # reference build's.
+    # PF4.34 to PF4.47: every cell row carries Holm's adjusted p and decision, the limit keys
+    # both ways, the competing shift and the interval on the change, in this order.
     "q_holm",
     "holm",
     "mde_rise",
@@ -149,19 +148,16 @@ def _manifest(run_id: str = "r", *, run_salt: str = "salt", t_unit: str = "secon
 
 
 def _seed_of(h: str, replicate_index: int) -> int:
-    """A stored seed that is a function of ``(config_hash, replicate_index)``. **C49 (P-1), added in
-    the P-1 freeze's update**: ``_cframe`` carried no ``seed`` column at all, so
-    ``mcnemar_bh`` ran on every I6 pair with nothing to establish the pairing on -- C18's blindness
-    inside a fixture. Two arms built by ``_cframe`` now store the same seed at the same
-    ``(config_hash, replicate_index)``, which is what a stored pair from one sweep does. Green
-    before and after on the bare tree (nothing reads the column there), so its green is not
-    evidence."""
+    """A stored seed that is a function of ``(config_hash, replicate_index)``. Two arms built by
+    ``_cframe`` store the same seed at the same ``(config_hash, replicate_index)``, which is what a
+    stored pair from one sweep does, so ``mcnemar_bh`` has a stored seed to establish every I6 pair
+    on; without the column a fixture would pair on nothing."""
     return 1000 * (int(h[:6], 16) % 100_000) + replicate_index
 
 
 def _cframe(cells: dict[str, list[tuple]], *, horizon: float = 5.0) -> pd.DataFrame:
     """Censored frame from {cell label: [(t, observed) or (t, observed, replicate_index)]}, with
-    the stored ``seed`` a censored store frame carries (C49)."""
+    the stored ``seed`` a censored store frame carries."""
     records = []
     for label, rows in cells.items():
         config = {"cell": label}
@@ -635,7 +631,7 @@ def test_i13_unpaired_methods_run_with_different_salts_and_report_it(method: str
 
 def test_i13_seed_identity_match_true_when_salts_and_stored_seeds_match() -> None:
     """P-1: the flag is seed identity, not salt equality -- ``_cframe`` stores a seed and both arms
-    carry the same one at each ``(config_hash, replicate_index)`` (C49)."""
+    carry the same one at each ``(config_hash, replicate_index)``."""
     a = _one_cell([(1.0, True), (5.0, False)])
     assert _paired("fisher_bh", a, a.copy()).seed_identity_match is True
     assert _paired("mcnemar_bh", a, a.copy()).seed_identity_match is True
@@ -734,9 +730,9 @@ def test_i17_capture_paired_and_logrank_counts(
     logrank = _fixture_diff(frames, manifests, "logrank_bh")
     assert mcnemar.seed_identity_match is True and mcnemar.method == "mcnemar_bh"
     assert logrank.method == "logrank_bh"
-    # The counts were captured and not pinned on the study fixture; on the lattice each is the
-    # count of an independent reference: the exact McNemar test (a binomial on the design's
-    # discordant pairs) and lifelines' log-rank test on the stored times, each with one BH family.
+    # Each count is the count of an independent reference: the exact McNemar test (a binomial on
+    # the lattice design's discordant pairs) and lifelines' log-rank test on the stored times, each
+    # with one BH family.
     ref_mcnemar, ref_logrank = lattice.mcnemar(EVENT, Q), lattice.logrank(EVENT, Q)
     assert (mcnemar.n_safer, mcnemar.n_worse) == lattice.directions(ref_mcnemar) == (27, 0)
     assert (logrank.n_safer, logrank.n_worse) == lattice.directions(ref_logrank) == (27, 12)

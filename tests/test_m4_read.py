@@ -1,23 +1,22 @@
-"""M4 read-amendment frozen tests: invariants R1-R9 of the store's narrow and keyed reads, written
-before ``Store.read(meta=, keys=)`` and ``Store.count`` exist.
+"""M4 read frozen tests: invariants R1-R9 of the store's narrow and keyed reads,
+``Store.read(meta=, keys=)`` and ``Store.count``.
 
 Stores are written under ``tmp_path`` in the M4 frozen tests' ``_rec``/``_manifest`` shape; the CLI
 is driven in-process through ``cli.main`` with ``StringIO`` streams, as the M10 frozen tests do; the
 golden reads the generated lattice pair (``tests/lattice.py``) through the ``lattice_store``
 conftest fixture.
 
-The numbers behind this amendment (a duration, a byte count, a row count) are the motivation
-and never an assertion: nothing here measures a duration or a byte count. What this file asserts is which
+Nothing here measures a duration or a byte count. What this file asserts is which
 paths decode ``meta``, and the poisoned store is how it knows. A poisoned store is a run written
 through ``Store.append`` whose part files were rewritten in place with the string ``not json``
 in the ``meta`` cells of chosen rows, each part keeping its own schema. On such a store the
 default read raises, and every path that never decodes ``meta`` reads it exactly as it reads
 the intact twin.
 
-Two facts a builder should know before the shim hits them:
+Two facts anyone changing the reads should know:
 
 - ``keys=[]`` must short-circuit before the reader: pyarrow raises ``ArrowTypeError`` on an
-  empty ``in`` list (verified 2026-09-05 against the venv's pyarrow). The explicit empty-keys
+  empty ``in`` list. The explicit empty-keys
   tests exist because of that.
 - The ``config_hash`` half of ``keys`` is pushed to the reader and the pair is masked after it.
   Two replicates of one cell share a hash, so the mock-agent run for R6 is built so that cells
@@ -64,7 +63,7 @@ THIRTEEN = [
     "confidence", "meta", "error", "wall_time", "backend_meta",
 ]
 ELEVEN = [c for c in THIRTEEN if c not in ("meta", "backend_meta")]
-# PF4 re-freeze: the store copies a rollout's case id into its own nullable string
+# the store copies a rollout's case id into its own nullable string
 # column, appended after trace_obs on disk, and every read returns it last (null for older parts), so
 # a read frame is the thirteen columns plus case_id and a narrow read the eleven plus case_id.
 FRAME = THIRTEEN + ["case_id"]
@@ -295,7 +294,7 @@ def assert_block_prints_row_with_trace(block: list[str], row: Any) -> None:
 
 @pytest.fixture(scope="module")
 def keyed(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, pd.DataFrame]:
-    """The keyed run and its default frame, read through the frozen M4 path. Never mutated."""
+    """The keyed run and its default frame, read through the default path. Never mutated."""
     store = Store(tmp_path_factory.mktemp("keyed-store"))
     _write_keyed_run(store)
     return store, store.read(KEYED_RUN)
@@ -714,7 +713,7 @@ def test_r6_one_poisoned_selected_row_is_loud(mock_run: MockRun, tmp_path: Path)
 @pytest.mark.parametrize("run_id", LATTICE_RUNS)
 def test_r7_lattice_default_read_is_2304_by_13(lattice_store: Store, run_id: str) -> None:
     df = lattice_store.read(run_id)
-    # PF4 re-freeze: the thirteen columns plus case_id, null on parts written before it.
+    # the thirteen columns plus case_id, null on parts written before it.
     assert df.shape == (LATTICE_ROWS, 13 + 1)
     assert LATTICE_ROWS == lattice.ROWS == len(lattice.rows(run_id))
     assert list(df.columns) == FRAME
@@ -724,7 +723,7 @@ def test_r7_lattice_default_read_is_2304_by_13(lattice_store: Store, run_id: str
 @pytest.mark.parametrize("run_id", LATTICE_RUNS)
 def test_r7_lattice_narrow_read_is_2304_by_11(lattice_store: Store, run_id: str) -> None:
     df = lattice_store.read(run_id, meta=False)
-    # PF4 re-freeze: the eleven columns plus case_id, null on parts written before it.
+    # the eleven columns plus case_id, null on parts written before it.
     assert df.shape == (LATTICE_ROWS, 11 + 1)
     assert list(df.columns) == NARROW
     assert df["case_id"].isna().all()
@@ -745,9 +744,8 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     # The lattice part is written in the legacy (pre-A7) layout, the thirteen columns.
     assert golden.names == THIRTEEN == list(lattice.LEGACY_COLUMNS)
     # A7: the on-disk schema is the legacy golden's thirteen fields plus
-    # ``trace`` and ``trace_obs``, both nullable strings, appended in that order. Amended from
-    # ``fresh.equals(golden)`` / ``fresh.names == THIRTEEN``; the golden comparison is kept.
-    # PF4 re-freeze: a nullable string case_id column follows trace_obs.
+    # ``trace`` and ``trace_obs``, both nullable strings, appended in that order; the golden
+    # comparison is kept. A nullable string case_id column follows trace_obs.
     expected = golden.append(pa.field("trace", pa.string(), nullable=True)).append(
         pa.field("trace_obs", pa.string(), nullable=True)
     ).append(pa.field("case_id", pa.string(), nullable=True))
@@ -756,8 +754,8 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     golden_manifest = json.loads((LATTICE_ROOT / lattice.RUN_A / "manifest.json").read_text())
     assert set(golden_manifest) == lattice.LEGACY_MANIFEST_KEYS
     # A10 (W4): the manifest's top-level keys are the legacy golden's
-    # twelve plus ``declared``, which is null for a sweep that declares nothing. Amended from
-    # ``== set(golden_manifest)``; the golden comparison is kept. A23/A26 re-amends this line.
+    # twelve plus ``declared``, which is null for a sweep that declares nothing; the golden
+    # comparison is kept.
     # PF0: the version key is written as ``poisson_prove_version``; the golden, written by
     # 0.0.1, keeps ``proofload_version``.
     assert set(store.manifest("r1").to_dict()) == (set(golden_manifest) - {"proofload_version"}) | {"poisson_prove_version", "declared"}
@@ -771,9 +769,8 @@ def test_r8_runs_on_lattice_prints_each_run_with_2304_rows(lattice_store: Store)
     assert r.code == 0, r.text
     assert not r.err
     lines = [line for line in r.out.splitlines() if line.strip()]
-    # PF2: the first line is the verdict `ok  N runs in <store>` instead of
-    # `store: <root>`, and the table has the columns #, name, id, status, backend, target, rows,
-    # rows without an outcome, created (t_unit is no longer a column). A name holds single
+    # PF2: the first line is the verdict `ok  N runs in <store>`, and the table has the columns #, name, id, status, backend, target, rows,
+    # rows without an outcome, created (no t_unit column). A name holds single
     # spaces, so cells are split on runs of two or more spaces.
     assert lines[0] == f"ok  {len(LATTICE_RUNS)} runs in {LATTICE_ROOT}"
     assert re.split(r"\s{2,}", lines[1].strip()) == [

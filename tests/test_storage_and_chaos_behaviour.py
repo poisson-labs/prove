@@ -8,7 +8,7 @@ library ``multi_diff``, the command line, and the chaos seam's public ``install`
 - The declared observation cap is the cap in force for a stored row, whichever route the trace
   took: cut in the child (``worker_batch``'s result), cut in the child and passed through the
   host's funnel (a stored captured run), or cut by the funnel alone (a rollout's own trace).
-  A value between the old module constant (8,192 bytes) and the declared 16,384 is kept whole.
+  A value between the module's routing constant (8,192 bytes) and the declared 16,384 is kept whole.
 - A captured span carries its OpenTelemetry trace id.
 - An observation is already cut in what ``worker_batch`` returns, before it crosses to the host.
 - ``multi_diff`` re-censors rows past the common horizon: they count as no event.
@@ -53,13 +53,13 @@ HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 TRUNCATED_KEY = "poisson_prove.truncated"
 
-#: The non-monotone pair: one value between the old module constant and the declared cap, one
+#: The non-monotone pair: one value between the routing constant and the declared cap, one
 #: above both.
 DECLARED_CAP = 16384
 MID_VALUE = "m" * 10000
 BIG_VALUE = "y" * 20000
 
-#: The cut before transport: a declared cap far under the old constant, and two values three times
+#: The cut before transport: a declared cap far under the routing constant, and two values three times
 #: it, one under an observation key and one under a key nobody named.
 WIRE_CAP = 1024
 WIRE_RESULT = "z" * (3 * WIRE_CAP)
@@ -256,7 +256,7 @@ def stored_trace(root: Path, run_id: str) -> Mapping[str, Any]:
 
 
 def test_a_declared_cap_above_the_old_constant_keeps_the_smaller_value_whole_and_cuts_the_larger_at_the_cap(cap_routes: CapRoutes) -> None:
-    """A funnel that cut at the old 8,192-byte constant, or at ``min(declared, 8192)``, cuts the
+    """A funnel that cut at the 8,192-byte routing constant, or at ``min(declared, 8192)``, cuts the
     10,000-byte value; at the declared 16,384 it is kept whole and only the 20,000-byte value is
     cut, at 16,384."""
     for run_id in (cap_routes.captured_run, cap_routes.own_run):

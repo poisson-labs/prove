@@ -1,105 +1,24 @@
 """A8a frozen tests: invariants P8-1 to P8-6, P8-13 to P8-16, P8-18 and P8-19 of
-the A8a span schema, written before the eight span fields, the seventh
-trace key, ``OUTCOME_BY``, ``GATE``, ``ALIAS_MAP_VERSION``, the lifts, ``record()``'s three kwargs,
-``inspect``'s four columns and the two renames exist, against ``0ef8c3c``, A8a's base
-commit (the design was written at ``afc1f3b`` and the probes first ran at
-``3bf4083``; ``src/`` and the nine updated test files are byte-identical across all three,
-measured by ``git diff --name-only``).
+the A8a span schema: the eight span fields, the seventh trace key, ``OUTCOME_BY``, ``GATE``,
+``ALIAS_MAP_VERSION``, the lifts, ``record()``'s three kwargs, ``inspect``'s four columns and the
+two renames.
 
-**The register, as decided before the build:** the alias map stays
-GenAI-only, and one real OpenInference payload went through ``from_otel`` before the build -- 21 keys
-on a chat span, 0 aliased, 0 lifted, 10 routed as observation content, ``tokens`` and the model
-name lost for fields that already exist, none of A8a's eight carriers present; widening the map is triggered
-for ``tokens`` and reported, not taken. No ``graph.node.*`` identity entries in
-``ATTRIBUTE_ALIASES``; T20 is untouched. ``FAULT_KEY`` and ``FAULT_POSITION_KEY`` are
-not A8a's and ``TRACE_EXPORTS`` is 25 names. ``ALIAS_MAP_VERSION == "1"``. Two cells. ``EVALUATOR`` is not a gate marker.
-``_ORIGINAL_ERROR_TYPE`` survives. The four columns, after ``error``.
+**What these tests hold to.** The alias map stays GenAI-only: a real OpenInference chat span
+through ``from_otel`` has none of its 21 keys aliased or lifted, ten of them are observation
+content, ``tokens`` and the model name do not reach the fields that exist for them, and none of
+A8a's eight carriers is present. No ``graph.node.*`` identity
+entries in ``ATTRIBUTE_ALIASES``. ``FAULT_KEY`` and ``FAULT_POSITION_KEY`` are not A8a's.
+``ALIAS_MAP_VERSION == "1"``. ``EVALUATOR`` is not a gate marker. ``_ORIGINAL_ERROR_TYPE``
+survives. ``inspect``'s four new columns come after ``error``.
 
-**Two cells, and no invariant is cell-specific -- a result, not an assumption**.
-pandas 2.3.3 and pandas 3.0.5, A22's recipe. Every
-one of A8a's nine fields reaches disk inside the ``trace`` / ``trace_obs`` JSON columns, never as
-a Parquet column, so the pandas major cannot see any of them; the cell that could disagree is the
-mutation table, not the red set. Every test here is asserted in both cells: **36 tests,
-36 + 36 = 72 ids over the two cells against the file's own 36.** Nullness is by identity in
-every clause: ``is None`` / ``is not None``, never ``pd.isna`` and never a bare
-truth test.
+**pandas 2 and pandas 3, and no invariant is specific to one.** Every one of A8a's nine fields
+reaches disk inside the ``trace`` / ``trace_obs`` JSON columns, never as a Parquet column, so the
+pandas major cannot see any of them. Nullness is by identity in every clause: ``is None`` /
+``is not None``, never ``pd.isna`` and never a bare truth test.
 
-**The classified red set on the update commits (``9996ce3`` + ``268b64a``) with
-this file and its fixture added, measured on two pristine ``git archive`` copies before any source
-edit, venvs from the repo venv's freeze closure differing in exactly pandas, collection verified
-1941 = 1941 = 1941 and then 1983 with this file, baselines 1934 passed / 7 skipped / 0 failed in
-both cells at ``0ef8c3c``: 90 failed / 1886 passed / 7 skipped, identical test by test in both
-cells.** The ninety: the **39** tests here that are not P8-21's two or P8-22 (every one for its
-expected cause -- the eight fields, the seventh key, ``OUTCOME_BY`` / ``GATE`` / ``ALIAS_MAP_VERSION``,
-``record()``'s kwargs, the lifts, the nine columns, the manifest key and the two renames do not exist
-yet); and **51** update reds -- ``test_m12_trace.py`` 19 (fifteen tests reading the 21-key ``SPAN_A``
-/ ``SPAN_B`` through a 13-key ``from_dict``: T1 x2, T2 x2, T3 x2, T5 x3, T6, T7, T9, T11, T26 x2; T23
-on ``span.operation``; T29 on ``tries``; T30 on the nine-column regex), ``test_m3_timeout_trace.py`` 12
-(E7, E8 x3, E11 and E1's round trip, field-order, seven-key and eighth-key tests on the seven-key
-dicts; E12 on 25 exports; E9 x2 on the regex), ``test_m3_crash_trace.py`` 10 (K1 x2, K3, K5 x3, K6 x2
-on the 21-key dicts; K7 on the regex; K8 on 25 exports), ``test_m4_read.py`` 3 (R6 on the regex),
-``test_m10_cli.py`` 2 (I15 on the regex, I18 on 21 keys), ``test_a7_storage.py`` 2 (P7-4 on 21 keys,
-P7-10 on eight tabs), ``test_m3_capture.py`` 1 (C4 on nine manifest keys), ``test_m12_kinds.py`` 1
-(T37), and one example harness's test 1 (P12 on 25 exports). **Nothing else is red.** The pandas 3 cell adds
-nothing: every A8a field reaches disk inside a JSON string. The copies skip 7 where the repo skips 5,
-the two extra being a real-suite pair that reads a gitignored data file; the other five are an
-example harness's not-installed pair and the three the repo always skips.
-
-**What was measured before the build at ``3bf4083``, so these frozen tests rest on runs and not
-on reads.** (1) The kind-ladder guard fires: adding ``openinference.span.kind`` to ``_LIFTED_KEYS``
-and nothing else turns nine tests in ``test_m12_kinds.py`` red (the seven T36 OpenInference
-parametrisations, the case-insensitive test, and T37's vendor-keys test); both vendor keys, thirteen.
-(2) The ``STEP_LINE_RE`` census, run by widening ``cli.py``'s line to nine columns in a pristine copy
-with the regex unamended: **six positive assertion sites, eight tests red** (``test_m10_cli.py:273``
-via I15; ``test_m3_crash_trace.py:945`` K7; ``test_m12_trace.py:1512`` T30;
-``test_m3_timeout_trace.py:1165`` E9 and ``:1199`` via ``step_columns``; ``test_m4_read.py:286`` via
-three R6 tests) and **six negative sites, four of them unpaired and silently green**
-(``test_m10_cli.py:1072`` I16, ``test_m12_trace.py:1469`` T30, ``test_m3_timeout_trace.py:1224`` E9,
-and ``test_m3_timeout_trace.py:1214`` E9 -- reached through the ``step_columns`` helper and named in
-no document). The earlier count of "five" counted ``test_m3_crash_trace.py:951`` and
-``test_m3_timeout_trace.py:1164``, which sit inside K7 and E9 beside a positive count on the same
-block and went red with them, and missed ``:1214``. The update pairs all six with an explicit
-control. (3) ``split`` and ``assemble`` **do** name ``span_id``, ``attrs`` and ``spans`` as
-literals. (4) ``ALIAS_MAP_VERSION`` has zero bindings and
-``"1"`` zero literal sites in ``src/``. (5) ``test_a7_storage.py:933`` used ``alias_map_version`` as
-its example of a key ``from_dict`` rejects; A8a makes it a valid key, so that row is updated to
-an unknown key -- a site in no inventory.
-
-**Mutation pass, eighteen rows plus control, whole suite on rsync copies of the shadow shim under the
-thread caps, pandas 2.3.3.** Measurement order: the control, rows 2-5 and the two
-frozen-test self-checks ran on the shim **before** the second update commit and carry its three reds
-(P7-10, E1 x2 -- the sites that commit fixes) in every row, not counted below; the control is
-**3 failed / 1977 passed / 7 skipped** for exactly those three and the amended tests are green on
-the shim; rows 6-17 and 4b ran after. Eighteen caught, **no survivor**. Spelling recorded where a
-sole catch is claimed.
-
-| Row | Mutation (spelling) | Caught by, measured |
-|---|---|---|
-| 1 | control, no edit | -- |
-| 2 | ``from_otel`` post-pass numbers ``attempt`` by ``step_name`` repetition under one parent | **P8-5 alone** |
-| 3 | ``split`` rebuilds ``envelope["spans"]`` from the twenty-one keys enumerated literally | P8-19 grep half **and** P8-22 (any edit to ``split`` moves its digest) |
-| 4 | ``split`` reads ``span["truncated"]`` / ``span["bytes_original"]`` in a no-op branch | P8-19 grep half and P8-22 -- the spelling names a field literal |
-| 4b | ``split``: ``bodies = dict()`` for ``{}`` (no key named, behaviour identical) | **P8-22 alone** |
-| 5 | the ``gate=gate`` kwarg dropped at the hand-written ``Span(...)`` in ``_span`` | **P8-3 contrapositive alone** |
-| 6 | ``merge`` takes the first non-None ``alias_map_version`` instead of the agreed one | **P8-13 merge test alone** |
-| 7 | ``gate = "emitted"`` when the span *name* is ``guardrail`` | **P8-6 named-guardrail test alone** |
-| 8 | the unrecognised operation still stashed under ``poisson_prove.original_operation`` | P8-16, T23 (amended) |
-| 9 | ``graph.node.id`` added to ``_LIFTED_KEYS`` (the no-lift decision crossed) | **P8-4 alone** |
-| 10 | ``_vendor_kind(attrs)`` after the lift | T36 x11, T37, P8-4, P8-6 -- 15 |
-| 11 | ``_span_mapping`` emits no ``traceId`` | **P8-14 alone** |
-| 12 | ``_capture_record`` without ``alias_map_version`` | P8-17, C4 |
-| 13 | the mock emits ``attrs={"attempts": ...}`` again | P8-15, T29 |
-| 14 | ``inspect`` prints ``attempt`` before ``step_name`` | **P8-18 columns test alone** |
-| 15 | the ``bytes_original``-without-``truncated`` clause dropped from ``Span.__post_init__`` | **P8-2 (that parametrisation) alone** |
-| 16 | a second ``ALIAS_MAP_VERSION = "1"`` binding in ``executor.py`` | **P8-13 binding test alone** |
-| 17 | ``record()`` defaults ``gate`` to ``"emitted"`` | P8-3 producer test, P8-3 contrapositive |
-| s1 | *(frozen-test self-check, four files)* one ``STEP_LINE_RE`` copy back to five columns | P8-21 copy test, I15, **and I16 -- the control line turns the vacuous negative red** |
-| s2 | *(frozen-test self-check, four files)* the control removed from I16 | **P8-21 pairing test alone** |
-
-**Green-before-and-after, named so its green is not read as evidence**: E1's renamed six-key rejection test, green on the bare tree because the rejection message
-lists the expected keys and ``"truncated"`` is among them, and green after the build because the key
-is then genuinely missing; A22's V5; T36's four tests in ``test_m12_kinds.py``, which are the guard that goes red if
-the build lifts the vendor keys before the ladder reads them.
+**The guard on the kind ladder.** T36's tests in ``test_m12_kinds.py`` are the guard that fails if
+the vendor keys are lifted before the kind ladder reads them: adding ``openinference.span.kind`` to
+``_LIFTED_KEYS`` fails them.
 """
 
 from __future__ import annotations
@@ -127,17 +46,17 @@ from conftest import quickstart_design
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS / "fixtures" / "trace"
 # PF3: the one copy is the packaged spec; this is its design at
-# the 100 replicates this file was frozen at.
+# 100 replicates.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
+# PF4.30, PF4.48a: the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
-# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# so its sweep is refused; every sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 LOGGER_NAME = "poisson_prove.trace"
 EPOCH = 1_756_900_000_000_000_000
 
-# ---------- the schema's constants, spelled here so the file collects before the build ----------
+# ---------- the schema's constants, spelled here rather than imported from the code ----------
 
 SPAN_FIELDS_SPEC: tuple[str, ...] = (
     "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
@@ -148,7 +67,7 @@ NEW_FIELDS: tuple[str, ...] = SPAN_FIELDS_SPEC[13:]
 TRACE_KEYS_SPEC: tuple[str, ...] = ("schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version")
 OUTCOME_BY_SPEC = ("code", "llm", "self", "human")
 GATE_SPEC = ("emitted", "declared")
-ALIAS_MAP_VERSION_SPEC = "1"  # as decided at the start
+ALIAS_MAP_VERSION_SPEC = "1"  # the alias map's only version
 STATUS_CODES = frozenset({"OK", "UNSET", "ERROR"})
 OTLP_FIXTURES = ("otlp_agent_chat.json", "otlp_kinds.json", "otlp_aliases.json", "otlp_dropped.json")
 
@@ -301,7 +220,7 @@ def test_p8_2_the_vocabularies_and_the_free_fields() -> None:
         assert plain_span(outcome="x", outcome_by=who).outcome_by == who
     for gate in GATE:
         assert plain_span(gate=gate).gate == gate
-    # operation is verbatim and never checked against a vocabulary (D7); outcome is a free label.
+    # operation is verbatim and never checked against a vocabulary; outcome is a free label.
     for op in ("chat", "frobnicate", "CHAT", "guardrail", ""):
         assert plain_span(operation=op).operation == op
     assert plain_span(outcome="").outcome == "" and plain_span(outcome="whatever").outcome == "whatever"
@@ -533,9 +452,9 @@ def test_p8_13_from_otel_stamps_it_and_record_and_litellm_leave_it_none() -> Non
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
     from poisson_prove.capture import CaptureSpec, Recorder
 
-    rec = Recorder(CaptureSpec(max_observation_bytes=8192), "r-a8a", "cfg:1")  # CD (D1): the cap has no default
+    rec = Recorder(CaptureSpec(max_observation_bytes=8192), "r-a8a", "cfg:1")  # a [capture] table's cap has no default
     empty = rec._trace([], None)
-    assert empty is None  # D9: nothing captured, no envelope from _trace itself
+    assert empty is None  # nothing captured, so _trace itself builds no envelope
     stamped = rec._trace([flat_span(0x31, "captured")], None)
     assert stamped is not None and stamped["alias_map_version"] == ALIAS_MAP_VERSION
 
@@ -570,7 +489,7 @@ def test_p8_14_on_the_fixtures_every_span_carries_both_and_error_keeps_the_shipp
         assert span.attrs["otel.trace_id"] == "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a", span.span_id
         assert span.attrs["otel.status_code"] in STATUS_CODES, span.span_id
     assert by[3].error == "lookup failed" and by[2].error is None
-    # otlp_kinds.json's two error spans, exactly as 3bf4083 reads them: status.message first, then error.type.
+    # otlp_kinds.json's two error spans under the shipped rule: status.message first, then error.type.
     kinds = {s.span_id: s for s in from_otel(load_fixture("otlp_kinds.json")).spans}
     assert kinds["0000000000000001"].error == "boom" and kinds["000000000000000e"].error == "TimeoutError"
     assert all(s.error is None for sid, s in kinds.items() if sid not in ("0000000000000001", "000000000000000e"))
@@ -625,7 +544,7 @@ def test_p8_16_operation_is_the_source_operation_name_stripped_and_lowercased_in
     from poisson_prove import trace as trace_module
 
     assert not hasattr(trace_module, "_ORIGINAL_OPERATION")
-    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # survives, as decided at the start
+    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # survives
 
 
 # ---------- P8-18: inspect's nine columns ----------
@@ -662,7 +581,7 @@ def test_p8_18_inspect_prints_nine_columns_the_first_five_unchanged_and_dashes_f
         step_lines = [line for line in block if STEP_LINE_RE.match(line)]
         assert len(step_lines) == len(spans) >= 1, "\n".join(block)
         for j, (line, span) in enumerate(zip(step_lines, spans, strict=True)):
-            # Byte-identical to 3bf4083's five columns, then four dashes: every new field is None on the mock.
+            # The five columns as before A8a, byte for byte, then four dashes: every new field is None on the mock.
             assert line == f"  {j}\t{span.kind}\t{span.name}\t{span.duration_ms}\t{'-' if span.error is None else span.error}\t-\t-\t-\t-", line
             checked += 1
     assert checked >= 1

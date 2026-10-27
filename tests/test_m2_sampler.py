@@ -4,10 +4,10 @@ Property tests (I1, I2, I5, I6, I7, I15) draw small mixed-type axis dicts with
 hypothesis; grids stay under about 200 configs. I10 is the golden: the lattice's sweep
 TOML (``tests/lattice.py``'s two axes) is written to tmp_path inside the test, loaded, and
 its config_hash set is compared against the generated store through the ``lattice_store``
-fixture and against the design's own condition keys. I12
+fixture and against the lattice design's own condition keys. I12
 round-trips through ``to_dict()`` and ``json.dumps``.
 
-Conventions the frozen tests fix for the implementation session:
+Conventions the frozen tests fix:
 
 - Axis values inside one axis are unique under Python equality, so ``1`` and ``True``
   never share an axis; across configs, value identity is checked by type as well as

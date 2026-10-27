@@ -1,67 +1,34 @@
-"""S28 -- the report: the frozen tests for R1-R20.
+"""S28 -- the report: the frozen tests for R1-R21.
 
-Written for the layered report's four tree sections, against ``3c472c9``, the update commit
-that narrowed the E14 family in five frozen test files. The implementation adds ``tree`` to
-``MultiReport``, the ``tree=`` keyword on ``build_multi_report``, the four sections behind one ``if`` in each renderer, the reason
-mapping and the formatting to ``src/poisson_prove/report.py``, and the tree-flag helper, the five
-flags on ``report``, the one ``_diff_tree`` call and the five names on ``_DIFF_ONLY_FLAGS`` to
-``src/poisson_prove/cli.py``, against this file, and does not edit it.
+The layered report's four tree sections: ``tree`` on ``MultiReport``, the ``tree=`` keyword on
+``build_multi_report``, the four sections behind one ``if`` in each renderer, the reason mapping
+and the formatting in ``src/poisson_prove/report.py``; the tree-flag helper, the five flags on
+``report``, the one ``_diff_tree`` call and the five names on ``_DIFF_ONLY_FLAGS`` in
+``src/poisson_prove/cli.py``.
 
-**``poisson_prove.report``'s new keyword and field are reached inside test bodies** (``report_module``,
-``built``): this file collects on the bare tree, its own tests fail there, and every other test
-in the repo still reports.
+**``poisson_prove.report``'s tree keyword and field are reached inside test bodies**
+(``report_module``, ``built``), so a missing one fails those tests and every other test in the
+repo still reports.
 
 **No test in this file carries the ``calibration`` marker, and none may.** The renderer draws
 nothing: every number it prints is a field of a ``TreeResult`` M14 already computed, and the
 tree is grown once per fixture at the golden knobs, so every rendering error is caught
 deterministically and there is no rejection rate to hold in a band.
 
-**Six items, measured at ``d5094a1`` before a test was written**
-(by a measurement script and its log). The full grep report, over both dimensions,
-is not reproduced here.
+**What R10 and R4 rest on.**
 
-1. **The grep report** established the update at five files (test_s21_errors.py E14,
-   test_s24_interval.py C14, test_s25_root.py, test_s26_fault_lines.py F28, test_s27_leaves.py
-   L20) and no sixth; the whole suite was green on the update commit alone (1744 passed, 3
-   skipped). The second dimension -- every test driving ``report`` on a pair through ``main()``
-   -- is 36 sites in six files (37 invocations); every one keeps its assertion, because each
-   asserts an exit code, a file set, the flat family's lines or a panel's shape, none of which
-   the four sections touch, and the refusals it pins fire before the tree or, for the two M7
-   axis errors, after a tree that writes nothing.
-2. **The unmeasured pairs, none of which refuses.** ``holes-a``/``holes-b`` (test_competing_set
-   H10): 3 tests, the root at p 1, ``level`` and ``task`` both refused ``underpowered``, the
-   whole grid, ``root_not_rejected`` at both levels, depth 2 of 3, bound 0.288, exit 0.
-   ``run-a``/``run-b`` at ``--event timeout`` (the site at line 617): 2 tests, root p 0.054,
-   ``level`` refused ``one_group`` and ``task`` ``underpowered``, the whole grid, exit 0. The
-   H6 mock pair: ``task_id`` (axis) with three groups all rejecting under one, three and the
-   two inferred events -- 6 of 9, 14 of 27 and 8 of 18 leaves rejected -- exit 0; the absent
-   event still exits 2 before any tree and writes nothing. test_m4_read R5's twins: the root
-   rejects, ``x`` refused ``underpowered``, the whole grid, one leaf of two rejected, 0.288.
-3. **The E14 measurement, re-run at HEAD.** ``build_multi_report(multi, spec, manifests=...)``
-   with no tree on the E14 argv reproduces all three of S21's digests bit for bit -- markdown
-   ``cc1157e3``, SVG ``3954321e``, light receipt ``974fa0a9`` -- and the CLI's three files
-   still do. The dark-theme receipt differs from the light one, which is why the light build
-   is the receipt's.
-4. **The collision scan, re-run at HEAD** (cited by attribute and enclosing
-   function, never by line). ``report.py``: the attributes ``delta`` inside a ``BinOp`` in
-   ``_cell_fill`` and in ``_forest_body``, ``mde`` in ``_forest_body``; the bare names ``bound``
-   in ``_cell_fill`` and ``config`` in ``_hole_map``. ``viewer.py``: none. ``cli.py``: the
-   attributes ``event`` in ``_cmd_inspect`` and ``headline`` in ``_write_summary``, the bare
-   name ``cells`` in ``_cmd_runs``. **Counting rule for "functions containing any ``BinOp``":**
-   walking every ``FunctionDef`` and counting those whose subtree holds a ``BinOp`` reads 37 /
-   6 / 22 for ``report.py`` / ``viewer.py`` / ``cli.py``; the log script's 38 / 7 / 23 counts
-   the module body as a function. Neither number is asserted; the collision set is.
-5. **The vocabulary collision set**: the 24 phrases confirmed as O19's nine,
-   F19's nine and L10's six. ``step`` reaches ``report.md``, ``receipt.html`` and the viewer
-   page of every builder-made pair through ``t unit: steps`` in the provenance and the
-   identity block (the builders' ``t_unit``; the quickstart's is ``tool_calls`` and the lattice's
-   ``seconds``); ``where it`` reaches the viewer page alone, inside ``elsewhere it`` in the
-   ``status_basis`` sentence V31 pins. Neither reaches the four sections, which is why R10 is
-   scoped to them and to the tree's own strings and masks user data first.
-6. **The kind table**: 21 rows naming 49 fields; every field exists on the
-   structure it is attributed to (R4's static clause repeats the check).
+- **The vocabulary collision set**: the 24 phrases are O19's nine,
+  F19's nine and L10's six. ``step`` reaches ``report.md``, ``receipt.html`` and the viewer
+  page of every builder-made pair through ``t unit: steps`` in the provenance and the
+  identity block (the builders' ``t_unit``; the quickstart's is ``tool_calls`` and the lattice's
+  ``seconds``); ``where it`` reaches the viewer page alone, inside ``elsewhere it`` in the
+  ``status_basis`` sentence V31 pins. Neither reaches the four sections, which is why R10 is
+  scoped to them and to the tree's own strings and masks user data first.
+- **The kind table**: 50 fields; every field exists on the structure it is attributed to (R4's
+  static clause checks it). ``RootResult.p_floor`` is in it under ``sig3``, and R4's layout set
+  requires it: the floor line prints in every omnibus rendering.
 
-**Conventions this file fixes where the design is silent. The implementation follows these.**
+**Conventions this file fixes beyond the invariants' own sentences. The code follows these.**
 
 - **Markdown layout.** ``## Omnibus`` and a blank line, then each item -- a line or a
   ``_md_table`` -- followed by a blank line, the same for the other three headings, and the
@@ -77,7 +44,7 @@ is not reproduced here.
   n_informative_cells, n_uninformative_cells, "n_a/n_b", mde]`` plus ``n_discordant`` iff the
   scheme is ``pair_swap`` plus ``[p_group, q_group, verdict]`` iff the level was tested, the
   verdict cell exactly ``rejected`` or ``not rejected``. Cells: the head; when any family
-  exists the MDE-meaning sentence (``increase`` and ``headroom`` in it, no number); per family
+  exists the MDE-meaning sentence (no number in it); per family
   in ``families`` order a line carrying ``key=label`` and the four counts, then iff
   ``n_rejected > 0`` a table whose rows are ``[config, event, delta, q_within, mde]`` for the
   rejected leaves in ``cells`` order, ``config`` as ``key=value`` over every key in the
@@ -91,7 +58,7 @@ is not reproduced here.
   delta prints as ``37.5`` under a header that says ``(pp)``.
 - **Identity is R5-R8's, the kind is R4's.** A numeric cell or token is matched to its field
   under *any* of M7's kinds (``renders``), so a correct field under a wrong kind passes the
-  section invariant and fails R4 alone (mutant 35); a wrong field fails the section invariant.
+  section invariant and fails R4 alone; a wrong field fails the section invariant.
 - **R4's allowed set** is every ``_fmt(field, kind)`` of the kind table, every count under
   ``int``, the numeric tokens of every label, config value, event name and requested key, the
   tokens of the verbatim ``headline()`` and ``detail`` strings, and the rule's ``2``. **The
@@ -99,93 +66,43 @@ is not reproduced here.
   year.
 - **The single-run refusal names each flag as typed**, ``--max-group-mde`` with dashes, with the
   existing diff-only sentence.
-- **The namespace fill in ``_report_pair`` names the three knobs as strings**, never as
-  attributes inside a comparison: S27's frozen L14 forbids any ``ast.Compare`` in ``cli.py``
-  whose subtree names ``depth``, so ``if knobs.depth is None`` is red on the frozen suite
-  (the first control run found it). The stand-in implementation iterates ``(name, constant)`` pairs with
-  ``getattr`` and ``setattr``; any form that keeps ``depth`` out of every ``Compare`` is
-  admissible.
-- **The empty family's refusal is unchanged**: exit 2 at M7's axis check (``not a config key``
+- **The empty family's refusal is M7's**: exit 2 at M7's axis check (``not a config key``
   on stderr), so the tree is computed only when ``multi.n_tests > 0``.
-- **The source-scan guards the implementation works under**, each a static read of ``src/`` that no
-  runtime test can see past. On ``cli.py``: S27's L14 (no ``ast.Compare`` whose subtree names
-  ``depth``); S27's L11, the superset of O17, F21 and S24's C19 (no ``BinOp`` whose subtree
-  reaches a guarded tree field as an attribute or a guarded name as a bare name -- the five
-  added lines read no tree field, so a loop over string constants is the safe shape); S24's
-  C18 and M10's I21 (no ``numpy``, ``scipy`` or extras import). On ``report.py``: M7's B19
-  (no ``numpy`` or ``scipy`` import text). Across the core modules: M13's V14 (no
-  network-client import). The first control run was red on
-  L14 alone, which is why the list is here rather than in a footnote.
-- **R2's with-tree digests were minted on a stand-in implementation**, whose rendered E14 sections
-  the templates above reproduce.
 
-**A27's re-freeze -- what it added and what it stopped guarding.**
+**The hostile group label.**
 
-- **The BH-shaped hostile pair** (``hgroup-a``/``hgroup-b``) is this re-freeze's one new fixture and
-  is built identically in both re-frozen test files, deliberately: built twice with different shapes
-  it would give the two files two different power shapes to measure one guard against, and the two
-  frozen test files would then disagree about what an admitted grouping is. Its constants and its measured
-  shape are restated in both files and asserted in both, never imported.
-- **The hostile-label guard is new coverage over already-correct behaviour**, so it is green
-  before and after. What makes it non-vacuous is measured rather
-  than argued: mutant 31b -- the group label emitted unescaped in the fault-lines table -- was
-  applied on a copy and is caught by this guard **alone** in this file, every other test in the
-  file surviving it. The round-trip clauses are not what catch it: ``model()``/``table_of``
-  unescape, so a raw cell also equals the value. The source-text and table-count clauses are.
-- **``diff.py`` is no longer pinned whole**, under the exclusion-record rule. One region is excluded, ``_pairing``,
-  recorded in ``DIFF_PY_EXCLUDED`` with the record's six fields including what it stopped guarding.
-  The region is **this re-freeze's own** -- C18's message restatement lives in it -- and it is not in
-  the plan for A27, which had A27 narrowing at ``_coverage`` for A22 on the stated basis that
-  *A27 does not touch ``diff.py``*. C18's message fix makes that false, measured: a copy
-  carrying the restatement moves the whole-file digest, and a ``_coverage``-only exclusion does not
-  hold across it. ``_coverage`` is **not** minted here. It moves to A22's freeze, where the
-  exclusion and the ``tests/test_a22_pandas3.py`` cover it names land in one commit, which is
-  the rule's own escape hatch for a change that does touch the file -- and which keeps the
-  cover-exists assertion below unconditional, rather than carving a named exception into the cover
-  rule on the first change to use it.
-- **A22's update: the second region landed as planned above.**
-  ``diff.py::_coverage`` is now a live exclusion beside ``_pairing`` in this same record, owned
-  by A22, minted at ``4b3c6ae``, covered by ``tests/test_a22_pandas3.py``'s V9-V12, retiring at
-  ``A28``. ``DIFF_PY_SHA256`` is re-minted over the file with both regions removed -- a read off
-  the shipped file, not a prediction -- and the two spans are measured disjoint (``_pairing``
-  814-874, ``_coverage`` 908-946), which is the rule's permitted *adjacent* case.
-- **All four carriers of this digest are narrowed here, not two.** Measured on a copy carrying the
-  restatement: every one of the four ``DIFF_PY_SHA256`` clauses goes red on the message change, so
-  narrowing only the two frozen test files this re-freeze covers would leave ``test_s26_fault_lines.py``
-  (F28) and ``test_s27_leaves.py`` (L20) red from this change until A22. The plan excluded those
-  two to avoid S27's ``FROZEN_ORACLE_SHA256`` cascade; the cascade is one literal, read off a file
-  this re-freeze itself wrote, and costs no red. A27 narrows all four and re-mints that literal after
-  the ``s26`` edit.
-- **A28's update: both ``diff.py`` exclusions retired.** ``DIFF_PY_SHA256`` is the
-  whole-file value read off the shipped file, and the record constant and its cover loop are gone.
-- **P-1's update.** ``KIND_TABLE`` gains ``RootResult.p_floor``
-  under ``sig3`` and R4's layout set requires it (the floor line prints in every omnibus
-  rendering); R21 is renamed and restated -- ``seed_identity_match`` is the salt plus the stored
-  seeds on every matched row, and the ``overlap`` fixture now stores the same seed in both arms
-  (``seed_of``; C49, it was 24 of 24 matched rows apart); ``E14_SHA256``'s markdown and receipt,
-  ``E14_WITH_TREE_SHA256``, ``CHECK_STDOUT_SHA256`` and ``SERVE_STRUCTURE_SHA256`` are re-minted
-  off a stand-in implementation of P-1; ``DIFF_PY_SHA256`` stays whole-file at A28's value, red from
-  the implementation until the commit after it.
+- **The BH-shaped hostile pair** (``hgroup-a``/``hgroup-b``) is built identically here and in
+  ``tests/test_s29_viewer.py``, deliberately: built twice with different shapes it would give the
+  two files two different power shapes to measure one guard against, and the two files would then
+  disagree about what an admitted grouping is. Its constants and its measured shape are restated
+  in both files and asserted in both, never imported.
+- **The hostile-label guard covers behaviour that is already correct**, so what makes it
+  non-vacuous is that it fails if the group label is emitted unescaped in the fault-lines
+  table, and in this file it alone fails then. The round-trip clauses are not what catch it:
+  ``model()``/``table_of`` unescape, so a raw cell also equals the value. The source-text and
+  table-count clauses are.
 
-**Requirements this file could not use as written, each resolved here.**
+**How some invariants are read here.**
 
 - R12's unknown-reason clause is asserted on ``Leaves.reason`` and ``FaultLines.reason``;
   ``Refusal.reason`` is printed as its own string on the refusal line (R6), not through the
   mapping, whose four keys are the untested reasons.
 - R15's "the twin stores of test_m4_read.py R5" is restated as the same pair written to two
-  roots rendering identical files; R5 itself now runs the report-pair verb with the tree on its
-  poisoned twin (grep report, dimension b).
-- R14's "the stdout summary is byte-identical to today's" is pinned as the flat headline plus
-  the three paths, built from ``multi.headline()``, which is what ``_write_summary`` prints.
+  roots rendering identical files; R5 itself runs the report-pair verb with the tree on its
+  poisoned twin.
+- R14's "the stdout summary is unchanged" is pinned as the flat headline plus the three paths,
+  built from ``multi.headline()``, which is what ``_write_summary`` prints.
 - R4's "every numeric token is a field" admits the verbatim ``headline()`` (``:g`` under R5),
   the verbatim ``detail`` (a string field) and the rule's literal ``2``, and skips the
   assumption line (above).
 - R13's "help text equal to ``diff --help``'s" is compared per flag after argparse's own
   wrapping is collapsed, invocation and help both.
+- R21: ``seed_identity_match`` is the salt plus the stored seeds on every matched row, and the
+  ``overlap`` fixture stores the same seed in both arms (``seed_of``).
 
 **Named non-observables.** A second ``tree()`` call in ``_report_pair`` on the same frames and
-knobs (mutant 32): the same bytes. R16's "before any string is built": a source property; the
-frozen file sees the raise at ``build_multi_report`` and no page.
+knobs: the same bytes. R16's "before any string is built": a source property; this file sees
+the raise at ``build_multi_report`` and no page.
 """
 
 from __future__ import annotations
@@ -220,20 +137,20 @@ import lattice
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 DIFF_SOURCE = PACKAGE / "diff.py"
-#: The generated pair (``tests/lattice.py``) in place of the study pair this file was frozen on.
+#: The generated pair (``tests/lattice.py``).
 LATTICE_ROOT = lattice.root()
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
 EVENT, OTHER, X, Y = lattice.EVENT, lattice.OTHER, lattice.X, lattice.Y
-# PF3: the one copy is the packaged spec; this is its design at
-# the 100 replicates this file was frozen at.
+# The one copy is the packaged spec; this is its design at
+# 100 replicates.
 QUICKSTART = quickstart_design()
 MOCK_MODULE = "poisson_prove.examples.mock_agent"
 ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 QUICKSTART_SALT = "0000000000000015"
-# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
+# PF4.30, PF4.48a: the quickstart design at 100 replicates with nothing
 # declared has a detection limit above the default accepted change of 0.20, so its sweep is refused;
-# the frozen sweeps accept 0.3, the smallest round value above the limit.
+# the sweeps here accept 0.3, the smallest round value above the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 
 # ---------- the literals ----------
@@ -245,9 +162,8 @@ HTML_HEADINGS = tuple(f"<h2>{h}</h2>" for h in HEADINGS)
 #: The line the four sections sit before, in each renderer (M7's own literals, unchanged).
 MD_FIGURE = "![delta heatmaps](heatmap.svg)"
 HTML_FIGURE_PREFIX = '<div class="figure">'
-#: R1. ``build_multi_report``'s signature after this change.
-# Re-minted for truncation surfacing: ``observations`` joins ``build_multi_report``'s keywords.
-# Re-minted for A10: ``declarations`` joins them, keyword-only and last, in the spelling the implementation uses.
+#: R1. ``build_multi_report``'s signature: ``tree``, ``observations`` and ``declarations`` are
+#: keyword-only, ``declarations`` last, in the spelling the code uses.
 BUILD_MULTI_REPORT_SIGNATURE = (
     "(multi: 'MultiDiffResult', spec: 'ReportSpec', *, manifests: 'tuple[RunManifest, RunManifest] | None' = None, "
     "tree: 'TreeResult | None' = None, observations: 'tuple[tuple[int, int], tuple[int, int]] | None' = None, "
@@ -292,14 +208,11 @@ KIND_TABLE = (
 #: ``2 x depth x q x delta*`` (the bound section's sample line, ``cli.py``'s block before it).
 BOUND_RULE_LITERAL = "2"
 
-#: R2. The E14 argv. S21's three E14 digests (``E14_SHA256``) and this file's two with-tree digests
-#: (``E14_WITH_TREE_SHA256``) were taken over the study pair and were no longer asserted after PF4
-#: (the lattice's ``tripped`` declares no event kind either, so the captions, the honesty line and
-#: the verdict column read in direction words); both dead digests are removed, and R2 asserts the
-#: facts they guarded.
+#: R2. The E14 argv. R2 asserts facts, not file digests: the lattice's ``tripped`` declares no
+#: event kind, so the captions, the honesty line and the verdict column read in direction words.
 E14_ARGV = ("report", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y)
-#: R18. The lattice's goldens (S27 L7 restated as rendered rows), re-measured on
-#: the unchanged code. By ``gain`` at the offered override: twelve groups, eleven rejected, the one
+#: R18. The lattice's goldens (S27 L7 restated as rendered rows), measured on
+#: the code. By ``gain`` at the offered override: twelve groups, eleven rejected, the one
 #: not rejected (``1.1``) the eleventh of twelve; the leaves under each scheme; by ``load``
 #: (requested) the three families' counts, one of whose ``q_within`` is unsorted; by grid, the flat 22.
 LATTICE_GAIN_GROUPS = 12
@@ -318,7 +231,7 @@ FLAG_VALUES = {"--permutations": "300", "--seed": "3", "--by": "temp", "--max-gr
 GOLDEN_PERMUTATIONS = 4000
 Q = 0.05
 
-# ---------- the frozen S27 builders, restated ----------
+# ---------- S27's builders, restated ----------
 
 NON_EVENTS = frozenset({"ok", "x", "z", "plain"})
 EVENT_T = 2.0
@@ -348,14 +261,14 @@ ME_TEMPS = (0.0, 0.7)
 VOCABULARY_VALUES = ("given the root", "where it broke")
 HOSTILE_VALUE = "".join(["<", "/table><script>alert(1)</script>&", chr(34)])
 PLAIN_VALUE = "plain-task"
-#: A27. M13's hostile string beside R17's own, and the BH-shaped hostile pair both frozen test files share.
+#: M13's hostile string beside R17's own, and the BH-shaped hostile pair both test files share.
 #: The pair's ``task`` values are these two, and ``HOSTILE_VALUES`` is the same tuple of the same
-#: two strings as ``tests/test_s29_viewer.py``'s, restated rather than imported so two frozen
+#: two strings as ``tests/test_s29_viewer.py``'s, restated rather than imported so the two
 #: frozen test files do not couple. The grouping key ``task`` takes them as its values and ``cell`` supplies
 #: the cells inside each group, so the axis rung reaches ``task`` and the power rule **admits** it
 #: instead of refusing it ``underpowered`` and collapsing to ``whole_grid`` -- which is what R17's
-#: own two-cell pair does, and why no group label in either frozen file has ever carried a hostile
-#: value. Measured at ``101028c``: two groups of eight cells at N=32 is 256 units per arm per
+#: own two-cell pair does, so a group label there never carries a hostile
+#: value. Measured: two groups of eight cells at N=32 is 256 units per arm per
 #: group, whose group MDE is 0.1347 against the 0.20 default at the two-group floor
 #: alpha = q/2 = 0.025, so both groups resolve. 128 units per arm would read 0.1883 and still
 #: admit; the margin is taken so a later power-rule change cannot quietly return this fixture to
@@ -369,11 +282,11 @@ HOSTILE_GROUP_CELLS = 8
 HOSTILE_GROUP_N = 32
 HOSTILE_GROUP_BASE = 2
 HOSTILE_GROUP_EXTRA = (14, 8)
-#: A27. The admitted grouping as both frozen test files read it: (key, resolved_by, n_groups,
+#: The admitted grouping as both frozen test files read it: (key, resolved_by, n_groups,
 #: n_resolvable_groups). ``whole_grid`` in either of the first two is the collapse this fixture
 #: exists to avoid, and asserting this tuple is what stops R17's label guard going vacuous.
 HOSTILE_GROUP_ADMITTED = ("task", "axis", 2, 2)
-#: A27. What the admitted axis makes testable, measured at ``101028c``.
+#: What the admitted axis makes testable, measured.
 HOSTILE_GROUP_REJECTED_GROUPS = 2
 HOSTILE_GROUP_FAMILIES = 2
 HOSTILE_GROUP_TESTS = 16
@@ -386,8 +299,8 @@ def tree() -> Any:
 
 
 def report_module() -> Any:
-    """``poisson_prove.report``, imported at call time: the new keyword and field are reached inside
-    test bodies, so this file collects on the bare tree and its own tests fail there."""
+    """``poisson_prove.report``, imported at call time: the tree keyword and field are reached
+    inside test bodies, so a missing one fails those tests and never the file's collection."""
     return importlib.import_module("poisson_prove.report")
 
 
@@ -406,12 +319,10 @@ def manifest(run_id: str, salt: str, axis_types: Mapping[str, str]) -> RunManife
 
 def seed_of(key: tuple[tuple[str, Any], ...], replicate_index: int) -> int:
     """A stored seed that is a function of ``(config, replicate_index)`` and never of the cell's
-    position in its dict. **C49, fixed in P-1's update.** The old
-    ``1000 * index + k`` seeded by dict position, and ``overlap_cells`` enumerates a ``task`` set
-    shifted by one per arm, so the same ``(config_hash, replicate_index)`` carried a different seed
-    in the two arms -- 24 of 24 matched rows disagreed, measured at ``a626cd3`` -- while
-    ``mcnemar_bh`` ran on them: C18's own blindness, inside a fixture. Green before and after on
-    the bare tree (nothing reads a stored seed there), so its green is not evidence."""
+    position in its dict. A seed of ``1000 * index + k`` by dict position would break the pair:
+    ``overlap_cells`` enumerates a ``task`` set shifted by one per arm, so the same
+    ``(config_hash, replicate_index)`` would carry a different seed in the two arms -- 24 of 24
+    matched rows disagreed, measured -- while ``mcnemar_bh`` ran on them."""
     return 1000 * (int(config_hash(dict(key))[:6], 16) % 100_000) + replicate_index
 
 
@@ -509,11 +420,11 @@ def two_value_cells(values: Sequence[str], moved: bool) -> dict[Any, list[str]]:
 
 
 def overlap_cells(shift: int) -> dict[Any, list[str]]:
-    """C18's partially-overlapping pair: the same salt and a ``task`` set shifted by one, which is
+    """R21's partially-overlapping pair: the same salt and a ``task`` set shifted by one, which is
     what a sweep-file edit that moves an axis value produces. Three cells are matched, one is in
     arm a alone and one in arm b alone, so ``coverage`` lists cells with no counterpart while the
-    pair still shares its salt and, since P-1's fixture fix, its seeds on every matched row -- the
-    page the warning's old sentence contradicted."""
+    pair still shares its salt and its seeds on every matched row -- a page a warning promising a
+    counterpart for every episode would contradict."""
     return {
         (("task", f"t{i}"), ("temp", 0.0)): (["fail"] * 2 + ["ok"] * 6 if shift else ["ok"] * 8)
         for i in range(shift, shift + 4)
@@ -521,7 +432,7 @@ def overlap_cells(shift: int) -> dict[Any, list[str]]:
 
 
 def hostile_group_cells() -> tuple[dict[Any, list[str]], dict[Any, list[str]]]:
-    """A27's BH-shaped hostile pair: ``task`` takes the two hostile values and is the grouping,
+    """The BH-shaped hostile pair: ``task`` takes the two hostile values and is the grouping,
     ``cell`` supplies eight cells inside each group at N=32. Arm b is moved in every cell of both
     groups, by a different amount per group, so the root rejects, the axis is admitted rather than
     refused underpowered, both groups reject and every leaf rejects."""
@@ -644,10 +555,10 @@ def store_tree(root: Path, a: str, b: str, *, events: Sequence[str], method: str
 
 
 def admitting(root: Path, a: str, b: str, *, events: Sequence[str], key: str, method: str = "fisher_bh", **knobs: Any) -> float:
-    """PF4 re-freeze (PF4.45): a group's limit now comes from each cell's own baseline with the root
-    and the group both rejecting, so a grouping this file was frozen on can be refused
+    """PF4.45: a group's limit comes from each cell's own baseline with the root
+    and the group both rejecting, so a grouping a test here means to exercise can be refused
     ``underpowered`` at the default ``--max-group-mde``. The override the refusal itself offers is
-    read here, never typed in, and passed back so the frozen grouping is the one tested."""
+    read here, never typed in, and passed back so that grouping is the one tested."""
     _, result = store_tree(root, a, b, events=events, method=method, **knobs)
     refused = [x for x in result.grouping.refused if x.key == key]
     assert len(refused) == 1 and refused[0].reason == "underpowered" and refused[0].offered_max_group_mde is not None, result.grouping.refused
@@ -655,7 +566,7 @@ def admitting(root: Path, a: str, b: str, *, events: Sequence[str], key: str, me
 
 
 def lattice_gain(method: str = "fisher_bh") -> tuple[str, str]:
-    """PF4 re-freeze (PF4.45): the flags that group the lattice by ``gain``, the override read off the
+    """PF4.45: the flags that group the lattice by ``gain``, the override read off the
     default tree's refusal (``gain`` is refused at 0.20 and ``load`` resolves)."""
     return ("--max-group-mde", str(admitting(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), key=X, method=method)))
 
@@ -886,7 +797,7 @@ def renders(cell: str, value: Any) -> bool:
         return False
     if isinstance(value, float) and math.isnan(value):
         # PF4 (PF4.15): a condition with no detection limit prints the reason, never a number.
-        # PF4 re-freeze (PF4.24): the 100% baseline's "ceiling" is gone (the rise has no room and the
+        # PF4.24: a 100% baseline prints no "ceiling" (the rise has no room and the
         # fall is computed); a null limit is a direction with room where none is detectable or none
         # can be flagged, and it still prints no number.
         return bool(cell) and "ceiling" not in cell and not re.search(r"\d", cell)
@@ -949,7 +860,7 @@ def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[s
         if value is None:
             return
         if isinstance(value, float) and math.isnan(value):
-            # PF4 (PF4.15): a limit that does not exist prints its reason, so no token is owed.
+            # PF4 (PF4.15): a limit that does not exist prints its reason, so no token is required.
             return
         if isinstance(value, Mapping):
             for event in root.events:
@@ -999,16 +910,16 @@ def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[s
         allowed.update(t for t in TOKEN_SPLIT.split(text) if t)
     for text in (root.headline(), *(r.detail for r in grouping.refused)):
         allowed.update(rule10_spellings(text))
-    # PF4 re-freeze (PF4.32, PF4.45): the fault-lines head now says the group limit is the change the
+    # PF4.32, PF4.45: the fault-lines head says the group limit is the change the
     # tree would flag "4 times in 5" (the power through the one formatting function), so the power's
-    # two numbers are admitted, read from the implementation's constant.
+    # two numbers are admitted, read from the code's constant.
     from fractions import Fraction
 
     from poisson_prove import stats as stats_mod
 
     power = Fraction(stats_mod.POWER).limit_denominator(100)
     allowed.update({str(power.numerator), str(power.denominator)})
-    # PF4 re-freeze (PF4.45): the offered --max-group-mde values change, and one that is not a round
+    # PF4.45: an offered --max-group-mde value that is not a round
     # number prints rounded up so it admits (assert_detail's spelling), which rule 10's nearest is not.
     for refusal in grouping.refused:
         if refusal.offered_max_group_mde is not None:
@@ -1047,8 +958,8 @@ def as_0_0_1_wrote_it(text: str) -> str:
     """PF0: the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
-    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
-    byte."""
+    drop any separate ``written by proofload`` entry, so the text can be compared with 0.0.1's
+    byte for byte."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
     text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
@@ -1138,7 +1049,7 @@ def quickstart(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str
     root = tmp_path_factory.mktemp("s28-quickstart")
 
     def sweep(target: str, *extra: str) -> str:
-        # A sweep no longer ends in a "run_id:" line; the new run is the one
+        # A sweep does not end in a "run_id:" line; the new run is the one
         # the store gained.
         before = set(Store(root).runs())
         code, out, err = run_cli(["--store", str(root), "sweep", str(QUICKSTART), "--target", target, "--yes", *extra])
@@ -1192,7 +1103,7 @@ def events_of(event_flags: Sequence[str]) -> tuple[str, ...]:
     return tuple(event_flags[i + 1] for i, f in enumerate(event_flags) if f == "--event")
 
 
-#: PF4 re-freeze (PF4.45): the rows whose frozen grouping now needs the offered override.
+#: PF4.45: the rows whose grouping needs the offered override.
 ADMITTED_KEYS = {"lattice": X, "bh": "grp", "gate": "grp", "multi-event": "task"}
 
 
@@ -1210,12 +1121,12 @@ def every_pair(outs: Path, synth_root: Path, quickstart: tuple[Path, str, str]) 
     out = []
     for name, root, a, b, ev, axes, extra, requested in rows:
         # PF3: every pair here shares a salt (the lattice, the synthetic
-        # pairs, the quickstart's --pair-with), so the default is now the paired test; a row that names
+        # pairs, the quickstart's --pair-with), so the default is the paired test; a row that names
         # no method is checked against the unpaired test's tree (method_of), so the command line names it.
         if "--method" not in extra:
             extra = (*extra, "--method", "fisher_bh")
-        # PF4 re-freeze (PF4.45): group limits from each cell's own baseline, unconditional, refuse
-        # the grouping these rows were frozen on (the lattice's gain, the BH and gate pairs' grp, the
+        # PF4.45: group limits from each cell's own baseline, unconditional, refuse
+        # the grouping these rows test (the lattice's gain, the BH and gate pairs' grp, the
         # multi-event pair's task) at the default 0.20; the override the refusal offers is passed.
         if name in ADMITTED_KEYS:
             offered = admitting(root, a, b, events=events_of(ev), key=ADMITTED_KEYS[name], method=method_of(extra), **knobs_of(extra))
@@ -1254,7 +1165,7 @@ JUDGEMENT_RE = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
 
 
 def assert_tree_less_facts(report: Any, light: Any, multi: Any, event: str) -> None:
-    """PF4 (PF4.20, PF4.3, PF4.15): what S21's three digests guarded, as facts. The lattice declares no
+    """PF4 (PF4.20, PF4.3, PF4.15): the tree-less report's facts. The lattice declares no
     event kind, so a reader sees direction words: the caption counts falls and rises, the honesty
     line names the count of rises, the verdict column is each condition's direction, and no
     rendering says safer or worse. The worst-cells rows carry their condition's numbers in M7's
@@ -1263,7 +1174,7 @@ def assert_tree_less_facts(report: Any, light: Any, multi: Any, event: str) -> N
     assert ev.kind is None
     caption = f"{event}: {ev.n_lower} lower, {ev.n_higher} higher"
     library = report.panels[event].honesty
-    # PF4 re-freeze (a kindless event): n_safer and n_worse are None on a
+    # A kindless event: n_safer and n_worse are None on a
     # kindless event; the honesty line's count of rises is n_higher, under either word in the field.
     assert (ev.n_safer, ev.n_worse) == (None, None)
     assert f'"{ev.n_higher} worse"' in library or f'"{ev.n_higher} higher"' in library, library
@@ -1313,38 +1224,34 @@ def assert_tree_less_facts(report: Any, light: Any, multi: Any, event: str) -> N
 
 def test_r2_the_tree_less_builder_carries_s21s_facts_and_the_clis_svg_keeps_its_colour_cells(outs: Path) -> None:
     """The first clause points one way: ``build_multi_report`` with no tree on the E14 argv's
-    ``multi`` and spec renders S21's bytes -- markdown, SVG, light receipt -- bit for bit, and
-    the CLI's ``heatmap.svg`` still digests to S21's literal (the SVG never
-    changes). A builder who touches the SVG, the panel honesty or the worst-cells table fails
-    here alone. **Re-minted by the P-1 freeze, all three:** the SVG carries the headline's second
-    line as its subtitle (``<text x="24" y="54">``), so D1's token -- ``unpaired)`` for
-    ``fisher_bh`` -- moves it too; P-1's expectation that *the SVG's bytes do not move* was wrong and is
-    corrected here. The colour cells and the geometry are untouched."""
+    ``multi`` and spec carries S21's facts -- the headline, the panel's caption and honesty, its
+    worst-cells table, the SVG's cells and glyphs -- in the markdown, the SVG and the light
+    receipt, and the CLI's ``heatmap.svg`` has the library SVG's colour cells, cell for cell. A
+    change to the SVG, the panel honesty or the worst-cells table fails here."""
     report = built(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), x=X, y=Y, with_tree=False)
     light = built(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), x=X, y=Y, with_tree=False, theme="light")
-    # PF4 (PF4.20, PF4.3, PF4.15): the three digests give way to the facts they guarded -- the
-    # headline, the panel's caption and honesty, its worst-cells table, the SVG's cells and glyphs.
+    # PF4 (PF4.20, PF4.3, PF4.15): the facts -- the headline, the panel's caption and honesty, its
+    # worst-cells table, the SVG's cells and glyphs.
     multi, _ = store_tree(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,))
     assert_tree_less_facts(report, light, multi, EVENT)
-    # PF3: the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is the paired
     # test; the library SVG is the unpaired test's, named.
     r = ok(outs, LATTICE_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
-    # The CLI's heatmap labels follow the look file's rule 10 and may re-wrap, so its digest
-    # moves; its colour cells are the pinned library SVG's, cell for cell.
+    # The CLI's heatmap labels follow the look file's rule 10 and may re-wrap, so its bytes
+    # differ; its colour cells are the library SVG's, cell for cell.
     assert svg_cells(r.svg) == svg_cells(report.to_svg()) and svg_cells(r.svg)
 
 
 def test_r2_the_clis_report_and_receipt_with_the_tree_are_the_librarys_render_and_carry_the_trees_numbers(outs: Path) -> None:
     """The second clause points the other way: the CLI's ``report.md`` and ``receipt.html`` on
-    the E14 argv, the tree at the default knobs, digest to the values this file minted on
-    a stand-in implementation, which the real one reproduces (module docstring: the section templates).
+    the E14 argv, with the tree, are the library's render of the same pair.
     The command line writes numbers by the look file's rule 10 and prose is not pinned, so
-    the digests give way to the facts they guarded: the library's render of the same pair line
-    for line outside the numbers, the version entry, and the tree's numbers, verdicts, cells and
-    bound in each section."""
-    # PF3: the lattice's runs share a salt, so the default is now the paired
+    what is compared is the library's render line for line outside the numbers, the version
+    entry, and the tree's numbers, verdicts, cells and bound in each section (the section
+    templates in the module docstring)."""
+    # PF3: the lattice's runs share a salt, so the default is the paired
     # test; the library render and the tree are the unpaired test's, named.
-    # PF4 re-freeze (PF4.45): the lattice's gain grouping is refused at the default 0.20; the override
+    # PF4.45: the lattice's gain grouping is refused at the default 0.20; the override
     # its refusal offers gives the grouping this test pins (lattice_gain).
     override = lattice_gain()
     r = ok(outs, LATTICE_ROOT, *E14_ARGV[1:], "--method", "fisher_bh", *override)
@@ -1352,10 +1259,10 @@ def test_r2_the_clis_report_and_receipt_with_the_tree_are_the_librarys_render_an
     library = built(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), x=X, y=Y, with_tree=True, theme="light", counted=True, max_group_mde=float(override[1]))
     for kind, page, theirs in (("md", r.md, library.to_markdown()), ("html", r.html, library.to_html())):
         as_0_0_1_wrote_it(page)
-        # PF3 (PF3.6b): the command line's files gain a line naming the method,
+        # PF3 (PF3.6b): the command line's files carry a line naming the method,
         # which the library's render does not carry; compared without it.
-        # PF4 re-freeze (PF4.32): every surface that prints a limit names its test, so the library's
-        # render now carries a limits line naming Fisher too; both sides are compared without it.
+        # PF4.32: every surface that prints a limit names its test, so the library's
+        # render carries a limits line naming Fisher too; both sides are compared without it.
         # PF5: the command line's files name each run with its id in
         # the header, and the provenance list gives no id; both sides are compared without the two.
         # PF2: the command line's title names the runs; asserted, then put
@@ -1393,11 +1300,11 @@ def test_r3_excising_the_four_sections_by_index_gives_the_tree_less_render_on_ev
         # PF2: the command's default title names the runs; with the ids
         # put back in the title, the files compare with the library's tree-less render as before.
         root, a, b = quickstart if name.startswith("quickstart") else (_TREE_LESS_ARGS[name][0] or synth_root, *_TREE_LESS_ARGS[name][1:3])
-        # PF3 (PF3.6b): the command line's files gain a line naming the method,
+        # PF3 (PF3.6b): the command line's files carry a line naming the method,
         # which the library's tree-less render does not carry; compared without it.
         md, html = without_method_lines(titled_by_ids(r.md, root, a, b)), without_method_lines(titled_by_ids(r.html, root, a, b))
-        # PF4 re-freeze (PF4.32): every surface that prints a limit names its test, so the library's
-        # tree-less render now carries a limits line naming Fisher too; both sides are compared without it.
+        # PF4.32: every surface that prints a limit names its test, so the library's
+        # tree-less render carries a limits line naming Fisher too; both sides are compared without it.
         # PF5: the command line's files name each run with its id in
         # the header, and the provenance list gives no id; both sides are compared without the two.
         md, html = without_run_lines(md), without_run_lines(html)
@@ -1699,7 +1606,7 @@ def test_r6_the_axes_pair_carries_the_override_inside_detail_the_one_value_pair_
     assert [x.reason for x in result.grouping.refused] == ["underpowered", "one_group"], result.grouping.refused
     lines = lines_of(fault_items(r, "md"))
     assert "underpowered" in lines[1] and "one_group" in lines[2], lines[:3]
-    # PF4 (PF4.6): ``--by kind`` is no longer a trace grouping the tree refuses on a row; it is an
+    # PF4 (PF4.6): ``--by kind`` is not a trace grouping the tree refuses on a row; it is an
     # unknown grouping, refused with exit 1 and no page, and the tree raises on it.
     # PF3: the method is named, as the rest of this file's lattice commands name it.
     r = rendered(outs, LATTICE_ROOT, LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--by", "kind", "--method", "fisher_bh")
@@ -1738,9 +1645,8 @@ def assert_cells(name: str, kind: str, items: Sequence[tuple[Any, ...]], result:
         return
     assert leaves.families, (name, kind)
     meaning = lines[1]
-    # PF4 re-freeze (PF4.24, PF4.32): a cell's limit is no longer the increase capped at the headroom
-    # but the smallest change either way one condition alone would be flagged for, from where it was;
-    # the sentence says that, still with no number.
+    # PF4.24, PF4.32: a cell's limit is the smallest change either way one condition alone would
+    # be flagged for, from where it was; the sentence says that, with no number.
     assert "alone" in meaning.lower() and "from where" in meaning.lower() and numeric_tokens(meaning) == [], (name, kind, meaning)
     family_lines = lines[2:]
     assert len(family_lines) == len(leaves.families), (name, kind, family_lines)
@@ -1786,7 +1692,7 @@ def test_r7_the_axes_pair_prints_one_family_line_reading_0_rejected_and_no_table
 
 
 def test_r7_on_the_lattice_by_load_family_20_follows_cells_order_and_its_q_tokens_are_not_sorted(outs: Path) -> None:
-    # PF3: the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is the paired
     # test; the tree checked here is the unpaired test's, named.
     r = ok(outs, LATTICE_ROOT, LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--by", Y, "--method", "fisher_bh")
     _, result = store_tree(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,), by=Y)
@@ -1811,7 +1717,7 @@ def test_r7_on_a_pair_with_a_fixed_third_key_every_leaf_row_carries_every_config
     """The tree is the family's and ``--fix`` slices only the figure: with ``model`` fixed to
     ``m1`` on the page, the leaf rows carry ``model=m1`` and ``model=m2`` alike, every key of
     each config. A builder who prints only the grid's two axes fails here alone."""
-    # PF3: the three-key pair's runs share a salt, so the default is now the paired
+    # PF3: the three-key pair's runs share a salt, so the default is the paired
     # test; the tree checked here is the unpaired test's, named.
     r = ok(outs, synth_root, "three-a", "three-b", "--event", "fail", "--x", "task", "--y", "temp", "--fix", 'model="m1"', "--method", "fisher_bh")
     _, result = store_tree(synth_root, "three-a", "three-b", events=("fail",))
@@ -2001,7 +1907,7 @@ def test_r13_report_help_lists_the_five_flags_with_diffs_help_text_for_each() ->
 
 
 def test_r13_the_five_flags_reach_the_call_on_the_axes_pair(outs: Path, synth_root: Path) -> None:
-    # PF3: the axes pair's runs share a salt, so the default is now the paired
+    # PF3: the axes pair's runs share a salt, so the default is the paired
     # test; the tree checked here is the unpaired test's, named.
     r = ok(outs, synth_root, "axes-a", "axes-b", "--event", "fail", "--x", "temp", "--y", "task", "--by", "temp", "--max-group-mde", "0.6", "--depth", "2", "--permutations", "300", "--seed", "3", "--method", "fisher_bh")
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), by="temp", max_group_mde=0.6, depth=2, n_permutations=300, seed=3)
@@ -2055,7 +1961,7 @@ def test_r14_every_pair_carries_the_four_sections_with_no_flag_and_the_empty_fam
 
 
 def test_r14_under_methods_all_the_sections_appear_once_and_the_omnibus_names_the_primarys_scheme(outs: Path) -> None:
-    # PF3: the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is the paired
     # test; the primary here is the unpaired test's, named.
     r = ok(outs, LATTICE_ROOT, *E14_ARGV[1:], "--methods", "all", "--method", "fisher_bh")
     _, result = store_tree(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,))
@@ -2070,7 +1976,7 @@ def test_r14_the_single_run_report_writes_none_of_the_four_headings_and_the_latt
     single = rendered(outs, synth_root, "axes-b", "--event", "fail", "--x", "temp", "--y", "task")
     assert single.code == 0, single.text
     assert not any(h in single.md.splitlines() for h in MD_HEADINGS) and not any(h in single.html.splitlines() for h in HTML_HEADINGS)
-    # PF3: the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is the paired
     # test; the headline here is the unpaired test's, named.
     r = ok(outs, LATTICE_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
     multi, _ = store_tree(LATTICE_ROOT, LATTICE_A, LATTICE_B, events=(EVENT,))
@@ -2116,7 +2022,7 @@ def test_r15_identical_arguments_and_twin_stores_write_byte_identical_files(tmp_
 def test_r15_a_different_seed_on_the_lattice_changes_only_what_the_second_tree_feeds(outs: Path) -> None:
     """The sections of the ``--seed 7`` run equal the sections rendered from the API's seed-7
     tree; everything outside them equals the default run's."""
-    # PF3: the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is the paired
     # test; the seed-7 tree checked here is the unpaired test's, named.
     base = ok(outs, LATTICE_ROOT, *E14_ARGV[1:], "--method", "fisher_bh")
     seeded = ok(outs, LATTICE_ROOT, *E14_ARGV[1:], "--seed", "7", "--method", "fisher_bh")
@@ -2179,11 +2085,11 @@ def test_r17_a_hostile_task_value_renders_as_text_on_the_receipt_and_verbatim_in
 
 
 def test_r17_a_hostile_value_in_a_group_label_renders_as_text_on_a_pair_whose_grouping_admits_the_axis(outs: Path, synth_root: Path) -> None:
-    """S29's hostile-label invariant, on this module's surface; A27 gives it the fixture.
+    """S29's hostile-label invariant, on this module's surface, on the BH-shaped hostile pair.
 
     The first assertion is the precondition and is not decoration: on R17's own two-cell pair the
-    grouping collapses to ``whole_grid`` and the one label reads ``all``, which is why no group
-    label in either frozen file has ever carried a hostile value. If a later power-rule change returns
+    grouping collapses to ``whole_grid`` and the one label reads ``all``, so no group
+    label there carries a hostile value. If a later power-rule change returns
     this fixture to the collapse, that assertion fails here rather than the clauses below passing
     over a label that carries nothing.
 
@@ -2230,23 +2136,22 @@ def test_r17_the_markdown_carries_a_hostile_group_label_verbatim_and_keeps_its_c
     assert all(value in r.md for value in HOSTILE_VALUES)
 
 
-# ---------- R21: C18's unpaired-analysis message ----------
+# ---------- R21: the unpaired-analysis message ----------
 
 
 def test_r21_the_unpaired_warning_states_the_cells_it_matched_and_names_coverage(synth_root: Path) -> None:
-    """C18's message half, and only the message half.
+    """The warning's message, and only the message.
 
-    The warning was raised in ``diff._pairing`` before any cell existed, so A27's sentence could
-    not carry a count and this clause did not ask for one; P-1 moves it after the matching and it
-    carries the matched-row count (P-1 Y4 pins that). What this clause asks for is that the claim's
-    subject stops being every episode: the pair below shares its seeds on every matched row (C49,
-    ``seed_of``) with two cells that have no counterpart at all, measured, and ``coverage`` on the same page lists them,
+    The warning is raised after the matching and carries the matched-row count, which
+    ``test_p1_payload.py``'s Y4 pins. What this clause asks for is that the claim's
+    subject is not every episode: the pair below shares its seeds on every matched row
+    (``seed_of``) with two cells that have no counterpart at all, measured, and ``coverage`` on the same page lists them,
     so a sentence promising a counterpart for every episode is contradicted by the page it is
     printed beside. The restatement scopes the correspondence to the cells the comparison matched
     and names ``coverage`` as where the rest are, which is reachable without a count.
 
-    The numbers are asserted unchanged in the same breath: the change alters what the warning
-    says, never when a method is permitted to run.
+    The numbers are asserted in the same breath: the message is about what the warning
+    says, never about when a method is permitted to run.
     """
     store = Store(synth_root)
     fa, fb = store.read("overlap-a", meta=False), store.read("overlap-b", meta=False)
@@ -2265,16 +2170,13 @@ def test_r21_the_unpaired_warning_states_the_cells_it_matched_and_names_coverage
 
 
 def test_r21_seed_identity_is_the_salt_plus_the_stored_seeds_and_mcnemar_refuses_and_runs_where_it_did(synth_root: Path) -> None:
-    """The three things C18 kept for its own change, which P-1 was, **restated after it**.
+    """Seed identity, the McNemar refusal and the unit check.
 
-    Until P-1 this test pinned ``paired`` as salt equality *even where the salt is the only evidence
-    and the rows disagree* -- and this very fixture was such a pair (C49: 24 of 24 matched rows
-    carried different seeds, by dict position). Now ``seed_identity_match`` is the salt plus the
-    stored seed on every matched row, the fixture stores the same seed in both
-    arms (``seed_of``), so it is ``True`` under ``fisher_bh`` and under ``mcnemar_bh``; the
-    salt-differing pair is ``False``; ``mcnemar_bh`` still refuses on differing salts and still runs
-    on this pair; a ``t_unit`` mismatch still raises before either question is asked. The
-    seed-disagreeing case is P-1's own Y3/Y5, minted deliberately rather than inherited.
+    ``seed_identity_match`` is the salt plus the stored seed on every matched row; the fixture
+    stores the same seed in both arms (``seed_of``), so it is ``True`` under ``fisher_bh`` and
+    under ``mcnemar_bh``; the salt-differing pair is ``False``; ``mcnemar_bh`` refuses on
+    differing salts and runs on this pair; a ``t_unit`` mismatch raises before either question is
+    asked. A pair whose salts match and whose seeds disagree is ``test_p1_payload.py``'s Y3 and Y5.
     """
     store = Store(synth_root)
     fa, fb = store.read("overlap-a", meta=False), store.read("overlap-b", meta=False)
@@ -2295,9 +2197,9 @@ def test_r21_seed_identity_is_the_salt_plus_the_stored_seeds_and_mcnemar_refuses
 
 
 def test_r18_the_lattice_renders_twelve_group_rows_eleven_rejected_eleven_families_and_the_golden_leaf_counts(outs: Path) -> None:
-    # PF3: the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is the paired
     # test; the Fisher and by-grid goldens are the unpaired test's, named.
-    # PF4 re-freeze (PF4.45): the lattice's gain grouping is refused at the default 0.20; the override
+    # PF4.45: the lattice's gain grouping is refused at the default 0.20; the override
     # its refusal offers gives the grouping these goldens are of (lattice_gain), under each method.
     fisher = ok(outs, LATTICE_ROOT, *E14_ARGV[1:], "--method", "fisher_bh", *lattice_gain())
     header, rows = tables_of(fault_items(fisher, "md"))[0]

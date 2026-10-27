@@ -11,7 +11,7 @@ each condition's count of ``tripped`` in each run, written down before any run i
 so they never skip. Cells are matched on the decoded ``config`` (gain, load), never on
 ``config_hash``.
 
-Notes for the implementation session:
+Notes for a reader of these tests:
 
 - I9 draws distinct event times on purpose. ``lifelines.AalenJohansenFitter`` jitters
   tied event times at random, which makes a 1e-9 comparison impossible on tied data.
@@ -550,7 +550,7 @@ def test_i13_cell_table_km_warns_with_names() -> None:
         cell_table(df, "fell", method="km")
     messages = " ".join(str(w.message) for w in record)
     # PF4 (PF4.19): the warning names the outcomes that end a run before the horizon; "timeout"
-    # does (t = 4.0), "survived" is seen only at the horizon (t = 5.0) and is no longer named.
+    # does (t = 4.0), "survived" is seen only at the horizon (t = 5.0) and is not named.
     assert "timeout" in messages and "survived" not in messages
 
 

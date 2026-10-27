@@ -1,48 +1,18 @@
-"""LS -- local serve: the frozen tests for LS1-LS20 and LS21.
+"""LS -- local serve: the frozen tests for LS1-LS21.
 
-**Frozen after review.** Approved: the invariant-to-test table, the mutant-to-test table and the
-conventions below; the freeze is this docstring and nothing else. The mutation pass was re-run
-control-first after the freeze. The build works against this file and does not edit it.
-
-Written against ``f7af030``, on the update commit that moves the schema pins to
-``proofload.viewpair/6``, the top-level key tuple to fourteen with ``summary`` eighth,
-``PANEL_KEYS`` to fifteen, ``HOLE_KEYS`` to ten, the ``<h2>`` sequence to ``Summary`` first and
-``Run pair`` thirteenth, and the two-event complementary pair's trade line to the complement
-sentence. The build changes ``src/poisson_prove/diff.py`` (``complementary_events``,
-``trade_line``), ``src/poisson_prove/report.py`` (``_wrap`` and the four wrapped texts,
-``MultiReport.complement``), the new ``src/poisson_prove/plain.py``, ``src/poisson_prove/viewer.py`` (the
+The surfaces under test are ``src/poisson_prove/diff.py`` (``complementary_events``,
+``trade_line``), ``src/poisson_prove/report.py`` (``_wrap`` and the wrapped texts,
+``MultiReport.complement``), ``src/poisson_prove/plain.py``, ``src/poisson_prove/viewer.py`` (the
 inert rule, the docstring and both refusals, the hole's ``where``, the holes block, the ``summary``
 key, the schema, the page order, the unverified tails) and ``src/poisson_prove/cli.py`` (help and two
-refusal wordings) against this file, and does not edit it. Every rendered-output digest the build
-moves is re-minted after it; none is minted here.
+refusal wordings).
 
 **``poisson_prove.plain`` and the changed surfaces are reached inside test bodies** through ``plain()``
-and ``viewer()``, so this file collects on the bare tree, its own tests fail there, and every other
-test in the repo still reports. Source is read through ``poisson_prove.__file__``, never ``Path.cwd()``,
-so a run under ``PYTHONPATH`` reads the tree it was pointed at.
+and ``viewer()``, so a break in one of them fails the tests that use it, never the collection, and
+every other test in the repo still reports. Source is read through ``poisson_prove.__file__``, never
+``Path.cwd()``, so a run under ``PYTHONPATH`` reads the tree it was pointed at.
 
-**Nine items, measured at ``f7af030`` before a test was written.** The four reproductions
-hold: (3) on the then-fixture pair's page every present cell has its centre under a label ``<text>`` drawn after its rect, and no
-``pointer-events:none`` selector ends in ``text``; (4) on that pair's two-event figure exactly two
-``<text>`` runs pass the box, both legend captions, and a 143-char ``--title`` runs past it too --
-*and on every builder-made pair whose box is 200 to 440 px wide the
-honesty lines, the panel headline, the stacked headline's second line and the legend swatch labels
-pass it too* (see the LS2 convention below); (5) a three-hole partial pair prints ``none`` in the
-``where`` column of both off-grid rows, each of which carries its whole ``config``; (6) all four
-integer conditions hold on that two-event pair in every cell and both arms, the deltas cancel
-in every cell, and every other pair measured (its one event alone, the multi-event pair, and two
-real-suite pairs in the workspace store) fails condition 1 or 4. (7) ``max_mde_unchanged`` is
-a fraction in [0, 1] on every pair and ``_fmt(value, "pp0")`` is character for character the number
-the honesty line prints, on all thirteen panels that have one. (8) ``MULTI_JSON_SHA256``'s fixture
-is a single-event comparison and ``to_json()`` has 25 keys, none named ``complementary_events``. (1) A
-grep for ``TOP_LEVEL_KEYS`` finds **six** copies (``test_s29_viewer.py``,
-``test_m13_viewer.py``, ``test_p1_payload.py``, ``test_s21_errors.py``, ``test_a28_agreement.py``,
-``test_cut_surfacing.py``), not the three expected; all six are updated. (2)
-``origin/main`` is ``a1caa17``, four commits past ``f7af030`` (the PR-1 merge); these tests stay
-on ``f7af030``.
-
-**Conventions this file fixes where the invariants are silent or disagree with each other. The
-build follows these; each was reviewed.**
+**Conventions this file fixes where the invariants are silent or disagree with each other.**
 
 - **The Summary region is one ``<p>`` per sentence, one element per line, no table, no list, no
   attribute, no ``<details>``**, in this order: the partial line (if any), the complement line (if
@@ -50,11 +20,9 @@ build follows these; each was reviewed.**
   line, and last the pointer. Every ``<p>`` is one ``line`` value of ``summary`` through
   ``html.escape``, so LS20's two directions are one equality.
 - **The event name is spelled bare** in the counts and row sentences: ``tripped: 0 of 72 conditions
-  ...``. The sentence's source writes the field in backticks, which this file reads as markdown
-  and not as characters the page prints; the headline already spells events bare.
+  ...``, with no backticks around it, as the headline spells events.
 - **``change`` is the cell's ``text["delta"]`` verbatim**, so a rise reads ``28.1`` and not
-  ``+28.1``; an example showed a plus sign while the rule says verbatim, and verbatim is what
-  LS9 can check.
+  ``+28.1``; verbatim is what LS9 can check.
 - **``q`` in the counts sentence is ``str()`` of the ``diff`` object's ``q``** (``0.05``). LS9's
   payload-bound clause accepts it because the tree's ``bound.text.q`` spells the same number; the
   two spellings part below ``q = 0.001`` (``sig3`` goes scientific), which no fixture reaches and is
@@ -74,35 +42,33 @@ build follows these; each was reviewed.**
   first guard runs first) and ``summary.complement`` is ``{"events": [...], "line": None}``: there
   is no traded pair to name. No fixture reaches it.
 - **The non-complementary trade line keeps its first sentence and drops its second**:
-  ``Trade: {safer} fell in {n} cells where {worse} rose.`` The line was to stay unchanged except
-  under complementarity, and "moved failures" was to appear nowhere in ``src/``; only the second
-  can be checked, and D2 is why it wins.
+  ``Trade: {safer} fell in {n} cells where {worse} rose.`` "moved failures" appears nowhere in
+  ``src/`` (LS13), and that rule wins over keeping the old line whole.
 - **The partial line names each partial run in ``a``, ``b`` order**, one sentence per run joined by
   a space, and ``summary.partial["runs"]`` lists them in that order.
-- **LS2 is pinned over five texts**: the four D9 wraps -- the title (stacked and per panel), the
+- **LS2 is pinned over five texts**: the four wrapped texts -- the title (stacked and per panel), the
   headline lines (stacked header and panel caption), the trade or complement line, the legend caption
   -- and the honesty lines, each identified by content through this file's restatement of
-  ``_wrap`` and its budget. LS2's clause reads "every ``<text>``"; measured before the build, that
+  ``_wrap`` and its budget. LS2's clause reads "every ``<text>``"; that
   cannot hold on a box 200 px wide, whose legend swatch *rects* sit at a fixed 46 px
   pitch and already leave it; the swatch labels are the named exception.
 - **A wrapped text is drawn as one ``<text>`` per line, the continuation lines carrying
-  ``data-wrap="1"`` and the first line not**, so M7's frozen file (updated) can read a wrapped
+  ``data-wrap="1"`` and the first line not**, so the M7 tests can read a wrapped
   text back as one, and so a reader of the SVG can tell a wrapped line from a new text.
-- **The tree refusal is left as it was.** It was to get "the same treatment for symmetry",
-  but it carries no version literal to interpolate, and P-1's Y15 pins its text; LS8
+- **The tree refusal keeps its wording.** It carries no version literal to interpolate, and
+  ``test_p1_payload.py``'s Y15 pins its text; LS8
   asserts it names no version, and the intervals refusal alone interpolates ``SCHEMA``.
 - **LS3's rect clause is "byte-identical up to the top growth"**: ``x``, ``width``, ``height``,
-  ``fill`` and the four ``data-`` attributes of every grid and glyph rect are the base commit's,
-  and ``y`` is the base commit's plus exactly the growth of ``top`` (``18`` per extra title
+  ``fill`` and the four ``data-`` attributes of every grid and glyph rect are the pinned unwrapped
+  page's, and ``y`` is the pinned value plus exactly the growth of ``top`` (``18`` per extra title
   line, ``12`` per extra headline line). LS3's "byte-identical" holds only where nothing
   above the grid wraps; on the narrow pairs the headline wraps, and a grid that did not move down
   would be drawn over its own title.
-- **LS16 is pinned as written, six tokens over the whole page.** Measured: the Cells region prints
-  ``MDE is ADR-018's smallest detectable increase ...`` on every pair with a rejecting family, so
-  LS16 and LS19's "byte-identical apart from" the two unverified tails cannot both hold.
-  D14's rule (a public page carries no reference a stranger cannot resolve) is the intent: the
-  build spells that sentence ``MDE is the smallest detectable increase ...`` (and its twin in ``report.py`` the same), and LS19's region digests are taken with the bare spelling
-  normalised to that one.
+- **LS16 holds over the whole page, six tokens.** A public page carries no reference a stranger
+  cannot resolve, so the Cells region, on every pair with a rejecting family, spells its MDE
+  sentence ``MDE is the smallest detectable increase ...`` (and its twin in ``report.py`` the same).
+  LS19's region digests were taken over the earlier spelling (``MDE_MEANING_BARE``), which is
+  normalised to that one before they are compared.
 - **The hole's ``where`` on a grid hole is its ``coords`` string, and on an off-grid hole is
   ``", ".join(f"{axis}={config_text[axis]}")`` over ``x_axis``, ``y_axis`` and the keys of
   ``view.fixed`` in that order**, or ``off grid: <config_hash>`` when the config carries none of them.
@@ -112,18 +78,18 @@ build follows these; each was reviewed.**
   honesty line is ``_HONESTY_NONE``.
 - **LS19's region digests are normalised at four places the invariant did not count**:
   the two unverified tails, the MDE-meaning sentence (the LS16 convention), the ``Result``
-  region's trade or complement ``<p>`` (D10 changes it on the two-event complementary pair), and the ``Cell``
-  region's holes JSON block (D12 adds ``where`` to every hole). Everything else in the eight regions
-  is pinned byte for byte, on the bare tree, and must survive the build.
-- **LS21, which lifted D16's hold on the word "unpaired":** the word and the Python warning stay exactly as they are, and one plain line is printed beside the word --
+  region's trade or complement ``<p>`` (the complement sentence replaces it on the two-event complementary pair), and the ``Cell``
+  region's holes JSON block (every hole carries ``where``). Everything else in the eight regions
+  is pinned byte for byte.
+- **LS21, the word "unpaired":** the word and the Python warning stay exactly as they are, and one plain line is printed beside the word --
   in the ``Result`` block, the ``<p>`` right after the headline -- iff the payload's
   ``diff.unpaired_analysis`` is true (the runs share their seeds and the test ignores that). It rides
   the payload as ``summary.pairing.line`` (``None`` otherwise), third key of ``summary`` after
   ``complement``, and is the one ``line`` of ``summary`` that is read in ``Result`` rather than in
   the Summary region, so LS20's equality leaves it out. The wording is a pairing report's
-  suggested sentence, verbatim. LS21 was added after LS1-LS20 were written.
+  suggested sentence, verbatim.
 
-**Fixture limits, stated before anything is asserted on a fixture.** Every S29 pair is complete,
+**Fixture limits.** Every S29 pair is complete,
 so LS15 rests on this file's own partial pair (three holes, ``part-a`` never marked complete,
 both orders). No stored pair was taken at ``--q`` above 0.05, so the unlabelled row and the ``q``
 boundaries are exercised on a hand-built panel (LS10) and only the labels the real payloads reach
@@ -188,10 +154,10 @@ TOP_LEVEL_KEYS = (
 #: LS7. Fifteen panel keys, ``mde_unchanged`` after ``honesty``; the cell keys unchanged; ten hole keys.
 # PF4 (PF4.20, PF4.3): a panel carries its event's kind before n_safer and n_worse (null when the
 # kind is unknown) and the direction counts n_higher and n_lower after them, then the share label.
-# The contract names the share caption, not this key; share_label is the reference build's name.
+# The contract names the share caption, not this key; share_label is the payload's name for it.
 # ``threshold`` is the verdict's threshold on the panel, so the Summary reads it as a payload field.
-# PF4 re-freeze (PF4.34 to PF4.47): each panel gains ``flag_rule`` after ``kind``; the order is the
-# reference build's.
+# PF4.34 to PF4.47: each panel carries ``flag_rule`` after ``kind``; the order is the one
+# ``viewer.py`` writes.
 PANEL_KEYS = (
     "event", "caption", "honesty", "mde_unchanged", "kind", "flag_rule", "n_safer", "n_worse", "n_higher", "n_lower",
     "share_label", "threshold", "n_unchanged", "n_absent", "n_present", "x_values", "y_values", "cells",
@@ -206,8 +172,8 @@ CELL_KEYS = (
     "coords", "config_hash", "n_a", "n_b", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "events_a", "events_b", "rate_a", "rate_b", "delta", "stat", "p", "q", "mde", "verdict",
     "direction", "direction_note", "pairs", "n01", "n10", "mde_note",
-    # PF4 re-freeze (PF4.34 to PF4.47): Holm's q and flag, the limit keys, the competing shift and the
-    # interval, after mde_note; the order is the reference build's.
+    # PF4.34 to PF4.47: Holm's q and flag, the limit keys, the competing shift and the
+    # interval, after mde_note; the order is the one ``viewer.py`` writes.
     "q_holm", "holm", "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test", "mde_basis",
     "mde_level", "mde_family", "mde_power", "mde_anchor", "mde_hr", "p_min", "flaggable", "mde_moves_with",
     "mde_rise_verdict", "mde_fall_verdict", "competing_shift", "ci_lo", "ci_hi", "ci_level", "ci_method",
@@ -220,9 +186,9 @@ HOLE_KEYS = (
 )
 #: LS7. The ``summary`` object, its event entry, a ``worse`` row and the limit.
 # PF4 (PF4.5): the Summary carries the comparison's verdict word, first.
-# PF4 re-freeze (PF4.34, PF4.35, PF4.40, PF4.44, PF4.46): after the word, the verdict rule, the verdict
+# PF4.34, PF4.35, PF4.40, PF4.44, PF4.46: after the word, the verdict rule, the verdict
 # line, the verdict limit, the fragility, peeking, the errored episodes and the verdict block's detail
-# lines (``facts``); the order is the reference build's.
+# lines (``facts``); the order is the one ``viewer.py`` writes.
 SUMMARY_KEYS = (
     "verdict", "verdict_rule", "verdict_line", "verdict_limit", "fragility", "peeking", "errors_differ", "facts",
     "partial", "complement", "pairing", "events", "pointer",
@@ -283,17 +249,17 @@ STACKED_LINE_H = 16
 TITLE_LINE_H = 18
 BODY_LINE_H = 12
 MIN_BUDGET = 8
-# PF4 (PF4.20): no longer asserted; on an event of unknown kind the caption reads in direction
+# PF4 (PF4.20): not asserted; on an event of unknown kind the caption reads in direction
 # words. LS2 reads the caption off the figure (drawn_legend_caption) and asserts its facts.
 LEGEND_TAIL = "corner notches = trade (safer in one event, worse in another)"
-#: The honesty lines join the wrap set: D9 named four texts, the honesty lines measured past the
-#: box on every narrow pair before the build, so they wrap too (a fifth
+#: The honesty lines join the wrap set: besides the four wrapped texts, the honesty lines pass the
+#: box on every narrow pair unwrapped, so they wrap too (a fifth
 #: text, at the caption's 12 px pitch).
 WRAPPED_HONESTY = True
 
 # ---------- the words, verbatim ----------
 
-# PF4 re-freeze (PF4.40): the words "no significant change" always carry the verdict limit on their
+# PF4.40: the words "no significant change" always carry the verdict limit on their
 # line, so the counts line says the conditions "were not flagged".
 COUNTS_LINE = "{event}: {n_worse} of {n_present} conditions got worse, {n_safer} got safer, and {n_unchanged} were not flagged at q = {q}."
 ROW_LINE = "{where}: {event} was {before}% of trials and is now {after}%, a rise of {change} percentage points. How sure: {label} (q = {q})."
@@ -302,7 +268,7 @@ LIMIT_LINE_LABELLED = "Too small to tell: the least sensitive condition among th
 LIMIT_LINE = "The least sensitive condition among those this run did not call a change ({where}, n = {n_a}/{n_b}) could only have seen a rise of {mde}pp or more."
 LIMIT_LINE_NONE = "Every condition moved significantly, so there is no condition left to state a detection limit from."
 PARTIAL_LINE = 'Run {run_id} ({role}) recorded status "partial": it stopped before everything it planned had run. What is below compares the conditions both runs have.'
-#: LS21, which lifted D16's hold: the one plain line beside the word
+#: LS21: the one plain line beside the word
 #: "unpaired", printed iff the payload's ``diff.unpaired_analysis`` is true.
 PAIRING_LINE = "Compared as two separate samples. The runs share their seeds; this test does not use that."
 POINTER_LINE = "Every number above is below with the statistics it came from: the omnibus, the honesty block and its bound, the per-condition table, the intervals, and what this comparison could not establish."
@@ -313,9 +279,9 @@ LATTICE_COMPLEMENT_LINE = COMPLEMENT_LINE.format(e1=lattice.EVENT, e2=lattice.OT
 TRADE_LINE = "Trade: {safer} fell in {n} {cells} where {worse} rose."
 HOLES_SUMMARY = "{n} holes: {g} on the grid, {o} off it (a condition whose axis value no comparable condition has, so it is on no heatmap)."
 HONESTY_NONE = "No unchanged cells; every cell moved significantly."
-# PF4 re-freeze (PF4.27, PF4.32): the limit named is the condition's own, a rise or a fall.
+# PF4.27, PF4.32: the limit named is the condition's own, a rise or a fall.
 HONESTY_RE = re.compile(r"can only detect a (\d+)pp (?:rise|fall)")
-#: PF4 re-freeze (PF4.27): the closed list of reasons a limit is null, printed in words.
+#: PF4.27: the closed list of reasons a limit is null, printed in words.
 NOTES = ("no room", "none detectable", "cannot be flagged", "no matched pairs")
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 
@@ -542,7 +508,7 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
         argv += ["--y", y]
     for k, v in fixed.items():
         argv += ["--fix", f"{k}={json.dumps(v)}"]
-    # PF3: with no --method the default is now the paired test
+    # PF3: with no --method the default is the paired test
     # for runs that share a salt (the lattice among them); every pair here is compared with the library's
     # multi_diff under ``method``, so the method is always named.
     argv += ["--method", method]
@@ -668,7 +634,7 @@ def walk_ints(value: Any) -> Iterator[str]:
 def summary_sentences(structure: Mapping[str, Any]) -> list[str]:
     """Every ``line`` value of ``summary`` that is a string, in section order."""
     s = structure["summary"]
-    # PF4 re-freeze (PF4.34, PF4.35, PF4.44): the Summary opens with the comparison's verdict line and
+    # PF4.34, PF4.35, PF4.44: the Summary opens with the comparison's verdict line and
     # carries the verdict block's detail lines, ``<label>: <line>``, before the pointer.
     out: list[str] = [s["verdict_line"]] if s.get("verdict_line") is not None else []
     if s["partial"] is not None:
@@ -685,7 +651,7 @@ def summary_sentences(structure: Mapping[str, Any]) -> list[str]:
 
 
 def verdict_block_lines(structure: Mapping[str, Any]) -> list[str]:
-    """PF4 re-freeze (PF4.35, PF4.42, PF4.44, PF4.46): the verdict block's detail lines the Summary
+    """PF4.35, PF4.42, PF4.44, PF4.46: the verdict block's detail lines the Summary
     carries, ``<label>: <line>``. They are the comparison's facts, carried whole by the payload as
     ``summary.facts``, not sentences the plain register composes from the panels."""
     return [f"{fact['label']}: {fact['line']}" for fact in structure["summary"].get("facts", ())]
@@ -1014,7 +980,7 @@ def caption_checked(caption: str, event: str, trades: bool) -> str:
 
 def expected_layout(p: Pair) -> dict[str, Any]:
     """Every wrapped text of the figure and the height growth it implies, from the structure and
-    the bare-tree pins alone."""
+    the pinned unwrapped geometry alone."""
     texts, width, _ = svg_texts(p.structure["heatmap_svg"])
     title = wrap(str(p.structure["view"]["title"]), budget(width, STACKED_TITLE_X, FONT + 2))
     header = [wrap(text, budget(width, STACKED_TITLE_X, FONT)) for text in header_lines(p)]
@@ -1135,15 +1101,15 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
     return {p.name: p for p in pairs}
 
 
-# ---------- the bare-tree pins (LS3, LS19), minted at 2da9847 ----------
+# ---------- the pins (LS3, LS19): the page before anything wraps ----------
 
-# ---- pins begin: minted on the bare tree at 2da9847 by the pin-minting script ----
-#: LS3. Per pair, the stacked figure's width and, per panel, its bare-tree body height and the sha256
-#: of its grid and glyph rects (``rect_set`` at shift 0). Green before and after: the grid does not
-#: move.
-#: The three lattice pairs' widths and heights are not minted: they are the grid layout's arithmetic
-#: on the design's 12 x 6 grid (``lattice_bare_box``, which LS3 asserts they equal), measured equal on
-#: main's unchanged src/ (05cd1e8); their rect sets are checked by their facts (``lattice_rects``).
+# ---- pins begin ----
+#: LS3. Per pair, the stacked figure's width and, per panel, its unwrapped body height and the sha256
+#: of its grid and glyph rects (``rect_set`` at shift 0). Wrapping does not move the grid
+#: sideways.
+#: The three lattice pairs' widths and heights are the grid layout's arithmetic on the lattice
+#: design's 12 x 6 grid (``lattice_bare_box``, which LS3 asserts they equal); their rect sets are
+#: checked by their facts (``lattice_rects``).
 BARE_WIDTH: dict[str, float] = {
     "lattice": 600.0,
     "lattice-two-events": 360.0,
@@ -1253,7 +1219,7 @@ RECT_SET_SHA256: dict[str, dict[str, str]] = {
 }
 #: LS19. Per pair and region, the sha256 of the region's lines with the retired unverified tails, the
 #: new ones, the MDE-meaning sentence's ``ADR-018's``, the trade or complement line and the holes JSON block
-#: normalised away (each named in the conventions above). Green before and after.
+#: normalised away (each named in the conventions above).
 REGION_SHA256: dict[str, dict[str, str]] = {
     "axes": {
         "Result": "8eaabfe0f29b5642660eeb10e3cc9baed9b44a2f3b66c428edca31c5c53feeb4",
@@ -1379,10 +1345,10 @@ REGION_SHA256: dict[str, dict[str, str]] = {
 # ---- pins end ----
 
 
-# ---------- the lattice pairs: what the bare-tree digests guarded, from the design ----------
+# ---------- the lattice pairs: what a region digest would guard, from the lattice design ----------
 
 #: The three pairs over the generated lattice (``tests/lattice.py``). Their figure and their Result,
-#: Not verified and Provenance regions are checked against the design and the run identities, not
+#: Not verified and Provenance regions are checked against the lattice design and the run identities, not
 #: against a digest of a page.
 LATTICE_PAIRS = ("lattice", "lattice-two-events", "lattice-titled")
 #: The grid body's layout, restated (``report._grid_body``): a cell is at most 40 px wide over 880 px
@@ -1418,7 +1384,7 @@ def dark_fill(ratio: float, significant: bool) -> str:
 
 
 def lattice_family(events: Sequence[str], q: float = 0.05) -> dict[tuple[str, str], dict[str, Any]]:
-    """Per (event, condition) of the lattice under the unpaired test: the design's counts, scipy's
+    """Per (event, condition) of the lattice under the unpaired test: the lattice design's counts, scipy's
     Fisher p (``lattice.fisher``) and one BH family over every event's conditions together."""
     rows = [(event, r) for event in events for r in lattice.fisher(event, q).values()]
     qs = lattice.bh([r["p"] for _, r in rows])
@@ -1436,7 +1402,7 @@ def lattice_directions(events: Sequence[str]) -> dict[str, tuple[int, int]]:
 
 def lattice_rects(p: Pair, event: str) -> list[dict[str, str | None]]:
     """The grid and glyph rects of one panel of a lattice pair as the layout and the colour rule
-    place them, from the design alone: one rect per condition at its grid position (``x`` over the
+    place them, from the lattice design alone: one rect per condition at its grid position (``x`` over the
     pair's x axis values in order, ``y`` over its y axis values), ``data-cell`` its key, its fill from
     the change over the colour bound and the BH family over the pair's events, ``data-sat`` on the
     conditions both arms hold at 0% or 100%, ``data-trade`` on the conditions one event flagged lower
@@ -1493,8 +1459,8 @@ def lattice_headline(events: Sequence[str], order: Sequence[str]) -> str:
 
 
 def assert_lattice_region(p: Pair, heading: str) -> None:
-    """What the bare-tree digest of a lattice pair's Result, Not verified or Provenance region
-    guarded, read line by line against the design, the run identities and the payload."""
+    """What a digest of a lattice pair's Result, Not verified or Provenance region would
+    guard, read line by line against the lattice design, the run identities and the payload."""
     lines = region_lines(p.page, heading)
     if heading == "Result":
         order = [panel["event"] for panel in p.structure["panels"]]
@@ -1509,7 +1475,7 @@ def assert_lattice_region(p: Pair, heading: str) -> None:
         assert lines == expected, (p.name, lines)
         return
     if heading == "Not verified":
-        # Every pair's region is the same four entries; the builder-made pairs' frozen digest of it
+        # Every pair's region is the same four entries; the builder-made pairs' pinned digest of it
         # is the one shared value, so the lattice pairs are held to it with no digest of their own.
         shared = {REGION_SHA256[name]["Not verified"] for name in REGION_SHA256}
         assert len(shared) == 1, shared
@@ -1561,7 +1527,7 @@ def page_as_0_0_1_wrote_it(page: str) -> str:
     provenance list, the version key in the arm table, and the ids of the page's two data blocks,
     which named the old product. First assert each is there as the rename writes it (the data
     blocks are ``prove-cells`` and ``prove-holes``), then put each back as 0.0.1
-    wrote it before the frozen digest is taken."""
+    wrote it before the pinned digest is taken."""
     assert 'id="prove-cells"' in page and 'id="prove-holes"' in page and 'getElementById("prove-cells")' in page
     assert "<td>poisson_prove_version</td>" in page and "proofload-cells" not in page and "proofload-holes" not in page
     found = re.findall(r"<li>Prove version: [^<]*</li>", page)
@@ -1606,7 +1572,7 @@ def test_ls1_every_data_cell_node_stays_clickable_and_every_text_inside_the_figu
 
 
 def wrapped_texts(p: Pair) -> list[tuple[str, list[str], float, float]]:
-    """(kind, lines, font, x) for every text D9 wraps, from the structure and the restated wrap."""
+    """(kind, lines, font, x) for every wrapped text, from the structure and the restated wrap."""
     layout = expected_layout(p)
     out = [("title", layout["title"], FONT + 2.0, float(STACKED_TITLE_X))]
     out.extend((f"header/{i}", lines, float(FONT), float(STACKED_TITLE_X)) for i, lines in enumerate(layout["header"]))
@@ -1646,7 +1612,7 @@ def test_ls2_the_legend_captions_last_six_words_are_present_on_the_traded_pairs(
     for p in (lattice_two, traded):
         texts, _, _ = svg_texts(p.structure["heatmap_svg"])
         # PF4 (PF4.20): neither pair declares a kind, so the caption's notches clause reads in
-        # direction words and LEGEND_TAIL's safer/worse wording is no longer asserted. What stays
+        # direction words and LEGEND_TAIL's safer/worse wording is not asserted. What stays
         # is the caption drawn whole: on every panel the notches clause is there, closed, and
         # nothing is cut with an ellipsis.
         for event, panel in panel_groups(p.structure["heatmap_svg"]):
@@ -1660,7 +1626,7 @@ def test_ls2_the_same_wrap_reaches_the_reports_figure_and_the_receipt(tmp_path: 
     """``report`` draws the figure with the same builders: its ``heatmap.svg`` and the receipt's
     inline figure carry the wrapped caption on the two-event lattice pair."""
     out = tmp_path / "rep"
-    # PF3: the lattice's runs share a salt, so the default is now the
+    # PF3: the lattice's runs share a salt, so the default is the
     # paired test; LATTICE_COMPLEMENT_LINE's 22 is the unpaired test's, named.
     code, _, err = run_cli(["--store", str(LATTICE_ROOT), "report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--event", lattice.OTHER, "--x", lattice.Y, "--y", lattice.X, "--method", "fisher_bh", "--out", str(out)])
     assert code == 0, err[-400:]
@@ -1687,7 +1653,7 @@ def test_ls3_the_box_grows_by_the_extra_lines_and_by_nothing_else(all_pairs: lis
         _, width, height = svg_texts(p.structure["heatmap_svg"])
         assert width == BARE_WIDTH[p.name], (p.name, width)
         if p.name in LATTICE_PAIRS:
-            # the pins are the layout's arithmetic on the design's grid (x across, y down)
+            # the pins are the layout's arithmetic on the lattice design's grid (x across, y down)
             sizes = {lattice.X: len(lattice.GAIN), lattice.Y: len(lattice.LOAD)}
             for panel in p.structure["panels"]:
                 assert [float(v) for v in panel["x_values"]] == {lattice.X: list(lattice.GAIN), lattice.Y: list(lattice.LOAD)}[p.x], (p.name, panel["x_values"])
@@ -1712,7 +1678,7 @@ def test_ls3_every_grid_and_glyph_rect_is_unchanged_up_to_the_top_growth(all_pai
             entry = layout["panels"][event]
             shift = TITLE_LINE_H * (len(entry["title"]) - 1) + BODY_LINE_H * (len(entry["headline"]) - 1)
             if p.name in LATTICE_PAIRS:
-                # the rect set recomputed from the design, the layout and the colour rule
+                # the rect set recomputed from the lattice design, the layout and the colour rule
                 expected = sorted(json.dumps(r, sort_keys=True) for r in lattice_rects(p, event))
                 assert rect_set(panel, shift).split("\n") == expected, (p.name, event, shift)
                 continue
@@ -1841,7 +1807,7 @@ def test_ls8_render_html_refuses_every_retired_version_by_name(lattice_one: Pair
 def test_ls9_every_numeric_substring_of_every_sentence_is_a_text_value_a_config_value_or_an_integer_field(all_pairs: list[Pair]) -> None:
     for p in all_pairs:
         allowed = set(walk_texts(p.structure)) | set(walk_ints(p.structure)) | THRESHOLD_SPELLINGS | {str(p.structure["diff"]["q"])}
-        # PF4 re-freeze (PF4.35, PF4.42, PF4.44): the verdict block's detail lines are payload fields
+        # PF4.35, PF4.42, PF4.44: the verdict block's detail lines are payload fields
         # themselves (summary.facts), so they are bound to a field by being one.
         facts = set(verdict_block_lines(p.structure))
         for sentence in (s for s in summary_sentences(p.structure) if s not in facts):
@@ -1872,7 +1838,7 @@ def synthetic_panel(cells: list[dict[str, Any]], mde_unchanged: float | None, wh
         honesty = f'Worst-powered unchanged cell ({where}, n=32/32) can only detect a {m7_form(mde_unchanged, "pp0")}pp rise. "{worse} worse" is an honest claim only above that.\nWorst-powered cell overall: 20pp (gain=0, load=30).'
         block = {"value": mde_unchanged, "text": m7_form(mde_unchanged, "pp0"), "where": where}
     # PF4 (PF4.20): the hand-built panel declares its event a failure, so its counts and rows keep
-    # the safer/worse words these tests are about; a panel now carries its kind and the direction
+    # the safer/worse words these tests are about; a panel carries its kind and the direction
     # counts beside n_safer and n_worse (for a failure event, a rise is worse).
     return {
         "event": "tripped", "caption": f"tripped: {safer} safer, {worse} worse", "honesty": honesty, "mde_unchanged": block,
@@ -1937,7 +1903,7 @@ def test_ls10_the_labels_on_every_real_worse_row_follow_the_cells_q(all_pairs: l
             # PF4 (PF4.20): no fixture declares a kind, so the rows are the conditions where the
             # event rose: their verdict reads "higher" where it read "worse", and their direction is
             # "higher" either way.
-            # PF4 re-freeze (PF4.27): a rising condition can have no limit (null with its note); it
+            # PF4.27: a rising condition can have no limit (null with its note); it
             # sorts after every condition with one, as _worst's tie-break puts it.
             worse = sorted((c for c in panel["cells"] if c["direction"] == "higher"), key=lambda c: (-c["delta"], c["q"], 2.0 if c["mde"] is None else c["mde"], c["config_hash"]))
             assert [row["config_hash"] for row in entry["worse"]] == [c["config_hash"] for c in worse[: p.structure["view"]["top_n"]]], (p.name, entry["event"])
@@ -1963,7 +1929,7 @@ def test_ls11_too_small_to_tell_is_a_function_of_mde_unchanged_alone_at_0_50() -
     # PF4 (PF4.5, PF4.17): the 50-point rule gives way to the runs' recorded threshold, and a limit
     # is too small to tell only above it (at or below it is no significant change).
     # The hand-built pair records 0.50 in both arms, so the boundary stays at 0.50 and a limit of
-    # exactly 0.50 is no longer labelled.
+    # exactly 0.50 is not labelled.
     for value, mde, labelled in ((0.49, "49", False), (0.50, "50", False), (0.51, "51", True), (0.999, "100", True), (0.0, "0", False)):
         limit = summary_of([synthetic_panel(cells, value)], pair_obj=THRESHOLD_PAIR)["events"][0]["limit"]
         fields = dict(where="gain=9, load=30", n_a=32, n_b=32, mde=mde)
@@ -2007,7 +1973,7 @@ def test_ls11_the_panels_mde_unchanged_is_the_honesty_number_character_for_chara
             block = panel["mde_unchanged"]
             first = str(panel["honesty"]).splitlines()[0]
             if block["value"] is None and panel["n_unchanged"] > 0:
-                # PF4 re-freeze (PF4.27): an unchanged condition can have no limit; the honesty line
+                # PF4.27: an unchanged condition can have no limit; the honesty line
                 # and the limit line then name the least sensitive one and give the reason in words,
                 # never a number for the limit.
                 assert block["value"] is None and block["text"] is None, (p.name, block)
@@ -2041,7 +2007,7 @@ def test_ls11_the_panels_mde_unchanged_is_the_honesty_number_character_for_chara
             fields = dict(where=block["where"], n_a=cell["n_a"], n_b=cell["n_b"], mde=block["text"])
             assert entry["limit"] == {"label": "too small to tell" if labelled else None, "mde": block["text"], "where": block["where"], "line": (LIMIT_LINE_LABELLED if labelled else LIMIT_LINE).format(**fields)}, (p.name, entry["limit"])
             seen.add("labelled" if labelled else "bare")
-    # PF4 re-freeze (PF4.27): the fixtures now reach the no-limit case too.
+    # PF4.27: the fixtures reach the no-limit case too.
     assert seen == {"nan", "labelled", "bare", "none"}, seen
 
 
@@ -2053,7 +2019,7 @@ def test_ls12_no_deciding_word_no_forbidden_vocabulary_and_no_question_in_the_su
         texts = [*summary_sentences(p.structure), *walk_strings(p.structure["summary"]), region_text(p.page, "Summary")]
         for text in texts:
             low = masked(text, p.structure)
-            # PF4 re-freeze (PF4.35): the Summary shows the comparison's word, so it carries the
+            # PF4.35: the Summary shows the comparison's word, so it carries the
             # verdict block's ``verdict rule`` line, which says the verdict counts changes at the
             # family-wise level; those two phrases are the one place the word is said.
             low = low.replace("verdict rule", " ").replace("the verdict counts changes", " ")
@@ -2092,7 +2058,7 @@ def test_ls13_the_two_event_lattice_pair_is_reported_once_and_never_as_a_trade(l
     # The sentence has one source: ``build_summary`` is handed ``trade_line``.
     assert "trade_line" in inspect.signature(plain().build_summary).parameters
     lines = summary_lines(lattice_two.page)
-    # PF4 re-freeze (PF4.34, PF4.35): the Summary opens with the verdict line; the complement sentence
+    # PF4.34, PF4.35: the Summary opens with the verdict line; the complement sentence
     # follows it.
     assert lines[0] == lattice_two.structure["summary"]["verdict_line"] and lines[1] == LATTICE_COMPLEMENT_LINE, lines[:2]
     assert [e["event"] for e in lattice_two.structure["summary"]["events"]] == [lattice.OTHER, lattice.EVENT]
@@ -2153,7 +2119,7 @@ def test_ls15_a_partial_arm_is_named_first_in_the_summary_from_either_side(parti
         assert arm["status"] == "partial" and arm["run_id"] == PARTIAL_A
         line = PARTIAL_LINE.format(run_id=PARTIAL_A, role=role)
         assert p.structure["summary"]["partial"] == {"runs": [PARTIAL_A], "line": line}, p.structure["summary"]["partial"]
-        # PF4 re-freeze (PF4.34): the Summary opens with the comparison's verdict line; the partial
+        # PF4.34: the Summary opens with the comparison's verdict line; the partial
         # line is the first after it.
         assert summary_lines(p.page)[0] == p.structure["summary"]["verdict_line"], summary_lines(p.page)[0]
         assert summary_lines(p.page)[1] == line, summary_lines(p.page)[1]
@@ -2287,17 +2253,17 @@ def test_ls18_the_readme_has_a_serve_section_and_the_docs_page_names_the_fourtee
 
 #: PF4 (PF4.20): a judgement word; no fixture here declares an event kind.
 JUDGEMENT_RE = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
-#: PF4 (PF4.20): a reader's direction word put back as the bare tree wrote the verdict (no fixture
+#: PF4 (PF4.20): a reader's direction word put back as the pinned page wrote the verdict (no fixture
 #: declares a kind, so the library's worse is a rise and its safer a fall).
 BARE_VERDICT = {"higher": "worse", "lower": "safer", "unchanged": "unchanged"}
 #: PF4 (PF4.13, PF4.14, PF4.15, PF4.3): the cell fields PF4 adds right after ``verdict``.
 PF4_CELL_KEYS = ("direction", "direction_note", "pairs", "n01", "n10", "mde_note", "share_a", "share_b", "share_a_differs", "share_b_differs")
 CELL_INDEX_RE = re.compile(r'(<script type="application/json" id="proofload-cells">)(.*)(</script>)')
 #: PF4 (PF4.12, PF4.15, PF4.18): the regions whose numbers PF4 moves, not only their words: on the
-#: study pairs (now the lattice pairs) the fault lines' group p and q (Westfall-Young on one scale),
+#: lattice pairs the fault lines' group p and q (Westfall-Young on one scale),
 #: and on those pairs and the traded pair (whose t0 fail arm fails every run) the detection limits of the conditions at a
-#: 100% baseline with the leaf rows, cell index and worst-cells rows that carry them. Their digests are no longer asserted; assert_region_facts asserts what they guarded.
-#: PF4 re-freeze (PF4.22 to PF4.27, PF4.34 to PF4.47): every pair's detection limits move (the exact
+#: 100% baseline with the leaf rows, cell index and worst-cells rows that carry them. Their digests are not asserted; assert_region_facts asserts what they guarded.
+#: PF4.22 to PF4.27, PF4.34 to PF4.47: every pair's detection limits move (the exact
 #: power at the lone-change level, both directions, null with a reason), its group limits move
 #: (PF4.45), its intervals are always there (PF4.42) and every cell gains the new keys, so on every
 #: pair the Honesty, Fault lines, Cells, Cell and Worst cells regions are checked by their facts.
@@ -2315,8 +2281,8 @@ def script_json(payload: Any) -> str:
 
 def as_before_pf4(text: str, heading: str, p: Pair) -> str:
     """PF4 (PF4.3, PF4.13, PF4.14, PF4.15, PF4.17, PF4.20): the words and fields PF4 changes in a
-    region the LS pass left untouched, first asserted in PF4's form and then put back as the bare
-    tree wrote them, so the frozen digest still guards every other byte. No fixture declares a kind,
+    region LS leaves untouched, first asserted in PF4's form and then put back as the pinned
+    page wrote them, so the pinned digest still guards every other byte. No fixture declares a kind,
     so the headline counts falls as lower and rises as higher, the honesty claim names the rises,
     the verdict column and the cell index carry the direction, and a panel with no unchanged
     condition counts its compared conditions."""
@@ -2387,7 +2353,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
         [table] = [table_of(line) for line in lines if line.startswith("<table>")]
         header, rows = table
         assert len(rows) == len(groups), (p.name, len(rows))
-        # PF4 re-freeze (PF4.45): every pair's group limits move, so each row is read column by
+        # PF4.45: every pair's group limits move, so each row is read column by
         # column against its group: the paired test adds the discordant pairs, and an untested
         # family (the root did not reject) prints no p, q or verdict.
         columns = {
@@ -2403,7 +2369,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
             expected = [g["label"], *(columns[name](g) for name in header[1:])]
             assert row == expected, (p.name, row, expected)
         if p.events == (lattice.EVENT,):
-            # PF4 re-freeze (PF4.45): the group limits use each cell's own baseline and the
+            # PF4.45: the group limits use each cell's own baseline and the
             # unconditional power, so the lattice's first declared axis, gain, does not resolve
             # (refused as underpowered) and the tree groups by the next, load: 6 groups, one per
             # load value. What is pinned is the walk and the rejected set as the page prints it.
@@ -2416,10 +2382,10 @@ def assert_region_facts(p: Pair, heading: str) -> None:
             assert tree["fault_lines"]["n_rejected_groups"] == sum(g["rejects"] for g in groups), p.name
         return
     if heading == "Honesty":
-        # PF4 re-freeze (PF4.22, PF4.27, PF4.42): each panel's honesty block is the payload's
+        # PF4.22, PF4.27, PF4.42: each panel's honesty block is the payload's
         # honesty text, and the intervals line is at 1 - q max(R, 1) / M, with R the flagged rows and
         # M the rows of the comparison.
-        # PF4 re-freeze (PF4.27): no text prints a number for a null limit, so no "nanpp".
+        # PF4.27: no text prints a number for a null limit, so no "nanpp".
         assert not re.search(r"\bnan(pp)?\b", unescape(text).lower()), (p.name, heading)
         panels = p.structure["panels"]
         heads = [i for i, line in enumerate(lines) if line.startswith("<h3>")]
@@ -2438,7 +2404,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
         paragraphs = [part for line in lines if line.startswith("<p>") for part in p_lines(line)]
         tables = [table_of(line) for line in lines if line.startswith("<table>")]
         if not leaves["tested"]:
-            # PF4 re-freeze (PF4.22 to PF4.27): the region is read by its facts on every pair now,
+            # PF4.22 to PF4.27: the region is read by its facts on every pair,
             # some of whose roots do not reject; then it is one sentence and no table.
             assert len(paragraphs) == 1 and paragraphs[0].startswith("not tested") and not tables, (p.name, paragraphs)
             return
@@ -2447,7 +2413,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
         assert len(tables) == len(rejecting), p.name
         for line, family in zip(paragraphs[2:], leaves["families"], strict=True):
             assert line.startswith(f"{family['key']}={family['label']}: {family['n_tests']} tests, {family['n_rejected']} rejected"), (p.name, line)
-            # PF4 re-freeze (PF4.27): a family whose limits are all null prints no number for them.
+            # PF4.27: a family whose limits are all null prints no number for them.
             for which in ("median", "max"):
                 if family[f"mde_{which}"] is None:
                     assert not re.search(rf"{which} \d", line), (p.name, line)
@@ -2459,7 +2425,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
             for row, leaf in zip(rows, leaves_here, strict=True):
                 assert row[1:4] == [leaf["event"], leaf["text"]["delta"], leaf["text"]["q_within"]], (p.name, row)
                 if leaf["mde"] is None:
-                    # PF4 re-freeze (PF4.27): a null limit is printed as its reason in words.
+                    # PF4.27: a null limit is printed as its reason in words.
                     assert any(note in row[4] for note in NOTES) and not NUMBER_RE.search(row[4]), (p.name, row)
                 else:
                     assert row[4] == f"{leaf['text']['mde']}pp", (p.name, row)
@@ -2468,7 +2434,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
     if heading == "Cell":
         [line] = [line for line in lines if CELL_INDEX_RE.fullmatch(line)]
         index = json.loads(CELL_INDEX_RE.fullmatch(line).group(2))  # type: ignore[union-attr]
-        # PF4 re-freeze: read on every pair now, so under --fix the index holds the slice the page
+        # Read on every pair: under --fix the index holds the slice the page
         # shows (the panels' cells), each a row of the comparison.
         shown = {(panel["event"], str(c["config_hash"])) for panel in p.structure["panels"] for c in panel["cells"]}
         assert {(key.rsplit(" ", 1)[0], entry["config_hash"]) for key, entry in index.items()} == shown <= set(records), p.name
@@ -2478,7 +2444,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
                 assert entry[field] == int(record[field]), (p.name, key, field)
             for field in ("rate_a", "rate_b", "delta", "p", "q", "mde"):
                 assert same_number(entry[field], record[field]), (p.name, key, field)
-            # PF4 re-freeze (PF4.20, kindless events): the library's verdict is the direction word too.
+            # PF4.20, kindless events: the library's verdict is the direction word too.
             assert entry["verdict"] == entry["direction"] == str(record["verdict"]), (p.name, key)
             if entry["mde"] is None:
                 # PF4 (PF4.15): no detection limit; the entry carries the note that says why. Its
@@ -2496,7 +2462,7 @@ def assert_region_facts(p: Pair, heading: str) -> None:
             verdict, mde = header.index("verdict"), header.index("MDE")
             for row, h in zip(rows, panel["worst_hashes"], strict=True):
                 record = records[(panel["event"], h)]
-                # PF4 re-freeze (PF4.20, kindless events): the library's verdict is the direction word too.
+                # PF4.20, kindless events: the library's verdict is the direction word too.
                 assert row[verdict] == str(record["verdict"]), (p.name, row)
                 if isinstance(record["mde_note"], str):
                     assert not re.search(r"\d+pp", row[mde]), (p.name, row)
@@ -2511,7 +2477,7 @@ def test_ls19_every_heading_is_still_on_the_page_and_the_untouched_regions_keep_
         assert set(h2_sequence(p.page)) == DISPATCH_H2, p.name
         for heading in UNTOUCHED_REGIONS:
             # PF4: a region whose numbers PF4 moves is checked by its facts; every other region
-            # keeps its frozen digest once PF4's words are put back (as_before_pf4).
+            # keeps its pinned digest once PF4's words are put back (as_before_pf4).
             if heading in PF4_MOVED_REGIONS.get(p.name, ()):
                 assert_region_facts(p, heading)
                 continue
@@ -2527,7 +2493,7 @@ def test_ls19_the_summary_introduces_no_number_the_statistics_view_does_not_carr
         lines = p.page.splitlines()
         marks = h2_lines(p.page)
         rest = html_mod.unescape("\n".join(lines[: marks[0][0]] + lines[marks[1][0] :]))
-        # PF4 re-freeze (PF4.44): the verdict block's detail lines carry facts only the verdict block
+        # PF4.44: the verdict block's detail lines carry facts only the verdict block
         # shows (the fragility among them), so this clause reads the plain register's sentences.
         facts = set(verdict_block_lines(p.structure))
         for sentence in (s for s in summary_sentences(p.structure) if s not in facts):

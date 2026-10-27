@@ -1,15 +1,13 @@
 """M12 -- the kind ladder: the frozen tests for T35-T37.
 
-Written from the invariants added to the trace converter after the
-2026-09-04 kind-ratio spike, which ran real instrumentation and found two gaps:
-``opentelemetry-util-genai`` emits ``fetch_response`` and ``execute_task`` (unmapped), and
-the two conventions carrying most real agent instrumentation -- openinference (Arize Phoenix)
-and traceloop (OpenLLMetry) -- typed nothing at all, so every one of their spans became
-``other``.
+The trace converter's kind mapping covers what real instrumentation emits:
+``opentelemetry-util-genai``'s ``fetch_response`` and ``execute_task``, and the two conventions
+carrying most real agent instrumentation -- openinference (Arize Phoenix) and traceloop
+(OpenLLMetry) -- whose spans would otherwise all become ``other``.
 
 Payloads here are hand-built flat span mappings, the second input form ``from_otel``
-accepts. No network, no keys, no instrumentation packages: the spike proved what real
-encoders emit, and these pin what the converter does with it.
+accepts. No network, no keys, no instrumentation packages: the payloads restate what real
+encoders emit, and these tests pin what the converter does with it.
 """
 
 from __future__ import annotations

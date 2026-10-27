@@ -1,25 +1,24 @@
 """PF12, the static UI: the pages ``poisson-prove ui`` and every writing verb build in the store (the code suite).
 
-Written from the static UI's design: its invariants PF12.6 to PF12.11 and PF12.13, the views'
-design in ``views.md``, the look file's static-UI section, and the project's test standard.
-``tests/test_pf12_artifacts.py`` holds the format. The build is written against these
-files and does not edit them.
+The invariants are PF12.6 to PF12.11 and PF12.13, the views' fields (``VIEW_FIELDS``) and the
+static-UI section of ``docs/cli-look.md``; ``docs/dashboard.md`` describes the pages for a reader.
+``tests/test_pf12_artifacts.py`` holds the format.
 
 **How a page is read.** No browser in the code suite: each page is parsed as HTML. A page is
 the rendering of exactly one core view (the core's ``view(store, address)``, the address being
 the page's path inside the UI), and says which fact is which, so a test can hold every page to
-its view without knowing the view's field names (those are left to PF5 and PF12):
+its view without knowing the view's field names (``VIEW_FIELDS`` names the ones a view must hold):
 
 - Every element that shows a fact carries ``data-fact``, the JSON pointer of that fact in the
   view's document (``/rows/3/delta``), and ``data-value``, the fact's value as JSON; its text is the
   fact as rule 10 prints it. Every scalar of the view is shown by at least one such element, and no
   element names a pointer the view does not have; a chart's drawing, a view string named ``svg``
-  (``views.md``'s chart field), is shown by the SVG itself, inline in the page.
+  (a chart's field), is shown by the SVG itself, inline in the page.
 - The renderer computes nothing: every digit a reader sees on a page, outside links, charts, the
   header, the navigation and the footer, sits inside an element that carries ``data-fact``.
 - The episodes view has one page per run of a saved comparison, event of that comparison and
   condition it compared (``runs/<run>/episodes/<event>/<condition hash>.html``), empty pages included,
-  as ``views.md`` draws them (2 runs, 2 events, 9 conditions: 36 pages); a run in no saved comparison
+  (2 runs, 2 events, 9 conditions: 36 pages); a run in no saved comparison
   has no episodes pages, so a store of many runs does not grow a page per outcome and condition.
 - A saved check has no page in v0, and the runs view lists the saved comparisons only.
 - "On the same line" in a page is the same block: the nearest ``p``, ``li``, ``tr``, ``dd``, ``dt``,
@@ -41,8 +40,8 @@ its view without knowing the view's field names (those are left to PF5 and PF12)
   it builds the empty runs view, and on a missing store it refuses as ``runs`` does.
 - An interrupted build: after Ctrl-C the previous pages stand byte for byte; after a kill they
   stand or there are none, never a mix, and the next build is whole.
-- The views' field names are frozen here, as ``views.md`` gives them (``VIEW_FIELDS``): PF5's freeze
-  leaves them to PF12 and PF6. A condition view's per-event blocks are a list ``events``, each
+- The views' field names are fixed here (``VIEW_FIELDS``). A condition view's per-event blocks are
+  a list ``events``, each
   naming its ``event``; its ``test`` also carries ``q_holm`` (Holm's adjusted p).
 - "Every writing verb refreshes the pages" refreshes the UI a store has: a store with no
   ``.poisson/ui/`` gets none from ``sweep``, a save, ``report`` or ``serve``; ``ui`` (or the terminal
@@ -59,7 +58,7 @@ its view without knowing the view's field names (those are left to PF5 and PF12)
   ``default-src 'none'``, allows scripts from ``'self'`` only, styles from ``'self'`` and inline (the
   charts' own), images from ``'self'`` and ``data:``, and names no host.
 
-**Lanes.** The code suite, but for the browser check and the wheel's bytes (``slow``).
+**Suites.** The code suite, but for the browser check and the wheel's bytes (``slow``).
 """
 
 from __future__ import annotations
@@ -181,7 +180,7 @@ def _world(name: str, request: pytest.FixtureRequest) -> tuple[Path, dict[str, A
 
 @pytest.mark.parametrize("world", WORLDS)
 def test_pf12_7_the_pages_are_exactly_the_seven_views_and_all_reachable_from_the_runs_view(world: str, request: pytest.FixtureRequest) -> None:
-    """The views are exactly the seven, at the addresses ``views.md`` gives them,
+    """The views are exactly the seven, at the addresses ``VIEW_ADDRESSES`` gives them,
     one page each where the store has something to show; every comparison has its
     could-not-detect view; and every page is reached by following links from ``index.html``."""
     store = _store(_world(world, request))
@@ -220,8 +219,9 @@ def _links(page: Page, ui: Path) -> set[str]:
 
 @pytest.mark.parametrize("world", WORLDS)
 def test_pf12_7_the_pages_hold_the_designs_anchors_embeds_and_footer(world: str, request: pytest.FixtureRequest) -> None:
-    """What the design asks pages to show by structure: the runs view links every saved comparison;
-    a comparison page has the anchors ``views.md`` gives and embeds its six charts, each
+    """What pages show by structure: the runs view links every saved comparison; a comparison
+    page has the anchors ``verdict``, ``counts``, ``trades``, ``conditions``, ``charts`` and one per
+    chart, and embeds its six charts, each
     linking to its page, and links each condition and its could-not-detect page; a condition page
     has a block per event and links both runs' episodes for it and its incidence charts; an
     episodes page shows each episode's ``rollout(cfg, seed=…)`` and names ``poisson-prove inspect``
@@ -330,8 +330,7 @@ def test_pf12_7_each_page_holds_every_fact_of_its_core_view(kind: str, request: 
         assert loose == [], (page.address, loose[:5])
 
 
-#: The views' field names, frozen here from ``views.md`` (the design's proposals, left
-#: to PF5 and PF12; PF5's freeze leaves them to PF12 and PF6). A view may hold more; it
+#: The views' field names, fixed here. A view may hold more; it
 #: holds at least these. ``*`` is every item of a list, or every value of a mapping keyed by data.
 VIEW_FIELDS: dict[str, dict[str, set[str]]] = {
     "runs": {
@@ -392,8 +391,8 @@ def _at(document: Any, path: str) -> list[Any]:
 
 @pytest.mark.parametrize("kind", list(VIEW_ADDRESSES))
 def test_pf12_7_each_view_carries_the_fields_views_md_names_and_the_results_numbers(kind: str, request: pytest.FixtureRequest) -> None:
-    """Each core view holds the fields ``views.md`` gives it (at least), so the terminal app (PF6)
-    and the next stage's server read the same object; and the numbers in it are the result's: a
+    """Each core view holds the fields ``VIEW_FIELDS`` gives it (at least), so the terminal app (PF6)
+    and the pages read the same object; and the numbers in it are the result's: a
     comparison's rows and a condition's blocks are its cells' (p, q, Holm's p, the change, its interval
     and level, both limits, the shares and their bounds), the could-not-detect rows are exactly the
     unchanged rows with the could-not-tell rows first, the runs view lists runs newest first
@@ -562,7 +561,7 @@ VERDICT_FACTS = [
 
 @pytest.mark.parametrize("pair, kinds, what", VERDICT_FACTS, ids=[c[0] for c in VERDICT_FACTS])
 def test_pf12_7_the_verdict_facts_reach_every_page_that_shows_the_verdict(pair: str, kinds: tuple[str, ...], what: str, old_world: Any, stats_world: Any) -> None:
-    """What the comparison view shows, from PF4's build: the Holm-based word first,
+    """What the comparison view shows, from PF4: the Holm-based word first,
     the fragility, ``no significant change`` always with its verdict limit on the same line
     (PF4.40), the peeking caveat (PF4.39), the errored-episodes warning (PF4.46) and log-rank as
     the cause-specific hazard with its shifted outcomes (PF4.41), on every page that shows them."""
@@ -1208,7 +1207,7 @@ SNAPSHOT_PAGES = {
     "could-not-detect": "comparisons/{cid}/could-not-detect.html",
     "chart": "comparisons/{cid}/heatmap-timeout.html",
 }
-assert len(SNAPSHOT_PAGES) <= 8  # the test standard: at most eight
+assert len(SNAPSHOT_PAGES) <= 8  # snapshots stay few: at most eight
 
 
 @pytest.mark.parametrize("name", list(SNAPSHOT_PAGES))

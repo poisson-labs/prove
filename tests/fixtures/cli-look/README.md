@@ -5,7 +5,7 @@ other tools copy it from here. The tests in `tests/test_pf6_look.py` hold it to 
 made from, both kept in this folder so the tests read nothing outside the repository.
 
 - `bfe802d.md` is the file as the lab's tools shared it before Prove's copy became the canonical
-  one (at the commit `bfe802d`, 2026-10-07), byte for byte: 89 lines, sha256
+  one, byte for byte (the name is the version it was taken from): 89 lines, sha256
   `af0bb656e8a955befbdcdc031cce7c78d62248cd3b90adebf1e63d837298ce79`.
 - `changes.json` holds the three changes made to it, each as the old text, which occurs exactly
   once in the base, and the new text: rule 10's dollars (two significant digits below $0.10), rule

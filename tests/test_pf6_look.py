@@ -2,8 +2,7 @@
 
 Written from the invariants PF6.0 to PF6.7 and the look file, ``docs/cli-look.md``, which is
 Prove's own: pretty output on a terminal, plain output everywhere else.
-``tests/test_pf6_app.py`` holds the terminal app. The implementation is written
-against these files and does not edit them.
+``tests/test_pf6_app.py`` holds the terminal app.
 
 **How the rendering is reached.** Every command runs as ``python -m poisson_prove`` in a process of
 its own, as a user's shell runs it: on pipes, or with stdout and stderr each on a pseudo-terminal of
@@ -24,10 +23,9 @@ test at the end (reading L3).
 
 - L1 PF6.0's "equal, byte for byte, the base with the three changes applied": the base is committed
   as ``tests/fixtures/cli-look/bfe802d.md`` with each change's old and new text in ``changes.json``
-  (each old text occurs exactly once), and the file's first 120 lines are the result; the implementation
-  adds ``docs/cli-look.md`` itself (sha256 ``92e71488…d85f``), so these
-  tests commit the base and the changes, not the file.
-- L2 "Piped, the pretty build's output equals the plain build's": the same build on streams that are
+  (each old text occurs exactly once), and the file's first 120 lines are the result;
+  ``docs/cli-look.md`` itself is held to its sha256 (``92e71488…d85f``).
+- L2 "Piped, the pretty build's output equals the plain build's": the same code on streams that are
   not terminals gives the same bytes with and without ``--plain`` and with Rich unimportable, each
   variant running the whole corpus through the command's own entry point in a process of its own; a
   sweep's new run id, the times and the durations are replaced before comparing, since they differ
@@ -36,7 +34,7 @@ test at the end (reading L3).
   second) depends on how fast the rollouts ran.
 - L3 PF6.2 and PF6.3 "over the corpus": PF6's corpus above in the code suite; PF1's whole corpus
   both ways is marked ``slow`` (it runs every verb's processes three more times, about four minutes
-  of processes, against the pull-request lane's five-minute budget).
+  of processes, against the code suite's five-minute budget).
 - L4 PF6.3's first line in a pseudo-terminal "carries the same verdict word and sentence": with
   escapes removed and whitespace collapsed, the terminal's stdout begins with the piped first line,
   wherever the terminal wrapped it.
@@ -56,7 +54,7 @@ test at the end (reading L3).
   and the app's modules (``poisson_prove._cli_app*``), ``textual`` only by the app's modules, and
   neither by ``cli.py``; importing ``poisson_prove.cli`` imports no Textual.
 - L9 Rich and Textual are core dependencies with a floor each (the lowest working
-  version, measured when PF6 was implemented); ``test_a22_pandas3::test_v14_…`` and
+  version); ``test_a22_pandas3::test_v14_…`` and
   ``test_pf7_packaging``'s PF7.4 check they are listed and that a floor is declared, not the
   measurement.
 - L10 On a terminal, plain wraps its own long lines (PF6.6), so "plain" there is read word for word, not
@@ -64,11 +62,10 @@ test at the end (reading L3).
   a line that repeats the command as typed), and PF6.5's terminal run with Rich missing reads as the
   pipe, its progress aside (a terminal gets one rewritten line, a pipe a line per tenth).
 
-**Frozen assertions this file's commit moves:** ``test_s0_scaffold::test_core_deps``
-and ``test_a22_pandas3::test_v14_…`` (the core dependency list gains ``rich`` and ``textual``). The
-second was not foreseen; it came to light when this file was written.
+**Other tests that pin the core dependency list** (which includes ``rich`` and ``textual``):
+``test_s0_scaffold::test_core_deps`` and ``test_a22_pandas3::test_v14_…``.
 
-**Lanes.** The code suite, but for PF1's corpus both ways (``slow``).
+**Suite.** The code suite, but for PF1's corpus both ways (``slow``).
 """
 
 from __future__ import annotations
@@ -135,7 +132,7 @@ def test_pf6_0_the_look_file_has_its_canonical_sha256() -> None:
 
 def test_pf6_0_its_rules_and_exit_code_table_are_the_base_with_the_three_changes() -> None:
     """Rules 1 to 16 and the exit-code table, up to the paragraph that closes it, equal byte for byte
-    the base at ``bfe802d`` with rule 10's dollars, rule 16's two renderings and rule 15's options
+    the base (``bfe802d.md``) with rule 10's dollars, rule 16's two renderings and rule 15's options
     applied (reading L1); rule 16 has eleven bullets; there are sixteen rules."""
     amended = _amended_base()
     assert squash(amended) and len(amended.splitlines()) == 120

@@ -8,12 +8,12 @@ pair, arms ``a`` and ``b``, carries the whole of the pair analysis, and arms ``3
 it. So a set whose error sits in arm ``3..k`` is out of the k-metrics and its declared pair is
 in the 2x2, because both of the pair's own arms returned.
 
-The build before this fix dropped such a set from both: one item whose fifth call was an
+Dropping such a set from both is the failure these tests catch: one item whose fifth call was an
 HTTP 529 while its declared pair returned 0.62 and 0.64, both acting under ``p > c`` at a cut of
-0.60, left the 2x2 one pair short. The store below is that set's shape in miniature: six items in one sweep, ``k = 5``, a ``gt`` cut at 0.60, one set with arm 5 errored
+0.60, would leave the 2x2 one pair short. The store below is that set's shape in miniature: six items in one sweep, ``k = 5``, a ``gt`` cut at 0.60, one set with arm 5 errored
 and its pair at 0.62 and 0.64.
 
-The store helpers are the frozen PR-3 replicates tests', imported and not copied, so this file
+The store helpers are ``tests/test_pr3_replicates.py``'s, imported and not copied, so this file
 reads stored rows exactly as those tests do. Every test name starts ``test_prN_``.
 """
 

@@ -22,10 +22,9 @@ def quickstart_design(replicates: int = 100) -> Path:
     """The packaged quickstart's design (its target id, unit and axes) at ``replicates``, with no
     ``target`` and no ``[declare]``, written once per process to a temporary file.
 
-    PF3: ``examples/quickstart.toml`` is gone and the packaged spec runs
-    194 replicates. The frozen tests that swept the old file sweep this: the one copy's
-    design at the 100 replicates their numbers were frozen at, the target typed as before, and
-    nothing declared, as the old file declared nothing.
+    PF3: the packaged spec runs 194 replicates. The tests whose numbers are pinned at 100
+    replicates sweep this instead: the packaged design at 100 replicates, the target typed on
+    the command line, and nothing declared.
     """
     import json
     import tempfile
@@ -40,7 +39,7 @@ def quickstart_design(replicates: int = 100) -> Path:
     return path
 
 
-#: PF3: each test's own name, which no output named before PF3.
+#: PF3: each statistical test's own name, which every surface prints on a line of its own.
 METHOD_OWN_NAMES = ("Fisher", "McNemar", "log-rank")
 
 
@@ -48,10 +47,10 @@ def without_method_lines(text: str) -> str:
     """``text`` (``report.md``, ``receipt.html``, the served page) with the lines that name the test
     by its own name taken out, and in their place no second blank line.
 
-    PF3 (PF3.6b): every surface names the method it used, on a line
-    of its own; nothing before PF3 printed Fisher, McNemar or log-rank, so a frozen digest over one
-    of these files holds over this. Removing a line never leaves two blank lines where it was:
-    a paragraph of its own (the line and the blank line after it) goes as a whole.
+    PF3.6b: every surface names the method it used, on a line of its own; a digest pinned over
+    one of these files is taken over this, so it guards everything but those lines. Removing a
+    line never leaves two blank lines where it was: a paragraph of its own (the line and the blank
+    line after it) goes as a whole.
     """
     out: list[str] = []
     removed = False
@@ -70,7 +69,7 @@ def without_method_lines(text: str) -> str:
 
 #: PF5 (the report header's ``NAME (ID)`` pairing): the header
 #: of ``report.md`` and ``receipt.html`` names each run as ``before  NAME (ID)`` and ``after  NAME
-#: (ID)``, and the provenance list no longer gives the ids, so each id is in each file once.
+#: (ID)``, and the provenance list does not give the ids, so each id is in each file once.
 _RUN_LINE = re.compile(r"^(?:<p>)?(?:before|after)  .+ \([^()]+\)(?:</p>)?$")
 _RUN_ID_ITEM = re.compile(r"<li>run id [ab]: [^<]*</li>")
 _RUN_ID_LINE = re.compile(r"^- run id [ab]: .*$")
@@ -79,8 +78,8 @@ _RUN_ID_LINE = re.compile(r"^- run id [ab]: .*$")
 def without_run_lines(text: str) -> str:
     """``text`` (``report.md``, ``receipt.html``) with the header's two run lines and the
     provenance list's two run-id entries taken out, and in place of the run lines no second blank
-    line: the bytes a file had before the pairing, and what the library's render gives without
-    its run-id entries."""
+    line: what a pinned digest of the file is taken over, and what the library's render gives
+    without its run-id entries."""
     out: list[str] = []
     removed = False
     for line in text.splitlines(keepends=True):
@@ -497,9 +496,9 @@ def code_of(source: str) -> str:
     """``source`` with its comments and docstrings taken out and its blank lines dropped: the code
     a change to words alone leaves as it was.
 
-    PF8: the plain-words pass rewrites the
-    docstrings and comments of ``src/`` and of the frozen tests, so a frozen digest over a symbol's
-    source or a test file's bytes is taken over this instead, and moves only when code does."""
+    A digest pinned over a symbol's source or a test file's bytes is taken over this, so
+    rewording a comment or docstring in ``src/`` or in a frozen test leaves it as it was; it moves
+    only when code does."""
     lines = io.StringIO(source, newline="\n").readlines()
 
     def column(row: int, byte_col: int) -> int:

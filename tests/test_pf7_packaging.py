@@ -1,5 +1,5 @@
 """PF7 -- packaging: the metadata, the extras and their floors, and what the wheel and the sdist
-hold (PF7.4 to PF7.6, with the release decisions on the extras, the floors and the description;
+hold (PF7.4 to PF7.6, with the extras, the floors and the description as released;
 the Modal floor measured by the backends module).
 
 **What is pinned is what ships.** ``pyproject.toml`` as the build reads it, and the wheel and the
@@ -9,7 +9,7 @@ member. The sets are rules over the tree, not lists: the wheel holds every file 
 folder and nothing else, so a module or a data file a later change adds is in it by being in the
 package.
 
-**Readings this file freezes** (the build follows them):
+**Readings this file pins:**
 
 - **k1** The PyPI short description is this sentence exactly: "Did your change to the agent
   really change how often it fails? Replays the same cases before and after, and says per
@@ -23,7 +23,7 @@ package.
 - **k4** Every requirement has a lower bound: the core, every extra, ``dev`` included (the floors
   run resolves ``[dev]`` at its lowest too), and the build backend. An upper bound only on
   ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.2``.
-- **k5** ``[dev]`` carries what the contributors' lanes need that this file and the docs check
+- **k5** ``[dev]`` carries what the contributors' test runs need that this file and the docs check
   read: ``pytest-xdist`` (the suite runs on parallel workers), ``hypothesis`` (the property tests), ``hatchling`` (the archives built
   here), ``markdown-it-py`` (the docs check reads pages with it), ``pyyaml`` (it parses YAML
   blocks) and ``pyte`` (the terminal emulator the app's tests read screens with). Other modules'
@@ -31,10 +31,10 @@ package.
 - **k6** PF7.5 is one slow test: on Python 3.11 it installs every requirement at exactly its
   stated floor (a constraints file of ``name==floor`` over the core and every extra; uv resolves
   what they bring), checks each is installed at its floor, then runs the code suite in that
-  environment. ``--resolution lowest-direct`` is how the build finds the floors; it
+  environment. ``--resolution lowest-direct`` is how the floors are found; it
   is not the check, because it takes what the floors bring at their newest and then backtracks a
   direct requirement above its floor to fit them (Modal 1.6.1 for a floor of 0.73.76 that installs
-  when asked). It needs the package index, so it is the main lane's, never a pull request's.
+  when asked). It needs the package index, so it runs for the main branch, never for a pull request.
 - **k7** The wheel holds exactly the files of ``src/poisson_prove/`` (byte code left out) and the
   ``dist-info`` with ``METADATA``, ``WHEEL``, ``RECORD``, ``entry_points.txt`` and the two licence
   files. The sdist holds exactly ``PKG-INFO``, ``pyproject.toml``, ``.gitignore``, ``README.md``,

@@ -1,58 +1,51 @@
 """S26 -- the grouping resolver and the fault lines: the frozen tests for F1-F30.
 
-Written before the code they test, against ``11502ba`` plus the update commit ``082c87d``. The
-code adds ``src/poisson_prove/tree.py`` (the resolver, ``tree``, the four dataclasses) and the two
-flags, one block and one key in ``src/poisson_prove/cli.py`` against this file and does not edit it.
+The code under test is ``src/poisson_prove/tree.py`` (the resolver, ``tree``, the four
+dataclasses) and the two flags, one block and one key in ``src/poisson_prove/cli.py``.
 
-**``poisson_prove.tree``'s new names are imported inside each test body**, the way the S25 frozen tests
-reached the module before it existed: this file collects on the bare tree, its own tests fail
-there, and every other test in the repo still reports.
+**``poisson_prove.tree``'s names are imported inside each test body**, the way the S25 frozen tests
+reach the module: a missing name fails the tests that use it, and every other test in the repo
+still reports.
 
-**No test in this file carries the ``calibration`` marker, and none may.** Measured by a slow
-script run before these tests were written (K=200 sharp-null resamples of the committed
-fixture of the time, grouped by its first axis, B=1000): Level 2 is gated on the root, so under
-the global sharp null the unconditional rate of any group rejecting is bounded by the root's own
-rate, which O10 already holds inside ``[0.020, 0.080]``. The measured gated rates, with BH and
+**No test in this file carries the ``calibration`` marker, and none may.** Level 2 is gated on the
+root, so under the global sharp null the unconditional rate of any group rejecting is bounded by
+the root's own rate, which O10 already holds inside ``[0.020, 0.080]``. Measured over K=200
+sharp-null resamples of a fixture grouped by its first axis (B=1000), the gated rates, with BH and
 with no correction, under both schemes, all sat at or below the band, so a band cannot tell a
 correct Level 2 from one with no correction at all, and the only column that separates them
 (ungated, no correction, far above the band) is unreachable from the public surface. Every Level 2 wiring error is caught
-deterministically here (F13-F16), and F24 is the fast twin of the lane's one sole catch (S25 M3b).
-Nothing below loops over resamples; a property test over small synthetic pairs is not a lane.
+deterministically here (F13-F16), and F24 catches an exchange regressed to arm label in a tenth of
+a second, a defect that among the calibration tests only S25's catches. Nothing below loops over
+resamples.
 
-**Measured before a test was written** (the measurement script,
-89 s against the bare tree; every number below is that script's or the reference script's):
+**The measurements the tests rest on**:
 
-1. **The refusal rule is S23's gate at the family floor, on shape alone.** The measurement script's
-   ``describe_grouping`` computes ``mde_two_proportion(0.5, n_a_g, n_b_g, alpha=q/G)`` from the
-   design's per-arm unit counts summed over the group's cells and reads no delta; the constant is
-   ``executor.DEFAULT_MAX_MDE`` imported. On both substrates every group is equal-sized, so the
-   script's ``power_{min,median,max}_gt_threshold`` rules coincide with "at least two resolve";
-   recomputed as that count directly, under both schemes, exactly one grouping was refused across
-   every axis of the fixtures of the time.
-   (PF4.45 since makes a group's limit its cells' own; on the lattice the default refuses ``gain``
-   and admits ``load``, F2.) F7 recomputes the
+1. **The refusal rule is a gate at the family floor ``q/G``, read before any delta.** Each group's
+   limit is the smallest change, made in every condition of the group from its own baseline and in
+   no other, that the tree would flag with the root and the group both rejecting, unconditionally
+   (PF4.45); a grouping resolves when at least two groups' limits are at or below
+   ``max_group_mde``, whose default is ``executor.DEFAULT_MAX_MDE`` imported. On the lattice the
+   default refuses ``gain`` and admits ``load`` (F2). F7 recomputes the
    rule from ``units`` and the partition; F7's shape test resolves the axes pair and its identical
    twin (same shape, every delta zero) to byte-identical ``Grouping`` JSON, which is what pins
    "admitted before any delta is read".
-2. **The rule's failure modes, named so the refusal is not read as more than it is.** It is a
-   design-time rule anchored at base rate 0.5 and the sparse alternative ``q/G``. It can admit a
-   grouping whose groups are mostly degenerate when N is large (the degenerate count is printed,
-   not gated); it can refuse a dense alternative that BH's step-up would have
-   had power for (the 4 x 4 pair is where ``q/G`` and ``q`` part); and at extreme base rates the
-   real power is below the anchor's (S23's 0.34 against 0.3251). None of those is a
-   reason to move it now, and no fixture here claims otherwise.
+2. **The rule's failure modes, named so the refusal is not read as more than it is.** It is
+   anchored at the sparse alternative ``q/G`` (one group moves). It can admit a grouping whose
+   groups are mostly degenerate when N is large (the degenerate count is printed, not gated), and
+   it can refuse a dense alternative that BH's step-up would have had power for. No fixture here
+   claims otherwise.
 3. **The axes pair** (164 ``task`` x 2 ``temp``, N=8, every cell all-``ok``; arm b moves twenty
    cells of ``temp = 0.0`` by two matched pairs ``ok -> fail`` at replicates 0 and 1): root at the
    floor and ``temp = 0.0`` at the floor under **both** schemes with no widening; the flat family
    rejects nothing (min raw p 0.5 under McNemar, 0.4667 under Fisher; min q 1); ``temp = 0.7``
-   degenerate under both. A mixed base (``fail x2 + ok x6``) was measured too: with two pairs the
+   degenerate under both. A mixed base (``fail x2 + ok x6``) would not do: with two pairs the
    arm-label root sits at p 0.38 and the group at 0.15, because 308 mixed cells contribute
-   permutation variance the twenty moved cells must overcome; six pairs would be needed, which is
-   not the intended fixture. The all-``ok`` base keeps the intended forty discordant pairs and McNemar
+   permutation variance the twenty moved cells must overcome, and six pairs would be needed. The
+   all-``ok`` base keeps forty discordant pairs and McNemar
    p of 0.5 and is the one on which "the group sees what no leaf can" is literal: no leaf p is
    below 0.46 before any correction. ``task`` refuses at 0.5000 (the cap; offered 0.5000) and
    ``temp`` admits at 0.0600.
-4. **The BH pair** under ``mcnemar_bh`` reproduces its design exactly: root p 0.00749813 and
+4. **The BH pair** under ``mcnemar_bh``: root p 0.00749813 and
    ``g00``'s ``p_group`` bit-equal to it (seeds 0-2), the other nineteen at p 1 and degenerate,
    ``q_group = 0.15``, and BH over the one informative group would give 0.0075. **The arm-label
    twin of that shape does not exist**: over w in {2..10} cells and k in {1..16} extra failures no
@@ -61,21 +54,21 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
    variance to the root's statistic and none to ``g00``'s slice, so ``g00`` is always far more
    extreme than the root (root p 0.98 at eight weak cells against ``g00`` 0.61; root 0.0057 at
    ten cells x twelve against ``g00`` at the floor). F14 is therefore asserted under
-   ``mcnemar_bh`` only, and two unnumbered arm-label guards are added: a
+   ``mcnemar_bh`` only, and two unnumbered arm-label guards stand beside it: a
    **strong** variant (ten cells x sixteen: root and ``g00`` at the floor, the nineteen at p 1 and
    informative) for F16's arm-label clause, and a **two-group** variant (``g01`` ten cells x twelve
    strong, ``g00`` eight cells x three weak: root p 0.0017, ``g00`` p 0.0215 -- 8.3 sd above
    ``q/20`` and 12.4 below ``q`` -- ``q_group`` 0.215, not rejected) for "no correction" under arm
    label. Neither can see ``m = informative groups`` (all twenty are informative under arm label);
    the lattice by ``load`` and the McNemar BH pair do.
-5. **The discordant cell** (one cell, every matched pair discordant) reproduces to the digit: ``p_location``
+5. **The discordant cell** (one cell, every matched pair discordant): ``p_location``
    0.2209, 0.2119, 0.2204, 0.2249, 0.2159 under pair swap against the exact 0.215327 and 0.0785,
    0.0890, 0.0810, 0.0767, 0.0912 under arm label against 0.079341; ``p_dispersion == p_location
    == p_omnibus`` on every seed. Band edges are at least 5.4 sd from the exact value and 6 sd from
    the other scheme's; an exchange regressed to arm label under ``mcnemar_bh`` reads about 0.08
    and fails ``[0.18, 0.26]`` alone.
-6. **The lattice's Level 2 golden** (``tests/lattice.py``; re-measured at B=4000, seed 0 on main's
-   unchanged code when this file moved to it): by ``load`` exactly three groups reject (``10.0``,
+6. **The lattice's Level 2 golden** (``tests/lattice.py``; measured on Prove at B=4000, seed 0):
+   by ``load`` exactly three groups reject (``10.0``,
    ``20.0``, ``30.0``), all at the floor, ``50.0`` and ``100.0`` degenerate, ``40.0`` with one
    informative cell at p 1; by ``gain`` (at the admitting override) eleven reject, the ten
    ``0.1`` ... ``1.0`` at the floor but ``0.9`` (3 / 4001 Fisher, 2 / 4001 McNemar) and ``1.2``
@@ -85,33 +78,31 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
    and ``m = informative`` differ on the load axis (two degenerate) and coincide on ``gain``, so
    F14's recompute clause on the lattice by load is what catches ``m = informative``.
 
-**Design statements these frozen tests could not use as written, each resolved here.**
+**Values and readings these frozen tests choose.**
 
-- F8's ``max_group_mde = 0.37`` cannot admit ``task`` on the axes pair: at N=8 the group MDE is the
-  cap 0.5000 (the axes pair's own number); 0.37 is the value for a design at N=32. F8 uses the offered
-  value pasted back (0.5000, equality passes) and an explicit 0.6.
-- F16's "the nineteen have ``p_group == 1.0`` under both" is unsatisfiable on the designed BH pair
-  under ``fisher_bh``: the root sits at p 0.98 there, the level is not tested and every p is
-  ``None``. The arm-label clause is asserted on the strong variant, where the root rejects.
-- The planned property tests say ``max_group_mde = 1.0`` "so the grouping resolves"; F8 refuses
-  ``1``. They use 0.75 (every MDE is at most the cap 0.5, so anything above admits everything).
-- F5 and F19 conflict on ``step_kind``: ``--by step_kind`` must echo its key verbatim
-  in a refusal row and on the block, and F19 forbids the substring ``step`` on both. The
-  vocabulary check masks the requested key before it looks; a build that echoes the name passes,
-  one that writes "failed at step" does not.
-- The axes pair's description says "every leaf in ``temp = 0.0`` has two discordant pairs"; twenty of the 164 do.
-- The planning table reads 0.1750 for the 4 x 4 pair at ``alpha = q``; ``mde_two_proportion``
-  gives 0.171705. The stated "MDE 0.49" for the imported pair's ``tool_fail_rate`` is 0.4597
-  (0.49 is another row of that table). Both still separate what they are meant to separate.
-- F15 names S25's three-cell identical pair, whose only axis refuses at the cap so the grouping
-  collapses to ``whole_grid`` and ``reason`` is ambiguous between the two untested cases. **These
-  frozen tests fix root-first precedence**: when the root did not reject, ``reason`` is
+- A ``max_group_mde`` of 0.37 cannot admit ``task`` on the axes pair: at N=8 the group MDE is the cap 0.5000 (the axes
+  pair's own number); 0.37 is the value for a design at N=32. F8 uses the offered value pasted back
+  (0.5000, equality passes) and an explicit 0.6.
+- On the designed BH pair under ``fisher_bh`` the root sits at p 0.98, the level is not tested and
+  every p is ``None``, so F16's arm-label clause (the nineteen at ``p_group == 1.0``) is asserted
+  on the strong variant, where the root rejects.
+- The property tests use ``max_group_mde = 0.75``, not 1 (F8 refuses ``1``): every MDE is at most
+  the cap 0.5, so anything above admits everything.
+- ``--by step_kind`` must echo its key verbatim in a refusal row and on the block (F5), and F19
+  forbids the substring ``step`` on both. The vocabulary check masks the requested key before it
+  looks; code that echoes the name passes, code that writes "failed at step" does not.
+- In the axes pair, twenty of the 164 leaves in ``temp = 0.0`` have two discordant pairs.
+- ``mde_two_proportion`` gives 0.171705 for the 4 x 4 pair at ``alpha = q``, and 0.4597 for the
+  imported pair's ``tool_fail_rate``; both separate what they are meant to separate.
+- S25's three-cell identical pair has one axis, which refuses at the cap, so the grouping
+  collapses to ``whole_grid`` and ``reason`` could be either untested case. **These frozen tests
+  fix root-first precedence**: when the root did not reject, ``reason`` is
   ``"root_not_rejected"`` whatever the grouping's cardinality, because the gate is evaluated before
   the level's shape and the more fundamental fact is the one stated. F15's full clause is asserted
   on an identical pair of the axes shape, where ``temp`` resolves to two groups.
-- S25's "two decorator lines" on O10 is one line: one function parametrises into both.
+- S25's O10 is one decorator line: one function parametrises into both schemes.
 
-**Conventions these frozen tests fix where the design is silent. The code follows these.**
+**Conventions these frozen tests fix.**
 
 - ``next_rung`` is the rung that makes the next attempt: ``"axis"`` when the axis rung refuses one
   axis and another remains, ``"task_family"`` when it refuses its last one, ``"trace"`` after the
@@ -167,7 +158,7 @@ TWO_SCHEMES = ("mcnemar_bh", "fisher_bh")
 
 #: This file's literals (F1). Never read back from the module.
 EXPECTED_RUNG_ORDER = ("requested", "trace", "axis", "task_family", "whole_grid")
-#: The two names the trace rung owned until PF4. PF4 (PF4.6): ``tree.TRACE_GROUPINGS`` is empty and
+#: Two trace-shaped names that are not groupings. PF4 (PF4.6): ``tree.TRACE_GROUPINGS`` is empty and
 #: both names are unknown groupings, refused before any permutation is drawn; the names stay
 #: here because the tests below check that refusal for each of them.
 EXPECTED_TRACE_GROUPINGS = ("kind", "step_kind")
@@ -179,8 +170,8 @@ EXPECTED_REFUSAL_REASONS = ("unsupported", "underpowered", "one_group", "not_sha
 EXPECTED_GROUP_NULL = "no cell in the group changed"
 EXPECTED_MIN_RESOLVABLE_GROUPS = 2
 EXPECTED_DEFAULT_MAX_GROUP_MDE = 0.20
-#: PF4 re-freeze (PF4.45): a group's limit is its cells' own unconditional limit, so the default no
-#: longer admits the lattice's ``gain`` or the BH pair's ``grp``; the fixtures that test those levels accept
+#: PF4.45: a group's limit is its cells' own unconditional limit, so the default does not
+#: admit the lattice's ``gain`` or the BH pair's ``grp``; the fixtures that test those levels accept
 #: this value, which admits every group whose limit is below it (the range check refuses 1).
 ADMITTING_MAX_GROUP_MDE = 0.99
 EXPECTED_NOT_TESTED_REASONS = ("root_not_rejected", "one_group")
@@ -192,7 +183,7 @@ GOLDEN_SEED = 0
 REFUSAL_PERMUTATIONS = 10**6
 REFUSAL_BUDGET_SECONDS = 10.0
 
-#: F24, the S25 amendment's bands; measurement 5 of the module docstring says why they hold.
+#: F24's bands, as S25 sets them; measurement 5 of the module docstring says why they hold.
 DISCORDANT_BANDS = {"mcnemar_bh": (0.18, 0.26), "fisher_bh": (0.05, 0.12)}
 
 #: F27: the keys a different seed may move.
@@ -240,8 +231,8 @@ LATTICE_GAIN_AT_FLOOR = tuple(str(v) for v in lattice.GAIN[:10])
 LATTICE_GAIN_NOT_REJECTED = "1.1"
 #: PF4 (PF4.18): with the permutations scored on the observed point's scale, the lattice by ``gain``
 #: under Fisher (B = 4,000, seed 0) rejects 11 of 12 groups, two of them off the floor: gain 0.9 at
-#: 3 / (B + 1) and gain 1.2 at 28 / (B + 1); gain 1.1 sits at 3797 / (B + 1). Re-measured on main's
-#: unchanged src when this file moved to the lattice (no independent value exists for a group p);
+#: 3 / (B + 1) and gain 1.2 at 28 / (B + 1); gain 1.1 sits at 3797 / (B + 1). Measured on
+#: Prove itself (no independent value exists for a group p);
 #: each group q is recomputed from these counts by ``lattice.bh``.
 LATTICE_FISHER_GAIN_GROUP_COUNTS = {"0.9": 3, "1.1": 3797, "1.2": 28}
 LATTICE_FISHER_GAIN_REJECTED = 11
@@ -407,7 +398,7 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
 
 def without_notes(err: str) -> str:
     """Stderr with the ``note:`` lines removed. Prove's own warning (``UnpairedAnalysis``, on two
-    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line."""
+    runs sharing a salt) reaches the CLI's stderr as one ``note:`` line."""
     return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
 
 
@@ -482,8 +473,8 @@ def bh_over(values: Any) -> list[float]:
 
 
 def assert_q_column_is_bh_over_its_p_column(result: Any, reference: Mapping[str, Mapping[str, Mapping[str, Any]]] | None, events: tuple[str, ...]) -> None:
-    """What a q-column digest guarded, as facts: the family covers ``events`` in that order, one
-    row per condition of the design each, in sorted-hash order (the order the digest read); its q
+    """The q column, by its facts: the family covers ``events`` in that order, one
+    row per condition of the design each, in sorted-hash order; its q
     values, in that order, equal BH over its p values exactly (one family over every event); and
     where ``reference`` (per event, per condition) holds an independent p, each p equals it exactly
     and each q equals BH over the reference's p column exactly."""
@@ -528,7 +519,7 @@ def walk_keys(payload: Any, *, skip: Sequence[str] = ("config", "groups")) -> li
 
 class Unreadable:
     """A frame stand-in that fails on any read. F5 hands a pair of these to ``resolve_grouping``
-    as ``frames``: the trace rung reads nothing today, so nothing may touch them."""
+    as ``frames``: the trace rung reads nothing, so nothing may touch them."""
 
     def _refuse(self, *args: Any, **kwargs: Any) -> Any:
         raise AssertionError("the trace rung read a frame before Phase 6")
@@ -551,7 +542,7 @@ def second_smallest_rounded_up(mdes: Sequence[float]) -> float:
 
 
 def read_group_limits(a: pd.DataFrame, b: pd.DataFrame, multi: Any, ma: RunManifest, mb: RunManifest, key: str) -> tuple[float, ...]:
-    """PF4 re-freeze (PF4.45): a key's group limits as the build computes them (each cell's own
+    """PF4.45: a key's group limits as Prove computes them (each cell's own
     baseline, unconditional), read off the grouping requested at ``ADMITTING_MAX_GROUP_MDE``. The
     stats file holds no independent reference for a group's limit, so they are read, never typed."""
     grouping = grown(a, b, multi, ma, mb, by=key, n_permutations=50, seed=GOLDEN_SEED, max_group_mde=ADMITTING_MAX_GROUP_MDE).grouping
@@ -585,7 +576,7 @@ def by_gain(lattice_trees: Any) -> dict[str, tuple[Any, Any]]:
     comparison and tree is the session's shared one (``conftest.SharedTrees``)."""
     out = {}
     for method in METHODS:
-        # PF4 re-freeze (PF4.45): at the default gain is refused as underpowered, so the golden
+        # PF4.45: at the default gain is refused as underpowered, so the golden
         # gain tree is grown at ADMITTING_MAX_GROUP_MDE, where gain resolves.
         out[method] = (
             lattice_trees.multi((EVENT,), method),
@@ -646,9 +637,9 @@ def bh_trees() -> dict[str, tuple[Any, Any]]:
         a, b = raw_frame("bh-a", cells_a), raw_frame("bh-b", cells_b)
         ma, mb = manifest("bh-a", BH_SALT, BH_TYPES), manifest("bh-b", BH_SALT, BH_TYPES)
         multi = quiet_multi_diff(a, b, ma, mb, events=("fail",), method=method)
-        # PF4 re-freeze (PF4.45): at the default grp is refused as underpowered now (each group's
+        # PF4.45: at the default grp is refused as underpowered (each group's
         # limit is its cells' own, unconditional), so the BH trees are grown at
-        # ADMITTING_MAX_GROUP_MDE, where grp resolves as it did.
+        # ADMITTING_MAX_GROUP_MDE, where grp resolves.
         out[name] = (multi, grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED, max_group_mde=ADMITTING_MAX_GROUP_MDE))
     return out
 
@@ -761,7 +752,7 @@ def property_tree(case: Any) -> Any:
 
 
 def test_f1_the_module_constants_are_the_spec_literals() -> None:
-    """Asserted against this file's literals, never against the module's own (standing rule 1)."""
+    """Asserted against this file's literals, never against the module's own."""
     t = tree()
     assert tuple(t.RUNG_ORDER) == EXPECTED_RUNG_ORDER
     # PF4 (PF4.6): the trace rung offers no grouping name; it keeps its slot in RUNG_ORDER.
@@ -812,7 +803,7 @@ def test_f2_arm_a_declaring_temp_first_refuses_nothing(axes: dict[str, Any]) -> 
 
 
 def test_f2_the_lattice_resolves_gain_with_no_refusal_under_every_method(pair: Any, by_gain: Any) -> None:
-    # PF4 re-freeze (PF4.45): at the default, gain's groups (each cell's own baseline, unconditional)
+    # PF4.45: at the default, gain's groups (each cell's own baseline, unconditional)
     # are too weak, so gain is refused as underpowered and load resolves; at a value that admits
     # gain it resolves with no refusal.
     a, b, ma, mb = pair
@@ -858,7 +849,7 @@ def test_f2_the_groups_partition_the_common_cells_on_every_fixture(every_tree: A
 def test_f2_the_partition_property_holds_over_small_two_key_pairs(case: Any) -> None:
     _, result = property_tree(case)
     grouping, units = result.grouping, result.root.units
-    # PF4 re-freeze (PF4.45): a group's limit is its cells' own, unconditional, so on designs this
+    # PF4.45: a group's limit is its cells' own, unconditional, so on designs this
     # small the first axis is not always admitted below 1 (which the range check refuses); x is the
     # grouping whenever it was not refused, and the partition holds on whichever grouping resolved.
     if [r.key for r in grouping.refused][:1] == ["x"]:
@@ -886,14 +877,14 @@ def test_f3_a_requested_key_that_passes_reads_requested_on_the_structure(axes: d
 
 def test_f3_the_block_and_the_json_carry_the_requested_key(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert block, out
     assert "temp" in block[0] and "requested" in block[0], block[0]
-    # --json replaces --format json.
+    # diff's JSON form is --json.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp", "--json"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["resolved_by"], grouping["requested"], grouping["key"]) == ("requested", "temp", "temp")
@@ -911,9 +902,9 @@ def test_f4_a_requested_key_that_is_refused_names_what_why_and_what_came_next(ax
     refusal = grouping.refused[0]
     assert (refusal.key, refusal.rung, refusal.reason, refusal.next_rung) == ("task", "requested", "underpowered", "trace")
     assert (refusal.n_groups, refusal.n_resolvable_groups) == (N_TASKS, 0)
-    # PF4 re-freeze (PF4.45): the group limits are each cell's own baseline and unconditional, read
-    # from the build (read_group_limits) rather than S23's rule at a base rate of 0.5; the offer is
-    # still S23's rounding-up rule over them.
+    # PF4.45: the group limits are each cell's own baseline and unconditional, read
+    # from Prove (read_group_limits) rather than S23's rule at a base rate of 0.5; the offer is
+    # S23's rounding-up rule over them.
     mdes = read_group_limits(axes["a"], axes["b"], multi, axes["ma"], axes["mb"], "task")
     assert len(mdes) == N_TASKS
     offered = second_smallest_rounded_up(mdes)
@@ -931,7 +922,7 @@ def test_f4_a_requested_key_that_is_refused_names_what_why_and_what_came_next(ax
 def test_f5_the_trace_stub_refuses_the_name_at_its_own_rung_and_resolution_continues(pair: Any, lattice_trees: Any, name: str) -> None:
     a, b, ma, mb = pair
     multi = lattice_trees.multi((EVENT,), "mcnemar_bh")
-    # PF4 (PF4.6): the trace rung no longer owns the name, so --by kind and --by step_kind are
+    # PF4 (PF4.6): the trace rung owns no name, so --by kind and --by step_kind are
     # unknown groupings: refused before any permutation is drawn (O13's cost pin), the message
     # naming the request and the axes both runs declare, and naming no phase.
     started = time.perf_counter()
@@ -944,20 +935,20 @@ def test_f5_the_trace_stub_refuses_the_name_at_its_own_rung_and_resolution_conti
 
 
 def test_f5_the_trace_rung_reads_no_frame_today_and_its_exception_never_propagates(pair: Any, by_gain: Any) -> None:
-    """``frames`` is what the trace rung will read in Phase 6 and is unread now: a pair of objects
+    """``frames`` is handed to the trace rung, which reads nothing: a pair of objects
     that fail on any read must pass through untouched, and ``TraceGroupingUnsupported`` is caught
     by the resolver and recorded, never raised to the caller."""
     _, _, ma, mb = pair
     multi, base = by_gain["fisher_bh"]
     t = tree()
-    # PF4 (PF4.6): "kind" is an unknown grouping now, refused by the requested rung before the
-    # trace rung is reached; the poisoned frames are still never read (the refusal is
+    # PF4 (PF4.6): "kind" is an unknown grouping, refused by the requested rung before the
+    # trace rung is reached; the poisoned frames are never read (the refusal is
     # UnknownGrouping, not the poison's AssertionError), and with no request the frames change
     # nothing.
     for name in EXPECTED_TRACE_GROUPINGS:
         with pytest.raises(t.UnknownGrouping):
             t.resolve_grouping(name, manifest_a=ma, manifest_b=mb, units=base.root.units, q=multi.q, frames=(Unreadable(), Unreadable()))
-    # PF4 re-freeze (PF4.45): at the value by_gain grows at, where gain resolves.
+    # PF4.45: at the value by_gain grows at, where gain resolves.
     with_poison = t.resolve_grouping(None, manifest_a=ma, manifest_b=mb, units=base.root.units, q=multi.q, frames=(Unreadable(), Unreadable()), max_group_mde=ADMITTING_MAX_GROUP_MDE)
     without_frames = t.resolve_grouping(None, manifest_a=ma, manifest_b=mb, units=base.root.units, q=multi.q, max_group_mde=ADMITTING_MAX_GROUP_MDE)
     assert json_bytes(with_poison.to_json()) == json_bytes(without_frames.to_json())
@@ -1007,7 +998,7 @@ def test_f7_the_group_mde_and_the_resolvable_count_are_recomputed_on_every_fixtu
     for name, multi, result in every_tree:
         grouping, units, fault_lines = result.grouping, result.root.units, result.fault_lines
         assert abs(grouping.alpha_floor - multi.q / grouping.n_groups) <= 1e-15, name
-        # PF4 re-freeze (PF4.45): a group's limit is its cells' own baselines, unconditional (root
+        # PF4.45: a group's limit is its cells' own baselines, unconditional (root
         # and group both rejecting), not S23's rule at 0.5; with no independent reference it is
         # read, and what is checked is that it is one number, a positive change within the room
         # of the group's cells (or the whole scale, 1, when no change within it is detectable),
@@ -1035,19 +1026,18 @@ def test_f7_the_group_mde_and_the_resolvable_count_are_recomputed_on_every_fixtu
 
 
 def test_f7_the_four_by_four_pair_separates_the_floor_from_q_and_equality_passes() -> None:
-    """Sixteen cells at N=32, 128 units per arm per group. Before the statistics re-freeze: MDE
-    0.2032 at ``q/4`` (refused at the default) and 0.1717 at ``q`` (would pass). Now: every ``x``
-    group's own limit is above the default, and at ``max_group_mde`` equal to the largest of them
-    the grouping is admitted (S23 W3's equality). ``y`` is refused too, so the default falls to
-    the whole grid."""
+    """Sixteen cells at N=32, 128 units per arm per group. Every ``x`` group's own limit is above
+    the default, and at ``max_group_mde`` equal to the largest of them the grouping is admitted
+    (S23 W3's equality). ``y`` is refused too, so the default falls to the whole grid. The name's
+    floor-against-q contrast belongs to S23's rule at a base rate of 0.5 (0.2032 at ``q/4``, 0.1717
+    at ``q``), which a group's own unconditional limit does not follow."""
     cells = four_by_four_cells()
     a, b = raw_frame("four-a", cells), raw_frame("four-b", cells)
     types = {"x": "continuous", "y": "continuous"}
     ma, mb = manifest("four-a", SALT, types), manifest("four-b", SALT, types)
     multi = quiet_multi_diff(a, b, ma, mb, events=("fail",), method="mcnemar_bh")
-    # PF4 re-freeze (PF4.45): the group limits are each cell's own baseline, unconditional, read
-    # from the build; S23's rule at 0.5 (0.2032 at q/4, 0.1717 at q) no longer applies, so the
-    # floor-against-q contrast is gone. Every x group is refused at the default, and the largest
+    # PF4.45: the group limits are each cell's own baseline, unconditional, read
+    # from Prove, not S23's rule at 0.5. Every x group is refused at the default, and the largest
     # of the four limits admits all four (equality passes).
     limits = read_group_limits(a, b, multi, ma, mb, "x")
     assert len(limits) == 4 and min(limits) > EXPECTED_DEFAULT_MAX_GROUP_MDE, limits
@@ -1090,9 +1080,9 @@ def test_f7_the_grouping_is_a_function_of_shape_and_reads_no_delta(axes: dict[st
 
 
 def test_f8_the_offered_value_pasted_back_admits_the_refused_grouping(axes: dict[str, Any]) -> None:
-    """The planned 0.37 cannot admit ``task`` here (the group MDE is the cap 0.5000 at N=8, the
+    """A ``max_group_mde`` of 0.37 cannot admit ``task`` here (the group MDE is the cap 0.5000 at N=8, the
     axes pair's own number; 0.37 is the value for a design at N=32 -- module docstring). What is pinned
-    is the property 0.37 stood for: the value the refusal offers, pasted back, admits the grouping
+    is the property 0.37 would stand for: the value the refusal offers, pasted back, admits the grouping
     (rounding up, S23's ``_offered_override``), and an explicit larger value admits it without
     ``--by`` and is carried on the structure."""
     multi = quiet_multi_diff(axes["a"], axes["b"], axes["ma"], axes["mb"], events=("fail",), method="mcnemar_bh")
@@ -1105,33 +1095,32 @@ def test_f8_the_offered_value_pasted_back_admits_the_refused_grouping(axes: dict
 
 def test_f8_the_block_and_the_json_carry_the_accepted_value(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", "0.6"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     # The accepted MDE prints to three decimals under rule 10, not ``:g``.
     assert block and mde(0.6) in numeric_tokens(block[0]) and "task" in block[0], block[:1]
-    # --json replaces --format json.
+    # diff's JSON form is --json.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", "0.6", "--json"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["max_group_mde"], grouping["key"], grouping["refused"]) == (0.6, "task", [])
 
 
 def test_f8_the_offered_value_is_rounded_up_where_nearest_would_refuse() -> None:
-    """S23's trap one level down. Before the statistics re-freeze the 4 x 4 pair's 0.203231 showed
-    it: the refusal offered 0.2033, which admitted the grouping, while 0.2032 refused it again. The
-    group limits now lie on the 0.0001 grid; the offer is still S23's rule over them and pasting it
-    admits the grouping."""
+    """S23's trap one level down: an offer rounded to nearest can fall below the limit it must
+    admit (a limit of 0.203231 offered as 0.2032 refuses again), so the offer is rounded up. The
+    group limits here lie on the 0.0001 grid, so the trap has no number to show; the offer is S23's
+    rule over them and pasting it admits the grouping."""
     cells = four_by_four_cells()
     a, b = raw_frame("four-a", cells), raw_frame("four-b", cells)
     types = {"x": "continuous", "y": "continuous"}
     ma, mb = manifest("four-a", SALT, types), manifest("four-b", SALT, types)
     multi = quiet_multi_diff(a, b, ma, mb, events=("fail",), method="mcnemar_bh")
     refusal = grown(a, b, multi, ma, mb, n_permutations=50, seed=GOLDEN_SEED).grouping.refused[0]
-    # PF4 re-freeze (PF4.45): the limits are each cell's own baseline, unconditional, read from the
-    # build; they fall on the 0.0001 grid, so 0.203231's rounding trap has no number to show here.
-    # What stays: the offer is S23's rounding-up rule over the limits, pasting it admits the
+    # PF4.45: the limits are each cell's own baseline, unconditional, read from Prove.
+    # Pinned: the offer is S23's rounding-up rule over the limits, pasting it admits the
     # grouping, and a value below the second-smallest limit refuses it again.
     limits = read_group_limits(a, b, multi, ma, mb, "x")
     assert refusal.key == "x" and refusal.offered_max_group_mde == second_smallest_rounded_up(limits)
@@ -1210,10 +1199,10 @@ def test_f10_the_imported_shape_pair_reaches_the_task_family_rung() -> None:
     a, b = raw_frame("imp-a", cells), raw_frame("imp-b", cells)
     ma, mb = manifest("imp-a", SALT, {"tool_fail_rate": "continuous"}), manifest("imp-b", SALT, {"tool_fail_rate": "continuous"})
     multi = quiet_multi_diff(a, b, ma, mb, events=("fail",), method="mcnemar_bh")
-    # PF4 re-freeze (PF4.45): with each cell's own baseline and the unconditional power, task_id's
-    # eight groups no longer resolve at the default either, so the task-family rung refuses it and
+    # PF4.45: with each cell's own baseline and the unconditional power, task_id's
+    # eight groups do not resolve at the default either, so the task-family rung refuses it and
     # the whole grid follows; the value that refusal offers, pasted back, admits task_id at the
-    # task-family rung while tool_fail_rate stays refused at the axis rung, as before.
+    # task-family rung while tool_fail_rate stays refused at the axis rung.
     default = grown(a, b, multi, ma, mb, n_permutations=50, seed=GOLDEN_SEED).grouping
     assert [(r.key, r.rung, r.reason, r.n_groups) for r in default.refused] == [("tool_fail_rate", "axis", "underpowered", 80), ("task_id", "task_family", "underpowered", 8)]
     assert default.key == EXPECTED_WHOLE_GRID_KEY
@@ -1483,10 +1472,10 @@ def test_f15_the_block_prints_the_grouping_line_and_not_tested_and_no_p(synth_ro
     """Every numeric token on an untested group line is a rule-10 rendering of one of that group's
     count or design fields, or its label; a p has nowhere to come from."""
     _, result = store_tree(synth_root, "same-a", "same-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
-    # PF3: the synthetic pair shares a salt, so the default is now the
+    # PF3: the synthetic pair shares a salt, so the default is the
     # paired test; the tree here is the unpaired test's, named.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail", "--method", "fisher_bh"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert block, out
@@ -1567,9 +1556,9 @@ def test_f17_golden_lattice_by_load_rejects_exactly_the_three_groups_up_to_30(by
     assert (fault_lines.n_rejected_groups, fault_lines.rejected_groups) == (3, LATTICE_LOAD_REJECTED)
     for group in fault_lines.groups:
         if group.label in LATTICE_LOAD_REJECTED:
-            # PF4 (PF4.18): on one scale a permutation can tie the observed point, so a group that sat
-            # at the floor may now sit a count or two above it, and no independent value exists for
-            # this axis. What stays pinned: each of the three rejects, its p is a count over B + 1,
+            # PF4 (PF4.18): on one scale a permutation can tie the observed point, so a group near
+            # the floor may sit a count or two above it, and no independent value exists for
+            # this axis. Pinned: each of the three rejects, its p is a count over B + 1,
             # and it is small enough to reject even under Bonferroni across the six groups.
             k = group.p_group * (GOLDEN_PERMUTATIONS + 1)
             assert abs(k - round(k)) <= 1e-6 and group.p_group >= floor, (group.label, group.p_group)
@@ -1589,7 +1578,7 @@ def test_f17_golden_lattice_by_gain_rejects_the_ten_at_the_floor_and_not_1_1(by_
     by_label = {gr.label: gr for gr in fault_lines.groups}
     assert result.grouping.resolved_by == "axis" and fault_lines.tested is True
     if method == "fisher_bh":
-        # PF4 (PF4.18): the re-measured lattice values (LATTICE_FISHER_GAIN_*): gain 0.9 and 1.2 sit
+        # PF4 (PF4.18): the measured lattice values (LATTICE_FISHER_GAIN_*): gain 0.9 and 1.2 sit
         # off the floor, 11 groups reject and gain 1.1 does not; each group q is BH over the pinned
         # counts, computed by lattice.bh (BH written out).
         counts = [LATTICE_FISHER_GAIN_GROUP_COUNTS.get(str(v), 1) for v in lattice.GAIN]
@@ -1606,7 +1595,7 @@ def test_f17_golden_lattice_by_gain_rejects_the_ten_at_the_floor_and_not_1_1(by_
         assert fault_lines.n_rejected_groups == LATTICE_FISHER_GAIN_REJECTED
         assert fault_lines.rejected_groups == tuple(label for label in expected_qs if label != LATTICE_GAIN_NOT_REJECTED)
     else:
-        # PF4 (PF4.18): no independent McNemar value exists, and on one scale a group at the old
+        # PF4 (PF4.18): no independent McNemar value exists, and on one scale a group near the
         # floor may sit a count or two above it. Pinned: each of the ten rejects, its p is a
         # count over B + 1, and it rejects even under Bonferroni across the twelve groups.
         for label in LATTICE_GAIN_AT_FLOOR:
@@ -1623,10 +1612,9 @@ def test_f17_golden_lattice_by_gain_rejects_the_ten_at_the_floor_and_not_1_1(by_
 def test_f17_every_flat_rejection_lies_inside_a_rejecting_group_on_both_axes(by_gain: Any, by_load: Any, method: str) -> None:
     """The 22 (Fisher) / 27 (McNemar) flat rejections, recomputed from ``cells.q`` and the
     references' counts, are a subset of the union of the rejecting groups' cells on both axes.
-    **The expected fixture limit is wrong in the safe direction**: one might think a fixture of this
-    kind cannot show a group rejecting with no flat rejection inside it, but by ``gain`` under
+    **The lattice can show a group rejecting with no flat rejection inside it**: by ``gain`` under
     McNemar the group 1.2 rejects (38 / 4001) with none inside; the last assertion records that, and
-    that under Fisher every rejecting group holds a flat rejection. F18's axes pair is still the
+    that under Fisher every rejecting group holds a flat rejection. F18's axes pair is the
     clean fixture, where no leaf is below 0.46 before correction."""
     multi, gain_tree = by_gain[method]
     _, load_tree = by_load[method]
@@ -1645,7 +1633,7 @@ def test_f17_every_flat_rejection_lies_inside_a_rejecting_group_on_both_axes(by_
 
 
 def test_f18_the_temp_zero_group_rejects_while_the_flat_family_rejects_nothing_inside_it(axes_trees: Any) -> None:
-    """The plan's Level 2 claim in fixture form, under both schemes. The leaf side is asserted
+    """The Level 2 claim in fixture form, under both schemes. The leaf side is asserted
     first from ``multi_diff``'s own ``cells``: no rejection anywhere, and no raw p inside
     ``temp = 0.0`` below ``q`` even before correction (0.5 under McNemar, 0.4667 under Fisher).
     ``temp = 0.7`` is identical across arms and all ``ok``: degenerate under both schemes here."""
@@ -1665,7 +1653,7 @@ def test_f18_the_temp_zero_group_rejects_while_the_flat_family_rejects_nothing_i
 
 def test_f18_the_block_shows_both_groups_with_their_verdicts(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert len(block) >= 3, block
@@ -1684,7 +1672,7 @@ def test_f19_no_detail_reason_or_block_line_uses_the_second_vocabulary(every_tre
     grouping name the block must echo verbatim -- module docstring). The block quotes the null."""
     a, b, ma, mb = pair
     multi = lattice_trees.multi((EVENT,), "mcnemar_bh")
-    # PF4 (PF4.6): --by kind and --by step_kind no longer build a tree with a stub row; they raise
+    # PF4 (PF4.6): --by kind and --by step_kind build no tree; they raise
     # UnknownGrouping, whose message is held to the same vocabulary with the requested name masked.
     for name in EXPECTED_TRACE_GROUPINGS:
         with pytest.raises(tree().UnknownGrouping) as refused:
@@ -1712,7 +1700,7 @@ def test_f19_no_detail_reason_or_block_line_uses_the_second_vocabulary(every_tre
                 for phrase in FORBIDDEN_VOCABULARY:
                     assert phrase not in masked, (pair, extra, phrase, err)
                 continue
-            # A shared salt now adds one note line on stderr.
+            # A shared salt adds one note line on stderr.
             assert code == 0 and without_notes(err) == "", (pair, extra, out, err)
             block = fault_lines_block(out)
             assert block, (pair, extra, out)
@@ -1723,8 +1711,8 @@ def test_f19_no_detail_reason_or_block_line_uses_the_second_vocabulary(every_tre
 
 
 def test_f19_no_field_name_and_no_json_key_contains_the_forbidden_substrings(by_gain: Any, axes_trees: Any) -> None:
-    """``level`` and ``interval`` belong to P4.3's design; ``leaf``, ``broke``, ``where``
-    and ``step`` are the second vocabulary. Field sets are asserted as supersets of the planned
+    """``level`` and ``interval`` are P4.3's words; ``leaf``, ``broke``, ``where``
+    and ``step`` are the second vocabulary. Field sets are asserted as supersets of this file's
     lists so a later change's defaulted addition to ``TreeResult`` does not trip a frozen test;
     the JSON walk skips the keys of ``config`` dicts and ``groups`` maps, which are user data."""
     import dataclasses
@@ -1751,7 +1739,7 @@ def test_f20_the_block_follows_the_omnibus_block_and_its_first_line_carries_the_
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, (out, err)
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert without_notes(err) == "", err
     lines = out.splitlines()
     omnibus, block = omnibus_block(out), fault_lines_block(out)
@@ -1775,7 +1763,7 @@ def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) ->
         _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=50, seed=GOLDEN_SEED, by=extra[1] if extra else None)
         assert [(r.key, r.rung, r.reason, r.next_rung) for r in result.grouping.refused] == [expected], extra
         code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh", *extra])
-        # A shared salt now adds one note line on stderr.
+        # A shared salt adds one note line on stderr.
         assert code == 0 and without_notes(err) == "", (extra, out, err)
         block = fault_lines_block(out)
         refused_lines = block[1 : 1 + len(result.grouping.refused)]
@@ -1788,7 +1776,7 @@ def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) ->
 def test_f20_one_group_line_per_group_in_labels_order_carrying_counts_p_q_and_the_verdict(synth_root: Path) -> None:
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert result.fault_lines.tested is True
@@ -1806,9 +1794,9 @@ def test_f20_one_group_line_per_group_in_labels_order_carrying_counts_p_q_and_th
 
 
 def test_f20_by_and_max_group_mde_reach_the_call(synth_root: Path) -> None:
-    # --json replaces --format json.
+    # diff's JSON form is --json.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp", "--max-group-mde", "0.37", "--json"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["requested"], grouping["max_group_mde"], grouping["resolved_by"]) == ("temp", 0.37, "requested")
@@ -1820,11 +1808,11 @@ def test_f20_the_json_tree_equals_to_json_after_a_round_trip_and_its_root_equals
     test computes on the same frames with the same knobs, and the root appears twice, equal --
     the CLI-level form of F11."""
     multi, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=300, seed=3)
-    # --json replaces --format json.
-    # PF3: the synthetic pair shares a salt, so the default is now the
+    # diff's JSON form is --json.
+    # PF3: the synthetic pair shares a salt, so the default is the
     # paired test; the tree here is the unpaired test's, named.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--json", "--permutations", "300", "--seed", "3", "--method", "fisher_bh"])
-    # A shared salt now adds one note line on stderr.
+    # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
     assert payload["tree"] == json.loads(json.dumps(result.to_json()))
@@ -1834,12 +1822,12 @@ def test_f20_the_json_tree_equals_to_json_after_a_round_trip_and_its_root_equals
         assert key in payload, key
 
 
-# ---------- F24: the discordant cell, the deterministic twin of S25 M3b ----------
+# ---------- F24: the discordant cell, the deterministic twin of S25's calibration check ----------
 
 
 @pytest.mark.parametrize("method", TWO_SCHEMES)
 def test_f24_the_discordant_cell_separates_pair_swap_from_arm_label(discordant_trees: Any, method: str) -> None:
-    """**The deterministic twin for the lane's one sole catch.** One cell of 32 with every
+    """**The deterministic twin of S25's calibration check for the exchange.** One cell of 32 with every
     matched pair discordant: under pair swap ``p_location`` is ``2 P(Bin(32, 1/2) <= 12) =
     0.2153`` exactly and under arm label ``2 P(Hyp(64, 32, 32) <= 12) = 0.0793``; measured
     0.2119-0.2249 and 0.0767-0.0912 over five seeds at B=4000 (module docstring, measurement 5). The bands are
@@ -1883,7 +1871,7 @@ def test_f27_a_different_seed_moves_only_the_p_driven_fields_on_the_lattice_by_g
     ``tested`` (stable on the lattice because the root is at the floor under every seed)."""
     a, b, ma, mb = pair
     multi, base = by_gain["fisher_bh"]
-    # PF4 re-freeze (PF4.45): grown at the value by_gain grows at, where gain resolves.
+    # PF4.45: grown at the value by_gain grows at, where gain resolves.
     other = grown(a, b, multi, ma, mb, n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED + 1, max_group_mde=ADMITTING_MAX_GROUP_MDE)
     one, two = base.to_json(), other.to_json()
     assert one["root"]["seed"] != two["root"]["seed"]
@@ -1909,7 +1897,7 @@ def test_f29_axis_order_is_arm_as_declared_order_intersected_with_arm_b(pair: An
     load_first = reordered(ma, {lattice.Y: "continuous", lattice.X: "continuous"})
     b_load_first = reordered(mb, {lattice.Y: "continuous", lattice.X: "continuous"})
     b_only_gain = reordered(mb, {lattice.X: "continuous"})
-    # PF4 re-freeze (PF4.45): the default refuses gain on the lattice, so the order is read at a
+    # PF4.45: the default refuses gain on the lattice, so the order is read at a
     # value that admits both axes, where only the declared order decides.
     knobs = {"n_permutations": 50, "seed": GOLDEN_SEED, "max_group_mde": ADMITTING_MAX_GROUP_MDE}
     swapped = grown(a, b, multi, load_first, mb, **knobs).grouping

@@ -526,7 +526,7 @@ def styled(text: str) -> tuple[list[Styled], list[str]]:
 
 
 def role_of(cell: Styled) -> str:
-    """A cell's colour role, as the design's masks mark it: ``G`` green, ``Y`` yellow, ``R`` red,
+    """A cell's colour role, as a snapshot's masks mark it: ``G`` green, ``Y`` yellow, ``R`` red,
     ``B`` bold, ``D`` dim, blank for none."""
     if cell.fg in (2, 10):
         return "G"
@@ -781,7 +781,7 @@ def as_document(obj: Any) -> dict[str, Any]:
 
 
 HEX16 = r"[0-9a-f]{16}"
-#: The views' addresses: PF12's seven as ``views.md`` gives them (Y17), and home's (reading A5).
+#: The views' addresses: PF12's seven, and home's (reading A5).
 VIEW_ADDRESSES = {
     "home": re.compile(r"^home$"),
     "runs": re.compile(r"^index\.html$"),
@@ -1061,7 +1061,7 @@ def cut_shown(text: str, value: str) -> bool:
 
 
 def comparison_name(name: str) -> str:
-    """A comparison's name as the app writes it (Y8): ``<before> → <after>`` with the words the two
+    """A comparison's name as the app writes it: ``<before> → <after>`` with the words the two
     runs' names share at the start written once (``mock-agent 2026-10-23 a → b``)."""
     before, _, after = name.partition(" → ")
     a, b = before.split(" "), after.split(" ")
@@ -1079,8 +1079,8 @@ IDENTIFYING_KEYS = frozenset({"schema", "view", "config_hash", "condition_hash",
 #: A page's address inside the UI, whatever key holds it.
 ADDRESS = re.compile(r"^(?:index|(?:runs|comparisons)/\S+)\.html(?:#\S*)?$")
 
-#: The tables each view's screen shows, with the columns the design gives them at 120 columns
-#: (``screens/*.md``): a list item's other facts are on the screen the row opens, so only these are
+#: The tables each view's screen shows, with the columns the screen gives them at 120
+#: columns: a list item's other facts are on the screen the row opens, so only these are
 #: checked here (reading A6). ``*`` is any key or index; a column's ``_note`` (its value's reason when
 #: it is null) goes with it. A list not named is shown whole.
 TABLE_COLUMNS: dict[str, dict[str, tuple[str, ...]]] = {
@@ -1099,7 +1099,7 @@ TABLE_COLUMNS: dict[str, dict[str, tuple[str, ...]]] = {
 
 
 def unshown_rows(document: dict[str, Any], text: str, kind: str) -> list[str]:
-    """Each row of a table ``TABLE_COLUMNS`` names, whose designed columns are not all on one line
+    """Each row of a table ``TABLE_COLUMNS`` names, whose listed columns are not all on one line
     of ``text`` (its rows joined into lines where a row wraps): a table's facts are checked row by
     row, so a value shown in another row never stands in for this one (reading A6)."""
     lines = [line for line in joined_lines(text) if line.strip()]
@@ -1315,8 +1315,8 @@ def build_small(folder: Path) -> dict[str, Any]:
 
 def _stats_stores() -> dict[str, Callable[[Path], dict[str, Any]]]:
     """Hand-written pairs, one store each, for the facts the verdict, conditions and condition
-    screens must carry from the statistics build (PF4.34 to PF4.46). Every run
-    is written through the public ``Store`` by PF4's own frozen helpers."""
+    screens must carry from the statistics (PF4.34 to PF4.46). Every run
+    is written through the public ``Store`` by PF4's own test helpers."""
     from test_pf4_surfaces import A_ID, B_ID, MID, STANDARD_A, STANDARD_B, _argon_pair, _arm, _declared, _pair, _write_run
 
     failures = _declared(failures=("fell",))
@@ -1428,5 +1428,5 @@ def run_times(store: Path) -> set[str]:
     return times
 
 
-if str(TESTS) not in sys.path:  # PF4's frozen helpers are imported by name from its test file
+if str(TESTS) not in sys.path:  # PF4's test helpers are imported by name from its test file
     sys.path.insert(0, str(TESTS))

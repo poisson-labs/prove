@@ -11,7 +11,7 @@ checkable without them:
 
 - **Cell identification in SVG.** Every cell ``<rect>`` carries ``data-cell="<config_hash>"``
   for a present cell and ``data-cell="absent"`` for a grid hole. Significance glyphs carry
-  ``data-sig="1"`` (as specified) and sit geometrically inside their cell's rect, which is how the
+  ``data-sig="1"`` and sit geometrically inside their cell's rect, which is how the
   set of significant cells is recovered after attribute stripping.
 - **Worst-cells table rows.** Each row is a Markdown pipe row containing, as text, the
   cell's coordinate values and the formatted ``n_a``, ``n_b``, ``rate_a``, ``rate_b``,

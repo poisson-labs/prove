@@ -1,115 +1,50 @@
-"""A7 frozen tests: invariants P7-1 to P7-12 of A7's storage split, written
-before ``Store.read(trace=)``, the two Parquet columns, ``split``, ``assemble``, ``OBSERVATION_KEYS``
-and ``LOGPROBS_KEY`` exist, against ``93bfa13`` -- the M11a merge, A7's base commit.
+"""A7 frozen tests: invariants P7-1 to P7-12 of A7's storage split: ``Store.read(trace=)``, the two
+Parquet columns ``trace`` and ``trace_obs``, ``split``, ``assemble``, ``OBSERVATION_KEYS`` and
+``LOGPROBS_KEY``.
 
-**The choices these tests are built to, fixed at the start:** P7-12's fixture is
-A28's crossed shape stored twice, and it discriminates *layout*, not scale; two cells,
-pandas 2.3.3 and pandas 3.0.5, A22's recipe; ``meta=`` stays orthogonal to ``trace=`` --
+**The behaviour these tests fix.** P7-12's fixture is A28's crossed shape stored twice, and it
+discriminates *layout*, not scale; ``meta=`` stays orthogonal to ``trace=`` --
 ``meta=False, trace="envelope"`` is twelve columns, ``meta=True, trace="envelope"`` fourteen with
 ``meta`` decoded and its ``"trace"`` key removed; ``read(meta=False, trace="full")`` is
 refused with a ``ValueError`` naming both arguments; no ``environment.code_root``;
-C28 is measured and deferred, ``append`` stays refuse-on-overlap; ``trace="none"`` strips a
-pre-A7 row's ``meta["trace"]``.
+``append`` stays refuse-on-overlap; ``trace="none"`` strips a pre-A7 row's ``meta["trace"]``.
 
-**Two cells, and the invariant set does not partition between them.** The claim spans pandas 2 and pandas 3 because six invariants --
-P7-2, P7-3, P7-7, P7-8, P7-9, P7-11 -- have null halves that **cannot disagree on pandas 2.3.3**:
-pyarrow gives an ``object`` column with ``None`` there whether or not the implementation registered the two
-columns in ``store._NULLABLE_STRING_COLUMNS``. Every invariant here is asserted in both cells;
-twelve tests, **12 + 12 = 24 ids over the two cells against this file's own 12**. No invariant is
-cell-specific, and none could be asserted in one cell only. **Nullness is by identity throughout**:
-``is None`` / ``is not None`` on every column in every clause, never ``pd.isna`` and never
-a bare truth test, and the on-disk ``trace_obs`` column -- which no read mode presents as a frame
-column -- is read raw through ``pyarrow`` and ``to_pylist()``, where a null is ``None`` on every
-pandas.
+**pandas 2 and pandas 3.** The claim spans both because six invariants --
+P7-2, P7-3, P7-7, P7-8, P7-9, P7-11 -- have null halves that **cannot fail on pandas 2**:
+pyarrow gives an ``object`` column with ``None`` there whether or not the two columns are
+registered in ``store._NULLABLE_STRING_COLUMNS``, while on pandas 3 an unregistered column reads
+back as a float ``NaN``. No invariant is specific to one pandas. **Nullness is by identity
+throughout**: ``is None`` / ``is not None`` on every column in every clause, never ``pd.isna`` and
+never a bare truth test, and the on-disk ``trace_obs`` column -- which no read mode presents as a
+frame column -- is read raw through ``pyarrow`` and ``to_pylist()``, where a null is ``None`` on
+every pandas.
 
-**This change also updates older frozen tests, and the update is seven sites in five files,
-not the five in four first counted.** R7's schema clause and R9's parameter list (``test_m4_read.py``) and
-the three ``TRACE_EXPORTS`` copies (``test_m3_crash_trace.py``, ``test_m3_timeout_trace.py`` and
-one more test module's) were foreseen. The sixth is ``test_m3_crash_trace.py``'s
-``S16_ORACLE_SHA256``, which pins ``test_m3_timeout_trace.py`` whole-file and moves the moment that
-file's export list is amended, so it is re-minted in the same commit after the edit (as A22's
-``FROZEN_ORACLE_SHA256`` cascade was). The seventh was found by a whole-suite control run
-against a stand-in implementation, not by any grep:
-``test_m3_capture.py::test_c7_rule_zero_the_mock_agent_trace_is_byte_identical_with_capture_on_and_off``
-reads the raw ``meta`` cell of every part and does ``json.loads(...)["trace"]`` on it -- a
-``KeyError`` once the trace leaves ``meta`` (P7-2). Its trace clause now reads through the store's
-full read; its raw byte-identity clause, rule zero's own claim, is untouched, and the test is
-green before and after. The expectation that no test in ``test_m3_capture.py`` goes red was wrong by
-that one test.
+**Retention and an invalid trace.** A22's V7 (``test_a22_pandas3.py``) stores an *invalid*
+``meta["trace"]`` on an unretained row and asserts the key is gone from the read-back ``meta``.
+P7-7 and P7-9 are neutral on that composition -- P7-7's trace is valid and leaves ``meta`` through
+the split, P7-9 has no retention policy -- so V7 is the frozen test that settles it: **an
+unretained row loses ``meta["trace"]`` whether or not the trace was valid**, and the columns beside
+it are nulled.
 
-**The classified red set on the update commit, measured on two pristine ``git archive`` copies of
-``93bfa13`` before any source edit, venvs from the repo venv's freeze closure differing in exactly
-pandas, collection verified 1913 = 1913 = 1913 and then 1925 with this file, baselines 1908 passed /
-5 skipped / 0 failed in both cells: 17 failed / 1903 passed / 5 skipped, identically in both
-cells.** The seventeen: all twelve tests here (P7-1 … P7-12), R7's schema clause, R9, K8, E12 and
-P12. **The same set in both cells** -- the pandas 3 cell adds nothing, because A22's port is shipped
-and the bare tree's reds are the four new names, the two new columns and the one new keyword, none
-of which pandas can see. Nothing outside the set is red. Every reference to a name the implementation has
-not created yet sits **inside** a test body or a fixture that runs at test time, never at module
-level, so ``--collect-only`` gives an exact count on the update commit. **Green before and after,
-named so their green is not read as evidence:** C7 above; R7's third clause (the manifest key set,
-A23/A26's); R9's other three tests and ``PUBLIC_STORE_SYMBOLS`` with its twin in
-``test_s21_errors.py`` (A7 adds no public symbol to ``store.py``); A22's V5 (red only transiently
-while the change is made, between ``_SCHEMA`` gaining the fields and ``_NULLABLE_STRING_COLUMNS``
-gaining them); and A28's G17 with every other ``G`` -- its stored pair is a pre-A7 store that is
-never rewritten, so the split never runs on it.
+**Preconditions first.** P7-10 (every verb's bytes unchanged) and P7-12 (the digest unchanged) are
+claims about a store in the **post-A7 layout**; on a store written in the old layout both would
+pass for nothing. So each asserts its precondition first -- the parts it wrote carry the two
+columns -- and P7-1 asserts ``trace`` is a parameter of ``Store.read`` before asserting how
+``read(meta=False, trace="full")`` is refused.
 
-**What writing these tests showed the first design to be wrong about, beyond the update count.** (1) **A22's V7
-decides a composition the first design got backwards.** It said retention "nulls both columns
-instead of popping ``meta``"; V7 (``test_a22_pandas3.py``) stores an *invalid* ``meta["trace"]`` on
-an unretained row and asserts the key is gone from the read-back ``meta``. P7-7 and P7-9 as written
-are neutral on that composition -- P7-7's trace is valid and leaves ``meta`` through the split, P7-9
-has no retention policy -- so V7 is the frozen test that settles it: **the implementation keeps the pop on an
-unretained row whether or not the trace was valid**, and nulls the columns beside it. A stand-in
-implementation was red on V7 until it did. (2) ``OBSERVATION_KEYS`` typed as a frozenset cannot carry A6's
-four prefix rows; pinned behaviourally here (see below).
+**Reading the old layout** (pyarrow 25.0.1). ``pq.read_table(part, schema=<thirteen + trace +
+trace_obs>)`` on a pre-A7 part **fills the two missing columns with nulls and does not raise**, in
+every projection form the reader uses -- no ``columns=``, all fifteen, the eleven non-meta,
+``["trace"]`` alone, and with a ``config_hash in`` filter -- and the reverse read of a
+fifteen-column part under the thirteen-field schema drops the extras; so no per-schema fallback is
+needed, and P7-3's mixed run is the guard that this holds beyond the lattice pair.
 
-**Mutants, measured over the whole suite on ``rsync`` copies of a stand-in implementation,
-one scratch copy per row, seven rows in parallel under the thread
-caps, pandas 2.3.3 unless named.** Measurement order: rows 1-6 ran before C7's amendment and carry
-its pre-amendment red in every row, not counted below; the control was re-run after the amendment
-and is **1922 passed / 3 skipped / 0 failed**; rows 7-12 and the pandas 3 row ran after it.
-Twelve mutants, twelve caught, no survivor.
-
-| Row | Mutation | Caught by, measured |
-|---|---|---|
-| 1 | split but forget to pop ``meta["trace"]`` | **P7-2 alone** |
-| 2 | the two names added to ``_META_COLUMNS``, old one-line projection | P7-1, P7-3 |
-| 3 | ``split`` returns ``(trace.to_dict(), {})`` | **P7-11**, and P7-3, P7-7 (their envelope and ``trace_obs`` clauses) |
-| 4 | ``_NULLABLE_STRING_COLUMNS`` not extended -- pandas 2.3.3 | **V5 alone**, as predicted: no null half can disagree here |
-| 4 | the same -- pandas 3.0.5 cell | 125 failed / 220 errors: V1-V5, V7, V8, P7-1, P7-2, P7-3, P7-7, P7-8, P7-9, P7-10, P7-11 and every reader of a stored run -- the unregistered column is a float ``NaN`` and the read path's own ``is not None`` dereferences it |
-| 5 | retention drops the errored row's trace too | P7-7, and K6 x2, E8 x2 -- the exemption was already pinned |
-| 6 | retention nulls ``trace`` and leaves ``trace_obs`` | **P7-7 alone** (its raw ``trace_obs`` clause) |
-| 7 | no empty envelope attached under active capture | **P7-8 alone** |
-| 8 | an invalid ``meta["trace"]`` raises in ``append`` | P7-9 (fixture error), and 13 older tests plus 10 fixture errors across K6, E8, C7, T30, I19, R1-R4, the M4 store frozen file and V7 |
-| 9 | ``trace="none"`` keeps a pre-A7 row's ``meta["trace"]`` (the reading not chosen) | **P7-3 alone** |
-| 10 | ``read(meta=False, trace="full")`` silently ``"none"`` (the reading not chosen) | **P7-1 alone** |
-| 11 | the envelope read decodes ``trace_obs`` | **P7-5 alone** |
-| 12 | the read path nulls ``outcome`` on a post-A7 row whose ``trace_obs`` is non-null and outcome is ``"crash"`` | **P7-12 alone -- and A28's G17 stays green**, which is the claim measured: a pre-A7 pair cannot see a change that reaches only the new layout |
-
-**Why every test here is red on the bare tree, including the two preservation invariants.**
-P7-10 (every verb's bytes unchanged) and P7-12 (the digest unchanged) are claims about a store in
-the **post-A7 layout**; on the bare tree ``Store.append`` writes the old layout and both would be
-green for nothing. So each asserts its precondition first -- the parts it wrote carry the two
-columns -- the S29 W11 lesson (assert the flag exists before asserting how it refuses), and P7-1
-asserts ``trace`` is a parameter of ``Store.read`` before asserting how ``read(meta=False, trace="full")`` is refused.
-
-**Measured before the build, at ``93bfa13`` on pyarrow 25.0.1, pandas 2.3.3.**
-(1) ``pq.read_table(part, schema=<thirteen + trace + trace_obs>)`` on both parts of the pre-A7 pair then committed
-**fills the two missing columns with nulls and does not raise**, in every projection form the
-reader uses -- no ``columns=``, all fifteen, the eleven non-meta, ``["trace"]`` alone, and with a
-``config_hash in`` filter -- and the reverse read of a fifteen-column part under the thirteen-field
-schema drops the extras; a per-schema fallback is **not needed**, and
-P7-3's mixed run is the guard that this holds beyond that pair. (2) The agreement digest on A28's
-crossed P shape (5 cells, N = 32, ``(4, 20, 2)``), stored once through the shipped writer and once
-in a hand-written post-A7 layout and read through the **shipped** reader, is **identical by string
-identity** in all four cells -- ``b6daa2f1...`` at K = 1 and ``83dcc3d9...`` at K = 2, the same value
-under ``fisher_bh`` and ``mcnemar_bh`` -- and both renderers accept a tree grown on one layout
-against a diff computed on the other; those are ``CROSSED_AGREEMENT`` below, pinned so P7-12 asserts
-a value and not only an equality. (3) C28: ``append`` of the same batch twice is refused whole with
-``DuplicateEpisode`` and the run gains no duplicate key; ``append`` of a batch overlapping the run on
-two of four keys is refused whole and **the two fresh keys are lost**; no ``.tmp`` part is left
-behind. Filed to C28's row, not to an invariant here.
+**The agreement digest across layouts.** The digest on A28's crossed P shape (5 cells, N = 32,
+``(4, 20, 2)``), stored once through the store's writer and once in a hand-written post-A7 layout
+and read through the store's reader, is **identical by string identity** -- the same value under
+``fisher_bh`` and ``mcnemar_bh`` -- and both renderers accept a tree grown on one layout against a
+diff computed on the other. ``CROSSED_AGREEMENT`` below holds the values at K = 1 and K = 2, so
+P7-12 asserts a value and not only an equality.
 
 **Fixture limits, stated rather than left to be rediscovered:**
 
@@ -119,7 +54,7 @@ behind. Filed to C28's row, not to an invariant here.
   about the split.
 - **F1**, ``write_pre_a7_part`` -- the checked-in pre-A7 writer, emitting the lattice part's own on-disk schema
   through ``pyarrow`` -- is the load-bearing helper: P7-3's mixed run and P7-12's first copy are
-  both built on it, and it is the only thing in the repo that can write the old layout once
+  both built on it, and it is the only thing in the repo that can write the old layout now that
   ``_SCHEMA`` has moved. It cannot express the post-A7 layout, by construction.
 - **The observation trace** (``observation_trace``) carries every class of A6's table
   -- prompt/completion under the GenAI, Traceloop, OpenInference-flattened and older-GenAI
@@ -127,10 +62,9 @@ behind. Filed to C28's row, not to an invariant here.
   tool-call keys, and ``poisson_prove.logprobs`` -- beside non-observation attributes on every span and
   one span with no observation at all. It cannot express truncation or the over-limit class: both
   are A8b's and do not exist at A7.
-- **The mock quickstart pair** is stored at test time and its run ids are minted from the clock, so
+- **The mock quickstart pair** is stored at test time and its run ids are made from the clock, so
   its bytes cannot be pinned here; P7-10 checks the **lattice pair's** verbs as facts and asserts the mock pair's verbs exit
-  0 with the shapes the M4 and M10 frozen test files pin. The mock pair's byte identity against the base
-  commit is checked by hand at acceptance.
+  0 with the shapes the M4 and M10 frozen test files pin.
 - **The capture-active runs** (F3) run ``run_local`` in a forked child, as the M3 capture frozen file
   does, because ``install()`` is once per process and claims the global provider. They cannot
   express the Modal row builder; A9's P9-6 fixture does.
@@ -138,12 +72,12 @@ behind. Filed to C28's row, not to an invariant here.
   place after ``Store.append`` wrote them; it says nothing about a pre-A7 part, where the envelope
   can only come from ``meta``.
 
-**What the declared type and A6's list disagree on, pinned behaviourally.** The design types
-``OBSERVATION_KEYS`` as ``frozenset[str]``; A6's table has four **prefix** rows
+**What the declared type and A6's list disagree on, pinned behaviourally.** ``OBSERVATION_KEYS`` is
+typed ``frozenset[str]``; A6's table has four **prefix** rows
 (``gen_ai.prompt.*``, ``gen_ai.completion.*``, ``llm.input_messages.*``, ``llm.output_messages.*``)
 that no membership test can express. This file pins the eight exact keys and ``LOGPROBS_KEY`` as
 members, and pins the prefixed keys **by what the split does to them** -- moved to ``trace_obs``
-under the same key, absent from the envelope -- leaving the representation to the implementation.
+under the same key, absent from the envelope -- leaving the representation to the code.
 
 Restated rather than imported, as every frozen test file's helpers are: the M4 record shape, the M3
 capture frozen file's forked child, A28's crossed cells and store writer, the CLI runner.
@@ -204,7 +138,7 @@ THIRTEEN = [
 ]
 ELEVEN = [c for c in THIRTEEN if c not in ("meta", "backend_meta")]
 TRACE_COLUMNS = ["trace", "trace_obs"]
-# PF4 re-freeze (PF4.38): the store copies a rollout's meta["case_id"] into its own
+# PF4.38: the store copies a rollout's meta["case_id"] into its own
 # nullable string column, appended after trace_obs (schema_version stays 1; older parts read it as
 # null), and Store.read returns it by default, so every read frame gains it at the end (before the
 # envelope's decoded trace) and every part written now carries it last.
@@ -241,8 +175,8 @@ SCHEMA_SPEC = "poisson-prove.trace/1"
 EPOCH = 1_756_900_000_000_000_000
 POISON = "not json"
 
-#: G17's schema tag (``tree.AGREEMENT_SCHEMA``, A28), and the one the 0.0.1 builds
-#: hashed behind before the PF0 freeze renamed it.
+#: G17's schema tag (``tree.AGREEMENT_SCHEMA``, A28), and the 0.0.1 tag it replaced, which
+#: 0.0.1 hashed the agreement behind.
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
 #: The lattice pair's events at K = 1 and K = 2.
@@ -263,11 +197,10 @@ def reference_agreement(events: Sequence[str], schema: str = AGREEMENT_SCHEMA) -
     return hashlib.sha256(json.dumps([schema, lines], separators=(",", ":"), ensure_ascii=True).encode("utf-8")).hexdigest()
 
 
-#: Measured before the build: A28's crossed P shape at ``93bfa13`` through the shipped writer, K = 1 and
-#: K = 2, the same value under both methods. P7-12 asserts both layouts equal these.
-# Re-minted by the PF0 freeze: the schema string behind the agreement form is renamed. Computed on
-# the 0.0.1 tree (98dc6af) with that one string changed, through this file's own crossed-store
-# fixture; the same code with the old string gives the old values (b6daa2f1..., 83dcc3d9...).
+#: The agreement digest of A28's crossed P shape through the store's writer, K = 1 and K = 2, the
+#: same value under both methods, computed through this file's own crossed-store fixture. P7-12
+#: asserts both layouts equal these. Under ``OLD_AGREEMENT_SCHEMA`` the same shape gives
+#: ``b6daa2f1...`` and ``83dcc3d9...``.
 CROSSED_AGREEMENT = {
     1: "f57096cddf8e00b356ad1949f848e1e7e411aa22fa1b3885100e6fab43158cb1",
     2: "d45463a2d5c94fc6093134f80765949838f509f7a4d1857468e486e16195e93f",
@@ -302,23 +235,9 @@ MOCK_BATCH = 5
 MOCK_EVENT = "violated"
 STORE_PLACEHOLDER = "<store>"
 OUT_PLACEHOLDER = "<out>"
-#: P7-10. Every verb on the pre-A7 pair at ``93bfa13``, in-process through ``cli.main``, stdout digested after
-#: the store root (``runs``, ``serve --json``'s ``pair.store_root``) and the ``--out`` directory
-#: (``report``) are normalised. ``inspect`` and ``diff`` echo no path. Measured by
-#: ``lattice_verb_digests`` below on the base commit; a later commit that moves one of these has
-#: changed what a consumer sees.
-# Re-minted for truncation surfacing: five values move -- report A/report.md, report A/receipt.html, report A B/report.md,
-# report A B/receipt.html and serve --json -- because the provenance list gains the horizon rename and the observation
-# lines and the structure is proofload.viewpair/5. Each is the baseline's output plus that change, byte for byte; the
-# other nine are unchanged.
-# Re-minted on the code at 173c25d: three of the fourteen move: both 'report A B' files, whose Cells section prints LS16's respelled sentence ('MDE is the smallest detectable increase', no decision-record number), and 'serve --json', which is proofload.viewpair/6 with the summary key and each panel's mde_unchanged. The other eleven are unchanged. Read through this test's own measurement on the built tree, not predicted.
-# The command line's look changes every other verb's output on the pre-A7 pair (the look file's rule 10 numbers,
-# 12-hex hashes, check's verdict line, --json for --format json), so those thirteen digests are gone and
-# ``assert_lattice_verb_facts`` checks the facts they guarded instead.
-# PF4 (PF4.3, PF4.11, PF4.13 to PF4.20): the page structure inside serve --json changes too (no
-# ``pair.store_root``, the cells' shares, directions and notes, the Summary's verdict and direction
-# words), so its digest is no longer asserted either; ``assert_lattice_verb_facts`` checks the facts it
-# guarded against ``diff --json`` and the store.
+# P7-10 checks every verb's output on the pre-A7 pair as facts, read against ``diff --json`` and
+# the store (``assert_lattice_verb_facts``), not as digests: the command line's look and the page
+# structure inside ``serve --json`` print the same facts in forms that change.
 SNIPPET_MARKER = "# reproduce one episode"
 
 
@@ -622,8 +541,8 @@ def as_0_0_1_wrote_it(text: str) -> str:
     """PF0: the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
-    drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
-    byte."""
+    drop any separate ``written by proofload`` entry before the text is digested (P7-10 checks only
+    that each digest is taken)."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
     text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
@@ -637,7 +556,7 @@ def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[st
     each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
     the figure's title line). First assert each is there as PF2 writes it and nowhere else the
     digest reads, then put the structure back as it was before names (no ``run_name``, the title by
-    id) so the frozen digest still guards everything else."""
+    id) before the structure is digested."""
     arms = {}
     for role, run_id, name in (("a", lattice.RUN_A, lattice.NAME_A), ("b", lattice.RUN_B, lattice.NAME_B)):
         arm = structure["pair"][role]
@@ -660,7 +579,7 @@ def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[st
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
     """PF0: the page structure's schema string and its version key, in both arms and in the
     provenance block. First assert they are there as the rename writes them, then put them back as
-    0.0.1 wrote them before the frozen digest is taken."""
+    0.0.1 wrote them before the structure is digested."""
     assert structure["schema"] == "poisson-prove.viewpair/7", structure["schema"]
     for arm in ("a", "b"):
         assert "poisson_prove_version" in structure["pair"][arm] and "proofload_version" not in structure["pair"][arm], arm
@@ -680,7 +599,7 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
     """Every verb, on one stored pair, exit codes kept and stdout digested with the
     store root and the ``--out`` directory normalised."""
     # PF3: ``method`` is appended to every verb that compares the
-    # two runs (diff, check, report A B, serve), so a caller can name the method its numbers were frozen under.
+    # two runs (diff, check, report A B, serve), so a caller can name the method its numbers were computed under.
     store_arg = str(root)
     results: dict[str, Result] = {}
     digests: dict[str, str] = {}
@@ -694,7 +613,7 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
     # diff's --format json is now --json.
     results["diff --json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--json", *method])
     # PF0: the tree's agreement digest is hashed behind the renamed schema string; the 0.0.1 value
-    # is put back before the frozen digest is taken.
+    # is put back before the output is digested.
     as_0_0_1 = norm(r.out)
     if root == LATTICE_ROOT:
         assert reference_agreement(LATTICE_EVENTS[1]) in as_0_0_1
@@ -720,14 +639,14 @@ def verb_digests(root: Path, a: str, b: str, *, event: str, x: str, y: str, out_
     try:
         # serve --json now leads with verdict and sentence before the page structure.
         # PF3: it also adds method and method_chosen right after sentence; neither
-        # is the page structure the kept digest guards, so they are dropped as verdict and sentence are.
+        # is the page structure the digest is taken of, so they are dropped as verdict and sentence are.
         structure = {k: v for k, v in json.loads(r.out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
-        # PF4 (PF4.11): the structure no longer carries the store's absolute path, so there is nothing to
+        # PF4 (PF4.11): the structure carries no absolute path of the store, so there is nothing to
         # normalise.
         assert "store_root" not in structure["pair"], structure["pair"]
         if root == LATTICE_ROOT:
             # PF2: run_name beside each arm's run_id and the title by name are
-            # asserted, then put back as before names, so the kept digest still guards the rest.
+            # asserted, then put back as before names, before the rest is digested.
             structure = structure_as_ids_named_it(structure, event)
         as_0_0_1 = json.dumps(structure_as_0_0_1_wrote_it(structure), sort_keys=True)
         if root == LATTICE_ROOT:
@@ -877,7 +796,7 @@ def check_report_table(header: list[str], rows: list[list[str]], data: Mapping[s
                 if column.lower() == "mde":
                     # PF4 (PF4.15): a condition with no detection limit, or none detectable, prints its
                     # note in place of the number.
-                    # PF4 re-freeze (PF4.27, PF4.32): or each direction's limit or note.
+                    # PF4.27, PF4.32: or each direction's limit or note.
                     assert limit_printed_as(printed[column], cell), (column, printed[column], cell["mde_note"])
                     continue
                 assert printed_as(printed[column], cell[column.lower()]), (column, printed[column], cell[column.lower()])
@@ -886,7 +805,7 @@ def check_report_table(header: list[str], rows: list[list[str]], data: Mapping[s
 
 
 def limit_printed_as(text: str, cell: Mapping[str, Any]) -> bool:
-    """PF4 re-freeze (PF4.22, PF4.27, PF4.32): a printed limit is both directions, each its number or
+    """PF4.22, PF4.27, PF4.32: a printed limit is both directions, each its number or
     its note (``rise 0.568, fall: none detectable``); or one number, the condition's limit, when the
     two agree; or the condition's note alone where a table prints one figure per condition."""
     text = text.strip()
@@ -979,7 +898,7 @@ def assert_lattice_verb_facts(results: Mapping[str, Result], out_dir: Path) -> N
             elif column == "mde":
                 # PF4 (PF4.15): a condition with no detection limit, or none detectable, prints its note
                 # in place of the number.
-                # PF4 re-freeze (PF4.27, PF4.32): the table prints each direction's limit or note.
+                # PF4.27, PF4.32: the table prints each direction's limit or note.
                 assert limit_printed_as(printed[column], cells[h]), (printed[column], cells[h]["mde_note"])
             else:
                 assert printed_as(printed[column], cells[h][column]), (column, printed[column], cells[h][column])
@@ -1110,7 +1029,7 @@ def sweep_toml(*, capture: dict[str, Any] | None, target_id: str, t_unit: str, a
         kind = "continuous" if all(isinstance(v, float) for v in values) else "categorical"
         lines += [f"[axes.{name}]", f'type = "{kind}"', f"values = {json.dumps(list(values))}", ""]
     if capture is not None:
-        # CD (D1): a [capture] table declares its cap; 8192 is what the dataclass used to supply.
+        # A [capture] table declares its cap, which has no default; 8192 was the old default.
         if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
             capture = {**capture, "max_observation_bytes": 8192}
         lines.append("[capture]")

@@ -1,8 +1,7 @@
 """PF2, names, runs and verdict lines: the frozen tests.
 
-Written from invariants PF2.1 to PF2.10, with the items earlier freezes carried here and the
-three points settled for this freeze below. The implementation is written against this file and
-does not edit it.
+It checks invariants PF2.1 to PF2.10, the three points below, and the items carried here from
+other invariant sets.
 
 What PF2 promises, in one line: no one ever pastes an id or a hash into a command. Every run has
 a name, the same one Trace gives it; a verb takes a run as ``latest``, ``previous``,
@@ -24,7 +23,7 @@ by name; and every verb's first line is its verdict.
   every verb that reads names, exit 1, naming the file, with Trace's own command to fix it as the
   ``next:`` line where Trace has one. Prove still never writes the file.
 
-**Carried here from earlier freezes.** Names holding a slash (they reach a name only through the
+**Carried here from other invariant sets.** Names holding a slash (they reach a name only through the
 names file or ``--name``) are slugged in the default report folder; a pair of one 0.0.1 run and
 one new run says which run ``proofload`` 0.0.1 wrote, on a line of its own beside the per-run
 lines; the ``next:`` lines refusals offer name runs by name; ``inspect``'s first line takes
@@ -66,12 +65,12 @@ verb, and ``sweep --name`` stores the name in the manifest.
   ``before`` and ``after``), ``report.md``, ``receipt.html`` and the served page.
 
 **Dependencies on other modules.** ``sweep --resume`` with no spec and no ``--target`` (the
-``next:`` line PF1 froze) needs PF3's ``prove.toml`` default; PF2.6 is tested with both given.
+``next:`` line PF1 pins) needs PF3's ``prove.toml`` default; PF2.6 is tested with both given.
 ``diff``'s word is PF4's (PF4.20); this file pins the line's shape and the word
 set. The ``method`` detail line's words are PF3's (PF3.6b); this file pins where the line sits.
 
-**Lanes.** Every test is fast but the few that sweep the keyless mock agent (a second or two
-each) and the served page; PF10 sets the ``slow`` marker from runner times.
+**Speed.** Every test is fast but the few that sweep the keyless mock agent (a second or two
+each) and the served page; the ``slow`` marker is set from runner times.
 
 **Invariant-to-test map**
 
@@ -222,7 +221,7 @@ def child_env(home: Path) -> dict[str, str]:
 
 
 def readline_within(stream: Any, seconds: float) -> str:
-    """One line from a child's stdout, or an assertion error after ``seconds``: a build that never
+    """One line from a child's stdout, or an assertion error after ``seconds``: code that never
     writes the line fails the test instead of hanging it."""
     import selectors
 
@@ -381,7 +380,7 @@ def write_names(root: Path, entries: dict[str, str]) -> Path:
 
 
 def write_paired_store(root: Path) -> None:
-    """Two runs replaying one request per item; copied from PF0's and PF1's freezes."""
+    """Two runs replaying one request per item; the same store PF0's and PF1's tests build."""
     from poisson_prove.trace import Span, Trace
 
     store = Store(root)
@@ -572,7 +571,7 @@ ROW_NUMBER = re.compile(r"^\s*#?(\d+)\s")
 
 @pytest.mark.parametrize("aspect", ["names", "numbers", "resolves"])
 def test_pf2_2_the_shared_list_from_trace_reads_the_same_in_prove(aspect: str, shared: Path) -> None:
-    """Trimmed by the PF4 re-freeze's T1: PF2.2's three tests as one, a case each:
+    """PF2.2 as one test, a case each:
     the names ``runs`` gives, the numbers its rows carry, and the run each word resolves to."""
     if aspect == "names":
         entries = runs_json(shared)
@@ -753,7 +752,7 @@ def test_pf2_4_a_fit_name_in_the_same_store_is_accepted(name: str, world: World,
 def test_pf2_4_a_name_another_run_goes_by_or_answers_to_is_refused_before_the_run_folder_exists(
     how: str, world: World, tmp_path: Path
 ) -> None:
-    """Trimmed by the PF4 re-freeze's T2: PF2.4's two refusals as one.
+    """PF2.4's two refusals as one test.
     ``goes-by``: a name another run already goes by (its stored name, or a name in the names file);
     the refusal names that run by its id, since it goes by the very word typed. ``answers-to``: a
     name two runs answer to is ambiguous, so the computed name and the id of a run that goes by
@@ -1374,7 +1373,7 @@ def test_pf2_10_no_runs_given_with_fewer_than_two_complete_runs_is_refused(tmp_p
     assert listing(tmp_path) == before
 
 
-# ---------- carried from earlier freezes ----------
+# ---------- carried from other invariant sets ----------
 
 
 def test_pf2_carried_a_name_with_a_slash_is_slugged_in_the_default_report_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

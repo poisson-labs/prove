@@ -1,57 +1,33 @@
 """A8b frozen tests: invariants P8-7 to P8-12, P8-20, P8-23, P8-24 and P8-27 of
 A8b -- the cut and the cap.
 
-Frozen on 2026-09-18 off ``a626cd3``, after the update commit. The build is written
-against this file and does not edit it. Every name A8b mints is imported inside the test that
-needs it, so the bare tree fails test by test and never at collection.
+Every name these tests reach in ``poisson_prove`` is imported inside the test that needs it, so a
+missing name fails that test and never the collection.
 
-**The answers this file is frozen against:** the head and
+**What the tests hold the code to:** the head and
 tail bounds are the limit's split, ``limit - limit // 4`` and ``limit // 4``;
-``CONTENT_KEYS`` is the shipped set plus the two ``llm.*`` families;
+``CONTENT_KEYS`` includes the two ``llm.*`` families;
 ``CONTENT_KEYS`` is a ``frozenset`` whose ``in`` answers exact members and dotted descendants, the
-six bare prefixes staying exact members so the shipped ``key == prefix`` match survives;
+six bare prefixes staying exact members so a ``key == prefix`` match holds;
 ``split`` routes a value to ``trace_obs`` when its key is an observation key, when it is already a
 wrapper, or when it is uncut and over the module default; a low limit is a supported
-measure-without-storing configuration; ``t4.toml`` and its assertion were rewritten together in
-the update; the wrapper has exactly three keys; the tests run in two cells.
+measure-without-storing configuration; the wrapper has exactly three keys.
 
-**Invariant-to-test map** (31 functions, 51 collected ids; the id counts below sum to 51):
+**The cap is declared, never defaulted** (``tests/test_cd_cap_declaration.py``): ``limit`` on
+``truncate_observations`` and ``finalize`` is keyword-only, typed ``int | None`` and has no
+default, and ``None`` means cut nothing; ``CaptureSpec()`` with no ``max_observation_bytes``
+raises; ``OBSERVATION_HEAD_BYTES`` and ``OBSERVATION_TAIL_BYTES`` do not exist; and the ``cut``,
+``sweep_toml`` and ``child_capture_spans`` helpers declare 8192 rather than inheriting it.
 
-| Invariant | Tests |
-|---|---|
-| public surface | ``test_trace_exports_*``, ``test_the_two_cut_functions_*``, ``test_content_keys_*`` (3 functions, 3 ids) |
-| P8-7 | ``test_p8_7_*`` (7 functions, 11 ids) |
-| P8-8 | ``test_p8_8_*`` (3 functions, 4 ids) |
-| P8-9 | ``test_p8_9_*`` (1 function, 2 ids) |
-| P8-10 | ``test_p8_10_*`` (3 functions, 4 ids) |
-| P8-11 | ``test_p8_11_*`` (2 functions, 2 ids) |
-| P8-12 | ``test_p8_12_*`` (4 functions, 8 ids) |
-| P8-20 | ``test_p8_20_*`` (2 functions, 5 ids) |
-| P8-23 | ``test_p8_23_*`` (3 functions, 8 ids), ``test_q5_*`` (1 function, 1 id) |
-| P8-24 | ``test_p8_24_*`` (1 function, 2 ids) |
-| P8-27 | ``test_p8_27_*`` (1 function, 1 id) |
+**Test names carry their invariant** (``test_p8_7_*`` for P8-7, and so on). The public surface is
+``test_trace_exports_*``, ``test_the_two_cut_functions_*`` and ``test_content_keys_*``;
+``test_q5_*`` belongs with P8-23.
 
-**Cells.** Every test here runs in both cells, pandas 2.3.3 and 3.0.5, and the
-measured result is that **no A8b invariant is cell-specific**: A8b adds no Parquet column, and
-everything it writes reaches disk inside the ``trace`` / ``trace_obs`` JSON strings A7 registered in
-``store._NULLABLE_STRING_COLUMNS``. The one place a genuine split could appear is P8-11's and
-P8-20's store clauses, which read the ``trace_obs`` column itself; they read it raw through
-``pyarrow`` and test nullness with ``is None``, never ``pd.isna`` and never a truth test, as
-in A8a and A22.
-
-**Green before and after -- six ids, named so their green is not read as coverage** (the other
-forty-five are red on the bare tree and green on the build): the ``content-on`` id of
-``test_p8_10_through_the_recorder_*`` (nothing is stripped with content on, before or after), and the
-five ids of ``test_p8_12_a_bad_value_is_refused_naming_the_field`` (the shipped parser already refuses
-three of them, and refuses ``max_observation_bytes`` as an unknown field, naming it, for another reason).
-
-**Amended by the CD freeze** (the cap declaration), which moves ten
-A8b clauses; what changed in this file is: the public surface's export list and
-its two signatures (``limit`` keeps its name, place and keyword-only kind and loses its default,
-widened to ``int | None``); P8-7's two-constant sentence, retired with the constants it described;
-P8-7's "the default limit is 8192 when none is passed", inverted in place under a new name; P8-12's
-``CaptureSpec()``, which now raises; and the ``cut``, ``sweep_toml`` and ``child_capture_spans``
-helpers, which declare 8192 rather than inheriting it.
+**No A8b invariant depends on the pandas version.** A8b adds no Parquet column, and
+everything it writes reaches disk inside the ``trace`` / ``trace_obs`` JSON strings listed in
+``store._NULLABLE_STRING_COLUMNS``. P8-11's and P8-20's store clauses, which read the
+``trace_obs`` column itself, read it raw through ``pyarrow`` and test nullness with ``is None``,
+never ``pd.isna`` and never a truth test, as in A8a and A22.
 
 **Beyond the numbered invariants, and said so:** that ``finalize`` is actually wired at the funnel,
 and that the funnel never raises on a trace it cannot read, is asserted through ``run_local`` by A7's
@@ -100,8 +76,8 @@ HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 CAPTURE_FIELDS_SPEC = ("instrument", "content", "max_observation_bytes", "max_spans")
 NEW_EXPORTS = (
-    # CD (D8): OBSERVATION_HEAD_BYTES and OBSERVATION_TAIL_BYTES are deleted, and
-    # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES -- same value, and a storage-layout
+    # CD: OBSERVATION_HEAD_BYTES and OBSERVATION_TAIL_BYTES do not exist, and
+    # OBSERVATION_ROUTING_BYTES (formerly OBSERVATION_LIMIT_BYTES, same value) is a storage-layout
     # constant rather than a cap. The retired three are pinned absent by CD11.
     "CONTENT_KEYS", "OBSERVATION_ROUTING_BYTES", "TRUNCATED_KEY", "finalize", "truncate_observations",
 )
@@ -144,7 +120,7 @@ def longest_valid_suffix(raw: bytes, bound: int) -> str:
 
 
 def expected_wrapper(value: Any, limit: int) -> dict[str, Any]:
-    """The limit's split, ``limit - limit // 4`` and ``limit // 4``, computed independently of the build by brute force over the byte form."""
+    """The limit's split, ``limit - limit // 4`` and ``limit // 4``, computed independently of ``trace.py`` by brute force over the byte form."""
     raw = byte_form(value)
     return {
         TRUNCATED_KEY_SPEC: {
@@ -172,9 +148,8 @@ def canonical(trace: Trace) -> str:
 
 
 def cut(trace: Trace, limit: int | None) -> Trace:
-    """CD (D1): ``limit`` is required here because it is required there. The old ``limit=None``
-    sentinel meant *use the module default*; under CD ``None`` means *cut nothing*, so a helper
-    that spells one as the other would hide the very thing CD is about."""
+    """CD: ``limit`` is required here because it is required there. ``None`` means *cut nothing*,
+    not *use a default*, so a helper that spelled one as the other would hide what CD checks."""
     from poisson_prove.trace import truncate_observations
 
     return truncate_observations(trace, limit=limit)
@@ -227,9 +202,8 @@ def full_traces(store: Store, run_id: str) -> dict[int, Any]:
 
 
 def sweep_toml(capture: dict[str, Any] | None) -> str:
-    """CD (D1): a ``[capture]`` table must declare ``max_observation_bytes``, so the builder writes
-    ``DEFAULT_LIMIT`` for a caller that named no cap -- which is the number those callers were
-    silently getting before. A caller that names one, including a bad one, is left alone, so the
+    """CD: a ``[capture]`` table must declare ``max_observation_bytes``, so the builder writes
+    ``DEFAULT_LIMIT`` for a caller that named no cap. A caller that names one, including a bad one, is left alone, so the
     refusal tests below still reach the parser with what they wrote."""
     lines = ['target_id = "a8b-oracle@v0"', 't_unit = "steps"', "replicates = 1", "", "[axes.x]", 'type = "continuous"', "values = [0.1]", ""]
     if capture is not None:
@@ -299,8 +273,8 @@ def child_capture_spans(spec_kwargs: dict[str, Any], spans: list[dict[str, Any]]
     through the real recorder -- the only path ``_is_content`` and the child's cut run on."""
     from poisson_prove.capture import CaptureSpec, capture, install
 
-    # CD (D1): CaptureSpec has no default cap, so the harness supplies the one these callers
-    # were getting from the dataclass. A caller that names a cap is left alone.
+    # CD: CaptureSpec has no default cap, so the harness supplies DEFAULT_LIMIT. A caller that
+    # names a cap is left alone.
     spec_kwargs = {"max_observation_bytes": DEFAULT_LIMIT, **spec_kwargs}
     status = install(CaptureSpec(**spec_kwargs))
     tracer = _tracer()
@@ -340,8 +314,8 @@ def child_run_local(store_root: str, toml_path: str, target: str, episode_timeou
 
 
 def test_trace_exports_the_five_names_and_the_routing_constant_is_not_a_cap() -> None:
-    """CD (D8), amending A8b's export list and P8-7's last sentence: the two constants that described the
-    default's split are deleted with the default, and the third is renamed to the job it still has."""
+    """CD: there is no default limit, so the two constants that described its split do not exist,
+    and the third is named for the job it has, routing."""
     import poisson_prove.trace as trace_module
 
     assert set(NEW_EXPORTS) <= set(trace_module.__all__), sorted(set(NEW_EXPORTS) - set(trace_module.__all__))
@@ -353,8 +327,8 @@ def test_trace_exports_the_five_names_and_the_routing_constant_is_not_a_cap() ->
 
 
 def test_the_two_cut_functions_keep_their_signatures() -> None:
-    """CD (D1) amends A8b's two signatures: ``limit`` keeps its name, its place and its
-    keyword-only kind, and loses its default. What it takes is widened to ``int | None``."""
+    """CD: ``limit`` is keyword-only, comes after ``trace`` (and ``declaration``), has no default,
+    and takes ``int | None``."""
     from poisson_prove.trace import finalize, truncate_observations
 
     t = inspect.signature(truncate_observations).parameters
@@ -376,11 +350,11 @@ def test_content_keys_is_a_frozenset_whose_in_answers_members_and_descendants() 
     assert isinstance(CONTENT_KEYS, frozenset)
     for key in CONTENT_EXACT + CONTENT_DESCENDANTS:
         assert key in CONTENT_KEYS, key
-    # The shipped rule matched ``key == prefix`` as well as a dotted descendant, and still does.
+    # A content family matches ``key == prefix`` as well as a dotted descendant.
     for family in CONTENT_FAMILIES:
         assert family in CONTENT_KEYS, family
         assert family + "x" not in CONTENT_KEYS and family + "x.0" not in CONTENT_KEYS, family
-    # Tool arguments and results are retained by default; the kind-dependent row is owed.
+    # Tool arguments and results are retained by default; no rule here depends on the span's kind.
     for key in RETAINED_TOOL_KEYS + ("server.address", RUN_ID_KEY, EPISODE_KEY):
         assert key not in CONTENT_KEYS, key
     assert 7 not in CONTENT_KEYS
@@ -494,8 +468,8 @@ def test_p8_7_a_span_cut_sets_the_span_field_and_leaves_the_trace_field_alone() 
 
 
 def test_p8_7_there_is_no_default_limit_and_the_ratio_holds_at_a_declared_8192() -> None:
-    """CD (D1) inverts this test's shipped half: there is no limit when none is passed, there is a
-    ``TypeError``. What P8-7 says about the cut at 8192 is re-asserted with 8192 declared."""
+    """CD: there is no limit when none is passed, there is a ``TypeError``. What P8-7 says about the
+    cut at 8192 is asserted with 8192 declared."""
     from poisson_prove.trace import truncate_observations
 
     at, over = "k" * DEFAULT_LIMIT, "k" * (DEFAULT_LIMIT + 1)
@@ -513,7 +487,7 @@ def test_p8_7_there_is_no_default_limit_and_the_ratio_holds_at_a_declared_8192()
 @pytest.mark.parametrize("limit", [64, DEFAULT_LIMIT])
 def test_p8_8_twice_is_once_byte_for_byte_including_both_span_fields(limit: int) -> None:
     """Sole catch for the accumulate spelling -- ``(span.bytes_original or 0) + n`` -- which is
-    byte-identical on the first pass and doubles on the second (measured before the build: 500, 1000)."""
+    byte-identical on the first pass and doubles on the second (500, then 1000)."""
     before = trace_of(
         span(1, output="o" * (limit + 9), attrs={"app.a": "x" * (3 * limit), "app.b": "y" * (2 * limit), "app.small": "ok"}),
         span(2, attrs={"app.small": "ok"}),
@@ -613,7 +587,7 @@ CAPTURE_PATH_ATTRS = {
 def test_p8_10_through_the_recorder_content_off_strips_all_eight_and_keeps_the_tool_observation(content: bool) -> None:
     """The two ``llm.*`` content families. Through the recorder, because ``_is_content`` runs only in ``_span_mapping`` and a
     hand-built ``Span`` never reaches it. ``input.value`` / ``output.value`` on an ``llm``-kind span
-    are the owed kind-dependent row, and nothing here asserts them either way."""
+    are not classified by kind, and nothing here asserts them either way."""
     r = isolated(child_capture_spans, {"content": True} if content else {}, [{"name": "execute_tool lookup", "attrs": CAPTURE_PATH_ATTRS}])
     assert r["active"] is True
     (s,) = Trace.from_dict(r["meta"]).spans
@@ -641,7 +615,7 @@ def test_p8_10_a_bare_family_key_is_stripped_as_the_shipped_rule_stripped_it() -
 
 
 def test_p8_11_an_over_limit_attribute_outside_the_key_set_leaves_the_envelope_and_one_at_the_limit_stays(tmp_path: Path) -> None:
-    """A8b's centre, and the sole catch for the shipped ``split``, which classifies by key
+    """A8b's centre, and the sole catch for a ``split`` that classifies by key
     alone. Through ``Store.read(trace="envelope")`` and the raw ``trace_obs`` column."""
     fixture = cut_fixture_spans()
     assert not any(k in OBSERVATION_KEYS for k in fixture[2].attrs), sorted(fixture[2].attrs)
@@ -688,8 +662,8 @@ def test_p8_11_a_wrapper_is_an_observation_at_any_size_and_the_split_never_cuts(
 
 
 def test_p8_12_capture_spec_fields_and_the_cap_that_has_no_default() -> None:
-    """CD (D1, D12) amends P8-12: the field-name tuple is unchanged and in ``_CAPTURE_FIELDS`` order,
-    and ``CaptureSpec()`` no longer builds. The other three defaults stand."""
+    """CD and P8-12: the field-name tuple is in ``_CAPTURE_FIELDS`` order, and ``CaptureSpec()``
+    with no cap does not build. The other three fields have defaults."""
     from poisson_prove.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == CAPTURE_FIELDS_SPEC
@@ -705,7 +679,7 @@ def test_p8_12_the_retired_field_is_refused_naming_it_and_an_absent_max_spans_is
     absent = SweepSpec.load(write(tmp_path / "absent.toml", sweep_toml({"instrument": [], "max_observation_bytes": 4096}))).capture
     assert absent is not None and absent.max_spans is None and absent.max_observation_bytes == 4096
     capped = SweepSpec.load(write(tmp_path / "capped.toml", sweep_toml({"instrument": [], "max_spans": 3}))).capture
-    # CD (D1): DEFAULT_LIMIT here is what the builder *declared*, not what the parser supplied.
+    # CD: DEFAULT_LIMIT here is what the builder *declared*, not what the parser supplied.
     assert capped is not None and capped.max_spans == 3 and capped.max_observation_bytes == DEFAULT_LIMIT
 
 
@@ -717,7 +691,7 @@ def test_p8_12_a_bad_value_is_refused_naming_the_field(tmp_path: Path, table: di
 
 
 def test_p8_12_with_no_cap_every_closed_span_is_kept() -> None:
-    """D6: the cap is off by default. 1,001 spans is one more than the shipped default kept."""
+    """The span cap is off by default: all 1,001 closed spans are kept, none dropped."""
     r = isolated(child_capture_spans, {}, [{"name": f"s{i}"} for i in range(1001)])
     trace = Trace.from_dict(r["meta"])
     assert len(trace.spans) == 1001 and trace.dropped == 0
@@ -765,8 +739,8 @@ def test_p8_20_the_round_trip_holds_through_the_store(tmp_path: Path) -> None:
     ids=["default-9000", "default-20000", "lowered-64", "raised-16384", "1023"],
 )
 def test_p8_23_on_an_ascii_value_both_bounds_are_met_exactly(limit: int, size: int, head: int, tail: int) -> None:
-    """Sole catch for A6's cut rule as first written, which stores ``"y" * 300`` twice at limit 64
-    with every clause of A6's P8-7 holding. The ``1023`` row separates ``limit - limit // 4`` from
+    """Sole catch for a cut rule that stores ``"y" * 300`` twice at limit 64 while every other
+    clause of P8-7 holds. The ``1023`` row separates ``limit - limit // 4`` from
     ``3 * limit // 4`` and ``round(limit * 0.75)``: both give 767, and both agree with the rule at
     every multiple of four."""
     value = "y" * size

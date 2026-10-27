@@ -2,14 +2,14 @@
 
 Covers invariants PF11.1 to PF11.8, the shared setup-file format (format 1) and where
 the skill goes ( ``.agents/skills/poisson-prove-setup/`` and ``.claude/skills/poisson-prove-setup/``,
-the same bytes). The code is written against this file and does not edit it.
+the same bytes).
 
 What PF11 promises, in one line: ``poisson-prove init --agent`` writes a skill and a prompt that the
 person's own coding agent follows to set Prove up for them to review, and ``sweep --dry-run`` tells
 that agent, without calling the rollout or the network, what is wrong with what it wrote. Prove
 makes no model call; no test here calls a model, a coding agent or any paid service.
 
-**Readings, named here** (each a point the design left open, read one way and lettered).
+**Readings, named here** (each a point read one way and lettered).
 
 - (a) The packaged template is package data at ``poisson_prove/skills/poisson-prove-setup/SKILL.md``
   (beside the quickstart spec); each written ``SKILL.md``
@@ -82,7 +82,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   OpenTelemetry is refused at ``--dry-run``, the ``error:`` line naming ``[capture]`` and the extra
   and the install line ``poisson-prove[agent]`` on stderr, as ``--backend modal`` without ``modal``
   names its extra and ``poisson-prove[modal]``.
-- (u) The two design rows pin the shape, not the numbers (the corrected gate is PF4's): the plan on
+- (u) The two design rows pin the shape, not the numbers (the gate is PF4's): the plan on
   stdout then the refusal, a ``next:`` line carrying ``--replicates``; a design that cannot flag a
   lone condition carries no ``--max-mde`` offer.
 - (v) The plan of a right setup: its first line ``plan  `` with the rollout count, the target id and
@@ -91,9 +91,9 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   ``successes:``; no ``note:``. The conditions, replicates and limit lines are PF4's and PF3's.
 - (w) The import over 30 s waits 30 s, so its case is marked ``slow``.
 - (x) Only ``--dry-run`` blocks the network: a real sweep's import reaches the socket layer.
-- (y) ``docs/setup-with-your-agent.md`` is written by PF11's build with the table of locations
-  PF11.8 reads (a Markdown table, a row per folder in backticks naming the agents that read it);
-  PF7 writes the rest of the page around it.
+- (y) ``docs/setup-with-your-agent.md`` holds the table of locations PF11.8 reads (a Markdown
+  table, a row per folder in backticks naming the agents that read it); the rest of the page
+  around it is PF7's.
 - (z) A ``--repo`` that is not a folder is a refusal (exit 1, the path on the ``error:`` line), not
   a wrong command line.
 - (aa) Every wrong-setup refusal (PF11.6) but the two design rows leaves stdout empty: the check refuses
@@ -120,13 +120,13 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   1 to 1,024 characters; ``metadata`` a map from string keys to string values.
 
 **Seams with other modules.** ``init``, ``prove.toml``, ``target``, strict specs and the exit-2
-refusal are PF3's (frozen on the PF3 freeze branch); the rows here that reuse them check only what
+refusal are PF3's; the rows here that reuse them check only what
 PF11 adds. ``[declare]``'s kinds and their refusals are PF4.20's; the power gate and the design
-that cannot flag are PF4's (its re-freeze). The core's ``init_agent`` is PF5's and
+that cannot flag are PF4's. The core's ``init_agent`` is PF5's and
 private, so it is reached only through the command. The README section and the rest of
 ``docs/setup-with-your-agent.md`` are PF7's; the plain-words pattern list is PF8's.
 
-**Lanes.** The code suite. One case is marked ``slow`` (the import that takes over 30 s). The
+**Suite.** The code suite. One case is marked ``slow`` (the import that takes over 30 s). The
 checks that import the person's code run as child processes, so no test's imports leak into
 another's.
 

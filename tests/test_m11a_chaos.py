@@ -1,14 +1,13 @@
 """M11a -- the injection seam, the keying and the carrier: the frozen tests for M11a-1 to M11a-33.
 
-Written for the injection adapter (D1
-reversed: no ``agentchaos-sdk`` dependency, the hook and the applier are M11's own, the fault
-vocabulary is copied under MIT with attribution), against ``7b61bf5``. The code adds
+The injection adapter has no ``agentchaos-sdk`` dependency: the hook and the applier are
+Prove's own, and the fault vocabulary is copied under MIT with attribution. These tests cover
 ``src/poisson_prove/chaos.py``, ``src/poisson_prove/chaos_catalog.py``, ``NOTICE``, the ``[chaos]``
 table in ``sampler.py``, ``chaos_call`` on ``executor._call_in_process``, ``chaos`` on
-``executor_modal.worker_batch``, ``environment["chaos"]`` and ``backend_meta["chaos"]`` against
-this file and does not edit it. ``poisson_prove.chaos`` and ``poisson_prove.chaos_catalog`` are
-imported **inside** test bodies and inside the forked children only, so this file collects on
-the bare tree and its own tests fail there.
+``executor_modal.worker_batch``, ``environment["chaos"]`` and ``backend_meta["chaos"]``.
+``poisson_prove.chaos`` and ``poisson_prove.chaos_catalog`` are
+imported **inside** test bodies and inside the forked children only, so a failure to import
+either fails those tests and never the file's collection.
 
 **Isolation.** ``chaos.install()`` is once per process and memoized, and it
 patches ``httpx.Client.send`` and ``httpx.AsyncClient.send`` for the life of the process. Every
@@ -25,24 +24,25 @@ Only ``position()``'s refusal, the dataclass shapes and the static reads run in-
   JSON tool arguments (so ``truncate`` and ``corrupt`` on ``function.arguments`` change them).
   It records every request it saw and every response object it made, which is what the
   identity and "never rewritten" clauses read. A second body, ``plain``, carries no
-  ``tool_calls`` and is the D16 fixture for an unresolvable path; a third, ``empty``, carries
-  ``content == ""`` so ``llm_empty_single`` resolves and changes nothing, D16's other half. It cannot express a real provider: no streaming chunk
+  ``tool_calls`` and is the fixture for an unresolvable path; a third, ``empty``, carries
+  ``content == ""`` so ``llm_empty_single`` resolves and changes nothing. Both are faults that
+  cannot be applied, and both are refused. It cannot express a real provider: no streaming chunk
   boundaries, no rate limiter, no connection reset; the streaming clause is asserted as "the
   request body's ``stream`` was never rewritten", never as "the stream behaved".
 - ``chaos_rollout`` / ``chaos_otel_rollout`` -- the two-step keyless target, **in this file
-  rather than under ``examples/``** so that the build cannot shape the fixture the frozen tests are
-  read against. Each drives a real ``openai.OpenAI`` over the scripted transport at two declared
-  positions (``plan``, ``solve``) and reports ``fell`` when anything it received differs from
-  the script. Nothing it does is a source of a published number.
+  rather than under ``examples/``** so that a change to the examples cannot reshape the fixture
+  these tests are read against. Each drives a real ``openai.OpenAI`` over the scripted
+  transport at two declared positions (``plan``, ``solve``) and reports ``fell`` when anything
+  it received differs from the script. Nothing it does is a source of a published number.
 - The shipped mock agent makes no HTTP call and is not a fixture here; nothing that needs a
   key is run.
 
-**Conventions these frozen tests fix where the design is silent. The code follows these.**
+**Conventions these frozen tests fix beyond the invariants' own sentences. The code follows these.**
 
 - ``poisson_prove.chaos_catalog.CATALOG`` is the one name the frozen tests read from the catalogue
   module: a mapping from fault name to the entries of that scenario, in order. A single-fault
   name may hold one entry or a one-tuple; a compound name holds a tuple. ``fault_names()`` and
-  ``install()`` read it at call time, so the D19(b) test can reach the ``error`` action -- which
+  ``install()`` read it at call time, so M11a-30b can reach the ``error`` action -- which
   no shipped entry uses -- by extending the mapping in a forked child.
 - The hooks read the ``ChaosSpec`` of the enclosing ``injecting(spec, seed)`` block: which
   fault, which rate, which steps. ``install(spec)`` validates the name and decides whether hooks
@@ -55,17 +55,17 @@ Only ``position()``'s refusal, the dataclass shapes and the static reads run in-
   the record is a dataclass and ``dataclasses.asdict`` is how the children ship it.
 - On the ``none`` arm ``environment["chaos"]["hooks"]`` is ``[]`` and ``engine_version`` is
   ``None`` ("installs no hook"); on a faulted arm ``hooks == ["sync", "async"]``.
-  The ``engine_version`` literal is not pinned (the design gives it only as an example).
+  The ``engine_version`` literal is not pinned (its value is an example, not a contract).
 - ``delay`` entries are pinned with ``target_path`` ``"$"`` or ``None`` and their millisecond
   ``value``; whether the hook sleeps is not pinned, only ``FaultRecord.delay_ms``.
 
 **Where the frozen tests pin something narrower than the invariant's sentence, measured:**
 
 - M11a-5 says the refused episode leaves ``store.manifest(run_id)`` raising ``StoreError``.
-  ``run_local`` writes the manifest at ``executor.py:806`` before the first episode runs, and a
-  D16 refusal is decided per call, inside the episode; so the frozen test pins what can hold --
-  ``run_local`` raises ``ChaosError`` naming the path, the run holds no episode row and is never
-  marked complete -- and leaves whether the run directory is removed open.
+  ``run_local`` writes the manifest before the first episode runs, and the refusal of a fault
+  that cannot be applied is decided per call, inside the episode; so the frozen test pins what
+  can hold -- ``run_local`` raises ``ChaosError`` naming the path, the run holds no episode row
+  and is never marked complete -- and leaves whether the run directory is removed open.
 - M11a-25 and M11a-26 say every applied fault changes the body. ``compound_slow_response`` is
   the one delay-only scenario in the vocabulary and cannot change a body; for it the frozen test
   pins ``FaultRecord.delay_ms == 5000`` on the applied record instead.
@@ -74,62 +74,20 @@ Only ``position()``'s refusal, the dataclass shapes and the static reads run in-
   ``tool_corrupt_single`` (``unicode`` mode) is asserted to differ; ``llm_corrupt_single`` is
   asserted identical, with the reason.
 
-**Cells.** These frozen tests do not span two cells. The previous revision's M11a-5
-asserted ``install()`` raises when the ``chaos`` extra is absent, and that extra no longer
-exists under D1; the only environment-shaped claim left is D1's "no new dependency at any
-tier", which ``test_m11a_23b`` asserts by blocking ``httpx``, ``openai`` and ``opentelemetry``
-in a subprocess and importing the seam -- a simulated core cell, not a second venv. Without
-``openai`` this whole file skips at module level and asserts nothing, deliberately: the seam
-cannot be observed without an HTTP client. One cell: the repo venv's closure (pandas 2.3.3,
-openai 1.109.1, httpx 0.28.1); every test id is asserted in it once.
+**One environment.** These frozen tests do not span two environments. The only
+environment-shaped claim is "no new dependency at any tier", which ``test_m11a_23b`` asserts by
+blocking ``httpx``, ``openai`` and ``opentelemetry`` in a subprocess and importing the seam -- a
+simulated core install, not a second venv. Without ``openai`` this whole file skips at module
+level and asserts nothing, deliberately: the seam cannot be observed without an HTTP client.
 
-**Three guards the tree already holds, which a ``chaos.py`` that imports ``httpx`` cannot
-satisfy and the code works around.** Under D1 ``chaos.py`` is core, and
-``test_s0_scaffold.py::test_no_network_imports_in_core`` bans
-any ``import httpx`` in ``src/poisson_prove`` at any nesting level (an AST walk, not a substring);
-``test_m12_trace.py::test_t17_no_module_outside_trace_py_reads_the_span_clock`` bans
-``time.time_ns()`` outside ``trace.py``, and ``FaultRecord`` carries ``start_ns``/``end_ns``.
-Measured on these frozen tests' shadow shim: a shim that imported ``httpx`` inside ``install()`` and
-read ``time.time_ns()`` turned all three red on the whole suite; one that reaches the client
-through ``sys.modules["httpx"]`` (the client the target already loaded) and reads
-``trace._span_clock()`` passes all three and this file. A faulted arm whose process has not
-loaded ``httpx`` by ``install()`` has no LLM client to inject into and is refused with
-``ChaosError`` before the manifest exists (M11a-33); the
-``none`` arm still installs.
-
-**The classified red set, measured on this commit.** Pristine
-``git clone`` of ``7b61bf5`` at a UUID-free path, venv built from the repo venv's ``pip
-freeze`` with ``--no-deps``, collection 1846 = the repo's 1846; the copy lacks the gitignored
-downloaded data file so it skips 5 where the repo skips 3.
-Bare-tree baseline: **4 failed / 1837 passed / 5 skipped** -- the four are A22's own
-classified reds on pandas 2.3.3 (``test_a22_pandas3.py`` V5, V12, V14, V15), whose build has
-not landed. With this file and the amendments below, 1887 collected: **48 failed / 1834 passed
-/ 5 skipped**, and nothing outside the following is red.
-
-- ``tests/test_m11a_chaos.py``: all 41, because ``poisson_prove.chaos`` and
-  ``poisson_prove.chaos_catalog`` do not exist -- 11 as ``ModuleNotFoundError`` in the test body,
-  21 as the same error reported by a forked child (``Failed: isolated child_* failed``), one as
-  the same error in a subprocess (M11a-33), and 8 by the assertion the missing build leaves unmet (``SamplerError`` not raised, the signatures
-  still four-wide, no ``chaos`` key on the manifest, no ``NOTICE``, the literal counted zero
-  times, the paired run's outcomes ``None``).
-- ``tests/test_m3_crash_trace.py::test_k8_the_transport_aliases_and_signatures_are_untouched``,
-  ``tests/test_m3_timeout_trace.py::test_e12_the_transport_aliases_and_episode_are_untouched``,
-  ``tests/test_m3_capture.py::test_c8_worker_batch_keeps_three_positional_parameters_and_adds_only_capture``:
-  the four amended assertions (``chaos`` on ``worker_batch``,
-  ``chaos_call`` on ``_call_in_process``), one test id each.
-- ``tests/test_a22_pandas3.py`` V5, V12, V14, V15: A22's, present on the bare tree, not this
-  file's.
-
-**A fifth frozen site, not listed before.** ``test_m3_crash_trace.py:111``
-``S16_ORACLE_SHA256`` is a byte digest of ``test_m3_timeout_trace.py``; amending E12 moves it,
-so this commit re-mints that literal off the amended file (``256298e6...``) and
-``test_k8_the_s16_oracle_is_byte_identical`` is green before and after.
-
-**Green-before-and-after clauses, named so their green is not read as evidence:**
-``"chaos" not in SweepSpec.load(...).to_dict()`` (M11a-2), a run without a ``[chaos]`` table
-carrying no ``environment["chaos"]`` (M11a-21) and no ``backend_meta["chaos"]`` (M11a-22),
-``agentchaos`` absent from ``pyproject.toml`` (M11a-23). Each sits inside a test whose other
-clauses are red on the bare tree, so no test id is green by construction.
+**A guard the tree already holds, which a ``chaos.py`` that imports ``httpx`` cannot satisfy.**
+``chaos.py`` is core, and ``test_s0_scaffold.py::test_no_network_imports_in_core`` bans any
+``import httpx`` in ``src/poisson_prove`` at any nesting level (an AST walk, not a substring).
+So ``chaos.py`` reaches the client through ``sys.modules["httpx"]`` (the client the target already
+loaded), and ``FaultRecord``'s ``start_ns``/``end_ns`` come from ``trace._span_clock()``, the
+clock the spans use. A faulted arm whose process has not loaded ``httpx`` by ``install()`` has
+no LLM client to inject into and is refused with ``ChaosError`` before the manifest exists
+(M11a-33); the ``none`` arm still installs.
 """
 
 from __future__ import annotations
@@ -396,7 +354,7 @@ def sweep_toml(
     lines = [f'target_id = "{target_id}"', f't_unit = "{t_unit}"', f"replicates = {replicates}", ""]
     lines += ["[axes.body]", 'type = "categorical"', f"values = {json.dumps(list(bodies))}", ""]
     if capture is not None:
-        # CD (D1): a [capture] table declares its cap; 8192 is what the dataclass used to supply.
+        # A [capture] table declares its cap; 8192 is what the dataclass used to supply.
         if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
             capture = {**capture, "max_observation_bytes": 8192}
         lines.append("[capture]")
@@ -839,7 +797,7 @@ def test_m11a_2_the_chaos_table_refuses_by_field_name_and_stays_out_of_to_dict(t
             SweepSpec.load(path)
         assert field in str(info.value), (table, str(info.value))
     good = SweepSpec.load(write(tmp_path / "good.toml", sweep_toml(chaos={"fault": "llm_error_single", "rate": 0.25, "steps": ["solve"]})))
-    assert "chaos" not in good.to_dict()  # green-before-and-after on its own
+    assert "chaos" not in good.to_dict()  # true without the seam too; the test's other clauses carry it
 
 
 def test_m11a_3_the_table_changes_no_cell_and_no_seed(tmp_path: Path) -> None:
@@ -880,7 +838,7 @@ def test_m11a_6_an_unknown_fault_is_refused_by_name_before_any_run_exists(tmp_pa
         Store(store_root).manifest(run["run_id"])
 
 
-# ---------- M11a-5: a fault that cannot be applied is fatal (D16) ----------
+# ---------- M11a-5: a fault that cannot be applied is fatal ----------
 
 
 def test_m11a_5_an_unresolvable_target_path_is_fatal_not_a_pass(tmp_path: Path) -> None:
@@ -890,7 +848,7 @@ def test_m11a_5_an_unresolvable_target_path_is_fatal_not_a_pass(tmp_path: Path) 
     assert any(ARGUMENTS_PATH in m for m in error["messages"]), error
     assert r["observed"][0]["json"] is None
     unchanged = isolated(child_episode, {"fault": "llm_empty_single"}, 3, [{"position": ["plan", 1]}], "empty")
-    error = unchanged["observed"][0]["error"]  # the path resolves and the payload does not change: the other half of D16
+    error = unchanged["observed"][0]["error"]  # the path resolves and the payload does not change: also a fault not applied
     assert error is not None and "ChaosError" in error["chain"], unchanged["observed"][0]
     assert not [rec for rec in unchanged["records"] if rec["applied"]], unchanged["records"]
     store_root = tmp_path / "store"
@@ -1127,7 +1085,7 @@ def test_m11a_21_the_manifest_carries_the_six_key_record_only_when_asked(tmp_pat
     none_record = store.manifest(runs["control"]["run_id"]).environment["chaos"]
     assert set(none_record) == MANIFEST_KEYS and none_record["requested"] is True and none_record["fault"] == "none"
     assert none_record["engine_version"] is None and none_record["hooks"] == []
-    assert "chaos" not in store.manifest(runs["bare"]["run_id"]).environment  # green-before-and-after on its own
+    assert "chaos" not in store.manifest(runs["bare"]["run_id"]).environment  # true without the seam too; the test's other clauses carry it
 
 
 @pytest.mark.parametrize(
@@ -1149,7 +1107,7 @@ def test_m11a_22_backend_meta_carries_the_record_on_every_ok_result_of_a_chaos_r
         assert result["outcome"] == "fell", result
     control = isolated(child_worker_batch, jobs, target, episode_timeout, None)
     for result in control["results"]:
-        assert isinstance(result, dict) and "chaos" not in result["backend_meta"], result  # green-before-and-after on its own
+        assert isinstance(result, dict) and "chaos" not in result["backend_meta"], result  # true without the seam too; the test's other clauses carry it
         assert result["outcome"] == "survived", result
 
 
@@ -1167,7 +1125,7 @@ def test_m11a_22b_the_mapper_driven_modal_run_records_chaos_on_the_manifest_and_
         assert row.outcome == "fell"
 
 
-# ---------- M11a-23: nothing of theirs but the words (D1) ----------
+# ---------- M11a-23: nothing of theirs but the words ----------
 
 
 def test_m11a_23_agentchaos_is_no_dependency() -> None:

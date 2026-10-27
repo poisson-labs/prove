@@ -1,15 +1,14 @@
-"""PF0, the name: the frozen tests for the rename from ``proofload`` to Poisson Prove.
+"""PF0, the name: the frozen tests for Prove's names and for reading what ``proofload`` 0.0.1 wrote.
 
-Its invariants are PF0.1 to PF0.13. The code is written against this file, which is not edited
-to fit it.
+Its invariants are PF0.1 to PF0.13.
 
-What the rename promises, in one line: new names everywhere, old names read forever. A build of
-this branch installs one package, ``poisson_prove``, and one command, ``poisson-prove``; it writes
+What PF0 promises, in one line: new names everywhere, old names read forever. A build of
+this checkout installs one package, ``poisson_prove``, and one command, ``poisson-prove``; it writes
 ``poisson-prove.*`` schema strings, ``poisson_prove.*`` span keys and ``poisson_prove_version``;
 and every store ``proofload`` 0.0.1 wrote is read by every verb with nothing in it rewritten.
 
 **The 0.0.1 stores.** ``tests/fixtures/stores-0.0.1/`` holds seven runs written by clean installs
-of two 0.0.1 wheels (its README and ``build/`` say how): the quickstart pair, a run with a
+of two 0.0.1 wheels (its README says how): the quickstart pair, a run with a
 timed-out and a crashed episode, a run whose captured observation was cut, a run under a declared
 fault, a run from the Modal backend's offline stand-in, and a run in the layout before the trace
 was split into two columns. ``SHA256SUMS`` is every file's digest as written. ``recorded/`` is
@@ -20,8 +19,8 @@ installed into a throwaway virtual environment of its own, first alone (PF0.1 re
 and then with its dependencies (PF0.2 runs the command it installed). Nothing falls back to the
 environment the suite runs in, and nothing skips: the point is that the command exists.
 
-**Lanes.** Every test here is in the fast lane (ten seconds of setup and call, measured on the
-runner, decides it; PF10 declares the ``slow`` marker).
+**Markers.** No test here is marked ``slow`` (the marker is for more than ten seconds of setup
+and call, measured on the runner).
 
 **Invariant-to-test map**
 
@@ -38,7 +37,7 @@ runner, decides it; PF10 declares the ``slow`` marker).
 | PF0.10 default output folders | ``test_pf0_10_*`` |
 | PF0.11 install hints | ``test_pf0_11_*`` |
 | PF0.12 an old run's provenance on the report, the receipt and the page | ``test_pf0_12_*`` |
-| PF0.13 the fixture pair's numbers | the existing fixture-pair tests (now on the generated lattice pair, ``tests/lattice.py``), moved for the names only |
+| PF0.13 the fixture pair's numbers | the fixture-pair tests, on the generated lattice pair (``tests/lattice.py``) |
 """
 
 from __future__ import annotations
@@ -175,7 +174,7 @@ def _no_store_variables(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(scope="module")
 def new_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str]:
-    """A pair written by this build: the mock agent, then the patched one paired with it."""
+    """A pair written by the code under test: the mock agent, then the patched one paired with it."""
     base = tmp_path_factory.mktemp("new-pair")
     spec = base / "small.toml"
     spec.write_text(SMALL_SPEC, encoding="utf-8")
@@ -340,10 +339,10 @@ AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 
 
 def lattice_agreement(event: str, schema: str) -> str:
-    """The lattice pair's agreement digest for ``event`` in A28's canonical form,
-    written here from the design's counts (``lattice.counts``) and not from ``tree.py``: one line
-    per cell, ``[event, config_hash, n_a, n_b, events_a, events_b]``, sorted, the pair
-    ``[schema, lines]`` as compact ASCII JSON, sha256, lowercase hex."""
+    """The lattice pair's agreement digest for ``event`` in A28's canonical form, written here from
+    the lattice design's counts (``lattice.counts``) and not from ``tree.py``: one line per cell,
+    ``[event, config_hash, n_a, n_b, events_a, events_b]``, sorted, the pair ``[schema, lines]`` as
+    compact ASCII JSON, sha256, lowercase hex."""
     import hashlib
 
     import lattice
@@ -367,7 +366,7 @@ def test_pf0_3_the_agreement_digest_diff_prints_is_built_over_poisson_prove_agre
 
 @pytest.fixture(scope="module")
 def chaos_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    """A run with ``[capture]`` and ``[chaos]``, swept by this build in a fresh interpreter, so
+    """A run with ``[capture]`` and ``[chaos]``, swept by the code under test in a fresh interpreter, so
     the provider capture installs is never this process's."""
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
     pytest.importorskip("openai", reason="the fault is declared on an OpenAI chat completion")
@@ -375,8 +374,8 @@ def chaos_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
     (base / "pf0_chaos_target.py").write_text(CHAOS_TARGET, encoding="utf-8")
     (base / "chaos.toml").write_text(CHAOS_SPEC, encoding="utf-8")
     store = base / "store"
-    # PF4 re-freeze (PF4.49): no lone condition of this 3-replicate design can be
-    # flagged, which any accepted change below 1 refuses; --max-mde 1 admits it as 0.99 did.
+    # PF4.49: no lone condition of this 3-replicate design can be flagged, which any
+    # accepted change below 1 refuses; --max-mde 1 admits it.
     r = subprocess.run(
         [sys.executable, "-m", "poisson_prove", "--store", str(store), "sweep", str(base / "chaos.toml"),
          "--target", "pf0_chaos_target:rollout", "--max-mde", "1", "--yes"],
@@ -453,7 +452,7 @@ def test_pf0_3_a_chaos_run_records_the_catalogue_as_poisson_prove_chaos_catalog_
 
 def test_pf0_4_every_span_key_a_capture_and_chaos_run_stores_uses_the_new_prefix(chaos_run: tuple[Path, str]) -> None:
     """What Prove stamps (the routing keys, the fault) and writes (the cut's wrapper around an
-    observation over the cap), read off the stored rows of a run this build swept."""
+    observation over the cap), read off the stored rows of a run the code under test swept."""
     store, run = chaos_run
     keys: set[str] = set()
     observations = ""
@@ -550,7 +549,7 @@ def test_pf0_4_the_docs_name_only_the_new_span_key_prefix() -> None:
 
 
 def test_pf0_6_the_committed_fixture_is_intact() -> None:
-    """The precondition of every byte check below: the files are the ones the build wrote."""
+    """The precondition of every byte check below: the files are the ones 0.0.1 wrote."""
     sums = {}
     for line in (FIXTURE / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
         digest, name = line.split(maxsplit=1)
@@ -596,7 +595,7 @@ def test_pf0_6_every_pair_verb_exits_0_on_the_0_0_1_quickstart_pair_and_no_store
     before = tree_digest(STORE)
     invocations = [
         ["diff", QA, QB],
-        # PF4 (PF4.20): a 0.0.1 run records no kind, so check's default --fail-on worse is refused;
+        # PF4.20: a 0.0.1 run records no kind, so check's default --fail-on worse is refused;
         # --fail-on higher is the same gate on a failure event (fail when the rate rose).
         ["check", QA, QB, "--event", "violated", "--fail-on", "higher"],
         ["report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(tmp_path / "report")],
@@ -605,8 +604,8 @@ def test_pf0_6_every_pair_verb_exits_0_on_the_0_0_1_quickstart_pair_and_no_store
     for argv in invocations:
         r = run_cli(["--store", str(STORE), *argv])
         assert r.code == 0, (argv, r)
-    # PF12 (PF12.1): report and serve save the comparison they show under
-    # ``.poisson/``; no byte the build wrote moves.
+    # PF12.1: report and serve save the comparison they show under
+    # ``.poisson/``; no byte 0.0.1 wrote moves.
     def stored(digest: dict[str, str]) -> dict[str, str]:
         return {k: v for k, v in digest.items() if not k.startswith(".poisson/")}
 
@@ -622,7 +621,7 @@ def test_pf0_6_runs_lists_every_0_0_1_run() -> None:
 
 def test_pf0_6_an_old_manifest_is_read_with_the_version_it_recorded_under_the_new_key(tmp_path: Path) -> None:
     """A manifest with either key reads, and the manifest exposes one field. The copy's
-    recorded version is one no build of Prove can be, so the running version cannot stand in for it."""
+    recorded version is one no release of Prove can be, so the running version cannot stand in for it."""
     from poisson_prove.store import Store
 
     store = copy_runs(tmp_path / "store", QA)
@@ -645,17 +644,17 @@ ROOT_FIELDS = ("p_omnibus", "p_location", "p_dispersion", "rejects")
 BOUND_FIELDS = ("depth_configured", "depth", "q", "delta_star", "bound", "discoveries")
 
 
-#: PF4 (PF4.20): a 0.0.1 run records no event kind, so a cell's verdict is now the direction word:
+#: PF4.20: a 0.0.1 run records no event kind, so a cell's verdict is the direction word:
 #: 0.0.1's ``safer`` (the rate fell) reads ``lower`` and its ``worse`` (rose) reads ``higher``.
 DIRECTION_OF = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
-#: PF4 (PF4.18): the omnibus and every group p-value are Westfall-Young on one scale, so these
+#: PF4.18: the omnibus and every group p-value are Westfall-Young on one scale, so these
 #: three fields move; every other field of the tree is 0.0.1's.
 TREE_FIELDS_PF4_MOVES = ("p_omnibus", "p_group", "q_group")
 
 
 def same(got: Any, want: Any) -> bool:
     """Equal, where a NaN 0.0.1 wrote (a statistic with no value) equals a NaN read back. Strict JSON
-    now writes a NaN or an infinity as null, so null equals either."""
+    writes a NaN or an infinity as null, so null equals either."""
     if got is None and isinstance(want, float) and (want != want or want in (float("inf"), float("-inf"))):
         return True
     return bool(got == want or (isinstance(want, float) and want != want and isinstance(got, float) and got != got))
@@ -697,7 +696,7 @@ def assert_same_cell(got: dict[str, Any], want: dict[str, Any], method: str, whe
     the number of rows the comparison tests."""
     for field in CELL_FIELDS:
         if field == "mde":
-            # PF4 re-freeze (PF4.22 to PF4.24): the limit is the exact power definition at the
+            # PF4.22 to PF4.24: the limit is the exact power definition at the
             # lone-change level q / M, both directions, so 0.0.1's normal-approximation number moves;
             # it is recomputed here from the stats file's references.
             want_mde = reference_mde(method, got["events_a"], got["pairs"] if method == "mcnemar_bh" else got["n_a"],
@@ -707,11 +706,11 @@ def assert_same_cell(got: dict[str, Any], want: dict[str, Any], method: str, whe
             else:
                 assert got[field] is not None and abs(got[field] - want_mde) <= 1e-4 + 1e-12, (*where, field, got[field], want_mde)
         elif field == "verdict":
-            # PF4 (PF4.20): the direction word in place of 0.0.1's safer/worse; the cell's
+            # PF4.20: the direction word in place of 0.0.1's safer/worse; the cell's
             # direction says the same.
             assert got[field] == got["direction"] == DIRECTION_OF[want[field]], (*where, field)
         elif field == "delta" and method == "mcnemar_bh":
-            # PF4 (PF4.14): delta is the matched-pair difference (n01 - n10) / pairs. Every run of
+            # PF4.14: delta is the matched-pair difference (n01 - n10) / pairs. Every run of
             # this pair is matched, so n01 - n10 is events_b - events_a and the value is 0.0.1's
             # horizon difference up to floating-point order.
             assert got["pairs"] == got["n_a"] == got["n_b"], (*where, got["pairs"])
@@ -738,7 +737,7 @@ def assert_same_tree(got: dict[str, Any], want: dict[str, Any]) -> None:
         if field in TREE_FIELDS_PF4_MOVES:
             continue
         assert got["root"][field] == want["root"][field], field
-    # PF4 (PF4.18): the root's p is the min-p over its statistics on one scale, which is never
+    # PF4.18: the root's p is the min-p over its statistics on one scale, which is never
     # below the smallest of their own p-values; whether it rejects is 0.0.1's (above).
     root = got["root"]
     assert min([*root["p_location"].values(), *root["p_dispersion"].values()]) <= root["p_omnibus"] <= 1.0, root
@@ -750,7 +749,7 @@ def assert_same_tree(got: dict[str, Any], want: dict[str, Any]) -> None:
             if field in TREE_FIELDS_PF4_MOVES:
                 continue
             assert got_groups[group["label"]][field] == group[field], (group["label"], field)
-    # PF4 (PF4.18): each group's p is a min-p on one scale as the root's is, and its q is the
+    # PF4.18: each group's p is a min-p on one scale as the root's is, and its q is the
     # Benjamini-Hochberg adjustment of those p-values, computed here.
     labels = sorted(got_groups)
     for label in labels:
@@ -777,7 +776,7 @@ def test_pf0_7_diff_json_on_the_0_0_1_pair_gives_0_0_1s_cells_omnibus_fault_line
         assert sorted(got_cells) == sorted(c["config_hash"] for c in block["cells"]), event
         for cell in block["cells"]:
             assert_same_cell(got_cells[cell["config_hash"]], cell, method, (event, cell["config_hash"]), rows)
-    # PF4 (PF4.18): the omnibus p moves with the tree's root, which it is.
+    # PF4.18: the omnibus p moves with the tree's root, which it is.
     assert got["omnibus"]["p_omnibus"] == got["tree"]["root"]["p_omnibus"]
     assert_same_tree(got["tree"], want["tree"])
 
@@ -819,7 +818,7 @@ def section(markdown: str, heading: str) -> str:
 
 
 #: A number as a report prints it: 0.0.1 printed rates in percentage points (``31.0``, ``17pp``) and
-#: p and q in ``:g`` form; the command line now prints them under rule 10, so a number is
+#: p and q in ``:g`` form; the command line prints them by rule 10, so a number is
 #: compared by value.
 PRINTED_NUMBER = re.compile(r"(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?(?:pp)?(?![\w]|\.\d)")
 
@@ -905,22 +904,22 @@ def test_pf0_7_report_on_the_0_0_1_pair_gives_0_0_1s_tables_and_bound(method: st
     assert r.code == 0, r
     got = (out / "report.md").read_text(encoding="utf-8")
     want = (RECORDED / f"report-{method}" / "report.md").read_text(encoding="utf-8")
-    # PF4 (PF4.3): report.md gains a Shares section, which 0.0.1 did not print; the rows compared
+    # PF4.3: report.md gains a Shares section, which 0.0.1 did not print; the rows compared
     # are those of every section 0.0.1 had.
     got = got.replace(section(got, "## Shares"), "")
-    # PF4 (PF4.20): a 0.0.1 run records no kind, so a row's verdict is the direction word.
+    # PF4.20: a 0.0.1 run records no kind, so a row's verdict is the direction word.
     want = re.sub(r"\b(safer|worse)\b", lambda m: DIRECTION_OF[m.group(1)], want)
-    # PF4 (PF4.18): a fault-line row's p and q (its last-but-two and last-but-one cells) are the
+    # PF4.18: a fault-line row's p and q (its last-but-two and last-but-one cells) are the
     # one-scale values, read from the same comparison's JSON; every other cell is 0.0.1's.
     tree = json.loads(run_cli(["--store", str(STORE), "diff", QA, QB, "--method", method, "--json"]).out)["tree"]
     groups = {g["label"]: g for g in tree["fault_lines"]["groups"]}
     fault_rows = set(table_data_rows(section(got, "## Fault lines")))
     assert len(fault_rows) == len(groups), fault_rows
-    # report.md's numbers are printed under rule 10 now: each row and
+    # report.md's numbers are printed by rule 10: each row and
     # the bound carry 0.0.1's numbers by value.
     got_rows, want_rows = table_data_rows(got), table_data_rows(want)
     assert len(got_rows) == len(want_rows)
-    # PF4 re-freeze (PF4.22 to PF4.24, PF4.45): every condition's and every group's limit moves (the
+    # PF4.22 to PF4.24, PF4.45: every condition's and every group's limit differs from 0.0.1's (the
     # exact power at the lone-change level; the group's from each cell's own baseline, unconditional),
     # so each printed MDE is read against the JSON of the same comparison (the same events) and left
     # out of the comparison with 0.0.1's row; every other cell is still 0.0.1's.
@@ -973,7 +972,7 @@ def verb_argv(verb: str, inputs: dict[str, Path], out: Path) -> list[str]:
     return {
         "sweep": ["sweep", str(inputs["spec"]), "--target", f"{MOCK}:rollout", "--max-mde", "0.99", "--yes"],
         "diff": ["diff", QA, QB],
-        # PF4 (PF4.20): as in PF0.6, the same gate named for an event of unknown kind.
+        # PF4.20: as in PF0.6, the same gate named for an event of unknown kind.
         "check": ["check", QA, QB, "--event", "violated", "--fail-on", "higher"],
         "report": ["report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(out)],
         "paired": ["paired", "--declaration", str(inputs["declaration"]), "--out", str(out)],
@@ -1111,7 +1110,7 @@ def test_pf0_9_sweep_with_no_store_anywhere_writes_into_prove_runs(tmp_path: Pat
 
 #: Two runs whose names need cleaning: capitals and spaces (names are slugged: lowercase,
 #: spaces and / to -). A run's id is a folder name, so it cannot carry a slash; a slash reaches a
-#: run's name only through a name given to it, which PF2 reads, and PF2 freezes that case. The
+#: run's name only through a name given to it, which PF2 reads, and PF2's tests pin that case. The
 #: target carries capitals, a space and a slash for the names PF2 computes from it.
 SLUG_RUNS = ("Base Line A", "Cand Two B")
 SLUG_TARGET = "Team/Agent X"

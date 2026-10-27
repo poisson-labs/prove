@@ -1,11 +1,10 @@
 """Frozen tests for M7's multi-event report: per-event panels, trade line, saturation, forest,
 survival report.
 
-B1 is the gate. It once compared ``build_report`` against an S8.1 output frozen on disk (built
-with the single-event renderer, ``fisher_bh``, the admitted knob on x, dark theme, diff with
-manifests, ``build_report`` without). The frozen file went with the study fixture it was built
-on; B1 now renders the generated lattice pair (``tests/lattice.py``) the same way and checks
-every fact that record carried -- the title and headline, the worst-cells table's rows,
+B1 is the gate. It renders the generated lattice pair (``tests/lattice.py``) with the
+single-event renderer (``fisher_bh``, the admitted knob on x, dark theme, diff with manifests,
+``build_report`` without) and checks
+every fact the report carries -- the title and headline, the worst-cells table's rows,
 coordinates and values, the Methods row, the honesty block's place, the fence and the
 provenance list -- against the lattice's own references (its design's counts and scipy's
 Fisher test with one BH family), never against Prove's own diff.
@@ -17,7 +16,7 @@ quickstart runs with ``cli.main`` under a fixed salt; everything else uses synth
 ``max_mde_unchanged`` / ``max_mde_unchanged_cell`` and ``trades`` derived the way M6
 derives them.
 
-Structural pins these frozen tests add where the report's design leaves the SVG open (as S8's did for
+Structural pins these frozen tests add where nothing else fixes the SVG (as S8's tests do for
 ``data-cell``):
 
 - **Panel captions.** ``<event>: <n_safer> safer, <n_worse> worse`` appears as a Markdown
@@ -37,9 +36,9 @@ Structural pins these frozen tests add where the report's design leaves the SVG 
   detect a Npp rise. "<n_worse> worse" is an honest claim only above that.`` or is the fixed
   sentence; line 2 matches ``Worst-powered cell overall: Npp (<coords>).``
 
-Deliberately absent rather than adapted: B1's SVG/HTML clause (the fixture's saturated cells change their fills and the legend)
-and B3 on the single-event ``build_report`` (its tiebreak reorders the frozen I19 data and the
-top-10 table that B1's Markdown clause pins). B3 is asserted on the multi-report panels only.
+Deliberately not asserted: an SVG/HTML clause in B1 (the fixture's saturated cells change their
+fills and the legend) and B3 on the single-event ``build_report`` (its tiebreak reorders the I19
+data and the top-10 table that B1's Markdown clause pins). B3 is asserted on the multi-report panels only.
 """
 
 from __future__ import annotations
@@ -87,12 +86,12 @@ from test_pf4_stats import POWER, _ref_fisher_power
 ROOT = Path(__file__).resolve().parents[1]
 #: B1. The single-event report's title on the lattice pair.
 LATTICE_TITLE = "Lattice before -> after"
-# PF3: the one copy is the packaged spec; this is its design at
-# the 100 replicates this file was frozen at.
+# The one copy is the packaged spec; this is its design at
+# 100 replicates.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
+# PF4.30, PF4.48a: the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
-# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# so its sweep is refused; every sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
@@ -766,7 +765,7 @@ def lattice_headline() -> str:
 
 
 def test_b1_the_lattice_record_is_intact_and_the_report_carries_its_headline_on_every_surface(golden_report: Report) -> None:
-    """Lattice port: B1's record is no longer a file frozen on disk but the generated lattice pair
+    """B1's record is the generated lattice pair
     and its references. The pair is the one the generator wrote (every file by digest); its
     references give a headline in S8's form; and the report's three surfaces exist and carry it --
     the Markdown with that headline once and the honesty block's two lines, the SVG parsing."""
@@ -885,14 +884,14 @@ def check_limit(report: Report, notes: dict[str, Any], coords: str, after: str, 
 
 
 def test_b1_markdown_matches_the_layout_built_from_the_references_outside_the_honesty_block(golden_report: Report, golden_diff: DiffResult) -> None:
-    """S8's record was a frozen file; on the lattice pair the same layout is built here from the
-    references and compared line for line outside the honesty block (B2 owns its two lines). What
-    P-1 moved in S8's record is written the way it reads now: the headline's last token states the
-    requested method's pairing (C1), the Methods row's second column reads ``unpaired``
+    """On the lattice pair S8's layout is built here from the
+    references and compared line for line outside the honesty block (B2 owns its two lines). The
+    layout reads as the report prints it now: the headline's last token states the
+    requested method's pairing, the Methods row's second column reads ``unpaired``
     for ``fisher_bh``, the provenance list carries ``seed identity match`` and ``unpaired
-    analysis`` where ``paired`` stood, and (truncation surfacing) ``episodes censored
-    at horizon`` where ``truncated`` stood. PF4 (PF4.15): every MDE cell is set aside and each
-    row's limit checked against its condition (``limit_kind``): the re-measured limit where it has
+    analysis`` (no ``paired`` entry), and ``episodes censored
+    at horizon`` (no ``truncated`` entry). PF4.15: every MDE cell is set aside and each
+    row's limit checked against its condition (``limit_kind``): the measured limit where it has
     one, the ceiling words at a 32-of-32 baseline, the none-detectable words where even the whole
     headroom is not caught. The default top ten holds limits and ceilings only, so the same report
     is rendered again with every condition in the table and every row checked the same way, the
