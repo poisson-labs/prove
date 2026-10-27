@@ -899,6 +899,31 @@ def test_pr29_clusters_are_ordered_by_a_stable_sort_of_the_cluster_key_not_by_ro
         assert math.isclose(got["hi"], sorted_ref[1], abs_tol=1e-12)
 
 
+def test_pr29_an_item_only_a_later_sweep_holds_takes_its_sorted_place_in_the_bootstrap() -> None:
+    """The analysis reads its rows sweep by sweep, so an item that only the second sweep holds
+    arrives after every item of the first even when its key sorts first. The bootstrap must still
+    draw over the items in key order: here the arrival order gives a different interval, and the
+    build must give the sorted one."""
+    names = ["b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m"]
+    rows: list[Pair] = []
+    for sweep, items in (("S1", names), ("S2", ["a", *names])):
+        for i, name in enumerate(items):
+            flips = (i % 4) != 0 and sweep == "S1" or (i % 3) == 0
+            rows.append(Pair(name, HI, LO if flips else HI, sweep=sweep))
+    clusters = [r.cluster for r in rows]
+    flips = [int(r.a != r.b) for r in rows]
+    sorted_ref = cluster_bootstrap(clusters, flips, seed=5, b=300)
+    rng = np.random.default_rng(5)
+    frame = pd.DataFrame({"cluster": clusters, "v": flips})
+    arrived = [g["v"].to_numpy() for _, g in frame.groupby("cluster", sort=False)]
+    idx = rng.integers(0, len(arrived), size=(300, len(arrived)))
+    draws = np.array([np.concatenate([arrived[i] for i in row]).mean() for row in idx])
+    assert (float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))) != sorted_ref
+    got = cut_of(analyse(assertion(rows, b=300, seed=5))).pooled["flip_rate"]
+    assert math.isclose(got["lo"], sorted_ref[0], abs_tol=1e-12), (got, sorted_ref)
+    assert math.isclose(got["hi"], sorted_ref[1], abs_tol=1e-12), (got, sorted_ref)
+
+
 @settings(max_examples=25, deadline=None, derandomize=True)
 @given(permutation=st.permutations(list(range(36))))
 def test_pr29_property_any_row_order_gives_the_same_bytes(permutation: list[int]) -> None:
