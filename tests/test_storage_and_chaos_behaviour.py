@@ -149,7 +149,9 @@ def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
             if parent_conn.poll(0.05):
                 outcome = parent_conn.recv()
             elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
+                # The child may have sent its result and exited since the poll above.
+                outcome = parent_conn.recv() if parent_conn.poll() else (
+                    "error", f"child exited with code {proc.exitcode} before reporting")
             elif time.perf_counter() > deadline:
                 outcome = ("error", f"child produced nothing within {timeout}s")
     finally:
