@@ -675,9 +675,9 @@ class Screens:
                 Detail("target", f"{doc['target']}, backend {doc['backend']}"),
                 Detail(
                     "paired with",
-                    f'"{doc["paired_with_name"]}" (shared seeds)'
+                    f'"{doc["paired_with_name"]}" ({doc["paired_with"]}, shared seeds)'
                     if doc.get("paired_with_name")
-                    else "not recorded"
+                    else "none: no earlier run shares its seeds"
                     if doc.get("paired_with") is None
                     else str(doc["paired_with"]),
                 ),
@@ -922,6 +922,7 @@ class Screens:
         )
         runs = list(doc.get("runs", []))
         names = {str(r["run_id"]): str(r["name"]) for r in runs}
+        salts = {str(r["run_id"]): r.get("run_salt") for r in runs}
         complete = [str(r["run_id"]) for r in runs if r["status"] == "complete"]
         turn = ["before"]
 
@@ -933,11 +934,21 @@ class Screens:
         if "after" not in chosen:
             latest()
 
+        def paired_line() -> list[Detail]:
+            """Whether the two chosen runs share their seeds, which decides the default test."""
+            before, after = chosen.get("before"), chosen.get("after")
+            if not before or not after:
+                return []
+            shared = salts.get(before) is not None and salts.get(before) == salts.get(after)
+            words = "yes: the two runs share their seeds" if shared else "no: separate seeds"
+            return [Detail("paired", words)]
+
         def layout(width: int) -> None:
             page.top = block(
                 [
                     Detail("before", names.get(chosen.get("before") or "", "none chosen")),
                     Detail("after", names.get(chosen.get("after") or "", "none chosen")),
+                    *paired_line(),
                 ]
             )
             if len(complete) < 2:
@@ -1750,8 +1761,10 @@ def _verdict_block(doc: Mapping[str, Any], *, saved: bool) -> list[Detail]:
 
 
 def _run_words(run: Mapping[str, Any]) -> str:
-    """One run of a comparison: its name, then its id and status."""
-    return f"{run.get('name')} ({run.get('run_id')}, {run.get('status')})"
+    """One run of a comparison: its name, then its id and status, and which build wrote it when
+    a mixed pair's older build did."""
+    writer = f", {run['writer']}" if run.get("writer") else ""
+    return f"{run.get('name')} ({run.get('run_id')}, {run.get('status')}{writer})"
 
 
 def _events_of(doc: Mapping[str, Any]) -> list[dict[str, Any]]:

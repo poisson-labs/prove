@@ -36,6 +36,7 @@ _NONE_WORDS = {
     "replicates": "not recorded",
     "horizon": "not recorded",
     "paired_with": "not paired",
+    "run_salt": "not recorded",
     "declared": "nothing declared",
     "design_mde": "not recorded",
     "events": "not recorded",
@@ -399,6 +400,7 @@ def _runs(page: _Page) -> None:
                     page.fact(f"{p}/rows"),
                     page.fact(f"{p}/rows_without_outcome"),
                     page.fact(f"{p}/created_at", kind="plain"),
+                    page.fact(f"{p}/run_salt", kind="plain", cls="mono"),
                 ]
             )
         page.add(
@@ -415,6 +417,7 @@ def _runs(page: _Page) -> None:
                     ("rows", "num"),
                     ("no outcome", "num"),
                     ("created", ""),
+                    ("salt", ""),
                 ],
                 rows,
                 filter_rows=True,
@@ -760,6 +763,13 @@ def _facts_dl(page: _Page, ptr: str) -> str:
     )
 
 
+def _writer_note(page: _Page, role: str) -> str:
+    """A mixed pair's note on the run the older build wrote, as ``diff`` prints it."""
+    if "writer" not in page.view.get(role, {}):
+        return ""
+    return f' <span class="dim">{page.fact(f"/{role}/writer", kind="plain")}</span>'
+
+
 def _comparison(page: _Page) -> None:
     v = page.view
     page.title = str(v["name"])
@@ -781,13 +791,15 @@ def _comparison(page: _Page) -> None:
                     "before",
                     page.link("/before/address", page.fact("/before/name", kind="plain"))
                     + f' <span class="mono dim">{page.fact("/before/run_id", kind="plain")}</span>'
-                    + f' <span class="dim">({page.fact("/before/status", kind="plain")})</span>',
+                    + f' <span class="dim">({page.fact("/before/status", kind="plain")})</span>'
+                    + _writer_note(page, "before"),
                 ),
                 (
                     "after",
                     page.link("/after/address", page.fact("/after/name", kind="plain"))
                     + f' <span class="mono dim">{page.fact("/after/run_id", kind="plain")}</span>'
-                    + f' <span class="dim">({page.fact("/after/status", kind="plain")})</span>',
+                    + f' <span class="dim">({page.fact("/after/status", kind="plain")})</span>'
+                    + _writer_note(page, "after"),
                 ),
                 (
                     "threshold",

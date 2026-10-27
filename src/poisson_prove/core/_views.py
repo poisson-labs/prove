@@ -29,6 +29,7 @@ from poisson_prove.core._ops import (
     COMMAND,
     _index,
     _method_first,
+    _old_writer,
     _opened,
     _operation,
     method_line,
@@ -580,6 +581,23 @@ class _Context:
             return run
         return self.index.name_of(run)
 
+    def paired_with(self, run: str) -> str | None:
+        """The run this one shares its seeds with: the newest run created before it with the same
+        salt (a sweep with --pair-with takes its earlier run's salt); None when it shares none."""
+        if self.index is None:
+            return None
+        mine = self.manifest(run)
+        if mine.run_salt is None:
+            return None
+        earlier = [
+            r.run_id
+            for r in self.index.runs
+            if r.run_id != run
+            and self.manifest(r.run_id).run_salt == mine.run_salt
+            and str(self.manifest(r.run_id).created_at) < str(mine.created_at)
+        ]
+        return max(earlier, key=lambda r: str(self.manifest(r).created_at), default=None)
+
     def comparison_name(self, descriptor: Mapping[str, Any]) -> str:
         a, b = descriptor["inputs"]["runs"]
         return f"{self.run_name(a)} → {self.run_name(b)}"
@@ -595,6 +613,12 @@ class _Context:
             for line in lines
             if isinstance(line, list) and len(line) == 2
         ]
+
+
+def _writer(writers: Mapping[str, str], role: str) -> dict[str, str]:
+    """``writer`` for a run of a mixed pair the older build wrote (``diff`` names it on its
+    before or after line); nothing for any other run."""
+    return {"writer": writers[role]} if role in writers else {}
 
 
 def _view(view_kind: str, address: str, **fields: Any) -> View:
@@ -641,6 +665,7 @@ def runs_view(ctx: _Context) -> View:
                     "rows": row["rows"],
                     "rows_without_outcome": row["no_outcome"],
                     "created_at": row["created_at"],
+                    "run_salt": ctx.manifest(str(row["run_id"])).run_salt,
                     "address": _run_address(str(row["run_id"])),
                 }
             )
@@ -751,8 +776,7 @@ def home_view(ctx: _Context, shown: str) -> View:
     latest_run = None
     if runs:
         newest = runs[0]
-        environment = dict(ctx.manifest(str(newest["run_id"])).environment or {})
-        paired = environment.get("paired_with")
+        paired = ctx.paired_with(str(newest["run_id"]))
         latest_run = {
             "name": newest["name"],
             "status": newest["status"],
@@ -843,7 +867,7 @@ def run_view(ctx: _Context, run: str) -> View:
     design = _recorded_design(m)
     horizon_values = frame["horizon"].dropna() if "horizon" in frame else pd.Series(dtype=float)
     horizon = float(horizon_values.max()) if len(horizon_values) else None
-    paired = environment.get("paired_with")
+    paired = ctx.paired_with(run)
     declared = (
         m.declared.to_dict() if m.declared is not None and hasattr(m.declared, "to_dict") else None
     )
@@ -954,6 +978,7 @@ def comparison_view(ctx: _Context, cid: str) -> View:
     conditions and the charts."""
     descriptor, result, folder = ctx.comparisons[cid]
     a, b = descriptor["inputs"]["runs"]
+    writers = _old_writer((ctx.manifest(a), ctx.manifest(b)))
     method = str(result["method"])
     q, m = result["q"], result["n_tests"]
     threshold = float(result["threshold"])
@@ -1054,12 +1079,14 @@ def comparison_view(ctx: _Context, cid: str) -> View:
             "run_id": a,
             "status": ctx.manifest(a).status,
             "address": _run_address(a),
+            **_writer(writers, "before"),
         },
         "after": {
             "name": ctx.run_name(b),
             "run_id": b,
             "status": ctx.manifest(b).status,
             "address": _run_address(b),
+            **_writer(writers, "after"),
         },
         "threshold": {"value": threshold, "source": result["threshold_source"]},
         "family": {
