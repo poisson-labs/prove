@@ -374,9 +374,11 @@ def _add_global_options(p: argparse.ArgumentParser, *, top: bool) -> None:
     )
 
 
-def _add_json_option(p: argparse.ArgumentParser, what: str) -> None:
+def _add_json_option(p: argparse.ArgumentParser, what: str, after: str = "") -> None:
     p.add_argument(
-        "--json", action="store_true", help=f"print {what} as one JSON document instead of text"
+        "--json",
+        action="store_true",
+        help=f"print {what} as one JSON document instead of text{after}",
     )
 
 
@@ -745,7 +747,7 @@ def _build_parser(io: _IO) -> _Parser:
     paired_p.add_argument(
         "--force", action="store_true", help="write into a folder that is not empty"
     )
-    _add_json_option(paired_p, "the files' contents, writing nothing")
+    _add_json_option(paired_p, "the files' contents", ", writing nothing")
     _add_global_options(paired_p, top=False)
 
     check_p = sub.add_parser(

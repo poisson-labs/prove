@@ -863,8 +863,29 @@ def _observation_counts(store: Store, run: str) -> tuple[int, int]:
     return len(spans), sum(1 for span in spans if span.get("truncated") == "observation")
 
 
-def _paired_declaration(path: str, a: str, b: str) -> Declaration:
-    declaration = Declaration.from_toml(path)
+def _by_id(declaration: Declaration, idx: Index) -> Declaration:
+    """The declaration with each arm a run id: an arm may be given by its run's name too (never
+    by a word that moves, such as latest); a word no run answers to is left for the check that
+    refuses an unknown run."""
+
+    def run_id(word: str) -> str:
+        if idx.by_id(word) is not None:
+            return word
+        hits = idx.words.get(word.strip(), set())
+        named = [r.run_id for r in idx.runs if r.name == word.strip() and r.run_id in hits]
+        return named[0] if len(hits) == 1 and named else word
+
+    sweeps = tuple(
+        dataclasses.replace(
+            s, a=run_id(s.a), b=run_id(s.b), more=tuple(run_id(m) for m in s.more)
+        )
+        for s in declaration.sweeps
+    )
+    return dataclasses.replace(declaration, sweeps=sweeps)
+
+
+def _paired_declaration(path: str, a: str, b: str, idx: Index) -> Declaration:
+    declaration = _by_id(Declaration.from_toml(path), idx)
     declared = {(sweep.a, sweep.b): sweep.name for sweep in declaration.sweeps}
     if (a, b) not in declared:
         pairs = ", ".join(f"{s.name}: ({s.a}, {s.b})" for s in declaration.sweeps)
@@ -915,7 +936,7 @@ def compare(
             st, verb, [run_a, run_b], typed, idx, x_missing=require_x, event_missing=require_events
         )
     fixed = _typed_fix(fix, (st.manifest(run_a), st.manifest(run_b))) if fix else {}
-    declaration = None if paired is None else _paired_declaration(paired, run_a, run_b)
+    declaration = None if paired is None else _paired_declaration(paired, run_a, run_b, idx)
     multi, others, manifests, frames = _run_diffs(
         store,
         idx,
@@ -1418,7 +1439,7 @@ def paired(
     replayed, the analysis, the windows, the cost and the replicates, as files to write; with
     ``cap_check``, whether the recorded input tokens are under the declared cap."""
     store = _opened(store)
-    decl = Declaration.from_toml(str(declaration))
+    decl = _by_id(Declaration.from_toml(str(declaration)), _index(store))
     st = Store(store.root)
     if cap_check:
         report = paired_cost(st, decl, phases={s.name: s.arms for s in decl.sweeps})
@@ -1449,6 +1470,14 @@ def paired(
             cap_reached=bool(report.cap_reached),
         )
     bundle = _bundle(st, decl)
+    total = bundle.assertion.counts["total"]
+    if total["eligible"] == 0:
+        causes = ", ".join(f"{cause} {n}" for cause, n in total["by_cause"].items() if n)
+        raise refusal(
+            f"no eligible pairs: of {total['keys']} keys {total['matched']} matched and none was "
+            f"eligible ({causes or 'nothing to pair'}); there is nothing to analyse, and nothing "
+            "was written"
+        )
     sentence = f"{_look.fmt_count(len(bundle.artifacts))} files, written nowhere"
     return PairedResult(
         verdict="ok",
