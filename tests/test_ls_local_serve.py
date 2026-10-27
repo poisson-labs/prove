@@ -256,7 +256,9 @@ DISPATCH_H2 = frozenset(H2_SEQUENCE)
 #: file's LS16 convention adds).
 UNTOUCHED_REGIONS = ("Result", "Honesty", "Not verified", "Fault lines", "Cells", "Cell", "Worst cells", "Provenance")
 RETIRED_TAILS = (" (closed by B.1)", " (nothing on the roadmap closes this)")
-NEW_TAILS = (" (a change is planned that would close this)", " (nothing planned would close this; it is a limit of the instrument)")
+# The page no longer speaks of planned changes: a limit some later version may close says only
+# that this version does not check it.
+NEW_TAILS = (" (this version does not check it)", " (nothing planned would close this; it is a limit of the instrument)")
 MDE_MEANING_BARE = "MDE is ADR-018's smallest detectable increase"
 MDE_MEANING_PLAIN = "MDE is the smallest detectable increase"
 #: LS10, LS11. Section 3.5's thresholds and the quantity each applies to.
