@@ -35,8 +35,10 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --event NAME          an outcome that counts as the event; repeatable
-                        (required: a picture never infers its event; omitted:
-                        lists the axes and events the runs carry; no default)
+                        (required: for runs that declare no kinds, since a
+                        picture never infers its event, and omitted lists the
+                        axes and events the runs carry; default: the failures
+                        and successes the runs declare)
   --method {fisher_bh,mcnemar_bh,logrank_bh}
                         the per-condition test: fisher_bh treats the two runs
                         as separate samples, mcnemar_bh pairs them on their
@@ -91,8 +93,10 @@ examples:
 
 - `RUN ...` names the baseline and the candidate, in that order; with none, `previous` and
   `latest`.
-- `--event NAME` is required, once per event: a picture never infers its event. Without it the
-  refusal lists the axes and events the runs carry.
+- `--event NAME` is an outcome to show, once per event. Without it the page shows the failures
+  and successes the runs' `[declare]` tables name; for runs that declare none it is required,
+  since a picture never infers its event, and the refusal lists the axes and events the runs
+  carry.
 - `--x AXIS` is required: the axis across the page's heatmap. `--y AXIS` is the axis down it, and
   `--fix KEY=VALUE` pins every other axis to one value, as for `report`.
 - `--method`, `--q Q`, `--permutations N`, `--seed N`, `--by KEY`, `--max-group-mde FRACTION`
@@ -144,8 +148,8 @@ error: serve requires --x AXIS, which was not given. …
 ## Exit codes
 
 - `0`: with `--json`, the structure was printed.
-- `1`: refused, and nothing was served: no `--event` or `--x`, an axis left free, or any refusal of
-  `diff`.
+- `1`: refused, and nothing was served: no `--x`, no `--event` for runs that declare no kinds, an
+  axis left free, or any refusal of `diff`.
 - `2`: the command line is wrong.
 - `3`: an unexpected failure; `--debug` prints its traceback.
 - `130`: stopped with Ctrl-C, which is how a served page ends.

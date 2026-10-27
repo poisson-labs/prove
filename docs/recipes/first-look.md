@@ -39,7 +39,7 @@ trade  timeout: … safer, … worse · violated: … safer, … worse (paired t
   limits  the smallest change one condition alone would be flagged for, 4 times in 5, …
   intervals  on each condition's change: Tango at 97.5%, …
 …
-inferred: no event was given, so the event set is violated, timeout; the non-event is completed, the most frequent outcome
+inferred: no event was given, so the event set is timeout, violated, the failures and successes the runs declared
 …
 coverage: holes=0 (only_a=0, only_b=0, no_outcome_a=0, no_outcome_b=0, no_outcome_both=0), no_outcome a=0 b=0
 …
@@ -65,8 +65,8 @@ names the rows that have none. `intervals` says how the interval on each conditi
 computed. `fragility` says how many episodes would have to have ended differently for the word to
 change.
 
-**The events.** `inferred` says which outcomes were compared: none was named, so every outcome but
-the most frequent one, `completed`.
+**The events.** `inferred` says which outcomes were compared: none was named, so the failures the
+spec's `[declare]` table names, `timeout` and `violated`.
 
 **The tables.** One per event: each condition with its episodes, its events in each run, each
 run's share with a 95% interval, the change and an interval on it, the test's statistic, its p and

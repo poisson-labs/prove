@@ -602,7 +602,11 @@ def _build_parser(io: _IO) -> _Parser:
         "runs", nargs="*", metavar="RUN",
         help="the baseline and the candidate (default: previous and latest)",
     )
-    _add_event_argument(diff_p, "default: inferred from the outcomes present")
+    _add_event_argument(
+        diff_p,
+        "default: the failures and successes the runs declare, else every outcome present "
+        "but the most frequent",
+    )
     _add_method_arguments(diff_p, defaults=True)
     diff_p.add_argument(
         "--methods",
@@ -637,7 +641,11 @@ def _build_parser(io: _IO) -> _Parser:
         "runs", nargs="*", metavar="RUN",
         help="A B for a comparison, one RUN for a survival report (default: previous and latest)",
     )
-    _add_event_argument(report_p, "default: inferred from the outcomes present")
+    _add_event_argument(
+        report_p,
+        "default: the failures and successes the runs declare, else every outcome present "
+        "but the most frequent",
+    )
     _add_method_arguments(report_p, defaults=False)
     report_p.add_argument(
         "--methods",
@@ -800,8 +808,9 @@ def _build_parser(io: _IO) -> _Parser:
     )
     _add_event_argument(
         serve_p,
-        "required: a picture never infers its event; omitted: lists the axes and events the "
-        "runs carry; no default",
+        "required: for runs that declare no kinds, since a picture never infers its event, "
+        "and omitted lists the axes and events the runs carry; default: the failures and "
+        "successes the runs declare",
         shown=True,
     )
     _add_method_arguments(serve_p, defaults=True)
@@ -2157,11 +2166,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
         return 0
     _wrote(io, out_dir, written)
     io.line()
-    if detail.inferred:
-        io.line(
-            f"inferred: no event was given, so the event set is {', '.join(events)}; "
-            f"the non-event is {detail.non_event}, the most frequent outcome"
-        )
+    if detail.inference is not None:
+        io.line(detail.inference)
     io.line(
         f'"{detail.run_name}": survival report over {", ".join(events)} at horizon '
         f"{_look.fmt_num(report.provenance['horizon'])}"

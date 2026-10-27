@@ -74,6 +74,7 @@ from poisson_prove.diff import (
     MixedCases,
     MultiDiffResult,
     UnknownEvent,
+    declared_events,
     infer_events,
     multi_diff,
 )
@@ -648,9 +649,26 @@ def _missing_flags_refusal(
     if x_missing and axes:
         filled.extend(["--x", axes[0]])
     if event_missing and events:
-        filled.extend(["--event", events[0]])
+        filled.extend(["--event", _suggested_event(store, runs_, frames, events)])
     fillable = (not x_missing or axes) and (not event_missing or events)
     return refusal(message, [join(filled)] if fillable else [])
+
+
+def _suggested_event(
+    store: Store, runs_: Sequence[str], frames: Sequence[pd.DataFrame], events: Sequence[str]
+) -> str:
+    """The event a refusal's filled command names: the first failure, else success, the runs
+    declare, else an outcome other than the most frequent (the outcome most runs end in is rarely
+    the event), else the first carried."""
+    declared = declared_events(*(store.manifest(run) for run in runs_))
+    named = [e for e in declared if e in events]
+    if named:
+        return named[0]
+    try:
+        found, _ = infer_events(frames[0], frames[-1] if len(frames) > 1 else frames[0].iloc[0:0])
+    except (EventInferenceError, DiffError):
+        return events[0]
+    return next((e for e in found if e in events), events[0])
 
 
 def _read_record() -> Path:
@@ -866,6 +884,9 @@ def compare(
     idx = _index(store)
     run_a, run_b = _pair_of(idx, verb, a, b, _notes)
     st = Store(store.root)
+    if require_events and verb == "serve":
+        # A declared set does not change when a new outcome appears: serve shows it.
+        require_events = not declared_events(st.manifest(run_a), st.manifest(run_b))
     if require_x or require_events:
         raise _missing_flags_refusal(
             st, verb, [run_a, run_b], typed, idx, x_missing=require_x, event_missing=require_events
@@ -1141,7 +1162,9 @@ def run(
     named, _ = _split_events(events)
     _require_known_events("report", named, df)
     inferred = named is None
-    if named is None:
+    if named is None and declared_events(manifest):
+        found, non_event = declared_events(manifest), None
+    elif named is None:
         try:
             found, non_event = infer_events(df, df.iloc[0:0])
         except EventInferenceError as exc:

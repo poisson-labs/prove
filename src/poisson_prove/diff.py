@@ -1161,7 +1161,12 @@ class MultiDiffResult:
         shown = _look.fmt_hash if look else str
         num = _look.fmt_num if look else str
         lines: list[str] = []
-        if self.inferred:
+        if self.inferred and self.non_event is None:
+            lines.append(
+                f"inferred: no event was given, so the event set is {', '.join(self.events)}, "
+                "the failures and successes the runs declared"
+            )
+        elif self.inferred:
             lines.append(
                 f"inferred: no event was given, so the event set is {', '.join(self.events)}; "
                 f"the non-event is {self.non_event}, the most frequent outcome"
@@ -2036,7 +2041,11 @@ def multi_diff(
     inferred = events is None
     non_event: str | None = None
     if events is None:
-        event_set, non_event = infer_events(a, b)
+        # The failures and successes the runs declare, when they declare any; otherwise every
+        # outcome present but the most frequent.
+        event_set = declared_events(manifest_a, manifest_b)
+        if not event_set:
+            event_set, non_event = infer_events(a, b)
     else:
         event_set = tuple(dict.fromkeys(str(e) for e in events))
         if not event_set:
@@ -2222,6 +2231,17 @@ def multi_diff(
         errors_differ=tuple(errors_differ),
         fragility_search=search,
     )
+
+
+def declared_events(*manifests: RunManifest | None) -> tuple[str, ...]:
+    """The events a comparison or report of these runs defaults to: the failures, then the
+    successes, each run's ``[declare]`` table names, in that order, each once. Empty when no run
+    declares a kind."""
+    names: list[str] = []
+    for manifest in manifests:
+        if manifest is not None and manifest.declared is not None:
+            names += [*manifest.declared.failures, *manifest.declared.successes]
+    return tuple(dict.fromkeys(names))
 
 
 def _declared_kinds(manifest: RunManifest | None) -> dict[str, str]:

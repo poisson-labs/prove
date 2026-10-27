@@ -142,7 +142,7 @@ is `next`, the commands to run next. A check carries `passed` and `fail_on` as w
 | `n_tests` | the size of the family: every (condition, event) tested |
 | `n_not_comparable`, `dropped_a`, `dropped_b` | conditions that could not be compared, and those only one run had |
 | `truncated` | rows cut at the horizon |
-| `inferred`, `non_event`, `events` | whether the events were inferred from the outcomes, the outcome that is not an event, and the events compared |
+| `inferred`, `non_event`, `events` | whether the events were defaulted (to the failures and successes the runs declare, else to every outcome but the most frequent), that most frequent outcome when it was used (null otherwise), and the events compared |
 | `by_event` | per event, its counts and its conditions (below) |
 | `trades` | conditions where one event got safer and another worse: `config`, `config_hash`, `safer_events`, `worse_events` |
 | `coverage` | per condition, the rows each run had, those with no outcome, whether it is `comparable` and, when not, the `cause`: `config`, `config_hash`, `rows_a`, `rows_b`, `no_outcome_a`, `no_outcome_b`, `comparable`, `cause` |

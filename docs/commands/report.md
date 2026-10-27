@@ -34,7 +34,8 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --event NAME          an outcome that counts as the event; repeatable
-                        (default: inferred from the outcomes present)
+                        (default: the failures and successes the runs declare,
+                        else every outcome present but the most frequent)
   --method {fisher_bh,mcnemar_bh,logrank_bh}
                         the per-condition test: fisher_bh treats the two runs
                         as separate samples, mcnemar_bh pairs them on their

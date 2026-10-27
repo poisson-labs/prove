@@ -185,6 +185,22 @@ class RunDetail(Result):
     declarations: Any = None
     fixed: Mapping[str, Any] = field(default_factory=dict)
 
+    @property
+    def inference(self) -> str | None:
+        """Where a defaulted event set came from, as the report prints it; None when the events
+        were named."""
+        if not self.inferred:
+            return None
+        if self.non_event is None:
+            return (
+                f"inferred: no event was given, so the event set is {', '.join(self.events)}, "
+                "the failures and successes the run declared"
+            )
+        return (
+            f"inferred: no event was given, so the event set is {', '.join(self.events)}; "
+            f"the non-event is {self.non_event}, the most frequent outcome"
+        )
+
 
 @dataclass(frozen=True, eq=False)
 class EpisodePage(Result):
