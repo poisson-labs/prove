@@ -142,7 +142,7 @@ With no axis named, it is refused and says which it could use:
 ```console
 $ poisson-prove serve --event timeout  # exits 1
 error: serve requires --x AXIS, which was not given. …
-  next: poisson-prove serve --event timeout --x task_id
+  next: poisson-prove serve --event timeout --x task_id --y tool_fail_rate
 ```
 
 ## Exit codes

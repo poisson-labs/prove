@@ -651,10 +651,30 @@ def _missing_flags_refusal(
     filled = [COMMAND, *_named_argv(argv, idx)]
     if x_missing and axes:
         filled.extend(["--x", axes[0]])
+        if verb in ("report", "serve"):
+            # Every other axis must be across, down or pinned, or the filled command is refused.
+            free = [a for a in axes[1:] if not _typed_axis(argv, a)]
+            if free and "--y" not in argv:
+                filled.extend(["--y", free.pop(0)])
+            for name in free:
+                values = [c[name] for frame in frames for c in frame["config"] if name in c]
+                value = min(values, key=lambda v: (str(type(v)), v))
+                filled.extend(["--fix", f"{name}={value}"])
     if event_missing and events:
         filled.extend(["--event", _suggested_event(store, runs_, frames, events)])
     fillable = (not x_missing or axes) and (not event_missing or events)
     return refusal(message, [join(filled)] if fillable else [])
+
+
+def _typed_axis(argv: Sequence[str], name: str) -> bool:
+    """Whether the command as typed already places the axis: across, down or pinned."""
+    for i, token in enumerate(argv[:-1]):
+        nxt = argv[i + 1]
+        if token in ("--x", "--y") and nxt == name:
+            return True
+        if token == "--fix" and nxt.split("=", 1)[0] == name:
+            return True
+    return False
 
 
 def _suggested_event(
