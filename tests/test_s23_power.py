@@ -36,8 +36,7 @@ file's own tests and every other test in the repo still reports. The other names
 - **``cli.py`` imports ``DEFAULT_MAX_MDE``; it does not define one.** A second definition in
   ``cli.py`` would be a threshold that can drift from M3's. The CLI needs the
   value for one non-statistical purpose: deciding what to record when no flag was passed. It
-  imports M3's single definition, makes no comparison of its own, and never calls
-  ``preflight_mde``.
+  imports M3's single definition and makes no comparison of its own.
 - **``--max-mde``'s range, (0, 1], is enforced in M3, not in the CLI**, by exact analogy with
   ``--q``: ``0.0 < q < 1.0`` lives in ``diff.py`` and reaches the user as a ``DiffError``. So an
   out-of-range ``--max-mde`` is an ``ExecutorError`` from ``check_power`` and a refusal at the
@@ -61,8 +60,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
 
 from poisson_prove import cli
 from poisson_prove.diff import mde_two_proportion
@@ -292,50 +289,20 @@ def assert_design_recorded(design: dict, *, n: int, rows: int, accepted: float) 
 # ---------- W1: one statistic, and it is the one already computed ----------
 
 
-@pytest.mark.parametrize("replicates", [2, 3, 8, 16, 32, 64, 93, 100, 105, 256, 1000])
-def test_w1_preflight_mde_is_mde_two_proportion_at_base_rate_one_half(replicates: int) -> None:
-    assert executor.preflight_mde(spec_at(replicates)) == mde_two_proportion(0.5, replicates, replicates)
-
-
 def saturation_ceiling() -> int:
-    """The largest N whose MDE is still the saturated 0.5, found rather than written."""
+    """The largest N whose MDE at base rate 0.5 is still the saturated 0.5, found rather than written."""
     n = 2
-    while executor.preflight_mde(spec_at(n + 1)) == executor.preflight_mde(spec_at(n)) and n < 1000:
+    while mde_two_proportion(0.5, n + 1, n + 1) == mde_two_proportion(0.5, n, n) and n < 1000:
         n += 1
     return n
-
-
-@given(a=st.integers(min_value=2, max_value=1000), b=st.integers(min_value=2, max_value=1000))
-@settings(deadline=None, max_examples=60)
-def test_w1_preflight_mde_never_rises_with_replicates(a: int, b: int) -> None:
-    lo, hi = min(a, b), max(a, b)
-    assert executor.preflight_mde(spec_at(hi)) <= executor.preflight_mde(spec_at(lo)), (lo, hi)
-
-
-@given(a=st.integers(min_value=11, max_value=1000), b=st.integers(min_value=11, max_value=1000))
-@settings(deadline=None, max_examples=60)
-def test_w1_preflight_mde_is_strictly_decreasing_above_the_saturation_point(a: int, b: int) -> None:
-    """W1 says "strictly decreasing" over 2-1000 and it is not, below N=11.
-
-    ``mde_two_proportion`` returns the largest possible increase when even that is
-    undetectable, so at base rate 0.5 every design with ten or fewer replicates reports exactly
-    0.5 and they are all equal. Strictness holds from the first N that resolves anything, and
-    the flat region is pinned separately below rather than papered over. Nothing the gate does
-    depends on it: 0.5 is refused at every threshold the gate can be given.
-    """
-    lo, hi = min(a, b), max(a, b)
-    if lo == hi:
-        return
-    assert saturation_ceiling() < 11
-    assert executor.preflight_mde(spec_at(hi)) < executor.preflight_mde(spec_at(lo)), (lo, hi)
 
 
 def test_w1_the_statistic_saturates_at_the_largest_possible_increase_for_tiny_designs() -> None:
     ceiling = saturation_ceiling()
     assert ceiling == 10, ceiling
     for n in range(2, ceiling + 1):
-        assert executor.preflight_mde(spec_at(n)) == 0.5, n
-    assert executor.preflight_mde(spec_at(ceiling + 1)) < 0.5
+        assert mde_two_proportion(0.5, n, n) == 0.5, n
+    assert mde_two_proportion(0.5, ceiling + 1, ceiling + 1) < 0.5
     # and every one of them is refused, so the flat region never reaches a decision
     for n in range(2, ceiling + 1):
         with pytest.raises(executor.UnderpoweredDesign):
@@ -579,7 +546,7 @@ def test_w6_a_non_float_is_refused_at_exit_two_with_nothing_written(value: str, 
 # PF4.49: --max-mde accepts (0, 1], so "1.01" and "1.001" are out of range and "1" and "1.0" are
 # not (they are admitted in test_w6_an_accepted_value_at_or_above_the_computed_mde_proceeds).
 @pytest.mark.parametrize("value", ["0", "0.0", "-0.2", "1.01", "1.001", "1.5"])
-def test_w6_a_value_outside_the_open_unit_interval_is_refused_with_nothing_written(value: str, tmp_path: Path) -> None:
+def test_w6_a_value_outside_zero_exclusive_to_one_inclusive_is_refused_with_nothing_written(value: str, tmp_path: Path) -> None:
     spec_path = write_spec(tmp_path / "clear.toml", underpowered_toml(replicates=CLEARING_REPLICATES))
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", value))

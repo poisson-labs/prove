@@ -42,7 +42,6 @@ from poisson_prove.chaos import (
     injecting,
 )
 from poisson_prove.chaos import install as chaos_install
-from poisson_prove.diff import mde_two_proportion
 from poisson_prove.episode import Episode
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, StoreError
@@ -286,26 +285,6 @@ DEFAULT_MAX_MDE: float = 0.20
 
 #: The bisection for the suggested replicate count never needs to look past this.
 _N_SEARCH_LIMIT = 1 << 62
-
-
-def preflight_mde(spec: SweepSpec) -> float:
-    """The design's minimum detectable effect, at base rate 0.5, in event-rate points.
-
-    **The one construction.** Both pre-flight lines read this function, and so does everything
-    built on it, so a change to the statistic cannot move the printed number without
-    moving whatever is compared against it. It was computed inline in ``preflight`` and
-    ``preflight_modal`` would have been a second site.
-
-    Base rate 0.5 is the right design-time anchor: it needs no data, and there is none before
-    the run. It is **not** an upper bound over the cells. ``mde_two_proportion`` guards a rate
-    of exactly 0 with ``0.5/n`` and returns the largest possible increase when even that is
-    undetectable, so cells at extreme base rates exceed this value -- measured on a sweep
-    fixture at N=32, the realised per-cell maximum was 0.34 against this function's 0.3251, 1.6
-    points higher. That gap is why the printed line no longer calls itself the largest case; anyone
-    tempted to make it exact should note that an exact number needs the base rates, and those
-    do not exist before the run.
-    """
-    return mde_two_proportion(0.5, spec.replicates, spec.replicates)
 
 
 def _offered_override(mde: float) -> float:
