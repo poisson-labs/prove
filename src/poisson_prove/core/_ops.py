@@ -2398,20 +2398,33 @@ def _resume_command(o: Mapping[str, Any], typed_target: str | None) -> str:
         words += ["--backend", o["backend"]]
     if (o.get("image") or "image") != "image":
         words += ["--image", o["image"]]
-    return join(words)
+    return join([*words, *_typed_store(o)])
+
+
+def _typed_store(o: Mapping[str, Any]) -> list[str]:
+    """``--store PATH`` when the sweep was typed with it, for its next lines, which act on the
+    same store (the tool's options are accepted after the verb)."""
+    typed = list(o.get("typed_named") or ())
+    for i, token in enumerate(typed):
+        if token == "--store" and i + 1 < len(typed):
+            return ["--store", typed[i + 1]]
+        if token.startswith("--store="):
+            return ["--store", token.split("=", 1)[1]]
+    return []
 
 
 def _after_sweep(o: Mapping[str, Any], idx: Index, run_id: str, target: str) -> list[str]:
     pair_with = o.get("pair_with")
+    store = _typed_store(o)
     if pair_with is not None:
         newest = [r.run_id for r in idx.complete[:2]]
         if newest == [run_id, pair_with]:
-            return [f"{COMMAND} diff"]
-        return [join([COMMAND, "diff", idx.word_for(pair_with), idx.word_for(run_id)])]
+            return [join([COMMAND, "diff", *store])]
+        return [join([COMMAND, "diff", idx.word_for(pair_with), idx.word_for(run_id), *store])]
     if target == MOCK_ROLLOUT:
         spec = [] if o.get("spec_typed") is None else [o["spec_typed"]]
         twin = ["--target", MOCK_PATCHED, "--pair-with", "latest"]
-        return [join([COMMAND, "sweep", *spec, *twin])]
+        return [join([COMMAND, "sweep", *spec, *twin, *store])]
     return []
 
 
@@ -2759,7 +2772,8 @@ def _sweep_result(
             f"commonest {commonest or 'unknown'}"
         )
         if commonest is not None:
-            nexts.append(f"{COMMAND} inspect latest --event {commonest}")
+            inspect = [COMMAND, "inspect", "latest", "--event", commonest]
+            nexts.append(join([*inspect, *_typed_store(o)]))
         stopped = True
     else:
         verdict = "done"
