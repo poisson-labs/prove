@@ -113,7 +113,11 @@ def test_the_paired_rows_carry_n01_and_n10_the_stored_pairs_give_and_the_unpaire
         for c in cells:
             assert c["n01"] + c["n10"] <= c["pairs"] and isinstance(c["n01"], int)
     assert any(n01 != n10 for n01, n10 in discordant(store, a, b, "violated").values()), "the fixture must tell the two apart"
-    (saved,) = [ref for ref in core.artifacts(core.open_store(str(store))) if ref.kind == "comparison"]
+    # The comparison this diff saved, by the id its saved line names (other tests save into this store too).
+    code, out, err = run(["--store", str(store), "diff", a, b, "--event", "violated", "--event", "timeout", "--save"])
+    assert code == 0, err
+    (cid,) = [line.split()[-1] for line in out.splitlines() if line.startswith("  saved  comparison ")]
+    (saved,) = [ref for ref in core.artifacts(core.open_store(str(store))) if ref.kind == "comparison" and ref.id.startswith(cid)]
     result = json.loads((store / saved.path / "comparison.json").read_text(encoding="utf-8"))
     assert {c["config_hash"]: (c["n01"], c["n10"]) for c in result["by_event"]["violated"]["cells"]} == discordant(store, a, b, "violated")
     code, out, err = run(["--store", str(store), "diff", a, b, "--event", "violated", "--json", "--method", "fisher_bh"])

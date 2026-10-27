@@ -291,8 +291,9 @@ def _a_home_of_its_own() -> None:
     """The suite runs with ``HOME`` in a folder of its own, made once for the session and shared
     with its workers, so what a test provokes (the errors log and the record of compared runs
     under ``~/.cache/poisson-prove``) never reaches the user's own. The tools the slow tests run
-    keep their folders: uv's cache and Pythons, pyenv's, and Playwright's browsers. A suite this
-    one starts (the floors run) keeps the folder it was given."""
+    keep their folders: uv's cache and Pythons, pyenv's, and Playwright's browsers, and the opt-in
+    backend tests still find the user's Modal credentials. A suite this one starts (the floors run)
+    keeps the folder it was given."""
     import os
     import shutil
     import subprocess
@@ -315,6 +316,10 @@ def _a_home_of_its_own() -> None:
                 os.environ[var] = str(path)
     os.environ["HOME"] = os.environ["PROVE_TESTS_HOME"] = tempfile.mkdtemp(prefix="prove-tests-home-")
     _MADE_HOME.append(os.environ["HOME"])
+    # The opt-in backend tests read the user's Modal credentials from ``~/.modal.toml``.
+    credentials = Path(real) / ".modal.toml" if real else None
+    if credentials is not None and credentials.is_file():
+        (Path(os.environ["HOME"]) / ".modal.toml").symlink_to(credentials)
 
 
 #: The ``HOME`` this process made, which only it removes.
