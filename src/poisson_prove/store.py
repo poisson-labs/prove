@@ -544,7 +544,8 @@ class Store:
     def _write_manifest(self, manifest: RunManifest) -> None:
         path = self._manifest_path(manifest.run_id)
         tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n")
+        text = json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n"
+        tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, path)
 
     # -- lifecycle --
