@@ -1,6 +1,6 @@
 """PF7 -- packaging: the metadata, the extras and their floors, and what the wheel and the sdist
-hold (PF7.4 to PF7.6; Q14, Q15, Q16, Q31, Q40, Q45 and Q49; the Modal floor measured by the
-backends module).
+hold (PF7.4 to PF7.6, with the release decisions on the extras, the floors and the description;
+the Modal floor measured by the backends module).
 
 **What is pinned is what ships.** ``pyproject.toml`` as the build reads it, and the wheel and the
 sdist built from this checkout once per test run (hatchling in a child process, over a copy of the
@@ -24,7 +24,7 @@ package.
   run resolves ``[dev]`` at its lowest too), and the build backend. An upper bound only on
   ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.2``.
 - **k5** ``[dev]`` carries what the contributors' lanes need that this file and the docs check
-  read: ``pytest-xdist`` (Q40), ``hypothesis`` (the property tests), ``hatchling`` (the archives built
+  read: ``pytest-xdist`` (the suite runs on parallel workers), ``hypothesis`` (the property tests), ``hatchling`` (the archives built
   here), ``markdown-it-py`` (the docs check reads pages with it) and ``pyyaml`` (it parses YAML
   blocks). Other modules' test tools are theirs to pin.
 - **k6** PF7.5 is one slow test: on Python 3.11 it installs every requirement at exactly its
@@ -39,7 +39,7 @@ package.
   files. The sdist holds exactly ``PKG-INFO``, ``pyproject.toml``, ``.gitignore``, ``README.md``,
   ``CHANGELOG.md``, ``CONTRIBUTING.md``, ``LICENSE``, ``NOTICE``, and the tree's files under
   ``src/``, ``tests/``, ``docs/`` and ``examples/``, each folder matched whole: which examples are
-  left is the hygiene module's (Q35), so the sdist follows the tree.
+  left is the hygiene module's call, so the sdist follows the tree.
 - **k8** The PyPI page is the README: the wheel's long description is ``README.md`` byte for byte,
   as Markdown.
 
@@ -54,9 +54,9 @@ before release (the hygiene tests); the version, set by the release.
 
 | invariant | tests |
 |---|---|
-| PF7.4 the release metadata, Q45's description | ``test_pf7_4_pyproject_carries_the_release_metadata`` (one case per field) |
-| PF7.4 the extras (Q14, Q15, Q31, Q40) | ``test_pf7_4_the_extras_are_section_3_3s`` (one case per extra) |
-| PF7.4 a floor on every dependency (Q16) | ``test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_section_3_3s`` (one case per group) |
+| PF7.4 the release metadata, k1's description | ``test_pf7_4_pyproject_carries_the_release_metadata`` (one case per field) |
+| PF7.4 the extras | ``test_pf7_4_the_extras_are_section_3_3s`` (one case per extra) |
+| PF7.4 a floor on every dependency (k4) | ``test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_section_3_3s`` (one case per group) |
 | PF7.5 the code suite passes with every dependency at its floor | ``test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor`` (slow) |
 | PF7.6 the wheel and the sdist hold exactly their sets; the example spec ships | ``test_pf7_6_each_archive_holds_exactly_its_set`` (wheel, sdist) |
 | PF7.6 the PyPI page is the README | ``test_pf7_6_the_pypi_page_is_the_readme`` |

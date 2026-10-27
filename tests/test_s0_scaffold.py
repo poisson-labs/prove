@@ -7,7 +7,7 @@ from pathlib import Path
 from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parents[1]
-# PF7 (Q14, Q31): the import names of what the extras bring; litellm and matplotlib are no
+# PF7: the import names of what the extras bring; litellm and matplotlib are no
 # extra's any more.
 EXTRAS_BANNED_FROM_CORE = {"modal", "burla", "openai", "opentelemetry"}
 NETWORK_CLIENT_MODULES = {"requests", "httpx", "urllib", "socket"}
@@ -47,7 +47,7 @@ def test_cli_version_via_module():
 def test_pyproject_extras_exact():
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
     extras = set(data["project"]["optional-dependencies"])
-    # PF9 (Q31): the [burla] extra joins the set. PF7 (Q14): the [viz] extra goes.
+    # PF9: the [burla] extra joins the set. PF7: the [viz] extra goes.
     assert extras == {"modal", "agent", "all", "dev", "burla"}
 
 
@@ -62,7 +62,7 @@ def test_pyproject_core_deps_are_math_only():
     list the old parser fails."""
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
     core = {Requirement(d).name.lower() for d in data["project"]["dependencies"]}
-    # PF6 (Q20, Q60): Rich for the pretty rendering and Textual for the terminal app join the core.
+    # PF6: Rich for the pretty rendering and Textual for the terminal app join the core.
     assert core == {"numpy", "pandas", "scipy", "pyarrow", "rich", "textual"}
 
 
@@ -71,7 +71,7 @@ def test_python_floor():
     assert data["project"]["requires-python"] == ">=3.11"
 
 
-#: Q36: ``SCOPE.md`` folds into the README, and its
+#: ``SCOPE.md`` folds into the README, and its
 #: never-phones-home paragraph is kept word for word, with the names as the rename gives them.
 NEVER_PHONES_HOME = (
     "Prove never phones home. No telemetry, no analytics, no update checks. "

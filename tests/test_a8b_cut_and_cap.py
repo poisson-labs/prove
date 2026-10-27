@@ -5,22 +5,22 @@ Frozen on 2026-09-18 off ``a626cd3``, after the update commit. The build is writ
 against this file and does not edit it. Every name A8b mints is imported inside the test that
 needs it, so the bare tree fails test by test and never at collection.
 
-**The answers this file is frozen against:** Q1 (a) the head and
-tail bounds are the limit's split, ``limit - limit // 4`` and ``limit // 4``; Q2 (b)
-``CONTENT_KEYS`` is the shipped set plus the two ``llm.*`` families; Q3 (a)
+**The answers this file is frozen against:** the head and
+tail bounds are the limit's split, ``limit - limit // 4`` and ``limit // 4``;
+``CONTENT_KEYS`` is the shipped set plus the two ``llm.*`` families;
 ``CONTENT_KEYS`` is a ``frozenset`` whose ``in`` answers exact members and dotted descendants, the
-six bare prefixes staying exact members so the shipped ``key == prefix`` match survives; Q4 (c)
+six bare prefixes staying exact members so the shipped ``key == prefix`` match survives;
 ``split`` routes a value to ``trace_obs`` when its key is an observation key, when it is already a
-wrapper, or when it is uncut and over the module default; Q5 (a) a low limit is a supported
-measure-without-storing configuration; Q6 ``t4.toml`` and its assertion were rewritten together in
-the update; Q8 (a) the wrapper has exactly three keys; Q9 (a) two cells.
+wrapper, or when it is uncut and over the module default; a low limit is a supported
+measure-without-storing configuration; ``t4.toml`` and its assertion were rewritten together in
+the update; the wrapper has exactly three keys; the tests run in two cells.
 
 **Invariant-to-test map** (38 functions, 63 collected ids; the id counts below sum to 63; the CD
 freeze deleted one P8-26 function and its one id, and moved none of the others):
 
 | Invariant | Tests |
 |---|---|
-| public surface / Q3 | ``test_section_2_*`` (3 functions, 3 ids) |
+| public surface | ``test_section_2_*`` (3 functions, 3 ids) |
 | P8-7 | ``test_p8_7_*`` (7 functions, 11 ids) |
 | P8-8 | ``test_p8_8_*`` (3 functions, 4 ids) |
 | P8-9 | ``test_p8_9_*`` (2 functions, 3 ids) |
@@ -112,7 +112,7 @@ FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path needs the fork start method")
 
 TRUNCATED_KEY_SPEC = "poisson_prove.truncated"
-WRAPPER_KEYS = frozenset({"head", "tail", "bytes_original"})  # Q8 (a): exactly three
+WRAPPER_KEYS = frozenset({"head", "tail", "bytes_original"})  # exactly three
 DEFAULT_LIMIT = 8192
 RUN_ID_KEY = "poisson_prove.run_id"
 EPISODE_KEY = "poisson_prove.episode"
@@ -136,19 +136,19 @@ CONTENT_FAMILIES = (
     "llm.input_messages", "llm.output_messages",
 )
 CONTENT_EXACT = ("gen_ai.input.messages", "gen_ai.output.messages")
-#: One dotted descendant per family, so P8-10 is neutral on the prefix spelling (Q3).
+#: One dotted descendant per family, so P8-10 is neutral on the prefix spelling.
 CONTENT_DESCENDANTS = tuple(f"{family}.0.message.content" for family in CONTENT_FAMILIES)
 RETAINED_TOOL_KEYS = ("gen_ai.tool.call.arguments", "gen_ai.tool.call.result", "input.value", "output.value")
 RETIRED_NAMES = ("_TRUNCATION_MARKER", "_apply_budget", "_json_size", "max_span_bytes")
 
 #: P8-25: sha256 of ``ast.get_source_segment`` per symbol, measured at the base commit ``a626cd3``.
 #: ``split`` is absent on purpose -- it is the one A7 symbol A8b edits -- and is pinned structurally.
-# Re-minted (Q37): each digest is over the symbol's code with its comments and docstrings
+# Re-minted: each digest is over the symbol's code with its comments and docstrings
 # taken out (``code_of``), so a pass over src/ that changes only words moves none of them and a change to the code still does.
 # Read off main's unchanged code (56e6e69), every raw digest above matching first, not predicted.
 HELD_SURFACE: dict[str, dict[str, str]] = {
     "trace.py": {
-        # PF0 (Q4): LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
+        # PF0: LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
         # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
         "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
         "_ObservationKeys": "27ead8ed01df19d6fdc2e1ec09a6ff70d40348074e9c62ae48c99f1bfd8a3502",
@@ -455,7 +455,7 @@ def child_run_local(store_root: str, toml_path: str, target: str, episode_timeou
     return str(p.run_id)
 
 
-# ---------- Q3: the public surface ----------
+# ---------- the public surface ----------
 
 
 def test_section_2_trace_exports_the_five_names_and_the_routing_constant_is_not_a_cap() -> None:
@@ -489,7 +489,7 @@ def test_section_2_the_two_functions_keep_their_specced_signatures() -> None:
 
 
 def test_section_2_content_keys_is_a_frozenset_whose_in_answers_members_and_descendants() -> None:
-    """Q3 (a): the ``_ObservationKeys`` shape. A plain ``frozenset`` loses the families."""
+    """``CONTENT_KEYS`` takes the ``_ObservationKeys`` shape. A plain ``frozenset`` loses the families."""
     from poisson_prove.trace import CONTENT_KEYS
 
     assert isinstance(CONTENT_KEYS, frozenset)
@@ -499,7 +499,7 @@ def test_section_2_content_keys_is_a_frozenset_whose_in_answers_members_and_desc
     for family in CONTENT_FAMILIES:
         assert family in CONTENT_KEYS, family
         assert family + "x" not in CONTENT_KEYS and family + "x.0" not in CONTENT_KEYS, family
-    # Tool arguments and results are retained by default (A6's Q3); the kind-dependent row is owed.
+    # Tool arguments and results are retained by default; the kind-dependent row is owed.
     for key in RETAINED_TOOL_KEYS + ("server.address", RUN_ID_KEY, EPISODE_KEY):
         assert key not in CONTENT_KEYS, key
     assert 7 not in CONTENT_KEYS
@@ -690,7 +690,7 @@ def test_p8_9_the_bytes_read_off_the_childs_pipe_already_carry_the_wrapper_with_
 
 @pytest.mark.parametrize("episode_timeout", [None, pytest.param(30.0, marks=needs_fork)], ids=["no-timeout", "fork"])
 def test_p8_9_the_stored_row_carries_the_wrapper_and_a_value_cut_below_the_default_still_leaves_the_envelope(tmp_path: Path, episode_timeout: float | None) -> None:
-    """The second half is Q4 (c): whatever the child cut is an observation in the store
+    """The second half is the routing rule: whatever the child cut is an observation in the store
     at any limit -- ``app.payload``'s wrapper is about 1.1 KB, far under the module default."""
     toml = write(tmp_path / "sweep.toml", sweep_toml({"instrument": [], "max_observation_bytes": SWEEP_LIMIT}))
     run_id = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:oversized_otel_rollout", episode_timeout)
@@ -797,7 +797,7 @@ def test_p8_11_an_over_limit_attribute_outside_the_key_set_leaves_the_envelope_a
 
 
 def test_p8_11_a_wrapper_is_an_observation_at_any_size_and_the_split_never_cuts() -> None:
-    """Q4 (c). A value cut at a sweep limit far under the module default is a small
+    """The routing rule. A value cut at a sweep limit far under the module default is a small
     wrapper; it leaves the envelope because it carries ``TRUNCATED_KEY``. An uncut value between
     the two limits stays: ``split`` reads the module default and nothing else."""
     low = cut(trace_of(span(1, attrs={"app.cut_low": "c" * 300, "app.mid": "m" * 60})), 64)
@@ -935,7 +935,7 @@ def test_p8_23_a_raised_limit_through_the_recorder_stores_the_raised_split() -> 
 
 
 def test_q5_a_low_limit_measures_every_value_and_stores_almost_nothing() -> None:
-    """Q5 (a): measure-without-storing is a limit setting, not a second mechanism. At
+    """Measure-without-storing is a limit setting, not a second mechanism. At
     limit 4 a run records every value's true length and keeps four bytes of each."""
     sizes = {"app.a": 8225, "app.b": 300, "app.c": 5}
     (s,) = cut(trace_of(span(1, attrs={key: "q" * n for key, n in sizes.items()})), 4).spans

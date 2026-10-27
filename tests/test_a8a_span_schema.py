@@ -6,16 +6,16 @@ commit (the design was written at ``afc1f3b`` and the probes first ran at
 ``3bf4083``; ``src/`` and the nine updated test files are byte-identical across all three,
 measured by ``git diff --name-only``).
 
-**The register, built to as decided at the start:** Q1 (c) the alias map stays
-GenAI-only and one real OpenInference payload went through ``from_otel`` before the build -- 21 keys
+**The register, as decided before the build:** the alias map stays
+GenAI-only, and one real OpenInference payload went through ``from_otel`` before the build -- 21 keys
 on a chat span, 0 aliased, 0 lifted, 10 routed as observation content, ``tokens`` and the model
-name lost for fields that already exist, none of A8a's eight carriers present; (b) is triggered
-for ``tokens`` and reported, not taken. Q2 (a) no ``graph.node.*`` identity entries in
-``ATTRIBUTE_ALIASES``; T20 is untouched. Q3 (b)/(c): ``FAULT_KEY`` and ``FAULT_POSITION_KEY`` are
-not A8a's and ``TRACE_EXPORTS`` is 25 names. Q4 (a) ``ALIAS_MAP_VERSION == "1"`` and P8-13 asserts
+name lost for fields that already exist, none of A8a's eight carriers present; widening the map is triggered
+for ``tokens`` and reported, not taken. No ``graph.node.*`` identity entries in
+``ATTRIBUTE_ALIASES``; T20 is untouched. ``FAULT_KEY`` and ``FAULT_POSITION_KEY`` are
+not A8a's and ``TRACE_EXPORTS`` is 25 names. ``ALIAS_MAP_VERSION == "1"`` and P8-13 asserts
 the **binding**, not the literal (the string ``"1"`` appears 0 times in ``src/`` at ``3bf4083``,
-measured). Q5 (a) two cells. Q6 (a) ``EVALUATOR`` is not a gate marker. Q7 (a)
-``_ORIGINAL_ERROR_TYPE`` survives. Q8 (a) the four columns, after ``error``.
+measured). Two cells. ``EVALUATOR`` is not a gate marker.
+``_ORIGINAL_ERROR_TYPE`` survives. The four columns, after ``error``.
 
 **Two cells, and no invariant is cell-specific -- a result, not an assumption**.
 pandas 2.3.3 and pandas 3.0.5, A22's recipe. Every
@@ -88,7 +88,7 @@ sole catch is claimed.
 | 6 | ``merge`` takes the first non-None ``alias_map_version`` instead of the agreed one | **P8-13 merge test alone** |
 | 7 | ``gate = "emitted"`` when the span *name* is ``guardrail`` | **P8-6 named-guardrail test alone** |
 | 8 | the unrecognised operation still stashed under ``poisson_prove.original_operation`` | P8-16, T23 (amended) |
-| 9 | ``graph.node.id`` added to ``_LIFTED_KEYS`` (Q2 crossed) | **P8-4 alone** |
+| 9 | ``graph.node.id`` added to ``_LIFTED_KEYS`` (the no-lift decision crossed) | **P8-4 alone** |
 | 10 | ``_vendor_kind(attrs)`` after the lift | T36 x11, T37, P8-4, P8-6 -- 15 |
 | 11 | ``_span_mapping`` emits no ``traceId`` | **P8-14 alone** |
 | 12 | ``_capture_record`` without ``alias_map_version`` | P8-17, C4 |
@@ -160,7 +160,7 @@ NEW_FIELDS: tuple[str, ...] = SPAN_FIELDS_SPEC[13:]
 TRACE_KEYS_SPEC: tuple[str, ...] = ("schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version")
 OUTCOME_BY_SPEC = ("code", "llm", "self", "human")
 GATE_SPEC = ("emitted", "declared")
-ALIAS_MAP_VERSION_SPEC = "1"  # Q4 (a)
+ALIAS_MAP_VERSION_SPEC = "1"  # as decided at the start
 STATUS_CODES = frozenset({"OK", "UNSET", "ERROR"})
 LIFTED_CARRIERS = (
     "openinference.span.kind", "traceloop.span.kind", "graph.node.name",
@@ -175,12 +175,12 @@ NINE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-\tplan\t2\tpass\temitted"
 FIVE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-"
 
 #: P8-22: sha256 of ``ast.get_source_segment`` for each symbol A7 owns, measured at ``3bf4083``.
-# Re-minted (Q37): each digest is over the symbol's code with its comments and docstrings
+# Re-minted: each digest is over the symbol's code with its comments and docstrings
 # taken out (``code_of``), so a pass over src/ that changes only words moves none of them and a change to the code still does.
 # Read off main's unchanged code (56e6e69), every raw digest above matching first, not predicted.
 A7_SURFACE: dict[str, dict[str, str]] = {
     "trace.py": {
-        # PF0 (Q4): LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
+        # PF0: LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
         # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
         "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
         "_ObservationKeys": "27ead8ed01df19d6fdc2e1ec09a6ff70d40348074e9c62ae48c99f1bfd8a3502",
@@ -524,7 +524,7 @@ def test_p8_4_guardrail_is_an_emitted_gate_and_evaluator_is_not_and_graph_node_i
     for sid in (9, 10, 11, 14):
         assert "openinference.span.kind" not in by[sid].attrs, sid
     assert "traceloop.span.kind" not in by[15].attrs and (by[15].kind, by[15].operation) == ("agent", "workflow")
-    # Q2 (a): graph.node.id and graph.node.parent_id are neither lifted nor aliased; they survive in attrs.
+    # graph.node.id and graph.node.parent_id are neither lifted nor aliased; they survive in attrs.
     for sid, node, parent in ((2, "n2", "n1"), (3, "n3", "n1"), (4, "n4", "n1"), (6, "n6", "n5")):
         assert by[sid].attrs["graph.node.id"] == node and by[sid].attrs["graph.node.parent_id"] == parent, sid
     assert by[1].attrs["graph.node.id"] == "n1" and "graph.node.parent_id" not in by[1].attrs
@@ -756,7 +756,7 @@ def test_p8_16_operation_is_the_source_operation_name_stripped_and_lowercased_in
     from poisson_prove import trace as trace_module
 
     assert not hasattr(trace_module, "_ORIGINAL_OPERATION")
-    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # Q7 (a): survives
+    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # survives, as decided at the start
 
 
 # ---------- P8-17: the manifest's capture record ----------

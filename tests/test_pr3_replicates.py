@@ -645,7 +645,7 @@ def pr60_digests(store: Store, decl: Any) -> dict[str, str]:
     assert '"poisson_prove_version":' in json.dumps(payload) and '"proofload_version":' not in json.dumps(payload)
     return {
         "pairs": hashlib.sha256(frame.encode()).hexdigest(),
-        # PF0 (Q4): each arm's identity echoes the manifest's version under its new key; under the old
+        # PF0: each arm's identity echoes the manifest's version under its new key; under the old
         # key the assertion is the pre-amendment build's byte for byte.
         "assertion": hashlib.sha256(json.dumps(
             json.loads(json.dumps(payload).replace('"poisson_prove_version":', '"proofload_version":')), sort_keys=True,

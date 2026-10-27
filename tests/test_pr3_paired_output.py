@@ -145,7 +145,7 @@ PAIR_A, PAIR_B = lattice.RUN_A, lattice.RUN_B
 #: minted on ``6f40d92``'s ``src/`` (the heatmap is the value ``test_s29_viewer.py``
 #: pins; W20 takes its markdown and receipt through the builder, so those two are minted here,
 #: the same bytes on two runs). PR53's "the report the same build produces today".
-# PF3 (Q17): the pair's runs share a salt, so the default is now the paired
+# PF3: the pair's runs share a salt, so the default is now the paired
 # test; the E14 facts are the unpaired test's, named.
 E14_ARGV = ("report", PAIR_A, PAIR_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
 # Re-minted off the build at 173c25d: report.md and receipt.html print LS16's respelled Cells sentence ('MDE is the smallest detectable increase', no document number) and nothing else new; heatmap.svg is unchanged. Read through this test's own measurement on the built tree, not predicted.
@@ -163,7 +163,7 @@ JUDGEMENT_WORD = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
 #: ``test_s29_viewer.py``'s and ``test_fr_first_run.py``'s whole-file digest of ``report.py``.
 # Re-minted off the build at 173c25d: report.py carries LS's changes (the wrap, the complement, mde_unchanged, LS16's Cells sentence); phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted for A10 declared expectations, phase two, off the build at 662ceff: report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (A10 W8); PR-3's phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
+# PF0: no longer asserted. The rename changes report.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists.
 REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
 
@@ -994,7 +994,7 @@ def test_pr52_the_cli_phases_are_the_declared_sweeps(tmp_path: Path) -> None:
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4): the one field the rename changes in a rendered report, receipt or page
+    """PF0: the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
     drop any separate ``written by proofload`` entry. PF4 (PF4.20): no digest is taken of the
@@ -1212,7 +1212,7 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         assert event == lattice.EVENT, line
         printed, half = rendered_value(delta_pp)
         assert abs(printed - 100 * row.delta) <= half + 1e-9, line
-        # PF4 re-freeze (PF4.27, Q54): a 100% baseline now has a fall limit; a condition whose limit
+        # PF4 re-freeze (PF4.27): a 100% baseline now has a fall limit; a condition whose limit
         # is null (a direction with room that detects nothing) prints no number.
         if row.mde is None or np.isnan(row.mde):
             assert not re.search(r"\d", mde_pp), line
@@ -1249,7 +1249,7 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     assert drawn_sentence_problems(library["heatmap.svg"], "Worst-powered unchanged cell (", honesty) == []
 
 
-# PF0 (Q4): test_pr53_report_py_is_not_touched_by_phase_three removed. It pinned the bytes of src/poisson_prove/report.py, which the rename
+# PF0: test_pr53_report_py_is_not_touched_by_phase_three removed. It pinned the bytes of src/poisson_prove/report.py, which the rename
 # changes; no digest of a file this module changes can be frozen honestly before its build
 # exists.
 

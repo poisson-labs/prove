@@ -9,13 +9,13 @@ one root reading *rejected, p = 0.0033* beside the other's *not rejected, p = 0.
 refused on all four crossings by a source carrying the digest's interface, without refusing any
 tree grown beside its own diff (G2, G10, G11).
 
-**Twenty-two invariants, not twenty.** G1-G20 were specified in advance. G21 and G22 are Q5's
-lean (b), taken as written: a second clause in each renderer comparing ``tree.root.method`` and
+**Twenty-two invariants, not twenty.** G1-G20 were specified in advance. G21 and G22 are the knob
+clause, taken as written: a second clause in each renderer comparing ``tree.root.method`` and
 ``tree.root.q`` to the diff's, with its own nameable message, after the digest clause. Measured
 cost the spec did not list: ``test_s29_viewer.py``'s first W16 test rendered a ``mcnemar_bh`` tree
 beside a ``fisher_bh`` diff to show a same-events tree is accepted; the update re-grows that tree
 under a different ``seed`` instead, which keeps the clause's point (events and cells decide, knobs
-the digest ignores do not) and no longer pins the behaviour Q5 (b) removes.
+the digest ignores do not) and no longer pins the behaviour the knob clause removes.
 
 **The canonical form is the ``json.dumps`` one, and G17's reference is written from it.** The
 first published ``b1423bc1...`` / ``1ac9386b...`` were measured on a prototype, which
@@ -34,7 +34,7 @@ same), G14 (W20's partition and arithmetic pins, restated), G15 (``cli.py`` neve
 ``agreement``; the ``test_s27_leaves.py`` guard lists it from the update on), G18, G19 and G20
 (the exclusion record, sweep and whole-file ``diff.py`` digest, all facts of the update commit
 itself -- red on the freeze commit alone, green from the update commit on). The two-cell rule does
-not bind (Q10 (a)): one environment, one cell.
+not bind: one environment, one cell.
 
 **Fixture limits, stated rather than left to be rediscovered:**
 
@@ -52,7 +52,7 @@ not bind (Q10 (a)): one environment, one cell.
   can drift apart.
 
 **Mutants, measured over the whole suite on copies of the shadow shim** (the planned
-twelve plus 13 and 14 for Q5 (b); control 1866 passed with W20's whole-file ``tree.py`` clause the
+twelve plus 13 and 14 for the knob clause; control 1866 passed with W20's whole-file ``tree.py`` clause the
 one expected red, present in every row and not counted): 1 viewer digest clause deleted -> G10, G13;
 2 report digest clause deleted -> G11, G13; 3 ``_require_agreement`` stops raising -> G5, and S25's
 O13, S26's F30 and S27's L24, which already pinned that refusal -- the spec's "G5 alone" holds in
@@ -122,11 +122,11 @@ TOP_LEVEL_KEYS = (
 )
 #: G7. ``TreeResult``'s six fields in order and ``to_json()``'s six keys in the same order.
 TREE_RESULT_FIELDS = ("root", "grouping", "fault_lines", "leaves", "bound", "agreement")
-#: G16, G17. The tag inside the hashed payload; never a sibling key (Q9).
+#: G16, G17. The tag inside the hashed payload; never a sibling key.
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
-#: G17. The schema string the 0.0.1 builds hashed behind, before the PF0 freeze (Q4) renamed it.
+#: G17. The schema string the 0.0.1 builds hashed behind, before the PF0 freeze renamed it.
 OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
-# The PF0 freeze (Q4) kept the old fixture's 0.0.1 digests beside its renamed ones; they were never
+# The PF0 freeze kept the old fixture's 0.0.1 digests beside its renamed ones; they were never
 # asserted in this file (a dead digest) and went with that fixture. G17 now checks the old string's
 # digest differs from the new one's, from the reference. Lattice port, 2026-10-25.
 
@@ -185,7 +185,7 @@ PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REP
 #: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS update) -- a read and not a prediction.
 # Re-minted off the build at 173c25d: diff.py gains complementary_events and trade_line()'s complement branch; the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted for A10's declared expectations, off the build at 662ceff: diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (A10 W9; _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
+# PF0: no longer asserted. The rename changes diff.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists.
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 #: The one ``tests/`` file whose module-level ``*_PY_EXCLUDED`` constants this file inspects.
@@ -695,7 +695,7 @@ def test_g11_the_report_refuses_c16s_crossed_tree_with_comparison_mismatch(cross
 
 def test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_unchanged(crossed: dict[str, Grown], every_fixture: list[Grown]) -> None:
     """Sole catch for mutant 11 (the digest clause ahead of the multiset clause), and the reason the
-    digest is an addition rather than a replacement (Q4). The viewer's events, arity and
+    digest is an addition rather than a replacement. The viewer's events, arity and
     multiset clauses and the report's events and arity clauses each fire on the input that fired
     them before, with their vocabulary, and none of those refusals mentions the digest. The
     multiset input is A27's crossing, whose hashes are disjoint by construction."""
@@ -841,8 +841,8 @@ def test_g17_a_digest_is_not_a_config_hash_and_not_a_method_hash(crossed: dict[s
 
 def test_g18_every_exclusion_record_this_packet_mints_carries_adr_077s_fields_and_resolves() -> None:
     """Asserted over whatever ``*_PY_EXCLUDED`` constants exist in the one carrier, rather than by
-    name, so it holds under either answer to Q2: six fields plus the region's lines over
-    the file's lines at mint (Q2's lean (b)); owner ``A28``; ``retire_at`` empty (D5); every
+    name, so it holds whichever record shape was chosen: six fields plus the region's lines over
+    the file's lines at mint (the shape taken); owner ``A28``; ``retire_at`` empty (D5); every
     cover exists and every test id resolves through the resolver; every region resolves to exactly
     one node of the pinned file; regions on one file disjoint.
 
@@ -850,7 +850,7 @@ def test_g18_every_exclusion_record_this_packet_mints_carries_adr_077s_fields_an
     by the shadow shim's whole-suite control): the carrier now holds two records, and owner, mint
     and cover are asserted per record through ``RECORD_OWNERS`` -- A28's ``report.py::_check_tree``
     covered by this file, P-1's ``tree.py`` regions covered by ``tests/test_p1_payload.py`` -- and
-    ``lines`` may list one span per region (Q2 (b))."""
+    ``lines`` may list one span per region."""
     records = exclusion_constants(TESTS / EXCLUSION_CARRIER)
     assert records and set(records) <= set(PINNED_BY_CONSTANT), sorted(records)
     for constant, entries in records.items():
@@ -899,12 +899,12 @@ def test_g19_adr_077s_step_1_sweep_returns_exactly_test_s29_viewer_py_and_all_fo
         assert len(literals) == 1, (name, len(literals))
 
 
-# PF0 (Q4): test_g20_diff_py_sha256_is_the_whole_file_digest_again_in_all_four_carriers_and_diff_py_is_unchanged removed. It pinned the bytes of src/poisson_prove/diff.py, which the rename
+# PF0: test_g20_diff_py_sha256_is_the_whole_file_digest_again_in_all_four_carriers_and_diff_py_is_unchanged removed. It pinned the bytes of src/poisson_prove/diff.py, which the rename
 # changes; no digest of a file this module changes can be frozen honestly before its build
 # exists.
 
 
-# ---------- G21, G22: Q5 (b), the knob clause ----------
+# ---------- G21, G22: the knob clause ----------
 
 
 def test_g21_the_viewer_refuses_a_tree_grown_under_another_method_or_q_naming_both_values(synth_root: Path, crossed: dict[str, Grown]) -> None:

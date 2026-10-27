@@ -221,7 +221,7 @@ OMNIBUS_INFORMATIVE_LINE = re.compile(r"^  informative cells: (\d+) of (\d+); (\
 # columns to every cell and changes its limits and words, so the multi_diff test checks the facts
 # the digest guarded instead (LATTICE_DIRECTION_COUNTS and the per-cell references below).
 #: ``check before after --event tripped``: exit code, bare tree.
-# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
+# PF3: the lattice's runs share a salt, so the default is now the paired
 # test; check's gate here is the flat family's unpaired test, named.
 # PF4 (PF4.20): tripped has no kind, so the default --fail-on worse is refused; --fail-on
 # higher is the same gate on it (fail when the rate rose).
@@ -233,7 +233,7 @@ CHECK_EXIT = 0
 #: echoes the ``--store`` path as ``pair.store_root``, so the digest is of the parsed structure with
 #: that one value replaced by ``<store>`` and re-serialised with sorted keys; the raw bytes would
 #: pin the machine's absolute path.
-# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
+# PF3: the lattice's runs share a salt, so the default is now the paired
 # test; the structure digest is the unpaired test's, named.
 SERVE_ARGV = ("serve", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", lattice.Y, "--json", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
@@ -253,7 +253,7 @@ SERVE_ARGV = ("serve", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", 
 #: the same pair at ``events=(EVENT,)``, ``method="logrank_bh"``.
 #: The three digests S21's E14 pins, restated. Minted on the bare tree at b10a146 by ``report`` on
 #: the pair with one event and both axes.
-# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
+# PF3: the lattice's runs share a salt, so the default is now the paired
 # test; the E14 digests and the heatmap are the unpaired test's, named.
 E14_ARGV = ("report", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
@@ -776,7 +776,7 @@ def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[st
 
 
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
-    """PF0 (Q4): the rename moves one key of the page structure, the version, in both
+    """PF0: the rename moves one key of the page structure, the version, in both
     arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
     were written by 0.0.1. First assert the new key is there and the old one is not, then put both
     back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
@@ -1578,7 +1578,7 @@ def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | No
 
 
 def assert_the_limits_follow_the_rule(cell: Mapping[str, Any], row: Mapping[str, Any], level: float, method: str) -> None:
-    """PF4 re-freeze (PF4.22, PF4.23, PF4.27, Q54): the JSON carries the frame's limits;
+    """PF4 re-freeze (PF4.22, PF4.23, PF4.27): the JSON carries the frame's limits;
     a baseline with the event in every run has no rise (``no room``) and its fall is computed; ``mde``
     follows the ``mde`` rule, with a note when it is null, and a number is a positive grid value;
     under Fisher both limits are the stats file's reference at the lone-change level ``q / M``."""
@@ -1778,7 +1778,7 @@ def assert_lattice_page_carries_the_diff(structure: Mapping[str, Any], multi: An
         for key in ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta", "p", "q"):
             assert cell[key] == row[key], (cell["config_hash"], key)
         assert cell["verdict"] == cell["direction"] == row["direction"], cell["config_hash"]
-        # PF4 re-freeze (PF4.27, Q54): a 100% baseline's limit is its fall, and a null limit is
+        # PF4 re-freeze (PF4.27): a 100% baseline's limit is its fall, and a null limit is
         # null on the page with its note, as in the diff.
         assert is_null(cell["mde"]) == is_null(row["mde"]), cell["config_hash"]
         assert (is_null(row["mde"]) and cell["mde_note"]) or cell["mde"] == row["mde"], cell["config_hash"]
@@ -1819,7 +1819,7 @@ def test_o14_the_columns_and_the_coverage_carry_the_facts_their_old_digests_guar
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4): the one field the rename changes in a rendered report, receipt or page
+    """PF0: the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
     drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
@@ -2098,7 +2098,7 @@ def test_o18_the_other_branch_reads_not_rejected(synth_root: Path) -> None:
 def test_o18_the_second_line_and_the_informative_line_carry_the_fields(synth_root: Path) -> None:
     """Every number on the block is a field the test reads back."""
     _, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
-    # PF3 (Q17): the synthetic pair shares a salt, so the default is now the
+    # PF3: the synthetic pair shares a salt, so the default is now the
     # paired test (scheme pair_swap); the root here is the unpaired test's, named.
     code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, out
@@ -2140,7 +2140,7 @@ def test_o18_permutations_and_seed_reach_the_call_and_json_carries_to_json(synth
     same frames with the same knobs, after one JSON round trip."""
     multi, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=200, seed=3)
     # --json replaces --format json; the shared salt adds one note line.
-    # PF3 (Q17): the synthetic pair shares a salt, so the default is now the
+    # PF3: the synthetic pair shares a salt, so the default is now the
     # paired test (scheme pair_swap); the root here is the unpaired test's, named.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--json", "--permutations", "200", "--seed", "3", "--method", "fisher_bh"])
     assert code == 0 and without_notes(err) == "", (out, err)

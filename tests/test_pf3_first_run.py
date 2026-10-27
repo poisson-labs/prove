@@ -1,7 +1,8 @@
 """PF3, ``init`` and the first run: the frozen tests.
 
-Written from the invariants PF3.1 to PF3.8 (PF3.6b included), with the decisions on Q17 and its
-condition, Q18, Q19 and Q56 (the packaged example runs 194 replicates), and the two things PF2
+Written from the invariants PF3.1 to PF3.8 (PF3.6b included), with the decisions taken on
+them (among them: the paired test as the default when the runs share a salt, an ``init`` that asks
+nothing, and a packaged example that runs 194 replicates), and the two things PF2
 left to PF3: the bare ``sweep --resume`` that PF1's ``next:`` line names, and taking the spec out
 of the resume command. The build is written against this file and does not edit it.
 
@@ -64,7 +65,7 @@ sweep time uses the paired test unless told otherwise, saying which test it used
   spec: with a ``--target`` (and ``--replicates 50``) it plans.
 - (q) ``init`` gets what every verb gets: help naming each option and an
   example, ``--json`` (``poisson-prove.init/1``, ``next`` last), abbreviations refused, the tool's
-  own options after the verb, ``python -m`` the same; and it asks nothing (Q18: stderr empty).
+  own options after the verb, ``python -m`` the same; and it asks nothing (stderr empty).
 - (r) The manifest records the target run as ``environment.import_path`` (as today) and the
   replicates run as ``environment.sweep.replicates`` (the spec's record, which ``--replicates``
   overrides).
@@ -75,7 +76,7 @@ tested here, and the refusal without a spec leaves room for its ``next:`` line (
 file asks only that the plan name the target used (c). Opening the terminal app is PF6's.
 ``compare``'s result objects naming the method are PF5.4's. That the corrected power gate
 accepts 194 and refuses 193 is PF4.30's; PF3.8 is checked by running the offered command, so it
-holds under either gate. ``diff``'s verdict word is PF4's rule; PF3.4 reads ``trade`` (Q56).
+holds under either gate. ``diff``'s verdict word is PF4's rule; PF3.4 reads ``trade``.
 
 **Lanes.** The code suite. PF3.4 and PF3.5 each have one case marked ``slow`` (the wheel built
 and installed into a fresh environment with ``uv``, which needs ``uv`` and the dependencies in
@@ -453,7 +454,7 @@ def test_pf3_1_init_writes_one_spec_file_and_nothing_else_and_refuses_an_existin
         return
 
     assert r.code == 0, r.err
-    assert r.err == "", r.err  # Q18: init asks nothing
+    assert r.err == "", r.err  # init asks nothing
     assert first_word(r.out) == "ok"
     assert target.name in r.out.splitlines()[0], r.out
     assert listing(cwd, elsewhere, home) == sorted([*before, f"{target.parent.name}/{target.name}"])

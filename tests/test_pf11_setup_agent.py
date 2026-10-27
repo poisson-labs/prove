@@ -1,7 +1,7 @@
 """PF11, the setup agent: the frozen tests.
 
-Covers invariants PF11.1 to PF11.8, the shared setup-file format (format 1) and Q64
-(the skill goes to ``.agents/skills/poisson-prove-setup/`` and ``.claude/skills/poisson-prove-setup/``,
+Covers invariants PF11.1 to PF11.8, the shared setup-file format (format 1) and where
+the skill goes ( ``.agents/skills/poisson-prove-setup/`` and ``.claude/skills/poisson-prove-setup/``,
 the same bytes). The code is written against this file and does not edit it.
 
 What PF11 promises, in one line: ``poisson-prove init --agent`` writes a skill and a prompt that the
@@ -106,7 +106,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
 - (dd) ``init --agent`` in a repository that already holds ``prove_rollout.py`` and ``prove.toml``
   is not refused for them: only the four files it writes are its own.
 
-**Where the agents read skills (Q64), checked against each one's own documentation on
+**Where the agents read skills, checked against each one's own documentation on
 2026-10-24.**
 
 - Cursor, https://cursor.com/docs/context/skills: project skills in ``.agents/skills/`` and
@@ -124,7 +124,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
 refusal are PF3's (frozen on the PF3 freeze branch); the rows here that reuse them check only what
 PF11 adds. ``[declare]``'s kinds and their refusals are PF4.20's; the power gate and the design
 that cannot flag are PF4's (its re-freeze). The core's ``init_agent`` is PF5's and
-private (Q28), so it is reached only through the command. The README section and the rest of
+private, so it is reached only through the command. The README section and the rest of
 ``docs/setup-with-your-agent.md`` are PF7's; the plain-words pattern list is PF8's.
 
 **Lanes.** The code suite. One case is marked ``slow`` (the import that takes over 30 s). The
@@ -209,7 +209,7 @@ HEADINGS = [
 OPTIONAL_LAST_HEADING = "## Words Prove uses"
 OWN_RULES = "### Prove's own rules"
 
-#: Q64's locations and the agents verified to read each, with where and when (PF11.8).
+#: The skill's locations and the agents verified to read each, with where and when (PF11.8).
 LOCATIONS: dict[str, tuple[str, ...]] = {
     ".agents/skills/": ("Codex", "Cursor"),
     ".claude/skills/": ("Claude Code", "Cursor"),

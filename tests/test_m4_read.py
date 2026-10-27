@@ -768,7 +768,7 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     # A10 (W4): the manifest's top-level keys are the legacy golden's
     # twelve plus ``declared``, which is null for a sweep that declares nothing. Amended from
     # ``== set(golden_manifest)``; the golden comparison is kept. A23/A26 re-amends this line.
-    # PF0 (Q4): the version key is written as ``poisson_prove_version``; the golden, written by
+    # PF0: the version key is written as ``poisson_prove_version``; the golden, written by
     # 0.0.1, keeps ``proofload_version``.
     assert set(store.manifest("r1").to_dict()) == (set(golden_manifest) - {"proofload_version"}) | {"poisson_prove_version", "declared"}
 

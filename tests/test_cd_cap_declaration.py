@@ -139,7 +139,7 @@ HUGE_VALUE, HUGE_BYTES = "y" * 20000, 20000
 NONE_VALUE, NONE_BYTES = "n" * 200000, 200000
 
 #: CD12, as a rule over what ships: every sweep spec under ``examples/`` and the packaged one.
-#: PF8 (Q35): the pilot specs this named left the repository,
+#: PF8: the pilot specs this named left the repository,
 #: so the files are found, not listed; a ``.toml`` there with no ``target_id`` is not a sweep spec.
 SHIPPED_SWEEP_FILES = tuple(
     str(path.relative_to(REPO))
@@ -150,7 +150,7 @@ assert SHIPPED_SWEEP_FILES, "the packaged quickstart spec at least ships"
 
 #: D9: nothing downstream of the manifest is edited. Minted at the base commit ``1f5491b``.
 # Re-minted at 173c25d: viewer.py is the build's (_LAYOUT's inert rule, the summary key, SCHEMA /6 and both refusals, the page order, the holes block, the unverified tail); the whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# PF0 (Q4): no longer asserted. The rename changes viewer.py, and no digest of a file this module
+# PF0: no longer asserted. The rename changes viewer.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists.
 UNTOUCHED_FILE_SHA256 = {
     "viewer.py": "6ed29eb6e77244d7b9d41de3004d08d89cb25f8af9e3cdfd98ba8f0ac22918ba",
@@ -160,7 +160,7 @@ UNTOUCHED_FILE_SHA256 = {
 #: survive D3's ``"none"``, and this is the one region that moves.
 # Re-minted at 173c25d: report.py outside _observation_cap is the build's (the wrap, the complement, mde_unchanged, LS16's Cells sentence); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted at 662ceff (A10 declared expectations): report.py outside _observation_cap: report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (A10 W8); _observation_cap itself is byte-identical to the bare tree's, checked. Read through this test's own measurement on the built tree, not predicted.
-# PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
+# PF0: no longer asserted. The rename changes report.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists.
 REPORT_OUTSIDE_OBSERVATION_CAP_SHA256 = "2e35cd3468dd170503d4ad3d7ec9fe1846d6349b84a577fc6de5bb60b74e8724"
 #: CD11: ``split``'s envelope/bodies partition over the fixture below, at the base commit.
@@ -900,12 +900,12 @@ def test_cd9_a_run_that_declared_none_has_nothing_to_report_cut(tmp_path: Path) 
     assert [line for line in out.splitlines() if line.startswith("observation: cut")] == [], out[:3000]
 
 
-# PF0 (Q4): test_cd9_viewer_py_is_byte_untouched removed. It pinned the bytes of src/poisson_prove/viewer.py, which the rename
+# PF0: test_cd9_viewer_py_is_byte_untouched removed. It pinned the bytes of src/poisson_prove/viewer.py, which the rename
 # changes; no digest of a file this module changes can be frozen honestly before its build
 # exists.
 
 
-# PF0 (Q4): test_cd9_report_py_outside_the_observation_cap_echo_is_the_dispatch_commits removed. It pinned the bytes of src/poisson_prove/report.py outside one function, which the rename
+# PF0: test_cd9_report_py_outside_the_observation_cap_echo_is_the_dispatch_commits removed. It pinned the bytes of src/poisson_prove/report.py outside one function, which the rename
 # changes; no digest of a file this module changes can be frozen honestly before its build
 # exists.
 
@@ -1039,7 +1039,7 @@ def test_cd11_splits_classification_is_byte_identical_to_the_dispatch_commits() 
     envelope, bodies = split(split_fixture())
     assert sorted(envelope["spans"][0]["attrs"]) == ["app.at", "app.under", "poisson_prove.episode", "poisson_prove.run_id"]
     assert sorted(next(iter(bodies.values()))["attrs"]) == ["app.over", "app.wrapped", "gen_ai.input.messages"]
-    # PF0 (Q4): the trace schema string and the span key prefix are renamed; with the
+    # PF0: the trace schema string and the span key prefix are renamed; with the
     # two renames undone, the partition is the base commit's byte for byte.
     as_written = json.dumps([envelope, bodies], sort_keys=True)
     assert '"poisson-prove.trace/1"' in as_written and '"poisson_prove.' in as_written and "proofload" not in as_written
@@ -1065,7 +1065,7 @@ def test_cd12_every_shipped_sweep_file_declares_and_loads(relative: str) -> None
     """Sole catch for a build that ships an example its own parser rejects: every sweep spec the
     repository ships loads, and one with a ``[capture]`` table declares its cap as a number.
 
-    PF8 (Q35): the two example studies' files this read, and the three tests that pinned one
+    PF8: the two example studies' files this read, and the three tests that pinned one
     study's pre-registered cap, its config hashes and its comment, left with the pilots; the rule
     stays, over the files that ship."""
     spec = SweepSpec.load(REPO / relative)

@@ -762,7 +762,7 @@ def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> Non
 
 
 def test_i9_diff_markdown_summary_line(lattice_store: Store) -> None:
-    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--method", "fisher_bh"])
     assert r.code == 0, r.text
@@ -784,7 +784,7 @@ def test_i9_diff_markdown_summary_line(lattice_store: Store) -> None:
 
 
 def test_i9_diff_json(lattice_store: Store) -> None:
-    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--json", "--method", "fisher_bh"])  # --json replaces --format
     assert r.code == 0, r.text
@@ -889,7 +889,7 @@ def report_argv(out: Path, *extra: str) -> list[str]:
 
 def test_i11_report_writes_exactly_three_files(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report"
-    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     r = run_cli(report_argv(out, "--method", "fisher_bh"))
     assert r.code == 0, r.text
@@ -905,7 +905,7 @@ def test_i11_report_writes_exactly_three_files(lattice_store: Store, tmp_path: P
     verdict, _, rest = r.out.partition("\n\n")
     lines = verdict.splitlines()
     assert lines[0] == f"ok  wrote {out} ({len(REPORT_FILES)} files)", r.out
-    # PF12 (Q59): report saves the comparison it shows and says so on one
+    # PF12: report saves the comparison it shows and says so on one
     # detail line after its wrote lines, the id's first 12 hex.
     assert re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[-1]), r.out
     assert sorted(lines[1:-1]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
@@ -1010,7 +1010,7 @@ def test_i13_x_equal_to_y_exits_two(lattice_store: Store, tmp_path: Path) -> Non
 
 def test_i13_fix_parses_toml_scalars(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report-1d"
-    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; these counts are the unpaired test's, named.
     r = run_cli(
         [
@@ -1045,7 +1045,7 @@ def test_i13_fix_with_bad_toml_scalar_exits_two(lattice_store: Store, tmp_path: 
 
 
 def test_i14_check_fixture_passes(lattice_store: Store) -> None:
-    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
     # declare none; --fail-on higher is the same gate ("fail when the rate rose").
@@ -1421,7 +1421,7 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     assert tail, md
     assert int(tail.group(1)) == QUICKSTART_CELLS
     # P-1: the quickstart diffs under the default fisher_bh, and the token states the request.
-    # PF3 (Q17): the second sweep is --pair-with the first, so the two
+    # PF3: the second sweep is --pair-with the first, so the two
     # share a salt and the default is now mcnemar_bh; the token states that request.
     assert tail.group(2) == "paired"
     assert "mcnemar_bh" in md, md

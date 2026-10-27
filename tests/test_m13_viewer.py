@@ -959,7 +959,7 @@ def lattice_serve_json(lattice_store: Store) -> Result:
     """``serve --json`` on the lattice pair, both events, with ``serve_page`` tripwired."""
     with pytest.MonkeyPatch.context() as mp:
         tripwire_serve(mp)
-        # PF3 (Q17): the lattice's runs share a salt, so the default is now the
+        # PF3: the lattice's runs share a salt, so the default is now the
         # paired test; V22 and V33 compare with the unpaired test's numbers, named.
         return run_cli(lattice_full_argv("--method", "fisher_bh", "--json"))
 
@@ -968,7 +968,7 @@ def lattice_serve_json(lattice_store: Store) -> Result:
 def lattice_serve_json_one_event(lattice_store: Store) -> Result:
     with pytest.MonkeyPatch.context() as mp:
         tripwire_serve(mp)
-        # PF3 (Q17): V22 compares with diff's unpaired numbers, named.
+        # PF3: V22 compares with diff's unpaired numbers, named.
         return run_cli(lattice_argv("--event", lattice.EVENT, "--x", LATTICE_X, "--y", LATTICE_Y, "--title", LATTICE_TITLE, "--method", "fisher_bh", "--json"))
 
 
@@ -1182,7 +1182,7 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(lattic
     assert statuses == [200, 200, 200] and missed == 404
     assert dropped is None or dropped.status >= 500, dropped
     # PF2: the first stdout line is serve's verdict line, which names both runs
-    # and carries the URL; PF12 (Q59): then the one line naming what it saved.
+    # and carries the URL; PF12: then the one line naming what it saved.
     lines = run.out.getvalue().splitlines()
     assert lines[0] == serving_line(run.server.server_address[1]) and len(lines) == 2, run.out.getvalue()
     assert re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]), run.out.getvalue()
@@ -1194,14 +1194,14 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(lattic
 def test_v12_assembling_rendering_and_serving_touch_no_file(lattice_built: Built, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
-    # PF2 (Q11): report's default folder is named by the runs' names now; both
+    # PF2: report's default folder is named by the runs' names now; both
     # the folder named by ids and the one named by names must stay absent.
     def slugged(name: str) -> str:
         return name.lower().replace(" ", "-").replace("/", "-")
 
     default_dir = tmp_path / f"prove-report-{LATTICE_A}-vs-{LATTICE_B}"
     named_dir = tmp_path / f"prove-report-{slugged(LATTICE_NAME_A)}-vs-{slugged(LATTICE_NAME_B)}"
-    # PF12 (Q59): serve saves the comparison it shows under the store's
+    # PF12: serve saves the comparison it shows under the store's
     # ``.poisson/``; nothing else in the store, and nothing in the working folder, is touched.
     def store_files() -> dict[str, int]:
         return {k: v for k, v in tree_snapshot(LATTICE_ROOT).items() if not k.startswith(".poisson")}
@@ -1858,7 +1858,7 @@ def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(la
         assert isinstance(run.server, socketserver.BaseServer)
         assert run.out_at_bind == ""
         # PF2: the URL line is now serve's verdict line naming both runs;
-        # PF12 (Q59): the line naming the saved comparison follows it.
+        # PF12: the line naming the saved comparison follows it.
         lines = run.out.getvalue().splitlines()
         assert lines[0] == serving_line(port) and len(lines) == 2 and re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]), lines
         assert get(run.server, "/").status == 200
@@ -1893,7 +1893,7 @@ def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_trace
     lines = r.out.splitlines()
     # PF2: the URL line is now serve's verdict line naming both runs.
     assert holder and lines[0] == serving_line(holder[0].server_address[1]), r.out
-    # PF12 (Q59): the saved comparison's line comes between the two, and once serve
+    # PF12: the saved comparison's line comes between the two, and once serve
     # has saved, its stopped line no longer says nothing was written.
     assert len(lines) == 3 and re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]) and lines[2].startswith("stopped  interrupted"), r.out
     assert "nothing was written" not in lines[2], r.out

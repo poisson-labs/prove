@@ -286,13 +286,13 @@ EVENT_COLLISION_LINE = 1318
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
 # Re-minted off the build at 173c25d: diff.py gains complementary_events and trade_line()'s complement branch; the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # Re-minted for A10's declared expectations, off the build at 662ceff: diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (_pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
+# PF0: no longer asserted. The rename changes diff.py, and no digest of a file this module
 # changes can be frozen honestly before its build exists.
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 # PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): MULTI_JSON_SHA256 is no longer asserted. PF4 adds
 # columns to every cell and changes its limits and words, so the multi_diff test checks the facts
 # the digest guarded instead (LATTICE_DIRECTION_COUNTS and the lattice's references below).
-# PF3 (Q17): the lattice's runs share a salt, so the default is the
+# PF3: the lattice's runs share a salt, so the default is the
 # paired test; check's gate here is the flat family's unpaired test, named.
 # PF4 (PF4.20): the lattice's tripped has no kind, so the default --fail-on worse is refused;
 # --fail-on higher is the same gate on it (fail when the rate rose).
@@ -300,7 +300,7 @@ CHECK_ARGV = ("check", LATTICE_A, LATTICE_B, "--event", EVENT, "--method", "fish
 # CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
 # checks the facts the digest guarded instead.
 CHECK_EXIT = 0
-# PF3 (Q17): the structure's facts are the unpaired test's, named.
+# PF3: the structure's facts are the unpaired test's, named.
 SERVE_ARGV = ("serve", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--json", "--method", "fisher_bh")
 # PF4 (PF4.3, PF4.11, PF4.17, PF4.20): SERVE_STRUCTURE_SHA256 is no longer asserted; the serve
 # test checks the facts the digest guarded instead.
@@ -309,7 +309,7 @@ SERVE_ARGV = ("serve", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", 
 #: lattice each is replaced by the facts it guarded, checked against ``lattice.fisher`` /
 #: ``lattice.logrank`` / ``lattice.bh`` and the design, in the forms they hashed
 #: (``test_l20_the_s24_columns_and_the_coverage_are_the_references`` below).
-# PF3 (Q17): the E14 facts and the heatmap are the unpaired test's, named.
+# PF3: the E14 facts and the heatmap are the unpaired test's, named.
 E14_ARGV = ("report", LATTICE_A, LATTICE_B, "--event", EVENT, "--x", X, "--y", Y, "--method", "fisher_bh")
 #: PF4: what the multi, E14 and serve checks hold the lattice's ``tripped`` to, per method:
 #: ``(lower, higher)``, the literal each reference gives (``lattice.directions`` over
@@ -347,14 +347,14 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # Re-minted for A10's declared expectations (last): only ``test_s26_fault_lines.py`` moved, by this
 # re-mint of its ``DIFF_PY_SHA256`` (off the build at 662ceff) and the dated note above it; ``test_s25_root.py`` is untouched.
 # Read off the file as it stands after every other re-mint, not predicted. Nothing pins this file, so the cascade ends here.
-# Re-minted by the PF0 freeze: both files as its freeze commit moved them (the rename, Q4, and the
+# Re-minted by the PF0 freeze: both files as its freeze commit moved them (the rename, and the
 # version field put back before their fixture digests). Read off the two files after every other move.
 # Re-minted for the command line's new look: both files
 # moved their CLI assertions. Read off the two files after every other move, not predicted.
 # Re-minted again for run names: both files moved their
 # serve --json digests to compare with the names put back to ids. Read off the two files after
 # every other move, not predicted.
-# Re-minted again for the paired default (Q17): both files name
+# Re-minted again for the paired default: both files name
 # --method fisher_bh on their fixture commands and drop method and method_chosen from serve --json.
 # Read off the two files after every other move, not predicted.
 # PF4: re-minted after PF4's moves of both files (their fixture multi, E14, check and serve tests, O9's
@@ -366,11 +366,11 @@ TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 # a package); test_s26_fault_lines.py is untouched. Read off the file after every other move.
 # Re-minted when both files moved off the committed study fixture onto the generated lattice pair
 # (tests/lattice.py). Read off the two files after every other move.
-# Re-minted again for the public release (Q37): test_s26_fault_lines.py no
+# Re-minted again for the public release: test_s26_fault_lines.py no
 # longer pins an internal phase in a refusal's detail. Read off the two files after every other move, not
 # predicted. The re-minted serve --json digests of both files were unwound when the committed study fixture
 # left the tests; the generated fixture that replaces it comes with main.
-# Re-minted again for the public release (Q38): a pass that changes only words edits the docstrings and comments of frozen test
+# Re-minted again for the public release: a pass that changes only words edits the docstrings and comments of frozen test
 # files, so the pin is over each file's code with those taken out (``conftest.code_of``) and still moves the moment
 # an assertion does. Read off the two files after every other move, not predicted.
 FROZEN_ORACLE_SHA256 = {
@@ -1152,7 +1152,7 @@ def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[st
 
 
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
-    """PF0 (Q4): the rename moves one key of the page structure, the version, in both
+    """PF0: the rename moves one key of the page structure, the version, in both
     arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
     were written by 0.0.1. First assert the new key is there and the old one is not, then put both
     back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
@@ -1729,7 +1729,7 @@ CLI_PAIRS = (("axes-a", "axes-b", ("fail",)), ("same-a", "same-b", ("fail",)), (
 def cli_pair(synth_root: Path, a: str, b: str, events: Sequence[str], *extra: str, **knobs: Any) -> tuple[Any, Any, str]:
     """The stored pair through ``main()`` beside the same tree built here with the CLI's knobs."""
     multi, result = store_tree(synth_root, a, b, events=events, method="fisher_bh", **{"n_permutations": GOLDEN_PERMUTATIONS, "seed": GOLDEN_SEED, **knobs})
-    # PF3 (Q17): the synthetic pairs share a salt, so the default is now the
+    # PF3: the synthetic pairs share a salt, so the default is now the
     # paired test; the tree built beside the CLI is the unpaired test's, so the CLI names it.
     argv = ["--store", str(synth_root), "diff", a, b, "--method", "fisher_bh"]
     for event in events:
@@ -2013,7 +2013,7 @@ def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | No
 
 
 def assert_the_limits_follow_the_rule(cell: Mapping[str, Any], row: Mapping[str, Any], level: float, method: str) -> None:
-    """PF4 re-freeze (PF4.22, PF4.23, PF4.27, Q54): the JSON carries the frame's limits;
+    """PF4 re-freeze (PF4.22, PF4.23, PF4.27): the JSON carries the frame's limits;
     a baseline with the event in every run has no rise (``no room``) and its fall is computed; ``mde``
     follows the ``mde`` rule (``reference_mde``), with a note when it is null, and a number is a positive grid value;
     under Fisher both limits are the stats file's reference at the lone-change level ``q / M``."""
@@ -2218,7 +2218,7 @@ def assert_lattice_page_carries_the_diff(structure: Mapping[str, Any], multi: An
         for key in ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta", "p", "q"):
             assert cell[key] == row[key], (cell["config_hash"], key)
         assert cell["verdict"] == cell["direction"] == row["direction"], cell["config_hash"]
-        # PF4 re-freeze (PF4.27, Q54): a 100% baseline's limit is its fall, and a null limit is
+        # PF4 re-freeze (PF4.27): a 100% baseline's limit is its fall, and a null limit is
         # null on the page with its note, as in the diff.
         assert is_null(cell["mde"]) == is_null(row["mde"]), cell["config_hash"]
         assert (is_null(row["mde"]) and cell["mde_note"]) or cell["mde"] == row["mde"], cell["config_hash"]
@@ -2304,7 +2304,7 @@ def test_l20_the_s24_columns_and_the_coverage_are_the_references(lattice_trees: 
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4): the one field the rename changes in a rendered report, receipt or page
+    """PF0: the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
     drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
@@ -2479,7 +2479,7 @@ def test_l20_omnibus_on_the_lattice_minus_the_p_driven_keys_is_the_payload_writt
 def test_l20_diff_py_and_the_two_frozen_oracles_are_byte_untouched() -> None:
     """The two frozen files' code, comments and docstrings aside, is unchanged: checked as
     digests, which a copy without ``.git`` can check. ``diff.py``'s digest is no longer asserted."""
-    # PF0 (Q4): the diff.py digest is no longer asserted; the rename changes diff.py.
+    # PF0: the diff.py digest is no longer asserted; the rename changes diff.py.
     for relative, digest in FROZEN_ORACLE_SHA256.items():
         assert hashlib.sha256(code_of((REPO / relative).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() == digest, relative
 
@@ -2601,7 +2601,7 @@ def test_l20_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_a
     ``101028c``: **0** files against twelve ``_PY_SHA256`` lines over six clauses in four files;
     **four** after A27, every carrier of ``DIFF_PY_SHA256``. Asserting the file list here is what
     makes a fifth exclusion, minted anywhere in ``tests/`` without a re-freeze behind it,
-    fail rather than accumulate -- Q1's named failure mode is exclusions piling up unretired.
+    fail rather than accumulate -- the failure mode it guards against is exclusions piling up unretired.
     A27's own retirement sweep discharges empty: nothing carried an exclusion at ``101028c``, so
     there was no orphan to file.
 

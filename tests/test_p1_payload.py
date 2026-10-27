@@ -5,12 +5,12 @@ statement and ``render_html``'s intervals refusal exist, against ``a626cd3`` -- 
 build, the commit the measurements were taken on.
 
 **The decisions this file is built to:** D1-D6 are settled and
-not reopened. Q1 (a): seed identity is the salt plus the stored seed on every matched row,
+not reopened. Seed identity is the salt plus the stored seed on every matched row,
 and A23/A26's two manifest fields join the same predicate later; Y1-Y6 are written against the pairing
-rule as it stands. Q2 (a): ``check`` prints no permutation p, and Y17's last clause asserts
-it prints none. Q3 (a): ``RootResult.p_floor`` is a design constant of the permutation
-count, not a statistic; Y21 guards the reading. Q4 lean: the page's interval paragraph sits before
-the bound. Q5 lean: the column is last, after ``MDE``. Q6 lean: no drill-down row.
+rule as it stands. ``check`` prints no permutation p, and Y17's last clause asserts
+it prints none. ``RootResult.p_floor`` is a design constant of the permutation
+count, not a statistic; Y21 guards the reading. Leaning, not settled: the page's interval
+paragraph sits before the bound, the column is last, after ``MDE``, and there is no drill-down row.
 
 **Two cells, and no invariant is cell-specific -- a result, not an assumption** (D7 binds one
 cell; this file reports two because both were asked for). pandas 2.3.3 and pandas 3.0.5, A22's recipe: every test here is asserted in both
@@ -709,7 +709,7 @@ def lattice_cli(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     out_dir = tmp_path_factory.mktemp("p1-lattice-cli") / "report"
     base = ["--store", str(LATTICE_ROOT)]
     knobs = ["--permutations", "300", "--seed", "0"]
-    # PF3 (Q17): the lattice's runs share a salt, so the default is now the
+    # PF3: the lattice's runs share a salt, so the default is now the
     # paired test; every number this file pins on the CLI is the unpaired test's, named.
     fisher = ["--method", "fisher_bh"]
     results: dict[str, Any] = {}
@@ -1309,7 +1309,7 @@ def test_y16_on_the_lattice_at_the_default_b_p_omnibus_equals_p_floor_exactly(la
 
 
 def test_y17_the_floor_line_follows_the_method_line_and_the_group_floor_line_follows_the_null_line_iff_tested_and_check_prints_none(lattice_built: Built, lattice_cli: dict[str, Any], same: Built) -> None:
-    """Mutant 16, and Q2 (a): ``check`` prints no ``p =``, no ``p floor`` and no
+    """Mutant 16, and ``check`` printing no permutation p: no ``p =``, no ``p floor`` and no
     ``not a measurement``."""
     root_lattice = lattice_built.tree.root
     cli_root = lattice_cli["serve json"]["tree"]["root"]
@@ -1377,7 +1377,7 @@ def test_y19_the_schema_is_viewpair_4_no_source_names_viewpair_3_and_the_schema_
     # PF5: the core is a package now, so the grep reads src/ recursively.
     hits = sorted(path.name for path in SRC.rglob("*.py") if any(r in path.read_text(encoding="utf-8") for r in retired))
     assert hits == [], hits
-    # PF8 (Q37): the comment above ``SCHEMA`` named the two changes
+    # PF8: the comment above ``SCHEMA`` named the two changes
     # that moved it; the plain-words pass rewrites every comment in src/ to say why in plain words, so
     # what a comment says is no longer pinned. The schema and the retired versions above still are.
 
@@ -1400,7 +1400,7 @@ def test_y20_the_unverified_ids_and_the_seed_identity_basis_statement_are_the_li
 
 def test_y21_no_new_statistic_no_second_honesty_block_and_p_floor_is_assigned_at_one_site_inside_root(lattice_built: Built, lattice_cli: dict[str, Any], k2: Built, same: Built) -> None:
     """The honesty and closure clauses are green before and after by design; the assignment-site
-    clause is the guard on Q3 (a)'s reading."""
+    clause is the guard on reading ``p_floor`` as a design constant, not a statistic."""
     # PF4 re-freeze (PF4.22, PF4.27): the honesty's limits are the exact limits at q / M, both
     # directions, so a626cd3's numbers (and the conditions that attain them) move, and a condition
     # with no limit is named with its reason instead of a number. The literals give way to the facts
@@ -1443,7 +1443,7 @@ def test_y22_serve_and_serve_json_on_the_lattice_write_nothing_to_the_store_the_
     assert code == 0 and calls == [] and out.startswith('{\n  "schema": '), err
     code, out, err, calls = quiet(lambda: run_serve(argv))
     assert calls == ["serve_page"] and out == "", (code, out[:80])
-    # PF12 (Q59): serve saves the comparison it shows under the store's
+    # PF12: serve saves the comparison it shows under the store's
     # ``.poisson/``; nothing else in the store, the working folder or the temp folder is written.
     def stored(listing: dict[str, str]) -> dict[str, str]:
         return {k: v for k, v in listing.items() if not k.startswith(".poisson")}

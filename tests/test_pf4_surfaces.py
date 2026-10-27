@@ -70,7 +70,7 @@ from conftest import writable_copy
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 TESTS = Path(__file__).resolve().parent
-# PF12 (Q59): report and serve save into the store they read, so these tests read a
+# PF12: report and serve save into the store they read, so these tests read a
 # per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
 OLD = writable_copy(TESTS / "fixtures" / "stores-0.0.1")
 OLD_RUNS: dict[str, str] = json.loads((OLD / "runs.json").read_text(encoding="utf-8"))
@@ -680,7 +680,7 @@ def test_pf4_30_the_quickstarts_design_passes_the_gate_at_194_and_is_refused_at_
     """The packaged quickstart's design, its two failures declared (9 conditions by 2 events, 18 rows),
     at the default 0.20: Fisher's worst base rate 0.4 with a limit of 0.1991 at 194 (E21, E22); 100 is
     refused with the 194 that passes both tests offered first. (Fisher alone passes from fewer: the
-    quickstart's 194 is the paired test's, Q56.)"""
+    quickstart's 194 is the paired test's.)"""
     from conftest import PACKAGED_QUICKSTART
 
     spec = tmp_path / "prove.toml"
@@ -1191,7 +1191,7 @@ def test_pf4_22_every_surface_gives_the_same_limits_as_the_one_family(standard: 
 
 
 def test_pf4_27_a_null_limit_prints_its_reason_and_no_number(standard: Path, tmp_path: Path) -> None:
-    """Amends PF4.15 (Q54 = yes): the condition at 40 of 40 has no rise ('no room') and a fall, which is
+    """Amends PF4.15: the condition at 40 of 40 has no rise ('no room') and a fall, which is
     its limit; at 38 of 40 a rise has room and none is detectable, so its one number is null."""
     doc = _json(_cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
     cells = _cells_of(doc)

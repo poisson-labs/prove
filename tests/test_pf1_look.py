@@ -1,7 +1,7 @@
 """PF1, the look and the errors (plain): the frozen tests.
 
-Written for invariants PF1.1 to PF1.15, with the answers to Q21, Q23, Q24 and Q47 and the four
-decisions listed below. The build is written against this file and does not edit it.
+Written for invariants PF1.1 to PF1.15, with the design answers settled before the freeze and
+the four decisions listed below. The build is written against this file and does not edit it.
 
 What PF1 promises, in one line: every verb behaves as the lab's other tools do. Exit codes mean
 one thing each (0 done, 1 refused, 2 a wrong command line, 3 stopped or failed after work started,

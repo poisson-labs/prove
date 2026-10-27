@@ -102,7 +102,7 @@ assert LATTICE_ROWS == lattice.ROWS
 
 # E14: the three digests were minted on the bare tree at b10a146 (2026-09-06) on the fixture pair of
 # the time; E14 now reads the facts they guarded off the lattice pair.
-# PF3 (Q17): the lattice's runs share a salt, so the default is now the
+# PF3: the lattice's runs share a salt, so the default is now the
 # paired test; the E14 facts and the heatmap are the unpaired test's, named.
 E14_ARGV = ("report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
 # PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests (report.md, heatmap.svg, receipt.html) are no longer
@@ -1184,7 +1184,7 @@ def lattice_serve_json(lattice_pair: Built) -> Served:
 
 @pytest.fixture(scope="module")
 def syn_serve_json(syn: Built) -> Served:
-    # PF3 (Q17): the synthetic pair's manifests carry one salt, so the
+    # PF3: the synthetic pair's manifests carry one salt, so the
     # default is now the paired test; the structure E24 compares with is the unpaired test's, named.
     return serve_json(serve_argv(syn, "--title", "syn", "--json", "--method", "fisher_bh"))
 
@@ -1491,7 +1491,7 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     body = after_verdict_block(r.out, names[SYN_A], names[SYN_B])
     head = "".join(body.splitlines(keepends=True)[: md_n + 1 + block_n])
     assert rendered_problems(shortened(md + "\n" + block), head, "diff.md") == [], r.out
-    # PF3 (Q17): the synthetic pair's manifests carry one salt, so the
+    # PF3: the synthetic pair's manifests carry one salt, so the
     # default is now the paired test; the markdown --methods all prints first is the unpaired test's, named.
     every = run_cli(diff_argv(syn_root, "--methods", "all", "--method", "fisher_bh"))
     assert every.code == 0, every.text
@@ -1561,7 +1561,7 @@ def test_e13_a_result_without_coverage_and_a_single_event_report_leave_hole_caus
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4): the one field the rename changes in a rendered report, receipt or page
+    """PF0: the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
     drop any separate ``written by proofload`` entry, so the frozen digest still guards every other

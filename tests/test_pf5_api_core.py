@@ -12,7 +12,7 @@ What PF5 promises, in one line: one core under every face. The plain commands, `
 rendered report and the page, and later the terminal app, the static UI and a local server, all show
 what the core returned, and the public ``compare`` and ``stats`` give a Python user the same numbers.
 
-**The core's operations this file reaches** (``poisson_prove.core``, private under Q28):
+**The core's operations this file reaches** (``poisson_prove.core``, private):
 
 | area | operation | returns |
 |---|---|---|
@@ -1038,8 +1038,8 @@ def _compare_cases(store: Path) -> dict[str, tuple[list[str], Callable[[], Any]]
 @pytest.mark.parametrize("case", ["diff default", "diff named", "diff log-rank", "check", "check any"])
 def test_pf5_4_compare_diff_and_check_return_what_the_json_prints(case: str, quickstart: Path) -> None:
     """PF5.4: ``compare.diff`` and ``compare.check`` on the pair the command line compared return the
-    document its ``--json`` prints, with the method and whether it was the default (Q17's
-    condition); the store as a path, a string or a ``Store``."""
+    document its ``--json`` prints, with the method and whether it was the default
+    (``method_chosen``, ``named`` or ``default``); the store as a path, a string or a ``Store``."""
     from poisson_prove import compare
 
     store = quickstart / "prove-runs"

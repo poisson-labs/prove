@@ -353,7 +353,7 @@ def test_u16_a_cli_diff_warns_and_the_artifact_is_unchanged_by_it(tmp_path: Path
     store = Store(tmp_path)
     write_run(store, "run-a", SALT, fails=2)
     write_run(store, "run-b", SALT, fails=4)
-    # PF3 (Q17): the pair shares a salt, so the default is now the paired
+    # PF3: the pair shares a salt, so the default is now the paired
     # test, which raises no warning; the warning this pins is the unpaired test's, named.
     argv = ["--store", str(tmp_path), "diff", "run-a", "run-b", "--event", "fail", "--method", "fisher_bh"]
     box: list[Result] = []

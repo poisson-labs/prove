@@ -603,7 +603,7 @@ def test_z9_report_serve_and_inspect_leave_every_stored_byte_and_mtime_where_the
         surfaces(corpus, *pair, tmp_path / "-".join(pair))
     for run in ("cut-a", "own"):
         assert run_cli(["--store", str(corpus), "inspect", run, "--event", "fail"])[0] == 0
-    # PF12 (Q59): report and serve save the comparison they show, under
+    # PF12: report and serve save the comparison they show, under
     # ``.poisson/``; every stored byte and mtime outside it stays where it was.
     def outside(listing: dict[str, tuple[str, int]]) -> dict[str, tuple[str, int]]:
         return {k: v for k, v in listing.items() if not k.startswith(".poisson")}

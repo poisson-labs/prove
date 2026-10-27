@@ -552,7 +552,7 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
         argv += ["--y", y]
     for k, v in fixed.items():
         argv += ["--fix", f"{k}={json.dumps(v)}"]
-    # PF3 (Q17): with no --method the default is now the paired test
+    # PF3: with no --method the default is now the paired test
     # for runs that share a salt (the lattice among them); every pair here is compared with the library's
     # multi_diff under ``method``, so the method is always named.
     argv += ["--method", method]
@@ -1551,7 +1551,7 @@ def normalised_region(page: str, heading: str) -> str:
 
 
 def page_as_0_0_1_wrote_it(page: str) -> str:
-    """PF0 (Q4): the rename changes three things on a page: the version entry of the
+    """PF0: the rename changes three things on a page: the version entry of the
     provenance list, the version key in the arm table, and the ids of the page's two data blocks,
     which named the old product. First assert each is there as the rename writes it (the data
     blocks are ``prove-cells`` and ``prove-holes``), then put each back as 0.0.1
@@ -1668,7 +1668,7 @@ def test_ls2_the_same_wrap_reaches_the_reports_figure_and_the_receipt(tmp_path: 
     """``report`` draws the figure with the same builders: its ``heatmap.svg`` and the receipt's
     inline figure carry the wrapped caption on the two-event lattice pair."""
     out = tmp_path / "rep"
-    # PF3 (Q17): the lattice's runs share a salt, so the default is now the
+    # PF3: the lattice's runs share a salt, so the default is now the
     # paired test; LATTICE_COMPLEMENT_LINE's 22 is the unpaired test's, named.
     code, _, err = run_cli(["--store", str(LATTICE_ROOT), "report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--event", lattice.OTHER, "--x", lattice.Y, "--y", lattice.X, "--method", "fisher_bh", "--out", str(out)])
     assert code == 0, err[-400:]
