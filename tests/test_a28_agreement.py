@@ -1,15 +1,15 @@
-"""A28 frozen tests: invariants G1-G22 of the A28 M14 agreement-digest spec section 4,
+"""A28 frozen tests: invariants G1-G22 of M14's agreement digest,
 written before ``tree.agreement_digest``, ``TreeResult.agreement`` and the two renderers' digest
-clauses exist, against ``03d7ed2`` (A24's build; ``src/proofload/{tree,report,viewer,diff}.py``
-are byte-identical to the spec's ``38e8df9``, measured).
+clauses exist, against ``03d7ed2`` (A24's build; ``src/poisson_prove/{tree,report,viewer,diff}.py``
+are byte-identical to ``38e8df9``, measured).
 
 **What closes.** C16: two 5-cell pairs over ``('fail', 'crash')`` with the same salt and the same
 five configs, different outcome mixes, crossed, are accepted by both renderers at ``03d7ed2`` --
 one root reading *rejected, p = 0.0033* beside the other's *not rejected, p = 0.90* -- and are
-refused on all four crossings by a source carrying section 2's interface, without refusing any
+refused on all four crossings by a source carrying the digest's interface, without refusing any
 tree grown beside its own diff (G2, G10, G11).
 
-**Twenty-two invariants, not twenty.** G1-G20 are the spec's. G21 and G22 are section 10 Q5's
+**Twenty-two invariants, not twenty.** G1-G20 were specified in advance. G21 and G22 are Q5's
 lean (b), taken as written: a second clause in each renderer comparing ``tree.root.method`` and
 ``tree.root.q`` to the diff's, with its own nameable message, after the digest clause. Measured
 cost the spec did not list: ``test_s29_viewer.py``'s first W16 test rendered a ``mcnemar_bh`` tree
@@ -17,15 +17,14 @@ beside a ``fisher_bh`` diff to show a same-events tree is accepted; the update r
 under a different ``seed`` instead, which keeps the clause's point (events and cells decide, knobs
 the digest ignores do not) and no longer pins the behaviour Q5 (b) removes.
 
-**The canonical form is section 3.2's, and G17's reference is written from it.** The
-spec's own ``b1423bc1...`` / ``1ac9386b...`` were measured on the spec session's prototype, which
+**The canonical form is the ``json.dumps`` one, and G17's reference is written from it.** The
+first published ``b1423bc1...`` / ``1ac9386b...`` were measured on a prototype, which
 joined rows with ``\\x1f`` and newlines rather than ``json.dumps`` -- measured here by re-running
-that form: it reproduces the spec's values, and section 3.2's form does not. G17 recomputes the
+that form: it reproduces those values, and the ``json.dumps`` form does not. G17 recomputes the
 JSON form's digest in this file from the generated lattice pair's design counts
 (``lattice.counts``), at K = 1 and K = 2, and requires both methods to carry it.
 
-**The freeze commit is red here by construction** (the project's standing rule
-12). On the update commit, before any source edit, the red set in this file is **fifteen**:
+**The freeze commit is red here by construction.** On the update commit, before any source edit, the red set in this file is **fifteen**:
 G1-G5, G7-G11, G13, G16, G17, G21 and G22. Every one reaches ``agreement_digest``,
 ``.agreement``, ``/4`` or a refusal that does not exist yet, inside a test body, so
 ``--collect-only`` is exact on the bare tree. **Green before and after, named so their green is
@@ -33,11 +32,11 @@ not read as evidence:** G6 (``omnibus`` and ``RootResult`` do not move), G12 (th
 refusals and their messages -- a preservation clause, and the sole catch for mutant 11 all the
 same), G14 (W20's partition and arithmetic pins, restated), G15 (``cli.py`` never mentions
 ``agreement``; the ``test_s27_leaves.py`` guard lists it from the update on), G18, G19 and G20
-(ADR-077's record, sweep and whole-file ``diff.py`` digest, all facts of the update commit
-itself -- red on the freeze commit alone, green from the update commit on). Rule 15 does not
-bind (section 10 Q10 (a)): one environment, one cell.
+(the exclusion record, sweep and whole-file ``diff.py`` digest, all facts of the update commit
+itself -- red on the freeze commit alone, green from the update commit on). The two-cell rule does
+not bind (Q10 (a)): one environment, one cell.
 
-**Fixture limits, stated rather than left to be rediscovered** (spec section 6):
+**Fixture limits, stated rather than left to be rediscovered:**
 
 - **The lattice pair** (``tests/lattice.py``) is one pair and cannot be crossed with anything; it
   guards G2, G6, G17's method half and every round trip, and nothing about C16.
@@ -52,7 +51,7 @@ bind (section 10 Q10 (a)): one environment, one cell.
 - **A ``mcnemar_bh`` lattice pair** shows the digest is scheme-blind, not how far ``units`` and ``cells``
   can drift apart.
 
-**Mutants, measured over the whole suite on copies of the shadow shim** (spec section 7.4's
+**Mutants, measured over the whole suite on copies of the shadow shim** (the planned
 twelve plus 13 and 14 for Q5 (b); control 1866 passed with W20's whole-file ``tree.py`` clause the
 one expected red, present in every row and not counted): 1 viewer digest clause deleted -> G10, G13;
 2 report digest clause deleted -> G11, G13; 3 ``_require_agreement`` stops raising -> G5, and S25's
@@ -65,7 +64,7 @@ left at ``/3`` -> G9 and the seven schema literals of M13, S21 and S29; 9 field 
 serialised -> G7, G8, G9, L10, W12; 10 digest compared to itself -> G10, G11, G13; 11 digest clause
 before the multiset clause -> G12 and W16, nothing else; 12 digest widened with ``multi.method`` ->
 G17, G21, G22; 13 viewer knob clause deleted -> G21 alone; 14 report knob clause deleted -> G22
-alone. The table is in the project's records for this freeze (2026-09-13).
+alone.
 
 Restated rather than imported, as every frozen test file's helpers are: the AST resolver, the
 closure and arithmetic scans, the store builders and the two-value cells.
@@ -110,20 +109,20 @@ CLI_SOURCE = PACKAGE / "cli.py"
 TESTS = REPO / "tests"
 LATTICE_ROOT = lattice.root()
 
-# ---------- spec sections 2, 3.2, 3.4: the literals ----------
+# ---------- the literals ----------
 
-#: G9. The schema this packet moves to, and the two it retires.
-# LS update, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+#: G9. The schema in force, and the retired ones.
+# LS update: /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMAS = ("proofload.viewpair/2", "proofload.viewpair/3", "proofload.viewpair/4", "proofload.viewpair/5", "proofload.viewpair/6")
-#: G9. The top-level keys, in order: the digest is inside ``tree``, not beside it. LS update, 2026-09-22 (local serve pass, Phase A): fourteen, ``summary`` eighth.
+#: G9. The top-level keys, in order: the digest is inside ``tree``, not beside it. LS update: fourteen, ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
 )
 #: G7. ``TreeResult``'s six fields in order and ``to_json()``'s six keys in the same order.
 TREE_RESULT_FIELDS = ("root", "grouping", "fault_lines", "leaves", "bound", "agreement")
-#: G16, G17. The tag inside the hashed payload (section 3.2); never a sibling key (section 10 Q9).
+#: G16, G17. The tag inside the hashed payload; never a sibling key (Q9).
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
 #: G17. The schema string the 0.0.1 builds hashed behind, before the PF0 freeze (Q4) renamed it.
 OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
@@ -133,7 +132,7 @@ OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
 
 
 def reference_agreement(events: Sequence[str], schema: str = AGREEMENT_SCHEMA) -> str:
-    """G17's reference, written from section 3.2 and not from ``tree.py``: one line per
+    """G17's reference, written from the canonical form and not from ``tree.py``: one line per
     ``(event, cell)`` of the lattice pair, ``[event, config_hash, n_a, n_b, events_a, events_b]``
     from the design's counts (``lattice.counts``), the lines sorted, the pair ``[schema, lines]``
     as compact ASCII JSON, sha256, lowercase hex. Nothing about the method enters."""
@@ -162,16 +161,16 @@ DIGEST_WORD = "digest"
 #: G14. M13's import partition (V35, W20), restated.
 ASSEMBLY_HELPERS = frozenset({"_fmt", "_coord_text", "_worst_header", "_worst_table_rows", "_EPISTEMIC_FENCE"})
 RENDER_HELPERS = frozenset({"_html_style", "_html_table", "_provenance_lines"})
-#: G18-G20. ADR-077's record fields, this packet's owner, and the four former carriers of the
+#: G18-G20. An exclusion record's fields, A28's owner tag, and the four former carriers of the
 #: ``diff.py`` digest, which after retirement assert the sweep from files carrying no exclusion.
 ADR_077_FIELDS = frozenset({"region", "owner", "cover", "minted_at", "blind_spot", "retire_at"})
 LINES_FIELD = "lines"
 LINES_RE = re.compile(r"^(?P<spans>\d+-\d+(?:, \d+-\d+)*) of (?P<total>\d+)$")
 OWNER = "A28"
 MINTED_AT = "38e8df9"
-#: G18, per record since P-1's update (2026-09-17): ``(owner, minted_at, cover file)`` for every
-#: exclusion record the carrier may hold. ``TREE_PY_EXCLUDED`` is P-1's (spec P-1 section 7.4,
-#: ADR-077's clean case at ``("RootResult", "_root")``), covered by the P-1 frozen file, so the cover
+#: G18, per record since P-1's update: ``(owner, minted_at, cover file)`` for every
+#: exclusion record the carrier may hold. ``TREE_PY_EXCLUDED`` is P-1's (an
+#: exclusion record's clean case, at ``("RootResult", "_root")``), covered by the P-1 frozen file, so the cover
 #: is no longer always this file and ``lines`` may carry two spans.
 RECORD_OWNERS = {
     "REPORT_PY_EXCLUDED": ("A28", "38e8df9", "test_a28_agreement.py"),
@@ -180,16 +179,16 @@ RECORD_OWNERS = {
 EXCLUSION_CARRIER = "test_s29_viewer.py"
 FORMER_CARRIERS = ("test_s26_fault_lines.py", "test_s27_leaves.py", "test_s28_report.py", "test_s29_viewer.py")
 PINNED_BY_CONSTANT = {"TREE_PY_EXCLUDED": TREE_SOURCE, "REPORT_PY_EXCLUDED": REPORT_SOURCE, "DIFF_PY_EXCLUDED": DIFF_SOURCE}
-#: G20. ``src/proofload/diff.py`` whole, read off the shipped file at ``38e8df9`` and unchanged at
+#: G20. ``src/poisson_prove/diff.py`` whole, read off the shipped file at ``38e8df9`` and unchanged at
 #: ``03d7ed2``: the value the retirement re-mints in every carrier -- five literals, one per file (this
 #: file, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``, ``test_s29_viewer.py``);
-#: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS update, 2026-09-22 (local serve pass, Phase A)) -- a read and not a prediction.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+#: "four" is ``FORMER_CARRIERS``, the set swept beside this file (LS update) -- a read and not a prediction.
+# Re-minted off the build at 173c25d: diff.py gains complementary_events and trade_line()'s complement branch; the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# Re-minted for A10's declared expectations, off the build at 662ceff: diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (A10 W9; _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists (front-door spec section 14).
+# changes can be frozen honestly before its build exists.
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
-#: The one ``tests/`` file whose module-level ``*_PY_EXCLUDED`` constants this packet inspects.
+#: The one ``tests/`` file whose module-level ``*_PY_EXCLUDED`` constants this file inspects.
 S27_SOURCE = TESTS / "test_s27_leaves.py"
 
 # ---------- the store builders (S27's and S29's, restated) ----------
@@ -222,7 +221,7 @@ def manifest(run_id: str, salt: str, axis_types: Mapping[str, str]) -> RunManife
 
 def write_run(store: Store, run_id: str, *, salt: str, axis_types: Mapping[str, str], cells: Mapping[tuple[tuple[str, Any], ...], Sequence[str]]) -> None:
     """A complete synthetic run over multi-key configs, one episode per outcome, through the
-    store's own writer (standing rule 14)."""
+    store's own writer."""
     store.create_run(manifest(run_id, salt, axis_types))
     records = []
     for index, (key, outcomes) in enumerate(cells.items()):
@@ -237,7 +236,7 @@ def write_run(store: Store, run_id: str, *, salt: str, axis_types: Mapping[str, 
 
 
 def crossed_cells(n_fail_a: int, n_fail_b: int, n_crash: int, n_cells: int = 5) -> tuple[dict[Any, list[str]], dict[Any, list[str]]]:
-    """Section 3.6's shape: identical ``(task, temp)`` configs in every pair, only the mix varies."""
+    """The crossed shape: identical ``(task, temp)`` configs in every pair, only the mix varies."""
     a: dict[Any, list[str]] = {}
     b: dict[Any, list[str]] = {}
     for i in range(n_cells):
@@ -325,7 +324,7 @@ def crossed(synth_root: Path) -> dict[str, Grown]:
 
 @pytest.fixture(scope="module")
 def every_fixture(synth_root: Path, crossed: dict[str, Grown]) -> list[Grown]:
-    """Section 6's fixture set: the lattice pair under both schemes at K = 1 and K = 2, the crossed pairs, the
+    """The fixture set: the lattice pair under both schemes at K = 1 and K = 2, the crossed pairs, the
     holed pair with an event nobody ran, and A27's two disjoint pairs."""
     return [
         grown("lattice", LATTICE_ROOT, lattice.RUN_A, lattice.RUN_B, events=(lattice.EVENT,)),
@@ -340,7 +339,7 @@ def every_fixture(synth_root: Path, crossed: dict[str, Grown]) -> list[Grown]:
 
 
 def viewer() -> Any:
-    """``proofload.viewer``, imported on demand so the changed surface is reached inside bodies."""
+    """``poisson_prove.viewer``, imported on demand so the changed surface is reached inside bodies."""
     import poisson_prove.viewer as module
 
     return module
@@ -418,7 +417,7 @@ def closure(module: ast.Module, name: str) -> list[ast.AST]:
 
 
 def resolve_region(tree: ast.Module, qualified: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:
-    """ADR-077's boundary, restated: exactly one definition per segment or the clause refuses."""
+    """The exclusion region's boundary, restated: exactly one definition per segment or the clause refuses."""
     node: ast.AST = tree
     definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
     for segment in qualified.split("."):
@@ -491,7 +490,7 @@ def module_constants(module: ast.Module) -> dict[str, ast.expr]:
 
 
 def exclusion_constants(path: Path) -> dict[str, tuple[dict[str, Any], ...]]:
-    """ADR-077's step-1 sweep as an AST read: the module-level constants named ``*_PY_EXCLUDED``.
+    """The exclusion sweep as an AST read: the module-level constants named ``*_PY_EXCLUDED``.
     A text grep for the suffix would count this file, and the four former carriers, from the
     prose and the sweep line itself once their records are gone; a name on a module-level
     assignment is what "the record is a module constant named for the file it narrows" means."""
@@ -605,7 +604,7 @@ def test_g5_require_agreement_returns_the_digest_and_still_raises_on_both_paths_
 
 
 def test_g6_omnibus_is_untouched_and_root_result_carries_no_digest(crossed: dict[str, Grown]) -> None:
-    """Green before and after (standing rule 12): the signature literal, the return type, the
+    """Green before and after: the signature literal, the return type, the
     byte-equality of ``tree(...).root`` with ``omnibus(...)`` on the same knobs, and no digest on
     ``RootResult``, in either its fields or its payload."""
     p = crossed["P"]
@@ -696,7 +695,7 @@ def test_g11_the_report_refuses_c16s_crossed_tree_with_comparison_mismatch(cross
 
 def test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_unchanged(crossed: dict[str, Grown], every_fixture: list[Grown]) -> None:
     """Sole catch for mutant 11 (the digest clause ahead of the multiset clause), and the reason the
-    digest is an addition rather than a replacement (section 10 Q4). The viewer's events, arity and
+    digest is an addition rather than a replacement (Q4). The viewer's events, arity and
     multiset clauses and the report's events and arity clauses each fire on the input that fired
     them before, with their vocabulary, and none of those refusals mentions the digest. The
     multiset input is A27's crossing, whose hashes are disjoint by construction."""
@@ -755,11 +754,11 @@ def test_g13_both_refusals_happen_before_anything_is_produced(crossed: dict[str,
 
 
 def test_g14_the_viewers_import_partition_and_arithmetic_pins_hold() -> None:
-    """W20's clauses restated (green before and after): ``proofload.tree`` only under
+    """W20's clauses restated (green before and after): ``poisson_prove.tree`` only under
     ``TYPE_CHECKING``, exactly the eight report names split by closure, and one arithmetic node in
     ``build_structure``'s closure, the ``created_at`` subtraction. A function-level import is not
     a module-body import, and a compare is not a ``BinOp`` -- which is what lets the digest clause
-    live inside the pinned closure at all (section 3.5)."""
+    live inside the pinned closure at all."""
     module = parsed(VIEWER_SOURCE)
     assert report_import_names(module) == ASSEMBLY_HELPERS | RENDER_HELPERS
     build = referenced_names(closure(module, "build_structure"))
@@ -792,7 +791,7 @@ def test_g16_the_canonical_form_is_written_twice_in_src_both_in_tree_py_through_
     function in ``tree.py`` hashes it -- the shared private serialiser, the only ``sha256`` and the
     only ``json.dumps`` in the file -- and exactly two functions call that serialiser by name:
     ``_require_agreement`` and ``agreement_digest``. Neither renderer writes the form."""
-    sources = sorted(PACKAGE.rglob("*.py"))  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
+    sources = sorted(PACKAGE.rglob("*.py"))  # PF5: the core is a package now, so the scan reads src/ recursively.
     tagged = {path.name: string_constants(parsed(path), "poisson-prove.agreement") for path in sources}
     assert {name: tags for name, tags in tagged.items() if tags} == {"tree.py": [AGREEMENT_SCHEMA]}, tagged
     module = parsed(TREE_SOURCE)
@@ -818,7 +817,7 @@ def test_g17_a_digest_is_not_a_config_hash_and_not_a_method_hash(crossed: dict[s
     """The discrimination half on C16's fixture (identical ``config_hash`` sets, different
     counts, different digests) and the method-equality half on the lattice pair at K = 1 and K = 2:
     both methods carry the one digest this file's reference recomputes from the design's counts in
-    section 3.2's form, so a later change that makes the form scheme-sensitive -- or drops the
+    the canonical form, so a later change that makes the form scheme-sensitive -- or drops the
     schema tag (mutant 6), or widens it with ``multi.method`` (mutant 12), or changes the
     serialiser (mutant 7) -- is caught rather than welcomed. The digest is not the one the 0.0.1
     schema string gives."""
@@ -837,21 +836,21 @@ def test_g17_a_digest_is_not_a_config_hash_and_not_a_method_hash(crossed: dict[s
         assert tree_mod.agreement_digest(by_name[mcnemar].multi) == expected
 
 
-# ---------- G18-G20: ADR-077's record ----------
+# ---------- G18-G20: the exclusion record ----------
 
 
 def test_g18_every_exclusion_record_this_packet_mints_carries_adr_077s_fields_and_resolves() -> None:
     """Asserted over whatever ``*_PY_EXCLUDED`` constants exist in the one carrier, rather than by
-    name, so it holds under either answer to section 10 Q2: six fields plus the region's lines over
-    the file's lines at mint (ADR-077 Q2 lean (b)); owner ``A28``; ``retire_at`` empty (D5); every
+    name, so it holds under either answer to Q2: six fields plus the region's lines over
+    the file's lines at mint (Q2's lean (b)); owner ``A28``; ``retire_at`` empty (D5); every
     cover exists and every test id resolves through the resolver; every region resolves to exactly
     one node of the pinned file; regions on one file disjoint.
 
-    **Amended by P-1's update, 2026-09-17** (a site the P-1 spec's section 7.2 did not list; found
+    **Amended by P-1's update** (a site P-1's plan did not list; found
     by the shadow shim's whole-suite control): the carrier now holds two records, and owner, mint
     and cover are asserted per record through ``RECORD_OWNERS`` -- A28's ``report.py::_check_tree``
     covered by this file, P-1's ``tree.py`` regions covered by ``tests/test_p1_payload.py`` -- and
-    ``lines`` may list one span per region (ADR-077 Q2 (b))."""
+    ``lines`` may list one span per region (Q2 (b))."""
     records = exclusion_constants(TESTS / EXCLUSION_CARRIER)
     assert records and set(records) <= set(PINNED_BY_CONSTANT), sorted(records)
     for constant, entries in records.items():
@@ -883,7 +882,7 @@ def test_g18_every_exclusion_record_this_packet_mints_carries_adr_077s_fields_an
 def test_g19_adr_077s_step_1_sweep_returns_exactly_test_s29_viewer_py_and_all_four_former_carriers_assert_it() -> None:
     """The sweep, counted over module-level constants named for the file they narrow, returns the
     one carrier; and each former ``diff.py`` carrier still asserts that one-element list by
-    literal, so a fifth exclusion minted anywhere under ``tests/`` without a re-freeze packet behind
+    literal, so a fifth exclusion minted anywhere under ``tests/`` without a re-freeze behind
     it turns four clauses red as well as this one."""
     assert sweep() == [EXCLUSION_CARRIER]
     for name in FORMER_CARRIERS:
@@ -902,14 +901,14 @@ def test_g19_adr_077s_step_1_sweep_returns_exactly_test_s29_viewer_py_and_all_fo
 
 # PF0 (Q4): test_g20_diff_py_sha256_is_the_whole_file_digest_again_in_all_four_carriers_and_diff_py_is_unchanged removed. It pinned the bytes of src/poisson_prove/diff.py, which the rename
 # changes; no digest of a file this module changes can be frozen honestly before its build
-# exists (front-door spec section 14).
+# exists.
 
 
-# ---------- G21, G22: section 10 Q5 (b), the knob clause ----------
+# ---------- G21, G22: Q5 (b), the knob clause ----------
 
 
 def test_g21_the_viewer_refuses_a_tree_grown_under_another_method_or_q_naming_both_values(synth_root: Path, crossed: dict[str, Grown]) -> None:
-    """Sole catch for mutant 13. The digest is scheme-blind and q-blind by section 3.3, so a tree
+    """Sole catch for mutant 13. The digest is scheme-blind and q-blind by construction, so a tree
     grown under ``mcnemar_bh`` or at ``q = 0.01`` passes the digest clause beside this pair's
     ``fisher_bh`` diff at ``q = 0.05`` -- asserted first -- and the knob clause is what refuses,
     naming both values. Not the digest's message: nothing the digest covers differs."""

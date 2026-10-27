@@ -1,16 +1,15 @@
 """S26 -- the grouping resolver and the fault lines: the frozen tests for F1-F30.
 
-Written from "Proofload -- Spec S26 Layered Report P4.2 Resolver and Fault Lines" section 4 and
-"Handoff P4.2", against ``11502ba`` plus the update commit ``082c87d`` (2026-09-07). The build
-adds ``src/proofload/tree.py`` (the resolver, ``tree``, the four dataclasses) and the two flags,
-one block and one key in ``src/proofload/cli.py`` against this file and does not edit it.
+Written before the code they test, against ``11502ba`` plus the update commit ``082c87d``. The
+code adds ``src/poisson_prove/tree.py`` (the resolver, ``tree``, the four dataclasses) and the two
+flags, one block and one key in ``src/poisson_prove/cli.py`` against this file and does not edit it.
 
-**``proofload.tree``'s new names are imported inside each test body**, the way the S25 frozen tests
+**``poisson_prove.tree``'s new names are imported inside each test body**, the way the S25 frozen tests
 reached the module before it existed: this file collects on the bare tree, its own tests fail
 there, and every other test in the repo still reports. The static tests read the source as text.
 
-**No test in this file carries the ``calibration`` marker, and none may.** Spec section 0.6,
-measured by the slow step-zero script (K=200 sharp-null resamples of the committed
+**No test in this file carries the ``calibration`` marker, and none may.** Measured by a slow
+script run before these tests were written (K=200 sharp-null resamples of the committed
 fixture of the time, grouped by its first axis, B=1000): Level 2 is gated on the root, so under
 the global sharp null the unconditional rate of any group rejecting is bounded by the root's own
 rate, which O10 already holds inside ``[0.020, 0.080]``. The measured gated rates, with BH and
@@ -20,10 +19,10 @@ correct Level 2 from one with no correction at all, and the only column that sep
 deterministically here (F13-F16), and F24 is the fast twin of the lane's one sole catch (S25 M3b).
 Nothing below loops over resamples; a property test over small synthetic pairs is not a lane.
 
-**Step zero, re-derived before a test was written** (the step-zero script,
-89 s against the bare tree; every number below is that script's or the spec's script's):
+**Measured before a test was written** (the measurement script,
+89 s against the bare tree; every number below is that script's or the reference script's):
 
-1. **The refusal rule is S23's gate at the family floor, on shape alone.** The step-zero script's
+1. **The refusal rule is S23's gate at the family floor, on shape alone.** The measurement script's
    ``describe_grouping`` computes ``mde_two_proportion(0.5, n_a_g, n_b_g, alpha=q/G)`` from the
    design's per-arm unit counts summed over the group's cells and reads no delta; the constant is
    ``executor.DEFAULT_MAX_MDE`` imported. On both substrates every group is equal-sized, so the
@@ -38,9 +37,9 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
 2. **The rule's failure modes, named so the refusal is not read as more than it is.** It is a
    design-time rule anchored at base rate 0.5 and the sparse alternative ``q/G``. It can admit a
    grouping whose groups are mostly degenerate when N is large (the degenerate count is printed,
-   not gated -- ADR-067's hatch); it can refuse a dense alternative that BH's step-up would have
+   not gated); it can refuse a dense alternative that BH's step-up would have
    had power for (the 4 x 4 pair is where ``q/G`` and ``q`` part); and at extreme base rates the
-   real power is below the anchor's (S23 section 3's 0.34 against 0.3251). None of those is a
+   real power is below the anchor's (S23's 0.34 against 0.3251). None of those is a
    reason to move it now, and no fixture here claims otherwise.
 3. **The axes pair** (164 ``task`` x 2 ``temp``, N=8, every cell all-``ok``; arm b moves twenty
    cells of ``temp = 0.0`` by two matched pairs ``ok -> fail`` at replicates 0 and 1): root at the
@@ -49,11 +48,11 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
    degenerate under both. A mixed base (``fail x2 + ok x6``) was measured too: with two pairs the
    arm-label root sits at p 0.38 and the group at 0.15, because 308 mixed cells contribute
    permutation variance the twenty moved cells must overcome; six pairs would be needed, which is
-   not the spec's fixture. The all-``ok`` base keeps the spec's forty discordant pairs and McNemar
+   not the intended fixture. The all-``ok`` base keeps the intended forty discordant pairs and McNemar
    p of 0.5 and is the one on which "the group sees what no leaf can" is literal: no leaf p is
    below 0.46 before any correction. ``task`` refuses at 0.5000 (the cap; offered 0.5000) and
    ``temp`` admits at 0.0600.
-4. **The BH pair** under ``mcnemar_bh`` reproduces section 0.7 exactly: root p 0.00749813 and
+4. **The BH pair** under ``mcnemar_bh`` reproduces its design exactly: root p 0.00749813 and
    ``g00``'s ``p_group`` bit-equal to it (seeds 0-2), the other nineteen at p 1 and degenerate,
    ``q_group = 0.15``, and BH over the one informative group would give 0.0075. **The arm-label
    twin of that shape does not exist**: over w in {2..10} cells and k in {1..16} extra failures no
@@ -62,14 +61,14 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
    variance to the root's statistic and none to ``g00``'s slice, so ``g00`` is always far more
    extreme than the root (root p 0.98 at eight weak cells against ``g00`` 0.61; root 0.0057 at
    ten cells x twelve against ``g00`` at the floor). F14 is therefore asserted under
-   ``mcnemar_bh`` only, as the spec allows, and two unnumbered arm-label guards are added: a
+   ``mcnemar_bh`` only, and two unnumbered arm-label guards are added: a
    **strong** variant (ten cells x sixteen: root and ``g00`` at the floor, the nineteen at p 1 and
    informative) for F16's arm-label clause, and a **two-group** variant (``g01`` ten cells x twelve
    strong, ``g00`` eight cells x three weak: root p 0.0017, ``g00`` p 0.0215 -- 8.3 sd above
    ``q/20`` and 12.4 below ``q`` -- ``q_group`` 0.215, not rejected) for "no correction" under arm
    label. Neither can see ``m = informative groups`` (all twenty are informative under arm label);
    the lattice by ``load`` and the McNemar BH pair do.
-5. **The discordant cell** (section 0.4's exact frames) reproduces to the digit: ``p_location``
+5. **The discordant cell** (one cell, every matched pair discordant) reproduces to the digit: ``p_location``
    0.2209, 0.2119, 0.2204, 0.2249, 0.2159 under pair swap against the exact 0.215327 and 0.0785,
    0.0890, 0.0810, 0.0767, 0.0912 under arm label against 0.079341; ``p_dispersion == p_location
    == p_omnibus`` on every seed. Band edges are at least 5.4 sd from the exact value and 6 sd from
@@ -91,38 +90,38 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
    informative count recomputed from the frames. ``diff.py``'s bytes are pinned by their own digest
    rather than by a ``git diff``, which a scratch copy without ``.git`` cannot run.
 
-**Spec text these frozen tests could not use as written, each resolved here and reported.**
+**Design statements these frozen tests could not use as written, each resolved here.**
 
 - F8's ``max_group_mde = 0.37`` cannot admit ``task`` on the axes pair: at N=8 the group MDE is the
-  cap 0.5000 (the spec's own section 6 number); 0.37 is the value for a design at N=32. F8 uses the offered
+  cap 0.5000 (the axes pair's own number); 0.37 is the value for a design at N=32. F8 uses the offered
   value pasted back (0.5000, equality passes) and an explicit 0.6.
-- F16's "the nineteen have ``p_group == 1.0`` under both" is unsatisfiable on the spec's BH pair
+- F16's "the nineteen have ``p_group == 1.0`` under both" is unsatisfiable on the designed BH pair
   under ``fisher_bh``: the root sits at p 0.98 there, the level is not tested and every p is
   ``None``. The arm-label clause is asserted on the strong variant, where the root rejects.
-- Section 7's property tests say ``max_group_mde = 1.0`` "so the grouping resolves"; F8 refuses
+- The planned property tests say ``max_group_mde = 1.0`` "so the grouping resolves"; F8 refuses
   ``1``. They use 0.75 (every MDE is at most the cap 0.5, so anything above admits everything).
 - F21's literal field list includes ``cells``, ``key``, ``label``, ``q``, ``root``, ``null``,
   ``reason`` and other names ``cli.py`` already uses as locals; ``_cmd_runs`` joins a local named
   ``cells`` with ``+`` at ``11502ba``, so the guard as written is red on the bare tree. Here every
   tree field is guarded as an attribute, and the names that cannot collide with a local (O17's
   thirteen, ``n_uninformative_cells`` and the compound tree names) are guarded as bare names too.
-- F5 and F19 conflict on ``step_kind``: ``--by step_kind`` must echo its key verbatim (section 8
-  trap 14) in a refusal row and on the block, and F19 forbids the substring ``step`` on both. The
+- F5 and F19 conflict on ``step_kind``: ``--by step_kind`` must echo its key verbatim
+  in a refusal row and on the block, and F19 forbids the substring ``step`` on both. The
   vocabulary check masks the requested key before it looks; a build that echoes the name passes,
   one that writes "failed at step" does not.
-- Section 6 says "every leaf in ``temp = 0.0`` has two discordant pairs"; twenty of the 164 do.
-- Section 0.2's table reads 0.1750 for the 4 x 4 pair at ``alpha = q``; ``mde_two_proportion``
-  gives 0.171705. Section 6's "MDE 0.49" for the imported pair's ``tool_fail_rate`` is 0.4597
-  (0.49 is another row of the spec's table). Both still separate what they are meant to separate.
+- The axes pair's description says "every leaf in ``temp = 0.0`` has two discordant pairs"; twenty of the 164 do.
+- The planning table reads 0.1750 for the 4 x 4 pair at ``alpha = q``; ``mde_two_proportion``
+  gives 0.171705. The stated "MDE 0.49" for the imported pair's ``tool_fail_rate`` is 0.4597
+  (0.49 is another row of that table). Both still separate what they are meant to separate.
 - F15 names S25's three-cell identical pair, whose only axis refuses at the cap so the grouping
   collapses to ``whole_grid`` and ``reason`` is ambiguous between the two untested cases. **These
   frozen tests fix root-first precedence**: when the root did not reject, ``reason`` is
   ``"root_not_rejected"`` whatever the grouping's cardinality, because the gate is evaluated before
   the level's shape and the more fundamental fact is the one stated. F15's full clause is asserted
   on an identical pair of the axes shape, where ``temp`` resolves to two groups.
-- S25 section A's "two decorator lines" on O10 is one line: one function parametrises into both.
+- S25's "two decorator lines" on O10 is one line: one function parametrises into both.
 
-**Conventions these frozen tests fix where the spec is silent. The build follows these.**
+**Conventions these frozen tests fix where the design is silent. The code follows these.**
 
 - ``next_rung`` is the rung that makes the next attempt: ``"axis"`` when the axis rung refuses one
   axis and another remains, ``"task_family"`` when it refuses its last one, ``"trace"`` after the
@@ -135,7 +134,7 @@ Nothing below loops over resamples; a property test over small synthetic pairs i
 - Every number on a fault-lines block line is a ``:g`` rendering of a field of the object that
   line describes, or the group's label; the check is on tokens, never on wording.
 
-**Named non-observables.** A weight *inside* ``_statistics`` (ADR-066); ``omnibus`` called a
+**Named non-observables.** A weight *inside* ``_statistics``; ``omnibus`` called a
 second time from ``_cmd_diff`` with the same seed (same bytes); a ``--by`` naming an axis declared
 in one manifest only (F6 pins "neither", F29 pins the unrequested ``not_shared`` row); the
 ``detail`` wording of ``one_group`` and ``not_shared`` refusals beyond their fields.
@@ -179,7 +178,7 @@ REPO = PACKAGE.parents[1]
 #: The generated pair (``tests/lattice.py``): the before run and the after run.
 LATTICE_ROOT = lattice.root()
 RUN_A, RUN_B = lattice.RUN_A, lattice.RUN_B
-# PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
+# PF2: every run has a name (target id up to its first "/", the UTC date of
 # created_at, a letter); serve names the lattice's runs by these.
 NAME_A, NAME_B = lattice.NAME_A, lattice.NAME_B
 EVENT, OTHER = lattice.EVENT, lattice.OTHER
@@ -189,7 +188,7 @@ DIFF_SOURCE = PACKAGE / "diff.py"
 METHODS = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 TWO_SCHEMES = ("mcnemar_bh", "fisher_bh")
 
-#: Spec section 2, this file's literals (F1). Never read back from the module.
+#: This file's literals (F1). Never read back from the module.
 EXPECTED_RUNG_ORDER = ("requested", "trace", "axis", "task_family", "whole_grid")
 #: The two names the trace rung owned until PF4. PF4 (PF4.6): ``tree.TRACE_GROUPINGS`` is empty and
 #: both names are unknown groupings, refused before any permutation is drawn; the names stay
@@ -216,7 +215,7 @@ GOLDEN_SEED = 0
 REFUSAL_PERMUTATIONS = 10**6
 REFUSAL_BUDGET_SECONDS = 10.0
 
-#: Section 4 F24, the S25 amendment's bands; step zero item 5 says why they hold.
+#: F24, the S25 amendment's bands; measurement 5 of the module docstring says why they hold.
 DISCORDANT_BANDS = {"mcnemar_bh": (0.18, 0.26), "fisher_bh": (0.05, 0.12)}
 
 #: F27: the keys a different seed may move.
@@ -224,7 +223,7 @@ P_DRIVEN_ROOT_KEYS = ("p_location", "p_dispersion", "p_omnibus", "rejects", "hea
 P_DRIVEN_GROUP_KEYS = ("p_location", "p_dispersion", "p_group", "q_group", "rejects")
 P_DRIVEN_FAULT_LINE_KEYS = ("n_rejected_groups", "rejected_groups")
 
-#: F19. O19's nine phrases plus this packet's additions, case-insensitive.
+#: F19. O19's nine phrases plus this file's additions, case-insensitive.
 FORBIDDEN_VOCABULARY = (
     "given the root", "given that", "conditional on", "leaf", "fdr", "broke", "where it broke",
     "failed at", "step",
@@ -233,7 +232,7 @@ FORBIDDEN_VOCABULARY = (
 )
 FORBIDDEN_FIELD_SUBSTRINGS = ("interval", "level", "leaf", "broke", "where", "step")
 
-#: The fields of the five structures (spec section 2), as this file's literal (F19, F21).
+#: The fields of the five structures, as this file's literal (F19, F21).
 REFUSAL_FIELDS = ("key", "rung", "reason", "detail", "next_rung", "n_groups", "n_resolvable_groups", "offered_max_group_mde")
 GROUPING_FIELDS = (
     "key", "resolved_by", "requested", "labels", "groups", "n_groups", "group_sizes", "size_min", "size_median",
@@ -272,51 +271,51 @@ OMNIBUS_PAYLOAD_KEYS = frozenset({
     "n_permutations", "p_floor", "seed", "units", "location", "dispersion",
 })
 LATTICE_INFORMATIVE_CELLS = 35
-#: ``src/proofload/diff.py``'s bytes, whole, unchanged since cd5f177 (``git diff --exit-code``).
-#: **A28's update, 2026-09-13 -- both ``diff.py`` exclusions retired** (ADR-077's standing duty).
+#: ``src/poisson_prove/diff.py``'s bytes, whole, unchanged since cd5f177 (``git diff --exit-code``).
+#: **A28's update -- both ``diff.py`` exclusions retired** (an exclusion is retired once its owner lands).
 #: A27's ``_pairing`` (minted ``101028c``) and A22's ``_coverage`` (minted ``4b3c6ae``) both named
-#: ``A28`` as their retiring packet; both owners have landed and A28 rewrites every carrier (five literals, one per file:
+#: ``A28`` as their retiring change; both owners have landed and A28 rewrites every carrier (five literals, one per file:
 #: ``test_a28_agreement.py``, ``test_s26_fault_lines.py``, ``test_s27_leaves.py``, ``test_s28_report.py``,
-#: ``test_s29_viewer.py``; "four" is ``FORMER_CARRIERS``, the set A28 sweeps beside itself -- LS update, 2026-09-22 (local serve pass, Phase A)), so
+#: ``test_s29_viewer.py``; "four" is ``FORMER_CARRIERS``, the set A28 sweeps beside itself), so
 #: the value below is a read off the shipped file at ``38e8df9`` (byte-identical at ``03d7ed2``),
 #: never a prediction: the whole-file sha256. The record constant, its cover loop and the span
 #: clause went with it; the sweep now finds ``test_s29_viewer.py`` alone.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): diff.py gains complementary_events and trade_line()'s complement branch (spec LS section 3.6); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (spec A10 W9; ADR-084 stands, _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# Re-minted at 173c25d: diff.py gains complementary_events and trade_line()'s complement branch; the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# Re-minted at 662ceff (A10 declared expectations): diff.py gains DeclaredSetMismatch(DiffError) and its refusal in diff() and multi_diff(), just before _pairing (A10 W9; _pairing is untouched); the whole-file sha256 of the built file. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # PF0 (Q4): no longer asserted. The rename changes diff.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists (front-door spec section 14).
+# changes can be frozen honestly before its build exists.
 DIFF_PY_SHA256 = "7344a99a0fa9263957f72257354988e29e600a4a152109ea0821db45ae96043b"
 #: S25's O14/O23 digests, restated rather than imported so two frozen test files do not couple.
 # PF4 (PF4.3, PF4.13 to PF4.15, PF4.20): MULTI_JSON_SHA256 is no longer asserted. PF4 adds
 # columns to every cell and changes its limits and words, so the multi_diff test checks the facts
 # the digest guarded instead (LATTICE_DIRECTION_COUNTS and the per-cell references below).
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
 # test; check's gate here is the flat family's unpaired test, named.
 # PF4 (PF4.20): tripped has no kind, so the default --fail-on worse is refused; --fail-on
 # higher is the same gate on it (fail when the rate rose).
 CHECK_ARGV = ("check", RUN_A, RUN_B, "--event", EVENT, "--method", "fisher_bh", "--fail-on", "higher")
 # CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
-# checks the facts the digest guarded instead (front-door spec section 14).
+# checks the facts the digest guarded instead.
 CHECK_EXIT = 0
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
 # test; the structure digest is the unpaired test's, named.
 SERVE_ARGV = ("serve", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", lattice.Y, "--json", "--method", "fisher_bh")
-# Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
+# Re-minted for truncation surfacing: the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# Re-minted at 173c25d: the structure gains the summary key and each panel's mde_unchanged; with schema projected back to /2 nothing else moves, the figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # PF4 (PF4.3, PF4.11, PF4.17, PF4.20): SERVE_STRUCTURE_SHA256 is no longer asserted. PF4 removes
 # pair.store_root, adds the Summary's verdict, the shares and the direction words, so the serve
 # test checks the facts the digest guarded instead.
-#: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
+#: S29's narrowing: ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
 #: ``schema`` set back to this literal; on the bare tree that projection is the identity.
 #: S24's column digests and S21's coverage digest, restated, are replaced by the facts they guarded
 #: (``assert_q_column_is_bh_over_its_p_column`` and its siblings below).
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
 # test; the E14 digests and the heatmap are the unpaired test's, named.
 E14_ARGV = ("report", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
-# Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
+# Re-minted for truncation surfacing: report.md and receipt.html take the horizon rename and the two observation-cap lines
 # (the builder is handed manifests and no counts); heatmap.svg is unchanged. Each value is the baseline's plus that change, byte for byte.
 # PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests are no longer asserted. PF4 changes all three
 # files (the share table, the limit notes, direction words for an event of unknown kind), so the
@@ -342,7 +341,7 @@ ARM_KEYS = ("n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b", "delta")
 #: (``bound`` is not among them: the page's ``view`` carries its own forest ``bound`` setting.)
 TREE_ONLY_KEYS = ("omnibus", "fault_lines", "leaves")
 
-#: Golden labels on the lattice (step zero item 6). ``str(value)`` of the config floats.
+#: Golden labels on the lattice (module docstring, measurement 6). ``str(value)`` of the config floats.
 #: By ``load`` at the default: 10, 20 and 30 reject at the floor; 40 has one informative condition
 #: (``gain`` 0.6, one discordant pair) at p exactly 1; 50 and 100 trip in every episode of both runs.
 LATTICE_LOAD_REJECTED = ("10.0", "20.0", "30.0")
@@ -381,7 +380,7 @@ N_TASKS, AXES_N, AXES_MOVED_CELLS, AXES_MOVED_PAIRS = 164, 8, 20, 2
 
 
 def tree() -> Any:
-    """``proofload.tree``, imported at call time (see the module docstring)."""
+    """``poisson_prove.tree``, imported at call time (see the module docstring)."""
     return importlib.import_module("poisson_prove.tree")
 
 
@@ -400,7 +399,7 @@ def manifest(run_id: str, salt: str, axis_types: Mapping[str, str]) -> RunManife
 
 
 def reordered(m: RunManifest, axis_types: Mapping[str, str]) -> RunManifest:
-    """Section 6: the same manifest with ``axis_types`` rebuilt in another declared order."""
+    """The same manifest with ``axis_types`` rebuilt in another declared order."""
     return RunManifest(**{**m.to_dict(), "axis_types": dict(axis_types)})
 
 
@@ -440,7 +439,7 @@ def write_run(store: Store, run_id: str, *, salt: str, axis_types: Mapping[str, 
 
 
 def axes_cells(moved: bool) -> dict[tuple[tuple[str, Any], ...], list[str]]:
-    """Section 6's axes pair: 164 ``task`` x 2 ``temp`` at N=8, every cell all ``ok``; when
+    """The axes pair: 164 ``task`` x 2 ``temp`` at N=8, every cell all ``ok``; when
     ``moved``, the first twenty cells of ``temp = 0.0`` carry ``fail`` at replicates 0 and 1."""
     cells = {}
     for i in range(N_TASKS):
@@ -453,7 +452,7 @@ def axes_cells(moved: bool) -> dict[tuple[tuple[str, Any], ...], list[str]]:
 
 
 def bh_cells(weak_cells: int, extra_fails: int, strong: tuple[int, int] | None = None) -> tuple[dict[Any, list[str]], dict[Any, list[str]]]:
-    """Section 0.7's BH pair: twenty ``grp`` x ten ``cell`` at N=32, ``fail x4 + ok x28`` in both
+    """The BH pair: twenty ``grp`` x ten ``cell`` at N=32, ``fail x4 + ok x28`` in both
     arms; ``g00``'s first ``weak_cells`` cells carry ``extra_fails`` more ``fail`` in arm b from
     replicate 4. ``strong=(cells, fails)`` moves ``g01`` the same way (the two-group variant)."""
     a, b = {}, {}
@@ -472,7 +471,7 @@ def bh_cells(weak_cells: int, extra_fails: int, strong: tuple[int, int] | None =
 
 
 def discordant_cells() -> tuple[dict[Any, list[str]], dict[Any, list[str]]]:
-    """Section 0.4's frames: one cell, arm a ``fail`` for i < 20, arm b ``fail`` for i >= 20."""
+    """The discordant cell's frames: one cell, arm a ``fail`` for i < 20, arm b ``fail`` for i >= 20."""
     key = (("task", "d"),)
     return {key: ["fail"] * 20 + ["ok"] * 12}, {key: ["ok"] * 20 + ["fail"] * 12}
 
@@ -522,7 +521,7 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
 
 def without_notes(err: str) -> str:
     """Stderr with the ``note:`` lines removed. Prove's own warning (``UnpairedAnalysis``, on two
-    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line (spec section 5.4)."""
+    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line."""
     return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
 
 
@@ -550,8 +549,8 @@ def omnibus_block(out: str) -> list[str]:
 def numeric_tokens(line: str) -> list[str]:
     """Every whitespace-, ``=``-, ``,``-, ``:``-, ``;``-, ``(``-, ``)``- or ``/``-separated token
     that parses as a number, verbatim. Wording-free: the block's numbers are checked as tokens.
-    A comma before three digits is a thousands separator inside a count (spec section 5.4,
-    rule 10), so ``1,312`` is one token."""
+    A comma before three digits is a thousands separator inside a count (rule 10),
+    so ``1,312`` is one token."""
     out = []
     for token in re.split(r"[\s=:;()/]+|,(?!\d{3}(?!\d))", line):
         try:
@@ -562,7 +561,7 @@ def numeric_tokens(line: str) -> list[str]:
     return out
 
 
-# The block's numbers as the command line prints them under rule 10 (spec section 5.4), which
+# The block's numbers as the command line prints them under rule 10, which
 # replaces ``:g``: counts with thousands separators, an MDE to three decimals, and a p, q or
 # alpha to three decimals or in ``2.3e-08`` form below 0.001.
 
@@ -760,7 +759,7 @@ def grown(a: pd.DataFrame, b: pd.DataFrame, multi: Any, ma: RunManifest, mb: Run
 
 
 def second_smallest_rounded_up(mdes: Sequence[float]) -> float:
-    """S23's offered-override rule restated (spec S23 section 3, ``_offered_override``): the
+    """S23's offered-override rule restated (``_offered_override``): the
     ``MIN_RESOLVABLE_GROUPS``-th smallest group MDE rounded **up** at four decimals, bumped by
     ``1e-4`` when the rounding fell short, so that pasting it admits the grouping."""
     mde = sorted(mdes)[EXPECTED_MIN_RESOLVABLE_GROUPS - 1]
@@ -787,11 +786,11 @@ def partition_by(units: pd.DataFrame, key: str, event: str) -> dict[str, list[st
     return {label: sorted(hashes) for label, hashes in out.items()}
 
 
-# ---------- ADR-077: the retirement sweep (A28, restated) ----------
+# ---------- The retirement sweep (A28, restated) ----------
 
 
 def excluded_constants(path: Path) -> list[str]:
-    """Module-level constants named ``*_PY_EXCLUDED`` -- ADR-077's step-1 sweep as an AST read.
+    """Module-level constants named ``*_PY_EXCLUDED`` -- the retirement sweep's first step as an AST read.
 
     A text grep for the suffix counts a file from its prose and from the sweep line itself once
     its record is gone; a name on a module-level assignment is what "the record is a module
@@ -849,7 +848,7 @@ def by_load(lattice_trees: Any) -> dict[str, tuple[Any, Any]]:
 
 @pytest.fixture(scope="module")
 def axes() -> dict[str, Any]:
-    """The axes pair in memory: frames plus manifests in both declared orders (section 6)."""
+    """The axes pair in memory: frames plus manifests in both declared orders."""
     return {
         "a": raw_frame("axes-a", axes_cells(False)),
         "b": raw_frame("axes-b", axes_cells(True)),
@@ -873,7 +872,7 @@ def axes_trees(axes: dict[str, Any]) -> dict[str, tuple[Any, Any]]:
 
 @pytest.fixture(scope="module")
 def bh_trees() -> dict[str, tuple[Any, Any]]:
-    """Three BH-pair variants (step zero item 4): the spec's shape under ``mcnemar_bh``; the strong
+    """Three BH-pair variants (module docstring, measurement 4): the designed shape under ``mcnemar_bh``; the strong
     arm-label variant (ten cells x sixteen); the two-group arm-label variant (``g01`` strong,
     ``g00`` weak). Every one resolves ``grp`` (twenty groups of 320 units per arm) at
     ``ADMITTING_MAX_GROUP_MDE``."""
@@ -979,7 +978,7 @@ def property_tree(case: Any) -> Any:
 
 
 def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
-    """PF2 (spec section 4.3): ``serve --json`` on the lattice moves in two places only: ``run_name`` beside
+    """PF2: ``serve --json`` on the lattice moves in two places only: ``run_name`` beside
     each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
     the figure's title line). First assert each is there as PF2 writes it and nowhere else the
     digest reads, then put the structure back as it was before names (no ``run_name``, the title by
@@ -1004,7 +1003,7 @@ def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[st
 
 
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
-    """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
+    """PF0 (Q4): the rename moves one key of the page structure, the version, in both
     arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
     were written by 0.0.1. First assert the new key is there and the old one is not, then put both
     back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
@@ -1052,7 +1051,7 @@ def test_f1_every_rung_and_reason_on_every_fixture_is_drawn_from_the_tuples(ever
 
 def test_f2_the_axes_pair_resolves_temp_after_refusing_task_in_arm_a_order(axes_trees: Any) -> None:
     """Arm A declares ``(task, temp)``: ``task`` is 164 groups of two cells at N=8, 16 units per
-    arm, MDE at ``q/164`` the cap 0.5000 (step zero item 3), refused; ``temp`` is two groups of
+    arm, MDE at ``q/164`` the cap 0.5000 (module docstring, measurement 3), refused; ``temp`` is two groups of
     1312 units per arm, MDE 0.0600, admitted. The lattice shows the same chain at the default
     (``gain`` refused, ``load`` admitted, F2 below); this pair pins its numbers."""
     for method, (_, result) in axes_trees.items():
@@ -1136,8 +1135,8 @@ def test_f2_the_partition_property_holds_over_small_two_key_pairs(case: Any) -> 
 
 
 def test_f3_a_requested_key_that_passes_reads_requested_on_the_structure(axes: dict[str, Any]) -> None:
-    """ADR-043's *including when it is the one requested*: ``resolved_by`` is the rung that
-    returned the grouping, and that rung is ``requested``."""
+    """``resolved_by`` is the rung that returned the grouping, *including when it is the one
+    requested*: that rung is ``requested``."""
     multi = quiet_multi_diff(axes["a"], axes["b"], axes["ma"], axes["mb"], events=("fail",), method="mcnemar_bh")
     result = grown(axes["a"], axes["b"], multi, axes["ma"], axes["mb"], by="temp", n_permutations=50, seed=GOLDEN_SEED)
     grouping = result.grouping
@@ -1146,14 +1145,14 @@ def test_f3_a_requested_key_that_passes_reads_requested_on_the_structure(axes: d
 
 def test_f3_the_block_and_the_json_carry_the_requested_key(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert block, out
     assert "temp" in block[0] and "requested" in block[0], block[0]
-    # --json replaces --format json (spec section 5.6).
+    # --json replaces --format json.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp", "--json"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["resolved_by"], grouping["requested"], grouping["key"]) == ("requested", "temp", "temp")
@@ -1256,7 +1255,7 @@ def test_f5_without_by_no_row_of_the_chain_is_at_the_trace_rung(every_tree: Any)
 
 @pytest.mark.parametrize("name", ("nonsense", "loa"))
 def test_f6_an_unknown_name_raises_unknown_grouping_before_any_permutation_is_drawn(pair: Any, by_gain: Any, name: str) -> None:
-    """ADR-043's hatch. ``loa`` is an axis of neither lattice manifest (they declare ``gain`` and
+    """An unknown name is refused, never handed to another rung. ``loa`` is an axis of neither lattice manifest (they declare ``gain`` and
     ``load``), only the start of one. Pinned by cost, O13's way: at ``n_permutations = 10**6`` a refusal that
     validates first returns in milliseconds. A builder who falls back to the axes rung on an
     unknown name fails here alone."""
@@ -1270,7 +1269,7 @@ def test_f6_an_unknown_name_raises_unknown_grouping_before_any_permutation_is_dr
 
 def test_f6_the_cli_maps_an_unknown_grouping_to_exit_two_without_a_traceback(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "nonsense"])
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, (out, err)
     assert "error:" in err and "Traceback" not in out + err, err
     assert "nonsense" in err and "usage:" not in err and "unrecognized" not in err, err
@@ -1371,8 +1370,8 @@ def test_f7_the_grouping_is_a_function_of_shape_and_reads_no_delta(axes: dict[st
 
 
 def test_f8_the_offered_value_pasted_back_admits_the_refused_grouping(axes: dict[str, Any]) -> None:
-    """The spec's 0.37 cannot admit ``task`` here (the group MDE is the cap 0.5000 at N=8, the
-    spec's own section 6 number; 0.37 is the value for a design at N=32 -- module docstring). What is pinned
+    """The planned 0.37 cannot admit ``task`` here (the group MDE is the cap 0.5000 at N=8, the
+    axes pair's own number; 0.37 is the value for a design at N=32 -- module docstring). What is pinned
     is the property 0.37 stood for: the value the refusal offers, pasted back, admits the grouping
     (rounding up, S23's ``_offered_override``), and an explicit larger value admits it without
     ``--by`` and is carried on the structure."""
@@ -1386,14 +1385,14 @@ def test_f8_the_offered_value_pasted_back_admits_the_refused_grouping(axes: dict
 
 def test_f8_the_block_and_the_json_carry_the_accepted_value(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", "0.6"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
-    # The accepted MDE prints to three decimals under rule 10 (spec section 5.4), not ``:g``.
+    # The accepted MDE prints to three decimals under rule 10, not ``:g``.
     assert block and mde(0.6) in numeric_tokens(block[0]) and "task" in block[0], block[:1]
-    # --json replaces --format json (spec section 5.6).
+    # --json replaces --format json.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", "0.6", "--json"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["max_group_mde"], grouping["key"], grouping["refused"]) == (0.6, "task", [])
@@ -1439,15 +1438,15 @@ def test_f8_an_out_of_range_override_is_refused_before_any_draw_from_tree_and_fr
 @pytest.mark.parametrize("value", ("0", "1", "-0.1", "1.5"))
 def test_f8_the_cli_maps_an_out_of_range_override_to_exit_two(synth_root: Path, value: str) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--max-group-mde", value])
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, (out, err)
     assert "error:" in err and "Traceback" not in out + err, err
     assert "usage:" not in err and "unrecognized" not in err, err
 
 
 def test_f8_the_range_check_lives_in_tree_py_and_not_in_cli_py() -> None:
-    """**The rule, in prose.** The CLI parses a float and decides nothing statistical (section 8
-    trap 13, M6's ``0 < q < 1``, S23's ``check_power``). No ``ast.Compare`` in ``cli.py`` whose
+    """**The rule, in prose.** The CLI parses a float and decides nothing statistical (M6's
+    ``0 < q < 1``, S23's ``check_power``). No ``ast.Compare`` in ``cli.py`` whose
     subtree names ``max_group_mde``; the refusal is ``tree.py``'s and the runtime tests above
     reach it through both entry points."""
     offenders = []
@@ -1531,7 +1530,7 @@ def test_f10_the_axes_pair_carries_no_task_family_row(axes_trees: Any) -> None:
 
 @pytest.mark.parametrize("method", METHODS)
 def test_f11_the_root_inside_the_tree_is_byte_equal_to_omnibus_on_the_lattice(pair: Any, by_gain: Any, method: str) -> None:
-    """One draw (draft ADR-058): ``tree(...).root`` is ``omnibus(...)`` on the same inputs and
+    """One draw: ``tree(...).root`` is ``omnibus(...)`` on the same inputs and
     knobs, JSON byte for byte and ``units`` frame for frame."""
     a, b, _, _ = pair
     multi, result = by_gain[method]
@@ -1613,7 +1612,7 @@ def test_f12_and_f13_the_recompute_and_the_p_form_hold_over_small_two_key_pairs(
 
 
 def test_f13_on_the_bh_pair_the_weak_groups_p_equals_the_roots_bit_for_bit(bh_trees: Any) -> None:
-    """Section 0.7: the other nineteen groups contribute exactly zero under every pair-swap
+    """On the BH pair the other nineteen groups contribute exactly zero under every pair-swap
     exchange, so the root statistic is ``g00``'s divided by a constant and the two p-values are
     the same count over the same draws. Measured equal at seeds 0-2 and at four sizes of the weak
     group. A Level 2 that drew its own ``(C_g, W)`` block from the same seed gets different bits
@@ -1642,7 +1641,7 @@ def test_f13_every_group_p_has_the_phipson_smyth_form_on_every_tested_fixture(ev
 
 
 def test_the_group_p_is_the_calibrated_count_and_not_the_bare_minimum_of_its_p_values() -> None:
-    """**Not a numbered invariant: section 8 trap 10 pinned at group level.** On the BH pair every
+    """**Not a numbered invariant: the bare-minimum trap pinned at group level.** On the BH pair every
     weak cell holds one discordant pair, so the group's dispersion is invariant under every
     exchange and its calibrated p coincides with the bare minimum of its two p-values -- F13's
     bit-equality cannot see a builder who takes the minimum. Here S25's six mid-range cells are
@@ -1675,11 +1674,11 @@ def test_the_group_p_is_the_calibrated_count_and_not_the_bare_minimum_of_its_p_v
 
 
 def test_f14_on_the_bh_pair_the_raw_p_is_below_q_and_bh_across_all_twenty_does_not_reject(bh_trees: Any) -> None:
-    """Section 0.7 under ``mcnemar_bh``: the root rejects, ``g00``'s raw ``p_group`` is below
+    """The BH pair under ``mcnemar_bh``: the root rejects, ``g00``'s raw ``p_group`` is below
     ``q``, and BH across twenty groups puts ``q_group`` at ``20 p`` above ``q``. BH over the one
     informative group, and no correction at all, would both reject it; the test says so from the
-    same array. **The arm-label twin of this shape does not exist** (module docstring, step zero
-    item 4), so F14's fixture clause is asserted under ``mcnemar_bh`` only; the two-group
+    same array. **The arm-label twin of this shape does not exist** (module docstring,
+    measurement 4), so F14's fixture clause is asserted under ``mcnemar_bh`` only; the two-group
     arm-label guard below covers "no correction" under arm label."""
     multi, result = bh_trees["mcnemar_bh"]
     fault_lines = result.fault_lines
@@ -1716,7 +1715,7 @@ def test_f14_q_group_is_bh_over_all_groups_and_rejects_is_strict_on_every_tested
 
 def test_the_two_group_arm_label_variant_leaves_the_weak_group_unrejected_after_bh(bh_trees: Any) -> None:
     """**Not a numbered invariant: "no correction" under arm label.** The one-group shape has no
-    arm-label twin (step zero item 4); with ``g01`` strong the root rejects through it while
+    arm-label twin (module docstring, measurement 4); with ``g01`` strong the root rejects through it while
     ``g00``'s raw p sits at 0.0215 -- 8.3 sd above ``q/20`` and 12.4 sd below ``q`` at B=4000 --
     so no correction rejects ``g00`` and BH across twenty (``q_group`` 0.215) does not. Every
     group is informative under arm label, so ``m = informative`` is not visible here; the lattice
@@ -1778,10 +1777,10 @@ def test_f15_the_block_prints_the_grouping_line_and_not_tested_and_no_p(synth_ro
     """Every numeric token on an untested group line is a rule-10 rendering of one of that group's
     count or design fields, or its label; a p has nowhere to come from."""
     _, result = store_tree(synth_root, "same-a", "same-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now the
+    # PF3 (Q17): the synthetic pair shares a salt, so the default is now the
     # paired test; the tree here is the unpaired test's, named.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail", "--method", "fisher_bh"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert block, out
@@ -1790,7 +1789,7 @@ def test_f15_the_block_prints_the_grouping_line_and_not_tested_and_no_p(synth_ro
     group_lines = block[-result.grouping.n_groups :]
     for group, line in zip(result.fault_lines.groups, group_lines, strict=True):
         assert group.label in line, (group.label, line)
-        # Counts and the MDE print under rule 10 (spec section 5.4), not ``:g``.
+        # Counts and the MDE print under rule 10, not ``:g``.
         allowed = {group.label, count(group.n_cells), count(group.n_informative_cells), count(group.n_uninformative_cells), count(group.n_a), count(group.n_b), mde(group.mde)}
         if group.n_discordant is not None:
             allowed.add(count(group.n_discordant))
@@ -1814,7 +1813,7 @@ def test_f16_degenerate_is_zero_informative_cells_and_a_degenerate_group_never_r
 def test_f16_the_lattice_by_load_has_two_degenerate_groups_and_one_at_p_one_that_is_not(by_load: Any, method: str) -> None:
     """O7's split one level up. Load 50 and 100: every episode tripped in both arms, no exchange
     can move them. Load 40: one informative cell (``gain`` 0.6), p exactly 1, **not** degenerate.
-    **The spec says its delta is exactly zero; it is -1/32** (one discordant pair, whose sign flip
+    **Its delta looks as if it should be exactly zero; it is -1/32** (one discordant pair, whose sign flip
     leaves ``|mean|`` and RMS unchanged, so every permutation ties the observed statistic). A
     builder who flags degeneracy from ``p == 1`` fails on 40 alone; one who flags it from
     ``delta == 0`` is not caught here -- the identical pair under arm label (F15) and the strong
@@ -1835,8 +1834,8 @@ def test_f16_the_bh_pairs_nineteen_are_degenerate_under_pair_swap_and_informativ
     """Under pair swap the nineteen identical groups are degenerate (no pair differs); under arm
     label their mixed outcomes make every cell informative and the observed statistic is the
     minimum of its own distribution, so p is exactly 1 and ``degenerate`` is ``False``. The
-    spec's clause is asserted on the strong variant under ``fisher_bh``, where the root rejects
-    (on the spec's shape it does not, and every p is ``None`` -- module docstring)."""
+    arm-label clause is asserted on the strong variant under ``fisher_bh``, where the root rejects
+    (on the designed shape it does not, and every p is ``None`` -- module docstring)."""
     _, pair_swap = bh_trees["mcnemar_bh"]
     assert pair_swap.fault_lines.n_degenerate_groups == 19 and pair_swap.fault_lines.groups[0].degenerate is False
     assert all(gr.degenerate is True and gr.p_group == 1.0 for gr in pair_swap.fault_lines.groups[1:])
@@ -1852,7 +1851,7 @@ def test_f16_the_bh_pairs_nineteen_are_degenerate_under_pair_swap_and_informativ
 
 @pytest.mark.parametrize("method", TWO_SCHEMES)
 def test_f17_golden_lattice_by_load_rejects_exactly_the_three_groups_up_to_30(by_load: Any, method: str) -> None:
-    """Step zero item 6. Three rejecting groups all at the floor; the three others at p exactly 1,
+    """Measurement 6 of the module docstring. Three rejecting groups all at the floor; the three others at p exactly 1,
     so their ``q_group`` is above ``q`` with room."""
     multi, result = by_load[method]
     fault_lines = result.fault_lines
@@ -1918,7 +1917,7 @@ def test_f17_golden_lattice_by_gain_rejects_the_ten_at_the_floor_and_not_1_1(by_
 def test_f17_every_flat_rejection_lies_inside_a_rejecting_group_on_both_axes(by_gain: Any, by_load: Any, method: str) -> None:
     """The 22 (Fisher) / 27 (McNemar) flat rejections, recomputed from ``cells.q`` and the
     references' counts, are a subset of the union of the rejecting groups' cells on both axes.
-    **The spec's fixture-limit note is wrong in the safe direction**: it says a fixture of this
+    **The expected fixture limit is wrong in the safe direction**: one might think a fixture of this
     kind cannot show a group rejecting with no flat rejection inside it, but by ``gain`` under
     McNemar the group 1.2 rejects (38 / 4001) with none inside; the last assertion records that, and
     that under Fisher every rejecting group holds a flat rejection. F18's axes pair is still the
@@ -1960,7 +1959,7 @@ def test_f18_the_temp_zero_group_rejects_while_the_flat_family_rejects_nothing_i
 
 def test_f18_the_block_shows_both_groups_with_their_verdicts(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert len(block) >= 3, block
@@ -1974,7 +1973,7 @@ def test_f18_the_block_shows_both_groups_with_their_verdicts(synth_root: Path) -
 
 def test_f19_no_detail_reason_or_block_line_uses_the_second_vocabulary(every_tree: Any, pair: Any, lattice_trees: Any, synth_root: Path) -> None:
     """Level 2 says which kind of work moved and never where it broke. O19's nine phrases and this
-    packet's additions, case-insensitively, on every ``Refusal.detail``, every ``FaultLines.reason``
+    file's additions, case-insensitively, on every ``Refusal.detail``, every ``FaultLines.reason``
     and every line of the captured block, with the requested key masked first (``step_kind`` is a
     grouping name the block must echo verbatim -- module docstring). The block quotes the null."""
     a, b, ma, mb = pair
@@ -2007,7 +2006,7 @@ def test_f19_no_detail_reason_or_block_line_uses_the_second_vocabulary(every_tre
                 for phrase in FORBIDDEN_VOCABULARY:
                     assert phrase not in masked, (pair, extra, phrase, err)
                 continue
-            # A shared salt now adds one note line on stderr (spec section 5.4).
+            # A shared salt now adds one note line on stderr.
             assert code == 0 and without_notes(err) == "", (pair, extra, out, err)
             block = fault_lines_block(out)
             assert block, (pair, extra, out)
@@ -2018,9 +2017,9 @@ def test_f19_no_detail_reason_or_block_line_uses_the_second_vocabulary(every_tre
 
 
 def test_f19_no_field_name_and_no_json_key_contains_the_forbidden_substrings(by_gain: Any, axes_trees: Any) -> None:
-    """``level`` and ``interval`` are draft ADR-060's and P4.3's; ``leaf``, ``broke``, ``where``
-    and ``step`` are the second vocabulary. Field sets are asserted as supersets of the spec's
-    lists so a later packet's defaulted addition to ``TreeResult`` does not trip a frozen test;
+    """``level`` and ``interval`` belong to P4.3's design; ``leaf``, ``broke``, ``where``
+    and ``step`` are the second vocabulary. Field sets are asserted as supersets of the planned
+    lists so a later change's defaulted addition to ``TreeResult`` does not trip a frozen test;
     the JSON walk skips the keys of ``config`` dicts and ``groups`` maps, which are user data."""
     import dataclasses
 
@@ -2040,13 +2039,13 @@ def test_f19_no_field_name_and_no_json_key_contains_the_forbidden_substrings(by_
 
 
 def test_f20_the_block_follows_the_omnibus_block_and_its_first_line_carries_the_fields(synth_root: Path) -> None:
-    """Section 3.6, through ``main()`` with ``StringIO`` streams. The block is found by index and
+    """Through ``main()`` with ``StringIO`` streams. The block is found by index and
     is never the tail of stdout (P4.3 appends after it). Every number on the first line is a
     field under rule 10 (``:g`` before it) and the key and the rung are named; the wording is free."""
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail"])
     assert code == 0, (out, err)
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert without_notes(err) == "", err
     lines = out.splitlines()
     omnibus, block = omnibus_block(out), fault_lines_block(out)
@@ -2056,7 +2055,7 @@ def test_f20_the_block_follows_the_omnibus_block_and_its_first_line_carries_the_
     first = block[0]
     assert grouping.key in first and grouping.resolved_by in first, first
     tokens = numeric_tokens(first)
-    # Each field prints under rule 10 (spec section 5.4), not ``:g``: the MDE to three decimals,
+    # Each field prints under rule 10, not ``:g``: the MDE to three decimals,
     # alpha as a p-value, the rest as counts.
     formats = {"max_group_mde": mde, "alpha_floor": rule_10_p}
     for field in FIRST_LINE_NUMERIC_FIELDS:
@@ -2070,7 +2069,7 @@ def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) ->
         _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=50, seed=GOLDEN_SEED, by=extra[1] if extra else None)
         assert [(r.key, r.rung, r.reason, r.next_rung) for r in result.grouping.refused] == [expected], extra
         code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", *extra])
-        # A shared salt now adds one note line on stderr (spec section 5.4).
+        # A shared salt now adds one note line on stderr.
         assert code == 0 and without_notes(err) == "", (extra, out, err)
         block = fault_lines_block(out)
         refused_lines = block[1 : 1 + len(result.grouping.refused)]
@@ -2083,7 +2082,7 @@ def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) ->
 def test_f20_one_group_line_per_group_in_labels_order_carrying_counts_p_q_and_the_verdict(synth_root: Path) -> None:
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
     assert result.fault_lines.tested is True
@@ -2091,7 +2090,7 @@ def test_f20_one_group_line_per_group_in_labels_order_carrying_counts_p_q_and_th
     for group, line in zip(result.fault_lines.groups, group_lines, strict=True):
         tokens = numeric_tokens(line)
         assert group.label in line, (group.label, line)
-        # Counts, p and q print under rule 10 (spec section 5.4), not ``:g``.
+        # Counts, p and q print under rule 10, not ``:g``.
         assert count(group.n_cells) in tokens and count(group.n_informative_cells) in tokens, (group.label, line)
         assert rule_10_p(group.p_group) in tokens and rule_10_p(group.q_group) in tokens, (group.label, line)
         if group.rejects:
@@ -2101,9 +2100,9 @@ def test_f20_one_group_line_per_group_in_labels_order_carrying_counts_p_q_and_th
 
 
 def test_f20_by_and_max_group_mde_reach_the_call(synth_root: Path) -> None:
-    # --json replaces --format json (spec section 5.6).
+    # --json replaces --format json.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--by", "temp", "--max-group-mde", "0.37", "--json"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     grouping = json.loads(out)["tree"]["grouping"]
     assert (grouping["requested"], grouping["max_group_mde"], grouping["resolved_by"]) == ("temp", 0.37, "requested")
@@ -2115,11 +2114,11 @@ def test_f20_the_json_tree_equals_to_json_after_a_round_trip_and_its_root_equals
     test computes on the same frames with the same knobs, and the root appears twice, equal --
     the CLI-level form of F11."""
     multi, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=300, seed=3)
-    # --json replaces --format json (spec section 5.6).
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now the
+    # --json replaces --format json.
+    # PF3 (Q17): the synthetic pair shares a salt, so the default is now the
     # paired test; the tree here is the unpaired test's, named.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--json", "--permutations", "300", "--seed", "3", "--method", "fisher_bh"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
     assert payload["tree"] == json.loads(json.dumps(result.to_json()))
@@ -2156,11 +2155,11 @@ def test_f21_the_cli_does_no_arithmetic_on_any_tree_field() -> None:
 
 
 def test_f22_methods_all_text_prints_the_table_then_the_primary_omnibus_then_the_fault_lines() -> None:
-    """Draft ADR-070. ``--permutations 200``: this test is about the shape of the stream, not
-    the omnibus (S25 section A permits fewer permutations for such a test and asks that it say
+    """``--permutations 200``: this test is about the shape of the stream, not
+    the omnibus (S25 permits fewer permutations for such a test and asks that it say
     so). One omnibus block and one fault-lines block: the primary's."""
     code, out, err = run_cli(["--store", str(LATTICE_ROOT), "diff", RUN_A, RUN_B, "--event", EVENT, "--methods", "all", "--permutations", "200"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     assert out.index("| method |") < out.index("omnibus: ") < out.index("fault lines:"), out
     assert out.count("omnibus: ") == 1 and out.count("fault lines:") == 1, out
@@ -2170,16 +2169,16 @@ def test_f22_methods_all_text_prints_the_table_then_the_primary_omnibus_then_the
 def test_f22_methods_all_json_keeps_exactly_the_three_method_keys_and_carries_no_tree() -> None:
     """``test_i9_diff_methods_all_json_keys`` pins the same key set from the M10 side; a builder
     who emits ``"tree"`` beside three method objects fails both."""
-    # --json replaces --format json (spec section 5.6).
+    # --json replaces --format json.
     code, out, err = run_cli(["--store", str(LATTICE_ROOT), "diff", RUN_A, RUN_B, "--event", EVENT, "--methods", "all", "--json", "--permutations", "200"])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     payload = json.loads(out)
     # --json adds schema, verdict, sentence, next and any key ending _note around the keys it
-    # keeps (spec section 5.6).
+    # keeps.
     envelope = {"schema", "verdict", "sentence", "next"} | {k for k in payload if k.endswith("_note")}
-    # PF4 (PF4.8, section 8.5): the payload now carries the primary method's omnibus and tree
-    # beside the three method keys, and section 8.4's threshold and its source; they are the
+    # PF4 (PF4.8): the payload now carries the primary method's omnibus and tree
+    # beside the three method keys, and the gate's threshold and its source; they are the
     # same objects the single-method --json prints for the same knobs.
     pf4_keys = {"omnibus", "tree", "threshold", "threshold_source"}
     assert set(payload) - envelope - pf4_keys == set(METHODS), sorted(payload)
@@ -2193,7 +2192,7 @@ def test_f22_methods_all_json_keeps_exactly_the_three_method_keys_and_carries_no
 def test_f23_no_comparable_cell_prints_neither_block_emits_neither_key_and_the_api_refuses(synth_root: Path) -> None:
     """A13 pinned as shipped: exit 0, no root and no fault lines on a pair with no common cell;
     ``tree()`` on that ``multi`` raises ``TreeError`` (O13's refusal, reached from the API only)."""
-    # PF4 (PF4.7, section 8.5): a pair with no comparable condition is refused, exit 1, with one
+    # PF4 (PF4.7): a pair with no comparable condition is refused, exit 1, with one
     # error line naming the holes (one condition only in each run here) and a next line; nothing
     # reaches stdout, so neither block is printed and no JSON key is emitted, in text and --json.
     for extra in ((), ("--json",)):
@@ -2221,7 +2220,7 @@ def test_f24_the_discordant_cell_separates_pair_swap_from_arm_label(discordant_t
     """**The deterministic twin for the lane's one sole catch.** One cell of 32 with every
     matched pair discordant: under pair swap ``p_location`` is ``2 P(Bin(32, 1/2) <= 12) =
     0.2153`` exactly and under arm label ``2 P(Hyp(64, 32, 32) <= 12) = 0.0793``; measured
-    0.2119-0.2249 and 0.0767-0.0912 over five seeds at B=4000 (step zero item 5). The bands are
+    0.2119-0.2249 and 0.0767-0.0912 over five seeds at B=4000 (module docstring, measurement 5). The bands are
     at least 5.4 Monte Carlo sd from the exact value and 6 sd from the other scheme's, so an
     exchange regressed to arm label under ``mcnemar_bh`` reads about 0.08 and fails the first
     band alone, in a tenth of a second, with every count and the ``scheme`` field still right.
@@ -2241,7 +2240,7 @@ def test_f24_the_discordant_cell_separates_pair_swap_from_arm_label(discordant_t
 
 
 def test_f25_the_reductions_that_make_a_statistic_live_in_one_function_called_only_with_a_bare_array_or_a_row_slice() -> None:
-    """**The rule, in prose** (ADR-066 as this packet fixes it). Calls named ``sqrt``, ``mean`` or
+    """**The rule, in prose.** Calls named ``sqrt``, ``mean`` or
     ``average`` occur in exactly one function of ``tree.py`` and it is ``_statistics``;
     ``_statistics`` is defined once with exactly one parameter; every call to it passes one
     positional argument that is a bare name or a subscript of a bare name -- never a ``BinOp``,
@@ -2273,8 +2272,8 @@ def test_f25_the_reductions_that_make_a_statistic_live_in_one_function_called_on
 
 
 def test_f26_the_threshold_is_imported_from_the_executor_and_never_retyped() -> None:
-    """ADR-021's shape: one constant, two readers. ``tree.py`` imports ``DEFAULT_MAX_MDE`` from
-    ``proofload.executor``; no float constant ``0.2`` appears in ``tree.py`` or ``cli.py``; the
+    """One constant, two readers. ``tree.py`` imports ``DEFAULT_MAX_MDE`` from
+    ``poisson_prove.executor``; no float constant ``0.2`` appears in ``tree.py`` or ``cli.py``; the
     module's own name is the executor's object."""
     imported = {alias.name for node in ast.walk(parsed(TREE_SOURCE)) if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.executor" for alias in node.names}
     assert "DEFAULT_MAX_MDE" in imported, imported
@@ -2367,7 +2366,7 @@ def reference_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> 
 
 
 def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | None:
-    """Section 8.10's ``mde`` rule over the reference's two limits: the larger of two numbers, the
+    """The ``mde`` rule over the reference's two limits: the larger of two numbers, the
     number beside a direction with no room, and null otherwise."""
     rise, fall = reference_fisher_limits(events_a, n_a, n_b, level)
     if rise is not None and fall is not None:
@@ -2380,9 +2379,9 @@ def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | No
 
 
 def assert_the_limits_follow_the_rule(cell: Mapping[str, Any], row: Mapping[str, Any], level: float, method: str) -> None:
-    """PF4 re-freeze (PF4.22, PF4.23, PF4.27, section 8.10, Q54): the JSON carries the frame's limits;
+    """PF4 re-freeze (PF4.22, PF4.23, PF4.27, Q54): the JSON carries the frame's limits;
     a baseline with the event in every run has no rise (``no room``) and its fall is computed; ``mde``
-    follows section 8.10's rule, with a note when it is null, and a number is a positive grid value;
+    follows the ``mde`` rule (``reference_mde``), with a note when it is null, and a number is a positive grid value;
     under Fisher both limits are the stats file's reference at the lone-change level ``q / M``."""
     what = (method, cell["config_hash"])
     for key in ("mde", "mde_rise", "mde_fall"):
@@ -2435,7 +2434,7 @@ def assert_lattice_multi_json_carries_the_facts(multi: Any, method: str, a: pd.D
     (scipy's Fisher test and exact binomial McNemar, one BH family), with the exact McNemar p also
     statsmodels' and its BH q statsmodels', and to 1e-12 relative under log-rank (lifelines on the stored
     times), whose q column is also BH over its p column exactly. A condition whose baseline had the
-    event in every run has no rise and its fall computed, and every limit follows section 8.10's
+    event in every run has no rise and its fall computed, and every limit follows the ``mde``
     rule at ``q / M``, Fisher's recomputed from the stats file's reference (PF4.22, PF4.27). Each
     cell's JSON verdict is its direction (tripped has no kind, PF4.20) and the reference's; a cell
     moves exactly when it is rejected, in the direction of its delta except under log-rank (PF4.13);
@@ -2615,7 +2614,7 @@ def test_f28_the_q_and_delta_columns_and_the_coverage_rows_are_the_designs(latti
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    """PF0 (Q4): the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
     drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
@@ -2647,7 +2646,7 @@ def e14_builder(pair: Any) -> tuple[Any, Any, Any]:
 def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
     """The command line's ``heatmap.svg`` against the builder's, whose bytes keep the frozen digest.
 
-    Rule 10 (spec section 5.4) reformats only the text in the file, so every element and attribute
+    Rule 10 reformats only the text in the file, so every element and attribute
     is the builder's. Each cell's label is its delta to three decimals, read from ``cells``; a text
     the builder prints as a percentage-point number is that number as a fraction; every other text
     that changed keeps its ``key=value`` facts and its counts; and the notes the builder writes in
@@ -2684,14 +2683,14 @@ def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: 
 
 
 def test_f28_the_lattice_report_receipt_and_heatmap_carry_the_diff(pair: Any, tmp_path: Path) -> None:
-    """Narrowed for S28 (draft ADR-074, spec S28 section 3.8): ``report`` on a pair now renders the
+    """Narrowed for S28: ``report`` on a pair now renders the
     layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
-    digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
+    digests bit for bit, so the two markdown and HTML pins move to
     ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
-    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted.
+    changes and stays pinned through the CLI. Narrowed, not deleted.
 
-    Moved for rule 10 (spec section 5.4): the command line now prints the heatmap's text as
+    Moved for rule 10: the command line now prints the heatmap's text as
     fractions, so its digest moves to the builder's heatmap, and the file the command line writes
     is checked against that one fact by fact."""
     out = tmp_path / "report"
@@ -2700,7 +2699,7 @@ def test_f28_the_lattice_report_receipt_and_heatmap_carry_the_diff(pair: Any, tm
     # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded.
     multi, report, receipt = e14_builder(pair)
     assert_e14_builder_carries_the_result(multi, report, receipt)
-    # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
+    # The command line's heatmap is the builder's with its text under rule 10,
     # checked by its facts rather than a new digest.
     assert_cli_heatmap_is_the_builders_under_rule_10(
         (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event[EVENT].cells
@@ -2709,10 +2708,10 @@ def test_f28_the_lattice_report_receipt_and_heatmap_carry_the_diff(pair: Any, tm
 
 def test_f28_check_on_the_lattice_prints_the_same_bytes_and_exits_the_same(lattice_trees: Any) -> None:
     code, out, err = run_cli(["--store", str(LATTICE_ROOT), *CHECK_ARGV])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == CHECK_EXIT and without_notes(err) == "", (out, err)
-    # The verdict line now comes first, so the stdout digest is replaced by the facts it guarded
-    # (spec sections 5.3 and 14): passed, the gated event, the flat family's counts and its size.
+    # The verdict line now comes first, so the stdout digest is replaced by the facts it guarded:
+    # passed, the gated event, the flat family's counts and its size.
     multi = lattice_trees.multi((EVENT,), "fisher_bh")
     verdicts = multi.by_event[EVENT].cells["verdict"]
     first = out.splitlines()[0]
@@ -2725,7 +2724,7 @@ def test_f28_check_on_the_lattice_prints_the_same_bytes_and_exits_the_same(latti
     assert (n_lower, n_higher) == LATTICE_DIRECTION_COUNTS["fisher_bh"] == lattice.directions(lattice.fisher(EVENT))
     assert f"{n_lower:,} lower, {n_higher:,} higher" in out, out
     assert f"{multi.n_tests:,} tests" in out, out
-    # PF4 re-freeze (PF4.34, PF4.40, reading R34): check's block names the comparison's own word on
+    # PF4 re-freeze (PF4.34, PF4.40): check's block names the comparison's own word on
     # its comparison line, read from Holm's rows.
     holm = multi.to_json()["by_event"][EVENT]
     (comparison,) = [line for line in out.splitlines() if line.startswith("  comparison  ")]
@@ -2734,15 +2733,15 @@ def test_f28_check_on_the_lattice_prints_the_same_bytes_and_exits_the_same(latti
 
 def test_f28_serve_json_on_the_lattice_prints_the_same_structure(lattice_trees: Any) -> None:
     code, out, err = run_cli(["--store", str(LATTICE_ROOT), *SERVE_ARGV])
-    # A shared salt now adds one note line on stderr (spec section 5.4).
+    # A shared salt now adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", err
-    # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
-    # PF3 (spec section 4.4, PF3.6b; rule R3): serve --json now names the method at the top level after the
+    # serve --json now leads with a verdict and a sentence beside the structure.
+    # PF3 (PF3.6b): serve --json now names the method at the top level after the
     # sentence; dropped beside the verdict and the sentence.
     structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
-    # PF4 (PF4.11, section 8.5): the page no longer carries the store path at all.
+    # PF4 (PF4.11): the page no longer carries the store path at all.
     assert "store_root" not in structure["pair"]
-    # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
+    # PF2: run_name beside each arm's run_id and the title by name are asserted,
     # then put back as before names.
     structure = structure_as_ids_named_it(structure, EVENT)
     # PF0's version-field check still holds on the page.
@@ -2758,13 +2757,13 @@ def test_f28_serve_json_on_the_lattice_prints_the_same_structure(lattice_trees: 
 
 # PF0 (Q4): test_f28_diff_py_is_byte_untouched removed. It pinned the bytes of src/poisson_prove/diff.py, which the rename
 # changes; no digest of a file this module changes can be frozen honestly before its build
-# exists (front-door spec section 14).
+# exists.
 
 
 def test_f28_omnibus_on_the_lattice_minus_the_p_driven_keys_is_the_designs_payload(pair: Any, by_gain: Any) -> None:
-    """How ``omnibus``'s body may be refactored (section 3.4, F25) without its output moving: the
+    """How ``omnibus``'s body may be refactored (F25) without its output moving: the
     non-Monte-Carlo payload -- ``units``, the two statistics, every count -- is pinned; no
-    permutation p is (S25 section 0.3). Both the standalone ``omnibus`` and the tree's root. The
+    permutation p is, as in S25. Both the standalone ``omnibus`` and the tree's root. The
     digest is replaced by the facts it covered, each checked against the design or recomputed from
     the frames (``assert_the_omnibus_payload_is_the_design``), and the two payloads are equal."""
     a, b, _, _ = pair
@@ -2840,37 +2839,37 @@ def test_f30_refusals_fire_before_any_permutation_is_drawn(pair: Any, by_gain: A
 
 
 def test_f28_the_exclusion_record_is_one_constant_per_narrowed_file_with_every_adr_077_field() -> None:
-    """ADR-077's retirement duty, as the mechanical check the entry defines.
+    """The duty to retire exclusions, as a mechanical check.
 
     Step 1 is the grep for ``_PY_EXCLUDED`` under ``tests/``, one hit per live exclusion because
     the record is a module constant named for the file it narrows. **Counted over files, not
-    lines**, and that is an amendment ADR-077 is owed rather than a reading of it: the entry says
+    lines**, which corrects the duty as first written rather than reading it: that text says
     ``grep -rn`` returns two after A27, which is wrong twice over -- it holds only for a one-line
     record, and A27 narrows four carriers rather than two. Six fields make it a multi-line literal,
-    so ``grep -rn`` returns many and ``grep -rl`` returns the files the entry means. Measured at
+    so ``grep -rn`` returns many and ``grep -rl`` returns the files the duty means. Measured at
     ``101028c``: **0** files against twelve ``_PY_SHA256`` lines over six clauses in four files;
     **four** after A27, every carrier of ``DIFF_PY_SHA256``. Asserting the file list here is what
-    makes a fifth exclusion, minted anywhere in ``tests/`` without a re-freeze packet behind it,
+    makes a fifth exclusion, minted anywhere in ``tests/`` without a re-freeze behind it,
     fail rather than accumulate -- Q1's named failure mode is exclusions piling up unretired.
     A27's own retirement sweep discharges empty: nothing carried an exclusion at ``101028c``, so
     there was no orphan to file.
 
-    **A22's update, 2026-09-13.** The file list is unchanged: A22 adds a second *region* to an
+    **A22's update.** The file list is unchanged: A22 adds a second *region* to an
     existing record constant, not a fifth carrier. The per-record assertions now pin ``owner`` and
     ``minted_at`` per entry rather than one shared literal, because ``_coverage`` is minted at
-    ``4b3c6ae`` and ``_pairing`` at ``101028c``. Two live regions on one file is ADR-077's
-    *adjacent* case and not its refused *overlapping* one, so the spans are asserted disjoint here
+    ``4b3c6ae`` and ``_pairing`` at ``101028c``. Two live regions on one file is the allowed
+    *adjacent* case and not the refused *overlapping* one, so the spans are asserted disjoint here
     rather than assumed. Neither exclusion is retirable yet: both name ``A28`` as their retiring
-    packet, and A22 is not it.
+    change, and A22 is not it.
 
-    **A28's update, 2026-09-13 -- both exclusions retired.** ``_pairing`` (A27, ``101028c``) and
+    **A28's update -- both exclusions retired.** ``_pairing`` (A27, ``101028c``) and
     ``_coverage`` (A22, ``4b3c6ae``) both named ``A28``; both owners have landed and A28 rewrites
     every carrier, so ``DIFF_PY_SHA256`` is the whole-file value again, read off the shipped file,
     and this file carries no record. What stays is the sweep, asserted from a file that carries no
     exclusion -- which is what makes a fifth one turn four clauses red -- and it finds
     ``test_s29_viewer.py`` alone, the carrier of A28's own ``report.py::_check_tree`` exclusion.
     **Counted over module-level constants named ``*_PY_EXCLUDED``, by AST and not by text**,
-    because the text grep the entry describes counts this docstring and the sweep line itself
+    because the text grep the duty describes counts this docstring and the sweep line itself
     once the record is gone (measured: it returned all four carriers after retirement).
     """
     hits = sorted(path.name for path in sorted((REPO / "tests").glob("test_*.py")) if excluded_constants(path))

@@ -632,7 +632,7 @@ def test_i18_aj_single_event_matches_km_on_fixture(
     )
 
 
-# ---------- KMCurve.median, per section 7 (not an invariant) ----------
+# ---------- KMCurve.median (not an invariant) ----------
 
 
 def test_median_none_when_survival_never_reaches_half() -> None:

@@ -1,19 +1,18 @@
 """PF6, the look's file and the pretty rendering: the frozen tests (the code suite).
 
-Written from the front-door spec's section 5.1 (the look file is Prove's), section 5.5 (pretty and
-plain), its invariants PF6.0 to PF6.7, the rulings Q20, Q25 (as amended 2026-10-23), Q51 and Q62,
-the look file as written on 2026-10-23 (rulings Y1 to Y30, all as recommended) and the
-test standard (section 10.6). ``tests/test_pf6_app.py`` holds the terminal app. The build is written
+Written from the invariants PF6.0 to PF6.7 and the look file, ``docs/cli-look.md``, which is
+Prove's own: pretty output on a terminal, plain output everywhere else.
+``tests/test_pf6_app.py`` holds the terminal app. The implementation is written
 against these files and does not edit them.
 
 **How the rendering is reached.** Every command runs as ``python -m poisson_prove`` in a process of
 its own, as a user's shell runs it: on pipes, or with stdout and stderr each on a pseudo-terminal of
 its own (so the two streams stay apart while both are terminals), 100 columns by 40 rows unless a
-test says otherwise, ``HOME`` an empty folder, the planted keys set, none of section 5.5's switches set
+test says otherwise, ``HOME`` an empty folder, the planted keys set, none of the switches to plain output set
 unless the case sets one. Colour is read by role from the SGR escapes (green, yellow, red, bold, dim),
 never by exact bytes.
 
-**The corpus** (``CORPUS``) is PF6's own: one invocation of every verdict word section 5.5 gives a
+**The corpus** (``CORPUS``) is PF6's own: one invocation of every verdict word the look file gives a
 meaning (``ok``, ``done``, ``passed``, ``under cap``; ``stopped``, ``too small to tell``, ``no
 significant change``, ``note:``; ``error:``, ``failed``, ``at cap``; ``plan``, ``worse``/``safer``
 through ``trade``, ``mixed``), every verb that prints a result, a cell table, a run table, a
@@ -21,12 +20,12 @@ reproduce block, the files ``report`` writes and the ``--json`` of the verbs tha
 plan, on small stores so the whole corpus runs in seconds. PF1's corpus run both ways is the ``slow``
 test at the end (reading L3).
 
-**Readings, named here** (each is a yes/no in the freeze's records).
+**Readings, named here.**
 
 - L1 PF6.0's "equal, byte for byte, the base with the three changes applied": the base is committed
   as ``tests/fixtures/cli-look/bfe802d.md`` with each change's old and new text in ``changes.json``
-  (each old text occurs exactly once), and the file's first 120 lines are the result; the build
-  copies ``docs/cli-look.md`` from the design session's filing (sha256 ``92e71488…d85f``), so these
+  (each old text occurs exactly once), and the file's first 120 lines are the result; the implementation
+  adds ``docs/cli-look.md`` itself (sha256 ``92e71488…d85f``), so these
   tests commit the base and the changes, not the file.
 - L2 "Piped, the pretty build's output equals the plain build's": the same build on streams that are
   not terminals gives the same bytes with and without ``--plain`` and with Rich unimportable, each
@@ -45,28 +44,28 @@ test at the end (reading L3).
   and dim": no SGR parameter outside 0, 1, 2, 22, 30 to 37, 39 and 90 to 97 (no background, no 256 or
   true colour, no italic, underline or reverse) on either stream; and since colour has four meanings,
   the only colours drawn are green, yellow and red, plain or bright (dim is the fourth meaning).
-- L6 PF6.6's "wide tables fold as item 27 says": in a terminal of 80 and of 100 columns no line of a
+- L6 PF6.6's "wide tables fold as the look file says": in a terminal of 80 and of 100 columns no line of a
   table, of pretty or of plain, is wider than the terminal; the cell table's condition column prints
   the axes (``task_id refund · tool_fail_rate 0.55``), never the config's JSON; a line longer than the
   terminal is allowed only when it carries a command to copy, which is never broken; plain's own
-  wrapped lines continue with a hanging indent. Item 27's "a unit every cell repeats moves into the
+  wrapped lines continue with a hanging indent. The look file's "a unit every cell repeats moves into the
   header" is read through the same width rule and is not pinned on its own.
 - L7 PF6.7's "gone from the screen when the work ends": the stderr terminal's final screen, read by
   a terminal emulator, holds no progress line, and stdout's stream never held one.
-- L8 Q20 and Q60's "imported only by": ``rich`` only by renderer modules (``poisson_prove._render_*``)
+- L8 "imported only by": ``rich`` only by renderer modules (``poisson_prove._render_*``)
   and the app's modules (``poisson_prove._cli_app*``), ``textual`` only by the app's modules, and
   neither by ``cli.py``; importing ``poisson_prove.cli`` imports no Textual.
-- L9 Rich and Textual are core dependencies with a floor each (section 5.5: the lowest working
-  version measured by PF6, recorded in the build's log); the test checks a floor is declared and that
+- L9 Rich and Textual are core dependencies with a floor each (the lowest working
+  version, measured when PF6 was implemented); the test checks a floor is declared and that
   the installed versions meet it, not the measurement.
 - L10 On a terminal, plain wraps its own long lines (PF6.6), so "plain" there is read word for word, not
   byte for byte: PF6.1's plain cases read as ``--plain`` on the same terminal (``--plain`` taken out of
   a line that repeats the command as typed), and PF6.5's terminal run with Rich missing reads as the
   pipe, its progress aside (a terminal gets one rewritten line, a pipe a line per tenth).
 
-**Frozen assertions this file's commit moves (section 14):** ``test_s0_scaffold::test_core_deps``
-and ``test_a22_pandas3::test_v14_…`` (the core dependency list gains ``rich`` and ``textual``, Q20 and
-Q60). The second is not in section 14's table; the session log names it as a finding.
+**Frozen assertions this file's commit moves:** ``test_s0_scaffold::test_core_deps``
+and ``test_a22_pandas3::test_v14_…`` (the core dependency list gains ``rich`` and ``textual``). The
+second was not foreseen; it came to light when this file was written.
 
 **Lanes.** The code suite, but for PF1's corpus both ways (``slow``).
 """
@@ -96,10 +95,10 @@ from pf6_support import (
 LOOK_SHA256 = "92e71488c2824c056252be9a7b340e7fc138d15359fbcb7431bcfc6fa267d85f"
 BASE_SHA256 = "af0bb656e8a955befbdcdc031cce7c78d62248cd3b90adebf1e63d837298ce79"
 PREFIX_SHA256 = "fca2017b1923ed0725d54fd8829e288f677b75a78b93eff12bd862ad07312697"
-#: The two sections the design session added, each from its heading to the next one (or the end).
+#: The look file's two added sections, the terminal app and the static UI, each from its heading to the next one (or the end).
 APP_SECTION_SHA256 = "2b18ab73f23aa95571ab971d548e464ed5dfeec1678e836e0b35eee5a1312049"
 UI_SECTION_SHA256 = "f39b5a83b13e3a3378a994150a3187cc7e764d63e01365641b9409e9c6febfa7"
-#: Section 5.2's codes and meanings, the look file's exit-code table's first column and the start of
+#: The exit codes and their meanings, the look file's exit-code table's first column and the start of
 #: its second.
 EXIT_CODES = {
     "0": "done: the result is printed, whatever it says",
@@ -132,8 +131,8 @@ def _amended_base() -> str:
 
 
 def test_pf6_0_the_look_file_is_the_one_the_design_session_filed() -> None:
-    """``docs/cli-look.md`` is Prove's canonical copy: its sha256 is the one filed with it (section
-    13.3), so any later edit is a re-hash the spec names."""
+    """``docs/cli-look.md`` is Prove's canonical copy: its sha256 is the one filed with it, so any
+    later edit means a new hash here."""
     assert sha256_of(LOOK) == LOOK_SHA256
 
 
@@ -164,7 +163,7 @@ def test_pf6_0_the_exit_code_table_has_section_5_2s_codes_and_meanings() -> None
 
 def test_pf6_0_the_new_sections_follow_the_files_old_end_and_no_dated_note_is_added() -> None:
     """After the exit-code table's closing paragraph come exactly the terminal app's and the static
-    UI's sections, in that order, as filed; the file carries no dated note (Q62): no date anywhere
+    UI's sections, in that order, as filed; the file carries no dated note: no date anywhere
     and nothing between the title and the first paragraph but a blank line."""
     look = _look()
     rest = look[len(_amended_base()):]
@@ -348,7 +347,7 @@ def _same_bytes(text: str) -> str:
 
 def _without_progress(text: str) -> str:
     """A stream without its progress, which a terminal gets as one rewritten line and a pipe as a
-    line per tenth (section 5.5)."""
+    line per tenth."""
     parts = re.split(r"[\r\n]", text)
     return "\n".join(p for p in parts if not re.fullmatch(r"\s*[\d,]+/[\d,]+\s*", p))
 
@@ -361,7 +360,7 @@ def _closing_word(text: str) -> str:
 
 def test_pf6_corpus_ran_as_designed_on_pipes(corpus: dict[str, dict[str, dict[str, Any]]]) -> None:
     """The corpus is what it says it is: each call's exit code and first stdout word as listed, so
-    the tests below read every verdict word section 5.5 gives a colour."""
+    the tests below read every verdict word the look file gives a colour."""
     for call in CORPUS:
         r = corpus["pipe"][call.name]
         assert r["code"] == call.code, (call.name, r["code"], r["err"][-500:])
@@ -379,7 +378,7 @@ def test_pf6_corpus_ran_as_designed_on_pipes(corpus: dict[str, dict[str, dict[st
     assert {"ok", "done", "passed", "under cap", "stopped", "too small to tell", "no significant change", "failed", "at cap", "plan", "trade", "mixed"} <= words
 
 
-# ---------- PF6.1 pretty only under section 5.5's conditions ----------
+# ---------- PF6.1 pretty only under the look file's conditions ----------
 
 #: (case, how the process runs, whether it draws pretty). Each case changes one condition from the
 #: first. ``stdout``/``stderr``: ``pty`` a terminal, ``pipe`` not; ``env`` and ``argv`` as given.
@@ -409,7 +408,7 @@ def switch_folder(template: Path, tmp_path: Path) -> Path:
 def test_pf6_1_pretty_runs_only_when_every_condition_holds_and_each_alone_turns_it_off(
     case: str, how: dict[str, Any], pretty: bool, switch_folder: Path, tmp_path: Path
 ) -> None:
-    """Section 5.5's switch, each condition alone: pretty when stdout and stderr are both terminals,
+    """The switch to pretty output, each condition alone: pretty when stdout and stderr are both terminals,
     ``NO_COLOR`` unset or empty, ``CI`` unset, ``TERM`` not ``dumb``, stdout UTF-8, no ``--json`` and no
     ``--plain`` (before or after the verb); otherwise plain, which on a terminal reads word for word as
     what ``--plain`` prints on the same terminal."""
@@ -438,7 +437,7 @@ def test_pf6_1_pretty_runs_only_when_every_condition_holds_and_each_alone_turns_
 def test_pf6_2_piped_every_call_prints_the_same_bytes_with_plain_asked_for_or_rich_missing(
     other: str, corpus: dict[str, dict[str, dict[str, Any]]]
 ) -> None:
-    """Reading L2: on pipes the build prints, for every call of the corpus, the same stdout, stderr
+    """Reading L2: on pipes the command prints, for every call of the corpus, the same stdout, stderr
     and exit code as with ``--plain`` and as with Rich unimportable; a sweep's progress lines are left
     out of stderr, since how many come depends on how fast the rollouts ran (one per tenth, from events
     that come at most once a second)."""
@@ -492,10 +491,10 @@ def _first_word_role(text: str) -> tuple[str, str]:
 
 
 def test_pf6_4_every_verdict_word_takes_its_meanings_colour_and_no_number_is_coloured(corpus: dict[str, dict[str, dict[str, Any]]]) -> None:
-    """Section 5.5's four meanings on a terminal: green for ``ok``, ``done``, ``passed``, ``under cap``;
+    """The look file's four meanings on a terminal: green for ``ok``, ``done``, ``passed``, ``under cap``;
     yellow for ``stopped``, ``too small to tell``, ``no significant change`` and ``note:``; red for
     ``error:``, ``failed`` and ``at cap``; bold with no colour for ``plan``, ``worse``, ``safer``,
-    ``trade`` and the direction words (reading A9); no digit coloured; only the 16 named colours, bold
+    ``trade`` and the direction words; no digit coloured; only the 16 named colours, bold
     and dim (reading L5), on stdout and on stderr."""
     from pf6_support import role_of
 
@@ -639,7 +638,7 @@ def test_pf6_7_pretty_progress_is_on_stderr_and_gone_from_the_screen_when_the_sw
     assert _closing_word(strip_escapes(run.out)) == "done", strip_escapes(run.out)[-400:]
 
 
-# ---------- Q20, Q60: where Rich and Textual are imported; the dependencies ----------
+# ---------- Where Rich and Textual are imported; the dependencies ----------
 
 
 def _imports(path: Path) -> set[str]:
@@ -662,7 +661,7 @@ def _module_name(path: Path) -> str:
 
 
 def test_pf6_rich_and_textual_are_imported_only_by_the_renderer_and_the_app() -> None:
-    """Reading L8 (Q20, Q60): ``rich`` only in ``poisson_prove._render_*`` and ``poisson_prove._cli_app*``,
+    """Reading L8: ``rich`` only in ``poisson_prove._render_*`` and ``poisson_prove._cli_app*``,
     ``textual`` only in ``poisson_prove._cli_app*``; at least one module imports each; ``cli.py`` neither."""
     users: dict[str, set[str]] = {"rich": set(), "textual": set()}
     for path in sorted(SRC.rglob("*.py")):
@@ -676,7 +675,7 @@ def test_pf6_rich_and_textual_are_imported_only_by_the_renderer_and_the_app() ->
 
 
 def test_pf6_importing_the_command_line_imports_no_textual(tmp_path: Path) -> None:
-    """Q60: Textual is imported by the app's module only, when the app opens, so the plain
+    """Textual is imported by the app's module only, when the app opens, so the plain
     commands do not pay for it."""
     home = tmp_path / "home"
     home.mkdir()
@@ -690,7 +689,7 @@ def test_pf6_importing_the_command_line_imports_no_textual(tmp_path: Path) -> No
 
 
 def test_pf6_rich_and_textual_are_core_dependencies_with_a_floor_the_install_meets() -> None:
-    """Q20 and Q60 with reading L9: both in ``[project] dependencies``, each with a ``>=`` floor, which
+    """Reading L9: both in ``[project] dependencies``, each with a ``>=`` floor, which
     the installed versions meet; the terminal emulator the tests read screens with is in ``[dev]``."""
     from importlib.metadata import version
 

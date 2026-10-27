@@ -1,23 +1,22 @@
-"""PF7 -- the README, the docs, the recipes and a real agent's example (*Prove -- Spec Front Door*,
-sections 4.1, 6.2 to 6.5, 7.2, 8.7 to 8.9, 9.2, 17 to 20, and PF7.1 to PF7.3, PF7.7 and PF7.8;
-Q15, Q26, Q31, Q35 and Q45; the decision of 2026-10-24 that each case is its own sweep axis; the
-amended description words of 2026-10-24; a comparison result's JSON form of 2026-10-25).
+"""PF7 -- the README, the docs, the recipes and a real agent's example (PF7.1 to PF7.3, PF7.7 and
+PF7.8; each case its own sweep axis; the amended description words; a comparison result's JSON
+form).
 
-**What is pinned is what ships, as rules.** The pages are found, not listed, where the spec lets
-them be: every Markdown page of the README, ``CONTRIBUTING.md``, ``docs/`` (but the two standards)
+**What is pinned is what ships, as rules.** The pages are found, not listed:
+every Markdown page of the README, ``CONTRIBUTING.md``, ``docs/`` (but the two standards)
 and the example is read by the docs check, the words check and the link check, so a page a later
 change adds is checked by being there. Where a page must carry what the code has (every verb, every
 option of a verb, every key a sweep spec takes, every fault, every required ``[burla]`` field, the
 prompt ``init --agent`` prints, the steps of the skill it writes), the list is read from what ships:
 the command's own output, the public modules, or the field lists the spec reader checks a spec
-against. Facts are pinned, never prose, but for the words the decisions fix: the README's
+against. Facts are pinned, never prose, but for the words fixed here: the README's
 description words, the never-phones-home paragraph, "its own sweep axis", and the section headings.
 
 **The docs check** is ``pf7_docs_check.py`` (its docstring is the definition of the marks and of
 "does what its page shows"). Its own behaviour is pinned here too, on small pages written by the
 test, so a check that let a wrong page through would fail here first.
 
-**Readings this file freezes** (each one yes/no in the release log; the build follows them):
+**Choices this file freezes** (the code follows them):
 
 - **d1** A block's mark is an HTML comment alone on the line directly before it, with three kinds
   (``run``, ``skip: REASON``, ``file NAME``) and one page mark (``setup quickstart``), as the check's
@@ -31,17 +30,17 @@ test, so a check that let a wrong page through would fail here first.
 - **d3** The pages it reads are the README, ``CONTRIBUTING.md``, every page under ``docs/`` but
   ``docs/cli-look.md`` and ``docs/repo-hygiene.md`` (copied byte for byte from their canonical
   copies, so they cannot carry marks), and the example's own pages. The pilots' pages are not read:
-  they leave the repository with the hygiene module (Q35).
+  they leave the repository with the hygiene module.
 - **d4** The README's first screen is everything above its first ``##`` heading; its commands block
-  is section 6.2's six lines exactly, fenced or indented.
-- **d5** The README's sections are section 6.2's headings, word for word, as ``##`` headings in that
+  is ``FIRST_COMMANDS``' six lines exactly, fenced or indented.
+- **d5** The README's sections are ``SECTIONS``' headings, word for word, as ``##`` headings in that
   order, and no other ``##`` heading.
 - **d6** The never-phones-home paragraph is ``SCOPE.md``'s, word for word with the names as the
   rename gives them ("Prove", ``poisson-prove serve``), the same words the hygiene tests pin.
 - **d7** "With stated confidence" is on no page and in no help: the README, the docs, the PyPI
   description and every ``--help``, the top-level one included.
 - **d8** The quickstart's verdict is ``trade``: its packaged spec declares ``timeout`` and
-  ``violated`` failures (the first-run decision), so the words are section 8.4's, not the kindless
+  ``violated`` failures, so the words are the five a kinded comparison reads, not the kindless
   ``mixed`` that the committed 0.0.1 pair reads. Its counts are never pinned.
 - **d9** A verb page has a ``## Exit codes`` section listing exactly the codes that verb can return
   (0, 1, 2, 3 and 130; ``check`` and ``paired`` also 4) and a ``## What it writes`` section; it names
@@ -50,7 +49,7 @@ test, so a check that let a wrong page through would fail here first.
   its line breaks evened out, as the docs check reads it); and two or more of its other examples
   are marked ``run`` with a printed line shown.
 - **d10** The layered-report page works on the quickstart pair: the committed two-run fixture it was
-  to use came out of the tests (the neutral-fixtures rule of 2026-10-25), and a reader can make the
+  to use came out of the tests, and a reader can make the
   quickstart pair.
 - **d11** The example's client is replaced in the test by a stand-in for ``openai.OpenAI`` (the
   Chat Completions call), with ``OPENAI_API_KEY`` set to a placeholder that is no key while the
@@ -70,18 +69,18 @@ test, so a check that let a wrong page through would fail here first.
   ``ModalOptions``, ``ImageSpec``, ``BurlaOptions``), the Modal price table's date
   (``executor_modal._PRICES_ASOF``) and ``BurlaOptions``' fields with no default; ``[axes.*]`` or
   ``[axes.<name>]`` both name the axis table.
-- **d15** The recipes' skip reasons are section 6.4's words exactly, and each recipe shows what
-  section 6.4's table says it shows: ``in-ci`` a ``check`` that exits 4 and a ``--json`` command;
+- **d15** The recipes' skip reasons are ``RECIPES``' words exactly, and each recipe shows what
+  ``RECIPE_SHOWS`` checks it shows: ``in-ci`` a ``check`` that exits 4 and a ``--json`` command;
   ``when-it-says-too-small-to-tell`` a comparison whose word is ``too small to tell``;
   ``a-prompt-change`` ``--pair-with latest`` and ``check --fail-on worse``;
   ``a-model-change-with-cost`` a spec the spec reader loads with an ``[axes.model]`` of two values,
   and ``paired --cap-check``; ``paired-replay`` a declaration the paired module loads, and
   ``paired``.
 - **d16** Prose is not pinned beyond the words named above: the "What Prove is not" paragraph,
-  section 8.9's "never edits your code or your files", section 6.5's four bullets, the concepts
+  "never edits your code or your files" and the bullets that go with it, the concepts
   pages' explanations, the form of the Citation (any section with text), how each option is
   explained (named in backticks is the fact), and that the docs describe the pretty rendering.
-- **d17** The statistics page explains section 8.4's five words and the three a comparison of
+- **d17** The statistics page explains the five verdict words and the three a comparison of
   events with no kind reads (``mixed``, ``higher``, ``lower``).
 - **d18** The case-id refusal is the docs check's run of the your-own-agent page: its refused
   comparison exits 1 and its printed refusal names two or more of the case ids the page's own runs
@@ -99,10 +98,10 @@ plain output: no escape and no box drawing in a command's shown output); the ``[
 it adds, which take floors here; the core dependencies it adds; ``poisson-prove`` with no verb,
 which opens the app only on a terminal, so a page's example of it is marked ``skip``.
 **Seams with the dashboard:** ``poisson-prove ui`` has its verb page (red until its verb is
-merged); the dashboard page names the seven views of section 18.3 as headings; the artifact
+merged); the dashboard page names the dashboard's seven views as headings; the artifact
 format's page is that module's, read here only by the three checks.
 **Seams with public hygiene:** the plain-words corpus (d12), the never-phones-home words (d6),
-section 9.1's removed files, the CHANGELOG; and a TOML header of an array of tables
+the removed files, the CHANGELOG; and a TOML header of an array of tables
 (``[[cuts]]`` in a paired declaration, ``[[scenarios]]`` in a sweep spec), which a page must be
 able to show and which the hygiene module's double-bracket family would read as a note link.
 
@@ -112,39 +111,39 @@ able to show and which the hygiene module's double-bracket family would read as 
 |---|---|
 | PF7.1 the README's first screen: title, commands block exactly, the three facts, the description words | ``test_pf7_1_the_readme_first_screen_is_section_6_2s`` |
 | PF7.1 every link in the README is absolute | ``test_pf7_1_every_link_in_the_readme_is_absolute_and_resolves`` |
-| section 6.2 the README's sections in order, under 250 lines | ``test_pf7_1_the_readme_sections_are_section_6_2s_in_order`` |
-| section 6.2 every command block of the README is run | ``test_pf7_1_every_block_of_the_readme_is_run`` |
-| section 6.3 the README links the three pages kept | ``test_pf7_1_the_readme_links_the_three_pages_it_keeps`` |
-| section 6.2, 20.5 each README section carries its facts | ``test_pf7_1_each_readme_section_carries_its_facts`` (one case per section) |
-| sections 6.3 and 9.1 the never-phones-home paragraph word for word | ``test_pf7_1_the_readme_keeps_the_never_phones_home_paragraph`` |
-| PF7.2 every page of section 6.3 exists | ``test_pf7_2_every_page_of_section_6_3_exists`` (one case per page) |
+| PF7.1 the README's sections in order, under 250 lines | ``test_pf7_1_the_readme_sections_are_section_6_2s_in_order`` |
+| PF7.1 every command block of the README is run | ``test_pf7_1_every_block_of_the_readme_is_run`` |
+| PF7.1 the README links the three pages kept | ``test_pf7_1_the_readme_links_the_three_pages_it_keeps`` |
+| PF7.1 each README section carries its facts | ``test_pf7_1_each_readme_section_carries_its_facts`` (one case per section) |
+| PF7.1 the never-phones-home paragraph word for word | ``test_pf7_1_the_readme_keeps_the_never_phones_home_paragraph`` |
+| PF7.2 every required page exists | ``test_pf7_2_every_page_of_section_6_3_exists`` (one case per page) |
 | PF7.2 each verb page's help equals ``--help``; options, examples, exit codes, what it writes | ``test_pf7_2_each_verb_page_has_its_help_options_examples_exit_codes_and_writes`` (one case per verb) |
-| section 4.1 the first run's pages show its commands and its verdict | ``test_pf7_2_the_first_run_pages_show_its_commands_and_its_verdict`` (README, quickstart) |
-| section 6.3 the sweep spec page names every key and table | ``test_pf7_2_the_sweep_spec_page_names_every_key_and_table`` |
-| section 6.3 the statistics page explains every verdict word | ``test_pf7_2_the_statistics_page_explains_every_verdict_word`` |
-| section 8.7 the backends page: local, Modal, Burla | ``test_pf7_2_the_backends_page_carries_what_each_backend_needs`` (one case per backend) |
-| section 8.7 the fault-injection page | ``test_pf7_2_the_fault_injection_page_names_every_fault_and_the_chaos_table`` |
-| rule of 2026-10-24 each case its own sweep axis; the refusal | ``test_pf7_2_the_agent_pages_say_each_case_is_its_own_sweep_axis`` (two pages) |
-| section 20.5 the setup page around its table | ``test_pf7_2_the_setup_page_carries_the_prompt_the_steps_and_the_options`` |
-| section 20.5 the setup page's table, kept | ``test_pf11_setup_agent::test_pf11_8_…`` (frozen, unchanged) |
-| section 19 the terminal app's page (shape) | ``test_pf7_2_the_terminal_app_page_says_how_it_opens_and_its_keys`` |
-| section 18 the dashboard's page (shape) | ``test_pf7_2_the_dashboard_page_names_the_views_the_verb_and_what_saves`` |
-| section 17 the architecture page | ``test_pf7_2_the_architecture_page_names_the_core_and_the_faces`` |
-| section 6.3 ``CONTRIBUTING.md`` | ``test_pf7_2_contributing_says_how_to_install_test_and_commit`` |
-| decision of 2026-10-25 ``json.dumps`` on an unread result | ``test_pf7_2_the_python_page_says_json_dumps_on_an_unread_result_is_unsupported`` |
+| PF7.2 the first run's pages show its commands and its verdict | ``test_pf7_2_the_first_run_pages_show_its_commands_and_its_verdict`` (README, quickstart) |
+| PF7.2 the sweep spec page names every key and table | ``test_pf7_2_the_sweep_spec_page_names_every_key_and_table`` |
+| PF7.2 the statistics page explains every verdict word | ``test_pf7_2_the_statistics_page_explains_every_verdict_word`` |
+| PF7.2 the backends page: local, Modal, Burla | ``test_pf7_2_the_backends_page_carries_what_each_backend_needs`` (one case per backend) |
+| PF7.2 the fault-injection page | ``test_pf7_2_the_fault_injection_page_names_every_fault_and_the_chaos_table`` |
+| PF7.2 each case its own sweep axis; the refusal | ``test_pf7_2_the_agent_pages_say_each_case_is_its_own_sweep_axis`` (two pages) |
+| PF7.2 the setup page around its table | ``test_pf7_2_the_setup_page_carries_the_prompt_the_steps_and_the_options`` |
+| PF11.8 the setup page's table, kept | ``test_pf11_setup_agent::test_pf11_8_…`` (frozen, unchanged) |
+| PF7.2 the terminal app's page (shape) | ``test_pf7_2_the_terminal_app_page_says_how_it_opens_and_its_keys`` |
+| PF7.2 the dashboard's page (shape) | ``test_pf7_2_the_dashboard_page_names_the_views_the_verb_and_what_saves`` |
+| PF7.2 the architecture page | ``test_pf7_2_the_architecture_page_names_the_core_and_the_faces`` |
+| PF7.2 ``CONTRIBUTING.md`` | ``test_pf7_2_contributing_says_how_to_install_test_and_commit`` |
+| PF7.2 ``json.dumps`` on an unread result | ``test_pf7_2_the_python_page_says_json_dumps_on_an_unread_result_is_unsupported`` |
 | PF7.3 every marked block runs and does what its page shows; unmarked fails; skips name reasons | ``test_pf7_3_every_marked_block_runs_and_does_what_its_page_shows`` (one case per page and install; the wheel's slow) |
 | PF7.3 the docs check catches each way a page can be wrong | ``test_pf7_3_the_docs_check_catches_each_way_a_page_can_be_wrong`` (one case per way, and a right page) |
 | PF7.7 the six recipes | ``test_pf7_7_the_recipes_are_section_6_4s_six`` |
-| PF7.7 each recipe: under 150 lines, ends with "What this does not tell you", no run id, run or skip as section 6.4 says | ``test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_marked_as_section_6_4_says`` (one case per recipe) |
+| PF7.7 each recipe: under 150 lines, ends with "What this does not tell you", no run id, run or skip as ``RECIPES`` says | ``test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_marked_as_section_6_4_says`` (one case per recipe) |
 | PF7.8 the example runs keyless with its client replaced by a stand-in | ``test_pf7_8_the_example_runs_keyless_with_its_client_replaced`` |
-| rule 11, sections 9.2 and 9.3 the docs are public text (interim) | ``test_pf7_the_docs_name_no_internal_code_study_or_place`` (one case per page) |
-| section 6.2 every link of every page resolves | ``test_pf7_every_link_of_every_page_resolves`` (one case per page) |
+| PF7 the docs are public text (interim) | ``test_pf7_the_docs_name_no_internal_code_study_or_place`` (one case per page) |
+| PF7 every link of every page resolves | ``test_pf7_every_link_of_every_page_resolves`` (one case per page) |
 | every docs page Prove's code or skill names exists | ``test_pf7_every_docs_page_prove_points_to_exists`` |
-| decision of 2026-10-24 "with stated confidence" nowhere | ``test_pf7_no_page_or_help_says_with_stated_confidence`` (pages, description, help) |
-| PF7 row of section 13 the docs show plain output | ``test_pf7_the_docs_show_plain_output`` |
-| sections 3.3 and 8.9 nothing unbuilt is offered | ``test_pf7_no_page_claims_what_0_1_0_does_not_build`` |
-| section 6.3 the layered-report page (d10) | ``test_pf7_2_the_layered_report_page_works_on_the_quickstart_pair_and_names_its_layers`` |
-| sections 5.4 and 6.4 no command is given a run id (d13) | ``test_pf7_no_command_on_any_page_is_given_a_run_id`` |
+| PF7 "with stated confidence" nowhere | ``test_pf7_no_page_or_help_says_with_stated_confidence`` (pages, description, help) |
+| PF7 the docs show plain output | ``test_pf7_the_docs_show_plain_output`` |
+| PF7 nothing unbuilt is offered | ``test_pf7_no_page_claims_what_0_1_0_does_not_build`` |
+| PF7.2 the layered-report page (d10) | ``test_pf7_2_the_layered_report_page_works_on_the_quickstart_pair_and_names_its_layers`` |
+| PF7 no command is given a run id (d13) | ``test_pf7_no_command_on_any_page_is_given_a_run_id`` |
 """
 
 from __future__ import annotations
@@ -477,7 +476,7 @@ def test_pf7_1_every_link_in_the_readme_is_absolute_and_resolves() -> None:
 
 
 def test_pf7_1_the_readme_links_the_three_pages_it_keeps() -> None:
-    """Section 6.3: the three pages kept from before are linked from the README."""
+    """The three pages kept from before are linked from the README."""
     kept = ("docs/reading-a-serve-page.md", "docs/defining-outcomes.md", "docs/what-capture-stores.md")
     assert [p for p in kept if not _links_to(text_of(README), p)] == []
 
@@ -490,7 +489,7 @@ def test_pf7_1_the_readme_sections_are_section_6_2s_in_order() -> None:
 
 
 def test_pf7_1_every_block_of_the_readme_is_run() -> None:
-    """Every command block of the README is run or written (section 6.2); a block marked as text
+    """Every command block of the README is run or written; a block marked as text
     (``text``) may be skipped with its reason. A fence with no language counts as commands."""
     page = page_of(README)
     not_run = [(b.line, b.mark) for b in page.blocks
@@ -617,7 +616,7 @@ def test_pf7_1_the_readme_keeps_the_never_phones_home_paragraph() -> None:
 def test_pf7_2_every_page_of_section_6_3_exists(rel: str) -> None:
     assert (ROOT / rel).is_file(), f"{rel} does not exist"
     if rel == "CHANGELOG.md":
-        return  # its form is the hygiene module's (section 9.4)
+        return  # its form is the hygiene module's
     first = text_of(rel).lstrip().splitlines()[:1]
     assert first and first[0].startswith("# "), (rel, first)
 
@@ -1205,7 +1204,7 @@ def test_pf7_no_page_or_help_says_with_stated_confidence(tmp_path: Path) -> None
 
 
 def test_pf7_no_page_claims_what_0_1_0_does_not_build() -> None:
-    """Sections 3.3 and 8.9: no page offers a flag, a verb or an extra 0.1.0 does not have."""
+    """No page offers a flag, a verb or an extra 0.1.0 does not have."""
     said = []
     for rel in PAGES:
         if not (ROOT / rel).is_file():

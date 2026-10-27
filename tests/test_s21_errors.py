@@ -1,4 +1,4 @@
-"""S21 frozen tests: error visibility downstream (Action List B.6), from section 4 of the S21 spec.
+"""S21 frozen tests: error visibility downstream.
 
 Invariants E1-E27 map one test function each (several map more). Nothing here is built when
 this file is written: ``RunTally``, ``Store.tally``, ``COVERAGE_COLUMNS``, ``Cell.hole_cause``
@@ -9,12 +9,12 @@ What is asserted where:
 
 - **The public surface first.** ``RunTally`` values, coverage frames, ``Cell`` fields, the
   structure, the page, and the CLI's exit code and streams. Five clauses reach a private name
-  because the spec pins the name itself and nothing rendered carries it: E3 (the two store
+  because the name itself is what is pinned and nothing rendered carries it: E3 (the two store
   markers against ``executor._TIMEOUT_ERROR`` and ``executor_modal._INFRA_PREFIX``, so they
   cannot drift), E12 (``diff._CAUSES`` and ``report._GRID_CAUSES``, the vocabulary written
   once), E16 (``report._fmt`` -- a formatted string can only be checked against the formatter,
   the V16 rule) and E17 (``report._coord_text`` for a grid hole's coords). E22 reads the source
-  through ``proofload.__file__`` and imports nothing.
+  through ``poisson_prove.__file__`` and imports nothing.
 - **The lattice pair is the zero case** (E4, E14, E15, E21, E23, E24): the generated pair
   (``tests/lattice.py``) has no errored rows, no holes, both tallies ``(2304, 2304, 0, 0, 0, 0)``.
   E14's three digests were minted on the bare tree at ``b10a146`` on the fixture pair of the time
@@ -22,14 +22,14 @@ What is asserted where:
   ``report lattice-a lattice-b --event tripped --x gain --y load``.
 - **The synthetic pair** (E6-E13, E17, E20, E24-E26) is built in ``tmp_path`` the way
   ``test_m13_viewer.py``'s ``write_run`` builds one, restated here. Over a categorical
-  ``task`` and a numeric ``level`` it holds every case section 6 lists, plus a ``variant`` key
+  ``task`` and a numeric ``level`` it holds every hole cause, plus a ``variant`` key
   that is constant on every comparable cell so that two non-comparable cells can share a grid
   coordinate, a ``ghost`` task no comparable cell carries (an off-grid hole without a
   ``--fix``, given errored rows so that E26 counts it), a bool and a list in every config (``config_text``'s scalar and non-scalar
   cases), and errors cycling through ``timeout`` / ``infra: RuntimeError('x')`` / ``boom`` so
   all four tally buckets are non-zero in both arms.
 
-Literals the spec leaves to the frozen tests, pinned here rather than buried in a test:
+Literals left to the frozen tests, pinned here rather than buried in a test:
 
 - ``HOLES_HEADING``: the section's ``<h2>`` text is ``Holes``.
 - ``ZERO_HOLES_TEXT``: the zero-holes paragraph reads ``0 holes``.
@@ -102,7 +102,7 @@ assert LATTICE_ROWS == lattice.ROWS
 
 # E14: the three digests were minted on the bare tree at b10a146 (2026-09-06) on the fixture pair of
 # the time; E14 now reads the facts they guarded off the lattice pair.
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the
+# PF3 (Q17): the lattice's runs share a salt, so the default is now the
 # paired test; the E14 facts and the heatmap are the unpaired test's, named.
 E14_ARGV = ("report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
 # PF4 (PF4.3, PF4.15, PF4.20): the three E14 digests (report.md, heatmap.svg, receipt.html) are no longer
@@ -110,11 +110,11 @@ E14_ARGV = ("report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--x", lat
 # E14 checks the facts they guarded instead. An event of unknown kind prints in direction words, so the
 # library's own ``safer`` (the rate fell) and ``worse`` (it rose) read ``lower`` and ``higher``.
 E14_DIRECTION = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
-# PF4 re-freeze (the PF4 freeze's yes/no 18 ruled no): the library's cells now hold the direction
+# PF4 re-freeze: the library's cells now hold the direction
 # words themselves for an event of unknown kind, so they map to themselves.
 E14_DIRECTION.update({"lower": "lower", "higher": "higher"})
 
-# LS update, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+# LS update: /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
@@ -133,7 +133,7 @@ MULTI_FIELDS = (
     "events", "by_event", "method", "seed_identity_match", "unpaired_analysis", "q", "t_unit", "horizon", "n_tests",
     "n_not_comparable", "dropped_a", "dropped_b", "truncated", "trades", "inferred", "non_event",
 )
-#: Updated 2026-09-20 (truncation surfacing): ``truncated`` -- the horizon count -- is
+#: Updated for truncation surfacing: ``truncated`` -- the horizon count -- is
 #: ``episodes_censored_at_horizon`` in its slot, and a report built with manifests and the counts the CLI hands
 #: the builders (this file's ``built()`` does) carries each run's recorded byte limit, its span count and its count
 #: of spans stamped as cut after ``run_salt``.
@@ -144,7 +144,7 @@ PROVENANCE_KEYS = (
     "observation_cut_spans_a", "observation_cut_spans_b",
 )
 
-# LS update, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
+# LS update: ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -174,7 +174,7 @@ PF4_CELL_KEYS = (
     "flaggable", "mde_moves_with", "mde_rise_verdict", "mde_fall_verdict", "competing_shift",
     "ci_lo", "ci_hi", "ci_level", "ci_method",
 )
-# LS update, 2026-09-22 (local serve pass, Phase A): ``where`` after ``coords``; ``coords`` keeps its meaning (spec LS section 3.1 (c)).
+# LS update: ``where`` after ``coords``; ``coords`` keeps its meaning.
 HOLE_KEYS = (
     "coords", "where", "config_hash", "cause", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "config", "config_text",
@@ -185,7 +185,7 @@ FLOAT_KINDS = {
     "mde": "pp0",
 }
 FORBIDDEN_KEYS = {"episode", "seed", "replicate_index", "trace", "meta"}
-#: E16's one carve-out, by path (spec S29 section 0.3): the permutation seed M14's frozen
+#: E16's one carve-out, by path: the permutation seed M14's frozen
 #: ``RootResult.to_json()`` names ``seed``, carried verbatim under ``tree``.
 SEED_CARVE_OUT = "tree.root.seed"
 UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
@@ -243,7 +243,7 @@ IDENTITY_ROWS = ("with_outcome", "no_outcome", "timed_out", "infra", "other")
 DRILL_LABELS = ("n (a/b)", "rows (a/b)", "no outcome (a/b)")
 ORDER_KEYS_AFTER_N = ("rows_a", "rows_b", "no_outcome_a", "no_outcome_b")
 HOLES_HEADING = "Holes"
-# LS update, 2026-09-22 (local serve pass, Phase A, found by the shim run): ``coords`` is ``where`` in the header and the column prints the hole's ``where`` (spec LS D12).
+# LS update: ``coords`` is ``where`` in the header and the column prints the hole's ``where``.
 HOLES_HEADER = ["where", "cause", "config_hash", "rows (a/b)", "no outcome (a/b)"]
 ZERO_HOLES_TEXT = "0 holes"
 HOLES_OPTGROUP = "holes"
@@ -251,7 +251,7 @@ HOLES_ID = "prove-holes"
 INDEX_ID = "prove-cells"
 HOLE_MESSAGE = "No comparable data for this cell."
 NONE_TEXT = "none"
-# PF2 (spec section 4.3/5.3): runs prints these nine columns, newest first.
+# PF2: runs prints these nine columns, newest first.
 RUNS_HEADER = ("#", "name", "id", "status", "backend", "target", "rows", "rows without an outcome", "created")
 PUBLIC_STORE_METHODS = {
     "create_run", "manifest", "mark_complete", "runs", "append", "read", "missing", "count",
@@ -307,7 +307,7 @@ B_CELLS: dict[tuple[str, float, str], tuple[int, int]] = {
     ("unsampled", 1.0, P): (N, 0),
     ("multi", 1.0, P): (N, 0), ("multi", 2.0, Q): (N, 0),
 }
-# Section 0.3's cause for every non-comparable coverage row of the pair, by (task, level, variant).
+# The expected cause for every non-comparable coverage row of the pair, by (task, level, variant).
 EXPECTED_CAUSES: dict[tuple[str, float, str], str] = {
     ("only-a", 2.0, P): "only_a",
     ("only-b", 2.0, P): "only_b",
@@ -399,14 +399,14 @@ DETAIL_LABELS = frozenset({
 
 
 def run_names(root: Path) -> dict[str, str]:
-    """PF2 (spec section 4.3/5.3): every run has a name; ``runs --json`` maps each id to it."""
+    """PF2: every run has a name; ``runs --json`` maps each id to it."""
     r = run_cli(["--store", str(root), "runs", "--json"])
     assert r.code == 0, r.text
     return {entry["run_id"]: entry["run_name"] for entry in json.loads(r.out)["runs"]}
 
 
 def after_verdict_block(out: str, name_a: str, name_b: str) -> str:
-    """PF2 (spec section 4.3/5.3): ``diff`` prints a verdict block first -- the verdict line, then
+    """PF2: ``diff`` prints a verdict block first -- the verdict line, then
     ``  method``, ``  before <name A>``, ``  after <name B>`` (and any ``  trade`` lines) -- then one
     blank line, then the text as before. Check the block's shape and return what follows it."""
     block, sep, rest = out.partition("\n\n")
@@ -645,7 +645,7 @@ def is_non_numeric(node: ast.AST) -> bool:
 
 def arithmetic_nodes(nodes: Sequence[ast.AST]) -> list[ast.AST]:
     """The S20 walk, verbatim, AugAssign trap included: ``+=`` anywhere in the closure errors
-    the test rather than failing it, which is stricter than the spec's letter and is its intent."""
+    the test rather than failing it, which is stricter than the rule as written and is its intent."""
     out: list[ast.AST] = []
     for fn in nodes:
         for node in ast.walk(fn):
@@ -733,7 +733,7 @@ def syn_manifest(run_id: str, note: str = "built by test_s21_errors") -> RunMani
 def seed_of(config: Mapping[str, Any], replicate_index: int) -> int:
     """A stored seed that is a function of ``(config, replicate_index)`` and never of the cell's
     position in its dict. **C49's fourth fixture, found at the P-1 freeze and fixed in its
-    update** (the spec's section 7.3 names three): ``write_run`` seeded ``1000 * index + k`` by
+    update**: ``write_run`` seeded ``1000 * index + k`` by
     dict position, and the synthetic pair's two arms enumerate different cell sets (``only_a`` and
     ``only_b`` holes are the point of the pair), so the same ``(config_hash, replicate_index)``
     carried a different seed in the two arms -- 16 of 99 matched rows disagreed, measured on the
@@ -851,7 +851,7 @@ class Built:
 
 def counts_of(store: Store, run: str) -> tuple[int, int]:
     """``(spans, spans stamped as cut)`` over a run's stored envelopes: the count the CLI hands the builders.
-    Added 2026-09-20 (truncation surfacing); restated here and never imported from another test module."""
+    Added with truncation surfacing; restated here and never imported from another test module."""
     spans = [s for e in store.read(run, meta=False, trace="envelope")["trace"] if isinstance(e, dict) for s in e.get("spans", [])]
     return len(spans), sum(1 for s in spans if s.get("truncated") == "observation")
 
@@ -962,8 +962,8 @@ def coverage_block(frame: pd.DataFrame) -> str:
     return "\n".join([coverage_line(frame), "", "## coverage", "", header, rule, *rows]) + "\n"
 
 
-# The command line prints its text, report.md, receipt.html and the heatmap's labels under rule 10
-# (spec section 5.4), which PF1 changes; the library renderers it calls do not change. So a
+# The command line prints its text, report.md, receipt.html and the heatmap's labels under rule 10,
+# which PF1 changes; the library renderers it calls do not change. So a
 # digest or an exact comparison over what the command line printed or wrote is replaced by two
 # checks: the library's rendering still gives the frozen digest or text, and the printed text
 # carries the same numbers, verdicts and cells as that rendering, each number equal to the
@@ -1045,7 +1045,7 @@ def rendered_problems(library: str, written: str, name: str) -> list[Any]:
 
 def shortened(text: str) -> str:
     """``text`` with every 16-hex config hash cut to its first 12 characters, as the command line
-    prints a hash in text (spec section 5.4, rule 10)."""
+    prints a hash in text (rule 10)."""
     return re.sub(r"\b([0-9a-f]{12})[0-9a-f]{4}\b", r"\1", text)
 
 
@@ -1184,7 +1184,7 @@ def lattice_serve_json(lattice_pair: Built) -> Served:
 
 @pytest.fixture(scope="module")
 def syn_serve_json(syn: Built) -> Served:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair's manifests carry one salt, so the
+    # PF3 (Q17): the synthetic pair's manifests carry one salt, so the
     # default is now the paired test; the structure E24 compares with is the unpaired test's, named.
     return serve_json(serve_argv(syn, "--title", "syn", "--json", "--method", "fisher_bh"))
 
@@ -1394,7 +1394,7 @@ def test_e10_the_column_sums_are_the_frame_totals(syn: Built) -> None:
 
 
 def test_e10_through_the_cli_the_sums_are_the_store_tallies(syn: Built) -> None:
-    # --json replaces --format json on diff (spec section 5.6).
+    # --json replaces --format json on diff.
     r = run_cli(diff_argv(syn.root, "--method", "fisher_bh", "--json"))
     assert r.code == 0, r.text
     records = json.loads(r.out)["coverage"]
@@ -1458,11 +1458,11 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     """S21's property: ``to_markdown()`` carries no coverage, and ``diff``'s text output appends
     the coverage block after the markdown and after the ``--methods all`` table.
 
-    **Narrowed 2026-09-07, from whole-stream equality to a prefix and an ordering.** The two
+    **Narrowed from whole-stream equality to a prefix and an ordering.** The two
     assertions below read ``r.out == md + "\n" + block`` and ``every.out.endswith(...)``, which
     pinned not just this block's content and position but *everything that follows it* -- and
-    so this packet owned, by accident, every later packet's right to add to the same stream.
-    S24's interval block appends after coverage per its section 3.4 and was refused by that,
+    so this file owned, by accident, every later change's right to add to the same stream.
+    S24's interval block appends after coverage and was refused by that,
     with nothing wrong on either side.
 
     What S21 owns is the block's exact content and its position relative to what precedes it:
@@ -1480,18 +1480,18 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     assert md == replace(syn_multi, coverage=None).to_markdown()
     assert "coverage" not in md
     block = coverage_block(frame)
-    # The command line prints the markdown and the block under rule 10 (spec section 5.4): each
+    # The command line prints the markdown and the block under rule 10: each
     # printed line carries the library line's numbers and table cells, hashes at 12 hex.
     md_n, block_n = len(md.splitlines()), len(block.splitlines())
     r = run_cli(diff_argv(syn_root, "--method", "fisher_bh"))
     assert r.code == 0, r.text
-    # PF2 (spec section 4.3/5.3): diff's stdout opens with the verdict block naming both runs; the
+    # PF2: diff's stdout opens with the verdict block naming both runs; the
     # text as before follows the first blank line, and the prefix and ordering are read there.
     names = run_names(syn_root)
     body = after_verdict_block(r.out, names[SYN_A], names[SYN_B])
     head = "".join(body.splitlines(keepends=True)[: md_n + 1 + block_n])
     assert rendered_problems(shortened(md + "\n" + block), head, "diff.md") == [], r.out
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair's manifests carry one salt, so the
+    # PF3 (Q17): the synthetic pair's manifests carry one salt, so the
     # default is now the paired test; the markdown --methods all prints first is the unpaired test's, named.
     every = run_cli(diff_argv(syn_root, "--methods", "all", "--method", "fisher_bh"))
     assert every.code == 0, every.text
@@ -1561,7 +1561,7 @@ def test_e13_a_result_without_coverage_and_a_single_event_report_leave_hole_caus
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    """PF0 (Q4): the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
     drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
@@ -1620,21 +1620,21 @@ def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
 
 
 def test_e14_the_lattice_report_reproduces_the_three_digests_minted_on_the_bare_tree(tmp_path: Path) -> None:
-    """Narrowed for S28 (draft ADR-074, spec S28 section 3.8): ``report`` on a pair now renders the
+    """Narrowed for S28: ``report`` on a pair now renders the
     layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
-    digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
+    digests bit for bit, so the two markdown and HTML pins move to
     ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
-    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted."""
+    changes and stays pinned through the CLI. Narrowed, not deleted."""
     out = tmp_path / "report"
     r = run_cli(["--store", str(LATTICE_ROOT), *E14_ARGV, "--out", str(out)])
     assert r.code == 0, r.text
     multi = e14_multi()
     texts = e14_builder_texts(multi)
-    # The heatmap's labels are printed under rule 10 by the command line (spec section 5.4): the
+    # The heatmap's labels are printed under rule 10 by the command line: the
     # frozen digest now holds over the builder's own SVG, and the written file carries its cells,
     # geometry and numbers.
-    # PF2 (spec section 4.3/5.3): the default title names the two runs by name instead of by id;
+    # PF2: the default title names the two runs by name instead of by id;
     # the builder's SVG with only its title moved to the names is what the command writes.
     names = run_names(LATTICE_ROOT)
     old_title = f"{LATTICE_A} vs {LATTICE_B}: {lattice.EVENT}"
@@ -1652,7 +1652,7 @@ def test_e14_the_lattice_report_reproduces_the_three_digests_minted_on_the_bare_
     # every condition (``lattice.fisher``), in the report, the receipt and the heatmap.
     tripped = multi.by_event[lattice.EVENT]
     cells = tripped.cells
-    # PF4 re-freeze (the PF4 freeze's yes/no 18 ruled no): the cells' verdict holds the direction words.
+    # PF4 re-freeze: the cells' verdict holds the direction words.
     n_lower, n_higher = int((cells["verdict"] == "lower").sum()), int((cells["verdict"] == "higher").sum())
     assert (n_lower, n_higher) == lattice.directions(lattice.fisher(lattice.EVENT, 0.05)) == (22, 0)
     headline = f"{lattice.EVENT}: {n_lower} lower, {n_higher} higher"
@@ -1784,7 +1784,7 @@ def test_e16_text_keys_are_still_the_seven_floats_and_forbidden_keys_appear_nowh
         for panel in b.structure["panels"]:
             for cell in panel["cells"]:
                 assert set(cell["text"]) == set(FLOAT_KINDS)
-        # Narrowed for S29 (spec S29 section 0.3, draft ADR-074), exactly as M13's V24: the structure
+        # Narrowed for S29, exactly as M13's V24: the structure
         # walk carves out the one path ``tree.root.seed``, M14's name for the permutation seed; the
         # page-index walk is not narrowed, because the tree's regions add nothing to the index.
         hits = {path for path, key in walk_key_paths(b.structure) if key in FORBIDDEN_KEYS}
@@ -1982,8 +1982,8 @@ def test_e21_with_holes_the_section_is_a_table_of_the_five_headers_and_one_row_p
         for h in syn.structure["holes"]
     ]
     assert table_rows(following[0]) == expected
-    # LS update, 2026-09-22: an off-grid hole is in the fixture (``coords`` None) and its row no
-    # longer prints ``none`` -- ``where`` names its config on the report's axes (spec LS D12).
+    # LS update: an off-grid hole is in the fixture (``coords`` None) and its row no
+    # longer prints ``none`` -- ``where`` names its config on the report's axes.
     assert any(h["coords"] is None for h in syn.structure["holes"]) and any(r[2] == NONE_TEXT for r in expected)
     assert not any(r[0] == NONE_TEXT for r in expected)
     assert HOLE_MESSAGE not in following[0].deep_text()
@@ -2071,9 +2071,9 @@ def test_e24_serve_json_on_the_lattice_prints_the_thirteen_keys_both_tallies_and
     assert r.code == 0, r.err
     assert lattice_serve_json.calls == []
     parsed = strict_loads(r.out)
-    # serve --json adds verdict and sentence after schema (spec section 5.6).
+    # serve --json adds verdict and sentence after schema.
     assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
-    # PF3 (spec section 4.4, R3): serve --json also adds method and method_chosen right after sentence.
+    # PF3: serve --json also adds method and method_chosen right after sentence.
     assert tuple(k for k in parsed if k not in ("verdict", "sentence")) == ("schema", "method", "method_chosen") + TOP_LEVEL_KEYS[1:]
     assert parsed["schema"] == SCHEMA
     assert parsed["pair"]["a"]["tally"] == lattice_store.tally(LATTICE_A).to_dict() == dict(zip(TALLY_FIELDS, LATTICE_TALLY))
@@ -2089,13 +2089,13 @@ def test_e24_serve_json_on_the_synthetic_pair_has_holes_with_the_seven_causes(sy
     assert parsed["holes"]
     assert all(h["cause"] in ALL_CAUSES for h in parsed["holes"])
     assert {h["cause"] for h in parsed["holes"]} == set(ALL_CAUSES)
-    # serve --json adds verdict and sentence after schema (spec section 5.6).
+    # serve --json adds verdict and sentence after schema.
     assert tuple(parsed)[:3] == ("schema", "verdict", "sentence"), tuple(parsed)
-    # PF3 (spec section 4.4, R3): serve --json also adds method and method_chosen right after sentence;
+    # PF3: serve --json also adds method and method_chosen right after sentence;
     # the library's structure has neither, so they are dropped here as verdict and sentence are.
     assert tuple(parsed)[3:5] == ("method", "method_chosen"), tuple(parsed)
     parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
-    # PF2 (spec section 4.3/5.3): serve --json carries run_name beside every run_id; each is the
+    # PF2: serve --json carries run_name beside every run_id; each is the
     # run's name, and with them taken out the structure is the library's as before.
     seen: list[tuple[str, str]] = []
     parsed = without_run_names(parsed, seen)
@@ -2121,7 +2121,7 @@ def without_run_names(node: Any, seen: list[tuple[str, str]]) -> Any:
 
 
 def runs_table(r: Result) -> tuple[tuple[str, ...], list[dict[str, str]]]:
-    """PF2 (spec section 4.3/5.3): ``runs`` prints ``ok  N runs in <store>``, a blank line, then a
+    """PF2: ``runs`` prints ``ok  N runs in <store>``, a blank line, then a
     table whose cells are padded to their column and joined by two spaces; names and the header
     ``rows without an outcome`` hold single spaces, so a row is cut at the header's column starts."""
     assert r.lines[0].startswith("ok  "), r.out
@@ -2140,7 +2140,7 @@ def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(
         store = Store(root)
         r = run_cli(["--store", str(root), "runs"])
         assert r.code == 0, r.text
-        # PF2 (spec section 4.3/5.3): the table's columns are now #, name, id, status, backend,
+        # PF2: the table's columns are now #, name, id, status, backend,
         # target, rows, rows without an outcome, created, newest first; the store's no_outcome
         # count is the "rows without an outcome" column and the row count the "rows" column.
         header, rows = runs_table(r)
@@ -2153,7 +2153,7 @@ def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(
         for row in rows:
             assert row["name"] == names[row["id"]], row
             assert row["status"] == store.manifest(row["id"]).status, row
-            # Counts carry thousands separators in text (spec section 5.4, rule 10).
+            # Counts carry thousands separators in text (rule 10).
             assert row["rows without an outcome"] == f"{store.tally(row['id']).no_outcome:,}", row
             assert row["rows"] == f"{store.count(row['id']):,}", row
             if root == LATTICE_ROOT:
@@ -2163,7 +2163,7 @@ def test_e25_runs_prints_seven_columns_and_the_seventh_is_the_stores_no_outcome(
 def test_e25_a_run_of_three_errored_rows_prints_three(three_root: Path) -> None:
     r = run_cli(["--store", str(three_root), "runs"])
     assert r.code == 0, r.text
-    # PF2 (spec section 4.3/5.3): the run is found by its id column in the new table.
+    # PF2: the run is found by its id column in the new table.
     _, rows = runs_table(r)
     assert len(rows) == 1
     fields = rows[0]

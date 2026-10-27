@@ -1,16 +1,16 @@
 """S25 -- the dual root: the frozen tests for O1-O23 except O15.
 
-Written from "Proofload -- Spec S25 Layered Report P4.1 Dual Root" section B.4, under the two
-calls the step-zero report drew (2026-09-07). The build adds ``src/proofload/tree.py`` and the
-``diff`` block in ``src/proofload/cli.py`` against this file and does not edit it.
+Tests for the layered report's dual root (P4.1), under the two calls the measurements taken
+before the build drew. The build adds ``src/poisson_prove/tree.py`` and the
+``diff`` block in ``src/poisson_prove/cli.py`` against this file and does not edit it.
 
-**``proofload.tree`` is imported inside each test body**, the way the M12 frozen tests reached
-``proofload.trace`` before it existed: a module-level import of a module that is not there is a
+**``poisson_prove.tree`` is imported inside each test body**, the way the M12 frozen tests reached
+``poisson_prove.trace`` before it existed: a module-level import of a module that is not there is a
 *collection* error, and pytest abandons the whole run on one. Imported lazily, this file collects,
 its own tests fail, and every other test in the repo still reports. The static tests read
-``src/proofload/tree.py`` as text and fail while it is absent.
+``src/poisson_prove/tree.py`` as text and fail while it is absent.
 
-**Step zero, re-derived before a test was written.** Six things the spec asserts were checked
+**Measured before the build, re-derived before a test was written.** Six things the spec asserts were checked
 against the measurement script and, where the script could not speak, measured again on the
 committed fixture of the time; the numbers below are the lattice's (``tests/lattice.py``), measured
 when this file moved to it. They are restated here because they are why several tests look the way
@@ -19,12 +19,12 @@ they do.
 1. **O10's resample as the spec wrote it is not a sharp null for the arm-label test.** The spec
    said a ``pair_swap`` exchange "produces a sharp-null dataset whatever the method under test".
    A uniform draw from the pair-swap orbit is not invariant under the larger arm-label group, so
-   the arm-label test on it is not exact by theorem: measured at step zero, a pair-swap resample
+   the arm-label test on it is not exact by theorem: measured before the build, a pair-swap resample
    tested by arm label rejected far outside the band ``[0.020, 0.080]``, and the matched
    construction sat inside it. **The resample follows the scheme under test**, from a table that
    is *this file's own literal* and never ``root.scheme`` -- so a scheme choice that regresses to one
    scheme for both methods is resampled under the right scheme and tested under the wrong one, and
-   O10 is written to see it. That is the sharpest guard in the packet
+   O10 is written to see it. That is the sharpest guard in this file
    and it is marked sole-catch in the mutation table. ``B`` is 1000, what the measurement used.
 2. **O7's byte-identical clause holds only under pair swap.** Under arm label a cell is
    informative when its pooled outcomes are not all identical, and ``b = a.copy()`` of the
@@ -33,8 +33,8 @@ they do.
    greater than zero. Every statistic is ``0.0`` and every p ``1.0`` under both.
 3. **O16's blanket ban is red at baseline.** ``capture.py:433`` already constructs
    ``random.Random(os.urandom(32))`` for something that is not a permutation stream. The guard is
-   scoped: ``default_rng`` at exactly one call site across ``src/``, in ``tree.py`` (widened
-   2026-09-22 to the two named sites, ``tree.py`` ``_draw`` and ``paired.py``
+   scoped: ``default_rng`` at exactly one call site across ``src/``, in ``tree.py`` (later
+   widened to the two named sites, ``tree.py`` ``_draw`` and ``paired.py``
    ``_cluster_bootstrap``, one stream per estimator); no
    ``np.random.seed``, ``RandomState`` or legacy ``np.random.<fn>`` anywhere in ``src/``; no
    ``random.Random``, ``random.seed`` or ``secrets`` in ``tree.py`` or ``diff.py``. The capture
@@ -46,7 +46,7 @@ they do.
    either reading, and 38 cells with ``delta == 0``, one of which (``gain`` 1.1 at ``load`` 30)
    carries discordant pairs, so 34 have a nonzero delta. Nothing here pins the example; O7 recomputes, and the ``delta == 0`` count
    is asserted to differ from the informative count so a builder counting nonzero deltas fails.
-6. **The step-zero log's addendum numbers (mirrored, calibration) were produced by code not in
+6. **The pre-build log's addendum numbers (mirrored, calibration) were produced by code not in
    the committed script.** Re-derived on the mirrored lattice: ``location`` is exactly ``0.0``,
    ``p_location`` ``1.0``, ``p_dispersion`` at the floor and ``p_omnibus`` at ``2 / (B + 1)`` at
    B=1000 and 4000 under both schemes (PF4.18's scale; O9 says why), and a location-only root reads
@@ -71,8 +71,8 @@ they do.
   "identical across arms in every episode", is the pair-swap reading and is wrong under arm
   label. The regex captures the counts and leaves the tail free.
 - **The CLI block is the ``omnibus:`` line plus every following line indented by two spaces.**
-  Never the tail of stdout: a later packet may append after it (Rollout Plan principle 4 rule 4,
-  and E12's precedent).
+  Never the tail of stdout: a later change may append after it (E12's
+  precedent).
 - **O12's three-outcome pair is built by hand.** S24's ``write_run`` takes a fail count and a
   fixed ``fail``/``ok`` vocabulary, not an outcome vocabulary.
 - **O13's "before any permutation is drawn" is pinned by cost.** With ``n_permutations = 10**6``
@@ -89,10 +89,10 @@ they do.
 root; nothing in the spec catches a *dispersion-only* omnibus, because on every named fixture the
 dispersion root rejects wherever the dual root does. The one-discordant-pair-per-cell fixture
 below has ``p_dispersion == 1.0`` exactly (the sum of squares is invariant under every exchange)
-and ``p_location`` at the floor, so it is the mirror image of O9. And section 8 trap 2 --
-exchanging per-event indicators independently rather than whole outcomes -- is caught with
+and ``p_location`` at the floor, so it is the mirror image of O9. And the trap of
+exchanging per-event indicators independently rather than whole outcomes is caught with
 both complementary events requested: under a whole-outcome exchange the two events' statistics are
-exact negatives and their p-values exact duplicates, which section 6 states and which an
+exact negatives and their p-values exact duplicates, which a whole-outcome exchange guarantees and which an
 independent exchange breaks.
 
 **Named non-observables.** ``units.delta`` versus ``cells.delta`` on censored data has no fixture:
@@ -143,14 +143,14 @@ REPO = PACKAGE.parents[1]
 #: The generated pair (``tests/lattice.py``): the before run and the after run.
 LATTICE_ROOT = lattice.root()
 RUN_A, RUN_B = lattice.RUN_A, lattice.RUN_B
-# PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
+# PF2: every run has a name (target id up to its first "/", the UTC date of
 # created_at, a letter); serve names the lattice's runs by these.
 NAME_A, NAME_B = lattice.NAME_A, lattice.NAME_B
 EVENT, OTHER = lattice.EVENT, lattice.OTHER
 TREE_SOURCE = PACKAGE / "tree.py"
 METHODS = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 
-#: Spec section 2 and section 0.2, stated in the spec, so constants here (standing rule 2).
+#: Each method's permutation scheme and the root's defaults, stated as constants here.
 EXPECTED_SCHEME_BY_METHOD = {"mcnemar_bh": "pair_swap", "fisher_bh": "arm_label", "logrank_bh": "arm_label"}
 EXPECTED_DEFAULT_PERMUTATIONS = 4000
 EXPECTED_DEFAULT_SEED = 0
@@ -169,7 +169,7 @@ CALIBRATION_SEED_OFFSET = 1000
 CALIBRATION_BAND = (0.020, 0.080)
 
 #: O10's resample scheme is THIS FILE's literal and is never read from the module or from
-#: ``root.scheme``. Step zero item 1 says why.
+#: ``root.scheme``. Item 1 of the module docstring says why.
 RESAMPLE_SCHEME_BY_METHOD = {"mcnemar_bh": "pair_swap", "fisher_bh": "arm_label"}
 
 #: O19 and O20, case-insensitive.
@@ -187,7 +187,7 @@ CLI_GUARDED_FIELDS = {
     "n_informative_cells", "n_discordant", "n_permutations", "seed", "scheme", "units",
 }
 
-#: The fields ``to_json()`` must carry (spec section 2 plus ``headline``); a superset is fine.
+#: The fields ``to_json()`` must carry (the root's fields plus ``headline``); a superset is fine.
 EXPECTED_JSON_KEYS = {
     "events", "method", "scheme", "q", "n_cells", "n_informative_cells", "n_discordant",
     "n_permutations", "seed", "units", "location", "dispersion", "p_location", "p_dispersion",
@@ -196,8 +196,8 @@ EXPECTED_JSON_KEYS = {
 #: O5 and O11: the keys a different seed or a larger B may move.
 P_DRIVEN_KEYS = ("p_location", "p_dispersion", "p_omnibus", "rejects", "headline")
 
-#: Section 3.4's block, line by line. Numbers are captured and checked against the fields under
-#: rule 10 (front-door spec section 5.4; ``:g`` before it); nothing is pinned as a typed literal. The informative line's tail is left free (see
+#: The CLI's omnibus block, line by line. Numbers are captured and checked against the fields under
+#: rule 10 (``:g`` before it); nothing is pinned as a typed literal. The informative line's tail is left free (see
 #: the module docstring).
 OMNIBUS_FIRST_LINE = re.compile(
     r'^omnibus: "no cell changed" is (rejected|not rejected) \(p = (\S+) (<|>=) q (\S+)\) '
@@ -205,7 +205,7 @@ OMNIBUS_FIRST_LINE = re.compile(
     re.MULTILINE,
 )
 OMNIBUS_SECOND_LINE = re.compile(
-    # A count carries thousands separators (front-door spec section 5.4, rule 10).
+    # A count carries thousands separators (rule 10).
     r"^  min-p of location and dispersion; ([\d,]+) within-cell permutations, (pair_swap|arm_label), "
     r"seed (-?\d+)$",
     re.MULTILINE,
@@ -221,28 +221,28 @@ OMNIBUS_INFORMATIVE_LINE = re.compile(r"^  informative cells: (\d+) of (\d+); (\
 # columns to every cell and changes its limits and words, so the multi_diff test checks the facts
 # the digest guarded instead (LATTICE_DIRECTION_COUNTS and the per-cell references below).
 #: ``check before after --event tripped``: exit code, bare tree.
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
 # test; check's gate here is the flat family's unpaired test, named.
 # PF4 (PF4.20): tripped has no kind, so the default --fail-on worse is refused; --fail-on
 # higher is the same gate on it (fail when the rate rose).
 CHECK_ARGV = ("check", RUN_A, RUN_B, "--event", EVENT, "--method", "fisher_bh", "--fail-on", "higher")
 # CHECK_STDOUT_SHA256 removed: the command line's new look changes check's stdout, and its test
-# checks the facts the digest guarded instead (front-door spec section 14).
+# checks the facts the digest guarded instead.
 CHECK_EXIT = 0
 #: ``serve before after --event tripped --x gain --y load --json``, bare tree. The structure
 #: echoes the ``--store`` path as ``pair.store_root``, so the digest is of the parsed structure with
 #: that one value replaced by ``<store>`` and re-serialised with sorted keys; the raw bytes would
 #: pin the machine's absolute path.
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
 # test; the structure digest is the unpaired test's, named.
 SERVE_ARGV = ("serve", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", lattice.Y, "--json", "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): the structure's ``diff`` object renames the horizon key in place and gains six keys, and the
 # schema is /5 before this projection sets it back to /2. Each value is the baseline's plus that change.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): the structure gains the summary key and each panel's mde_unchanged (spec LS sections 3.3, 3.5); with schema projected back to /2 nothing else moves, the figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
+# Re-minted off the build at 173c25d: the structure gains the summary key and each panel's mde_unchanged; with schema projected back to /2 nothing else moves, the figure included. The same value in all five carriers. Read through this test's own measurement on the built tree, not predicted.
 # PF4 (PF4.3, PF4.11, PF4.17, PF4.20): SERVE_STRUCTURE_SHA256 is no longer asserted. PF4 removes
 # pair.store_root, adds the Summary's verdict, the shares and the direction words, so the serve
 # test checks the facts the digest guarded instead.
-#: S29's narrowing (spec S29 section 3.7, draft ADR-074): ``serve --json`` now prints
+#: S29's narrowing: ``serve --json`` now prints
 #: ``proofload.viewpair/3``, which carries M14's tree under one new top-level key. The digest above
 #: was minted on the bare tree, so it is taken over the structure with ``tree`` removed and
 #: ``schema`` set back to this literal; on the bare tree that projection is the identity.
@@ -253,7 +253,7 @@ SERVE_ARGV = ("serve", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", 
 #: the same pair at ``events=(EVENT,)``, ``method="logrank_bh"``.
 #: The three digests S21's E14 pins, restated. Minted on the bare tree at b10a146 by ``report`` on
 #: the pair with one event and both axes.
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+# PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
 # test; the E14 digests and the heatmap are the unpaired test's, named.
 E14_ARGV = ("report", RUN_A, RUN_B, "--event", EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
 # Re-minted 2026-09-20 (truncation surfacing): report.md and receipt.html take the horizon rename and the two observation-cap lines
@@ -293,7 +293,7 @@ SALT, OTHER_SALT = "s25-salt", "s25-other-salt"
 
 
 def tree() -> Any:
-    """``proofload.tree``, imported at call time (see the module docstring)."""
+    """``poisson_prove.tree``, imported at call time (see the module docstring)."""
     return importlib.import_module("poisson_prove.tree")
 
 
@@ -335,7 +335,7 @@ def manifest(run_id: str, salt: str) -> RunManifest:
 
 def seed_of(config: Mapping[str, Any], replicate_index: int) -> int:
     """A seed that is a function of ``(config, replicate_index)`` and never of the cell's position
-    in its dict. **C49 (P-1 section 7.3), fixed in the P-1 freeze's update.** The old
+    in its dict. **C49, fixed in a later update.** The old
     ``1000 * index + k`` seeded by dict position and ``replicate_index`` counted from
     ``replicate_start``, so O21's pair stored a different seed at the same
     ``(config_hash, replicate_index)`` in its two arms -- 16 of 48 matched rows disagreed, measured
@@ -423,7 +423,7 @@ def three_outcome_cells() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 
 def mirrored(a: pd.DataFrame, b: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Spec section 6: every cell present twice, the second copy with its arms exchanged, every
+    """Every cell present twice, the second copy with its arms exchanged, every
     copied row's ``config`` gaining ``{"mirror": 1}`` and its hash suffixed so the hashes stay
     distinct. No RNG, no store, no committed file."""
 
@@ -478,12 +478,12 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
 
 def without_notes(err: str) -> str:
     """Stderr with the ``note:`` lines removed. Prove's own warning (``UnpairedAnalysis``, on two
-    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line (spec section 5.4)."""
+    runs sharing a salt) now reaches the CLI's stderr as one ``note:`` line."""
     return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
 
 
 def rule_10_p(p: float) -> str:
-    """A p-value or q as the command line prints it (spec section 5.4, rule 10): three decimals,
+    """A p-value or q as the command line prints it (rule 10): three decimals,
     or one decimal of mantissa in exponent form below 0.001."""
     return f"{p:.3f}" if p >= 0.001 else f"{p:.1e}"
 
@@ -751,7 +751,7 @@ PROPERTY_SETTINGS = settings(deadline=None, max_examples=40, suppress_health_che
 
 
 def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
-    """PF2 (spec section 4.3): ``serve --json`` on the lattice moves in two places only: ``run_name`` beside
+    """PF2: ``serve --json`` on the lattice moves in two places only: ``run_name`` beside
     each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
     the figure's title line). First assert each is there as PF2 writes it and nowhere else the
     digest reads, then put the structure back as it was before names (no ``run_name``, the title by
@@ -776,7 +776,7 @@ def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[st
 
 
 def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
-    """PF0 (Q4, section 2.3): the rename moves one key of the page structure, the version, in both
+    """PF0 (Q4): the rename moves one key of the page structure, the version, in both
     arms (``poisson_prove_version``) and in the provenance block, whose value also says when the runs
     were written by 0.0.1. First assert the new key is there and the old one is not, then put both
     back as 0.0.1 wrote them before the frozen digest is taken, so the digest still guards everything
@@ -796,7 +796,7 @@ def structure_as_0_0_1_wrote_it(structure: dict[str, Any]) -> dict[str, Any]:
 def test_o1_location_is_the_mean_and_dispersion_the_rms_of_units_delta_on_the_lattice(
     lattice_roots: dict[str, tuple[Any, Any]], method: str
 ) -> None:
-    """Spec section 0.1: the plan's unweighted sum and unweighted sum of squares, in mean and RMS
+    """The plan's unweighted sum and unweighted sum of squares, in mean and RMS
     form. Recomputed from ``units`` rather than read back. **The lattice's unequal rates are the catch**
     for a variance-weighted or pooled statistic, so the test also says the rates are unequal.
     ``delta`` is the naive proportion difference, ``+ 0.0`` so zero is unsigned, exactly."""
@@ -814,7 +814,7 @@ def test_o1_location_is_the_mean_and_dispersion_the_rms_of_units_delta_on_the_la
 def test_o1_holds_where_n_differs_across_cells_so_n_weighting_is_caught(
     unequal_n: dict[str, tuple[Any, Any, pd.DataFrame, pd.DataFrame]]
 ) -> None:
-    """Step zero item 4. The lattice's n is 32 everywhere, so an n-weighted mean equals the unweighted one
+    """Item 4 of the module docstring. The lattice's n is 32 everywhere, so an n-weighted mean equals the unweighted one
     there and only the variance-weighted mutant is caught. On the O22 fixture the cell sizes
     differ, and the test says the two means differ before asserting the unweighted one."""
     _, root, _, _ = unequal_n["mixed"]
@@ -854,9 +854,9 @@ def test_o2_units_columns_are_the_spec_tuple() -> None:
 def test_o2_units_agree_with_cells_row_for_row_on_the_lattice(
     lattice_roots: dict[str, tuple[Any, Any]], method: str
 ) -> None:
-    """**The packet's most important invariant.** ``omnibus`` rebuilds the cell view from the raw
+    """**This file's most important invariant.** ``omnibus`` rebuilds the cell view from the raw
     frames with ``diff.py``'s own helpers -- a second construction of something ``multi_diff``
-    already built -- and this is the check that makes that safe. Section 8 trap 1: the rebuild
+    already built -- and this is the check that makes that safe. The trap: the rebuild
     filters null outcomes, truncates at the minimum horizon, intersects hashes and sorts them, in
     that order; a builder who simplifies any step lands a different count here, on the
     truncation and holes fixtures below if not on the lattice."""
@@ -908,7 +908,7 @@ def test_o2_the_rebuild_drops_errored_rows_the_way_multi_diff_does(method: str) 
 
 @pytest.mark.parametrize("method", METHODS)
 def test_o2_the_rebuild_truncates_at_the_minimum_horizon_the_way_multi_diff_does(method: str) -> None:
-    """Section 8 trap 1's hardest case: the lattice cannot express truncation. Arm a's horizon is 5 and
+    """The rebuild trap's hardest case: the lattice cannot express truncation. Arm a's horizon is 5 and
     carries events at t=4.5; arm b's horizon is 3, so ``multi.horizon`` is 3 and every t=4.5 event
     in a is re-censored -- still in ``n_a``, no longer in ``events_a``. A rebuild that skips
     ``_truncate_raw`` counts them as events and disagrees with ``cells``. Replicates stay matched
@@ -950,7 +950,7 @@ def test_o3_every_p_is_one_plus_an_integer_over_b_plus_one_on_the_lattice(
 @PROPERTY_SETTINGS
 @given(case=small_pairs())
 def test_o3_the_form_holds_over_small_synthetic_pairs_and_both_schemes(case: Any) -> None:
-    """Section 8 trap 4 is stated here and not fixed: ties are counted with ``>=``, since discrete
+    """A known trap, stated here and not fixed: ties are counted with ``>=``, since discrete
     outcomes tie constantly at small N and ``>`` would be anti-conservative. This test does not
     see that; O10 does."""
     cells_a, cells_b, events, method, permutations, seed = case
@@ -979,7 +979,7 @@ def test_o4_rejects_is_strictly_p_omnibus_below_multi_q(
     ``p_omnibus == 1/4`` exactly. At ``q = 0.25`` that
     is a tie and ``rejects`` is ``False`` -- the same strictness as BH's ``q_adj < q``. At
     ``q = 0.5`` the same p rejects and at ``q = 0.2`` it does not, which is what fails a builder
-    comparing to ``0.05`` or to a constant in ``cli.py`` (section 8 trap 7)."""
+    comparing to ``0.05`` or to a constant in ``cli.py``."""
     a, b, _, _ = pair
     multi = lattice_trees.multi((EVENT,), method, q=q)
     root = tree().omnibus(a, b, multi, n_permutations=3, seed=GOLDEN_SEED)
@@ -1005,7 +1005,7 @@ def test_o4_rejects_equals_the_strict_comparison_on_every_fixture(
 
 
 def test_o5_the_same_inputs_give_identical_json_bytes_twice_in_one_process(pair: Any, lattice_trees: Any) -> None:
-    """Section 0.3 says why not across NumPy releases: NEP 19 reserves the right to move a
+    """Not across NumPy releases: NEP 19 reserves the right to move a
     ``Generator`` stream. Within one environment the stream is a function of ``seed`` and nothing
     else, so two calls agree byte for byte. ``json.dumps`` succeeding is also the check that
     ``to_json()`` carries native types, which ``--format json`` needs."""
@@ -1060,10 +1060,10 @@ def test_o5_a_different_seed_moves_only_the_p_driven_fields(
 def test_o6_the_scheme_table_is_the_spec_table_and_every_root_follows_it(
     lattice_roots: dict[str, tuple[Any, Any]]
 ) -> None:
-    """Draft ADR-057. The table is asserted against this file's literal and not only against
+    """The table is asserted against this file's literal and not only against
     itself: a builder whose table says ``arm_label`` for every method would otherwise agree with
     its own field. ``logrank_bh`` uses arm label and the same proportions as ``fisher_bh``, so on
-    the lattice the two roots differ only in ``method`` (section 10)."""
+    the lattice the two roots differ only in ``method``."""
     assert dict(tree().SCHEME_BY_METHOD) == EXPECTED_SCHEME_BY_METHOD
     assert tuple(tree().ROOT_STATISTICS) == EXPECTED_ROOT_STATISTICS
     assert tree().DEFAULT_PERMUTATIONS == EXPECTED_DEFAULT_PERMUTATIONS
@@ -1076,7 +1076,7 @@ def test_o6_the_scheme_table_is_the_spec_table_and_every_root_follows_it(
 
 
 def test_o6_the_pairable_pair_and_its_unpairable_twin_give_identical_json(synth_root: Path) -> None:
-    """ADR-052's twin, S24's C12 construction restated. ``moved-b`` and ``moved-b-unpaired`` hold
+    """The unpairable twin, S24's C12 construction restated. ``moved-b`` and ``moved-b-unpaired`` hold
     identical episodes and differ only in ``run_salt``, so the two diffs below see the same frames
     and differ only in ``seed_identity_match`` (``paired`` until P-1). A root that dispatched on it would take pair swap on
     the first and arm label on the second, and the ``scheme`` field alone would separate the two
@@ -1109,11 +1109,11 @@ def test_o6_tree_never_names_paired() -> None:
 def test_o7_informative_cells_and_discordant_pairs_are_recomputed_from_the_frames_on_the_lattice(
     pair: Any, lattice_roots: dict[str, tuple[Any, Any]], method: str
 ) -> None:
-    """Spec section 0.5's operational definition, recomputed from the raw frames (the lattice has no
+    """The operational definition of informative, recomputed from the raw frames (the lattice has no
     errored or truncated row, so raw and rebuilt views coincide). Under ``pair_swap``: cells with
     at least one matched pair whose two outcomes differ, and the total of such pairs. Under
-    ``arm_label``: cells whose pooled outcomes are not all identical, and ``None``. Step zero
-    item 5: on the lattice the informative count (35 under either reading) differs from the count
+    ``arm_label``: cells whose pooled outcomes are not all identical, and ``None``. Item 5 of the
+    module docstring: on the lattice the informative count (35 under either reading) differs from the count
     of cells with a nonzero delta (34): ``gain`` 1.1 at ``load`` 30 moves two episodes each way, so
     it has discordant pairs and mixed outcomes and no change in the share. The test says so, so a
     builder counting nonzero deltas fails under either scheme."""
@@ -1138,7 +1138,7 @@ def test_o7_informative_cells_and_discordant_pairs_are_recomputed_from_the_frame
 def test_o7_the_byte_identical_pair_is_a_point_mass_under_pair_swap(identical_lattice: dict[str, tuple[Any, Any]]) -> None:
     """``b = a.copy()`` with equal salts under ``mcnemar_bh``: no pair differs, so no exchange
     changes anything, every statistic is ``0.0``, every p is ``1.0`` (all ``B`` permutations tie
-    the observed statistic and ties count, section 8 trap 4), ``rejects`` is ``False``, and both
+    the observed statistic and ties count), ``rejects`` is ``False``, and both
     degeneracy counts are zero."""
     _, root = identical_lattice["mcnemar_bh"]
     assert root.scheme == "pair_swap"
@@ -1152,7 +1152,7 @@ def test_o7_the_byte_identical_pair_is_a_point_mass_under_pair_swap(identical_la
 def test_o7_the_byte_identical_pair_keeps_its_mixed_cells_informative_under_arm_label(
     pair: Any, identical_lattice: dict[str, tuple[Any, Any]]
 ) -> None:
-    """Step zero item 2, the half the spec got wrong. Under arm label a cell with mixed outcomes
+    """Item 2 of the module docstring, the half the spec got wrong. Under arm label a cell with mixed outcomes
     is informative even when the two arms are identical: permuting its labels moves the
     statistic away from the observed zero. The lattice's before run has 33 such cells. The statistics and the
     p-values are still ``0.0`` and ``1.0``, because the observed statistic is the minimum of its
@@ -1174,7 +1174,7 @@ def test_o7_the_byte_identical_pair_keeps_its_mixed_cells_informative_under_arm_
 def test_o7_the_counts_are_over_outcomes_not_over_one_event_on_the_three_outcome_pair(
     three_outcome: Any, three_outcome_roots: dict[str, tuple[Any, Any]], method: str
 ) -> None:
-    """Section 8 trap 2 seen from the count: a pair ``(z, y)`` is discordant even for event ``x``,
+    """The per-event exchange trap seen from the count: a pair ``(z, y)`` is discordant even for event ``x``,
     because outcomes exchange whole. Every cell here has 16 such pairs, so all six are informative
     and ``n_discordant`` is 96 under pair swap."""
     a, b, _, _ = three_outcome
@@ -1201,8 +1201,8 @@ def test_o8_the_lattice_rejects_at_the_floor_under_both_schemes(
     """The floor ``1 / (B + 1)`` is exact by construction: the observed statistic exceeds every
     permutation on both roots, ``c = 0``, and the rank-p of a permutation among the ``B``
     includes itself so its minimum is ``1/B > 1/(B+1)`` and no permutation's min-p reaches the
-    observed one (section 8 trap 3). ``location`` is recomputed from ``cells.delta``, not typed.
-    Bonferroni is computed and printed as section 8 trap 9 asks, and no order is asserted."""
+    observed one. ``location`` is recomputed from ``cells.delta``, not typed.
+    Bonferroni is computed and printed, and no order is asserted."""
     multi, root = lattice_roots[method]
     floor = 1.0 / (GOLDEN_PERMUTATIONS + 1)
     assert root.n_permutations == GOLDEN_PERMUTATIONS and root.seed == GOLDEN_SEED
@@ -1224,7 +1224,7 @@ def test_o9_the_mirrored_lattice_is_invisible_to_location_and_rejected_by_disper
 ) -> None:
     """**Sole-catch guard for a location-only root.** On the lattice as stored every root is at the floor,
     so a location-only omnibus is byte-identical to the dual root there (O8) and blind here: it
-    reads ``p_omnibus == 1.0`` on this fixture, measured in step zero under both schemes. The
+    reads ``p_omnibus == 1.0`` on this fixture, measured before the build under both schemes. The
     ladder's F3 -- half the cells break and half improve -- in fixture form. ``> 0.5`` rather
     than ``== 1.0`` because floating accumulation can leave ``location`` at ``1e-17`` and a
     permutation can tie it."""
@@ -1299,12 +1299,12 @@ def test_o10_the_root_is_calibrated_on_sharp_null_resamples_of_the_lattice(pair:
     result), then ``omnibus`` at ``B = 1000`` with seed ``1000 + k``. The spec as first written
     resampled with ``pair_swap`` under both methods, and a draw uniform on the pair-swap orbit is
     not invariant under the larger arm-label group, so the arm-label test on it is not exact by
-    theorem; step zero measured that mismatch far outside the band and the matched construction
+    theorem; a measurement before the build put that mismatch far outside the band and the matched construction
     inside it.
 
     **The band.** ``0.05 +- 1.96 * sqrt(0.05 * 0.95 / 200) = [0.0198, 0.0802]``, the 95% Monte
     Carlo band for a true rate of 0.05 at ``K = 200``, kept as the spec's literal
-    ``[0.020, 0.080]``. Section 8 trap 12: if a NumPy bump moves the rate out of it, that is a
+    ``[0.020, 0.080]``. If a NumPy bump moves the rate out of it, that is a
     Monte Carlo event to re-run with more ``K``, not a reason to loosen the band.
 
     **Above 0.080 catches anti-conservative wiring**: the exchange applied to per-event indicators
@@ -1386,7 +1386,7 @@ def test_o11_more_permutations_move_only_the_p_driven_fields(pair: Any, lattice_
 def test_o12_only_the_moving_event_rejects_and_every_map_carries_both_events(
     three_outcome: Any, three_outcome_roots: dict[str, tuple[Any, Any]], method: str
 ) -> None:
-    """Built by hand (section 6): ``x`` sits at the same replicates in both arms so it never
+    """Built by hand: ``x`` sits at the same replicates in both arms so it never
     moves; ``y`` goes 4 -> 20 per cell over six cells. A builder reading only ``events[0]`` has no
     ``y``; a builder summing across events has one statistic. With ``events=("x",)`` alone the
     observed statistics are both zero, the minimum of their own permutation distributions, so
@@ -1406,7 +1406,7 @@ def test_o12_only_the_moving_event_rejects_and_every_map_carries_both_events(
 
 @pytest.mark.parametrize("method", ("fisher_bh", "mcnemar_bh"))
 def test_complementary_events_give_exact_duplicate_p_values_and_negated_locations(method: str) -> None:
-    """**Not a numbered invariant: section 6's own statement, and the catch for section 8 trap 2.**
+    """**Not a numbered invariant: a property of the whole-outcome exchange, and the catch for exchanging per-event indicators.**
     With a two-outcome vocabulary and both outcomes requested, every cell's two deltas are exact
     negatives under every whole-outcome exchange, so the four statistics are two pairs of
     duplicates and the p-values agree exactly. Exchanging per-event indicators independently is a
@@ -1506,7 +1506,7 @@ def test_o13_refusals_fire_before_any_permutation_is_drawn(pair: Any, lattice_ro
 
 def test_o13_the_cli_maps_a_refusal_to_exit_two_without_a_traceback(synth_root: Path) -> None:
     code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--permutations", "0"])
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, (out, err)
     assert "error:" in err and "Traceback" not in out + err, err
 
@@ -1565,7 +1565,7 @@ def reference_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> 
 
 
 def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | None:
-    """Section 8.10's ``mde`` rule over the reference's two limits: the larger of two numbers, the
+    """The ``mde`` rule over the reference's two limits: the larger of two numbers, the
     number beside a direction with no room, and null otherwise."""
     rise, fall = reference_fisher_limits(events_a, n_a, n_b, level)
     if rise is not None and fall is not None:
@@ -1578,9 +1578,9 @@ def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | No
 
 
 def assert_the_limits_follow_the_rule(cell: Mapping[str, Any], row: Mapping[str, Any], level: float, method: str) -> None:
-    """PF4 re-freeze (PF4.22, PF4.23, PF4.27, section 8.10, Q54): the JSON carries the frame's limits;
+    """PF4 re-freeze (PF4.22, PF4.23, PF4.27, Q54): the JSON carries the frame's limits;
     a baseline with the event in every run has no rise (``no room``) and its fall is computed; ``mde``
-    follows section 8.10's rule, with a note when it is null, and a number is a positive grid value;
+    follows the ``mde`` rule, with a note when it is null, and a number is a positive grid value;
     under Fisher both limits are the stats file's reference at the lone-change level ``q / M``."""
     what = (method, cell["config_hash"])
     for key in ("mde", "mde_rise", "mde_fall"):
@@ -1633,7 +1633,7 @@ def assert_lattice_multi_json_carries_the_facts(multi: Any, method: str, a: pd.D
     (scipy's Fisher test and exact binomial McNemar, one BH family), with the exact McNemar p also
     statsmodels' and its BH q statsmodels', and to 1e-12 relative under log-rank (lifelines on the stored
     times), whose q column is also BH over its p column exactly. A condition whose baseline had the
-    event in every run has no rise and its fall computed, and every limit follows section 8.10's
+    event in every run has no rise and its fall computed, and every limit follows the ``mde``
     rule at ``q / M``, Fisher's recomputed from the stats file's reference (PF4.22, PF4.27). Each
     cell's JSON verdict is its direction (tripped has no kind, PF4.20) and the reference's; a cell
     moves exactly when it is rejected, in the direction of its delta except under log-rank (PF4.13);
@@ -1819,7 +1819,7 @@ def test_o14_the_s24_column_digests_and_the_coverage_digest_are_unchanged(lattic
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    """PF0 (Q4): the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
     drop any separate ``written by proofload`` entry, so the frozen digest still guards every other
@@ -1851,7 +1851,7 @@ def e14_builder(pair: Any) -> tuple[Any, Any, Any]:
 def assert_cli_heatmap_is_the_builders_under_rule_10(cli_svg: str, builder_svg: str, cells: pd.DataFrame) -> None:
     """The command line's ``heatmap.svg`` against the builder's, whose bytes keep the frozen digest.
 
-    Rule 10 (spec section 5.4) reformats only the text in the file, so every element and attribute
+    Rule 10 reformats only the text in the file, so every element and attribute
     is the builder's. Each cell's label is its delta to three decimals, read from ``cells``; a text
     the builder prints as a percentage-point number is that number as a fraction; every other text
     that changed keeps its ``key=value`` facts and its counts; and the notes the builder writes in
@@ -1892,14 +1892,14 @@ def test_o14_and_o23_the_lattice_report_still_reproduces_the_three_digests_s21_m
     reaches no other verb (O23); if a byte leaks into ``to_markdown``, the receipt or the heatmap,
     one of these three moves.
 
-    Narrowed for S28 (draft ADR-074, spec S28 section 3.8): ``report`` on a pair now renders the
+    Narrowed for S28: ``report`` on a pair now renders the
     layered report into ``report.md`` and ``receipt.html``, so those two files through the CLI
     are S28's to pin. The surface S21 owned is the tree-less M7 builder, which reproduces both
-    digests bit for bit (S28 section 0.2), so the two markdown and HTML pins move to
+    digests bit for bit, so the two markdown and HTML pins move to
     ``build_multi_report(multi, spec, manifests=...)`` with no tree; ``heatmap.svg`` never
-    changes (S28 section 3.3) and stays pinned through the CLI. Narrowed, not deleted.
+    changes and stays pinned through the CLI. Narrowed, not deleted.
 
-    Moved for rule 10 (spec section 5.4): the command line now prints the heatmap's text as
+    Moved for rule 10: the command line now prints the heatmap's text as
     fractions, so its digest moves to the builder's heatmap, and the file the command line writes
     is checked against that one fact by fact."""
     out = tmp_path / "report"
@@ -1908,7 +1908,7 @@ def test_o14_and_o23_the_lattice_report_still_reproduces_the_three_digests_s21_m
     # PF4 (PF4.3, PF4.15, PF4.20): the three digests are replaced by the facts they guarded.
     multi, report, receipt = e14_builder(pair)
     assert_e14_builder_carries_the_result(multi, report, receipt)
-    # The command line's heatmap is the builder's with its text under rule 10 (spec section 5.4),
+    # The command line's heatmap is the builder's with its text under rule 10,
     # checked by its facts rather than a new digest.
     assert_cli_heatmap_is_the_builders_under_rule_10(
         (out / "heatmap.svg").read_text(encoding="utf-8"), report.to_svg(), multi.by_event[EVENT].cells
@@ -1916,14 +1916,14 @@ def test_o14_and_o23_the_lattice_report_still_reproduces_the_three_digests_s21_m
 
 
 def test_o14_and_o23_check_on_the_lattice_prints_the_same_bytes_and_exits_the_same(lattice_trees: Any) -> None:
-    """``check`` keeps the flat family's gate (section 5); whether the root should gate is
+    """``check`` keeps the flat family's gate; whether the root should gate is
     P4.4's question. Stdout digest and exit code from the bare tree.
 
-    Moved for the command line's look (front-door spec sections 5.3 and 14): the verdict line now
+    Moved for the command line's look: the verdict line now
     comes first and the stdout digest is replaced by the facts it guarded: the check passed, it
     names the gated event, the flat family's counts and its size."""
     code, out, err = run_cli(["--store", str(LATTICE_ROOT), *CHECK_ARGV])
-    # The lattice's two runs share a salt, so stderr now carries one note line (spec section 5.4).
+    # The lattice's two runs share a salt, so stderr now carries one note line.
     assert code == CHECK_EXIT and without_notes(err) == "", (out, err)
     multi = lattice_trees.multi((EVENT,), "fisher_bh")
     verdicts = multi.by_event[EVENT].cells["verdict"]
@@ -1937,7 +1937,7 @@ def test_o14_and_o23_check_on_the_lattice_prints_the_same_bytes_and_exits_the_sa
     assert (n_lower, n_higher) == LATTICE_DIRECTION_COUNTS["fisher_bh"] == lattice.directions(lattice.fisher(EVENT))
     assert f"{n_lower:,} lower, {n_higher:,} higher" in out, out
     assert f"{multi.n_tests:,} tests" in out, out
-    # PF4 re-freeze (PF4.34, PF4.40, reading R34): check's block names the comparison's own word on
+    # PF4 re-freeze (PF4.34, PF4.40): check's block names the comparison's own word on
     # its comparison line, read from Holm's rows.
     holm = multi.to_json()["by_event"][EVENT]
     (comparison,) = [line for line in out.splitlines() if line.startswith("  comparison  ")]
@@ -1945,21 +1945,21 @@ def test_o14_and_o23_check_on_the_lattice_prints_the_same_bytes_and_exits_the_sa
 
 
 def test_o23_serve_json_on_the_lattice_prints_the_same_structure(lattice_trees: Any) -> None:
-    """Narrowed for S29 (spec S29 section 3.7, draft ADR-074): ``serve`` now computes M14's tree
+    """Narrowed for S29: ``serve`` now computes M14's tree
     and ``proofload.viewpair/3`` carries it under one new top-level key, ``tree``. The surface
     S25 owned is everything else: the structure with ``tree`` removed and ``schema`` set back to
     the ``/2`` literal, ``pair.store_root`` normalised as before, digests to the value minted on
     the bare tree. Narrowed, not deleted."""
     code, out, err = run_cli(["--store", str(LATTICE_ROOT), *SERVE_ARGV])
-    # The lattice's two runs share a salt, so stderr now carries one note line (spec section 5.4).
+    # The lattice's two runs share a salt, so stderr now carries one note line.
     assert code == 0 and without_notes(err) == "", err
-    # serve --json now leads with a verdict and a sentence beside the structure (spec section 5.6).
-    # PF3 (spec section 4.4, PF3.6b; rule R3): serve --json now names the method at the top level after the
+    # serve --json now leads with a verdict and a sentence beside the structure.
+    # PF3 (PF3.6b): serve --json now names the method at the top level after the
     # sentence; dropped beside the verdict and the sentence.
     structure = {k: v for k, v in json.loads(out).items() if k not in ("verdict", "sentence", "method", "method_chosen")}
-    # PF4 (PF4.11, section 8.5): the page no longer carries the store path at all.
+    # PF4 (PF4.11): the page no longer carries the store path at all.
     assert "store_root" not in structure["pair"]
-    # PF2 (spec section 4.3): run_name beside each arm's run_id and the title by name are asserted,
+    # PF2: run_name beside each arm's run_id and the title by name are asserted,
     # then put back as before names.
     structure = structure_as_ids_named_it(structure, EVENT)
     # PF0's version-field check still holds on the page.
@@ -1977,21 +1977,21 @@ def test_o23_serve_json_on_the_lattice_prints_the_same_structure(lattice_trees: 
 
 
 def test_o16_default_rng_is_called_in_exactly_one_function_and_it_lives_in_tree_py() -> None:
-    """**The rule, in prose.** Draft ADR-058, widened 2026-09-22 (PR-2 build): one
+    """**The rule, in prose.** One
     seeded stream per estimator, each constructed in one function and never stored. The tree's
     permutation stream is built in ``tree.py``'s ``_draw`` and P4.2 obtains the same draws by
     calling that function; the paired replay's item-clustered bootstrap is built in
-    ``paired.py``'s ``_cluster_bootstrap`` from the declared ``bootstrap_seed`` (Prove -- Spec PR
-    Paired Replay, PR29). A ``default_rng`` anywhere else in the package is a second stream free
-    to disagree with one of these, which is the ADR-021 shape this project has shipped twice, and
+    ``paired.py``'s ``_cluster_bootstrap`` from the declared ``bootstrap_seed``
+    (PR29). A ``default_rng`` anywhere else in the package is a second stream free
+    to disagree with one of these, a shape of defect this project has shipped twice, and
     the two named sites are the whole of the allowance. Legacy NumPy RNG entry points --
     ``np.random.seed``, ``RandomState``, any ``np.random.<fn>`` other than ``default_rng`` -- are
-    global state and are forbidden everywhere in ``src/``. *Updated, ruled 2026-09-22: this test
+    global state and are forbidden everywhere in ``src/``. *Updated: this test
     read "exactly one site, in tree.py" from ``5143c8d`` until the paired bootstrap landed; the
     name is kept so the row in the S25 frozen-test map still resolves.*"""
     sites: list[tuple[str, int, str]] = []
     legacy: list[tuple[str, int, str]] = []
-    for path in sorted(PACKAGE.rglob("*.py")):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
+    for path in sorted(PACKAGE.rglob("*.py")):  # PF5: the core is a package now, so the scan reads src/ recursively.
         module = parsed(path)
         enclosing = enclosing_functions(module)
         for node in ast.walk(module):
@@ -2018,7 +2018,7 @@ def test_o16_default_rng_is_called_in_exactly_one_function_and_it_lives_in_tree_
 
 @pytest.mark.parametrize("name", ("tree.py", "diff.py"))
 def test_o16_the_statistics_modules_use_no_stdlib_random_and_no_secrets(name: str) -> None:
-    """Scoped to the two statistics modules (step zero item 3): ``capture.py:433`` already holds a
+    """Scoped to the two statistics modules (item 3 of the module docstring): ``capture.py:433`` already holds a
     ``random.Random(os.urandom(32))`` for something that is not a permutation stream, and naming
     that site beats widening the guard until it forbids what exists. In ``tree.py`` and
     ``diff.py`` there is no ``random``, no ``secrets``, no ``Random``."""
@@ -2063,13 +2063,13 @@ def test_o17_the_cli_does_no_arithmetic_on_any_root_field() -> None:
 
 
 def test_o18_the_block_follows_the_interval_block_and_its_first_line_carries_the_fields(synth_root: Path) -> None:
-    """Section 3.4, through ``main()`` with ``StringIO`` streams. The block is found by index and
-    never by ``endswith``: a later packet may append after it. The first line's p, q, verdict,
+    """The CLI's omnibus block, through ``main()`` with ``StringIO`` streams. The block is found by index and
+    never by ``endswith``: a later change may append after it. The first line's p, q, verdict,
     cell count and event count are captured and checked against the fields under rule 10."""
     multi, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
     assert code == 0, (out, err)
-    # The pair shares a salt, so stderr now carries one note line (spec section 5.4).
+    # The pair shares a salt, so stderr now carries one note line.
     assert without_notes(err) == "", err
     assert out.index("intervals: ") < out.index("omnibus: "), out
     match = OMNIBUS_FIRST_LINE.search(out)
@@ -2077,7 +2077,7 @@ def test_o18_the_block_follows_the_interval_block_and_its_first_line_carries_the
     verdict, p, sign, q, n_cells, n_events = match.groups()
     assert root.rejects is True
     assert (verdict, sign) == ("rejected", "<")
-    # p and q print under rule 10 (spec section 5.4), not ``:g``.
+    # p and q print under rule 10, not ``:g``.
     assert p == rule_10_p(root.p_omnibus) and q == rule_10_p(multi.q)
     assert int(n_cells) == root.n_cells and int(n_events) == len(root.events) == 1
 
@@ -2085,26 +2085,26 @@ def test_o18_the_block_follows_the_interval_block_and_its_first_line_carries_the
 def test_o18_the_other_branch_reads_not_rejected(synth_root: Path) -> None:
     _, root = store_root(synth_root, "same-a", "same-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail"])
-    # The pair shares a salt, so stderr now carries one note line (spec section 5.4).
+    # The pair shares a salt, so stderr now carries one note line.
     assert code == 0 and without_notes(err) == "", (out, err)
     match = OMNIBUS_FIRST_LINE.search(out)
     assert match is not None, out
     assert root.rejects is False
     assert (match.group(1), match.group(3)) == ("not rejected", ">=")
-    # p prints under rule 10 (spec section 5.4), not ``:g``.
+    # p prints under rule 10, not ``:g``.
     assert match.group(2) == rule_10_p(root.p_omnibus)
 
 
 def test_o18_the_second_line_and_the_informative_line_carry_the_fields(synth_root: Path) -> None:
-    """Every number on the block is a field the test reads back (section 0.4)."""
+    """Every number on the block is a field the test reads back."""
     _, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now the
+    # PF3 (Q17): the synthetic pair shares a salt, so the default is now the
     # paired test (scheme pair_swap); the root here is the unpaired test's, named.
     code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, out
     second = OMNIBUS_SECOND_LINE.search(out)
     assert second is not None, out
-    # The permutation count carries separators (spec section 5.4, rule 10); the seed does not.
+    # The permutation count carries separators (rule 10); the seed does not.
     assert (second.group(1), second.group(2), int(second.group(3))) == (f"{root.n_permutations:,}", root.scheme, root.seed)
     informative = OMNIBUS_INFORMATIVE_LINE.search(out)
     assert informative is not None, out
@@ -2118,13 +2118,13 @@ def test_o18_one_location_and_one_dispersion_line_per_event_in_events_order(synt
     ``dispersion`` lines, in ``multi.events`` order, values under rule 10 (``:g`` before it)."""
     _, root = store_root(synth_root, "tri-a", "tri-b", events=("x", "y"), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
     code, out, err = run_cli(["--store", str(synth_root), "diff", "tri-a", "tri-b", "--event", "x", "--event", "y"])
-    # The pair shares a salt, so stderr now carries one note line (spec section 5.4).
+    # The pair shares a salt, so stderr now carries one note line.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = omnibus_block(out)
     locations = OMNIBUS_LOCATION_LINE.findall(block)
     dispersions = OMNIBUS_DISPERSION_LINE.findall(block)
     assert [e for e, _, _ in locations] == [e for e, _, _ in dispersions] == list(root.events) == ["x", "y"]
-    # Deltas print to three decimals and p under rule 10 (spec section 5.4), not ``:g``.
+    # Deltas print to three decimals and p under rule 10, not ``:g``.
     for event, value, p in locations:
         assert (value, p) == (f"{root.location[event]:.3f}", rule_10_p(root.p_location[event])), event
     for event, value, p in dispersions:
@@ -2139,8 +2139,8 @@ def test_o18_permutations_and_seed_reach_the_call_and_json_carries_to_json(synth
     computing nothing, so the ``"omnibus"`` value equals the payload the test computes on the
     same frames with the same knobs, after one JSON round trip."""
     multi, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=200, seed=3)
-    # --json replaces --format json (spec section 5.6); the shared salt adds one note line (5.4).
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the synthetic pair shares a salt, so the default is now the
+    # --json replaces --format json; the shared salt adds one note line.
+    # PF3 (Q17): the synthetic pair shares a salt, so the default is now the
     # paired test (scheme pair_swap); the root here is the unpaired test's, named.
     code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--json", "--permutations", "200", "--seed", "3", "--method", "fisher_bh"])
     assert code == 0 and without_notes(err) == "", (out, err)
@@ -2152,7 +2152,7 @@ def test_o18_permutations_and_seed_reach_the_call_and_json_carries_to_json(synth
 
 
 def test_o18_the_defaults_are_the_named_constants(synth_root: Path) -> None:
-    # --json replaces --format json (spec section 5.6).
+    # --json replaces --format json.
     code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--json"])
     assert code == 0, out
     payload = json.loads(out)["omnibus"]
@@ -2172,7 +2172,7 @@ def test_o19_no_headline_uses_the_forbidden_vocabulary(
     "where it broke" vocabulary -- applied to the first rendered byte of the nested family. A
     root has no leaves and no groups, so neither sentence is natural here; the invariant exists
     so the rule is already in force when they arrive. ``headline()`` is one line and is pinned by
-    this and O20, never by bytes (section 8 trap 11)."""
+    this and O20, never by bytes."""
     for group in (lattice_roots, mirrored_lattice, identical_lattice, three_outcome_roots):
         for method, (_, root) in group.items():
             text = root.headline()
@@ -2203,7 +2203,7 @@ def test_o20_every_headline_quotes_the_null_and_names_the_family(
     identical_lattice: dict[str, tuple[Any, Any]],
     three_outcome_roots: dict[str, tuple[Any, Any]],
 ) -> None:
-    """Section 0.0: the only null this packet tests is the sharp "no cell changed", quoted
+    """The only null this file tests is the sharp "no cell changed", quoted
     verbatim; "same shift" -- Ding, Feller & Miratrix's other null -- is not tested, named or
     printed."""
     for group in (lattice_roots, mirrored_lattice, identical_lattice, three_outcome_roots):
@@ -2264,7 +2264,7 @@ def test_o21_unmatched_replicates_are_dropped_by_the_join_and_not_mispaired() ->
 def test_o22_unequal_n_keeps_each_arms_count_and_the_naive_delta(
     unequal_n: dict[str, tuple[Any, Any, pd.DataFrame, pd.DataFrame]]
 ) -> None:
-    """Section 8 trap 5: ``arm_label`` permutes the ``n_a + n_b`` labels and assigns the first
+    """``arm_label`` permutes the ``n_a + n_b`` labels and assigns the first
     ``n_a`` to arm a, so per-cell sizes are preserved. From the surface: the ``units`` row carries
     ``(32, 20)`` and ``delta == events_b/20 - events_a/32``."""
     _, root, _, _ = unequal_n["mixed"]

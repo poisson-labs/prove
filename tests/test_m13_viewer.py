@@ -1,7 +1,7 @@
-"""M13 viewer frozen tests, generated from section 4 of the M13 spec before the viewer is built.
+"""M13 viewer frozen tests, written before the viewer was built.
 
 Invariants V1-V40 map one test function each (several map more); V10 is withdrawn with
-``--port`` and its number is retired. ``proofload.viewer`` does not exist when this file is
+``--port`` and its number is retired. ``poisson_prove.viewer`` does not exist when this file is
 written, so it is imported lazily through ``viewer()``; collection never touches it.
 
 What is asserted where:
@@ -19,23 +19,23 @@ What is asserted where:
   ``http.client``, and stops it with ``shutdown()`` then ``server_close()`` in a ``finally``.
   ``shutdown()`` runs on a helper thread with a join timeout, so a server whose
   ``serve_forever`` never started cannot hang the suite.
-- **Tree reads.** V6, V14, V17 and V35 resolve ``viewer.py`` through ``proofload.__file__``,
+- **Tree reads.** V6, V14, V17 and V35 resolve ``viewer.py`` through ``poisson_prove.__file__``,
   never ``Path.cwd()``, so the shadow-shim run under ``PYTHONPATH`` reads the shim.
 - **Non-finite floats.** Fisher's odds ratio is ``inf`` or ``nan`` in 76 of the generated
   lattice pair's 144 cells (its zero and ceiling conditions, over both events). V37 runs on that
   pair; V29 and V33 depend on the null-for-non-finite rule.
 
-Two literals the spec leaves to the frozen tests, recorded here rather than buried in a test:
+Two literals the frozen tests fix, recorded here rather than buried in a test:
 
-- V25's hole message. The spec says "the no-comparable-data message string" without fixing
+- V25's hole message. V25 names "the no-comparable-data message string" without fixing
   it, and the ``hole_cause`` statement itself contains "no comparable data", so the phrase
   cannot be what is counted. ``HOLE_MESSAGE`` is the sentence these frozen tests pin.
 - V36's initial selection. The page's JavaScript is the named non-observable, so the
   initially-selected cell is pinned as the ``<option selected>`` of the picker.
 
-Also recorded: the six ``unverified`` statements are the spec's table cells with their
+Also recorded: the six ``unverified`` statements are the unverified table's cells with their
 Markdown code spans (backticks) removed, and the event line's wording is pinned to the
-literal ``given by --event, not inferred`` (section 3.4, fixed at close-out).
+literal ``given by --event, not inferred`` (fixed at close-out).
 
 V41 (environment inside a closed ``<details>``) was added at close-out after the mutation
 pass rendered it outside and nothing caught it.
@@ -83,7 +83,7 @@ from conftest import quickstart_design
 ROOT = Path(__file__).resolve().parents[1]
 #: The generated lattice pair (``tests/lattice.py``), built once per machine and checked on use.
 LATTICE_ROOT = lattice.root()
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
 S0_TEST_SOURCE = Path(__file__).resolve().parent / "test_s0_scaffold.py"
@@ -94,12 +94,12 @@ ROLLOUT = f"{MOCK_MODULE}:rollout"
 PATCHED = f"{MOCK_MODULE}:rollout_patched"
 V22B_SALT = "00112233445566778899aabbccddeeff"
 
-# LS update, 2026-09-22 (local serve pass, Phase A): /5 retires with the ``summary`` key.
+# LS: /5 retires with the ``summary`` key.
 SCHEMA = "poisson-prove.viewpair/7"
 RETIRED_SCHEMA = "proofload.viewpair/3"
 HOST = "127.0.0.1"
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
-# PF2 (spec section 4.3): every run has a name (target id up to its first "/", the UTC date of
+# PF2: every run has a name (target id up to its first "/", the UTC date of
 # created_at, a letter); outputs name the lattice runs by these.
 LATTICE_NAME_A, LATTICE_NAME_B = lattice.NAME_A, lattice.NAME_B
 LATTICE_EVENTS = (lattice.EVENT, lattice.OTHER)
@@ -114,7 +114,7 @@ CSP = (
     "img-src data:; form-action 'none'; base-uri 'none'"
 )
 CONTENT_TYPE = "text/html; charset=utf-8"
-# LS update, 2026-09-22 (local serve pass, Phase A): ``summary`` eighth.
+# LS: ``summary`` eighth.
 TOP_LEVEL_KEYS = (
     "schema", "pair", "diff", "holes", "view", "headline", "trade_line", "summary", "fence", "panels",
     "intervals", "tree", "unverified", "heatmap_svg",
@@ -125,11 +125,11 @@ ARM_KEYS = (
     "rows_stored", "tally",
 )
 VIEW_KEYS = ("title", "x_axis", "y_axis", "fixed", "theme", "top_n", "forest", "bound", "sign_convention")
-# LS update, 2026-09-22 (local serve pass, Phase A): ``mde_unchanged`` after ``honesty`` (spec LS D4, section 3.5).
+# LS: ``mde_unchanged`` after ``honesty``.
 # PF4 (PF4.20, PF4.3): each panel carries the event's ``kind`` beside ``n_safer`` and ``n_worse``
 # (null when the kind is not known) and ``n_higher`` / ``n_lower`` after them, then the label of its
 # per-condition share interval (``share_label``, the share caption's level and method) and the
-# threshold section 8.4 reads its nothing-moved word against (``threshold``, the page's own copy).
+# threshold its nothing-moved word is read against (``threshold``, the page's own copy).
 # PF4 re-freeze (PF4.34 to PF4.47): each panel gains ``flag_rule`` after ``kind``; the order is the build's.
 PANEL_KEYS = (
     "event", "caption", "honesty", "mde_unchanged", "kind", "flag_rule", "n_safer", "n_worse", "n_higher", "n_lower",
@@ -162,10 +162,10 @@ SERVE_FLAGS = {
     "--event", "--x", "--y", "--fix", "--method", "--q", "--theme", "--top-n", "--forest",
     "--title", "--json",
     "--permutations", "--seed", "--by", "--max-group-mde", "--depth",
-    # Every verb also takes the tool's own options after it (spec section 5.4).
+    # Every verb also takes the tool's own options after it.
     "--store", "--plain", "--debug",
 }
-#: V24's one carve-out, by path (spec S29 section 0.3): the permutation seed M14's frozen
+#: V24's one carve-out, by path (S29): the permutation seed M14's frozen
 #: ``RootResult.to_json()`` names ``seed``, carried verbatim under ``tree``.
 SEED_CARVE_OUT = "tree.root.seed"
 UNVERIFIED: tuple[tuple[str, str, str | None], ...] = (
@@ -239,7 +239,7 @@ REQUEST_TIMEOUT_S = 15.0
 
 
 def viewer() -> Any:
-    """``proofload.viewer``, imported on demand so collection does not depend on it."""
+    """``poisson_prove.viewer``, imported on demand so collection does not depend on it."""
     import poisson_prove.viewer as module
 
     return module
@@ -281,7 +281,7 @@ def assert_clean_refusal(r: Result, code: int) -> None:
 
 def run_id_of(root: Path, before: set[str]) -> str:
     """The one run a sweep added to the store. A sweep no longer ends with a ``run_id:`` line; it
-    ends with a verdict line (spec section 5.3), so the id is read from the store."""
+    ends with a verdict line, so the id is read from the store."""
     added = set(Store(root).runs()) - before
     assert len(added) == 1, added
     return added.pop()
@@ -289,19 +289,19 @@ def run_id_of(root: Path, before: set[str]) -> str:
 
 def without_notes(err: str) -> str:
     """Stderr with the ``note:`` lines dropped: Prove's own warnings now reach the CLI's stderr as
-    one ``note:`` line each (spec section 5.4)."""
+    one ``note:`` line each."""
     return "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
 
 
 def assert_error_then_next(err: str) -> None:
-    """A refusal is one ``error:`` line, then only ``  next:`` lines (spec section 5.4)."""
+    """A refusal is one ``error:`` line, then only ``  next:`` lines."""
     lines = without_notes(err).splitlines()
     assert lines and lines[0].startswith("error: "), err
     assert all(line.startswith("  next: ") for line in lines[1:]), err
 
 
 def serving_line(port: int) -> str:
-    """PF2 (spec section 5.3): serve's verdict line, which replaced the bare URL line."""
+    """PF2: serve's verdict line, which replaced the bare URL line."""
     return f'ok  serving "{LATTICE_NAME_A}" against "{LATTICE_NAME_B}" at http://{HOST}:{port}/ (Ctrl-C stops)'
 
 
@@ -910,7 +910,7 @@ class Built:
 
 def counts_of(store: Store, run: str) -> tuple[int, int]:
     """``(spans, spans stamped as cut)`` over a run's stored envelopes: the count the CLI hands the builders.
-    Added 2026-09-20 (truncation surfacing); restated here and never imported from another test module."""
+    Added with truncation surfacing; restated here and never imported from another test module."""
     spans = [s for e in store.read(run, meta=False, trace="envelope")["trace"] if isinstance(e, dict) for s in e.get("spans", [])]
     return len(spans), sum(1 for s in spans if s.get("truncated") == "observation")
 
@@ -918,8 +918,8 @@ def counts_of(store: Store, run: str) -> tuple[int, int]:
 def build_pair(root: Path, a: str, b: str, spec: ReportSpec, events: Sequence[str]) -> Built:
     """S29 (``proofload.viewpair/3``) makes M14's tree a required input to assembly, so the
     fixture grows it on the frames it already reads, at M14's defaults, and passes ``tree=``.
-    The tree is the family's, never the ``--fix`` slice's, which is what the spec says of the
-    structure too."""
+    The tree is the family's, never the ``--fix`` slice's, as the structure's tree
+    is too."""
     store = Store(root)
     ma, mb = store.manifest(a), store.manifest(b)
     fa, fb = store.read(a), store.read(b)
@@ -959,7 +959,7 @@ def lattice_serve_json(lattice_store: Store) -> Result:
     """``serve --json`` on the lattice pair, both events, with ``serve_page`` tripwired."""
     with pytest.MonkeyPatch.context() as mp:
         tripwire_serve(mp)
-        # PF3 (Q17, spec sections 4.4 and 14; R1): the lattice's runs share a salt, so the default is now the
+        # PF3 (Q17): the lattice's runs share a salt, so the default is now the
         # paired test; V22 and V33 compare with the unpaired test's numbers, named.
         return run_cli(lattice_full_argv("--method", "fisher_bh", "--json"))
 
@@ -968,7 +968,7 @@ def lattice_serve_json(lattice_store: Store) -> Result:
 def lattice_serve_json_one_event(lattice_store: Store) -> Result:
     with pytest.MonkeyPatch.context() as mp:
         tripwire_serve(mp)
-        # PF3 (Q17, spec sections 4.4 and 14; R1): V22 compares with diff's unpaired numbers, named.
+        # PF3 (Q17): V22 compares with diff's unpaired numbers, named.
         return run_cli(lattice_argv("--event", lattice.EVENT, "--x", LATTICE_X, "--y", LATTICE_Y, "--title", LATTICE_TITLE, "--method", "fisher_bh", "--json"))
 
 
@@ -979,7 +979,7 @@ class MockPair:
     b: str
 
 
-#: PF4 re-freeze (PF4.30, reading R33): the quickstart's design at 100 replicates with nothing
+#: PF4 re-freeze (PF4.30): the quickstart's design at 100 replicates with nothing
 #: declared has a lone-change limit of 0.262 at base 0.400, which the default 0.20 refuses; 0.3 is
 #: the smallest round value above it, and what these sweeps accept.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
@@ -1028,10 +1028,10 @@ def hostile(tmp_path_factory: pytest.TempPathFactory) -> Built:
 def test_v1_missing_event_exits_two_names_serve_and_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(lattice_argv("--x", LATTICE_X))
-    # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr (spec section 5.4).
+    # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr.
     assert_clean_refusal(r, 1)
     assert_error_then_next(r.err)
-    # PF2 (spec section 4.3): the refusal and its next line name the two runs by name, not id.
+    # PF2: the refusal and its next line name the two runs by name, not id.
     for fact in ("serve", "--event", LATTICE_NAME_A, LATTICE_NAME_B, lattice.X, lattice.Y, lattice.EVENT, lattice.OTHER):
         assert fact in r.err, (fact, r.err)
 
@@ -1039,7 +1039,7 @@ def test_v1_missing_event_exits_two_names_serve_and_lists_the_axes_and_events_th
 def test_v2_unknown_event_exits_two_with_the_known_events_sentence_and_the_verb(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(lattice_argv("--event", "nope", "--x", LATTICE_X))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert_clean_refusal(r, 1)
     assert 'serve: event "nope" does not appear in either run. Present: held, tripped.' in r.err, r.err
 
@@ -1058,10 +1058,10 @@ def test_v3_wrong_arity_exits_two_naming_the_two_run_form_and_no_single_run_mode
 def test_v4_missing_x_lists_the_axes_and_events_the_runs_carry(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(lattice_argv("--event", lattice.EVENT))
-    # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr (spec section 5.4).
+    # A refusal exits 1 and is one error line plus next lines; its facts stay in stderr.
     assert_clean_refusal(r, 1)
     assert_error_then_next(r.err)
-    # PF2 (spec section 4.3): the refusal and its next line name the two runs by name, not id.
+    # PF2: the refusal and its next line name the two runs by name, not id.
     for fact in ("serve", "--x", LATTICE_NAME_A, LATTICE_NAME_B, lattice.X, lattice.Y, lattice.EVENT, lattice.OTHER):
         assert fact in r.err, (fact, r.err)
 
@@ -1069,12 +1069,12 @@ def test_v4_missing_x_lists_the_axes_and_events_the_runs_carry(monkeypatch: pyte
 def test_v4_unknown_x_exits_two_through_axis_error(monkeypatch: pytest.MonkeyPatch) -> None:
     tripwire_serve(monkeypatch)
     r = run_cli(lattice_argv("--event", lattice.EVENT, "--x", "nope"))
-    # A refusal exits 1, and an error shows no Python repr, so the value is checked bare (spec section 5.4).
+    # A refusal exits 1, and an error shows no Python repr, so the value is checked bare.
     assert_clean_refusal(r, 1)
     assert "nope" in r.err and "config key" in r.err, r.err
 
 
-# Each with its exit code: a refusal exits 1, a wrong command line (the run count) exits 2 (spec section 5.2).
+# Each with its exit code: a refusal exits 1, a wrong command line (the run count) exits 2.
 REFUSALS = [
     (lattice_argv("--x", LATTICE_X), 1),
     (lattice_argv("--event", "nope", "--x", LATTICE_X), 1),
@@ -1181,12 +1181,12 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(lattic
     real_out, real_err = capfd.readouterr()
     assert statuses == [200, 200, 200] and missed == 404
     assert dropped is None or dropped.status >= 500, dropped
-    # PF2 (spec section 5.3): the first stdout line is serve's verdict line, which names both runs
-    # and carries the URL; PF12 (spec section 18.2, Q59): then the one line naming what it saved.
+    # PF2: the first stdout line is serve's verdict line, which names both runs
+    # and carries the URL; PF12 (Q59): then the one line naming what it saved.
     lines = run.out.getvalue().splitlines()
     assert lines[0] == serving_line(run.server.server_address[1]) and len(lines) == 2, run.out.getvalue()
     assert re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]), run.out.getvalue()
-    # The unpaired-analysis warning on the lattice pair is now a note line on stderr (spec section 5.4).
+    # The unpaired-analysis warning on the lattice pair is now a note line on stderr.
     assert without_notes(run.err.getvalue()) == "", run.err.getvalue()
     assert (real_out, real_err) == ("", ""), (real_out, real_err)
 
@@ -1194,14 +1194,14 @@ def test_v11_serving_including_a_raising_request_writes_only_the_url_line(lattic
 def test_v12_assembling_rendering_and_serving_touch_no_file(lattice_built: Built, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("POISSON_PROVE_STORE", raising=False)
     monkeypatch.chdir(tmp_path)
-    # PF2 (spec section 2.3, Q11): report's default folder is named by the runs' names now; both
+    # PF2 (Q11): report's default folder is named by the runs' names now; both
     # the folder named by ids and the one named by names must stay absent.
     def slugged(name: str) -> str:
         return name.lower().replace(" ", "-").replace("/", "-")
 
     default_dir = tmp_path / f"prove-report-{LATTICE_A}-vs-{LATTICE_B}"
     named_dir = tmp_path / f"prove-report-{slugged(LATTICE_NAME_A)}-vs-{slugged(LATTICE_NAME_B)}"
-    # PF12 (spec section 18.2, Q59): serve saves the comparison it shows under the store's
+    # PF12 (Q59): serve saves the comparison it shows under the store's
     # ``.poisson/``; nothing else in the store, and nothing in the working folder, is touched.
     def store_files() -> dict[str, int]:
         return {k: v for k, v in tree_snapshot(LATTICE_ROOT).items() if not k.startswith(".poisson")}
@@ -1432,7 +1432,7 @@ def test_v22_n_tests_and_every_q_equal_diff_format_json(lattice_serve_json: Resu
     argv = ["--store", str(LATTICE_ROOT), "diff", LATTICE_A, LATTICE_B]
     for e in events:
         argv += ["--event", e]
-    # --json replaces --format json on diff (spec section 5.6).
+    # --json replaces --format json on diff.
     argv += ["--method", "fisher_bh", "--json"]
     diffed = run_cli(argv)
     assert diffed.code == 0, diffed.err
@@ -1485,10 +1485,10 @@ def test_v24_cell_keys_are_the_twenty_one_and_no_episode_level_key_anywhere(latt
         for cell in panel["cells"]:
             assert tuple(cell) == CELL_KEYS, tuple(cell)
             assert set(cell["text"]) == set(FLOAT_KINDS)
-    # Narrowed for S29 (spec S29 section 0.3, draft ADR-074). ``proofload.viewpair/3`` carries
+    # Narrowed for S29. ``proofload.viewpair/3`` carries
     # M14's ``TreeResult.to_json()`` verbatim, and ``RootResult`` names the permutation seed
     # ``seed``: a knob a reader pastes back with ``--seed``, not a replicate's seed, and renaming
-    # it in the structure would make the structure a lossy copy of the tree (ADR-033). The
+    # it in the structure would make the structure a lossy copy of the tree. The
     # structure walk therefore carves out that one path, by path and not by name: ``seed`` stays
     # forbidden at every other path, the other four names stay forbidden everywhere, and a user
     # config axis named ``seed`` still trips this clause under ``tree.root.units.config`` exactly
@@ -1510,8 +1510,8 @@ def test_v25_holes_have_no_index_entry_and_the_hole_message_appears_once(hostile
 
 
 def test_v26_pointer_events_none_covers_the_glyph_the_notch_and_the_figures_text_and_nothing_else(lattice_dom: Dom) -> None:
-    """LS update, 2026-09-22 (local serve pass, Phase A): the inert set gains the figure's ``<text>`` (spec LS D8, LS1) -- a cell's own
-    label swallowed the click. The ``data-cell`` clause is re-asserted verbatim."""
+    """LS (D8, LS1): the inert set gains the figure's ``<text>`` -- a cell's own label swallowed
+    the click. The ``data-cell`` clause is re-asserted verbatim."""
     rules = css_rules(lattice_dom.html_style())
     inert = [s for selectors, decls in rules if decls.get("pointer-events") == "none" for s in selectors]
     assert inert, rules
@@ -1692,12 +1692,12 @@ def test_v33_json_prints_the_structure_indented_and_strict_and_binds_nothing(lat
     assert r.code == 0, r.err
     assert r.out.startswith('{\n  "schema": ')
     parsed = strict_loads(r.out)
-    # serve --json wraps the structure with verdict and sentence after schema (spec section 5.6).
-    # PF3 (spec section 4.4, R3): and with method and method_chosen right after sentence, which the
+    # serve --json wraps the structure with verdict and sentence after schema.
+    # PF3: and with method and method_chosen right after sentence, which the
     # library's structure does not carry; they are set aside with verdict and sentence.
     assert tuple(parsed)[:5] == ("schema", "verdict", "sentence", "method", "method_chosen"), tuple(parsed)
     parsed = {k: v for k, v in parsed.items() if k not in ("verdict", "sentence", "method", "method_chosen")}
-    # PF2 (spec section 4.3): serve --json carries run_name beside each arm's run_id; with it set
+    # PF2: serve --json carries run_name beside each arm's run_id; with it set
     # aside the structure is the library's, and the names sit where they belong.
     assert {role: (parsed["pair"][role]["run_id"], parsed["pair"][role].get("run_name")) for role in ("a", "b")} == {
         "a": (LATTICE_A, LATTICE_NAME_A), "b": (LATTICE_B, LATTICE_NAME_B)
@@ -1857,13 +1857,13 @@ def test_v38_the_url_line_carries_the_bound_port_and_is_written_after_on_bind(la
         port = run.server.server_address[1]
         assert isinstance(run.server, socketserver.BaseServer)
         assert run.out_at_bind == ""
-        # PF2 (spec section 5.3): the URL line is now serve's verdict line naming both runs;
-        # PF12 (spec section 18.2, Q59): the line naming the saved comparison follows it.
+        # PF2: the URL line is now serve's verdict line naming both runs;
+        # PF12 (Q59): the line naming the saved comparison follows it.
         lines = run.out.getvalue().splitlines()
         assert lines[0] == serving_line(port) and len(lines) == 2 and re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]), lines
         assert get(run.server, "/").status == 200
     assert run.codes == [0], run.codes
-    # The unpaired-analysis warning on the lattice pair is now a note line on stderr (spec section 5.4).
+    # The unpaired-analysis warning on the lattice pair is now a note line on stderr.
     assert without_notes(run.err.getvalue()) == ""
 
 
@@ -1887,14 +1887,14 @@ def test_v38_keyboard_interrupt_exits_zero_closes_the_socket_and_prints_no_trace
     monkeypatch.setattr(cli, "serve_page", wrapped, raising=False)
     r = run_cli(lattice_full_argv())
     # Ctrl-C exits 130 and adds one stopped line after the URL line; the unpaired-analysis warning is a note line
-    # (spec sections 5.2 and 5.4).
+    #.
     assert r.code == 130, r.text
     assert "Traceback" not in r.text and without_notes(r.err) == "", r.text
     lines = r.out.splitlines()
-    # PF2 (spec section 5.3): the URL line is now serve's verdict line naming both runs.
+    # PF2: the URL line is now serve's verdict line naming both runs.
     assert holder and lines[0] == serving_line(holder[0].server_address[1]), r.out
-    # PF12 (spec section 18.2, Q59): the saved comparison's line comes between the two, and once serve
-    # has saved, its stopped line no longer says nothing was written (PF12 reading R41).
+    # PF12 (Q59): the saved comparison's line comes between the two, and once serve
+    # has saved, its stopped line no longer says nothing was written.
     assert len(lines) == 3 and re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[1]) and lines[2].startswith("stopped  interrupted"), r.out
     assert "nothing was written" not in lines[2], r.out
     assert holder[0].socket.fileno() == -1
@@ -1908,7 +1908,7 @@ def test_v38_bind_failure_is_a_viewer_error_and_exit_two(lattice_built: Built, m
     with pytest.raises(viewer().ViewerError):
         viewer().serve_page(lattice_built.page, on_bind=lambda server: None)
     r = run_cli(lattice_full_argv())
-    # A refusal exits 1; the unpaired-analysis warning may come first as a note line (spec sections 5.2 and 5.4).
+    # A refusal exits 1; the unpaired-analysis warning may come first as a note line.
     assert_clean_refusal(r, 1)
     assert r.out == "" and without_notes(r.err).startswith("error:"), r.text
 
@@ -1942,9 +1942,8 @@ def test_v39_trade_line_appears_when_present_and_leaves_no_empty_element_when_nu
     assert holder, "the trade line is not the direct text of one element outside the SVG"
     without = json.loads(json.dumps(lattice_built.structure, allow_nan=False))
     without["trade_line"] = None
-    # LS update, 2026-09-22 (local serve pass, Phase A, found by the shim run): the Summary carries the same sentence as
-    # ``summary.complement.line`` on this pair (spec LS section 3.6), so a structure without the
-    # trade line is one without the complement too.
+    # LS: the Summary carries the same sentence as ``summary.complement.line`` on this pair, so
+    # a structure without the trade line is one without the complement too.
     without["summary"]["complement"] = None
     page = viewer().render_html(without)
     dom = parse_html(page)

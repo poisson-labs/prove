@@ -1,28 +1,28 @@
 """PR-2 frozen tests: the per-cut paired analysis, the item-clustered bootstrap and the outcome of
-"Prove -- Spec PR Paired Replay" -- invariants PR22 to PR39.
+the paired replay -- invariants PR22 to PR39.
 
-Written at the freeze on 2026-09-22 off ``pr1-build`` ``0f1e1e0`` (phase 1 built) plus a fixture
-update (``86c1b4d``), as ``4106e54``. **Frozen 2026-09-22** after approval of the two
-tables in the handoff and the conventions below, and ruled on the sign of the net swing (kept as
+Written off ``pr1-build`` ``0f1e1e0`` (phase 1 built) plus a fixture
+update (``86c1b4d``), as ``4106e54``. **Frozen** after approval of the
+invariant tables and the conventions below, with three points settled: the sign of the net swing (kept as
 PR26 writes it, the second arm minus the first, and the output labels which way it subtracts), the
-net swing under the fallback (``not_estimated``, null bounds) and spec section 9's
+net swing under the fallback (``not_estimated``, null bounds) and running under
 ``PYTHONPATH=src``. The freeze changes this docstring and adds the one ``direction`` assertion the
-sign ruling asks for, in the two net-swing tests. The build adds phase 2 of
-``src/proofload/paired.py`` -- ``CutResult``, ``PairedResult`` and ``analyse`` -- against this file
+sign decision asks for, in the two net-swing tests. The build adds phase 2 of
+``src/poisson_prove/paired.py`` -- ``CutResult``, ``PairedResult`` and ``analyse`` -- against this file
 and does not edit it. Phase 2's names are read through ``getattr`` inside each test, so
 the bare tree (phase 1 only) fails test by test on ``AttributeError`` and never at collection.
-*Update R3, ruled 2026-09-22 (the PR-3 freeze): ``Cut`` gains ``comparison`` with no default, so
+*The ``comparison`` update (with PR-3): ``Cut`` gains ``comparison`` with no default, so
 every cut this file builds carries ``"ge"`` -- the one reading PR23 had, so no pinned number moves
 -- and the PR23 tests take the comparison as a parameter with ``"gt"`` rows beside the ``"ge"``
 ones; PR24 gains one test for the tie under ``"gt"``. Every test in this file is red on the tree
-this update lands on, on ``TypeError`` from the missing field, until the build adds it. Ruled
-the same day on the PR-3 freeze report: both artifacts print the cut's ``comparison`` beside
+this update lands on, on ``TypeError`` from the missing field, until the build adds it. Also
+with PR-3: both artifacts print the cut's ``comparison`` beside
 its ``threshold``, pinned by one line in PR37's nesting test.*
 
 **What phase 2 is.** ``analyse`` takes a ``PairAssertion`` and nothing else (PR9, already pinned by
 the PR-1 frozen tests) and answers one question per declared cut: did the binary action at that cut
-reproduce? The action is ``value >= threshold`` on ``Decimal`` (PR23, PR24) -- under update R3,
-ruled 2026-09-22, ``value >= threshold`` when the cut declares ``comparison = "ge"`` and
+reproduce? The action is ``value >= threshold`` on ``Decimal`` (PR23, PR24) -- since the ``comparison``
+update, ``value >= threshold`` when the cut declares ``comparison = "ge"`` and
 ``value > threshold`` when it declares ``"gt"``, a tie being action 1 under the first and action 0
 under the second and counted per arm under both; the 2x2, the flip rate
 and the net swing are paired quantities (PR25 to PR27); the pooled interval is the percentile
@@ -31,12 +31,12 @@ design effect (PR28 to PR34); McNemar is the arm-order check and nothing else (P
 statistic crosses a cut (PR37); the outcome fires only against a declared floor (PR38); and the
 whole of it, read off two stored arms, gives what an independent reference gives (PR39).
 
-**Conventions this file fixes for the build session** (the spec's section 2 leaves them open;
-each goes into the spec's change log on the freeze):
+**Conventions this file fixes for the build** (where the declared interface leaves them
+open):
 
-- *The result.* ``PairedResult`` is the two fields of section 2 and no other; ``cuts`` is one
-  ``CutResult`` per declared cut, in declaration order. ``CutResult`` is the seven fields of
-  section 2 and no other. ``declaration_digest == assertion.declaration.digest``.
+- *The result.* ``PairedResult`` is its two declared fields and no other; ``cuts`` is one
+  ``CutResult`` per declared cut, in declaration order. ``CutResult`` is its seven declared
+  fields and no other. ``declaration_digest == assertion.declaration.digest``.
 - *``per_sweep``.* One mapping per declared sweep, in declaration order, carrying ``sweep``,
   ``n11``, ``n10``, ``n01``, ``n00``, ``n``, ``ties`` (``{"a": int, "b": int}``), ``rate_a`` and
   ``rate_b`` (descriptive floats, no interval), ``flip_rate`` (``{estimate, lo, hi, basis}`` with
@@ -82,18 +82,18 @@ each goes into the spec's change log on the freeze):
   ``flip_rate`` interval the outcome was decided from, ``null`` without a floor). Every number
   is a JSON number; ``threshold`` is the one string. Key order is stable across calls, processes
   and hash seeds.
-- *The sign of the net swing, ruled 2026-09-22.* PR26 writes ``net_swing = (n01 - n10) / n``,
+- *The sign of the net swing.* PR26 writes ``net_swing = (n01 - n10) / n``,
   the second arm (``b``, arm A') minus the first (``a``, arm A); a reader who subtracts the other
   way gets the same interval with its sign flipped. **The
   formula stands as written**, and
   **every ``net_swing`` mapping -- per sweep, pooled, and in ``intervals_json`` -- carries
   ``direction: "b_minus_a"``** so a reader never has to guess which way it subtracts.
 
-**Invariant-to-test map** is in the handoff: 49 functions,
+**Invariant-to-test map**, kept outside this file: 49 functions,
 72 collected ids, PR22 to PR39, approved as written. Every test name starts ``test_prN_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` but two is built in test code,
-frame by frame -- the spec's section 11.2 ruling made that the front door for phase 2, and it is
+frame by frame -- that is the intended way in for phase 2, and it is
 what lets a fixture carry exactly the flip pattern an invariant needs. The two exceptions: the
 control runs a hand-built store through ``assert_pairs`` so the frames ``analyse`` reads are the
 frames phase 1 emits; and PR39 reads two stored arms the suite generates (``tests/replay_arms.py``)
@@ -306,7 +306,7 @@ def declaration(
         "value_key": VALUE_KEY, "cluster_key": "item", "stratum_key": "cut",
         # A cut is ``(name, threshold)`` or ``(name, threshold, comparison)``; the comparison
         # defaults to ``"ge"`` here, in the helper, because that is the reading every test below
-        # was cut against. The module itself has no default (update R3).
+        # was cut against. The module itself has no default (the ``comparison`` update).
         "cuts": tuple(
             paired.Cut(name=c[0], threshold=Decimal(c[1]), comparison=c[2] if len(c) > 2 else "ge")
             for c in cuts
@@ -564,7 +564,7 @@ def test_pr22_the_module_computes_the_rate_and_chooses_no_threshold_for_it() -> 
     ("comparison", "literal", "action"),
     [("ge", "0.59", 0), ("ge", "0.60", 1), ("ge", "0.61", 1), ("ge", "0.6", 1), ("ge", "0.599", 0),
      ("ge", "0.6000", 1), ("ge", "1", 1), ("ge", "0", 0),
-     # Update R3 (2026-09-22): under ``gt`` the tie does not act, and nothing else moves.
+     # The ``comparison`` update: under ``gt`` the tie does not act, and nothing else moves.
      ("gt", "0.59", 0), ("gt", "0.60", 0), ("gt", "0.61", 1), ("gt", "0.6", 0), ("gt", "0.599", 0),
      ("gt", "0.6000", 0), ("gt", "1", 1), ("gt", "0", 0), ("gt", "0.6000000000000000001", 1)],
 )
@@ -578,7 +578,7 @@ def test_pr23_the_action_is_value_at_or_above_the_threshold(comparison: str, lit
 @pytest.mark.parametrize(
     ("comparison", "literal", "threshold", "action"),
     [
-        # Named mutant 2, as the spec spells it: an item stored at 0.60 must clear a cut of 0.60.
+        # Named mutant 2: an item stored at 0.60 must clear a cut of 0.60.
         # ``float("0.60") >= Decimal("0.60")`` is False, because Python compares the two exactly.
         ("ge", "0.60", "0.60", 1),
         # And as all-float arithmetic hides it: below the cut to Decimal, a tie to a double.
@@ -588,7 +588,7 @@ def test_pr23_the_action_is_value_at_or_above_the_threshold(comparison: str, lit
         # 0.1 + 0.2 is the double above 0.3; the literal is not, and is below a cut of 0.3.
         ("ge", "0.29999999999999998", "0.3", 0),
         ("ge", "0.3", "0.30000000000000004", 0),
-        # Update R3 (2026-09-22), the same literals under ``gt``: the tie at 0.60 does not act,
+        # The ``comparison`` update, the same literals under ``gt``: the tie at 0.60 does not act,
         # a float would call ``0.60000000000000000011 > 0.6000000000000000001`` a tie, and it is not.
         ("gt", "0.60", "0.60", 0),
         ("gt", "0.60000000000000000011", "0.6000000000000000001", 1),
@@ -652,7 +652,7 @@ def test_pr24_a_tie_is_action_one_and_is_counted_per_arm() -> None:
 
 
 def test_pr24_under_gt_a_tie_is_action_zero_and_is_still_counted_per_arm() -> None:
-    """Update R3 (2026-09-22): the same five pairs as the test above under ``comparison =
+    """The ``comparison`` update: the same five pairs as the test above under ``comparison =
     "gt"``. The ties change side -- 0.60 no longer acts -- and the tie counts do not move, because
     a tie is a value equal to the threshold whichever way the cut is declared."""
     rows = [
@@ -726,7 +726,7 @@ def test_pr26_flip_rate_and_net_swing_per_sweep_and_pooled() -> None:
     assert cut.pooled["flip_rate"]["estimate"] == pytest.approx(6 / 20)
     assert cut.pooled["net_swing"]["estimate"] == pytest.approx((3 - 3) / 20)
     assert s1["rate_a"] == pytest.approx(9 / 10) and s1["rate_b"] == pytest.approx(7 / 10)
-    # Ruled 2026-09-22: the output says which way it subtracts, everywhere the swing appears.
+    # The output says which way it subtracts, everywhere the swing appears.
     assert s1["net_swing"]["direction"] == s2["net_swing"]["direction"] == "b_minus_a"
     assert cut.pooled["net_swing"]["direction"] == "b_minus_a"
     _, intervals = artifacts(result)
@@ -1190,7 +1190,7 @@ def test_pr37_every_statistic_is_nested_under_exactly_one_cut_name() -> None:
         assert tree["declaration_digest"] == result.declaration_digest
         for name, block in tree["cuts"].items():
             assert block["threshold"] == {CUT: "0.60", "c50": "0.50", "c90": "0.90"}[name]
-            assert block["comparison"] == "ge"  # ruled 2026-09-22: printed beside the threshold (R3)
+            assert block["comparison"] == "ge"  # printed beside the threshold (the ``comparison`` update)
             for path, _ in walk(block):
                 assert not any(
                     word in p.lower() for p in path for word in ("across", "between_cut", "trend")
@@ -1387,7 +1387,7 @@ def test_pr39_the_item_clustered_interval_on_the_stored_arms_is_0_095_to_0_275()
 
 
 def test_pr39_the_net_swing_on_the_stored_arms_is_b_minus_a_with_its_clustered_interval() -> None:
-    """PR26 is A' minus A -- ruled 2026-09-22 to stand -- so the swing is ``(n01 - n10) / n`` and
+    """PR26 is A' minus A -- kept as written -- so the swing is ``(n01 - n10) / n`` and
     the output says which way it subtracts."""
     swing = stored_cut().pooled["net_swing"]
     assert swing["estimate"] == pytest.approx((15 - 21) / 200)

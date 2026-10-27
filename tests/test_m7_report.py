@@ -6,19 +6,19 @@ on the raw string. Golden tests use the generated lattice pair (``tests/lattice.
 uses a synthetic ``DiffResult`` factory built directly from M6's ``cells`` columns. All
 temp output goes under tmp_path. No network, no clock.
 
-Two things the spec leaves open that these frozen tests pin, because I7, I11 and I19 are not
+Two things the invariants leave open that these frozen tests pin, because I7, I11 and I19 are not
 checkable without them:
 
 - **Cell identification in SVG.** Every cell ``<rect>`` carries ``data-cell="<config_hash>"``
   for a present cell and ``data-cell="absent"`` for a grid hole. Significance glyphs carry
-  ``data-sig="1"`` (spec) and sit geometrically inside their cell's rect, which is how the
+  ``data-sig="1"`` (as specified) and sit geometrically inside their cell's rect, which is how the
   set of significant cells is recovered after attribute stripping.
 - **Worst-cells table rows.** Each row is a Markdown pipe row containing, as text, the
   cell's coordinate values and the formatted ``n_a``, ``n_b``, ``rate_a``, ``rate_b``,
   ``delta``, ``p``, ``q``, ``mde`` and ``verdict``. I2(a) requires every numeric field of a
   present cell to be visible somewhere, and with ``top_n >= present`` the table is where.
 
-Reference formatting used by the tests, per the spec's formatting rule: pp values are
+Reference formatting used by the tests, per M7's formatting rule: pp values are
 ``format(x * 100, ".1f")`` (delta, rate) or ``format(x * 100, ".0f")`` (mde) with ``-0.0``
 normalised; p/q are ``format(x, ".3g")`` at or above 1e-3 and ``format(x, ".2e")`` below;
 zero prints as ``0``.
@@ -237,7 +237,7 @@ def svg_root(report: Report) -> ET.Element:
 
 def _svg_text_rejoined(svg: str) -> str:
     """Every ``<text>`` in document order, one per line, a ``data-wrap="1"`` continuation joined back
-    onto the line before with a space. LS update, 2026-09-25 (local serve pass, Phase C)."""
+    onto the line before with a space."""
     out: list[str] = []
     for e in ET.fromstring(svg).iter():
         if _local(e.tag) != "text":
@@ -519,7 +519,7 @@ def test_i4_counts_and_headline_agree() -> None:
         assert count == sum(c.verdict == verdict for c in present)
     safer, n_present, worse, method, q_text, pairing = _parse_headline(report)
     assert (safer, n_present, worse) == (report.n_safer, len(present), report.n_worse)
-    # P-1 (ADR-052): the token is the requested method's pairing, never the runs' seed identity.
+    # P-1: the token is the requested method's pairing, never the runs' seed identity.
     assert method == d.method == "fisher_bh" and pairing == "unpaired"
     assert q_text == _sig3(d.q)
     assert report.headline in report.to_markdown() and html_escape(report.headline) in report.to_html()
@@ -675,8 +675,7 @@ def _check_honesty(report: Report, diff_result: DiffResult) -> None:
     for line in lines:
         assert line in md, line
         assert html_escape(line) in html, line
-    # LS update, 2026-09-25 (local serve pass, Phase C, ruled on the build's finding): the honesty lines wrap
-    # (ruling 2 of 2026-09-22), so the figure is read as its ``<text>`` runs with each ``data-wrap="1"``
+    # The honesty lines wrap in the figure, so the figure is read as its ``<text>`` runs with each ``data-wrap="1"``
     # continuation joined back onto the line before by one space, the way M7's multi ``texts()`` reads it.
     svg = _svg_text_rejoined(svg)
     assert "Worst-powered cell overall" in svg

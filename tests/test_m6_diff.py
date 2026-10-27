@@ -1,7 +1,7 @@
 """Frozen tests for M6: run diff with Fisher/BH, paired McNemar, log-rank, and MDE.
 
 Golden tests (I1, I2, I8, I10, I12, I17, I18) run on the generated lattice pair
-(``tests/lattice.py``) through ``lattice_store``; frames are produced with ``proofload.survival.censor``. Reference tests (I3, I6,
+(``tests/lattice.py``) through ``lattice_store``; frames are produced with ``poisson_prove.survival.censor``. Reference tests (I3, I6,
 I7, I9) import ``statsmodels`` / ``lifelines`` with ``pytest.importorskip`` in the test
 body and run hypothesis on an inner function, so a missing dev extra is a clean skip.
 I4 is a seeded Monte Carlo. I11-I14 and I16 use small synthetic censored frames built
@@ -13,12 +13,12 @@ exact test on the design's counts per condition and one BH family over all of th
 in the test suite and never by Prove, so neither I1 test skips. The 22/0 assertion is the
 reference's count, pinned.
 
-Notes for the implementation session:
+Notes for the implementation:
 
 - The reference ``q`` is BH over all 72 conditions. BH over only the conditions with at least
   one event gives 23 lower, not 22.
 - I9's reference is ``statsmodels.stats.proportion.power_proportions_2indep`` inverted by
-  bisection. It uses the pooled-null and alternative standard errors of section 3, which
+  bisection. It uses the pooled-null and alternative standard errors, which
   ``NormalIndPower`` (Cohen's h) does not. The reference bisection runs to 1e-10, so the
   implementation's own bisection must converge to well under 1e-6.
 - I7 draws times from a short grid so ties and censoring are both exercised; lifelines'
@@ -154,8 +154,8 @@ def _manifest(run_id: str = "r", *, run_salt: str = "salt", t_unit: str = "secon
 
 
 def _seed_of(h: str, replicate_index: int) -> int:
-    """A stored seed that is a function of ``(config_hash, replicate_index)``. **C49 (P-1 section
-    7.3), added in the P-1 freeze's update**: ``_cframe`` carried no ``seed`` column at all, so
+    """A stored seed that is a function of ``(config_hash, replicate_index)``. **C49 (P-1), added in
+    the P-1 freeze's update**: ``_cframe`` carried no ``seed`` column at all, so
     ``mcnemar_bh`` ran on every I6 pair with nothing to establish the pairing on -- C18's blindness
     inside a fixture. Two arms built by ``_cframe`` now store the same seed at the same
     ``(config_hash, replicate_index)``, which is what a stored pair from one sweep does. Green

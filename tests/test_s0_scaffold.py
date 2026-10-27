@@ -71,7 +71,7 @@ def test_python_floor():
     assert data["project"]["requires-python"] == ">=3.11"
 
 
-#: Q36 (front-door spec sections 6.3, 9.1 and 14): ``SCOPE.md`` folds into the README, and its
+#: Q36: ``SCOPE.md`` folds into the README, and its
 #: never-phones-home paragraph is kept word for word, with the names as the rename gives them.
 NEVER_PHONES_HOME = (
     "Prove never phones home. No telemetry, no analytics, no update checks. "
@@ -121,10 +121,10 @@ def network_violations(py: Path) -> list[str]:
 
 
 def test_no_network_imports_in_core():
-    """Proofload opens no outbound connection.
+    """Prove opens no outbound connection.
 
     Outbound client modules - urllib, requests, httpx, socket - are banned in every module
-    under src/proofload. A listener bound to loopback, on request, is not an outbound
+    under src/poisson_prove. A listener bound to loopback, on request, is not an outbound
     connection: http.server is permitted in viewer.py and in no other module.
 
     Checked by an ast walk over full dotted import paths, not by substring: ``import

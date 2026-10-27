@@ -1,6 +1,6 @@
-"""BU -- the Burla backend: ``proofload sweep … --backend burla`` on a fixed cluster, through Burla.
+"""BU -- the Burla backend: ``poisson-prove sweep … --backend burla`` on a fixed cluster, through Burla.
 
-The frozen tests for the project's *Prove -- Spec Burla Backend* (section 4, lane P): the invariants R1-R7
+The frozen tests for the Burla backend (lane P): the invariants R1-R7
 (the shared runner), M1-M11 (the host-side mapper), S1-S7 (the launcher), W1-W6 (the bundle and
 the worker), C1-C5 (chaos and capture), $1-$9 (cost, caps and the ledger), P1-P7 (pre-flight and
 CLI) and I1-I6 (imports and surface). Lane D, the demo package, lives in the ``burla-demo`` repo.
@@ -14,7 +14,7 @@ them, as it is to a node. The launcher seam, ``executor_burla._launcher_argv``, 
 real ``_burla_submit.py`` as ``__main__``. Every interpreter the fake or a test starts arms a
 network tripwire (a socket other than a Unix one raises); the pytest process never does.
 
-**What the tests fix that the spec leaves open** (for the build, and listed in the session's
+**What the tests fix that the invariants leave open** (for the build, and listed in the
 invariant-to-test table):
 
 - The ledger is JSON lines. An open line carries ``event="open"``, ``run_id``, ``start`` (Unix
@@ -89,7 +89,7 @@ PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
 PIN = "1.8.2"
-# PF9 (the PF0 freeze's yes/no 5, ruled 2026-10-14): Burla's install line names Prove's extra.
+# PF9: Burla's install line names Prove's extra.
 INSTALL_HINT = 'pip install "poisson-prove[burla]"'
 HEAD = "http://localhost:5001"
 SALT = "bu-oracle-salt"
@@ -107,7 +107,7 @@ BURLA_ALL = [
     "BurlaBackendError", "BurlaCostGuard", "BurlaNotInstalled", "BurlaOptions",
     "BurlaSpendStop", "estimate_burla_cost", "preflight_burla", "run_burla",
 ]
-# Section 2.3, in order: (name, default or REQUIRED).
+# BurlaOptions' fields, in order: (name, default or REQUIRED).
 REQUIRED = object()
 OPTION_FIELDS = [
     ("nodes", REQUIRED), ("machine_type", REQUIRED), ("slots_per_node", REQUIRED),
@@ -146,7 +146,7 @@ EXECUTOR_PUBLIC = frozenset({
     "new_run_id", "new_run_salt", "plan", "preflight", "run_local", "UnderpoweredDesign",
     "check_power", "preflight_mde",
 })
-# run_with_mapper's parameters on main, then the three the spec adds (section 2.2).
+# run_with_mapper's parameters on main, then the three the Burla backend adds.
 RUNNER_PARAMS = [
     ("p", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
     ("mapper", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
@@ -420,7 +420,7 @@ class Fake:
 @pytest.fixture
 def fake(tmp_path: Path, pool: Pool, monkeypatch: pytest.MonkeyPatch) -> Fake:
     monkeypatch.syspath_prepend(str(TARGETS))
-    # PF9 (reading r2): a Burla sweep refuses a missing ``burla`` before the plan, as a Modal sweep
+    # PF9: a Burla sweep refuses a missing ``burla`` before the plan, as a Modal sweep
     # refuses a missing ``modal``. The fake client stays importable only in the launcher; here an
     # empty package of that name, at the pin, is findable, and nothing imports it.
     findable = tmp_path / "findable-burla"
@@ -1022,7 +1022,7 @@ def test_s1_the_launcher_seam_starts_this_file_under_python_i() -> None:
 def test_s1_importing_the_launcher_imports_only_the_standard_library_and_runs_nothing() -> None:
     """The launcher file on its own, in a ``python -I`` interpreter as the backend starts it, loaded
     by path under a name other than ``__main__``: every module it brings in must come from the
-    standard library. Loading it through ``import proofload…`` would hide whatever the package's
+    standard library. Loading it through ``import poisson_prove…`` would hide whatever the package's
     own ``__init__`` already imports (numpy, for one)."""
     probe = (
         "import json, os, runpy, sys, sysconfig\n"
@@ -1717,14 +1717,14 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
 
 def new_run(store_root: Path, before: set[str]) -> str:
     """The one run a sweep added. A sweep no longer ends with its run id as the last word of
-    stdout; it ends with a verdict line (spec section 5.3), so the id is read from the store."""
+    stdout; it ends with a verdict line, so the id is read from the store."""
     added = set(Store(store_root).runs()) - before
     assert len(added) == 1, added
     return added.pop()
 
 
 def sweep_argv(root: Path, spec: Path, target: str = PLAIN, *extra: str, backend: str = "burla") -> list[str]:
-    # PF4 re-freeze (PF4.30, reading R17): no lone condition of these small designs can be flagged,
+    # PF4 re-freeze (PF4.30): no lone condition of these small designs can be flagged,
     # which any accepted change below 1 refuses; --max-mde 1 admits them as 0.99 did.
     return ["--store", str(root / "store"), "sweep", str(spec), "--target", target, "--backend", backend,
             "--salt", "0123456789abcdef", "--max-mde", "1", "--yes", *extra]
@@ -1735,7 +1735,7 @@ def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) 
     ledger = tmp_path / "ledgers" / "step.jsonl"
     for flag in (["--concurrency", "2"], ["--app-name", "x"], ["--image", "gpu"]):
         code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, *flag))
-        # A refusal exits 1 (spec section 5.2).
+        # A refusal exits 1.
         assert code == 1, (flag, out, err)
     assert fake.launchers() == [] and not ledger.exists()
     code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, "--max-cost", "7.5", "--est-seconds", "0.002",
@@ -1754,34 +1754,34 @@ def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) 
     assert {len(item["jobs"]) for item in call["items"]} == {1}
     code, out, err = run_cli(sweep_argv(tmp_path / "capped", spec, PLAIN, "--max-rollouts", "2"))
     # A sweep stopped by --max-rollouts exits 3 and ends with a stopped line instead of the
-    # stopped_by field; the store holds the run, partial, with the two rollouts it kept
-    # (spec sections 5.2 and 5.3).
+    # stopped_by field; the store holds the run, partial, with the two
+    # rollouts it kept.
     assert code == 3, err
     assert any(line.startswith("stopped  ") for line in out.splitlines()), out
     capped = Store(tmp_path / "capped" / "store")
     (capped_run,) = capped.runs()
     assert capped.manifest(capped_run).status == "partial" and capped.count(capped_run) == 2
     code, out, err = run_cli(sweep_argv(tmp_path / "local", spec, PLAIN, "--max-cost", "1", backend="local"))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, "--backend local changed"
 
 
 def test_p1_an_unknown_burla_field_is_a_refusal(fake: Fake, tmp_path: Path) -> None:
     spec = write_sweep(tmp_path, burla=burla_table(nodez=4))
     code, out, err = run_cli(sweep_argv(tmp_path, spec))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1 and "nodez" in err, err
 
 
 def test_p2_the_target_resolves_here_first_with_the_local_refusal(fake: Fake, tmp_path: Path) -> None:
     bad = "bu_targets.nope:rollout"
     good = write_sweep(tmp_path / "good", burla=burla_table())
-    # PF3 (PF3.3, rule R4): an unknown key in [burla] is now refused when the spec is read, before the
+    # PF3 (PF3.3): an unknown key in [burla] is now refused when the spec is read, before the
     # target; the [burla] table is broken here in a way strict key checking does not see (nodes, a known
     # field, out of range), so the test still says the target resolves before the table's values are checked.
     broken = write_sweep(tmp_path / "broken", burla=burla_table(nodes=0))
     local = run_cli(sweep_argv(tmp_path / "good", good, bad, backend="local"))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert local[0] == 1
     for spec in (good, broken):
         code, out, err = run_cli(sweep_argv(spec.parent, spec, bad))
@@ -1836,7 +1836,7 @@ def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake
     monkeypatch.setenv("BU_DRIFT_MARKER", "host-value-4c7e")
     spec = write_sweep(tmp_path / "drift", burla=burla_table())
     code, out, err = run_cli(sweep_argv(spec.parent, spec, DRIFTING))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, (out, err)
     assert "host-value-4c7e" in out + err and "absent-in-the-worker-view" in out + err
     assert fake.launchers() == [] and not (spec.parent / "ledgers").exists()
@@ -1847,7 +1847,7 @@ def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake
     assert code == 0, err
 
 
-# PF4 re-freeze (PF4.22, reading R36): the preflight block no longer prints "MDE at N=..." (the old
+# PF4 re-freeze (PF4.22): the preflight block no longer prints "MDE at N=..." (the old
 # normal approximation at base 0.5); the plan's one limit is the gate's line. The other lines keep
 # their order.
 PREFLIGHT_ORDER = ["Backend: burla", "Cluster: ", "Bundle: ", "Worker view: ", "Traffic: ", "Cost: ", "Chaos: "]
@@ -1883,7 +1883,7 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     commit = _git(tmp_path / "checkout", "rev-parse", "HEAD")
     assert commit and commit[:7] in bundle_line and bundle.sha256 in bundle_line, bundle_line
     assert "uncommitted changes" in bundle_line
-    # PF4 re-freeze (PF4.22, reading R36): the old limit line is gone from the preflight block.
+    # PF4 re-freeze (PF4.22): the old limit line is gone from the preflight block.
     assert not any(line.startswith("MDE at N=") for line in lines), lines
     plain = eb.preflight_burla(p, PLAIN, options(tmp_path, packages=("bu_targets",)))
     plain_bundle = next(line for line in plain.splitlines() if line.startswith("Bundle: "))
@@ -1901,7 +1901,7 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     assert code == 0, err
     remote = new_run(store_root, {local})
     code, out, err = run_cli(["--store", str(store_root), "runs"])
-    # PF2 (spec section 4.3): runs rows now lead with # and the name, so the row is found by
+    # PF2: runs rows now lead with # and the name, so the row is found by
     # the id, and the status and backend are the two cells after it.
     assert code == 0 and any(
         line.split()[line.split().index(remote):][:3] == [remote, "complete", "burla"]
@@ -1912,7 +1912,7 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     assert run_cli(["--store", str(store_root), "report", local, remote, "--event", "fell", "--x", "cell",
                     "--out", str(tmp_path / "report")])[0] == 0
     assert run_cli(["--store", str(store_root), "serve", local, remote, "--event", "fell", "--x", "cell", "--json"])[0] == 0
-    # --json replaces --format json on diff (spec section 5.6).
+    # --json replaces --format json on diff.
     code, out, err = run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell", "--json"])
     fell = json.loads(out)["by_event"]["fell"]
     # PF4 (PF4.20): "fell" has no declared kind, so the JSON gives direction counts and leaves the
@@ -1927,7 +1927,7 @@ def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -
     _seed_ledger(ledger, PRIOR)
     guard = write_sweep(tmp_path / "guard", burla=burla_table(stop_cost=0.3, max_cost=0.3))
     code, out, err = run_cli(sweep_argv(guard.parent, guard))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1 and str(ledger) in err, err
     fake.script(attempts=[{"hang_after": 1}])
     stop = write_sweep(tmp_path / "stop", replicates=3,
@@ -1937,7 +1937,7 @@ def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -
     fake.script(default={"refuse": "NoNodes"})
     refused = write_sweep(tmp_path / "refused", burla=burla_table())
     code, out, err = run_cli(sweep_argv(refused.parent, refused))
-    # PF4 re-freeze (PF4.49, reading R17): under --max-mde 1 this design, in which no lone condition
+    # PF4 re-freeze (PF4.49): under --max-mde 1 this design, in which no lone condition
     # can be flagged, gets the gate's facts as a note: line first; the backend's refusal is the next.
     rest = "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
     assert code == 3 and rest.startswith("error: "), err
@@ -1981,7 +1981,7 @@ def _burla_imports(path: Path) -> list[tuple[int, str | None]]:
 
 
 def test_i2_only_the_launchers_main_imports_burla() -> None:
-    for path in sorted(PACKAGE.rglob("*.py")):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
+    for path in sorted(PACKAGE.rglob("*.py")):  # PF5: the core is a package now, so the scan reads src/ recursively.
         found = _burla_imports(path)
         if path.name == "_burla_submit.py":
             assert found and all(function == "main" for _, function in found), found
@@ -2020,12 +2020,12 @@ def test_i4_the_new_files_pass_the_frozen_guards() -> None:
 
 
 def test_i5_the_burla_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None:
-    # PF9 (Q31, ruled 2026-10-13): Burla ships as an experimental backend with a [burla] extra
+    # PF9: Burla ships as an experimental backend with a [burla] extra
     # pinning the client the backend runs, so the extra is no longer absent; what it pins is
     # test_pf9_backends.py's.
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     extras = project["optional-dependencies"]
-    # PF7 (Q14): the [viz] extra goes; nothing imports matplotlib.
+    # PF7: the [viz] extra goes; nothing imports matplotlib.
     assert set(extras) == {"modal", "agent", "all", "dev", "burla"}
     assert any(req.split("=")[0].split(">")[0].split("<")[0].strip().lower() == "cloudpickle" for req in extras["dev"])
 
@@ -2043,7 +2043,7 @@ def _cli_imports_constant() -> set[tuple[str | None, str | None]]:
 def test_i6_fr18_admits_exactly_the_three_burla_imports_and_cli_imports_them() -> None:
     frozen = _cli_imports_constant()
     assert {entry for entry in frozen if entry[0] == "poisson_prove.executor_burla"} == BURLA_IMPORTS
-    # PF5 (spec section 17; PF5.7): the face runs no backend, so the three names are the core's to
+    # PF5 (PF5.7): the face runs no backend, so the three names are the core's to
     # reach: the core's modules reach exactly these three, imported by name or read off the
     # module, and ``cli.py`` reaches none.
     def reached(path: Path) -> set[tuple[str | None, str | None]]:

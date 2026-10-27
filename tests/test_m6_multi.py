@@ -14,18 +14,17 @@ Everything else uses small raw frames built directly with M4's thirteen columns,
 M5 frozen tests do; synthetic rows sit at the horizon unless a test needs otherwise, so the
 CIF at horizon equals the terminal rate and verdict direction follows the counts.
 
-Two invariants are deliberately absent, reported to the spec author at the freeze rather
-than adapted:
+Two invariants are deliberately absent, left out at the freeze rather than adapted:
 
-- A4 names "the ordering helper" (delta desc, q asc, mde asc, config_hash) but section 2
-  declares no such public symbol, and the build rules forbid extra public symbols. M7's
+- A4 names "the ordering helper" (delta desc, q asc, mde asc, config_hash) but the public API
+  declares no such symbol, and no extra public symbol may be added. M7's
   private ``_worst`` sorts by (delta desc, config_hash) and is covered by M7 I19.
 - A7 asks for early censoring from errored rows, but M4's ``EpisodeRecord`` requires
   ``t`` and ``horizon`` to be None on errored rows, so they carry no censoring time, and
   A20 excludes them from every denominator. As written the CIF cannot differ from the
   rate on such a frame.
 
-Notes for the implementation session:
+Notes for the implementation:
 
 - The A11 fixture builder searches for the smallest swing that leaves cell X significant
   in both directions after BH over the whole family, and a cell Y whose opposite move is
@@ -740,7 +739,7 @@ def test_a5_single_event_via_multi_matches_diff(golden: DiffResult, multi_trippe
     assert set(multi_tripped.by_event) == {EVENT}
     ev = multi_tripped.by_event[EVENT]
     assert isinstance(ev, EventDiff) and ev.event == EVENT
-    # PF4 re-freeze (PF4.20, the library follows the screen; reading R35): the comparison object
+    # PF4 re-freeze (PF4.20, the library follows the screen): the comparison object
     # gives "tripped" no kind, so its reference 22 safer and 0 worse are 22 lower and 0 higher, with
     # n_safer and n_worse null; the single-event DiffResult keeps its safer/worse record.
     assert ev.n_safer is None and ev.n_worse is None
@@ -763,8 +762,8 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
         assert (ours[col].to_numpy() == ref[col].to_numpy()).all(), col
     for col in ("p", "q", "delta"):
         np.testing.assert_allclose(ours[col].to_numpy(dtype=float), ref[col].to_numpy(dtype=float), rtol=0, atol=TOL_EXACT)
-    # PF4 re-freeze (PF4.22, PF4.23, PF4.27; reading R35): the comparison's limit is Fisher's exact
-    # power at the lone-change level q / M, both ways, with mde the larger (section 8.10), while the
+    # PF4 re-freeze (PF4.22, PF4.23, PF4.27): the comparison's limit is Fisher's exact
+    # power at the lone-change level q / M, both ways, with mde the larger, while the
     # single-event DiffResult keeps its own record, so the two mde columns no longer agree; the
     # comparison's is recomputed here from the stats suite's reference.
     level = Q / multi_tripped.n_tests
@@ -786,7 +785,7 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
             want = None  # a direction with room and no limit leaves no single number
         assert abs(float(row.mde_level) - level) <= 1e-15, row.Index
         _assert_limit(row.mde, want, (row.Index, events_a))
-    # PF4 re-freeze (PF4.20, the library follows the screen; reading R35): the comparison's "tripped"
+    # PF4 re-freeze (PF4.20, the library follows the screen): the comparison's "tripped"
     # has no kind, so its verdict column reads direction words where DiffResult's reads safer/worse.
     as_direction = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
     assert list(ours["verdict"]) == [as_direction[v] for v in ref["verdict"]]
@@ -950,7 +949,7 @@ def _assert_headline(result: MultiDiffResult) -> None:
     assert result.method in paren
     assert f"q<{result.q}" in paren or f"q<{result.q:g}" in paren, paren
     assert re.search(rf"\b{result.n_tests}\b", paren), paren
-    # P-1 (ADR-052): the token states the requested method's pairing, never the runs' seed identity.
+    # P-1: the token states the requested method's pairing, never the runs' seed identity.
     if result.method == "mcnemar_bh":
         assert "paired" in paren and "unpaired" not in paren
     else:
@@ -1207,7 +1206,7 @@ def test_a14_no_negative_zero_when_deltas_vanish() -> None:
 
 
 def _assert_check(result: MultiDiffResult) -> None:
-    # PF4 re-freeze (PF4.20, the library follows the screen; PF4.34, reading R2): no event here has a
+    # PF4 re-freeze (PF4.20, the library follows the screen; PF4.34): no event here has a
     # kind, so the default gate on worse is refused, and the gate reads the direction of the rows
     # that count for the verdict (Holm's): "higher" where it read "worse", "any" over both ways.
     with pytest.raises(DiffError):

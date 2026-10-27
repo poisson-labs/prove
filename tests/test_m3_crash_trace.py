@@ -1,8 +1,7 @@
 """M3 -- the crashed episode's trace: the frozen tests for K1-K8.
 
-Written from "Proofload -- Spec M3 Executor (crashed episode trace)" section 4. The build
-builds the two touched files (``executor.py``, ``executor_modal.py``) against this file and
-does not edit it.
+What the executor records when a rollout raises. The two touched files (``executor.py``,
+``executor_modal.py``) are written against this file, which is not edited to fit them.
 
 The conventions of ``tests/test_m3_capture.py`` and ``tests/test_m3_timeout_trace.py`` carry
 over unchanged: the whole file skips without ``opentelemetry-sdk``; every test that installs
@@ -16,7 +15,7 @@ purges ``opentelemetry*`` from ``sys.modules`` earlier in the suite; the episode
 ``CaptureSpec`` fields plus ``run_id``. ``cli.main`` is driven in-process on a store a child
 wrote; ``inspect`` installs nothing. ``modal`` is never imported. Nothing sleeps.
 
-Conventions these frozen tests fix where the spec is silent, recorded so they are not re-litigated:
+Conventions these frozen tests fix, recorded so they are not re-litigated:
 
 - The row that crashes is chosen by config, as the timed-out row was: one categorical axis
   ``role`` over ``a``, ``b``, ``c`` and ``crash`` with one replicate, so every run has exactly
@@ -27,18 +26,18 @@ Conventions these frozen tests fix where the spec is silent, recorded so they ar
   second rollout returns a dict instead of an ``Episode`` after the same two closed spans
   (K3). A third raises before opening any span (K2, rule zero). A fourth replaces
   ``Trace.to_dict`` on the class in its own child and then raises, so ``to_meta()`` raises
-  after the rollout did: section 3's "the string when it is None *or raised*", section 8's
-  "``format_exc()`` first".
+  after the rollout did: the string is kept when ``to_meta()`` is None *or raised*, because
+  ``format_exc()`` is taken first.
 - **What the SDK marks, measured against opentelemetry-sdk before this file was written.**
   ``start_as_current_span`` sets ``ERROR`` status on *every* span the exception unwinds
   through, not only the innermost: with the shape above both ``execute_tool`` and the
   ``invoke_agent`` root close with ``error == "RuntimeError: boom <seed>"``, and only ``chat``,
-  which closed before the raise, has ``error is None``. K1 as section 4 states it -- the span
-  open at the raise marked, every span that closed *before* it unmarked -- holds; section 7's
+  which closed before the raise, has ``error is None``. K1 as stated -- the span
+  open at the raise marked, every span that closed *before* it unmarked -- holds; the stricter
   "one span with ``error`` set and two without" does not. This file pins what the SDK does in
   one test of its own (``test_k1_the_root_the_exception_unwound_through_is_marked_too``) so
-  the fact is asserted rather than rediscovered, and so that, should the spec choose
-  otherwise, exactly that test moves. Nothing in ``src/`` sets or clears a status (section 8).
+  the fact is asserted rather than rediscovered, and so that, should that choice
+  change, exactly that test moves. Nothing in ``src/`` sets or clears a status.
 - The fork path is exercised with ``episode_timeout`` set to a deadline no rollout here
   approaches: the crash returns long before it, the outcome crosses the pipe as a normal
   return and nothing is terminated, so ``n_timeout`` is 0 on that path by construction and
@@ -110,9 +109,9 @@ STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
 S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-# Re-minted by the PF0 freeze over the file as its freeze commit moved it (the rename, Q4).
-# Re-minted over the file as moved for 12-hex config hashes in inspect text (spec section 5.4, rule 10).
-# Re-minted for public hygiene (Q38): over the file's code with its docstrings and comments taken out
+# Re-minted by the PF0 freeze over the file as its freeze commit moved it (the rename).
+# Re-minted over the file as moved for 12-hex config hashes in inspect text.
+# Re-minted for public hygiene: over the file's code with its docstrings and comments taken out
 # (``conftest.code_of``), which the plain-words pass edits; read off the file as it stands, not predicted.
 S16_ORACLE_SHA256 = "9ea86d2005d588bf50d6015580875bc172354e0f8058886d925424e514de5da9"  # 38 tests
 
@@ -121,12 +120,12 @@ DECLARED_LIMIT = 8192
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
-    # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
-    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants and two
+    # A7: four mints; A8a: three constants --
+    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b: five constants and two
     # functions. CD (D8) retires three of A8b's five -- OBSERVATION_HEAD_BYTES and
     # OBSERVATION_TAIL_BYTES are deleted with the default they described, and
     # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES, which sorts one place later.
-    # A10 (spec section 7.1 group 3, W1): Declaration joins, minted in trace.py, among the classes.
+    # A10 (W1): Declaration joins, minted in trace.py, among the classes.
     # trace.py's own order: constants, classes, functions, each sorted. 31 names.
     "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
     "OBSERVATION_KEYS", "OBSERVATION_ROUTING_BYTES",
@@ -277,9 +276,9 @@ def _raise_at_to_dict(self: Any) -> dict[str, Any]:
 
 
 def to_meta_poisoning_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """K2, section 3's "or raised": one span, then ``Trace.to_dict`` broken on the class in
+    """K2, the "or raised" case: one span, then ``Trace.to_dict`` broken on the class in
     this child, then the raise. ``to_meta()`` now raises on every path to a dict, after the
-    rollout's own exception is already in hand (section 8: ``format_exc()`` first)."""
+    rollout's own exception is already in hand (``format_exc()`` is taken first)."""
     tracer = _tracer()
     with tracer.start_as_current_span(f"invoke_agent {seed}") as root:
         root.set_attribute("gen_ai.operation.name", "invoke_agent")
@@ -345,7 +344,7 @@ def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
 
 
 def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
-    """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028 plus A8a's ``alias_map_version``."""
+    """A valid stored-shape trace dict around the given span dicts: the six stored trace keys plus A8a's ``alias_map_version``."""
     d: dict[str, Any] = {
         "schema": "poisson-prove.trace/1",
         "source": "otel",
@@ -661,9 +660,9 @@ def test_k1_call_in_process_with_capture_returns_the_two_key_dict_around_the_tra
 
 def test_k1_the_root_the_exception_unwound_through_is_marked_too(crash_outcome: dict[str, Any]) -> None:
     """Measured, not specified: ``start_as_current_span`` marks every span the exception unwinds
-    through, so the root closes with the same ``ERROR`` status as the failing child and section
-    7's "one span with ``error`` set" is two. Pinned on its own so the fact is asserted once and
-    so that, should the spec choose otherwise, exactly this test moves."""
+    through, so the root closes with the same ``ERROR`` status as the failing child and the
+    expected "one span with ``error`` set" is two. Pinned on its own so the fact is asserted once and
+    so that, should that choice change, exactly this test moves."""
     _, t = assert_dict_form(crash_outcome["payload"])
     spans = by_name(Trace.from_dict(t))
     root, chat, tool = spans["invoke_agent 7"], spans["chat 7"], spans["execute_tool 7"]
@@ -698,8 +697,8 @@ def test_k2_with_a_capture_call_a_rollout_that_emitted_no_span_yields_the_string
 
 
 def test_k2_a_recorder_that_raises_at_to_meta_yields_the_rollouts_own_traceback_as_the_string() -> None:
-    """Section 3: the string when ``to_meta()`` is None *or raised*, guarded as ``_classify``
-    guards it; section 8: ``format_exc()`` first, so nothing that raises after it replaces the
+    """The string when ``to_meta()`` is None *or raised*, guarded as ``_classify``
+    guards it; ``format_exc()`` first, so nothing that raises after it replaces the
     traceback the user needs."""
     r = isolated(child_call_in_process, POISONED_PATH, {"role": CRASH}, 7, True)
     assert r["kind"] == "error", r
@@ -919,7 +918,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
     blocks: list[list[str]] = []
     current: list[str] | None = None
     for line in body.splitlines():
-        # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+        # Text output shows a config_hash at 12 hex characters.
         if any(h[:12] in line for h in hashes):
             if current is not None:
                 blocks.append(current)
@@ -933,7 +932,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
 
 def assert_block_is_row(block: list[str], row: Any) -> None:
     text = "\n".join(block)
-    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    # Text output shows a config_hash at 12 hex characters.
     assert row.config_hash[:12] in block[0], block[0]
     assert re.search(rf"\b{row.seed}\b", text), f"seed {row.seed} missing from block:\n{text}"
     found = False
@@ -954,7 +953,7 @@ def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_i
     crashed = crash_run.crashed
     seed = int(crashed["seed"])
     error_text = str(crashed["error"])
-    assert "\n" in error_text  # a traceback: the exact text is the only selector until --errored lands (section 5)
+    assert "\n" in error_text  # a traceback: the exact text is the only selector until --errored lands
     r = inspect_run(crash_run.root, crash_run.run_id, error_text)
     assert r.code == 0, r.text
     assert not r.err.strip(), r.err
@@ -963,12 +962,12 @@ def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_i
     block = blocks[0]
     assert_block_is_row(block, crashed)
     text = "\n".join(block)
-    # Section 3's errored-row lines, where an ok row prints t: <float>.
+    # The errored row's lines, where an ok row prints t: <float>.
     assert "outcome: -" in block and "t: -" in block, text
     assert [line for line in block if line.startswith("t: ")] == ["t: -"], text
     error_lines = [line for line in block if line.startswith("error: ")]
     assert error_lines == ["error: Traceback (most recent call last):"], error_lines
-    assert f"error: {error_text}" in text, text  # printed as it is stored, multi-line (section 5)
+    assert f"error: {error_text}" in text, text  # printed as it is stored, multi-line
     # No truncated line: nothing was cut.
     assert "trace: truncated" not in r.out, r.out
     assert not [line for line in block if line.startswith("trace:")], text
@@ -1012,7 +1011,7 @@ def test_k8_the_transport_aliases_and_signatures_are_untouched() -> None:
     assert set(Episode(outcome="fell", t=1.0, horizon=HORIZON).to_dict()) == set(EPISODE_FIELDS)
     assert tuple(f.name for f in dataclasses.fields(executor.RunSummary)) == SUMMARY_FIELDS
     params = list(inspect.signature(worker_batch).parameters.values())
-    # M11a: ``chaos`` rides beside ``capture``, keyword-only, default None (Spec M11 section 0.1)
+    # M11a: ``chaos`` rides beside ``capture``, keyword-only, default None
     assert [p.name for p in params] == ["jobs", "import_path", "episode_timeout", "capture", "chaos"]
     assert params[3].kind is params[3].KEYWORD_ONLY and params[3].default is None
     assert params[4].kind is params[4].KEYWORD_ONLY and params[4].default is None

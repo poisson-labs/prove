@@ -12,7 +12,7 @@ user's rollout inside a container; the ones that single out a job read module-le
 sets (``RAISE_SEEDS``, ``SLEEP_SEEDS``) that a test fills in from its plan. A forked child
 inherits them. An autouse fixture clears them between tests.
 
-Conventions the frozen tests fix for the implementation session:
+Conventions the frozen tests fix for the implementation:
 
 - The deterministic rollout is the M3-local one, formula included, so I5 compares like with
   like across ``run_local`` and ``run_with_mapper``.
@@ -808,7 +808,7 @@ def test_i15_preflight_fresh_plan_with_and_without_estimate(tmp_path: Path) -> N
     cost_line = _line_with(text, "Cost: ~$")
     assert "best-effort" in cost_line and "prices" in cost_line
     assert "Cost: unknown" not in text
-    # PF4 re-freeze (PF4.22, reading R36): the preflight block no longer prints the old limit at a base
+    # PF4 re-freeze (PF4.22): the preflight block no longer prints the old limit at a base
     # rate of 0.5 (the normal approximation, beside the gate's own); the plan's one limit is the gate's.
     assert "MDE at N=" not in text and "base rate 0.5" not in text
     assert "Resuming" not in text

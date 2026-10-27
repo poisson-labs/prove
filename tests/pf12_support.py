@@ -1,9 +1,9 @@
 """What PF12's two test files share: the command line in process, a page read as a tree, the
-format's schemas written from the spec, and the stores both files read.
+format's schemas as ``docs/artifact-format.md`` gives them, and the stores both files read.
 
 PF12 (artifacts and the static UI) is reached the way a user and a consumer reach it: the command
-line, the files it writes into the store (``.poisson/``, ``events.jsonl``), and the core's boundary
-as the front-door spec's section 17.1 names it (``poisson_prove.core``). Nothing here imports a
+line, the files it writes into the store (``.poisson/``, ``events.jsonl``), and the core's public
+boundary, the package ``poisson_prove.core``. Nothing here imports a
 private module of Prove.
 
 **The stores are built once per test session.** Building them runs about twenty comparisons and
@@ -125,12 +125,12 @@ def _norm(text: str) -> str:
 
 def says(text: str, words: str) -> bool:
     """A binding phrase, whatever its case and whichever hyphen or dash joins its words (PF4's
-    reading R30, applied to the pages)."""
+    rule for binding phrases, applied to the pages)."""
     return _norm(words) in _norm(text)
 
 
 def canonical(obj: Any) -> str:
-    """The format's canonical JSON: sorted keys, no spaces, UTF-8 (reading PF12-R6)."""
+    """The format's canonical JSON: sorted keys, no spaces, UTF-8."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
@@ -142,9 +142,9 @@ def version_major_minor() -> str:
 
 
 def expected_id(descriptor: dict[str, Any]) -> str:
-    """The format's id (Artifact Format section 5.1) recomputed from a descriptor: the first 16 hex
+    """The format's id (``docs/artifact-format.md``) recomputed from a descriptor: the first 16 hex
     of the sha256 of the canonical JSON of the kind, the tool, its major.minor version, the inputs
-    and every setting but those that only record how the result was asked for (reading PF12-R6)."""
+    and every setting but those that only record how the result was asked for."""
     settings = {k: v for k, v in descriptor["settings"].items() if k not in HOW_ASKED}
     payload = {
         "kind": descriptor["kind"],
@@ -158,8 +158,8 @@ def expected_id(descriptor: dict[str, Any]) -> str:
 
 #: Settings kept in ``settings`` but not in the id: they record how the result was asked for.
 HOW_ASKED = frozenset({"method_chosen"})
-#: Every setting that changes a comparison's result (Artifact Format section 5.1, with the tree's
-#: ``max_group_mde``: reading PF12-R7). A check runs no tree: its settings are the comparison's
+#: Every setting that changes a comparison's result (the artifact format's list, with the tree's
+#: ``max_group_mde``). A check runs no tree: its settings are the comparison's
 #: without the tree's five, and ``fail_on``.
 COMPARISON_SETTINGS = frozenset(
     {"method", "method_chosen", "events", "q", "power", "horizon", "by", "depth", "permutations", "seed", "max_group_mde"}
@@ -184,7 +184,7 @@ def copy_store(src: Path, dest: Path) -> Path:
 
 def copy_fixture(src: Path, dest: Path) -> Path:
     """A committed fixture store as committed: frozen tests run ``report`` and ``serve`` on these
-    fixtures in place, and their saves land in its ``.poisson/`` while a session runs (reading R39),
+    fixtures in place, and their saves land in its ``.poisson/`` while a session runs,
     so a copy leaves that folder out."""
     shutil.copytree(src, dest, symlinks=True, ignore=lambda folder, names: [n for n in names if n == ".poisson"])
     return dest
@@ -223,14 +223,14 @@ def environment(**variables: str | None) -> Iterator[None]:
                 os.environ[k] = v
 
 
-# ---------- the core, through section 17.1's boundary ----------
+# ---------- the core, through its public boundary ----------
 #
 # Every name PF12's tests take from PF5 is used through the three functions below, so the two
-# freezes can be checked against each other in one place (the session log's seam list, S1 to S12).
+# freezes can be checked against each other in one place (the seams S1 to S12).
 
 
 def core() -> Any:
-    """S1: the core's entry point is the package ``poisson_prove.core`` (section 17)."""
+    """S1: the core's entry point is the package ``poisson_prove.core``."""
     from poisson_prove import core as prove_core
 
     return prove_core
@@ -444,7 +444,7 @@ def shows_number(text: str, value: float) -> bool:
     return False
 
 
-# ---------- the format's schemas (Artifact Format sections 3 to 5, written when the PF12 tests were frozen) ----------
+# ---------- the format's schemas (from the artifact format, written when the PF12 tests were frozen) ----------
 
 _UTC = {"type": "string", "pattern": ISO_UTC.pattern}
 
@@ -550,7 +550,7 @@ EVENT_SCHEMA: dict[str, Any] = {
 }
 
 PROGRESS_KEYS = ("done", "kept", "errored", "total")
-#: Section 17.2's grammar within a run, one letter per event.
+#: The grammar of a run's events, one letter per event.
 EVENT_LETTERS = {"planned": "P", "started": "S", "progress": "g", "note": "n", "finished": "F", "interrupted": "I", "resumed": "R"}
 EVENT_GRAMMAR = re.compile(r"^PS[gn]*[FI](R[gn]*[FI])*$")
 
@@ -561,13 +561,13 @@ def validate(document: Any, schema: dict[str, Any]) -> None:
     jsonschema.Draft202012Validator(schema).validate(document)
 
 
-#: The long-form table's key columns, in order, with their Arrow types (Artifact Format 5.3).
+#: The long-form table's key columns, in order, with their Arrow types (the artifact format's long-form table).
 TABLE_COLUMNS = (
     ("artifact_id", "string"), ("event", "string"), ("condition", "string"), ("condition_hash", "string"),
     ("arm", "string"), ("metric", "string"), ("value", "double"), ("note", "string"), ("level", "double"),
 )
-#: Every metric a comparison's table holds, from each condition's row in the result (reading
-#: PF12-R10): per arm (``a`` and ``b``) the counts, the rate and the share with its Wilson bounds;
+#: Every metric a comparison's table holds, from each condition's row in the result:
+#: per arm (``a`` and ``b``) the counts, the rate and the share with its Wilson bounds;
 #: for the pair (``both``) the change, the test and its adjusted p-values, the interval on the change,
 #: the limits both ways at the row's level and at the verdict's, and the smallest possible p.
 ARM_METRICS = {"n": "n", "events": "events", "rate": "rate"}
@@ -703,8 +703,8 @@ def shared_world(factory: pytest.TempPathFactory, name: str, build: Callable[[Pa
 
 
 def saved_id(result: Result, kind: str, store: Path) -> str:
-    """The id of what a save wrote, from its ``  saved  <kind> <id>`` detail line (section 18.2),
-    which shows the id as rule 10 shows a hash in text, its first 12 hex (reading R1); the folder
+    """The id of what a save wrote, from its ``  saved  <kind> <id>`` detail line,
+    which shows the id as rule 10 shows a hash in text, its first 12 hex; the folder
     under ``.poisson/artifacts/<kind>/`` carries the whole id."""
     found = [line.removeprefix(f"  saved  {kind} ") for line in result.lines() if line.startswith(f"  saved  {kind} ")]
     assert len(found) == 1, (result.code, result.out, result.err)
@@ -958,7 +958,7 @@ MEANING_TOKENS = ("--ok", "--warn", "--bad")
 
 # ---------- snapshots (PF12.13) ----------
 
-#: The command that rewrites the snapshots, the one documented way (section 10.6).
+#: The command that rewrites the snapshots, the one documented way.
 SNAPSHOT_COMMAND = "python -m pytest tests -k snapshot --update-snapshots"
 
 

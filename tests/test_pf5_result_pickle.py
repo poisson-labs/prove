@@ -1,10 +1,10 @@
 """PF5: a comparison result pickles, and the copy is equal to it, whether or not it was read.
 
-The ruling of 2026-10-25 on the PF5 build's yes/no 9: the result builds its document and its
+The result builds its document and its
 tree when first read, and must still pickle, and round-trip equal, before anything has read it, by
 building itself in full when pickled. ``json.dumps`` on an unread result stays unsupported
-(``to_json()`` is the document). Added by the build beside the frozen tests, which it does not
-edit.
+(``to_json()`` is the document). Added beside the frozen tests, without editing
+them.
 """
 
 from __future__ import annotations

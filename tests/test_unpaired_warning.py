@@ -262,7 +262,7 @@ def test_u8_the_warning_never_switches_the_test() -> None:
 
 
 def test_u9_the_headline_states_the_request_and_seed_identity_is_a_field_beside_it() -> None:
-    """**Inverted by P-1 (ADR-052; standing item C1).** Until P-1 this test pinned the
+    """**Inverted by P-1.** Until P-1 this test pinned the
     defect: the headline printed ``paired`` next to the method that discarded the pairing, and
     this docstring called that something a reader could see. It was a fact about the *runs*
     printed where the reader reads about the *analysis*. Now the headline's last token is the
@@ -335,7 +335,7 @@ def test_u15_only_m6_names_the_category() -> None:
     second place the rule could be applied, or applied differently."""
     named = sorted(
         path.name
-        for path in SRC.rglob("*.py")  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
+        for path in SRC.rglob("*.py")  # PF5: the core is a package now, so the scan reads src/ recursively.
         if "UnpairedAnalysis" in path.read_text(encoding="utf-8")
     )
     assert named == ["diff.py"], named
@@ -353,14 +353,14 @@ def test_u16_a_cli_diff_warns_and_the_artifact_is_unchanged_by_it(tmp_path: Path
     store = Store(tmp_path)
     write_run(store, "run-a", SALT, fails=2)
     write_run(store, "run-b", SALT, fails=4)
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the pair shares a salt, so the default is now the paired
+    # PF3 (Q17): the pair shares a salt, so the default is now the paired
     # test, which raises no warning; the warning this pins is the unpaired test's, named.
     argv = ["--store", str(tmp_path), "diff", "run-a", "run-b", "--event", "fail", "--method", "fisher_bh"]
     box: list[Result] = []
     caught(lambda: box.append(run_cli(argv)))
     result = box[0]
-    # The warning now reaches the CLI's own stderr as one note line, whose wording is the warning's
-    # (front-door spec section 5.4); outside that line the CLI still names the alternative nowhere.
+    # The warning now reaches the CLI's own stderr as one note line, whose wording is the warning's;
+    # outside that line the CLI still names the alternative nowhere.
     notes = [line for line in result.err.splitlines() if line.startswith("note: ")]
     assert len(notes) == 1, result.err
     assert result.code == 0, result.err

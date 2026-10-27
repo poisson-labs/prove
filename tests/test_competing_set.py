@@ -1,7 +1,7 @@
-"""S13.1 competing-set hardening frozen tests, generated from section 4 of the S13.1 spec before
+"""S13.1 competing-set hardening frozen tests, written from the S13.1 invariants before
 any of M5, M6, M7 or M10 is amended.
 
-ADR-021: the Aalen-Johansen competing set is every terminal outcome present in either run;
+The rule: the Aalen-Johansen competing set is every terminal outcome present in either run;
 ``events`` selects which CIFs are compared, not which outcomes are absorbing. S11 hit this in
 ``multi_diff`` and S13 hit it again in the single-run report path. This file makes the rule a
 test rather than a review step.
@@ -14,8 +14,8 @@ Reading notes for the build:
 
 - ``competing_set`` is reached module-qualified as ``survival.competing_set``, so this file
   still collects before S13.1 builds it. Every symbol that exists today is imported directly.
-  ``import proofload.cli as cli`` is the S10 and S12 idiom; this extends it to the new name.
-- H3, H4 and H10 drive ``proofload.cli.main`` and read the report objects the CLI built, by
+  ``import poisson_prove.cli as cli`` is the S10 and S12 idiom; this extends it to the new name.
+- H3, H4 and H10 drive ``poisson_prove.cli.main`` and read the report objects the CLI built, by
   wrapping ``cli.build_survival_report`` / ``cli.build_multi_report`` (the S12 C11 idiom; the
   name must be bound in ``cli``). The wrappers call the real builders, so the files are still
   written. Reading the rendered Markdown instead would not work: ``_fmt(..., "pp1")`` rounds
@@ -33,13 +33,13 @@ Reading notes for the build:
   ``competing_set``; the one forwarding call inside ``cell_table`` itself is the plumbing that
   carries a caller's set, not a second construction, and is named as such in the test.
 
-H6 and H9 were rewritten by the spec author after the first pass of these frozen tests reported
+H6 and H9 were rewritten after the first pass of these frozen tests reported
 that the original pair could not both hold. The tests below are written against the revised
-§2/§3-D3/§4: validation moved into the CLI, where every typo originates, and ``multi_diff``
+invariants: validation moved into the CLI, where every typo originates, and ``multi_diff``
 was pinned permissive instead. Two readings the revised text still leaves to the test:
 
-- H6's message. §4 requires exit 2, the offending name and the outcomes present; D3 shows the
-  shape with the verb name substituted. Asserted by containment, not as an exact string, so
+- H6's message. H6 requires exit 2, the offending name and the outcomes present; the worked
+  example shows the shape with the verb name substituted. Asserted by containment, not as an exact string, so
   the wording stays the implementer's.
 - H9's "zero-count `EventDiff`". Read as the event counts, not the cell count -- see the
   docstring of ``test_h9_absent_event_gets_a_zero_count_event_diff``. The frozen M6 file
@@ -50,7 +50,7 @@ Still not mapped, and reported rather than adapted:
 - H12's third clause, "suite totals for every prior frozen file unchanged". A test cannot assert
   the totals of the suite that contains it; that clause is the acceptance command's job. The
   two fixture clauses are mapped below.
-- §2's "``build_survival_report`` remains permissive" is not separately asserted. §4 pins only
+- "``build_survival_report`` remains permissive" is not separately asserted. The invariants pin only
   ``multi_diff`` (H9), and once H13 routes ``cell_table`` through ``competing_set`` an absent
   event is no longer a key on the cell table's ``CIFCurve``, so ``_cif_at`` raises
   ``SurvivalError`` there rather than returning zero. That path is unreachable from the CLI,
@@ -88,10 +88,10 @@ import lattice
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "poisson_prove"
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
 # so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
@@ -259,7 +259,7 @@ def run_cli(argv: list[str]) -> tuple[int, str, str]:
 
 
 def sweep(root: Path, target: str, *extra: str) -> str:
-    # A sweep no longer ends with a run_id line (its end is a verdict line, spec section 5.3), so
+    # A sweep no longer ends with a run_id line (its end is a verdict line), so
     # the new run is the one the store gained.
     before = set(Store(root).runs())
     code, out, err = run_cli(
@@ -272,7 +272,7 @@ def sweep(root: Path, target: str, *extra: str) -> str:
 
 
 def verdict_lines(text: str) -> list[str]:
-    """Lines that begin with check's verdict words (spec section 5.3)."""
+    """Lines that begin with check's verdict words."""
     return [line for line in text.splitlines() if line.startswith(("passed  ", "failed  "))]
 
 
@@ -561,7 +561,7 @@ def test_h6_every_verb_refuses_an_event_absent_from_the_runs(
     if verb == "report":
         argv += ["--x", "tool_fail_rate", "--y", "task_id", "--out", str(tmp_path / "out")]
     code, out, err = run_cli(argv)
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, out + err
     assert "Traceback" not in out + err, out + err
     assert ABSENT in out + err, out + err
@@ -596,7 +596,7 @@ def test_h6_refuses_when_only_one_of_several_events_is_absent(
     code, out, err = run_cli(
         ["--store", str(root), "diff", a, b, "--event", "violated", "--event", ABSENT]
     )
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, out + err
     assert ABSENT in out + err, out + err
 
@@ -611,7 +611,7 @@ def test_h6_report_refuses_before_it_writes_anything(
         ["--store", str(root), "report", a, b, "--event", ABSENT,
          "--x", "tool_fail_rate", "--y", "task_id", "--out", str(out_dir)]
     )
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, out + err
     assert not out_dir.exists() or not any(out_dir.iterdir()), sorted(out_dir.iterdir())
 
@@ -645,7 +645,7 @@ def test_h6_single_run_report_validates_against_the_run_it_loaded(tmp_path: Path
         ["--store", str(root), "report", "run-a", "--event", "timeout",
          "--x", "task", "--out", str(tmp_path / "single")]
     )
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, out + err
     assert "timeout" in out + err, out + err
     for present in ("completed", "violated"):
@@ -660,7 +660,7 @@ def test_h7_check_refuses_an_event_absent_from_both_runs(
 ) -> None:
     root, a, b = mock_pair
     code, out, err = run_cli(["--store", str(root), "check", a, b, "--event", "voilated"])
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, out + err
     assert "Traceback" not in out + err, out + err
     assert "voilated" in out + err, out + err
@@ -671,7 +671,7 @@ def test_h7_check_refuses_an_event_absent_from_both_runs(
 def test_h7_check_prints_no_verdict_when_it_refuses(mock_pair: tuple[Path, str, str]) -> None:
     root, a, b = mock_pair
     code, out, err = run_cli(["--store", str(root), "check", a, b, "--event", "voilated"])
-    # A refusal exits 1, and check's verdict is now a passed or failed line (spec sections 5.2, 5.3).
+    # A refusal exits 1, and check's verdict is now a passed or failed line.
     assert code == 1, out + err
     assert verdict_lines(out + err) == [], out + err
 
@@ -688,7 +688,7 @@ def test_h8_check_still_passes_on_a_known_event(mock_pair: tuple[Path, str, str]
     )
     assert code == 0, out + err
     assert "Traceback" not in out + err, out + err
-    # check's verdict is the first stdout line, passed or failed (spec section 5.3).
+    # check's verdict is the first stdout line, passed or failed.
     assert out.startswith("passed  "), out
     assert "violated" in out, out
 
@@ -703,7 +703,7 @@ def test_h8_check_still_fails_cleanly_on_two_known_events(mock_pair: tuple[Path,
         ["--store", str(root), "check", a, b, "--event", "violated", "--event", "timeout",
          "--fail-on", "higher"]
     )
-    # A failed check exits 4 and says failed on its first stdout line (spec sections 5.2, 5.3).
+    # A failed check exits 4 and says failed on its first stdout line.
     assert code == 4, out + err
     assert "Traceback" not in out + err, out + err
     assert out.startswith("failed  "), out
@@ -1187,7 +1187,7 @@ def test_h12_lattice_single_event_diff_still_reproduces_the_reference_cells(latt
     assert at_ceiling == sum(c["events_a"] == c["n_a"] for c in frozen["cells"]) == 37
 
 
-# ---------- H13: ADR-021 is enforced in src/, not documented ----------
+# ---------- H13: the competing-set rule is enforced in src/, not documented ----------
 
 
 def _modules() -> list[tuple[Path, ast.Module]]:

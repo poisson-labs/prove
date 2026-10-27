@@ -1,15 +1,15 @@
-"""A22 + C13 frozen tests: invariants V1-V15 of the A22 pandas 3 port spec, section 4,
+"""A22 + C13 frozen tests: invariants V1-V15 of the A22 pandas 3 port,
 written before ``store._NULLABLE_STRING_COLUMNS`` exists and before ``diff._coverage`` rebuilds
 its ``cause`` column from the records list.
 
 **This frozen file runs in two cells and the invariant set does not partition between them.** The
-packet's claim is a range -- *a stored null reads back as* ``None`` *on every pandas this
+port's claim is a range -- *a stored null reads back as* ``None`` *on every pandas this
 package supports* -- and a single run proves one point in it. Every invariant here is asserted
 in both cells; what differs is which of them the **bare** tree already satisfies:
 
 - **pandas 2.3.3.** V1-V4, V6-V11 and V13 pass on the bare tree. The store normalisation and
-  the coverage rebuild are identities there (measured, spec section 3.2), so their green is
-  not evidence the builder did anything -- it is the packet's "no-op on pandas 2" claim, and
+  the coverage rebuild are identities there (measured), so their green is
+  not evidence the builder did anything -- it is the port's "no-op on pandas 2" claim, and
   it is asserted rather than assumed. V5, V12, V14 and V15 are the four that bite here.
 - **pandas 3.0.5.** V1, V2, V3, V7, V8, V9, V10 and V11 bite as well, because
   ``pyarrow.Table.to_pandas`` gives a ``str`` column with ``NaN`` for null and
@@ -37,11 +37,11 @@ Fixture limits, stated rather than left to be rediscovered:
 - The literal requirement list in V13 says nothing about the real ``pyproject.toml``; V14 and
   V15 assert that separately, deliberately.
 - Nothing here measures a live provider or a Modal run. A24's W1-W7 are a
-  different packet (spec section 11) and are not in this file.
+  different change and are not in this file.
 
-**A22 is an update packet** (the project's standing rule 12). On the freeze
+**A22 updates existing behaviour**, so its tests start red. On the freeze
 commit V5, V12, V14 and V15 are red in both cells, and on pandas 3 so are V1, V2, V3, V7, V8,
-V9, V10 and V11 -- with the sixteen pre-existing pandas 3 failures of spec section 3.1 beside
+V9, V10 and V11 -- with the sixteen pandas 3 failures that predate the port beside
 them. The build reproduces that set before it builds. Every reference to a name the build has
 not created yet sits **inside** a test function, never at module level, so ``--collect-only``
 gives an exact count on the freeze's own commit.
@@ -190,7 +190,7 @@ def mixed_pair(tmp_path: Path) -> Any:
 def test_v1_a_stored_null_reads_back_as_none_in_both_nullable_string_columns(two_records: Store) -> None:
     """``is None``, not ``pd.isna``. Under pandas 3 an unported ``to_pandas`` gives a ``str``
     column whose null is ``NaN``, on which ``row.outcome is not None`` is true and wrong -- the
-    trap spec section 12 hands A7 twice over."""
+    trap A7 meets twice over."""
     frame = two_records.read(RUN)
     by_hash = {str(h): i for i, h in enumerate(frame["config_hash"])}
     errored, with_outcome = by_hash[config_hash(ERRORED_CONFIG)], by_hash[config_hash(OUTCOME_CONFIG)]
@@ -235,7 +235,7 @@ def test_v3_the_two_nullable_string_columns_are_object_dtype_on_every_frame_shap
 
 
 def test_v4_the_three_nullable_float_columns_read_back_nan_and_not_none(two_records: Store) -> None:
-    """The negative that stops a build from finishing the job on the floats (spec section 3.4).
+    """The negative that stops a build from finishing the job on the floats.
     ``t``, ``horizon`` and ``confidence`` are NaN on pandas 2 and on pandas 3 alike; three
     frozen tests already spell them ``pd.isna`` and A22 does not move them."""
     frame = two_records.read(RUN)
@@ -314,10 +314,10 @@ def test_v7_a_retained_run_strips_the_unretained_rows_trace_and_its_error_is_non
 
 
 def test_v8_horizon_truncation_leaves_outcome_none_on_exactly_the_recensored_rows(tmp_path: Path) -> None:
-    """Spec section 4 names this one ``censor()``; ``censor`` takes no horizon and drops null
+    """The invariant names this one ``censor()``; ``censor`` takes no horizon and drops null
     outcomes through ``isna()``, which is true of ``None`` and of ``NaN`` alike -- asserted over
     ``censor`` the invariant is green by construction in both cells and pins nothing. The
-    horizon re-censoring lives in ``diff._truncate_raw``, which is what section 0.1 cites and
+    horizon re-censoring lives in ``diff._truncate_raw``, and that is
     what this asserts. It sets ``None`` into a column it did not create, and is correct only
     because its input now arrives ``object`` from ``Store.read``."""
     store = Store(tmp_path / "truncate")
@@ -362,7 +362,7 @@ def test_v9_coverage_cause_is_none_on_every_comparable_row_and_a_named_cause_on_
 
 
 def test_v10_the_coverage_block_prints_none_and_never_nan(mixed_pair: Any) -> None:
-    """Not a test artefact: this is ``proofload diff``'s printed output. ``_md_cell`` sends a
+    """Not a test artefact: this is ``poisson-prove diff``'s printed output. ``_md_cell`` sends a
     float through ``f"{value:.6g}"``, and ``isinstance(np.float64("nan"), float)`` is true, so
     an unported build prints ``nan`` in the cell where ``None`` belongs."""
     block = cli._coverage_block(mixed_pair)
@@ -380,11 +380,11 @@ def test_v11_the_diff_json_payload_dumps_with_allow_nan_false(mixed_pair: Any) -
 
 
 def test_v12_no_astype_is_applied_to_the_cause_column_in_diff_py(mixed_pair: Any) -> None:
-    """Structural, the ADR-021 way: the repaired guard must not be left beside the repair for
+    """Structural, read from the source the way H13 reads it: the repaired guard must not be left beside the repair for
     someone to restore. Every statement of ``diff.py`` that both names ``"cause"`` and calls
     ``.astype`` is an offender, which on the bare tree is the ``for col in ("config", "cause")``
-    loop and its body. ``ci_lo``/``ci_hi``'s own ``astype`` loop is deliberately untouched
-    (spec section 10 Q3), and this assertion does not reach it. Takes ``mixed_pair`` so a build
+    loop and its body. ``ci_lo``/``ci_hi``'s own ``astype`` loop is deliberately untouched,
+    and this assertion does not reach it. Takes ``mixed_pair`` so a build
     that satisfies the scan by deleting the rebuild fails V9-V11 in the same run."""
     offenders = []
     for node in ast.walk(ast.parse(DIFF_SOURCE.read_bytes())):
@@ -408,8 +408,8 @@ def test_v12_no_astype_is_applied_to_the_cause_column_in_diff_py(mixed_pair: Any
 def test_v13_the_dependency_parser_reads_pep_508_names_off_every_operator() -> None:
     """C13's whole content, and the one assertion the *old* parser fails: it yields five names,
     four with an operator still attached. Green the moment the freeze commits it and nothing the
-    builder does can change that -- C13 has no build half (standing rule 12's
-    green-before-and-after category)."""
+    builder does can change that -- C13 has no build half (it is
+    green before and after)."""
     assert {Requirement(d).name.lower() for d in SYNTHETIC_REQUIREMENTS} == CORE_NAMES
 
 
@@ -418,7 +418,7 @@ def test_v14_the_real_core_dependencies_are_the_four_math_names_and_packaging_is
     the real file says nothing about an operator the list has and it does not. ``packaging`` is
     declared rather than leaned on through pytest, which is the thing C12 was about."""
     data = tomllib.loads(PYPROJECT.read_text())
-    # PF6 (Q20, Q60): Rich and Textual join the core; the math names are still all there.
+    # PF6: Rich and Textual join the core; the math names are still all there.
     assert {Requirement(d).name.lower() for d in data["project"]["dependencies"]} == CORE_NAMES | {"rich", "textual"}
     assert "packaging" in {Requirement(d).name.lower() for d in data["project"]["optional-dependencies"]["dev"]}
 

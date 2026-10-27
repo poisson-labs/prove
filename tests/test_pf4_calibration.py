@@ -7,7 +7,7 @@ detection limit (each test, both directions, the lone-change level, outcomes tha
 baseline under log-rank, the power gate at its worst base rate, the fault-line groups), and the coverage
 of the intervals on the change and of the Wilson shares.
 
-**How a draw runs Prove's comparison (reading R18, a yes/no in the session log).** Twenty thousand
+**How a draw runs Prove's comparison.** Twenty thousand
 draws of ``multi_diff`` per design would take hours, so each draw takes its per-row p-value from Prove's
 own test (``diff._fisher``, ``diff._mcnemar``, ``diff._logrank``, the functions ``multi_diff`` calls for
 each row), its correction from Prove's own ``diff.bh`` and ``diff.holm``, and its direction from the
@@ -23,10 +23,10 @@ group limit runs ``multi_diff`` and ``tree.tree`` on every draw.
 must be at most ``x`` is checked against ``x + 3·se``; a power that must be at least ``π`` against
 ``π − 3·se``, and where both arms have at least 30 runs and the limit is exact (not cautious by
 construction) at most ``π + 0.05 + 3·se`` (a limit far too cautious is also wrong), ``π + 0.10 + 3·se``
-under log-rank, whose power is an approximation (reading R37). Seeds are fixed here.
+under log-rank, whose power is an approximation. Seeds are fixed here.
 
-**Runtime.** Each test records its wall time as the junit property ``seconds``; the session log reports
-them against §10.6's budgets (reading R32).
+**Runtime.** Each test records its wall time as the junit property ``seconds``, so a run's times can
+be read against the suite's time budgets.
 
 **Lanes.** The math suite (``math``), and each test is ``calibration``: it runs on main, nightly and
 before a release, and on a pull request that changes the statistics.
@@ -127,7 +127,7 @@ def _word_of(holm_flags: np.ndarray) -> str | None:
 
 def _through_prove(rows: Sequence[Row], method: str, events: Sequence[str], bh_flags: np.ndarray, holm_flags: np.ndarray,
                    what: Any) -> None:
-    """The seeded subset (reading R18): Prove's whole comparison on the drawn runs flags the same rows the
+    """The seeded subset: Prove's whole comparison on the drawn runs flags the same rows the
     same way, counts the same rows by Holm, and gives the word those rows make. Flags are event-major:
     every row of the first event, then of the second."""
     fa, fb = _frames_from_counts(rows)
@@ -521,7 +521,7 @@ def test_pf4_26_the_logrank_limits_are_caught_four_times_in_five(base: float, co
             if d < SUBSET:
                 drawn = [_logrank_row("r000", a, b)] + [_logrank_row(f"r{j + 1:03d}", x, y) for j, (x, y) in enumerate(others)]
                 _through_prove(drawn, "logrank_bh", ("fell",), flags, _flags(tested[:, 0], tested[:, 1], holm), (base, competing, way, d))
-        # Reading R37: the expected-moments power is an approximation that errs cautious when few
+        # The expected-moments power is an approximation that errs cautious when few
         # events are expected (a fall from 0.2 with a competing outcome is caught about 86% of the
         # time), so the upper bound under log-rank allows 0.10.
         _check_power(caught, DRAWS, True, (base, competing, way, theta), slack=0.10)
@@ -720,7 +720,7 @@ def test_pf4_45_the_group_limit_is_caught_four_times_in_five_root_and_group_toge
 
 @pytest.mark.slow
 def test_pf4_45_with_two_events_the_group_limit_holds_whichever_event_moves() -> None:
-    """Reading R41: four groups of three conditions, 80 a side, two events compared ('fell' at 0.05,
+    """Four groups of three conditions, 80 a side, two events compared ('fell' at 0.05,
     'stuck' at 0.3 in every condition). The printed limit is the larger of the two events' limits, so
     moving only the harder event ('stuck') of group x by it is still caught four times in five, root
     and group together."""
@@ -868,7 +868,7 @@ def test_pf4_51_the_wilson_share_interval_covers_near_its_level_averaged_over_th
 def test_pf4_18_under_the_null_the_omnibus_rejects_at_its_nominal_rate_at_small_b() -> None:
     """Observed and permuted statistics drawn alike, B = 19, four statistics: the omnibus is a rank among
     20 exchangeable members, so it rejects at 0.10 in at most 10% of datasets. The old scales rejected in
-    18.4% (the statistics re-check's README section 6)."""
+    18.4%."""
     from poisson_prove.tree import _min_p
 
     rng = np.random.default_rng(20261020)

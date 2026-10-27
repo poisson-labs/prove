@@ -1,19 +1,19 @@
-"""M10 CLI frozen tests, generated from section 4 of the M10 spec before the CLI is built.
+"""M10 CLI frozen tests, written before the CLI was built.
 
-Every test drives ``proofload.cli.main(argv, stdout=, stderr=, stdin=)`` in-process with
+Every test drives ``poisson_prove.cli.main(argv, stdout=, stderr=, stdin=)`` in-process with
 ``StringIO`` streams. The one exception is the entrypoint smoke test, which shells out to the
-installed ``proofload`` script and is skipped when that script is not on PATH (the same
+installed ``poisson-prove`` script and is skipped when that script is not on PATH (the same
 environment dependency S0's entrypoint test carries).
 
 Stores live under ``tmp_path``. Golden tests point ``--store`` at the generated lattice pair
 (``tests/lattice.py``) read-only and write report output under ``tmp_path``. The mock agent
-(``proofload.examples.mock_agent``) is imported lazily because it does not exist until
+(``poisson_prove.examples.mock_agent``) is imported lazily because it does not exist until
 the build adds it; collection must not depend on it.
 
 Two reading notes for the build, recorded here so the frozen tests are not re-litigated:
 
 - I4 drives the prompt through a ``StringIO`` whose ``isatty()`` returns True, so the
-  prompt path is exercised under either reading of the non-TTY rule (section 3 says any
+  prompt path is exercised under either reading of the non-TTY rule (the general rule says any
   non-TTY stdin without ``--yes`` exits 2; I4 says a piped ``y`` proceeds). I5 uses a plain,
   empty ``StringIO``, which both readings refuse with a message naming ``--yes``.
 - Since the M10 multi-event amendment the local backend records ``environment["import_path"]``
@@ -58,10 +58,10 @@ from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
 LATTICE_ROOT = lattice.root()
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
 # so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
@@ -83,7 +83,7 @@ DIFF_JSON_ENVELOPE = {"schema", "verdict", "sentence", "next"}
 QUICKSTART_CELLS = 9
 QUICKSTART_REPLICATES = 100
 QUICKSTART_ROWS = QUICKSTART_CELLS * QUICKSTART_REPLICATES
-# PF3 (spec sections 8.8 and 14; rule R4): the packaged spec's target id is mock-agent, where the old
+# PF3: the packaged spec's target id is mock-agent, where the old
 # examples/quickstart.toml said mock-agent@v0.
 QUICKSTART_TARGET_ID = "mock-agent"
 QUICKSTART_T_UNIT = "tool_calls"
@@ -170,7 +170,7 @@ def assert_clean_refusal(r: Result, code: int) -> None:
 
 
 def new_run_id(root: Path, before: Sequence[str]) -> str:
-    # A sweep's output no longer ends with a run_id line (spec section 5.3): the new run is
+    # A sweep's output no longer ends with a run_id line: the new run is
     # the one the store gained.
     added = set(Store(root).runs()) - set(before)
     assert len(added) == 1, (sorted(before), sorted(added))
@@ -265,7 +265,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
     blocks: list[list[str]] = []
     current: list[str] | None = None
     for line in body.splitlines():
-        # Text output shows a config_hash at 12 hex characters (spec section 5.6, rule 10).
+        # Text output shows a config_hash at 12 hex characters.
         if any(h[:12] in line for h in hashes):
             if current is not None:
                 blocks.append(current)
@@ -374,13 +374,13 @@ class CapturedRunModal:
 
 @pytest.fixture
 def captured_run_modal(monkeypatch: pytest.MonkeyPatch) -> CapturedRunModal:
-    # A missing modal package is refused before the plan (spec section 5.2), so the patched
+    # A missing modal package is refused before the plan, so the patched
     # launch seam is reached only when modal imports.
     monkeypatch.setitem(
         sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None))
     )
     captured = CapturedRunModal()
-    # PF5 (spec section 17; PF5.7): the face runs no backend; the core calls the Modal runner, so
+    # PF5 (PF5.7): the face runs no backend; the core calls the Modal runner, so
     # the stand-in replaces it where it is defined, which the core reads when it runs a plan.
     monkeypatch.setattr(importlib.import_module("poisson_prove.executor_modal"), "run_modal", captured)
     return captured
@@ -399,7 +399,7 @@ def modal_absent(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_i1_no_arguments_prints_usage_and_returns_zero() -> None:
     r = run_cli([])
     # No arguments is a wrong command line: exit 2, an error line pointing at --help, nothing
-    # on stdout (spec section 5.2).
+    # on stdout.
     assert r.code == 2, r.text
     assert r.out == "", r.out
     err = r.err.splitlines()
@@ -497,8 +497,8 @@ def test_i3_sweep_local_end_to_end(store_root: Path) -> None:
     assert len(df) == QUICKSTART_ROWS
     assert df["config_hash"].nunique() == QUICKSTART_CELLS
     assert df["outcome"].notna().all(), "the mock agent must not error"
-    # The end of a sweep is a verdict line plus detail lines, not RunSummary fields (spec
-    # section 5.3): the summary's facts are read from the store and the verdict line by value.
+    # The end of a sweep is a verdict line plus detail lines, not RunSummary fields:
+    # the summary's facts are read from the store and the verdict line by value.
     tally = store.tally(run_id)
     assert (tally.with_outcome, tally.no_outcome, tally.timed_out) == (QUICKSTART_ROWS, 0, 0)
     assert df["error"].isna().all()
@@ -515,14 +515,14 @@ def test_i4_declined_prompt_exits_two_and_creates_nothing(store_root: Path) -> N
         ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT],
         stdin=TtyStringIO("n\n"),
     )
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
-    # The pre-flight lines follow the plan, not necessarily as one block (spec section 5.3), and
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
+    # The pre-flight lines follow the plan, not necessarily as one block, and
     # text prints fractions to three decimals (rule 10) where the library's pre-flight keeps full
     # precision, so both sides are compared with every decimal at three places.
     out = three_decimals(r.out)
     for line in expected.strip().splitlines():
         assert three_decimals(line.strip()) in out, (line, r.out)
-    assert "[y/N]" in r.err  # The question goes to stderr (spec section 5.3).
+    assert "[y/N]" in r.err  # The question goes to stderr.
     assert Store(store_root).runs() == []
 
 
@@ -532,7 +532,7 @@ def test_i4_anything_but_yes_is_a_decline(store_root: Path, answer: str) -> None
         ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT],
         stdin=TtyStringIO(answer),
     )
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert Store(store_root).runs() == []
 
 
@@ -543,7 +543,7 @@ def test_i4_accepted_prompt_runs(store_root: Path, answer: str) -> None:
         stdin=TtyStringIO(answer),
     )
     assert r.code == 0, r.text
-    assert "[y/N]" in r.err  # The question goes to stderr (spec section 5.3).
+    assert "[y/N]" in r.err  # The question goes to stderr.
     run_id = new_run_id(store_root, [])
     assert Store(store_root).manifest(run_id).status == "complete"
 
@@ -556,7 +556,7 @@ def test_i5_non_tty_stdin_without_yes_exits_two_naming_the_flag(store_root: Path
         ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT],
         stdin=StringIO(),
     )
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert "--yes" in r.text, r.text
     assert Store(store_root).runs() == []
 
@@ -587,7 +587,7 @@ def test_i6_resume_completes_a_partial_run(store_root: Path) -> None:
     partial = run_cli(
         ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes", "--max-rollouts", "40"]
     )
-    # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
+    # A sweep stopped by --max-rollouts exits 3.
     assert partial.code == 3, partial.text
     run_id = new_run_id(store_root, [])
     store = Store(store_root)
@@ -598,7 +598,7 @@ def test_i6_resume_completes_a_partial_run(store_root: Path) -> None:
         ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--yes", "--resume", run_id]
     )
     assert resumed.code == 0, resumed.text
-    # The resumed run is the partial one: the store gained no run (spec section 5.3).
+    # The resumed run is the partial one: the store gained no run.
     assert set(store.runs()) - {run_id} == set()
     assert store.runs() == [run_id]
     assert store.manifest(run_id).status == "complete"
@@ -632,7 +632,7 @@ def test_i7_modal_absent_exits_two_with_install_hint(store_root: Path, modal_abs
     r = run_cli(
         ["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", ROLLOUT, "--backend", "modal", "--yes"]
     )
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert "pip install \"poisson-prove[modal]\"" in r.text, r.text
     assert Store(store_root).runs() == []
 
@@ -651,7 +651,7 @@ def test_i7_table_only_reaches_options_and_image(
     assert isinstance(store, Store)
     assert target == ModalTarget(import_path=ROLLOUT, image=TABLE_IMAGE)
     assert options == TABLE_OPTIONS
-    # No run_id line ends the output now (spec section 5.3); the patched launch writes no run,
+    # No run_id line ends the output now; the patched launch writes no run,
     # so the planned run's id is checked by value in the output.
     assert p.run_id in r.out, r.out
 
@@ -738,14 +738,14 @@ def test_i7_local_backend_never_calls_run_modal(store_root: Path, captured_run_m
 )
 def test_i8_unresolvable_target_exits_two_naming_the_path(store_root: Path, target: str) -> None:
     r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", target, "--yes"])
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert target in r.text, r.text
     assert Store(store_root).runs() == []
 
 
 def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> None:
     r = run_cli(["--store", str(store_root), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", RAISING, "--yes"])
-    # A sweep in which every rollout errored exits 3 (spec section 5.2).
+    # A sweep in which every rollout errored exits 3.
     assert r.code == 3, r.text
     run_id = new_run_id(store_root, [])
     store = Store(store_root)
@@ -753,7 +753,7 @@ def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> Non
     df = store.read(run_id)
     assert len(df) == QUICKSTART_ROWS
     assert df["error"].notna().all()
-    # The errored and ok counts are read from the store, not from summary fields (spec section 5.3).
+    # The errored and ok counts are read from the store, not from summary fields.
     tally = store.tally(run_id)
     assert (tally.no_outcome, tally.with_outcome) == (QUICKSTART_ROWS, 0)
 
@@ -762,14 +762,14 @@ def test_i8_rollout_that_always_raises_still_exits_zero(store_root: Path) -> Non
 
 
 def test_i9_diff_markdown_summary_line(lattice_store: Store) -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--method", "fisher_bh"])
     assert r.code == 0, r.text
-    # PF2 (spec section 4.3): diff's first lines are now a verdict block ending at the first
+    # PF2: diff's first lines are now a verdict block ending at the first
     # blank line; the report that follows it is unchanged, so its summary line is read there.
     verdict, _, report = r.out.partition("\n\n")
-    # PF3 (spec section 4.4, PF3.6b; rule R4): the verdict line now also names the test in plain words.
+    # PF3 (PF3.6b): the verdict line now also names the test in plain words.
     # PF4 (PF4.20): the lattice's runs declare no kind for tripped, so the counts read in direction
     # words: 22 conditions fell and none rose, as scipy's Fisher with one BH family gives.
     assert fisher_reference_counts() == (22, 0)
@@ -784,7 +784,7 @@ def test_i9_diff_markdown_summary_line(lattice_store: Store) -> None:
 
 
 def test_i9_diff_json(lattice_store: Store) -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--json", "--method", "fisher_bh"])  # --json replaces --format
     assert r.code == 0, r.text
@@ -815,7 +815,7 @@ def test_i9_diff_methods_all_json_keys(lattice_store: Store) -> None:
     assert r.code == 0, r.text
     data = json.loads(r.out)
     # diff --json adds schema, verdict, sentence, next and any *_note key around today's keys.
-    # PF4 (PF4.8, section 8.4): it also carries the primary method's omnibus and tree, and the
+    # PF4 (PF4.8): it also carries the primary method's omnibus and tree, and the
     # threshold with its source, beside the three method keys.
     pf4_keys = {"omnibus", "tree", "threshold", "threshold_source"}
     assert pf4_keys <= set(data)
@@ -846,13 +846,13 @@ def test_i9_diff_methods_all_markdown_has_method_table(lattice_store: Store) -> 
 
 def test_i10_unknown_run_exits_two(lattice_store: Store) -> None:
     r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, "no-such-run", "--event", lattice.EVENT])
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert "no-such-run" in r.text, r.text
 
 
 def test_i10_t_unit_mismatch_exits_two_with_unit_mismatch_wording(mock_runs: MockRuns) -> None:
     r = run_cli(["--store", str(mock_runs.root), "diff", lattice.RUN_A, mock_runs.a, "--event", lattice.EVENT])
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert "t_unit differs" in r.text, r.text
     assert "seconds" in r.text and QUICKSTART_T_UNIT in r.text
 
@@ -861,7 +861,7 @@ def test_i10_mcnemar_on_unpaired_runs_exits_two_with_not_pairable_wording(mock_r
     r = run_cli(
         ["--store", str(mock_runs.root), "diff", mock_runs.a, mock_runs.c, "--event", "violated", "--method", "mcnemar_bh"]
     )
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert "mcnemar_bh" in r.text and "run_salt" in r.text, r.text
 
 
@@ -889,7 +889,7 @@ def report_argv(out: Path, *extra: str) -> list[str]:
 
 def test_i11_report_writes_exactly_three_files(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report"
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     r = run_cli(report_argv(out, "--method", "fisher_bh"))
     assert r.code == 0, r.text
@@ -900,12 +900,12 @@ def test_i11_report_writes_exactly_three_files(lattice_store: Store, tmp_path: P
     # words: 22 conditions fell and none rose, as scipy's Fisher with one BH family gives.
     assert fisher_reference_counts() == (22, 0)
     assert "tripped: 22 lower, 0 higher" in md and "fisher_bh" in md
-    # PF2 (spec section 4.3): report's stdout now opens with `ok  wrote <folder> (N files)` and
+    # PF2: report's stdout now opens with `ok  wrote <folder> (N files)` and
     # one `  wrote  <path>` line per file, then a blank line, then what it printed before.
     verdict, _, rest = r.out.partition("\n\n")
     lines = verdict.splitlines()
     assert lines[0] == f"ok  wrote {out} ({len(REPORT_FILES)} files)", r.out
-    # PF12 (spec section 18.2, Q59): report saves the comparison it shows and says so on one
+    # PF12 (Q59): report saves the comparison it shows and says so on one
     # detail line after its wrote lines, the id's first 12 hex.
     assert re.fullmatch(r"  saved  comparison [0-9a-f]{12}", lines[-1]), r.out
     assert sorted(lines[1:-1]) == sorted(f"  wrote  {out / name}" for name in REPORT_FILES), r.out
@@ -964,7 +964,7 @@ def test_i13_existing_non_empty_out_refused_without_writing(lattice_store: Store
     out.mkdir()
     (out / "keep.txt").write_text("do not touch\n")
     r = run_cli(report_argv(out))
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert {p.name for p in out.iterdir()} == {"keep.txt"}
     assert (out / "keep.txt").read_text() == "do not touch\n"
 
@@ -989,9 +989,9 @@ def test_i13_force_overwrites_non_empty_out(lattice_store: Store, tmp_path: Path
 def test_i13_fix_on_unknown_key_exits_two_with_axis_error_message(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report"
     r = run_cli(report_argv(out, "--fix", "bogus=1"))
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
-    # LS update, 2026-09-22 (local serve pass, Phase A, found by the shim run): the refusal names the flag, not the parameter (spec LS section 3.8 item 4).
-    # Errors show values bare, not as Python reprs, and prose is not pinned (spec section 5.4).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
+    # The refusal names the flag, not the parameter.
+    # Errors show values bare, not as Python reprs, and prose is not pinned.
     assert "--fix" in r.err and "bogus" in r.err, r.text
     assert not out.exists() or not any(out.iterdir())
 
@@ -1004,13 +1004,13 @@ def test_i13_x_equal_to_y_exits_two(lattice_store: Store, tmp_path: Path) -> Non
             "--x", lattice.X, "--y", lattice.X, "--out", str(out),
         ]
     )
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
     assert not out.exists() or not any(out.iterdir())
 
 
 def test_i13_fix_parses_toml_scalars(lattice_store: Store, tmp_path: Path) -> None:
     out = tmp_path / "report-1d"
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
     # test; these counts are the unpaired test's, named.
     r = run_cli(
         [
@@ -1038,14 +1038,14 @@ def test_i13_fix_parses_toml_scalars(lattice_store: Store, tmp_path: Path) -> No
 
 def test_i13_fix_with_bad_toml_scalar_exits_two(lattice_store: Store, tmp_path: Path) -> None:
     r = run_cli(report_argv(tmp_path / "report", "--fix", f"{lattice.X}=not a value"))
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
 
 
 # ---------- I14: check exit codes ----------
 
 
 def test_i14_check_fixture_passes(lattice_store: Store) -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+    # PF3 (Q17): the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
     # declare none; --fail-on higher is the same gate ("fail when the rate rose").
@@ -1054,7 +1054,7 @@ def test_i14_check_fixture_passes(lattice_store: Store) -> None:
          "--fail-on", "higher"]
     )
     assert r.code == 0, r.text
-    # check's first stdout line is "passed  ..." or "failed  ..." (spec section 5.3).
+    # check's first stdout line is "passed  ..." or "failed  ...".
     assert r.out.startswith("passed  ") and not r.out.startswith("failed"), r.out
     # PF4 (PF4.20): with tripped's kind unknown the counts read 22 lower, 0 higher, as the reference gives.
     assert fisher_reference_counts() == (22, 0)
@@ -1064,7 +1064,7 @@ def test_i14_check_fixture_passes(lattice_store: Store) -> None:
 
 def test_i14_check_fail_on_any_fails_the_fixture(lattice_store: Store) -> None:
     r = run_cli(["--store", str(LATTICE_ROOT), "check", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--fail-on", "any"])
-    assert_clean_refusal(r, 4)  # A failed check exits 4 (spec section 5.2).
+    assert_clean_refusal(r, 4)  # A failed check exits 4.
     assert r.out.startswith("failed  ") and not r.out.startswith("passed"), r.out
 
 
@@ -1077,7 +1077,7 @@ def test_i14_check_significantly_worse_cell_fails(tmp_path: Path) -> None:
     r = run_cli(
         ["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell", "--fail-on", "higher"]
     )
-    assert_clean_refusal(r, 4)  # A failed check exits 4 (spec section 5.2).
+    assert_clean_refusal(r, 4)  # A failed check exits 4.
     assert r.out.startswith("failed  ") and not r.out.startswith("passed"), r.out
     # PF4 (PF4.20): with fell's kind unknown the count reads 0 lower, 1 higher (was 0 safer, 1 worse).
     assert "fell: 0 lower, 1 higher" in r.out, r.out
@@ -1094,7 +1094,7 @@ def test_i14_check_safer_direction_passes_by_default(tmp_path: Path) -> None:
         ["--store", str(tmp_path / "syn"), "check", "syn-a", "syn-b", "--event", "fell", "--fail-on", "higher"]
     )
     assert r.code == 0, r.text
-    assert r.out.startswith("passed  "), r.out  # The first line says passed (spec section 5.3).
+    assert r.out.startswith("passed  "), r.out  # The first line says passed.
 
 
 # ---------- I15: inspect ----------
@@ -1185,7 +1185,7 @@ def test_i15_snippet_matches_a_printed_row(mock_runs: MockRuns) -> None:
 
 def test_i15_inspect_unknown_run_exits_two(mock_runs: MockRuns) -> None:
     r = run_cli(["--store", str(mock_runs.root), "inspect", "no-such-run", "--event", "violated"])
-    assert_clean_refusal(r, 1)  # A refusal exits 1 (spec section 5.2).
+    assert_clean_refusal(r, 1)  # A refusal exits 1.
 
 
 # ---------- I16: inspect on a run with no trace ----------
@@ -1215,7 +1215,7 @@ def test_i17_runs_lists_every_run_sorted_with_seven_fields(mock_runs: MockRuns, 
     (tmp_path / "empty").mkdir()  # E1
     empty = run_cli(["--store", str(tmp_path / "empty"), "runs"])
     assert empty.code == 0, empty.text
-    # PF2 (spec section 4.3): an empty store prints `ok  no runs in <store>` and a `next:` line,
+    # PF2: an empty store prints `ok  no runs in <store>` and a `next:` line,
     # both on stdout and nothing on stderr, where it used to print the header alone.
     assert not empty.err, empty.err
     assert len(empty.lines) == 2, empty.out
@@ -1227,7 +1227,7 @@ def test_i17_runs_lists_every_run_sorted_with_seven_fields(mock_runs: MockRuns, 
     assert len(expected) == 5
     r = run_cli(["--store", str(mock_runs.root), "runs"])
     assert r.code == 0, r.text
-    # PF2 (spec section 4.3): the verdict line, then a header with the columns #, name, id,
+    # PF2: the verdict line, then a header with the columns #, name, id,
     # status, backend, target, rows, rows without an outcome, created (t_unit is no longer a
     # column). A name holds single spaces, so cells are split on runs of two or more spaces.
     assert r.lines[0] == f"ok  {len(expected)} runs in {mock_runs.root}"
@@ -1238,9 +1238,9 @@ def test_i17_runs_lists_every_run_sorted_with_seven_fields(mock_runs: MockRuns, 
     assert len(r.lines) == 2 + len(expected)
     run_lines = r.lines[2:]
     manifests = {run_id: store.manifest(run_id) for run_id in expected}
-    # PF2 (spec section 4.3): newest first by created_at, where the old table was in id order.
+    # PF2: newest first by created_at, where the old table was in id order.
     newest_first = sorted(expected, key=lambda run_id: manifests[run_id].created_at, reverse=True)
-    # PF2 (spec section 4.3): the computed name is the target id up to its first `/`, the UTC
+    # PF2: the computed name is the target id up to its first `/`, the UTC
     # date of created_at, then a letter in creation order among that target's runs that day.
     names: dict[str, str] = {}
     for run_id in sorted(expected, key=lambda run_id: manifests[run_id].created_at):
@@ -1319,7 +1319,7 @@ def test_i18_episode_shape_and_trace() -> None:
                     assert set(step) == {
                         "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
                         "input", "output", "tokens", "confidence", "error", "code", "attrs",
-                        # A8a: the eight verdict fields (spec section 3.1)
+                        # A8a: the eight verdict fields
                         "operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original",
                     }, step
 
@@ -1420,8 +1420,8 @@ def test_i20_quickstart_three_commands_under_thirty_seconds(tmp_path: Path, monk
     tail = re.search(r"over (\d+) tests, (paired|unpaired)\)", md)
     assert tail, md
     assert int(tail.group(1)) == QUICKSTART_CELLS
-    # P-1 (ADR-052): the quickstart diffs under the default fisher_bh, and the token states the request.
-    # PF3 (Q17, spec sections 4.4 and 14; rule R4): the second sweep is --pair-with the first, so the two
+    # P-1: the quickstart diffs under the default fisher_bh, and the token states the request.
+    # PF3 (Q17): the second sweep is --pair-with the first, so the two
     # share a salt and the default is now mcnemar_bh; the token states that request.
     assert tail.group(2) == "paired"
     assert "mcnemar_bh" in md, md

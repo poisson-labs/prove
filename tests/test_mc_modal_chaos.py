@@ -1,23 +1,22 @@
 """MC -- the Modal backend hands a sweep's ``[chaos]`` table to its containers, and the shared
 orchestration refuses a chaos run whose rows come back without the per-row chaos record.
 
-The rulings of 2026-09-26 ("Modal chaos fix" in the decisions log), on the check that
-found ``run_modal`` never passing ``[chaos]`` into its containers: every episode of a faulted
-Modal arm ran with no fault while its manifest recorded the fault as requested, so the arm was a
-second control arm that read as a clean measurement.
+Two fixes from the check that found ``run_modal`` never passing ``[chaos]`` into its containers:
+every episode of a faulted Modal arm ran with no fault while its manifest recorded the fault as
+requested, so the arm was a second control arm that read as a clean measurement.
 
-- **MC1, MC2** (ruling 1): the chaos settings travel into the containers the way the capture
+- **MC1, MC2** (fix 1): the chaos settings travel into the containers the way the capture
   settings already do, and ``worker_batch`` receives them. Driven through the real
   ``run_modal``, ``_ModalMapper`` and ``_container_batch``: a chaos sweep's rollouts see the
   same chaos settings on the Modal path as on ``run_local``, and every ok Modal row carries
   ``backend_meta["chaos"]``, the record of what its container armed.
-- **MC3, MC4** (ruling 2): ``run_with_mapper`` is the orchestration every mapper backend shares
+- **MC3, MC4** (fix 2): ``run_with_mapper`` is the orchestration every mapper backend shares
   (Modal's, and the seam a Burla backend plugs into). It refuses a chaos run whose ok rows come
   back without ``backend_meta["chaos"]``, loudly, naming the run and the missing record, whichever
   mapper produced them. MC4 is its scope: a run without ``[chaos]``, and a chaos run's errored
   rows (which carry no ``backend_meta`` from a container), are not refused.
 
-**The harness is the check's** (the project's records of the check). Only the ``modal``
+**The harness is the check's.** Only the ``modal``
 package is replaced: a stub placed in ``sys.modules`` before ``run_modal`` imports it, whose
 ``Function.map`` pickles the map items across a process boundary and calls the shipped function
 on each in a fresh spawned interpreter, which is what a Modal container does with it. Everything

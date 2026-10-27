@@ -1,7 +1,6 @@
 """PF7 -- packaging: the metadata, the extras and their floors, and what the wheel and the sdist
-hold (*Prove -- Spec Front Door*, sections 3.1 to 3.4, 6.2, 9.5 and 11, and PF7.4 to PF7.6; Q14,
-Q15, Q16, Q31, Q40, Q45 and Q49; the Modal floor measured by the backends module, 2026-10-24; the
-words of the short description amended 2026-10-24).
+hold (PF7.4 to PF7.6; Q14, Q15, Q16, Q31, Q40, Q45 and Q49; the Modal floor measured by the
+backends module).
 
 **What is pinned is what ships.** ``pyproject.toml`` as the build reads it, and the wheel and the
 sdist built from this checkout once per test run (hatchling in a child process, over a copy of the
@@ -10,28 +9,28 @@ member. The sets are rules over the tree, not lists: the wheel holds every file 
 folder and nothing else, so a module or a data file a later change adds is in it by being in the
 package.
 
-**Readings this file freezes** (each one yes/no in the release log; the build follows them):
+**Readings this file freezes** (the build follows them):
 
-- **k1** The PyPI short description is section 11's sentence exactly: "Did your change to the agent
+- **k1** The PyPI short description is this sentence exactly: "Did your change to the agent
   really change how often it fails? Replays the same cases before and after, and says per
   condition, with stated error bounds and detection limits." It is the one description, so it is
   pinned whole.
-- **k2** Section 9.5's "MIT" classifier is left out: with an SPDX ``license = "MIT"`` the packaging
+- **k2** The "MIT" classifier is left out: with an SPDX ``license = "MIT"`` the packaging
   standard (PEP 639) forbids a ``License ::`` classifier beside it, and hatchling refuses the
   pair. No classifier claims Windows or "OS Independent", nor a Python outside 3.11 to 3.14.
 - **k3** ``Documentation`` and ``Changelog`` point at a file or folder of the repository on
   ``main`` that exists in this tree; ``Source`` is the repository and ``Issues`` its issues page.
 - **k4** Every requirement has a lower bound: the core, every extra, ``dev`` included (the floors
-  run resolves ``[dev]`` at its lowest too, section 3.4), and the build backend. An upper bound
-  only where section 3.3 has one (``openai<3``), and an exact pin only for ``burla==1.8.2``.
+  run resolves ``[dev]`` at its lowest too), and the build backend. An upper bound only on
+  ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.2``.
 - **k5** ``[dev]`` carries what the contributors' lanes need that this file and the docs check
-  read: ``pytest-xdist`` (Q40), ``hypothesis`` (section 10.6), ``hatchling`` (the archives built
+  read: ``pytest-xdist`` (Q40), ``hypothesis`` (the property tests), ``hatchling`` (the archives built
   here), ``markdown-it-py`` (the docs check reads pages with it) and ``pyyaml`` (it parses YAML
   blocks). Other modules' test tools are theirs to pin.
 - **k6** PF7.5 is one slow test: on Python 3.11 it installs every requirement at exactly its
   stated floor (a constraints file of ``name==floor`` over the core and every extra; uv resolves
   what they bring), checks each is installed at its floor, then runs the code suite in that
-  environment. Section 3.4's ``--resolution lowest-direct`` is how the build finds the floors; it
+  environment. ``--resolution lowest-direct`` is how the build finds the floors; it
   is not the check, because it takes what the floors bring at their newest and then backtracks a
   direct requirement above its floor to fit them (Modal 1.6.1 for a floor of 0.73.76 that installs
   when asked). It needs the package index, so it is the main lane's, never a pull request's.
@@ -48,19 +47,19 @@ package.
 ``test_a22_pandas3``; the terminal app adds ``rich`` and ``textual``); the pandas floor, which
 ``test_a22_pandas3::test_v15`` holds to admit 2.3.3 and 3.0.5, so the measured floor is at most
 2.3.3; the Modal floor and the Burla
-pin themselves (``test_pf9_backends``, which this file reads the same way); section 9.1's removed
-files (the hygiene tests); the version, set by the release.
+pin themselves (``test_pf9_backends``, which this file reads the same way); the files removed
+before release (the hygiene tests); the version, set by the release.
 
 **Invariant-to-test map**
 
 | invariant | tests |
 |---|---|
-| PF7.4 section 9.5's metadata, Q45's description | ``test_pf7_4_pyproject_carries_the_release_metadata`` (one case per field) |
-| PF7.4 section 3.3's extras (Q14, Q15, Q31, Q40) | ``test_pf7_4_the_extras_are_section_3_3s`` (one case per extra) |
+| PF7.4 the release metadata, Q45's description | ``test_pf7_4_pyproject_carries_the_release_metadata`` (one case per field) |
+| PF7.4 the extras (Q14, Q15, Q31, Q40) | ``test_pf7_4_the_extras_are_section_3_3s`` (one case per extra) |
 | PF7.4 a floor on every dependency (Q16) | ``test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_section_3_3s`` (one case per group) |
 | PF7.5 the code suite passes with every dependency at its floor | ``test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor`` (slow) |
-| PF7.6 the wheel and the sdist hold exactly section 9.5's sets; the example spec ships | ``test_pf7_6_each_archive_holds_exactly_its_set`` (wheel, sdist) |
-| section 11 the PyPI page is the README | ``test_pf7_6_the_pypi_page_is_the_readme`` |
+| PF7.6 the wheel and the sdist hold exactly their sets; the example spec ships | ``test_pf7_6_each_archive_holds_exactly_its_set`` (wheel, sdist) |
+| PF7.6 the PyPI page is the README | ``test_pf7_6_the_pypi_page_is_the_readme`` |
 """
 
 from __future__ import annotations

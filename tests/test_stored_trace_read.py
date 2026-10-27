@@ -1,7 +1,7 @@
 """Stored-trace read frozen tests: a run stored before A8a opens, and the tolerance is exactly that wide.
 
-Frozen 2026-09-20 off ``1f5491b``. The build is written against this file and does not edit it. The
-brief was the surfacing cleanup's first item: ``proofload inspect`` cannot open any stored run that
+Frozen off ``1f5491b``. The code is written against this file and does not edit it. The
+problem: ``poisson-prove inspect`` cannot open any stored run that
 carries a trace.
 
 **What is being fixed, measured at ``1f5491b`` on stored runs that carry a trace.**
@@ -18,8 +18,8 @@ every such trace validate and changes nothing else.
 rejects thirteen-key spans and a six-key trace, and a stored dict that is *not* the old shape must keep
 being rejected. The store knows what it wrote, so the store recognises the old shape and reads it as the
 current one, the way A7's ``_legacy_envelope`` already reads the layout before the split. It is not a
-migration: nothing stored is rewritten (R10), and a migration would need a verb, which is a public
-symbol the spec has not given, and would leave every unmigrated store failing as before.
+migration: nothing stored is rewritten (R10), and a migration would need a verb, which is a new public
+symbol, and would leave every unmigrated store failing as before.
 
 **What a read of an old trace means.** ``None`` on each of the nine fields is "not recorded", which is what
 ``Span``'s own comment says ``None`` means on A8a's eight, so a reader asks ``is None`` and reads the truth. It
@@ -41,7 +41,7 @@ is never a zero and never an empty string.
 | R10 nothing is written: no stored byte or mtime moves | ``test_r10_*`` |
 
 **Real frames, round-tripped.** Every store is written by ``Store.append`` and read back through ``Store.read``
-and the CLI; nothing is hand-built at the read (standing rule 14). The old shape is made the way a build
+and the CLI; nothing is hand-built at the read. The old shape is made the way a build
 before A8a stored it: the ``trace`` column of a written part is rewritten to six keys and thirteen-key spans
 (``Store.append`` refuses to write that shape, and a fixture that was not the shape would prove nothing
 about it; R1's first test asserts the fixture is what it claims). The part before A7 is made by moving the
@@ -62,7 +62,7 @@ R6 and R7 test that reads an old run are red.
 
 **Named gaps, not pinned.** (1) ``inspect`` prints no ``observation:`` line on an old run, because its spans
 carry no stamp: ``span.truncated`` is ``None`` and a pre-A8b marker is not read (A8b's P8-27 bars the text
-from ``src/``, and a ruling of 2026-09-20 says no reader is written). Whether ``inspect`` should say
+from ``src/``, and no reader for it is written). Whether ``inspect`` should say
 ``not counted`` for such a row is a decision, not a fix, and nothing here decides it. (2) The write path is
 unchanged: ``Store.append`` still stores a dict in the old shape as written, in ``meta``, with both columns
 null (A7's P7-9); R8 reads that back, and does not ask ``append`` to accept it.
@@ -94,7 +94,7 @@ REPLICATES = 8
 EVENT = "fail"
 
 #: The shape a build before A8a stored, spelled out as history: six trace keys, thirteen span keys.
-#: Not derived from ``proofload.trace``, so a change to the current schema cannot move it.
+#: Not derived from ``poisson_prove.trace``, so a change to the current schema cannot move it.
 A7_TRACE_KEYS = ("schema", "source", "source_version", "dropped", "spans", "truncated")
 A7_SPAN_KEYS = (
     "span_id", "parent_id", "kind", "name", "start_ns", "end_ns", "input", "output", "tokens",
@@ -471,7 +471,7 @@ def normalise(text: str, run_id: str) -> str:
 
 
 def computed_name(root: Path, run_id: str) -> str:
-    """PF2 (spec section 4.3): the target id up to its first `/`, the UTC date of created_at, then
+    """PF2: the target id up to its first `/`, the UTC date of created_at, then
     a letter in creation order among that target's runs that day."""
     store = Store(root)
     manifests = sorted((store.manifest(r) for r in store.runs()), key=lambda m: m.created_at)
@@ -481,7 +481,7 @@ def computed_name(root: Path, run_id: str) -> str:
 
 
 def split_verdict(text: str, root: Path, run_id: str) -> str:
-    """PF2 (spec section 4.3): inspect's first line names the run by its name, which differs
+    """PF2: inspect's first line names the run by its name, which differs
     between two runs of one store; check it names this run, and return everything after it."""
     first, _, rest = text.partition("\n")
     rows = 2 * len(TASKS)  # the two failing rows of each task, as fail_span_count counts them
@@ -505,7 +505,7 @@ def test_r7_what_it_prints_is_what_the_current_writers_run_of_the_same_traces_pr
     code, twin, err = inspect_run(root, "twin")
     assert code == 0, err
     assert len(SPAN_LINE.findall(twin)) == fail_span_count()
-    # PF2 (spec section 4.3): the verdict line names each run by its own name; all after it agrees.
+    # PF2: the verdict line names each run by its own name; all after it agrees.
     assert normalise(split_verdict(old, root, "old"), "old") == normalise(split_verdict(twin, root, "twin"), "twin")
 
 
@@ -562,7 +562,7 @@ def test_r8_inspect_prints_every_span_of_an_old_trace_inside_meta(root: Path) ->
     assert code == 0, err
     assert len(SPAN_LINE.findall(out)) == fail_span_count()
     _, twin, _ = inspect_run(root, "twin")
-    # PF2 (spec section 4.3): the verdict line names each run by its own name; all after it agrees.
+    # PF2: the verdict line names each run by its own name; all after it agrees.
     assert normalise(split_verdict(out, root, "meta-old"), "meta-old") == normalise(split_verdict(twin, root, "twin"), "twin")
 
 

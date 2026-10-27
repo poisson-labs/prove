@@ -1,9 +1,7 @@
 """PF1, the look and the errors (plain): the frozen tests.
 
-Written from the front-door spec's section 5 (5.1 to 5.4 and 5.6) and its invariants PF1.1 to
-PF1.15, with the rulings of 2026-10-13 (Q21, Q23, Q24, Q47) and the four taken for this freeze on
-2026-10-20 (the session log names them R1 to R4). The build is written against this file and does
-not edit it.
+Written for invariants PF1.1 to PF1.15, with the answers to Q21, Q23, Q24 and Q47 and the four
+decisions listed below. The build is written against this file and does not edit it.
 
 What PF1 promises, in one line: every verb behaves as the lab's other tools do. Exit codes mean
 one thing each (0 done, 1 refused, 2 a wrong command line, 3 stopped or failed after work started,
@@ -12,23 +10,23 @@ only by ``  next:`` lines; a warning is one ``note:`` line; an unexpected failur
 instead of printing a traceback; help, ``--version``, ``--json``, numbers, pipes and encodings
 read the same everywhere.
 
-**The rulings this file is written under (2026-10-20).**
+**The decisions this file is written under.**
 
-- R1: PF1.15's first-line shape covers what PF1 gives words to: ``sweep`` (its plan comes
+- PF1.15's first-line shape covers what PF1 gives words to: ``sweep`` (its plan comes
   first), ``check`` (``passed``/``failed``), ``paired --cap-check`` (``under cap``/``at cap``),
   Ctrl-C's ``stopped`` line, and the three refusals that keep a plan. The other verbs' first
   lines are PF2's (PF2.9). PF1.15's rule for stderr lines covers the whole corpus.
-- R2: PF1.2's refusal corpus is every refusal that exists at PF1. The ambiguous run name is
+- PF1.2's refusal corpus is every refusal that exists at PF1. The ambiguous run name is
   added by PF2's freeze and the pair with no comparable condition by PF4's, with the same
   assertions.
-- R3: a sweep in which every rollout errored names its commonest error by what ``inspect
+- A sweep in which every rollout errored names its commonest error by what ``inspect
   --event`` matches: ``timeout`` for timeouts, otherwise the exception's type name (the last line
   of the stored traceback, up to its colon); ``inspect --event TYPE`` selects the errored rows of
   that type.
-- R4: rule 10 prints rates, shares, deltas and minimum detectable effects as fractions to three
+- Rule 10 prints rates, shares, deltas and minimum detectable effects as fractions to three
   decimals, in every verb's text output and in ``report.md``, ``receipt.html`` and the heatmap's
-  labels. The served page and the prose inside JSON structures keep their wording (section 5.5
-  limits the look rules to the terminal).
+  labels. The served page and the prose inside JSON structures keep their wording (the look
+  rules are for the terminal only).
 
 **Two readings, named here.** PF1.7's "help text on every option with its default or 'no
 default'" is read as Trace's frozen help test reads the same rule: every argument and option has
@@ -45,9 +43,8 @@ per module as ``python -m poisson_prove`` in a process of its own, with this che
 first on its path, ``HOME`` pointed at an empty folder and no store variable set. Ctrl-C, the
 unexpected failure, the pseudo-terminal and the encodings have tests of their own.
 
-**Lanes.** Every test here is in the fast lane by the spec's rule (ten seconds of setup and call
-on the runner decides it; PF10 declares the ``slow`` marker); the session log has the measured
-times.
+**Lanes.** Every test here is in the fast lane by the project's rule (ten seconds of setup and call
+on the runner decides it; PF10 declares the ``slow`` marker).
 
 **Invariant-to-test map**
 
@@ -110,7 +107,7 @@ ERRORS_LOG = "~/.cache/poisson-prove/errors.log"
 TRACEBACK = "Traceback (most recent call last)"
 
 #: 9 conditions x 120 replicates = 1,080 rollouts.
-#: PF4 re-freeze (PF4.30, reading R33): this is the quickstart's design at 120 replicates with no
+#: PF4 re-freeze (PF4.30): this is the quickstart's design at 120 replicates with no
 #: kind declared. Its exact limit at level q / 9 is 0.240 at base rate 0.400, over the default
 #: accepted change of 0.200, so N=120 no longer clears the gate on its own: every sweep of it
 #: accepts ``MAX_MDE``, the smallest round value above that limit.
@@ -392,7 +389,7 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> World:
     folders["empty"].mkdir()
 
     store = base / "store"
-    # PF4 re-freeze (PF4.30, reading R33): both sweeps of the 120-replicate design accept MAX_MDE.
+    # PF4 re-freeze (PF4.30): both sweeps of the 120-replicate design accept MAX_MDE.
     # A fixed salt, so the pair's episodes are the same on every run of the suite (the second
     # sweep shares it through --pair-with).
     first = run_cli(["--store", str(store), "sweep", str(folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--max-mde", MAX_MDE, "--salt", "a1b2c3d4e5f60718"])
@@ -429,7 +426,7 @@ PAIR_X = "--x task_id --y tool_fail_rate"
 
 CORPUS: tuple[Call, ...] = (
     # the result of every verb
-    # PF4 re-freeze (PF4.30, reading R33): every sweep of the 120-replicate design below accepts
+    # PF4 re-freeze (PF4.30): every sweep of the 120-replicate design below accepts
     # MAX_MDE, so each refusal and each sweep that stops short is the one it names, not the gate's.
     Call("sweep-dry-run", "--store {base}/dry-store sweep {spec} --target " + MOCK + ":rollout --dry-run --max-mde " + MAX_MDE, 0, "result"),
     Call("sweep-yes", "--store {base}/sweep-store sweep {spec} --target " + MOCK + ":rollout --yes --max-mde " + MAX_MDE, 0, "result"),
@@ -451,7 +448,7 @@ CORPUS: tuple[Call, ...] = (
     #: 8 items x 400 input tokens x 2 arms = 6,400, exactly the declared cap: "at or above" (PF1.14).
     Call("paired-equal-cap", f"{PS} paired --declaration {{decl_equal}} --cap-check", 4, "result"),
     # the two ways a sweep stops short after work started
-    # PF4 re-freeze (PF4.49, reading R17): the 3-replicate design passed --max-mde 0.99; no lone condition
+    # PF4 re-freeze (PF4.49): the 3-replicate design passed --max-mde 0.99; no lone condition
     # of it can be flagged, which only an accepted change of 1 admits.
     Call("sweep-max-rollouts", "--store {base}/capped-store sweep {spec} --target " + MOCK + ":rollout --yes --max-rollouts 100 --max-mde " + MAX_MDE, 3, "stopped"),
     Call("sweep-all-errored", "--store {base}/errored-store sweep {triple} --target pf1_targets:mostly_value_error --yes --max-mde 1", 3, "stopped", paths=("targets",)),
@@ -470,7 +467,7 @@ CORPUS: tuple[Call, ...] = (
     Call("version", "--version", 0, "version"),
     Call("help", "--help", 0, "help"),
     *(Call(f"help-{verb}", f"{verb} --help", 0, "help") for verb in ("sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs")),
-    # every refusal that exists at PF1 (R2): exit 1
+    # every refusal that exists at PF1: exit 1
     Call("refuse-missing-store", "--store {nowhere} runs", 1, "refusal", ("{nowhere}",)),
     Call("refuse-old-store-only", "runs", 1, "refusal", ("proofload-runs",), cwd="old_cwd"),
     Call("refuse-unknown-run", f"{S} diff {{A}} 20991231T000000Z-dead", 1, "refusal", ("20991231T000000Z-dead",)),
@@ -613,7 +610,7 @@ def test_pf1_3_no_arguments_says_no_verb_was_given_and_points_to_help(corpus: di
 #: raise: the failure no verb expects. Each runs in a process of its own, so the log's place is
 #: read from that process's ``HOME`` however the build looks it up.
 VERB_CALLS = {
-    # PF4 re-freeze (PF4.30, reading R33): the sweep succeeds on the world only with MAX_MDE.
+    # PF4 re-freeze (PF4.30): the sweep succeeds on the world only with MAX_MDE.
     "sweep": "--store {base}/failure-store sweep {spec} --target " + MOCK + ":rollout --yes --max-mde " + MAX_MDE,
     "diff": f"{S} diff {{A}} {{B}}",
     "check": f"{S} check {{A}} {{B}} --event violated",
@@ -683,7 +680,7 @@ def test_pf1_4_an_unexpected_failure_exits_3_naming_the_log_and_appends_the_comm
 
 def test_pf1_4_a_failure_after_the_sweep_started_still_names_only_the_log(world: World, tmp_path: Path) -> None:
     home = tmp_path / "home"
-    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+    # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
     argv = ["--store", str(tmp_path / "store"), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--batch-size", "64",
             "--max-mde", MAX_MDE]
     r = prove_with(RAISE_MID_SWEEP, argv, home=home, cwd=tmp_path)
@@ -759,7 +756,7 @@ def test_pf1_5_a_warning_prove_raises_reaches_the_user_as_one_note_line(corpus: 
 
 def test_pf1_6_ctrl_c_in_a_sweep_exits_130_keeps_what_was_stored_and_names_the_resume(world: World, tmp_path: Path) -> None:
     store = tmp_path / "store"
-    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+    # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
     r = prove(
         ["--store", str(store), "sweep", str(world.folders["spec"]), "--target", "pf1_targets:interrupted", "--yes", "--batch-size", "64",
          "--max-mde", MAX_MDE],
@@ -941,7 +938,7 @@ for words in json.loads(sys.argv[1]):
 print(json.dumps(results))
 """
 HELP_VERBS = ("", "sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs")
-#: The options each verb's usage line must show outside brackets (section 5.3 and 5.4).
+#: The options each verb's usage line must show outside brackets.
 REQUIRED_SHOWN = {"check": ("--event",), "report": ("--x",), "serve": ("--x", "--event"), "inspect": ("--event",), "paired": ("--declaration",)}
 
 
@@ -1061,7 +1058,7 @@ def test_pf1_9_store_plain_and_debug_are_read_after_the_verb_as_before_it(world:
     ["--store", "{S}", "diff", "{A}", "{B}", "--even", "violated"],
     ["--store", "{S}", "diff", "{A}", "{B}", "--meth", "fisher_bh"],
     ["--store", "{S}", "check", "{A}", "{B}", "--event", "violated", "--fail", "any"],
-    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+    # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
     ["--store", "{S}", "sweep", "{spec}", "--tar", MOCK + ":rollout", "--yes", "--max-mde", MAX_MDE],
 ], ids=lambda argv: " ".join(argv))
 def test_pf1_9_an_abbreviated_option_exits_2(argv: list[str], world: World, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1084,8 +1081,8 @@ def number_problems(text: str) -> list[str]:
     """Every number in ``text`` that rule 10 (as amended) does not allow.
 
     Not numbers in this sense: run ids, anything with a slash (paths, URLs, ``n_a/n_b``), dates,
-    versions, a year cited in parentheses, a seed or a salt (no separators on seeds, as Trace
-    ruled), and a UTC time with ``Z``."""
+    versions, a year cited in parentheses, a seed or a salt (no separators on seeds, as in
+    Trace), and a UTC time with ``Z``."""
     problems: list[str] = []
     t = RUN_ID.sub(" ", text)
     t = re.sub(r"\S*/\S*", " ", t)
@@ -1257,7 +1254,7 @@ def test_pf1_11_runs_json_names_the_writer_of_a_0_0_1_run_as_proofload_and_a_new
 
 @pytest.mark.parametrize("argv", [
     ["diff", "{A}", "{B}", "--method", "mcnemar_bh"],
-    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+    # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
     ["sweep", "{spec}", "--target", MOCK + ":rollout", "--dry-run", "--max-mde", MAX_MDE],
 ], ids=["diff", "sweep-dry-run"])
 def test_pf1_12_an_ascii_only_stdout_gets_the_plain_rendering_in_ascii_line_for_line(argv: list[str], world: World, tmp_path: Path) -> None:
@@ -1320,7 +1317,7 @@ def test_pf1_12_every_file_prove_writes_is_utf_8(world: World, tmp_path: Path) -
     for argv, code in (
         (["--store", str(world.store), "report", world.a, world.b, "--x", "task_id", "--y", "tool_fail_rate", "--title", title, "--out", str(pair_out)], 0),
         (["--store", str(world.store), "report", world.a, "--x", "task_id", "--y", "tool_fail_rate", "--event", "violated", "--title", title, "--out", str(run_out)], 0),
-        # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+        # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
         (["--store", str(store), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout", "--yes", "--max-mde", MAX_MDE], 0),
         (["--store", str(world.paired_store), "paired", "--declaration", str(world.folders["decl"]), "--out", str(tmp_path / "paired")], 0),
     ):
@@ -1363,7 +1360,7 @@ def test_pf1_13_every_sweep_prints_its_plan_first_and_a_finished_one_one_closing
 
 def test_pf1_13_a_stdin_that_is_not_a_terminal_without_yes_prints_the_plan_then_refuses(world: World, tmp_path: Path) -> None:
     store = tmp_path / "store"
-    # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+    # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
     done = subprocess.run(
         [sys.executable, "-m", "poisson_prove", "--store", str(store), "sweep", str(world.folders["spec"]), "--target", f"{MOCK}:rollout",
          "--max-mde", MAX_MDE],
@@ -1383,7 +1380,7 @@ def test_pf1_13_on_modal_an_estimate_over_max_cost_is_refused_before_the_questio
         try:
             os.write(controller, answer)
             return subprocess.run(
-                # PF4 re-freeze (PF4.30, reading R33): the 120-replicate design accepts MAX_MDE.
+                # PF4 re-freeze (PF4.30): the 120-replicate design accepts MAX_MDE.
                 [sys.executable, "-m", "poisson_prove", "--store", str(tmp_path / "store"), "sweep", str(world.folders["spec"]),
                  "--target", f"{MOCK}:rollout", "--backend", "modal", "--max-cost", max_cost, "--est-seconds", "36000", "--max-mde", MAX_MDE],
                 cwd=tmp_path, env=child_env(world.home, world.folders["fake_modal"]), stdin=terminal,
@@ -1421,7 +1418,7 @@ def test_pf1_13_burlas_cap_refusal_keeps_the_plan_on_screen(world: World, tmp_pa
         encoding="utf-8",
     )
     store = tmp_path / "store"
-    # PF4 re-freeze (PF4.49, reading R17): the 2-replicate design passed --max-mde 0.99; it moves to 1.
+    # PF4 re-freeze (PF4.49): the 2-replicate design passed --max-mde 0.99; it moves to 1.
     r = prove(
         ["--store", str(store), "sweep", str(spec), "--target", "bu_targets.plain:rollout", "--backend", "burla", "--max-mde", "1", "--yes"],
         home=world.home, cwd=tmp_path, paths=(BU_TARGETS, world.folders["fake_burla"]),
@@ -1448,7 +1445,7 @@ def test_pf1_13_a_sweep_stopped_by_max_rollouts_exits_3_with_what_was_kept_and_t
     stopped = [line for line in r.out.splitlines() if line.startswith("stopped  ")]
     assert len(stopped) == 1 and f"{kept:,}" in stopped[0], r.out
     assert not any(line.startswith("done  ") for line in r.out.splitlines()), r.out
-    # PF3 (spec section 5.3, reading e; rule R4): the next line resumes the sweep as it was typed. This
+    # PF3: the next line resumes the sweep as it was typed. This
     # sweep typed a spec path and --target, so the line carries the spec before --resume and the --target typed.
     spec, target = r.argv[r.argv.index("sweep") + 1], r.argv[r.argv.index("--target") + 1]
     nexts = [line for line in r.out.splitlines() + r.err.splitlines() if line.startswith("  next: poisson-prove sweep ")]
@@ -1484,7 +1481,7 @@ def test_pf1_13_a_sweep_in_which_every_rollout_timed_out_exits_3_naming_timeout_
     spec = tmp_path / "two.toml"
     spec.write_text(TRIPLE_SPEC.replace('["a", "b", "c"]', '["a", "b"]').replace("replicates = 3", "replicates = 2"), encoding="utf-8")
     store = tmp_path / "store"
-    # PF4 re-freeze (PF4.49, reading R17): the 2-replicate design passed --max-mde 0.99; it moves to 1.
+    # PF4 re-freeze (PF4.49): the 2-replicate design passed --max-mde 0.99; it moves to 1.
     r = prove(
         ["--store", str(store), "sweep", str(spec), "--target", "pf1_targets:sleeps", "--yes", "--max-mde", "1", "--episode-timeout", "0.5"],
         home=world.home, cwd=tmp_path, paths=(world.folders["targets"],),
@@ -1519,7 +1516,7 @@ def test_pf1_14_check_and_the_cap_check_say_their_verdict_first_and_a_check_that
 # ---------- PF1.15 the first stdout line and every stderr line ----------
 
 
-#: The invocations whose first stdout line PF1 gives words to (R1).
+#: The invocations whose first stdout line PF1 gives words to.
 PF1_WORDS = (
     "sweep-dry-run", "sweep-yes", "sweep-max-rollouts", "sweep-all-errored", "refuse-underpowered",
     "refuse-stdin-not-a-terminal", "refuse-over-max-cost", "check-passed", "check-failed",

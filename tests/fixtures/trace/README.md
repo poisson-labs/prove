@@ -26,7 +26,7 @@ trace schema reads. Nothing here was captured live: no network, no API key.
   counted attempts; a `gen_ai.operation.name` conflicting with a vendor kind; one
   `traceloop.span.kind`; one unrecognised operation spelled with case and whitespace; and one status
   of each of `OK`, `UNSET`, `ERROR`. Used by `tests/test_a8a_span_schema.py` (P8-4, P8-5, P8-6,
-  P8-14, P8-16). **A8b does not extend this file**, though its spec asked for that: A8a's frozen `loop_spans()` helper asserts
+  P8-14, P8-16). **A8b does not extend this file**, though it was first planned to: A8a's frozen `loop_spans()` helper asserts
   `len(tr.spans) == 16`, so a seventeenth span would turn five A8a tests red. A8b's over-limit spans
   are in `otlp_cut.json` below; every span here is A8a's.
 - `otlp_cut.json` — **A8b's fixture**, a flat span list of two spans built at the default limit of 8192 bytes by

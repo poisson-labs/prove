@@ -1,62 +1,61 @@
 """PF12, the static UI: the pages ``poisson-prove ui`` and every writing verb build in the store (the code suite).
 
-Written from the front-door spec's section 18.3 (ruling Q65), section 16.3 items 5 and 6, its
-invariants PF12.6 to PF12.11 and PF12.13, the design session's ``views.md`` and the look file's
-static-UI section (rulings Y1 to Y30 of 2026-10-23, all as recommended), and the test standard
-(section 10.6). ``tests/test_pf12_artifacts.py`` holds the format. The build is written against these
+Written from the static UI's design: its invariants PF12.6 to PF12.11 and PF12.13, the views'
+design in ``views.md``, the look file's static-UI section, and the project's test standard.
+``tests/test_pf12_artifacts.py`` holds the format. The build is written against these
 files and does not edit them.
 
-**How a page is read.** No browser in the code suite: each page is parsed as HTML (Q65). A page is
-the rendering of exactly one core view (section 17.1's ``view(store, address)``, the address being
-the page's path inside the UI, Y17), and says which fact is which, so a test can hold every page to
-its view without knowing the view's field names (Y2 leaves those to PF5 and PF12):
+**How a page is read.** No browser in the code suite: each page is parsed as HTML. A page is
+the rendering of exactly one core view (the core's ``view(store, address)``, the address being
+the page's path inside the UI), and says which fact is which, so a test can hold every page to
+its view without knowing the view's field names (those are left to PF5 and PF12):
 
-- R19 Every element that shows a fact carries ``data-fact``, the JSON pointer of that fact in the
+- Every element that shows a fact carries ``data-fact``, the JSON pointer of that fact in the
   view's document (``/rows/3/delta``), and ``data-value``, the fact's value as JSON; its text is the
   fact as rule 10 prints it. Every scalar of the view is shown by at least one such element, and no
   element names a pointer the view does not have; a chart's drawing, a view string named ``svg``
   (``views.md``'s chart field), is shown by the SVG itself, inline in the page.
-- R20 The renderer computes nothing: every digit a reader sees on a page, outside links, charts, the
+- The renderer computes nothing: every digit a reader sees on a page, outside links, charts, the
   header, the navigation and the footer, sits inside an element that carries ``data-fact``.
-- R21 The episodes view has one page per run of a saved comparison, event of that comparison and
+- The episodes view has one page per run of a saved comparison, event of that comparison and
   condition it compared (``runs/<run>/episodes/<event>/<condition hash>.html``), empty pages included,
   as ``views.md`` draws them (2 runs, 2 events, 9 conditions: 36 pages); a run in no saved comparison
   has no episodes pages, so a store of many runs does not grow a page per outcome and condition.
-- R22 A saved check has no page in v0, and the runs view lists the saved comparisons only (Y6).
-- R25 "On the same line" in a page is the same block: the nearest ``p``, ``li``, ``tr``, ``dd``, ``dt``,
+- A saved check has no page in v0, and the runs view lists the saved comparisons only.
+- "On the same line" in a page is the same block: the nearest ``p``, ``li``, ``tr``, ``dd``, ``dt``,
   ``h1``–``h6``, ``caption`` or ``figcaption`` around the words.
-- R26 A page carries no build time and nothing of where the store is: the same records give the same
+- A page carries no build time and nothing of where the store is: the same records give the same
   page bytes wherever the store sits.
-- R28 A page names the store by its folder's name only.
-- R29 A chart is an SVG whose first two children are ``title`` and ``desc`` (its text alternative),
+- A page names the store by its folder's name only.
+- A chart is an SVG whose first two children are ``title`` and ``desc`` (its text alternative),
   with ``role="img"`` and ``aria-labelledby`` naming both; it holds no script, no foreign object and no
   reference outside itself; its colours are the look's chart tokens (as ``var(--…)`` or their light
   and dark values), never the four meanings'.
-- R30 A number in a chart's text has at most three decimals, or is ``2.3e-08``-shaped.
-- R31 A page that shows a verdict shows it first: the first fact in ``main`` is the verdict word.
-- R18 Every file in ``.poisson/ui/`` is a page (``.html``) or a fixed bundle file, byte for byte one
+- A number in a chart's text has at most three decimals, or is ``2.3e-08``-shaped.
+- A page that shows a verdict shows it first: the first fact in ``main`` is the verdict word.
+- Every file in ``.poisson/ui/`` is a page (``.html``) or a fixed bundle file, byte for byte one
   file of the same name in the package (so in the wheel); the bundle holds at least ``style.css`` and
   ``ui.js``, and its style sheets set the look's twelve tokens for light and dark.
-- R17 ``ui`` prints ``ok  dashboard at <the file URI of the store's .poisson/ui/index.html>``; its
+- ``ui`` prints ``ok  dashboard at <the file URI of the store's .poisson/ui/index.html>``; its
   ``--json`` (``poisson-prove.ui/1``) carries ``location``, the same URI; on a store folder with no runs
   it builds the empty runs view, and on a missing store it refuses as ``runs`` does.
-- R34 An interrupted build: after Ctrl-C the previous pages stand byte for byte; after a kill they
+- An interrupted build: after Ctrl-C the previous pages stand byte for byte; after a kill they
   stand or there are none, never a mix, and the next build is whole.
-- R42 The views' field names are frozen here, as ``views.md`` gives them (``VIEW_FIELDS``): PF5's freeze
-  leaves them to PF12 and PF6 (Y2). A condition view's per-event blocks are a list ``events``, each
-  naming its ``event``; its ``test`` also carries ``q_holm`` (section 18.3 item 4: Holm's adjusted p).
-- R40 "Every writing verb refreshes the pages" refreshes the UI a store has: a store with no
+- The views' field names are frozen here, as ``views.md`` gives them (``VIEW_FIELDS``): PF5's freeze
+  leaves them to PF12 and PF6. A condition view's per-event blocks are a list ``events``, each
+  naming its ``event``; its ``test`` also carries ``q_holm`` (Holm's adjusted p).
+- "Every writing verb refreshes the pages" refreshes the UI a store has: a store with no
   ``.poisson/ui/`` gets none from ``sweep``, a save, ``report`` or ``serve``; ``ui`` (or the terminal
   app, before it shows a link) builds the first. So the frozen tests that run ``report`` and ``serve``
   on the generated lattice store and the committed fixtures do not rebuild a UI each time.
-- R23 Snapshots (PF12.13): seven pages of the 0.0.1 quickstart pair (R33: the committed fixture, so
+- Snapshots (PF12.13): seven pages of the 0.0.1 quickstart pair (the committed fixture, so
   the same records every time), compared as text after the build's times, the running version and the
   comparison's id are replaced. A page is one file for both themes (it follows the system's), so light
   and dark are held by the style sheets' tokens here and by the browser check below.
-- R24 The browser check (marked ``slow``): Playwright's Chromium, Firefox and WebKit (Safari's engine)
+- The browser check (marked ``slow``): Playwright's Chromium, Firefox and WebKit (Safari's engine)
   open the snapshot pages from ``file://`` at 390 and 1280 px in light and dark; a missing engine fails
   with the line that installs it.
-- R37 Each page's ``Content-Security-Policy`` meta comes before any style or script, sets
+- Each page's ``Content-Security-Policy`` meta comes before any style or script, sets
   ``default-src 'none'``, allows scripts from ``'self'`` only, styles from ``'self'`` and inline (the
   charts' own), images from ``'self'`` and ``data:``, and names no host.
 
@@ -106,7 +105,7 @@ def _ui(store: Path) -> Path:
     return store / ".poisson" / "ui"
 
 
-# ---------- the seven views and their addresses (Y17) ----------
+# ---------- the seven views and their addresses ----------
 
 HEX16 = r"[0-9a-f]{16}"
 VIEW_ADDRESSES = {
@@ -143,8 +142,8 @@ def _compared_runs(store: Path, cid: str) -> list[str]:
 
 def expected_pages(store: Path) -> set[str]:
     """Every page the UI holds for a store: the runs view, a run page per run, and per saved
-    comparison its page, a page per condition, its could-not-detect page, its charts (Y17, Y19) and
-    its runs' episodes pages for its events and conditions (R21)."""
+    comparison its page, a page per condition, its could-not-detect page, its charts and
+    its runs' episodes pages for its events and conditions."""
     from poisson_prove.store import Store
 
     pages = {"index.html"} | {f"runs/{run}.html" for run in Store(store).runs()}
@@ -182,8 +181,8 @@ def _world(name: str, request: pytest.FixtureRequest) -> tuple[Path, dict[str, A
 
 @pytest.mark.parametrize("world", WORLDS)
 def test_pf12_7_the_pages_are_exactly_the_seven_views_and_all_reachable_from_the_runs_view(world: str, request: pytest.FixtureRequest) -> None:
-    """Section 18.3: the views are exactly its seven, at the addresses ``views.md`` gives them (Y17),
-    one page each where the store has something to show (R21, R22); every comparison has its
+    """The views are exactly the seven, at the addresses ``views.md`` gives them,
+    one page each where the store has something to show; every comparison has its
     could-not-detect view; and every page is reached by following links from ``index.html``."""
     store = _store(_world(world, request))
     ui = _ui(store)
@@ -221,14 +220,14 @@ def _links(page: Page, ui: Path) -> set[str]:
 
 @pytest.mark.parametrize("world", WORLDS)
 def test_pf12_7_the_pages_hold_the_designs_anchors_embeds_and_footer(world: str, request: pytest.FixtureRequest) -> None:
-    """The design's rulings that pages show by structure: the runs view links every saved comparison
-    (Y6); a comparison page has the anchors ``views.md`` gives (Y17) and embeds its six charts, each
-    linking to its page (Y19), and links each condition and its could-not-detect page; a condition page
-    has a block per event (Y18) and links both runs' episodes for it and its incidence charts; an
+    """What the design asks pages to show by structure: the runs view links every saved comparison;
+    a comparison page has the anchors ``views.md`` gives and embeds its six charts, each
+    linking to its page, and links each condition and its could-not-detect page; a condition page
+    has a block per event and links both runs' episodes for it and its incidence charts; an
     episodes page shows each episode's ``rollout(cfg, seed=…)`` and names ``poisson-prove inspect``
-    for the import line (Y11); the differences, limits and heatmap charts have a row for every
-    condition (Y12: an interval on every row); every page's footer names its address and says nothing
-    was loaded from the network (Y30)."""
+    for the import line; the differences, limits and heatmap charts have a row for every
+    condition (an interval on every row); every page's footer names its address and says nothing
+    was loaded from the network."""
     store = _store(_world(world, request))
     ui = _ui(store)
     index = read_page(ui, ui / "index.html")
@@ -280,12 +279,12 @@ def _pages_by_kind(request: pytest.FixtureRequest, kind: str) -> list[tuple[Path
     return out
 
 
-#: The elements a reader sees whose digits name addresses and the tool, not facts (R20).
+#: The elements a reader sees whose digits name addresses and the tool, not facts.
 NOT_FACTS = frozenset({"a", "svg", "header", "nav", "footer", "head", "script", "style", "title"})
 
 
 def _loose_digits(node: Node, inside_fact: bool = False) -> list[str]:
-    """Text a reader sees that holds a digit outside every element carrying ``data-fact`` (R20)."""
+    """Text a reader sees that holds a digit outside every element carrying ``data-fact``."""
     if node.tag in NOT_FACTS:
         return []
     inside_fact = inside_fact or "data-fact" in node.attrs
@@ -304,7 +303,7 @@ def test_pf12_7_each_page_holds_every_fact_of_its_core_view(kind: str, request: 
     """Every page is its core view, rendered: each scalar of ``view(store, address)`` is shown by an
     element naming its pointer and value, the text agreeing with the number; no element names a fact
     the view lacks; and every digit a reader sees outside links, charts and the frame is a fact's
-    (R19, R20; section 17.1: renderers format the facts and never recompute them)."""
+    (renderers format the facts and never recompute them)."""
     for store, page in _pages_by_kind(request, kind):
         view = view_document(store, page.address)
         shown: dict[str, list[Node]] = {}
@@ -331,8 +330,8 @@ def test_pf12_7_each_page_holds_every_fact_of_its_core_view(kind: str, request: 
         assert loose == [], (page.address, loose[:5])
 
 
-#: The views' field names, frozen here from ``views.md`` (the design session's proposals, which Y2 left
-#: to PF5 and PF12; PF5's freeze leaves them to PF12 and PF6: reading R42). A view may hold more; it
+#: The views' field names, frozen here from ``views.md`` (the design's proposals, left
+#: to PF5 and PF12; PF5's freeze leaves them to PF12 and PF6). A view may hold more; it
 #: holds at least these. ``*`` is every item of a list, or every value of a mapping keyed by data.
 VIEW_FIELDS: dict[str, dict[str, set[str]]] = {
     "runs": {
@@ -393,12 +392,12 @@ def _at(document: Any, path: str) -> list[Any]:
 
 @pytest.mark.parametrize("kind", list(VIEW_ADDRESSES))
 def test_pf12_7_each_view_carries_the_fields_views_md_names_and_the_results_numbers(kind: str, request: pytest.FixtureRequest) -> None:
-    """R42: each core view holds the fields ``views.md`` gives it (at least), so the terminal app (PF6)
+    """Each core view holds the fields ``views.md`` gives it (at least), so the terminal app (PF6)
     and the next stage's server read the same object; and the numbers in it are the result's: a
     comparison's rows and a condition's blocks are its cells' (p, q, Holm's p, the change, its interval
     and level, both limits, the shares and their bounds), the could-not-detect rows are exactly the
-    unchanged rows with the could-not-tell rows first (Y20), the runs view lists runs newest first
-    (section 18.3 item 1) and a run's shares are its Wilson intervals at the recorded level."""
+    unchanged rows with the could-not-tell rows first, the runs view lists runs newest first
+    and a run's shares are its Wilson intervals at the recorded level."""
     from poisson_prove import stats
     from poisson_prove.store import Store
 
@@ -447,7 +446,7 @@ def test_pf12_7_each_view_carries_the_fields_views_md_names_and_the_results_numb
             unchanged = {key for key, c in cells.items() if c["verdict"] == "unchanged"}
             assert {(r["event"], config_hash_of(r["config"])) for r in view["rows"]} == unchanged, page.address
             tells = [bool(r["could_tell"]) for r in view["rows"]]
-            assert tells == sorted(tells), (page.address, tells)  # could-not-tell rows first (Y20)
+            assert tells == sorted(tells), (page.address, tells)  # could-not-tell rows first
 
 
 def _level(level: float) -> str:
@@ -563,9 +562,9 @@ VERDICT_FACTS = [
 
 @pytest.mark.parametrize("pair, kinds, what", VERDICT_FACTS, ids=[c[0] for c in VERDICT_FACTS])
 def test_pf12_7_the_verdict_facts_reach_every_page_that_shows_the_verdict(pair: str, kinds: tuple[str, ...], what: str, old_world: Any, stats_world: Any) -> None:
-    """What section 18.3 lists for the comparison view, from PF4's build: the Holm-based word first
-    (R31), the fragility, ``no significant change`` always with its verdict limit on the same line
-    (PF4.40, R25), the peeking caveat (PF4.39), the errored-episodes warning (PF4.46) and log-rank as
+    """What the comparison view shows, from PF4's build: the Holm-based word first,
+    the fragility, ``no significant change`` always with its verdict limit on the same line
+    (PF4.40), the peeking caveat (PF4.39), the errored-episodes warning (PF4.46) and log-rank as
     the cause-specific hazard with its shifted outcomes (PF4.41), on every page that shows them."""
     if pair == "quickstart":
         store, cid = _store(old_world), old_world[1]["comparison"]
@@ -633,7 +632,7 @@ def test_pf12_8_nothing_loads_from_the_network_and_every_link_is_relative_and_re
     """No ``src``, ``href``, ``url()`` or import names an ``http://`` or ``https://`` address, a
     protocol-relative ``//`` one or an absolute path; no page has an inline script or an ``on…``
     handler; the script fetches nothing; every font and script is the bundle's; every link inside the
-    UI is relative and lands on a page or anchor that exists (section 16.3 item 6). The artifacts'
+    UI is relative and lands on a page or anchor that exists. The artifacts'
     SVG files reference nothing outside themselves. (SVG's ``xmlns`` and text a page shows are not
     loads.)"""
     store = _store(_world(world, request))
@@ -700,8 +699,8 @@ def _csp(page: Page) -> dict[str, list[str]]:
 
 @pytest.mark.parametrize("world", WORLDS)
 def test_pf12_8_every_page_carries_a_policy_that_allows_only_the_bundle(world: str, request: pytest.FixtureRequest) -> None:
-    """Y16: one ``Content-Security-Policy`` meta on every page, before any style or script, allowing
-    only the bundle's own files (R37): ``default-src 'none'``; scripts ``'self'``; styles ``'self'`` and
+    """One ``Content-Security-Policy`` meta on every page, before any style or script, allowing
+    only the bundle's own files: ``default-src 'none'``; scripts ``'self'``; styles ``'self'`` and
     inline; images ``'self'`` and ``data:``; no host, no scheme but ``data:``, no ``'unsafe-eval'``."""
     ui = _ui(_store(_world(world, request)))
     allowed = {"script-src": {"'self'"}, "style-src": {"'self'", "'unsafe-inline'"}, "img-src": {"'self'", "data:"}, "font-src": {"'self'"}}
@@ -751,7 +750,7 @@ def _forbidden(store: Path, world: dict[str, Any]) -> dict[str, str]:
 def _captured(store: Path) -> set[str]:
     """The content a run captured: every string of its stored observations (``trace_obs``) and of its
     spans' content attributes (``poisson_prove.trace``'s public ``CONTENT_KEYS``), eight characters
-    or more. No run here set ``content = true`` for a view, so none may show (section 18.3)."""
+    or more. No run here set ``content = true`` for a view, so none may show."""
     import pyarrow.parquet as pq
 
     from poisson_prove.trace import CONTENT_KEYS, OBSERVATION_KEYS
@@ -790,11 +789,11 @@ def _captured(store: Path) -> set[str]:
 
 @pytest.mark.parametrize("world", WORLDS)
 def test_pf12_9_no_page_or_artifact_holds_a_path_platform_python_build_import_path_or_key(world: str, request: pytest.FixtureRequest, tmp_path: Path) -> None:
-    """Section 18.3's never-list over every file under ``.poisson/`` (pages, bundle, descriptors,
+    """The never-list (no path, platform, Python build, import path or key) over every file under ``.poisson/`` (pages, bundle, descriptors,
     results, tables, charts) and over ``ui --json``, whose ``location`` is the one exempt field: it is
     the address a person opens, so it must say where the store is. Captured content too: the 0.0.1
     store's capture run stored a tool result, which no page shows. (The episodes page shows
-    ``rollout(cfg, seed=…)`` and names ``poisson-prove inspect`` for the import line: Y11.)"""
+    ``rollout(cfg, seed=…)`` and names ``poisson-prove inspect`` for the import line.)"""
     store_world = _world(world, request)
     store = _store(store_world)
     forbidden = _forbidden(store, store_world[1])
@@ -813,7 +812,7 @@ def test_pf12_9_no_page_or_artifact_holds_a_path_platform_python_build_import_pa
 
 def test_pf12_9_the_pages_do_not_depend_on_where_the_store_is(old_world: Any, tmp_path: Path) -> None:
     """The same records give the same page bytes wherever the store sits, and whether ``--store`` was
-    given as an absolute path or relative to the working folder (R26, R28)."""
+    given as an absolute path or relative to the working folder."""
     near = copy_store(_store(old_world), tmp_path / "a" / "prove-runs")
     far = copy_store(_store(old_world), tmp_path / "b" / "c" / "d" / "prove-runs")
     for root in (near, far):
@@ -850,10 +849,10 @@ def _chart_files(store: Path) -> list[Path]:
 
 @pytest.mark.parametrize("world", ["old", "stats"])
 def test_pf12_10_every_chart_is_proves_own_svg_with_a_title_a_text_alternative_and_its_data(world: str, request: pytest.FixtureRequest) -> None:
-    """Each chart is an SVG Prove drew (R29): ``title`` and ``desc`` first, ``role="img"`` and
-    ``aria-labelledby`` naming both, nothing outside itself, numbers per rule 10 (R30), the look's
-    chart tokens only (never the four meanings' colours, Y13); and its page shows it inline, the
-    artifact's own file, with its data as a table beside it (Y19)."""
+    """Each chart is an SVG Prove drew: ``title`` and ``desc`` first, ``role="img"`` and
+    ``aria-labelledby`` naming both, nothing outside itself, numbers per rule 10, the look's
+    chart tokens only (never the four meanings' colours); and its page shows it inline, the
+    artifact's own file, with its data as a table beside it."""
     store = _store(_world(world, request))
     tokens = look_tokens()
     allowed = {v for t in CHART_TOKENS for v in tokens[t]}
@@ -962,7 +961,7 @@ def _dark_blocks(css: str) -> tuple[str, str]:
 
 
 def test_pf12_10_the_bundle_sets_the_looks_tokens_for_light_and_dark_and_only_the_systems_fonts(old_world: Any) -> None:
-    """Y14 and Y15: the bundle's style sheets set each of the look's twelve colour tokens to its light
+    """The bundle's style sheets set each of the look's twelve colour tokens to its light
     value outside, and its dark value inside, a ``prefers-color-scheme: dark`` block (the pages follow the
     system's theme), and name no font but the system's."""
     css = "\n".join(p.read_text(encoding="utf-8") for p in _bundle_files(_ui(_store(old_world))) if p.suffix == ".css")
@@ -1009,7 +1008,7 @@ def _path_of(uri: str) -> Path:
 
 
 def test_pf12_6_ui_builds_the_dashboard_and_prints_where_it_is(old_world: Any, tmp_path: Path) -> None:
-    """``poisson-prove ui`` prints ``ok  dashboard at file://…/index.html`` (R17), the store's own
+    """``poisson-prove ui`` prints ``ok  dashboard at file://…/index.html``, the store's own
     index; ``--json`` carries the same address as ``location``; an empty store folder gets the empty
     runs view; a missing store is refused as ``runs`` refuses it, and nothing is made."""
     store = _store(old_world)
@@ -1035,7 +1034,7 @@ def test_pf12_6_ui_builds_the_dashboard_and_prints_where_it_is(old_world: Any, t
 
 def test_pf12_6_ui_open_calls_the_browser_opener_once_and_nothing_else_opens_it(old_world: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ui --open`` opens the dashboard's address in the browser once; ``ui`` without it, and every
-    other command, opens nothing (section 17.3: the core never opens a browser)."""
+    other command, opens nothing (the core never opens a browser)."""
     import webbrowser
 
     calls: list[tuple[str, tuple[Any, ...]]] = []
@@ -1067,7 +1066,7 @@ REFRESHING = ("sweep", "sweep --resume", "diff --save", "check --save", "report"
 def test_pf12_6_every_writing_verb_refreshes_the_pages_and_says_nothing_about_it(verb: str, has_ui: bool, stats_world: Any, tmp_path: Path) -> None:
     """A command that writes a run or saves an artifact rebuilds the store's UI, so its pages show what
     the store now holds; the pages are derived files, so the refresh prints nothing (the one exception to
-    rule 12). A store with no UI yet gets none from it: ``ui`` builds the first (reading R40)."""
+    rule 12). A store with no UI yet gets none from it: ``ui`` builds the first."""
     from pf12_support import LOOSE, MOCK, SMALL_SPEC
 
     store = copy_store(_store(stats_world), tmp_path / "prove-runs")
@@ -1101,7 +1100,7 @@ def test_pf12_6_every_writing_verb_refreshes_the_pages_and_says_nothing_about_it
         return
     built = {p.relative_to(_ui(store)).as_posix() for p in pages_of(_ui(store))}
     assert built == expected_pages(store), sorted(built ^ expected_pages(store))[:10]
-    if verb != "check --save":  # a check has no page (R22); every other write changes a page at least
+    if verb != "check --save":  # a check has no page; every other write changes a page at least
         assert listing(_ui(store)) != before, verb
 
 
@@ -1122,7 +1121,7 @@ def _package_files() -> dict[str, list[bytes]]:
 
 
 def test_pf12_6_the_fixed_bundle_files_are_the_packages_bytes(old_world: Any) -> None:
-    """Every file of the UI that is not a page is copied from the package byte for byte (R18), at
+    """Every file of the UI that is not a page is copied from the package byte for byte, at
     least the style sheet and the script; the wheel check below reads the built wheel itself."""
     bundle = _bundle_files(_ui(_store(old_world)))
     names = {p.name for p in bundle}
@@ -1177,9 +1176,9 @@ sys.exit(cli.main(sys.argv[1:]))
 
 @pytest.mark.parametrize("how", ["ctrl-c", "killed"])
 def test_pf12_6_an_interrupted_build_leaves_the_previous_pages(how: str, old_world: Any, tmp_path: Path) -> None:
-    """Section 18.3: the pages are written beside and renamed in, so an interrupted build leaves the
+    """The pages are written beside and renamed in, so an interrupted build leaves the
     previous pages; after a kill, the previous pages or none, never a mix of two builds, and the next
-    build is whole (R34)."""
+    build is whole."""
     store = copy_store(_store(old_world), tmp_path / "prove-runs")
     index = _ui(store) / "index.html"
     index.write_text(index.read_text(encoding="utf-8").replace("</body>", "<!-- the previous build --></body>"), encoding="utf-8")
@@ -1209,12 +1208,12 @@ SNAPSHOT_PAGES = {
     "could-not-detect": "comparisons/{cid}/could-not-detect.html",
     "chart": "comparisons/{cid}/heatmap-timeout.html",
 }
-assert len(SNAPSHOT_PAGES) <= 8  # section 10.6: at most eight
+assert len(SNAPSHOT_PAGES) <= 8  # the test standard: at most eight
 
 
 @pytest.mark.parametrize("name", list(SNAPSHOT_PAGES))
 def test_pf12_13_snapshot(name: str, old_world: Any, request: pytest.FixtureRequest) -> None:
-    """One page of the 0.0.1 quickstart pair, whole, against its snapshot (R23, R33); rewritten only by
+    """One page of the 0.0.1 quickstart pair, whole, against its snapshot; rewritten only by
     the documented command, and reviewed in the pull request."""
     store, cid = _store(old_world), old_world[1]["comparison"]
     address = SNAPSHOT_PAGES[name].format(cid=cid)
@@ -1230,7 +1229,7 @@ def test_pf12_13_snapshot(name: str, old_world: Any, request: pytest.FixtureRequ
 
 def test_pf12_13_the_snapshots_are_few_and_written_only_by_the_documented_command() -> None:
     """At most eight, exactly the pages above, and ``CONTRIBUTING.md`` names the one command that
-    rewrites them (section 10.6)."""
+    rewrites them."""
     assert sorted(p.name for p in SNAPSHOTS.iterdir()) == sorted(f"{n}.html" for n in SNAPSHOT_PAGES), sorted(p.name for p in SNAPSHOTS.iterdir()) if SNAPSHOTS.exists() else None
     contributing = ROOT / "CONTRIBUTING.md"
     assert contributing.is_file() and SNAPSHOT_COMMAND in contributing.read_text(encoding="utf-8")
@@ -1263,8 +1262,8 @@ def _rgb(value: str) -> str:
 @pytest.mark.slow
 @pytest.mark.parametrize("engine", ENGINES)
 def test_pf12_8_the_pages_open_offline_in_each_browser_without_sideways_scroll(engine: str, old_world: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Y16 and the render check: each snapshot page, opened from ``file://`` in Chromium, Firefox and
-    WebKit (R24), light and dark, 390 and 1280 px wide, requests nothing but ``file:`` URLs, logs no
+    """The render check: each snapshot page, opened from ``file://`` in Chromium, Firefox and
+    WebKit, light and dark, 390 and 1280 px wide, requests nothing but ``file:`` URLs, logs no
     error (a policy violation is one), never scrolls sideways, takes the look's background for its
     theme, shows every fact, and shows the same facts with the script off (the script only sorts and
     filters)."""

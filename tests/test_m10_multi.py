@@ -1,7 +1,7 @@
-"""M10 multi-event CLI frozen tests, generated from section 4 of the M10 multi-event amendment
-before the CLI is amended.
+"""M10 multi-event CLI frozen tests, written before the CLI was amended to report more than one
+event.
 
-Every test drives ``proofload.cli.main(argv, stdout=, stderr=, stdin=)`` in-process with
+Every test drives ``poisson_prove.cli.main(argv, stdout=, stderr=, stdin=)`` in-process with
 ``StringIO`` streams, as the S10 frozen tests do. Stores live under ``tmp_path``; the generated
 lattice pair (``tests/lattice.py``) is read in place and only ``--out`` directories are written.
 
@@ -11,7 +11,7 @@ has worse cells in ``timeout`` only, and carries a trade line; that is the pair 
 C7, C9-C13 and C17 read. C6 does not rely on it: its pair is synthetic, with the worse cell
 found by searching counts.
 
-Reading notes for the build:
+Reading notes:
 
 - C11 asserts the flag reaches ``ReportSpec.forest`` by wrapping ``cli.build_multi_report``
   (the name must be bound in ``cli``, as ``run_modal`` is for I7) and reading the spec it is
@@ -24,18 +24,18 @@ Reading notes for the build:
   field on a real run; the manifest is therefore the modal backend's own, not one the test
   writes.
 
-Deliberately absent, reported to the spec author rather than adapted (see the session report):
+Deliberately absent, rather than adapted:
 
 - C1's JSON clause (the fixture's count as ``n_safer`` at the top level). ``MultiDiffResult.to_json()``
-  carries per-event counts under ``by_event`` and section 3 prints ``to_json()``; a top-level
-  ``n_safer`` would need the one-event branch section 8 forbids. The amended I9 asserts the count
+  carries per-event counts under ``by_event`` and the CLI prints ``to_json()``; a top-level
+  ``n_safer`` would need a one-event branch the multi-event output does not have. The amended I9 asserts the count
   where ``to_json()`` puts it.
 - C3. Seven distinct outcomes infer six events, which ``infer_events`` allows (S11 A13 pins the
   six-event ceiling as inclusive), so a seven-outcome frame cannot fail inference as written.
 - C17's second clause. The third quickstart command carries ``--event violated``, a one-event
   call, which cannot show both events or a trade line. The three commands are asserted
   unchanged; the two-event clause is not.
-- ``report RUN`` with ``--event`` omitted. Section 3 does not say where a single run's event
+- ``report RUN`` with ``--event`` omitted. Nothing fixes where a single run's event
   set comes from, so every single-run test passes ``--event`` explicitly.
 """
 
@@ -73,10 +73,10 @@ from conftest import quickstart_design
 
 ROOT = Path(__file__).resolve().parents[1]
 LATTICE_ROOT = lattice.root()
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
 # so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
@@ -152,7 +152,7 @@ def run_ids(store: Path) -> set[str]:
 
 
 def run_id_of(r: Result, store: Path, before: set[str]) -> str:
-    # A sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3), so the
+    # A sweep now ends with a verdict line, not 'run_id: <id>', so the
     # new run is the one run id the store gained during the sweep.
     assert r.lines, r.text
     added = run_ids(store) - before
@@ -490,7 +490,7 @@ def fake_run_modal(
 def modal_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
     # A missing modal package is now refused before the plan, so modal must import here.
     monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
-    # PF5 (spec section 17; PF5.7): the face runs no backend; the core calls the Modal runner, so
+    # PF5 (PF5.7): the face runs no backend; the core calls the Modal runner, so
     # the stand-in replaces it where it is defined, which the core reads when it runs a plan.
     monkeypatch.setattr(importlib.import_module("poisson_prove.executor_modal"), "run_modal", fake_run_modal)
 
@@ -521,7 +521,7 @@ def run_report_argv(pair: MockPair, out: Path, *extra: str) -> list[str]:
 
 
 def test_c1_single_event_diff_headline_reads_twenty_two_lower_zero_higher_fisher() -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
     r = run_cli(lattice_argv("diff", "--event", lattice.EVENT, "--method", "fisher_bh"))
     assert r.code == 0, r.text
@@ -538,7 +538,7 @@ def test_c1_single_event_diff_headline_reads_twenty_two_lower_zero_higher_fisher
 def test_c2_no_event_prints_inference_line_first_then_a_headline_naming_both_events(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "diff"))
     assert r.code == 0, r.text
-    # PF2 (spec section 4.3): diff now opens with a verdict block that ends at the first blank
+    # PF2: diff now opens with a verdict block that ends at the first blank
     # line; the inference line is the first line of the report after it.
     verdict, _, report = r.out.partition("\n\n")
     assert verdict and not verdict.startswith(INFERENCE_MARKER), r.out
@@ -568,7 +568,7 @@ def test_c2_explicit_event_prints_one_event_and_no_inference_line(pair: MockPair
 
 
 def test_c4_repeated_events_equal_inference_with_inferred_false(pair: MockPair) -> None:
-    # diff's --format json is now --json (spec section 5.3).
+    # diff's --format json is now --json.
     inferred = run_cli(pair_argv(pair, "diff", "--json"))
     explicit = run_cli(pair_argv(pair, "diff", "--event", "violated", "--event", "timeout", "--json"))
     assert inferred.code == 0 and explicit.code == 0, inferred.text + explicit.text
@@ -594,11 +594,11 @@ def test_c4_repeated_events_print_no_inference_line(pair: MockPair) -> None:
 
 def test_c5_check_without_event_exits_two_and_lists_the_events_the_runs_carry(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "check"))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert_clean_refusal(r, 1)
     assert "requires --event" in r.err, r.text
     assert "violated" in r.err and "timeout" in r.err, r.err
-    # check's verdict is now a first line starting passed or failed (spec section 5.3); none is printed.
+    # check's verdict is now a first line starting passed or failed; none is printed.
     assert not [line for line in r.text.splitlines() if line.startswith(("passed", "failed"))], r.text
 
 
@@ -612,7 +612,7 @@ def test_c6_worse_counts_are_a_real_swing() -> None:
 
 
 def test_c6_check_fails_when_any_named_event_has_a_worse_cell(worse_pair: Path) -> None:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the hand-built pair's two manifests carry one salt, so the
+    # PF3: the hand-built pair's two manifests carry one salt, so the
     # default is now the paired test; the worse cell this gate fails on is the unpaired test's, named.
     # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
     # declare none; --fail-on higher is the same gate ("fail when the rate rose").
@@ -620,7 +620,7 @@ def test_c6_check_fails_when_any_named_event_has_a_worse_cell(worse_pair: Path) 
         ["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--event", "timeout",
          "--method", "fisher_bh", "--fail-on", "higher"]
     )
-    # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
+    # A failed check exits 4 and says failed on its first line.
     assert_clean_refusal(r, 4)
     assert r.lines[0].startswith("failed") and not [x for x in r.lines if x.startswith("passed")], r.out
 
@@ -629,7 +629,7 @@ def test_c6_check_on_the_worse_event_alone_fails(worse_pair: Path) -> None:
     # PF4 (PF4.20): check's default gate is refused on an event of unknown kind, and these runs
     # declare none; --fail-on higher is the same gate ("fail when the rate rose").
     r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--fail-on", "higher"])
-    # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
+    # A failed check exits 4 and says failed on its first line.
     assert_clean_refusal(r, 4)
     assert r.lines[0].startswith("failed") and not [x for x in r.lines if x.startswith("passed")], r.out
     # PF4 (PF4.20): with the kind unknown the count reads 0 lower, 1 higher (was 0 safer, 1 worse).
@@ -641,7 +641,7 @@ def test_c6_check_on_the_untouched_event_alone_passes(worse_pair: Path) -> None:
     # declare none; --fail-on higher is the same gate ("fail when the rate rose").
     r = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout", "--fail-on", "higher"])
     assert r.code == 0, r.text
-    # A passed check says passed on its first line (spec section 5.3).
+    # A passed check says passed on its first line.
     assert r.lines[0].startswith("passed") and not [x for x in r.lines if x.startswith("failed")], r.out
     # PF4 (PF4.20): with the kind unknown the count reads 0 lower, 0 higher (was 0 safer, 0 worse).
     assert "timeout: 0 lower, 0 higher" in r.out, r.out
@@ -675,7 +675,7 @@ def test_c7_inferred_report_writes_the_same_three_files_and_one_panel_per_event(
 
 
 def lattice_report(tmp_path: Path) -> str:
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+    # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; the report C8 reads is the unpaired test's, named.
     out = tmp_path / "lattice-report"
     r = run_cli(lattice_argv("report", "--event", lattice.EVENT, "--x", lattice.Y, "--y", lattice.X, "--out", str(out), "--method", "fisher_bh"))
@@ -691,8 +691,8 @@ def test_c8_single_event_report_has_the_two_line_honesty_block(tmp_path: Path) -
 
 
 def test_c8_single_event_worst_cells_use_the_multi_tiebreak(tmp_path: Path) -> None:
-    # diff's --format json is now --json (spec section 5.3).
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the lattice's runs share a salt, so the default is now the paired
+    # diff's --format json is now --json.
+    # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; the cells ordered here are the unpaired test's, named.
     j = run_cli(lattice_argv("diff", "--event", lattice.EVENT, "--json", "--method", "fisher_bh"))
     assert j.code == 0, j.text
@@ -729,7 +729,7 @@ def test_c9_single_run_report_writes_three_files_with_one_panel_per_event(pair: 
     assert len(panels) == 2 and set(panels) == MOCK_EVENTS, panels
     md = (out / "report.md").read_text()
     assert not re.search(r"\bdelta\b", md), md
-    # PF4 re-freeze (PF4.30, PF4.48a, section 8.3): the header's design limit names the test's level
+    # PF4 re-freeze (PF4.30, PF4.48a): the header's design limit names the test's level
     # ("q 0.05 over 9 tests"); no other line of a single-run report carries a q.
     design = [line for line in md.splitlines() if line.startswith("design limit ")]
     assert len(design) == 1, md
@@ -759,7 +759,7 @@ def test_c9_single_run_report_defaults_to_proofload_report_run(pair: MockPair, t
 def test_c9_diff_only_flags_are_refused_by_name_on_a_single_run(pair: MockPair, tmp_path: Path, flag: tuple[str, str]) -> None:
     out = tmp_path / "refused"
     r = run_cli(run_report_argv(pair, out, *flag))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert_clean_refusal(r, 1)
     assert flag[0] in r.err, r.text
     assert not out.exists() or not any(out.iterdir())
@@ -844,7 +844,7 @@ def test_c12_receipt_has_a_bounded_body_a_scrolling_svg_and_wrapping_text(pair: 
     out = tmp_path / "receipt"
     r = run_cli(report_argv(pair, out))
     assert r.code == 0, r.text
-    # diff's --format json is now --json (spec section 5.3).
+    # diff's --format json is now --json.
     j = run_cli(pair_argv(pair, "diff", "--json"))
     assert j.code == 0, j.text
     data = json.loads(j.out)
@@ -947,7 +947,7 @@ def test_c16_gate_pass_is_zero_and_gate_fail_is_one(worse_pair: Path) -> None:
     passed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "timeout", "--fail-on", "higher"])
     failed = run_cli(["--store", str(worse_pair), "check", "syn-a", "syn-b", "--event", "violated", "--fail-on", "higher"])
     assert passed.code == 0, passed.text
-    # A failed check exits 4 and says failed on its first line (spec section 5.2, 5.3).
+    # A failed check exits 4 and says failed on its first line.
     assert failed.code == 4 and "Traceback" not in failed.text, failed.text
     fixture = run_cli(lattice_argv("check", "--event", lattice.EVENT, "--fail-on", "any"))
     assert fixture.code == 4 and fixture.lines[0].startswith("failed"), fixture.text
@@ -955,7 +955,7 @@ def test_c16_gate_pass_is_zero_and_gate_fail_is_one(worse_pair: Path) -> None:
 
 def test_c16_check_without_event_is_a_two(pair: MockPair) -> None:
     r = run_cli(pair_argv(pair, "check"))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert_clean_refusal(r, 1)
     assert r.err.strip(), "expected a message on stderr"
 
@@ -967,7 +967,7 @@ def test_c16_check_without_event_is_a_two(pair: MockPair) -> None:
 )
 def test_c16_single_run_report_with_a_diff_only_flag_is_a_two(pair: MockPair, tmp_path: Path, extra: tuple[str, str]) -> None:
     r = run_cli(run_report_argv(pair, tmp_path / "out", *extra))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert_clean_refusal(r, 1)
     assert r.err.strip(), "expected a message on stderr"
 
@@ -985,7 +985,7 @@ def test_c16_report_with_three_positionals_is_a_two_naming_both_forms(pair: Mock
 
 def test_c16_unknown_run_is_still_a_two_and_missing_event_is_not_a_traceback(pair: MockPair) -> None:
     r = run_cli(["--store", str(pair.root), "diff", pair.a, "no-such-run"])
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert_clean_refusal(r, 1)
     assert "no-such-run" in r.text, r.text
 

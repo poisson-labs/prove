@@ -1,13 +1,13 @@
 """A8a frozen tests: invariants P8-1 to P8-6, P8-13 to P8-19, P8-21 and P8-22 of
-the A8a span-schema spec, section 4, written before the eight span fields, the seventh
+the A8a span schema, written before the eight span fields, the seventh
 trace key, ``OUTCOME_BY``, ``GATE``, ``ALIAS_MAP_VERSION``, the lifts, ``record()``'s three kwargs,
-``inspect``'s four columns and the two renames exist, against ``0ef8c3c`` -- T.4 prep's closing
-commit, A8a's base commit (the spec was written at ``afc1f3b`` and the probes first ran at
+``inspect``'s four columns and the two renames exist, against ``0ef8c3c``, A8a's base
+commit (the design was written at ``afc1f3b`` and the probes first ran at
 ``3bf4083``; ``src/`` and the nine updated test files are byte-identical across all three,
 measured by ``git diff --name-only``).
 
-**The register, built to as decided at the start (spec section 10):** Q1 (c) the alias map stays
-GenAI-only and one real OpenInference payload went through ``from_otel`` at step zero -- 21 keys
+**The register, built to as decided at the start:** Q1 (c) the alias map stays
+GenAI-only and one real OpenInference payload went through ``from_otel`` before the build -- 21 keys
 on a chat span, 0 aliased, 0 lifted, 10 routed as observation content, ``tokens`` and the model
 name lost for fields that already exist, none of A8a's eight carriers present; (b) is triggered
 for ``tokens`` and reported, not taken. Q2 (a) no ``graph.node.*`` identity entries in
@@ -17,16 +17,16 @@ the **binding**, not the literal (the string ``"1"`` appears 0 times in ``src/``
 measured). Q5 (a) two cells. Q6 (a) ``EVALUATOR`` is not a gate marker. Q7 (a)
 ``_ORIGINAL_ERROR_TYPE`` survives. Q8 (a) the four columns, after ``error``.
 
-**Two cells, and no invariant is cell-specific -- a result, not an assumption** (Master Action
-List section 18 standing rule 15, spec T7). pandas 2.3.3 and pandas 3.0.5, A22's recipe. Every
+**Two cells, and no invariant is cell-specific -- a result, not an assumption**.
+pandas 2.3.3 and pandas 3.0.5, A22's recipe. Every
 one of A8a's nine fields reaches disk inside the ``trace`` / ``trace_obs`` JSON columns, never as
 a Parquet column, so the pandas major cannot see any of them; the cell that could disagree is the
 mutation table, not the red set. Every test here is asserted in both cells: **42 tests,
 42 + 42 = 84 ids over the two cells against the frozen file's own 42.** Nullness is by identity in
-every clause (spec section 3.10): ``is None`` / ``is not None``, never ``pd.isna`` and never a bare
+every clause: ``is None`` / ``is not None``, never ``pd.isna`` and never a bare
 truth test.
 
-**Standing rule 12 -- the classified red set on the update commits (``9996ce3`` + ``268b64a``) with
+**The classified red set on the update commits (``9996ce3`` + ``268b64a``) with
 this file and its fixture added, measured on two pristine ``git archive`` copies before any source
 edit, venvs from the repo venv's freeze closure differing in exactly pandas, collection verified
 1941 = 1941 = 1941 and then 1983 with this file, baselines 1934 passed / 7 skipped / 0 failed in
@@ -47,7 +47,7 @@ nothing: every A8a field reaches disk inside a JSON string. The copies skip 7 wh
 the two extra being a real-suite pair that reads a gitignored data file; the other five are an
 example harness's not-installed pair and the three the repo always skips.
 
-**What step zero measured at ``3bf4083`` (spec section 7.4), so these frozen tests rest on runs and not
+**What was measured before the build at ``3bf4083``, so these frozen tests rest on runs and not
 on reads.** (1) The kind-ladder guard fires: adding ``openinference.span.kind`` to ``_LIFTED_KEYS``
 and nothing else turns nine tests in ``test_m12_kinds.py`` red (the seven T36 OpenInference
 parametrisations, the case-insensitive test, and T37's vendor-keys test); both vendor keys, thirteen.
@@ -58,11 +58,11 @@ via I15; ``test_m3_crash_trace.py:945`` K7; ``test_m12_trace.py:1512`` T30;
 three R6 tests) and **six negative sites, four of them unpaired and silently green**
 (``test_m10_cli.py:1072`` I16, ``test_m12_trace.py:1469`` T30, ``test_m3_timeout_trace.py:1224`` E9,
 and ``test_m3_timeout_trace.py:1214`` E9 -- reached through the ``step_columns`` helper and named in
-no document). The spec's "five" counts ``test_m3_crash_trace.py:951`` and
+no document). The earlier count of "five" counted ``test_m3_crash_trace.py:951`` and
 ``test_m3_timeout_trace.py:1164``, which sit inside K7 and E9 beside a positive count on the same
-block and went red with them, and misses ``:1214``. The update pairs all six with an explicit
+block and went red with them, and missed ``:1214``. The update pairs all six with an explicit
 control and P8-21 scans for it. (3) ``split`` and ``assemble`` **do** name ``span_id``, ``attrs``
-and ``spans`` as literals, so P8-19's grep clause as the spec words it is false at ``3bf4083``; the
+and ``spans`` as literals, so P8-19's grep clause as first worded is false at ``3bf4083``; the
 clause asserted here is the one that catches the mutant -- no literal from the field set outside
 the navigation keys, and none of A8a's nine names. (4) ``ALIAS_MAP_VERSION`` has zero bindings and
 ``"1"`` zero literal sites in ``src/``. (5) ``test_a7_storage.py:933`` used ``alias_map_version`` as
@@ -70,7 +70,7 @@ its example of a key ``from_dict`` rejects; A8a makes it a valid key, so that ro
 an unknown key -- a site in no inventory.
 
 **Mutation pass, eighteen rows plus control, whole suite on rsync copies of the shadow shim under the
-thread caps (harness fact 6), pandas 2.3.3.** Measurement order: the control, rows 2-5 and the two
+thread caps, pandas 2.3.3.** Measurement order: the control, rows 2-5 and the two
 frozen-test self-checks ran on the shim **before** the second update commit and carry its three reds
 (P7-10, E1 x2 -- the sites that commit fixes) in every row, not counted below; the control is
 **3 failed / 1977 passed / 7 skipped** for exactly those three and the amended tests are green on
@@ -87,9 +87,9 @@ sole catch is claimed.
 | 5 | the ``gate=gate`` kwarg dropped at the hand-written ``Span(...)`` in ``_span`` | **P8-3 contrapositive alone** |
 | 6 | ``merge`` takes the first non-None ``alias_map_version`` instead of the agreed one | **P8-13 merge test alone** |
 | 7 | ``gate = "emitted"`` when the span *name* is ``guardrail`` | **P8-6 named-guardrail test alone** |
-| 8 | the unrecognised operation still stashed under ``proofload.original_operation`` | P8-16, T23 (amended) |
+| 8 | the unrecognised operation still stashed under ``poisson_prove.original_operation`` | P8-16, T23 (amended) |
 | 9 | ``graph.node.id`` added to ``_LIFTED_KEYS`` (Q2 crossed) | **P8-4 alone** |
-| 10 | ``_vendor_kind(attrs)`` after the lift (section 8 trap 1) | T36 x11, T37, P8-4, P8-6 -- 15 |
+| 10 | ``_vendor_kind(attrs)`` after the lift | T36 x11, T37, P8-4, P8-6 -- 15 |
 | 11 | ``_span_mapping`` emits no ``traceId`` | **P8-14 alone** |
 | 12 | ``_capture_record`` without ``alias_map_version`` | P8-17, C4 |
 | 13 | the mock emits ``attrs={"attempts": ...}`` again | P8-15, T29 |
@@ -100,7 +100,7 @@ sole catch is claimed.
 | s1 | *(frozen-test self-check, four files)* one ``STEP_LINE_RE`` copy back to five columns | P8-21 copy test, I15, **and I16 -- the control line turns the vacuous negative red** |
 | s2 | *(frozen-test self-check, four files)* the control removed from I16 | **P8-21 pairing test alone** |
 
-**Green-before-and-after, named so its green is not read as evidence** (standing rule 12): P8-19's
+**Green-before-and-after, named so its green is not read as evidence**: P8-19's
 grep half (``split`` / ``assemble`` already pass it); P8-22 in its entirety (per-symbol digests of
 A7's surface at ``3bf4083``); the six negative ``STEP_LINE_RE`` uses (they pass on the unamended
 regex vacuously and on the amended one for the right reason; the control makes the difference
@@ -138,10 +138,10 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "poisson_prove"
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS / "fixtures" / "trace"
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
 # so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
@@ -149,7 +149,7 @@ QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 LOGGER_NAME = "poisson_prove.trace"
 EPOCH = 1_756_900_000_000_000_000
 
-# ---------- spec constants (section 2), spelled here so the file collects before the build ----------
+# ---------- the schema's constants, spelled here so the file collects before the build ----------
 
 SPAN_FIELDS_SPEC: tuple[str, ...] = (
     "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
@@ -160,7 +160,7 @@ NEW_FIELDS: tuple[str, ...] = SPAN_FIELDS_SPEC[13:]
 TRACE_KEYS_SPEC: tuple[str, ...] = ("schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version")
 OUTCOME_BY_SPEC = ("code", "llm", "self", "human")
 GATE_SPEC = ("emitted", "declared")
-ALIAS_MAP_VERSION_SPEC = "1"  # section 10 Q4 (a)
+ALIAS_MAP_VERSION_SPEC = "1"  # Q4 (a)
 STATUS_CODES = frozenset({"OK", "UNSET", "ERROR"})
 LIFTED_CARRIERS = (
     "openinference.span.kind", "traceloop.span.kind", "graph.node.name",
@@ -175,8 +175,8 @@ NINE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-\tplan\t2\tpass\temitted"
 FIVE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-"
 
 #: P8-22: sha256 of ``ast.get_source_segment`` for each symbol A7 owns, measured at ``3bf4083``.
-# Re-minted 2026-10-24 (public hygiene, Q37): each digest is over the symbol's code with its comments and docstrings
-# taken out (``code_of``), so the plain-words pass over src/ moves none of them and a change to the code still does.
+# Re-minted (Q37): each digest is over the symbol's code with its comments and docstrings
+# taken out (``code_of``), so a pass over src/ that changes only words moves none of them and a change to the code still does.
 # Read off main's unchanged code (56e6e69), every raw digest above matching first, not predicted.
 A7_SURFACE: dict[str, dict[str, str]] = {
     "trace.py": {
@@ -184,14 +184,14 @@ A7_SURFACE: dict[str, dict[str, str]] = {
         # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
         "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
         "_ObservationKeys": "27ead8ed01df19d6fdc2e1ec09a6ff70d40348074e9c62ae48c99f1bfd8a3502",
-        # ``split`` retired from this table by the A8b freeze, narrowed and never re-minted (ADR-077 / C19):
+        # ``split`` retired from this table by the A8b freeze, narrowed and never re-minted:
         # A8b widens its loop body, which is the one A7 symbol A8b may edit. Owner: A8b. Cover:
         # tests/test_a8b_cut_and_cap.py P8-25, which re-asserts every other symbol here byte-identical,
         # pins split's signature line and confines its edit to the loop. Digest at retirement: a63f24ba...13df24.
         "assemble": "ff677667e7d4d35ab51f1b4a51fae804f4eaa80c7e19bc9188889fbf63d9cb61",
     },
     "store.py": {
-        # PF4 re-freeze (PF4.38, reading R5): the store gains a nullable case_id column copied from
+        # PF4 re-freeze (PF4.38): the store gains a nullable case_id column copied from
         # meta["case_id"] on append, which moves _SCHEMA, _NULLABLE_STRING_COLUMNS and Store.append;
         # their digests are removed (digests at removal: 7a667ffb...80c02a, c7f3ae63...a9fe0, 8bdf8983...87bb7).
         "Store.read": "dbb913562835b7a20a900720cd9d8a94f7b403e513f8966751f4c5ffa52c48cb",
@@ -371,7 +371,7 @@ def test_p8_2_the_vocabularies_and_the_free_fields() -> None:
         assert plain_span(outcome="x", outcome_by=who).outcome_by == who
     for gate in GATE:
         assert plain_span(gate=gate).gate == gate
-    # operation is verbatim and never checked against a vocabulary (D7); outcome is a free label (ADR-039).
+    # operation is verbatim and never checked against a vocabulary (D7); outcome is a free label.
     for op in ("chat", "frobnicate", "CHAT", "guardrail", ""):
         assert plain_span(operation=op).operation == op
     assert plain_span(outcome="").outcome == "" and plain_span(outcome="whatever").outcome == "whatever"
@@ -756,7 +756,7 @@ def test_p8_16_operation_is_the_source_operation_name_stripped_and_lowercased_in
     from poisson_prove import trace as trace_module
 
     assert not hasattr(trace_module, "_ORIGINAL_OPERATION")
-    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # section 10 Q7 (a): survives
+    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # Q7 (a): survives
 
 
 # ---------- P8-17: the manifest's capture record ----------
@@ -785,12 +785,12 @@ def test_p8_18_inspect_prints_nine_columns_the_first_five_unchanged_and_dashes_f
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()
-    # A sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3); the run is
+    # A sweep now ends with a verdict line, not 'run_id: <id>'; the run is
     # the one the empty store gained.
     (run_id,) = Store(root).runs()
     df = Store(root).read(run_id)
     rows = df[df["outcome"] == "violated"]
-    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    # Text output shows a config_hash at 12 hex characters (rule 10).
     by_key = {(row.config_hash[:12], int(row.seed)): row for row in rows.itertuples(index=False)}
     lines = inspect_lines(root, run_id, "violated")
     blocks: list[list[str]] = []
@@ -899,7 +899,7 @@ def test_p8_19_assemble_of_split_round_trips_the_twenty_one_key_span_and_the_sev
 
 
 def test_p8_19_split_and_assemble_name_no_field_key_outside_the_navigation_set() -> None:
-    """Green-before-and-after (spec section 7.2): measured at 3bf4083, both functions already
+    """Green-before-and-after: measured at 3bf4083, both functions already
     satisfy this. The literals they do name -- ``span_id``, ``attrs``, ``spans`` -- are the keys
     needed to walk the structure, not the field set; the mutant this catches rebuilds the envelope
     from an enumerated key list, which puts ``kind``, ``name``, ``operation`` ... into the body."""
@@ -985,9 +985,8 @@ def test_p8_21_every_negative_use_is_paired_with_a_positive_control_in_the_same_
 
 
 def test_p8_22_a8a_edits_nothing_a7_owns() -> None:
-    """Green-before-and-after by construction (spec section 7.2): it goes red only if the build
-    crosses the A7/A8b line -- teaching ``split`` about ``truncated``, adding a span field to
-    ``OBSERVATION_KEYS``, or touching the store's schema, its nullable columns, ``append`` or ``read``."""
+    """Green-before-and-after by construction: it goes red only if the build
+    crosses the A7/A8b line: it changes the code of a symbol ``A7_SURFACE`` pins."""
     for file, symbols in A7_SURFACE.items():
         for qualname, expected in symbols.items():
             actual = hashlib.sha256(code_of(function_source(SRC / file, qualname)).encode("utf-8")).hexdigest()

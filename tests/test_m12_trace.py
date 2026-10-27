@@ -1,27 +1,27 @@
 """M12 -- Trace: the frozen tests.
 
-Generated from the invariants T1-T30 in "Proofload -- Spec M12 Trace" section 4. The build
-builds ``src/proofload/trace.py`` against this file and does not edit it.
+Generated from the invariants T1-T30 of the trace format. The build
+builds ``src/poisson_prove/trace.py`` against this file and does not edit it.
 
-Every test imports ``proofload.trace`` inside its own body rather than at module level, so
+Every test imports ``poisson_prove.trace`` inside its own body rather than at module level, so
 that the file collects (and every test fails honestly) while ``trace.py`` does not exist.
-Strategy constants below are spelled from the spec, not read from the module, for the same
+Strategy constants below are spelled from the format, not read from the module, for the same
 reason; T3 pins the module's tuples to them.
 
 Reading notes for the build, recorded here so the frozen tests are not re-litigated:
 
 - Span-level validation (T3, T4, T6) and trace-level validation (T7, T8) are asserted at
-  *both* the constructor and ``from_dict``. The spec says ``from_dict`` is the validator and
+  *both* the constructor and ``from_dict``. The format says ``from_dict`` is the validator and
   also that "a Trace holding two spans ... is valid" of a constructed Trace; the package
   convention (``Episode``, ``EpisodeRecord``, ``RunManifest``) is ``__post_init__``
   validation, which satisfies both readings at once.
 - T20 is asserted over every OTLP fixture, including the span whose ``gen_ai.operation.name``
-  is unrecognized. Section 3 says that original is "preserved in attrs"; T20 says no lifted
+  is unrecognized. The format says that original is "preserved in attrs"; T20 says no lifted
   key appears in ``attrs``. Both hold if the original is preserved under a key that is not
   ``gen_ai.operation.name``; the unrecognized-operation test only checks the value survives
   somewhere in ``attrs``.
-- The stored token shape ``{"in": ..., "out": ...}`` is taken from the section 3 example,
-  which is the only place the spec spells it.
+- The stored token shape ``{"in": ..., "out": ...}`` is taken from the format's example span,
+  which is the only place it is spelled.
 - T17 is two tests: the vacuous half (no clock call outside ``trace.py``) passes at baseline;
   the strong half (exactly one helper in ``trace.py`` making both calls) fails until the build.
 - T30's first clause maps to the two amended M10 tests by name. The fourth column
@@ -61,17 +61,17 @@ SRC = ROOT / "src" / "poisson_prove"
 TRACE_SOURCE = SRC / "trace.py"
 CLI_SOURCE = SRC / "cli.py"
 MOCK_AGENT_SOURCE = SRC / "examples" / "mock_agent.py"
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
 # so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "trace"
 
-# ---------- spec constants (section 2 and 3), spelled here so the file collects at baseline ----------
+# ---------- the format's constants, spelled here so the file collects at baseline ----------
 
 SCHEMA_SPEC = "poisson-prove.trace/1"
 KINDS_SPEC = ("llm", "tool", "retrieval", "db", "http", "agent", "other")
@@ -86,7 +86,7 @@ SPAN_KEYS = frozenset(
     {
         "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
         "input", "output", "tokens", "confidence", "error", "code", "attrs",
-        # A8a (spec section 3.1): the eight verdict fields, appended in this order, None-defaulted.
+        # A8a: the eight verdict fields, appended in this order, None-defaulted.
         "operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original",
     }
 )
@@ -102,7 +102,7 @@ LIFTED_KEYS = (
     "code.function.name",
     "code.line.number",
     "error.type",
-    # A8a (spec section 3.5): the carriers lifted into the eight new fields.
+    # A8a: the carriers lifted into the eight new fields.
     "openinference.span.kind",
     "traceloop.span.kind",
     "graph.node.name",
@@ -123,7 +123,7 @@ OTEL_KIND_MAP_SPEC = {
     "create_agent": "agent",
     "invoke_workflow": "agent",
     "plan": "agent",
-    # Added 2026-09-04 after the kind-ratio spike: both are emitted by
+    # Added after a check of the kind ratios: both are emitted by
     # opentelemetry-util-genai 1.1b0 and were landing in "other".
     "fetch_response": "llm",
     "execute_task": "agent",
@@ -136,7 +136,7 @@ EPOCH = 1_756_900_000_000_000_000
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the same nine columns M10 I15 reads, tab-delimited (A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
-# The section 3 example span, as a dict. Tests copy it with dict(...) before mutating.
+# The format's example span, as a dict. Tests copy it with dict(...) before mutating.
 SPAN_A: dict[str, Any] = {
     "span_id": CHAT_ID,
     "parent_id": AGENT_ID,
@@ -226,7 +226,7 @@ def _plain_tool(x: int) -> int:
     return 2 * x
 
 
-# ---------- hypothesis strategies: JSON-native payloads only (section 7) ----------
+# ---------- hypothesis strategies: JSON-native payloads only ----------
 
 hex_ids = st.text(alphabet="0123456789abcdef", min_size=16, max_size=16)
 json_scalars = (
@@ -865,7 +865,7 @@ def test_t15_nested_exception_closes_both_spans_outermost_last() -> None:
     assert by_name["inner"].end_ns <= by_name["outer"].end_ns
 
 
-# ---------- T16: monotonic close under a backwards-stepping wall clock (ADR-023) ----------
+# ---------- T16: monotonic close under a backwards-stepping wall clock ----------
 
 
 def test_t16_end_ns_is_not_below_start_ns_when_the_wall_clock_steps_back(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -886,7 +886,7 @@ def test_t16_end_ns_is_not_below_start_ns_when_the_wall_clock_steps_back(monkeyp
         assert span.start_ns <= EPOCH and span.start_ns % 1_000_000_000 == 0  # opened on the wall clock
 
 
-# ---------- T17: the span clock is one helper (ADR-023 enforced) ----------
+# ---------- T17: the span clock is one helper ----------
 
 
 def clock_call_sites(path: Path) -> list[tuple[str, str]]:
@@ -1049,7 +1049,7 @@ def test_t19_concurrent_tasks_nest_independently_in_one_trace() -> None:
         assert span.end_ns is not None and span.end_ns >= span.start_ns, span.name
 
 
-# ---------- T20: no un-normalized key reaches the store (ADR-024) ----------
+# ---------- T20: no un-normalized key reaches the store ----------
 
 
 def test_t20_no_alias_or_lifted_key_survives_in_attrs_across_every_otlp_fixture() -> None:
@@ -1276,7 +1276,7 @@ def test_t23_unrecognized_operation_name_lands_in_other_and_is_preserved_as_oper
     tr = from_otel(load_fixture("otlp_kinds.json"))
     span = {s.span_id: s for s in tr.spans}["0000000000000007"]
     assert span.kind == "other"
-    # A8a (spec section 3.1, P8-16): the unrecognised operation has a field; the stash key is retired.
+    # A8a (P8-16): the unrecognised operation has a field; the stash key is retired.
     assert span.operation == "frobnicate" and "poisson_prove.original_operation" not in span.attrs, dict(span.attrs)
 
 
@@ -1405,7 +1405,7 @@ def test_t27_trace_py_source_imports_only_the_standard_library_and_proofload() -
     assert third_party == set(), third_party
 
 
-# ---------- T28: the schema id is built in one place (ADR-024) ----------
+# ---------- T28: the schema id is built in one place ----------
 
 
 def imports_proofload_trace(path: Path) -> bool:
@@ -1425,7 +1425,7 @@ def test_t28_schema_literal_appears_exactly_once_in_src() -> None:
 
 
 def test_t28_cli_and_mock_agent_reach_the_schema_through_proofload_trace() -> None:
-    # PF5 (spec section 17; PF5.7): the face reads stored traces through the core, which reaches
+    # PF5 (PF5.7): the face reads stored traces through the core, which reaches
     # the schema through ``poisson_prove.trace``; the face imports from Prove only the core and
     # the renderers, so it is the core's modules that must import the trace module.
     core_sources = sorted((SRC / "core").rglob("*.py"))
@@ -1471,7 +1471,7 @@ def test_t29_mock_agent_per_step_shape_from_section_3() -> None:
         assert later.start_ns == earlier.end_ns, (earlier, later)  # cumulative simulated latency
     for span in tr.spans:
         assert span.code is None
-        assert set(span.attrs) == {"tries"} and span.attrs["tries"] in (1, 2)  # A8a: the mock's rename (spec section 3.13)
+        assert set(span.attrs) == {"tries"} and span.attrs["tries"] in (1, 2)  # A8a: the mock's rename
         assert span.error in (None, "ToolError")
         assert span.name in mock_agent._TASKS["checkout"]
 
@@ -1531,7 +1531,7 @@ def test_t30_inspect_prints_ordered_spans_with_duration_ms_in_the_fourth_column(
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()
-    # A sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3); the run is
+    # A sweep now ends with a verdict line, not 'run_id: <id>'; the run is
     # the one the empty store gained.
     assert [line for line in out.getvalue().splitlines() if line.strip()], out.getvalue()
     (run_id,) = Store(root).runs()
@@ -1539,7 +1539,7 @@ def test_t30_inspect_prints_ordered_spans_with_duration_ms_in_the_fourth_column(
     df = Store(root).read(run_id)
     rows = df[df["outcome"] == "violated"]
     assert len(rows) >= 1
-    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    # Text output shows a config_hash at 12 hex characters (rule 10).
     by_key = {(row.config_hash[:12], int(row.seed)): row for row in rows.itertuples(index=False)}
 
     out, err = StringIO(), StringIO()

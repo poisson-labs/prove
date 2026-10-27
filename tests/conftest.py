@@ -13,7 +13,7 @@ import pytest
 from poisson_prove.store import Store
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-#: PF3 (spec sections 8.8 and 14): the quickstart's one copy is the packaged spec.
+#: PF3: the quickstart's one copy is the packaged spec.
 PACKAGED_QUICKSTART = Path(__file__).resolve().parents[1] / "src" / "poisson_prove" / "examples" / "quickstart.toml"
 
 
@@ -22,8 +22,8 @@ def quickstart_design(replicates: int = 100) -> Path:
     """The packaged quickstart's design (its target id, unit and axes) at ``replicates``, with no
     ``target`` and no ``[declare]``, written once per process to a temporary file.
 
-    PF3 (spec sections 8.8 and 14): ``examples/quickstart.toml`` is gone and the packaged spec runs
-    194 replicates (Q56). The frozen tests that swept the old file sweep this: the one copy's
+    PF3: ``examples/quickstart.toml`` is gone and the packaged spec runs
+    194 replicates. The frozen tests that swept the old file sweep this: the one copy's
     design at the 100 replicates their numbers were frozen at, the target typed as before, and
     nothing declared, as the old file declared nothing.
     """
@@ -40,7 +40,7 @@ def quickstart_design(replicates: int = 100) -> Path:
     return path
 
 
-#: PF3 (spec section 4.4, Q17's condition): each test's own name, which no output named before PF3.
+#: PF3: each test's own name, which no output named before PF3.
 METHOD_OWN_NAMES = ("Fisher", "McNemar", "log-rank")
 
 
@@ -48,7 +48,7 @@ def without_method_lines(text: str) -> str:
     """``text`` (``report.md``, ``receipt.html``, the served page) with the lines that name the test
     by its own name taken out, and in their place no second blank line.
 
-    PF3 (spec section 4.4, PF3.6b, reading p): every surface names the method it used, on a line
+    PF3 (PF3.6b): every surface names the method it used, on a line
     of its own; nothing before PF3 printed Fisher, McNemar or log-rank, so a frozen digest over one
     of these files holds over this. Removing a line never leaves two blank lines where it was:
     a paragraph of its own (the line and the blank line after it) goes as a whole.
@@ -68,7 +68,7 @@ def without_method_lines(text: str) -> str:
 
 
 
-#: PF5 (spec section 4.3, the report header's ``NAME (ID)`` pairing; PF5's reading o): the header
+#: PF5 (the report header's ``NAME (ID)`` pairing): the header
 #: of ``report.md`` and ``receipt.html`` names each run as ``before  NAME (ID)`` and ``after  NAME
 #: (ID)``, and the provenance list no longer gives the ids, so each id is in each file once.
 _RUN_LINE = re.compile(r"^(?:<p>)?(?:before|after)  .+ \([^()]+\)(?:</p>)?$")
@@ -95,7 +95,7 @@ def without_run_lines(text: str) -> str:
         out.append(_RUN_ID_ITEM.sub("", line))
     return "".join(out)
 
-#: PF9.4 (spec section 13.1): every module that drives a remote backend offline runs with network
+#: PF9.4: every module that drives a remote backend offline runs with network
 #: sockets blocked in the pytest process (the interpreters the Burla and Modal fakes start arm
 #: their own tripwire). ``test_pf9_backends`` checks that no such module is left out.
 NETWORK_BLOCKED_MODULES = frozenset({
@@ -176,7 +176,7 @@ def writable_copy(fixture: Path) -> Path:
     """A copy, made once per test process, of a committed fixture folder, for the tests that run a
     verb which writes into the store it reads.
 
-    PF12 (spec section 18.2, Q59): ``report`` and ``serve`` save the comparison they show into the
+    PF12: ``report`` and ``serve`` save the comparison they show into the
     store's ``.poisson/``. Run on a committed fixture in place, under ``-n`` one worker's save would
     land while another digests or copies the same folder; so those tests read a copy, named as the
     fixture is, and the committed folders are never written. The copy is removed when the process
@@ -357,7 +357,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     against the digests written with it, in every process, worker or not.
 
     A worker process holds its folder for its life and removes it at exit or when another bundle
-    replaces it (``proofload._burla_submit``), but the fake pool ends its workers with SIGKILL, so
+    replaces it (``poisson_prove._burla_submit``), but the fake pool ends its workers with SIGKILL, so
     the last pool's folders outlive them. Their temporary directory is what an interpreter with an
     empty environment gets, which is not this process's. Only a folder whose owner is gone is
     removed: a live worker of any other session still holds its lock.
@@ -436,7 +436,7 @@ def resume_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[s
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """``--update-snapshots``: the snapshot tests write the snapshots instead of comparing against
-    them (section 10.6, PF6.14 and PF12.13; the one documented command is in ``CONTRIBUTING.md``)."""
+    them (PF6.14 and PF12.13; the one documented command is in ``CONTRIBUTING.md``)."""
     parser.addoption(
         "--update-snapshots",
         action="store_true",
@@ -446,7 +446,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def _lattice_through_its_copy() -> None:
-    """PF12 (spec section 18.2, Q59; R39): ``report`` and ``serve`` save into the store they read,
+    """PF12: ``report`` and ``serve`` save into the store they read,
     so every test that reads the generated lattice pair (``tests/lattice.py``) reads this process's
     copy of it (``writable_copy``): ``lattice.root()`` hands out the copy, made on first use.
     ``lattice.intact()`` checks both stores: the one the generator wrote, which no test writes, and
@@ -491,7 +491,7 @@ def code_of(source: str) -> str:
     """``source`` with its comments and docstrings taken out and its blank lines dropped: the code
     a change to words alone leaves as it was.
 
-    PF8 (front-door spec sections 9.2 and 14, Q37 and Q38): the plain-words pass rewrites the
+    PF8: the plain-words pass rewrites the
     docstrings and comments of ``src/`` and of the frozen tests, so a frozen digest over a symbol's
     source or a test file's bytes is taken over this instead, and moves only when code does."""
     lines = io.StringIO(source, newline="\n").readlines()

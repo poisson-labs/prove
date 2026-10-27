@@ -1,23 +1,21 @@
-"""PR-3 frozen tests, the replicates packet: k calls per item, of which a pair is the case k = 2 --
-invariants PR57 to PR76 of "Prove -- Spec PR Paired Replay", section 4.H, and named mutants 9 to
-16. PR77 (the rendered Replicates section) is the output packet's, with PR7 and PR40 to PR55,
-and is not here: section 7 lets a freeze cut PR-3 into two files, and this is the first.
+"""PR-3 frozen tests, replicates: k calls per item, of which a pair is the case k = 2 --
+invariants PR57 to PR76 and named mutants 9 to 16. PR77 (the rendered Replicates section) is
+tested with the output, with PR7 and PR40 to PR55, and is not here: PR-3 is cut into two files,
+and this is the first.
 
-Written on 2026-09-22 off ``pr2-build`` ``7bb1a3b`` (phases 1 and 2 built) plus the
-two updates ruled the same day and committed first on this branch: R1 (``733ac35``, two names
-into the PR-1 frozen tests' ``SPEC_PUBLIC_NAMES``) and R3 (``fd4266d``, a ``Cut`` declares its
-comparison, ``gt`` or ``ge``, with no default). **Frozen 2026-09-22 in one commit over both PR-3
-files, over the reviewed ``ef9f4ef``**, after approval of the four tables in the handoff
-and an independent recompute of every hard-coded
-expectation passed (``recompute_expectations.py`` there, 83 of 83). The build adds phase 3's
-replicate half of ``src/proofload/paired.py``
+Written off ``pr2-build`` ``7bb1a3b`` (phases 1 and 2 built) plus two updates committed first on
+this branch: ``733ac35`` (two names into the PR-1 frozen tests' ``SPEC_PUBLIC_NAMES``) and
+``fd4266d`` (a ``Cut`` declares its comparison, ``gt`` or ``ge``, with no default). **Frozen in
+one commit over both PR-3 files, over the reviewed ``ef9f4ef``**, after review of the four
+tables and an independent recompute of every hard-coded expectation passed (83 of 83). The build
+adds phase 3's replicate half of ``src/poisson_prove/paired.py``
 -- ``SweepPair.more``, the k-arm assertion, ``ReplicateResult`` and ``replicates`` -- against this
 file and does not edit it. Phase 3's names are read through ``getattr`` inside each test, so the
 bare tree fails test by test and never at collection.
 
-**What the packet is.** A sweep declares ``more``, the arms after ``a`` and ``b``, so a replicate
+**What replicates are.** A sweep declares ``more``, the arms after ``a`` and ``b``, so a replicate
 set is ``k = 2 + len(more)`` calls of one request in one sweep; the key is PR10's, unchanged; the
-declared pair still carries the whole of section 4.C (PR61) and a declaration with no ``more``
+declared pair still carries the whole two-arm analysis (PR61) and a declaration with no ``more``
 produces what today's build produces (PR60). ``replicates`` is a second reader of the same
 ``PairAssertion`` and answers, per cut and under both action rules: ``agree@j``, how often the
 first ``j`` calls all took the same action (PR65, PR66), and ``MS@j``, how often two sweeps'
@@ -27,8 +25,7 @@ design effect of PR32 on that metric's own footing (PR73), no cross-cut and no c
 (PR74), a paired step between prefixes and never two intervals to eyeball (PR75), and the cost
 framing pre-declared whole (PR76).
 
-**Conventions this file fixes for the build session** (section 2 leaves them open; each goes into
-the spec's change log on the freeze):
+**Conventions this file fixes for the build:**
 
 - *Arm labels.* ``a`` and ``b`` keep their names; the arms in ``more`` are labelled by their
   1-based position in the declared order, ``"3"`` to ``"k"``, as strings. ``pairs`` gains one
@@ -42,25 +39,24 @@ the spec's change log on the freeze):
   ``value_missing``, ``value_out_of_range``) names the failing arm's label; a comparison cause
   (``body``, ``body_field_absent``, ``target``, ``header``) reads ``"both"`` as it does at
   ``k = 2`` and names the differing arm in ``detail``. Tests build one failure per set, so the
-  precedence between two causes on one set is not pinned (ambiguity 9 of the spec session).
+  precedence between two causes on one set is not pinned.
 - *PR57 fires in the constructor and at load.* ``Declaration(...)`` with two sweeps of different
   ``k``, or a run id repeated inside one sweep's ``arms``, raises ``DeclarationError``;
   ``from_toml`` therefore does too. ``SweepPair.arms`` is ``(a, b, *more)``.
-- *The result.* ``ReplicateResult`` is the seven fields of section 2 and no other, one per
+- *The result.* ``ReplicateResult`` has seven fields and no other, one per
   declared cut in declaration order; ``replicates()`` returns ``()`` when every sweep is a pair.
   ``ReplicateResult.to_json()`` is one JSON object with the keys ``name``, ``threshold`` (the
   literal text), ``comparison``, ``k``, ``agree``, ``majority``, ``counts`` and ``cost_framing``,
   every number a JSON number, key order stable across calls, processes and hash seeds. The
   artifact ``replicates_by_cut.json`` -- top level, ``declaration_digest``, the ``cuts`` wrapper
-  and the fact that nothing is written at ``k = 2`` -- is the CLI's and is the output packet's
-  to pin.
+  and the fact that nothing is written at ``k = 2`` -- is the CLI's and is pinned with the
+  output.
 - *Rules.* ``agree`` and ``majority`` are keyed ``"primary"`` then ``"sensitivity"``, in that
   order, always both (PR70). The primary is the cut's declared ``comparison``; the sensitivity is
   the other one. ``counts["rules"]`` says which is which.
-- *``agree[rule]``.* ``"j2"`` to ``"jk"``, one block per prefix, every ``j`` (section 3 as
-  written; ambiguity 6 of the spec session is one yes/no in the handoff), plus ``"steps"``: for
-  each consecutive pair of prefixes, ``"j2_to_j3"`` and so on, the paired step of PR75. A prefix
-  block is ``{estimate, lo, hi, basis, observation: "within_sweep", design_effect}`` and, under
+- *``agree[rule]``.* ``"j2"`` to ``"jk"``, one block per prefix, every ``j``, plus ``"steps"``:
+  for each consecutive pair of prefixes, ``"j2_to_j3"`` and so on, the paired step of PR75. A
+  prefix block is ``{estimate, lo, hi, basis, observation: "within_sweep", design_effect}`` and, under
   the fallback, ``upper_bound_by_observation: true``.
 - *``majority[rule]``.* ``"j1"``, ``"j3"``, ... for odd ``j <= k`` and nothing else; a block is
   ``{estimate, lo, hi, basis, observation: "across_sweeps", design_effect}`` with the same
@@ -74,7 +70,7 @@ the spec's change log on the freeze):
 - *The design effect (PR73).* ``{icc, m_bar, deff}`` per block on PR32's footing: ``m_bar`` is
   observations per item for that metric -- the eligible sets per item for ``agree@j``, the eligible
   sweep pairs per item for ``MS@j`` -- and the one-way ANOVA cluster size ``m0`` sits in the ICC
-  denominator when eligibility leaves the clusters unbalanced (ruled 2026-09-22).
+  denominator when eligibility leaves the clusters unbalanced.
 - *``counts``.* ``items`` (``G``), ``sweeps`` (``S``), ``eligible_sets`` keyed by sweep,
   ``sweep_pairs`` keyed ``"S1|S2"`` (items with both sets eligible), ``excluded_by_arm`` keyed by
   arm label off this cut's rows of ``excluded``, ``ties`` keyed by arm label over all sweeps,
@@ -85,9 +81,9 @@ the spec's change log on the freeze):
   ``n_lo`` from the interval's upper bound and ``n_hi`` from its lower bound -- **only when the
   declaration carries ``conditioning``**, ``dollars_per_decision`` only when ``cost`` was passed
   with a price, and ``latency_per_decision`` only when ``windows`` was passed. What is absent is
-  absent, never zero (PR7). *Ruled 2026-09-22:* the two arithmetic rows read the two inputs the
-  output packet's spec gained the same day. ``dollars_per_decision`` is ``{estimate,
-  mean_input_tokens, price_per_input_token}`` with ``mean_input_tokens = cost.input_tokens /
+  absent, never zero (PR7). The two arithmetic rows read two inputs of the output side, ``cost``
+  and ``windows``. ``dollars_per_decision`` is ``{estimate, mean_input_tokens,
+  price_per_input_token}`` with ``mean_input_tokens = cost.input_tokens /
   cost.recorded_spans`` and ``estimate = j * mean_input_tokens * price``, the price echoed as its
   literal; ``latency_per_decision`` is ``{median_call_s, serial_s, at_declared_concurrency_s}``
   with ``median_call_s`` the median of the per-sweep ``latency_s["median"]`` values
@@ -95,16 +91,15 @@ the spec's change log on the freeze):
   ``at_declared_concurrency_s = serial_s / concurrency`` when every arm's recorded
   ``environment["sweeps"][S][arm]["concurrency"]`` is one non-null number, else absent.
 
-**Invariant-to-test map** is in the handoff. Every test
-name starts ``test_prN_`` or ``test_control_``.
+Every test name starts ``test_prN_`` or ``test_control_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` is built in test code or by
-running a hand-built k-arm store through ``assert_pairs``; the three frames section 6 names are
+running a hand-built k-arm store through ``assert_pairs``; three frames are
 here: a ``k = 5`` store with one arm errored on some items (PR63), a ``k = 5`` frame on which every
 item agrees at every cut (PR72), and a ``k = 4`` frame whose only job is to be refused a majority
 (PR68). No committed fixture carries a third arm, so none is used. ``S`` is never more than 3 in
 this file, so whether an ordered or an unordered sweep pair is the ``MS@j`` observation at
-``S > 3`` (ambiguity 5) is not pinned.
+``S > 3`` is not pinned.
 
 **Green before and after -- named so their green is not read as coverage.**
 ``test_pr71_no_default_rng_site_is_added_to_paired_py`` is green on the bare tree, because the
@@ -112,17 +107,16 @@ one site is already there, and stays green: it guards the build against adding a
 other test in this file is red on the bare tree, on ``TypeError`` from ``Cut`` without
 ``comparison`` or from ``SweepPair`` without ``more``, or on ``AttributeError`` for
 ``ReplicateResult`` and ``replicates``. The PR60 digests were minted on the pre-amendment build
-(``7bb1a3b``'s ``src/``) by ``mint_pr60.py`` in the handoff, so the test that carries them is red
+(``7bb1a3b``'s ``src/``), so the test that carries them is red
 on the bare tree only because it builds cuts with a comparison; on the build it is the
 byte-identity guard.
 
 **The three ``hypothesis`` tests are derandomized.**
 
-**Named gaps, not pinned.** An empty cut under ``replicates()`` (ambiguity 7); cause precedence
-on a set broken in two arms (ambiguity 9); the ``MS@j`` observation at ``S > 3`` (ambiguity 5);
+**Named gaps, not pinned.** An empty cut under ``replicates()``; cause precedence on a set
+broken in two arms; the ``MS@j`` observation at ``S > 3``;
 a run id shared between two different sweeps; the order of ``excluded_by_arm``'s keys. (The
-dollars and latency values and the ``comparison`` in the phase-2 artifacts were ruled 2026-09-22
-and are pinned.)
+dollars and latency values and the ``comparison`` in the phase-2 artifacts are pinned.)
 """
 
 from __future__ import annotations
@@ -188,10 +182,10 @@ STEP = re.compile(r"\Aj(\d+)_to_j(\d+)\Z")
 OTHER = {"ge": "gt", "gt": "ge"}
 
 # PR60: the bytes the pre-amendment build (``7bb1a3b``'s ``src/``) writes for ``pr60_store``
-# through ``assert_pairs`` and ``analyse`` at ``k = 2``, minted by ``mint_pr60.py`` in the
-# handoff through ``pr60_digests`` below, which masks what later rulings add on top of today's
-# bytes: the declaration digest and block (they move with R3), the ``comparison`` the two
-# artifacts print beside the threshold (ruled 2026-09-22), and the four timing columns phase 3's
+# through ``assert_pairs`` and ``analyse`` at ``k = 2``, minted through ``pr60_digests`` below,
+# which masks what later changes add on top of today's bytes: the declaration digest and block
+# (they move with ``fd4266d``), the ``comparison`` the two artifacts print beside the threshold,
+# and the four timing columns phase 3's
 # windows add to ``pairs`` (``TIMING_COLUMNS``). Every other byte is pinned.
 TIMING_COLUMNS = ("start_ns_a", "end_ns_a", "start_ns_b", "end_ns_b")
 PR60_PAIRS_SHA256 = "120c9c73ff9c68f9063b177da266d0f5712184f44238e359d551f3b7fa4f843e"
@@ -258,8 +252,7 @@ def cp_lower_one_sided(k_dis: int, g: int) -> float:
 
 
 def icc1(clusters: Sequence[Any], values: Sequence[float]) -> tuple[float, float, float]:
-    """One-way ANOVA ``ICC(1)`` with the ANOVA cluster size ``m0`` in the denominator (ruled
-    2026-09-22) and ``m_bar = N / G`` in the design effect: ``(icc, m_bar, deff)``."""
+    """One-way ANOVA ``ICC(1)`` with the ANOVA cluster size ``m0`` in the denominator and ``m_bar = N / G`` in the design effect: ``(icc, m_bar, deff)``."""
     frame = pd.DataFrame({"c": list(clusters), "y": [float(v) for v in values]})
     total, g = len(frame), frame["c"].nunique()
     m_bar = total / g
@@ -895,11 +888,11 @@ def test_pr60_replicates_returns_an_empty_tuple_when_every_sweep_is_a_pair(tmp_p
 def test_pr60_at_k_two_the_frames_and_both_phase_two_artifacts_are_the_bytes_the_pre_amendment_build_wrote(
     tmp_path: Path,
 ) -> None:
-    """Minted on ``7bb1a3b``'s ``src/`` (no ``more``, no ``comparison``, no timing) by
-    ``mint_pr60.py`` through ``pr60_digests``: the ``pairs`` frame's nine frozen columns,
+    """Minted on ``7bb1a3b``'s ``src/`` (no ``more``, no ``comparison``, no timing) through
+    ``pr60_digests``: the ``pairs`` frame's nine frozen columns,
     ``pair_assertion.json`` without its declaration block, digest and timing columns,
     ``contingency_by_cut.json`` and ``intervals_by_cut.json`` with the digest and the
-    ``comparison`` line masked. What the masks cover was ruled in after the mint; every other
+    ``comparison`` line masked. What the masks cover was added after the mint; every other
     byte is pinned, so a build that changes a ``k = 2`` byte anywhere else fails here."""
     digests = pr60_digests(pr60_store(tmp_path), store_declaration(sweeps=("S1", "S2"), k=2))
     assert digests == {
@@ -914,7 +907,7 @@ def test_pr60_a_sweep_pair_built_without_more_is_the_sweep_pair_built_with_an_em
     assert declaration(k=2).digest == declaration(more={"S1": ()}, k=2).digest
 
 
-# ---------- PR61: the declared pair carries the whole of section 4.C ----------
+# ---------- PR61: the declared pair carries the whole two-arm analysis ----------
 
 
 def test_pr61_arms_three_to_k_move_no_byte_of_the_two_phase_two_artifacts_and_do_move_the_replicates() -> None:
@@ -1843,7 +1836,7 @@ def test_pr76_without_a_price_or_a_cost_report_the_dollar_row_is_absent_not_zero
 
 
 def test_pr76_the_dollar_row_is_j_times_the_mean_recorded_input_tokens_times_the_price() -> None:
-    """Ruled 2026-09-22: the mean is ``input_tokens / recorded_spans`` off the cost report,
+    """The mean is ``input_tokens / recorded_spans`` off the cost report,
     never a tokeniser and never a rate card; the price is echoed as its literal."""
     paired = P()
     priced = paired.CostReport(
@@ -1865,7 +1858,7 @@ def test_pr76_the_dollar_row_is_j_times_the_mean_recorded_input_tokens_times_the
 
 
 def test_pr76_the_latency_row_is_j_times_the_recorded_per_call_median_serial_and_at_the_declared_concurrency() -> None:
-    """Ruled 2026-09-22: the median is the median of the per-sweep medians ``windows`` carries;
+    """The median is the median of the per-sweep medians ``windows`` carries;
     the concurrency is the arms' recorded one, and with none recorded that row is absent."""
     paired = P()
     windows = paired.WindowReport(

@@ -1,7 +1,7 @@
 """M3 -- the timed-out episode's trace: the frozen tests for E1-E12.
 
-Written from "Proofload -- Spec M3 Executor (timed-out episode trace)" section 4, after the
-M12 frozen tests were amended for ADR-028 in their own commit. The build changes the six touched files
+Written after the M12 frozen tests were amended, in their own commit, for the trace-level ``truncated``
+key. The implementation changes the six touched files
 (``trace.py``, ``capture.py``, ``executor.py``, ``executor_modal.py``, ``store.py``, ``cli.py``)
 against this file and does not edit it.
 
@@ -16,7 +16,7 @@ is ``f"{config_hash}:{replicate_index}"``; ``worker_batch``'s ``capture`` dict i
 ``CaptureSpec`` fields plus ``run_id``. ``cli.main`` is driven in-process on a store a child
 wrote, as the M10 frozen tests drive it; ``inspect`` installs nothing.
 
-Conventions these frozen tests fix where the spec is silent, recorded so they are not re-litigated:
+Conventions these frozen tests fix where the design is silent, recorded so they are not re-litigated:
 
 - The row that hangs is chosen by config, not by a module-level seed set: the sweep has one
   categorical axis ``role`` over ``a``, ``b``, ``c`` and ``hang`` with one replicate, so every
@@ -24,28 +24,28 @@ Conventions these frozen tests fix where the spec is silent, recorded so they ar
   ``worker_batch`` and ``run_with_mapper`` without shared state.
 - The timed-out rollout opens an ``invoke_agent`` root, closes a ``chat`` child, opens an
   ``execute_tool`` child and sleeps: one closed span and two open ones, one per nesting level,
-  which is the shape section 3 describes. Span names carry the seed, so a span from another
+  which is the shape an agent hung inside a tool call leaves. Span names carry the seed, so a span from another
   row is visible by name.
 - The child's ``SIGTERM`` disposition (E5) is read by the *sibling* rollouts of the same run and
   returned in their ``Episode.meta["sigterm"]``: the timed-out child cannot report, and every
   episode child of a run is started by the same ``_child_main`` with the same capture call. The
   contrast is asserted both ways: ``default`` without a ``[capture]`` table, a handler with one.
 - E6's "snapshot raises" is a rollout that replaces ``Trace.to_dict`` on the class in its own
-  child before sleeping, which section 3 puts on every path to a snapshot dict; "never yields to
-  the handler" is a rollout that sets ``SIG_IGN`` -- section 3's "rollout that ignores
-  ``SIGTERM``" -- and sleeps past the whole grace, so the parent's ``kill()`` is what ends it.
-  The bound is asserted with 1.0 s of process slack over the sum the spec states, and
-  ``_DRAIN_GRACE_S`` and ``_JOIN_GRACE_S`` are pinned at the values section 3 gives them.
+  child before sleeping, which every path to a snapshot dict goes through; "never yields to
+  the handler" is a rollout that sets ``SIG_IGN`` -- a rollout that ignores
+  ``SIGTERM`` -- and sleeps past the whole grace, so the parent's ``kill()`` is what ends it.
+  The bound is asserted with 1.0 s of process slack over the deadline plus both graces, and
+  ``_DRAIN_GRACE_S`` and ``_JOIN_GRACE_S`` are pinned at their values, 2.0 s and 5.0 s.
 - E1's ``str | None`` is asserted at the constructor and at ``from_dict``, the M12 frozen tests'
   convention for every typed field of the schema.
-- E9 pins the errored row's three lines section 3 spells (``outcome: -``, ``t: -``,
-  ``error: timeout``) and pins nothing about an ``outcome:`` line on an ok row, where section
-  3 and section 5 can be read differently; the "no rows" message is pinned to the words
+- E9 pins the errored row's three lines (``outcome: -``, ``t: -``,
+  ``error: timeout``) and pins nothing about an ``outcome:`` line on an ok row, where the
+  design can be read two ways; the "no rows" message is pinned to the words
   ``no rows`` and the event name, not to its wording.
 - The wall-clock bounds are the only timing assertions, and every one is an upper bound.
 
-E13 and E14 (added after the build, under the freeze's authority) pin two deviations back to the
-spec: a Modal dict-form result whose ``meta`` is absent or not a Mapping raises
+E13 and E14 (added after the implementation) pin two of its deviations back to the intended
+behaviour: a Modal dict-form result whose ``meta`` is absent or not a Mapping raises
 ``ModalBackendError`` naming the job, as an invalid episode does, instead of being stored
 without it; and the drain pipe is created beside the outcome pipe on every
 ``_call_with_timeout`` call, capture call or not, counted through a context wrapper that
@@ -101,15 +101,15 @@ EPISODE_KEY = "poisson_prove.episode"
 RUN_ID = "r-2026-09-05-timeout-oracle"
 EPISODE = "cfg-7:1"
 SALT = "timeout-oracle-salt"
-REASON = "timeout"  # the executor's error and the reason the drain mints: one vocabulary (section 0)
+REASON = "timeout"  # the executor's error and the reason the drain mints: one vocabulary
 HANG = "hang"
 ROLES = ("a", "b", "c", HANG)
 HORIZON = 10.0
 TIMEOUT_S = 0.5  # the deadline, as the frozen I9 and I3 tests set it
 HANG_S = 12.0  # longer than timeout + both graces: only the handler's exit, SIGTERM's default, or kill() ends a hung child
-DRAIN_GRACE_S = 2.0  # section 3: _DRAIN_GRACE_S
-JOIN_GRACE_S = 5.0  # section 3: the existing _JOIN_GRACE_S
-PROCESS_SLACK_S = 1.0  # poll steps, kill and join on top of the sum the spec states
+DRAIN_GRACE_S = 2.0  # the executor's _DRAIN_GRACE_S
+JOIN_GRACE_S = 5.0  # the executor's existing _JOIN_GRACE_S
+PROCESS_SLACK_S = 1.0  # poll steps, kill and join on top of the deadline plus both graces
 PID_KEY = "oracle.pid"
 BEFORE_KEY = "oracle.before"
 AFTER_KEY = "oracle.after"
@@ -125,12 +125,12 @@ TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans"
 TRACE_FIELDS = ("spans", "source", "source_version", "dropped", "truncated", "alias_map_version")  # A8a: the seventh field
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
-    # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
-    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants and two
+    # A7: four mints; A8a: three constants --
+    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b: five constants and two
     # functions. CD (D8) retires three of A8b's five -- OBSERVATION_HEAD_BYTES and
     # OBSERVATION_TAIL_BYTES are deleted with the default they described, and
     # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES, which sorts one place later.
-    # A10 (spec section 7.1 group 3, W1): Declaration joins, minted in trace.py, among the classes.
+    # A10 (W1): Declaration joins, minted in trace.py, among the classes.
     # trace.py's own order: constants, classes, functions, each sorted. 31 names.
     "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
     "OBSERVATION_KEYS", "OBSERVATION_ROUTING_BYTES",
@@ -263,8 +263,8 @@ def _raise_at_snapshot(self: Any) -> dict[str, Any]:
 
 
 def snapshot_failing_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """E6, first case: a rollout whose capture is made to fail at snapshot time. Section 3 puts
-    ``Trace.to_dict()`` on every path to the snapshot dict; this child breaks it on the class,
+    """E6, first case: a rollout whose capture is made to fail at snapshot time. Every path to
+    the snapshot dict goes through ``Trace.to_dict()``; this child breaks it on the class,
     so whatever the handler assembles cannot become a payload."""
     tracer = _tracer()
     with tracer.start_as_current_span(f"invoke_agent {seed}"):
@@ -274,7 +274,7 @@ def snapshot_failing_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
 
 
 def sigterm_ignoring_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """E6, second case: section 3's "rollout that ignores ``SIGTERM``". The handler never runs
+    """E6, second case: a rollout that ignores ``SIGTERM``. The handler never runs
     and the sleep outlasts both graces, so only the parent's ``kill()`` ends this child."""
     tracer = _tracer()
     with tracer.start_as_current_span(f"invoke_agent {seed}"):
@@ -306,7 +306,7 @@ def sweep_toml(
     target_id: str = "timeout-oracle@v0",
     t_unit: str = "steps",
 ) -> str:
-    """A sweep file over ``role``; ``capture`` is the ``[capture]`` table of section 3, or absent."""
+    """A sweep file over ``role``; ``capture`` is the sweep's ``[capture]`` table, or absent."""
     axes = {"role": list(ROLES)} if axes is None else axes
     lines = [f'target_id = "{target_id}"', f't_unit = "{t_unit}"', f"replicates = {replicates}", ""]
     for name, values in axes.items():
@@ -346,7 +346,7 @@ def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
 
 
 def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
-    """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028 plus A8a's ``alias_map_version``."""
+    """A valid stored-shape trace dict around the given span dicts: the six keys (the trace-level ``truncated`` among them) plus A8a's ``alias_map_version``."""
     d: dict[str, Any] = {
         "schema": "poisson-prove.trace/1",
         "source": "otel",
@@ -791,7 +791,7 @@ def test_e2_from_otel_yields_truncated_none_even_when_a_span_is_open() -> None:
     }
     tr = from_otel([closed, left_open])
     assert tr.truncated is None and len(tr.spans) == 2 and tr.dropped == 0
-    assert by_name(tr)["execute_tool"].end_ns is None  # an open span on its own says nothing (section 0)
+    assert by_name(tr)["execute_tool"].end_ns is None  # an open span on its own says nothing
     assert from_otel([]).truncated is None
 
 
@@ -948,7 +948,7 @@ def test_e4_the_timed_out_row_carries_its_truncated_trace_and_every_other_row_is
     slow = timeout_run.timed_out
     assert slow["outcome"] is None and slow["error"] == REASON and pd.isna(slow["t"])
     assert set(slow["meta"]) == {"trace"}, slow["meta"]
-    # The handler exited the child (section 3: never back into the rollout), so the parent's
+    # The handler exited the child (never back into the rollout), so the parent's
     # join was immediate: _call_with_timeout returned well inside the drain grace, not at kill().
     assert float(slow["wall_time"]) < TIMEOUT_S + DRAIN_GRACE_S + PROCESS_SLACK_S, slow["wall_time"]
     assert_snapshot_of(
@@ -977,7 +977,7 @@ def test_e5_without_a_capture_table_the_timed_out_row_is_bare_and_the_child_keep
     assert len(others) == 3 and others["error"].isna().all()
     assert all("trace" not in meta for meta in others["meta"]), list(others["meta"])
     assert {meta["sigterm"] for meta in others["meta"]} == {"default"}, list(others["meta"])
-    # The other half of section 3's "when and only when": with a capture call the child has one.
+    # The other half of "a handler when and only when there is a capture call": with one, the child has a handler.
     assert {meta["sigterm"] for meta in timeout_run.others["meta"]} == {"handler"}, list(timeout_run.others["meta"])
     assert bare_timeout_run.report["sdk_provider_in_this_process"] is False
 
@@ -1155,7 +1155,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
     blocks: list[list[str]] = []
     current: list[str] | None = None
     for line in body.splitlines():
-        # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+        # Text output shows a config_hash at 12 hex characters.
         if any(h[:12] in line for h in hashes):
             if current is not None:
                 blocks.append(current)
@@ -1169,7 +1169,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
 
 def assert_block_is_row(block: list[str], row: Any) -> None:
     text = "\n".join(block)
-    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    # Text output shows a config_hash at 12 hex characters.
     assert row.config_hash[:12] in block[0], block[0]
     assert re.search(rf"\b{row.seed}\b", text), f"seed {row.seed} missing from block:\n{text}"
     found = False
@@ -1198,7 +1198,7 @@ def test_e9_inspect_selects_the_timed_out_row_by_error_and_prints_its_truncated_
     block = blocks[0]
     slow = timeout_run.timed_out
     assert_block_is_row(block, slow)
-    # Section 3's errored-row lines, where an ok row prints t: <float>.
+    # The errored row's lines, where an ok row prints t: <float>.
     assert block.count(f"error: {REASON}") == 1, "\n".join(block)
     assert "outcome: -" in block and "t: -" in block, "\n".join(block)
     # Exactly one truncated line, before the span lines, and never a span line itself.
@@ -1415,7 +1415,7 @@ def test_e12_the_transport_aliases_and_episode_are_untouched() -> None:
     assert tuple(f.name for f in dataclasses.fields(Episode)) == EPISODE_FIELDS
     assert set(Episode(outcome="fell", t=1.0, horizon=HORIZON).to_dict()) == set(EPISODE_FIELDS)
     params = list(inspect.signature(worker_batch).parameters.values())
-    # M11a: ``chaos`` rides beside ``capture``, keyword-only, default None (Spec M11 section 0.1)
+    # M11a: ``chaos`` rides beside ``capture``, keyword-only, default None
     assert [p.name for p in params] == ["jobs", "import_path", "episode_timeout", "capture", "chaos"]
     assert params[3].kind is params[3].KEYWORD_ONLY and params[3].default is None
     assert params[4].kind is params[4].KEYWORD_ONLY and params[4].default is None

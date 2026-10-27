@@ -1,8 +1,6 @@
 """PF9 -- backends and platforms: the Modal extra's floor and its plan, the Burla extra and its
-label, and the refusal on Windows (*Prove -- Spec Front Door*, sections 3.2, 3.3, 8.6, 8.7
-and PF9.1 to PF9.4; Q31 and Q34, ruled yes 2026-10-13; the Burla pin moved to exactly 1.8.2 and its
-relay line rewritten by the pin fix of 2026-10-14; the PF0 freeze's yes/no 5, ruled yes 2026-10-14,
-which gives PF9 the Burla install line).
+label, and the refusal on Windows (PF9.1 to PF9.4; the Burla pin at exactly 1.8.2 and the
+relay line the pin fix rewrote; and the Burla install line, which PF9 owns).
 
 **What is pinned is public behaviour.** The command line in this process (``cli.main`` with string
 streams, as every frozen command-line test drives it), the package's declared extras (read from
@@ -15,7 +13,7 @@ A test that needs one present puts a package of that name, with a ``dist-info`` 
 first on ``sys.path``; it is findable and its version readable, and nothing of it runs. A test that
 needs ``burla`` missing puts a finder first on ``sys.meta_path`` that refuses to find or import it,
 so the case holds where the real client is installed: missing means not importable in Prove's
-interpreter, which is what the launcher needs (reading r2). Burla's launcher is the backend's own
+interpreter, which is what the launcher needs. Burla's launcher is the backend's own
 seam, ``executor_burla._launcher_argv``, pointed at ``tests/bu_fixtures/launch.py`` with the fake
 client of ``tests/bu_fixtures/burla``, as ``test_bu_burla_backend.py`` points it. The fake reports
 the version a test writes into its ``script.json`` and refuses any call it gets, so no worker pool
@@ -24,35 +22,34 @@ is needed and a launcher that reaches Burla ends at once, with the call on recor
 **Sockets are blocked** in this module and in every module that drives a remote backend offline
 (PF9.4), by ``conftest.py``'s guard; the fake's own interpreters arm their tripwire as before.
 
-**Readings this file freezes** (each owed as one yes/no in the project's
-the freeze's records; the build is written against them unedited):
+**Choices this file freezes** (the code is written against them; they are not edited to fit it):
 
-- **r1** The ``[burla]`` extra pins exactly the client the backend runs, ``burla==1.8.2`` (the spec's
-  ``==1.8.1`` predates the 2026-10-14 pin): the extra admits a version exactly when the backend
+- The ``[burla]`` extra pins exactly the client the backend runs, ``burla==1.8.2`` (an earlier
+  ``==1.8.1`` predates the current pin): the extra admits a version exactly when the backend
   runs it. Under the alternative, a floor, the 1.8.3 and 1.9.0 cases flip.
-- **r2** A ``burla`` that Prove's interpreter cannot import is refused before the plan, as a missing
-  ``modal`` is (sections 3.2 and PF1.2; "one line" read as the look's refusal: one ``error:`` line,
+- A ``burla`` that Prove's interpreter cannot import is refused before the plan, as a missing
+  ``modal`` is (PF1.2; "one line" read as the look's refusal: one ``error:`` line,
   then ``next:`` lines): exit 1, the next line ``pip install "poisson-prove[burla]"``, nothing on
   stdout, no launcher, no ledger, no run stored, before the ``[burla]`` table is read. The
   launcher's own check stays as the backstop and names the extra too.
-- **r3** Every Modal plan names the price table's date and says the estimate covers compute, not
+- Every Modal plan names the price table's date and says the estimate covers compute, not
   model tokens, also with no estimate (no ``--est-seconds``, or a GPU the price table lacks).
-- **r4** On Windows the Burla refusal comes before anything else a Burla sweep does (the spec file,
+- On Windows the Burla refusal comes before anything else a Burla sweep does (the spec file,
   the store, the flags, the extra, the ``[burla]`` table, the target), names burla and Windows in
   its ``error:`` line, and offers no install line; local and Modal are not refused.
-- **r5** The Burla plan's relay line names the switch ``DISABLE_BURLA_RELAY=True``, says relay and
-  says where the store stays (the corrected message of 2026-10-14, pinned by its facts).
-- **r6** Real-backend tests carry ``slow`` and ``backend`` (section 10.6's names) and are skipped
+- The Burla plan's relay line names the switch ``DISABLE_BURLA_RELAY=True``, says relay and
+  says where the store stays (the corrected message of the pin fix, pinned by its facts).
+- Real-backend tests carry the ``slow`` and ``backend`` markers and are skipped
   unless their own opt-in variable is set, so a plain ``pytest`` never makes a paid call.
-- **r7** PF9.4's "offline Modal and Burla tests" are every module that drives a remote backend
+- PF9.4's "offline Modal and Burla tests" are every module that drives a remote backend
   offline (``conftest.NETWORK_BLOCKED_MODULES``); one that must serve on a local socket is exempt,
   named with its reason (``conftest.NETWORK_EXEMPT_MODULES``).
-- **r13** The price table's date is pinned as printed today, ``2026-09-03``: re-reading Modal's
+- The price table's date is pinned as printed today, ``2026-09-03``: re-reading Modal's
   prices is a deliberate change that moves this test with it.
 
 **Seams with PF3 and PF7, tested only on PF9's side:** PF3's ``prove.toml`` default spec and
 ``init`` (a Burla sweep with no spec argument on Windows meets the same first check, pinned here
-with a spec named, a missing one included); PF7's measured floors (section 3.4, Q16) and its
+with a spec named, a missing one included); PF7's measured floors and its
 ``all`` extra (this file pins only that ``all`` carries the ``modal`` and ``burla`` requirements
 their own extras carry, and that no other extra names ``burla``).
 """
@@ -139,7 +136,7 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
 
 
 def sweep_argv(root: Path, spec: Path, backend: str, *extra: str, target: str = MOCK) -> list[str]:
-    # PF4 re-freeze (PF4.30, reading R17): no lone condition of this 2-replicate design can be
+    # PF4 re-freeze (PF4.30): no lone condition of this 2-replicate design can be
     # flagged, which any accepted change below 1 refuses; --max-mde 1 admits it as 0.99 did.
     return ["--store", str(root / "store"), "sweep", str(spec), "--target", target,
             "--backend", backend, "--max-mde", "1", *extra]
@@ -231,7 +228,7 @@ def point_launcher(monkeypatch: pytest.MonkeyPatch, launches: Launches) -> None:
 
 
 def simulate_windows(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``os.name == "nt"`` as the spec simulates it (PF9.3). The filesystem is still this one, so
+    """``os.name == "nt"`` as PF9.3 simulates it. The filesystem is still this one, so
     the module that defines ``pathlib.Path`` (``pathlib`` up to 3.12, ``pathlib._local`` from 3.13)
     keeps reading the real name; nothing else is changed."""
     defining = sys.modules[pathlib.Path.__module__]
@@ -273,9 +270,9 @@ def nearest_backend(text: str, word: str) -> str | None:
 
 
 def test_pf9_1_the_modal_extra_has_a_floor_and_no_ceiling() -> None:
-    """Section 3.3: ``modal>=<measured floor>``; section 3.4: no upper bound where none exists today.
-    The floor's value is measured (Q16; reading r8), so it is not pinned here; PF9's real-backend
-    test runs Modal at it. ``all`` carries the same requirement (section 3.3's ``all`` row)."""
+    """``modal>=<measured floor>``, and no upper bound where none exists today.
+    The floor's value is measured, so it is not pinned here; PF9's real-backend
+    test runs Modal at it. ``all`` carries the same requirement."""
     found = named(extras()["modal"], "modal")
     assert len(found) == 1, extras()["modal"]
     (req,) = found
@@ -293,7 +290,7 @@ def test_pf9_1_the_modal_extra_has_a_floor_and_no_ceiling() -> None:
 def test_pf9_1_the_modal_plan_dates_its_prices_and_covers_compute_not_tokens(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gpu: str | None, extra: tuple[str, ...],
 ) -> None:
-    """PF9.1, readings r3 and r13: whatever the estimate, the plan names the price table's date and
+    """PF9.1: whatever the estimate, the plan names the price table's date and
     says the estimate covers compute and not model tokens; ``--json``'s plan lines say the same."""
     make_findable(monkeypatch, tmp_path, "modal", "99.0")
     spec = write_spec(tmp_path, modal=True, modal_gpu=gpu)
@@ -322,7 +319,7 @@ def test_pf9_1_the_modal_plan_dates_its_prices_and_covers_compute_not_tokens(
 def test_pf9_2_the_burla_extra_admits_exactly_the_client_the_backend_runs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: str, runs: bool,
 ) -> None:
-    """Section 3.3 under Q31 and the 2026-10-14 pin, reading r1: ``[burla]`` declares one ``burla``
+    """The exact pin: ``[burla]`` declares one ``burla``
     requirement, ``all`` carries the same, no other extra names ``burla``, and it admits a version
     exactly when the backend runs that client. A client the backend refuses is refused before
     Burla is called, naming the client's version, the pin and the install line. (The pinned client
@@ -346,7 +343,7 @@ def test_pf9_2_the_burla_extra_admits_exactly_the_client_the_backend_runs(
 
 
 def test_pf9_2_the_help_calls_the_burla_backend_experimental() -> None:
-    """PF9.2: ``--backend``'s help line calls burla, and only burla, experimental (section 8.7)."""
+    """PF9.2: ``--backend``'s help line calls burla, and only burla, experimental."""
     code, out, err = run_cli(["sweep", "--help"])
     assert code == 0, err
     lines = out.splitlines()
@@ -365,10 +362,10 @@ def test_pf9_2_the_help_calls_the_burla_backend_experimental() -> None:
 def test_pf9_2b_every_burla_install_line_names_the_extra(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str,
 ) -> None:
-    """PF0's yes/no 5 (ruled 2026-10-14): Burla's install line is ``pip install "poisson-prove[burla]"``
+    """Burla's install line is ``pip install "poisson-prove[burla]"``
     wherever Prove prints one, never ``pip install burla==``: when ``burla`` cannot be imported here,
     and from the launcher's backstop when it cannot import ``burla`` there. (A client the backend
-    does not run is the r1 test's.)"""
+    does not run is the pin test's.)"""
     spec = write_spec(tmp_path, burla=BURLA_TABLE)
     if case == "missing-here":
         make_missing(monkeypatch, "burla")
@@ -394,7 +391,7 @@ def test_pf9_2b_every_burla_install_line_names_the_extra(
 def test_pf9_2c_a_missing_burla_is_refused_before_the_plan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: bool,
 ) -> None:
-    """Reading r2 (sections 3.2 and PF1.2, as ``modal`` is today): with ``burla`` not importable, a
+    """PF1.2, as for ``modal`` today: with ``burla`` not importable, a
     Burla sweep exits 1 with one ``error:`` line naming burla and the install line as its one next
     line, prints nothing on stdout, starts no launcher, writes no ledger and stores no run, before
     the ``[burla]`` table is read. The control is the same command in the same kind of folder with
@@ -428,7 +425,7 @@ def test_pf9_2c_a_missing_burla_is_refused_before_the_plan(
 
 
 def test_pf9_2d_the_burla_plan_names_the_relay_switch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Reading r5 (the pin fix's relay line, 2026-10-14; passes on main, a guard of that fix): the
+    """The pin fix's relay line (passes on main, a guard of that fix): the
     Burla plan has one line naming ``DISABLE_BURLA_RELAY=True`` that also says relay and store, in
     text and in ``--json``'s plan lines."""
     make_findable(monkeypatch, tmp_path, "burla", PIN)
@@ -455,7 +452,7 @@ def test_pf9_2d_the_burla_plan_names_the_relay_switch(tmp_path: Path, monkeypatc
 def test_pf9_3_burla_on_windows_is_refused_before_any_work(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, windows: None, case: str,
 ) -> None:
-    """PF9.3 under Q34, reading r4: with ``os.name == "nt"``, ``--backend burla`` exits 1 with one
+    """PF9.3: with ``os.name == "nt"``, ``--backend burla`` exits 1 with one
     ``error:`` line naming burla and Windows, before the spec file, the flags, the store, the extra,
     the ``[burla]`` table or the target is looked at: nothing on stdout, no install line, no
     launcher, no ledger, no run stored."""
@@ -510,7 +507,7 @@ DRIVES_A_BACKEND = re.compile(
 
 
 def test_pf9_4_every_offline_backend_module_runs_with_sockets_blocked(blocked_network: list[str]) -> None:
-    """PF9.4, reading r7: every test module that drives a remote backend (its source runs
+    """PF9.4: every test module that drives a remote backend (its source runs
     ``--backend modal`` or ``burla``, ``run_modal``, ``run_burla`` or ``run_with_mapper``) runs with
     network sockets blocked, unless it is exempt with its reason; this one is blocked. An attempt
     fails the test even when the code under test swallows the error. ``tests/live`` is not offline."""

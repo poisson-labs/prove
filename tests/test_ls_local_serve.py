@@ -1,31 +1,28 @@
-"""LS -- the local serve pass: the frozen tests for LS1-LS20 and the ruled LS21.
+"""LS -- local serve: the frozen tests for LS1-LS20 and LS21.
 
-**Frozen 2026-09-22.** Approved: the invariant-to-test table, the mutant-to-test table and the
-conventions below (seven yes); the freeze is this docstring and nothing else. The mutation pass was
-re-run control-first after the freeze; its table is the handoff's. The build works against this
-file and does not edit it.
+**Frozen after review.** Approved: the invariant-to-test table, the mutant-to-test table and the
+conventions below; the freeze is this docstring and nothing else. The mutation pass was re-run
+control-first after the freeze. The build works against this file and does not edit it.
 
-Written from "Prove -- Spec Local Serve Pass" section 4 against ``f7af030`` (2026-09-22), on the
-update commit that moves the schema pins to ``proofload.viewpair/6``, the top-level key tuple to
-fourteen with ``summary`` eighth, ``PANEL_KEYS`` to fifteen, ``HOLE_KEYS`` to ten, the ``<h2>``
-sequence to ``Summary`` first and ``Run pair`` thirteenth, and the two-event complementary pair's trade line to the
-complement sentence. Phase B changes ``src/proofload/diff.py`` (``complementary_events``,
-``trade_line``), ``src/proofload/report.py`` (``_wrap`` and the four wrapped texts,
-``MultiReport.complement``), the new ``src/proofload/plain.py``, ``src/proofload/viewer.py`` (the
+Written against ``f7af030``, on the update commit that moves the schema pins to
+``proofload.viewpair/6``, the top-level key tuple to fourteen with ``summary`` eighth,
+``PANEL_KEYS`` to fifteen, ``HOLE_KEYS`` to ten, the ``<h2>`` sequence to ``Summary`` first and
+``Run pair`` thirteenth, and the two-event complementary pair's trade line to the complement
+sentence. The build changes ``src/poisson_prove/diff.py`` (``complementary_events``,
+``trade_line``), ``src/poisson_prove/report.py`` (``_wrap`` and the four wrapped texts,
+``MultiReport.complement``), the new ``src/poisson_prove/plain.py``, ``src/poisson_prove/viewer.py`` (the
 inert rule, the docstring and both refusals, the hole's ``where``, the holes block, the ``summary``
-key, the schema, the page order, the unverified tails) and ``src/proofload/cli.py`` (help and two
-refusal wordings) against this file, and does not edit it. Phase C re-mints every rendered-output
-digest the build moves; none is minted here.
+key, the schema, the page order, the unverified tails) and ``src/poisson_prove/cli.py`` (help and two
+refusal wordings) against this file, and does not edit it. Every rendered-output digest the build
+moves is re-minted after it; none is minted here.
 
-**``proofload.plain`` and the changed surfaces are reached inside test bodies** through ``plain()``
+**``poisson_prove.plain`` and the changed surfaces are reached inside test bodies** through ``plain()``
 and ``viewer()``, so this file collects on the bare tree, its own tests fail there, and every other
-test in the repo still reports. Source is read through ``proofload.__file__``, never ``Path.cwd()``,
+test in the repo still reports. Source is read through ``poisson_prove.__file__``, never ``Path.cwd()``,
 so a run under ``PYTHONPATH`` reads the tree it was pointed at.
 
-**Step zero, nine items, measured at ``f7af030`` before a test was written** (the log in
-a scratch folder of the worktree, filed in the project's records
-as the step-zero record). The four reproductions hold: (3) on the then-fixture
-pair's page every present cell has its centre under a label ``<text>`` drawn after its rect, and no
+**Nine items, measured at ``f7af030`` before a test was written.** The four reproductions
+hold: (3) on the then-fixture pair's page every present cell has its centre under a label ``<text>`` drawn after its rect, and no
 ``pointer-events:none`` selector ends in ``text``; (4) on that pair's two-event figure exactly two
 ``<text>`` runs pass the box, both legend captions, and a 143-char ``--title`` runs past it too --
 *and on every builder-made pair whose box is 200 to 440 px wide the
@@ -37,15 +34,15 @@ in every cell, and every other pair measured (its one event alone, the multi-eve
 real-suite pairs in the workspace store) fails condition 1 or 4. (7) ``max_mde_unchanged`` is
 a fraction in [0, 1] on every pair and ``_fmt(value, "pp0")`` is character for character the number
 the honesty line prints, on all thirteen panels that have one. (8) ``MULTI_JSON_SHA256``'s fixture
-is a single-event comparison and ``to_json()`` has 25 keys, none named ``complementary_events``. (1) The
-section 7.1 greps: ``TOP_LEVEL_KEYS`` has **six** copies (``test_s29_viewer.py``,
+is a single-event comparison and ``to_json()`` has 25 keys, none named ``complementary_events``. (1) A
+grep for ``TOP_LEVEL_KEYS`` finds **six** copies (``test_s29_viewer.py``,
 ``test_m13_viewer.py``, ``test_p1_payload.py``, ``test_s21_errors.py``, ``test_a28_agreement.py``,
-``test_cut_surfacing.py``), not the three section 0.2 counts; all six are updated. (2)
-``origin/main`` is ``a1caa17``, four commits past ``f7af030`` (the PR-1 merge); this packet stays
-on ``f7af030`` as instructed and the line numbers in the spec were read there.
+``test_cut_surfacing.py``), not the three expected; all six are updated. (2)
+``origin/main`` is ``a1caa17``, four commits past ``f7af030`` (the PR-1 merge); these tests stay
+on ``f7af030``.
 
-**Conventions this file fixes where the spec is silent or disagrees with itself. The build follows
-these; each was put to review and ruled on 2026-09-22 (seven yes).**
+**Conventions this file fixes where the invariants are silent or disagree with each other. The
+build follows these; each was reviewed.**
 
 - **The Summary region is one ``<p>`` per sentence, one element per line, no table, no list, no
   attribute, no ``<details>``**, in this order: the partial line (if any), the complement line (if
@@ -53,11 +50,11 @@ these; each was put to review and ruled on 2026-09-22 (seven yes).**
   line, and last the pointer. Every ``<p>`` is one ``line`` value of ``summary`` through
   ``html.escape``, so LS20's two directions are one equality.
 - **The event name is spelled bare** in the counts and row sentences: ``tripped: 0 of 72 conditions
-  ...``. The spec writes the field in backticks in section 3.4, which this file reads as the spec's
-  own markdown and not as characters the page prints; the headline already spells events bare.
+  ...``. The sentence's source writes the field in backticks, which this file reads as markdown
+  and not as characters the page prints; the headline already spells events bare.
 - **``change`` is the cell's ``text["delta"]`` verbatim**, so a rise reads ``28.1`` and not
-  ``+28.1``; section 3.3's example shows a plus sign and section 3.3's rule says verbatim, and
-  verbatim is what LS9 can check.
+  ``+28.1``; an example showed a plus sign while the rule says verbatim, and verbatim is what
+  LS9 can check.
 - **``q`` in the counts sentence is ``str()`` of the ``diff`` object's ``q``** (``0.05``). LS9's
   payload-bound clause accepts it because the tree's ``bound.text.q`` spells the same number; the
   two spellings part below ``q = 0.001`` (``sig3`` goes scientific), which no fixture reaches and is
@@ -67,71 +64,69 @@ these; each was put to review and ruled on 2026-09-22 (seven yes).**
   else beyond the payload.
 - **The ``worse`` rows are the panel's ``worse`` cells sorted by ``(-delta, q, mde, config_hash)``**
   -- ``_worst``'s tie-break key -- cut at ``view.top_n``; a sort is not arithmetic.
-- **The complement sentence's second clause names the traded pair, not ``events`` order** (ruled
-  2026-09-22): ``The {k} conditions where {worse} rose are the {k} where {safer} fell``, with
+- **The complement sentence's second clause names the traded pair, not ``events`` order**:
+  ``The {k} conditions where {worse} rose are the {k} where {safer} fell``, with
   ``(safer, worse)`` the pair ``trade_line()`` picks. On the two-event lattice pair the two readings coincide.
-- **``build_summary`` takes the trade line as a sixth keyword** (ruled 2026-09-22), so
+- **``build_summary`` takes the trade line as a sixth keyword**, so
   ``summary.complement.line`` *is* ``trade_line()`` and ``plain.py`` composes no complement sentence:
   one source for one sentence, on every method.
 - **Under complementarity with nothing significant, ``trade_line()`` stays ``None``** (the existing
   first guard runs first) and ``summary.complement`` is ``{"events": [...], "line": None}``: there
   is no traded pair to name. No fixture reaches it.
-- **The non-complementary trade line keeps its first sentence and drops its second** (ruled
-  2026-09-22): ``Trade: {safer} fell in {n} cells where {worse} rose.`` Section 0.2 says the line is
-  unchanged except under complementarity and, two lines on, that "moved failures" appears nowhere
-  in ``src/``; only the second can be checked, and D2 is why it wins.
+- **The non-complementary trade line keeps its first sentence and drops its second**:
+  ``Trade: {safer} fell in {n} cells where {worse} rose.`` The line was to stay unchanged except
+  under complementarity, and "moved failures" was to appear nowhere in ``src/``; only the second
+  can be checked, and D2 is why it wins.
 - **The partial line names each partial run in ``a``, ``b`` order**, one sentence per run joined by
   a space, and ``summary.partial["runs"]`` lists them in that order.
 - **LS2 is pinned over five texts**: the four D9 wraps -- the title (stacked and per panel), the
   headline lines (stacked header and panel caption), the trade or complement line, the legend caption
-  -- and, ruled 2026-09-22, the honesty lines, each identified by content through this file's
-  restatement of ``_wrap`` and its budget. The spec's clause reads "every ``<text>``"; measured at
-  step zero, that cannot hold on a box 200 px wide, whose legend swatch *rects* sit at a fixed 46 px
+  -- and the honesty lines, each identified by content through this file's restatement of
+  ``_wrap`` and its budget. LS2's clause reads "every ``<text>``"; measured before the build, that
+  cannot hold on a box 200 px wide, whose legend swatch *rects* sit at a fixed 46 px
   pitch and already leave it; the swatch labels are the named exception.
 - **A wrapped text is drawn as one ``<text>`` per line, the continuation lines carrying
   ``data-wrap="1"`` and the first line not**, so M7's frozen file (updated) can read a wrapped
   text back as one, and so a reader of the SVG can tell a wrapped line from a new text.
-- **The tree refusal is left as it was.** Section 3.8 item 1 gives it "the same treatment for
-  symmetry", but it carries no version literal to interpolate, and P-1's Y15 pins its text; LS8
+- **The tree refusal is left as it was.** It was to get "the same treatment for symmetry",
+  but it carries no version literal to interpolate, and P-1's Y15 pins its text; LS8
   asserts it names no version, and the intervals refusal alone interpolates ``SCHEMA``.
 - **LS3's rect clause is "byte-identical up to the top growth"**: ``x``, ``width``, ``height``,
   ``fill`` and the four ``data-`` attributes of every grid and glyph rect are the base commit's,
   and ``y`` is the base commit's plus exactly the growth of ``top`` (``18`` per extra title
-  line, ``12`` per extra headline line). The spec's "byte-identical" holds only where nothing
+  line, ``12`` per extra headline line). LS3's "byte-identical" holds only where nothing
   above the grid wraps; on the narrow pairs the headline wraps, and a grid that did not move down
   would be drawn over its own title.
 - **LS16 is pinned as written, six tokens over the whole page.** Measured: the Cells region prints
   ``MDE is ADR-018's smallest detectable increase ...`` on every pair with a rejecting family, so
-  LS16 and LS19's "byte-identical apart from the two strings section 3.8 names" cannot both hold.
-  D14's rule (a public page carries no reference a stranger cannot resolve) is the intent, ruled
-  2026-09-22: the build spells that sentence ``MDE is the smallest detectable increase ...`` (and its
-  twin in ``report.py`` the same), and LS19's region digests are taken with the bare spelling
+  LS16 and LS19's "byte-identical apart from" the two unverified tails cannot both hold.
+  D14's rule (a public page carries no reference a stranger cannot resolve) is the intent: the
+  build spells that sentence ``MDE is the smallest detectable increase ...`` (and its twin in ``report.py`` the same), and LS19's region digests are taken with the bare spelling
   normalised to that one.
 - **LS1's "sole catch" is a source clause.** The page's ``<style>`` is ``_html_style(theme)`` plus
   ``_LAYOUT``, so a rule added to the report's stylesheet *does* reach the page and the computed
-  style cannot tell the two apart; the spec's "where the page does not read it" is wrong. What
+  style cannot tell the two apart; LS1's "where the page does not read it" is wrong. What
   catches the mutant is that ``pointer-events`` appears in ``viewer._LAYOUT`` and not in
   ``_html_style``.
 - **The hole's ``where`` on a grid hole is its ``coords`` string, and on an off-grid hole is
   ``", ".join(f"{axis}={config_text[axis]}")`` over ``x_axis``, ``y_axis`` and the keys of
   ``view.fixed`` in that order**, or ``off grid: <config_hash>`` when the config carries none of them.
-  The Holes summary paragraph is the sentence of section 3.1 (c) with the cause counts after it.
+  The Holes summary paragraph is the on-grid and off-grid count sentence with the cause counts after it.
 - **``mde_unchanged.where``** is the ``coords`` string of the cell ``_honesty``'s three-step search
   names, and ``mde_unchanged.text`` is ``_fmt(value, "pp0")``; ``None`` for all three when the
   honesty line is ``_HONESTY_NONE``.
-- **LS19's region digests are normalised at four places the spec did not count**: the two
-  unverified tails (section 3.8), the MDE-meaning sentence (the LS16 convention), the ``Result``
+- **LS19's region digests are normalised at four places the invariant did not count**:
+  the two unverified tails, the MDE-meaning sentence (the LS16 convention), the ``Result``
   region's trade or complement ``<p>`` (D10 changes it on the two-event complementary pair), and the ``Cell``
   region's holes JSON block (D12 adds ``where`` to every hole). Everything else in the eight regions
   is pinned byte for byte, on the bare tree, and must survive the build.
-- **LS21, from the ruling of 2026-09-21 that lifted D16's hold on the word "unpaired":** the word
-  and the Python warning stay exactly as they are, and one plain line is printed beside the word --
+- **LS21, which lifted D16's hold on the word "unpaired":** the word and the Python warning stay exactly as they are, and one plain line is printed beside the word --
   in the ``Result`` block, the ``<p>`` right after the headline -- iff the payload's
   ``diff.unpaired_analysis`` is true (the runs share their seeds and the test ignores that). It rides
   the payload as ``summary.pairing.line`` (``None`` otherwise), third key of ``summary`` after
   ``complement``, and is the one ``line`` of ``summary`` that is read in ``Result`` rather than in
-  the Summary region, so LS20's equality leaves it out. The wording is an internal pairing report's
-  suggested sentence, verbatim. Not a spec invariant: the ruling came after the spec was written.
+  the Summary region, so LS20's equality leaves it out. The wording is a pairing report's
+  suggested sentence, verbatim. LS21 was added after LS1-LS20 were written.
 
 **Fixture limits, stated before anything is asserted on a fixture.** Every S29 pair is complete,
 so LS15 rests on this file's own partial pair (three holes, ``part-a`` never marked complete,
@@ -190,7 +185,7 @@ SERVE_DOC = REPO / "docs" / "reading-a-serve-page.md"
 LATTICE_ROOT = lattice.root()
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
 
-# ---------- spec sections 2, 3.2, 3.3, 3.5: the literals ----------
+# ---------- the literals ----------
 
 #: LS7, LS8. The schema, and the four ``render_html`` refuses by name.
 SCHEMA = "poisson-prove.viewpair/7"
@@ -204,7 +199,7 @@ TOP_LEVEL_KEYS = (
 # PF4 (PF4.20, PF4.3): a panel carries its event's kind before n_safer and n_worse (null when the
 # kind is unknown) and the direction counts n_higher and n_lower after them, then the share label.
 # The contract names the share caption, not this key; share_label is the reference build's name.
-# ``threshold`` is section 8.4's threshold on the panel, so the Summary reads it as a payload field.
+# ``threshold`` is the verdict's threshold on the panel, so the Summary reads it as a payload field.
 # PF4 re-freeze (PF4.34 to PF4.47): each panel gains ``flag_rule`` after ``kind``; the order is the
 # reference build's.
 PANEL_KEYS = (
@@ -233,7 +228,7 @@ HOLE_KEYS = (
     "coords", "where", "config_hash", "cause", "rows_a", "rows_b", "no_outcome_a", "no_outcome_b",
     "config", "config_text",
 )
-#: LS7. The ``summary`` object (section 3.3), its event entry, a ``worse`` row and the limit.
+#: LS7. The ``summary`` object, its event entry, a ``worse`` row and the limit.
 # PF4 (PF4.5): the Summary carries the comparison's verdict word, first.
 # PF4 re-freeze (PF4.34, PF4.35, PF4.40, PF4.44, PF4.46): after the word, the verdict rule, the verdict
 # line, the verdict limit, the fragility, peeking, the errored episodes and the verdict block's detail
@@ -252,7 +247,7 @@ H2_SEQUENCE = (
     "Holes", "Worst cells", "Run pair", "Provenance",
 )
 DISPATCH_H2 = frozenset(H2_SEQUENCE)
-#: LS19. The regions that keep their bytes but for the strings section 3.8 names (and the one this
+#: LS19. The regions that keep their bytes but for the two unverified tails (and the one this
 #: file's LS16 convention adds).
 UNTOUCHED_REGIONS = ("Result", "Honesty", "Not verified", "Fault lines", "Cells", "Cell", "Worst cells", "Provenance")
 RETIRED_TAILS = (" (closed by B.1)", " (nothing on the roadmap closes this)")
@@ -261,7 +256,7 @@ RETIRED_TAILS = (" (closed by B.1)", " (nothing on the roadmap closes this)")
 NEW_TAILS = (" (this version does not check it)", " (nothing planned would close this; it is a limit of the instrument)")
 MDE_MEANING_BARE = "MDE is ADR-018's smallest detectable increase"
 MDE_MEANING_PLAIN = "MDE is the smallest detectable increase"
-#: LS10, LS11. Section 3.5's thresholds and the quantity each applies to.
+#: LS10, LS11. The confidence thresholds and the quantity each applies to.
 CONFIDENCE_THRESHOLDS = ((0.001, "very sure"), (0.01, "sure"), (0.05, "fairly sure"))
 TOO_SMALL_TO_TELL = 0.50
 LABEL_START = "0.05"
@@ -301,12 +296,12 @@ MIN_BUDGET = 8
 # PF4 (PF4.20): no longer asserted; on an event of unknown kind the caption reads in direction
 # words. LS2 reads the caption off the figure (drawn_legend_caption) and asserts its facts.
 LEGEND_TAIL = "corner notches = trade (safer in one event, worse in another)"
-#: The honesty lines join the wrap set: D9 named four texts, step zero measured the honesty lines
-#: past the box on every narrow pair, and it was ruled on 2026-09-22 that they wrap too (a fifth
+#: The honesty lines join the wrap set: D9 named four texts, the honesty lines measured past the
+#: box on every narrow pair before the build, so they wrap too (a fifth
 #: text, at the caption's 12 px pitch).
 WRAPPED_HONESTY = True
 
-# ---------- section 3.4: the words, verbatim ----------
+# ---------- the words, verbatim ----------
 
 # PF4 re-freeze (PF4.40): the words "no significant change" always carry the verdict limit on their
 # line, so the counts line says the conditions "were not flagged".
@@ -317,7 +312,7 @@ LIMIT_LINE_LABELLED = "Too small to tell: the least sensitive condition among th
 LIMIT_LINE = "The least sensitive condition among those this run did not call a change ({where}, n = {n_a}/{n_b}) could only have seen a rise of {mde}pp or more."
 LIMIT_LINE_NONE = "Every condition moved significantly, so there is no condition left to state a detection limit from."
 PARTIAL_LINE = 'Run {run_id} ({role}) recorded status "partial": it stopped before everything it planned had run. What is below compares the conditions both runs have.'
-#: LS21, the ruling of 2026-09-21 that lifted D16's hold: the one plain line beside the word
+#: LS21, which lifted D16's hold: the one plain line beside the word
 #: "unpaired", printed iff the payload's ``diff.unpaired_analysis`` is true.
 PAIRING_LINE = "Compared as two separate samples. The runs share their seeds; this test does not use that."
 POINTER_LINE = "Every number above is below with the statistics it came from: the omnibus, the honesty block and its bound, the per-condition table, the intervals, and what this comparison could not establish."
@@ -557,7 +552,7 @@ def serve_argv(root: Path, a: str, b: str, events: Sequence[str], x: str, y: str
         argv += ["--y", y]
     for k, v in fixed.items():
         argv += ["--fix", f"{k}={json.dumps(v)}"]
-    # PF3 (Q17, spec sections 4.4 and 14; R1): with no --method the default is now the paired test
+    # PF3 (Q17): with no --method the default is now the paired test
     # for runs that share a salt (the lattice among them); every pair here is compared with the library's
     # multi_diff under ``method``, so the method is always named.
     argv += ["--method", method]
@@ -906,7 +901,7 @@ def right_edge(t: Text) -> float:
 
 
 def wrap(text: str, budget: int) -> list[str]:
-    """Section 3.1 (b)'s ``_wrap``, restated: broken on spaces into lines of at most ``budget``
+    """``_wrap``, restated: broken on spaces into lines of at most ``budget``
     characters, greedy, a word longer than the budget hard-split; ``[""]`` for empty text."""
     if not text:
         return [""]
@@ -1556,10 +1551,10 @@ def normalised_region(page: str, heading: str) -> str:
 
 
 def page_as_0_0_1_wrote_it(page: str) -> str:
-    """PF0 (Q4, section 2.5): the rename changes three things on a page: the version entry of the
+    """PF0 (Q4): the rename changes three things on a page: the version entry of the
     provenance list, the version key in the arm table, and the ids of the page's two data blocks,
     which named the old product. First assert each is there as the rename writes it (the data
-    blocks are ``prove-cells`` and ``prove-holes``, ruled 2026-10-14), then put each back as 0.0.1
+    blocks are ``prove-cells`` and ``prove-holes``), then put each back as 0.0.1
     wrote it before the frozen digest is taken."""
     assert 'id="prove-cells"' in page and 'id="prove-holes"' in page and 'getElementById("prove-cells")' in page
     assert "<td>poisson_prove_version</td>" in page and "proofload-cells" not in page and "proofload-holes" not in page
@@ -1639,7 +1634,7 @@ def test_ls2_every_wrapped_text_of_the_figure_is_drawn_whole_and_ends_inside_the
             texts, width, _ = svg_texts(p.structure[source])
             contents = [t.content for t in texts]
             for kind, lines, font, x in wrapped_texts(p):
-                # PF2 (spec section 4.3): the default title names the runs, so a wrapped title can
+                # PF2: the default title names the runs, so a wrapped title can
                 # repeat a line (``synthetic@v0`` as its first and third line). A line is therefore
                 # read in its place, as the k-th of the wrapped text's lines drawn in order at its
                 # font and x, rather than by its content alone.
@@ -1673,7 +1668,7 @@ def test_ls2_the_same_wrap_reaches_the_reports_figure_and_the_receipt(tmp_path: 
     """``report`` draws the figure with the same builders: its ``heatmap.svg`` and the receipt's
     inline figure carry the wrapped caption on the two-event lattice pair."""
     out = tmp_path / "rep"
-    # PF3 (Q17, spec sections 4.4 and 14; R1): the lattice's runs share a salt, so the default is now the
+    # PF3 (Q17): the lattice's runs share a salt, so the default is now the
     # paired test; LATTICE_COMPLEMENT_LINE's 22 is the unpaired test's, named.
     code, _, err = run_cli(["--store", str(LATTICE_ROOT), "report", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--event", lattice.OTHER, "--x", lattice.Y, "--y", lattice.X, "--method", "fisher_bh", "--out", str(out)])
     assert code == 0, err[-400:]
@@ -1809,8 +1804,8 @@ def test_ls7_the_fourteen_top_level_keys_the_schema_the_panel_keys_and_the_cell_
     assert viewer().SCHEMA == SCHEMA
     for p in all_pairs:
         s = p.structure
-        # serve --json adds verdict and sentence after schema (front-door spec section 5.6).
-        # PF3 (spec section 4.4, R3): and method and method_chosen right after sentence.
+        # serve --json adds verdict and sentence after schema.
+        # PF3: and method and method_chosen right after sentence.
         assert tuple(s)[1:5] == ("verdict", "sentence", "method", "method_chosen"), (p.name, tuple(s))
         keys = tuple(k for k in s if k not in ("verdict", "sentence", "method", "method_chosen"))
         assert keys == TOP_LEVEL_KEYS and s["schema"] == SCHEMA, (p.name, tuple(s))
@@ -1870,7 +1865,7 @@ def test_ls8_both_structural_refusals_interpolate_the_constant_and_no_source_nam
     outside = "\n".join(lines[:start] + lines[at:])
     for retired in RETIRED_SCHEMAS:
         assert retired not in outside, retired
-        for path in SRC.rglob("*.py"):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
+        for path in SRC.rglob("*.py"):  # PF5: the core is a package now, so the scan reads src/ recursively.
             if path.name != "viewer.py":
                 assert retired not in path.read_text(encoding="utf-8"), (path.name, retired)
     assert f'SCHEMA = "{SCHEMA}"' in lines[at]
@@ -2023,7 +2018,7 @@ def test_ls10_the_labels_on_every_real_worse_row_follow_the_cells_q(all_pairs: l
 def test_ls11_too_small_to_tell_is_a_function_of_mde_unchanged_alone_at_0_50() -> None:
     cells = [synthetic_cell(0, 1e-5, 1e-6), synthetic_cell(9, 0.9, 0.9, delta=0.0, verdict="unchanged", mde=0.5)]
     # PF4 (PF4.5, PF4.17): the 50-point rule gives way to the runs' recorded threshold, and a limit
-    # is too small to tell only above it (section 8.4; at or below it is no significant change).
+    # is too small to tell only above it (at or below it is no significant change).
     # The hand-built pair records 0.50 in both arms, so the boundary stays at 0.50 and a limit of
     # exactly 0.50 is no longer labelled.
     for value, labelled in ((0.49, False), (0.50, False), (0.51, True), (0.999, True), (0.0, False)):
@@ -2055,7 +2050,7 @@ def test_ls11_the_limit_never_attaches_to_a_worse_row() -> None:
 def recorded_threshold(structure: Mapping[str, Any]) -> float:
     """PF4 (PF4.5, PF4.17): the threshold the Summary's limit is read against, computed here from
     the payload's two arms: the runs' recorded ``max_mde_accepted``, the smaller of the two, 0.20
-    when neither run recorded one (front-door spec section 8.4)."""
+    when neither run recorded one."""
     recorded = [arm["environment"].get("max_mde_accepted") for arm in (structure["pair"]["a"], structure["pair"]["b"])]
     values = [float(v) for v in recorded if v is not None]
     return min(values) if values else 0.20
@@ -2110,7 +2105,7 @@ def test_ls11_the_panels_mde_unchanged_is_the_honesty_number_character_for_chara
 def test_ls11_no_module_parses_the_honesty_prose_for_the_number() -> None:
     """Sole catch for a build that keeps the dashboard's text pattern."""
     pattern = re.compile(r"honesty[^\n]*\.(split|find|index|search|match|findall)\(|re\.\w+\([^\n]*honesty")
-    for path in SRC.rglob("*.py"):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
+    for path in SRC.rglob("*.py"):  # PF5: the core is a package now, so the scan reads src/ recursively.
         for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             assert not pattern.search(line), (path.name, i, line.strip())
 
@@ -2159,7 +2154,7 @@ def test_ls13_the_two_event_lattice_pair_is_reported_once_and_never_as_a_trade(l
     assert lattice_two.structure["trade_line"] == LATTICE_COMPLEMENT_LINE
     assert lattice_two.structure["summary"]["complement"] == {"events": [lattice.EVENT, lattice.OTHER], "line": LATTICE_COMPLEMENT_LINE}
     assert lattice_two.structure["summary"]["complement"]["line"] == lattice_two.structure["trade_line"]
-    # Ruling 6 (2026-09-22): the sentence has one source. ``plain.py`` carries ``trade_line`` and
+    # The sentence has one source. ``plain.py`` carries ``trade_line`` and
     # composes no complement sentence of its own.
     assert "complements here" not in PLAIN_SOURCE.read_text(encoding="utf-8")
     assert "trade_line" in inspect.signature(plain().build_summary).parameters
@@ -2183,7 +2178,7 @@ def test_ls13_the_two_event_lattice_pair_is_reported_once_and_never_as_a_trade(l
         # PF4 (PF4.20): neither event declares a kind, so the counts are the rises and falls.
         assert str(panel["n_higher"]) in entry["line"] and str(panel["n_lower"]) in entry["line"]
     assert LATTICE_COMPLEMENT_LINE in region_text(lattice_two.page, "Result")
-    for path in SRC.rglob("*.py"):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
+    for path in SRC.rglob("*.py"):  # PF5: the core is a package now, so the scan reads src/ recursively.
         assert RETIRED_TRADE_TAIL not in path.read_text(encoding="utf-8"), path.name
 
 
@@ -2247,7 +2242,7 @@ def test_ls15_a_partial_arm_is_named_first_in_the_summary_from_either_side(parti
     assert next(r for r in rows if r[0] == "status") == ["status", "complete", "complete"]
 
 
-# ---------- LS21: the plain line beside "unpaired" (the ruling of 2026-09-21) ----------
+# ---------- LS21: the plain line beside "unpaired" ----------
 
 
 def result_lines(page: str) -> list[str]:
@@ -2276,7 +2271,7 @@ def test_ls21_the_unpaired_word_gets_its_plain_line_beside_it_and_only_when_the_
 
 
 def test_ls21_the_word_and_the_warning_do_not_move() -> None:
-    """D16 as ruled: the word stays and the warning stays; only the line beside the word is new."""
+    """D16: the word stays and the warning stays; only the line beside the word is new."""
     assert "unpaired" in source_of(DIFF_SOURCE, "headline")
     src = DIFF_SOURCE.read_text(encoding="utf-8")
     assert "class UnpairedAnalysis" in src
@@ -2340,7 +2335,7 @@ BAD_ARGV = (
 def test_ls17_no_refusal_reachable_from_serve_names_a_python_parameter(lattice_one: Pair) -> None:
     for tail in BAD_ARGV:
         code, out, err, calls = run_serve(["--store", str(LATTICE_ROOT), "serve", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, *tail, "--json"])
-        # A refusal exits 1 (front-door spec section 5.2).
+        # A refusal exits 1.
         assert code == 1 and calls == [] and out == "", (tail, code, err[-300:])
         low = err.lower()
         for spelling in ("x_axis", "y_axis", "fixed=", "fixed ", "spec."):
@@ -2348,7 +2343,7 @@ def test_ls17_no_refusal_reachable_from_serve_names_a_python_parameter(lattice_o
         if "pin" in low or "not a config key" in low or "unknown config key" in low:
             assert "--x" in err or "--y" in err or "--fix" in err, (tail, err)
     code, out, err, calls = run_serve(["--store", str(LATTICE_ROOT), "serve", LATTICE_A, LATTICE_B, "--event", lattice.EVENT, "--json"])
-    # A refusal exits 1 (front-door spec section 5.2).
+    # A refusal exits 1.
     assert code == 1 and "--x AXIS" in err, err
 
 
@@ -2356,8 +2351,8 @@ def test_ls17_no_refusal_reachable_from_serve_names_a_python_parameter(lattice_o
 
 
 def test_ls18_the_readme_has_a_serve_section_and_the_docs_page_names_the_fourteen_headings_in_order() -> None:
-    # PF7 (sections 6.2 and 6.3): the README is the release's, its links absolute and its sections
-    # section 6.2's, so the serve section, its command and "Pre-release" move to serve's own page,
+    # PF7: the README is the release's, its links absolute and its sections
+    # the release's set, so the serve section, its command and "Pre-release" move to serve's own page,
     # which the README's Commands line links; the README still links this page.
     readme = README.read_text(encoding="utf-8")
     serve_page = (REPO / "docs" / "commands" / "serve.md").read_text(encoding="utf-8")

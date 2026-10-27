@@ -1,29 +1,28 @@
 """PF4, the statistics: the frozen tests at the library's level (the math suite).
 
-Written from the front-door spec's section 8 (8.2 to 8.5, 8.10) and its invariants PF4.1 to PF4.51.
-PF4.1 to PF4.21 were frozen by the PF4 freeze (2026-10-20); PF4.22 to PF4.33 by the addendum of
-2026-10-23; PF4.34 to PF4.51 by the statistics re-freeze of 2026-10-24, from twelve rulings
-on Argon's methodology review. The build is written against this file and does not edit it.
+Written from the invariants PF4.1 to PF4.51. PF4.1 to PF4.21 were frozen first; PF4.22 to PF4.33
+were added after them; PF4.34 to PF4.51 by the statistics re-freeze, after a review of the
+methodology. The implementation is written against this file and does not edit it.
 ``tests/test_pf4_surfaces.py`` holds what a user reads on a screen or in a file and the contract
 tests on the result objects (the code suite); ``tests/test_pf4_calibration.py`` simulates every
 claim Prove prints. This file holds the numbers underneath them.
 
 **How each statistic is checked.** Every number is recomputed by code written in this file from
-the spec's own definition, never from Prove's, with an outside library (scipy, statsmodels or
+the statistic's own definition, never from Prove's, with an outside library (scipy, statsmodels or
 lifelines) wherever one computes the quantity, its arguments taken from that library's
-documentation. Where an outside library was found not to compute the quantity the spec names, the
+documentation. Where an outside library was found not to compute the quantity as defined, the
 test says so and maximises the paper's restricted likelihood here instead (statsmodels 0.15's score
 test of a nonzero difference does not match the Miettinen-Nurminen restricted maximum likelihood; the
 restricted rates below come from scipy's bounded minimiser, which agrees with Farrington and Manning's
 closed form to 1e-7). Property-based tests (Hypothesis) carry the generated
-inputs, with the spec's edge cases as explicit examples: empty arms, 0% and 100%, uneven arms both
+inputs, with the edge cases as explicit examples: empty arms, 0% and 100%, uneven arms both
 ways, one condition, ties.
 
-**Readings, named here** (each is a yes/no in the session log).
+**Readings, named here.**
 
 - ``poisson_prove.stats`` holds ``wilson``, ``WilsonInterval`` and ``WILSON_LEVEL`` (PF5 adds the
   rest). A refused level raises ``ValueError``.
-- The library's cell frames (``EventDiff.cells``) carry every per-condition field the spec names as
+- The library's cell frames (``EventDiff.cells``) carry every per-condition field as
   columns: ``direction``, ``direction_note``, ``pairs``, ``q_holm``, ``holm``, the limit keys of
   PF4.32 with ``mde_hr``, ``mde_moves_with``, ``mde_rise_verdict`` and ``mde_fall_verdict``,
   ``competing_shift``, and the interval's ``ci_lo``, ``ci_hi``, ``ci_level`` and ``ci_method``.
@@ -41,17 +40,16 @@ ways, one condition, ties.
   no public path exposes the permutation draws.
 - A rollout's case id is ``Episode.meta["case_id"]``; the store copies it into its own ``case_id``
   column when the episode is appended, and a store frame carries it there (null for older parts),
-  which is how ``multi_diff`` sees it without decoding ``meta`` (reading R5).
+  which is how ``multi_diff`` sees it without decoding ``meta``.
 - ``mde_hr`` is the rise's hazard ratio under log-rank (null when the rise is null); the fall's is the
   grid point of ``log θ`` whose incidence change is the printed fall, recovered here from the template.
 - ``fragility_flips`` holds one entry per flipped run: ``config_hash``, ``event``, ``run`` (``"a"`` or
   ``"b"``), ``replicate_index`` and ``to`` (``"event"`` or ``"not event"``), so its length is the
-  fragility. A flip moves one row (reading R26): a run is made to end in the event only from an
+  fragility. A flip moves one row: a run is made to end in the event only from an
   outcome outside the compared events, and a run that ended in it is made to end outside them.
 
 **Lanes.** The math suite (marker ``math``). Most tests here run in seconds; the exhaustive fragility
-searches make a few thousand ``multi_diff`` calls and take longer (their times are in the session
-log). The simulations are in ``tests/test_pf4_calibration.py``.
+searches make a few thousand ``multi_diff`` calls and take longer. The simulations are in ``tests/test_pf4_calibration.py``.
 """
 
 from __future__ import annotations
@@ -93,7 +91,7 @@ def _frame(cells: dict[str, list[tuple[int, str | None, float]]], horizon: float
     """A raw store frame: one row per ``(replicate_index, outcome, t)`` in each named cell. The seed
     is the replicate index plus 1000 in both arms, so a pair of frames is a paired design. ``meta``
     maps a cell to the ``meta`` its rollouts returned, when given; its case id lands in the frame's
-    ``case_id`` column, as the store puts it (reading R5)."""
+    ``case_id`` column, as the store puts it."""
     rows = []
     for name, entries in cells.items():
         for rep, outcome, t in entries:
@@ -154,7 +152,7 @@ def _none(value: Any) -> bool:
     return value is None or (isinstance(value, float) and math.isnan(value))
 
 
-# ---------- the references: the spec's definitions, written here ----------
+# ---------- the references: the definitions, written here ----------
 
 
 @lru_cache(maxsize=256)
@@ -170,7 +168,7 @@ def _fisher_p(n_a: int, n_b: int) -> np.ndarray:
 
 
 def _ref_fisher_power(p_a: float, n_a: int, n_b: int, level: float, deltas: np.ndarray, rise: bool) -> np.ndarray:
-    """Section 8.10 item 3: A ~ Binomial(n_a, p_a), B ~ Binomial(n_b, p_a +- delta); a table counts when
+    """The power model: A ~ Binomial(n_a, p_a), B ~ Binomial(n_b, p_a +- delta); a table counts when
     its Fisher p is below the level and B's share moved the way the change does."""
     xa, xb = np.arange(n_a + 1), np.arange(n_b + 1)
     moved = (xb[None, :] * n_a > xa[:, None] * n_b) if rise else (xb[None, :] * n_a < xa[:, None] * n_b)
@@ -198,7 +196,7 @@ def _paired_region(pairs: int, level: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _ref_paired_power(p_a: float, pairs: int, level: float, deltas: np.ndarray, rise: bool) -> np.ndarray:
-    """Section 8.10 item 3: the two arms independent within a pair at A's share; the multinomial over
+    """The paired power model: the two arms independent within a pair at A's share; the multinomial over
     (n01, n10, concordant) enumerated cell by cell, in chunks of the grid."""
     from scipy.special import gammaln
 
@@ -253,7 +251,7 @@ def _ref_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> tuple
 
 
 def _assert_limit(got: Any, want: float | None, what: Any) -> None:
-    """The limit to the grid step (the spec's "the limit to the grid step"): floating-point order
+    """The limit to the grid step: floating-point order
     can move a power that sits on the target by one ulp."""
     if want is None:
         assert _none(got), (what, got)
@@ -267,7 +265,7 @@ def _assert_limit(got: Any, want: float | None, what: Any) -> None:
 @pytest.mark.parametrize("level,k,n", [(None, 10, 32), (0.90, 7, 20), (0.975, 7, 20), (0.5, 7, 20)],
                          ids=["default", "0.90", "0.975", "0.5"])
 def test_pf4_1_wilson_returns_its_bounds_level_z_and_method_at_each_level(level: float | None, k: int, n: int) -> None:
-    """Trimmed by the re-freeze's T3 (ruled 2026-10-24): the default level and other levels in one
+    """Trimmed by the PF4 re-freeze: the default level and other levels in one
     test. scipy documents ``norm.isf(q)`` as the inverse survival function: the two-sided quantile at
     level L leaves (1 - L) / 2 in the upper tail."""
     from scipy.stats import norm
@@ -418,7 +416,7 @@ def test_pf4_22_the_family_is_every_row_of_the_one_pass() -> None:
 
 
 def test_pf4_48_a_fall_from_a_share_off_the_grid_never_steps_past_the_room() -> None:
-    """The design session's finding 2: a fall from 5 of 194 with a grid that ran to room + step / 2 put
+    """A case found while the limits were designed: a fall from 5 of 194 with a grid that ran to room + step / 2 put
     B's share below 0 and turned "none detectable" into 0.0258."""
     result = _compare({"c": _counts(5, 194)}, {"c": _counts(5, 194)}, method="mcnemar_bh", q=Q / 18)
     row = _cell(result, "fell", "c")
@@ -492,8 +490,8 @@ def _template(t: np.ndarray, o: np.ndarray) -> list[tuple[float, float, float]]:
 
 
 def _ref_logrank(t_a: np.ndarray, o_a: np.ndarray, n_b: int, theta: float, level: float) -> tuple[float, float]:
-    """(power, B's incidence at the horizon) under the discrete mapping of PF4.43, written from the
-    spec: B's hazard of the event 1 - (1 - h_A)^theta at each of A's times, B's other endings A's
+    """(power, B's incidence at the horizon) under the discrete mapping of PF4.43, written from its
+    definition: B's hazard of the event 1 - (1 - h_A)^theta at each of A's times, B's other endings A's
     share among the runs that did not have the event, and Lakatos's expected moments for A's O - E."""
     z = sps.norm.isf(level / 2)
     y_b, mu, var, cif = float(n_b), 0.0, 0.0, 0.0
@@ -600,7 +598,7 @@ def _fall_step(t: np.ndarray, o: np.ndarray, n_b: int, value: float, cif_a: floa
 
 
 def test_pf4_43_where_as_hazard_reaches_one_a_fall_cannot_be_reached_and_reads_none_detectable() -> None:
-    """Reading R40: every run of A fell, at steps 1 to 9, so at A's last time its hazard is 1 and
+    """Every run of A fell, at steps 1 to 9, so at A's last time its hazard is 1 and
     1 - (1 - 1)^theta stays 1 for every theta: B's incidence cannot fall under the discrete mapping. The
     rise has no room, the fall is none detectable (never a change of 0), and the condition has no
     limit. On the lattice pair 37 conditions are like this (every run of its before arm tripped)."""
@@ -669,7 +667,7 @@ def test_pf4_43_a_zero_baseline_with_no_threshold_has_no_rise_and_says_none_dete
     """36 of A's 40 runs ended in another outcome at step 1: with four runs a side at risk at the
     horizon, even all four of B's having the event gives log-rank p about 0.008, above 0.05 / 18. The
     condition can still be flagged (an earlier event would) so ``flaggable`` holds, and the rise, whose
-    power is 0 under the zero-baseline model, is null with ``none detectable`` (reading R11)."""
+    power is 0 under the zero-baseline model, is null with ``none detectable``."""
     level = Q / 18
     arm = [(i, "stuck", 1.0) if i < 36 else (i, "ok", 10.0) for i in range(40)]
     row = _cell(_compare({"c": arm}, {"c": arm}, method="logrank_bh", q=level), "fell", "c")
@@ -683,8 +681,7 @@ def test_pf4_43_a_zero_baseline_with_no_threshold_has_no_rise_and_says_none_dete
 
 
 def test_pf4_15_the_single_event_diff_also_reports_no_limit_at_ceiling() -> None:
-    """The freeze's PF4.15 on the single-event ``diff()`` result, which keeps its own record (reading
-    R35): a condition that had the event in every run has no limit, and the largest is the other's."""
+    """PF4.15 on the single-event ``diff()`` result, which keeps its own record: a condition that had the event in every run has no limit, and the largest is the other's."""
     from poisson_prove.diff import diff
     from poisson_prove.survival import censor
 
@@ -701,7 +698,7 @@ def test_pf4_15_the_single_event_diff_also_reports_no_limit_at_ceiling() -> None
 
 
 def test_pf4_27_at_a_baseline_of_one_the_rise_has_no_room_and_the_fall_is_the_limit() -> None:
-    """Amends PF4.15 (Q54 = yes): a cell whose baseline had the event in every run, decided from the
+    """Amends PF4.15: a cell whose baseline had the event in every run, decided from the
     counts, has no rise, a computed fall, and enters the maxima."""
     a = {
         "all_fell": [(i, "fell", 0.01 * (i + 1)) for i in range(40)],
@@ -747,7 +744,7 @@ def test_pf4_27_every_null_has_a_note_from_the_closed_list_and_mde_follows_the_r
         assert row["mde"] == fall
     else:
         assert _none(row["mde"])
-        # §8.10: the note of the direction that made it null, the rise's when both did; a direction
+        # The note of the direction that made it null, the rise's when both did; a direction
         # with no room never makes it null.
         made_null = [n for v, n in ((rise, row["mde_rise_note"]), (fall, row["mde_fall_note"])) if _none(v) and n != "no room"]
         assert row["mde_note"] == (made_null[0] if made_null else row["mde_rise_note"])
@@ -1081,7 +1078,7 @@ def test_pf4_16_the_private_wilson_keeps_its_default_z_of_1_96() -> None:
 
 
 def _reference_min_p(observed: np.ndarray, permuted: np.ndarray) -> tuple[np.ndarray, float]:
-    """The spec's definition, member by member: the reference set is the B permutations and the
+    """The definition, member by member: the reference set is the B permutations and the
     observed point."""
     n_perm, n_stat = permuted.shape
     p_obs = (1 + (permuted >= observed[None, :]).sum(axis=0)) / (n_perm + 1)
@@ -1128,7 +1125,7 @@ def test_pf4_18_with_one_statistic_the_omnibus_is_that_statistics_p() -> None:
 
 
 def _one_competitor_frame() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """The re-check's run (README section 7): 'fell' at a random time, and one other outcome,
+    """An independent statistics check's run: 'fell' at a random time, and one other outcome,
     'stuck', that ends about half the runs before the horizon at 10."""
     rng = np.random.default_rng(7)
     n = 400
@@ -1146,7 +1143,7 @@ def _one_competitor_frame() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
 @pytest.mark.parametrize("case", ["one-competitor-early", "others-only-at-the-horizon", "names-each-early-outcome",
                                   "aalen-johansen"])
 def test_pf4_19_the_kaplan_meier_warning_names_each_outcome_that_ends_runs_early_and_only_then(case: str) -> None:
-    """Trimmed by the re-freeze's T4 (ruled 2026-10-24): PF4.19's four cases as one test. One other
+    """Trimmed by the PF4 re-freeze: PF4.19's four cases as one test. One other
     outcome that ends runs early draws the warning (lifelines documents
     ``KaplanMeierFitter().fit(durations, event_observed)`` and ``AalenJohansenFitter().fit(durations,
     event_observed, event_of_interest)`` with the event coded as an integer per cause; they disagree
@@ -1242,7 +1239,7 @@ def test_pf4_34_an_adjusted_p_equal_to_q_neither_flags_nor_counts() -> None:
 
 
 def _argon_pair() -> tuple[dict[str, Any], dict[str, Any]]:
-    """Argon's case: nine conditions fell far, 20 did not move, and one rose by a step-up margin. The
+    """The methodology review's case: nine conditions fell far, 20 did not move, and one rose by a step-up margin. The
     rise's p (0 of 40 to 7 of 40, about 0.012) is under Benjamini-Hochberg's level at rank 10 of 30
     (0.0167) and over Holm's there (0.05 / 21)."""
     a = {f"down{i}": _counts(30, 40) for i in range(9)}
@@ -1296,7 +1293,7 @@ def test_pf4_34_with_flags_but_no_holm_row_the_word_is_a_nothing_moved_word() ->
 
 @pytest.mark.parametrize("threshold,word", [(0.25, "too small to tell"), (0.32, "no significant change")])
 def test_pf4_34_the_nothing_moved_question_reads_the_rows_flagged_without_counting(threshold: float, word: str) -> None:
-    """Reading R1: 27 conditions of 200 a side that did not move (each tells a change under 0.2 both
+    """27 conditions of 200 a side that did not move (each tells a change under 0.2 both
     ways at q / 30) and three that rose from 0 to 9 of 40 (flagged, not counted), whose rise from 0 of 40
     is told only at about 0.299. The question reads every row that does not count, so the three decide
     between the two nothing-moved words, and the verdict limit is theirs."""
@@ -1328,7 +1325,7 @@ def _ref_question(rise: float | None, fall: float | None, p_a: float, threshold:
 
 @pytest.mark.parametrize("threshold,word", [(0.24, "too small to tell"), (0.26, "no significant change")])
 def test_pf4_40_the_verdict_limit_reads_the_verdict_level_limits_of_rows_that_move_together(threshold: float, word: str) -> None:
-    """Reading R8 with PF4.47: three conditions whose runs all ended in 'fell' or 'ok', both compared, so
+    """PF4.47: three conditions whose runs all ended in 'fell' or 'ok', both compared, so
     every row moves with its complement and its flag limit is at 2q/M; the question and the verdict limit
     read the limits at q/M, which are larger. At T = 0.24 every flag-level limit is under T and a
     verdict-level one is over it."""
@@ -1647,7 +1644,7 @@ def _word(a: dict[str, Any], b: dict[str, Any], method: str, kinds: dict[str, st
 def _exhaustive_fragility(a: dict[str, Any], b: dict[str, Any], method: str, kinds: dict[str, str] | None, upto: int,
                           events: Sequence[str] = ("fell",)) -> int | None:
     """Every set of flips of up to ``upto`` stored outcomes, both runs, through Prove's comparison. A flip
-    moves one row (reading R26): a run that ended in a compared event is made to end outside them, and a
+    moves one row: a run that ended in a compared event is made to end outside them, and a
     run that ended outside them in the first compared event (the designs here with such runs compare one)."""
     word = _word(a, b, method, kinds, events)
 
@@ -1783,7 +1780,7 @@ def test_pf4_44_the_flips_it_names_for_a_limit_crossing_change_the_word(method: 
 
 
 def test_pf4_44_with_two_compared_events_a_flip_moves_one_row_and_the_search_says_it_is_not_exact() -> None:
-    """Reading R26: 5 a side whose runs all ended in 'fell' or 'ok', both compared, 'fell' rising from 0
+    """Five a side whose runs all ended in 'fell' or 'ok', both compared, 'fell' rising from 0
     to 5 of 5, so both rows count and the word is worse. One flip from 'fell' to 'ok' in B would move
     both rows and change the word; flips that move one row need two, one per row. The result gives the
     one-row count, found exhaustively here, and ``fragility_exact`` false."""
@@ -1968,7 +1965,7 @@ def test_pf4_47_on_any_arms_rows_that_move_together_carry_both_levels_limits(na:
 
 @pytest.mark.parametrize("kinds,word", [(None, "mixed"), ({"fell": "failure", "ok": "success"}, "worse")], ids=["no-kinds", "kinds"])
 def test_pf4_47_a_lone_change_in_rows_that_move_together_reads_mixed_without_kinds(kinds: dict[str, str] | None, word: str) -> None:
-    """Reading R27: 'fell' rose from 30 to 70 of 100 in 'c', so 'ok' fell with it and both rows count.
+    """In 'c', 'fell' rose from 30 to 70 of 100, so 'ok' fell with it and both rows count.
     Without kinds that is a row higher and a row lower, which PF4.20's direction words call mixed; with
     the kinds both are worse."""
     a = {"c": _counts(30, 100), "d": _counts(30, 100)}
@@ -1979,7 +1976,7 @@ def test_pf4_47_a_lone_change_in_rows_that_move_together_reads_mixed_without_kin
 
 
 def test_pf4_47_on_rows_that_move_together_flaggable_and_the_notes_are_at_their_own_level() -> None:
-    """Reading R27: one condition of 4 a side whose runs all ended in 'fell' or 'ok', both compared
+    """One condition of 4 a side whose runs all ended in 'fell' or 'ok', both compared
     (M = 2). Fisher's smallest p, 2 / C(8, 4), about 0.029, is under the rows' own level 2q/M = 0.05 and
     over the verdict's q/M = 0.025: the rows are flaggable and their limits and notes read at 0.05; the
     verdict-level limits are null, so the question cannot tell."""
@@ -2023,7 +2020,7 @@ def test_pf4_33_the_limits_and_the_fragility_cost_what_the_spec_allows_on_the_ru
     """The limits of a comparison of the quickstart's shape (9 conditions by 2 events at 194 a side)
     within 2 s and its fragility within 5 s more; one condition of 5,000 runs a side within 5 s. Measured
     always and recorded; asserted only where ``POISSON_PROVE_TIMING=assert`` (the runner's lane), never by
-    wall clock on a laptop (reading R25)."""
+    wall clock on a laptop."""
     import os
 
     if case == "quickstart":

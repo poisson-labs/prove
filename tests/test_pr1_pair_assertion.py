@@ -1,18 +1,18 @@
-"""PR-1 frozen tests: the declaration, the canonicaliser and the pair assertion of "Prove -- Spec PR
-Paired Replay" -- invariants PR1 to PR6, PR8 to PR21, and PR56 (the Modal manifest records
+"""PR-1 frozen tests: the declaration, the canonicaliser and the pair assertion of paired
+replay -- invariants PR1 to PR6, PR8 to PR21, and PR56 (the Modal manifest records
 ``infra_retries``).
 
-Frozen on 2026-09-21 off ``f7af030``, after approval of the two tables and the
-conventions below (written the same day as ``624ce94``; the freeze changes this docstring only).
-The build adds ``src/proofload/paired.py`` (phase 1's part of it) and one line of
-``executor_modal.py`` against this file and does not edit it. *Update R1, ruled 2026-09-22
-(the PR-3 freeze): ``SPEC_PUBLIC_NAMES`` gains ``ReplicateResult`` and ``replicates``, the two
-public names section 2 added with the k-replicate amendment; nothing else in this file moves for
-it, and nothing in the suite pins this file's bytes. Update R3, ruled the same day: ``Cut``
+Frozen off ``f7af030``, after approval of the two tables and the conventions below (written as
+``624ce94``; the freeze changes this docstring only).
+The implementation adds ``src/poisson_prove/paired.py`` (phase 1's part of it) and one line of
+``executor_modal.py`` against this file and does not edit it. *Updated at the PR-3 freeze:
+``SPEC_PUBLIC_NAMES`` gains ``ReplicateResult`` and ``replicates``, the two public names the
+k-replicate amendment added; nothing else in this file moves for it, and nothing in the suite
+pins this file's bytes. The comparison update, at the same freeze: ``Cut``
 gains ``comparison``, so every cut this file builds or writes carries ``"ge"`` (the reading PR23
 had), PR1 and PR8 gain the no-default and the two-words refusals for it, and PR6's field-change
 table gains ``cuts.comparison``. Every test that builds a cut is red on the bare tree until the
-build lands the field; the two new refusals are red for the same reason.* ``proofload.paired`` is imported inside the test that needs it, so the bare tree fails test by
+implementation lands the field; the two new refusals are red for the same reason.* ``poisson_prove.paired`` is imported inside the test that needs it, so the bare tree fails test by
 test and never at collection.
 
 **What phase 1 is.** Two stored arms are only a pair if they were the same request twice, and the
@@ -21,12 +21,11 @@ does not know (PR1 to PR8), the request is canonicalised without ever passing a 
 ``float`` (PR11), and every pair is either eligible or excluded with one named cause, with counts
 that reconcile (PR9 to PR21). Nothing here computes a rate.
 
-**Conventions this file fixes for the build session** (the spec leaves them open; each is in the
-spec's change log under 2026-09-21):
+**Conventions this file fixes** (the invariants leave them open):
 
 - *The TOML layout.* Top-level keys are ``Declaration``'s field names. ``[[cuts]]`` tables carry
-  ``name``, ``threshold`` and ``comparison`` (update R3, ruled 2026-09-22: the comparison the
-  action is taken under, ``"gt"`` or ``"ge"``, with no default -- ADR-096's rule; a cut without
+  ``name``, ``threshold`` and ``comparison`` (the comparison update: the comparison the
+  action is taken under, ``"gt"`` or ``"ge"``, with no default; a cut without
   one, or with any other word, is a ``DeclarationError``); ``[[sweeps]]`` tables carry ``name``,
   ``a`` and ``b``. ``threshold``,
   ``floor`` and ``price_per_input_token`` are TOML number literals and reach ``Decimal`` from their
@@ -46,7 +45,7 @@ spec's change log under 2026-09-21):
   ``"both"``) and ``detail``. One pair is one row in exactly one of the two frames. ``arm`` is the
   arm the failure was found in; a cause that is a *comparison* of the two arms (``body``,
   ``body_field_absent``, ``header``, ``target``) belongs to neither and reads ``"both"``.
-- *The causes.* The spec names five: ``unmatched``, ``body_field_absent``, ``model_pin``, ``header``,
+- *The causes.* The invariants name five: ``unmatched``, ``body_field_absent``, ``model_pin``, ``header``,
   ``retry_or_multicall``. This file mints the rest of the closed set: ``errored`` (either row carries
   ``error``: an HTTP error, a timeout, an infra failure), ``no_request_span``, ``malformed_body`` (the
   stored request is not a JSON object), ``body`` (same fields, a differing value), ``target`` (URL or
@@ -59,7 +58,7 @@ spec's change log under 2026-09-21):
   ``excluded`` and in ``by_cause``). ``keys`` is summed over sweeps, each sweep's union taken on its
   own, because every sweep replays the same item set. ``counts["exemptions_exercised"]`` maps every
   declared exemption to the number of pairs it absorbed a difference on, zero included (PR16).
-- *The environment.* ``environment["sweeps"][<sweep>]["a" | "b"]`` records ``proofload_version``,
+- *The environment.* ``environment["sweeps"][<sweep>]["a" | "b"]`` records ``poisson_prove_version``,
   ``run_salt``, ``python``, ``concurrency`` and ``capture_cap`` per arm. ``environment["gaps"]`` is
   the list of identity facts that could not be asserted: ``"headers"`` (PR15), ``"retries"`` (PR18),
   and -- until a ``meta`` key convention exists for them, which is deferred -- ``"harness_digest"``
@@ -96,23 +95,22 @@ spec's change log under 2026-09-21):
 | PR21 | ``test_pr21_*`` (2 functions, 2 ids) |
 | PR56 | ``test_pr56_*`` (2 functions, 4 ids) |
 
-**Fixtures, and what each cannot express** (spec section 6, measured first-hand on 2026-09-21).
-Every store here is built under ``tmp_path`` by this file -- the hand-built frames section 6 asks
-for, with an error in each arm and in both. **Neither committed fixture can guard a phase 1
+**Fixtures, and what each cannot express** (measured first-hand).
+Every store here is built under ``tmp_path`` by this file -- hand-built frames, with an error in
+each arm and in both. **Neither committed fixture can guard a phase 1
 invariant, and neither is used:** the lattice pair's two runs carry no trace at all, no item axis
 and no ``python`` in their imported manifests, so every pair would be ``no_request_span`` under
 every implementation; and the stored replay arms PR39 reads (``tests/replay_arms.py``) carry no
 trace either, so the assertion this file pins would refuse every one of their pairs. That is the
-assertion working. **Ruled 2026-09-21 (spec section
-11.2):** phase 2's PR39 builds its ``PairAssertion`` in test code from the two stored arms and hands
+assertion working. **So** phase 2's PR39 builds its ``PairAssertion`` in test code from the two stored arms and hands
 it to ``analyse``; it does not go through ``assert_pairs``, and PR9's structural rule (``analyse``
 takes a ``PairAssertion`` and nothing else) is unchanged by that.
 
 **Green before and after -- named so their green is not read as coverage.** None. Every test in
 this file is red on the bare tree: PR56's four ids on a Modal manifest with no ``infra_retries``,
-the other 173 on ``ModuleNotFoundError: proofload.paired``. A missing module is a weak red, so
+the other 173 on ``ModuleNotFoundError: poisson_prove.paired``. A missing module is a weak red, so
 the freeze also ran the file against a shadow shim (177 green) and 40 mutants of it (40 red, no
-survivor); the table is in the handoff.
+survivor).
 
 **The four ``hypothesis`` tests are derandomized,** so a run of this file is the same run every
 time and a mutation row does not depend on a seed.
@@ -167,9 +165,9 @@ ITEMS_PER_CUT = 4
 EXEMPTIONS = ("x-request-id", "date")
 PYTHON = "3.11.7 (main, Feb 12 2026)"
 
-#: The spec's public names (section 2). Anything else public on the module is a spec violation.
-#: Update R1, ruled 2026-09-22 (the PR-3 freeze): ``ReplicateResult`` and ``replicates`` join
-#: the set, as section 2 has carried them since the k-replicate amendment of the same day.
+#: The module's declared public names. Anything else public on the module is a violation.
+#: Updated at the PR-3 freeze: ``ReplicateResult`` and ``replicates`` join the set, as the
+#: declared names have carried them since the k-replicate amendment.
 SPEC_PUBLIC_NAMES = frozenset({
     "PairedError", "DeclarationError", "NotAssertable", "NoEligiblePairs",
     "Cut", "SweepPair", "Declaration", "canonical_request", "request_digest",
@@ -472,8 +470,8 @@ def test_pr1_a_cut_without_a_threshold_is_refused_at_load(tmp_path: Path) -> Non
 
 
 def test_pr1_a_cut_without_a_comparison_is_refused_at_load(tmp_path: Path) -> None:
-    """Update R3 (2026-09-22): the comparison is an estimator's parameter like the seed and
-    ``B``, and ADR-096's no-default rule applies -- a cut that does not say ``gt`` or ``ge``
+    """The comparison update: the comparison is an estimator's parameter like the seed and
+    ``B``, and it has no default -- a cut that does not say ``gt`` or ``ge``
     does not say which items act."""
     cuts = [{"name": '"c50"', "threshold": "0.50", "comparison": '"gt"'}, {"name": '"c60"', "threshold": "0.60"}]
     load(tmp_path, decl_toml(cuts=[cuts[0]]), "control.toml")
@@ -647,7 +645,7 @@ def _field_changes() -> dict[str, Callable[[Any], Any]]:
         "stratum_key": lambda p: "band",
         "cuts.threshold": lambda p: tuple(p.Cut(name=n, threshold=Decimal(t) + Decimal("0.01"), comparison="ge") for n, t in CUTS),
         "cuts.name": lambda p: tuple(p.Cut(name=n + "x", threshold=Decimal(t), comparison="ge") for n, t in CUTS),
-        # Update R3 (2026-09-22): the comparison is part of the pre-registered cut.
+        # The comparison update: the comparison is part of the pre-registered cut.
         "cuts.comparison": lambda p: tuple(p.Cut(name=n, threshold=Decimal(t), comparison="gt") for n, t in CUTS),
         "sweeps": lambda p: (p.SweepPair(name="S1", a="s1-a", b="other-b"),),
         "request_span": lambda p: "scorer.other",
@@ -732,7 +730,7 @@ def test_pr8_an_unknown_key_inside_a_cut_is_refused(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("word", ['"eq"', '"gte"', '">="', '"GE"', "true"])
 def test_pr8_a_cuts_comparison_takes_only_its_two_words(tmp_path: Path, word: str) -> None:
-    """Update R3 (2026-09-22): ``comparison`` is ``"gt"`` or ``"ge"`` and nothing else, as
+    """The comparison update: ``comparison`` is ``"gt"`` or ``"ge"`` and nothing else, as
     ``headers`` and ``retries`` take only their two words."""
     load(tmp_path, decl_toml(cuts=[{"name": '"c50"', "threshold": "0.50", "comparison": '"gt"'}]), "control.toml")
     with pytest.raises(P().DeclarationError):
@@ -868,7 +866,7 @@ def test_pr11_str_and_bytes_give_the_same_canonical_bytes_and_the_output_is_utf8
 def test_pr11_number_literals_are_emitted_verbatim_and_never_meet_a_float(left: str, right: str) -> None:
     """Named mutant 1. The first two pairs are **one double each** (``float("0.30") ==
     float("0.30000000000000001")``), so a canonicaliser that meets a float cannot tell them apart.
-    The spec's own example, ``0.3000000000000000444``, is the *next* double up from 0.30 and a float
+    The example ``0.3000000000000000444`` is the *next* double up from 0.30 and a float
     round-trip still separates it; it is kept because a float emits neither literal as written. The
     rest are one value to a reader and two different requests on the wire."""
     paired = P()
@@ -1355,7 +1353,7 @@ def test_pr19_an_errored_pair_is_never_repaired_from_the_arm_that_answered(tmp_p
 
 def mixed_arms() -> tuple[dict[str, Row], dict[str, Row]]:
     """An error in each arm and in both, one unmatched key per arm, and four more causes -- the
-    frame section 6 says the mock runs cannot give."""
+    frame the mock runs cannot give."""
     a, b = default_rows(), default_rows()
     a["c50-i000"] = dataclasses.replace(a["c50-i000"], error="timeout")
     b["c50-i001"] = dataclasses.replace(b["c50-i001"], error="infra: reset")

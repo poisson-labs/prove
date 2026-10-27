@@ -1,19 +1,18 @@
 """PF5, the Python API and the core: the frozen tests (the code suite).
 
-Written from the front-door spec's section 7 (the public surface, its docstrings), section 17 (the
-core and its boundary: core, renderers, faces), sections 16.3, 18 and 19 (what the static UI and the
-terminal app read from the core) and its invariants PF5.1 to PF5.11, with the items earlier sessions
-left for PF5 (section 14 and the decisions file): ``POWER``'s place in ``stats.__all__``; the method
+Covers the public surface and its docstrings, the core and its boundary (core, renderers, faces),
+what the static UI and the terminal app read from the core, and invariants PF5.1 to PF5.11, with the
+items earlier work left for PF5: ``POWER``'s place in ``stats.__all__``; the method
 lines the command line adds to the rendered files and the notes ``diff --methods all`` keeps; the
 report header's ``NAME (ID)`` pairing; the core's ``init_agent``; and everything the statistics now
-return, which the API exposes and no face recomputes. The build is written against this file and does
+return, which the API exposes and no face recomputes. The code is written against this file and does
 not edit it.
 
 What PF5 promises, in one line: one core under every face. The plain commands, ``--json``, the
 rendered report and the page, and later the terminal app, the static UI and a local server, all show
 what the core returned, and the public ``compare`` and ``stats`` give a Python user the same numbers.
 
-**The core's operations this file reaches** (section 17.1; ``poisson_prove.core``, private under Q28):
+**The core's operations this file reaches** (``poisson_prove.core``, private under Q28):
 
 | area | operation | returns |
 |---|---|---|
@@ -27,15 +26,15 @@ commands. ``overrides`` takes the sweep's options by their flag names with under
 (``target``, ``replicates``, ``pair_with``, ``resume``, ``name``, ``max_mde``, ``salt``,
 ``max_rollouts``, ``backend``, ...). ``cancel`` is a ``threading.Event``.
 
-**Readings, named here** (each is a yes/no in the freeze's records; the
-letters are the log's; every one is written under its recommended answer).
+**Readings, named here** (each a point the design left open, read one way and
+lettered so the tests below can cite it).
 
-- (a) PF5 builds the store, setup, sweeps and comparisons areas of section 17.1. ``init_agent`` is a
+- (a) PF5 builds the store, setup, sweeps and comparisons areas of the table above. ``init_agent`` is a
   core operation PF11's build adds (PF11's frozen tests drive it through ``init --agent``);
   ``save``, ``artifacts``, ``artifact`` and ``build_ui`` are PF12's; ``view`` is PF12's and PF6's.
-  The design session's Y2 (ruled 2026-10-23) leaves the view field names to "PF5 and PF12" to
+  The view field names are left to "PF5 and PF12" to
   freeze; this file freezes none of them and leaves them to PF12, whose freeze holds the views,
-  and to PF6 (a yes/no in the log). Those operations may be in
+  and to PF6. Those operations may be in
   ``core.__all__`` already; this file requires only PF5's. PF5.11's ``save`` and "saved
   comparisons" are therefore checked by PF12; PF5.9's "and view" by PF6 and PF12.
 - (b) PF5 writes each new run's ``events.jsonl`` (PF5.10 asks for it); PF12 documents it and adds
@@ -51,7 +50,7 @@ letters are the log's; every one is written under its recommended answer).
 - (f) Faces call operations as attributes of ``poisson_prove.core`` (``core.compare(...)``), so a
   test can see what the core returned to a face; a face imports from Prove only names in
   ``core.__all__``, renderer modules and its own modules, and reads on ``core`` only names in
-  ``core.__all__``; ``core.__all__`` holds section 17.1's operations, data and exception classes and
+  ``core.__all__``; ``core.__all__`` holds the table's operations, data and exception classes and
   constants, and no other function.
 - (g) The classes: faces ``cli`` and ``__main__``; renderers ``_look``, ``_facts``, ``plain``,
   ``report`` and ``viewer``; the core everything else, ``poisson_prove.core`` and its submodules
@@ -70,14 +69,14 @@ letters are the log's; every one is written under its recommended answer).
   ``EpisodePage`` lists ``episodes`` as ``inspect --json`` does, in its order.
 - (i) ``compare``'s public set is ``diff``, ``check``, ``runs``, ``resolve``, ``Comparison``,
   ``CheckResult``, ``RunInfo`` and ``Refusal``; ``compare.diff`` returns the core's ``Comparison``
-  (section 7.2's ``DiffResult`` read as it); each takes the store as a path or a ``Store``.
+  (the documented ``DiffResult`` read as it); each takes the store as a path or a ``Store``.
 - (j) ``stats.__all__`` gains ``POWER`` (the item the PF4 build left), beside ``WILSON_LEVEL``.
 - (k) ``stats.__all__`` gains ``KMCurve`` and ``CIFCurve``, the types two of its functions return.
 - (l) ``stats.fisher_test(events_a, n_a, events_b, n_b)`` gives ``(odds_ratio, p)``,
   ``mcnemar_test(only_a, only_b)`` gives ``(only_a - only_b, p)`` and ``logrank_test(t_a,
   observed_a, t_b, observed_b)`` gives ``(chi_square, p)``. PF5.3's "what the private functions
   return" is checked against the numbers the comparison reports for every row of every fixture
-  pair (test rule 1: never an internal), and ``kaplan_meier`` and ``mde_two_proportion``, whose
+  pair (never against an internal), and ``kaplan_meier`` and ``mde_two_proportion``, whose
   numbers no comparison reports, against lifelines and statsmodels.
 - (m) ``Comparison`` exposes ``verdict``, ``sentence``, ``detail`` (the verdict block's
   ``(label, text)`` lines), ``next``, ``notes``, ``method``, ``method_chosen``, ``threshold``,
@@ -93,7 +92,7 @@ letters are the log's; every one is written under its recommended answer).
   public name in its section, every public constant with its meaning, the private modules named
   private, and an example for every function of ``compare`` and ``stats``; each example runs from a
   folder whose ``./prove-runs`` holds the quickstart pair. PF7's docs check later takes it in.
-- (q) PF5.2's "plain words" is section 9.3's families, applied to the public docstrings now.
+- (q) PF5.2's "plain words" is the internal-word families (``INTERNAL_WORDS``), applied to the public docstrings now.
 - (r) ``mypy --strict`` over ``src/`` is one case of the code suite, run with no cache (about 2 s at
   freeze), not a ``slow`` one.
 - (s) PF5.8's scan: a read is ``os.environ.get(N)``, ``os.environ[N]``, ``N in os.environ`` or
@@ -108,13 +107,13 @@ letters are the log's; every one is written under its recommended answer).
 - (v) PF5.8's "the quickstart fixtures" is the packaged quickstart pair at 194 replicates.
 - (w) The face writes the report folder (``report.md``, ``heatmap.svg``, ``receipt.html``, and
   ``paired``'s files) with the renderers it imports: the folder is the person's, outside the store,
-  and neither a store file nor an artifact (section 17.3's list), and frozen tests stand in for
-  ``cli.build_multi_report``, ``cli.build_survival_report`` and ``cli.serve_page``. Section 17's
-  "the core calls renderers when it writes a file (a report, ...)" is read as the saved artifact of
-  section 18 (PF12's), not this folder.
+  and neither a store file nor an artifact, and frozen tests stand in for
+  ``cli.build_multi_report``, ``cli.build_survival_report`` and ``cli.serve_page``. The design's
+  "the core calls renderers when it writes a file (a report, ...)" is read as the saved artifact
+  (PF12's), not this folder.
 - (x) The two checks against an outside library (``kaplan_meier`` against lifelines,
-  ``mde_two_proportion`` against statsmodels) are marked ``math``: section 10.6 puts agreement with
-  an outside library in the math suite. Every other case is in the code suite.
+  ``mde_two_proportion`` against statsmodels) are marked ``math``: agreement with
+  an outside library belongs in the math suite. Every other case is in the code suite.
 - (y) The core runs a remote backend through its module's attribute (``executor_modal.run_modal``,
   read when the plan runs), where the four moved frozen tests put their stand-ins.
 - (z) ``resume`` continues a run recorded on this machine's backend; a run recorded on Modal or
@@ -212,7 +211,7 @@ failures = ["timeout", "violated"]
 """
 
 
-# ---------- the public sets (section 7.2, readings i to k) ----------
+# ---------- the public sets (readings i to k) ----------
 
 PUBLIC: dict[str, frozenset[str]] = {
     "poisson_prove": frozenset({"Episode", "EpisodeValidationError", "Rollout", "record", "step", "__version__"}),
@@ -274,14 +273,14 @@ ALL_AT_98DC6AF: dict[str, frozenset[str]] = {
     "poisson_prove.viewer": frozenset({"ViewerError", "build_structure", "render_html", "serve_page"}),
 }
 
-#: Section 7.2's private modules (and, since the addendum, the core), each named private in
+#: The private modules (the core among them), each named private in
 #: ``docs/python.md``.
 PRIVATE_MODULES = (
     "executor", "executor_modal", "executor_burla", "sampler", "diff", "tree", "report", "viewer", "plain",
     "paired", "capture", "chaos_catalog", "survival", "cli", "_compat", "_resolve", "_burla_submit", "core",
 )
 
-#: Section 9.3's families, as PF5.2 applies them to the public docstrings (reading q). Each
+#: The internal-word families, as PF5.2 applies them to the public docstrings (reading q). Each
 #: permitted exception is a word a docstring may need: an encoding, a digest, a hypothesis.
 INTERNAL_WORDS = re.compile(
     r"\bPF\d+(\.\d+)?[a-z]?\b|\b[A-Z]{1,3}-?\d+[a-z]?\b|§|\bsection \d|\bPhase \d|\bSession [AB]\b"
@@ -292,7 +291,7 @@ INTERNAL_WORDS = re.compile(
 )
 INTERNAL_EXCEPTIONS = frozenset({"utf-8", "utf8", "sha256", "sha-256", "h0", "h1"})
 
-#: Section 17's three classes, every module of ``src/`` in exactly one (reading g).
+#: The three classes, every module of ``src/`` in exactly one (reading g).
 FACES = frozenset({"poisson_prove.cli", "poisson_prove.__main__"})
 RENDERERS = frozenset({
     "poisson_prove._look", "poisson_prove._facts", "poisson_prove.plain", "poisson_prove.report",
@@ -309,7 +308,7 @@ CORE = frozenset({
     "poisson_prove.tree",
 })
 
-#: Section 17.1's operations: what ``core.__all__`` may hold as functions (reading f). PF5 builds
+#: The core's operations: what ``core.__all__`` may hold as functions (reading f). PF5 builds
 #: the first fourteen (reading a); the rest are the later modules'.
 PF5_OPERATIONS = (
     "open_store", "runs", "resolve", "run", "episodes", "init", "read_spec", "plan", "start", "resume",
@@ -399,7 +398,7 @@ def spying(monkeypatch: pytest.MonkeyPatch, *names: str) -> Iterator[dict[str, l
 
 
 def inner(result: Any) -> dict[str, Any]:
-    """A core result's document, checked to be one strict JSON document in section 5.6's order."""
+    """A core result's document, checked to be one strict JSON document in the envelope's order (``schema``, ``verdict``, ``sentence``, its keys, ``next``)."""
     doc = as_json(result.to_json())
     assert isinstance(doc, dict)
     keys = list(doc)
@@ -587,7 +586,7 @@ def facts(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def _build_named(folder: Path) -> None:
-    """Four runs for the run forms of section 4.3: two complete, one named at sweep time, one
+    """Four runs for the run forms: two complete, one named at sweep time, one
     partial, and a names file naming the first."""
     store = folder / "prove-runs"
     spec = write_spec(folder, 6)
@@ -623,7 +622,7 @@ def ids_by_age(store: Path) -> list[str]:
 
 @pytest.mark.parametrize("module", sorted(PUBLIC))
 def test_pf5_1_each_public_module_exports_exactly_its_public_set(module: str) -> None:
-    """Section 7.2's table, with readings i, j and k: ``__all__`` is the set, and every name in it
+    """The public sets, with readings i, j and k: ``__all__`` is the set, and every name in it
     is reachable."""
     mod = importlib.import_module(module)
     assert frozenset(getattr(mod, "__all__", ())) == PUBLIC[module]
@@ -670,8 +669,8 @@ def _internal_words(text: str) -> list[str]:
 
 @pytest.mark.parametrize("module", sorted(PUBLIC))
 def test_pf5_2_every_public_name_has_a_plain_docstring_and_annotations(module: str) -> None:
-    """PF5.2 and section 7.3: every function and class in a public ``__all__`` has its own
-    docstring with no internal id, spec section, ruling or private-notes trace in it (reading q); every
+    """PF5.2: every function and class in a public ``__all__`` has its own
+    docstring with no internal id, document citation, decision reference or private-notes trace in it (reading q); every
     function, and every public method a class defines, has every parameter and its return
     annotated."""
     problems: list[str] = []
@@ -996,7 +995,7 @@ PF5_3_CHECKS: dict[str, Callable[[Path, tuple[str, str]], int]] = {
 }
 
 
-#: Agreement with an outside library is the math suite's (section 10.6, reading x).
+#: Agreement with an outside library is the math suite's (reading x).
 _LIBRARY_CHECKS = ("kaplan_meier", "mde_two_proportion")
 
 
@@ -1079,7 +1078,7 @@ RUN_FORMS = (
 
 @pytest.mark.parametrize("form", RUN_FORMS)
 def test_pf5_4_compare_resolve_resolves_every_run_form(form: str, named: Path) -> None:
-    """PF5.4 and section 4.3: every form a verb takes reaches the same run through
+    """PF5.4: every form a verb takes reaches the same run through
     ``compare.resolve``, given the store as a path or a ``Store``, as through the command line."""
     from poisson_prove import compare
     from poisson_prove.store import Store
@@ -1107,7 +1106,7 @@ def test_pf5_4_compare_resolve_resolves_every_run_form(form: str, named: Path) -
 
 @pytest.mark.parametrize("word", ["a name no run has", "a bare 4-hex suffix", "a target with a slash"])
 def test_pf5_4_compare_resolve_refuses_what_the_command_line_refuses(word: str, named: Path) -> None:
-    """PF5.4 and section 4.3: a word the command line refuses is ``compare.Refusal``, its text the
+    """PF5.4: a word the command line refuses is ``compare.Refusal``, its text the
     command line's ``error:`` sentence."""
     from poisson_prove import compare
 

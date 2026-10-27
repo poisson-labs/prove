@@ -1,10 +1,10 @@
 """S23 -- the power gate: the frozen tests for W1-W12.
 
-Written from "Proofload -- Spec S23 Power Gate" section 4. The build changes
-``src/proofload/executor.py``, ``executor_modal.py`` and ``cli.py`` against this file and does
-not edit it. ``examples/quickstart.toml`` was rebalanced in step zero and is not the build's.
+Written from the S23 invariants. The build changes
+``src/poisson_prove/executor.py``, ``executor_modal.py`` and ``cli.py`` against this file and does
+not edit it. ``examples/quickstart.toml`` was rebalanced before the build and is not the build's.
 
-**What the packet is.** ``MDE at N=32 (worst case, rate 0.5): 0.3251`` printed before a single
+**What the gate is for.** ``MDE at N=32 (worst case, rate 0.5): 0.3251`` printed before a single
 episode of an earlier sweep ran, was close to the realised per-cell maximum, and was read
 twice and acted on zero times. A louder warning is not the fix -- ``--yes`` is on every command
 in that sweep's README, so the prompt was never a gate either. The number gets a threshold, the
@@ -22,12 +22,12 @@ is exactly the window in which someone wants to run it. Qualified, this file col
 tests fail, and every other test in the repo still reports. The names that already exist
 (``Plan``, ``plan``, ``preflight``, ``ExecutorError``) are imported normally.
 
-**Conventions these frozen tests fix where the spec is silent, recorded so they are not
+**Conventions these frozen tests fix where S23 is silent, recorded so they are not
 re-litigated. The build follows these.**
 
 - **The seam that carries the accepted value to the manifest is ``Plan.max_mde_accepted``**, a
-  field with a default of ``None`` set through ``plan(..., max_mde_accepted=...)``. Spec section
-  2 states ``check_power``'s signature and section 3 states where the value lands; nothing states
+  field with a default of ``None`` set through ``plan(..., max_mde_accepted=...)``. S23
+  states ``check_power``'s signature and where the value lands; nothing states
   how it gets there. ``Plan.import_path`` is the exact precedent: a value the CLI supplies purely
   so the runners can put it in ``environment``, read by nothing else. W11 forbids ``check_power``
   *mutating* the plan, which this does not -- the CLI builds the plan with it. **Measured:** the
@@ -37,13 +37,13 @@ re-litigated. The build follows these.**
   ``DEFAULT_MAX_MDE``: that is the threshold that was in force, and W8 requires every launched
   run to carry one.
 - **A resume inherits by the CLI resolving the effective threshold, not by skipping the gate.**
-  Spec section 3 says ``check_power`` is skipped on a resume whose manifest still covers the
+  S23 says ``check_power`` is skipped on a resume whose manifest still covers the
   design, but ``check_power`` takes no store and so cannot read a manifest. Instead ``_cmd_sweep``
   passes ``max_mde=ns.max_mde`` when given, else ``manifest.environment["max_mde_accepted"]`` on a
   resume, else ``None``; ``check_power`` then compares against the *current* design exactly as it
-  always does. That keeps the comparison in M3 (section 6: the CLI decides nothing statistical),
+  always does. That keeps the comparison in M3 (the CLI decides nothing statistical),
   and it is why a resume whose design grew is still refused (W9).
-- **``cli.py`` imports ``DEFAULT_MAX_MDE``; it does not define one.** Spec section 6 forbids
+- **``cli.py`` imports ``DEFAULT_MAX_MDE``; it does not define one.** S23 forbids
   putting the constant in ``cli.py`` "beside ``_DEFAULT_METHOD``" -- that is a prohibition on a
   second *definition*, which would be a threshold that can drift from M3's. The CLI needs the
   value for one non-statistical purpose: deciding what to record when no flag was passed. It
@@ -57,12 +57,12 @@ re-litigated. The build follows these.**
 - **The suggested override in the refusal message must itself clear the gate** (W4, last
   clause). This is not decoration: at N=32 the true MDE is 0.32510999..., the pre-flight prints
   it as ``0.3251``, and ``--max-mde 0.3251`` *refuses*. A message telling the reader to paste a
-  number that does not work is the packet's usability failing at its one interaction. Round the
+  number that does not work is the gate's usability failing at its one interaction. Round the
   suggestion up at four decimals, or print it with more; either satisfies this.
 
-**Three findings from the step-zero pass, recorded here because they contradict the spec.**
+**Three findings from the pass before the build, recorded here because they contradict S23.**
 
-1. **No test pinned ``worst case``.** Spec section 6 says the M3 local and modal frozen tests pin the
+1. **No test pinned ``worst case``.** S23 says the M3 local and modal frozen tests pin the
    pre-flight text including that label. They do not: both match the line with
    ``MDE at N=\\d+[^:]*:``, which swallows either label, and the string appears in no test in the
    repo. Verified by making the W10 edit in ``src/`` and running the M3 and M10 frozen tests unchanged.
@@ -71,7 +71,7 @@ re-litigated. The build follows these.**
    1``, never a cell count. ``8 of 15 cells safer`` lives in the project's records' renders and in no test.
 3. **Four frozen test files pinned the quickstart grid, not one.** M10 (cells, replicates, axis width),
    M12 (its own second copy of both), M13 (the BH family size) and M7 (the mock-agent trade
-   golden). Spec section 3 expected M10 and explicitly not M7. All four moved in step zero.
+   golden). S23 expected M10 and explicitly not M7. All four moved before the build.
 """
 
 from __future__ import annotations
@@ -111,19 +111,19 @@ PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
 EXECUTOR = PACKAGE / "executor.py"
 EXECUTOR_MODAL = PACKAGE / "executor_modal.py"
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
 
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
 
-#: Spec section 3. Stated in the spec, so it may be a constant here (standing rule 1).
+#: The default limit. S23 states it, so it may be a constant here.
 EXPECTED_DEFAULT = 0.20
 
 #: The lattice's design (``tests/lattice.py``), twelve ``gain`` by six ``load`` at N=32, built here in
 #: code and never read from a store: one of the two N=32 designs the default is calibrated to refuse
-#: (spec section 3, W12), the four-condition ``spec_at(32)`` the other.
+#: (W12), the four-condition ``spec_at(32)`` the other.
 LATTICE_REPLICATES = 32
 LATTICE_GAIN = [round(0.1 * k, 1) for k in range(1, 13)]
 LATTICE_LOAD = [10.0, 20.0, 30.0, 40.0, 50.0, 100.0]
@@ -132,7 +132,7 @@ assert (LATTICE_REPLICATES, tuple(LATTICE_GAIN), tuple(LATTICE_LOAD), LATTICE_TA
     lattice.N, lattice.GAIN, lattice.LOAD, lattice.TARGET_A
 )
 
-#: A design that clears the default (W12's second half). The spec names 105; it is not the
+#: A design that clears the default (W12's second half). S23 names 105; it is not the
 #: bisection answer (that is 93, below) and nothing here depends on which it is.
 # PF4 re-freeze (PF4.30): the gate asks Fisher's exact test at q / M at the worst base rate, so
 # 105 replicates over the four conditions below no longer clear the default; 150 do, which
@@ -140,11 +140,11 @@ assert (LATTICE_REPLICATES, tuple(LATTICE_GAIN), tuple(LATTICE_LOAD), LATTICE_TA
 # references rather than trusting.
 CLEARING_REPLICATES = 150
 
-#: The gate's false discovery rate and target power (spec section 8.10), stated in the spec.
+#: The gate's false discovery rate and target power, as S23 states them.
 Q = 0.05
 POWER = 0.8
 
-#: PF4 re-freeze (reading R33): the quickstart's design at 100 replicates with nothing declared
+#: PF4 re-freeze: the quickstart's design at 100 replicates with nothing declared
 #: (nine rows) is refused at the default 0.20; ``--max-mde 0.3`` is the round value above its limit.
 QUICKSTART_MAX_MDE = 0.3
 
@@ -236,7 +236,7 @@ def store_is_untouched(root: Path) -> bool:
 
 
 def run_id_of(root: Path) -> str:
-    """The run a sweep created. A sweep no longer ends with a ``run_id:`` line (spec section 5.3),
+    """The run a sweep created. A sweep no longer ends with a ``run_id:`` line,
     so the run is read from the store, which held no run before the sweep."""
     created = sorted(Store(root).runs())
     assert len(created) == 1, created
@@ -406,7 +406,7 @@ def test_w1_the_statistic_saturates_at_the_largest_possible_increase_for_tiny_de
 
 
 def test_w1_the_default_refuses_the_lattice_design_and_the_four_condition_design_at_n_32() -> None:
-    """Spec section 3's calibration claim, asserted rather than believed: the default refuses an N=32
+    """S23's calibration claim, asserted rather than believed: the default refuses an N=32
     design, here the lattice's 72 conditions (twelve ``gain`` by six ``load``) and the four conditions of
     ``spec_at(32)``, by the gate's own rule from the references and by ``check_power``. A default that
     passed N=32 designs would be calibrated to pass everything."""
@@ -430,8 +430,8 @@ def test_w2_mde_two_proportion_is_called_in_exactly_one_place_and_it_is_prefligh
     inline today and ``preflight_modal`` would be a second site; after S23 there is exactly one
     call to ``mde_two_proportion`` across both executor modules, and it is inside
     ``preflight_mde``. Everything else -- both pre-flight lines, ``check_power``, the suggested N
-    in the refusal -- goes through that function. Spec rule 2: an ADR says where a value is
-    built, so a test fails when it is built elsewhere.
+    in the refusal -- goes through that function. Where a value is built is
+    stated once, so a test fails when it is built elsewhere.
 
     ``ast`` and not a substring scan: ``"mde_two_proportion" in source`` cannot tell the import
     from the call, nor a call from a mention in a docstring.
@@ -454,7 +454,7 @@ def test_w2_mde_two_proportion_is_called_in_exactly_one_place_and_it_is_prefligh
 
 
 def test_w2_the_cli_names_no_threshold_of_its_own_and_makes_no_comparison() -> None:
-    """Spec section 6's "one tempting wrong move", guarded rather than trusted.
+    """S23's "one tempting wrong move", guarded rather than trusted.
 
     **The threshold, the comparison and the message live in M3.** ``cli.py`` may read
     ``DEFAULT_MAX_MDE`` to decide what to record, and it may pass a float to ``check_power``. It
@@ -614,9 +614,9 @@ def test_w4_the_suggested_n_is_the_boundary_at_any_accepted_value(accepted: floa
 
 
 def test_w4_the_override_the_message_suggests_actually_clears_the_gate() -> None:
-    """The clause that is not decoration, and the one the spec's own example gets wrong.
+    """The clause that is not decoration, and the one S23's own example gets wrong.
 
-    Section 3's worked message tells the reader ``--max-mde 0.3251 accepts this design as it
+    S23's worked message tells the reader ``--max-mde 0.3251 accepts this design as it
     stands``. It does not: the true MDE at N=32 is 0.32510999..., the pre-flight prints it to
     four decimals as 0.3251, and 0.3251 < 0.32510999 so the gate refuses again. Whatever value
     the message names as an override has to pass ``check_power`` on the same design -- round the
@@ -650,7 +650,7 @@ def test_w5_yes_does_not_clear_the_gate_and_the_store_stays_empty(tmp_path: Path
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     assert "underpowered" in r.err.lower(), r.err
     assert store_is_untouched(root), sorted(p.name for p in root.iterdir()) if root.exists() else root
@@ -668,7 +668,7 @@ def test_w5_the_refusal_creates_no_manifest_even_beside_an_existing_run(tmp_path
 
     bad = write_spec(tmp_path / "bad.toml", underpowered_toml())
     r = run_cli(sweep_argv(root, bad, MOCK_ROLLOUT))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     assert Store(root).runs() == before, Store(root).runs()
 
@@ -699,7 +699,7 @@ def test_w6_an_accepted_value_below_the_computed_mde_refuses(tmp_path: Path) -> 
     # PF4 re-freeze (PF4.30): below the smallest accepted change the gate admits, by one step of 0.001.
     mde = ref_offer(SweepSpec.load(spec_path).replicates, FOUR, executor.DEFAULT_MAX_MDE)
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(round(mde - 0.001, 3))))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     assert store_is_untouched(root)
 
@@ -720,7 +720,7 @@ def test_w6_a_value_outside_the_open_unit_interval_is_refused_with_nothing_writt
     spec_path = write_spec(tmp_path / "clear.toml", underpowered_toml(replicates=CLEARING_REPLICATES))
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", value))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     assert store_is_untouched(root), Store(root).runs()
 
@@ -737,12 +737,12 @@ def test_w7_the_refusal_follows_the_complete_preflight_block_on_stdout(tmp_path:
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     spec = SweepSpec.load(spec_path)
     for token in ("Sweep:", "Backend: local", "Cost:", f"N={spec.replicates}"):
         assert token in r.out, (token, r.out)
-    # PF4 re-freeze (PF4.22, reading R36): the plan no longer prints the normal approximation's
+    # PF4 re-freeze (PF4.22): the plan no longer prints the normal approximation's
     # `MDE at N=... (base rate 0.5)` line; the number the refusal is about is the gate's limit at the
     # worst base rate, on the refusal's own error line, to three decimals (rule 10), from the
     # references.
@@ -782,7 +782,7 @@ def test_w8_a_run_that_clears_the_default_records_the_default(tmp_path: Path) ->
 
 
 def test_w8_the_modal_path_records_it_too(tmp_path: Path) -> None:
-    """The one likely to be missed: both backends build ``environment`` separately (spec section 8)."""
+    """The one likely to be missed: both backends build ``environment`` separately."""
     store = Store(tmp_path / "runs")
     spec = spec_at(CLEARING_REPLICATES, cells=2, target_id="mock-agent@v0")
     accepted = 0.25
@@ -828,7 +828,7 @@ def test_w9_a_resume_inherits_the_accepted_value_without_the_flag(tmp_path: Path
     # PF4 re-freeze (PF4.30): the smallest accepted change the gate admits, from the references.
     accepted = ref_offer(spec.replicates, FOUR, executor.DEFAULT_MAX_MDE)
     first = launched_underpowered(root, spec_path, accepted, "--max-rollouts", "4")
-    # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
+    # A sweep stopped by --max-rollouts exits 3.
     assert first.code == 3, first.text
     run_id = run_id_of(root)
 
@@ -846,14 +846,14 @@ def test_w9_a_resume_is_refused_when_the_recorded_value_no_longer_covers_the_des
     # gate's rule, read from the references.
     accepted = ref_offer(64, FOUR, executor.DEFAULT_MAX_MDE)
     first = launched_underpowered(root, started, accepted, "--max-rollouts", "4")
-    # A sweep stopped by --max-rollouts exits 3 (spec section 5.2).
+    # A sweep stopped by --max-rollouts exits 3.
     assert first.code == 3, first.text
     run_id = run_id_of(root)
 
     grown = write_spec(tmp_path / "b.toml", underpowered_toml(replicates=8))
     assert not ref_admits(SweepSpec.load(grown).replicates, FOUR, accepted)
     resumed = run_cli(sweep_argv(root, grown, MOCK_ROLLOUT, "--resume", run_id))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert resumed.code == 1, resumed.text
     assert "underpowered" in resumed.err.lower(), resumed.err
 
@@ -874,7 +874,7 @@ def test_w9_pair_with_does_not_inherit(tmp_path: Path) -> None:
     run_a = run_id_of(root)
 
     paired = run_cli(sweep_argv(root, spec_path, MOCK_PATCHED, "--pair-with", run_a))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert paired.code == 1, paired.text
     assert "underpowered" in paired.err.lower(), paired.err
     assert Store(root).runs() == [run_a], Store(root).runs()
@@ -887,7 +887,7 @@ def test_w9_pair_with_does_not_inherit(tmp_path: Path) -> None:
 
 
 def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path: Path) -> None:
-    """The label the spec says three frozen test files pinned. None of them did -- see the module
+    """The label S23 says three frozen test files pinned. None of them did -- see the module
     docstring, finding 1 -- so this is the only guard it has."""
     from poisson_prove.executor_modal import ImageSpec, ModalTarget
 
@@ -900,11 +900,11 @@ def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path:
         ModalOptions(),
     )
     for text in (local, modal):
-        # PF4 re-freeze (PF4.22, reading R36): neither pre-flight block prints a limit; the
+        # PF4 re-freeze (PF4.22): neither pre-flight block prints a limit; the
         # normal approximation's `MDE at N=... (base rate 0.5)` line is gone.
         assert not MDE_LINE.search(text) and "MDE at N=" not in text, text
         assert "worst case" not in text, text
-    # PF4 re-freeze (PF4.30, reading R36): the plan's one limit is the command line's gate line, and
+    # PF4 re-freeze (PF4.30): the plan's one limit is the command line's gate line, and
     # it names the limit at the worst base rate, that base rate, the test and the family; the
     # numbers are the references'.
     spec_path = write_spec(tmp_path / "plan.toml", underpowered_toml(replicates=LATTICE_REPLICATES))
@@ -965,7 +965,7 @@ def test_w12_the_lattice_design_is_refused_at_the_default(tmp_path: Path) -> Non
 
 
 def test_w12_the_lattice_design_passes_at_its_own_mde_and_not_at_the_printed_rounding() -> None:
-    """Both halves come from ``preflight_mde``. The second is spec section 3's example, and it
+    """Both halves come from ``preflight_mde``. The second is S23's example, and it
     is wrong: ``--max-mde 0.3251`` is what the message tells the reader to paste and it refuses.
     See ``test_w4_the_override_the_message_suggests_actually_clears_the_gate``."""
     spec = lattice_spec()
@@ -991,12 +991,12 @@ def test_w12_a_design_at_the_clearing_replicate_count_passes_at_the_default() ->
 
 
 def test_w12_the_rebalanced_quickstart_clears_its_own_gate_with_no_flag() -> None:
-    """Spec section 9's acceptance clause, and the reason step zero rebalanced the grid rather
+    """S23's acceptance clause, and the reason the grid was rebalanced before the build rather
     than teaching a stranger to pass an override on the first command they ever run."""
-    # PF4 re-freeze (PF4.30, Q56): the packaged quickstart (194 replicates, its two failures
+    # PF4 re-freeze (PF4.30): the packaged quickstart (194 replicates, its two failures
     # declared, 9 conditions by 2 events) clears the default with no flag; its design at the 100
     # replicates this file was frozen at, nothing declared (nine rows), is refused at the default and
-    # admitted at --max-mde 0.3 (reading R33). Both decisions are read from the references.
+    # admitted at --max-mde 0.3. Both decisions are read from the references.
     packaged = SweepSpec.load(PACKAGED_QUICKSTART)
     assert len(packaged.configs) == 9
     assert ref_admits(packaged.replicates, 9 * 2, executor.DEFAULT_MAX_MDE), packaged.replicates

@@ -1,8 +1,8 @@
-"""Frozen tests for the M7 multi-event amendment: per-event panels, trade line, saturation, forest,
+"""Frozen tests for M7's multi-event report: per-event panels, trade line, saturation, forest,
 survival report.
 
 B1 is the gate. It once compared ``build_report`` against an S8.1 output frozen on disk (built
-with the pre-amendment renderer, ``fisher_bh``, the admitted knob on x, dark theme, diff with
+with the single-event renderer, ``fisher_bh``, the admitted knob on x, dark theme, diff with
 manifests, ``build_report`` without). The frozen file went with the study fixture it was built
 on; B1 now renders the generated lattice pair (``tests/lattice.py``) the same way and checks
 every fact that record carried -- the title and headline, the worst-cells table's rows,
@@ -17,14 +17,14 @@ quickstart runs with ``cli.main`` under a fixed salt; everything else uses synth
 ``max_mde_unchanged`` / ``max_mde_unchanged_cell`` and ``trades`` derived the way M6
 derives them.
 
-Structural pins these frozen tests add where the spec leaves the SVG open (as S8's did for
+Structural pins these frozen tests add where the report's design leaves the SVG open (as S8's did for
 ``data-cell``):
 
 - **Panel captions.** ``<event>: <n_safer> safer, <n_worse> worse`` appears as a Markdown
   line of its own (not the headline), as a ``<text>`` inside the panel's
   ``<g data-panel="<event>">``, and in the HTML text; panel sections in Markdown run from one
   caption to the next.
-- **Forest rows.** Each row is ``<g data-cell="<hash>">`` (spec). Inside it the point carries
+- **Forest rows.** Each row is ``<g data-cell="<hash>">``, as S8 pinned. Inside it the point carries
   ``data-point="1"`` (a ``<circle>`` with ``cx`` or a ``<rect>``), the MDE bracket carries
   ``data-mde="1"`` (a ``<rect>`` with ``width`` or a ``<line>`` with ``x1``/``x2``), and the
   significance glyph is a descendant of its row, which is how I7 recovers the significant
@@ -37,8 +37,7 @@ Structural pins these frozen tests add where the spec leaves the SVG open (as S8
   detect a Npp rise. "<n_worse> worse" is an honest claim only above that.`` or is the fixed
   sentence; line 2 matches ``Worst-powered cell overall: Npp (<coords>).``
 
-Deliberately absent, reported to the spec author rather than adapted (see the session
-report): B1's SVG/HTML clause (the fixture's saturated cells change their fills and the legend)
+Deliberately absent rather than adapted: B1's SVG/HTML clause (the fixture's saturated cells change their fills and the legend)
 and B3 on the single-event ``build_report`` (its tiebreak reorders the frozen I19 data and the
 top-10 table that B1's Markdown clause pins). B3 is asserted on the multi-report panels only.
 """
@@ -88,10 +87,10 @@ from test_pf4_stats import POWER, _ref_fisher_power
 ROOT = Path(__file__).resolve().parents[1]
 #: B1. The single-event report's title on the lattice pair.
 LATTICE_TITLE = "Lattice before -> after"
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
+# PF3: the one copy is the packaged spec; this is its design at
 # the 100 replicates this file was frozen at.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# PF4 re-freeze (PF4.30, PF4.48a): the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
 # so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
@@ -120,8 +119,8 @@ CAPTION_RE = re.compile(r"^(\S+): (\d+) safer, (\d+) worse$")
 HEADLINE_EVENT_RE = re.compile(r"(\S+): (\d+) safer, (\d+) worse")
 COVERAGE_RE = re.compile(r"n=(\d+)\.\.(\d+) per cell, (\d+) cells with n < 16")
 SATURATION_LEGEND = "both 0% / both 100%"
-# LS update, 2026-09-22 (local serve pass, Phase A): the retired tail "The patch moved failures, it did not remove them." leaves every surface
-# (spec LS D2, D10, LS13); a trade line is recognised by its ``Trade:`` head alone.
+# LS update: the retired tail "The patch moved failures, it did not remove them." leaves every surface;
+# a trade line is recognised by its ``Trade:`` head alone.
 TRADE_MARK = "Trade:"
 HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
@@ -412,9 +411,9 @@ def panel_groups(root: ET.Element) -> list[ET.Element]:
 
 
 def texts(root: ET.Element) -> list[str]:
-    """Every ``<text>`` in document order. LS update, 2026-09-22 (local serve pass, Phase A, found by the shim run): a long title, headline,
+    """Every ``<text>`` in document order. LS update: a long title, headline,
     trade line or legend caption is drawn as several ``<text>`` elements, the continuation lines
-    carrying ``data-wrap="1"`` (spec LS D9, section 3.1 (b)); those are joined back onto their first
+    carrying ``data-wrap="1"``; those are joined back onto their first
     line with a space, so a text reads as one whatever the box width."""
     out: list[str] = []
     for e in root.iter():
@@ -508,8 +507,8 @@ def panel_kind(report: Report) -> str:
 
 
 def html_text(html: str) -> str:
-    # LS update, 2026-09-25 (local serve pass, Phase C, ruled on the build's finding): the inline figure's honesty
-    # lines wrap (ruling 2 of 2026-09-22), continuation lines carrying ``data-wrap="1"``; each is joined back onto
+    # LS update: the inline figure's honesty
+    # lines wrap, continuation lines carrying ``data-wrap="1"``; each is joined back onto
     # the line before with one space, the way ``texts()`` joins them, so a line reads as rendered whatever the box width.
     html = re.sub(r'</text>\s*<text[^>]*\bdata-wrap="1"[^>]*>', " ", html)
     return html_unescape(re.sub(r"<[^>]+>", " ", html))
@@ -716,8 +715,8 @@ def _sweep(store: Path, target: str) -> str:
     out, err = StringIO(), StringIO()
     argv = ["--store", str(store), "sweep", str(QUICKSTART), *QUICKSTART_MAX_MDE, "--target", target, "--yes",
             "--salt", QUICKSTART_SALT]
-    # A sweep no longer ends with a run_id line (its end is a verdict line, front-door spec section
-    # 5.3), so the new run is the one the store gained.
+    # A sweep no longer ends with a run_id line (its end is a verdict line),
+    # so the new run is the one the store gained.
     before = set(Store(store).runs())
     code = cli.main(argv, stdout=out, stderr=err, stdin=StringIO())
     assert code == 0, err.getvalue() + out.getvalue()
@@ -750,7 +749,7 @@ def strip_honesty(text: str) -> str:
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one line of a rendered report the rename changes is the version
+    """PF0: the one line of a rendered report the rename changes is the version
     in its provenance list. First assert it is there as the rename writes it -- one ``Prove version:``
     line and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and drop any separate
     ``written by proofload`` line, so every other byte is still compared."""
@@ -769,7 +768,7 @@ def lattice_headline() -> str:
 def test_b1_the_lattice_record_is_intact_and_the_report_carries_its_headline_on_every_surface(golden_report: Report) -> None:
     """Lattice port: B1's record is no longer a file frozen on disk but the generated lattice pair
     and its references. The pair is the one the generator wrote (every file by digest); its
-    references give a headline in S8's form; and the build's three surfaces exist and carry it --
+    references give a headline in S8's form; and the report's three surfaces exist and carry it --
     the Markdown with that headline once and the honesty block's two lines, the SVG parsing."""
     assert lattice.intact()
     headline = lattice_headline()
@@ -830,7 +829,7 @@ FENCE = (
 
 
 def _sig3(x: float) -> str:
-    """The report's p and q format (M7's spec): three significant figures, scientific below 1e-3."""
+    """The report's p and q format: three significant figures, scientific below 1e-3."""
     if x == 0:
         return "0"
     return format(x, ".2e") if x < 1e-3 else format(x, ".3g")
@@ -889,9 +888,9 @@ def test_b1_markdown_matches_frozen_s8_output_outside_the_honesty_block(golden_r
     """S8's record was a frozen file; on the lattice pair the same layout is built here from the
     references and compared line for line outside the honesty block (B2 owns its two lines). What
     P-1 moved in S8's record is written the way it reads now: the headline's last token states the
-    requested method's pairing (ADR-052, C1), the Methods row's second column reads ``unpaired``
+    requested method's pairing (C1), the Methods row's second column reads ``unpaired``
     for ``fisher_bh``, the provenance list carries ``seed identity match`` and ``unpaired
-    analysis`` where ``paired`` stood, and (truncation surfacing, 2026-09-20) ``episodes censored
+    analysis`` where ``paired`` stood, and (truncation surfacing) ``episodes censored
     at horizon`` where ``truncated`` stood. PF4 (PF4.15): every MDE cell is set aside and each
     row's limit checked against its condition (``limit_kind``): the re-measured limit where it has
     one, the ceiling words at a 32-of-32 baseline, the none-detectable words where even the whole
@@ -1726,7 +1725,7 @@ def test_b15_provenance_carries_the_multi_fields_and_run_ids_only_with_manifests
     with_runs = build_multi_report(multi, spec2(), manifests=(_manifest("run-a"), _manifest("run-b")))
     assert with_runs.provenance["run_id_a"] == "run-a" and with_runs.provenance["run_id_b"] == "run-b"
     assert "run-a" in with_runs.to_markdown() and "run-b" in with_runs.to_html()
-    # Updated 2026-09-20 (truncation surfacing): the manifests also give each run's recorded byte
+    # Updated for truncation surfacing: the manifests also give each run's recorded byte
     # limit, an ``observation_cap_*`` key beside the ``run_*`` identity ones and no number of the report's.
     assert {k: v for k, v in with_runs.provenance.items() if not k.startswith(("run_", "observation_"))} == {
         k: v for k, v in bare.provenance.items() if not k.startswith(("run_", "observation_"))
