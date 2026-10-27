@@ -473,6 +473,8 @@ class Plan(Result):
     modal: Any = None
     burla: Any = None
     options: Mapping[str, Any] = field(default_factory=dict)
+    #: The ``[capture].instrument`` names no installed package provides (local runs only).
+    missing_instrumentors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, eq=False)

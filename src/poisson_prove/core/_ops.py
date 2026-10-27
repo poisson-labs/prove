@@ -26,6 +26,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -45,6 +46,8 @@ from poisson_prove._names import Index, NamesError, started, unfit
 from poisson_prove._names import index as names_index
 from poisson_prove._resolve import resolve as _resolve_import
 from poisson_prove._resolve import split_import_path
+from poisson_prove.capture import _ENTRY_POINT_GROUP as INSTRUMENTOR_GROUP
+from poisson_prove.chaos import fault_names
 from poisson_prove.core import _artifacts
 from poisson_prove.core._results import (
     CheckResult,
@@ -1940,6 +1943,23 @@ def _has_module(name: str) -> bool:
         return False
 
 
+def _missing_instrumentors(spec: SweepSpec) -> tuple[str, ...]:
+    """The ``[capture].instrument`` names no installed package provides, in the spec's order."""
+    if spec.capture is None or not spec.capture.instrument:
+        return ()
+    try:
+        installed = {ep.name for ep in entry_points(group=INSTRUMENTOR_GROUP)}
+    except Exception:  # noqa: BLE001 - an unreadable environment names nothing
+        return ()
+    return tuple(name for name in spec.capture.instrument if name not in installed)
+
+
+def _missing_line(missing: Sequence[str]) -> str:
+    """The plan's ``capture`` line when an instrumentor the spec names is not installed."""
+    names = ", ".join(f'"{name}"' for name in missing)
+    return f"capture  not installed here: {names}, so the sweep records no spans from it"
+
+
 def _outcomes_line(spec: SweepSpec) -> str:
     """The plan's ``outcomes`` line: each failure and each success, then the other outcomes."""
     declared = spec.declare
@@ -2211,6 +2231,13 @@ def _planned(
         raise refusal(
             '[capture] needs the "agent" extra, which is not installed', [EXTRA_HINTS["agent"]]
         )
+    if spec.chaos is not None and spec.chaos.fault not in fault_names():
+        raise refusal(
+            f'[chaos].fault "{spec.chaos.fault}" is not a fault this build implements; the '
+            f"names are {', '.join(fault_names())}"
+        )
+    # Only a local run's instrumentors are this machine's to look for.
+    missing = _missing_instrumentors(spec) if backend == "local" else ()
     # The spec's folder is first on the path while the sweep plans (Burla's bundle reads it) and,
     # in ``start``, while it runs, as the rollout may import more of the person's code.
     on_path.enter_context(_folder_first(folder))
@@ -2265,6 +2292,7 @@ def _planned(
     lines = (
         _target_line(target, params, backend),
         _outcomes_line(spec),
+        *([_missing_line(missing)] if missing else []),
         *(_look.reprint(line) for line in block.splitlines()),
     )
     payload: dict[str, Any] = {
@@ -2342,6 +2370,7 @@ def _planned(
         rollout=rollout,
         modal=modal,
         burla=burla_options,
+        missing_instrumentors=missing,
         options={
             **o,
             "pair_with": pair_with,
@@ -2735,9 +2764,11 @@ def _sweep_result(
     else:
         verdict = "done"
         nexts.extend(_after_sweep(o, idx, run_id, plan.target))
+        missing = ", ".join(f'"{m}"' for m in plan.missing_instrumentors)
+        unrecorded = f"; no spans from {missing}, not installed" if missing else ""
         sentence = (
             f'{n(kept)} rollouts in run "{name}" ({status}) in '
-            f"{_look.fmt_duration(summary.wall_time)}{paired_clause}"
+            f"{_look.fmt_duration(summary.wall_time)}{paired_clause}{unrecorded}"
         )
     details = [
         ("episodes with an outcome", n(with_outcome)),

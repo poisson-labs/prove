@@ -36,10 +36,11 @@ same places.
 | `rate` | `1.0` | the share of eligible positions that get the fault, from 0 to 1 |
 | `steps` | every step | only positions with one of these names are eligible |
 
-A fault that cannot apply stops the sweep, never a quiet no-op. An unknown name, or a faulted run
-whose process has no `httpx` client loaded, passes `--dry-run` but stops the sweep before any
-episode runs, as an unexpected failure (exit 3) whose details are in
-`~/.cache/poisson-prove/errors.log`; nothing is stored, so check the name against the list below.
+A fault that cannot apply stops the sweep, never a quiet no-op. An unknown name is refused when
+the sweep is planned, `--dry-run` included (exit 1), and the refusal lists the names below. A
+faulted run whose process has no `httpx` client loaded passes `--dry-run` but stops the sweep
+before any episode runs, as an unexpected failure (exit 3) whose details are in
+`~/.cache/poisson-prove/errors.log`; nothing is stored.
 A target path missing from a response, a mutation that changes nothing, or a streamed response at
 an eligible position fails the episode. The table is not part of the sweep's identity, so a faulted run
 paired with a clean one shares its seeds.
