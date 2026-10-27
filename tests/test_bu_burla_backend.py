@@ -1142,7 +1142,10 @@ def test_s7_without_burla_importable_run_burla_raises_burla_not_installed(fake: 
     monkeypatch.setattr(eb, "_launcher_argv", lambda: fake.argv("absent"))
     p, store, opts, outcome = burla_run(fake, tmp_path)
     assert isinstance(outcome, eb.BurlaNotInstalled), outcome
-    assert INSTALL_HINT in str(outcome)
+    # The message says what failed, with no raw repr of the import error, and the install line is
+    # its own next line, not inside the sentence.
+    assert outcome.nexts == [INSTALL_HINT] and INSTALL_HINT not in str(outcome), (outcome.nexts, str(outcome))
+    assert "burla" in str(outcome) and "Error(" not in str(outcome), str(outcome)
     assert fake.starts() == []
 
 

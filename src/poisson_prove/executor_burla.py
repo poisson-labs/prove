@@ -89,7 +89,11 @@ class BurlaBackendError(ExecutorError):
 
 
 class BurlaNotInstalled(BurlaBackendError):
-    """``burla==1.8.2`` is not importable by the launcher."""
+    """``burla==1.8.2`` is not importable by the launcher. ``nexts`` holds the install line."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.nexts = [_INSTALL_HINT]
 
 
 class BurlaCostGuard(BurlaBackendError):
@@ -900,7 +904,7 @@ class _BurlaMapper:
         assert done is not None
         if done[0] == "missing":
             raise BurlaNotInstalled(
-                f"the launcher cannot import burla: {_INSTALL_HINT} in this venv ({done[1]})"
+                f"the launcher cannot import burla in this environment: {done[1]}"
             )
         how = done[1]
         if how in ("complete", "interrupted"):

@@ -2702,6 +2702,8 @@ def start(
             sentence, nexts = _kept(
                 st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
             )
+            # What the error says to do comes before the resume (an install line, say).
+            nexts = [*getattr(exc, "nexts", ()), *nexts]
             error = _final(f'{exc} (run "{p.run_id}")')
             kept = closing_progress()
             events.emit("interrupted", {"kept": kept, "status": "partial", "error": error})

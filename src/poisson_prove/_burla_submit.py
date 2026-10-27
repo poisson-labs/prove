@@ -226,7 +226,7 @@ def main() -> int:
         import burla
         from burla._node import AllNodesBusy
     except ImportError as exc:
-        _send(out, ("missing", repr(exc)))
+        _send(out, ("missing", str(exc)))
         return 3
     _send(out, ("version", burla.__version__))
     if burla.__version__ != request["pin"]:

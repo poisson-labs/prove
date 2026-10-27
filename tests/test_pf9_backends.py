@@ -379,7 +379,13 @@ def test_pf9_2b_every_burla_install_line_names_the_extra(
     point_launcher(monkeypatch, launches)
     code, out, err = run_cli(sweep_argv(tmp_path, spec, "burla", "--yes"))
     assert code != 0, (case, out, err)
-    assert BURLA_HINT in err, (case, err)
+    if case == "missing-here":
+        assert BURLA_HINT in err, (case, err)
+    else:
+        # The launcher's report stops the sweep after its plan: the install line is a next line
+        # beside the stopped line, and the error sentence names no install line of its own.
+        assert f"  next: {BURLA_HINT}" in out.splitlines(), (case, out)
+        assert BURLA_HINT not in err, (case, err)
     assert OLD_BURLA_HINT not in out + err, (case, out, err)
     assert launches.called() == [], case
 
