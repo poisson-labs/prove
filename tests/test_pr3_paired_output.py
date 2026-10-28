@@ -756,7 +756,7 @@ def pr45_assertion() -> Any:
     return _PR45["a"]
 
 
-@settings(max_examples=40, deadline=None, derandomize=True)
+@settings(max_examples=40)
 @given(deleted=st.frozensets(st.sampled_from(TIMING_COLUMNS)))
 def test_pr45_property_deleting_timestamps_moves_windows_json_and_nothing_else(deleted: frozenset[str]) -> None:
     """Nulling any subset of the timing columns changes no count, no table and no interval;

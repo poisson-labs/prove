@@ -661,7 +661,7 @@ def test_t11_ordered_sorts_by_start_then_span_id() -> None:
     assert Trace(spans=tuple(reversed(spans)), source="record").ordered() == expected
 
 
-@settings(max_examples=75, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=75, suppress_health_check=[HealthCheck.too_slow])
 @given(spans=span_forests(), data=st.data())
 def test_t11_ordered_is_independent_of_input_order(spans: list[dict[str, Any]], data: st.DataObject) -> None:
     from poisson_prove.trace import Span, Trace

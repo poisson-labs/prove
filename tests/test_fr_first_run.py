@@ -741,7 +741,7 @@ def test_fr10_inspect_adds_episode_timeout_only_when_rows_timed_out(tmp_path: Pa
 KEYS = ("a", "b", "c", "d")
 LABELS = ("fell", "ok", "late", "slow")
 ERRORS = ("timeout", "boom")
-PROPERTY = settings(max_examples=60, deadline=None, derandomize=True, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+PROPERTY = settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 
 
 @st.composite

@@ -635,7 +635,7 @@ draws = st.builds(
     Draw, salt_equal=st.booleans(), seed_a=st.booleans(), seed_b=st.booleans(),
     overlap=st.sampled_from(("full", "partial", "none")), one_differs=st.booleans(), n=st.integers(min_value=2, max_value=6),
 )
-HYPOTHESIS = settings(max_examples=60, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+HYPOTHESIS = settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 
 
 @given(draw=draws, method=st.sampled_from(METHODS))

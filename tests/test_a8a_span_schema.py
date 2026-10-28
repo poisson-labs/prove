@@ -651,7 +651,7 @@ def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
     return spans
 
 
-@settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=150, suppress_health_check=[HealthCheck.too_slow])
 @given(spans=span_forests(), source=st.sampled_from(("record", "otel", "litellm", "mixed")), alias=st.none() | st.sampled_from(["1", "2"]), truncated=st.none() | st.just("timeout"))
 def test_p8_19_assemble_of_split_round_trips_the_twenty_one_key_span_and_the_seventh_trace_key(spans: list[dict[str, Any]], source: str, alias: str | None, truncated: str | None) -> None:
     from poisson_prove.trace import OBSERVATION_KEYS, assemble, split

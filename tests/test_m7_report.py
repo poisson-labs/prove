@@ -793,7 +793,7 @@ def test_i11b_fill_is_a_pure_function_of_ratio_significance_theme(theme: str) ->
 
 @pytest.mark.parametrize("theme", ["dark", "light"])
 def test_i11c_hypothesis_distance_from_neutral_is_monotone(theme: str) -> None:
-    @settings(max_examples=40, deadline=None)
+    @settings(max_examples=40)
     @given(
         deltas=st.lists(st.floats(min_value=-1.0, max_value=1.0, allow_nan=False), min_size=2, max_size=12, unique=True),
         significant=st.booleans(),
@@ -889,7 +889,7 @@ def test_i14_numeric_and_lexicographic_ordering() -> None:
 
 
 def test_i14_hypothesis_shuffling_input_rows_is_byte_identical() -> None:
-    @settings(max_examples=40, deadline=None)
+    @settings(max_examples=40)
     @given(
         xs=st.one_of(
             st.lists(st.integers(min_value=-50, max_value=50), min_size=2, max_size=5, unique=True),
@@ -918,7 +918,7 @@ def test_i14_hypothesis_shuffling_input_rows_is_byte_identical() -> None:
 
 
 def test_i15_hypothesis_table_numbers_match_reference_formats() -> None:
-    @settings(max_examples=60, deadline=None)
+    @settings(max_examples=60)
     @given(
         rate_a=st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
         delta=st.floats(min_value=-1.0, max_value=1.0, allow_nan=False),

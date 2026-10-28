@@ -431,7 +431,7 @@ def test_c7_the_paired_statistic_is_one_at_the_point_estimate(b: int, c: int, n:
     assert abs(diff_mod.score_p_rd_paired(b, c, n, delta=(c - b) / n) - 1.0) <= 1e-12
 
 
-@settings(deadline=None, max_examples=120)
+@settings(max_examples=120)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
@@ -467,7 +467,7 @@ def test_c8_swapping_the_arms_negates_the_delta_and_leaves_the_p_value_alone(
     assert abs(forward - reversed_) <= 1e-12
 
 
-@settings(deadline=None, max_examples=120)
+@settings(max_examples=120)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
@@ -622,7 +622,7 @@ def test_c10_the_paired_interval_is_nested_in_alpha_too(b: int, c: int, n: int) 
 # ---------- C4 and C5 at the function level ----------
 
 
-@settings(deadline=None, max_examples=150)
+@settings(max_examples=150)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
@@ -639,7 +639,7 @@ def test_c4_every_interval_contains_the_point_estimate(
     assert lo <= events_b / n_b - events_a / n_a <= hi, (lo, hi)
 
 
-@settings(deadline=None, max_examples=150)
+@settings(max_examples=150)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
@@ -658,7 +658,7 @@ def test_c5_every_interval_lies_inside_the_unit_interval(
 
 
 @pytest.mark.math
-@settings(deadline=None, max_examples=120)
+@settings(max_examples=120)
 @given(data=st.data())
 def test_c4_and_c5_hold_for_the_paired_interval_too(data: st.DataObject) -> None:
     """``b + c <= n``: the discordant pairs cannot outnumber the pairs."""

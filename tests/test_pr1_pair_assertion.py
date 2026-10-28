@@ -674,7 +674,7 @@ def test_pr6_adding_one_exemption_changes_the_digest() -> None:
 HEADER_NAMES = st.text(alphabet="abcdefghijklmnopqrstuvwxyz-", min_size=1, max_size=12)
 
 
-@settings(max_examples=60, deadline=None, derandomize=True)
+@settings(max_examples=60)
 @given(
     first=st.lists(HEADER_NAMES, unique=True, max_size=5),
     second=st.lists(HEADER_NAMES, unique=True, max_size=5),
@@ -927,14 +927,14 @@ def leaf_at(obj: list[tuple[str, Any]], where: tuple[int, ...]) -> str:
     return value if len(where) == 1 else leaf_at(value, where[1:])
 
 
-@settings(max_examples=200, deadline=None, derandomize=True)
+@settings(max_examples=200)
 @given(obj=raw_objects(), seed=st.integers(min_value=0, max_value=2**16))
 def test_pr11_property_reordering_and_reindenting_never_move_the_digest(obj: list[tuple[str, Any]], seed: int) -> None:
     canonical_request = P().canonical_request
     assert canonical_request(render(obj)) == canonical_request(render(obj, random.Random(seed)))
 
 
-@settings(max_examples=200, deadline=None, derandomize=True)
+@settings(max_examples=200)
 @given(obj=raw_objects(), pick=st.integers(min_value=0, max_value=10**6), new=LEAF_LITERALS)
 def test_pr11_property_changing_one_leafs_literal_always_moves_the_digest(
     obj: list[tuple[str, Any]], pick: int, new: str
@@ -1424,7 +1424,7 @@ FAILURES: dict[str, Callable[[Row], Row | None]] = {
 KEEP_ELIGIBLE = frozenset({"c50-i003", "c60-i003", "c90-i003"})
 
 
-@settings(max_examples=25, deadline=None, derandomize=True)
+@settings(max_examples=25)
 @given(
     plan_a=st.lists(st.sampled_from(["ok", "ok", "ok", "errored", "unmatched"]), min_size=12, max_size=12),
     plan_b=st.lists(st.sampled_from(sorted(FAILURES)), min_size=12, max_size=12),

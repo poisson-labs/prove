@@ -908,7 +908,7 @@ def shifted_two_key_pairs(draw: st.DrawFn) -> tuple[dict[Any, list[str]], dict[A
     return cells_a, cells_b, draw(st.sampled_from(TWO_SCHEMES)), draw(st.integers(min_value=200, max_value=400)), draw(st.integers(min_value=0, max_value=10**6))
 
 
-PROPERTY_SETTINGS = settings(deadline=None, max_examples=30, suppress_health_check=[HealthCheck.too_slow])
+PROPERTY_SETTINGS = settings(max_examples=30, suppress_health_check=[HealthCheck.too_slow])
 PROPERTY_TYPES = {"x": "continuous", "y": "continuous"}
 PROPERTY_MAX_GROUP_MDE = 0.75
 

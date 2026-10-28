@@ -356,7 +356,7 @@ def test_p8_7_a_value_over_the_limit_is_stored_as_the_wrapper_and_the_span_recor
     assert s.bytes_original == len(byte_form(text)) + len(byte_form(blob)) + len(byte_form(field))
 
 
-@settings(max_examples=120, deadline=None)
+@settings(max_examples=120)
 @given(
     text=st.text(alphabet=st.sampled_from(["a", "Z", " ", "é", "ß", "€", "中", "𝄞", "🙂"]), min_size=0, max_size=400),
     limit=st.sampled_from([5, 64, 99, 257]),
@@ -374,7 +374,7 @@ def test_p8_7_property_the_head_and_tail_are_the_longest_valid_utf8_within_the_l
     assert s.truncated == "observation" and s.bytes_original == len(raw)
 
 
-@settings(max_examples=60, deadline=None)
+@settings(max_examples=60)
 @given(
     value=st.recursive(
         st.one_of(st.none(), st.booleans(), st.integers(-9, 9), st.text(alphabet="ab€", max_size=30)),

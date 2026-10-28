@@ -341,7 +341,7 @@ def test_pf4_1b_the_cell_table_records_the_level_beside_its_wilson_bounds() -> N
 # ---------- PF4.22, PF4.23, PF4.48: Fisher's limits, both ways, within the room ----------
 
 
-@settings(deadline=None, max_examples=40, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
 @given(
     n_a=st.integers(min_value=1, max_value=48),
     n_b=st.integers(min_value=1, max_value=48),
@@ -566,7 +566,7 @@ def test_pf4_43_the_logrank_limit_is_the_discrete_mapping_on_as_risk_set(base: f
     _check_logrank_limits(_logrank_frames(base, competing, 100, seed=int(base * 100 + competing * 10)), 100, 18, True)
 
 
-@settings(deadline=None, max_examples=8, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=8, suppress_health_check=[HealthCheck.too_slow])
 @given(n=st.integers(min_value=20, max_value=150), base=st.floats(0.05, 0.7), competing=st.sampled_from([0.0, 0.15, 0.3]),
        rows=st.sampled_from([1, 9, 18]), seed=st.integers(0, 10_000))
 @example(n=20, base=0.05, competing=0.3, rows=18, seed=7)
@@ -711,7 +711,7 @@ def test_pf4_27_at_a_baseline_of_one_the_rise_has_no_room_and_the_fall_is_the_li
     assert ev.max_mde == max(numbers) and ev.max_mde_unchanged == max(numbers)
 
 
-@settings(deadline=None, max_examples=30)
+@settings(max_examples=30)
 @given(n=st.integers(min_value=1, max_value=40), frac=st.floats(0, 1), method=st.sampled_from(["fisher_bh", "mcnemar_bh"]),
        rows=st.sampled_from([1, 9, 50]))
 @example(n=3, frac=0.5, method="fisher_bh", rows=9)
@@ -1188,7 +1188,7 @@ P_VECTORS = st.one_of(
 )
 
 
-@settings(deadline=None, max_examples=300)
+@settings(max_examples=300)
 @given(p=P_VECTORS)
 def test_pf4_34_the_two_corrections_are_statsmodels_holm_and_fdr_bh(p: list[float]) -> None:
     """statsmodels documents ``multipletests(pvals, alpha, method)`` returning the adjusted p-values
@@ -1531,7 +1531,7 @@ ARMS = st.integers(min_value=1, max_value=60)
 ALPHAS = st.sampled_from([0.05, Q / 18, 0.2])
 
 
-@settings(deadline=None, max_examples=40, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
 @given(na=ARMS, nb=ARMS, fa=st.floats(0, 1), fb=st.floats(0, 1), alpha=ALPHAS)
 @example(na=40, nb=40, fa=0.0, fb=0.0, alpha=0.05)
 @example(na=40, nb=40, fa=1.0, fb=1.0, alpha=0.05)
@@ -1555,7 +1555,7 @@ def test_pf4_42_the_miettinen_nurminen_interval_on_any_arms(na: int, nb: int, fa
     assert w_lo <= lo + 1e-9 and w_hi >= hi - 1e-9
 
 
-@settings(deadline=None, max_examples=40, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
 @given(n=st.integers(min_value=1, max_value=60), fb=st.floats(0, 1), fc=st.floats(0, 1), alpha=ALPHAS)
 @example(n=40, fb=0.0, fc=0.0, alpha=0.05)
 @example(n=40, fb=0.0, fc=1.0, alpha=0.05)
@@ -1774,7 +1774,7 @@ def test_pf4_44_with_two_compared_events_a_flip_moves_one_row_and_the_search_say
     assert _word(a, between, "fisher_bh", kinds, events) != "worse"
 
 
-@settings(deadline=None, max_examples=10, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=10, suppress_health_check=[HealthCheck.too_slow])
 @given(na=st.integers(5, 7), nb=st.integers(5, 7), fa=st.floats(0, 1), fb=st.floats(0, 1),
        kinds=st.sampled_from([None, {"fell": "failure"}]))
 @example(na=5, nb=7, fa=0.0, fb=1.0, kinds=None)
@@ -1911,7 +1911,7 @@ def test_pf4_47_exact_complements_are_flagged_together_and_their_limit_is_at_twi
     assert _cell(logrank, "fell", "c")["mde_moves_with"] is None
 
 
-@settings(deadline=None, max_examples=15, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=15, suppress_health_check=[HealthCheck.too_slow])
 @given(na=st.integers(2, 60), nb=st.integers(2, 60), fa=st.floats(0, 1), fb=st.floats(0, 1))
 @example(na=5, nb=50, fa=0.2, fb=0.2)
 @example(na=50, nb=5, fa=1.0, fb=0.0)

@@ -607,7 +607,7 @@ def test_pr23_no_rounding_is_applied_before_the_comparison() -> None:
     assert two_by_two(cut_of(result)) == (0, 0, 1, 1)
 
 
-@settings(max_examples=150, deadline=None, derandomize=True)
+@settings(max_examples=150)
 @pytest.mark.math
 @given(
     value=st.decimals(min_value=Decimal(0), max_value=Decimal(1), places=22, allow_nan=False),
@@ -728,7 +728,7 @@ def test_pr26_each_item_contributes_one_indicator_built_from_both_arms() -> None
     assert cut_of(result).pooled["flip_rate"]["estimate"] == 1.0
 
 
-@settings(max_examples=100, deadline=None, derandomize=True)
+@settings(max_examples=100)
 @pytest.mark.math
 @given(
     actions=st.lists(
@@ -917,7 +917,7 @@ def test_pr29_an_item_only_a_later_sweep_holds_takes_its_sorted_place_in_the_boo
 
 
 @pytest.mark.math
-@settings(max_examples=25, deadline=None, derandomize=True)
+@settings(max_examples=25)
 @given(permutation=st.permutations(list(range(36))))
 def test_pr29_property_any_row_order_gives_the_same_bytes(permutation: list[int]) -> None:
     rows = grid(12, ["S1", "S2", "S3"], correlated)

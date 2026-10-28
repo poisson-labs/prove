@@ -262,7 +262,7 @@ def test_i3_bh_matches_statsmodels() -> None:
         st.sampled_from([0.0, 1e-6, 0.01, 0.04, 0.05, 0.5, 1.0]),
     )
 
-    @settings(max_examples=100, deadline=None)
+    @settings(max_examples=100)
     @given(p=st.lists(p_values, min_size=1, max_size=60))
     def check(p: list[float]) -> None:
         arr = np.asarray(p, dtype=float)
@@ -301,7 +301,6 @@ def test_i4_bh_controls_false_discovery_on_uniform_nulls() -> None:
 # ---------- I5: Fisher is scipy's two-sided Fisher ----------
 
 
-@settings(deadline=None)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=40),
@@ -329,7 +328,7 @@ def test_i5_fisher_p_equals_scipy_exactly(n_a: int, n_b: int, fa: float, fb: flo
 def test_i6_mcnemar_matches_statsmodels() -> None:
     tables = pytest.importorskip("statsmodels.stats.contingency_tables")
 
-    @settings(max_examples=100, deadline=None)
+    @settings(max_examples=100)
     @given(
         n=st.integers(min_value=1, max_value=40),
         seed_a=st.lists(st.booleans(), min_size=40, max_size=40),
@@ -389,7 +388,7 @@ def test_i7_logrank_matches_lifelines() -> None:
         o = draw(st.lists(st.booleans(), min_size=n, max_size=n))
         return list(zip(t, o, strict=True))
 
-    @settings(max_examples=80, deadline=None)
+    @settings(max_examples=80)
     @given(rows_a=arm(), rows_b=arm())
     def check(rows_a: list[tuple[float, bool]], rows_b: list[tuple[float, bool]]) -> None:
         assume(any(o for _, o in rows_a) or any(o for _, o in rows_b))
@@ -464,7 +463,7 @@ def _reference_mde(rate_a: float, n_a: int, n_b: int, alpha: float, power: float
 def test_i9_mde_matches_statsmodels_power_inversion() -> None:
     proportion = pytest.importorskip("statsmodels.stats.proportion")
 
-    @settings(max_examples=60, deadline=None)
+    @settings(max_examples=60)
     @given(
         rate_a=st.floats(min_value=0.05, max_value=0.9),
         n_a=st.integers(min_value=8, max_value=400),
@@ -553,7 +552,6 @@ def test_i11_verdict_rule_on_golden(golden: DiffResult) -> None:
     assert set(golden.cells["verdict"]) <= {"safer", "worse", "unchanged"}
 
 
-@settings(deadline=None)
 @pytest.mark.math
 @given(
     tables=st.lists(

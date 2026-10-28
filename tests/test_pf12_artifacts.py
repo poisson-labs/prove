@@ -399,7 +399,7 @@ def test_pf12_2_a_reader_given_events_cut_mid_line_reads_every_whole_line(sweep_
     def shown(view: dict[str, Any]) -> list[list[str]]:
         return [[str(item.get("kind")) for item in found] for found in _lists_of_dicts(view) if all("kind" in item for item in found)]
 
-    @settings(max_examples=12, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=12, suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(cut=st.integers(min_value=1, max_value=len(extra) - 1))
     def reads_whole_lines(cut: int) -> None:
         path.write_text(whole + extra[:cut], encoding="utf-8")

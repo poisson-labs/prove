@@ -846,7 +846,7 @@ def test_pr59_adding_removing_and_reordering_an_arm_each_change_the_digest() -> 
 RUN_IDS = st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789-", min_size=1, max_size=8)
 
 
-@settings(max_examples=60, deadline=None, derandomize=True)
+@settings(max_examples=60)
 @given(first=st.lists(RUN_IDS, unique=True, max_size=4), second=st.lists(RUN_IDS, unique=True, max_size=4))
 def test_pr59_property_two_declarations_share_a_digest_only_if_more_is_the_same_sequence(
     first: list[str], second: list[str]
@@ -1141,7 +1141,7 @@ def test_pr65_agree_is_over_every_sweep_and_the_cluster_is_the_item_not_the_set(
     assert r.agree["primary"]["j3"]["design_effect"]["m_bar"] == 3.0
 
 
-@settings(max_examples=60, deadline=None, derandomize=True)
+@settings(max_examples=60)
 @pytest.mark.math
 @given(
     codes=st.lists(

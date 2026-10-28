@@ -446,7 +446,7 @@ def test_r2_narrow_read_of_an_empty_run_keeps_columns_and_dtypes(
 # ---------- R3: keys= selects exactly those rows ----------
 
 
-@settings(max_examples=60, deadline=None)
+@settings(max_examples=60)
 @given(
     keys=st.lists(st.sampled_from(KEY_POOL), max_size=2 * len(KEY_POOL)),
     meta=st.booleans(),

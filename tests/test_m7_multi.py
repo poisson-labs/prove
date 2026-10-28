@@ -1070,7 +1070,7 @@ def test_b3_delta_stays_the_primary_key_in_each_panel() -> None:
 
 
 def test_b3_hypothesis_ten_zero_delta_rows_order_by_q_mde_hash_under_shuffling() -> None:
-    @settings(max_examples=40, deadline=None)
+    @settings(max_examples=40)
     @given(
         qs=st.lists(st.sampled_from([0.1, 0.2, 0.3, 0.6]), min_size=10, max_size=10),
         mdes=st.lists(st.sampled_from([0.05, 0.1, 0.2]), min_size=10, max_size=10),
@@ -1221,7 +1221,7 @@ def test_b5_two_events_with_different_ranges_share_one_bound_and_one_ramp() -> N
 
 
 def test_b5_hypothesis_identical_delta_gives_identical_fill_across_panels() -> None:
-    @settings(max_examples=40, deadline=None)
+    @settings(max_examples=40)
     @given(
         common=st.floats(min_value=-1.0, max_value=1.0, allow_nan=False),
         a_rest=st.lists(st.floats(min_value=-1.0, max_value=1.0, allow_nan=False), min_size=1, max_size=5),
@@ -1672,7 +1672,7 @@ def test_b14_dark_and_light_stacked_trees_identical_after_stripping_presentation
 
 
 def test_b14_hypothesis_repeat_renders_identical_and_themes_differ_only_in_presentation() -> None:
-    @settings(max_examples=25, deadline=None)
+    @settings(max_examples=25)
     @given(
         nx=st.integers(min_value=2, max_value=4),
         ny=st.integers(min_value=1, max_value=3),

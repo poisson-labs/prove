@@ -560,7 +560,7 @@ def test_e1_from_dict_rejects_an_eighth_key_naming_it() -> None:
     assert Trace.from_dict(trace_dict(SPAN_CLOSED)).truncated is None
 
 
-@settings(max_examples=75, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=75, suppress_health_check=[HealthCheck.too_slow])
 @given(
     spans=span_forests(),
     source=st.sampled_from(SOURCES_SPEC),

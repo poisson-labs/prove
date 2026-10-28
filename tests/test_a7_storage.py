@@ -1408,7 +1408,7 @@ def test_p7_3_a_pre_a7_part_and_a_post_a7_part_in_one_run_read_as_one_frame(mixe
 # ---------- P7-4: assemble(*split(t)) is the identity over A7's whole valid space ----------
 
 
-@settings(max_examples=75, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=75, suppress_health_check=[HealthCheck.too_slow])
 @given(
     spans=span_forests(),
     source=st.sampled_from(("record", "otel", "litellm", "mixed")),

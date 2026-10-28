@@ -901,7 +901,7 @@ def _assert_counts(result: MultiDiffResult, a: pd.DataFrame, b: pd.DataFrame) ->
     assert result.n_not_comparable == result.dropped_a + result.dropped_b
 
 
-@settings(max_examples=40, deadline=None)
+@settings(max_examples=40)
 @given(pair=run_pair())
 def test_a9_counts_add_up_property(pair: tuple[pd.DataFrame, pd.DataFrame]) -> None:
     a, b = pair
@@ -1327,7 +1327,7 @@ def test_a18_no_truncation_when_horizons_match(multi_tripped: MultiDiffResult) -
 # ---------- A19: determinism ----------
 
 
-@settings(max_examples=25, deadline=None)
+@settings(max_examples=25)
 @given(pair=run_pair(max_cells=3))
 def test_a19_multi_diff_is_deterministic_property(pair: tuple[pd.DataFrame, pd.DataFrame]) -> None:
     a, b = pair

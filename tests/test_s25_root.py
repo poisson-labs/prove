@@ -543,7 +543,7 @@ def small_pairs(draw: st.DrawFn) -> tuple[dict[str, list[str]], dict[str, list[s
     return cells_a, cells_b, vocab[1:], method, permutations, seed
 
 
-PROPERTY_SETTINGS = settings(deadline=None, max_examples=40, suppress_health_check=[HealthCheck.too_slow])
+PROPERTY_SETTINGS = settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
 
 
 # ---------- O1: the unweighted forms ----------

@@ -332,7 +332,7 @@ def test_i5_greenwood_all_censored_has_no_variance() -> None:
 def test_i6_km_matches_lifelines() -> None:
     lifelines = pytest.importorskip("lifelines")
 
-    @settings(max_examples=60, deadline=None)
+    @settings(max_examples=60)
     @given(data=tied_survival_data(min_size=2, max_size=60))
     def check(data) -> None:
         t, observed = data
@@ -410,7 +410,7 @@ def test_i8_rows_outside_events_are_censored(data) -> None:
 def test_i9_aj_matches_lifelines() -> None:
     lifelines = pytest.importorskip("lifelines")
 
-    @settings(max_examples=25, deadline=None)
+    @settings(max_examples=25)
     @given(data=distinct_competing_data(events=("a", "b", "c"), min_size=6, max_size=40))
     def check(data) -> None:
         t, outcome = data
