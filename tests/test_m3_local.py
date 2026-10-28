@@ -28,6 +28,8 @@ import dataclasses
 import hashlib
 import math
 import multiprocessing
+import os
+import random
 import re
 import time
 from pathlib import Path
@@ -210,7 +212,11 @@ def test_i1_derive_seed_no_collisions_across_ten_thousand_inputs() -> None:
 # ---------- I2: run ids and salts ----------
 
 
-def test_i2_new_run_id_shape_and_uniqueness() -> None:
+def test_i2_new_run_id_shape_and_uniqueness(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two ids made in the same second differ by their random suffix. The suffix's 16 bits come
+    from a seeded source here, so the two never collide by chance (one run in 65,536 would)."""
+    seeded = random.Random(0)
+    monkeypatch.setattr(os, "urandom", seeded.randbytes)
     a, b = new_run_id(TARGET), new_run_id(TARGET)
     for rid in (a, b):
         assert RUN_ID_RE.match(rid), rid
