@@ -36,8 +36,6 @@ test that the marker matches real inferred output.
 
 from __future__ import annotations
 
-import ast
-import hashlib
 import json
 import re
 import shlex
@@ -1375,30 +1373,6 @@ def test_fr17_infer_events_returns_what_it_returned(lattice_inferred: MultiDiffR
 def test_fr17_report_md_provenance_still_prints_inferred(lattice_ran: dict[str, Ran], kind: str, line: str) -> None:
     md = (lattice_ran[f"report {kind}"].out_dir / "report.md").read_text().splitlines()
     assert line in md, [m for m in md if "inferred" in m]
-
-
-# The resolver and the digest are restated, never imported.
-
-
-def resolve_region(module: ast.Module, qualified: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:
-    node: ast.AST = module
-    definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
-    for segment in qualified.split("."):
-        matches = [c for c in ast.iter_child_nodes(node) if isinstance(c, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and c.name == segment]
-        assert len(matches) == 1, (qualified, segment, len(matches))
-        definition = matches[0]
-        node = definition
-    assert definition is not None
-    return definition
-
-
-def digest_excluding(path: Path, regions: Sequence[str]) -> str:
-    """The file's sha256 with each region's ``lineno`` to ``end_lineno`` removed, whole lines; the ``def``
-    line is the region's first, so a decorator above it stays guarded."""
-    source = path.read_bytes()
-    spans = [(n.lineno, n.end_lineno or 0) for n in (resolve_region(ast.parse(source), q) for q in regions)]
-    kept = [line for i, line in enumerate(source.decode().splitlines(keepends=True), start=1) if not any(lo <= i <= hi for lo, hi in spans)]
-    return hashlib.sha256("".join(kept).encode()).hexdigest()
 
 
 # FR18: no new surface.

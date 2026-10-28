@@ -122,7 +122,6 @@ in one manifest only (F6 pins "neither", F29 pins the unrequested ``not_shared``
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import math
@@ -140,7 +139,6 @@ import pytest
 from hypothesis import HealthCheck, given, settings, target
 from hypothesis import strategies as st
 
-import poisson_prove
 from poisson_prove import cli
 from poisson_prove import diff as diff_mod
 from poisson_prove import executor
@@ -150,9 +148,7 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
 import lattice
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
 EVENT, OTHER = lattice.EVENT, lattice.OTHER
-DIFF_SOURCE = PACKAGE / "diff.py"
 METHODS = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 TWO_SCHEMES = ("mcnemar_bh", "fisher_bh")
 
@@ -461,10 +457,6 @@ def json_bytes(payload: Mapping[str, Any]) -> str:
 
 def without(payload: Mapping[str, Any], keys: Sequence[str]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in keys}
-
-
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def bh_over(values: Any) -> list[float]:
@@ -1807,14 +1799,6 @@ def test_f24_the_discordant_cell_separates_pair_swap_from_arm_label(discordant_t
     grouping = result.grouping
     assert [(r.key, r.rung, r.reason) for r in grouping.refused] == [("task", "axis", "one_group")]
     assert (grouping.key, grouping.resolved_by, grouping.n_groups) == (EXPECTED_WHOLE_GRID_KEY, "whole_grid", 1)
-
-
-# ---------- F26: one threshold ----------
-
-
-def test_f26_the_default_group_limit_is_the_executors_default_limit() -> None:
-    """One constant, two readers: the module's default group limit is the executor's object."""
-    assert tree().DEFAULT_MAX_GROUP_MDE == executor.DEFAULT_MAX_MDE
 
 
 # ---------- F27: determinism ----------

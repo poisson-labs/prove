@@ -58,29 +58,28 @@ every other test in the repo still reports. Source is read through ``poisson_pro
 - **The tree refusal keeps its wording.** It carries no version literal to interpolate, and
   ``test_p1_payload.py``'s Y15 pins its text; LS8
   asserts it names no version, and the intervals refusal alone interpolates ``SCHEMA``.
-- **LS3's rect clause is "byte-identical up to the top growth"**: ``x``, ``width``, ``height``,
-  ``fill`` and the four ``data-`` attributes of every grid and glyph rect are the pinned unwrapped
-  page's, and ``y`` is the pinned value plus exactly the growth of ``top`` (``18`` per extra title
-  line, ``12`` per extra headline line). LS3's "byte-identical" holds only where nothing
-  above the grid wraps; on the narrow pairs the headline wraps, and a grid that did not move down
-  would be drawn over its own title.
+- **LS3's rect clause is "unchanged up to the top growth"**: ``x``, ``width``, ``height``,
+  ``fill`` and the four ``data-`` attributes of every grid and glyph rect are where the grid
+  layout and the colour rule put them before anything wraps, and ``y`` is that value plus exactly
+  the growth of ``top`` (``18`` per extra title line, ``12`` per extra headline line). The
+  unwrapped rects are recomputed from the lattice design on the lattice pairs and from the
+  library's frame on the same runs on the builder-made pairs; "unchanged" holds only where
+  nothing above the grid wraps, and a grid that did not move down would be drawn over its own
+  title.
 - **LS16 holds over the whole page, six tokens.** A public page carries no reference a stranger
   cannot resolve, so the Cells region, on every pair with a rejecting family, spells its MDE
   sentence ``MDE is the smallest detectable increase ...`` (and its twin in ``report.py`` the same).
-  LS19's region digests were taken over the earlier spelling (``MDE_MEANING_BARE``), which is
-  normalised to that one before they are compared.
 - **The hole's ``where`` on a grid hole is its ``coords`` string, and on an off-grid hole is
   ``", ".join(f"{axis}={config_text[axis]}")`` over ``x_axis``, ``y_axis`` and the keys of
   ``view.fixed`` in that order**, or ``off grid: <config_hash>`` when the config carries none of them.
   The Holes summary paragraph is the on-grid and off-grid count sentence with the cause counts after it.
 - **``mde_unchanged.where``** is the ``coords`` string of the cell ``_honesty``'s three-step search
-  names, and ``mde_unchanged.text`` is ``_fmt(value, "pp0")``; ``None`` for all three when the
+  names, and ``mde_unchanged.text`` is the value in M7's ``pp0`` form; ``None`` for all three when the
   honesty line is ``_HONESTY_NONE``.
-- **LS19's region digests are normalised at four places the invariant did not count**:
-  the two unverified tails, the MDE-meaning sentence (the LS16 convention), the ``Result``
-  region's trade or complement ``<p>`` (the complement sentence replaces it on the two-event complementary pair), and the ``Cell``
-  region's holes JSON block (every hole carries ``where``). Everything else in the eight regions
-  is pinned byte for byte.
+- **LS19 reads the eight regions by their facts**: the ``Result`` region line by line from the
+  library's counts (with the pairing line and the trade or complement line), ``Not verified``
+  entry by entry from the 0.0.1 store's recorded payload with the new tails, ``Provenance`` item
+  by item from the stored runs, and the other five against the payload and the library's frame.
 - **LS21, the word "unpaired":** the word and the Python warning stay exactly as they are, and one plain line is printed beside the word --
   in the ``Result`` block, the ``<p>`` right after the headline -- iff the payload's
   ``diff.unpaired_analysis`` is true (the runs share their seeds and the test ignores that). It rides
@@ -106,7 +105,6 @@ LS20's equality cannot see it.
 
 from __future__ import annotations
 
-import hashlib
 import html as html_mod
 import json
 import inspect
@@ -129,12 +127,10 @@ from poisson_prove import cli
 from poisson_prove import diff as diff_mod
 from poisson_prove.diff import multi_diff
 from poisson_prove.episode import Episode
-from poisson_prove.report import _fmt
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parents[1]
-REPORT_SOURCE = PACKAGE / "report.py"
 README = REPO / "README.md"
 SERVE_DOC = REPO / "docs" / "reading-a-serve-page.md"
 #: The generated lattice pair (``tests/lattice.py``), built once per machine and checked on use.
@@ -203,15 +199,17 @@ H2_SEQUENCE = (
     "Holes", "Worst cells", "Run pair", "Provenance",
 )
 DISPATCH_H2 = frozenset(H2_SEQUENCE)
-#: LS19. The regions that keep their bytes but for the two unverified tails (and the one this
-#: file's LS16 convention adds).
+#: LS19. The regions LS leaves as they were but for the two unverified tails (and the one this
+#: file's LS16 convention adds), each checked by its facts.
 UNTOUCHED_REGIONS = ("Result", "Honesty", "Not verified", "Fault lines", "Cells", "Cell", "Worst cells", "Provenance")
-RETIRED_TAILS = (" (closed by B.1)", " (nothing on the roadmap closes this)")
 # The page no longer speaks of planned changes: a limit some later version may close says only
 # that this version does not check it.
 NEW_TAILS = (" (this version does not check it)", " (nothing planned would close this; it is a limit of the instrument)")
-MDE_MEANING_BARE = "MDE is ADR-018's smallest detectable increase"
-MDE_MEANING_PLAIN = "MDE is the smallest detectable increase"
+#: LS19. The tail each unverified entry's ``blocked_by`` reads as on the page.
+TAIL_OF = {"B.1": NEW_TAILS[0], None: NEW_TAILS[1]}
+#: LS19. The 0.0.1 store's recorded ``serve --json``, whose ``unverified`` entries are the ones the
+#: Not verified region lists, read as data.
+RECORDED_SERVE = Path(__file__).resolve().parent / "fixtures" / "stores-0.0.1" / "recorded" / "serve-fisher_bh.json"
 #: LS10, LS11. The confidence thresholds and the quantity each applies to.
 CONFIDENCE_THRESHOLDS = ((0.001, "very sure"), (0.01, "sure"), (0.05, "fairly sure"))
 TOO_SMALL_TO_TELL = 0.50
@@ -691,7 +689,10 @@ def no_negative_zero(text: str) -> str:
 def m7_form(value: float, kind: str) -> str:
     """M7's number forms, written from their rule and never read from ``report.py``: ``pp1`` and
     ``pp0`` a fraction in points to one and to no decimals, ``sig3`` three significant figures
-    (``0`` at zero, scientific below 0.001); a negative zero reads as zero."""
+    (``0`` at zero, scientific below 0.001), ``num`` a plain number to ten significant figures; a
+    negative zero reads as zero."""
+    if kind == "num":
+        return no_negative_zero(f"{value:.10g}")
     if kind == "pp1":
         return no_negative_zero(f"{value * 100:.1f}")
     if kind == "pp0":
@@ -948,13 +949,9 @@ def rect_set(panel: Sequence[ET.Element], shift: float) -> str:
         if local(r.tag) != "rect" or not ("data-cell" in r.attrib or "data-sig" in r.attrib):
             continue
         a = dict(r.attrib)
-        a["y"] = _fmt(float(a["y"]) - shift, "num")
+        a["y"] = m7_form(float(a["y"]) - shift, "num")
         rows.append(json.dumps({k: a.get(k) for k in ("x", "y", "width", "height", "fill", "data-cell", "data-sig", "data-trade", "data-sat")}, sort_keys=True))
     return "\n".join(sorted(rows))
-
-
-def sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def header_lines(p: Pair) -> list[str]:
@@ -1104,12 +1101,11 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
 # ---------- the pins (LS3, LS19): the page before anything wraps ----------
 
 # ---- pins begin ----
-#: LS3. Per pair, the stacked figure's width and, per panel, its unwrapped body height and the sha256
-#: of its grid and glyph rects (``rect_set`` at shift 0). Wrapping does not move the grid
-#: sideways.
+#: LS3. Per pair, the stacked figure's width and, per panel, its unwrapped body height. Wrapping
+#: does not move the grid sideways.
 #: The three lattice pairs' widths and heights are the grid layout's arithmetic on the lattice
-#: design's 12 x 6 grid (``lattice_bare_box``, which LS3 asserts they equal); their rect sets are
-#: checked by their facts (``lattice_rects``).
+#: design's 12 x 6 grid (``lattice_bare_box``, which LS3 asserts they equal). Every pair's rect set
+#: is checked by its facts (``lattice_rects`` on the lattice pairs, ``frame_rects`` on the others).
 BARE_WIDTH: dict[str, float] = {
     "lattice": 600.0,
     "lattice-two-events": 360.0,
@@ -1177,180 +1173,17 @@ BARE_PANEL_HEIGHT: dict[str, dict[str, float]] = {
         "fail": 220.0
     }
 }
-RECT_SET_SHA256: dict[str, dict[str, str]] = {
-    "axes": {
-        "fail": "2e70339ddc493a738427684da54f0ef9fbbd967ba32c7216bacea3677271baf5"
-    },
-    "identical": {
-        "fail": "322015428ac90fe1a41cc09925fc6eddb66de0aec71aa2a8caf47e8d2b99b613"
-    },
-    "bh": {
-        "fail": "6a9a5840c49198ad855b086bb030321de83300a8a4e0720ad44f9b7884cbf552"
-    },
-    "gate": {
-        "fail": "d002f71a71472f5dc6342ddd8f38e9c04e0f2d0524d2198dbfca871e8d258552"
-    },
-    "multi-event": {
-        "fail": "113baa938d51e95632eb766ea9db7c547a959639b370147ea0bea35222c10fec",
-        "crash": "1cd85268c74c53a5425dcddc44e111632e230c80cebee85e41f97f9d3afc5a7a"
-    },
-    "one-value": {
-        "fail": "3533c10e18d541a4bb9fe381c3ead4501fc10beb05710fa41bdb75d102f5d0a2"
-    },
-    "three-key": {
-        "fail": "10e914dc7eea9a7734341a0075bd878ddf87c915fbca8d26d315a3d750270cec"
-    },
-    "vocab": {
-        "fail": "0035e625570c0e89560ed5eede39eb6af11440b08a2646f070ae8c5b8711ac10"
-    },
-    "hostile": {
-        "fail": "fd8bd55a4b19d460625ae46be32357bc82491535cec164ddae186318b0881c9c"
-    },
-    "partial": {
-        "fail": "b3a700424e39cfd4c4d59a14ef74120fb27092f437737c8d03b6d063045f2cb2"
-    },
-    "partial-b": {
-        "fail": "b3a700424e39cfd4c4d59a14ef74120fb27092f437737c8d03b6d063045f2cb2"
-    },
-    "traded": {
-        "crash": "e7daf18a09fc20402bf19cfcd292d7c8a8c9fb39b01f7ed53dbc70090926dbbe",
-        "fail": "3dc4c27455dafeb2ff359d09ae29740dc9db1ec4fe9552bf734c171458d9ab15"
-    }
-}
-#: LS19. Per pair and region, the sha256 of the region's lines with the retired unverified tails, the
-#: new ones, the MDE-meaning sentence's ``ADR-018's``, the trade or complement line and the holes JSON block
-#: normalised away (each named in the conventions above).
-REGION_SHA256: dict[str, dict[str, str]] = {
-    "axes": {
-        "Result": "8eaabfe0f29b5642660eeb10e3cc9baed9b44a2f3b66c428edca31c5c53feeb4",
-        "Honesty": "e84a5d18112e5a08d56a07ec1dfa4e7240b51742902d1ef649120d267a4d00b3",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "c53ac2d09a955514157bd19edc481268ddde73039d707e1c7a9a619860992d42",
-        "Cells": "3c40e73c8f12438a83b54c71518d5a27e343116dea71a5db4060e29e7414b13d",
-        "Cell": "6b50964fb7bbf09eb56fc91ce95a3f3df767a32de42ed0250bf19a5118e1ce02",
-        "Worst cells": "89e39a8f04a392ac919ce9fefa4a580f4149777475d37326ddc6791b8cc3fec0",
-        "Provenance": "25a96a5ff36e9fb2b8efef69621cef26c170be0831a91f0c9df82258d2e2d611"
-    },
-    "identical": {
-        "Result": "8eaabfe0f29b5642660eeb10e3cc9baed9b44a2f3b66c428edca31c5c53feeb4",
-        "Honesty": "41e8b3c0340720d7e43752498400f66ddbef7acea90d3127b0388d9cc69c64ea",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "bf766a516d3e648811391324291509487ea4d9b3b54ab6a6b64cfcf2e7b3b2bd",
-        "Cells": "c213deff0415997a37d6c3e7a83131e330a6261b13b835e657e649986ad2bbc1",
-        "Cell": "49ff30ecf2a451ebb795ee06f3efe54d4965035deb5b0d6493e93295efb8e12f",
-        "Worst cells": "362361b98e5cd78245b84ef538d0ca872c3fd26446f6195bdf8490d366fba5f0",
-        "Provenance": "c3ab26977e6a75c2e1ffdcc8331e0fd9516e84e04880ec6c4f194a40788b48f8"
-    },
-    "bh": {
-        "Result": "1b986499207f63a76c04007cc19e0b6ac6e17f0ec7ffabb74260d86ad568e4a2",
-        "Honesty": "ecc07c71c6fd5c0b0876263cf59ffebeec43ad3665e3263859df3372c929e19c",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "47ddc7259f1c8797a46e593631f45006a91dfc9da9cd3a028163d9e509b2d620",
-        "Cells": "5b584fdb05c1c02a9412dc3b29c2d5f1a3fd284ccec6660f3bec2b7bb0d1457c",
-        "Cell": "d0a60b85ae4f9443a5a44eebe502d68d439e5a89640658619afb71139db62714",
-        "Worst cells": "dfce64c090fce7e67c96599de2b196479fd95edc983707622c80ee9b9a026652",
-        "Provenance": "bcc658c4833a62bd53e6e103948cc42bdead04ce1619b5960efe6901bf9439d1"
-    },
-    "gate": {
-        "Result": "785057a8636adc229fc6c694bc36a9289d0861cef8d9510bccd2bd8d428463c2",
-        "Honesty": "4fdedbe288dec390f2700e6142db21385fd2622cf78cf38a3ab1b9883f89cc8d",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "fcf925d2daa339120c0fc5096797d9dfcae3d264700b30f0ff44dca7c76f376c",
-        "Cells": "5b584fdb05c1c02a9412dc3b29c2d5f1a3fd284ccec6660f3bec2b7bb0d1457c",
-        "Cell": "9de14b6364f5f17095d772b6f05d09844faf531ad189004d07b95a1bb4795c4d",
-        "Worst cells": "a662553f2f1d44f2882bc4dc771975517df667ecee7212d0067a180ddb8d4ba8",
-        "Provenance": "b2e1361e55bb48da686a6336dc144a5040786a8a9a3dc1bbbd8bc7a06a24a05f"
-    },
-    "multi-event": {
-        "Result": "52a2856902fecad01d45701267b56bd052d4d2d7d98e57274b2b50d6ab22abbf",
-        "Honesty": "4d4d4c733d97fe13a989e2381090cb70f2b7a431528eba248f0d9bdf0de31485",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "f2295c600622f662770d21e4fa7b8a13f75c94f400497573f8d8f08335055b0d",
-        "Cells": "ef2dfeb65f586ae30af05a01ef61f1c1459702fb850ff15e08ef89f71f691e4a",
-        "Cell": "636fd9f7d277d93d52836c5a24f567461932fe4533fa52150dfa777255f96870",
-        "Worst cells": "19fb4f1e69e3832157f148b83b1dc38d6c3c32551709d9993209cfca132bf2f7",
-        "Provenance": "a4af3bafa0a31cee590d0bfd966ea678d625a908845a4209381d28455189da6f"
-    },
-    "one-value": {
-        "Result": "1a3812de2e519c3221077c1883fc2b0a3d9135dafff2d9af529fd843e8135c14",
-        "Honesty": "2ef21087b61b7c914b4598c22f576bd97147f61e4577bd5a88aed6902c6a1eac",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "b0f6d63c36cac008ad8196ec378f7d3986a85c7c4e571758cd05ecdf3f684565",
-        "Cells": "1be3f951cdaa408e8704389605045cb0021f2ad995229ffdbd1462aa580096db",
-        "Cell": "4c1f9776e3499c2beda6a4cbe86fcf8b4f77bb642828c45863353ebe3cd0d840",
-        "Worst cells": "071fac09ebe101d9848fb58609230e4e6be100219c74e5bf0165b8596a1646ee",
-        "Provenance": "a49c2cd9973cd179028c07a4b2cba44abffe3e5206c241da2ed759b4ca17bfca"
-    },
-    "three-key": {
-        "Result": "2a3b90c3d6a730d3bb34df7221cee88a3ceea3032fd93e9f89c523a0a02731c4",
-        "Honesty": "520f9708edccad02028ba0dc025570c82dc48e501d076da92bd9b53cc4a4569a",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "da6d149fcdefc0cf45744de247fdb3d7177b6b946f1f996276822984bb3be05e",
-        "Cells": "5cfde57429d3bdded87ee3fb8c3a2b8b6d2f8b6fc21ca04345c6ddc08e24fa31",
-        "Cell": "ddb0b6b8340d694eb3a43fb5e60264fd7431f44dfb38bcb23637eeabb3afa983",
-        "Worst cells": "21ed782f313f9246995c76835405c4204db58f79cc062ad45066a2a39a08a6bb",
-        "Provenance": "8811c630753b05828421ac98d0e2f3dc3075dfc01f4a1108ba8bd872f643bdbc"
-    },
-    "vocab": {
-        "Result": "e7b31766fb7a1c145259924859000f4c67e67f45e72a07a33e5b068f0fe7af2b",
-        "Honesty": "104f560124a32d0e6ec843edde43f313abdc2c816f1be6d95f38d71edd71f79c",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "7e23b11a5bdc4cb1d66684694a1474fb8f1937ff612805bd005e4880026cef33",
-        "Cells": "5148a27636bbdd2630b772d6916b65eaaed7974638e4f9cf331c635740f1cf5b",
-        "Cell": "6dc47ef914752e3a085e151d9454924364bab6e291c065c9823219d549bfe6c1",
-        "Worst cells": "5c96f66411336b19d922c328f2aa13ffeb43baa9ce1cbecba581685b25c3ea90",
-        "Provenance": "2fda0ac316c96a7261190d4b2661496e1477c09f727db80118e04f9e0bd9d421"
-    },
-    "hostile": {
-        "Result": "e7b31766fb7a1c145259924859000f4c67e67f45e72a07a33e5b068f0fe7af2b",
-        "Honesty": "df2abf5c7dd9754e040447ef4823ef707c1ecbdb019f017640e8d994384657c3",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "7e23b11a5bdc4cb1d66684694a1474fb8f1937ff612805bd005e4880026cef33",
-        "Cells": "1dd3804a2178cc145d9e4400399db882576035171d09ca85428ff1b0881189d7",
-        "Cell": "17bb7c8111a9718a790d5eaecc5d539be5f74c798145d4806d97ae74ac9d380b",
-        "Worst cells": "0d73d36d3d99092724b34d930096a8cac383aee59a85cfe34b4e11cdc1f6b6e9",
-        "Provenance": "9e9b246c4204602dc7e99fca5a8b52ae842d1abd54baa6d6a158b0938e7174e6"
-    },
-    "partial": {
-        "Result": "c275359e965f3e9ae8621d19388d7e21801b25c4aee07d1838a19af5863aaf1e",
-        "Honesty": "ad1984f57b1c9740c1752ca8830032a9dc2c746a3de0b0121e4761e5a4b4a395",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "eb29f0fb8a96a28dc96aa5d82a0b9e586c52c8c553e008918719b892a916923c",
-        "Cells": "c213deff0415997a37d6c3e7a83131e330a6261b13b835e657e649986ad2bbc1",
-        "Cell": "be5c0348ba217057c8be546aec836bb3d85e6d8ad835d598c2be159e9b517a5c",
-        "Worst cells": "4d54cbb2c0637b95dc5f7d51b5da2a9fb86016f935660794ba22da8977a4f746",
-        "Provenance": "afb76ec8b793c9a6f575ba067d37f0807e158a95b50a1a9aadb735b36bb17ceb"
-    },
-    "partial-b": {
-        "Result": "c275359e965f3e9ae8621d19388d7e21801b25c4aee07d1838a19af5863aaf1e",
-        "Honesty": "ad1984f57b1c9740c1752ca8830032a9dc2c746a3de0b0121e4761e5a4b4a395",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "eb29f0fb8a96a28dc96aa5d82a0b9e586c52c8c553e008918719b892a916923c",
-        "Cells": "c213deff0415997a37d6c3e7a83131e330a6261b13b835e657e649986ad2bbc1",
-        "Cell": "be5c0348ba217057c8be546aec836bb3d85e6d8ad835d598c2be159e9b517a5c",
-        "Worst cells": "4d54cbb2c0637b95dc5f7d51b5da2a9fb86016f935660794ba22da8977a4f746",
-        "Provenance": "8b83c1056455c49c67b4debfef71d2b7f58808dfdf5ddff90558c60e0b50c29d"
-    },
-    "traded": {
-        "Result": "936619210f729d33f265595efd16251aa3c71e8add3cef28bc5ae2b2afd77e7d",
-        "Honesty": "3b7cfa0aef9d3361dee50621f36f2cc3cbb32166ed7cd1b0caa6c32fa6339940",
-        "Not verified": "668a554e7d778e41010a143f5868e5a648e3bfeea6a39b358a89bdaafd3ff681",
-        "Fault lines": "9fd0e417ade585ff4291259e09dff3076fd0874866f25c9446ccbe4e89eb08be",
-        "Cells": "bd80db6990bce238cb732ba70a9a74c15d836d9ce6e980b21d3829bb85a7568a",
-        "Cell": "163cd7ecb92a22e0cb6f13edf385c646e7d6488e284ff96c64e14971caa51e7f",
-        "Worst cells": "6f6629ddc4e93e6e0427be995e34d4c072328c915c5510db375c2f970eced740",
-        "Provenance": "03d6bb32a83661c2d8b532f47f7057b2bbd7dde226e062262779bce87852ad6b"
-    }
-}
 # ---- pins end ----
 
 
-# ---------- the lattice pairs: what a region digest would guard, from the lattice design ----------
+# ---------- the lattice pairs: each region's facts, from the lattice design ----------
 
-#: The three pairs over the generated lattice (``tests/lattice.py``). Their figure and their Result,
-#: Not verified and Provenance regions are checked against the lattice design and the run identities, not
-#: against a digest of a page.
+#: The three pairs over the generated lattice (``tests/lattice.py``). Their figure and their Result
+#: and Provenance regions are checked against the lattice design and the run identities.
 LATTICE_PAIRS = ("lattice", "lattice-two-events", "lattice-titled")
+#: The builder-made pairs (``build_synth_store``). Their figure and their Result and Provenance
+#: regions are checked against the stored runs and the library's frame on the same runs.
+BUILDER_PAIRS = ("axes", "identical", "bh", "gate", "multi-event", "one-value", "three-key", "vocab", "hostile", "partial", "partial-b", "traded")
 #: The grid body's layout, restated (``report._grid_body``): a cell is at most 40 px wide over 880 px
 #: and at most 28 px high over 560 px, the grid starts 96 px in when there is a y axis, 24 px of
 #: margin on the right, 52 px of top band and 112 px of bottom band before anything wraps, and the
@@ -1360,6 +1193,9 @@ GRID_LEFT_WITH_Y, GRID_RIGHT, GRID_TOP, GRID_BOTTOM, GLYPH = 96, 24, 52, 112, 4
 #: the survived colour through neutral to the failed colour, linear in sRGB, a non-significant
 #: change drawn 0.45 of the way toward neutral, both arms at 0% or both at 100% drawn saturated.
 DARK_NEUTRAL, DARK_SATURATED, SURVIVED, FAILED, NONSIG_SCALE = "#1F1F22", "#2A2A2E", "#3ECF8E", "#FF4D4D", 0.45
+#: A grid position no condition is on is drawn in the dark theme's no-data colour, its
+#: ``data-cell`` the word ``absent``.
+DARK_ABSENT = "#141416"
 
 
 def lattice_bare_box(cols: int, rows: int) -> tuple[float, float]:
@@ -1433,6 +1269,60 @@ def lattice_rects(p: Pair, event: str) -> list[dict[str, str | None]]:
     return rects
 
 
+def axis_values(values: Iterator[Any]) -> list[Any]:
+    """An axis's values in grid order: ascending, numbers as numbers and text as text."""
+    return sorted(set(values))
+
+
+def frame_rects(p: Pair, event: str) -> list[dict[str, str | None]]:
+    """The grid and glyph rects of one panel of a builder-made pair as the layout and the colour
+    rule place them, from the library's frame on the same runs: one rect per condition on the
+    panel's slice (every condition, or those ``--fix`` pins) at its grid position over the slice's
+    sorted axis values, ``data-cell`` its key, its fill from the change over the colour bound (the
+    largest change on the slice, up to the next 0.05) and its direction, ``data-sat`` on the
+    conditions both arms hold at 0% or 100%, ``data-trade`` on the conditions one event moved
+    lower and another higher; a glyph on every condition that moved; and one no-data rect on every
+    grid position no condition is on."""
+    def on_slice(r: Mapping[str, Any]) -> bool:
+        return all(r["config"].get(k) == v for k, v in p.fixed.items())
+
+    frames = {e: [r for r in p.multi.by_event[e].cells.to_dict(orient="records") if on_slice(r)] for e in p.events}
+    biggest = max(abs(r["delta"]) for rows in frames.values() for r in rows)
+    steps = int(biggest * 20)
+    bound = (max(steps + (steps < biggest * 20), 1)) / 20
+    assert bound == p.structure["view"]["bound"], (p.name, bound, p.structure["view"]["bound"])
+    moved = {(e, r["config_hash"]): r["direction"] for e, rows in frames.items() for r in rows}
+    trades = {h for (_, h) in moved if {moved.get((e, h)) for e in p.events} >= {"lower", "higher"}}
+    rows = frames[event]
+    xs = axis_values(r["config"][p.x] for r in rows)
+    ys = axis_values(r["config"][str(p.y)] for r in rows)
+    panel = next(e for e in p.structure["panels"] if e["event"] == event)
+    assert panel["x_values"] == [v if isinstance(v, str) else m7_form(v, "num") for v in xs], (p.name, panel["x_values"])
+    assert panel["y_values"] == [v if isinstance(v, str) else m7_form(v, "num") for v in ys], (p.name, panel["y_values"])
+    cell_w, cell_h = max(4, min(40, int(880 / len(xs)))), max(4, min(28, int(560 / len(ys))))
+    rects: list[dict[str, str | None]] = []
+    for r in rows:
+        x = GRID_LEFT_WITH_Y + xs.index(r["config"][p.x]) * cell_w
+        y = GRID_TOP + ys.index(r["config"][str(p.y)]) * cell_h
+        saturated = r["rate_a"] == r["rate_b"] and r["rate_a"] in (0.0, 1.0)
+        significant = r["direction"] != "unchanged"
+        fill = DARK_SATURATED if saturated else dark_fill(r["delta"] / bound, significant)
+        rects.append({"x": str(x), "y": str(y), "width": str(cell_w), "height": str(cell_h), "fill": fill,
+                      "data-cell": r["config_hash"], "data-sig": None, "data-trade": "1" if r["config_hash"] in trades else None,
+                      "data-sat": "1" if saturated else None})
+        if significant:
+            rects.append({"x": str(x + cell_w - GLYPH - 1), "y": str(y + 1), "width": str(GLYPH), "height": str(GLYPH),
+                          "fill": None, "data-cell": None, "data-sig": "1", "data-trade": None, "data-sat": None})
+    held = {(r["config"][p.x], r["config"][str(p.y)]) for r in rows}
+    for i, xv in enumerate(xs):
+        for j, yv in enumerate(ys):
+            if (xv, yv) not in held:
+                rects.append({"x": str(GRID_LEFT_WITH_Y + i * cell_w), "y": str(GRID_TOP + j * cell_h), "width": str(cell_w),
+                              "height": str(cell_h), "fill": DARK_ABSENT, "data-cell": "absent", "data-sig": None,
+                              "data-trade": None, "data-sat": None})
+    return rects
+
+
 def lattice_worst_first(events: Sequence[str], q: float = 0.05) -> list[str]:
     """The events in worst-first order under log-rank, from lifelines' test per condition on the
     stored times (``lattice.logrank``) and one BH family over every event's conditions together:
@@ -1459,8 +1349,8 @@ def lattice_headline(events: Sequence[str], order: Sequence[str]) -> str:
 
 
 def assert_lattice_region(p: Pair, heading: str) -> None:
-    """What a digest of a lattice pair's Result, Not verified or Provenance region would
-    guard, read line by line against the lattice design, the run identities and the payload."""
+    """A lattice pair's Result or Provenance region, read line by line against the lattice
+    design, the run identities and the payload."""
     lines = region_lines(p.page, heading)
     if heading == "Result":
         order = [panel["event"] for panel in p.structure["panels"]]
@@ -1473,14 +1363,6 @@ def assert_lattice_region(p: Pair, heading: str) -> None:
         if len(p.events) == 2:
             expected.append(f"<p>{html_mod.escape(LATTICE_COMPLEMENT_LINE)}</p>")
         assert lines == expected, (p.name, lines)
-        return
-    if heading == "Not verified":
-        # Every pair's region is the same four entries; the builder-made pairs' pinned digest of it
-        # is the one shared value, so the lattice pairs are held to it with no digest of their own.
-        shared = {REGION_SHA256[name]["Not verified"] for name in REGION_SHA256}
-        assert len(shared) == 1, shared
-        text = as_before_pf4(normalised_region(page_as_0_0_1_wrote_it(p.page), heading), heading, p)
-        assert sha(text) in shared, p.name
         return
     if heading == "Provenance":
         manifest_a, manifest_b = lattice.manifest(lattice.RUN_A), lattice.manifest(lattice.RUN_B)
@@ -1507,35 +1389,88 @@ def assert_lattice_region(p: Pair, heading: str) -> None:
     raise AssertionError((p.name, heading))
 
 
-def normalised_region(page: str, heading: str) -> str:
-    lines = region_lines(page, heading)
+def assert_not_verified(p: Pair) -> None:
+    """The Not verified region on every pair: the four entries the 0.0.1 store's recorded payload
+    carries, in its order, each its id, its statement and the tail its ``blocked_by`` reads as."""
+    recorded = json.loads(RECORDED_SERVE.read_text(encoding="utf-8"))["unverified"]
+    assert [e["id"] for e in recorded] == ["outcome_labels", "status_basis", "created_at_meaning", "seed_identity_basis"]
+    assert p.structure["unverified"] == recorded, p.name
+    expected = ["<ul>", *(
+        f"<li><strong>{html_mod.escape(e['id'])}</strong> {html_mod.escape(e['statement'] + TAIL_OF[e['blocked_by']])}</li>"
+        for e in recorded
+    ), "</ul>"]
+    assert region_lines(p.page, "Not verified") == expected, (p.name, region_lines(p.page, "Not verified"))
+
+
+def stored_hashes(p: Pair, run_id: str) -> set[str]:
+    return set(Store(p.root).read(run_id, meta=False)["config_hash"])
+
+
+def assert_builder_region(p: Pair, heading: str) -> None:
+    """A builder-made pair's Result or Provenance region, line by line, from the stored runs and
+    the library's frame on the same runs."""
+    lines = region_lines(p.page, heading)
+    frames = {e: p.multi.by_event[e].cells.to_dict(orient="records") for e in p.events}
+    unpaired = not p.method.startswith("mcnemar")
     if heading == "Result":
-        lines = [line for line in lines if not (line.startswith("<p>Trade:") or "are complements here" in line or "Compared as two separate samples" in line)]
-    if heading == "Cell":
-        lines = [line for line in lines if not re.match(r'<script type="application/json" id="[\w-]+-holes">', line)]
-    text = "\n".join(lines)
-    for tail in (*RETIRED_TAILS, *NEW_TAILS):
-        text = text.replace(html_mod.escape(tail), "")
-    return text.replace(html_mod.escape(MDE_MEANING_BARE), html_mod.escape(MDE_MEANING_PLAIN))
+        counts = {e: (sum(r["direction"] == "lower" for r in rows), sum(r["direction"] == "higher" for r in rows)) for e, rows in frames.items()}
+        order = sorted(p.events, key=lambda e: (-counts[e][1], -counts[e][0], e))
+        assert [panel["event"] for panel in p.structure["panels"]] == order, p.name
+        n_tests = sum(len(rows) for rows in frames.values())
+        headline = " · ".join(f"{e}: {counts[e][0]} lower, {counts[e][1]} higher" for e in order) + (
+            f"\n(aalen_johansen + {p.method}, BH q<0.05 over {n_tests} tests, {'unpaired' if unpaired else 'paired'})"
+        )
+        assert p.structure["headline"] == headline, (p.name, p.structure["headline"], headline)
+        expected = ["<p>" + html_mod.escape(headline).replace("\n", "<br>") + "</p>"]
+        if unpaired:
+            expected.append(f"<p>{html_mod.escape(PAIRING_LINE)}</p>")
+        moved = {(e, r["config_hash"]): r["direction"] for e, rows in frames.items() for r in rows}
+        traded = {h for (_, h) in moved if {moved.get((e, h)) for e in p.events} >= {"lower", "higher"}}
+        if traded:
+            (safer,) = {e for (e, h), d in moved.items() if h in traded and d == "lower"}
+            (worse,) = {e for (e, h), d in moved.items() if h in traded and d == "higher"}
+            cells = "cell" if len(traded) == 1 else "cells"
+            expected.append(f"<p>{html_mod.escape(TRADE_LINE.format(safer=safer, n=len(traded), cells=cells, worse=worse))}</p>")
+        assert lines == expected, (p.name, lines)
+        return
+    if heading == "Provenance":
+        store = Store(p.root)
+        salt = store.manifest(p.a).run_salt
+        assert store.manifest(p.b).run_salt == salt, p.name
+        in_a, in_b = stored_hashes(p, p.a), stored_hashes(p, p.b)
+        only_a, only_b = in_a - in_b, in_b - in_a
+        # A grid position with no condition on it: the slice's axis values crossed, less the
+        # conditions both runs hold.
+        shown = [r["config"] for r in frames[p.events[0]] if all(r["config"].get(k) == v for k, v in p.fixed.items())]
+        grid = len({c[p.x] for c in shown}) * len({c[str(p.y)] for c in shown})
+        items = [
+            ("events", ", ".join(p.events)), ("inferred", "false"), ("non event", "none"),
+            ("n tests", str(sum(len(rows) for rows in frames.values()))), ("method", p.method), ("seed identity match", "true"),
+            ("unpaired analysis", "true" if unpaired else "false"), ("q", "0.05"), ("t unit", "steps"), ("horizon", f"{HORIZON:g}"),
+            ("n not comparable", str(len(only_a) + len(only_b))), ("dropped a", str(len(only_a))), ("dropped b", str(len(only_b))),
+            ("episodes censored at horizon", "0"), ("n absent", str(grid - len(shown))),
+            ("Prove version", poisson_prove.__version__), ("run id a", p.a), ("run id b", p.b), ("run salt", salt),
+            ("observation cap a", "not recorded"), ("observation cap b", "not recorded"), ("trace spans a", "0"),
+            ("trace spans b", "0"), ("observation cut spans a", "0"), ("observation cut spans b", "0"),
+        ]
+        expected = "<ul>" + "".join(f"<li>{html_mod.escape(f'{k}: {v}')}</li>" for k, v in items) + "</ul>"
+        assert lines == [expected, "</body>", "</html>"], (p.name, lines)
+        return
+    raise AssertionError((p.name, heading))
+
+
+def assert_page_names(page: str) -> None:
+    """PF0: the page's two data blocks are ``prove-cells`` and ``prove-holes``, the arm table's
+    version key is ``poisson_prove_version``, and the provenance list has one ``Prove version:``
+    entry; none of the three is spelled with the old name."""
+    assert 'id="prove-cells"' in page and 'id="prove-holes"' in page and 'getElementById("prove-cells")' in page
+    assert "<td>poisson_prove_version</td>" in page and "proofload-cells" not in page and "proofload-holes" not in page
+    assert "<td>proofload_version</td>" not in page
+    found = re.findall(r"<li>Prove version: [^<]*</li>", page)
+    assert len(found) == 1 and "proofload version:" not in page, found
 
 
 # ---------- LS1: no cell swallows its own click ----------
-
-
-def page_as_0_0_1_wrote_it(page: str) -> str:
-    """PF0: the rename changes three things on a page: the version entry of the
-    provenance list, the version key in the arm table, and the ids of the page's two data blocks,
-    which named the old product. First assert each is there as the rename writes it (the data
-    blocks are ``prove-cells`` and ``prove-holes``), then put each back as 0.0.1
-    wrote it before the pinned digest is taken."""
-    assert 'id="prove-cells"' in page and 'id="prove-holes"' in page and 'getElementById("prove-cells")' in page
-    assert "<td>poisson_prove_version</td>" in page and "proofload-cells" not in page and "proofload-holes" not in page
-    found = re.findall(r"<li>Prove version: [^<]*</li>", page)
-    assert len(found) == 1 and "proofload version:" not in page, found
-    page = re.sub(r'(id="|getElementById\(")prove-(cells|holes)"', r'\1proofload-\2"', page)
-    page = page.replace("<td>poisson_prove_version</td>", "<td>proofload_version</td>")
-    page = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", page)
-    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", page)
 
 
 def test_ls1_the_inert_selector_list_names_the_figures_text_beside_the_glyph_and_the_path(every_pair: list[Pair]) -> None:
@@ -1680,9 +1615,11 @@ def test_ls3_every_grid_and_glyph_rect_is_unchanged_up_to_the_top_growth(all_pai
             if p.name in LATTICE_PAIRS:
                 # the rect set recomputed from the lattice design, the layout and the colour rule
                 expected = sorted(json.dumps(r, sort_keys=True) for r in lattice_rects(p, event))
-                assert rect_set(panel, shift).split("\n") == expected, (p.name, event, shift)
-                continue
-            assert sha(rect_set(panel, shift)) == RECT_SET_SHA256[p.name][event], (p.name, event, shift)
+            else:
+                # the rect set recomputed from the library's frame, the layout and the colour rule
+                assert p.name in BUILDER_PAIRS, p.name
+                expected = sorted(json.dumps(r, sort_keys=True) for r in frame_rects(p, event))
+            assert rect_set(panel, shift).split("\n") == expected, (p.name, event, shift)
 
 
 # ---------- LS4: every hole says where it is ----------
@@ -2253,85 +2190,17 @@ def test_ls18_the_readme_has_a_serve_section_and_the_docs_page_names_the_fourtee
 
 #: PF4 (PF4.20): a judgement word; no fixture here declares an event kind.
 JUDGEMENT_RE = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
-#: PF4 (PF4.20): a reader's direction word put back as the pinned page wrote the verdict (no fixture
-#: declares a kind, so the library's worse is a rise and its safer a fall).
-BARE_VERDICT = {"higher": "worse", "lower": "safer", "unchanged": "unchanged"}
-#: PF4 (PF4.13, PF4.14, PF4.15, PF4.3): the cell fields PF4 adds right after ``verdict``.
-PF4_CELL_KEYS = ("direction", "direction_note", "pairs", "n01", "n10", "mde_note", "share_a", "share_b", "share_a_differs", "share_b_differs")
-CELL_INDEX_RE = re.compile(r'(<script type="application/json" id="proofload-cells">)(.*)(</script>)')
+CELL_INDEX_RE = re.compile(r'(<script type="application/json" id="prove-cells">)(.*)(</script>)')
 #: PF4 (PF4.12, PF4.15, PF4.18): the regions whose numbers PF4 moves, not only their words: on the
 #: lattice pairs the fault lines' group p and q (Westfall-Young on one scale),
 #: and on those pairs and the traded pair (whose t0 fail arm fails every run) the detection limits of the conditions at a
-#: 100% baseline with the leaf rows, cell index and worst-cells rows that carry them. Their digests are not asserted; assert_region_facts asserts what they guarded.
+#: 100% baseline with the leaf rows, cell index and worst-cells rows that carry them.
 #: PF4.22 to PF4.27, PF4.34 to PF4.47: every pair's detection limits move (the exact
 #: power at the lone-change level, both directions, null with a reason), its group limits move
 #: (PF4.45), its intervals are always there (PF4.42) and every cell gains the new keys, so on every
-#: pair the Honesty, Fault lines, Cells, Cell and Worst cells regions are checked by their facts.
-PF4_MOVED_REGIONS: dict[str, tuple[str, ...]] = {
-    name: ("Honesty", "Fault lines", "Cells", "Cell", "Worst cells") for name in (*REGION_SHA256, *LATTICE_PAIRS)
-}
-
-
-def script_json(payload: Any) -> str:
-    """The viewer's ``_script_json``, restated: ``json.dumps`` with the three markup characters
-    escaped."""
-    dump = json.dumps(payload, sort_keys=False, allow_nan=False)
-    return dump.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
-
-
-def as_before_pf4(text: str, heading: str, p: Pair) -> str:
-    """PF4 (PF4.3, PF4.13, PF4.14, PF4.15, PF4.17, PF4.20): the words and fields PF4 changes in a
-    region LS leaves untouched, first asserted in PF4's form and then put back as the pinned
-    page wrote them, so the pinned digest still guards every other byte. No fixture declares a kind,
-    so the headline counts falls as lower and rises as higher, the honesty claim names the rises,
-    the verdict column and the cell index carry the direction, and a panel with no unchanged
-    condition counts its compared conditions."""
-    if heading == "Result":
-        lines = text.split("\n")
-        pattern = r"(\S+): (\d+) lower, (\d+) higher"
-        assert len(re.findall(pattern, lines[0])) == len(p.events) and not JUDGEMENT_RE.search(lines[0]), lines[0]
-        lines[0] = re.sub(pattern, r"\1: \2 safer, \3 worse", lines[0])
-        return "\n".join(lines)
-    if heading == "Honesty":
-        lines = text.split("\n")
-        panels = iter(p.structure["panels"])
-        for i in range(1, len(lines)):
-            if not lines[i - 1].startswith("<h3>"):
-                continue
-            panel = next(panels)
-            first, sep, rest = lines[i][3:].partition("<br>")
-            if "can only detect" in first:
-                assert re.search(r"&quot;\d+ higher&quot; is an honest claim", first) and not re.search(r"&quot;\d+ worse&quot;", first), first
-                first = re.sub(r"&quot;(\d+) higher&quot; is an honest claim", r"&quot;\1 worse&quot; is an honest claim", first)
-            else:
-                compared = {str(panel["n_present"]), str(len(p.multi.by_event[panel["event"]].cells))}
-                assert first != HONESTY_NONE and compared & set(NUMBER_RE.findall(first)), first
-                first = HONESTY_NONE
-            lines[i] = "<p>" + first + sep + rest
-        return "\n".join(lines)
-    if heading == "Worst cells":
-        assert "<td>worse</td>" not in text and "<td>safer</td>" not in text, text[:200]
-        return text.replace("<td>higher</td>", "<td>worse</td>").replace("<td>lower</td>", "<td>safer</td>")
-    if heading == "Cell":
-        out = []
-        for line in text.split("\n"):
-            if line.startswith('<div id="pl-cell">'):
-                for word, bare in BARE_VERDICT.items():
-                    line = line.replace(f"<td>verdict</td><td>{word}</td>", f"<td>verdict</td><td>{bare}</td>")
-            m = CELL_INDEX_RE.fullmatch(line)
-            if m:
-                index = json.loads(m.group(2))
-                for entry in index.values():
-                    keys = list(entry)
-                    at = keys.index("verdict") + 1
-                    assert tuple(keys[at : at + len(PF4_CELL_KEYS)]) == PF4_CELL_KEYS and entry["direction"] == entry["verdict"], keys
-                    for key in PF4_CELL_KEYS:
-                        del entry[key]
-                    entry["verdict"] = BARE_VERDICT[entry["verdict"]]
-                line = m.group(1) + script_json(index) + m.group(3)
-            out.append(line)
-        return "\n".join(out)
-    return text
+#: pair the Honesty, Fault lines, Cells, Cell and Worst cells regions are checked by their facts
+#: against the payload and the library's frame (assert_region_facts).
+FACT_REGIONS = ("Honesty", "Fault lines", "Cells", "Cell", "Worst cells")
 
 
 def same_number(got: Any, want: Any) -> bool:
@@ -2341,10 +2210,9 @@ def same_number(got: Any, want: Any) -> bool:
 
 
 def assert_region_facts(p: Pair, heading: str) -> None:
-    """PF4 (PF4.12, PF4.15, PF4.18, PF4.20): what a moved region's digest guarded, read against the
+    """PF4 (PF4.12, PF4.15, PF4.18, PF4.20): a region whose numbers PF4 moved, read against the
     payload and the library's frame on the same pair."""
-    page = page_as_0_0_1_wrote_it(p.page)
-    lines = region_lines(page, heading)
+    lines = region_lines(p.page, heading)
     text = "\n".join(lines)
     assert not JUDGEMENT_RE.search(unescape(text)) and "nan" not in unescape(text).lower().split(), (p.name, heading)
     tree = p.structure["tree"]
@@ -2472,20 +2340,19 @@ def assert_region_facts(p: Pair, heading: str) -> None:
     raise AssertionError((p.name, heading))
 
 
-def test_ls19_every_heading_is_still_on_the_page_and_the_untouched_regions_keep_their_bytes(all_pairs: list[Pair]) -> None:
+def test_ls19_every_heading_is_still_on_the_page_and_the_untouched_regions_carry_their_facts(all_pairs: list[Pair]) -> None:
     for p in all_pairs:
         assert set(h2_sequence(p.page)) == DISPATCH_H2, p.name
+        assert_page_names(p.page)
         for heading in UNTOUCHED_REGIONS:
-            # PF4: a region whose numbers PF4 moves is checked by its facts; every other region
-            # keeps its pinned digest once PF4's words are put back (as_before_pf4).
-            if heading in PF4_MOVED_REGIONS.get(p.name, ()):
+            if heading in FACT_REGIONS:
                 assert_region_facts(p, heading)
-                continue
-            if p.name in LATTICE_PAIRS:
+            elif heading == "Not verified":
+                assert_not_verified(p)
+            elif p.name in LATTICE_PAIRS:
                 assert_lattice_region(p, heading)
-                continue
-            text = as_before_pf4(normalised_region(page_as_0_0_1_wrote_it(p.page), heading), heading, p)
-            assert sha(text) == REGION_SHA256[p.name][heading], (p.name, heading)
+            else:
+                assert_builder_region(p, heading)
 
 
 def test_ls19_the_summary_introduces_no_number_the_statistics_view_does_not_carry(all_pairs: list[Pair]) -> None:

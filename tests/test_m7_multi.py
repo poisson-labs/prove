@@ -64,7 +64,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import lattice
-from poisson_prove import cli
+from poisson_prove import __version__, cli
 from poisson_prove.diff import DiffResult, EventDiff, MultiDiffResult, diff, multi_diff
 from poisson_prove.report import (
     SATURATED_FILL,
@@ -747,17 +747,6 @@ def strip_honesty(text: str) -> str:
     return "\n".join(line for line in text.splitlines() if not _is_honesty_line(line))
 
 
-def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0: the one line of a rendered report the rename changes is the version
-    in its provenance list. First assert it is there as the rename writes it -- one ``Prove version:``
-    line and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and drop any separate
-    ``written by proofload`` line, so every other byte is still compared."""
-    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text)
-    assert len(found) == 1 and "proofload version:" not in text, found
-    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
-    return re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
-
-
 def lattice_headline() -> str:
     """The single-event headline the lattice's references give: Fisher + BH over the design's counts."""
     lower, higher = lattice.directions(lattice.fisher())
@@ -912,7 +901,8 @@ def test_b1_markdown_matches_the_layout_built_from_the_references_outside_the_ho
         f"- event: {lattice.EVENT}", f"- t unit: {lattice.T_UNIT}", f"- horizon: {lattice.HORIZON:g}",
         "- method: fisher_bh", "- seed identity match: true", "- unpaired analysis: true", "- q: 0.05",
         "- n not comparable: 0", "- dropped a: 0", "- dropped b: 0", "- episodes censored at horizon: 0",
-        "- n absent: 0", "- proofload version: 0.0.1",
+        # The report is built with no manifests, so the version it gives is this build's.
+        "- n absent: 0", f"- Prove version: {__version__}",
     ]
     # The record's own facts, pinned so a drift of the generator or of the references is seen too.
     assert expected[2] == "22 of 72 cells safer, 0 worse (fisher_bh, BH q<0.05, unpaired)."
@@ -922,7 +912,7 @@ def test_b1_markdown_matches_the_layout_built_from_the_references_outside_the_ho
     assert {k for k, v in kinds.items() if v == "limit"} == set(LATTICE_LIMITS)
     assert sum(v == "ceiling" for v in kinds.values()) == 37
     assert LATTICE_MAX_MDE_PP == f"{_pp0(golden_diff.max_mde)}pp"
-    now, printed = _set_aside_mde(as_0_0_1_wrote_it(golden_report.to_markdown()))
+    now, printed = _set_aside_mde(golden_report.to_markdown())
     assert strip_honesty(now).splitlines() == expected
     assert len(printed) == len(worst) == golden_report.spec.top_n
     notes = dict(zip(golden_diff.cells["config_hash"], golden_diff.cells["mde_note"], strict=True))

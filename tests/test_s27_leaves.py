@@ -108,7 +108,6 @@ from __future__ import annotations
 
 import functools
 import dataclasses
-import hashlib
 import importlib
 import inspect
 import json
@@ -127,7 +126,6 @@ import pytest
 from hypothesis import HealthCheck, given, settings, target
 from hypothesis import strategies as st
 
-import poisson_prove
 from poisson_prove import cli
 from poisson_prove import diff as diff_mod
 from poisson_prove.diff import multi_diff
@@ -136,7 +134,6 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
 import lattice
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
 #: The generated pair (``tests/lattice.py``) every lattice test below reads.
 LATTICE_ROOT = lattice.root()
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
@@ -144,7 +141,6 @@ LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
 # created_at, a letter); serve names the lattice's runs by these.
 LATTICE_NAME_A, LATTICE_NAME_B = lattice.NAME_A, lattice.NAME_B
 EVENT, X, Y = lattice.EVENT, lattice.X, lattice.Y
-DIFF_SOURCE = PACKAGE / "diff.py"
 METHODS = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 TWO_SCHEMES = ("mcnemar_bh", "fisher_bh")
 
@@ -541,10 +537,6 @@ def without(payload: Mapping[str, Any], keys: Sequence[str]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in keys}
 
 
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
 def walk_keys(payload: Any, *, skip: Sequence[str] = ("config", "groups")) -> list[str]:
     """Every mapping key at any depth of a JSON payload, except the keys of mappings that carry
     user data: a ``config`` dict's keys are the run's axis names and ``groups``' keys are labels."""
@@ -924,28 +916,18 @@ def property_tree(case: Any, depth: int) -> Any:
 # ---------- L1: the literals ----------
 
 
-def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
+def assert_runs_are_named(structure: Mapping[str, Any], events: str) -> None:
     """PF2: run names show in ``serve --json`` on the lattice in two places only: ``run_name``
-    beside each arm's ``run_id``, and the default title, which names the runs by name (``view.title``
-    and the figure's title line). First assert each is there as PF2 writes it, then return the
-    structure without names (no ``run_name``, the title by id) for the checks that follow."""
-    arms = {}
+    right after each arm's ``run_id``, and the default title, which names the runs by name
+    (``view.title`` and the figure's title line, once)."""
     for role, run_id, name in (("a", LATTICE_A, LATTICE_NAME_A), ("b", LATTICE_B, LATTICE_NAME_B)):
         arm = structure["pair"][role]
         keys = list(arm)
         assert (arm["run_id"], arm.get("run_name")) == (run_id, name), arm
         assert keys.index("run_name") == keys.index("run_id") + 1, keys
-        arms[role] = {k: v for k, v in arm.items() if k != "run_name"}
-    named, by_id = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}", f"{LATTICE_A} vs {LATTICE_B}: {events}"
+    named = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}"
     assert structure["view"]["title"] == named, structure["view"]["title"]
-    line = f'font-size="13">{named}</text>'
-    assert structure["heatmap_svg"].count(line) == 1, structure["heatmap_svg"][:600]
-    return {
-        **structure,
-        "pair": {**structure["pair"], **arms},
-        "view": {**structure["view"], "title": by_id},
-        "heatmap_svg": structure["heatmap_svg"].replace(line, f'font-size="13">{by_id}</text>'),
-    }
+    assert structure["heatmap_svg"].count(f'font-size="13">{named}</text>') == 1, structure["heatmap_svg"][:600]
 
 
 def assert_version_keys(structure: dict[str, Any]) -> None:
@@ -1884,9 +1866,8 @@ def test_l20_check_and_serve_on_the_lattice_carry_the_flat_familys_counts_and_ce
     assert code == 0, runs_out + runs_err
     names = {entry["run_id"]: entry["run_name"] for entry in json.loads(runs_out)["runs"]}
     assert (names[LATTICE_A], names[LATTICE_B]) == (LATTICE_NAME_A, LATTICE_NAME_B)
-    # PF2: run_name beside each arm's run_id and the title by name are asserted,
-    # then put back as before names.
-    structure = structure_as_ids_named_it(structure, EVENT)
+    # PF2: run_name beside each arm's run_id, and the title by name.
+    assert_runs_are_named(structure, EVENT)
     # PF0's version-field check still holds on the page.
     assert_version_keys(structure)
     # PF4 (PF4.3, PF4.11, PF4.17, PF4.20): the structure is checked by its facts; the tree

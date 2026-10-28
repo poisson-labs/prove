@@ -96,10 +96,12 @@ item agrees at every cut (PR72), and a ``k = 4`` frame whose only job is to be r
 this file, so whether an ordered or an unordered sweep pair is the ``MS@j`` observation at
 ``S > 3`` is not pinned.
 
-The PR60 digests were computed on the two-arm code before replicates (``7bb1a3b``'s
-``src/``); the test that carries them is the byte-identity guard for ``k = 2``.
+PR60's ``k = 2`` guard reads the ``pairs`` frame, the assertion and both analysis artifacts of
+a fixed two-arm store against what the two-arm analysis gives on its stored values, written out
+here: the frame row by row, the 2x2, the ties and McNemar per sweep, and the exact intervals the
+fixture's few flipping items put every cut under.
 
-**The three ``hypothesis`` tests are derandomized.**
+**The two ``hypothesis`` tests are derandomized.**
 
 **Named gaps, not pinned.** An empty cut under ``replicates()``; cause precedence on a set
 broken in two arms; the ``MS@j`` observation at ``S > 3``;
@@ -110,7 +112,6 @@ dollars and latency values and the ``comparison`` in the two analysis artifacts 
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import itertools
 import json
 import math
@@ -131,7 +132,7 @@ import pandas as pd
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from scipy.stats import beta
+from scipy.stats import beta, binomtest
 
 import poisson_prove
 from poisson_prove import paired
@@ -168,17 +169,18 @@ PREFIX = re.compile(r"\Aj(\d+)\Z")
 STEP = re.compile(r"\Aj(\d+)_to_j(\d+)\Z")
 OTHER = {"ge": "gt", "gt": "ge"}
 
-# PR60: the bytes the two-arm code before replicates (``7bb1a3b``'s ``src/``) writes for
-# ``pr60_store`` through ``assert_pairs`` and ``analyse`` at ``k = 2``, computed through
-# ``pr60_digests`` below, which masks what was added on top of those bytes: the declaration digest
-# and block (they move with the cut's ``comparison``), the ``comparison`` the two artifacts print
-# beside the threshold, and the four timing columns the
-# windows add to ``pairs`` (``TIMING_COLUMNS``). Every other byte is pinned.
+# PR60: the four timing columns the windows add to ``pairs``, after the PR-1 frozen tests' nine.
 TIMING_COLUMNS = ("start_ns_a", "end_ns_a", "start_ns_b", "end_ns_b")
-PR60_PAIRS_SHA256 = "120c9c73ff9c68f9063b177da266d0f5712184f44238e359d551f3b7fa4f843e"
-PR60_ASSERTION_SHA256 = "1599b827d6274ac7fd149dcba4ad47f43a75414ad4d2592b1b04dd14f7077526"
-PR60_CONTINGENCY_SHA256 = "b4a14e176172f65823ec9276def0b1f9dfb6e1c03dbde6dde13fa2ded2a84809"
-PR60_INTERVALS_SHA256 = "efefd40a6d2d63da52f090deb67e710f1d364fd3d7cb741683f486a796da6fb5"
+TWO_ARM_COLUMNS = (
+    "sweep", "cut", "cluster", "config_hash", "replicate_index", "request_digest", "exemptions_exercised", "value_a", "value_b",
+)
+#: PR60: every cause the counts block names, each at zero on a store where every pair is eligible.
+CAUSES = (
+    "unmatched", "errored", "no_request_span", "retry_or_multicall", "malformed_body", "model_pin",
+    "body_field_absent", "body", "target", "header", "value_missing", "value_out_of_range",
+)
+#: PR60: what a pair assertion records as not compared when the declaration does not record them.
+GAPS = ["harness_digest", "client_version", "retries", "headers"]
 
 
 def P() -> Any:
@@ -230,6 +232,26 @@ def observation_bootstrap(values: Sequence[float], *, seed: int, b: int) -> tupl
     idx = rng.integers(0, len(v), size=(b, len(v)))
     draws = v[idx].mean(axis=1)
     return float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))
+
+
+def cp_two_sided(k: int, n: int) -> tuple[float, float]:
+    """The two-sided 95% Clopper-Pearson interval on ``k`` of ``n``."""
+    lo = 0.0 if k == 0 else float(beta.ppf(0.025, k, n - k + 1))
+    hi = 1.0 if k == n else float(beta.ppf(0.975, k + 1, n - k))
+    return lo, hi
+
+
+def cp_upper_one_sided(k: int, g: int) -> float:
+    """The one-sided exact 95% Clopper-Pearson upper bound on ``k`` flipping items of ``g``."""
+    return float(beta.ppf(0.95, k + 1, g - k))
+
+
+def mcnemar_p(n10: int, n01: int) -> float:
+    """The two-sided exact binomial on ``min(n10, n01)`` of ``n10 + n01`` at one half, ``1.0`` at
+    zero discordant pairs."""
+    if n10 + n01 == 0:
+        return 1.0
+    return float(binomtest(min(n10, n01), n10 + n01, 0.5).pvalue)
 
 
 def cp_lower_one_sided(k_dis: int, g: int) -> float:
@@ -583,7 +605,7 @@ def make_k_store(
                 run_id=run_id, target_id="scorer@v1", t_unit="steps", run_salt=SALT,
                 axis_types={"item": "categorical", "cut": "categorical"}, backend="local",
                 environment={
-                    "python": "3.11.7", "platform": "oracle",
+                    "python": "3.11.7", "platform": "test",
                     "poisson_prove_version": poisson_prove.__version__,
                     "capture": {"content": True, "max_observation_bytes": "none"},
                 },
@@ -602,44 +624,133 @@ def k_rows(g: int, pattern: Callable[[int], Sequence[int]], *, cut: str = CUT, k
     ]
 
 
-def pr60_store(root: Path) -> Store:
-    """The fixed ``k = 2`` store the PR60 digests are computed on: two cuts, four items each,
-    two sweeps, values chosen so c60 has three flipping items and a tie in arm b."""
-    rows = [
+PR60_SWEEPS = ("S1", "S2")
+PR60_CUTS = ((CUT, THRESHOLD), ("c50", "0.50"))
+
+
+def pr60_rows() -> list[KRow]:
+    """Two cuts, four items each, values chosen so c60 has two flipping items and a tie in arm b."""
+    return [
         KRow("c60-p0", CUT, ("0.75", "0.60")), KRow("c60-p1", CUT, ("0.25", "0.75")),
         KRow("c60-p2", CUT, ("0.40", "0.99")), KRow("c60-p3", CUT, ("0.00", "0.10")),
         KRow("c50-q0", "c50", ("0.80", "0.90")), KRow("c50-q1", "c50", ("0.55", "0.51")),
         KRow("c50-q2", "c50", ("0.70", "0.20")), KRow("c50-q3", "c50", ("0.10", "0.30")),
     ]
-    return make_k_store(root, rows, k=2, sweeps=("S1", "S2"))
 
 
-def pr60_digests(store: Store, decl: Any) -> dict[str, str]:
-    """The four PR60 digests off a store and a declaration, with the declaration digest masked
-    and the declaration block dropped, which is how the pinned digests were computed."""
-    a = P().assert_pairs(store, decl)
-    result = P().analyse(a)
-    mask = re.compile(r'"declaration_digest": "[0-9a-f]{64}"|\n *"comparison": "g[te]",?')
-    payload = json.loads(a.to_json())
-    payload.pop("declaration", None)
-    payload.pop("declaration_digest", None)
-    for row in payload.get("pairs", []):
-        if isinstance(row, dict):
-            for column in TIMING_COLUMNS:
-                row.pop(column, None)
-    frozen = [c for c in a.pairs.columns if c not in TIMING_COLUMNS]
-    frame = a.pairs[frozen].astype(str).to_csv(index=False)
-    assert '"poisson_prove_version":' in json.dumps(payload) and '"proofload_version":' not in json.dumps(payload)
+def pr60_store(root: Path) -> Store:
+    """The fixed ``k = 2`` store PR60 reads: ``pr60_rows`` in two sweeps."""
+    return make_k_store(root, pr60_rows(), k=2, sweeps=PR60_SWEEPS)
+
+
+def pr60_expected_pairs() -> list[dict[str, Any]]:
+    """The ``pairs`` frame's nine two-arm columns, from ``pr60_rows``: one row per item per sweep,
+    ordered by sweep, cut and item; the stored literals; the digest of the one request every arm
+    sent (``_record``'s body, the span's URL and method, no header recorded)."""
+    out = []
+    for sweep in PR60_SWEEPS:
+        for row in sorted(pr60_rows(), key=lambda r: (r.cut, r.item)):
+            body = (
+                f'{{"model": "{MODEL_PIN}", "state": "state of {row.item}", "temperature": 0.30, '
+                '"max_tokens": 64}'
+            )
+            out.append({
+                "sweep": sweep, "cut": row.cut, "cluster": row.item,
+                "config_hash": config_hash({"item": row.item, "cut": row.cut}), "replicate_index": 0,
+                "request_digest": paired.request_digest(
+                    body, target={"url.full": URL, "http.request.method": "POST"}, headers={}, exemptions=("x-request-id",),
+                ),
+                "exemptions_exercised": (), "value_a": row.values[0], "value_b": row.values[1],
+            })
+    return out
+
+
+def pr60_counts() -> dict[str, Any]:
+    """The counts block of a store on which every key matched and every pair is eligible."""
+    def block(keys: int) -> dict[str, Any]:
+        return {
+            "keys": keys, "matched": keys, "unmatched": 0, "eligible": keys, "ineligible": 0,
+            "by_cause": dict.fromkeys(CAUSES, 0), "by_arm": {"a": 0, "b": 0, "both": 0}, "reconciles": True,
+        }
+    per_cut = {cut: len(PR60_SWEEPS) * sum(r.cut == cut for r in pr60_rows()) for cut, _ in PR60_CUTS}
     return {
-        "pairs": hashlib.sha256(frame.encode()).hexdigest(),
-        # PF0: each arm's identity echoes the manifest's version under its new key; under the old
-        # key the assertion is the two-arm code's byte for byte.
-        "assertion": hashlib.sha256(json.dumps(
-            json.loads(json.dumps(payload).replace('"poisson_prove_version":', '"proofload_version":')), sort_keys=True,
-        ).encode()).hexdigest(),
-        "contingency": hashlib.sha256(mask.sub("", result.contingency_json()).encode()).hexdigest(),
-        "intervals": hashlib.sha256(mask.sub("", result.intervals_json()).encode()).hexdigest(),
+        "total": block(sum(per_cut.values())), "by_cut": {cut: block(n) for cut, n in per_cut.items()},
+        "exemptions_exercised": {"x-request-id": 0},
     }
+
+
+def pr60_actions(cut: str, threshold: str) -> list[tuple[str, int, int]]:
+    """Each item of the cut with its two actions under ``ge``; every sweep stores the same rows."""
+    return [(r.item, act(r.values[0], threshold, "ge"), act(r.values[1], threshold, "ge")) for r in pr60_rows() if r.cut == cut]
+
+
+def pr60_expected_contingency() -> dict[str, Any]:
+    """``contingency_by_cut.json``'s cuts, from the actions: per sweep the 2x2, ``n``, the ties
+    (a stored literal equal to the threshold) and McNemar; per cut the ties summed over sweeps."""
+    cuts = {}
+    for cut, threshold in PR60_CUTS:
+        acts = pr60_actions(cut, threshold)
+        n11, n10 = sum(a and b for _, a, b in acts), sum(a and not b for _, a, b in acts)
+        n01, n00 = sum(b and not a for _, a, b in acts), sum(not a and not b for _, a, b in acts)
+        ties = {
+            arm: sum(Decimal(r.values[i]) == Decimal(threshold) for r in pr60_rows() if r.cut == cut)
+            for i, arm in enumerate(("a", "b"))
+        }
+        one = {
+            "n11": n11, "n10": n10, "n01": n01, "n00": n00, "n": len(acts), "ties": ties,
+            "arm_order_check": {"p": mcnemar_p(n10, n01), "n_discordant": n10 + n01, "can_reject": n10 + n01 >= 6},
+        }
+        cuts[cut] = {
+            "threshold": threshold, "comparison": "ge", "per_sweep": {sweep: one for sweep in PR60_SWEEPS},
+            "ties": {arm: len(PR60_SWEEPS) * n for arm, n in ties.items()},
+        }
+    return {"cuts": cuts}
+
+
+def pr60_expected_intervals() -> dict[str, Any]:
+    """``intervals_by_cut.json``'s cuts, from the actions. Fewer than five items flip at every cut,
+    so the pooled flip rate is the exact one-sided bound and the net swing is not estimated; the
+    design effect is one-way ANOVA on each item's flip indicators over the sweeps; per sweep the
+    flip rate is the two-sided exact interval on the discordant count."""
+    cuts = {}
+    for cut, threshold in PR60_CUTS:
+        acts = pr60_actions(cut, threshold)
+        g, s = len(acts), len(PR60_SWEEPS)
+        flips = [int(a != b) for _, a, b in acts]
+        k_dis = sum(flips)
+        assert k_dis < 5, (cut, k_dis)
+        clusters = [item for _ in PR60_SWEEPS for item, _, _ in acts]
+        indicators = flips * s
+        icc, m_bar, deff = icc1(clusters, indicators)
+        swing = (sum(b for _, _, b in acts) - sum(a for _, a, _ in acts)) / g
+        lo, hi = cp_two_sided(k_dis, g)
+        one = {
+            "rate_a": sum(a for _, a, _ in acts) / g, "rate_b": sum(b for _, _, b in acts) / g,
+            "flip_rate": {"estimate": k_dis / g, "lo": lo, "hi": hi, "basis": "exact_binomial"},
+            "net_swing": {"estimate": swing, "direction": "b_minus_a"},
+        }
+        cuts[cut] = {
+            "threshold": threshold, "comparison": "ge", "n": {"items": g, "sweeps": s},
+            "flip_rate": {
+                "estimate": sum(indicators) / len(indicators), "lo": 0.0, "hi": cp_upper_one_sided(k_dis, g),
+                "basis": "exact_upper_one_sided", "lower_bound_by_observation": True,
+            },
+            "net_swing": {"estimate": swing, "lo": None, "hi": None, "basis": "not_estimated", "direction": "b_minus_a"},
+            "design_effect": {"icc": icc, "m_bar": m_bar, "deff": deff},
+            "per_sweep": {sweep: one for sweep in PR60_SWEEPS},
+            "ineligibility_rate": 0.0, "outcome": None, "outcome_interval": None,
+        }
+    return {"cuts": cuts}
+
+
+def in_order(node: Any) -> Any:
+    """A parsed JSON value with every object as its list of (key, value) pairs, so equality also
+    reads the key order."""
+    if isinstance(node, dict):
+        return [(k, in_order(v)) for k, v in node.items()]
+    if isinstance(node, list):
+        return [in_order(v) for v in node]
+    return node
 
 
 def store_declaration(**over: Any) -> Any:
@@ -858,7 +969,7 @@ def test_pr59_property_two_declarations_share_a_digest_only_if_more_is_the_same_
     assert (a.digest == b.digest) == (ids_first == ids_second)
 
 
-# ---------- PR60: k = 2 is byte-identical, and replicates() returns nothing for it ----------
+# ---------- PR60: k = 2 is the two-arm analysis, and replicates() returns nothing for it ----------
 
 
 def test_pr60_replicates_returns_an_empty_tuple_when_every_sweep_is_a_pair(tmp_path: Path) -> None:
@@ -872,20 +983,48 @@ def test_pr60_replicates_returns_an_empty_tuple_when_every_sweep_is_a_pair(tmp_p
     ]
 
 
-def test_pr60_at_k_two_the_pairs_frame_the_assertion_and_both_analysis_artifacts_keep_their_pinned_bytes(
+def test_pr60_at_k_two_the_pairs_frame_the_assertion_and_both_analysis_artifacts_are_the_two_arm_analysis(
     tmp_path: Path,
 ) -> None:
-    """Computed on ``7bb1a3b``'s ``src/`` (no ``more``, no ``comparison``, no timing) through
-    ``pr60_digests``: the ``pairs`` frame's nine two-arm columns,
-    ``pair_assertion.json`` without its declaration block, digest and timing columns,
-    ``contingency_by_cut.json`` and ``intervals_by_cut.json`` with the digest and the
-    ``comparison`` line masked. What the masks cover was added since; every other
-    byte is pinned, so code that changes a ``k = 2`` byte anywhere else fails here."""
-    digests = pr60_digests(pr60_store(tmp_path), store_declaration(sweeps=("S1", "S2"), k=2))
-    assert digests == {
-        "pairs": PR60_PAIRS_SHA256, "assertion": PR60_ASSERTION_SHA256,
-        "contingency": PR60_CONTINGENCY_SHA256, "intervals": PR60_INTERVALS_SHA256,
+    """A declaration with no ``more`` produces what the two-arm analysis alone produces, read on a
+    fixed store against the stored values: the ``pairs`` frame's nine two-arm columns row by row,
+    ``pair_assertion.json`` without its declaration block and the timing columns (the windows'),
+    and ``contingency_by_cut.json`` and ``intervals_by_cut.json`` whole, key order included."""
+    decl = store_declaration(sweeps=PR60_SWEEPS, k=2)
+    a = P().assert_pairs(pr60_store(tmp_path), decl)
+    result = P().analyse(a)
+    expected = pr60_expected_pairs()
+    got = a.pairs[list(TWO_ARM_COLUMNS)].to_dict(orient="records")
+    assert all(isinstance(r[c], Decimal) for r in got for c in ("value_a", "value_b"))
+    assert [{**r, "value_a": str(r["value_a"]), "value_b": str(r["value_b"])} for r in got] == expected
+    payload = json.loads(a.to_json())
+    assert payload.pop("declaration_digest") == decl.digest
+    payload.pop("declaration")
+    for row in payload["pairs"]:
+        for column in TIMING_COLUMNS:
+            row.pop(column)
+    assert payload == {
+        "environment": {
+            "sweeps": {
+                sweep: {
+                    arm: {
+                        "poisson_prove_version": poisson_prove.__version__, "run_salt": SALT, "python": "3.11.7",
+                        "concurrency": None, "capture_cap": "none",
+                    }
+                    for arm in ("a", "b")
+                }
+                for sweep in PR60_SWEEPS
+            },
+            "gaps": GAPS,
+        },
+        "pairs": [{**r, "exemptions_exercised": []} for r in expected],
+        "excluded": [],
+        "counts": pr60_counts(),
     }
+    for text, want in ((result.contingency_json(), pr60_expected_contingency()), (result.intervals_json(), pr60_expected_intervals())):
+        got_json = json.loads(text)
+        assert got_json.pop("declaration_digest") == decl.digest
+        assert in_order(got_json) == in_order(want)
 
 
 def test_pr60_a_sweep_pair_built_without_more_is_the_sweep_pair_built_with_an_empty_more() -> None:

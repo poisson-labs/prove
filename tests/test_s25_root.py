@@ -88,7 +88,6 @@ former's top-level key set to the three methods, and nothing pins the latter.
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import math
@@ -403,10 +402,6 @@ def json_bytes(root: Any) -> str:
 
 def without(payload: Mapping[str, Any], keys: Sequence[str]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in keys}
-
-
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # ---------- fixtures ----------
@@ -784,10 +779,10 @@ def test_o5_the_same_inputs_give_identical_json_bytes_twice_in_one_process(pair:
 def test_o5_the_same_inputs_give_identical_json_bytes_across_two_processes(pair: Any, lattice_trees: Any) -> None:
     a, b, _, _ = pair
     multi = lattice_trees.multi((EVENT,), "fisher_bh")
-    here = sha256_of_text(json_bytes(tree().omnibus(a, b, multi, n_permutations=200, seed=0)))
+    here = json_bytes(tree().omnibus(a, b, multi, n_permutations=200, seed=0))
     script = "\n".join(
         [
-            "import hashlib, json, sys, warnings",
+            "import json, sys, warnings",
             "from poisson_prove.store import Store",
             "from poisson_prove.diff import multi_diff, UnpairedAnalysis",
             "from poisson_prove.tree import omnibus",
@@ -796,12 +791,12 @@ def test_o5_the_same_inputs_give_identical_json_bytes_across_two_processes(pair:
             "a = s.read(ra, meta=False); b = s.read(rb, meta=False)",
             "m = multi_diff(a, b, events=[event], method='fisher_bh', manifest_a=s.manifest(ra), manifest_b=s.manifest(rb))",
             "r = omnibus(a, b, m, n_permutations=200, seed=0)",
-            "print(hashlib.sha256(json.dumps(r.to_json(), sort_keys=True).encode('utf-8')).hexdigest())",
+            "print(json.dumps(r.to_json(), sort_keys=True))",
         ]
     )
     done = subprocess.run([sys.executable, "-c", script, str(LATTICE_ROOT), RUN_A, RUN_B, EVENT], capture_output=True, text=True, check=False)
     assert done.returncode == 0, done.stderr
-    assert done.stdout.strip() == here
+    assert done.stdout.rstrip("\n") == here
 
 
 def test_o5_a_different_seed_moves_only_the_p_driven_fields(

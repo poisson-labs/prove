@@ -55,7 +55,6 @@ observations.
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping, Sequence
@@ -81,7 +80,7 @@ MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parent.parent
 
-RUN_SALT = "cd-oracle-salt"
+RUN_SALT = "cd-test-salt"
 HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 TRUNCATED_KEY = "poisson_prove.truncated"
@@ -120,9 +119,11 @@ SHIPPED_SWEEP_FILES = tuple(
 )
 assert SHIPPED_SWEEP_FILES, "the packaged quickstart spec at least ships"
 
-#: CD11: ``split``'s envelope/bodies partition over the fixture below, hashed with the old
-#: ``proofload.`` schema string and span prefix put back (see the test).
-SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
+#: CD11: the fixture's attributes ``split`` routes into the bodies -- over the routing constant,
+#: a named observation key, a cut value's wrapper -- and the ones it leaves in the envelope: at or
+#: under the constant, and the two routing stamps by name, whatever their size.
+ROUTED_ATTRS = ("app.over", "app.wrapped", "gen_ai.input.messages")
+KEPT_ATTRS = ("app.at", "app.under", "poisson_prove.episode", "poisson_prove.run_id")
 
 
 # ---------- helpers: never an assertion ----------
@@ -158,7 +159,7 @@ def sweep_toml(capture: dict[str, Any] | None, *, replicates: int = 1, values: S
     """A sweep file. ``capture`` is written verbatim: this builder declares nothing of its own,
     because what a ``[capture]`` table does or does not say is the whole subject here."""
     lines = [
-        'target_id = "cd-oracle@v0"', 't_unit = "steps"', f"replicates = {replicates}", "",
+        'target_id = "cd-test@v0"', 't_unit = "steps"', f"replicates = {replicates}", "",
         "[axes.x]", 'type = "continuous"', f"values = {json.dumps(list(values))}", "",
     ]
     if capture is not None:
@@ -186,7 +187,7 @@ def manifest(run_id: str, capture: Mapping[str, Any] | None) -> RunManifest:
     return RunManifest(
         # The same target_id, t_unit and axis_types ``sweep_toml`` writes, so the three gates that
         # sit beside the cap gate (target, unit, axes) pass and the cap gate is what is measured.
-        run_id=run_id, target_id="cd-oracle@v0", t_unit="steps", run_salt=RUN_SALT,
+        run_id=run_id, target_id="cd-test@v0", t_unit="steps", run_salt=RUN_SALT,
         axis_types={"x": "continuous"}, backend="local", environment=environment,
     )
 
@@ -218,7 +219,7 @@ def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 180.0) -> Any:
 def _tracer() -> Any:
     from opentelemetry import trace
 
-    return trace.get_tracer("cd.oracle", "0.1.0")
+    return trace.get_tracer("cd.test", "0.1.0")
 
 
 def child_run_local(store_root: str, toml_path: str, target: str, salt: str) -> str:
@@ -779,16 +780,18 @@ def test_cd11_splits_partition_of_the_fixture_is_unchanged() -> None:
     into ``split`` changes which column stored bytes live in and breaks ``Store.read`` on rows
     written with any other limit."""
     envelope, bodies = split(split_fixture())
-    assert sorted(envelope["spans"][0]["attrs"]) == ["app.at", "app.under", "poisson_prove.episode", "poisson_prove.run_id"]
-    assert sorted(next(iter(bodies.values()))["attrs"]) == ["app.over", "app.wrapped", "gen_ai.input.messages"]
-    # PF0: the trace schema string and the span key prefix carry the new names; with the old
-    # names put back, the partition hashes to SPLIT_PARTITION_SHA256 byte for byte.
-    as_written = json.dumps([envelope, bodies], sort_keys=True)
-    assert '"poisson-prove.trace/1"' in as_written and '"poisson_prove.' in as_written and "proofload" not in as_written
-    as_0_0_1 = as_written.replace('"poisson-prove.trace/1"', '"proofload.trace/1"').replace('"poisson_prove.', '"proofload.')
-    digest = hashlib.sha256(as_0_0_1.encode()).hexdigest()
-    assert digest == SPLIT_PARTITION_SHA256, digest
-    assert assemble(envelope, bodies).to_dict() == split_fixture().to_dict()
+    assert sorted(envelope["spans"][0]["attrs"]) == list(KEPT_ATTRS)
+    assert sorted(next(iter(bodies.values()))["attrs"]) == list(ROUTED_ATTRS)
+    # The whole partition: the envelope is the fixture's own trace dict with the routed attributes
+    # taken out and nothing else changed, and the bodies hold exactly those attributes, whole,
+    # under the span's id. The schema string carries the current name.
+    whole = split_fixture().to_dict()
+    attrs = whole["spans"][0]["attrs"]
+    expected_envelope = {**whole, "spans": [{**whole["spans"][0], "attrs": {k: attrs[k] for k in attrs if k in KEPT_ATTRS}}]}
+    assert envelope == expected_envelope
+    assert bodies == {"0000000000000001": {"attrs": {k: attrs[k] for k in ROUTED_ATTRS}}}
+    assert envelope["schema"] == "poisson-prove.trace/1" and "proofload" not in json.dumps([envelope, bodies])
+    assert assemble(envelope, bodies).to_dict() == whole
 
 
 def test_cd11_split_does_not_take_a_limit() -> None:

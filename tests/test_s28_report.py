@@ -108,7 +108,6 @@ the raise at ``build_multi_report`` and no page.
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import html as html_mod
 import importlib
 import inspect
@@ -125,7 +124,6 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import poisson_prove
 from poisson_prove import cli
 from poisson_prove import diff as diff_mod
 from poisson_prove.diff import multi_diff
@@ -135,8 +133,6 @@ from conftest import quickstart_design, shared, without_method_lines, without_ru
 
 import lattice
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
-DIFF_SOURCE = PACKAGE / "diff.py"
 #: The generated pair (``tests/lattice.py``).
 LATTICE_ROOT = lattice.root()
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
@@ -959,10 +955,6 @@ def assert_one_prove_version_entry(text: str) -> None:
     list and no ``proofload version:``."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
-
-
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # ---------- help text ----------
@@ -2006,13 +1998,13 @@ def test_r15_identical_arguments_and_twin_stores_write_byte_identical_files(tmp_
     """Two runs with identical arguments are byte-identical (I12 with the tree); the same pair
     written to two roots renders the same three files, so nothing in the sections echoes a
     store path (R5 of ``test_m4_read.py`` runs the same verb on its poisoned twin)."""
-    digests = []
+    written = []
     for k in range(2):
         out = tmp_path / f"twice-{k}"
         code, stdout, stderr = run_cli(["--store", str(synth_root), "report", "me-a", "me-b", "--event", "fail", "--event", "crash", "--x", "task", "--y", "temp", "--methods", "all", "--out", str(out)])
         assert code == 0, stdout + stderr
-        digests.append({name: sha256_of_text((out / name).read_text()) for name in ("report.md", "heatmap.svg", "receipt.html")})
-    assert digests[0] == digests[1]
+        written.append({name: (out / name).read_bytes() for name in ("report.md", "heatmap.svg", "receipt.html")})
+    assert written[0] == written[1]
     twins = []
     for k in range(2):
         root = tmp_path / f"twin-{k}"
@@ -2022,7 +2014,7 @@ def test_r15_identical_arguments_and_twin_stores_write_byte_identical_files(tmp_
         out = tmp_path / f"twin-out-{k}"
         code, stdout, stderr = run_cli(["--store", str(root), "report", "ov-a", "ov-b", "--event", "fail", "--x", "task", "--y", "temp", "--out", str(out)])
         assert code == 0, stdout + stderr
-        twins.append({name: sha256_of_text((out / name).read_text()) for name in ("report.md", "heatmap.svg", "receipt.html")})
+        twins.append({name: (out / name).read_bytes() for name in ("report.md", "heatmap.svg", "receipt.html")})
     assert twins[0] == twins[1]
 
 
