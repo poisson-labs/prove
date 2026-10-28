@@ -254,11 +254,12 @@ def _summary(summary: Any) -> dict[str, Any]:
 
 def child_local(root: str, episode_timeout: float | None) -> dict[str, Any]:
     from poisson_prove.executor import plan, run_local
-    from poisson_prove._resolve import resolve
 
     store = Store(Path(root) / "store")
     p = plan(_sweep(root, CHAOS), store, backend="local", run_salt=SALT, import_path=TARGET)
-    summary = run_local(p, resolve(TARGET), store, episode_timeout=episode_timeout)
+    module, _, name = TARGET.partition(":")
+    summary = run_local(p, getattr(importlib.import_module(module), name), store,
+                        episode_timeout=episode_timeout)
     return {"run_id": p.run_id, "summary": _summary(summary)}
 
 

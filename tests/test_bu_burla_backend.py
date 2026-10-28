@@ -466,16 +466,20 @@ def isolated(fn: Callable[..., Any], *args: Any) -> Any:
     return run_isolated(fn, *args, timeout=ARM_DEADLINE_S, method="spawn", prepare=_arm_tripwire)
 
 
+def import_target(import_path: str) -> Callable[..., Any]:
+    """The callable ``"module:function"`` names, imported the way any Python caller would."""
+    module, _, name = import_path.partition(":")
+    return getattr(importlib.import_module(module), name)
+
+
 def child_local(root: str, target: str, chaos: dict[str, Any] | None, episode_timeout: float | None,
                 capture: bool) -> dict[str, Any]:
     """``run_local`` on the sweep a Burla arm runs, in a fresh interpreter."""
     sys.path.insert(0, str(TARGETS))
-    from poisson_prove._resolve import resolve
-
     spec_path = write_sweep(Path(root), chaos=chaos, capture=capture)
     store = Store(Path(root) / "store")
     p = make_plan(spec_path, store, target, backend="local")
-    summary = run_local(p, resolve(target), store, episode_timeout=episode_timeout)
+    summary = run_local(p, import_target(target), store, episode_timeout=episode_timeout)
     return {"run_id": p.run_id, "complete": summary.complete}
 
 
@@ -625,11 +629,23 @@ class HookFailed(Exception):
     pass
 
 
-def test_r4_the_cost_hook_runs_once_first_and_replaces_modals_check(tmp_path: Path,
-                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
-    modal_checks: list[Any] = []
-    monkeypatch.setattr(executor_modal, "_check_cost", lambda *a, **k: modal_checks.append(a))
-    p, store = r_plan(tmp_path / "hook")
+# Options Modal's own cost check refuses for any plan: one whose estimate is over its cap, and
+# one with a cap and no estimate.
+MODAL_REFUSES = {
+    "over-cap": ModalOptions(batch_size=2, max_cost=1e-9, est_seconds_per_episode=60.0),
+    "no-estimate": ModalOptions(batch_size=2, max_cost=1e-9),
+}
+
+
+def _hooked_run_under(tmp_path: Path, name: str, options: ModalOptions) -> None:
+    # Control: without the hook, Modal's check refuses these options before anything.
+    pc, cstore = r_plan(tmp_path / f"{name}-modal")
+    cmapper = RecordingMapper()
+    with pytest.raises(executor_modal.CostGuard):
+        run_with_mapper(pc, cmapper, cstore, options=options)
+    assert cmapper.calls == 0 and cstore.runs() == []
+    # With the hook, the same options run: the hook replaces Modal's check.
+    p, store = r_plan(tmp_path / name)
     events: list[str] = []
     seen: list[Any] = []
 
@@ -638,11 +654,16 @@ def test_r4_the_cost_hook_runs_once_first_and_replaces_modals_check(tmp_path: Pa
         events.append("cost_check")
         assert store.runs() == [], "the manifest was written before the cost hook"
 
-    run_with_mapper(p, RecordingMapper(events=events), store, options=ModalOptions(batch_size=2),
-                    backend="burla", placement=PLACEMENT, cost_check=check)
+    summary = run_with_mapper(p, RecordingMapper(events=events), store, options=options,
+                              backend="burla", placement=PLACEMENT, cost_check=check)
     assert len(seen) == 1 and seen[0] is p
     assert events[0] == "cost_check" and events.count("cost_check") == 1
-    assert modal_checks == []
+    assert summary.complete and len(stored(store, p.run_id)) == len(p.pairs), name
+
+
+def test_r4_the_cost_hook_runs_once_first_and_replaces_modals_check(tmp_path: Path) -> None:
+    for name, options in MODAL_REFUSES.items():
+        _hooked_run_under(tmp_path, name, options)
     pf, fstore = r_plan(tmp_path / "raises")
     mapper = RecordingMapper()
 
@@ -725,9 +746,7 @@ def local_rows(root: Path, target: str) -> list[dict[str, Any]]:
     spec_path = write_sweep(root, replicates=3)
     store = Store(root / "store")
     p = make_plan(spec_path, store, target, backend="local")
-    from poisson_prove._resolve import resolve
-
-    run_local(p, resolve(target), store)
+    run_local(p, import_target(target), store)
     return stored(store, p.run_id)
 
 
