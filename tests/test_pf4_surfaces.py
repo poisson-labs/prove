@@ -1132,9 +1132,9 @@ PAIRED_FIELDS = ("pairs", "n01", "n10", "delta", "p", "q", "direction", "verdict
 def test_pf4_14_diff_json_carries_the_matched_difference_and_the_pair_count_under_the_paired_test(tmp_path: Path) -> None:
     """Replicates 0 to 19 in both runs: A ended in ``fell`` on 0 to 3, B on 0 to 11, so 8 pairs had it in B
     only and none in A only. A also holds twelve runs of its own that fell, B twelve that did not. The
-    change, the discordant counts, the p-value, the interval and both limits are the matched pairs' alone,
-    as the same comparison with the unmatched runs taken out shows, whose two shares are the matched
-    pairs' and differ by the change; each run's own counts and rates still count every run."""
+    change, the discordant counts, the p-value, the interval, both limits and both shares are the matched
+    pairs' alone, as the same comparison with the unmatched runs taken out shows; the shares differ by
+    the change; each run's own counts and rates still count every run."""
     a = [(i, "fell" if i < 4 else "ok", HORIZON if i >= 4 else 1.0) for i in range(20)]
     b = [(i, "fell" if i < 12 else "ok", HORIZON if i >= 12 else 1.0) for i in range(20)]
     matched_root = _pair(tmp_path / "matched", {"c": a}, {"c": b})
@@ -1148,7 +1148,8 @@ def test_pf4_14_diff_json_carries_the_matched_difference_and_the_pair_count_unde
     assert cell["direction"] == "higher" and cell["verdict"] == "worse"
     assert {k: cell[k] for k in PAIRED_FIELDS} == {k: matched[k] for k in PAIRED_FIELDS}
     assert (matched["share_a"]["value"], matched["share_b"]["value"]) == (4 / 20, 12 / 20)
-    assert abs(cell["delta"] - (matched["share_b"]["value"] - matched["share_a"]["value"])) <= 1e-12
+    assert (cell["share_a"], cell["share_b"]) == (matched["share_a"], matched["share_b"])
+    assert abs(cell["delta"] - (cell["share_b"]["value"] - cell["share_a"]["value"])) <= 1e-12
     assert (cell["n_a"], cell["n_b"], cell["events_a"], cell["events_b"]) == (32, 32, 16, 12)
     assert abs(cell["rate_a"] - 0.5) <= 1e-12 and abs(cell["rate_b"] - 0.375) <= 1e-12
 

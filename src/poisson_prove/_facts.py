@@ -103,10 +103,11 @@ def limits_caption(power: float | None = None) -> str:
     )
 
 
-def shares_caption(event: str, level: float) -> str:
+def shares_caption(event: str, level: float, *, paired: bool = False) -> str:
     """What the share columns are, and that their intervals are per condition."""
+    over = "matched pairs' runs" if paired else "runs"
     return (
-        f"share_a and share_b are each condition's share of runs that ended in {event} by the "
+        f"share_a and share_b are each condition's share of {over} that ended in {event} by the "
         f"comparison's horizon, with a {_look.level_label(level)} Wilson interval per condition, "
         "not adjusted for the number of conditions; the tests compare the rates, and * marks a "
         "share that is not its rate (a run censored before the horizon)."

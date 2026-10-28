@@ -172,7 +172,7 @@ condition.
 |---|---|
 | `config`, `config_hash` | the condition's axis values and their 16-hex digest |
 | `n_a`, `n_b`, `events_a`, `events_b`, `rate_a`, `rate_b` | each run's episodes, those that ended in the event, and the rates the test compared |
-| `share_a`, `share_b` | each run's share of episodes ending in the event with its Wilson interval: `value`, `lo`, `hi`, `level`, `method`; `share_a_differs`, `share_b_differs` mark a share that is not its rate (a run censored before the horizon) |
+| `share_a`, `share_b` | each run's share of episodes ending in the event (under `mcnemar_bh`, of the condition's matched pairs, as `delta` is) with its Wilson interval: `value`, `lo`, `hi`, `level`, `method`; `share_a_differs`, `share_b_differs` mark a share that is not its rate (a run censored before the horizon) |
 | `delta` | the change, after minus before |
 | `pairs`, `n01`, `n10` | the pairs a paired test read, and the discordant ones among them: `n01` where only the after run had the event, `n10` where only the before run had it (null under the other tests) |
 | `stat`, `p`, `q`, `q_holm`, `holm` | the test statistic, its p, the Benjamini-Hochberg q, Holm's adjusted p, and whether the condition counted for the verdict |
