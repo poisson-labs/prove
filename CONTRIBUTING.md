@@ -43,6 +43,16 @@ python -m playwright install chromium firefox webkit
 OPENBLAS_NUM_THREADS=1 python -m pytest tests -n 6 -m "slow and not backend"
 ```
 
+## CI
+
+Every pull request and every push to main runs the code lane: ruff, the format check on `src`,
+mypy and the code suite, on Python 3.11 and 3.14. A pull request that changes the statistics, a test
+of the math suite, or the version a statistics library resolves to also runs the math suite, and the
+job summary says why. Every night, and before a release, CI runs everything else: the code suite on
+every supported Python, the math suite, the slow tests, the floors run and the code suite in a Linux
+container. Tests marked `backend` never run in CI. Each job's summary gives the tests it ran, its
+time against the lane's budget, and the code lane's tests over 10 seconds.
+
 ## The docs are tested
 
 Every command block in the README and under `docs/` runs, from a folder of its own, and must do
