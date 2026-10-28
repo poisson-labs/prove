@@ -97,7 +97,6 @@ import inspect
 import json
 import math
 import re
-import tempfile
 import typing
 import weakref
 from collections.abc import Iterator, Mapping, Sequence
@@ -263,10 +262,12 @@ def make_store(
     sweeps: Sequence[str] = ("S1",),
     per_sweep: Mapping[str, Sequence[TRow]] | None = None,
     extra_runs: Mapping[str, Sequence[TRow]] | None = None,
+    only_in: Mapping[str, Sequence[TRow]] | None = None,
     name: str = "store",
 ) -> Store:
     """``rows`` replayed in every sweep (``per_sweep`` overrides one); ``extra_runs`` are run
-    ids outside every sweep, for the cost phases."""
+    ids outside every sweep, for the cost phases; ``only_in`` adds rows to the one run it names
+    (items no other arm holds)."""
     store = Store(root / name)
     MADE_AT[store] = root / name
 
@@ -275,7 +276,7 @@ def make_store(
             run_id=run_id, target_id="scorer@v1", t_unit="steps", run_salt=SALT,
             axis_types={"item": "categorical", "cut": "categorical"}, backend="local",
             environment={
-                "python": "3.11.7", "platform": "oracle",
+                "python": "3.11.7", "platform": "test-platform",
                 "poisson_prove_version": poisson_prove.__version__,
                 "capture": {"content": True, "max_observation_bytes": "none"},
             },
@@ -288,7 +289,8 @@ def make_store(
     for sweep_index, sweep in enumerate(sweeps):
         sweep_rows = rows if per_sweep is None or sweep not in per_sweep else per_sweep[sweep]
         for label in labels(k):
-            write(f"{sweep}-{label}", label, sweep_rows, sweep_index)
+            run_id = f"{sweep}-{label}"
+            write(run_id, label, [*sweep_rows, *(only_in or {}).get(run_id, ())], sweep_index)
     for run_id, run_rows in (extra_runs or {}).items():
         write(run_id, "a", run_rows, 9)
     return store
@@ -742,26 +744,21 @@ def test_pr45_a_pair_replayed_ten_days_later_is_still_a_pair(tmp_path: Path) -> 
     assert cut.per_sweep[0]["n"] == 8 and cut.per_sweep[0]["n10"] == 3
 
 
-_PR45: dict[str, Any] = {}
-
-
-def pr45_assertion() -> Any:
+@pytest.fixture(scope="module")
+def pr45_assertion(tmp_path_factory: pytest.TempPathFactory) -> Any:
     """One stored two-sweep assertion, built once for the property test (a function-scoped
     fixture cannot serve a hypothesis test)."""
-    if "a" not in _PR45:
-        root = Path(tempfile.mkdtemp(prefix="pr45-"))
-        store = make_store(root, default_rows(), sweeps=("S1", "S2"))
-        decl = declaration(sweeps=("S1", "S2"), declared_window_s=1200.0)
-        _PR45["a"] = P().assert_pairs(store, decl)
-    return _PR45["a"]
+    store = make_store(tmp_path_factory.mktemp("pr45"), default_rows(), sweeps=("S1", "S2"))
+    decl = declaration(sweeps=("S1", "S2"), declared_window_s=1200.0)
+    return P().assert_pairs(store, decl)
 
 
 @settings(max_examples=40)
 @given(deleted=st.frozensets(st.sampled_from(TIMING_COLUMNS)))
-def test_pr45_property_deleting_timestamps_moves_windows_json_and_nothing_else(deleted: frozenset[str]) -> None:
+def test_pr45_property_deleting_timestamps_moves_windows_json_and_nothing_else(pr45_assertion: Any, deleted: frozenset[str]) -> None:
     """Nulling any subset of the timing columns changes no count, no table and no interval;
     only the windows artifact can move, and it does whenever anything was deleted."""
-    a = pr45_assertion()
+    a = pr45_assertion
     stripped = dataclasses.replace(a, pairs=a.pairs.assign(**{c: None for c in deleted}))
     full, without = P().analyse(a), P().analyse(stripped)
     assert full.contingency_json() == without.contingency_json()
@@ -772,6 +769,33 @@ def test_pr45_property_deleting_timestamps_moves_windows_json_and_nothing_else(d
         assert w_full.to_json() != w_without.to_json()
     else:
         assert w_full.to_json() == w_without.to_json()
+
+
+# ---------- items one arm holds alone ----------
+
+
+def test_items_one_arm_holds_alone_are_unmatched_and_every_figure_is_over_the_matched_pairs(tmp_path: Path) -> None:
+    """Eight items in both arms, the first three flipping from acting to not; arm a also holds
+    three items of its own that did not act, and arm b three of its own that did. The six are
+    unmatched, and the contingency, both arms' rates, the flip rate and the net swing are
+    the eight matched pairs' alone: over every item an arm holds, a's rate would be 8/11 and b's
+    8/11, not 1 and 5/8."""
+    own_a = [TRow(f"{CUT}-a{i}", CUT, (LO, LO)) for i in range(3)]
+    own_b = [TRow(f"{CUT}-b{i}", CUT, (HI, HI)) for i in range(3)]
+    store = make_store(tmp_path, default_rows(), only_in={"S1-a": own_a, "S1-b": own_b})
+    out = tmp_path / "paired"
+    assert paired_cli(store, write_declaration(tmp_path / "decl.toml"), out).code == 0
+    counts = json.loads((out / "pair_assertion.json").read_text())["counts"]["by_cut"][CUT]
+    assert (counts["matched"], counts["unmatched"], counts["eligible"]) == (8, 6, 8), counts
+    table = json.loads((out / "contingency_by_cut.json").read_text())["cuts"][CUT]["per_sweep"]["S1"]
+    assert (table["n"], table["n11"], table["n10"], table["n01"], table["n00"]) == (8, 5, 3, 0, 0), table
+    assert table["arm_order_check"]["n_discordant"] == 3
+    intervals = json.loads((out / "intervals_by_cut.json").read_text())["cuts"][CUT]
+    sweep = intervals["per_sweep"]["S1"]
+    assert intervals["n"]["items"] == 8
+    assert sweep["rate_a"] == pytest.approx(8 / 8) and sweep["rate_b"] == pytest.approx(5 / 8)
+    assert sweep["flip_rate"]["estimate"] == intervals["flip_rate"]["estimate"] == pytest.approx(3 / 8)
+    assert sweep["net_swing"]["estimate"] == intervals["net_swing"]["estimate"] == pytest.approx((0 - 3) / 8)
 
 
 # ---------- PR46: a timing artifact and nothing else ----------
@@ -960,18 +984,13 @@ def test_pr52_the_cli_phases_are_the_declared_sweeps(tmp_path: Path) -> None:
 # ---------- PR53: without --paired, the library's rendering ----------
 
 
-def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0: the one field the rename changes in a rendered report, receipt or page
-    is the version in its provenance list. First assert it is there as the rename writes it -- one
-    ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
-    drop any separate ``written by proofload`` entry. PF4 (PF4.20): no digest is taken of the
-    result; PR53 reads its facts instead."""
+def one_prove_version_entry(text: str) -> str:
+    """A rendered report, receipt or page names its version once in its provenance list, as
+    ``Prove version`` (a store 0.0.1 wrote says so inside that entry), and never as ``proofload
+    version``. Returns ``text`` unchanged."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
-    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
-    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
-    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
-    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
+    return text
 
 
 # The command line prints report.md, receipt.html and the heatmap's labels under rule 10,
@@ -1123,7 +1142,7 @@ def test_pr53_a_report_without_paired_writes_the_library_rendering_and_the_latti
     assert (names[PAIR_A], names[PAIR_B]) == (lattice.NAME_A, lattice.NAME_B)
     for name in E14_FILES:
         assert named in library[name] and by_id not in library[name], name
-        text = library[name] if name == "heatmap.svg" else as_0_0_1_wrote_it(library[name])
+        text = library[name] if name == "heatmap.svg" else one_prove_version_entry(library[name])
         # PF4 (PF4.20): the event has no kind in the pair, so the headline counts are direction words
         # and no rendering says safer or worse.
         assert f"{lattice.EVENT}: {lower} lower, {higher} higher" in text, name
