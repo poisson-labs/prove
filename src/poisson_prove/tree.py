@@ -461,7 +461,7 @@ def _design(
     n_a = np.array([len(x) for x, _ in per_cell], dtype=np.int64)
     n_b = np.array([len(y) for _, y in per_cell], dtype=np.int64)
     if scheme == "pair_swap":
-        width = int(max(n_a.max(), 1))
+        width = max(int(np.max(n_a)), 1)
         left = np.full((len(per_cell), width), _PAD, dtype=np.int16)
         right = np.full((len(per_cell), width), _PAD, dtype=np.int16)
         for row, (codes_a, codes_b) in enumerate(per_cell):
@@ -472,7 +472,7 @@ def _design(
         in_b = column < n_b[:, None]
         ragged = bool(np.any(n_a < width))
     else:
-        width = int(max((n_a + n_b).max(), 1))
+        width = max(int(np.max(n_a + n_b)), 1)
         left = np.full((len(per_cell), width), _PAD, dtype=np.int16)
         right = np.zeros((len(per_cell), 0), dtype=np.int16)
         for row, (codes_a, codes_b) in enumerate(per_cell):
@@ -666,7 +666,7 @@ def _min_p(
         column = np.sort(permuted[:, j])
         at_least = n_permutations - np.searchsorted(column, permuted[:, j], side="left")
         rank_p[:, j] = (at_least + (observed[j] >= permuted[:, j])) / (n_permutations + 1)
-    m_observed = float(p_observed.min())
+    m_observed = float(np.min(p_observed))
     omnibus_p = (1 + int(np.sum(rank_p.min(axis=1) <= m_observed))) / (n_permutations + 1)
     return p_observed, omnibus_p
 
