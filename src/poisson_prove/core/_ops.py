@@ -26,6 +26,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -45,6 +46,8 @@ from poisson_prove._names import Index, NamesError, started, unfit
 from poisson_prove._names import index as names_index
 from poisson_prove._resolve import resolve as _resolve_import
 from poisson_prove._resolve import split_import_path
+from poisson_prove.capture import _ENTRY_POINT_GROUP as INSTRUMENTOR_GROUP
+from poisson_prove.chaos import fault_names
 from poisson_prove.core import _artifacts
 from poisson_prove.core._results import (
     CheckResult,
@@ -74,6 +77,7 @@ from poisson_prove.diff import (
     MixedCases,
     MultiDiffResult,
     UnknownEvent,
+    declared_events,
     infer_events,
     multi_diff,
 )
@@ -628,8 +632,8 @@ def _missing_flags_refusal(
     frames = [store.read(run, meta=False) for run in runs_]
     axes = sorted({str(key) for frame in frames for config in frame["config"] for key in config})
     events = list(competing_set(*frames))
-    if verb == "inspect" and "timeout" not in events and store.tally(runs_[0]).timed_out:
-        events = sorted({*events, "timeout"})
+    if verb == "inspect" and store.tally(runs_[0]).timed_out:
+        events = sorted({*events, EPISODE_TIMEOUT})
     flags = " and ".join(
         flag
         for flag, missing in (("--x AXIS", x_missing), ("--event NAME", event_missing))
@@ -647,10 +651,47 @@ def _missing_flags_refusal(
     filled = [COMMAND, *_named_argv(argv, idx)]
     if x_missing and axes:
         filled.extend(["--x", axes[0]])
+        if verb in ("report", "serve"):
+            # Every other axis must be across, down or pinned, or the filled command is refused.
+            free = [a for a in axes[1:] if not _typed_axis(argv, a)]
+            if free and "--y" not in argv:
+                filled.extend(["--y", free.pop(0)])
+            for name in free:
+                values = [c[name] for frame in frames for c in frame["config"] if name in c]
+                value = min(values, key=lambda v: (str(type(v)), v))
+                filled.extend(["--fix", f"{name}={value}"])
     if event_missing and events:
-        filled.extend(["--event", events[0]])
+        filled.extend(["--event", _suggested_event(store, runs_, frames, events)])
     fillable = (not x_missing or axes) and (not event_missing or events)
     return refusal(message, [join(filled)] if fillable else [])
+
+
+def _typed_axis(argv: Sequence[str], name: str) -> bool:
+    """Whether the command as typed already places the axis: across, down or pinned."""
+    for i, token in enumerate(argv[:-1]):
+        nxt = argv[i + 1]
+        if token in ("--x", "--y") and nxt == name:
+            return True
+        if token == "--fix" and nxt.split("=", 1)[0] == name:
+            return True
+    return False
+
+
+def _suggested_event(
+    store: Store, runs_: Sequence[str], frames: Sequence[pd.DataFrame], events: Sequence[str]
+) -> str:
+    """The event a refusal's filled command names: the first failure, else success, the runs
+    declare, else an outcome other than the most frequent (the outcome most runs end in is rarely
+    the event), else the first carried."""
+    declared = declared_events(*(store.manifest(run) for run in runs_))
+    named = [e for e in declared if e in events]
+    if named:
+        return named[0]
+    try:
+        found, _ = infer_events(frames[0], frames[-1] if len(frames) > 1 else frames[0].iloc[0:0])
+    except (EventInferenceError, DiffError):
+        return events[0]
+    return next((e for e in found if e in events), events[0])
 
 
 def _read_record() -> Path:
@@ -822,8 +863,29 @@ def _observation_counts(store: Store, run: str) -> tuple[int, int]:
     return len(spans), sum(1 for span in spans if span.get("truncated") == "observation")
 
 
-def _paired_declaration(path: str, a: str, b: str) -> Declaration:
-    declaration = Declaration.from_toml(path)
+def _by_id(declaration: Declaration, idx: Index) -> Declaration:
+    """The declaration with each arm a run id: an arm may be given by its run's name too (never
+    by a word that moves, such as latest); a word no run answers to is left for the check that
+    refuses an unknown run."""
+
+    def run_id(word: str) -> str:
+        if idx.by_id(word) is not None:
+            return word
+        hits = idx.words.get(word.strip(), set())
+        named = [r.run_id for r in idx.runs if r.name == word.strip() and r.run_id in hits]
+        return named[0] if len(hits) == 1 and named else word
+
+    sweeps = tuple(
+        dataclasses.replace(
+            s, a=run_id(s.a), b=run_id(s.b), more=tuple(run_id(m) for m in s.more)
+        )
+        for s in declaration.sweeps
+    )
+    return dataclasses.replace(declaration, sweeps=sweeps)
+
+
+def _paired_declaration(path: str, a: str, b: str, idx: Index) -> Declaration:
+    declaration = _by_id(Declaration.from_toml(path), idx)
     declared = {(sweep.a, sweep.b): sweep.name for sweep in declaration.sweeps}
     if (a, b) not in declared:
         pairs = ", ".join(f"{s.name}: ({s.a}, {s.b})" for s in declaration.sweeps)
@@ -866,12 +928,15 @@ def compare(
     idx = _index(store)
     run_a, run_b = _pair_of(idx, verb, a, b, _notes)
     st = Store(store.root)
+    if require_events and verb == "serve":
+        # A declared set does not change when a new outcome appears: serve shows it.
+        require_events = not declared_events(st.manifest(run_a), st.manifest(run_b))
     if require_x or require_events:
         raise _missing_flags_refusal(
             st, verb, [run_a, run_b], typed, idx, x_missing=require_x, event_missing=require_events
         )
     fixed = _typed_fix(fix, (st.manifest(run_a), st.manifest(run_b))) if fix else {}
-    declaration = None if paired is None else _paired_declaration(paired, run_a, run_b)
+    declaration = None if paired is None else _paired_declaration(paired, run_a, run_b, idx)
     multi, others, manifests, frames = _run_diffs(
         store,
         idx,
@@ -1141,7 +1206,9 @@ def run(
     named, _ = _split_events(events)
     _require_known_events("report", named, df)
     inferred = named is None
-    if named is None:
+    if named is None and declared_events(manifest):
+        found, non_event = declared_events(manifest), None
+    elif named is None:
         try:
             found, non_event = infer_events(df, df.iloc[0:0])
         except EventInferenceError as exc:
@@ -1194,11 +1261,16 @@ def run(
     )
 
 
+#: The kind a face names an episode stopped at ``--episode-timeout`` by: the store marks it
+#: ``timeout``, which an agent's own outcome is often called too.
+EPISODE_TIMEOUT = "episode_timeout"
+
+
 def _error_kind(error: Any) -> str | None:
     if not isinstance(error, str) or not error:
         return None
     if error == "timeout":
-        return "timeout"
+        return EPISODE_TIMEOUT
     last = [line for line in error.splitlines() if line.strip()]
     if not last:
         return None
@@ -1221,7 +1293,12 @@ def _stored_trace(meta: Any) -> Trace | None:
 def _selected(st: Store, run_id: str, event: str, where: Mapping[str, Any]) -> pd.DataFrame:
     df = st.read(run_id, meta=False)
     kinds = df["error"].map(_error_kind)
-    rows = df[(df["outcome"] == event) | (df["error"] == event) | (kinds == event)]
+    # ``timeout`` is an outcome when the run has one by that name; otherwise it still reaches the
+    # episodes stopped at --episode-timeout, as it did before they had a name of their own.
+    by_error = df["error"] == event
+    if event == "timeout" and (df["outcome"] == event).any():
+        by_error = by_error & False
+    rows = df[(df["outcome"] == event) | by_error | (kinds == event)]
     for key, value in where.items():
         keep = [
             label
@@ -1307,6 +1384,10 @@ def inspect(
         raise _missing_flags_refusal(
             st, "inspect", [run_id], typed, idx, x_missing=False, event_missing=True
         )
+    if limit is not None and limit < 1:
+        raise refusal(
+            f"--limit must be 1 or more, got {limit}", [f"{COMMAND} inspect --help"], usage=True
+        )
     checked = _declaration_check(st, run_id)
     provenance = () if checked is None else tuple(_provenance_lines(checked.provenance()))
     rows = _selected(st, run_id, event, _parse_pairs(where, "--where"))
@@ -1372,7 +1453,7 @@ def paired(
     replayed, the analysis, the windows, the cost and the replicates, as files to write; with
     ``cap_check``, whether the recorded input tokens are under the declared cap."""
     store = _opened(store)
-    decl = Declaration.from_toml(str(declaration))
+    decl = _by_id(Declaration.from_toml(str(declaration)), _index(store))
     st = Store(store.root)
     if cap_check:
         report = paired_cost(st, decl, phases={s.name: s.arms for s in decl.sweeps})
@@ -1403,6 +1484,14 @@ def paired(
             cap_reached=bool(report.cap_reached),
         )
     bundle = _bundle(st, decl)
+    total = bundle.assertion.counts["total"]
+    if total["eligible"] == 0:
+        causes = ", ".join(f"{cause} {n}" for cause, n in total["by_cause"].items() if n)
+        raise refusal(
+            f"no eligible pairs: of {total['keys']} keys {total['matched']} matched and none was "
+            f"eligible ({causes or 'nothing to pair'}); there is nothing to analyse, and nothing "
+            "was written"
+        )
     sentence = f"{_look.fmt_count(len(bundle.artifacts))} files, written nowhere"
     return PairedResult(
         verdict="ok",
@@ -1436,6 +1525,13 @@ values = ["search", "refund"]
 [axes.temperature]
 type = "continuous"
 values = [0.0, 0.7]
+
+# The outcomes your rollout returns that count against it (failures) and for it (successes).
+# With them a comparison compares exactly these and says "worse" and "safer"; without them it
+# says "higher" and "lower". Name your own outcomes and remove the comment marks.
+# [declare]
+# failures = ["error", "timeout"]
+# successes = ["resolved"]
 """
 
 
@@ -1917,6 +2013,23 @@ def _has_module(name: str) -> bool:
         return False
 
 
+def _missing_instrumentors(spec: SweepSpec) -> tuple[str, ...]:
+    """The ``[capture].instrument`` names no installed package provides, in the spec's order."""
+    if spec.capture is None or not spec.capture.instrument:
+        return ()
+    try:
+        installed = {ep.name for ep in entry_points(group=INSTRUMENTOR_GROUP)}
+    except Exception:  # noqa: BLE001 - an unreadable environment names nothing
+        return ()
+    return tuple(name for name in spec.capture.instrument if name not in installed)
+
+
+def _missing_line(missing: Sequence[str]) -> str:
+    """The plan's ``capture`` line when an instrumentor the spec names is not installed."""
+    names = ", ".join(f'"{name}"' for name in missing)
+    return f"capture  not installed here: {names}, so the sweep records no spans from it"
+
+
 def _outcomes_line(spec: SweepSpec) -> str:
     """The plan's ``outcomes`` line: each failure and each success, then the other outcomes."""
     declared = spec.declare
@@ -2188,6 +2301,13 @@ def _planned(
         raise refusal(
             '[capture] needs the "agent" extra, which is not installed', [EXTRA_HINTS["agent"]]
         )
+    if spec.chaos is not None and spec.chaos.fault not in fault_names():
+        raise refusal(
+            f'[chaos].fault "{spec.chaos.fault}" is not a fault this build implements; the '
+            f"names are {', '.join(fault_names())}"
+        )
+    # Only a local run's instrumentors are this machine's to look for.
+    missing = _missing_instrumentors(spec) if backend == "local" else ()
     # The spec's folder is first on the path while the sweep plans (Burla's bundle reads it) and,
     # in ``start``, while it runs, as the rollout may import more of the person's code.
     on_path.enter_context(_folder_first(folder))
@@ -2242,6 +2362,7 @@ def _planned(
     lines = (
         _target_line(target, params, backend),
         _outcomes_line(spec),
+        *([_missing_line(missing)] if missing else []),
         *(_look.reprint(line) for line in block.splitlines()),
     )
     payload: dict[str, Any] = {
@@ -2319,6 +2440,7 @@ def _planned(
         rollout=rollout,
         modal=modal,
         burla=burla_options,
+        missing_instrumentors=missing,
         options={
             **o,
             "pair_with": pair_with,
@@ -2346,20 +2468,33 @@ def _resume_command(o: Mapping[str, Any], typed_target: str | None) -> str:
         words += ["--backend", o["backend"]]
     if (o.get("image") or "image") != "image":
         words += ["--image", o["image"]]
-    return join(words)
+    return join([*words, *_typed_store(o)])
+
+
+def _typed_store(o: Mapping[str, Any]) -> list[str]:
+    """``--store PATH`` when the sweep was typed with it, for its next lines, which act on the
+    same store (the tool's options are accepted after the verb)."""
+    typed = list(o.get("typed_named") or ())
+    for i, token in enumerate(typed):
+        if token == "--store" and i + 1 < len(typed):
+            return ["--store", typed[i + 1]]
+        if token.startswith("--store="):
+            return ["--store", token.split("=", 1)[1]]
+    return []
 
 
 def _after_sweep(o: Mapping[str, Any], idx: Index, run_id: str, target: str) -> list[str]:
     pair_with = o.get("pair_with")
+    store = _typed_store(o)
     if pair_with is not None:
         newest = [r.run_id for r in idx.complete[:2]]
         if newest == [run_id, pair_with]:
-            return [f"{COMMAND} diff"]
-        return [join([COMMAND, "diff", idx.word_for(pair_with), idx.word_for(run_id)])]
+            return [join([COMMAND, "diff", *store])]
+        return [join([COMMAND, "diff", idx.word_for(pair_with), idx.word_for(run_id), *store])]
     if target == MOCK_ROLLOUT:
         spec = [] if o.get("spec_typed") is None else [o["spec_typed"]]
         twin = ["--target", MOCK_PATCHED, "--pair-with", "latest"]
-        return [join([COMMAND, "sweep", *spec, *twin])]
+        return [join([COMMAND, "sweep", *spec, *twin, *store])]
     return []
 
 
@@ -2372,8 +2507,8 @@ def _commonest_error(store: Store, run_id: str) -> str | None:
     if not kinds:
         return None
     top = max(kinds.values())
-    if kinds.get("timeout") == top:
-        return "timeout"
+    if kinds.get(EPISODE_TIMEOUT) == top:
+        return EPISODE_TIMEOUT
     return next(kind for kind, count in kinds.items() if count == top)
 
 
@@ -2414,7 +2549,9 @@ class _Events:
         self.emit("progress", detail)
 
 
-def _kept(st: Store, idx_root: OpenedStore, run_id: str, planned: int) -> tuple[str, list[str]]:
+def _kept(
+    st: Store, idx_root: OpenedStore, run_id: str, planned: int, resume: str
+) -> tuple[str, list[str]]:
     try:
         kept = st.count(run_id)
     except Exception:  # noqa: BLE001
@@ -2427,7 +2564,7 @@ def _kept(st: Store, idx_root: OpenedStore, run_id: str, planned: int) -> tuple[
         f"{_look.fmt_count(kept)} of {_look.fmt_count(planned)} rollouts kept in run "
         f'"{name}" (partial)'
     )
-    return sentence, [f"{COMMAND} sweep --resume"]
+    return sentence, [resume]
 
 
 def _resume_before(store: Store, p: Any) -> dict[str, Any]:
@@ -2562,7 +2699,9 @@ def start(
     except KeyboardInterrupt as exc:
         if p.run_id in st.runs():
             begin()
-            sentence, nexts = _kept(st, store, p.run_id, len(p.pairs))
+            sentence, nexts = _kept(
+                st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
+            )
             kept = closing_progress()
             events.emit("interrupted", {"kept": kept, "status": "partial"})
             raise Interrupted(f"interrupted: {sentence}", nexts) from exc
@@ -2570,7 +2709,11 @@ def start(
     except _REFUSABLE as exc:
         if p.run_id in st.runs():
             begin()
-            sentence, nexts = _kept(st, store, p.run_id, len(p.pairs))
+            sentence, nexts = _kept(
+                st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
+            )
+            # What the error says to do comes before the resume (an install line, say).
+            nexts = [*getattr(exc, "nexts", ()), *nexts]
             error = _final(f'{exc} (run "{p.run_id}")')
             kept = closing_progress()
             events.emit("interrupted", {"kept": kept, "status": "partial", "error": error})
@@ -2701,14 +2844,17 @@ def _sweep_result(
             f"commonest {commonest or 'unknown'}"
         )
         if commonest is not None:
-            nexts.append(f"{COMMAND} inspect latest --event {commonest}")
+            inspect = [COMMAND, "inspect", "latest", "--event", commonest]
+            nexts.append(join([*inspect, *_typed_store(o)]))
         stopped = True
     else:
         verdict = "done"
         nexts.extend(_after_sweep(o, idx, run_id, plan.target))
+        missing = ", ".join(f'"{m}"' for m in plan.missing_instrumentors)
+        unrecorded = f"; no spans from {missing}, not installed" if missing else ""
         sentence = (
             f'{n(kept)} rollouts in run "{name}" ({status}) in '
-            f"{_look.fmt_duration(summary.wall_time)}{paired_clause}"
+            f"{_look.fmt_duration(summary.wall_time)}{paired_clause}{unrecorded}"
         )
     details = [
         ("episodes with an outcome", n(with_outcome)),

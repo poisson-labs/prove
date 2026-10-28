@@ -5,8 +5,8 @@ poisson-prove · condition  task_id checkout · tool_fail_rate 0.3              
   after   0.010 [0.002, 0.054], 1 of 100 episodes                                                                       
           95% Wilson interval on each run's share, per condition, not adjusted                                          
   change  -0.250 [-0.360, -0.165], 97.778% interval (Tango)                                                             
-  test    the paired test (McNemar): its discordant pairs are not in the saved comparison; p 6.0e-08, q 1.8e-07, Holm's 
-          p 7.7e-07, statistic 25                                                                                       
+  test    the paired test (McNemar): 0 pairs had violated only after, 25 only before; p 6.0e-08, q 1.8e-07, Holm's p    
+          7.7e-07, statistic 25                                                                                         
   rise    0.274: the smallest rise one condition alone would be flagged for, power 0.800, from the observed baseline    
           (McNemar, level 0.003 over 18 tests)                                                                          
   fall    0.201, the same way                                                                                           
@@ -17,8 +17,8 @@ poisson-prove · condition  task_id checkout · tool_fail_rate 0.3              
   after   0.000 [0.000, 0.037], 0 of 100 episodes                                                                       
           95% Wilson interval on each run's share, per condition, not adjusted                                          
   change  -0.010 [-0.067, +0.040], 97.778% interval (Tango)                                                             
-  test    the paired test (McNemar): its discordant pairs are not in the saved comparison; p 1.000, q 1.000, Holm's p   
-          1.000, statistic 1                                                                                            
+  test    the paired test (McNemar): 0 pairs had timeout only after, 1 only before; p 1.000, q 1.000, Holm's p 1.000,   
+          statistic 1                                                                                                   
   rise    0.146: the smallest rise one condition alone would be flagged for, power 0.800, from the observed baseline    
           (McNemar, level 0.003 over 18 tests)                                                                          
   fall    none detectable, the same way                                                                                 

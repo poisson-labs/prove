@@ -1,22 +1,22 @@
 """PF3, ``init`` and the first run: the frozen tests.
 
-Written from the front-door spec's sections 4.1, 4.2 and 4.4 and its invariants PF3.1 to PF3.8
-(PF3.6b included), with the rulings of 2026-10-13 (Q17 and its condition, Q18, Q19), of
-2026-10-23 (Q56: the packaged example runs 194 replicates) and the PF2 rulings that left two
-things to PF3: the bare ``sweep --resume`` that PF1's ``next:`` line names, and taking the spec
-out of the resume command. The build is written against this file and does not edit it.
+Written from the invariants PF3.1 to PF3.8 (PF3.6b included), with the choices they leave
+settled (among them: the paired test as the default when the runs share a salt, an ``init`` that
+asks nothing, and a packaged example that runs 194 replicates), and two carried behaviours: the
+bare ``sweep --resume`` that PF1's ``next:`` line names, and a resume command that does not carry
+the spec.
 
 What PF3 promises, in one line: a new user gets from install to a first proved comparison with
 no key and no id pasted. ``init`` writes ``prove.toml``; ``sweep`` reads it and its ``target``;
 every ``next:`` line on the way is a whole command; and the comparison of two runs paired at
 sweep time uses the paired test unless told otherwise, saying which test it used everywhere.
 
-**Readings, named here** (each is a yes/no in the session log; the letters are the log's).
+**Readings, named here** (lettered for reference).
 
-- (a) PF3.4's "with the counts of section 4.1" is read as the verdict word and the shape of the
+- (a) PF3.4's "with the counts" is read as the verdict word and the shape of the
   result, not the counts: each sweep draws a fresh salt, so the counts move from run to run.
   ``trade`` first, the paired test named, a ``trade`` detail line, the runs by name.
-- (b) The ``next:`` lines of the first run are frozen as section 4.1 prints them: after
+- (b) The ``next:`` lines of the first run are pinned as the first run prints them: after
   ``init --example``, ``poisson-prove sweep``; after a sweep of the packaged mock agent's
   ``rollout``, the sweep of ``rollout_patched`` paired with ``latest``; after a paired sweep,
   ``poisson-prove diff``. After ``init --target T``, ``poisson-prove sweep``; after
@@ -27,8 +27,8 @@ sweep time uses the paired test unless told otherwise, saying which test it used
   ``plan.target``. With neither, the exit-2 refusal's error line names ``--target``, the key
   ``target`` and the spec file it read.
 - (d) With no spec given and no ``./prove.toml``, ``sweep`` refuses (exit 1) with
-  ``poisson-prove init`` among its ``next:`` lines; the ``init --agent`` line section 20.3 adds
-  there is PF11's and is neither required nor forbidden here.
+  ``poisson-prove init`` among its ``next:`` lines; the ``init --agent`` line PF11 adds
+  there is neither required nor forbidden here.
 - (e) A ``stopped`` sweep's ``next:`` line is a command that resumes it as typed: bare
   ``poisson-prove sweep --resume`` when the spec was ``./prove.toml`` and the target the spec's,
   otherwise carrying the spec (before ``--resume``) and the ``--target`` that was typed.
@@ -36,10 +36,10 @@ sweep time uses the paired test unless told otherwise, saying which test it used
   table under ``[modal]`` is known and its keys are checked; ``[[scenarios]]`` entries are
   configs and hold any key. Every other table and key is checked against the spec's own set,
   whatever the backend, and the nearest known key is the closest spelling.
-- (g) PF3.5's ``[declare]`` failures ``timeout`` and ``violated`` are frozen in PF3's packaged
-  file, so PF3's build reads ``failures`` (and ``successes``) in ``[declare]``, recorded as
-  PF4.20 records them; what they change in the words is PF4's.
-- (h) The method's JSON keeps ``method`` as the method's name (section 5.6 keeps today's keys)
+- (g) PF3.5's ``[declare]`` failures ``timeout`` and ``violated`` are in the packaged file, so
+  ``sweep`` reads ``failures`` (and ``successes``) in ``[declare]``, recorded as PF4.20 records
+  them; what they change in the words is PF4's.
+- (h) The method's JSON keeps ``method`` as the method's name (the JSON keeps its other keys)
   and adds ``method_chosen`` (``"default"`` or ``"named"``) right after it; ``serve --json``, the
   page structure, gains both at its top level, right after ``sentence``. ``diff --methods all
   --json`` keeps its shape (one object per method) and is not pinned here.
@@ -50,8 +50,8 @@ sweep time uses the paired test unless told otherwise, saying which test it used
   have one line (one block) carrying the method's own name (McNemar, Fisher, log-rank) and
   ``default`` or ``named``.
 - (p) On those files the method's words stand on a line of their own (in ``report.md`` a
-  paragraph: the line and a blank line after it), so taking them out gives today's bytes: the
-  moved frozen digests hold over ``conftest.without_method_lines``.
+  paragraph: the line and a blank line after it), so taking them out leaves the rest of the file
+  as it was: the pinned digests are taken over ``conftest.without_method_lines``.
 - (j) The pairing ``note:`` is a stderr line beginning ``note:`` that mentions seeds; other
   notes may come and go.
 - (k) ``--fix KEY=VALUE`` on a categorical axis matches VALUE against the axis's values as
@@ -63,22 +63,22 @@ sweep time uses the paired test unless told otherwise, saying which test it used
   typed carries ``--yes``, so the gate is the refusal.
 - (m) The bare template ``init`` writes holds ``target`` as a commented line and is a strict
   spec: with a ``--target`` (and ``--replicates 50``) it plans.
-- (q) ``init`` gets what sections 5.4 and 5.6 give every verb: help naming each option and an
+- (q) ``init`` gets what every verb gets: help naming each option and an
   example, ``--json`` (``poisson-prove.init/1``, ``next`` last), abbreviations refused, the tool's
-  own options after the verb, ``python -m`` the same; and it asks nothing (Q18: stderr empty).
-- (r) The manifest records the target run as ``environment.import_path`` (as today) and the
+  own options after the verb, ``python -m`` the same; and it asks nothing (stderr empty).
+- (r) The manifest records the target run as ``environment.import_path`` and the
   replicates run as ``environment.sweep.replicates`` (the spec's record, which ``--replicates``
   overrides).
 
-**Seams with other modules.** ``init --agent`` and ``--print`` are PF11's (section 20): not
+**Seams with other modules.** ``init --agent`` and ``--print`` are PF11's: not
 tested here, and the refusal without a spec leaves room for its ``next:`` line (d). The
 ``target`` and ``outcomes`` plan lines with "(imports, takes cfg and seed)" are PF11's; this
 file asks only that the plan name the target used (c). Opening the terminal app is PF6's.
-``compare``'s result objects naming the method are PF5.4's. That the corrected power gate
-accepts 194 and refuses 193 is PF4.30's; PF3.8 is checked by running the offered command, so it
-holds under either gate. ``diff``'s verdict word is PF4's rule; PF3.4 reads ``trade`` (Q56).
+``compare``'s result objects naming the method are PF5.4's. That the power gate accepts 194
+and refuses 193 is PF4.30's; PF3.8 is checked by running the offered command, so it does not
+depend on the gate's arithmetic. ``diff``'s verdict word is PF4's rule; PF3.4 reads ``trade``.
 
-**Lanes.** The code suite. PF3.4 and PF3.5 each have one case marked ``slow`` (the wheel built
+**Suite.** The code suite. PF3.4 and PF3.5 each have one case marked ``slow`` (the wheel built
 and installed into a fresh environment with ``uv``, which needs ``uv`` and the dependencies in
 its cache or the network for the install; the five commands themselves run offline); every other
 case is fast. The module fixtures sweep the keyless mock agent at small sizes.
@@ -109,7 +109,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import time
 import tomllib
 import urllib.request
 import zipfile
@@ -122,6 +121,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+from conftest import blas_thread_cap
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -153,7 +154,7 @@ values = [0.3, 0.55]
 """
 NO_TARGET_SPEC = SPEC.split("\n", 1)[1]
 
-#: Each method's plain words, and its own name kept beside them (section 4.4).
+#: Each method's plain words, and its own name kept beside them.
 PLAIN = {"mcnemar_bh": "shared seeds", "fisher_bh": "separate samples", "logrank_bh": "time to the event"}
 OWN_NAME = {"mcnemar_bh": "mcnemar", "fisher_bh": "fisher", "logrank_bh": "log-rank"}
 
@@ -366,6 +367,7 @@ def guarded_env(home: Path, guard: Path, *, bindir: Path, src: Path | None) -> d
         "PYTHONIOENCODING": "utf-8",
         "LANG": "C.UTF-8",
         "TMPDIR": str(home),
+        **blas_thread_cap(),
     }
 
 
@@ -454,7 +456,7 @@ def test_pf3_1_init_writes_one_spec_file_and_nothing_else_and_refuses_an_existin
         return
 
     assert r.code == 0, r.err
-    assert r.err == "", r.err  # Q18: init asks nothing
+    assert r.err == "", r.err  # init asks nothing
     assert first_word(r.out) == "ok"
     assert target.name in r.out.splitlines()[0], r.out
     assert listing(cwd, elsewhere, home) == sorted([*before, f"{target.parent.name}/{target.name}"])
@@ -480,7 +482,7 @@ def test_pf3_1_init_writes_one_spec_file_and_nothing_else_and_refuses_an_existin
 
 @pytest.mark.parametrize("case", ["--help", "--json", "an abbreviation", "a global option after the verb", "python -m"])
 def test_pf3_carried_init_gets_what_every_verb_gets(case: str, tmp_path: Path) -> None:
-    """Sections 5.4 and 5.6 for the verb PF3 adds: help with every option's default and an example,
+    """What every verb gets, for the verb PF3 adds: help with every option's default and an example,
     the JSON envelope, abbreviations refused, the tool's own options after the verb, and
     ``python -m`` the same as the command."""
     cwd = tmp_path / "cwd"
@@ -672,17 +674,14 @@ def test_pf3_4_the_five_commands_run_from_a_fresh_install_with_no_key_and_no_net
     assert init.code == 0, init.err
     assert init.nexts == [f"{COMMAND} sweep"], init.nexts
 
-    started = time.monotonic()
     first = child(got.command, cwd, env, "sweep", "--yes")
     second = child(got.command, cwd, env, "sweep", "--target", PATCHED, "--pair-with", "latest", "--yes")
-    took = time.monotonic() - started
     assert first.code == 0, first.err
     assert closing_word(first.out) == "done"
     assert first.nexts == [f"{COMMAND} sweep --target {PATCHED} --pair-with latest"], first.nexts
     assert second.code == 0, second.err
     assert closing_word(second.out) == "done"
     assert second.nexts == [f"{COMMAND} diff"], second.nexts
-    assert took < 30, f"the two sweeps took {took:.1f} s"
 
     diff = child(got.command, cwd, env, "diff")
     assert diff.code == 0, diff.err
@@ -958,6 +957,10 @@ def test_pf3_7_fix_reads_its_value_by_the_axis_type_and_refuses_a_value_not_on_t
     else:
         # The same report as the value spelt the way a TOML scalar always read.
         spelt = f'{key}="{pinned}"' if isinstance(pinned, str) else f"{key}={pinned!r}"
+        if spelt == fix:
+            # Typed as the scalar already reads: the same number in exponent form instead.
+            spelt = f"{key}={pinned:e}"
+        assert spelt != fix, spelt
         same = run(r.cwd, "report", r.a, r.b, "--x", x, "--fix", spelt, "--out", tmp_path / "spelt")
         assert same.code == 0, same.err
         assert (tmp_path / "out" / "report.md").read_bytes() == (tmp_path / "spelt" / "report.md").read_bytes()

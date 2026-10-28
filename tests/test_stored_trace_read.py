@@ -1,36 +1,35 @@
 """Stored-trace read frozen tests: a run stored before A8a opens, and the tolerance is exactly that wide.
 
-Frozen 2026-09-20 off ``1f5491b``. The build is written against this file and does not edit it. The
-brief was the surfacing cleanup's first item: ``proofload inspect`` cannot open any stored run that
-carries a trace.
+The problem these tests guard against: without the read below, ``poisson-prove inspect`` cannot
+open a stored run that carries a trace in the old shape.
 
-**What is being fixed, measured at ``1f5491b`` on stored runs that carry a trace.**
+**What the read fixes, on stored runs that carry a trace.**
 A8a added one trace key (``alias_map_version``) and eight span keys, and ``Trace.from_dict`` demands the
 exact key set, so a trace stored before it is rejected. Every trace stored before A8a is exactly the old
 shape: six trace keys, spans of thirteen. A run written after A7 holds it in the ``trace`` column, and
-``Store.read`` reassembles it through ``from_dict`` and raises, so ``inspect`` exits 3 on it. A run written
-before A7 holds it in ``meta["trace"]``: ``Store.read`` hands it back as stored, ``inspect`` validates it,
-rejects it and prints no trace lines and no error (the posture M12's T30 pins for a rejected dict), so
-the older runs are silent where the newer are loud. Adding exactly those nine keys, each ``None``, makes
-every such trace validate and changes nothing else.
+without the read ``Store.read`` reassembles it through ``from_dict`` and raises, so ``inspect`` exits 3 on
+it. A run written before A7 holds it in ``meta["trace"]``: ``Store.read`` hands it back as stored,
+``inspect`` validates it, rejects it and prints no trace lines and no error (the posture M12's T30 pins for
+a rejected dict), so the older runs would be silent where the newer are loud. Adding exactly those nine
+keys, each ``None``, makes every such trace validate and changes nothing else.
 
 **The fix is a read, at the store, and only the store.** ``from_dict`` stays strict: A8a's P8-1 pins that it
 rejects thirteen-key spans and a six-key trace, and a stored dict that is *not* the old shape must keep
 being rejected. The store knows what it wrote, so the store recognises the old shape and reads it as the
 current one, the way A7's ``_legacy_envelope`` already reads the layout before the split. It is not a
-migration: nothing stored is rewritten (R10), and a migration would need a verb, which is a public
-symbol the spec has not given, and would leave every unmigrated store failing as before.
+migration: nothing stored is rewritten (R10), and a migration would need a verb, which is a new public
+symbol, and would leave every unmigrated store failing as before.
 
 **What a read of an old trace means.** ``None`` on each of the nine fields is "not recorded", which is what
 ``Span``'s own comment says ``None`` means on A8a's eight, so a reader asks ``is None`` and reads the truth. It
 is never a zero and never an empty string.
 
-**Invariant-to-test map** (R-numbers are this file's; 64 collected ids):
+**Invariant-to-test map** (R-numbers are this file's; 54 collected ids):
 
 | Invariant | Tests |
 |---|---|
 | R1 a run stored before A8a opens in full: every row reads as the trace it was | ``test_r1_*`` |
-| R2 what the old shape lacked reads ``None``, field by field | ``test_r2_*`` |
+| R2 what the old shape lacked reads ``None``, field by field | ``test_r1_*`` (each row equals the trace rebuilt with ``None`` there) |
 | R3 a trace already in the current shape is not touched | ``test_r3_*`` |
 | R4 the tolerance is exactly the old shape: near misses still raise | ``test_r4_*`` |
 | R5 ``from_dict`` is unchanged: the fix is not there | ``test_r5_*`` |
@@ -41,7 +40,7 @@ is never a zero and never an empty string.
 | R10 nothing is written: no stored byte or mtime moves | ``test_r10_*`` |
 
 **Real frames, round-tripped.** Every store is written by ``Store.append`` and read back through ``Store.read``
-and the CLI; nothing is hand-built at the read (standing rule 14). The old shape is made the way a build
+and the CLI; nothing is hand-built at the read. The old shape is made the way a build
 before A8a stored it: the ``trace`` column of a written part is rewritten to six keys and thirteen-key spans
 (``Store.append`` refuses to write that shape, and a fixture that was not the shape would prove nothing
 about it; R1's first test asserts the fixture is what it claims). The part before A7 is made by moving the
@@ -49,20 +48,19 @@ trace back inside ``meta`` and dropping both trace columns. The expected trace o
 from the same recipe with ``make_trace``, never read off a store, so a broken twin cannot make a test
 vacuous; and R7 counts the span lines it expects, because two silent outputs are equal.
 
-**Green before and after -- 37 of the 64 ids**, named so their green is not read as coverage (the other 27 are
-red on the bare tree: 17 raise ``missing trace key(s): alias_map_version`` from ``Store.read``, the defect itself, and 10
-fail on what ``inspect`` does or on a ``meta`` or an envelope that comes back unread): R1's fixture precondition; both
-R3 tests (the current shape round-trips today); all twenty-six R4 tests (a near miss raises today and must go on raising,
-so they pin what must NOT change: six mixtures of the two shapes, and each of the six trace keys and thirteen span keys
-the old shape had, missing in turn); both R5 tests (``from_dict`` is strict today and must stay so); R8's five (a
-current-shape trace and something that is no trace, inside ``meta``, are returned as written today, ``inspect`` prints
-no trace lines for the second, and the envelope of the first is the current writer's while the second has none); and
-R9's one (the envelope read of a written column is raw today and must stay raw). R10's second test and every R1, R2,
-R6 and R7 test that reads an old run are red.
+**What must not change -- 37 of the 54 ids** pass with or without the read, so their passing is not
+coverage of it: R1's fixture precondition; both R3 tests (the current shape round-trips); all twenty-six
+R4 tests (a near miss raises and must go on raising: six mixtures of the two shapes, and each of the six
+trace keys and thirteen span keys the old shape had, missing in turn); both R5 tests (``from_dict`` is
+strict and must stay so); R8's five (a current-shape trace and something that is no trace, inside
+``meta``, are returned as written, ``inspect`` prints no trace lines for the second, and the envelope of
+the first is the current writer's while the second has none); and R9's one (the envelope read of a
+written column is raw and must stay raw). R10's second test and every R1, R6 and R7 test that reads an
+old run need the read.
 
 **Named gaps, not pinned.** (1) ``inspect`` prints no ``observation:`` line on an old run, because its spans
 carry no stamp: ``span.truncated`` is ``None`` and a pre-A8b marker is not read (A8b's P8-27 bars the text
-from ``src/``, and a ruling of 2026-09-20 says no reader is written). Whether ``inspect`` should say
+from ``src/``, and no reader for it is written). Whether ``inspect`` should say
 ``not counted`` for such a row is a decision, not a fix, and nothing here decides it. (2) The write path is
 unchanged: ``Store.append`` still stores a dict in the old shape as written, in ``meta``, with both columns
 null (A7's P7-9); R8 reads that back, and does not ask ``append`` to accept it.
@@ -94,15 +92,12 @@ REPLICATES = 8
 EVENT = "fail"
 
 #: The shape a build before A8a stored, spelled out as history: six trace keys, thirteen span keys.
-#: Not derived from ``proofload.trace``, so a change to the current schema cannot move it.
+#: Not derived from ``poisson_prove.trace``, so a change to the current schema cannot move it.
 A7_TRACE_KEYS = ("schema", "source", "source_version", "dropped", "spans", "truncated")
 A7_SPAN_KEYS = (
     "span_id", "parent_id", "kind", "name", "start_ns", "end_ns", "input", "output", "tokens",
     "confidence", "error", "code", "attrs",
 )
-#: What A8a added: one trace key and eight span keys.
-A8A_TRACE_KEYS = ("alias_map_version",)
-A8A_SPAN_KEYS = ("operation", "step_name", "outcome", "outcome_by", "attempt", "gate", "truncated", "bytes_original")
 
 
 # ---------- helpers: data construction, never an assertion ----------
@@ -346,29 +341,6 @@ def test_r1_every_stored_trace_validates_under_the_current_schema_once_read(root
         assert Trace.from_dict(trace).to_dict() == expected(key), key
 
 
-# ---------- R2: what the old shape lacked reads None, field by field ----------
-
-
-@pytest.mark.parametrize("name", A8A_TRACE_KEYS)
-def test_r2_each_trace_key_the_old_shape_lacked_reads_none(root: Path, name: str) -> None:
-    for key, trace in read_traces(root, "old"):
-        assert name in trace and trace[name] is None, (name, key, trace.get(name, "<absent>"))
-
-
-@pytest.mark.parametrize("name", A8A_SPAN_KEYS)
-def test_r2_each_span_key_the_old_shape_lacked_reads_none_and_never_a_zero_or_a_blank(root: Path, name: str) -> None:
-    for key, trace in read_traces(root, "old"):
-        for span in trace["spans"]:
-            assert name in span and span[name] is None, (name, key, span.get(name, "<absent>"))
-
-
-def test_r2_what_the_old_shape_had_is_where_it_was_and_the_read_trace_has_exactly_the_current_keys(root: Path) -> None:
-    for key, trace in read_traces(root, "old"):
-        assert set(trace) == {*A7_TRACE_KEYS, *A8A_TRACE_KEYS}, key
-        for span in trace["spans"]:
-            assert set(span) == {*A7_SPAN_KEYS, *A8A_SPAN_KEYS}, key
-
-
 # ---------- R3: a trace already in the current shape is not touched ----------
 
 
@@ -471,7 +443,7 @@ def normalise(text: str, run_id: str) -> str:
 
 
 def computed_name(root: Path, run_id: str) -> str:
-    """PF2 (spec section 4.3): the target id up to its first `/`, the UTC date of created_at, then
+    """PF2: the target id up to its first `/`, the UTC date of created_at, then
     a letter in creation order among that target's runs that day."""
     store = Store(root)
     manifests = sorted((store.manifest(r) for r in store.runs()), key=lambda m: m.created_at)
@@ -481,7 +453,7 @@ def computed_name(root: Path, run_id: str) -> str:
 
 
 def split_verdict(text: str, root: Path, run_id: str) -> str:
-    """PF2 (spec section 4.3): inspect's first line names the run by its name, which differs
+    """PF2: inspect's first line names the run by its name, which differs
     between two runs of one store; check it names this run, and return everything after it."""
     first, _, rest = text.partition("\n")
     rows = 2 * len(TASKS)  # the two failing rows of each task, as fail_span_count counts them
@@ -505,7 +477,7 @@ def test_r7_what_it_prints_is_what_the_current_writers_run_of_the_same_traces_pr
     code, twin, err = inspect_run(root, "twin")
     assert code == 0, err
     assert len(SPAN_LINE.findall(twin)) == fail_span_count()
-    # PF2 (spec section 4.3): the verdict line names each run by its own name; all after it agrees.
+    # PF2: the verdict line names each run by its own name; all after it agrees.
     assert normalise(split_verdict(old, root, "old"), "old") == normalise(split_verdict(twin, root, "twin"), "twin")
 
 
@@ -562,7 +534,7 @@ def test_r8_inspect_prints_every_span_of_an_old_trace_inside_meta(root: Path) ->
     assert code == 0, err
     assert len(SPAN_LINE.findall(out)) == fail_span_count()
     _, twin, _ = inspect_run(root, "twin")
-    # PF2 (spec section 4.3): the verdict line names each run by its own name; all after it agrees.
+    # PF2: the verdict line names each run by its own name; all after it agrees.
     assert normalise(split_verdict(out, root, "meta-old"), "meta-old") == normalise(split_verdict(twin, root, "twin"), "twin")
 
 

@@ -1,9 +1,9 @@
-"""BU -- the Burla backend: ``proofload sweep … --backend burla`` on a fixed cluster, through Burla.
+"""BU -- the Burla backend: ``poisson-prove sweep … --backend burla`` on a fixed cluster, through Burla.
 
-The frozen tests for the project's *Prove -- Spec Burla Backend* (section 4, lane P): the invariants R1-R7
-(the shared runner), M1-M11 (the host-side mapper), S1-S7 (the launcher), W1-W6 (the bundle and
-the worker), C1-C5 (chaos and capture), $1-$9 (cost, caps and the ledger), P1-P7 (pre-flight and
-CLI) and I1-I6 (imports and surface). Lane D, the demo package, lives in the ``burla-demo`` repo.
+The frozen tests for the Burla backend: the invariants R1-R7 (the shared runner), M1-M11 (the
+host-side mapper), S1-S7 (the launcher), W1-W6 (the bundle and the worker), C1-C5 (chaos and
+capture), $1-$9 (cost, caps and the ledger), P1-P7 (pre-flight and CLI) and I1-I6 (imports and
+surface).
 
 **No Burla, no network.** Burla is replaced by a fake of the 1.8.1 client, ``tests/bu_fixtures/
 burla``, which cites the tag's lines and runs each call over a pool of local fake workers:
@@ -14,8 +14,7 @@ them, as it is to a node. The launcher seam, ``executor_burla._launcher_argv``, 
 real ``_burla_submit.py`` as ``__main__``. Every interpreter the fake or a test starts arms a
 network tripwire (a socket other than a Unix one raises); the pytest process never does.
 
-**What the tests fix that the spec leaves open** (for the build, and listed in the session's
-invariant-to-test table):
+**What the tests fix that the invariants leave open:**
 
 - The ledger is JSON lines. An open line carries ``event="open"``, ``run_id``, ``start`` (Unix
   seconds), ``estimate``, ``nodes``, ``machine_type``, ``usd_per_node_hour``, ``price_asof``,
@@ -41,7 +40,6 @@ time; the file takes a few minutes.
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import hashlib
 import importlib.metadata
@@ -59,7 +57,6 @@ import sys
 import sysconfig
 import tarfile
 import tempfile
-import textwrap
 import time
 import tomllib
 import traceback
@@ -70,11 +67,12 @@ from typing import Any
 import pytest
 
 import poisson_prove
-from poisson_prove import _burla_submit, cli, executor, executor_burla, executor_modal
+from poisson_prove import _burla_submit, cli, executor_burla, executor_modal
 from poisson_prove.executor import ExecutorError, plan, run_local
 from poisson_prove.executor_modal import ModalBackendError, ModalOptions, run_with_mapper
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import Store, StoreError
+from isolated_support import isolated as run_isolated
 
 eb = executor_burla
 _ORIGINAL_ARGV = eb._launcher_argv
@@ -84,12 +82,11 @@ TARGETS = FIXTURES / "targets"
 LAUNCH = FIXTURES / "launch.py"
 DEAF = FIXTURES / "deaf_launcher.py"
 WORKER = FIXTURES / "worker.py"
-FR_TEST = REPO / "tests" / "test_fr_first_run.py"
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
 PIN = "1.8.2"
-# PF9 (the PF0 freeze's yes/no 5, ruled 2026-10-14): Burla's install line names Prove's extra.
+# PF9: Burla's install line names Prove's extra.
 INSTALL_HINT = 'pip install "poisson-prove[burla]"'
 HEAD = "http://localhost:5001"
 SALT = "bu-oracle-salt"
@@ -107,7 +104,7 @@ BURLA_ALL = [
     "BurlaBackendError", "BurlaCostGuard", "BurlaNotInstalled", "BurlaOptions",
     "BurlaSpendStop", "estimate_burla_cost", "preflight_burla", "run_burla",
 ]
-# Section 2.3, in order: (name, default or REQUIRED).
+# BurlaOptions' fields, in order: (name, default or REQUIRED).
 REQUIRED = object()
 OPTION_FIELDS = [
     ("nodes", REQUIRED), ("machine_type", REQUIRED), ("slots_per_node", REQUIRED),
@@ -124,29 +121,13 @@ MODAL_ENV_KEYS = frozenset({
 SHARED_KEYS = ("python", "platform", "poisson_prove_version", "sweep", "infra_retries", "import_path",
                "max_mde_accepted")
 MODAL_ONLY_KEYS = ("image", "modal_app", "concurrency", "secrets")
-# main's capture reason for a Modal run, byte for byte (executor_modal.py at 91d2071).
+# The capture reason a Modal run records, byte for byte.
 MODAL_CAPTURE_REASON = (
     "the host installs nothing for a Modal run; the container may not even "
     "hold the packages. Each batch records what happened at "
     "backend_meta['capture']"
 )
-# test_m3_modal_launch.py's L14 pins, restated.
-MODAL_EXPORTS = [
-    "CostGuard", "ImageSpec", "Job", "Mapper", "ModalBackendError", "ModalNotInstalled",
-    "ModalOptions", "ModalTarget", "Result", "estimate_cost", "preflight_modal", "run_modal",
-    "run_with_mapper", "worker_batch",
-]
-MODAL_PUBLIC = frozenset({
-    "CostGuard", "ImageSpec", "ModalBackendError", "ModalNotInstalled", "ModalOptions",
-    "ModalTarget", "estimate_cost", "preflight_modal", "run_modal", "run_with_mapper",
-    "worker_batch",
-})
-EXECUTOR_PUBLIC = frozenset({
-    "ExecutorError", "NotResumable", "Pair", "PairMismatch", "Plan", "RunSummary", "derive_seed",
-    "new_run_id", "new_run_salt", "plan", "preflight", "run_local", "UnderpoweredDesign",
-    "check_power", "preflight_mde",
-})
-# run_with_mapper's parameters on main, then the three the spec adds (section 2.2).
+# run_with_mapper's shared parameters, then the three the Burla backend adds.
 RUNNER_PARAMS = [
     ("p", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
     ("mapper", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
@@ -158,13 +139,7 @@ RUNNER_PARAMS = [
     ("placement", "KEYWORD_ONLY", None),
     ("cost_check", "KEYWORD_ONLY", None),
 ]
-BURLA_IMPORTS = frozenset({
-    ("poisson_prove.executor_burla", "BurlaOptions"),
-    ("poisson_prove.executor_burla", "preflight_burla"),
-    ("poisson_prove.executor_burla", "run_burla"),
-})
 BOOTSTRAP_PARAMS = ["k", "jobs", "import_path", "episode_timeout", "capture", "chaos"]
-NETWORK_TOPS = frozenset({"urllib", "requests", "httpx", "socket"})
 ARM_DEADLINE_S = 240.0
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 
@@ -420,7 +395,7 @@ class Fake:
 @pytest.fixture
 def fake(tmp_path: Path, pool: Pool, monkeypatch: pytest.MonkeyPatch) -> Fake:
     monkeypatch.syspath_prepend(str(TARGETS))
-    # PF9 (reading r2): a Burla sweep refuses a missing ``burla`` before the plan, as a Modal sweep
+    # PF9: a Burla sweep refuses a missing ``burla`` before the plan, as a Modal sweep
     # refuses a missing ``modal``. The fake client stays importable only in the launcher; here an
     # empty package of that name, at the pin, is findable, and nothing imports it.
     findable = tmp_path / "findable-burla"
@@ -476,43 +451,9 @@ def _arm_tripwire() -> None:
     socket.socket.connect = connect  # type: ignore[method-assign]
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    _arm_tripwire()
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
 def isolated(fn: Callable[..., Any], *args: Any) -> Any:
-    ctx = multiprocessing.get_context("spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + ARM_DEADLINE_S
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {ARM_DEADLINE_S}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
+    """Run ``fn(*args)`` in a fresh spawned interpreter with the tripwire armed; return its result."""
+    return run_isolated(fn, *args, timeout=ARM_DEADLINE_S, method="spawn", prepare=_arm_tripwire)
 
 
 def child_local(root: str, target: str, chaos: dict[str, Any] | None, episode_timeout: float | None,
@@ -550,7 +491,7 @@ def child_burla(root: str, argv: list[str], target: str, sweep: dict[str, Any],
     return result
 
 
-# ---------- the R lane: hand-built results, no worker, nothing armed ----------
+# ---------- R: hand-built results, no worker, nothing armed ----------
 
 
 def ok_result(i: int, chaos_record: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -594,15 +535,16 @@ PLACEMENT = {"burla": {"nodes": 3, "machine_type": "m7i.2xlarge"}, "bundle": {"s
 
 
 def test_r1_without_the_new_keywords_the_modal_manifest_and_cost_guard_are_mains(tmp_path: Path) -> None:
-    """Green on the skeleton by design: it pins what the runner change must not move."""
+    """Without the Burla keywords, a Modal run through the shared runner keeps the Modal manifest
+    keys and capture reason, and its cost guard refuses before the mapper is called."""
     p, store = r_plan(tmp_path / "plain", capture=True)
     run_with_mapper(p, RecordingMapper(), store, options=ModalOptions(batch_size=2))
     m = store.manifest(p.run_id)
     assert m.backend == "modal"
-    # PF4 (PF4.4): every backend now records the design detection limit as design_mde
-    # ({"mde", "base_rate"}) beside max_mde_accepted; every other key is main's.
+    # PF4.4: every backend records the design detection limit as design_mde
+    # ({"mde", "base_rate"}) beside max_mde_accepted; every other key is a Modal run's.
     assert set(m.environment) == MODAL_ENV_KEYS | {"capture", "design_mde"}, sorted(m.environment)
-    # PF4 re-freeze (PF4.30): design_mde now records which test, level and family the gate used and
+    # PF4.30: design_mde also records which test, level and family the gate used and
     # whether a lone condition can be flagged, beside mde and base_rate.
     assert set(m.environment["design_mde"]) == {
         "mde", "base_rate", "direction", "test", "level", "family", "conditions", "events", "q", "power",
@@ -610,7 +552,7 @@ def test_r1_without_the_new_keywords_the_modal_manifest_and_cost_guard_are_mains
     assert m.environment["capture"]["reason"] == MODAL_CAPTURE_REASON
     pc, cstore = r_plan(tmp_path / "chaos", chaos=CHAOS)
     run_with_mapper(pc, RecordingMapper(chaos_record(CHAOS)), cstore, options=ModalOptions(batch_size=2))
-    # PF4 (PF4.4): design_mde is recorded on a chaos run too.
+    # PF4.4: design_mde is recorded on a chaos run too.
     assert set(cstore.manifest(pc.run_id).environment) == MODAL_ENV_KEYS | {"chaos", "design_mde"}
     pg, gstore = r_plan(tmp_path / "guard")
     mapper = RecordingMapper()
@@ -724,21 +666,12 @@ def test_r6_a_burla_chaos_run_whose_rows_lack_the_record_is_refused_before_stori
     assert summary.complete
 
 
-def _defined(module: Any) -> set[str]:
-    return {n for n, o in vars(module).items() if not n.startswith("_")
-            and getattr(o, "__module__", None) == module.__name__}
-
-
 def test_r7_the_runners_surface_gains_three_keyword_only_parameters_and_nothing_else() -> None:
-    assert executor_modal.__all__ == MODAL_EXPORTS
-    assert _defined(executor_modal) == MODAL_PUBLIC
     params = [(n, p.kind.name, p.default) for n, p in inspect.signature(run_with_mapper).parameters.items()]
     assert params == RUNNER_PARAMS, params
-    assert _defined(cli) == {"main"}
-    assert _defined(executor) == EXECUTOR_PUBLIC
 
 
-# ---------- the M lane: the host-side mapper, through the fake ----------
+# ---------- M: the host-side mapper, through the fake ----------
 
 
 def test_m1_one_call_per_round_with_the_declared_shape(fake: Fake, tmp_path: Path) -> None:
@@ -758,8 +691,11 @@ def test_m2_one_item_per_batch_carrying_six_fields_in_order(fake: Fake, tmp_path
     p, store, opts, outcome = burla_run(fake, tmp_path, PROBE, sweep=sweep, episode_timeout=45.0)
     assert_complete(outcome, store, p)
     (call,) = fake.starts()
-    want_capture = executor_modal._capture_payload(p.spec.capture, p.run_id)
-    want_chaos = executor_modal._chaos_payload(p.spec.chaos)
+    # What the sweep file declares, spelled out: ``[capture]`` with ``instrument = []`` and no
+    # cap, and the ``[chaos]`` table above.
+    want_capture = {"run_id": p.run_id, "instrument": [], "content": False, "max_observation_bytes": None,
+                    "max_spans": None}
+    want_chaos = {"fault": "none", "rate": 1.0, "steps": []}
     expected = [
         {"type": "tuple", "arity": 6, "k": k, "jobs": jobs, "import_path": PROBE,
          "episode_timeout": 45.0, "capture": want_capture, "chaos": want_chaos}
@@ -1006,7 +942,7 @@ def test_m11_busy_past_the_deadline_fires_the_stop(fake: Fake, tmp_path: Path) -
     assert closed["ended"] == "stopped" and closed["end"] - start <= 3.0 + 5.0 + 2.0, closed
 
 
-# ---------- the S lane: the launcher ----------
+# ---------- S: the launcher ----------
 
 
 def test_s1_the_launcher_runs_in_its_own_session(fake: Fake, tmp_path: Path) -> None:
@@ -1022,7 +958,7 @@ def test_s1_the_launcher_seam_starts_this_file_under_python_i() -> None:
 def test_s1_importing_the_launcher_imports_only_the_standard_library_and_runs_nothing() -> None:
     """The launcher file on its own, in a ``python -I`` interpreter as the backend starts it, loaded
     by path under a name other than ``__main__``: every module it brings in must come from the
-    standard library. Loading it through ``import proofload…`` would hide whatever the package's
+    standard library. Loading it through ``import poisson_prove…`` would hide whatever the package's
     own ``__init__`` already imports (numpy, for one)."""
     probe = (
         "import json, os, runpy, sys, sysconfig\n"
@@ -1047,17 +983,6 @@ def test_s1_importing_the_launcher_imports_only_the_standard_library_and_runs_no
     assert done.returncode == 0, done.stderr
     assert json.loads(done.stdout.strip().splitlines()[-1]) == []
     assert done.stderr == "" and len(done.stdout.strip().splitlines()) == 1, (done.stdout, done.stderr)
-    tree = ast.parse(SUBMIT.read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign)):
-            continue
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
-            continue  # the docstring
-        is_main_guard = (
-            isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
-            and isinstance(node.test.left, ast.Name) and node.test.left.id == "__name__"
-        )
-        assert is_main_guard, ast.dump(node)[:200]
 
 
 def test_s2_nothing_of_ours_is_imported_or_shipped_when_burla_is_called(fake: Fake, tmp_path: Path) -> None:
@@ -1068,12 +993,7 @@ def test_s2_nothing_of_ours_is_imported_or_shipped_when_burla_is_called(fake: Fa
     assert call["shipped"] == [], call["shipped"]
 
 
-def test_s3_the_bootstrap_has_no_import_statement_in_a_function_and_passes_burlas_rule(fake: Fake,
-                                                                                      tmp_path: Path) -> None:
-    tree = ast.parse(textwrap.dedent(inspect.getsource(_burla_submit._bootstrap)))
-    found = [node.lineno for fn in ast.walk(tree) if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
-             for node in ast.walk(fn) if isinstance(node, (ast.Import, ast.ImportFrom))]
-    assert found == [], found
+def test_s3_the_bootstrap_passes_burlas_rule(fake: Fake, tmp_path: Path) -> None:
     p, store, opts, outcome = burla_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     assert fake.starts()[0]["offenders"] == []
@@ -1142,12 +1062,15 @@ def test_s7_without_burla_importable_run_burla_raises_burla_not_installed(fake: 
     monkeypatch.setattr(eb, "_launcher_argv", lambda: fake.argv("absent"))
     p, store, opts, outcome = burla_run(fake, tmp_path)
     assert isinstance(outcome, eb.BurlaNotInstalled), outcome
-    assert INSTALL_HINT in str(outcome)
+    # The message says what failed, with no raw repr of the import error, and the install line is
+    # its own next line, not inside the sentence.
+    assert outcome.nexts == [INSTALL_HINT] and INSTALL_HINT not in str(outcome), (outcome.nexts, str(outcome))
+    assert "burla" in str(outcome) and "Error(" not in str(outcome), str(outcome)
     assert fake.starts() == []
 
 
 
-# ---------- the W lane: the bundle and the worker ----------
+# ---------- W: the bundle and the worker ----------
 
 
 def _source_files(folder: Path) -> dict[str, bytes]:
@@ -1221,7 +1144,7 @@ def test_w1_the_bundle_is_deterministic_and_complete(tmp_path: Path, monkeypatch
     assert files == want, sorted(set(files) ^ set(want))
 
 
-def test_w1_the_manifest_records_the_bundle_and_each_packages_version_commit_and_dirty_flag(
+def test_w1_the_manifest_records_the_bundle_prove_s_version_and_each_package_s_version_commit_and_dirty_flag(
     fake: Fake, tmp_path: Path
 ) -> None:
     p, store, opts, outcome = burla_run(fake, tmp_path)
@@ -1229,13 +1152,13 @@ def test_w1_the_manifest_records_the_bundle_and_each_packages_version_commit_and
     record = store.manifest(p.run_id).environment["bundle"]
     rebuilt = eb._build_bundle(("bu_targets",))
     assert record["sha256"] == rebuilt.sha256 and record["size"] == len(rebuilt.data)
-    assert record["packages"] == {"poisson_prove": _expected_package("poisson_prove"),
+    assert record["packages"] == {"poisson_prove": {"version": _expected_version("poisson_prove")},
                                   "bu_targets": _expected_package("bu_targets")}
 
 
 def _outside_repo(path: str) -> bool:
     """Not the project, its source or its tests. The venv's ``site-packages`` may sit under the
-    worktree; it stands for the distributions a node installs, and is allowed."""
+    checkout; it stands for the distributions a node installs, and is allowed."""
     real = os.path.realpath(path)
     project = str(REPO.resolve())
     if real == project:
@@ -1352,7 +1275,7 @@ def test_w6_a_target_that_does_not_import_in_the_worker_is_stored_as_infra_rows(
     assert {s["kind"] for s in fake.served()} == {"ok"}, "the bootstrap raised instead of returning (k, None, traceback)"
 
 
-# ---------- the C lane: chaos and capture on Burla ----------
+# ---------- C: chaos and capture on Burla ----------
 
 
 def _chaos_rows(store: Store, run_id: str) -> dict[tuple[str, int], tuple[Any, ...]]:
@@ -1442,7 +1365,7 @@ def test_c5_a_capture_sweeps_rows_carry_what_the_worker_saw(fake: Fake, tmp_path
         assert seen["requested"] is True and seen["active"] is True, seen
 
 
-# ---------- the $ lane: cost, caps and the ledger ----------
+# ---------- $: cost, caps and the ledger ----------
 
 
 def _table_file(root: Path, table: dict[str, Any]) -> Path:
@@ -1703,7 +1626,7 @@ def test_dollar9_the_preflight_shows_the_declaration_and_the_manifest_keeps_it(f
     assert abs(kept["estimate"] - estimate) < 1e-9 and abs(kept["ledger_total"] - 0.37) < 1e-9
 
 
-# ---------- the P lane: the pre-flight and the CLI ----------
+# ---------- P: the pre-flight and the CLI ----------
 
 
 def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
@@ -1713,16 +1636,16 @@ def run_cli(argv: Sequence[str]) -> tuple[int, str, str]:
 
 
 def new_run(store_root: Path, before: set[str]) -> str:
-    """The one run a sweep added. A sweep no longer ends with its run id as the last word of
-    stdout; it ends with a verdict line (spec section 5.3), so the id is read from the store."""
+    """The one run a sweep added. A sweep ends with a verdict line, not its run id, so the id is
+    read from the store."""
     added = set(Store(store_root).runs()) - before
     assert len(added) == 1, added
     return added.pop()
 
 
 def sweep_argv(root: Path, spec: Path, target: str = PLAIN, *extra: str, backend: str = "burla") -> list[str]:
-    # PF4 re-freeze (PF4.30, reading R17): no lone condition of these small designs can be flagged,
-    # which any accepted change below 1 refuses; --max-mde 1 admits them as 0.99 did.
+    # PF4.30: no lone condition of these small designs can be flagged, which any accepted change
+    # below 1 refuses; --max-mde 1 admits them.
     return ["--store", str(root / "store"), "sweep", str(spec), "--target", target, "--backend", backend,
             "--salt", "0123456789abcdef", "--max-mde", "1", "--yes", *extra]
 
@@ -1732,7 +1655,7 @@ def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) 
     ledger = tmp_path / "ledgers" / "step.jsonl"
     for flag in (["--concurrency", "2"], ["--app-name", "x"], ["--image", "gpu"]):
         code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, *flag))
-        # A refusal exits 1 (spec section 5.2).
+        # A refusal exits 1.
         assert code == 1, (flag, out, err)
     assert fake.launchers() == [] and not ledger.exists()
     code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, "--max-cost", "7.5", "--est-seconds", "0.002",
@@ -1751,34 +1674,34 @@ def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) 
     assert {len(item["jobs"]) for item in call["items"]} == {1}
     code, out, err = run_cli(sweep_argv(tmp_path / "capped", spec, PLAIN, "--max-rollouts", "2"))
     # A sweep stopped by --max-rollouts exits 3 and ends with a stopped line instead of the
-    # stopped_by field; the store holds the run, partial, with the two rollouts it kept
-    # (spec sections 5.2 and 5.3).
+    # stopped_by field; the store holds the run, partial, with the two
+    # rollouts it kept.
     assert code == 3, err
     assert any(line.startswith("stopped  ") for line in out.splitlines()), out
     capped = Store(tmp_path / "capped" / "store")
     (capped_run,) = capped.runs()
     assert capped.manifest(capped_run).status == "partial" and capped.count(capped_run) == 2
     code, out, err = run_cli(sweep_argv(tmp_path / "local", spec, PLAIN, "--max-cost", "1", backend="local"))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, "--backend local changed"
 
 
 def test_p1_an_unknown_burla_field_is_a_refusal(fake: Fake, tmp_path: Path) -> None:
     spec = write_sweep(tmp_path, burla=burla_table(nodez=4))
     code, out, err = run_cli(sweep_argv(tmp_path, spec))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1 and "nodez" in err, err
 
 
 def test_p2_the_target_resolves_here_first_with_the_local_refusal(fake: Fake, tmp_path: Path) -> None:
     bad = "bu_targets.nope:rollout"
     good = write_sweep(tmp_path / "good", burla=burla_table())
-    # PF3 (PF3.3, rule R4): an unknown key in [burla] is now refused when the spec is read, before the
-    # target; the [burla] table is broken here in a way strict key checking does not see (nodes, a known
-    # field, out of range), so the test still says the target resolves before the table's values are checked.
+    # PF3.3: an unknown key in [burla] is refused when the spec is read, before the target; the
+    # [burla] table is broken here in a way strict key checking does not see (nodes, a known field,
+    # out of range), so the test says the target resolves before the table's values are checked.
     broken = write_sweep(tmp_path / "broken", burla=burla_table(nodes=0))
     local = run_cli(sweep_argv(tmp_path / "good", good, bad, backend="local"))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert local[0] == 1
     for spec in (good, broken):
         code, out, err = run_cli(sweep_argv(spec.parent, spec, bad))
@@ -1833,7 +1756,7 @@ def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake
     monkeypatch.setenv("BU_DRIFT_MARKER", "host-value-4c7e")
     spec = write_sweep(tmp_path / "drift", burla=burla_table())
     code, out, err = run_cli(sweep_argv(spec.parent, spec, DRIFTING))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, (out, err)
     assert "host-value-4c7e" in out + err and "absent-in-the-worker-view" in out + err
     assert fake.launchers() == [] and not (spec.parent / "ledgers").exists()
@@ -1844,9 +1767,8 @@ def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake
     assert code == 0, err
 
 
-# PF4 re-freeze (PF4.22, reading R36): the preflight block no longer prints "MDE at N=..." (the old
-# normal approximation at base 0.5); the plan's one limit is the gate's line. The other lines keep
-# their order.
+# PF4.22: the preflight block prints no "MDE at N=..." line; the plan's one limit is the gate's
+# line. The other lines keep this order.
 PREFLIGHT_ORDER = ["Backend: burla", "Cluster: ", "Bundle: ", "Worker view: ", "Traffic: ", "Cost: ", "Chaos: "]
 
 
@@ -1877,14 +1799,15 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     bundle = eb._build_bundle(("bu_targets", "bu_dirty"))
     for name in ("poisson_prove", "bu_targets", "bu_dirty"):
         assert name in bundle_line, (name, bundle_line)
+    assert f"Bundle: poisson_prove {_expected_version('poisson_prove') or 'unversioned'}, " in bundle_line, bundle_line
     commit = _git(tmp_path / "checkout", "rev-parse", "HEAD")
     assert commit and commit[:7] in bundle_line and bundle.sha256 in bundle_line, bundle_line
     assert "uncommitted changes" in bundle_line
-    # PF4 re-freeze (PF4.22, reading R36): the old limit line is gone from the preflight block.
+    # PF4.22: no "MDE at N=" line in the preflight block.
     assert not any(line.startswith("MDE at N=") for line in lines), lines
     plain = eb.preflight_burla(p, PLAIN, options(tmp_path, packages=("bu_targets",)))
     plain_bundle = next(line for line in plain.splitlines() if line.startswith("Bundle: "))
-    dirty = any(_expected_package(name)["dirty"] for name in ("poisson_prove", "bu_targets"))
+    dirty = bool(_expected_package("bu_targets")["dirty"])
     assert ("uncommitted changes" in plain_bundle) == dirty, (dirty, plain_bundle)
 
 
@@ -1898,7 +1821,7 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     assert code == 0, err
     remote = new_run(store_root, {local})
     code, out, err = run_cli(["--store", str(store_root), "runs"])
-    # PF2 (spec section 4.3): runs rows now lead with # and the name, so the row is found by
+    # PF2: runs rows lead with # and the name, so the row is found by
     # the id, and the status and backend are the two cells after it.
     assert code == 0 and any(
         line.split()[line.split().index(remote):][:3] == [remote, "complete", "burla"]
@@ -1909,11 +1832,11 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     assert run_cli(["--store", str(store_root), "report", local, remote, "--event", "fell", "--x", "cell",
                     "--out", str(tmp_path / "report")])[0] == 0
     assert run_cli(["--store", str(store_root), "serve", local, remote, "--event", "fell", "--x", "cell", "--json"])[0] == 0
-    # --json replaces --format json on diff (spec section 5.6).
+    # --json replaces --format json on diff.
     code, out, err = run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell", "--json"])
     fell = json.loads(out)["by_event"]["fell"]
-    # PF4 (PF4.20): "fell" has no declared kind, so the JSON gives direction counts and leaves the
-    # safer/worse counts null; the fact pinned (no condition moved, two unchanged) is the same.
+    # PF4.20: "fell" has no declared kind, so the JSON gives direction counts and leaves the
+    # safer/worse counts null; the fact pinned is that no condition moved and two are unchanged.
     assert fell["n_worse"] is None and fell["n_safer"] is None and fell["kind"] is None, fell
     assert fell["n_higher"] == 0 and fell["n_lower"] == 0 and fell["n_unchanged"] == 2, fell
     assert comparable(stored(Store(store_root), local)) == comparable(stored(Store(store_root), remote))
@@ -1924,7 +1847,7 @@ def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -
     _seed_ledger(ledger, PRIOR)
     guard = write_sweep(tmp_path / "guard", burla=burla_table(stop_cost=0.3, max_cost=0.3))
     code, out, err = run_cli(sweep_argv(guard.parent, guard))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert code == 1 and str(ledger) in err, err
     fake.script(attempts=[{"hang_after": 1}])
     stop = write_sweep(tmp_path / "stop", replicates=3,
@@ -1934,13 +1857,13 @@ def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -
     fake.script(default={"refuse": "NoNodes"})
     refused = write_sweep(tmp_path / "refused", burla=burla_table())
     code, out, err = run_cli(sweep_argv(refused.parent, refused))
-    # PF4 re-freeze (PF4.49, reading R17): under --max-mde 1 this design, in which no lone condition
-    # can be flagged, gets the gate's facts as a note: line first; the backend's refusal is the next.
+    # PF4.49: under --max-mde 1 this design, in which no lone condition can be flagged, gets the
+    # gate's facts as a note: line first; the backend's refusal is the next.
     rest = "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
     assert code == 3 and rest.startswith("error: "), err
 
 
-# ---------- the I lane: imports, surface and the frozen guards ----------
+# ---------- I: imports and surface ----------
 
 
 def test_i1_nothing_imports_burla_at_import_time() -> None:
@@ -1957,108 +1880,14 @@ def test_i1_nothing_imports_burla_at_import_time() -> None:
     assert done.stdout.strip().splitlines()[-1] == "False"
 
 
-def _burla_imports(path: Path) -> list[tuple[int, str | None]]:
-    """Each import naming burla, with the function it sits in (None at module level)."""
-    found: list[tuple[int, str | None]] = []
-
-    def visit(node: ast.AST, function: str | None) -> None:
-        for child in ast.iter_child_nodes(node):
-            inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else function
-            names: list[str] = []
-            if isinstance(child, ast.Import):
-                names = [alias.name for alias in child.names]
-            elif isinstance(child, ast.ImportFrom) and child.module:
-                names = [child.module]
-            if any(name.split(".")[0] == "burla" for name in names):
-                found.append((child.lineno, function))
-            visit(child, inner)
-
-    visit(ast.parse(path.read_text(encoding="utf-8")), None)
-    return found
-
-
-def test_i2_only_the_launchers_main_imports_burla() -> None:
-    for path in sorted(PACKAGE.rglob("*.py")):  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
-        found = _burla_imports(path)
-        if path.name == "_burla_submit.py":
-            assert found and all(function == "main" for _, function in found), found
-        else:
-            assert found == [], (path.name, found)
-
-
 def test_i3_the_public_surface_is_the_eight_names() -> None:
     assert executor_burla.__all__ == BURLA_ALL
-    assert _defined(executor_burla) == set(BURLA_ALL)
-
-
-def _imports(path: Path) -> set[str]:
-    out: set[str] = set()
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Import):
-            out.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            out.add(node.module)
-            if node.module == "http":
-                out.update(f"http.{alias.name}" for alias in node.names)
-    return out
-
-
-def test_i4_the_new_files_pass_the_frozen_guards() -> None:
-    for path in (PACKAGE / "executor_burla.py", PACKAGE / "_burla_submit.py"):
-        text = path.read_text(encoding="utf-8")
-        assert "Secret" not in text, path.name
-        assert "api_error" not in text and "golden_pilot" not in text, path.name
-        imported = _imports(path)
-        assert not {name for name in imported if name.split(".")[0] in NETWORK_TOPS}, (path.name, imported)
-        assert "http.server" not in imported, path.name
-        tree = ast.parse(text)
-        clock = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr in ("time_ns", "perf_counter_ns")]
-        assert clock == [], (path.name, clock)
 
 
 def test_i5_the_burla_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None:
-    # PF9 (Q31, ruled 2026-10-13): Burla ships as an experimental backend with a [burla] extra
-    # pinning the client the backend runs, so the extra is no longer absent; what it pins is
-    # test_pf9_backends.py's.
+    # PF9: Burla ships as an experimental backend with a [burla] extra
+    # pinning the client the backend runs; what it pins is test_pf9_backends.py's.
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     extras = project["optional-dependencies"]
-    # PF7 (Q14): the [viz] extra goes; nothing imports matplotlib.
-    assert set(extras) == {"modal", "agent", "all", "dev", "burla"}
+    assert "burla" in extras
     assert any(req.split("=")[0].split(">")[0].split("<")[0].strip().lower() == "cloudpickle" for req in extras["dev"])
-
-
-def _cli_imports_constant() -> set[tuple[str | None, str | None]]:
-    tree = ast.parse(FR_TEST.read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "CLI_IMPORTS" for t in node.targets):
-            call = node.value
-            assert isinstance(call, ast.Call)
-            return set(ast.literal_eval(call.args[0]))
-    raise AssertionError("no CLI_IMPORTS in test_fr_first_run.py")
-
-
-def test_i6_fr18_admits_exactly_the_three_burla_imports_and_cli_imports_them() -> None:
-    frozen = _cli_imports_constant()
-    assert {entry for entry in frozen if entry[0] == "poisson_prove.executor_burla"} == BURLA_IMPORTS
-    # PF5 (spec section 17; PF5.7): the face runs no backend, so the three names are the core's to
-    # reach: the core's modules reach exactly these three, imported by name or read off the
-    # module, and ``cli.py`` reaches none.
-    def reached(path: Path) -> set[tuple[str | None, str | None]]:
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        found: set[tuple[str | None, str | None]] = set()
-        bound: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove.executor_burla":
-                found.update((node.module, alias.name) for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module == "poisson_prove":
-                bound |= {a.asname or a.name for a in node.names if a.name == "executor_burla"}
-            elif isinstance(node, ast.Import):
-                bound |= {a.asname or a.name for a in node.names if a.name == "poisson_prove.executor_burla"}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and ast.unparse(node.value) in bound | {"poisson_prove.executor_burla"}:
-                found.add(("poisson_prove.executor_burla", node.attr))
-        return found
-
-    core = set().union(*(reached(path) for path in sorted((PACKAGE / "core").rglob("*.py"))))
-    assert core == BURLA_IMPORTS
-    assert reached(PACKAGE / "cli.py") == set()

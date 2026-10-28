@@ -34,7 +34,8 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --event NAME          an outcome that counts as the event; repeatable
-                        (default: inferred from the outcomes present)
+                        (default: the failures and successes the runs declare,
+                        else every outcome present but the most frequent)
   --method {fisher_bh,mcnemar_bh,logrank_bh}
                         the per-condition test: fisher_bh treats the two runs
                         as separate samples, mcnemar_bh pairs them on their
@@ -168,13 +169,14 @@ With two axes and only `--x` named, `--fix` pins the other to one value:
 `poisson-prove report --x task_id --fix tool_fail_rate=0.55` draws the three tasks at the hardest
 tool failure rate.
 
-Without `--x`, the refusal lists the axes and events the runs carry:
+Without `--x`, the refusal lists the axes and events the runs carry, and its next line places
+every axis:
 
 <!-- docs-check: run -->
 ```console
 $ poisson-prove report  # exits 1
 error: report requires --x AXIS, which was not given. …
-  next: poisson-prove report --x task_id
+  next: poisson-prove report --x task_id --y tool_fail_rate
 ```
 
 ## Exit codes

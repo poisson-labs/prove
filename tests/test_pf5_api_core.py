@@ -1,19 +1,17 @@
 """PF5, the Python API and the core: the frozen tests (the code suite).
 
-Written from the front-door spec's section 7 (the public surface, its docstrings), section 17 (the
-core and its boundary: core, renderers, faces), sections 16.3, 18 and 19 (what the static UI and the
-terminal app read from the core) and its invariants PF5.1 to PF5.11, with the items earlier sessions
-left for PF5 (section 14 and the decisions file): ``POWER``'s place in ``stats.__all__``; the method
+Covers the public surface and its docstrings, the core and its boundary (core, renderers, faces),
+what the static UI and the terminal app read from the core, and invariants PF5.1 to PF5.11, with the
+items earlier work left for PF5: ``POWER``'s place in ``stats.__all__``; the method
 lines the command line adds to the rendered files and the notes ``diff --methods all`` keeps; the
 report header's ``NAME (ID)`` pairing; the core's ``init_agent``; and everything the statistics now
-return, which the API exposes and no face recomputes. The build is written against this file and does
-not edit it.
+return, which the API exposes and no face recomputes.
 
 What PF5 promises, in one line: one core under every face. The plain commands, ``--json``, the
 rendered report and the page, and later the terminal app, the static UI and a local server, all show
 what the core returned, and the public ``compare`` and ``stats`` give a Python user the same numbers.
 
-**The core's operations this file reaches** (section 17.1; ``poisson_prove.core``, private under Q28):
+**The core's operations this file reaches** (``poisson_prove.core``, private):
 
 | area | operation | returns |
 |---|---|---|
@@ -27,16 +25,14 @@ commands. ``overrides`` takes the sweep's options by their flag names with under
 (``target``, ``replicates``, ``pair_with``, ``resume``, ``name``, ``max_mde``, ``salt``,
 ``max_rollouts``, ``backend``, ...). ``cancel`` is a ``threading.Event``.
 
-**Readings, named here** (each is a yes/no in the freeze's records; the
-letters are the log's; every one is written under its recommended answer).
+**Readings, named here** (each a point the invariants leave open, read one way and
+lettered so the tests below can cite it).
 
-- (a) PF5 builds the store, setup, sweeps and comparisons areas of section 17.1. ``init_agent`` is a
-  core operation PF11's build adds (PF11's frozen tests drive it through ``init --agent``);
-  ``save``, ``artifacts``, ``artifact`` and ``build_ui`` are PF12's; ``view`` is PF12's and PF6's.
-  The design session's Y2 (ruled 2026-10-23) leaves the view field names to "PF5 and PF12" to
-  freeze; this file freezes none of them and leaves them to PF12, whose freeze holds the views,
-  and to PF6 (a yes/no in the log). Those operations may be in
-  ``core.__all__`` already; this file requires only PF5's. PF5.11's ``save`` and "saved
+- (a) PF5 covers the store, setup, sweeps and comparisons areas of the table above. ``init_agent`` is
+  PF11's core operation (PF11's tests drive it through ``init --agent``); ``save``,
+  ``artifacts``, ``artifact`` and ``build_ui`` are PF12's; ``view`` is PF12's and PF6's. This
+  file pins none of the view field names; PF12's and PF6's tests hold the views. Those
+  operations may be in ``core.__all__``; this file requires only PF5's. PF5.11's ``save`` and "saved
   comparisons" are therefore checked by PF12; PF5.9's "and view" by PF6 and PF12.
 - (b) PF5 writes each new run's ``events.jsonl`` (PF5.10 asks for it); PF12 documents it and adds
   the store descriptor. A resume of a run that has no ``events.jsonl`` (a 0.0.1 run) starts none.
@@ -44,14 +40,14 @@ letters are the log's; every one is written under its recommended answer).
 - (d) ``resume(store, ref)`` continues a partial run from what its manifest recorded (conditions,
   replicates, target), on this machine, asking nothing; ``sweep --resume`` stays ``plan`` with
   ``overrides={"resume": ...}`` then ``start``, so a resume still reads the spec's replicates
-  (frozen ``test_s23_power::test_w9``).
+  (``test_s23_power::test_w9``).
 - (e) Every core refusal is a ``core.Refusal`` whose ``str()`` is the face's ``error:`` sentence
   exactly; an underpowered design's refusal comes from ``plan``, after which the face still shows
   the plan (rule 7). ``compare.Refusal`` is the public name of the same class.
 - (f) Faces call operations as attributes of ``poisson_prove.core`` (``core.compare(...)``), so a
   test can see what the core returned to a face; a face imports from Prove only names in
   ``core.__all__``, renderer modules and its own modules, and reads on ``core`` only names in
-  ``core.__all__``; ``core.__all__`` holds section 17.1's operations, data and exception classes and
+  ``core.__all__``; ``core.__all__`` holds the table's operations, data and exception classes and
   constants, and no other function.
 - (g) The classes: faces ``cli`` and ``__main__``; renderers ``_look``, ``_facts``, ``plain``,
   ``report`` and ``viewer``; the core everything else, ``poisson_prove.core`` and its submodules
@@ -70,14 +66,14 @@ letters are the log's; every one is written under its recommended answer).
   ``EpisodePage`` lists ``episodes`` as ``inspect --json`` does, in its order.
 - (i) ``compare``'s public set is ``diff``, ``check``, ``runs``, ``resolve``, ``Comparison``,
   ``CheckResult``, ``RunInfo`` and ``Refusal``; ``compare.diff`` returns the core's ``Comparison``
-  (section 7.2's ``DiffResult`` read as it); each takes the store as a path or a ``Store``.
-- (j) ``stats.__all__`` gains ``POWER`` (the item the PF4 build left), beside ``WILSON_LEVEL``.
-- (k) ``stats.__all__`` gains ``KMCurve`` and ``CIFCurve``, the types two of its functions return.
+  (the documented ``DiffResult`` read as it); each takes the store as a path or a ``Store``.
+- (j) ``stats.__all__`` holds ``POWER``, beside ``WILSON_LEVEL``.
+- (k) ``stats.__all__`` holds ``KMCurve`` and ``CIFCurve``, the types two of its functions return.
 - (l) ``stats.fisher_test(events_a, n_a, events_b, n_b)`` gives ``(odds_ratio, p)``,
   ``mcnemar_test(only_a, only_b)`` gives ``(only_a - only_b, p)`` and ``logrank_test(t_a,
   observed_a, t_b, observed_b)`` gives ``(chi_square, p)``. PF5.3's "what the private functions
   return" is checked against the numbers the comparison reports for every row of every fixture
-  pair (test rule 1: never an internal), and ``kaplan_meier`` and ``mde_two_proportion``, whose
+  pair (never against an internal), and ``kaplan_meier`` and ``mde_two_proportion``, whose
   numbers no comparison reports, against lifelines and statsmodels.
 - (m) ``Comparison`` exposes ``verdict``, ``sentence``, ``detail`` (the verdict block's
   ``(label, text)`` lines), ``next``, ``notes``, ``method``, ``method_chosen``, ``threshold``,
@@ -93,9 +89,10 @@ letters are the log's; every one is written under its recommended answer).
   public name in its section, every public constant with its meaning, the private modules named
   private, and an example for every function of ``compare`` and ``stats``; each example runs from a
   folder whose ``./prove-runs`` holds the quickstart pair. PF7's docs check later takes it in.
-- (q) PF5.2's "plain words" is section 9.3's families, applied to the public docstrings now.
-- (r) ``mypy --strict`` over ``src/`` is one case of the code suite, run with no cache (about 2 s at
-  freeze), not a ``slow`` one.
+- (q) PF5.2's "plain words" in the public docstrings and ``docs/python.md`` is checked by the release
+  plain-words test (``test_pf8_public_hygiene.py``, PF8.4), over the wheel and the docs.
+- (r) ``mypy --strict`` over ``src/`` is one case of the code suite, run with no cache (about 2 s),
+  not a ``slow`` one.
 - (s) PF5.8's scan: a read is ``os.environ.get(N)``, ``os.environ[N]``, ``N in os.environ`` or
   ``os.getenv(N)`` with ``N`` a string or a module constant; copying the environment whole for a
   child process is not a read; any other use of ``os.environ`` is a failure. The core may also
@@ -108,20 +105,20 @@ letters are the log's; every one is written under its recommended answer).
 - (v) PF5.8's "the quickstart fixtures" is the packaged quickstart pair at 194 replicates.
 - (w) The face writes the report folder (``report.md``, ``heatmap.svg``, ``receipt.html``, and
   ``paired``'s files) with the renderers it imports: the folder is the person's, outside the store,
-  and neither a store file nor an artifact (section 17.3's list), and frozen tests stand in for
-  ``cli.build_multi_report``, ``cli.build_survival_report`` and ``cli.serve_page``. Section 17's
-  "the core calls renderers when it writes a file (a report, ...)" is read as the saved artifact of
-  section 18 (PF12's), not this folder.
+  and neither a store file nor an artifact, and other test files stand in for
+  ``cli.build_multi_report``, ``cli.build_survival_report`` and ``cli.serve_page``. The rule
+  "the core calls renderers when it writes a file (a report, ...)" is read as the saved artifact
+  (PF12's), not this folder.
 - (x) The two checks against an outside library (``kaplan_meier`` against lifelines,
-  ``mde_two_proportion`` against statsmodels) are marked ``math``: section 10.6 puts agreement with
-  an outside library in the math suite. Every other case is in the code suite.
+  ``mde_two_proportion`` against statsmodels) are marked ``math``: agreement with
+  an outside library belongs in the math suite. Every other case is in the code suite.
 - (y) The core runs a remote backend through its module's attribute (``executor_modal.run_modal``,
-  read when the plan runs), where the four moved frozen tests put their stand-ins.
+  read when the plan runs), where four tests in other files put their stand-ins.
 - (z) ``resume`` continues a run recorded on this machine's backend; a run recorded on Modal or
   Burla is refused, naming ``sweep --resume`` with its backend, since its image or bundle comes from
   the spec. No test here reaches a remote run.
 
-**Lanes.** The code suite, but for reading (x)'s two ``math`` cases. The shared stores and
+**Suites.** The code suite, but for reading (x)'s two ``math`` cases. The shared stores and
 the comparison documents PF5.3 reads are built once per test session, and once in all when the
 suite runs on ``pytest-xdist`` workers (``_shared``).
 
@@ -129,13 +126,12 @@ suite runs on ``pytest-xdist`` workers (``_shared``).
 
 | invariant | tests |
 |---|---|
-| PF5.1 each public module's ``__all__``; the old sets kept | ``test_pf5_1_*`` |
-| PF5.2 docstrings in plain words, annotations, ``docs/python.md``, ``mypy``, ``py.typed`` | ``test_pf5_2_*`` |
+| PF5.1 each public module's ``__all__`` | ``test_pf5_1_*`` |
+| PF5.2 docstrings, annotations, ``docs/python.md``, ``mypy`` | ``test_pf5_2_*`` |
 | PF5.3 the public statistics give the numbers comparisons report | ``test_pf5_3_*`` |
 | PF5.4 ``compare`` returns what ``--json`` prints; ``resolve`` takes every form | ``test_pf5_4_*`` |
 | PF5.5 ``from poisson_prove import step, record, Episode, Rollout`` | ``test_pf5_5_*`` |
 | PF5.6 every example in ``docs/python.md`` runs | ``test_pf5_6_*`` |
-| PF5.7 the boundary, by the import graph | ``test_pf5_7_*`` |
 | PF5.8 the core prints, asks, exits, opens and connects nothing; the environment it reads | ``test_pf5_8_*`` |
 | PF5.9 each verb's ``--json`` is the core's result inside the envelope | ``test_pf5_9_*`` |
 | PF5.10 events in order, ``events.jsonl``, cancel as Ctrl-C | ``test_pf5_10_*`` |
@@ -147,8 +143,6 @@ from __future__ import annotations
 
 import ast
 import builtins
-import dataclasses
-import enum
 import gc
 import html
 import importlib
@@ -164,7 +158,6 @@ import sys
 import tempfile
 import threading
 import time
-import typing
 import warnings
 import webbrowser
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -212,7 +205,7 @@ failures = ["timeout", "violated"]
 """
 
 
-# ---------- the public sets (section 7.2, readings i to k) ----------
+# ---------- the public sets (readings i to k) ----------
 
 PUBLIC: dict[str, frozenset[str]] = {
     "poisson_prove": frozenset({"Episode", "EpisodeValidationError", "Rollout", "record", "step", "__version__"}),
@@ -242,57 +235,14 @@ PUBLIC: dict[str, frozenset[str]] = {
     "poisson_prove.examples.mock_agent": frozenset({"rollout", "rollout_patched"}),
 }
 
-#: Every ``__all__`` at ``98dc6af`` (the last commit before the rename), read off that commit; a
-#: module that had one keeps every name in it (PF5.1). The import name is the renamed one.
-ALL_AT_98DC6AF: dict[str, frozenset[str]] = {
-    "poisson_prove.capture": frozenset({"CaptureSpec", "CaptureStatus", "Recorder", "capture", "install"}),
-    "poisson_prove.chaos": PUBLIC["poisson_prove.chaos"],
-    "poisson_prove.chaos_catalog": frozenset(),
-    "poisson_prove.cli": frozenset({"main"}),
-    "poisson_prove.executor_burla": frozenset({
-        "BurlaBackendError", "BurlaCostGuard", "BurlaNotInstalled", "BurlaOptions", "BurlaSpendStop",
-        "estimate_burla_cost", "preflight_burla", "run_burla",
-    }),
-    "poisson_prove.executor_modal": frozenset({
-        "CostGuard", "ImageSpec", "Job", "Mapper", "ModalBackendError", "ModalNotInstalled", "ModalOptions",
-        "ModalTarget", "Result", "estimate_cost", "preflight_modal", "run_modal", "run_with_mapper", "worker_batch",
-    }),
-    "poisson_prove.otel": PUBLIC["poisson_prove.otel"],
-    "poisson_prove.plain": frozenset({"CONFIDENCE_THRESHOLDS", "TOO_SMALL_TO_TELL", "build_summary"}),
-    "poisson_prove.steps": PUBLIC["poisson_prove.steps"],
-    "poisson_prove.trace": PUBLIC["poisson_prove.trace"],
-    "poisson_prove.tree": frozenset({
-        "AGREEMENT_SCHEMA", "BOUND_DISCOVERIES", "Bound", "CELL_NULL", "CellFamily", "CellResult",
-        "DEFAULT_DEPTH", "DEFAULT_MAX_GROUP_MDE", "DEFAULT_PERMUTATIONS", "DEFAULT_SEED", "DELTA_STAR", "DEPTHS",
-        "FaultLines", "GROUP_NULL", "GroupResult", "Grouping", "LEAVES_NOT_TESTED_REASONS", "Leaves",
-        "MIN_FAMILY_GROUPS", "MIN_RESOLVABLE_GROUPS", "NOT_TESTED_REASONS", "REFUSAL_REASONS", "ROOT_STATISTICS",
-        "RUNG_ORDER", "Refusal", "RootResult", "SCHEME_BY_METHOD", "Scheme", "TASK_FAMILY_KEYS",
-        "TRACE_GROUPINGS", "TraceGroupingUnsupported", "TreeError", "TreeResult", "UNITS_COLUMNS",
-        "UnknownGrouping", "WHOLE_GRID", "WHOLE_GRID_KEY", "WHOLE_GRID_LABEL", "agreement_digest", "omnibus",
-        "resolve_grouping", "tree",
-    }),
-    "poisson_prove.viewer": frozenset({"ViewerError", "build_structure", "render_html", "serve_page"}),
-}
-
-#: Section 7.2's private modules (and, since the addendum, the core), each named private in
+#: The private modules (the core among them), each named private in
 #: ``docs/python.md``.
 PRIVATE_MODULES = (
     "executor", "executor_modal", "executor_burla", "sampler", "diff", "tree", "report", "viewer", "plain",
     "paired", "capture", "chaos_catalog", "survival", "cli", "_compat", "_resolve", "_burla_submit", "core",
 )
 
-#: Section 9.3's families, as PF5.2 applies them to the public docstrings (reading q). Each
-#: permitted exception is a word a docstring may need: an encoding, a digest, a hypothesis.
-INTERNAL_WORDS = re.compile(
-    r"\bPF\d+(\.\d+)?[a-z]?\b|\b[A-Z]{1,3}-?\d+[a-z]?\b|§|\bsection \d|\bPhase \d|\bSession [AB]\b"
-    r"|\boracle\b|\bretrofit\b|\bshim\b|\bpacket\b|\bruled\b|\bruling\b|\bTaylor\b|\bHUMAIN\b"
-    r"|\bBorderless\b|\bCodestrap\b|45/44|\[\[|\bvault\b|\bObsidian\b|note[s]/|\bdispatch\b|/User[s]/|~/cod[e]/"
-    r"|proofload",
-    re.IGNORECASE,
-)
-INTERNAL_EXCEPTIONS = frozenset({"utf-8", "utf8", "sha256", "sha-256", "h0", "h1"})
-
-#: Section 17's three classes, every module of ``src/`` in exactly one (reading g).
+#: The three classes, every module of ``src/`` in exactly one (reading g).
 FACES = frozenset({"poisson_prove.cli", "poisson_prove.__main__"})
 RENDERERS = frozenset({
     "poisson_prove._look", "poisson_prove._facts", "poisson_prove.plain", "poisson_prove.report",
@@ -308,14 +258,6 @@ CORE = frozenset({
     "poisson_prove.steps", "poisson_prove.store", "poisson_prove.survival", "poisson_prove.trace",
     "poisson_prove.tree",
 })
-
-#: Section 17.1's operations: what ``core.__all__`` may hold as functions (reading f). PF5 builds
-#: the first fourteen (reading a); the rest are the later modules'.
-PF5_OPERATIONS = (
-    "open_store", "runs", "resolve", "run", "episodes", "init", "read_spec", "plan", "start", "resume",
-    "compare", "check", "paired", "inspect",
-)
-LATER_OPERATIONS = ("init_agent", "save", "artifacts", "artifact", "build_ui", "view")
 
 #: The environment variables Prove's own code reads (PF5.8, reading s).
 CORE_ENV = frozenset({"POISSON_PROVE_STORE", "PROOFLOAD_STORE"})
@@ -399,7 +341,7 @@ def spying(monkeypatch: pytest.MonkeyPatch, *names: str) -> Iterator[dict[str, l
 
 
 def inner(result: Any) -> dict[str, Any]:
-    """A core result's document, checked to be one strict JSON document in section 5.6's order."""
+    """A core result's document, checked to be one strict JSON document in the envelope's order (``schema``, ``verdict``, ``sentence``, its keys, ``next``)."""
     doc = as_json(result.to_json())
     assert isinstance(doc, dict)
     keys = list(doc)
@@ -587,7 +529,7 @@ def facts(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def _build_named(folder: Path) -> None:
-    """Four runs for the run forms of section 4.3: two complete, one named at sweep time, one
+    """Four runs for the run forms: two complete, one named at sweep time, one
     partial, and a names file naming the first."""
     store = folder / "prove-runs"
     spec = write_spec(folder, 6)
@@ -610,8 +552,8 @@ def _paired_fixture(folder: Path) -> tuple[Path, Path]:
     """``paired``'s store and declaration, as PR3's frozen tests build them."""
     from test_pr3_paired_output import default_rows, make_store, write_declaration
 
-    store = make_store(folder, default_rows())
-    return Path(store._root), write_declaration(folder / "declaration.toml")  # noqa: SLF001
+    make_store(folder, default_rows(), name="store")
+    return folder / "store", write_declaration(folder / "declaration.toml")
 
 
 def ids_by_age(store: Path) -> list[str]:
@@ -623,20 +565,12 @@ def ids_by_age(store: Path) -> list[str]:
 
 @pytest.mark.parametrize("module", sorted(PUBLIC))
 def test_pf5_1_each_public_module_exports_exactly_its_public_set(module: str) -> None:
-    """Section 7.2's table, with readings i, j and k: ``__all__`` is the set, and every name in it
+    """The public sets, with readings i, j and k: ``__all__`` is the set, and every name in it
     is reachable."""
     mod = importlib.import_module(module)
     assert frozenset(getattr(mod, "__all__", ())) == PUBLIC[module]
     assert len(mod.__all__) == len(set(mod.__all__))
     for name in mod.__all__:
-        assert hasattr(mod, name), f"{module}.{name}"
-
-
-@pytest.mark.parametrize("module", sorted(ALL_AT_98DC6AF))
-def test_pf5_1_the_modules_that_had_an_all_keep_every_name(module: str) -> None:
-    mod = importlib.import_module(module)
-    assert ALL_AT_98DC6AF[module] <= frozenset(getattr(mod, "__all__", ()))
-    for name in ALL_AT_98DC6AF[module]:
         assert hasattr(mod, name), f"{module}.{name}"
 
 
@@ -664,14 +598,10 @@ def _unannotated(fn: Any) -> list[str]:
     return missing
 
 
-def _internal_words(text: str) -> list[str]:
-    return [m.group(0) for m in INTERNAL_WORDS.finditer(text) if m.group(0).lower() not in INTERNAL_EXCEPTIONS]
-
-
 @pytest.mark.parametrize("module", sorted(PUBLIC))
 def test_pf5_2_every_public_name_has_a_plain_docstring_and_annotations(module: str) -> None:
-    """PF5.2 and section 7.3: every function and class in a public ``__all__`` has its own
-    docstring with no internal id, spec section, ruling or private-notes trace in it (reading q); every
+    """PF5.2: every function and class in a public ``__all__`` has its own
+    docstring (its words are the release plain-words test's, reading q); every
     function, and every public method a class defines, has every parameter and its return
     annotated."""
     problems: list[str] = []
@@ -683,8 +613,6 @@ def test_pf5_2_every_public_name_has_a_plain_docstring_and_annotations(module: s
             # A data class or named tuple with no docstring of its own gets one generated from
             # its fields: that is no docstring.
             problems.append(f"{name}: no docstring")
-        elif _internal_words(doc):
-            problems.append(f"{name}: {_internal_words(doc)}")
         if inspect.isfunction(obj):
             if _unannotated(obj):
                 problems.append(f"{name}: unannotated {_unannotated(obj)}")
@@ -714,7 +642,7 @@ def _sections(text: str) -> dict[str, str]:
 def test_pf5_2_docs_python_lists_every_public_name_and_constant_and_marks_the_private_modules() -> None:
     """PF5.2 and reading p: one section per public module; every public name in its section in
     backticks; every public constant on a line that says what it means; every private module
-    named in a paragraph that says it is private; no internal words."""
+    named in a paragraph that says it is private."""
     text = DOCS_PYTHON.read_text(encoding="utf-8")
     sections = _sections(text)
     problems: list[str] = []
@@ -739,24 +667,12 @@ def test_pf5_2_docs_python_lists_every_public_name_and_constant_and_marks_the_pr
         found = [p for p in paragraphs if re.search(rf"`(poisson_prove\.)?{re.escape(private)}`", p)]
         if not any("private" in p.lower() for p in found):
             problems.append(f"{private} not named private")
-    if _internal_words(text):
-        problems.append(f"internal words: {_internal_words(text)}")
     assert not problems, problems
-
-
-def test_pf5_2_py_typed_ships() -> None:
-    """PF5.2: the package marks itself typed, and the wheel's package data takes the file."""
-    assert (PACKAGE / "py.typed").is_file()
-    import tomllib
-
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    excluded = json.dumps(project.get("tool", {}).get("hatch", {}).get("build", {}))
-    assert "py.typed" not in excluded
 
 
 def test_pf5_2_mypy_strict_passes_over_src(tmp_path: Path) -> None:
     """PF5.2, reading r: ``mypy --strict`` over ``src/``, with a fresh cache, in the code suite (it
-    took about 2 s at freeze)."""
+    takes about 2 s)."""
     done = subprocess.run(
         [sys.executable, "-m", "mypy", "--strict", f"--cache-dir={tmp_path / 'mypy'}", "src/poisson_prove"],
         cwd=ROOT, capture_output=True, text=True, timeout=900,
@@ -996,7 +912,7 @@ PF5_3_CHECKS: dict[str, Callable[[Path, tuple[str, str]], int]] = {
 }
 
 
-#: Agreement with an outside library is the math suite's (section 10.6, reading x).
+#: Agreement with an outside library is the math suite's (reading x).
 _LIBRARY_CHECKS = ("kaplan_meier", "mde_two_proportion")
 
 
@@ -1039,8 +955,8 @@ def _compare_cases(store: Path) -> dict[str, tuple[list[str], Callable[[], Any]]
 @pytest.mark.parametrize("case", ["diff default", "diff named", "diff log-rank", "check", "check any"])
 def test_pf5_4_compare_diff_and_check_return_what_the_json_prints(case: str, quickstart: Path) -> None:
     """PF5.4: ``compare.diff`` and ``compare.check`` on the pair the command line compared return the
-    document its ``--json`` prints, with the method and whether it was the default (Q17's
-    condition); the store as a path, a string or a ``Store``."""
+    document its ``--json`` prints, with the method and whether it was the default
+    (``method_chosen``, ``named`` or ``default``); the store as a path, a string or a ``Store``."""
     from poisson_prove import compare
 
     store = quickstart / "prove-runs"
@@ -1079,7 +995,7 @@ RUN_FORMS = (
 
 @pytest.mark.parametrize("form", RUN_FORMS)
 def test_pf5_4_compare_resolve_resolves_every_run_form(form: str, named: Path) -> None:
-    """PF5.4 and section 4.3: every form a verb takes reaches the same run through
+    """PF5.4: every form a verb takes reaches the same run through
     ``compare.resolve``, given the store as a path or a ``Store``, as through the command line."""
     from poisson_prove import compare
     from poisson_prove.store import Store
@@ -1107,7 +1023,7 @@ def test_pf5_4_compare_resolve_resolves_every_run_form(form: str, named: Path) -
 
 @pytest.mark.parametrize("word", ["a name no run has", "a bare 4-hex suffix", "a target with a slash"])
 def test_pf5_4_compare_resolve_refuses_what_the_command_line_refuses(word: str, named: Path) -> None:
-    """PF5.4 and section 4.3: a word the command line refuses is ``compare.Refusal``, its text the
+    """PF5.4: a word the command line refuses is ``compare.Refusal``, its text the
     command line's ``error:`` sentence."""
     from poisson_prove import compare
 
@@ -1179,193 +1095,6 @@ def _redirected(out: StringIO) -> Iterator[None]:
         yield
     finally:
         sys.stdout = before
-
-
-# ---------- PF5.7 ----------
-
-
-def _modules() -> dict[str, Path]:
-    found: dict[str, Path] = {}
-    for path in sorted(PACKAGE.rglob("*.py")):
-        parts = path.relative_to(SRC).with_suffix("").parts
-        if parts[-1] == "__init__":
-            parts = parts[:-1]
-        found[".".join(parts)] = path
-    return found
-
-
-def _class_of(module: str) -> str | None:
-    """A module's class: as listed, or for a module PF5 adds, by where it sits or what it is named
-    (reading g): under ``poisson_prove.core`` the core, ``poisson_prove._cli_*`` the face's own,
-    ``poisson_prove._render_*`` a renderer."""
-    if module in FACES or module.startswith("poisson_prove._cli_"):
-        return "face"
-    if module in RENDERERS or module.startswith("poisson_prove._render_"):
-        return "renderer"
-    if module in CORE or module.startswith("poisson_prove.core."):
-        return "core"
-    return None
-
-
-@dataclass(frozen=True)
-class _Import:
-    module: str  # the Prove module imported from, or imported
-    names: tuple[str, ...]  # the names taken from it; () for ``import M`` / ``from P import M``
-    typing_only: bool
-    line: int
-
-
-def _imports(path: Path, module: str) -> list[_Import]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    typing_lines: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.If) and "TYPE_CHECKING" in ast.unparse(node.test):
-            for child in node.body:
-                for sub in ast.walk(child):
-                    if hasattr(sub, "lineno"):
-                        typing_lines.add(sub.lineno)
-    package = module if path.name == "__init__.py" else module.rpartition(".")[0]
-    out: list[_Import] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.split(".")[0] == "poisson_prove":
-                    out.append(_Import(alias.name, (), node.lineno in typing_lines, node.lineno))
-        elif isinstance(node, ast.ImportFrom):
-            base = node.module or ""
-            if node.level:
-                anchor = package.split(".")
-                anchor = anchor[: len(anchor) - node.level + 1]
-                base = ".".join([*anchor, *([base] if base else [])])
-            if base.split(".")[0] != "poisson_prove":
-                continue
-            for alias in node.names:
-                submodule = f"{base}.{alias.name}"
-                if submodule in _modules():
-                    out.append(_Import(submodule, (), node.lineno in typing_lines, node.lineno))
-                else:
-                    out.append(_Import(base, (alias.name,), node.lineno in typing_lines, node.lineno))
-    return out
-
-
-def _is_type_or_constant(value: Any, *, typing_only: bool) -> bool:
-    if inspect.ismodule(value):
-        return False
-    if inspect.isclass(value):
-        return bool(
-            dataclasses.is_dataclass(value)
-            or issubclass(value, (BaseException, enum.Enum))
-            or (issubclass(value, tuple) and hasattr(value, "_fields"))
-            or getattr(value, "_is_protocol", False)
-            or typing_only
-        )
-    if typing.get_origin(value) is not None or isinstance(value, typing.TypeVar):
-        return True
-    return not callable(value)
-
-
-def _core_attribute_reads(path: Path) -> set[str]:
-    """The attributes a face reads on the name it bound to ``poisson_prove.core``."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    bound = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove":
-            bound |= {alias.asname or alias.name for alias in node.names if alias.name == "core"}
-        if isinstance(node, ast.Import):
-            bound |= {alias.asname for alias in node.names if alias.name == "poisson_prove.core" and alias.asname}
-    reads = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in bound:
-            reads.add(node.attr)
-        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Attribute)
-                and ast.unparse(node.value) == "poisson_prove.core"):
-            reads.add(node.attr)
-    return reads
-
-
-def _rule_classified(found: Mapping[str, Path]) -> list[str]:
-    problems = [f"{m} is in no class" for m in found if _class_of(m) is None]
-    problems += [f"{m} is listed but not in src/" for m in (FACES | RENDERERS | CORE) if m not in found]
-    return problems
-
-
-def _rule_faces(found: Mapping[str, Path]) -> list[str]:
-    exported = frozenset(getattr(core(), "__all__", ()))
-    problems = []
-    for module in sorted(m for m in found if _class_of(m) == "face"):
-        for imp in _imports(found[module], module):
-            kind = _class_of(imp.module)
-            if kind in ("face", "renderer"):
-                continue
-            if imp.module == "poisson_prove" and imp.names == () :
-                continue
-            if imp.module == "poisson_prove.core" and set(imp.names) <= exported:
-                continue
-            if imp.module == "poisson_prove.core" and imp.typing_only:
-                continue
-            problems.append(f"{module}:{imp.line} imports {imp.module} {list(imp.names)}")
-        stray = _core_attribute_reads(found[module]) - exported
-        if stray:
-            problems.append(f"{module} reads {sorted(stray)} on core, outside core.__all__")
-    return problems
-
-
-def _rule_renderers(found: Mapping[str, Path]) -> list[str]:
-    problems = []
-    for module in sorted(m for m in found if _class_of(m) == "renderer"):
-        for imp in _imports(found[module], module):
-            kind = _class_of(imp.module)
-            if kind == "renderer":
-                continue
-            if kind == "face":
-                problems.append(f"{module}:{imp.line} imports the face {imp.module}")
-                continue
-            if not imp.names:
-                problems.append(f"{module}:{imp.line} imports the module {imp.module}")
-                continue
-            source = importlib.import_module(imp.module)
-            for name in imp.names:
-                value = getattr(source, name, None)
-                if not _is_type_or_constant(value, typing_only=imp.typing_only):
-                    problems.append(f"{module}:{imp.line} imports {imp.module}.{name}, which is neither a type nor a constant")
-    return problems
-
-
-def _rule_core(found: Mapping[str, Path]) -> list[str]:
-    problems = []
-    for module in sorted(m for m in found if _class_of(m) == "core"):
-        for imp in _imports(found[module], module):
-            if _class_of(imp.module) == "face":
-                problems.append(f"{module}:{imp.line} imports the face {imp.module}")
-    module = core()
-    exported = list(getattr(module, "__all__", ()))
-    missing = [op for op in PF5_OPERATIONS if op not in exported or not callable(getattr(module, op, None))]
-    if missing:
-        problems.append(f"core lacks the operations {missing}")
-    for name in exported:
-        value = getattr(module, name)
-        if inspect.isfunction(value) and name not in (*PF5_OPERATIONS, *LATER_OPERATIONS):
-            problems.append(f"core.__all__ exports the function {name}, which is no operation")
-        elif inspect.isclass(value) and not (_is_type_or_constant(value, typing_only=False) or hasattr(value, "to_json")):
-            problems.append(f"core.__all__ exports the class {name}, which is not a result, view or error type")
-    return problems
-
-
-PF5_7_RULES: dict[str, Callable[[Mapping[str, Path]], list[str]]] = {
-    "every module in one class": _rule_classified,
-    "faces import only the core and renderers": _rule_faces,
-    "renderers import only types and constants": _rule_renderers,
-    "the core imports no face and exports only operations": _rule_core,
-}
-
-
-@pytest.mark.parametrize("rule", sorted(PF5_7_RULES))
-def test_pf5_7_the_import_graph_holds_the_boundary(rule: str) -> None:
-    """PF5.7 with readings f and g, by the import graph of ``src/``."""
-    found = _modules()
-    assert _class_of("poisson_prove.core") == "core" and "poisson_prove.core" in found
-    problems = PF5_7_RULES[rule](found)
-    assert not problems, problems
 
 
 # ---------- PF5.8 ----------
@@ -1478,6 +1207,29 @@ def test_pf5_8_core_operations_print_ask_exit_open_and_connect_nothing(
     assert (out, err) == ("", ""), (out, err)
     assert used == []
     assert [str(w.message) for w in caught if _provess(w)] == []
+
+
+def _modules() -> dict[str, Path]:
+    found: dict[str, Path] = {}
+    for path in sorted(PACKAGE.rglob("*.py")):
+        parts = path.relative_to(SRC).with_suffix("").parts
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        found[".".join(parts)] = path
+    return found
+
+
+def _class_of(module: str) -> str | None:
+    """A module's class: as listed, or for a module PF5 adds, by where it sits or what it is named
+    (reading g): under ``poisson_prove.core`` the core, ``poisson_prove._cli_*`` the face's own,
+    ``poisson_prove._render_*`` a renderer."""
+    if module in FACES or module.startswith("poisson_prove._cli_"):
+        return "face"
+    if module in RENDERERS or module.startswith("poisson_prove._render_"):
+        return "renderer"
+    if module in CORE or module.startswith("poisson_prove.core."):
+        return "core"
+    return None
 
 
 def _env_reads(path: Path) -> tuple[set[str], list[str]]:

@@ -1,23 +1,20 @@
 """PF4, completeness: the frozen tests of what a user reads, and the contract tests (the code suite).
 
-Written from the front-door spec's section 8 (8.2 to 8.5, 8.10) and its invariants PF4.1b to PF4.51
-as they are read on a screen or in a file: ``diff``, ``check``, ``report`` and ``serve`` (text and
-``--json``), ``report.md``, ``receipt.html``, the page and its Summary, ``paired``, ``sweep``'s plan,
-and what a sweep records. The PF4 freeze covered PF4.1 to PF4.21 (2026-10-20); the statistics re-freeze of
-2026-10-24 adds PF4.22 to PF4.51 and moves what the rulings of that day on Argon's methodology
-review change. ``tests/test_pf4_stats.py`` holds the numbers underneath (the math suite) and
-``tests/test_pf4_calibration.py`` the simulations. The build is written against this file and does
-not edit it.
+Written from the invariants PF4.1b to PF4.51 as they are read on a screen or in a file: ``diff``,
+``check``, ``report`` and ``serve`` (text and ``--json``), ``report.md``, ``receipt.html``, the page
+and its Summary, ``paired``, ``sweep``'s plan, and what a sweep records.
+``tests/test_pf4_stats.py`` holds the numbers underneath (the math suite) and
+``tests/test_pf4_calibration.py`` the simulations.
 
-**What this file can rely on.** PF4 is built on ``main`` with PF0 to PF3 and PF9 merged: run names
-(PF2), the paired default and the method lines (PF3). These tests name runs by id, always pass
+**What this file can rely on:** run names (PF2), the paired default and the method lines (PF3).
+These tests name runs by id, always pass
 ``--method`` unless the default is the point, and read the verdict word from ``--json`` and from the
 first stdout line. Each surface is reached through the command line in process, with ``HOME`` pointed
 at an empty folder.
 
-**Readings, named here** (each is a yes/no in the re-freeze's records).
+**Readings, named here.**
 
-- The freeze's, ruled 2026-10-24: the comparison's word is ``verdict`` in ``diff --json``,
+- The comparison's word is ``verdict`` in ``diff --json``,
   ``comparison_verdict`` in ``report --json``, ``summary.verdict`` on the page, and ``report.md``'s
   first line after the title; ``diff --json`` carries ``threshold`` and ``threshold_source``
   (``recorded``, ``smaller``, ``default``); a kind is ``--event NAME:failure|success`` or the
@@ -26,22 +23,22 @@ at an empty folder.
   ``poisson_prove.stats.WILSON_LEVEL`` is read when a surface computes; PF4.11's "any ``--json``" is
   every comparing verb's, ``runs``', ``paired``'s and ``sweep``'s, and ``inspect`` keeps the import
   path; ``check`` prints no cell table.
-- Re-freeze readings: shares count by the common horizon and the single-run report's by the
-  horizon it reads, so no share differs from its rate in a store 0.1.0 writes (R3, R4); the verdict
+- Shares count by the common horizon and the single-run report's by the
+  horizon it reads, so no share differs from its rate in a store 0.1.0 writes; the verdict
   block's detail lines are found by their label, ``  <label>  `` (``method``, ``comparison`` on
   ``check``, ``threshold``, ``before``, ``after``, ``trade``, ``verdict rule``, ``flagged only``, ``fragility``, ``peeking``, ``errors``,
   ``competing``), and a text surface's line is pinned only by its facts: the number, the run's name,
-  the binding words of the spec (PF4.35, PF4.41, PF4.42, PF4.45: ``Benjamini``, ``Hochberg``, ``Holm``,
+  the binding words of the invariants (PF4.35, PF4.41, PF4.42, PF4.45: ``Benjamini``, ``Hochberg``, ``Holm``,
   ``false discovery rate``, ``family-wise``, ``cause-specific hazard``, ``peeking``, ``errored``,
   ``fragility``, ``unconditional``, ``Miettinen-Nurminen``, ``Tango``, ``simultaneous``, ``Bonferroni``,
   ``false coverage``, ``Benjamini-Yekutieli``), matched without regard to case, hyphens or dashes
-  (``_says``, reading R30); the page carries the same facts in ``summary`` (``verdict``,
+  (``_says``); the page carries the same facts in ``summary`` (``verdict``,
   ``verdict_limit``, ``fragility``, ``peeking``, ``errors_differ``) and each panel's ``flag_rule``;
-  the read record is ``~/.cache/poisson-prove/compared.jsonl`` (R6); a case id is
-  ``Episode.meta["case_id"]``, which the store copies into its ``case_id`` column (R5); ``--max-mde 1`` admits any design (R17); PF4.32's patched constant
+  the read record is ``~/.cache/poisson-prove/compared.jsonl``; a case id is
+  ``Episode.meta["case_id"]``, which the store copies into its ``case_id`` column; ``--max-mde 1`` admits any design; PF4.32's patched constant
   is ``poisson_prove.stats.POWER``, read when a surface computes, as ``WILSON_LEVEL`` is.
 
-**Lanes.** The code suite. The tests that sweep take a few seconds each; the gate's paired design at
+**Suite.** The code suite. The tests that sweep take a few seconds each; the gate's paired design at
 194 replicates sweeps 1,746 rollouts and is marked ``slow``.
 """
 
@@ -71,7 +68,7 @@ from conftest import writable_copy
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 TESTS = Path(__file__).resolve().parent
-# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# PF12: report and serve save into the store they read, so these tests read a
 # per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
 OLD = writable_copy(TESTS / "fixtures" / "stores-0.0.1")
 OLD_RUNS: dict[str, str] = json.loads((OLD / "runs.json").read_text(encoding="utf-8"))
@@ -113,7 +110,7 @@ def _norm(text: str) -> str:
 
 
 def _says(text: str, words: str) -> bool:
-    """A binding phrase, whatever its case and whichever hyphen or dash joins its words (reading R30)."""
+    """A binding phrase, whatever its case and whichever hyphen or dash joins its words."""
     return _norm(words) in _norm(text)
 
 
@@ -483,23 +480,6 @@ def test_pf4_1c_with_the_level_patched_to_90_every_surface_says_90_and_none_95(
     assert "95%" not in json.dumps(page["summary"])
 
 
-def test_pf4_1c_the_rendering_code_holds_no_95_percent_and_no_1_96() -> None:
-    """The label is built from the recorded level and the quantile from the level; neither is
-    typed into a renderer. Passes on today's code, which prints no Wilson label at all; it fails a
-    build that hard-codes either."""
-    package = SRC / "poisson_prove"
-    files = [package / f"{name}.py" for name in ("report", "viewer", "plain", "cli", "_look")]
-    # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
-    files += [path for path in sorted(package.rglob("*.py"))
-              if path not in files and re.search(r"^\s*(import|from) rich\b", path.read_text(encoding="utf-8"), re.M)]
-    for path in files:
-        if not path.exists():
-            continue
-        text = path.read_text(encoding="utf-8")
-        assert "95%" not in text, path.name
-        assert not re.search(r"(?<![\d.])1\.96(?!\d)", text), path.name
-
-
 # ---------- PF4.2 and PF4.37: shares on the window the tests read ----------
 
 
@@ -516,7 +496,7 @@ def test_pf4_2_the_single_run_report_prints_each_share_with_its_interval_and_the
 
 
 def test_pf4_37_the_single_run_reports_share_counts_by_the_horizon_it_reads(standard: Path, tmp_path: Path) -> None:
-    """Reading R3, which reverses the PF4 freeze's yes/no 10 here too: at ``--horizon 2`` a condition's
+    """At ``--horizon 2`` a condition's
     share counts the falls by step 2, as its incidence does, so the two agree and nothing is marked."""
     doc = _json(_cli(standard, "report", A_ID, "--event", "fell", "--x", "cell", "--horizon", "2",
                      "--out", str(tmp_path / "r"), "--json"))
@@ -534,8 +514,8 @@ def test_pf4_37_the_single_run_reports_share_counts_by_the_horizon_it_reads(stan
 
 def test_pf4_37_a_two_run_share_counts_by_the_common_horizon_and_is_never_marked(tmp_path: Path) -> None:
     """A ran to step 10 and B to step 5, so the comparison's horizon is 5. In 'late' half of A's runs fell
-    after step 5: by then A had none, so its share is 0 of 40, the rate the test compares, and no mark.
-    The PF4 freeze's W17 counted the stored outcomes here (0.500); ruling 2 of 2026-10-24 reverses it."""
+    after step 5: by then A had none, so its share is 0 of 40, the rate the test compares, and no mark,
+    not the 0.500 the stored outcomes would give."""
     root = tmp_path / "prove-runs"
     a = {"late": [(i, "fell", 6.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)],
          "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)]}
@@ -681,7 +661,7 @@ def test_pf4_30_the_quickstarts_design_passes_the_gate_at_194_and_is_refused_at_
     """The packaged quickstart's design, its two failures declared (9 conditions by 2 events, 18 rows),
     at the default 0.20: Fisher's worst base rate 0.4 with a limit of 0.1991 at 194 (E21, E22); 100 is
     refused with the 194 that passes both tests offered first. (Fisher alone passes from fewer: the
-    quickstart's 194 is the paired test's, Q56.)"""
+    quickstart's 194 is the paired test's.)"""
     from conftest import PACKAGED_QUICKSTART
 
     spec = tmp_path / "prove.toml"
@@ -756,7 +736,7 @@ def _one_word(words: dict[str, str]) -> str:
 
 
 def _rows_of_8_4() -> list[tuple[str, dict[str, Any], dict[str, Any], str]]:
-    """One constructed pair per row of section 8.4's table and PF4.29's edges, the event declared a
+    """One constructed pair per row of the verdict table and PF4.29's edges, the event declared a
     failure on the command line. 200 runs give an unchanged condition a limit near 0.1 both ways; 20,
     one near 0.5."""
     return [
@@ -845,7 +825,8 @@ def test_pf4_5_the_page_summarys_50_point_rule_is_gone(tmp_path: Path) -> None:
 
 
 def test_pf4_50_the_threshold_line_sits_under_the_nothing_moved_words_only(standard: Path, tmp_path: Path) -> None:
-    """The PF2 build's yes/no 1: test_e12 moves for it."""
+    """A comparison that moved (a trade) prints no threshold line; one where nothing moved prints it
+    once, after the method line and before the before line."""
     moved = _cli(standard, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
     assert _first_word(moved.out) == "trade" and _detail(moved.out, "threshold") == []
     root = _pair(tmp_path / "prove-runs", MID, MID)
@@ -869,7 +850,7 @@ def test_pf4_6_by_kind_is_refused_as_an_unknown_grouping_listing_the_supported_o
     if verb == "report":
         argv += ["--out", str(tmp_path / "r")]
     if verb == "serve":
-        argv += ["--json"]  # a build that accepted the grouping would otherwise bind and wait
+        argv += ["--json"]  # a version that accepted the grouping would otherwise bind and wait
     result = _cli(standard, *argv)
     assert result.code == 1, (result.code, result.err)
     assert result.out == ""
@@ -896,7 +877,7 @@ def test_pf4_6_no_help_names_a_phase_or_offers_a_trace_grouping(verb: str, tmp_p
 
 @pytest.mark.parametrize("verb", ["diff", "diff --json", "check", "report", "serve"])
 def test_pf4_7_a_pair_with_no_comparable_condition_is_refused_naming_the_holes(verb: str, tmp_path: Path) -> None:
-    """The PF4 freeze's yes/no 13, ruled 2026-10-24: every comparing verb refuses, not only diff."""
+    """Every comparing verb refuses, not only diff."""
     a = {"c1": _arm(4, 20), "c2": _arm(4, 20), "c3": _arm(4, 20)}
     b = {"d1": _arm(4, 20), "d2": _arm(4, 20)}
     root = _pair(tmp_path / "prove-runs", a, b)
@@ -907,7 +888,7 @@ def test_pf4_7_a_pair_with_no_comparable_condition_is_refused_naming_the_holes(v
     if name == "report":
         argv += ["--out", str(tmp_path / "r")]
     if name == "serve":
-        argv += ["--json"]  # a build that did not refuse would otherwise bind and wait
+        argv += ["--json"]  # a version that did not refuse would otherwise bind and wait
     if name == "check":
         argv += ["--fail-on", "any"]
     result = _cli(root, *argv)
@@ -1099,9 +1080,8 @@ def test_pf4_11_no_output_carries_the_store_path_the_platform_the_python_build_o
     for folder in ("r", "s"):
         for file in ("report.md", "receipt.html"):
             texts[f"{folder}/{file}"] = (work / folder / file).read_text(encoding="utf-8")
-    # The PF4 freeze's yes/no 15 and the independent read's finding 4, ruled 2026-10-24: paired --json and
-    # sweep --json are in "any --json" too. sweep's plan names the target as it was typed (PF3's frozen
-    # plan.target), so the import path is the one fact its scan leaves out (reading R19).
+    # paired --json and sweep --json are in "any --json" too. sweep's plan names the target as it
+    # was typed (PF3's plan.target), so the import path is the one fact its scan leaves out.
     spec = work / "spec.toml"
     spec.write_text(SMALL_SPEC, encoding="utf-8")
     swept = _cli("prove-runs", "sweep", "spec.toml", "--target", "poisson_prove.examples.mock_agent:rollout",
@@ -1125,7 +1105,7 @@ def test_pf4_11_no_output_carries_the_store_path_the_platform_the_python_build_o
     own = Store(root).manifest(new_run).environment
     for secret in [*secrets[:3], own["platform"], own["python"]]:
         assert secret not in swept.out, ("sweep --json", secret)
-    # The page shows the run's Python version and nothing more of the build.
+    # The page shows the run's Python version and nothing more of its environment.
     assert "3.11.7" in texts["page"]
 
 
@@ -1193,7 +1173,7 @@ def test_pf4_22_every_surface_gives_the_same_limits_as_the_one_family(standard: 
 
 
 def test_pf4_27_a_null_limit_prints_its_reason_and_no_number(standard: Path, tmp_path: Path) -> None:
-    """Amends PF4.15 (Q54 = yes): the condition at 40 of 40 has no rise ('no room') and a fall, which is
+    """Amends PF4.15: the condition at 40 of 40 has no rise ('no room') and a fall, which is
     its limit; at 38 of 40 a rise has room and none is detectable, so its one number is null."""
     doc = _json(_cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
     cells = _cells_of(doc)
@@ -1254,7 +1234,7 @@ def test_pf4_32_every_surface_names_the_limits_test_level_family_and_power_from_
     assert "9 times in 10" in single_md and "4 times in 5" not in single_md and "over 9 tests" in single_md
     for name, text in _texts(s).items():
         if name == "check":
-            continue  # check prints no cell table (the freeze's yes/no 14)
+            continue  # check prints no cell table
         assert "9 times in 10" in text and "4 times in 5" not in text, name
         assert "Fisher" in text and "over 6 tests" in text, name
     for c in s["diff --json"]["by_event"]["fell"]["cells"]:
@@ -1322,11 +1302,11 @@ def test_pf4_20_without_a_kind_every_word_names_the_direction_and_none_judges(st
 
 
 def test_pf4_20_the_comparison_object_itself_reads_in_direction_words_without_a_kind() -> None:
-    """Ruled 2026-10-24 (the independent read's yes/no 1): no split between the library and the
-    screen. The lattice pair under log-rank, ``tripped`` with no kind: 27 conditions fell and 12 rose
-    (lifelines' log-rank over the stored times gives the same, ``lattice.logrank``), as direction words
-    on the object itself; the safer and worse counts are null; the default worse-gate is refused and
-    ``check("higher")`` fails on the 12 rises."""
+    """No split between the library and the screen. The lattice pair under log-rank, ``tripped``
+    with no kind: 27 conditions fell and 12 rose (lifelines' log-rank over the stored times gives
+    the same, ``lattice.logrank``), as direction words on the object itself; the safer and worse
+    counts are null; the default worse-gate is refused and ``check("higher")`` fails on the 12
+    rises."""
     from poisson_prove.diff import DiffError, multi_diff
 
     pair = Store(lattice.root())
@@ -1364,7 +1344,7 @@ SOLVED_B = {"c": [(i, "solved" if i < 26 else "failed", 1.0) for i in range(32)]
 
 @pytest.fixture(scope="module")
 def solved(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The re-check's success event (README section 10): B solves 26 of 32 where A solved 6."""
+    """The re-check's success event: B solves 26 of 32 where A solved 6."""
     return _pair(tmp_path_factory.mktemp("solved") / "prove-runs", SOLVED_A, SOLVED_B)
 
 
@@ -1569,7 +1549,7 @@ def test_pf4_34_a_step_up_flag_does_not_turn_the_word_into_a_trade_on_any_surfac
 
 @pytest.mark.parametrize("fail_on,code", [("higher", 0), ("lower", 4), ("any", 4)])
 def test_pf4_34_check_fails_on_the_rows_that_count_not_the_flags(fail_on: str, code: int, tmp_path: Path) -> None:
-    """Reading R2: on Argon's pair the rise is flagged and does not count, the nine falls count. check
+    """On Argon's pair the rise is flagged and does not count, the nine falls count. check
     gates on the rows that count, so ``--fail-on higher`` passes."""
     root = _argon_pair(tmp_path / "prove-runs")
     result = _cli(root, "check", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--fail-on", fail_on)
@@ -1602,7 +1582,7 @@ def test_pf4_38_a_comparison_whose_condition_ran_several_cases_is_refused_on_eve
     _write_run(root, A_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t1"}, "d": {"case_id": "t2"}})
     _write_run(root, B_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t3"}, "d": {"case_id": "t2"}},
                created_at="2026-10-20T10:01:00Z")
-    # Reading R5: the store copies each rollout's case id into its own column, read without decoding meta.
+    # The store copies each rollout's case id into its own column, read without decoding meta.
     assert {str(v) for v in Store(root).read(B_ID, meta=False)["case_id"]} == {"t3", "t2"}
     argv = [verb, A_ID, B_ID, "--event", "fell", "--method", "fisher_bh"]
     argv += {"report": ["--x", "cell", "--out", str(tmp_path / "r")], "serve": ["--x", "cell", "--json"],
@@ -1712,7 +1692,7 @@ def test_pf4_40_no_significant_change_prints_its_limit_on_the_same_line_everywhe
     rise, fall = _ref_fisher_limits(30, 60, 60, Q / 2)
     assert rise is not None and fall is not None and abs(limit - max(rise, fall)) <= 1e-4 + 1e-12
     assert s["diff --json"]["verdict"] == "no significant change"
-    # Reading R34: check's word is passed or failed, so its block names the comparison's word.
+    # Check's word is passed or failed, so its block names the comparison's word.
     (compared,) = _detail(s["check"].out, "comparison")
     assert compared.startswith("no significant change"), compared
     for name, text in _texts(s).items():

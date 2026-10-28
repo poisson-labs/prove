@@ -1,19 +1,19 @@
-"""Update, 2026-09-23: a replicate set with an errored arm past the declared pair keeps its pair.
+"""A replicate set with an errored arm past the declared pair keeps its pair.
 
-Read together, PR61 and PR63 of "Prove -- Spec PR Paired Replay" say two different things about
+Read together, PR61 and PR63 say two different things about
 one broken replicate set. PR63 is the k-metrics' rule: a set is eligible for ``agree@j`` and
 ``MS@j`` only when all ``k`` of its calls returned, and a set with fewer is excluded whole,
 never analysed at the ``j`` its calls reached. PR61 is the pair analysis' rule: the declared
-pair, arms ``a`` and ``b``, carries the whole of section 4.C, and arms ``3..k`` move no byte of
+pair, arms ``a`` and ``b``, carries the whole of the pair analysis, and arms ``3..k`` move no byte of
 it. So a set whose error sits in arm ``3..k`` is out of the k-metrics and its declared pair is
 in the 2x2, because both of the pair's own arms returned.
 
-The build before this update dropped such a set from both: one item whose fifth call was an
+Dropping such a set from both is the failure these tests catch: one item whose fifth call was an
 HTTP 529 while its declared pair returned 0.62 and 0.64, both acting under ``p > c`` at a cut of
-0.60, left the 2x2 one pair short. The store below is that set's shape in miniature: six items in one sweep, ``k = 5``, a ``gt`` cut at 0.60, one set with arm 5 errored
+0.60, would leave the 2x2 one pair short. The store below is that set's shape in miniature: six items in one sweep, ``k = 5``, a ``gt`` cut at 0.60, one set with arm 5 errored
 and its pair at 0.62 and 0.64.
 
-The store helpers are the frozen PR-3 replicates tests', imported and not copied, so this file
+The store helpers are ``tests/test_pr3_replicates.py``'s, imported and not copied, so this file
 reads stored rows exactly as those tests do. Every test name starts ``test_prN_``.
 """
 

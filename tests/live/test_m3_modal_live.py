@@ -1,6 +1,6 @@
 """M3 I19: live parity between ``run_modal`` and ``run_local``.
 
-Opt-in only. Runs when ``PROOFLOAD_MODAL_LIVE=1`` and Modal credentials are present
+Opt-in only. Runs when ``POISSON_PROVE_MODAL_LIVE=1`` and Modal credentials are present
 (``MODAL_TOKEN_ID`` in the environment or ``~/.modal.toml``); skipped otherwise, never failed
 for missing credentials or a missing ``modal`` package. A 2-cell x 3-replicate sweep of a
 tiny CPU rollout, so container time stays well under a minute once the image is built.
@@ -9,9 +9,9 @@ The rollout is the ``proofload_live_rollout`` fixture package next to this file;
 this directory on ``sys.path`` (no ``__init__.py`` here), so the package is importable locally
 and shippable through ``ImageSpec.local_packages``.
 
-L15 (the S19 modal launch amendment) lives here too, behind a third gate:
-``PROOFLOAD_MODAL_LIVE_SECRET=1``, set by whoever created the Modal secret
-``proofload-live-test`` with ``PROOFLOAD_LIVE_SECRET=present``. No session creates that
+L15 (a named Modal secret mounted on the function) lives here too, behind a third gate:
+``POISSON_PROVE_MODAL_LIVE_SECRET=1``, set by whoever created the Modal secret
+``proofload-live-test`` with ``PROOFLOAD_LIVE_SECRET=present``. No test creates that
 secret. The rollout is ``rollout_secret`` in the same fixture package.
 """
 
@@ -33,6 +33,7 @@ SECRET_NAME = "proofload-live-test"
 SECRET_SALT = "live-secret-salt"
 
 pytestmark = [
+    pytest.mark.backend,
     pytest.mark.skipif(not LIVE, reason="set POISSON_PROVE_MODAL_LIVE=1 to run the live Modal test"),
     pytest.mark.skipif(not HAS_CREDENTIALS, reason="no Modal credentials (MODAL_TOKEN_ID or ~/.modal.toml)"),
 ]

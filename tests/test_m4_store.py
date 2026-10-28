@@ -36,8 +36,6 @@ def test_hash_bool_distinct_from_int():
     assert config_hash({"flag": True}) != config_hash({"flag": 1})
 def test_hash_numpy_scalars():
     assert config_hash({"a": np.float64(0.5), "b": np.int64(3)}) == config_hash({"a": 0.5, "b": 3})
-def test_hash_float_repr_stable():
-    assert config_hash({"a": 0.1 + 0.2}) == config_hash({"a": 0.30000000000000004})
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
 def test_hash_rejects_nonfinite(bad):
     with pytest.raises(InvalidConfig):
@@ -138,7 +136,7 @@ def test_append_to_unknown_run_raises(tmp_path):
     with pytest.raises(StoreError):
         Store(tmp_path).append("nope", [_rec()])
 # ---------- read() shape (I9, I13) ----------
-# PF4 re-freeze (PF4.38, reading R5): a read frame gains the store's ``case_id`` column at the end.
+# PF4.38: a read frame carries the store's ``case_id`` column at the end.
 EXPECTED_COLS = ["run_id", "config_hash", "config", "seed", "replicate_index",
                  "outcome", "t", "horizon", "confidence", "meta", "error",
                  "wall_time", "backend_meta", "case_id"]

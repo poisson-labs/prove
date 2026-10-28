@@ -1,15 +1,14 @@
 """M12 -- the episode stamper: the frozen tests for T31-T34.
 
-Written from the invariants added to "Proofload -- Spec M12 Trace" section 4 after the
-2026-09-04 OTel spike, which found that a per-episode *resource* attribute cannot be varied
-inside one process: ``Resource.attributes`` is immutable, ``TracerProvider.resource`` has no
-setter, and a second ``set_tracer_provider()`` is refused. Proofload therefore stamps
-``proofload.run_id`` and ``proofload.episode`` as *span* attributes, which land in the same
+A per-episode *resource* attribute cannot be varied inside one process (measured on the
+OpenTelemetry SDK): ``Resource.attributes`` is immutable, ``TracerProvider.resource`` has no
+setter, and a second ``set_tracer_provider()`` is refused. Prove therefore stamps
+``poisson_prove.run_id`` and ``poisson_prove.episode`` as *span* attributes, which land in the same
 place once ``from_otel`` merges resource, scope and span attributes into ``attrs``.
 
-Every test imports ``proofload.otel`` inside its own body, the way the M12 frozen tests do, so the
-file collects while the module does not exist. The stamper lives behind the ``agent`` extra;
-the whole file skips when the SDK is absent so a core-only install still runs green.
+Every test imports ``poisson_prove.otel`` inside its own body, the way the M12 frozen tests do, so a
+broken module fails the tests that use it and not the file's collection. The stamper lives behind the ``agent`` extra;
+the whole file skips when the SDK is absent so a core-only install still passes.
 """
 
 from __future__ import annotations
@@ -145,7 +144,7 @@ def test_t32_both_keys_reach_attrs_through_from_otel() -> None:
     for span in trace.spans:
         assert span.attrs[RUN_ID_KEY] == "r-2026-09-04", span.name
         assert span.attrs[EPISODE_KEY] == "cfg-7:seed-3", span.name
-    # The stamp does not disturb the rest of the section 3 mapping.
+    # The stamp does not disturb the rest of the ``from_otel`` mapping.
     kinds = {s.kind for s in trace.spans}
     assert kinds == {"agent", "llm"}
     assert len(trace.roots()) == 1

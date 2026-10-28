@@ -121,7 +121,7 @@ extra package: it hooks the `httpx` client the target's model client uses.
 
 | key | type | default | what it is |
 |---|---|---|---|
-| `fault` | a fault's name | `"none"` | which fault to inject; an unknown name stops the sweep before its first episode |
+| `fault` | a fault's name | `"none"` | which fault to inject; an unknown name is refused when the sweep is planned |
 | `rate` | number from 0 to 1 | `1.0` | the share of eligible calls that get the fault |
 | `steps` | list of step names | every step | inject only inside these steps |
 

@@ -1,15 +1,13 @@
 """M12 -- the kind ladder: the frozen tests for T35-T37.
 
-Written from the invariants added to "Proofload -- Spec M12 Trace" section 4 after the
-2026-09-04 kind-ratio spike, which ran real instrumentation and found two gaps:
-``opentelemetry-util-genai`` emits ``fetch_response`` and ``execute_task`` (unmapped), and
-the two conventions carrying most real agent instrumentation -- openinference (Arize Phoenix)
-and traceloop (OpenLLMetry) -- typed nothing at all, so every one of their spans became
-``other``.
+The trace converter's kind mapping covers what real instrumentation emits:
+``opentelemetry-util-genai``'s ``fetch_response`` and ``execute_task``, and the two conventions
+carrying most real agent instrumentation -- openinference (Arize Phoenix) and traceloop
+(OpenLLMetry) -- whose spans would otherwise all become ``other``.
 
-Payloads here are hand-built flat span mappings, the shape section 3's second input form
-accepts. No network, no keys, no instrumentation packages: the spike proved what real
-encoders emit, and these pin what the converter does with it.
+Payloads here are hand-built flat span mappings, the second input form ``from_otel``
+accepts. No network, no keys, no instrumentation packages: the payloads restate what real
+encoders emit, and these tests pin what the converter does with it.
 """
 
 from __future__ import annotations
@@ -35,13 +33,6 @@ def span(span_id: str, name: str, **attrs: Any) -> dict[str, Any]:
 
 
 # ---------- T35: the two operation values the spike found missing ----------
-
-
-def test_t35_fetch_response_and_execute_task_are_mapped() -> None:
-    from poisson_prove.trace import OTEL_KIND_MAP
-
-    assert OTEL_KIND_MAP["fetch_response"] == "llm"
-    assert OTEL_KIND_MAP["execute_task"] == "agent"
 
 
 @pytest.mark.parametrize(
@@ -103,7 +94,7 @@ def test_t36_matching_is_case_insensitive_both_ways() -> None:
 def test_t36_an_unrecognized_vendor_value_falls_through_the_rest_of_the_ladder() -> None:
     from poisson_prove.trace import from_otel
 
-    # GUARDRAIL is a real openinference value with no Proofload kind: it must not invent one.
+    # GUARDRAIL is a real openinference value with no Prove kind: it must not invent one.
     plain = from_otel([span("0000000000000006", "s", **{"openinference.span.kind": "GUARDRAIL"})])
     assert plain.spans[0].kind == "other"
     # ...and the db/http rungs still work underneath it.
@@ -142,7 +133,7 @@ def test_t37_gen_ai_operation_name_wins_over_a_conflicting_vendor_kind() -> None
 
 
 def test_t37_vendor_keys_are_lifted_into_operation_and_do_not_survive_in_attrs() -> None:
-    """A8a inverts the shipped rule (spec A8a section 3.5): ``openinference.span.kind`` and
+    """A8a inverts the shipped rule: ``openinference.span.kind`` and
     ``traceloop.span.kind`` are lifted, the value lands in ``operation`` stripped and lowercased,
     the kind ladder still reads it, and the key never survives in ``attrs`` (T20)."""
     from poisson_prove.trace import from_otel

@@ -374,9 +374,11 @@ def _add_global_options(p: argparse.ArgumentParser, *, top: bool) -> None:
     )
 
 
-def _add_json_option(p: argparse.ArgumentParser, what: str) -> None:
+def _add_json_option(p: argparse.ArgumentParser, what: str, after: str = "") -> None:
     p.add_argument(
-        "--json", action="store_true", help=f"print {what} as one JSON document instead of text"
+        "--json",
+        action="store_true",
+        help=f"print {what} as one JSON document instead of text{after}",
     )
 
 
@@ -409,7 +411,10 @@ def _build_parser(io: _IO) -> _Parser:
 
     init_p = sub.add_parser(
         "init",
-        help=f"write {_DEFAULT_SPEC}, a sweep spec to edit, or the keyless example",
+        help=(
+            f"write {_DEFAULT_SPEC}, a sweep spec to edit, or the keyless example; with --agent, "
+            "your coding agent's setup"
+        ),
         description=(
             f"Write a sweep spec, ./{_DEFAULT_SPEC} unless --out names another file, and nothing\n"
             "else: a commented template to edit, or with --example the keyless quickstart,\n"
@@ -602,7 +607,11 @@ def _build_parser(io: _IO) -> _Parser:
         "runs", nargs="*", metavar="RUN",
         help="the baseline and the candidate (default: previous and latest)",
     )
-    _add_event_argument(diff_p, "default: inferred from the outcomes present")
+    _add_event_argument(
+        diff_p,
+        "default: the failures and successes the runs declare, else every outcome present "
+        "but the most frequent",
+    )
     _add_method_arguments(diff_p, defaults=True)
     diff_p.add_argument(
         "--methods",
@@ -637,7 +646,11 @@ def _build_parser(io: _IO) -> _Parser:
         "runs", nargs="*", metavar="RUN",
         help="A B for a comparison, one RUN for a survival report (default: previous and latest)",
     )
-    _add_event_argument(report_p, "default: inferred from the outcomes present")
+    _add_event_argument(
+        report_p,
+        "default: the failures and successes the runs declare, else every outcome present "
+        "but the most frequent",
+    )
     _add_method_arguments(report_p, defaults=False)
     report_p.add_argument(
         "--methods",
@@ -737,7 +750,7 @@ def _build_parser(io: _IO) -> _Parser:
     paired_p.add_argument(
         "--force", action="store_true", help="write into a folder that is not empty"
     )
-    _add_json_option(paired_p, "the files' contents, writing nothing")
+    _add_json_option(paired_p, "the files' contents", ", writing nothing")
     _add_global_options(paired_p, top=False)
 
     check_p = sub.add_parser(
@@ -800,8 +813,9 @@ def _build_parser(io: _IO) -> _Parser:
     )
     _add_event_argument(
         serve_p,
-        "required: a picture never infers its event; omitted: lists the axes and events the "
-        "runs carry; no default",
+        "required: for runs that declare no kinds, since a picture never infers its event, "
+        "and omitted lists the axes and events the runs carry; default: the failures and "
+        "successes the runs declare",
         shown=True,
     )
     _add_method_arguments(serve_p, defaults=True)
@@ -1457,9 +1471,10 @@ def _method_of(result: core.Comparison) -> str:
 
 def _method_table(results: Sequence[Any]) -> str:
     # The two count columns are an event's safer and worse with a kind, and its falls and rises
-    # without one; the header keeps its original names, which its frozen test reads.
+    # (lower, higher) without one, named so in the header.
     known = all(m.all_kinds_known() for m in results)
-    header = ("method", "event", "pairing", "safer", "worse", "unchanged", "max_mde")
+    down, up = ("safer", "worse") if known else ("lower", "higher")
+    header = ("method", "event", "pairing", down, up, "unchanged", "max_mde")
     lines = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
     for m in results:
         pairing = "paired" if m.method in PAIRED_METHODS else "unpaired"
@@ -2156,11 +2171,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
         return 0
     _wrote(io, out_dir, written)
     io.line()
-    if detail.inferred:
-        io.line(
-            f"inferred: no event was given, so the event set is {', '.join(events)}; "
-            f"the non-event is {detail.non_event}, the most frequent outcome"
-        )
+    if detail.inference is not None:
+        io.line(detail.inference)
     io.line(
         f'"{detail.run_name}": survival report over {", ".join(events)} at horizon '
         f"{_look.fmt_num(report.provenance['horizon'])}"

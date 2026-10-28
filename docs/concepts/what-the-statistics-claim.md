@@ -12,7 +12,8 @@ Prove compares a condition in one run with the same condition in the other, neve
 conditions.
 
 **An event** is an outcome being counted, such as `timeout`. A comparison reads the events you
-name with `--event`, or every outcome but the most frequent one. Whether a rise of an event is
+name with `--event`, or else the failures and successes the runs declare, or, for runs that
+declare none, every outcome but the most frequent one. Whether a rise of an event is
 bad or good comes from the runs' `[declare]` table: a failure that rises is worse, a success
 that rises is safer. An event with no declared kind is only said to go up or down.
 

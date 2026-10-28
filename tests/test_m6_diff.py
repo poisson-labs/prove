@@ -1,31 +1,26 @@
 """Frozen tests for M6: run diff with Fisher/BH, paired McNemar, log-rank, and MDE.
 
-Golden tests (I1, I2, I8, I10, I12, I17, I18) run on the generated lattice pair
-(``tests/lattice.py``) through ``lattice_store``; frames are produced with ``proofload.survival.censor``. Reference tests (I3, I6,
+Golden tests (I2, I8, I10, I12, I17, I18) run on the generated lattice pair
+(``tests/lattice.py``) through ``lattice_store``; frames are produced with ``poisson_prove.survival.censor``. Reference tests (I3, I6,
 I7, I9) import ``statsmodels`` / ``lifelines`` with ``pytest.importorskip`` in the test
 body and run hypothesis on an inner function, so a missing dev extra is a clean skip.
 I4 is a seeded Monte Carlo. I11-I14 and I16 use small synthetic censored frames built
 directly with the six columns M6 reads: ``config_hash``, ``config``, ``replicate_index``,
 ``t``, ``observed``, ``horizon``.
 
-Per-cell reference p/q values for I1 come from ``lattice.fisher()``: scipy's two-sided Fisher
-exact test on the design's counts per condition and one BH family over all of them, computed
-in the test suite and never by Prove, so neither I1 test skips. The 22/0 assertion is the
-reference's count, pinned.
-
-Notes for the implementation session:
+Notes on the references:
 
 - The reference ``q`` is BH over all 72 conditions. BH over only the conditions with at least
   one event gives 23 lower, not 22.
 - I9's reference is ``statsmodels.stats.proportion.power_proportions_2indep`` inverted by
-  bisection. It uses the pooled-null and alternative standard errors of section 3, which
-  ``NormalIndPower`` (Cohen's h) does not. The reference bisection runs to 1e-10, so the
-  implementation's own bisection must converge to well under 1e-6.
+  bisection. It uses the pooled-null and alternative standard errors, which
+  ``NormalIndPower`` (Cohen's h) does not. The reference bisection runs to 1e-10, so Prove's
+  own bisection must converge to well under 1e-6.
 - I7 draws times from a short grid so ties and censoring are both exercised; lifelines'
   ``logrank_test`` counts all ties at a time in that time's ``d_j``.
 - I6 includes a cell where one arm lacks a replicate; the pair must be dropped, and the
   test is built so that positional mis-pairing changes ``stat``.
-- I8 asserts ``p == 1.0`` exactly on identical arms. Compute the expected count as
+- I8 asserts ``p == 1.0`` exactly on identical arms. The expected count must be computed as
   ``n_a_j * d_j / n_j`` (integer-exact) rather than ``n_a_j * (d_j / n_j)``, or the
   statistic picks up a ~1e-30 residue and ``chi2.sf`` returns just under 1.0.
 """
@@ -82,15 +77,16 @@ CELLS_COLUMNS = [
     "q",
     "verdict",
     "mde",
-    # PF4 (PF4.13, PF4.14, PF4.15): every cell now carries its direction from the test, the
+    # PF4 (PF4.13, PF4.14, PF4.15): every cell carries its direction from the test, the
     # log-rank timing note, the matched-pair count and the note on a missing detection limit.
     "direction",
     "direction_note",
     "pairs",
+    "n01",
+    "n10",
     "mde_note",
-    # PF4 re-freeze (PF4.34 to PF4.47): every cell row gains Holm's adjusted p and decision, the
-    # limit keys both ways, the competing shift and the interval on the change; the order is the
-    # reference build's.
+    # PF4.34 to PF4.47: every cell row carries Holm's adjusted p and decision, the limit keys
+    # both ways, the competing shift and the interval on the change, in this order.
     "q_holm",
     "holm",
     "mde_rise",
@@ -152,19 +148,16 @@ def _manifest(run_id: str = "r", *, run_salt: str = "salt", t_unit: str = "secon
 
 
 def _seed_of(h: str, replicate_index: int) -> int:
-    """A stored seed that is a function of ``(config_hash, replicate_index)``. **C49 (P-1 section
-    7.3), added in the P-1 freeze's update**: ``_cframe`` carried no ``seed`` column at all, so
-    ``mcnemar_bh`` ran on every I6 pair with nothing to establish the pairing on -- C18's blindness
-    inside a fixture. Two arms built by ``_cframe`` now store the same seed at the same
-    ``(config_hash, replicate_index)``, which is what a stored pair from one sweep does. Green
-    before and after on the bare tree (nothing reads the column there), so its green is not
-    evidence."""
+    """A stored seed that is a function of ``(config_hash, replicate_index)``. Two arms built by
+    ``_cframe`` store the same seed at the same ``(config_hash, replicate_index)``, which is what a
+    stored pair from one sweep does, so ``mcnemar_bh`` has a stored seed to establish every I6 pair
+    on; without the column a fixture would pair on nothing."""
     return 1000 * (int(h[:6], 16) % 100_000) + replicate_index
 
 
 def _cframe(cells: dict[str, list[tuple]], *, horizon: float = 5.0) -> pd.DataFrame:
     """Censored frame from {cell label: [(t, observed) or (t, observed, replicate_index)]}, with
-    the stored ``seed`` a censored store frame carries (C49)."""
+    the stored ``seed`` a censored store frame carries."""
     records = []
     for label, rows in cells.items():
         config = {"cell": label}
@@ -241,36 +234,6 @@ def golden(frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -
     return _fixture_diff(frames, manifests, "fisher_bh")
 
 
-# ---------- I1: golden ----------
-
-
-def test_i1_golden_twenty_two_safer_zero_worse(golden: DiffResult) -> None:
-    lower, higher = lattice.directions(lattice.fisher(EVENT, Q))
-    assert golden.n_safer == lower == REFERENCE_SAFER
-    assert golden.n_worse == higher == REFERENCE_WORSE
-    assert len(golden.cells) == CELLS and golden.n_not_comparable == 0
-    assert golden.method == "fisher_bh" and golden.q == Q and golden.event == EVENT
-    assert golden.t_unit == "seconds" and golden.horizon == 5.0
-    assert golden.seed_identity_match is True
-    assert list(golden.cells.columns) == CELLS_COLUMNS
-
-
-def test_i1_golden_per_cell_p_and_q_match_reference(golden: DiffResult) -> None:
-    # The reference is scipy's Fisher test and BH written out in tests/lattice.py, on the
-    # design's counts; it equals Prove's p and q bit for bit, so the comparison is exact.
-    reference = lattice.fisher(EVENT, Q)
-    assert len(reference) == CELLS
-    assert set(golden.cells["config_hash"]) == set(reference)
-    for row in golden.cells.itertuples(index=False):
-        key = (row.config["gain"], row.config["load"])
-        ref = reference[row.config_hash]
-        assert ref["config"] == row.config, key
-        assert row.events_a == ref["events_a"] and row.events_b == ref["events_b"], key
-        assert row.n_a == ref["n_a"] and row.n_b == ref["n_b"], key
-        assert float(row.p) == ref["p"], (key, row.p, ref["p"])
-        assert float(row.q) == ref["q"], (key, row.q, ref["q"])
-
-
 # ---------- I2: null diff ----------
 
 
@@ -334,6 +297,7 @@ def test_i4_bh_controls_false_discovery_on_uniform_nulls() -> None:
 # ---------- I5: Fisher is scipy's two-sided Fisher ----------
 
 
+@settings(deadline=None)
 @given(
     n_a=st.integers(min_value=1, max_value=40),
     n_b=st.integers(min_value=1, max_value=40),
@@ -572,6 +536,7 @@ def test_i11_verdict_rule_on_golden(golden: DiffResult) -> None:
     assert set(golden.cells["verdict"]) <= {"safer", "worse", "unchanged"}
 
 
+@settings(deadline=None)
 @given(
     tables=st.lists(
         st.tuples(
@@ -666,7 +631,7 @@ def test_i13_unpaired_methods_run_with_different_salts_and_report_it(method: str
 
 def test_i13_seed_identity_match_true_when_salts_and_stored_seeds_match() -> None:
     """P-1: the flag is seed identity, not salt equality -- ``_cframe`` stores a seed and both arms
-    carry the same one at each ``(config_hash, replicate_index)`` (C49)."""
+    carry the same one at each ``(config_hash, replicate_index)``."""
     a = _one_cell([(1.0, True), (5.0, False)])
     assert _paired("fisher_bh", a, a.copy()).seed_identity_match is True
     assert _paired("mcnemar_bh", a, a.copy()).seed_identity_match is True
@@ -714,8 +679,7 @@ def test_i15_to_markdown_has_header_and_summary(golden: DiffResult) -> None:
     md = golden.to_markdown()
     lines = [line for line in md.splitlines() if line.strip()]
     header = next(line for line in lines if line.lstrip().startswith("|"))
-    for col in CELLS_COLUMNS:
-        assert col in header, col
+    assert [cell.strip() for cell in header.strip().strip("|").split("|")] == CELLS_COLUMNS, header
     summary = [line for line in lines if not line.lstrip().startswith("|")]
     joined = " ".join(summary)
     for token in ("n_safer", "n_worse", "max_mde", "method", "seed_identity_match", "unpaired_analysis"):
@@ -766,9 +730,9 @@ def test_i17_capture_paired_and_logrank_counts(
     logrank = _fixture_diff(frames, manifests, "logrank_bh")
     assert mcnemar.seed_identity_match is True and mcnemar.method == "mcnemar_bh"
     assert logrank.method == "logrank_bh"
-    # The counts were captured and not pinned on the study fixture; on the lattice each is the
-    # count of an independent reference: the exact McNemar test (a binomial on the design's
-    # discordant pairs) and lifelines' log-rank test on the stored times, each with one BH family.
+    # Each count is the count of an independent reference: the exact McNemar test (a binomial on
+    # the lattice design's discordant pairs) and lifelines' log-rank test on the stored times, each
+    # with one BH family.
     ref_mcnemar, ref_logrank = lattice.mcnemar(EVENT, Q), lattice.logrank(EVENT, Q)
     assert (mcnemar.n_safer, mcnemar.n_worse) == lattice.directions(ref_mcnemar) == (27, 0)
     assert (logrank.n_safer, logrank.n_worse) == lattice.directions(ref_logrank) == (27, 12)

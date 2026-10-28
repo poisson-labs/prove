@@ -6,7 +6,7 @@ State folder (``BU_FAKE_BURLA_STATE``), written by the test before a run:
 - ``script.json``: ``{"version": ..., "watch": [...], "attempts": [{...}, ...], "default": {...}}``.
   Call attempt ``n`` (counted across every launcher that shares the folder) follows
   ``attempts[n]`` when there is one, else ``default``. ``watch`` names the top-level packages
-  whose modules must be absent from the launcher (``proofload`` and the bundled packages).
+  whose modules must be absent from the launcher (``poisson_prove`` and the bundled packages).
 - ``workers.json``: the pool, ``[{"socket": path, "pid": pid}, ...]``, written by the fixture
   that started the workers.
 
@@ -16,7 +16,7 @@ Records, appended by the fake, one JSON object per line:
   ends, however it ends.
 - ``served.jsonl``: one line per input a worker served, written by the worker itself.
 
-The script's keys, each a fault the spec names (section 4.10):
+The script's keys, each a fault the Burla backend must survive:
 ``busy`` (AllNodesBusy at the first iteration), ``refuse`` (a named exception at the first
 iteration) or ``refuse_after`` (the same after that many results), ``shuffle`` (a seed),
 ``duplicate`` and ``withhold`` (input indices), ``exceptions`` (``[{"index", "with_index"}]``),

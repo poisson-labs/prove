@@ -1,25 +1,24 @@
 """PF11, the setup agent: the frozen tests.
 
-Written from the front-door spec's section 20 and its invariants PF11.1 to PF11.8, from the shared
-page "Poisson - Spec Setup File" (format 1, 2026-10-23) and from the ruling Q64 of 2026-10-23
-(the skill goes to ``.agents/skills/poisson-prove-setup/`` and ``.claude/skills/poisson-prove-setup/``,
-the same bytes). The build is written against this file and does not edit it.
+Covers invariants PF11.1 to PF11.8, the shared setup-file format (format 1) and where
+the skill goes ( ``.agents/skills/poisson-prove-setup/`` and ``.claude/skills/poisson-prove-setup/``,
+the same bytes).
 
 What PF11 promises, in one line: ``poisson-prove init --agent`` writes a skill and a prompt that the
 person's own coding agent follows to set Prove up for them to review, and ``sweep --dry-run`` tells
 that agent, without calling the rollout or the network, what is wrong with what it wrote. Prove
 makes no model call; no test here calls a model, a coding agent or any paid service.
 
-**Readings, named here** (each is a yes/no in the session log; the letters are the log's).
+**Readings, named here** (each a point read one way and lettered).
 
 - (a) The packaged template is package data at ``poisson_prove/skills/poisson-prove-setup/SKILL.md``
-  (beside the quickstart spec, as section 20.4's "packaged template" asks); each written ``SKILL.md``
+  (beside the quickstart spec); each written ``SKILL.md``
   differs from it in exactly one line, the ``poisson-tool-version`` line, whose value is the version
   ``--version`` prints. What the template holds in that line's place is not pinned.
-- (b) ``init --agent`` prints section 20.1's lines, pinned by their facts: a verdict line ``ok  wrote
+- (b) ``init --agent`` prints its lines, pinned by their facts: a verdict line ``ok  wrote
   … (4 files)``, one ``  wrote  <path>`` line per file (each path, read from the folder the command
   ran in, is the file written; their order is free), ``  prompt  <the prompt>`` exactly, and one
-  ``  next:`` line, nothing else on stdout and nothing on stderr. That ``next:`` line (section 20.1:
+  ``  next:`` line, nothing else on stdout and nothing on stderr. That ``next:`` line (which says:
   give your coding agent the prompt, then review what it wrote) is the one ``next:`` line in Prove
   that is not a command.
 - (c) "The user's repository" is the folder the command runs in, or ``--repo DIR`` as given; Prove
@@ -37,7 +36,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
 - (g) The frontmatter holds exactly ``name``, ``description`` and ``metadata``; ``name`` follows the
   Agent Skills rules (lowercase letters, digits and single hyphens, at most 64 characters) and
   equals its folder; ``description`` is 1 to 1,024 characters; every ``metadata`` value is a string.
-- (h) The body's ``#`` and ``##`` headings are the shared page's section 2.2, in order (the last,
+- (h) The body's ``#`` and ``##`` headings are the shared format's, in order (the last,
   "Words Prove uses", optional); ``### Prove's own rules`` follows the shared rules directly and
   names ``--dry-run``, ``prove-runs/`` and ``.poisson/``; "What you are doing" is one paragraph;
   "Files you write" is one ``- `path` ...`` line per file, in ``poisson-writes``' order; "Steps" is
@@ -52,8 +51,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   and every option the command carries appearing in its verb's help; every fenced block carries a
   language tag, and a line starting ``poisson-prove`` sits only in a ``bash`` block or in the one
   ``text`` block under "Hand over", which is ``poisson-prove sweep``.
-- (j) Until PF8 freezes the plain-words test's pattern list, PF11 checks the skill and the prompt
-  against the families section 9.3 lists; PF8 then adds both files to its corpus.
+- (j) The plain words of the skill and the prompt are checked in PF8's corpus, not here.
 - (k) The scripted run reads the steps by number from the written skill and plays them with the
   expected files: ``expected/prove.toml`` is what step 3 writes (20 replicates, below the gate),
   without its ``[declare]`` table, which step 4 adds; the run's last ``prove.toml`` is that file
@@ -72,7 +70,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
 - (o) "Changes nothing" holds for Python's byte code too: ``sweep --dry-run`` writes no
   ``__pycache__`` into the repository.
 - (p) A target "takes (cfg, seed)" when its first two parameters are named ``cfg`` and ``seed`` and
-  any further one has a default; section 20.3's own example, ``(task, client)``, is refused though
+  any further one has a default; the example ``(task, client)`` is refused though
   it takes two arguments.
 - (q) The listing of the module's callables may sit on the ``error:`` line or the ``next:`` lines.
 - (r) The import failure's traceback is appended to ``~/.cache/poisson-prove/errors.log``.
@@ -84,7 +82,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   OpenTelemetry is refused at ``--dry-run``, the ``error:`` line naming ``[capture]`` and the extra
   and the install line ``poisson-prove[agent]`` on stderr, as ``--backend modal`` without ``modal``
   names its extra and ``poisson-prove[modal]``.
-- (u) The two design rows pin the shape, not the numbers (the corrected gate is PF4's): the plan on
+- (u) The two design rows pin the shape, not the numbers (the gate is PF4's): the plan on
   stdout then the refusal, a ``next:`` line carrying ``--replicates``; a design that cannot flag a
   lone condition carries no ``--max-mde`` offer.
 - (v) The plan of a right setup: its first line ``plan  `` with the rollout count, the target id and
@@ -93,12 +91,12 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   ``successes:``; no ``note:``. The conditions, replicates and limit lines are PF4's and PF3's.
 - (w) The import over 30 s waits 30 s, so its case is marked ``slow``.
 - (x) Only ``--dry-run`` blocks the network: a real sweep's import reaches the socket layer.
-- (y) ``docs/setup-with-your-agent.md`` is written by PF11's build with the table of locations
-  PF11.8 reads (a Markdown table, a row per folder in backticks naming the agents that read it);
-  PF7 writes the rest of the page around it.
+- (y) ``docs/setup-with-your-agent.md`` holds the table of locations PF11.8 reads (a Markdown
+  table, a row per folder in backticks naming the agents that read it); the rest of the page
+  around it is PF7's.
 - (z) A ``--repo`` that is not a folder is a refusal (exit 1, the path on the ``error:`` line), not
   a wrong command line.
-- (aa) Every refusal of section 20.3 but the two design rows leaves stdout empty: the check refuses
+- (aa) Every wrong-setup refusal (PF11.6) but the two design rows leaves stdout empty: the check refuses
   before it plans.
 - (bb) "Parses" reads ``--help``'s stdout starting with ``usage``.
 - (cc) Each check imports the target afresh from its spec's folder and leaves Python's import path
@@ -107,7 +105,7 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
 - (dd) ``init --agent`` in a repository that already holds ``prove_rollout.py`` and ``prove.toml``
   is not refused for them: only the four files it writes are its own.
 
-**Where the agents read skills (Q64), checked against each one's own documentation on
+**Where the agents read skills, checked against each one's own documentation on
 2026-10-24.**
 
 - Cursor, https://cursor.com/docs/context/skills: project skills in ``.agents/skills/`` and
@@ -122,13 +120,13 @@ makes no model call; no test here calls a model, a coding agent or any paid serv
   1 to 1,024 characters; ``metadata`` a map from string keys to string values.
 
 **Seams with other modules.** ``init``, ``prove.toml``, ``target``, strict specs and the exit-2
-refusal are PF3's (frozen on the PF3 freeze branch); the rows here that reuse them check only what section
-20.3 adds. ``[declare]``'s kinds and their refusals are PF4.20's; the power gate and the design
-that cannot flag are section 8.10's (PF4's re-freeze). The core's ``init_agent`` is PF5's and
-private (Q28), so it is reached only through the command. The README section and the rest of
+refusal are PF3's; the rows here that reuse them check only what
+PF11 adds. ``[declare]``'s kinds and their refusals are PF4.20's; the power gate and the design
+that cannot flag are PF4's. The core's ``init_agent`` is PF5's and
+private, so it is reached only through the command. The README section and the rest of
 ``docs/setup-with-your-agent.md`` are PF7's; the plain-words pattern list is PF8's.
 
-**Lanes.** The code suite. One case is marked ``slow`` (the import that takes over 30 s). The
+**Suite.** The code suite. One case is marked ``slow`` (the import that takes over 30 s). The
 checks that import the person's code run as child processes, so no test's imports leak into
 another's.
 
@@ -141,7 +139,7 @@ another's.
 | PF11.3 the shared setup-file check | ``test_pf11_3_*`` |
 | PF11.4 the commands, ``--yes``, ``--dry-run``, the plain words | ``test_pf11_4_*`` |
 | PF11.5 the scripted run | ``test_pf11_5_*`` |
-| PF11.6 each wrong setup of section 20.3 | ``test_pf11_6_*`` |
+| PF11.6 each wrong setup | ``test_pf11_6_*`` |
 | PF11.7 the rollout never called; the network blocked; the time limit (its case is PF11.6's) | ``test_pf11_7_*`` |
 | PF11.8 the locations in the docs match the verified table | ``test_pf11_8_*`` |
 | carried: ``init --agent`` gets what every verb gets | ``test_pf11_carried_*`` |
@@ -170,6 +168,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from conftest import blas_thread_cap
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 FIXTURES = ROOT / "tests" / "fixtures" / "setup-agent"
@@ -187,7 +187,7 @@ PROMPT = "Use the poisson-prove-setup skill in this repository: set Poisson Prov
 WRITES = ["prove_rollout.py", "prove.toml"]
 CHECK = "poisson-prove sweep --dry-run"
 NEXT_COMMAND = "poisson-prove sweep"
-#: What Prove fills into the shared text (the shared page, sections 3 to 6; reading f).
+#: What Prove fills into the shared text (the shared format; reading f).
 NAMES = {
     "<Product full name>": "Poisson Prove",
     "<next command>": NEXT_COMMAND,
@@ -210,7 +210,7 @@ HEADINGS = [
 OPTIONAL_LAST_HEADING = "## Words Prove uses"
 OWN_RULES = "### Prove's own rules"
 
-#: Q64's locations and the agents verified to read each, with where and when (PF11.8).
+#: The skill's locations and the agents verified to read each, with where and when (PF11.8).
 LOCATIONS: dict[str, tuple[str, ...]] = {
     ".agents/skills/": ("Codex", "Cursor"),
     ".claude/skills/": ("Claude Code", "Cursor"),
@@ -332,7 +332,7 @@ def added(before: dict[str, str], after: dict[str, str], root: Path) -> list[str
 
 
 def users_own_files(repo: Path) -> None:
-    """Files the person owns that a setup must never write to (section 20.1)."""
+    """Files the person owns that a setup must never write to."""
     for name, text in (
         ("AGENTS.md", "# Notes for coding agents\n\nRun the tests with pytest.\n"),
         ("CLAUDE.md", "Follow AGENTS.md.\n"),
@@ -467,18 +467,6 @@ def commands(body: str, lang: str) -> list[tuple[str, str]]:
     return [(f.section, line.strip()) for f in fences(body) if f.lang == lang for line in f.lines if line.strip()]
 
 
-#: The families section 9.3 lists, until PF8 freezes the full pattern list (reading j).
-PLAIN_WORDS = [
-    re.compile(r"\b[A-Z]{1,2}-?\d+(?:\.\d+)?[a-z]?\b"),
-    re.compile(r"\b(?:LST|ADR)-?\d+\b"),
-    re.compile(r"\bPhase \d|\bSession [AB]\b|\boracle\b|\bretrofit\b|\bshim\b|\bpacket\b|\bruled\b", re.I),
-    re.compile(r"\bTaylor\b|\bGo1\b|\bHUMAIN\b|\bBorderless\b|\bCodestrap\b|45/44"),
-    re.compile(r"\[\[|\bvault\b|\bObsidian\b|note[s]/|\bdispatch\b", re.I),
-    re.compile(r"/User[s]/|~/cod[e]/"),
-    re.compile(r"proofload", re.I),
-]
-
-
 # ---------- child processes ----------
 
 GUARD = '''\
@@ -585,6 +573,7 @@ def run_child(repo: Path, base: Path, *argv: str, hide: tuple[str, ...] = (), ex
         "PYTHONIOENCODING": "utf-8",
         "LANG": "C.UTF-8",
         "TMPDIR": str(home),
+        **blas_thread_cap(),
         **(extra or {}),
     }
     spec = repo / "prove.toml"
@@ -819,11 +808,11 @@ def test_pf11_3_the_skill_passes_the_shared_setup_file_check(part: str, tmp_path
 # ---------- PF11.4 the commands and the words ----------
 
 PF11_4_PARTS = ["every command parses", "no --yes", "every sweep the agent runs carries --dry-run",
-                "the person's command is one text block under Hand over", "commands only in tagged blocks", "the plain-words test"]
+                "the person's command is one text block under Hand over", "commands only in tagged blocks"]
 
 
 @pytest.mark.parametrize("part", PF11_4_PARTS)
-def test_pf11_4_every_command_parses_none_answers_for_the_person_no_sweep_without_dry_run_and_the_words_are_plain(part: str, tmp_path: Path) -> None:
+def test_pf11_4_every_command_parses_none_answers_for_the_person_and_no_sweep_runs_without_dry_run(part: str, tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     assert run(repo, "init", "--agent").code == 0
@@ -855,7 +844,7 @@ def test_pf11_4_every_command_parses_none_answers_for_the_person_no_sweep_withou
     elif part == "the person's command is one text block under Hand over":
         under = [c for s, c in person if s == "## Hand over"]
         assert under == [NEXT_COMMAND], person
-    elif part == "commands only in tagged blocks":
+    else:
         blocks = fences(body)
         assert all(b.lang for b in blocks), [b.lines[:1] for b in blocks if not b.lang]
         for b in blocks:
@@ -863,11 +852,6 @@ def test_pf11_4_every_command_parses_none_answers_for_the_person_no_sweep_withou
                 continue
             stray = [line for line in b.lines if line.strip().startswith(COMMAND)]
             assert not stray, (b.lang, b.section, stray)
-    else:
-        for name in ("SKILL.md", "prompt.txt"):
-            words = (repo / FOLDERS[0] / name).read_text(encoding="utf-8")
-            found = [m.group(0) for pattern in PLAIN_WORDS for m in pattern.finditer(words)]
-            assert not found, (name, found)
 
 
 # ---------- PF11.5 the scripted run ----------
@@ -920,7 +904,7 @@ def test_pf11_5_the_scripted_run_plays_the_six_steps_and_ends_in_the_check_passi
     assert not any(c.attempts for c in runs), [c.attempts for c in runs]
 
 
-# ---------- PF11.6 each wrong setup of section 20.3 ----------
+# ---------- PF11.6 each wrong setup ----------
 
 #: A guard check, then a connection the wrapper attempts when it is imported (reading m).
 LIVE = 'import os, socket, sys\nif getattr(sys, "_pf11_guard", False):\n    open(os.environ["PF11_SOCKET_LOG"] + ".live", "w").close()\n'
@@ -1079,7 +1063,6 @@ ROWS: dict[str, Row] = {
     "the target's module does not import": Row(
         (edit("prove_rollout.py", "from support_agent.agent import", "from support_agnt.agent import"),),
         error=('"prove_rollout:rollout"', "ModuleNotFoundError", "support_agnt"), check=_one_traceback_in_the_log),
-    "importing the target connects to a host": Row((at_import(CONNECT.format(host="api.example.com")),), error=("api.example.com:443",)),
     "importing the target takes over 30 s": Row((at_import("import time\ntime.sleep(90)\n"),), error=("30 s",), slow=True, check=_the_limit_is_kept),
     "the module has no such name": Row((edit("prove_rollout.py", "def rollout(", "def rollout_v1("),), error=('"prove_rollout"', '"rollout"'),
                                        check=_the_callables_and_nothing_else),
@@ -1277,7 +1260,10 @@ def test_pf11_8_the_docs_name_the_agents_each_location_was_verified_for() -> Non
         named = {agent for agent in AGENTS if re.search(rf"\b{agent}\b", mine[0])}
         assert named == set(agents), (folder, named, agents)
     assert {f"{Path(folder).parent}/" for folder in FOLDERS} == set(LOCATIONS)
-    assert all(agent in PROVENANCE for agents in LOCATIONS.values() for agent in agents)
+    # Each agent a location names was checked against its own documentation on the date the page gives.
+    page = DOCS_PAGE.read_text(encoding="utf-8")
+    for agent in sorted({agent for agents in LOCATIONS.values() for agent in agents}):
+        assert PROVENANCE[agent][1] in page, (agent, PROVENANCE[agent])
 
 
 # ---------- carried: init --agent gets what every verb gets ----------

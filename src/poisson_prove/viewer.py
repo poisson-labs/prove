@@ -888,7 +888,7 @@ def _unverified_html(entries: Sequence[Mapping[str, Any]]) -> list[str]:
         # ``blocked_by`` stays in the payload for consumers that track which limits have an owner;
         # the page says the same thing without an id a reader cannot resolve.
         tail = (
-            " (a change is planned that would close this)"
+            " (this version does not check it)"
             if blocked is not None
             else " (nothing planned would close this; it is a limit of the instrument)"
         )

@@ -102,8 +102,9 @@ examples:
 - `--name TEXT` names the run. Without it the run is named by its target, the date and a letter,
   such as `mock-agent 2026-10-26 a`; every verb accepts the name in place of the run's id.
 - `--episode-timeout S` stops an episode that runs longer than `S` seconds and stores it with no
-  outcome, as an error of kind `timeout`. On the local backend each episode then runs in a child
-  process that can be stopped.
+  outcome, as an error of kind `episode_timeout`; `--event episode_timeout` reaches those episodes
+  (as `--event timeout` does in a run whose agent has no `timeout` outcome of its own). On the local
+  backend each episode then runs in a child process that can be stopped.
 - `--max-rollouts N` stops after `N` rollouts and leaves the run partial, to resume later.
 - `--batch-size N` is how many rows are written to the store at a time; a stopped run keeps every
   whole batch.

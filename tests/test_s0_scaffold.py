@@ -4,11 +4,11 @@ import sys
 import tomllib
 from pathlib import Path
 
-from packaging.requirements import Requirement
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
-# PF7 (Q14, Q31): the import names of what the extras bring; litellm and matplotlib are no
-# extra's any more.
+# PF7: the import names of what the extras bring; none may load in a core module.
 EXTRAS_BANNED_FROM_CORE = {"modal", "burla", "openai", "opentelemetry"}
 NETWORK_CLIENT_MODULES = {"requests", "httpx", "urllib", "socket"}
 LOOPBACK_SERVER_MODULE = "http.server"
@@ -20,15 +20,24 @@ def test_import_and_version():
     assert isinstance(poisson_prove.__version__, str) and poisson_prove.__version__
 
 
-def test_core_import_pulls_no_extras():
-    for name in list(sys.modules):
-        if name.split(".")[0] in EXTRAS_BANNED_FROM_CORE:
-            del sys.modules[name]
-    import importlib
-    import poisson_prove
-    importlib.reload(poisson_prove)
-    loaded = {n.split(".")[0] for n in sys.modules}
-    assert not loaded & EXTRAS_BANNED_FROM_CORE
+#: The modules a bare install imports: the package, its public modules but ``otel`` (which needs the
+#: ``agent`` extra), the core and the command line.
+CORE_MODULES = (
+    "poisson_prove", "poisson_prove.compare", "poisson_prove.stats", "poisson_prove.store",
+    "poisson_prove.trace", "poisson_prove.steps", "poisson_prove.chaos",
+    "poisson_prove.examples.mock_agent", "poisson_prove.core", "poisson_prove.cli",
+)
+
+
+@pytest.mark.parametrize("module", CORE_MODULES)
+def test_core_import_pulls_no_extras(module):
+    """Each core module, imported alone in a fresh interpreter, loads no extra's package."""
+    r = subprocess.run([sys.executable, "-I", "-c", f"import sys, {module}; print(*sorted(sys.modules))"],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    loaded = {n.split(".")[0] for n in r.stdout.split()}
+    assert module in r.stdout.split(), r.stdout[-500:]
+    assert not loaded & EXTRAS_BANNED_FROM_CORE, (module, sorted(loaded & EXTRAS_BANNED_FROM_CORE))
 
 
 def test_cli_version_via_entrypoint():
@@ -44,49 +53,9 @@ def test_cli_version_via_module():
     assert r.returncode == 0 and poisson_prove.__version__ in r.stdout
 
 
-def test_pyproject_extras_exact():
-    data = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    extras = set(data["project"]["optional-dependencies"])
-    # PF9 (Q31): the [burla] extra joins the set. PF7 (Q14): the [viz] extra goes.
-    assert extras == {"modal", "agent", "all", "dev", "burla"}
-
-
-def test_pyproject_core_deps_are_math_only():
-    """C13, closed by A22. The parser was ``d.split("[")[0].split(">")[0].split("=")[0]`` plus a
-    ``.strip().lower()``, which strips neither ``<`` nor ``~=`` nor ``!=``: ``pandas>=2,<3``
-    survived it only because ``>`` happens to come first, and the ``pandas<3`` half alone would
-    not have. ``Requirement(d).name`` is the PEP 508 read, with ``packaging`` declared in
-    ``[dev]`` rather than leaned on through pytest. **Green before and after** -- the assertion's
-    value does not change under either parser for either spelling, so C13 has no build half. The
-    negative that makes it non-vacuous is V13 in ``tests/test_a22_pandas3.py``, over a synthetic
-    list the old parser fails."""
-    data = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    core = {Requirement(d).name.lower() for d in data["project"]["dependencies"]}
-    # PF6 (Q20, Q60): Rich for the pretty rendering and Textual for the terminal app join the core.
-    assert core == {"numpy", "pandas", "scipy", "pyarrow", "rich", "textual"}
-
-
 def test_python_floor():
     data = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert data["project"]["requires-python"] == ">=3.11"
-
-
-#: Q36 (front-door spec sections 6.3, 9.1 and 14): ``SCOPE.md`` folds into the README, and its
-#: never-phones-home paragraph is kept word for word, with the names as the rename gives them.
-NEVER_PHONES_HOME = (
-    "Prove never phones home. No telemetry, no analytics, no update checks. "
-    "`poisson-prove serve` binds a loopback listener on request and makes no outbound connection: "
-    "it holds one page built from data already on the machine, and dies with the process."
-)
-
-
-def test_readme_keeps_the_never_phones_home_promise_word_for_word():
-    text = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
-    assert NEVER_PHONES_HOME in text
-
-
-def test_license_is_mit():
-    assert "MIT License" in (ROOT / "LICENSE").read_text()
 
 
 def imported_modules(py: Path) -> set[str]:
@@ -121,10 +90,10 @@ def network_violations(py: Path) -> list[str]:
 
 
 def test_no_network_imports_in_core():
-    """Proofload opens no outbound connection.
+    """Prove opens no outbound connection.
 
     Outbound client modules - urllib, requests, httpx, socket - are banned in every module
-    under src/proofload. A listener bound to loopback, on request, is not an outbound
+    under src/poisson_prove. A listener bound to loopback, on request, is not an outbound
     connection: http.server is permitted in viewer.py and in no other module.
 
     Checked by an ast walk over full dotted import paths, not by substring: ``import

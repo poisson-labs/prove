@@ -1,6 +1,7 @@
 import ast
 import functools
 import io
+import os
 import re
 import socket
 import tokenize
@@ -13,7 +14,7 @@ import pytest
 from poisson_prove.store import Store
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-#: PF3 (spec sections 8.8 and 14): the quickstart's one copy is the packaged spec.
+#: PF3: the quickstart's one copy is the packaged spec.
 PACKAGED_QUICKSTART = Path(__file__).resolve().parents[1] / "src" / "poisson_prove" / "examples" / "quickstart.toml"
 
 
@@ -22,10 +23,9 @@ def quickstart_design(replicates: int = 100) -> Path:
     """The packaged quickstart's design (its target id, unit and axes) at ``replicates``, with no
     ``target`` and no ``[declare]``, written once per process to a temporary file.
 
-    PF3 (spec sections 8.8 and 14): ``examples/quickstart.toml`` is gone and the packaged spec runs
-    194 replicates (Q56). The frozen tests that swept the old file sweep this: the one copy's
-    design at the 100 replicates their numbers were frozen at, the target typed as before, and
-    nothing declared, as the old file declared nothing.
+    PF3: the packaged spec runs 194 replicates. The tests whose numbers are pinned at 100
+    replicates sweep this instead: the packaged design at 100 replicates, the target typed on
+    the command line, and nothing declared.
     """
     import json
     import tempfile
@@ -40,18 +40,27 @@ def quickstart_design(replicates: int = 100) -> Path:
     return path
 
 
-#: PF3 (spec section 4.4, Q17's condition): each test's own name, which no output named before PF3.
+#: PF3: each statistical test's own name, which every surface prints on a line of its own.
 METHOD_OWN_NAMES = ("Fisher", "McNemar", "log-rank")
+#: A step row of ``inspect``'s text output: the step's index, then eight more tab-separated
+#: columns.
+STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")
+
+
+def blas_thread_cap() -> dict[str, str]:
+    """The BLAS thread cap the suite runs under, for a child whose environment is built from nothing:
+    without it an old OpenBLAS (numpy at its floor) runs a thread on every core in every child."""
+    return {name: os.environ[name] for name in ("OPENBLAS_NUM_THREADS",) if name in os.environ}
 
 
 def without_method_lines(text: str) -> str:
     """``text`` (``report.md``, ``receipt.html``, the served page) with the lines that name the test
     by its own name taken out, and in their place no second blank line.
 
-    PF3 (spec section 4.4, PF3.6b, reading p): every surface names the method it used, on a line
-    of its own; nothing before PF3 printed Fisher, McNemar or log-rank, so a frozen digest over one
-    of these files holds over this. Removing a line never leaves two blank lines where it was:
-    a paragraph of its own (the line and the blank line after it) goes as a whole.
+    PF3.6b: every surface names the method it used, on a line of its own; a digest pinned over
+    one of these files is taken over this, so it guards everything but those lines. Removing a
+    line never leaves two blank lines where it was: a paragraph of its own (the line and the blank
+    line after it) goes as a whole.
     """
     out: list[str] = []
     removed = False
@@ -68,9 +77,9 @@ def without_method_lines(text: str) -> str:
 
 
 
-#: PF5 (spec section 4.3, the report header's ``NAME (ID)`` pairing; PF5's reading o): the header
+#: PF5 (the report header's ``NAME (ID)`` pairing): the header
 #: of ``report.md`` and ``receipt.html`` names each run as ``before  NAME (ID)`` and ``after  NAME
-#: (ID)``, and the provenance list no longer gives the ids, so each id is in each file once.
+#: (ID)``, and the provenance list does not give the ids, so each id is in each file once.
 _RUN_LINE = re.compile(r"^(?:<p>)?(?:before|after)  .+ \([^()]+\)(?:</p>)?$")
 _RUN_ID_ITEM = re.compile(r"<li>run id [ab]: [^<]*</li>")
 _RUN_ID_LINE = re.compile(r"^- run id [ab]: .*$")
@@ -79,8 +88,8 @@ _RUN_ID_LINE = re.compile(r"^- run id [ab]: .*$")
 def without_run_lines(text: str) -> str:
     """``text`` (``report.md``, ``receipt.html``) with the header's two run lines and the
     provenance list's two run-id entries taken out, and in place of the run lines no second blank
-    line: the bytes a file had before the pairing, and what the library's render gives without
-    its run-id entries."""
+    line: what a pinned digest of the file is taken over, and what the library's render gives
+    without its run-id entries."""
     out: list[str] = []
     removed = False
     for line in text.splitlines(keepends=True):
@@ -95,14 +104,15 @@ def without_run_lines(text: str) -> str:
         out.append(_RUN_ID_ITEM.sub("", line))
     return "".join(out)
 
-#: PF9.4 (spec section 13.1): every module that drives a remote backend offline runs with network
+#: PF9.4: every module that drives a remote backend offline runs with network
 #: sockets blocked in the pytest process (the interpreters the Burla and Modal fakes start arm
-#: their own tripwire). ``test_pf9_backends`` checks that no such module is left out.
+#: their own tripwire). A new module that drives a backend is added here by hand.
 NETWORK_BLOCKED_MODULES = frozenset({
     "test_a10_declared", "test_bu_burla_backend", "test_m10_cli", "test_m10_multi", "test_m11a_chaos",
     "test_m3_capture", "test_m3_crash_trace", "test_m3_modal", "test_m3_modal_launch",
     "test_m3_timeout_trace", "test_mc_modal_chaos", "test_pf11_setup_agent", "test_pf1_look", "test_pf9_backends",
-    "test_pr1_pair_assertion", "test_s23_power",
+    "test_pr1_pair_assertion", "test_s21_errors", "test_s23_power", "test_capture_crash_and_timeout_behaviour",
+    "test_storage_and_chaos_behaviour",
 })
 #: A module that drives a backend but must serve on a local socket, with its reason.
 NETWORK_EXEMPT_MODULES = {
@@ -176,7 +186,7 @@ def writable_copy(fixture: Path) -> Path:
     """A copy, made once per test process, of a committed fixture folder, for the tests that run a
     verb which writes into the store it reads.
 
-    PF12 (spec section 18.2, Q59): ``report`` and ``serve`` save the comparison they show into the
+    PF12: ``report`` and ``serve`` save the comparison they show into the
     store's ``.poisson/``. Run on a committed fixture in place, under ``-n`` one worker's save would
     land while another digests or copies the same folder; so those tests read a copy, named as the
     fixture is, and the committed folders are never written. The copy is removed when the process
@@ -287,12 +297,53 @@ def lattice_trees(tmp_path_factory: pytest.TempPathFactory) -> SharedTrees:
     return SharedTrees(folder)
 
 
+def _a_home_of_its_own() -> None:
+    """The suite runs with ``HOME`` in a folder of its own, made once for the session and shared
+    with its workers, so what a test provokes (the errors log and the record of compared runs
+    under ``~/.cache/poisson-prove``) never reaches the user's own. The tools the slow tests run
+    keep their folders: uv's cache and Pythons, pyenv's, and Playwright's browsers, and the opt-in
+    backend tests still find the user's Modal credentials. A suite this one starts (the floors run)
+    keeps the folder it was given."""
+    import os
+    import shutil
+    import subprocess
+    import sys
+    import tempfile
+
+    if os.environ.get("PROVE_TESTS_HOME"):
+        return
+    real = os.environ.get("HOME")
+    if real:
+        caches = "Library/Caches" if sys.platform == "darwin" else ".cache"
+        keep = {"PLAYWRIGHT_BROWSERS_PATH": Path(real) / caches / "ms-playwright", "PYENV_ROOT": Path(real) / ".pyenv"}
+        uv = shutil.which("uv")
+        for var, args in (("UV_CACHE_DIR", ("cache", "dir")), ("UV_PYTHON_INSTALL_DIR", ("python", "dir"))):
+            found = subprocess.run([uv, *args], capture_output=True, text=True, timeout=60) if uv else None
+            if found is not None and found.returncode == 0 and found.stdout.strip():
+                keep[var] = Path(found.stdout.strip())
+        for var, path in keep.items():
+            if var not in os.environ and path.exists():
+                os.environ[var] = str(path)
+    os.environ["HOME"] = os.environ["PROVE_TESTS_HOME"] = tempfile.mkdtemp(prefix="prove-tests-home-")
+    _MADE_HOME.append(os.environ["HOME"])
+    # The opt-in backend tests read the user's Modal credentials from ``~/.modal.toml``.
+    credentials = Path(real) / ".modal.toml" if real else None
+    if credentials is not None and credentials.is_file():
+        (Path(os.environ["HOME"]) / ".modal.toml").symlink_to(credentials)
+
+
+#: The ``HOME`` this process made, which only it removes.
+_MADE_HOME: list[str] = []
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Check both generated stores before any test runs, rebuilding one that fails (a crash or an
     earlier session left it), then mark them checked for this session and its workers: from here
-    on a store that fails was written by a test, and ``lattice.cached_store`` refuses it."""
+    on a store that fails was written by a test, and ``lattice.cached_store`` refuses it. First,
+    the session's own ``HOME`` (``_a_home_of_its_own``)."""
     if hasattr(config, "workerinput"):
         return
+    _a_home_of_its_own()
     import os
 
     import lattice
@@ -304,6 +355,14 @@ def pytest_configure(config: pytest.Config) -> None:
     os.environ[lattice.CHECKED] = "1"
 
 
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """The session's own ``HOME`` goes with the session that made it."""
+    import shutil
+
+    for home in _MADE_HOME:
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Fail the session if a test wrote into a generated store; then remove the bundle folders the
     Burla tests' fake workers unpacked and could not remove.
@@ -313,7 +372,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     against the digests written with it, in every process, worker or not.
 
     A worker process holds its folder for its life and removes it at exit or when another bundle
-    replaces it (``proofload._burla_submit``), but the fake pool ends its workers with SIGKILL, so
+    replaces it (``poisson_prove._burla_submit``), but the fake pool ends its workers with SIGKILL, so
     the last pool's folders outlive them. Their temporary directory is what an interpreter with an
     empty environment gets, which is not this process's. Only a folder whose owner is gone is
     removed: a live worker of any other session still holds its lock.
@@ -392,7 +451,7 @@ def resume_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[s
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """``--update-snapshots``: the snapshot tests write the snapshots instead of comparing against
-    them (section 10.6, PF6.14 and PF12.13; the one documented command is in ``CONTRIBUTING.md``)."""
+    them (PF6.14 and PF12.13; the one documented command is in ``CONTRIBUTING.md``)."""
     parser.addoption(
         "--update-snapshots",
         action="store_true",
@@ -402,7 +461,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def _lattice_through_its_copy() -> None:
-    """PF12 (spec section 18.2, Q59; R39): ``report`` and ``serve`` save into the store they read,
+    """PF12: ``report`` and ``serve`` save into the store they read,
     so every test that reads the generated lattice pair (``tests/lattice.py``) reads this process's
     copy of it (``writable_copy``): ``lattice.root()`` hands out the copy, made on first use.
     ``lattice.intact()`` checks both stores: the one the generator wrote, which no test writes, and
@@ -447,9 +506,9 @@ def code_of(source: str) -> str:
     """``source`` with its comments and docstrings taken out and its blank lines dropped: the code
     a change to words alone leaves as it was.
 
-    PF8 (front-door spec sections 9.2 and 14, Q37 and Q38): the plain-words pass rewrites the
-    docstrings and comments of ``src/`` and of the frozen tests, so a frozen digest over a symbol's
-    source or a test file's bytes is taken over this instead, and moves only when code does."""
+    A digest pinned over a symbol's source or a test file's bytes is taken over this, so
+    rewording a comment or docstring in ``src/`` or in a frozen test leaves it as it was; it moves
+    only when code does."""
     lines = io.StringIO(source, newline="\n").readlines()
 
     def column(row: int, byte_col: int) -> int:

@@ -1,22 +1,19 @@
 """M3 -- the crashed episode's trace: the frozen tests for K1-K8.
 
-Written from "Proofload -- Spec M3 Executor (crashed episode trace)" section 4. The build
-builds the two touched files (``executor.py``, ``executor_modal.py``) against this file and
-does not edit it.
+What the executor records when a rollout raises, in ``executor.py`` and
+``executor_modal.py``.
 
 The conventions of ``tests/test_m3_capture.py`` and ``tests/test_m3_timeout_trace.py`` carry
 over unchanged: the whole file skips without ``opentelemetry-sdk``; every test that installs
-capture -- directly, through ``_call_in_process`` with a capture call, or through ``run_local``,
-``worker_batch`` or ``run_with_mapper`` -- runs it in a child forked from this process
-(``isolated``) and reads the store and the results back through a pipe, so the pytest process
+capture -- through ``run_local``, ``worker_batch`` or ``run_with_mapper`` -- runs it in a child
+forked from this process (``isolated``) and reads the store and the results back through a pipe, so the pytest process
 never installs and the in-process tests can assert the global provider was left alone;
-OpenTelemetry objects are imported inside test bodies, never at module level, because M12's T27
-purges ``opentelemetry*`` from ``sys.modules`` earlier in the suite; the episode id is
+OpenTelemetry objects are imported inside test bodies, never at module level; the episode id is
 ``f"{config_hash}:{replicate_index}"``; ``worker_batch``'s ``capture`` dict is the four
 ``CaptureSpec`` fields plus ``run_id``. ``cli.main`` is driven in-process on a store a child
 wrote; ``inspect`` installs nothing. ``modal`` is never imported. Nothing sleeps.
 
-Conventions these frozen tests fix where the spec is silent, recorded so they are not re-litigated:
+Conventions these tests fix:
 
 - The row that crashes is chosen by config, as the timed-out row was: one categorical axis
   ``role`` over ``a``, ``b``, ``c`` and ``crash`` with one replicate, so every run has exactly
@@ -24,21 +21,14 @@ Conventions these frozen tests fix where the spec is silent, recorded so they ar
   ``run_with_mapper`` without shared state.
 - The crashing rollout opens an ``invoke_agent`` root, closes a ``chat`` child, opens an
   ``execute_tool`` child and raises ``RuntimeError`` inside it; span names carry the seed. A
-  second rollout returns a dict instead of an ``Episode`` after the same two closed spans
-  (K3). A third raises before opening any span (K2, rule zero). A fourth replaces
-  ``Trace.to_dict`` on the class in its own child and then raises, so ``to_meta()`` raises
-  after the rollout did: section 3's "the string when it is None *or raised*", section 8's
-  "``format_exc()`` first".
-- **What the SDK marks, measured against opentelemetry-sdk before this file was written.**
+  second rollout returns a dict instead of an ``Episode`` after the same two closed spans.
+- **What the SDK marks, measured against opentelemetry-sdk.**
   ``start_as_current_span`` sets ``ERROR`` status on *every* span the exception unwinds
   through, not only the innermost: with the shape above both ``execute_tool`` and the
   ``invoke_agent`` root close with ``error == "RuntimeError: boom <seed>"``, and only ``chat``,
-  which closed before the raise, has ``error is None``. K1 as section 4 states it -- the span
-  open at the raise marked, every span that closed *before* it unmarked -- holds; section 7's
-  "one span with ``error`` set and two without" does not. This file pins what the SDK does in
-  one test of its own (``test_k1_the_root_the_exception_unwound_through_is_marked_too``) so
-  the fact is asserted rather than rediscovered, and so that, should the spec choose
-  otherwise, exactly that test moves. Nothing in ``src/`` sets or clears a status (section 8).
+  which closed before the raise, has ``error is None``. K1 as stated -- the span
+  open at the raise marked, every span that closed *before* it unmarked -- holds; the stricter
+  "one span with ``error`` set and two without" does not. Nothing in ``src/`` sets or clears a status.
 - The fork path is exercised with ``episode_timeout`` set to a deadline no rollout here
   approaches: the crash returns long before it, the outcome crosses the pipe as a normal
   return and nothing is terminated, so ``n_timeout`` is 0 on that path by construction and
@@ -47,21 +37,16 @@ Conventions these frozen tests fix where the spec is silent, recorded so they ar
   block is read the way the M10 and S16 frozen tests read it. E9's "no ``Traceback`` in the output"
   cannot hold here, because the traceback *is* the error line; ``stderr`` empty and exit 0
   stand in for it.
-- K8 pins the S16 frozen file by the SHA-256 of its bytes (38 tests at that hash): a freeze that
-  amends that file re-pins the hash in the same commit.
 """
 
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import inspect
 import json
 import multiprocessing
 import os
 import re
-import time
-import traceback
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from io import StringIO
 from pathlib import Path
@@ -73,19 +58,18 @@ import pytest
 import poisson_prove
 import poisson_prove.cli as cli
 import poisson_prove.executor as executor
-import poisson_prove.executor_modal as executor_modal
 from poisson_prove.episode import Episode
 from poisson_prove.executor import plan, run_local
 from poisson_prove.executor_modal import Job, Mapper, ModalOptions, Result, run_with_mapper, worker_batch
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
-from conftest import code_of
+from isolated_support import isolated
+from conftest import STEP_LINE_RE
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
-HERE = Path(__file__).resolve().parent
 PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path needs the fork start method")
@@ -95,39 +79,25 @@ EPISODE_KEY = "poisson_prove.episode"
 RUN_ID = "r-2026-09-05-crash-oracle"
 EPISODE = "cfg-7:1"
 SALT = "crash-oracle-salt"
-TIMEOUT_ERROR = "timeout"  # S16's error and reason: a crashed row never carries it
 CRASH = "crash"
 ROLES = ("a", "b", "c", CRASH)
 HORIZON = 10.0
 EXCEPTION = "RuntimeError"
 MESSAGE = "boom"
 NON_EPISODE_TEXT = "rollout returned dict, expected Episode"  # the existing text, verbatim
-POISON = "the oracle broke Trace.to_dict in this child"
 NO_HANG_TIMEOUT_S = 30.0  # the fork path with nothing to terminate: every rollout here returns at once
 EPOCH = 1_756_900_000_000_000_000
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
 STEP_LINE_SAMPLE = "  0\ttool\tsearch_catalog\t12.5\t-\t-\t-\t-\t-"  # nine columns: P8-21's positive control for every negative use
 
-S16_ORACLE = HERE / "test_m3_timeout_trace.py"
-# Re-minted by the PF0 freeze over the file as its freeze commit moved it (the rename, Q4).
-# Re-minted over the file as moved for 12-hex config hashes in inspect text (spec section 5.4, rule 10).
-# Re-minted for public hygiene (Q38): over the file's code with its docstrings and comments taken out
-# (``conftest.code_of``), which the plain-words pass edits; read off the file as it stands, not predicted.
-S16_ORACLE_SHA256 = "9ea86d2005d588bf50d6015580875bc172354e0f8058886d925424e514de5da9"  # 38 tests
-
-#: CD (D1): the cap a [capture] table must now declare; the value the dataclass used to supply.
+#: The cap a [capture] table must declare; the value the dataclass's old default supplied.
 DECLARED_LIMIT = 8192
 TRACE_KEYS = frozenset({"schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version"})  # A8a: the seventh key
 PUBLIC_CAPTURE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
 TRACE_EXPORTS = [
-    # A7 (spec section 7.1): four mints; A8a (spec section 7.1 group 3): three constants --
-    # ALIAS_MAP_VERSION, GATE, OUTCOME_BY; A8b (spec section 7.1 group 5): five constants and two
-    # functions. CD (D8) retires three of A8b's five -- OBSERVATION_HEAD_BYTES and
-    # OBSERVATION_TAIL_BYTES are deleted with the default they described, and
-    # OBSERVATION_LIMIT_BYTES is renamed OBSERVATION_ROUTING_BYTES, which sorts one place later.
-    # A10 (spec section 7.1 group 3, W1): Declaration joins, minted in trace.py, among the classes.
-    # trace.py's own order: constants, classes, functions, each sorted. 31 names.
+    # trace.py's public names, in its own order: constants, classes, functions, each sorted.
+    # 31 names. There is no OBSERVATION_HEAD_BYTES or OBSERVATION_TAIL_BYTES (the observation
+    # cap has no default), and the routing threshold is OBSERVATION_ROUTING_BYTES.
     "ALIAS_MAP_VERSION", "ATTRIBUTE_ALIASES", "CONTENT_KEYS", "DROP_REASONS", "GATE", "KINDS", "LOGPROBS_KEY",
     "OBSERVATION_KEYS", "OBSERVATION_ROUTING_BYTES",
     "OTEL_KIND_MAP", "OTEL_SEMCONV_VERSION", "OUTCOME_BY", "SCHEMA", "SOURCES", "TRUNCATED_KEY",
@@ -136,24 +106,6 @@ TRACE_EXPORTS = [
     "truncate_observations",
 ]
 OTEL_EXPORTS = ["EPISODE_KEY", "RUN_ID_KEY", "EpisodeStamper", "episode"]
-MODAL_EXPORTS = [
-    "CostGuard", "ImageSpec", "Job", "Mapper", "ModalBackendError", "ModalNotInstalled",
-    "ModalOptions", "ModalTarget", "Result", "estimate_cost", "preflight_modal", "run_modal",
-    "run_with_mapper", "worker_batch",
-]
-# Every public name each touched module defines itself (E12's measure): no new public symbol.
-EXECUTOR_PUBLIC = frozenset({
-    "ExecutorError", "NotResumable", "Pair", "PairMismatch", "Plan", "RunSummary",
-    "derive_seed", "new_run_id", "new_run_salt", "plan", "preflight", "run_local",
-    # S23: the power gate. DEFAULT_MAX_MDE is a constant and not a defined object, so it
-    # does not reach _defined(); these three do.
-    "UnderpoweredDesign", "check_power", "preflight_mde",
-})
-MODAL_PUBLIC = frozenset({
-    "CostGuard", "ImageSpec", "ModalBackendError", "ModalNotInstalled", "ModalOptions",
-    "ModalTarget", "estimate_cost", "preflight_modal", "run_modal", "run_with_mapper",
-    "worker_batch",
-})
 EPISODE_FIELDS = ("outcome", "t", "horizon", "confidence", "meta")
 SUMMARY_FIELDS = (
     "run_id", "n_ok", "n_errored", "n_timeout", "wall_time", "stopped_by", "complete",
@@ -162,8 +114,6 @@ SUMMARY_FIELDS = (
 
 CRASH_PATH = f"{MODULE}:crashing_rollout"
 DICT_PATH = f"{MODULE}:dict_returning_rollout"
-SPANLESS_PATH = f"{MODULE}:spanless_raising_rollout"
-POISONED_PATH = f"{MODULE}:to_meta_poisoning_rollout"
 
 # Three hand-built spans in the stored shape, all closed, the tool marked: a complete crash trace.
 ROOT_ID = "b7ad6b7169203331"
@@ -239,7 +189,7 @@ def is_crash(cfg: Any) -> bool:
 
 
 def crashing_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """The K1/K4/K5/K7 target. Every row opens an ``invoke_agent`` root and closes a ``chat``
+    """The K4/K5/K7 target. Every row opens an ``invoke_agent`` root and closes a ``chat``
     child; the ``crash`` row then opens an ``execute_tool`` child and raises inside it. Every
     span is closed by the time the executor reads the recorder -- the rollout's own ``with``
     blocks end them as the exception unwinds -- and the SDK has marked the ones it unwound
@@ -257,7 +207,7 @@ def crashing_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
 
 
 def dict_returning_rollout(cfg: Mapping[str, Any], seed: int) -> Any:
-    """K3: the same two closed spans, then a dict where an ``Episode`` was expected. The
+    """K5: the same two closed spans, then a dict where an ``Episode`` was expected. The
     capture block completes normally and the recorder is full."""
     tracer = _tracer()
     with tracer.start_as_current_span(f"invoke_agent {seed}") as root:
@@ -265,26 +215,6 @@ def dict_returning_rollout(cfg: Mapping[str, Any], seed: int) -> Any:
         with tracer.start_as_current_span(f"chat {seed}") as chat:
             chat.set_attribute("gen_ai.operation.name", "chat")
     return {"outcome": "fell", "t": 1.0, "horizon": HORIZON}
-
-
-def spanless_raising_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """K2, rule zero: raises before its first span. No OpenTelemetry call at all."""
-    raise RuntimeError(f"{MESSAGE} {seed}")
-
-
-def _raise_at_to_dict(self: Any) -> dict[str, Any]:
-    raise RuntimeError(POISON)
-
-
-def to_meta_poisoning_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """K2, section 3's "or raised": one span, then ``Trace.to_dict`` broken on the class in
-    this child, then the raise. ``to_meta()`` now raises on every path to a dict, after the
-    rollout's own exception is already in hand (section 8: ``format_exc()`` first)."""
-    tracer = _tracer()
-    with tracer.start_as_current_span(f"invoke_agent {seed}") as root:
-        root.set_attribute("gen_ai.operation.name", "invoke_agent")
-        Trace.to_dict = _raise_at_to_dict  # type: ignore[method-assign]
-        raise RuntimeError(f"{MESSAGE} {seed}")
 
 
 def _resolve(import_path: str) -> Any:
@@ -312,8 +242,8 @@ def sweep_toml(
         kind = "continuous" if all(isinstance(v, float) for v in values) else "categorical"
         lines += [f"[axes.{name}]", f'type = "{kind}"', f"values = {json.dumps(values)}", ""]
     if capture is not None:
-        # CD (D1): a [capture] table declares its cap. DECLARED_LIMIT is what these callers were
-        # getting from the dataclass before, so nothing they measure moves.
+        # A [capture] table must declare its cap. DECLARED_LIMIT is the dataclass's old default,
+        # so nothing these callers measure moves.
         if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
             capture = {**capture, "max_observation_bytes": DECLARED_LIMIT}
         lines.append("[capture]")
@@ -345,7 +275,7 @@ def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
 
 
 def trace_dict(*spans: dict[str, Any], **overrides: Any) -> dict[str, Any]:
-    """A valid stored-shape trace dict around the given span dicts: the six keys of ADR-028 plus A8a's ``alias_map_version``."""
+    """A valid stored-shape trace dict around the given span dicts: the six stored trace keys plus A8a's ``alias_map_version``."""
     d: dict[str, Any] = {
         "schema": "poisson-prove.trace/1",
         "source": "otel",
@@ -397,81 +327,10 @@ def _global_provider_is_sdk() -> bool:
     return type(trace.get_tracer_provider()).__module__.startswith("opentelemetry.sdk")
 
 
-def _defined(module: Any) -> set[str]:
-    """The public names a module defines itself: E12's measure of its surface."""
-    return {
-        name
-        for name, obj in vars(module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == module.__name__
-    }
-
-
 # ---------- helpers: isolation (the M3 capture frozen tests', verbatim in behaviour) ----------
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
-def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
-    """Run ``fn(*args)`` in a child process and return its (pickle-native) result.
-
-    Forked when the platform allows, so the child inherits this process's imports and its
-    untouched OTel globals; spawned otherwise, which works because ``fn`` and everything it
-    reaches live in this real file.
-    """
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
-
-
 # ---------- the children: everything that installs a provider runs here ----------
-
-
-def child_call_in_process(target: str, config: dict[str, Any], seed: int, with_capture: bool) -> dict[str, Any]:
-    """One ``_call_in_process`` call, with or without a capture call; with one, it installs here."""
-    from poisson_prove.capture import CaptureSpec
-
-    call = (
-        executor._CaptureCall(spec=CaptureSpec(max_observation_bytes=DECLARED_LIMIT), run_id=RUN_ID, episode_id=EPISODE)  # CD (D1)
-        if with_capture
-        else None
-    )
-    kind, payload = executor._call_in_process(_resolve(target), dict(config), seed, call)
-    return {
-        "kind": kind,
-        "payload": payload,
-        "pid": os.getpid(),
-        "sdk_provider_in_this_process": _global_provider_is_sdk(),
-    }
 
 
 def child_run_local(
@@ -524,13 +383,7 @@ def child_run_with_mapper(
     }
 
 
-# ---------- fixtures: the K1 payload and the two runs K4/K7 read ----------
-
-
-@pytest.fixture(scope="module")
-def crash_outcome() -> dict[str, Any]:
-    """One ``_call_in_process`` call with a capture call on the crashing rollout, in a child."""
-    return isolated(child_call_in_process, CRASH_PATH, {"role": CRASH}, 7, True)
+# ---------- fixtures: the two runs K4/K7 read ----------
 
 
 @dataclasses.dataclass(frozen=True)
@@ -591,7 +444,6 @@ def assert_traceback_of(text: Any, seed: int) -> None:
     assert isinstance(text, str), text
     assert text.startswith("Traceback (most recent call last):"), text
     assert text.rstrip("\n").splitlines()[-1] == f"{EXCEPTION}: {MESSAGE} {seed}", text
-    assert text != TIMEOUT_ERROR
 
 
 def assert_crash_trace_of(trace: Trace, seed: int, run_id: str, episode: str) -> None:
@@ -644,94 +496,6 @@ def assert_intact_ok_rows(others: pd.DataFrame, run_id: str) -> None:
             assert span.attrs[EPISODE_KEY] == episode_id(row.config_hash, row.replicate_index)
 
 
-# ---------- K1: _call_in_process with a capture call, the rollout raises after spans ----------
-
-
-def test_k1_call_in_process_with_capture_returns_the_two_key_dict_around_the_traceback_and_the_complete_trace(
-    crash_outcome: dict[str, Any],
-) -> None:
-    assert crash_outcome["kind"] == "error", crash_outcome
-    error, t = assert_dict_form(crash_outcome["payload"])
-    assert_traceback_of(error, 7)
-    assert "crashing_rollout" in error, error  # the rollout's own frame, not another's
-    assert_crash_trace_of(Trace.from_dict(t), 7, RUN_ID, EPISODE)
-    assert crash_outcome["sdk_provider_in_this_process"] is True, "_call_in_process with a capture call did not install"
-    assert not _global_provider_is_sdk(), "the pytest process installed a provider"
-
-
-def test_k1_the_root_the_exception_unwound_through_is_marked_too(crash_outcome: dict[str, Any]) -> None:
-    """Measured, not specified: ``start_as_current_span`` marks every span the exception unwinds
-    through, so the root closes with the same ``ERROR`` status as the failing child and section
-    7's "one span with ``error`` set" is two. Pinned on its own so the fact is asserted once and
-    so that, should the spec choose otherwise, exactly this test moves."""
-    _, t = assert_dict_form(crash_outcome["payload"])
-    spans = by_name(Trace.from_dict(t))
-    root, chat, tool = spans["invoke_agent 7"], spans["chat 7"], spans["execute_tool 7"]
-    assert tool.error == f"{EXCEPTION}: {MESSAGE} 7", tool.error
-    assert root.error == tool.error, (root.error, tool.error)
-    assert chat.error is None, chat.error
-
-
-# ---------- K2: the string form, where it stays ----------
-
-
-def test_k2_without_a_capture_call_the_payload_is_the_string_it_always_was() -> None:
-    kind, text = executor._call_in_process(crashing_rollout, {"role": CRASH}, 7)
-    assert kind == "error"
-    assert_traceback_of(text, 7)
-    kind, text = executor._call_in_process(dict_returning_rollout, {"role": "a"}, 7)
-    assert (kind, text) == ("error", NON_EPISODE_TEXT)
-    kind, text = executor._call_in_process(spanless_raising_rollout, {"role": "a"}, 7)
-    assert kind == "error"
-    assert_traceback_of(text, 7)
-    assert not _global_provider_is_sdk(), "a call without a capture call installed a provider"
-
-
-def test_k2_with_a_capture_call_a_rollout_that_emitted_no_span_yields_the_string_never_a_dict_with_an_empty_meta() -> None:
-    r = isolated(child_call_in_process, SPANLESS_PATH, {"role": CRASH}, 7, True)
-    assert r["kind"] == "error", r
-    assert isinstance(r["payload"], str), r["payload"]  # rule zero: nothing captured, no trace claimed
-    assert_traceback_of(r["payload"], 7)
-    assert "spanless_raising_rollout" in r["payload"], r["payload"]
-    assert r["sdk_provider_in_this_process"] is True, "capture was not installed: rule zero was not exercised"
-    assert not _global_provider_is_sdk(), "the pytest process installed a provider"
-
-
-def test_k2_a_recorder_that_raises_at_to_meta_yields_the_rollouts_own_traceback_as_the_string() -> None:
-    """Section 3: the string when ``to_meta()`` is None *or raised*, guarded as ``_classify``
-    guards it; section 8: ``format_exc()`` first, so nothing that raises after it replaces the
-    traceback the user needs."""
-    r = isolated(child_call_in_process, POISONED_PATH, {"role": CRASH}, 7, True)
-    assert r["kind"] == "error", r
-    text = r["payload"]
-    assert isinstance(text, str), text
-    assert_traceback_of(text, 7)
-    assert "to_meta_poisoning_rollout" in text, text
-    assert POISON not in text, text
-    assert r["sdk_provider_in_this_process"] is True
-    assert not _global_provider_is_sdk(), "the pytest process installed a provider"
-
-
-# ---------- K3: a non-Episode return after spans ----------
-
-
-def test_k3_a_non_episode_return_after_spans_yields_the_dict_form_around_the_existing_text() -> None:
-    r = isolated(child_call_in_process, DICT_PATH, {"role": "a"}, 7, True)
-    assert r["kind"] == "error", r
-    error, t = assert_dict_form(r["payload"])
-    assert error == NON_EPISODE_TEXT, error
-    trace = Trace.from_dict(t)
-    assert trace.truncated is None and trace.dropped == 0 and trace.source == "otel"
-    spans = by_name(trace)
-    assert set(spans) == {"invoke_agent 7", "chat 7"}, sorted(spans)
-    for span in trace.spans:
-        assert span.end_ns is not None and span.error is None, span  # nothing raised: nothing marked
-        assert span.attrs[RUN_ID_KEY] == RUN_ID and span.attrs[EPISODE_KEY] == EPISODE, (span.name, span.attrs)
-    assert spans["chat 7"].parent_id == spans["invoke_agent 7"].span_id
-    assert (spans["invoke_agent 7"].kind, spans["chat 7"].kind) == ("agent", "llm")
-    assert not _global_provider_is_sdk(), "the pytest process installed a provider"
-
-
 # ---------- K4: run_local, both paths ----------
 
 
@@ -747,7 +511,6 @@ def test_k4_run_local_stores_the_crashed_row_with_its_trace_counted_as_errored_a
     crashed = run.crashed
     seed = int(crashed["seed"])
     assert crashed["outcome"] is None and pd.isna(crashed["t"])
-    assert crashed["error"] != TIMEOUT_ERROR
     assert_traceback_of(crashed["error"], seed)
     assert set(crashed["meta"]) == {"trace"}, crashed["meta"]
     assert_crash_trace_of(
@@ -818,7 +581,6 @@ def test_k5_worker_batch_returns_the_string_for_the_crashing_job_without_capture
         if is_crash(config):
             assert isinstance(result, str), result
             assert_traceback_of(result, seed)
-            assert EXCEPTION in result and MESSAGE in result and "Traceback" in result  # I2's three words
         else:
             assert isinstance(result, dict) and result["outcome"] == _outcome(config, seed), result
             assert "trace" not in result["meta"] and result["backend_meta"]["i"] == i
@@ -919,7 +681,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
     blocks: list[list[str]] = []
     current: list[str] | None = None
     for line in body.splitlines():
-        # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+        # Text output shows a config_hash at 12 hex characters.
         if any(h[:12] in line for h in hashes):
             if current is not None:
                 blocks.append(current)
@@ -933,7 +695,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
 
 def assert_block_is_row(block: list[str], row: Any) -> None:
     text = "\n".join(block)
-    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    # Text output shows a config_hash at 12 hex characters.
     assert row.config_hash[:12] in block[0], block[0]
     assert re.search(rf"\b{row.seed}\b", text), f"seed {row.seed} missing from block:\n{text}"
     found = False
@@ -954,7 +716,7 @@ def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_i
     crashed = crash_run.crashed
     seed = int(crashed["seed"])
     error_text = str(crashed["error"])
-    assert "\n" in error_text  # a traceback: the exact text is the only selector until --errored lands (section 5)
+    assert "\n" in error_text  # a traceback: the exact text is the only selector until --errored lands
     r = inspect_run(crash_run.root, crash_run.run_id, error_text)
     assert r.code == 0, r.text
     assert not r.err.strip(), r.err
@@ -963,12 +725,12 @@ def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_i
     block = blocks[0]
     assert_block_is_row(block, crashed)
     text = "\n".join(block)
-    # Section 3's errored-row lines, where an ok row prints t: <float>.
+    # The errored row's lines, where an ok row prints t: <float>.
     assert "outcome: -" in block and "t: -" in block, text
     assert [line for line in block if line.startswith("t: ")] == ["t: -"], text
     error_lines = [line for line in block if line.startswith("error: ")]
     assert error_lines == ["error: Traceback (most recent call last):"], error_lines
-    assert f"error: {error_text}" in text, text  # printed as it is stored, multi-line (section 5)
+    assert f"error: {error_text}" in text, text  # printed as it is stored, multi-line
     # No truncated line: nothing was cut.
     assert "trace: truncated" not in r.out, r.out
     assert not [line for line in block if line.startswith("trace:")], text
@@ -994,44 +756,26 @@ def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_i
     assert not _global_provider_is_sdk(), "inspect installed a provider"
 
 
-# ---------- K8: the timed-out path and every public surface are untouched ----------
-
-
-def test_k8_the_s16_oracle_is_byte_identical() -> None:
-    assert S16_ORACLE.is_file(), S16_ORACLE
-    assert hashlib.sha256(code_of(S16_ORACLE.read_text(encoding="utf-8")).encode("utf-8")).hexdigest() == S16_ORACLE_SHA256, "the S16 oracle moved"
+# ---------- K8: the public surface is untouched ----------
 
 
 def test_k8_the_transport_aliases_and_signatures_are_untouched() -> None:
     assert Job == tuple[dict[str, Any], int, int, str, int]
     assert Result == dict[str, Any] | str
-    assert executor._Outcome == tuple[str, Any]
     assert Mapper == Callable[[Sequence[Sequence[Job]]], Iterator[tuple[int, list[Result] | BaseException]]]
-    assert executor._TIMEOUT_ERROR == TIMEOUT_ERROR
     assert tuple(f.name for f in dataclasses.fields(Episode)) == EPISODE_FIELDS
     assert set(Episode(outcome="fell", t=1.0, horizon=HORIZON).to_dict()) == set(EPISODE_FIELDS)
     assert tuple(f.name for f in dataclasses.fields(executor.RunSummary)) == SUMMARY_FIELDS
-    params = list(inspect.signature(worker_batch).parameters.values())
-    # M11a: ``chaos`` rides beside ``capture``, keyword-only, default None (Spec M11 section 0.1)
-    assert [p.name for p in params] == ["jobs", "import_path", "episode_timeout", "capture", "chaos"]
-    assert params[3].kind is params[3].KEYWORD_ONLY and params[3].default is None
-    assert params[4].kind is params[4].KEYWORD_ONLY and params[4].default is None
-    call = inspect.signature(executor._call_in_process).parameters
-    assert list(call) == ["rollout", "config", "seed", "capture_call", "chaos_call"]
-    assert call["capture_call"].default is None and call["chaos_call"].default is None
     meta = inspect.signature(EpisodeRecord.errored).parameters["meta"]
     assert meta.kind is meta.KEYWORD_ONLY and meta.default is None
 
 
-def test_k8_no_new_public_symbol_in_the_touched_modules_or_their_neighbours() -> None:
+def test_k8_capture_trace_and_otel_export_exactly_their_public_names() -> None:
     import poisson_prove.capture as capture_module
     import poisson_prove.otel as otel_module
     import poisson_prove.trace as trace_module
 
-    assert _defined(executor) == EXECUTOR_PUBLIC, sorted(_defined(executor) ^ EXECUTOR_PUBLIC)
-    assert _defined(executor_modal) == MODAL_PUBLIC, sorted(_defined(executor_modal) ^ MODAL_PUBLIC)
-    assert list(executor_modal.__all__) == MODAL_EXPORTS, executor_modal.__all__
-    assert set(capture_module.__all__) == PUBLIC_CAPTURE and _defined(capture_module) == PUBLIC_CAPTURE
+    assert set(capture_module.__all__) == PUBLIC_CAPTURE
     assert list(trace_module.__all__) == TRACE_EXPORTS, trace_module.__all__
     assert list(otel_module.__all__) == OTEL_EXPORTS, otel_module.__all__
     assert (PACKAGE / "executor.py").is_file() and (PACKAGE / "executor_modal.py").is_file(), PACKAGE

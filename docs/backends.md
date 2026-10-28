@@ -15,7 +15,7 @@ this machine. It needs nothing beyond `pip install poisson-prove`, and costs not
 agent's own calls.
 
 `--episode-timeout S` limits one episode to `S` seconds: each episode then runs in a child process,
-and one past the limit is stopped and stored with no outcome, as an error of kind `timeout`, with
+and one past the limit is stopped and stored with no outcome, as an error of kind `episode_timeout`, with
 the trace it had so far. Without it an episode that hangs holds up the sweep. A rollout that
 raises is stored as an errored episode either way, and the sweep goes on.
 

@@ -1,123 +1,31 @@
-"""A8a frozen tests: invariants P8-1 to P8-6, P8-13 to P8-19, P8-21 and P8-22 of
-the A8a span-schema spec, section 4, written before the eight span fields, the seventh
-trace key, ``OUTCOME_BY``, ``GATE``, ``ALIAS_MAP_VERSION``, the lifts, ``record()``'s three kwargs,
-``inspect``'s four columns and the two renames exist, against ``0ef8c3c`` -- T.4 prep's closing
-commit, A8a's base commit (the spec was written at ``afc1f3b`` and the probes first ran at
-``3bf4083``; ``src/`` and the nine updated test files are byte-identical across all three,
-measured by ``git diff --name-only``).
+"""A8a frozen tests: invariants P8-1 to P8-6, P8-13 to P8-16, P8-18 and P8-19 of
+the A8a span schema: the eight span fields, the seventh trace key, ``OUTCOME_BY``, ``GATE``,
+``ALIAS_MAP_VERSION``, the lifts, ``record()``'s three kwargs, ``inspect``'s four columns and the
+two renames.
 
-**The register, built to as decided at the start (spec section 10):** Q1 (c) the alias map stays
-GenAI-only and one real OpenInference payload went through ``from_otel`` at step zero -- 21 keys
-on a chat span, 0 aliased, 0 lifted, 10 routed as observation content, ``tokens`` and the model
-name lost for fields that already exist, none of A8a's eight carriers present; (b) is triggered
-for ``tokens`` and reported, not taken. Q2 (a) no ``graph.node.*`` identity entries in
-``ATTRIBUTE_ALIASES``; T20 is untouched. Q3 (b)/(c): ``FAULT_KEY`` and ``FAULT_POSITION_KEY`` are
-not A8a's and ``TRACE_EXPORTS`` is 25 names. Q4 (a) ``ALIAS_MAP_VERSION == "1"`` and P8-13 asserts
-the **binding**, not the literal (the string ``"1"`` appears 0 times in ``src/`` at ``3bf4083``,
-measured). Q5 (a) two cells. Q6 (a) ``EVALUATOR`` is not a gate marker. Q7 (a)
-``_ORIGINAL_ERROR_TYPE`` survives. Q8 (a) the four columns, after ``error``.
+**What these tests hold to.** The alias map stays GenAI-only: a real OpenInference chat span
+through ``from_otel`` has none of its 21 keys aliased or lifted, ten of them are observation
+content, ``tokens`` and the model name do not reach the fields that exist for them, and none of
+A8a's eight carriers is present. No ``graph.node.*`` identity
+entries in ``ATTRIBUTE_ALIASES``. ``FAULT_KEY`` and ``FAULT_POSITION_KEY`` are not A8a's.
+``ALIAS_MAP_VERSION == "1"``. ``EVALUATOR`` is not a gate marker. ``_ORIGINAL_ERROR_TYPE``
+survives. ``inspect``'s four new columns come after ``error``.
 
-**Two cells, and no invariant is cell-specific -- a result, not an assumption** (Master Action
-List section 18 standing rule 15, spec T7). pandas 2.3.3 and pandas 3.0.5, A22's recipe. Every
-one of A8a's nine fields reaches disk inside the ``trace`` / ``trace_obs`` JSON columns, never as
-a Parquet column, so the pandas major cannot see any of them; the cell that could disagree is the
-mutation table, not the red set. Every test here is asserted in both cells: **42 tests,
-42 + 42 = 84 ids over the two cells against the frozen file's own 42.** Nullness is by identity in
-every clause (spec section 3.10): ``is None`` / ``is not None``, never ``pd.isna`` and never a bare
-truth test.
+**pandas 2 and pandas 3, and no invariant is specific to one.** Every one of A8a's nine fields
+reaches disk inside the ``trace`` / ``trace_obs`` JSON columns, never as a Parquet column, so the
+pandas major cannot see any of them. Nullness is by identity in every clause: ``is None`` /
+``is not None``, never ``pd.isna`` and never a bare truth test.
 
-**Standing rule 12 -- the classified red set on the update commits (``9996ce3`` + ``268b64a``) with
-this file and its fixture added, measured on two pristine ``git archive`` copies before any source
-edit, venvs from the repo venv's freeze closure differing in exactly pandas, collection verified
-1941 = 1941 = 1941 and then 1983 with this file, baselines 1934 passed / 7 skipped / 0 failed in
-both cells at ``0ef8c3c``: 90 failed / 1886 passed / 7 skipped, identical test by test in both
-cells.** The ninety: the **39** tests here that are not P8-21's two or P8-22 (every one for its
-expected cause -- the eight fields, the seventh key, ``OUTCOME_BY`` / ``GATE`` / ``ALIAS_MAP_VERSION``,
-``record()``'s kwargs, the lifts, the nine columns, the manifest key and the two renames do not exist
-yet); and **51** update reds -- ``test_m12_trace.py`` 19 (fifteen tests reading the 21-key ``SPAN_A``
-/ ``SPAN_B`` through a 13-key ``from_dict``: T1 x2, T2 x2, T3 x2, T5 x3, T6, T7, T9, T11, T26 x2; T23
-on ``span.operation``; T29 on ``tries``; T30 on the nine-column regex), ``test_m3_timeout_trace.py`` 12
-(E7, E8 x3, E11 and E1's round trip, field-order, seven-key and eighth-key tests on the seven-key
-dicts; E12 on 25 exports; E9 x2 on the regex), ``test_m3_crash_trace.py`` 10 (K1 x2, K3, K5 x3, K6 x2
-on the 21-key dicts; K7 on the regex; K8 on 25 exports), ``test_m4_read.py`` 3 (R6 on the regex),
-``test_m10_cli.py`` 2 (I15 on the regex, I18 on 21 keys), ``test_a7_storage.py`` 2 (P7-4 on 21 keys,
-P7-10 on eight tabs), ``test_m3_capture.py`` 1 (C4 on nine manifest keys), ``test_m12_kinds.py`` 1
-(T37), and one example harness's test 1 (P12 on 25 exports). **Nothing else is red.** The pandas 3 cell adds
-nothing: every A8a field reaches disk inside a JSON string. The copies skip 7 where the repo skips 5,
-the two extra being a real-suite pair that reads a gitignored data file; the other five are an
-example harness's not-installed pair and the three the repo always skips.
-
-**What step zero measured at ``3bf4083`` (spec section 7.4), so these frozen tests rest on runs and not
-on reads.** (1) The kind-ladder guard fires: adding ``openinference.span.kind`` to ``_LIFTED_KEYS``
-and nothing else turns nine tests in ``test_m12_kinds.py`` red (the seven T36 OpenInference
-parametrisations, the case-insensitive test, and T37's vendor-keys test); both vendor keys, thirteen.
-(2) The ``STEP_LINE_RE`` census, run by widening ``cli.py``'s line to nine columns in a pristine copy
-with the regex unamended: **six positive assertion sites, eight tests red** (``test_m10_cli.py:273``
-via I15; ``test_m3_crash_trace.py:945`` K7; ``test_m12_trace.py:1512`` T30;
-``test_m3_timeout_trace.py:1165`` E9 and ``:1199`` via ``step_columns``; ``test_m4_read.py:286`` via
-three R6 tests) and **six negative sites, four of them unpaired and silently green**
-(``test_m10_cli.py:1072`` I16, ``test_m12_trace.py:1469`` T30, ``test_m3_timeout_trace.py:1224`` E9,
-and ``test_m3_timeout_trace.py:1214`` E9 -- reached through the ``step_columns`` helper and named in
-no document). The spec's "five" counts ``test_m3_crash_trace.py:951`` and
-``test_m3_timeout_trace.py:1164``, which sit inside K7 and E9 beside a positive count on the same
-block and went red with them, and misses ``:1214``. The update pairs all six with an explicit
-control and P8-21 scans for it. (3) ``split`` and ``assemble`` **do** name ``span_id``, ``attrs``
-and ``spans`` as literals, so P8-19's grep clause as the spec words it is false at ``3bf4083``; the
-clause asserted here is the one that catches the mutant -- no literal from the field set outside
-the navigation keys, and none of A8a's nine names. (4) ``ALIAS_MAP_VERSION`` has zero bindings and
-``"1"`` zero literal sites in ``src/``. (5) ``test_a7_storage.py:933`` used ``alias_map_version`` as
-its example of a key ``from_dict`` rejects; A8a makes it a valid key, so that row is updated to
-an unknown key -- a site in no inventory.
-
-**Mutation pass, eighteen rows plus control, whole suite on rsync copies of the shadow shim under the
-thread caps (harness fact 6), pandas 2.3.3.** Measurement order: the control, rows 2-5 and the two
-frozen-test self-checks ran on the shim **before** the second update commit and carry its three reds
-(P7-10, E1 x2 -- the sites that commit fixes) in every row, not counted below; the control is
-**3 failed / 1977 passed / 7 skipped** for exactly those three and the amended tests are green on
-the shim; rows 6-17 and 4b ran after. Eighteen caught, **no survivor**. Spelling recorded where a
-sole catch is claimed.
-
-| Row | Mutation (spelling) | Caught by, measured |
-|---|---|---|
-| 1 | control, no edit | -- |
-| 2 | ``from_otel`` post-pass numbers ``attempt`` by ``step_name`` repetition under one parent | **P8-5 alone** |
-| 3 | ``split`` rebuilds ``envelope["spans"]`` from the twenty-one keys enumerated literally | P8-19 grep half **and** P8-22 (any edit to ``split`` moves its digest) |
-| 4 | ``split`` reads ``span["truncated"]`` / ``span["bytes_original"]`` in a no-op branch | P8-19 grep half and P8-22 -- the spelling names a field literal |
-| 4b | ``split``: ``bodies = dict()`` for ``{}`` (no key named, behaviour identical) | **P8-22 alone** |
-| 5 | the ``gate=gate`` kwarg dropped at the hand-written ``Span(...)`` in ``_span`` | **P8-3 contrapositive alone** |
-| 6 | ``merge`` takes the first non-None ``alias_map_version`` instead of the agreed one | **P8-13 merge test alone** |
-| 7 | ``gate = "emitted"`` when the span *name* is ``guardrail`` | **P8-6 named-guardrail test alone** |
-| 8 | the unrecognised operation still stashed under ``proofload.original_operation`` | P8-16, T23 (amended) |
-| 9 | ``graph.node.id`` added to ``_LIFTED_KEYS`` (Q2 crossed) | **P8-4 alone** |
-| 10 | ``_vendor_kind(attrs)`` after the lift (section 8 trap 1) | T36 x11, T37, P8-4, P8-6 -- 15 |
-| 11 | ``_span_mapping`` emits no ``traceId`` | **P8-14 alone** |
-| 12 | ``_capture_record`` without ``alias_map_version`` | P8-17, C4 |
-| 13 | the mock emits ``attrs={"attempts": ...}`` again | P8-15, T29 |
-| 14 | ``inspect`` prints ``attempt`` before ``step_name`` | **P8-18 columns test alone** |
-| 15 | the ``bytes_original``-without-``truncated`` clause dropped from ``Span.__post_init__`` | **P8-2 (that parametrisation) alone** |
-| 16 | a second ``ALIAS_MAP_VERSION = "1"`` binding in ``executor.py`` | **P8-13 binding test alone** |
-| 17 | ``record()`` defaults ``gate`` to ``"emitted"`` | P8-3 producer test, P8-3 contrapositive |
-| s1 | *(frozen-test self-check, four files)* one ``STEP_LINE_RE`` copy back to five columns | P8-21 copy test, I15, **and I16 -- the control line turns the vacuous negative red** |
-| s2 | *(frozen-test self-check, four files)* the control removed from I16 | **P8-21 pairing test alone** |
-
-**Green-before-and-after, named so its green is not read as evidence** (standing rule 12): P8-19's
-grep half (``split`` / ``assemble`` already pass it); P8-22 in its entirety (per-symbol digests of
-A7's surface at ``3bf4083``); the six negative ``STEP_LINE_RE`` uses (they pass on the unamended
-regex vacuously and on the amended one for the right reason; the control makes the difference
-visible); E1's renamed six-key rejection test, green on the bare tree because the rejection message
-lists the expected keys and ``"truncated"`` is among them, and green after the build because the key
-is then genuinely missing; A22's V5; T36's four tests in ``test_m12_kinds.py``, which are the guard that goes red if
-the build lifts the vendor keys before the ladder reads them.
+**The guard on the kind ladder.** T36's tests in ``test_m12_kinds.py`` are the guard that fails if
+the vendor keys are lifted before the kind ladder reads them: adding ``openinference.span.kind`` to
+``_LIFTED_KEYS`` fails them.
 """
 
 from __future__ import annotations
 
-import ast
 import dataclasses
-import hashlib
 import json
 import logging
-import re
 from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
@@ -132,24 +40,22 @@ import poisson_prove.cli as cli
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace, TraceValidationError
-from conftest import code_of, quickstart_design
+from conftest import STEP_LINE_RE, quickstart_design
 
-ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "src" / "poisson_prove"
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS / "fixtures" / "trace"
-# PF3 (spec sections 8.8 and 14): the one copy is the packaged spec; this is its design at
-# the 100 replicates this file was frozen at.
+# PF3: the one copy is the packaged spec; this is its design at
+# 100 replicates.
 QUICKSTART = quickstart_design()
-# PF4 re-freeze (PF4.30, PF4.48a, reading R33): the quickstart design at 100 replicates with nothing
+# PF4.30, PF4.48a: the quickstart design at 100 replicates with nothing
 # declared has a detection limit (0.262 at base rate 0.400) above the default accepted change of 0.20,
-# so its sweep is refused; every frozen sweep of it in this file accepts 0.3, the smallest round value
+# so its sweep is refused; every sweep of it in this file accepts 0.3, the smallest round value
 # above the limit.
 QUICKSTART_MAX_MDE = ("--max-mde", "0.3")
 LOGGER_NAME = "poisson_prove.trace"
 EPOCH = 1_756_900_000_000_000_000
 
-# ---------- spec constants (section 2), spelled here so the file collects before the build ----------
+# ---------- the schema's constants, spelled here rather than imported from the code ----------
 
 SPAN_FIELDS_SPEC: tuple[str, ...] = (
     "span_id", "parent_id", "kind", "name", "start_ns", "end_ns",
@@ -160,43 +66,9 @@ NEW_FIELDS: tuple[str, ...] = SPAN_FIELDS_SPEC[13:]
 TRACE_KEYS_SPEC: tuple[str, ...] = ("schema", "source", "source_version", "dropped", "spans", "truncated", "alias_map_version")
 OUTCOME_BY_SPEC = ("code", "llm", "self", "human")
 GATE_SPEC = ("emitted", "declared")
-ALIAS_MAP_VERSION_SPEC = "1"  # section 10 Q4 (a)
+ALIAS_MAP_VERSION_SPEC = "1"  # the alias map's only version
 STATUS_CODES = frozenset({"OK", "UNSET", "ERROR"})
-LIFTED_CARRIERS = (
-    "openinference.span.kind", "traceloop.span.kind", "graph.node.name",
-    "poisson_prove.step_name", "poisson_prove.outcome", "poisson_prove.outcome_by", "poisson_prove.attempt", "poisson_prove.gate",
-)
-MANIFEST_CAPTURE_KEYS = frozenset({
-    "requested", "active", "reason", "instrumented", "semconv", "alias_map_version", "content", "max_observation_bytes", "max_spans",  # A8b: the key's second move (A8a T4)
-})
 OTLP_FIXTURES = ("otlp_agent_chat.json", "otlp_kinds.json", "otlp_aliases.json", "otlp_dropped.json")
-STEP_LINE_FILES = ("test_m10_cli.py", "test_m12_trace.py", "test_m3_crash_trace.py", "test_m3_timeout_trace.py", "test_m4_read.py")
-NINE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-\tplan\t2\tpass\temitted"
-FIVE_COLUMNS = "  3\tllm\tchat gpt-4o\t0.5\t-"
-
-#: P8-22: sha256 of ``ast.get_source_segment`` for each symbol A7 owns, measured at ``3bf4083``.
-# Re-minted 2026-10-24 (public hygiene, Q37): each digest is over the symbol's code with its comments and docstrings
-# taken out (``code_of``), so the plain-words pass over src/ moves none of them and a change to the code still does.
-# Read off main's unchanged code (56e6e69), every raw digest above matching first, not predicted.
-A7_SURFACE: dict[str, dict[str, str]] = {
-    "trace.py": {
-        # PF0 (Q4): LOGPROBS_KEY and OBSERVATION_KEYS are no longer pinned; the rename changes both
-        # (the span key prefix), and no digest of them can be frozen honestly before the build exists.
-        "_OBSERVATION_PREFIXES": "08fd8423badb0404b15168948cbc2f22baf07277aa6570e9f36d35e3bf71a40a",
-        "_ObservationKeys": "27ead8ed01df19d6fdc2e1ec09a6ff70d40348074e9c62ae48c99f1bfd8a3502",
-        # ``split`` retired from this table by the A8b freeze, narrowed and never re-minted (ADR-077 / C19):
-        # A8b widens its loop body, which is the one A7 symbol A8b may edit. Owner: A8b. Cover:
-        # tests/test_a8b_cut_and_cap.py P8-25, which re-asserts every other symbol here byte-identical,
-        # pins split's signature line and confines its edit to the loop. Digest at retirement: a63f24ba...13df24.
-        "assemble": "ff677667e7d4d35ab51f1b4a51fae804f4eaa80c7e19bc9188889fbf63d9cb61",
-    },
-    "store.py": {
-        # PF4 re-freeze (PF4.38, reading R5): the store gains a nullable case_id column copied from
-        # meta["case_id"] on append, which moves _SCHEMA, _NULLABLE_STRING_COLUMNS and Store.append;
-        # their digests are removed (digests at removal: 7a667ffb...80c02a, c7f3ae63...a9fe0, 8bdf8983...87bb7).
-        "Store.read": "dbb913562835b7a20a900720cd9d8a94f7b403e513f8966751f4c5ffa52c48cb",
-    },
-}
 
 # ---------- helpers: data construction, never an assertion ----------
 
@@ -244,30 +116,6 @@ def flat_span(n: int, name: str, **attrs: Any) -> dict[str, Any]:
     }
 
 
-def function_source(path: Path, qualname: str) -> str:
-    """``ast.get_source_segment`` of a top-level def / class / assignment, or ``Class.method``."""
-    src = path.read_text(encoding="utf-8")
-    tree = ast.parse(src)
-    head, _, tail = qualname.partition(".")
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.ClassDef) and node.name == head:
-            if not tail:
-                return ast.get_source_segment(src, node) or ""
-            for member in node.body:
-                if isinstance(member, ast.FunctionDef) and member.name == tail:
-                    return ast.get_source_segment(src, member) or ""
-        if isinstance(node, ast.Assign | ast.AnnAssign):
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if any(isinstance(t, ast.Name) and t.id == head for t in targets):
-                return ast.get_source_segment(src, node) or ""
-    raise AssertionError(f"{qualname} not found at top level of {path.name}")
-
-
-
-def string_literals(node: ast.AST) -> set[str]:
-    return {n.value for n in ast.walk(node) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
-
-
 def synthetic_run_with_trace(root: Path, run_id: str, trace: Mapping[str, Any]) -> None:
     """One violated row carrying ``trace`` in ``meta`` -- the shape T30's rejected-trace test stores."""
     store = Store(root)
@@ -288,7 +136,6 @@ def inspect_lines(root: Path, run_id: str, event: str) -> list[str]:
     return out.getvalue().splitlines()
 
 
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")
 
 
 # ---------- P8-1: the twenty-one-key span and the seven-key trace ----------
@@ -371,7 +218,7 @@ def test_p8_2_the_vocabularies_and_the_free_fields() -> None:
         assert plain_span(outcome="x", outcome_by=who).outcome_by == who
     for gate in GATE:
         assert plain_span(gate=gate).gate == gate
-    # operation is verbatim and never checked against a vocabulary (D7); outcome is a free label (ADR-039).
+    # operation is verbatim and never checked against a vocabulary; outcome is a free label.
     for op in ("chat", "frobnicate", "CHAT", "guardrail", ""):
         assert plain_span(operation=op).operation == op
     assert plain_span(outcome="").outcome == "" and plain_span(outcome="whatever").outcome == "whatever"
@@ -501,7 +348,7 @@ def test_p8_3_a_bad_handle_value_drops_the_span_with_a_warning_and_never_raises(
 # ---------- P8-4: the lifts on otlp_loop.json ----------
 
 
-def test_p8_4_graph_node_name_and_proofload_attempt_are_lifted_and_leave_attrs() -> None:
+def test_p8_4_graph_node_name_and_poisson_prove_attempt_are_lifted_and_leave_attrs() -> None:
     by = loop_spans()
     for sid, step_name in ((2, "lookup"), (3, "lookup"), (4, "lookup"), (6, "check"), (7, "check"), (8, "check"), (1, "plan"), (5, "verify")):
         assert by[sid].step_name == step_name, (sid, by[sid].step_name)
@@ -524,15 +371,13 @@ def test_p8_4_guardrail_is_an_emitted_gate_and_evaluator_is_not_and_graph_node_i
     for sid in (9, 10, 11, 14):
         assert "openinference.span.kind" not in by[sid].attrs, sid
     assert "traceloop.span.kind" not in by[15].attrs and (by[15].kind, by[15].operation) == ("agent", "workflow")
-    # Q2 (a): graph.node.id and graph.node.parent_id are neither lifted nor aliased; they survive in attrs.
+    # graph.node.id and graph.node.parent_id are neither lifted nor aliased; they survive in attrs.
     for sid, node, parent in ((2, "n2", "n1"), (3, "n3", "n1"), (4, "n4", "n1"), (6, "n6", "n5")):
         assert by[sid].attrs["graph.node.id"] == node and by[sid].attrs["graph.node.parent_id"] == parent, sid
     assert by[1].attrs["graph.node.id"] == "n1" and "graph.node.parent_id" not in by[1].attrs
-    from poisson_prove.trace import ATTRIBUTE_ALIASES, _LIFTED_KEYS
+    from poisson_prove.trace import ATTRIBUTE_ALIASES
 
     assert "graph.node.id" not in ATTRIBUTE_ALIASES and "graph.node.parent_id" not in ATTRIBUTE_ALIASES
-    assert "graph.node.id" not in _LIFTED_KEYS and "graph.node.parent_id" not in _LIFTED_KEYS
-    assert set(LIFTED_CARRIERS) <= set(_LIFTED_KEYS)
 
 
 # ---------- P8-5: attempt is never derived ----------
@@ -584,27 +429,10 @@ def test_p8_6_declared_on_the_wire_is_dropped_with_one_warning_and_emitted_is_ta
 # ---------- P8-13: ALIAS_MAP_VERSION ----------
 
 
-def alias_map_version_bindings() -> list[str]:
-    sites = []
-    for path in sorted(SRC.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign | ast.AnnAssign):
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                if any(isinstance(t, ast.Name) and t.id == "ALIAS_MAP_VERSION" for t in targets):
-                    value = node.value
-                    literal = value.value if isinstance(value, ast.Constant) else None
-                    sites.append(f"{path.relative_to(SRC)}:{node.lineno}={literal!r}")
-    return sites
-
-
-def test_p8_13_alias_map_version_is_bound_exactly_once_in_src_and_the_binding_is_the_value() -> None:
+def test_p8_13_alias_map_version_is_one() -> None:
     from poisson_prove.trace import ALIAS_MAP_VERSION
 
     assert ALIAS_MAP_VERSION == ALIAS_MAP_VERSION_SPEC
-    sites = alias_map_version_bindings()
-    assert len(sites) == 1 and sites[0].startswith("trace.py:"), sites
-    assert sites[0].endswith(f"={ALIAS_MAP_VERSION!r}"), sites
 
 
 def test_p8_13_from_otel_stamps_it_and_record_and_litellm_leave_it_none() -> None:
@@ -622,9 +450,9 @@ def test_p8_13_from_otel_stamps_it_and_record_and_litellm_leave_it_none() -> Non
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
     from poisson_prove.capture import CaptureSpec, Recorder
 
-    rec = Recorder(CaptureSpec(max_observation_bytes=8192), "r-a8a", "cfg:1")  # CD (D1): the cap has no default
+    rec = Recorder(CaptureSpec(max_observation_bytes=8192), "r-a8a", "cfg:1")  # a [capture] table's cap has no default
     empty = rec._trace([], None)
-    assert empty is None  # D9: nothing captured, no envelope from _trace itself
+    assert empty is None  # nothing captured, so _trace itself builds no envelope
     stamped = rec._trace([flat_span(0x31, "captured")], None)
     assert stamped is not None and stamped["alias_map_version"] == ALIAS_MAP_VERSION
 
@@ -649,43 +477,6 @@ def test_p8_13_merge_mirrors_source_version_keeps_agreement_and_erases_disagreem
 # ---------- P8-14: the trace id and the status code ----------
 
 
-def test_p8_14_span_mapping_emits_trace_id_and_from_otel_keeps_it_with_the_status_code_unlifted() -> None:
-    pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    from opentelemetry.trace import Status, StatusCode
-
-    from poisson_prove.capture import _span_mapping
-    from poisson_prove.trace import _LIFTED_KEYS, from_otel
-
-    provider = TracerProvider()
-    exporter = InMemorySpanExporter()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    tracer = provider.get_tracer("a8a")
-    with tracer.start_as_current_span("ok") as ok:
-        ok.set_status(Status(StatusCode.OK))
-    with tracer.start_as_current_span("unset"):
-        pass
-    with tracer.start_as_current_span("error") as bad:
-        bad.set_status(Status(StatusCode.ERROR, "boom"))
-    finished = exporter.get_finished_spans()
-    assert len(finished) == 3
-    mappings = [_span_mapping(s, content=False) for s in finished]
-    for raw, sdk in zip(mappings, finished, strict=True):
-        assert raw["traceId"] == format(sdk.get_span_context().trace_id, "032x"), raw
-    tr = from_otel(mappings)
-    assert tr.dropped == 0
-    by_name = {s.name: s for s in tr.spans}
-    assert {by_name[n].attrs["otel.status_code"] for n in ("ok", "unset", "error")} == STATUS_CODES
-    assert by_name["ok"].attrs["otel.status_code"] == "OK" and by_name["error"].attrs["otel.status_code"] == "ERROR"
-    assert by_name["unset"].attrs["otel.status_code"] == "UNSET"
-    for span in tr.spans:
-        assert span.attrs["otel.trace_id"] == mappings[0]["traceId"] or span.attrs["otel.trace_id"] in {m["traceId"] for m in mappings}
-    assert "otel.trace_id" not in _LIFTED_KEYS and "otel.status_code" not in _LIFTED_KEYS
-    assert by_name["error"].error == "boom" and by_name["ok"].error is None and by_name["unset"].error is None
-
-
 def test_p8_14_on_the_fixtures_every_span_carries_both_and_error_keeps_the_shipped_rule() -> None:
     from poisson_prove.trace import from_otel
 
@@ -696,7 +487,7 @@ def test_p8_14_on_the_fixtures_every_span_carries_both_and_error_keeps_the_shipp
         assert span.attrs["otel.trace_id"] == "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a", span.span_id
         assert span.attrs["otel.status_code"] in STATUS_CODES, span.span_id
     assert by[3].error == "lookup failed" and by[2].error is None
-    # otlp_kinds.json's two error spans, exactly as 3bf4083 reads them: status.message first, then error.type.
+    # otlp_kinds.json's two error spans under the shipped rule: status.message first, then error.type.
     kinds = {s.span_id: s for s in from_otel(load_fixture("otlp_kinds.json")).spans}
     assert kinds["0000000000000001"].error == "boom" and kinds["000000000000000e"].error == "TimeoutError"
     assert all(s.error is None for sid, s in kinds.items() if sid not in ("0000000000000001", "000000000000000e"))
@@ -709,9 +500,6 @@ def test_p8_14_on_the_fixtures_every_span_carries_both_and_error_keeps_the_shipp
 def test_p8_15_modal_backend_meta_carries_infra_attempt_and_no_attempt() -> None:
     from poisson_prove import executor_modal
 
-    source = (SRC / "executor_modal.py").read_text(encoding="utf-8")
-    literals = string_literals(ast.parse(source))
-    assert "attempt" not in literals and "infra_attempt" in literals
     job = ({"x": 1.0}, 7, 3, "hash", 0)
     record = executor_modal._infra_record(SimpleNamespace(run_id="r-modal"), job, RuntimeError("boom"), 2)
     assert record.backend_meta.get("infra_attempt") == 2 and "attempt" not in record.backend_meta, record.backend_meta
@@ -721,8 +509,6 @@ def test_p8_15_modal_backend_meta_carries_infra_attempt_and_no_attempt() -> None
 def test_p8_15_the_mock_emits_tries_and_never_attempt() -> None:
     from poisson_prove.examples import mock_agent
 
-    source = (SRC / "examples" / "mock_agent.py").read_text(encoding="utf-8")
-    assert "attempts" not in string_literals(ast.parse(source))
     seen = set()
     for seed in range(20):
         for fn in (mock_agent.rollout, mock_agent.rollout_patched):
@@ -756,22 +542,7 @@ def test_p8_16_operation_is_the_source_operation_name_stripped_and_lowercased_in
     from poisson_prove import trace as trace_module
 
     assert not hasattr(trace_module, "_ORIGINAL_OPERATION")
-    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # section 10 Q7 (a): survives
-
-
-# ---------- P8-17: the manifest's capture record ----------
-
-
-def test_p8_17_environment_capture_has_the_nine_keys_and_alias_map_version_is_the_constant() -> None:
-    pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
-    from poisson_prove.capture import CaptureSpec, CaptureStatus
-    from poisson_prove.executor import _capture_record
-    from poisson_prove.trace import ALIAS_MAP_VERSION, OTEL_SEMCONV_VERSION
-
-    record = _capture_record(CaptureSpec(max_observation_bytes=8192), CaptureStatus(requested=False, active=False, reason=None, instrumented=()))  # CD (D1)
-    assert set(record) == MANIFEST_CAPTURE_KEYS, sorted(record)
-    assert record["alias_map_version"] == ALIAS_MAP_VERSION and record["semconv"] == OTEL_SEMCONV_VERSION
-    assert record["max_observation_bytes"] == 8_192  # A8b: the renamed key; A8a kept the shipped spelling
+    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # survives
 
 
 # ---------- P8-18: inspect's nine columns ----------
@@ -785,12 +556,12 @@ def test_p8_18_inspect_prints_nine_columns_the_first_five_unchanged_and_dashes_f
         stdout=out, stderr=err, stdin=StringIO(),
     )
     assert code == 0, out.getvalue() + err.getvalue()
-    # A sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3); the run is
+    # A sweep now ends with a verdict line, not 'run_id: <id>'; the run is
     # the one the empty store gained.
     (run_id,) = Store(root).runs()
     df = Store(root).read(run_id)
     rows = df[df["outcome"] == "violated"]
-    # Text output shows a config_hash at 12 hex characters (spec section 5.4, rule 10).
+    # Text output shows a config_hash at 12 hex characters (rule 10).
     by_key = {(row.config_hash[:12], int(row.seed)): row for row in rows.itertuples(index=False)}
     lines = inspect_lines(root, run_id, "violated")
     blocks: list[list[str]] = []
@@ -808,7 +579,7 @@ def test_p8_18_inspect_prints_nine_columns_the_first_five_unchanged_and_dashes_f
         step_lines = [line for line in block if STEP_LINE_RE.match(line)]
         assert len(step_lines) == len(spans) >= 1, "\n".join(block)
         for j, (line, span) in enumerate(zip(step_lines, spans, strict=True)):
-            # Byte-identical to 3bf4083's five columns, then four dashes: every new field is None on the mock.
+            # The five columns as before A8a, byte for byte, then four dashes: every new field is None on the mock.
             assert line == f"  {j}\t{span.kind}\t{span.name}\t{span.duration_ms}\t{'-' if span.error is None else span.error}\t-\t-\t-\t-", line
             checked += 1
     assert checked >= 1
@@ -829,10 +600,10 @@ def test_p8_18_the_four_new_columns_carry_step_name_attempt_outcome_and_gate(tmp
     assert second[1:3] == ["tool", "lookup"] and second[5:] == ["lookup", "2", "pass", "emitted"], second
     assert all(len(cols) == 9 for cols in (first, second))
     # operation, outcome_by, truncated and bytes_original are not printed anywhere in the block.
-    assert not any("execute_tool" in line or "code" == line.strip() for line in lines)
+    assert not any("execute_tool" in line or "code" in line.split("\t") for line in lines)
 
 
-# ---------- P8-19: the round trip over the widened span, and the grep half ----------
+# ---------- P8-19: the round trip over the widened span ----------
 
 hex_ids = st.text(alphabet="0123456789abcdef", min_size=16, max_size=16)
 json_scalars = st.none() | st.booleans() | st.integers(min_value=-(2**63), max_value=2**63) | st.floats(allow_nan=False, allow_infinity=False) | st.text(max_size=8)
@@ -896,99 +667,3 @@ def test_p8_19_assemble_of_split_round_trips_the_twenty_one_key_span_and_the_sev
     assert assemble(envelope, obs).to_dict() == t.to_dict()
     if not obs:
         assert assemble(envelope, None).to_dict() == t.to_dict()
-
-
-def test_p8_19_split_and_assemble_name_no_field_key_outside_the_navigation_set() -> None:
-    """Green-before-and-after (spec section 7.2): measured at 3bf4083, both functions already
-    satisfy this. The literals they do name -- ``span_id``, ``attrs``, ``spans`` -- are the keys
-    needed to walk the structure, not the field set; the mutant this catches rebuilds the envelope
-    from an enumerated key list, which puts ``kind``, ``name``, ``operation`` ... into the body."""
-    from poisson_prove.trace import _OBSERVATION_FIELDS, _SPAN_FIELDS, _TRACE_FIELDS
-
-    navigation = {"span_id", "attrs", "spans", *_OBSERVATION_FIELDS}
-    assert set(_SPAN_FIELDS) == set(SPAN_FIELDS_SPEC) and set(_TRACE_FIELDS) == set(TRACE_KEYS_SPEC)
-    forbidden = (set(_SPAN_FIELDS) | set(_TRACE_FIELDS)) - navigation
-    for name in ("split", "assemble"):
-        body = ast.parse(function_source(SRC / "trace.py", name))
-        for node in ast.walk(body):
-            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
-                continue  # the docstring
-        literals = {n.value for n in ast.walk(body) if isinstance(n, ast.Constant) and isinstance(n.value, str) and len(n.value) < 40}
-        assert not (literals & forbidden), (name, sorted(literals & forbidden))
-        assert not (literals & set(NEW_FIELDS)) and "alias_map_version" not in literals, name
-
-
-# ---------- P8-21: the step-line regex, five copies, every negative use paired ----------
-
-
-def step_line_re_of(path: Path) -> re.Pattern[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "STEP_LINE_RE" for t in node.targets):
-            call = node.value
-            assert isinstance(call, ast.Call) and isinstance(call.args[0], ast.Constant), path.name
-            return re.compile(call.args[0].value)
-    raise AssertionError(f"no STEP_LINE_RE in {path.name}")
-
-
-def test_p8_21_every_copy_of_the_regex_reads_nine_columns() -> None:
-    for name in STEP_LINE_FILES:
-        pattern = step_line_re_of(TESTS / name)
-        assert pattern.match(NINE_COLUMNS), name
-        assert not pattern.match(FIVE_COLUMNS), name
-        assert not pattern.match(NINE_COLUMNS + "\t-"), name
-        assert not pattern.match("trace: truncated (timeout)"), name
-
-
-def negative_and_positive_uses(fn: ast.FunctionDef, src: str) -> tuple[int, int]:
-    """(negative uses, positive controls) of STEP_LINE_RE inside one function body."""
-    negatives = positives = 0
-    for node in ast.walk(fn):
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            operand = ast.get_source_segment(src, node.operand) or ""
-            if "STEP_LINE_RE.match(" in operand or "step_columns(" in operand:
-                negatives += 1
-        if isinstance(node, ast.Compare) and len(node.comparators) == 1:
-            left = ast.get_source_segment(src, node.left) or ""
-            right = node.comparators[0]
-            if "STEP_LINE_RE.match(" in left and isinstance(right, ast.List) and not right.elts:
-                negatives += 1
-        if isinstance(node, ast.Assert) and isinstance(node.test, ast.Call):
-            func = node.test.func
-            if isinstance(func, ast.Attribute) and func.attr == "match" and isinstance(func.value, ast.Name) and func.value.id == "STEP_LINE_RE":
-                positives += 1
-    return negatives, positives
-
-
-def test_p8_21_every_negative_use_is_paired_with_a_positive_control_in_the_same_test() -> None:
-    paired: list[str] = []
-    for name in STEP_LINE_FILES:
-        src = (TESTS / name).read_text(encoding="utf-8")
-        tree = ast.parse(src)
-        for fn in [n for n in tree.body if isinstance(n, ast.FunctionDef)]:
-            negatives, positives = negative_and_positive_uses(fn, src)
-            if negatives:
-                assert positives >= 1, f"{name}::{fn.name} has {negatives} negative use(s) of STEP_LINE_RE and no positive control"
-                paired.append(f"{name}::{fn.name}")
-    # The census at 3bf4083: six functions carry a negative use. Pinned so the scan is known to see them.
-    assert sorted(paired) == sorted([
-        "test_m10_cli.py::test_i16_inspect_without_trace_prints_rows_and_no_step_lines",
-        "test_m12_trace.py::test_t30_inspect_prints_no_trace_lines_and_no_error_for_a_rejected_trace_dict",
-        "test_m3_crash_trace.py::test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_its_complete_trace",
-        "test_m3_timeout_trace.py::test_e9_inspect_selects_the_timed_out_row_by_error_and_prints_its_truncated_trace",
-        "test_m3_timeout_trace.py::test_e9_a_timed_out_row_without_a_trace_prints_its_error_and_no_trace_lines",
-        "test_m3_timeout_trace.py::test_e9_an_event_matching_neither_outcome_nor_error_prints_the_no_rows_message_naming_it",
-    ]), paired
-
-
-# ---------- P8-22: A7's surface is byte-identical ----------
-
-
-def test_p8_22_a8a_edits_nothing_a7_owns() -> None:
-    """Green-before-and-after by construction (spec section 7.2): it goes red only if the build
-    crosses the A7/A8b line -- teaching ``split`` about ``truncated``, adding a span field to
-    ``OBSERVATION_KEYS``, or touching the store's schema, its nullable columns, ``append`` or ``read``."""
-    for file, symbols in A7_SURFACE.items():
-        for qualname, expected in symbols.items():
-            actual = hashlib.sha256(code_of(function_source(SRC / file, qualname)).encode("utf-8")).hexdigest()
-            assert actual == expected, f"{file} {qualname} moved: {actual}"

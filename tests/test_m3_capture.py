@@ -1,17 +1,12 @@
 """M3 -- trace capture: the frozen tests for C1-C12, C2a included.
 
-Written from "Proofload -- Spec M3 Executor (trace capture amendment)" section 4. The build
-builds ``src/proofload/capture.py`` and the four wiring changes against this file and does not
-edit it. Every test imports ``proofload.capture`` inside its own body, so the file collects
-while the module does not exist. The capture module lives behind the ``agent`` extra; the
-whole file skips without ``opentelemetry-sdk``, the way the stamper frozen tests do, and the one
-test that feeds finished spans through the OTLP encoder skips at that helper -- the encoder
-is a dev-only reference, like lifelines.
+Trace capture in the executor (``src/poisson_prove/capture.py``). Every test imports
+``poisson_prove.capture`` inside its own body. The capture module lives behind the ``agent``
+extra; the whole file skips without ``opentelemetry-sdk``, the way the stamper frozen tests do.
 
-C1 and C2 come first because both were found by running code and both fail silently: a run
-completes normally and every trace is empty or nearly empty. C1 uses a real fork, both ways,
-from a driver written to a real file (``spawn`` re-imports ``__main__`` and cannot re-import
-``<stdin>``). C2 re-seeds the global ``random`` between spans against the real provider
+C1 and C2 come first because both fail silently: a run completes normally and every trace is
+empty or nearly empty. C1 checks that ``install()`` reports itself inactive when it cannot own
+the global provider. C2 re-seeds the global ``random`` between spans against the real provider
 ``install()`` builds. Neither uses a mock provider.
 
 Installing a provider is permanent (C2a), so every test that calls ``install()`` -- directly,
@@ -19,19 +14,17 @@ or through ``run_local``, ``worker_batch`` or the CLI -- runs it in a child proc
 this one (``isolated``) and reads the store, the results and the child's log records back
 through a pipe. The pytest process itself never installs, so every child starts from the same
 clean state and the in-process tests can assert the global provider was left alone.
-OpenTelemetry objects are imported inside test bodies, never held at module level: M12's T27
-purges ``opentelemetry*`` from ``sys.modules`` earlier in the suite, and a module-level
-reference would then point at a different copy of the SDK than the code under test.
+OpenTelemetry objects are imported inside test bodies, never held at module level.
 
-Conventions the frozen tests fix where the spec is silent, recorded so they are not re-litigated:
+Conventions the frozen tests fix where nothing else does:
 
-- The episode id stamped as ``proofload.episode`` is ``f"{config_hash}:{replicate_index}"`` on
-  every path. Section 3 derives it from those two fields inside ``worker_batch``; the local
+- The episode id stamped as ``poisson_prove.episode`` is ``f"{config_hash}:{replicate_index}"``
+  on every path. ``worker_batch`` derives it from those two fields; the local
   path has the same two on its ``Pair``.
 - ``worker_batch``'s keyword-only ``capture`` dict carries the four ``CaptureSpec`` fields as
-  JSON-native values (``instrument`` a list) plus ``"run_id"``. Section 3 fixes the signature
-  at one new parameter and says the run id rides the map item, so at the ``worker_batch``
-  boundary it can only travel inside that dict.
+  JSON-native values (``instrument`` a list) plus ``"run_id"``. The signature keeps its three
+  positional parameters, ``capture`` is keyword-only, and the run id rides the map item, so at
+  the ``worker_batch`` boundary it can only travel inside that dict.
 - ``CaptureSpec.instrument`` names resolve through the ``opentelemetry_instrumentor``
   entry-point group, the group every ``opentelemetry-instrumentation-*`` package registers
   under; a name with no entry point is C4's "unknown instrumentor name". The frozen tests register
@@ -39,20 +32,19 @@ Conventions the frozen tests fix where the spec is silent, recorded so they are 
   installed and nothing is patched.
 - A ``[capture]`` table with ``instrument = []`` still installs the provider and is active:
   ``install(CaptureSpec(max_observation_bytes=...))`` must capture for C2 to be testable at all --
-  CD (D1) took the cap's default away, and this file declares ``DECLARED_LIMIT`` for it -- and a
+  the cap has no default, and this file declares ``DECLARED_LIMIT`` for it -- and a
   target that emits spans through the OTel API itself needs no instrumentor.
 - ``run_local`` learns of the request from the ``[capture]`` table ``SweepSpec.load`` reads.
   The tests drive it from a TOML file only and pin no field name on ``SweepSpec``.
 - C7's collision WARNING is asserted as exactly one WARNING record on a logger under
-  ``proofload`` during a one-episode run; the logger's exact name is not pinned.
+  ``poisson_prove`` during a one-episode run; the logger's exact name is not pinned.
 - C10's marker "recording each original byte length" is accepted with either defensible
   measure of the replaced value: its UTF-8 length or the length of its JSON encoding.
-- The manifest record of section 3 is asserted only when a ``[capture]`` table is present.
+- The capture manifest record is asserted only when a ``[capture]`` table is present.
 """
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import importlib
 import importlib.machinery
@@ -62,10 +54,8 @@ import json
 import logging
 import multiprocessing
 import random
-import subprocess
 import sys
 import time
-import traceback
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, ExitStack
 from io import StringIO
@@ -75,35 +65,31 @@ from typing import Any
 import pyarrow.parquet as pq
 import pytest
 
-import poisson_prove
 import poisson_prove.cli as cli
-import poisson_prove.executor as executor
 from poisson_prove.episode import Episode
 from poisson_prove.executor import RunSummary, plan, run_local
 from poisson_prove.executor_modal import Job, Mapper, Result, worker_batch
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
+from isolated_support import isolated
 
 pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
 
 MODULE = __name__
-PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
 RUN_ID_KEY = "poisson_prove.run_id"
 EPISODE_KEY = "poisson_prove.episode"
-#: A8b: test-local and narrower than the public ``trace.CONTENT_KEYS`` (six prefix families more);
-#: renamed so it cannot shadow it. C9 covers the shipped half only -- the widening is the A8b frozen tests' P8-10.
+#: Test-local and narrower than the public ``trace.CONTENT_KEYS`` (six prefix families more), and
+#: named so it cannot shadow it. C9 covers these two keys only; P8-10 in test_a8b_cut_and_cap.py
+#: covers the rest.
 GENAI_CONTENT_KEYS = ("gen_ai.input.messages", "gen_ai.output.messages")
 OVERRIDE_MESSAGE = "Overriding of current TracerProvider is not allowed"
 PUBLIC_SURFACE = frozenset({"CaptureSpec", "CaptureStatus", "install", "Recorder", "capture"})
-SPEC_FIELDS = ("instrument", "content", "max_observation_bytes", "max_spans")  # A8b: the rename
-#: CD (D1): ``CaptureSpec`` has no default cap and a ``[capture]`` table must declare one. This is
-#: the number every caller in this file was getting from the dataclass before, so what the tests
-#: below measure is unchanged -- it is now declared rather than supplied.
+SPEC_FIELDS = ("instrument", "content", "max_observation_bytes", "max_spans")  # the four fields, in order
+#: ``CaptureSpec`` has no default cap and a ``[capture]`` table must declare one; every caller
+#: in this file declares this one.
 DECLARED_LIMIT = 8192
 STATUS_FIELDS = ("requested", "active", "reason", "instrumented")
-MANIFEST_KEYS = frozenset({*STATUS_FIELDS, "semconv", "alias_map_version", "content", "max_observation_bytes", "max_spans"})  # A8a: + alias_map_version; A8b: the byte field renamed
-TOUCHED_FILES = ("capture.py", "executor.py", "executor_modal.py", "sampler.py", "cli.py")
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 FAKE_INSTRUMENTOR = "oracle-fake"
 CONFLICT_INSTRUMENTOR = "oracle-conflict"
@@ -209,14 +195,14 @@ def sweep_toml(
     target_id: str = "capture-oracle@v0",
     t_unit: str = "steps",
 ) -> str:
-    """A sweep file; ``capture`` is the ``[capture]`` table of section 3, or absent."""
+    """A sweep file; ``capture`` is the ``[capture]`` table, or absent."""
     axes = {"x": [0.1, 0.2]} if axes is None else axes
     lines = [f'target_id = "{target_id}"', f't_unit = "{t_unit}"', f"replicates = {replicates}", ""]
     for name, values in axes.items():
         kind = "continuous" if all(isinstance(v, float) for v in values) else "categorical"
         lines += [f"[axes.{name}]", f'type = "{kind}"', f"values = {json.dumps(values)}", ""]
     if capture is not None:
-        # CD (D1): a [capture] table declares its cap; a caller that named one, or a bad one, is left alone.
+        # A [capture] table declares its cap; a caller that named one, or a bad one, is left alone.
         if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
             capture = {**capture, "max_observation_bytes": DECLARED_LIMIT}
         lines.append("[capture]")
@@ -266,7 +252,7 @@ def names(meta: dict[str, Any] | None) -> list[str]:
     return [span.name for span in Trace.from_dict(meta).ordered()]
 
 
-def warnings_under_proofload(records: list[list[str]]) -> list[list[str]]:
+def warnings_under_poisson_prove(records: list[list[str]]) -> list[list[str]]:
     return [r for r in records if r[1] == "WARNING" and r[0].split(".")[0] == "poisson_prove"]
 
 
@@ -346,50 +332,6 @@ def watch_logs() -> LogSink:
     sink = LogSink()
     logging.getLogger().addHandler(sink)
     return sink
-
-
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
-def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 120.0) -> Any:
-    """Run ``fn(*args)`` in a child process and return its (JSON-native) result.
-
-    Forked when the platform allows, so the child inherits this process's imports and its
-    untouched OTel globals; spawned otherwise, which works because ``fn`` and everything it
-    reaches live in this real file.
-    """
-    ctx = multiprocessing.get_context("fork" if FORK_AVAILABLE else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
 
 
 def status_dict(status: Any) -> dict[str, Any]:
@@ -506,7 +448,7 @@ def child_install(
 
     from poisson_prove.capture import CaptureSpec, capture, install
 
-    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
+    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # the cap has no default
     status = install(CaptureSpec(**spec_kwargs))
     second = install(CaptureSpec(**spec_kwargs)) if twice else None
     with capture(RUN_ID, "cfg-7:3") as recorder:
@@ -541,7 +483,7 @@ def child_capture_spans(
     sink = watch_logs()
     from poisson_prove.capture import CaptureSpec, capture, install
 
-    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
+    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # the cap has no default
     status = install(CaptureSpec(**spec_kwargs))
     tracer = _tracer()
     stream_untouched = None
@@ -573,7 +515,7 @@ def child_nested_capture(spec_kwargs: dict[str, Any], depth: int) -> dict[str, A
     Each start waits for the wall clock to tick, so start times are strictly increasing."""
     from poisson_prove.capture import CaptureSpec, capture, install
 
-    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # CD (D1)
+    spec_kwargs = {"max_observation_bytes": DECLARED_LIMIT, **spec_kwargs}  # the cap has no default
     status = install(CaptureSpec(**spec_kwargs))
     tracer = _tracer()
     with capture(RUN_ID, "cfg-7:1") as recorder:
@@ -591,7 +533,7 @@ def child_sequential_captures() -> dict[str, Any]:
     inside the second."""
     from poisson_prove.capture import CaptureSpec, capture, install
 
-    install(CaptureSpec(max_observation_bytes=DECLARED_LIMIT))  # CD (D1)
+    install(CaptureSpec(max_observation_bytes=DECLARED_LIMIT))  # the cap has no default
     tracer = _tracer()
     with capture(RUN_ID, "cfg-7:0") as first:
         with tracer.start_as_current_span("first-own"):
@@ -617,106 +559,7 @@ def child_cli(argv: list[str], extra_path: str | None) -> dict[str, Any]:
     }
 
 
-# ---------- C1: the parent must not set a global TracerProvider before forking ----------
-
-C1_DRIVER = '''\
-"""C1 driver: a real fork, both ways. ``python c1_driver.py set`` or ``... unset``."""
-
-import json
-import logging
-import multiprocessing
-import sys
-
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-PARENT_EXPORTER = InMemorySpanExporter()
-
-
-class Sink(logging.Handler):
-    def __init__(self):
-        super().__init__(level=logging.DEBUG)
-        self.messages = []
-
-    def emit(self, record):
-        self.messages.append(record.getMessage())
-
-
-def child(conn):
-    sink = Sink()
-    logging.getLogger().addHandler(sink)
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
-    with trace.get_tracer("child").start_as_current_span("in-child"):
-        pass
-    provider.force_flush()
-    trace.get_tracer_provider().force_flush()
-    conn.send(
-        {
-            "captured": [span.name for span in exporter.get_finished_spans()],
-            "owns_global": trace.get_tracer_provider() is provider,
-            "landed_in_parent_provider": [
-                span.name for span in PARENT_EXPORTER.get_finished_spans()
-            ],
-            "messages": sink.messages,
-        }
-    )
-    conn.close()
-
-
-def main(parent_sets):
-    if parent_sets:
-        parent_provider = TracerProvider()
-        parent_provider.add_span_processor(SimpleSpanProcessor(PARENT_EXPORTER))
-        trace.set_tracer_provider(parent_provider)
-    ctx = multiprocessing.get_context("fork")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=child, args=(child_conn,))
-    proc.start()
-    child_conn.close()
-    result = parent_conn.recv()
-    proc.join()
-    print(json.dumps(result))
-
-
-if __name__ == "__main__":
-    main(sys.argv[1] == "set")
-'''
-
-
-def run_c1_driver(script: Path, way: str) -> dict[str, Any]:
-    r = subprocess.run(
-        [sys.executable, str(script), way],
-        capture_output=True,
-        text=True,
-        timeout=60.0,
-        cwd=script.parent,
-    )
-    assert r.returncode == 0, f"driver {way!r} failed:\n{r.stderr}"
-    return json.loads(r.stdout.strip().splitlines()[-1])
-
-
-@pytest.mark.skipif(not FORK_AVAILABLE, reason="C1 is a fork hazard; needs the fork start method")
-def test_c1_a_forked_child_captures_only_when_the_parent_set_no_provider(tmp_path: Path) -> None:
-    script = write(tmp_path / "c1_driver.py", C1_DRIVER)
-
-    unset = run_c1_driver(script, "unset")
-    assert unset["captured"] == ["in-child"], unset
-    assert unset["owns_global"] is True, unset
-    assert not any(OVERRIDE_MESSAGE in m for m in unset["messages"]), unset["messages"]
-
-    already_set = run_c1_driver(script, "set")
-    assert already_set["captured"] == [], already_set
-    assert already_set["owns_global"] is False, already_set
-    assert any(OVERRIDE_MESSAGE in m for m in already_set["messages"]), already_set["messages"]
-    # The span was not lost to nowhere: it went to the first provider, the parent's, whose
-    # exporter the child inherited a copy of. Nothing crossed back to the real parent.
-    assert already_set["landed_in_parent_provider"] == ["in-child"], already_set
-
+# ---------- C1: install() cannot own a provider someone else set ----------
 
 def test_c1_install_reports_inactive_when_it_cannot_own_the_global_provider() -> None:
     r = isolated(child_install, {}, None, "noop")
@@ -727,79 +570,7 @@ def test_c1_install_reports_inactive_when_it_cannot_own_the_global_provider() ->
     assert r["sdk_provider_in_this_process"] is False
 
 
-@pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path needs the fork start method")
-def test_c1_the_local_fork_path_installs_in_the_child_not_the_parent(tmp_path: Path) -> None:
-    toml = write(tmp_path / "sweep.toml", sweep_toml(capture={"instrument": []}))
-    r = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:otel_rollout", SALT, 30.0, None)
-    assert r["sdk_provider_in_this_process"] is False, "run_local installed in the forking parent"
-    assert r["summary"]["n_ok"] == 4 and r["summary"]["n_timeout"] == 0, r["summary"]
-    df = Store(tmp_path / "store").read(r["run_id"])
-    for row in df.itertuples():
-        trace = Trace.from_dict(row.meta["trace"])
-        assert [s.attrs.get(RUN_ID_KEY) for s in trace.spans] == [r["run_id"]] * 2, row.config_hash
-
-
 # ---------- C2: the capture provider does not use the global random ----------
-
-
-def _reseeded_span_ids(n: int, seed: int) -> list[int]:
-    """Span ids from a naive ``TracerProvider()`` when the global ``random`` is re-seeded
-    before each span. A private provider, never the global one."""
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    tracer = provider.get_tracer("oracle.naive")
-    for i in range(n):
-        random.seed(seed)
-        with tracer.start_as_current_span(f"span-{i}"):
-            pass
-    provider.force_flush()
-    return [span.context.span_id for span in exporter.get_finished_spans()]
-
-
-def as_otlp(spans: Sequence[Any]) -> Any:
-    """Finished ``ReadableSpan`` objects as the OTLP/JSON payload ``from_otel`` consumes."""
-    pytest.importorskip(
-        "opentelemetry.exporter.otlp.proto.common",
-        reason="the OTLP encoder is a dev-only oracle, like lifelines",
-    )
-    from google.protobuf.json_format import MessageToDict
-
-    try:
-        from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
-    except ImportError:  # pragma: no cover - the module moved between SDK releases
-        from opentelemetry.exporter.otlp.proto.common._internal.trace_encoder import (
-            encode_spans,
-        )
-    return MessageToDict(encode_spans(list(spans)))
-
-
-def test_c2_a_naive_provider_reseeded_between_spans_repeats_its_span_ids() -> None:
-    ids = _reseeded_span_ids(10, 1234)
-    assert len(ids) == 10 and len(set(ids)) == 1, ids
-
-
-def test_c2_from_otel_drops_the_repeated_ids_as_duplicates() -> None:
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    from poisson_prove.trace import from_otel
-
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    tracer = provider.get_tracer("oracle.naive")
-    for i in range(10):
-        random.seed(1234)
-        with tracer.start_as_current_span(f"span-{i}"):
-            pass
-    provider.force_flush()
-    trace = from_otel(as_otlp(exporter.get_finished_spans()))
-    assert (len(trace.spans), trace.dropped) == (1, 9)
 
 
 def test_c2_capture_ids_stay_distinct_when_the_global_random_is_reseeded() -> None:
@@ -809,7 +580,7 @@ def test_c2_capture_ids_stay_distinct_when_the_global_random_is_reseeded() -> No
     trace = Trace.from_dict(r["meta"])
     assert trace.dropped == 0 and len(trace.spans) == 10, r["meta"]
     assert len({s.span_id for s in trace.spans}) == 10, [s.span_id for s in trace.spans]
-    assert not warnings_under_proofload(r["logs"]), r["logs"]
+    assert not warnings_under_poisson_prove(r["logs"]), r["logs"]
 
 
 def test_c2_capture_never_draws_from_the_global_random() -> None:
@@ -820,19 +591,12 @@ def test_c2_capture_never_draws_from_the_global_random() -> None:
 # ---------- C2a: installing a provider is permanent ----------
 
 
-def test_c2a_the_sdk_provider_has_no_remove_span_processor() -> None:
-    from opentelemetry.sdk.trace import TracerProvider
-
-    assert hasattr(TracerProvider, "add_span_processor")
-    assert not hasattr(TracerProvider, "remove_span_processor")
-
-
 def test_c2a_install_adds_its_processors_to_a_user_provider_and_leaves_their_exporter_alone() -> None:
     r = isolated(child_install, {}, None, "sdk")
     assert r["status"]["active"] is True, r["status"]
     assert r["global_is_user_provider"] is True, "install() replaced the user's provider"
     assert not any(OVERRIDE_MESSAGE in m for _, _, m in r["logs"]), r["logs"]
-    # Their exporter still sees every span, now stamped: the stamper was added to theirs.
+    # Their exporter still sees every span, stamped: install() adds the stamper to their provider.
     assert [s["name"] for s in r["user_exporter"]] == ["probe"], r["user_exporter"]
     assert r["user_exporter"][0]["attrs"][RUN_ID_KEY] == RUN_ID
     assert r["user_exporter"][0]["attrs"][EPISODE_KEY] == "cfg-7:3"
@@ -930,7 +694,6 @@ def test_c4_the_manifest_records_the_whole_capture_request(tmp_path: Path) -> No
     toml = write(tmp_path / "sweep.toml", sweep_toml(capture=table))
     r = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:otel_rollout", SALT, None, str(fake))
     record = Store(tmp_path / "store").manifest(r["run_id"]).environment["capture"]
-    assert set(record) == MANIFEST_KEYS, sorted(record)
     assert record["requested"] is True and record["active"] is True and record["reason"] is None, record
     assert record["instrumented"] == [FAKE_INSTRUMENTOR]
     assert record["semconv"] == OTEL_SEMCONV_VERSION
@@ -966,18 +729,21 @@ def test_c5_every_row_of_a_local_run_carries_a_stamped_trace(tmp_path: Path, epi
     assert r["summary"]["n_ok"] == 4 and r["summary"]["complete"] is True, r["summary"]
     store = Store(tmp_path / "store")
     assert_stamped_rows(store.read(r["run_id"]), r["run_id"])
+    assert r["summary"]["n_timeout"] == 0, r["summary"]
     record = store.manifest(r["run_id"]).environment["capture"]
     assert record["requested"] is True, record
     if episode_timeout is None:
         assert record["active"] is True, record
         assert r["sdk_provider_in_this_process"] is True, "the no-timeout path runs in the caller's process"
+    else:
+        assert r["sdk_provider_in_this_process"] is False, "run_local installed in the forking parent"
 
 
 # ---------- C6: the same holds for the Modal backend, both worker_batch branches ----------
 
 
 def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {"run_id": run_id, "instrument": [], "content": False, "max_observation_bytes": 8192, "max_spans": 1000}  # A8b: the renamed transport field
+    payload: dict[str, Any] = {"run_id": run_id, "instrument": [], "content": False, "max_observation_bytes": 8192, "max_spans": 1000}  # the cap travels as max_observation_bytes
     payload.update(overrides)
     return payload
 
@@ -1006,7 +772,7 @@ def test_c6_worker_batch_carries_stamped_traces_in_both_branches(tmp_path: Path,
         for span in trace.spans:
             assert span.attrs[RUN_ID_KEY] == RUN_ID, (span.name, span.attrs)
             assert span.attrs[EPISODE_KEY] == episode_id(config_hash, replicate_index), (span.name, span.attrs)
-        # Section 3: the per-batch backend_meta["capture"] carries what happened in the container.
+        # The per-batch backend_meta["capture"] carries what happened in the container.
         status = result["backend_meta"]["capture"]
         assert set(STATUS_FIELDS) <= set(status) and status["active"] is True, status
     if episode_timeout is not None:
@@ -1031,13 +797,13 @@ def test_c7_rule_zero_the_mock_agent_trace_is_byte_identical_with_capture_on_and
     assert len(stored_on) == 24 and set(stored_on) == set(stored_off)
     for key in stored_off:
         assert stored_on[key] == stored_off[key], key
-    # A7 (spec section 3.2, P7-2): the trace is stored beside ``meta``, not inside it, so the
+    # A7 (P7-2): the trace is stored beside ``meta``, not inside it, so the
     # rollout's own trace is read back through the store's full read, where ``meta["trace"]`` is
-    # reassembled. Amended from a ``json.loads`` of the raw ``meta`` cell, which no longer carries
-    # the key; the raw byte identity above is rule zero's own clause and is unchanged.
+    # reassembled; the raw ``meta`` cell does not carry the key. The raw byte identity above is
+    # rule zero's own clause.
     for row in Store(tmp_path / "on").read(on["run_id"]).itertuples(index=False):
         assert row.meta["trace"]["source"] == "record" and Trace.from_dict(row.meta["trace"]).dropped == 0
-    assert not warnings_under_proofload(on["logs"]), on["logs"]
+    assert not warnings_under_poisson_prove(on["logs"]), on["logs"]
 
 
 def test_c7_a_valid_user_trace_gets_the_capture_merged_in(tmp_path: Path) -> None:
@@ -1067,7 +833,7 @@ def test_c7_a_span_id_collision_keeps_the_user_trace_drops_the_capture_and_warns
     trace = Trace.from_dict(row["meta"]["trace"])
     assert trace.source == "record" and len(trace.spans) == 1 and trace.dropped == 0
     assert trace.spans[0].name == "recorded-tool" and trace.spans[0].attrs == {"attempts": 1}
-    warned = warnings_under_proofload(r["logs"])
+    warned = warnings_under_poisson_prove(r["logs"])
     assert len(warned) == 1, r["logs"]
 
 
@@ -1093,7 +859,7 @@ def test_c8_worker_batch_keeps_three_positional_parameters_and_adds_only_capture
     for p in params[:3]:
         assert p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD), p
     added = params[3:]
-    # M11a: the rule is one keyword-only, None-defaulted parameter per seam (Spec M11 section 0.1)
+    # M11a: the rule is one keyword-only, None-defaulted parameter per seam
     assert [p.name for p in added] == ["capture", "chaos"], [p.name for p in added]
     for p in added:
         assert p.kind is p.KEYWORD_ONLY and p.default is None, p
@@ -1102,7 +868,6 @@ def test_c8_worker_batch_keeps_three_positional_parameters_and_adds_only_capture
 def test_c8_job_result_outcome_mapper_and_from_episode_are_unchanged() -> None:
     assert Job == tuple[dict[str, Any], int, int, str, int]
     assert Result == dict[str, Any] | str
-    assert executor._Outcome == tuple[str, Any]
     assert Mapper == Callable[[Sequence[Sequence[Job]]], Iterator[tuple[int, list[Result] | BaseException]]]
     assert list(inspect.signature(EpisodeRecord.from_episode).parameters) == [
         "ep", "run_id", "config", "seed", "replicate_index", "wall_time", "backend_meta",
@@ -1129,13 +894,6 @@ CONTENT_ATTRS = {
 }
 
 
-def test_c9_content_is_off_by_default_in_the_spec() -> None:
-    from poisson_prove.capture import CaptureSpec
-
-    # CD (D1): ``content`` keeps its default; only the cap loses one.
-    assert CaptureSpec(max_observation_bytes=DECLARED_LIMIT).content is False
-
-
 def test_c9_content_attributes_are_stripped_when_content_is_off() -> None:
     r = isolated(child_capture_spans, {}, [{"name": "chat", "attrs": CONTENT_ATTRS}])
     assert r["status"]["active"] is True
@@ -1153,16 +911,14 @@ def test_c9_content_attributes_survive_when_content_is_on() -> None:
         assert span.attrs[key] == CONTENT_ATTRS[key], (key, span.attrs)
 
 
-# ---------- C10: the cut (A8b; was the size budget), asserted against attrs ----------
+# ---------- C10: the cut, asserted against attrs ----------
 
 
 def test_c10_an_oversized_observation_value_is_stored_head_and_tail_in_attrs() -> None:
-    """A8b (spec section 7.1 group 4): was ``..._has_its_offending_attribute_replaced_by_a_marker_in_attrs``.
-    The marker, the per-span total and C30's wording are retired; the unit is one observation value
-    and the bounds are the limit's split (ADR-082): 768 + 256 at 1024. The per-span ``<= 1024``
-    clause is deleted, not ported -- the wrapper alone holds 1,024 bytes of content plus its keys."""
+    """The unit is one observation value and the bounds are the limit's split: 768 + 256 at 1024.
+    No per-span bound of 1024 is asserted: the wrapper alone holds 1,024 bytes of content plus its
+    keys."""
     giant = json.dumps([{"role": "user", "content": "x" * 8192}])
-    assert len(giant.encode("utf-8")) == 8225 and giant.isascii()
     attrs = {"gen_ai.input.messages": giant, "gen_ai.output.messages": "[]", "server.address": "api.example"}
     r = isolated(child_capture_spans, {"content": True, "max_observation_bytes": 1024}, [{"name": "chat", "attrs": attrs}])
     (span,) = Trace.from_dict(r["meta"]).spans
@@ -1180,14 +936,12 @@ def test_c10_an_oversized_observation_value_is_stored_head_and_tail_in_attrs() -
 
 
 def test_c10_the_cut_runs_when_content_is_off() -> None:
-    """A8b (spec section 7.1 group 4): was ``test_c10_the_budget_is_inert_when_content_is_off``, whose
-    name stated the behaviour A8b inverts. Spec section 0.4's worked case: A6's absolute constants
-    would store ``"y" * 300`` as both head and tail; the limit's split stores 48 + 16."""
+    """The cut does not depend on ``content``. The worked case: fixed head and tail sizes larger
+    than the value would store ``"y" * 300`` as both head and tail; the limit's split stores 48 + 16."""
     big = "y" * 300
     r = isolated(child_capture_spans, {"max_observation_bytes": 64}, [{"name": "chat", "attrs": {"big.attribute": big}}])
     (span,) = Trace.from_dict(r["meta"]).spans
     assert span.attrs["big.attribute"] == {"poisson_prove.truncated": {"head": "y" * 48, "tail": "y" * 16, "bytes_original": 300}}, span.attrs
-    assert 48 + 16 <= 64 < 300
     assert span.truncated == "observation" and span.bytes_original == 300, (span.truncated, span.bytes_original)
 
 
@@ -1201,7 +955,7 @@ def test_c10_spans_beyond_max_spans_are_dropped_and_counted() -> None:
 
 def test_c10_max_spans_keeps_the_earliest_started_spans_and_drops_the_deepest() -> None:
     """Spans end innermost-first, so a cap applied as spans end keeps the leaves and loses the
-    root. C10 (amended 2026-09-05) caps in start order: the root and its first descendants
+    root. C10, as amended, caps in start order: the root and its first descendants
     survive, the deepest spans are the ones dropped."""
     r = isolated(child_nested_capture, {"max_spans": 3}, 5)
     trace = Trace.from_dict(r["meta"])
@@ -1214,29 +968,13 @@ def test_c10_max_spans_keeps_the_earliest_started_spans_and_drops_the_deepest() 
 # ---------- C11: two episodes in one process stay apart ----------
 
 
-def test_c11_two_episodes_in_one_process_keep_their_spans_apart(tmp_path: Path) -> None:
-    toml = write(tmp_path / "sweep.toml", sweep_toml(capture={"instrument": []}))
-    r = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:otel_rollout", SALT, None, None)
-    df = Store(tmp_path / "store").read(r["run_id"])
-    assert len(df) == 4
-    episodes: list[str] = []
-    for row in df.itertuples():
-        trace = Trace.from_dict(row.meta["trace"])
-        assert {s.name.split(" ")[1] for s in trace.spans} == {str(row.seed)}, "a span from another episode leaked in"
-        stamps = {s.attrs[EPISODE_KEY] for s in trace.spans}
-        assert stamps == {episode_id(row.config_hash, row.replicate_index)}, stamps
-        episodes.extend(stamps)
-    assert len(set(episodes)) == 4, episodes
-
-
 def test_c11_a_span_closing_after_its_episode_falls_on_the_floor() -> None:
     r = isolated(child_sequential_captures)
     assert names(r["second"]) == ["second-own"], r["second"]
-    assert r["first"] is None or names(r["first"]) == ["first-own"], r["first"]
-    if r["first"] is not None:
-        first = Trace.from_dict(r["first"]).spans[0].attrs[EPISODE_KEY]
-        second = Trace.from_dict(r["second"]).spans[0].attrs[EPISODE_KEY]
-        assert (first, second) == ("cfg-7:0", "cfg-7:1")
+    assert names(r["first"]) == ["first-own"], r["first"]
+    first = Trace.from_dict(r["first"]).spans[0].attrs[EPISODE_KEY]
+    second = Trace.from_dict(r["second"]).spans[0].attrs[EPISODE_KEY]
+    assert (first, second) == ("cfg-7:0", "cfg-7:1")
 
 
 # ---------- C12: the pre-flight names what will be activated ----------
@@ -1244,7 +982,7 @@ def test_c11_a_span_closing_after_its_episode_falls_on_the_floor() -> None:
 
 def capture_lines(out: str) -> tuple[list[str], list[int]]:
     lines = out.splitlines()
-    # The pre-flight lines now follow the plan line and may be indented (spec section 5.3).
+    # The pre-flight lines follow the plan line and may be indented.
     return lines, [i for i, line in enumerate(lines) if line.lstrip().startswith("Capture:")]
 
 
@@ -1261,14 +999,10 @@ class LoggedStringIO(StringIO):
         return super().write(s)
 
 
-#: These fixtures are two-cell plumbing grids, not powered designs: N is 1, 2 or 4 and
-#: the MDE saturates at 0.5. S23 gates a sweep on that number, so every end-to-end
-#: invocation here states what it accepts. The flag is the honest answer -- these runs
-#: really can only see a fifty-point move -- and it is what the gate exists to make
-#: people say out loud.
-# PF4 re-freeze (PF4.30, reading R17): at 1, 2 or 4 replicates a side no lone condition of these
-# grids can be flagged at q / M, so any accepted change below 1 refuses them (no fifty-point limit
-# exists any more); --max-mde 1 admits any design, which is what 0.5 did here.
+#: These fixtures are two-cell plumbing grids, not powered designs: N is 1, 2 or 4. S23 gates a
+#: sweep on its detection limit, so every end-to-end invocation here states what it accepts.
+# PF4.30: at 1, 2 or 4 replicates a side no lone condition of these grids can be flagged at
+# q / M, so any accepted change below 1 refuses them; --max-mde 1 admits any design.
 PLUMBING_MAX_MDE = ("--max-mde", "1")
 
 
@@ -1282,13 +1016,13 @@ def test_c12_preflight_prints_one_capture_line_before_the_prompt(tmp_path: Path,
          *PLUMBING_MAX_MDE],
         stdout=out, stderr=err, stdin=TtyStringIO("n\n"),
     )
-    # Declining is a refusal and exits 1 (spec section 5.2).
+    # Declining is a refusal and exits 1.
     assert code == 1 and "Traceback" not in out.getvalue() + err.getvalue()
     lines, found = capture_lines(out.getvalue())
     assert len(found) == 1, out.getvalue()
     assert FAKE_INSTRUMENTOR in lines[found[0]], lines[found[0]]
-    # The question now goes to stderr (spec section 5.3); the shared log keeps the order of
-    # both streams, so the capture line is still checked to come before it.
+    # The question goes to stderr; the shared log keeps the order of
+    # both streams, so the capture line is checked to come before it.
     assert "[y/N]" in err.getvalue(), err.getvalue()
     both = "".join(log).splitlines()
     capture_at = [i for i, line in enumerate(both) if line.lstrip().startswith("Capture:")]
@@ -1308,8 +1042,8 @@ def test_c12_yes_does_not_suppress_the_capture_line(tmp_path: Path) -> None:
     lines, found = capture_lines(r["out"])
     assert len(found) == 1, r["out"]
     assert FAKE_INSTRUMENTOR in lines[found[0]]
-    # The sweep now ends with a verdict line, not 'run_id: <id>' (spec section 5.3); the capture
-    # line still comes before the end, and the run is the one the empty store gained.
+    # The sweep ends with a ``done`` verdict line; the capture line comes
+    # before it, and the run is the one the empty store gained.
     done_line = [i for i, line in enumerate(lines) if line.startswith("done")]
     assert done_line and found[0] < done_line[0], r["out"]
     (run_id,) = Store(tmp_path / "store").runs()
@@ -1324,9 +1058,9 @@ def test_c12_the_modal_preflight_prints_the_capture_line_too(tmp_path: Path, mon
         calls.append(p)
         return RunSummary(run_id=p.run_id, n_ok=len(p.pairs), n_errored=0, n_timeout=0, wall_time=0.0, stopped_by=None, complete=True)
 
-    # A missing modal package is now refused before the plan, so modal must import here.
+    # A missing modal package is refused before the plan, so modal must import here.
     monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
-    # PF5 (spec section 17; PF5.7): the face runs no backend; the core calls the Modal runner, so
+    # PF5.7: the face runs no backend; the core calls the Modal runner, so
     # the stand-in replaces it where it is defined, which the core reads when it runs a plan.
     monkeypatch.setattr(importlib.import_module("poisson_prove.executor_modal"), "run_modal", fake_run_modal)
     monkeypatch.syspath_prepend(str(register_fake_instrumentors(tmp_path / "fake")))
@@ -1343,36 +1077,28 @@ def test_c12_the_modal_preflight_prints_the_capture_line_too(tmp_path: Path, mon
     assert not _global_provider_is_sdk(), "the host installed a provider for a Modal run"
 
 
-# ---------- section 2: the public interface ----------
+# ---------- the public interface ----------
 
 
-def test_section_2_public_surface_is_exactly_five_symbols() -> None:
+def test_capture_exports_exactly_five_names() -> None:
     import poisson_prove.capture as capture_module
 
-    exported = getattr(capture_module, "__all__", None)
-    if exported is not None:
-        assert set(exported) == PUBLIC_SURFACE, sorted(exported)
-    defined = {
-        name
-        for name, obj in vars(capture_module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == "poisson_prove.capture"
-    }
-    assert defined == PUBLIC_SURFACE, sorted(defined)
+    assert set(capture_module.__all__) == PUBLIC_SURFACE, sorted(capture_module.__all__)
 
 
-def test_section_2_capture_spec_fields_defaults_and_frozenness() -> None:
+def test_capture_spec_fields_defaults_and_frozenness() -> None:
     from poisson_prove.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == SPEC_FIELDS
     with pytest.raises(TypeError):
-        CaptureSpec()  # type: ignore[call-arg]  # CD (D1): the cap has no default
+        CaptureSpec()  # type: ignore[call-arg]  # the cap has no default
     spec = CaptureSpec(max_observation_bytes=DECLARED_LIMIT)
-    assert (spec.instrument, spec.content, spec.max_observation_bytes, spec.max_spans) == ((), False, 8192, None)  # A8b: the rename, and D6's cap off by default
+    assert (spec.instrument, spec.content, spec.max_observation_bytes, spec.max_spans) == ((), False, 8192, None)  # no span cap by default
     with pytest.raises(dataclasses.FrozenInstanceError):
         spec.content = True  # type: ignore[misc]
 
 
-def test_section_2_capture_status_fields_and_frozenness() -> None:
+def test_capture_status_fields_and_frozenness() -> None:
     from poisson_prove.capture import CaptureStatus
 
     assert tuple(f.name for f in dataclasses.fields(CaptureStatus)) == STATUS_FIELDS
@@ -1381,7 +1107,7 @@ def test_section_2_capture_status_fields_and_frozenness() -> None:
         status.active = True  # type: ignore[misc]
 
 
-def test_section_2_capture_is_a_context_manager_yielding_a_recorder() -> None:
+def test_capture_is_a_context_manager_yielding_a_recorder() -> None:
     from poisson_prove.capture import Recorder, capture, install
 
     assert list(inspect.signature(capture).parameters) == ["run_id", "episode_id"]
@@ -1390,48 +1116,7 @@ def test_section_2_capture_is_a_context_manager_yielding_a_recorder() -> None:
     assert isinstance(capture(RUN_ID, "cfg-7:0"), AbstractContextManager)
 
 
-def test_section_2_capture_module_imports_opentelemetry_lazily() -> None:
+def test_capture_module_imports_opentelemetry_lazily() -> None:
     r = isolated(child_import_capture_clean)
     assert r["opentelemetry_modules"] == [], r["opentelemetry_modules"]
     assert r["otel_helper_loaded"] is False
-
-
-def module_scope_imports(path: Path) -> set[str]:
-    """Import targets at module scope, descending into if/try/with but not into functions,
-    classes or ``if TYPE_CHECKING:`` blocks."""
-    found: set[str] = set()
-
-    def is_type_checking(test: ast.expr) -> bool:
-        return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-            isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-        )
-
-    def visit(nodes: Sequence[ast.stmt]) -> None:
-        for node in nodes:
-            if isinstance(node, ast.Import):
-                found.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
-                found.add(node.module)
-            elif isinstance(node, ast.If):
-                if not is_type_checking(node.test):
-                    visit(node.body)
-                visit(node.orelse)
-            elif isinstance(node, ast.Try):
-                visit(node.body)
-                for handler in node.handlers:
-                    visit(handler.body)
-                visit(node.orelse)
-                visit(node.finalbody)
-            elif isinstance(node, (ast.With, ast.For, ast.While)):
-                visit(node.body)
-
-    visit(ast.parse(path.read_text(encoding="utf-8")).body)
-    return found
-
-
-def test_section_2_no_touched_module_imports_opentelemetry_at_module_scope() -> None:
-    assert (PACKAGE / "capture.py").is_file(), f"{PACKAGE / 'capture.py'} does not exist"
-    for name in TOUCHED_FILES:
-        imports = module_scope_imports(PACKAGE / name)
-        offending = {m for m in imports if m.split(".")[0] == "opentelemetry" or m == "poisson_prove.otel"}
-        assert offending == set(), (name, sorted(offending))

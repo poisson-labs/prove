@@ -1,24 +1,17 @@
-"""PR-3 frozen tests, the replicates packet: k calls per item, of which a pair is the case k = 2 --
-invariants PR57 to PR76 of "Prove -- Spec PR Paired Replay", section 4.H, and named mutants 9 to
-16. PR77 (the rendered Replicates section) is the output packet's, with PR7 and PR40 to PR55,
-and is not here: section 7 lets a freeze cut PR-3 into two files, and this is the first.
+"""PR-3 frozen tests, replicates: k calls per item, of which a pair is the case k = 2 --
+invariants PR57 to PR76. PR77 (the rendered Replicates section) is tested with the output, with
+PR7 and PR40 to PR55, in ``test_pr3_paired_output.py``, and is not here.
 
-Written on 2026-09-22 off ``pr2-build`` ``7bb1a3b`` (phases 1 and 2 built) plus the
-two updates ruled the same day and committed first on this branch: R1 (``733ac35``, two names
-into the PR-1 frozen tests' ``SPEC_PUBLIC_NAMES``) and R3 (``fd4266d``, a ``Cut`` declares its
-comparison, ``gt`` or ``ge``, with no default). **Frozen 2026-09-22 in one commit over both PR-3
-files, over the reviewed ``ef9f4ef``**, after approval of the four tables in the handoff
-and an independent recompute of every hard-coded
-expectation passed (``recompute_expectations.py`` there, 83 of 83). The build adds phase 3's
-replicate half of ``src/proofload/paired.py``
--- ``SweepPair.more``, the k-arm assertion, ``ReplicateResult`` and ``replicates`` -- against this
-file and does not edit it. Phase 3's names are read through ``getattr`` inside each test, so the
-bare tree fails test by test and never at collection.
+The code under test is the replicate half of ``src/poisson_prove/paired.py`` -- ``SweepPair.more``,
+the k-arm assertion, ``ReplicateResult`` and ``replicates``. A ``Cut`` declares its comparison,
+``gt`` or ``ge``, with no default. Every hard-coded expectation here is computed independently
+of the code. The replicate names are read through ``getattr`` inside each test, so a missing one
+fails test by test and never at collection.
 
-**What the packet is.** A sweep declares ``more``, the arms after ``a`` and ``b``, so a replicate
+**What replicates are.** A sweep declares ``more``, the arms after ``a`` and ``b``, so a replicate
 set is ``k = 2 + len(more)`` calls of one request in one sweep; the key is PR10's, unchanged; the
-declared pair still carries the whole of section 4.C (PR61) and a declaration with no ``more``
-produces what today's build produces (PR60). ``replicates`` is a second reader of the same
+declared pair still carries the whole two-arm analysis (PR61) and a declaration with no ``more``
+produces what the two-arm analysis alone produced (PR60). ``replicates`` is a second reader of the same
 ``PairAssertion`` and answers, per cut and under both action rules: ``agree@j``, how often the
 first ``j`` calls all took the same action (PR65, PR66), and ``MS@j``, how often two sweeps'
 ``j``-call majorities agreed (PR67 to PR69), each with the item-clustered interval of PR28 through
@@ -27,8 +20,7 @@ design effect of PR32 on that metric's own footing (PR73), no cross-cut and no c
 (PR74), a paired step between prefixes and never two intervals to eyeball (PR75), and the cost
 framing pre-declared whole (PR76).
 
-**Conventions this file fixes for the build session** (section 2 leaves them open; each goes into
-the spec's change log on the freeze):
+**Conventions this file fixes:**
 
 - *Arm labels.* ``a`` and ``b`` keep their names; the arms in ``more`` are labelled by their
   1-based position in the declared order, ``"3"`` to ``"k"``, as strings. ``pairs`` gains one
@@ -42,25 +34,24 @@ the spec's change log on the freeze):
   ``value_missing``, ``value_out_of_range``) names the failing arm's label; a comparison cause
   (``body``, ``body_field_absent``, ``target``, ``header``) reads ``"both"`` as it does at
   ``k = 2`` and names the differing arm in ``detail``. Tests build one failure per set, so the
-  precedence between two causes on one set is not pinned (ambiguity 9 of the spec session).
+  precedence between two causes on one set is not pinned.
 - *PR57 fires in the constructor and at load.* ``Declaration(...)`` with two sweeps of different
   ``k``, or a run id repeated inside one sweep's ``arms``, raises ``DeclarationError``;
   ``from_toml`` therefore does too. ``SweepPair.arms`` is ``(a, b, *more)``.
-- *The result.* ``ReplicateResult`` is the seven fields of section 2 and no other, one per
+- *The result.* ``ReplicateResult`` has seven fields and no other, one per
   declared cut in declaration order; ``replicates()`` returns ``()`` when every sweep is a pair.
   ``ReplicateResult.to_json()`` is one JSON object with the keys ``name``, ``threshold`` (the
   literal text), ``comparison``, ``k``, ``agree``, ``majority``, ``counts`` and ``cost_framing``,
   every number a JSON number, key order stable across calls, processes and hash seeds. The
   artifact ``replicates_by_cut.json`` -- top level, ``declaration_digest``, the ``cuts`` wrapper
-  and the fact that nothing is written at ``k = 2`` -- is the CLI's and is the output packet's
-  to pin.
+  and the fact that nothing is written at ``k = 2`` -- is the CLI's and is pinned with the
+  output.
 - *Rules.* ``agree`` and ``majority`` are keyed ``"primary"`` then ``"sensitivity"``, in that
   order, always both (PR70). The primary is the cut's declared ``comparison``; the sensitivity is
   the other one. ``counts["rules"]`` says which is which.
-- *``agree[rule]``.* ``"j2"`` to ``"jk"``, one block per prefix, every ``j`` (section 3 as
-  written; ambiguity 6 of the spec session is one yes/no in the handoff), plus ``"steps"``: for
-  each consecutive pair of prefixes, ``"j2_to_j3"`` and so on, the paired step of PR75. A prefix
-  block is ``{estimate, lo, hi, basis, observation: "within_sweep", design_effect}`` and, under
+- *``agree[rule]``.* ``"j2"`` to ``"jk"``, one block per prefix, every ``j``, plus ``"steps"``:
+  for each consecutive pair of prefixes, ``"j2_to_j3"`` and so on, the paired step of PR75. A
+  prefix block is ``{estimate, lo, hi, basis, observation: "within_sweep", design_effect}`` and, under
   the fallback, ``upper_bound_by_observation: true``.
 - *``majority[rule]``.* ``"j1"``, ``"j3"``, ... for odd ``j <= k`` and nothing else; a block is
   ``{estimate, lo, hi, basis, observation: "across_sweeps", design_effect}`` with the same
@@ -74,7 +65,7 @@ the spec's change log on the freeze):
 - *The design effect (PR73).* ``{icc, m_bar, deff}`` per block on PR32's footing: ``m_bar`` is
   observations per item for that metric -- the eligible sets per item for ``agree@j``, the eligible
   sweep pairs per item for ``MS@j`` -- and the one-way ANOVA cluster size ``m0`` sits in the ICC
-  denominator when eligibility leaves the clusters unbalanced (ruled 2026-09-22).
+  denominator when eligibility leaves the clusters unbalanced.
 - *``counts``.* ``items`` (``G``), ``sweeps`` (``S``), ``eligible_sets`` keyed by sweep,
   ``sweep_pairs`` keyed ``"S1|S2"`` (items with both sets eligible), ``excluded_by_arm`` keyed by
   arm label off this cut's rows of ``excluded``, ``ties`` keyed by arm label over all sweeps,
@@ -85,9 +76,9 @@ the spec's change log on the freeze):
   ``n_lo`` from the interval's upper bound and ``n_hi`` from its lower bound -- **only when the
   declaration carries ``conditioning``**, ``dollars_per_decision`` only when ``cost`` was passed
   with a price, and ``latency_per_decision`` only when ``windows`` was passed. What is absent is
-  absent, never zero (PR7). *Ruled 2026-09-22:* the two arithmetic rows read the two inputs the
-  output packet's spec gained the same day. ``dollars_per_decision`` is ``{estimate,
-  mean_input_tokens, price_per_input_token}`` with ``mean_input_tokens = cost.input_tokens /
+  absent, never zero (PR7). The two arithmetic rows read two inputs of the output side, ``cost``
+  and ``windows``. ``dollars_per_decision`` is ``{estimate, mean_input_tokens,
+  price_per_input_token}`` with ``mean_input_tokens = cost.input_tokens /
   cost.recorded_spans`` and ``estimate = j * mean_input_tokens * price``, the price echoed as its
   literal; ``latency_per_decision`` is ``{median_call_s, serial_s, at_declared_concurrency_s}``
   with ``median_call_s`` the median of the per-sweep ``latency_s["median"]`` values
@@ -95,39 +86,29 @@ the spec's change log on the freeze):
   ``at_declared_concurrency_s = serial_s / concurrency`` when every arm's recorded
   ``environment["sweeps"][S][arm]["concurrency"]`` is one non-null number, else absent.
 
-**Invariant-to-test map** is in the handoff. Every test
-name starts ``test_prN_`` or ``test_control_``.
+Every test name starts ``test_prN_`` or ``test_control_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` is built in test code or by
-running a hand-built k-arm store through ``assert_pairs``; the three frames section 6 names are
+running a hand-built k-arm store through ``assert_pairs``; three frames are
 here: a ``k = 5`` store with one arm errored on some items (PR63), a ``k = 5`` frame on which every
 item agrees at every cut (PR72), and a ``k = 4`` frame whose only job is to be refused a majority
 (PR68). No committed fixture carries a third arm, so none is used. ``S`` is never more than 3 in
 this file, so whether an ordered or an unordered sweep pair is the ``MS@j`` observation at
-``S > 3`` (ambiguity 5) is not pinned.
+``S > 3`` is not pinned.
 
-**Green before and after -- named so their green is not read as coverage.**
-``test_pr71_no_default_rng_site_is_added_to_paired_py`` is green on the bare tree, because the
-one site is already there, and stays green: it guards the build against adding a second. Every
-other test in this file is red on the bare tree, on ``TypeError`` from ``Cut`` without
-``comparison`` or from ``SweepPair`` without ``more``, or on ``AttributeError`` for
-``ReplicateResult`` and ``replicates``. The PR60 digests were minted on the pre-amendment build
-(``7bb1a3b``'s ``src/``) by ``mint_pr60.py`` in the handoff, so the test that carries them is red
-on the bare tree only because it builds cuts with a comparison; on the build it is the
-byte-identity guard.
+The PR60 digests were computed on the two-arm code before replicates (``7bb1a3b``'s
+``src/``); the test that carries them is the byte-identity guard for ``k = 2``.
 
 **The three ``hypothesis`` tests are derandomized.**
 
-**Named gaps, not pinned.** An empty cut under ``replicates()`` (ambiguity 7); cause precedence
-on a set broken in two arms (ambiguity 9); the ``MS@j`` observation at ``S > 3`` (ambiguity 5);
+**Named gaps, not pinned.** An empty cut under ``replicates()``; cause precedence on a set
+broken in two arms; the ``MS@j`` observation at ``S > 3``;
 a run id shared between two different sweeps; the order of ``excluded_by_arm``'s keys. (The
-dollars and latency values and the ``comparison`` in the phase-2 artifacts were ruled 2026-09-22
-and are pinned.)
+dollars and latency values and the ``comparison`` in the two analysis artifacts are pinned.)
 """
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import hashlib
 import itertools
@@ -187,11 +168,11 @@ PREFIX = re.compile(r"\Aj(\d+)\Z")
 STEP = re.compile(r"\Aj(\d+)_to_j(\d+)\Z")
 OTHER = {"ge": "gt", "gt": "ge"}
 
-# PR60: the bytes the pre-amendment build (``7bb1a3b``'s ``src/``) writes for ``pr60_store``
-# through ``assert_pairs`` and ``analyse`` at ``k = 2``, minted by ``mint_pr60.py`` in the
-# handoff through ``pr60_digests`` below, which masks what later rulings add on top of today's
-# bytes: the declaration digest and block (they move with R3), the ``comparison`` the two
-# artifacts print beside the threshold (ruled 2026-09-22), and the four timing columns phase 3's
+# PR60: the bytes the two-arm code before replicates (``7bb1a3b``'s ``src/``) writes for
+# ``pr60_store`` through ``assert_pairs`` and ``analyse`` at ``k = 2``, computed through
+# ``pr60_digests`` below, which masks what was added on top of those bytes: the declaration digest
+# and block (they move with the cut's ``comparison``), the ``comparison`` the two artifacts print
+# beside the threshold, and the four timing columns the
 # windows add to ``pairs`` (``TIMING_COLUMNS``). Every other byte is pinned.
 TIMING_COLUMNS = ("start_ns_a", "end_ns_a", "start_ns_b", "end_ns_b")
 PR60_PAIRS_SHA256 = "120c9c73ff9c68f9063b177da266d0f5712184f44238e359d551f3b7fa4f843e"
@@ -201,7 +182,7 @@ PR60_INTERVALS_SHA256 = "efefd40a6d2d63da52f090deb67e710f1d364fd3d7cb741683f486a
 
 
 def P() -> Any:
-    """The module under test. Phase 3's names are read off it inside each test."""
+    """The module under test. The replicate names are read off it inside each test."""
     return paired
 
 
@@ -242,7 +223,7 @@ def cluster_bootstrap(
 
 
 def observation_bootstrap(values: Sequence[float], *, seed: int, b: int) -> tuple[float, float]:
-    """The naive bootstrap PR71 forbids (named mutant 11): observations resampled, the item
+    """The naive bootstrap PR71 forbids: observations resampled, the item
     ignored."""
     rng = np.random.default_rng(seed)
     v = np.asarray(list(values), dtype=float)
@@ -258,8 +239,7 @@ def cp_lower_one_sided(k_dis: int, g: int) -> float:
 
 
 def icc1(clusters: Sequence[Any], values: Sequence[float]) -> tuple[float, float, float]:
-    """One-way ANOVA ``ICC(1)`` with the ANOVA cluster size ``m0`` in the denominator (ruled
-    2026-09-22) and ``m_bar = N / G`` in the design effect: ``(icc, m_bar, deff)``."""
+    """One-way ANOVA ``ICC(1)`` with the ANOVA cluster size ``m0`` in the denominator and ``m_bar = N / G`` in the design effect: ``(icc, m_bar, deff)``."""
     frame = pd.DataFrame({"c": list(clusters), "y": [float(v) for v in values]})
     total, g = len(frame), frame["c"].nunique()
     m_bar = total / g
@@ -330,7 +310,7 @@ def excluded_frame(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
 
 
 def names_arm(detail: str, label: str) -> bool:
-    """``detail`` names an arm as ``arm <label>``, the phrase phase 1's build already uses."""
+    """``detail`` names an arm as ``arm <label>``, the phrase the pair assertion already uses."""
     return re.search(rf"\barm {re.escape(label)}\b", str(detail)) is not None
 
 
@@ -528,7 +508,7 @@ def assert_block_is(
     assert block["design_effect"]["deff"] == pytest.approx(deff, abs=1e-12)
 
 
-# ---------- helpers: a k-arm store the phase 1 assertion reads ----------
+# ---------- helpers: a k-arm store the pair assertion reads ----------
 
 
 @dataclasses.dataclass
@@ -623,7 +603,7 @@ def k_rows(g: int, pattern: Callable[[int], Sequence[int]], *, cut: str = CUT, k
 
 
 def pr60_store(root: Path) -> Store:
-    """The fixed ``k = 2`` store the PR60 digests were minted on: two cuts, four items each,
+    """The fixed ``k = 2`` store the PR60 digests are computed on: two cuts, four items each,
     two sweeps, values chosen so c60 has three flipping items and a tie in arm b."""
     rows = [
         KRow("c60-p0", CUT, ("0.75", "0.60")), KRow("c60-p1", CUT, ("0.25", "0.75")),
@@ -636,7 +616,7 @@ def pr60_store(root: Path) -> Store:
 
 def pr60_digests(store: Store, decl: Any) -> dict[str, str]:
     """The four PR60 digests off a store and a declaration, with the declaration digest masked
-    and the declaration block dropped, exactly as ``mint_pr60.py`` computes them."""
+    and the declaration block dropped, which is how the pinned digests were computed."""
     a = P().assert_pairs(store, decl)
     result = P().analyse(a)
     mask = re.compile(r'"declaration_digest": "[0-9a-f]{64}"|\n *"comparison": "g[te]",?')
@@ -652,8 +632,8 @@ def pr60_digests(store: Store, decl: Any) -> dict[str, str]:
     assert '"poisson_prove_version":' in json.dumps(payload) and '"proofload_version":' not in json.dumps(payload)
     return {
         "pairs": hashlib.sha256(frame.encode()).hexdigest(),
-        # PF0 (Q4): each arm's identity echoes the manifest's version under its new key; under the old
-        # key the assertion is the pre-amendment build's byte for byte.
+        # PF0: each arm's identity echoes the manifest's version under its new key; under the old
+        # key the assertion is the two-arm code's byte for byte.
         "assertion": hashlib.sha256(json.dumps(
             json.loads(json.dumps(payload).replace('"poisson_prove_version":', '"proofload_version":')), sort_keys=True,
         ).encode()).hexdigest(),
@@ -691,7 +671,7 @@ def control_sets() -> list[RSet]:
 
 
 def test_control_replicates_consumes_the_frames_assert_pairs_emits(tmp_path: Path) -> None:
-    """The one road through phase 1 at ``k = 5``: a hand-built five-arm store, ``assert_pairs``,
+    """The one road through the pair assertion at ``k = 5``: a hand-built five-arm store, ``assert_pairs``,
     then ``replicates`` beside ``analyse``. Every later test builds its ``PairAssertion``
     directly; this is what says the two shapes agree."""
     store = make_k_store(tmp_path, control_rows(), k=5, sweeps=("S1", "S2"))
@@ -892,15 +872,15 @@ def test_pr60_replicates_returns_an_empty_tuple_when_every_sweep_is_a_pair(tmp_p
     ]
 
 
-def test_pr60_at_k_two_the_frames_and_both_phase_two_artifacts_are_the_bytes_the_pre_amendment_build_wrote(
+def test_pr60_at_k_two_the_pairs_frame_the_assertion_and_both_analysis_artifacts_keep_their_pinned_bytes(
     tmp_path: Path,
 ) -> None:
-    """Minted on ``7bb1a3b``'s ``src/`` (no ``more``, no ``comparison``, no timing) by
-    ``mint_pr60.py`` through ``pr60_digests``: the ``pairs`` frame's nine frozen columns,
+    """Computed on ``7bb1a3b``'s ``src/`` (no ``more``, no ``comparison``, no timing) through
+    ``pr60_digests``: the ``pairs`` frame's nine two-arm columns,
     ``pair_assertion.json`` without its declaration block, digest and timing columns,
     ``contingency_by_cut.json`` and ``intervals_by_cut.json`` with the digest and the
-    ``comparison`` line masked. What the masks cover was ruled in after the mint; every other
-    byte is pinned, so a build that changes a ``k = 2`` byte anywhere else fails here."""
+    ``comparison`` line masked. What the masks cover was added since; every other
+    byte is pinned, so code that changes a ``k = 2`` byte anywhere else fails here."""
     digests = pr60_digests(pr60_store(tmp_path), store_declaration(sweeps=("S1", "S2"), k=2))
     assert digests == {
         "pairs": PR60_PAIRS_SHA256, "assertion": PR60_ASSERTION_SHA256,
@@ -914,11 +894,11 @@ def test_pr60_a_sweep_pair_built_without_more_is_the_sweep_pair_built_with_an_em
     assert declaration(k=2).digest == declaration(more={"S1": ()}, k=2).digest
 
 
-# ---------- PR61: the declared pair carries the whole of section 4.C ----------
+# ---------- PR61: the declared pair carries the whole two-arm analysis ----------
 
 
-def test_pr61_arms_three_to_k_move_no_byte_of_the_two_phase_two_artifacts_and_do_move_the_replicates() -> None:
-    """Named mutant 15. Two assertions under one declaration, identical in arms a and b, wild in
+def test_pr61_arms_three_to_k_move_no_byte_of_the_contingency_and_intervals_artifacts_and_do_move_the_replicates() -> None:
+    """Two assertions under one declaration, identical in arms a and b, wild in
     arms 3 to 5: ``analyse`` writes the same bytes for both and ``replicates`` does not."""
     def tame(i: int, s: str) -> tuple[int, ...]:
         return (1, 0, 1, 1, 0) if i < 6 else (1, 1, 1, 1, 1)
@@ -984,20 +964,12 @@ def test_pr62_a_set_matched_in_all_k_arms_is_one_row_of_pairs_carrying_k_values(
     assert all(isinstance(row[c], Decimal) for c in value_columns(5))
 
 
-def test_pr62_at_k_two_pr10_reads_exactly_as_the_frozen_oracle_pinned_it(tmp_path: Path) -> None:
-    rows = k_rows(3, lambda i: (1, 1), k=2)
-    rows[1] = dataclasses.replace(rows[1], absent=frozenset({"b"}))
-    a = P().assert_pairs(make_k_store(tmp_path, rows, k=2), declaration(k=2))
-    only_a = a.excluded.iloc[0]
-    assert (only_a["cause"], only_a["arm"]) == ("unmatched", "a")
-
-
-# ---------- PR63: all k, or none (fixture 1, named mutant 9) ----------
+# ---------- PR63: all k, or none (fixture 1) ----------
 
 
 def errored_rows() -> list[KRow]:
     """Twelve items; arm 4 errored on three of them, arm 3 on one more. The four broken sets
-    disagree in their first two arms, so a build that analyses them at ``j = 2`` moves
+    disagree in their first two arms, so code that analyses them at ``j = 2`` moves
     ``agree@2``; the eight whole sets agree at every prefix but one."""
     rows = k_rows(12, lambda i: (1, 1, 1, 1, 1) if i != 7 else (1, 0, 1, 1, 1))
     for i in (0, 1, 2):
@@ -1022,7 +994,7 @@ def test_pr63_a_set_with_one_errored_arm_is_excluded_whole_with_the_cause_and_th
 
 
 def test_pr63_a_partial_set_is_never_analysed_at_the_j_its_calls_reached(tmp_path: Path) -> None:
-    """Named mutant 9: ``agree@2`` on the easy items and the errored ones under one name."""
+    """Fails on ``agree@2`` taken over the easy items and the errored ones under one name."""
     a = P().assert_pairs(make_k_store(tmp_path, errored_rows()), declaration())
     r = result_of(a)
     for j in (2, 3, 4, 5):
@@ -1075,7 +1047,7 @@ def test_pr63_an_excluded_set_leaves_every_sweep_pair_it_was_in(tmp_path: Path) 
     assert r.majority["primary"]["j3"]["design_effect"]["m_bar"] == pytest.approx(10 / 4)
 
 
-# ---------- PR64: arm order is the declaration's (named mutant 13) ----------
+# ---------- PR64: arm order is the declaration's ----------
 
 
 def test_pr64_the_prefix_at_j_is_the_declared_order_not_the_run_id_order_nor_the_store_order(tmp_path: Path) -> None:
@@ -1096,7 +1068,7 @@ def test_pr64_the_prefix_at_j_is_the_declared_order_not_the_run_id_order_nor_the
 
 
 def test_pr64_the_prefix_is_never_a_per_set_subset_chosen_after_the_calls_are_seen() -> None:
-    """Named mutant 13. Every set has some three arms that agree; the first three never do."""
+    """Every set has some three arms that agree; the first three never do."""
     rows = [from_actions(f"i{i}", (1, 1, 0, 1, 1)) for i in range(4)]
     rows += [from_actions(f"j{i}", (0, 0, 1, 0, 0)) for i in range(4)]
     r = result_of(assertion(rows))
@@ -1157,15 +1129,18 @@ def test_pr65_agree_is_over_every_sweep_and_the_cluster_is_the_item_not_the_set(
 
 @settings(max_examples=60, deadline=None, derandomize=True)
 @given(
-    actions=st.lists(
-        st.tuples(*([st.integers(0, 1)] * 5)), min_size=6, max_size=14,
+    codes=st.lists(
+        st.tuples(*([st.sampled_from([0, 1, 2])] * 5)), min_size=6, max_size=14,
     ),
     comparison=st.sampled_from(["ge", "gt"]),
 )
 def test_pr65_property_agree_at_every_j_follows_from_the_actions(
-    actions: list[tuple[int, ...]], comparison: str
+    codes: list[tuple[int, ...]], comparison: str
 ) -> None:
-    rows = [from_actions(f"i{i:03d}", a) for i, a in enumerate(actions)]
+    """Each call is an action 0, an action 1 or a tie (code 2), which acts under ``ge`` and not
+    under ``gt``, so the declared comparison decides the actions."""
+    rows = [RSet(f"i{i:03d}", tuple((LO, HI, TIE)[c] for c in cs)) for i, cs in enumerate(codes)]
+    actions = [tuple(int(c == 1 or (c == 2 and comparison == "ge")) for c in cs) for cs in codes]
     r = result_of(assertion(rows, comparison=comparison, b=50))
     for j in (2, 3, 4, 5):
         assert r.agree["primary"][f"j{j}"]["estimate"] == pytest.approx(
@@ -1279,12 +1254,12 @@ def test_pr67_with_two_sweeps_there_is_one_observation_per_item_and_with_one_swe
         assert block["basis"] == "not_estimated"
 
 
-# ---------- PR68: no majority on an even j (fixture 3, named mutant 10) ----------
+# ---------- PR68: no majority on an even j (fixture 3) ----------
 
 
 def even_rows() -> list[RSet]:
     """``k = 4``, and every set splits two against two, so an even-``j`` majority would need a
-    tie-break: a build that breaks it toward the action reads ``maj_4 = 1`` everywhere."""
+    tie-break: code that breaks it toward the action reads ``maj_4 = 1`` everywhere."""
     return [from_actions(f"i{i:03d}", (1, 0, 1, 0) if i % 2 else (0, 1, 0, 1), sweep=s)
             for i in range(8) for s in ("S1", "S2")]
 
@@ -1319,7 +1294,7 @@ def test_pr68_no_even_j_majority_appears_under_any_key_and_no_tie_is_broken() ->
     assert r.majority["primary"]["j1"]["estimate"] == 1.0
 
 
-# ---------- PR69: MS@1 is not the flip rate (named mutant 16) ----------
+# ---------- PR69: MS@1 is not the flip rate ----------
 
 
 def test_pr69_ms_at_one_compares_two_sweeps_single_calls_and_the_flip_rate_two_arms_in_one_sweep() -> None:
@@ -1401,26 +1376,12 @@ def test_pr70_the_sensitivity_never_replaces_the_primary_where_the_two_agree() -
     assert list(r.agree) == list(RULES)
 
 
-# ---------- PR71: one bootstrap, one seed, no new default_rng site (named mutant 11) ----------
-
-
-def test_pr71_no_default_rng_site_is_added_to_paired_py() -> None:
-    """Green before and after: the one site is already there. The S25 guard pins the package;
-    this pins the file, so a second stream in ``paired.py`` fails here by name."""
-    source = Path(paired.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    sites: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            for inner in ast.walk(node):
-                if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) and inner.func.attr == "default_rng":
-                    sites.append(node.name)
-    assert sites == ["_cluster_bootstrap"], sites
+# ---------- PR71: one bootstrap, one seed ----------
 
 
 def test_pr71_every_k_metric_interval_is_pr28s_estimator_and_never_the_observation_bootstrap() -> None:
-    """Named mutant 11. Items agree or disagree all-or-nothing across three sweeps, so the
-    observation bootstrap is narrower (asserted on the fixture) and the build matches the
+    """Items agree or disagree all-or-nothing across three sweeps, so the
+    observation bootstrap is narrower (asserted on the fixture) and ``replicates`` matches the
     cluster one."""
     def pattern(i: int, s: str) -> tuple[int, ...]:
         return (1, 0, 1, 1, 1) if i < 6 else (1, 1, 1, 1, 1)
@@ -1501,11 +1462,11 @@ def test_pr71_a_fresh_generator_per_quantity_per_prefix_per_cut_and_per_rule() -
     assert {r.name: r for r in results}[CUT].to_json() == alone
 
 
-# ---------- PR72: the fallback, mirrored (fixture 2, named mutant 12) ----------
+# ---------- PR72: the fallback, mirrored (fixture 2) ----------
 
 
 def test_pr72_zero_disagreeing_items_is_the_exact_lower_bound_and_never_a_certainty() -> None:
-    """Named mutant 12: ``[1, 1]`` where no item disagreed. Twenty items, three sweeps, three
+    """Fails on ``[1, 1]`` where no item disagreed. Twenty items, three sweeps, three
     cuts, every set agreeing at every prefix under both rules."""
     rows = grid(20, ["S1", "S2", "S3"], all_agree)
     rows += grid(20, ["S1", "S2", "S3"], lambda i, s: (0,) * 5, cut="c50")
@@ -1766,7 +1727,7 @@ def test_pr75_a_step_whose_endpoint_is_under_the_fallback_is_not_estimated() -> 
     assert r.agree["primary"]["j5"]["basis"] == "cluster_bootstrap"
 
 
-# ---------- PR76: the cost framing, pre-declared and emitted whole (named mutant 14) ----------
+# ---------- PR76: the cost framing, pre-declared and emitted whole ----------
 
 
 def test_pr76_the_per_ten_thousand_figure_carries_both_bounds_from_the_same_interval_and_the_conditioning() -> None:
@@ -1799,7 +1760,7 @@ def test_pr76_under_the_fallback_the_lower_count_is_zero_and_the_upper_comes_fro
 
 
 def test_pr76_without_a_declared_conditioning_no_per_ten_thousand_figure_is_emitted() -> None:
-    """Named mutant 14, half of it: a near-cut rate read as a production rate."""
+    """Fails on a near-cut rate read as a production rate."""
     r = result_of(assertion(grid(8, ["S1", "S2"], ms_pattern)))
     for rule in RULES:
         for j in (1, 3, 5):
@@ -1807,11 +1768,16 @@ def test_pr76_without_a_declared_conditioning_no_per_ten_thousand_figure_is_emit
             assert "per_10000" not in block, block
             for path, _ in walk(block):
                 assert not any("10000" in key or "10_000" in key for key in path), path
-    assert result_of(assertion(grid(8, ["S1", "S2"], ms_pattern), conditioning="c")).cost_framing["primary"]["j1"]["per_10000"]["n"] >= 0
+    conditioned = result_of(assertion(grid(8, ["S1", "S2"], ms_pattern), conditioning="c"))
+    for rule in RULES:
+        for j in (1, 3, 5):
+            figure = conditioned.cost_framing[rule][f"j{j}"]["per_10000"]
+            assert figure["conditioning"] == "c", (rule, j, figure)
+            assert 0 <= figure["n_lo"] <= figure["n"] <= figure["n_hi"], (rule, j, figure)
 
 
 def test_pr76_n_is_never_emitted_without_both_bounds() -> None:
-    """Named mutant 14, the other half: the point estimate alone."""
+    """Fails on the point estimate emitted alone."""
     payload = loaded(result_of(assertion(grid(8, ["S1", "S2"], ms_pattern), conditioning="c")))
     seen = 0
     for path, value in walk(payload["cost_framing"]):
@@ -1843,7 +1809,7 @@ def test_pr76_without_a_price_or_a_cost_report_the_dollar_row_is_absent_not_zero
 
 
 def test_pr76_the_dollar_row_is_j_times_the_mean_recorded_input_tokens_times_the_price() -> None:
-    """Ruled 2026-09-22: the mean is ``input_tokens / recorded_spans`` off the cost report,
+    """The mean is ``input_tokens / recorded_spans`` off the cost report,
     never a tokeniser and never a rate card; the price is echoed as its literal."""
     paired = P()
     priced = paired.CostReport(
@@ -1865,7 +1831,7 @@ def test_pr76_the_dollar_row_is_j_times_the_mean_recorded_input_tokens_times_the
 
 
 def test_pr76_the_latency_row_is_j_times_the_recorded_per_call_median_serial_and_at_the_declared_concurrency() -> None:
-    """Ruled 2026-09-22: the median is the median of the per-sweep medians ``windows`` carries;
+    """The median is the median of the per-sweep medians ``windows`` carries;
     the concurrency is the arms' recorded one, and with none recorded that row is absent."""
     paired = P()
     windows = paired.WindowReport(

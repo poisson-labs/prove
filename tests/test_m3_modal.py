@@ -12,7 +12,7 @@ user's rollout inside a container; the ones that single out a job read module-le
 sets (``RAISE_SEEDS``, ``SLEEP_SEEDS``) that a test fills in from its plan. A forked child
 inherits them. An autouse fixture clears them between tests.
 
-Conventions the frozen tests fix for the implementation session:
+Conventions the frozen tests fix:
 
 - The deterministic rollout is the M3-local one, formula included, so I5 compares like with
   like across ``run_local`` and ``run_with_mapper``.
@@ -28,15 +28,15 @@ Conventions the frozen tests fix for the implementation session:
   episodes stored so far and is reported once per completed batch.
 - ``n_executed`` for a capped run is ``n_ok + n_errored``, which equals the rows stored.
 - I11 is exercised only where the batch holding the Nth episode is not the final batch; the
-  edge where a cap lands inside the last batch (every pair executed anyway) is left to the
-  implementation to decide between ``complete`` and ``partial``.
+  edge where a cap lands inside the last batch (every pair executed anyway) may end
+  ``complete`` or ``partial``, and is not pinned.
 - I12 checks ``environment["import_path"]`` for presence only: ``run_with_mapper`` has no
-  import path input, so its value on a mapper-driven run is the implementation's call.
+  import path input, so its value on a mapper-driven run is not pinned.
 - ``ImageSpec.to_dict()`` is JSON-native (lists, not tuples; ``dockerfile`` as ``str``) under
   the field names ``python``, ``pip``, ``apt``, ``dockerfile``, ``local_packages``, ``gpu``, so
   it equals its own JSON round-trip and the manifest's ``environment["image"]``.
 - I4 counts every attribute lookup of the rollout name on its module (a module-level
-  ``__getattr__`` hook), so resolve ``import_path`` with a single ``getattr`` per call, not a
+  ``__getattr__`` hook), so ``import_path`` is resolved with a single ``getattr`` per call, not a
   ``hasattr`` probe followed by a ``getattr``.
 - The cap in I11 may leave the last batch whole or truncated to N rows; only the bounds
   ``N <= rows <= N + batch_size - 1`` and ``ceil(rows / batch_size)`` parts are asserted.
@@ -131,7 +131,7 @@ def wrong_type_rollout(cfg: dict[str, Any], seed: int) -> Any:
 
 def sleeping_rollout(cfg: dict[str, Any], seed: int) -> Episode:
     if seed in SLEEP_SEEDS:
-        time.sleep(3.0)
+        time.sleep(12.0)  # past the test's 5 s bound: an executor that waits instead of killing fails it
     return deterministic_rollout(cfg, seed)
 
 
@@ -808,8 +808,8 @@ def test_i15_preflight_fresh_plan_with_and_without_estimate(tmp_path: Path) -> N
     cost_line = _line_with(text, "Cost: ~$")
     assert "best-effort" in cost_line and "prices" in cost_line
     assert "Cost: unknown" not in text
-    # PF4 re-freeze (PF4.22, reading R36): the preflight block no longer prints the old limit at a base
-    # rate of 0.5 (the normal approximation, beside the gate's own); the plan's one limit is the gate's.
+    # PF4.22: the preflight block prints no limit at a base rate of 0.5 (the normal
+    # approximation, beside the gate's own); the plan's one limit is the gate's.
     assert "MDE at N=" not in text and "base rate 0.5" not in text
     assert "Resuming" not in text
 

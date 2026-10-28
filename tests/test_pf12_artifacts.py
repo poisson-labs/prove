@@ -1,41 +1,39 @@
 """PF12, the artifact format: what every run and saved comparison writes into the store (the code suite).
 
-Written from the front-door spec's section 18 (18.1 and 18.2, ruling Q59), its invariants PF12.1 to
-PF12.5 and PF12.12, the shared format ``Poisson — Spec Artifact Format`` (sections 1 to 9) and the
-test standard (section 10.6). ``tests/test_pf12_ui.py`` holds PF12.6 to PF12.11 and PF12.13, the
-static UI. The build is written against these files and does not edit them.
+Written from what the store holds and how a comparison is saved, the invariants PF12.1 to PF12.5
+and PF12.12, the shared artifact format (``docs/artifact-format.md``) and the test standard.
+``tests/test_pf12_ui.py`` holds PF12.6 to PF12.11 and PF12.13, the static UI.
 
 **What this file reads.** The files a command writes into the store (``.poisson/store.json``,
 ``.poisson/artifacts/<kind>/<id>/``, each run's ``events.jsonl``), what the commands print (text and
-``--json``), and, for PF12.3's "equal to the core's result", the core through section 17.1's
-boundary (``pf12_support.core``: the seam with PF5, listed S1 to S12 in the session log). Statistics
-are PF4's: this file never pins a number a comparison computes, only that the artifact carries the
+``--json``), and, for PF12.3's "equal to the core's result", the core through its boundary
+(``pf12_support.core``: the seam with PF5). Statistics are PF4's: this file never pins a number a comparison computes, only that the artifact carries the
 number the comparison printed. The quickstart's counts are never pinned; its verdict word is
 ``mixed`` (its events are not declared) and its shape is what is pinned.
 
-**Readings** (each a yes/no in the freeze's records; the ids are the records').
+**Readings** (where the invariants leave a choice, the one this file makes).
 
-- R1 A save prints ``  saved  comparison <id>`` (``  saved  check <id>`` for ``check --save``) as
+- A save prints ``  saved  comparison <id>`` (``  saved  check <id>`` for ``check --save``) as
   the last detail line of the command's first block (after ``report``'s ``wrote`` lines; after
   ``serve``'s line with the address, once it is bound), the id as rule 10 prints a hash in text, its
   first 12 hex; its ``--json`` carries ``saved``, the store-relative folder with the whole id
   (``.poisson/artifacts/comparison/<id>``), before ``next``; without a save neither appears, so the
   plain commands' output is unchanged.
-- R2 ``serve --json`` saves the comparison as ``serve`` does: ``--json`` changes how the page is
+- ``serve --json`` saves the comparison as ``serve`` does: ``--json`` changes how the page is
   printed, not what the command does. Its document is the page structure (``poisson-prove.viewpair/7``),
-  whose keys stay as frozen: it gains no ``saved`` key, and the save shows in the store.
-- R3 An unwritable store: exactly one ``note: the comparison was not saved: <the system's words>``
+  whose keys stay as they are: it gains no ``saved`` key, and the save shows in the store.
+- An unwritable store: exactly one ``note: the comparison was not saved: <the system's words>``
   line, the words carrying ``os.strerror`` of the error; stdout and the exit code are what the same
   command prints on a writable store, less the ``saved`` line. The same sentence for a check.
-- R4 The store descriptor is written by every command that writes into the store (``sweep`` and its
+- The store descriptor is written by every command that writes into the store (``sweep`` and its
   resume, a save, ``ui`` and every refresh); a command that writes nothing creates nothing.
-- R5 ``writers`` gains one entry per tool and major.minor version (``version`` the full version,
+- ``writers`` gains one entry per tool and major.minor version (``version`` the full version,
   ``first_write`` its time); an existing descriptor's other keys, ``created_by`` and ``created_at``
   included, are kept as they are, unknown keys too.
-- R6 The id: the first 16 hex of the sha256 of the canonical JSON (sorted keys, no spaces, UTF-8
+- The id: the first 16 hex of the sha256 of the canonical JSON (sorted keys, no spaces, UTF-8
   unescaped) of ``{"kind", "tool", "tool_version": "<major>.<minor>", "inputs", "settings"}``,
   ``settings`` being the descriptor's less ``method_chosen``.
-- R7 ``settings`` holds exactly the result-changing settings plus ``method_chosen`` (``default`` or
+- ``settings`` holds exactly the result-changing settings plus ``method_chosen`` (``default`` or
   ``named``): the method as resolved; ``events`` as ``{"name", "kind"}`` sorted by name, the kind
   ``failure``, ``success`` or null; ``q``; ``power``; the comparison's horizon; the ``--by`` asked for
   (null when none: the result records how the tree resolved it), ``depth``, ``permutations``,
@@ -44,52 +42,51 @@ number the comparison printed. The quickstart's counts are never pinned; its ver
   ``fail_on`` instead of the tree's five. ``report``'s and ``serve``'s picture flags (``--x``,
   ``--y``, ``--fix``, ``--theme``, ``--top-n``, ``--forest``, ``--title``, ``--methods``) are not
   settings.
-- R8 Saving a comparison whose id exists writes nothing: the first folder stays byte for byte,
+- Saving a comparison whose id exists writes nothing: the first folder stays byte for byte,
   ``created_at`` and ``method_chosen`` included, and the command prints the same ``saved`` line.
-- R9 ``files`` lists every file of the folder but ``artifact.json`` itself (which cannot hold its
+- ``files`` lists every file of the folder but ``artifact.json`` itself (which cannot hold its
   own digest); a chart's data is a JSON file listed with role ``table`` and schema
   ``poisson-prove.chart/1``, named by the chart's ``data``.
-- R10 The table's metrics, from each condition's row of the result: per arm ``n``, ``events``,
+- The table's metrics, from each condition's row of the result: per arm ``n``, ``events``,
   ``rate``, ``share``, ``share_lo``, ``share_hi``; for the pair (arm ``both``) ``delta``, ``stat``,
   ``p``, ``q``, ``q_holm``, ``ci_lo``, ``ci_hi``, ``mde_rise``, ``mde_fall``, ``mde_rise_verdict``,
   ``mde_fall_verdict``, ``p_min``. ``condition`` is the config's canonical JSON. A level is set on the
   shares and their bounds (the Wilson level), the interval's bounds (its level) and the two limits
   (``mde_level``), and null elsewhere; a null value carries a note, the limits' own notes where the
   row has them. More metrics may follow; each is documented (PF12.12).
-- R11 A comparison's charts are ``charts/{heatmap,differences,limits}-<event>.svg`` and
+- A comparison's charts are ``charts/{heatmap,differences,limits}-<event>.svg`` and
   ``charts/<condition hash>/incidence-<event>.svg``, each with its ``.json`` beside it
   (``{"schema", "kind", "event", "condition", "columns", "rows"}``); a comparison over one axis draws
   its heatmap as one row.
-- R12 A saved check holds ``check.json`` (``poisson-prove.check/1``, the core's check result) and
+- A saved check holds ``check.json`` (``poisson-prove.check/1``, the core's check result) and
   ``conditions.parquet``, and no charts.
-- R13 A newer major: ``store.json``'s refuses every command on that store, exit 1, one ``error:``
+- A newer major: ``store.json``'s refuses every command on that store, exit 1, one ``error:``
   line naming both format strings (``poisson.store/2``, ``poisson.store/1``) and ``  next: pip
   install -U poisson-prove``, with nothing on stdout: ``sweep`` checks the store before it plans, so
   this refusal is not one of rule 7's three that keep a plan on screen; an artifact's or an event
   line's refuses ``ui`` the same way.
-- R14 An interrupted save: Ctrl-C leaves no artifact and no folder at all; a killed process may leave
+- An interrupted save: Ctrl-C leaves no artifact and no folder at all; a killed process may leave
   a temporary folder, never one named as an id, and no reader lists it.
-- R15 A sweep stopped by ``--max-rollouts`` ends its segment with ``interrupted``; ``progress``
+- A sweep stopped by ``--max-rollouts`` ends its segment with ``interrupted``; ``progress``
   counts satisfy ``kept + errored == done <= total``; "once just before ``finished`` or
   ``interrupted``" is the event immediately before it (no ``note`` between them).
-- R16 Only a run a 0.1.0 sweep starts or resumes has ``events.jsonl``; a run written through the
+- Only a run a 0.1.0 sweep starts or resumes has ``events.jsonl``; a run written through the
   ``Store`` alone, like every 0.0.1 run, has none.
-- R35 (folded into R11: a one-axis comparison's heatmap is one row.)
-- R36 Lanes: every PF12 test is in the code suite, but the browser check and the wheel's bytes
-  (``slow``), as section 10.6 puts browser and wheel builds.
-- R38 ``jsonschema`` (the format's schemas) and ``playwright`` (the browser check) join ``[dev]``.
-- R39 Frozen tests that run ``report`` or ``serve`` read a per-process copy of the generated lattice
+- Markers: every PF12 test is in the code suite; the browser check and the wheel's bytes are
+  marked ``slow``, like every browser and wheel build.
+- ``jsonschema`` (the format's schemas) and ``playwright`` (the browser check) are in ``[dev]``.
+- Frozen tests that run ``report`` or ``serve`` read a per-process copy of the generated lattice
   store and the committed 0.0.1 fixture (``conftest.writable_copy``), so no test writes into either; a copy of a
   committed store made for a shared world leaves out any ``.poisson/`` (``copy_fixture``).
-- R41 Once ``serve`` has saved, its help and its Ctrl-C line no longer say nothing was written: the
-  help says it saves, and the stopped line says it was interrupted without that clause.
-- R27 ``docs/artifact-format.md`` names, in backticks, every key at every depth of every JSON file
+- ``serve`` saves, so neither its help nor its Ctrl-C line says nothing was written: the help
+  says it saves, and the stopped line says it was interrupted without that clause.
+- ``docs/artifact-format.md`` names, in backticks, every key at every depth of every JSON file
   Prove writes under the format (``store.json``, ``artifact.json``, the event lines, ``comparison.json``,
   ``check.json``, the charts' data) and every table column and metric.
-- R32 The resumed 0.0.1 run's ``events.jsonl`` starts at ``resumed``, as PF12.1 says.
+- The resumed 0.0.1 run's ``events.jsonl`` starts at ``resumed``, as PF12.1 says.
 
-**Lanes.** The code suite, every test. The stores the tests read are built once per session
-(``pf12_support.shared_world``); one test sweeps a small spec of its own.
+**Suite.** The code suite, every test. The stores the tests read are built once per session
+(``pf12_support.shared_world``); one test sweeps a small spec of its own, and PF12.2 a slowed one.
 """
 
 from __future__ import annotations
@@ -183,7 +180,7 @@ def _versions() -> tuple[str, str, str]:
 @pytest.mark.parametrize("before", ["none", "another tool", "this version", "same minor", "other minor"])
 def test_pf12_1_the_first_write_creates_the_store_descriptor_and_a_later_writer_only_appends_its_entry(before: str, tmp_path: Path) -> None:
     """``.poisson/store.json`` is ``poisson.store/1`` (its first key ``format``); a writer adds one
-    ``writers`` entry per tool and major.minor version and changes nothing else (R4, R5)."""
+    ``writers`` entry per tool and major.minor version and changes nothing else."""
     from poisson_prove import __version__
 
     store = tmp_path / "prove-runs"
@@ -256,7 +253,7 @@ def test_pf12_1_every_writing_verb_leaves_every_0_0_1_file_as_it_was(step: str, 
 def test_pf12_1_the_one_exception_resuming_a_0_0_1_partial_run_changes_its_manifest_and_starts_its_events_at_resumed(resume_world: tuple[Path, dict[str, Any]]) -> None:
     """``sweep --resume`` of a 0.0.1 partial run updates that run's manifest (its status, and the resume
     PF4.39 records), as 0.0.1 did, adds episode parts and an ``events.jsonl`` that starts at ``resumed``,
-    and changes nothing else (R32)."""
+    and changes nothing else."""
     facts = resume_world[1]
     assert facts["result"]["code"] == 0, facts["result"]
     store = _store(resume_world)
@@ -273,7 +270,7 @@ def test_pf12_1_the_one_exception_resuming_a_0_0_1_partial_run_changes_its_manif
 
 
 def test_pf12_readers_ignore_the_poisson_folder(old_world: tuple[Path, dict[str, Any]]) -> None:
-    """Section 18.1: ``runs``, the resolver and the public ``Store`` read the same runs once the store
+    """``runs``, the resolver and the public ``Store`` read the same runs once the store
     holds ``.poisson/`` (its descriptor, a saved comparison and the UI) as before."""
     from poisson_prove.store import Store
 
@@ -289,17 +286,61 @@ def test_pf12_readers_ignore_the_poisson_folder(old_world: tuple[Path, dict[str,
 
 # ---------- PF12.2 events.jsonl ----------
 
+#: A rollout of the mock agent slowed to a quarter of a second, so a sweep of the small spec's
+#: twelve rollouts takes about three seconds and reports progress more than twice.
+SLOW_ROLLOUT = """\
+import time
 
-@pytest.mark.parametrize("which", ["complete", "resumed", "paired", "errored"])
-def test_pf12_2_every_new_run_writes_its_events_in_section_17_2s_order(which: str, sweep_world: tuple[Path, dict[str, Any]]) -> None:
+from poisson_prove.examples import mock_agent
+
+
+def rollout(cfg, seed):
+    time.sleep(0.25)
+    return mock_agent.rollout(cfg, seed)
+"""
+
+
+@pytest.fixture(scope="module")
+def slow_world(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict[str, Any]]:
+    """One complete run of the small spec, swept with the slowed rollout."""
+    work = tmp_path_factory.mktemp("slow") / "work"
+    work.mkdir()
+    (work / "pf12_slow.py").write_text(SLOW_ROLLOUT, encoding="utf-8")
+    spec = work / "spec.toml"
+    spec.write_text(SMALL_SPEC, encoding="utf-8")
+    store = work / "prove-runs"
+    old = sys.path[:]
+    sys.path.insert(0, str(work))
+    sys.modules.pop("pf12_slow", None)
+    try:
+        swept = cli(store, "sweep", spec, "--target", "pf12_slow:rollout", "--yes", *LOOSE, cwd=work)
+    finally:
+        sys.path[:] = old
+        sys.modules.pop("pf12_slow", None)
+    assert swept.code == 0, swept.err
+    (run,) = [p.name for p in store.iterdir() if (p / "manifest.json").is_file()]
+    return work, {"store": str(store), "runs": {"slow": run}}
+
+
+def _seconds(at: str) -> float:
+    """An event's ``at`` (``YYYY-MM-DDTHH:MM:SS.ffffffZ``) as seconds since the epoch."""
+    from datetime import datetime
+
+    return datetime.fromisoformat(at.replace("Z", "+00:00")).timestamp()
+
+
+@pytest.mark.parametrize("which", ["complete", "resumed", "paired", "errored", "slow"])
+def test_pf12_2_every_new_run_writes_its_events_in_section_17_2s_order(which: str, request: pytest.FixtureRequest) -> None:
     """Each line is one ``poisson.run-event/1`` object (``schema`` first, then ``at``, ``kind``,
     ``detail``) in the grammar ``planned started (progress|note)* (finished|interrupted)``, a resume
     adding ``resumed (progress|note)* (finished|interrupted)``; times never go back; ``progress``
-    comes at most once a second plus once just before the segment ends, with counts that add up
-    (R15); a stopped run's lines stay as they were when the resume appends (append, never rewrite)."""
-    facts = sweep_world[1]
+    comes at most once a second plus once just before the segment ends, with counts that add up;
+    a stopped run's lines stay as they were when the resume appends (append, never rewrite). The
+    slowed run reports progress three times or more, so its pace is measured."""
+    world = request.getfixturevalue("slow_world" if which == "slow" else "sweep_world")
+    facts = world[1]
     run = facts["runs"][which]
-    text = (_store(sweep_world) / run / "events.jsonl").read_text(encoding="utf-8")
+    text = (_store(world) / run / "events.jsonl").read_text(encoding="utf-8")
     assert text.endswith("\n")
     events = [json.loads(line) for line in text.splitlines()]
     for event in events:
@@ -322,8 +363,12 @@ def test_pf12_2_every_new_run_writes_its_events_in_section_17_2s_order(which: st
             counts = e["detail"]
             assert all(isinstance(counts[k], int) and counts[k] >= 0 for k in PROGRESS_KEYS), counts
             assert counts["kept"] + counts["errored"] == counts["done"] <= counts["total"], counts
-        paced = [e["at"] for e in progress[:-1]]
-        assert len(set(paced)) == len(paced), paced  # whole seconds apart, so at most once a second
+        paced = [_seconds(e["at"]) for e in progress[:-1]]
+        if which == "slow":
+            assert len(paced) >= 2, [e["at"] for e in progress]
+        # At most once a second; the hundredth allows for the clock the time is read from.
+        gaps = [later - earlier for earlier, later in zip(paced, paced[1:])]
+        assert all(gap >= 0.99 for gap in gaps), [e["at"] for e in progress]
     last = events[-1]
     assert last["kind"] == "finished", letters
     if which == "resumed":
@@ -340,7 +385,7 @@ def test_pf12_2_every_new_run_writes_its_events_in_section_17_2s_order(which: st
 
 def test_pf12_2_a_reader_given_events_cut_mid_line_reads_every_whole_line(sweep_world: tuple[Path, dict[str, Any]], tmp_path: Path) -> None:
     """A run still writing, or one that died, leaves a partial last line: the run's view and its page
-    show every whole line's event, in order, and nothing of the cut one (Artifact Format 4.2). The cut
+    show every whole line's event, in order, and nothing of the cut one. The cut
     falls anywhere in the last line (Hypothesis picks where); the page is built once, at one cut."""
     from hypothesis import HealthCheck, given, settings, strategies as st
 
@@ -387,7 +432,7 @@ def _lists_of_dicts(node: Any) -> list[list[dict[str, Any]]]:
 
 
 def test_pf12_2_runs_written_without_a_sweep_have_no_event_log(stats_world: tuple[Path, dict[str, Any]], old_world: tuple[Path, dict[str, Any]]) -> None:
-    """Only a run a 0.1.0 sweep starts or resumes writes ``events.jsonl`` (R16): no 0.0.1 run gains
+    """Only a run a 0.1.0 sweep starts or resumes writes ``events.jsonl``: no 0.0.1 run gains
     one by being read, compared or shown, and a run written through the ``Store`` has none."""
     for store in (_store(stats_world), _store(old_world)):
         for manifest in store.glob("*/manifest.json"):
@@ -400,9 +445,9 @@ def test_pf12_2_runs_written_without_a_sweep_have_no_event_log(stats_world: tupl
 @pytest.mark.parametrize("name", [n for _, n in SAVED])
 def test_pf12_3_the_descriptor_is_valid_and_lists_every_file_with_its_digest(name: str, old_world: Any, stats_world: Any) -> None:
     """``artifact.json`` is ``poisson.artifact/1`` (first key ``format``), its id the folder's name and
-    the format's digest (R6), its settings the result-changing ones (R7), its summary the result's word
+    the format's digest, its settings the result-changing ones, its summary the result's word
     and sentence; ``files`` lists every other file in the folder with its role, media type, schema and
-    sha256 (R9), the charts each with their data beside them (R11), a check none (R12)."""
+    sha256, the charts each with their data beside them, a check none."""
     store, kind, artifact_id = _saved(name, old_world, stats_world)
     folder = _folder(store, kind, artifact_id)
     descriptor = _descriptor(store, kind, artifact_id)
@@ -457,7 +502,7 @@ def _without(document: dict[str, Any], *keys: str) -> dict[str, Any]:
     return {k: v for k, v in document.items() if k not in keys}
 
 
-#: The envelope keys a verb's ``--json`` puts around the core's document (section 5.6, R1).
+#: The envelope keys a verb's ``--json`` puts around the core's document.
 ENVELOPE = ("schema", "saved")
 
 
@@ -506,7 +551,7 @@ def test_pf12_3_the_saved_result_is_the_cores_result_and_what_the_verb_prints_as
 
 def test_pf12_3_the_table_is_long_form_with_the_formats_key_columns_and_every_rows_numbers(old_world: Any, stats_world: Any) -> None:
     """``conditions.parquet`` (``poisson.table/1``) has the format's nine key columns first, in order and
-    of their types; one row per (event, condition, arm, metric); every metric of R10 for every row of
+    of their types; one row per (event, condition, arm, metric); every metric of the table for every row of
     the result, its value the result's own number, its level where the metric has one, and a note
     beside every null value."""
     for name in [n for _, n in SAVED]:
@@ -536,7 +581,8 @@ def test_pf12_3_the_table_is_long_form_with_the_formats_key_columns_and_every_ro
                     assert row["condition"] == canonical(cell["config"]), row
                     assert row["value"] == cell[metric], (name, metric, row, cell[metric])
                     level = LEVELLED.get(metric)
-                    assert row["level"] == (cell[level] if level and cell[metric] is not None else row["level"] if level else None), (name, row)
+                    # A null value of a metric with a level keeps the level it was sought at.
+                    assert row["level"] == (cell[level] if level else None), (name, row)
                     if row["value"] is None:
                         assert row["note"], (name, row)
                         if metric in ("mde_rise", "mde_fall"):
@@ -548,8 +594,8 @@ def test_pf12_3_the_table_is_long_form_with_the_formats_key_columns_and_every_ro
 ])
 def test_pf12_3_the_id_is_the_digest_of_the_inputs_and_the_result_changing_settings(change: str, stats_world: Any, tmp_path: Path) -> None:
     """Saving twice is one artifact; asking for the same result another way (the default method named,
-    a picture flag of ``report``) is the same id, the first descriptor kept (R8); a setting that
-    changes the result gives another id, and the new descriptor records it (R6, R7)."""
+    a picture flag of ``report``) is the same id, the first descriptor kept; a setting that
+    changes the result gives another id, and the new descriptor records it."""
     pair = stats_world[1]["pairs"]["grid"]
     store = copy_store(_store(stats_world), tmp_path / "prove-runs")
     shutil.rmtree(store / ".poisson" / "artifacts")
@@ -626,7 +672,7 @@ sys.exit(cli.main(sys.argv[1:]))
 @pytest.mark.parametrize("how", ["ctrl-c", "killed"])
 def test_pf12_3_an_interrupted_save_leaves_no_artifact(how: str, stats_world: Any, tmp_path: Path) -> None:
     """A save writes into a temporary folder renamed into place last: interrupted, it leaves no artifact
-    (R14) — after Ctrl-C nothing at all, after a kill no folder named as an id — no reader lists one, and
+    — after Ctrl-C nothing at all, after a kill no folder named as an id — no reader lists one, and
     the next save of the same comparison succeeds."""
     pair = stats_world[1]["pairs"]["trade"]
     store = copy_store(_store(stats_world), tmp_path / "prove-runs")
@@ -650,7 +696,7 @@ def test_pf12_3_two_processes_saving_the_same_comparison_at_once_leave_one_artif
     """Saving the same comparison twice is one artifact also when two commands save it at once (two
     faces on one store, PF5.11; two test workers on one fixture): the second to rename finds the
     folder there, and that is a save, not a failure. Both print the same ``saved`` line and no note,
-    and nothing else is left in the folder (R14)."""
+    and nothing else is left in the folder."""
     pair = stats_world[1]["pairs"]["trade"]
     store = copy_store(_store(stats_world), tmp_path / "prove-runs")
     shutil.rmtree(store / ".poisson" / "artifacts")
@@ -703,7 +749,7 @@ sys.exit(code)
 def test_pf12_4_readers_accept_the_current_major_and_ignore_unknown_keys_and_kinds(sweep_world: Any, stats_world: Any, tmp_path: Path) -> None:
     """A store whose descriptor, artifacts, event lines and table carry keys, kinds and columns this
     Prove does not know (a later minor's, or another tool's): every reader goes on, and shows what it
-    knows (Artifact Format section 9)."""
+    knows."""
     store = copy_store(_store(stats_world), tmp_path / "prove-runs")
     for run in sweep_world[1]["runs"].values():
         shutil.copytree(_store(sweep_world) / run, store / run)
@@ -749,7 +795,7 @@ def test_pf12_4_readers_accept_the_current_major_and_ignore_unknown_keys_and_kin
 ])
 def test_pf12_4_a_newer_major_is_refused_in_one_error_line_naming_both_versions(where: str, verb: str, stats_world: Any, sweep_world: Any, tmp_path: Path) -> None:
     """A file in a newer major than this Prove reads is refused: exit 1, nothing on stdout, one
-    ``error:`` line naming both versions, then ``  next: pip install -U poisson-prove`` (R13)."""
+    ``error:`` line naming both versions, then ``  next: pip install -U poisson-prove``."""
     store = copy_store(_store(stats_world), tmp_path / "prove-runs")
     pair = stats_world[1]["pairs"]["trade"]
     run = sweep_world[1]["runs"]["complete"]
@@ -803,9 +849,9 @@ def test_pf12_4_a_newer_major_is_refused_in_one_error_line_naming_both_versions(
     ("report", True), ("report --json", True), ("serve --json", True),
 ])
 def test_pf12_5_report_and_serve_save_and_diff_and_check_only_with_save(verb: str, saves: bool, stats_world: Any, tmp_path: Path) -> None:
-    """Q59: ``report`` and ``serve`` save the comparison they show, ``diff`` and ``check`` only with
+    """``report`` and ``serve`` save the comparison they show, ``diff`` and ``check`` only with
     ``--save``; a save says so on one ``  saved  <kind> <id>`` detail line, the last of the first block,
-    or in ``--json`` as ``saved``, the store-relative folder (R1, R2); without a save the output is the
+    or in ``--json`` as ``saved``, the store-relative folder; without a save the output is the
     command's own, and nothing is written into the store."""
     pair = stats_world[1]["pairs"]["trade"]
     store = copy_store(_store(stats_world), tmp_path / "prove-runs")
@@ -835,7 +881,7 @@ def test_pf12_5_report_and_serve_save_and_diff_and_check_only_with_save(verb: st
         if saves and name != "serve":
             assert printed["saved"] == f".poisson/artifacts/{kind}/{folders[0].name}", printed.get("saved")
         else:
-            assert "saved" not in printed  # serve --json is the page structure, its keys unchanged (R2)
+            assert "saved" not in printed  # serve --json is the page structure, its keys unchanged
     else:
         lines = [line for line in r.out.splitlines() if line.startswith("  saved  ")]
         if saves:
@@ -844,9 +890,9 @@ def test_pf12_5_report_and_serve_save_and_diff_and_check_only_with_save(verb: st
         else:
             assert lines == []
     if not saves:
-        assert listing(store) == before  # a command that does not save writes nothing (R4)
+        assert listing(store) == before  # a command that does not save writes nothing
     if plain is not None:
-        # R1: the save adds its one line, or its one key, and changes nothing else the command prints.
+        # The save adds its one line, or its one key, and changes nothing else the command prints.
         if as_json:
             assert {k: v for k, v in doc(r).items() if k != "saved"} == doc(plain)
         else:
@@ -858,7 +904,7 @@ def test_pf12_5_report_and_serve_save_and_diff_and_check_only_with_save(verb: st
 def test_pf12_5_an_unwritable_store_gives_the_note_and_the_commands_own_exit_code(verb: str, stats_world: Any, tmp_path: Path) -> None:
     """A store that cannot be written to does not stop a command that saves: one ``note: the comparison
     was not saved: <the system's words>`` and the command goes on, with what it prints on a writable
-    store less the ``saved`` line, and its exit code (R3). A command that does not save works on it
+    store less the ``saved`` line, and its exit code. A command that does not save works on it
     with no note at all."""
     pair = stats_world[1]["pairs"]["trade"]
     a, b, ev = pair["a"], pair["b"], pair["argv"]
@@ -909,8 +955,8 @@ def test_pf12_5_a_comparison_refused_for_its_cases_saves_nothing(verb: str, stat
 
 
 def test_pf12_5_the_help_says_which_commands_save() -> None:
-    """Q59 in the help (R41): ``report`` and ``serve`` say they save the comparison they show and no
-    longer say nothing is written; ``diff`` and ``check`` offer ``--save``; ``ui`` says it builds the
+    """The help: ``report`` and ``serve`` say they save the comparison they show and do
+    not say nothing is written; ``diff`` and ``check`` offer ``--save``; ``ui`` says it builds the
     dashboard and offers ``--open``."""
     texts = {verb: cli(None, verb, "--help") for verb in ("report", "serve", "diff", "check", "ui")}
     for verb, r in texts.items():
@@ -963,7 +1009,7 @@ def _data_words(store: Path) -> set[str]:
 def test_pf12_12_the_format_doc_lists_every_file_key_column_and_metric_prove_writes(old_world: Any, stats_world: Any, sweep_world: Any) -> None:
     """``docs/artifact-format.md`` names, each in backticks, every file Prove writes under the format,
     every key at every depth of each of its JSON files, every table column and metric, and every schema
-    string (R27); nothing Prove writes is undocumented."""
+    string; nothing Prove writes is undocumented."""
     assert DOC.is_file(), DOC
     text = DOC.read_text(encoding="utf-8")
     named = _documented(text)
@@ -993,7 +1039,7 @@ def test_pf12_12_the_format_doc_lists_every_file_key_column_and_metric_prove_wri
 
 
 def test_pf12_12_the_format_doc_maps_each_kind_to_an_mlflow_run_and_a_wandb_run() -> None:
-    """The format's section 6: a table whose header names MLflow and W&B, with a row for the run record,
+    """The format doc's export section: a table whose header names MLflow and W&B, with a row for the run record,
     its event log, a comparison, a check and a chart, each with a mapping in both columns."""
     assert DOC.is_file(), DOC
     rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in DOC.read_text(encoding="utf-8").splitlines() if line.strip().startswith("|")]

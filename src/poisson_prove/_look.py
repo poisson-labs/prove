@@ -329,9 +329,13 @@ def plain_words(message: str) -> str:
 
 
 def one_line(message: str) -> str:
-    """A message as one line: its lines joined with ``; `` and runs of blanks collapsed."""
+    """A message as one line: its lines joined with ``; ``, or a space after a line that ends a
+    sentence, and runs of blanks collapsed."""
     parts = [part.strip() for part in str(message).splitlines() if part.strip()]
-    return "; ".join(parts)
+    out = parts[0] if parts else ""
+    for before, part in zip(parts, parts[1:], strict=False):
+        out += (" " if before.endswith((".", "?", "!")) else "; ") + part
+    return out
 
 
 # ---------- glyphs ----------

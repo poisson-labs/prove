@@ -31,8 +31,8 @@ options:
   --cap-check         say whether the recorded input tokens are under the
                       declared cap, write nothing, and exit 4 at or above it
   --force             write into a folder that is not empty
-  --json              print the files' contents, writing nothing as one JSON
-                      document instead of text
+  --json              print the files' contents as one JSON document instead
+                      of text, writing nothing
   --store PATH        the store folder (default: $POISSON_PROVE_STORE when
                       set, else ./prove-runs)
   --plain             print plain text, as a pipe gets it, on a terminal too
@@ -120,8 +120,8 @@ plan  1,200 rollouts of grader: 6 cells x 200 replicates on local, $0 (local)
 …
 ```
 
-The declaration names the arms by their run ids, which exist only once the runs do, so here a few
-lines of Python write it:
+The declaration names each arm by its run's id or its name (never `latest`, which moves); here a
+few lines of Python write it with the ids, which exist only once the runs do:
 
 <!-- docs-check: run -->
 ```python
@@ -195,7 +195,8 @@ print("net swing", round(cut["net_swing"]["estimate"], 3))
 - `0`: the files were written; with `--cap-check`, the recorded tokens are under the cap.
 - `1`: refused, and nothing was written: the declaration cannot be read or names a key it does not
   know, an arm is not in the store, the arms are not the same draw (different seeds), the
-  thresholds' items overlap, or the output folder is not empty without `--force`.
+  thresholds' items overlap, no pair is eligible, or the output folder is not empty without
+  `--force`.
 - `2`: the command line is wrong, such as no `--declaration`.
 - `3`: an unexpected failure; `--debug` prints its traceback.
 - `4`: with `--cap-check`, the recorded input tokens are at or above `token_cap`.

@@ -1,42 +1,31 @@
 """PR-2 frozen tests: the per-cut paired analysis, the item-clustered bootstrap and the outcome of
-"Prove -- Spec PR Paired Replay" -- invariants PR22 to PR39.
+the paired replay -- invariants PR22 to PR39.
 
-Written at the freeze on 2026-09-22 off ``pr1-build`` ``0f1e1e0`` (phase 1 built) plus a fixture
-update (``86c1b4d``), as ``4106e54``. **Frozen 2026-09-22** after approval of the two
-tables in the handoff and the conventions below, and ruled on the sign of the net swing (kept as
-PR26 writes it, the second arm minus the first, and the output labels which way it subtracts), the
-net swing under the fallback (``not_estimated``, null bounds) and spec section 9's
-``PYTHONPATH=src``. The freeze changes this docstring and adds the one ``direction`` assertion the
-sign ruling asks for, in the two net-swing tests. The build adds phase 2 of
-``src/proofload/paired.py`` -- ``CutResult``, ``PairedResult`` and ``analyse`` -- against this file
-and does not edit it. Phase 2's names are read through ``getattr`` inside each test, so
-the bare tree (phase 1 only) fails test by test on ``AttributeError`` and never at collection.
-*Update R3, ruled 2026-09-22 (the PR-3 freeze): ``Cut`` gains ``comparison`` with no default, so
-every cut this file builds carries ``"ge"`` -- the one reading PR23 had, so no pinned number moves
--- and the PR23 tests take the comparison as a parameter with ``"gt"`` rows beside the ``"ge"``
-ones; PR24 gains one test for the tie under ``"gt"``. Every test in this file is red on the tree
-this update lands on, on ``TypeError`` from the missing field, until the build adds it. Ruled
-the same day on the PR-3 freeze report: both artifacts print the cut's ``comparison`` beside
-its ``threshold``, pinned by one line in PR37's nesting test.*
+The code under test is the analysis part of ``src/poisson_prove/paired.py``: ``CutResult``,
+``PairedResult`` and ``analyse``. Their names are read through ``getattr`` inside each test, so a
+missing name fails test by test on ``AttributeError`` and never at collection. A ``Cut`` declares
+its ``comparison`` with no default, so every cut this file builds carries ``"ge"`` -- the reading
+PR23 had -- and the PR23 tests take the comparison as a parameter with ``"gt"`` rows beside the
+``"ge"`` ones; PR24 has one test for the tie under ``"gt"``. Both artifacts print the cut's
+``comparison`` beside its ``threshold``, pinned by one line in PR37's nesting test.
 
-**What phase 2 is.** ``analyse`` takes a ``PairAssertion`` and nothing else (PR9, already pinned by
+**What the analysis is.** ``analyse`` takes a ``PairAssertion`` and nothing else (PR9, pinned by
 the PR-1 frozen tests) and answers one question per declared cut: did the binary action at that cut
-reproduce? The action is ``value >= threshold`` on ``Decimal`` (PR23, PR24) -- under update R3,
-ruled 2026-09-22, ``value >= threshold`` when the cut declares ``comparison = "ge"`` and
-``value > threshold`` when it declares ``"gt"``, a tie being action 1 under the first and action 0
-under the second and counted per arm under both; the 2x2, the flip rate
+reproduce? The action, on ``Decimal`` (PR23, PR24), is ``value >= threshold`` when the cut declares
+``comparison = "ge"`` and ``value > threshold`` when it declares ``"gt"``, a tie being action 1
+under the first and action 0 under the second and counted per arm under both; the 2x2, the flip rate
 and the net swing are paired quantities (PR25 to PR27); the pooled interval is the percentile
 cluster bootstrap over items, with its declared fallback and its
 design effect (PR28 to PR34); McNemar is the arm-order check and nothing else (PR35, PR36); no
 statistic crosses a cut (PR37); the outcome fires only against a declared floor (PR38); and the
 whole of it, read off two stored arms, gives what an independent reference gives (PR39).
 
-**Conventions this file fixes for the build session** (the spec's section 2 leaves them open;
-each goes into the spec's change log on the freeze):
+**Conventions this file fixes** (where the declared interface leaves them
+open):
 
-- *The result.* ``PairedResult`` is the two fields of section 2 and no other; ``cuts`` is one
-  ``CutResult`` per declared cut, in declaration order. ``CutResult`` is the seven fields of
-  section 2 and no other. ``declaration_digest == assertion.declaration.digest``.
+- *The result.* ``PairedResult`` is its two declared fields and no other; ``cuts`` is one
+  ``CutResult`` per declared cut, in declaration order. ``CutResult`` is its seven declared
+  fields and no other. ``declaration_digest == assertion.declaration.digest``.
 - *``per_sweep``.* One mapping per declared sweep, in declaration order, carrying ``sweep``,
   ``n11``, ``n10``, ``n01``, ``n00``, ``n``, ``ties`` (``{"a": int, "b": int}``), ``rate_a`` and
   ``rate_b`` (descriptive floats, no interval), ``flip_rate`` (``{estimate, lo, hi, basis}`` with
@@ -82,32 +71,27 @@ each goes into the spec's change log on the freeze):
   ``flip_rate`` interval the outcome was decided from, ``null`` without a floor). Every number
   is a JSON number; ``threshold`` is the one string. Key order is stable across calls, processes
   and hash seeds.
-- *The sign of the net swing, ruled 2026-09-22.* PR26 writes ``net_swing = (n01 - n10) / n``,
+- *The sign of the net swing.* PR26 writes ``net_swing = (n01 - n10) / n``,
   the second arm (``b``, arm A') minus the first (``a``, arm A); a reader who subtracts the other
   way gets the same interval with its sign flipped. **The
-  formula stands as written**, and
+  formula is PR26's**, and
   **every ``net_swing`` mapping -- per sweep, pooled, and in ``intervals_json`` -- carries
   ``direction: "b_minus_a"``** so a reader never has to guess which way it subtracts.
 
-**Invariant-to-test map** is in the handoff: 49 functions,
-72 collected ids, PR22 to PR39, approved as written. Every test name starts ``test_prN_``.
+**Invariants.** PR22 to PR39; two functions are the control. Every test name starts
+``test_prN_``.
 
 **Fixtures, and what each cannot express.** Every ``PairAssertion`` but two is built in test code,
-frame by frame -- the spec's section 11.2 ruling made that the front door for phase 2, and it is
+frame by frame -- that is the intended way in for the analysis, and it is
 what lets a fixture carry exactly the flip pattern an invariant needs. The two exceptions: the
 control runs a hand-built store through ``assert_pairs`` so the frames ``analyse`` reads are the
-frames phase 1 emits; and PR39 reads two stored arms the suite generates (``tests/replay_arms.py``)
+frames the pair assertion emits; and PR39 reads two stored arms the suite generates (``tests/replay_arms.py``)
 and builds their assertion in test code, matched on ``(config_hash, replicate_index)`` with the
 five eligibility rules. The stored arms carry one cut, four pairs per item and 36 flips, so PR37, PR32's
 ``m_bar = 3`` reading and PR31 each have a hand-built frame here instead.
 
-**Green before and after -- named so their green is not read as coverage.** None. Every test in
-this file is red on the bare tree: phase 1's module has no ``analyse``, no ``CutResult`` and no
-``PairedResult``, so each fails on ``AttributeError`` (PR39 included, since the stored arms are
-present on this machine).
-
 **The three ``hypothesis`` tests are derandomized,** so a run of this file is the same run every
-time and a mutation row does not depend on a seed.
+time and a failure does not depend on a seed.
 
 **Named gaps, not pinned.** Which function raises ``NoEligiblePairs`` and what an empty cut does
 (no test here empties a cut; every declaration lists exactly the cuts its rows carry); a row whose
@@ -179,8 +163,8 @@ INSTRUMENT_SIDE = frozenset(
 
 
 def P() -> Any:
-    """The module under test. Phase 2's names are read off it inside each test, so the bare tree
-    fails on ``AttributeError`` test by test."""
+    """The module under test. The analysis names are read off it inside each test, so a missing
+    one fails on ``AttributeError`` test by test."""
     return paired
 
 
@@ -275,7 +259,7 @@ def excluded_frame(rows: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
 
 
 def counts_for(pairs: pd.DataFrame, excluded: pd.DataFrame, cuts: Sequence[str]) -> dict[str, Any]:
-    """PR20's block, consistent with the two frames, so the build may read either."""
+    """PR20's block, consistent with the two frames, so the code may read either."""
     def block(kept: pd.DataFrame, dropped: pd.DataFrame) -> dict[str, Any]:
         unmatched = int((dropped["cause"] == "unmatched").sum()) if len(dropped) else 0
         ineligible = len(dropped) - unmatched
@@ -306,7 +290,7 @@ def declaration(
         "value_key": VALUE_KEY, "cluster_key": "item", "stratum_key": "cut",
         # A cut is ``(name, threshold)`` or ``(name, threshold, comparison)``; the comparison
         # defaults to ``"ge"`` here, in the helper, because that is the reading every test below
-        # was cut against. The module itself has no default (update R3).
+        # was cut against. The module itself has no default.
         "cuts": tuple(
             paired.Cut(name=c[0], threshold=Decimal(c[1]), comparison=c[2] if len(c) > 2 else "ge")
             for c in cuts
@@ -404,7 +388,7 @@ def artifacts(result: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     return contingency, intervals
 
 
-# ---------- helpers: a store the phase 1 assertion accepts (the control only) ----------
+# ---------- helpers: a store the pair assertion accepts (the control only) ----------
 
 
 def _span(body: str, k: int) -> Span:
@@ -479,8 +463,9 @@ def store_declaration() -> Any:
 
 
 def test_control_analyse_consumes_the_frames_assert_pairs_emits(tmp_path: Path) -> None:
-    """The one road through phase 1: a hand-built store, ``assert_pairs``, then ``analyse``. Every
-    later test builds its ``PairAssertion`` directly; this is what says the two shapes agree."""
+    """The one road through the pair assertion: a hand-built store, ``assert_pairs``, then
+    ``analyse``. Every later test builds its ``PairAssertion`` directly; this is what says the two
+    shapes agree."""
     store = make_store(tmp_path, STORE_VALUES)
     a = paired.assert_pairs(store, store_declaration())
     assert len(a.pairs) == 12 and len(a.excluded) == 0
@@ -564,7 +549,7 @@ def test_pr22_the_module_computes_the_rate_and_chooses_no_threshold_for_it() -> 
     ("comparison", "literal", "action"),
     [("ge", "0.59", 0), ("ge", "0.60", 1), ("ge", "0.61", 1), ("ge", "0.6", 1), ("ge", "0.599", 0),
      ("ge", "0.6000", 1), ("ge", "1", 1), ("ge", "0", 0),
-     # Update R3 (2026-09-22): under ``gt`` the tie does not act, and nothing else moves.
+     # Under ``gt`` the tie does not act, and nothing else moves.
      ("gt", "0.59", 0), ("gt", "0.60", 0), ("gt", "0.61", 1), ("gt", "0.6", 0), ("gt", "0.599", 0),
      ("gt", "0.6000", 0), ("gt", "1", 1), ("gt", "0", 0), ("gt", "0.6000000000000000001", 1)],
 )
@@ -578,7 +563,7 @@ def test_pr23_the_action_is_value_at_or_above_the_threshold(comparison: str, lit
 @pytest.mark.parametrize(
     ("comparison", "literal", "threshold", "action"),
     [
-        # Named mutant 2, as the spec spells it: an item stored at 0.60 must clear a cut of 0.60.
+        # An item stored at 0.60 must clear a cut of 0.60, which a float comparison fails.
         # ``float("0.60") >= Decimal("0.60")`` is False, because Python compares the two exactly.
         ("ge", "0.60", "0.60", 1),
         # And as all-float arithmetic hides it: below the cut to Decimal, a tie to a double.
@@ -588,7 +573,7 @@ def test_pr23_the_action_is_value_at_or_above_the_threshold(comparison: str, lit
         # 0.1 + 0.2 is the double above 0.3; the literal is not, and is below a cut of 0.3.
         ("ge", "0.29999999999999998", "0.3", 0),
         ("ge", "0.3", "0.30000000000000004", 0),
-        # Update R3 (2026-09-22), the same literals under ``gt``: the tie at 0.60 does not act,
+        # The same literals under ``gt``: the tie at 0.60 does not act,
         # a float would call ``0.60000000000000000011 > 0.6000000000000000001`` a tie, and it is not.
         ("gt", "0.60", "0.60", 0),
         ("gt", "0.60000000000000000011", "0.6000000000000000001", 1),
@@ -619,16 +604,17 @@ def test_pr23_no_rounding_is_applied_before_the_comparison() -> None:
 @settings(max_examples=150, deadline=None, derandomize=True)
 @given(
     value=st.decimals(min_value=Decimal(0), max_value=Decimal(1), places=22, allow_nan=False),
+    value_b=st.decimals(min_value=Decimal(0), max_value=Decimal(1), places=22, allow_nan=False),
     threshold=st.decimals(min_value=Decimal("0.0001"), max_value=Decimal(1), places=22, allow_nan=False),
     comparison=st.sampled_from(["ge", "gt"]),
 )
 def test_pr23_property_the_action_is_the_decimal_comparison_at_any_length(
-    value: Decimal, threshold: Decimal, comparison: str
+    value: Decimal, value_b: Decimal, threshold: Decimal, comparison: str
 ) -> None:
     decl = declaration(cuts=((CUT, str(threshold), comparison),))
-    result = analyse(assertion([Pair("i0", str(value), "1")], decl=decl))
+    result = analyse(assertion([Pair("i0", str(value), str(value_b))], decl=decl))
     acted_a = value >= threshold if comparison == "ge" else value > threshold
-    acted_b = Decimal(1) >= threshold if comparison == "ge" else Decimal(1) > threshold
+    acted_b = value_b >= threshold if comparison == "ge" else value_b > threshold
     expected = {(True, True): (1, 0, 0, 0), (True, False): (0, 1, 0, 0), (False, True): (0, 0, 1, 0), (False, False): (0, 0, 0, 1)}
     assert two_by_two(cut_of(result)) == expected[(acted_a, acted_b)], (value, threshold, comparison)
 
@@ -636,32 +622,18 @@ def test_pr23_property_the_action_is_the_decimal_comparison_at_any_length(
 # ---------- PR24: a tie is action 1 and is counted, per cut and per arm ----------
 
 
-def test_pr24_a_tie_is_action_one_and_is_counted_per_arm() -> None:
+@pytest.mark.parametrize(("comparison", "table"), [("ge", (3, 1, 0, 1)), ("gt", (0, 1, 1, 3))], ids=["ge", "gt"])
+def test_pr24_a_tie_acts_only_under_ge_and_is_counted_per_arm_under_both(comparison: str, table: tuple[int, ...]) -> None:
+    """The same five pairs under each comparison. Under ``ge`` every tie acts; under ``gt`` the
+    ties change side -- 0.60 no longer acts -- and the tie counts do not move, because a tie is a
+    value equal to the threshold whichever way the cut is declared."""
     rows = [
         Pair("i0", "0.60", "0.60"), Pair("i1", "0.60", "0.90"), Pair("i2", "0.70", "0.6"),
         Pair("i3", "0.50", "0.50"), Pair("i4", "0.6000", "0.25"),
     ]
-    result = analyse(assertion(rows))
+    result = analyse(assertion(rows, decl=declaration(cuts=((CUT, THRESHOLD, comparison),))))
     cut = cut_of(result)
-    assert two_by_two(cut) == (3, 1, 0, 1)  # every tie acted
-    assert cut.ties == {"a": 3, "b": 2}
-    assert sweep_of(cut)["ties"] == {"a": 3, "b": 2}
-    contingency, _ = artifacts(result)
-    assert contingency["cuts"][CUT]["ties"] == {"a": 3, "b": 2}
-    assert contingency["cuts"][CUT]["per_sweep"]["S1"]["ties"] == {"a": 3, "b": 2}
-
-
-def test_pr24_under_gt_a_tie_is_action_zero_and_is_still_counted_per_arm() -> None:
-    """Update R3 (2026-09-22): the same five pairs as the test above under ``comparison =
-    "gt"``. The ties change side -- 0.60 no longer acts -- and the tie counts do not move, because
-    a tie is a value equal to the threshold whichever way the cut is declared."""
-    rows = [
-        Pair("i0", "0.60", "0.60"), Pair("i1", "0.60", "0.90"), Pair("i2", "0.70", "0.6"),
-        Pair("i3", "0.50", "0.50"), Pair("i4", "0.6000", "0.25"),
-    ]
-    result = analyse(assertion(rows, decl=declaration(cuts=((CUT, THRESHOLD, "gt"),))))
-    cut = cut_of(result)
-    assert two_by_two(cut) == (0, 1, 1, 3)  # no tie acted
+    assert two_by_two(cut) == table
     assert cut.ties == {"a": 3, "b": 2}
     assert sweep_of(cut)["ties"] == {"a": 3, "b": 2}
     contingency, _ = artifacts(result)
@@ -726,7 +698,7 @@ def test_pr26_flip_rate_and_net_swing_per_sweep_and_pooled() -> None:
     assert cut.pooled["flip_rate"]["estimate"] == pytest.approx(6 / 20)
     assert cut.pooled["net_swing"]["estimate"] == pytest.approx((3 - 3) / 20)
     assert s1["rate_a"] == pytest.approx(9 / 10) and s1["rate_b"] == pytest.approx(7 / 10)
-    # Ruled 2026-09-22: the output says which way it subtracts, everywhere the swing appears.
+    # The output says which way it subtracts, everywhere the swing appears.
     assert s1["net_swing"]["direction"] == s2["net_swing"]["direction"] == "b_minus_a"
     assert cut.pooled["net_swing"]["direction"] == "b_minus_a"
     _, intervals = artifacts(result)
@@ -872,7 +844,7 @@ def test_pr29_the_seed_alone_moves_the_interval() -> None:
 
 def test_pr29_clusters_are_ordered_by_a_stable_sort_of_the_cluster_key_not_by_row_order() -> None:
     """The reference with its groups in a different order gives a different interval on this
-    fixture -- so the sort is load-bearing -- and the build matches the sorted one whatever the
+    fixture -- so the sort is load-bearing -- and ``analyse`` matches the sorted one whatever the
     row order."""
     names = ["k", "b", "z", "a", "m", "c", "y", "d", "x", "e", "w", "f"]
     # Item i flips in its first i mod 4 sweeps, so the flip counts are 0, 1, 2, 3 repeating:
@@ -899,6 +871,31 @@ def test_pr29_clusters_are_ordered_by_a_stable_sort_of_the_cluster_key_not_by_ro
         assert math.isclose(got["hi"], sorted_ref[1], abs_tol=1e-12)
 
 
+def test_pr29_an_item_only_a_later_sweep_holds_takes_its_sorted_place_in_the_bootstrap() -> None:
+    """The analysis reads its rows sweep by sweep, so an item that only the second sweep holds
+    arrives after every item of the first even when its key sorts first. The bootstrap must still
+    draw over the items in key order: here the arrival order gives a different interval, and
+    ``analyse`` must give the sorted one."""
+    names = ["b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m"]
+    rows: list[Pair] = []
+    for sweep, items in (("S1", names), ("S2", ["a", *names])):
+        for i, name in enumerate(items):
+            flips = (i % 4) != 0 and sweep == "S1" or (i % 3) == 0
+            rows.append(Pair(name, HI, LO if flips else HI, sweep=sweep))
+    clusters = [r.cluster for r in rows]
+    flips = [int(r.a != r.b) for r in rows]
+    sorted_ref = cluster_bootstrap(clusters, flips, seed=5, b=300)
+    rng = np.random.default_rng(5)
+    frame = pd.DataFrame({"cluster": clusters, "v": flips})
+    arrived = [g["v"].to_numpy() for _, g in frame.groupby("cluster", sort=False)]
+    idx = rng.integers(0, len(arrived), size=(300, len(arrived)))
+    draws = np.array([np.concatenate([arrived[i] for i in row]).mean() for row in idx])
+    assert (float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))) != sorted_ref
+    got = cut_of(analyse(assertion(rows, b=300, seed=5))).pooled["flip_rate"]
+    assert math.isclose(got["lo"], sorted_ref[0], abs_tol=1e-12), (got, sorted_ref)
+    assert math.isclose(got["hi"], sorted_ref[1], abs_tol=1e-12), (got, sorted_ref)
+
+
 @settings(max_examples=25, deadline=None, derandomize=True)
 @given(permutation=st.permutations(list(range(36))))
 def test_pr29_property_any_row_order_gives_the_same_bytes(permutation: list[int]) -> None:
@@ -912,8 +909,8 @@ def test_pr29_property_any_row_order_gives_the_same_bytes(permutation: list[int]
 
 
 def test_pr30_the_bootstrap_resamples_whole_items_never_observations() -> None:
-    """Named mutant 3. On a fixture with within-item correlation the observation bootstrap is
-    narrower -- right shape, wrong width -- and the frozen test carries the fixture."""
+    """On a fixture with within-item correlation the observation bootstrap is narrower -- right
+    shape, wrong width -- so a bootstrap that resamples observations fails here."""
     rows = grid(20, ["S1", "S2", "S3"], lambda i, s: (1, 0) if i < 5 else (1, 1))
     clusters = [r.cluster for r in rows]
     flips = [int(r.a != r.b) for r in rows]
@@ -940,7 +937,7 @@ def test_pr30_control_a_frame_with_no_within_item_correlation_has_no_design_effe
 
 
 def test_pr31_zero_flips_is_the_exact_upper_bound_and_never_a_precise_zero() -> None:
-    """Named mutant 4."""
+    """Zero flips give the one-sided exact upper bound, never a zero-width interval at zero."""
     g = 20
     cut = cut_of(analyse(assertion(grid(g, ["S1", "S2", "S3"], concordant))))
     flip = cut.pooled["flip_rate"]
@@ -1055,7 +1052,7 @@ def test_pr33_a_per_sweep_interval_is_exact_binomial_and_never_labelled_clustere
 
 
 def test_pr34_the_pooled_n_is_items_and_sweeps_and_no_key_holds_their_product() -> None:
-    """Named mutant 8. Seven items by three sweeps is twenty-one observations, and the number
+    """Seven items by three sweeps is twenty-one observations, and the number
     twenty-one appears nowhere in either artifact."""
     rows = grid(7, ["S1", "S2", "S3"], lambda i, s: (1, 0) if i == 0 and s == "S1" else (1, 1))
     result = analyse(assertion(rows, b=50))
@@ -1142,7 +1139,7 @@ def test_pr36_the_outcome_and_every_interval_are_blind_to_the_arm_order_check() 
 
 
 def test_pr36_the_artifacts_never_say_reproducible() -> None:
-    """The rendered half of PR36 is phase 3's; the JSON half is pinned here."""
+    """The JSON half of PR36 is pinned here; the rendered half is not this file's."""
     result = analyse(assertion(grid(8, ["S1", "S2"], correlated), floor="0.01", b=50))
     for text in (result.contingency_json(), result.intervals_json()):
         assert "reproducib" not in text.lower()
@@ -1165,7 +1162,7 @@ def test_pr37_every_statistic_is_nested_under_exactly_one_cut_name() -> None:
         assert tree["declaration_digest"] == result.declaration_digest
         for name, block in tree["cuts"].items():
             assert block["threshold"] == {CUT: "0.60", "c50": "0.50", "c90": "0.90"}[name]
-            assert block["comparison"] == "ge"  # ruled 2026-09-22: printed beside the threshold (R3)
+            assert block["comparison"] == "ge"  # printed beside the threshold
             for path, _ in walk(block):
                 assert not any(
                     word in p.lower() for p in path for word in ("across", "between_cut", "trend")
@@ -1188,7 +1185,7 @@ def test_pr37_a_cuts_result_does_not_depend_on_any_other_cut() -> None:
     assert dataclasses.asdict(cut_of(alone)) == dataclasses.asdict(cut_of(with_others))
 
 
-def test_pr37_phase_two_adds_exactly_its_three_public_names_and_no_function_returns_a_cross_cut_figure() -> None:
+def test_pr37_analyse_and_its_two_result_types_are_public_and_no_function_returns_a_cross_cut_figure() -> None:
     module = P()
     public = {
         name for name, value in vars(module).items()
@@ -1217,17 +1214,12 @@ def test_pr38_outcome_a_flips_ruled_out_below_the_floor_needs_a_large_stratum() 
     assert c.pooled["flip_rate"]["hi"] >= 0.01 and c.pooled["flip_rate"]["lo"] == 0.0
 
 
-def test_pr38_outcome_b_flips_detected_when_the_lower_bound_leaves_zero() -> None:
-    b = cut_of(analyse(assertion(grid(20, ["S1", "S2", "S3"], correlated), floor="0.01")))
-    assert b.pooled["flip_rate"]["lo"] > 0.0 and b.outcome == "B"
-
-
 def test_pr38_outcome_c_under_the_fallback_when_the_upper_bound_reaches_the_floor() -> None:
     """Two of forty items flip: the fallback fires, the lower bound is zero by observation, the
     upper bound is 0.153 and clears a floor of 0.01, so the reading is C -- and under a floor of
     0.20 the same numbers read A. Once five items flip a bootstrap lower bound cannot be zero
     (the chance that a resample holds none of them is below e to the minus five), so C only ever
-    comes from the fallback, and the frozen test says so rather than pretending otherwise."""
+    comes from the fallback, and the test says so rather than pretending otherwise."""
     rows = grid(40, ["S1"], lambda i, s: (1, 0) if i < 2 else (1, 1))
     c = cut_of(analyse(assertion(rows, floor="0.01", b=50)))
     assert c.pooled["flip_rate"]["basis"] == "exact_upper_one_sided"
@@ -1251,10 +1243,11 @@ def test_pr38_the_outcome_is_per_cut_and_is_emitted_with_the_interval_it_was_dec
         assert decided["basis"] == block["flip_rate"]["basis"]
 
 
-def test_pr38_with_no_floor_the_outcome_is_null_and_nothing_else_moves() -> None:
+def test_pr38_outcome_b_when_the_lower_bound_leaves_zero_and_with_no_floor_the_outcome_is_null() -> None:
     rows = grid(20, ["S1", "S2", "S3"], correlated)
     with_floor = analyse(assertion(rows, floor="0.01"))
     without = analyse(assertion(rows))
+    assert cut_of(with_floor).pooled["flip_rate"]["lo"] > 0.0
     assert cut_of(with_floor).outcome == "B" and cut_of(without).outcome is None
     _, intervals = artifacts(without)
     assert intervals["cuts"][CUT]["outcome"] is None
@@ -1362,7 +1355,7 @@ def test_pr39_the_item_clustered_interval_on_the_stored_arms_is_0_095_to_0_275()
 
 
 def test_pr39_the_net_swing_on_the_stored_arms_is_b_minus_a_with_its_clustered_interval() -> None:
-    """PR26 is A' minus A -- ruled 2026-09-22 to stand -- so the swing is ``(n01 - n10) / n`` and
+    """PR26 is A' minus A -- kept as written -- so the swing is ``(n01 - n10) / n`` and
     the output says which way it subtracts."""
     swing = stored_cut().pooled["net_swing"]
     assert swing["estimate"] == pytest.approx((15 - 21) / 200)

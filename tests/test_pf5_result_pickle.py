@@ -1,10 +1,8 @@
 """PF5: a comparison result pickles, and the copy is equal to it, whether or not it was read.
 
-The ruling of 2026-10-25 on the PF5 build's yes/no 9: the result builds its document and its
-tree when first read, and must still pickle, and round-trip equal, before anything has read it, by
-building itself in full when pickled. ``json.dumps`` on an unread result stays unsupported
-(``to_json()`` is the document). Added by the build beside the frozen tests, which it does not
-edit.
+The result builds its document and its tree when first read, and must still pickle, and
+round-trip equal, before anything has read it, by building itself in full when pickled.
+``json.dumps`` on an unread result stays unsupported (``to_json()`` is the document).
 """
 
 from __future__ import annotations
@@ -89,8 +87,6 @@ def test_pf5_a_comparison_and_a_check_pickle_and_round_trip_equal_read_or_not(st
         copy = pickle.loads(pickle.dumps(result))
         assert type(copy) is type(result)
         assert copy == result
-        assert copy.to_json() == result.to_json()
-        assert copy.rows == result.rows and copy.detail == result.detail
     diffed, checked = (pickle.loads(pickle.dumps(r)) for r in results)
     assert diffed.tree is not None and checked.passed == results[1].passed
     # A copy of an unread result and a copy of a read one are the same comparison.

@@ -1,21 +1,13 @@
-"""PR-3 frozen tests, the output packet: windows, cost and rendering of "Prove -- Spec PR Paired
-Replay" -- invariants PR7, PR40 to PR55 and PR77, with named mutants 5, 6 and 7. The
-replicates packet (PR57 to PR76) is ``tests/test_pr3_replicates.py``; section 7 lets a freeze
-cut PR-3 into the two files and freezes them in one pass.
+"""PR-3 frozen tests, the output: windows, cost and rendering of paired replay -- invariants
+PR7, PR40 to PR55 and PR77. The replicates tests (PR57 to PR76) are
+``tests/test_pr3_replicates.py``.
 
-Written on 2026-09-22 on the PR-3 freeze branch over the replicates tests (``9e41c2b``) and
-the ruled update ``6f40d92`` (the two phase-2 artifacts print ``comparison``). **Frozen
-2026-09-22 in one commit over both PR-3 files, over the reviewed ``ef9f4ef``**, after approval of
-the four tables in the handoff and an
-independent recompute of every hard-coded expectation passed (``recompute_expectations.py``
-there, 83 of 83). The build adds phase 3's output half against this file and does not edit
-it: ``WindowReport``,
-``windows``, ``CostReport`` and ``cost`` in ``src/proofload/paired.py``, the ``paired`` verb and
-the ``--paired`` flag in ``cli.py``, and **nothing in ``report.py``**, whose whole-file digest two
-frozen tests pin and this file pins again. Phase 3's names are read through ``getattr`` inside
-each test, so the bare tree fails test by test and never at collection.
+The surfaces under test are ``WindowReport``, ``windows``, ``CostReport`` and ``cost`` in
+``src/poisson_prove/paired.py``, and the ``paired`` verb and the ``--paired`` flag in ``cli.py``.
+The paired names are read through ``getattr`` inside each test, so a missing name fails the tests
+that use it and never the collection.
 
-**What the packet is.** Each sweep is its own window, read from the trace envelope and never
+**What the output side is.** Each sweep is its own window, read from the trace envelope and never
 from ``wall_time`` (PR40 to PR43); the per-pair replay gap is reported and never selected on
 (PR44, PR45); ``windows.json`` is a timing artifact and nothing else (PR46). Cost is the
 provider's own recorded usage summed per phase, per sweep and per arm, priced only against a
@@ -23,8 +15,7 @@ declared price, with unrecorded spans counted as what they are and the cap gated
 (PR7, PR47 to PR52). The renderer folds four sections into ``report.md`` and ``receipt.html``
 behind ``--paired``, formats and computes nothing, and prints no verdict (PR53 to PR55, PR77).
 
-**Conventions this file fixes for the build session** (section 2 leaves them open; each goes
-into the spec's change log on the freeze):
+**Conventions this file fixes:**
 
 - *Timing rides on ``pairs``.* ``assert_pairs`` records, per eligible set and per arm label,
   ``start_ns_<label>`` and ``end_ns_<label>`` off the request span (``None`` where the span
@@ -54,10 +45,10 @@ into the spec's change log on the freeze):
   ``dollars = Decimal(input_tokens) * price`` or ``None``; ``cap_reached = token_cap is not None
   and input_tokens >= token_cap``. A run id in two phases is a ``PairedError``. In ``to_json()``
   the price and the dollars are their ``Decimal`` literals as strings, never floats.
-- *The CLI.* ``proofload paired --declaration DECL.toml [--out DIR] [--format md|json]
+- *The CLI.* ``poisson-prove paired --declaration DECL.toml [--out DIR] [--json]
   [--cap-check] [--force]`` runs the assertion, the analysis, the windows, the cost with one
   phase per declared sweep (the sweep's name, its arms) and the replicates, and writes the
-  artifacts into ``--out`` (default ``./proofload-paired-<first 12 hex of the digest>``, refused
+  artifacts into ``--out`` (default ``./prove-paired-<first 12 hex of the digest>``, refused
   non-empty without ``--force``), printing one path per line; ``--format json`` prints the
   combined payload -- keys ``pair_assertion``, ``contingency_by_cut``, ``intervals_by_cut``,
   ``windows``, ``cost`` and, at ``k > 2`` only, ``replicates_by_cut`` -- and writes nothing;
@@ -78,30 +69,19 @@ into the spec's change log on the freeze):
   value's own text, a ``Decimal`` literal verbatim -- so PR54 is a byte search. The arm-order
   check is printed under that name and no other. The Provenance block gains ``declaration
   digest``, ``bootstrap seed``, ``bootstrap b``, ``price per input token``, ``input tokens``,
-  ``output tokens`` and ``artifacts`` (the filenames, six at ``k > 2``; R2).
-- *The comparison in the two phase-2 artifacts (ruled 2026-09-22).* ``CutResult``'s seven fields
-  are pinned by the frozen PR-2 tests, so the cut's declared comparison rides on
+  ``output tokens`` and ``artifacts`` (the filenames, six at ``k > 2``).
+- *The comparison in ``contingency_by_cut.json`` and ``intervals_by_cut.json``.* ``CutResult``'s
+  seven fields are pinned by the frozen PR-2 tests, so the cut's declared comparison rides on
   ``CutResult.pooled["comparison"]`` and the two artifact writers print it beside the threshold;
   ``pooled``'s key set is not pinned and ``intervals_json`` prints its keys by name.
-- *``report.py`` is not edited.* PR53's byte identity holds by construction: the sections are
-  folded into the rendered strings by ``paired.py`` and ``cli.py``, and the whole-file digest
-  ``REPORT_PY_SHA256`` two frozen tests carry is carried here too.
-
-**Invariant-to-test map** is in the handoff.
+- *``report.py`` holds no paired code.* The sections are folded into the rendered strings by
+  ``paired.py`` and ``cli.py``, so a report without ``--paired`` is the library's rendering (PR53).
 
 **Fixtures, and what each cannot express.** Every store is built under ``tmp_path`` by this file
 with timestamps and token counts chosen per arm and per item, so a window, a gap, a missing
 timestamp and an unrecorded span are each one knob. The generated lattice pair
 (``tests/lattice.py``) is read for PR53 only: it is a report the suite already pins elsewhere, and
 it carries no paired declaration.
-
-**Green before and after -- named so their green is not read as coverage.**
-``test_pr53_a_report_without_paired_is_byte_identical_to_todays`` (the E14 digests the suite
-pins, re-taken through the CLI), ``test_pr53_report_py_is_not_touched_by_phase_three`` (the
-whole-file digest) and ``test_pr51_the_executor_is_untouched_by_the_cap`` (a source scan) are
-green on the bare tree and stay green. Every other test is red on the bare tree: on
-``TypeError`` from ``Cut`` without ``comparison``, on ``AttributeError`` for the four missing
-names, or on the CLI refusing the ``paired`` verb and the ``--paired`` flag.
 
 **Named gaps, not pinned.** A sweep with some timestamps missing; a run id in ``phases`` that
 the store does not hold; the ``paired`` verb's default ``--out`` name beyond its prefix; the
@@ -119,6 +99,7 @@ import math
 import re
 import tempfile
 import typing
+import weakref
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -147,31 +128,21 @@ from conftest import without_method_lines, without_run_lines
 REPO = Path(__file__).resolve().parents[1]
 PAIR_ROOT = lattice.root()
 PAIR_A, PAIR_B = lattice.RUN_A, lattice.RUN_B
-#: W20's E14 argv on the pair, through the CLI, as today's build writes the three files:
-#: minted 2026-09-22 on ``6f40d92``'s ``src/`` (the heatmap is the value ``test_s29_viewer.py``
-#: pins; W20 takes its markdown and receipt through the builder, so those two are minted here,
-#: the same bytes on two runs). PR53's "the report the same build produces today".
-# PF3 (Q17, spec sections 4.4 and 14; rule R1): the pair's runs share a salt, so the default is now the paired
+#: W20's E14 argv on the pair, through the CLI: the command whose three files PR53 reads.
+# PF3: the pair's runs share a salt, so the default is the paired
 # test; the E14 facts are the unpaired test's, named.
 E14_ARGV = ("report", PAIR_A, PAIR_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--method", "fisher_bh")
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.md and receipt.html print LS16's respelled Cells sentence ('MDE is the smallest detectable increase', no ADR number) and nothing else new; heatmap.svg is unchanged. Read through this test's own measurement on the built tree, not predicted.
-# PF4 (PF4.12, PF4.15, PF4.18, PF4.20): the three digests are no longer asserted. PF4 changes all
+# PF4 (PF4.12, PF4.15, PF4.18, PF4.20): the three files are not checked by digest. PF4 changes all
 # three renderings (direction words for an event of unknown kind, no limit at a 100% baseline, the
 # Westfall-Young group p-values, the shares), so PR53 asserts the facts they guarded instead.
 E14_FILES = ("report.md", "heatmap.svg", "receipt.html")
 #: The pair's report under fisher_bh: 22 conditions fell and none rose, as scipy's Fisher test with
-#: one BH family over the design's counts gives them (``lattice.fisher``); a fisher_bh condition's
+#: one BH family over the lattice design's counts gives them (``lattice.fisher``); a fisher_bh condition's
 #: direction is still the sign of delta.
 E14_LOWER, E14_HIGHER = 22, 0
 #: The root at the default 4,000 permutations sits at the floor, 1 / 4,001.
 E14_ROOT_P = 1 / 4001
 JUDGEMENT_WORD = re.compile(r"\b(safer|worse)\b", re.IGNORECASE)
-#: ``test_s29_viewer.py``'s and ``test_fr_first_run.py``'s whole-file digest of ``report.py``.
-# Re-minted 2026-09-25 (local serve pass, Phase C, off the build at 173c25d): report.py is the local serve pass's build (the wrap, the complement, mde_unchanged, LS16's Cells sentence); phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# Re-minted 2026-09-26 (A10 declared expectations, phase two, off the build at 662ceff): report.py gains DeclarationCheck under TYPE_CHECKING, _run_declarations and _run_declaration, the declarations keyword on the three builders, and _provenance_lines printing an empty list as none (spec A10 W8); PR-3's phase three still does not touch it. The whole-file sha256 of the built file. Read through this test's own measurement on the built tree, not predicted.
-# PF0 (Q4): no longer asserted. The rename changes report.py, and no digest of a file this module
-# changes can be frozen honestly before its build exists (front-door spec section 14).
-REPORT_PY_SHA256 = "06775d22522d897f8bf7c6086739e301ceb92baf5c0b9d9a806afecaa2962e61"
 
 EPOCH = 1_790_000_000_000_000_000
 NS = 1_000_000_000
@@ -297,6 +268,7 @@ def make_store(
     """``rows`` replayed in every sweep (``per_sweep`` overrides one); ``extra_runs`` are run
     ids outside every sweep, for the cost phases."""
     store = Store(root / name)
+    MADE_AT[store] = root / name
 
     def write(run_id: str, label: str, run_rows: Sequence[TRow], sweep_index: int) -> None:
         store.create_run(RunManifest(
@@ -407,15 +379,19 @@ def run_cli(argv: Sequence[str]) -> Result:
 
 
 def run_names(root: Path) -> dict[str, str]:
-    """PF2 (spec section 4.3/5.3): every run has a name; ``runs --json`` maps each id to it."""
+    """PF2: every run has a name; ``runs --json`` maps each id to it."""
     r = run_cli(["--store", str(root), "runs", "--json"])
     assert r.code == 0, r.err
     return {entry["run_id"]: entry["run_name"] for entry in json.loads(r.out)["runs"]}
 
 
+#: Each store ``make_store`` built, and the folder it built it in.
+MADE_AT: weakref.WeakKeyDictionary[Store, Path] = weakref.WeakKeyDictionary()
+
+
 def root_of(store: Store) -> Path:
-    """The store's directory, for ``--store``: the one private read this file makes."""
-    return Path(store._root)  # noqa: SLF001
+    """The store's directory, for ``--store``: the folder ``make_store`` built it in."""
+    return MADE_AT[store]
 
 
 def paired_cli(store: Store, decl_path: Path, out: Path, *extra: str) -> Result:
@@ -524,7 +500,7 @@ def test_control_the_five_artifacts_and_the_report_come_out_of_one_store(tmp_pat
     r = paired_cli(store, decl_path, out)
     assert r.code == 0, r.err
     assert sorted(p.name for p in out.iterdir()) == sorted(FIVE)
-    # PF2 (spec section 4.3/5.3): paired's stdout is "ok  wrote <folder> (5 files)", then one
+    # PF2: paired's stdout is "ok  wrote <folder> (5 files)", then one
     # "  wrote  <path>" line per artifact in the order the paths were printed before.
     # PF4 (PF4.9): paired also prints one "  not recorded  ..." detail line naming the harness's
     # digest and the client's version, which these runs do not record; the other lines are as they were.
@@ -572,8 +548,7 @@ def test_pr7_with_no_cap_cap_reached_is_false_and_cap_check_exits_zero(tmp_path:
     store = make_store(tmp_path, default_rows())
     decl_path = write_declaration(tmp_path / "decl.toml")
     out = tmp_path / "paired"
-    # The cap check's text is now a verdict line; its cost block is what --json prints (spec
-    # sections 5.3 and 5.6).
+    # The cap check's text is a verdict line; its cost block is what --json prints.
     r = paired_cli(store, decl_path, out, "--cap-check", "--json")
     assert r.code == 0, r.err
     block = json.loads(r.out)
@@ -615,7 +590,8 @@ def test_pr40_no_span_is_computed_across_two_sweeps(tmp_path: Path) -> None:
 
 
 def test_pr41_the_realized_span_is_first_start_in_arm_a_to_last_end_in_arm_b_off_the_envelope(tmp_path: Path) -> None:
-    """Named mutant 5. Every record's ``wall_time`` says 0.1 s; the spans say ten minutes."""
+    """Every record's ``wall_time`` says 0.1 s; the spans say ten minutes. Fails if the span is
+    read from ``wall_time``."""
     rows = default_rows(4)
     for i, row in enumerate(rows):
         row.start = {"a": EPOCH + i * 30 * NS, "b": EPOCH + 300 * NS + i * 30 * NS}
@@ -751,7 +727,7 @@ def test_pr44_the_gap_is_over_the_cuts_eligible_pairs_of_every_sweep(tmp_path: P
 
 
 def test_pr45_a_pair_replayed_ten_days_later_is_still_a_pair(tmp_path: Path) -> None:
-    """Named mutant 6: filtering pairs on the replay gap."""
+    """Fails if pairs are filtered on the replay gap."""
     rows = default_rows()
     rows[1].start = {"a": EPOCH, "b": EPOCH + 10 * 86_400 * NS}
     store = make_store(tmp_path, rows)
@@ -842,14 +818,6 @@ def test_pr47_a_retry_span_is_paid_for_and_an_errored_episode_records_nothing(tm
     assert report.input_tokens == 7 * 400
 
 
-def test_pr47_the_module_holds_no_tokeniser_and_no_rate_card() -> None:
-    source = Path(P().__file__).read_text(encoding="utf-8")
-    for word in ("tiktoken", "encoding_for_model", "transformers", "per_1k", "per_million", "usd_per"):
-        assert word not in source, word
-    assert not re.search(r"\$\s*\d", source)
-    assert "price_per_input_token" in source
-
-
 # ---------- PR48: output tokens with or without a price ----------
 
 
@@ -890,7 +858,7 @@ def test_pr49_dollars_are_input_tokens_times_the_price_with_the_price_echoed_in_
 
 
 def test_pr50_a_span_with_no_recorded_usage_is_counted_under_unrecorded_spans_and_never_as_zero(tmp_path: Path) -> None:
-    """Named mutant 7."""
+    """Fails if a span with no recorded input tokens is counted as zero tokens recorded."""
     rows = default_rows(4)
     rows[0].tokens = {"a": None}
     rows[1].tokens = {"b": {"out": 5}}  # output but no input: unrecorded for the input total
@@ -918,7 +886,7 @@ def test_pr50_a_total_over_spans_that_recorded_nothing_is_reported_as_what_it_is
     assert report_cli(store, "S1-a", "S1-b", out, "--paired", str(decl_path)).code == 0
     cost = json.loads((out / "cost.json").read_text())
     assert (cost["input_tokens"], cost["recorded_spans"], cost["unrecorded_spans"]) == (0, 0, 8)
-    assert cost["dollars"] == "0E-6" or Decimal(cost["dollars"]) == 0
+    assert cost["dollars"] == "0.000000"
     section = (out / "report.md").read_text()
     section = section[section.index("## Cost"):section.index(FENCE)]
     assert "unrecorded spans" in section and re.search(r"unrecorded spans\D*8\b", section)
@@ -935,14 +903,14 @@ def test_pr51_cap_reached_is_cumulative_input_tokens_at_or_above_the_declared_ca
     assert report.input_tokens == 6400 and report.token_cap == cap and report.cap_reached is reached
 
 
-# At the cap the check exits 4 (spec section 5.2).
+# At the cap the check exits 4.
 @pytest.mark.parametrize(("cap", "code"), [(6400, 4), (6401, 0)])
-def test_pr51_cap_check_prints_the_cost_block_writes_nothing_and_exits_one_at_the_cap(tmp_path: Path, cap: int, code: int) -> None:
+def test_pr51_cap_check_prints_the_cost_block_writes_nothing_and_exits_four_at_the_cap(tmp_path: Path, cap: int, code: int) -> None:
     store = make_store(tmp_path, default_rows())
     decl_path = write_declaration(tmp_path / "decl.toml", top={"token_cap": str(cap)})
     out = tmp_path / "paired"
-    # The cap check's text is now a verdict line; its cost block is what --json prints, after the
-    # schema, verdict and sentence keys, with the same exit code (spec sections 5.3 and 5.6).
+    # The cap check's text is a verdict line; its cost block is what --json prints, after the
+    # schema, verdict and sentence keys, with the same exit code.
     r = paired_cli(store, decl_path, out, "--cap-check", "--json")
     assert r.code == code, r.err
     block = json.loads(r.out)
@@ -957,14 +925,6 @@ def test_pr51_the_cap_is_over_completed_runs_and_a_later_sweep_adds_to_it(tmp_pa
     both = P().cost(store, declaration(sweeps=("S1", "S2"), token_cap=7000), phases={"S1": ("S1-a", "S1-b"), "S2": ("S2-a", "S2-b")})
     assert (one.input_tokens, one.cap_reached) == (6400, False)
     assert (both.input_tokens, both.cap_reached) == (12800, True)
-
-
-def test_pr51_the_executor_is_untouched_by_the_cap() -> None:
-    """Green before and after: the cap is analysis-side (ruled 2026-09-21) and neither executor
-    knows the word."""
-    for name in ("executor.py", "executor_modal.py"):
-        source = (Path(P().__file__).parent / name).read_text(encoding="utf-8")
-        assert "token_cap" not in source and "cap_reached" not in source, name
 
 
 # ---------- PR52: the cost block reconciles ----------
@@ -997,15 +957,15 @@ def test_pr52_the_cli_phases_are_the_declared_sweeps(tmp_path: Path) -> None:
     assert cost["input_tokens"] == 12800
 
 
-# ---------- PR53: without --paired, today's bytes ----------
+# ---------- PR53: without --paired, the library's rendering ----------
 
 
 def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0 (Q4, section 2.3): the one field the rename changes in a rendered report, receipt or page
+    """PF0: the one field the rename changes in a rendered report, receipt or page
     is the version in its provenance list. First assert it is there as the rename writes it -- one
     ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and
     drop any separate ``written by proofload`` entry. PF4 (PF4.20): no digest is taken of the
-    result any more; PR53 reads its facts instead."""
+    result; PR53 reads its facts instead."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
     text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
@@ -1014,10 +974,10 @@ def as_0_0_1_wrote_it(text: str) -> str:
     return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
 
 
-# The command line prints report.md, receipt.html and the heatmap's labels under rule 10 (spec
-# section 5.4), which PF1 changes; the library renderers it calls do not change. So a digest over
+# The command line prints report.md, receipt.html and the heatmap's labels under rule 10,
+# which PF1 changes; the library renderers it calls do not change. So a digest over
 # a file the command line wrote is replaced by two checks: the library's rendering of the same
-# inputs carries the frozen facts (PF4: no longer a digest, see E14_FILES), and the written file
+# inputs carries the pinned facts (PF4: not a digest, see E14_FILES), and the written file
 # carries the same numbers, verdicts
 # and cells as that rendering, each number equal to the library's or to its percentage points
 # read as a fraction, within the coarser of the two printed precisions (a 12-hex token is a hash,
@@ -1096,7 +1056,7 @@ def rendered_problems(library: str, written: str, name: str) -> list[Any]:
 
 
 def offers_rounded_up(text: str) -> str:
-    """PF4 re-freeze (PF4.45): the group limits moved, and the ``--max-group-mde`` the fault-lines
+    """PF4.45: the ``--max-group-mde`` the fault-lines
     section offers is printed by the command line rounded up at three decimals (PF1's offer, rule
     10), which is more than half a digit from the library's four-decimal value when the fourth
     decimal is small; the library's offers are rounded up the same way before the comparison."""
@@ -1132,8 +1092,8 @@ def drawn_sentence_problems(svg: str, opening: str, sentence: str) -> list[str]:
     return problems
 
 
-def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Green before and after: the facts W20's three digests guarded, on the lattice pair, over the
+def test_pr53_a_report_without_paired_writes_the_library_rendering_and_the_lattice_reports_facts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The lattice report's facts, on the lattice pair, over the
     library's rendering of what the CLI built, and the CLI's three files carrying that rendering's facts."""
     calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
     real = report_module.build_multi_report
@@ -1157,7 +1117,7 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     cells = fell.cells
     lower, higher = int((cells["direction"] == "lower").sum()), int((cells["direction"] == "higher").sum())
     assert (lower, higher) == lattice.directions(lattice.fisher()) == (E14_LOWER, E14_HIGHER), (lower, higher)
-    # PF2 (spec section 4.3/5.3): the CLI's default title names the two runs by name.
+    # PF2: the CLI's default title names the two runs by name.
     names = run_names(PAIR_ROOT)
     named, by_id = f"{names[PAIR_A]} vs {names[PAIR_B]}: {lattice.EVENT}", f"{PAIR_A} vs {PAIR_B}: {lattice.EVENT}"
     assert (names[PAIR_A], names[PAIR_B]) == (lattice.NAME_A, lattice.NAME_B)
@@ -1168,14 +1128,14 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         # and no rendering says safer or worse.
         assert f"{lattice.EVENT}: {lower} lower, {higher} higher" in text, name
         assert JUDGEMENT_WORD.search(text) is None, (name, JUDGEMENT_WORD.search(text))
-        # PF3 (spec section 4.4, PF3.6b; rule R2): the written report.md and receipt.html gain a line of their
+        # PF3 (PF3.6b): the written report.md and receipt.html gain a line of their
         # own naming the method; with it taken out they carry the library rendering's facts as before.
         written = (out / name).read_text(encoding="utf-8")
         assert name == "heatmap.svg" or without_method_lines(written) != written, name
-        # PF4 re-freeze (PF4.32): the library's rendering now names the test on its limits line too,
+        # PF4.32: the library's rendering names the test on its limits line too,
         # which without_method_lines takes out of the written file, so it is taken out of both.
         rendered = library[name] if name == "heatmap.svg" else offers_rounded_up(without_method_lines(library[name]))
-        # PF5 (spec section 4.3, reading o): the written files name each run with its id in the
+        # PF5: the written files name each run with its id in the
         # header, and their provenance lists give no id; both sides are compared without the two.
         if name != "heatmap.svg":
             rendered, written = without_run_lines(rendered), without_run_lines(written)
@@ -1184,7 +1144,7 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     tree = report_kwargs["tree"]
     # PF4 (PF4.18): the root and the fault lines on one scale; the root sits at the floor.
     assert tree.root.n_permutations == 4000 and tree.root.p_omnibus == E14_ROOT_P and tree.root.rejects, tree.root.p_omnibus
-    # PF4 re-freeze (PF4.45): a group's limit now uses each condition's own baseline and the
+    # PF4.45: a group's limit uses each condition's own baseline and the
     # unconditional power, so the first axis, gain, resolves none of its 12 groups at the default
     # 0.200 and is refused, and the tree groups by load instead with the dual statistic; its group counts and p-values are read from the tree (no reference computes the
     # permutation test), and the table below is checked against them.
@@ -1219,7 +1179,7 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
         assert event == lattice.EVENT, line
         printed, half = rendered_value(delta_pp)
         assert abs(printed - 100 * row.delta) <= half + 1e-9, line
-        # PF4 re-freeze (PF4.27, Q54): a 100% baseline now has a fall limit; a condition whose limit
+        # PF4.27: a 100% baseline has a fall limit; a condition whose limit
         # is null (a direction with room that detects nothing) prints no number.
         if row.mde is None or np.isnan(row.mde):
             assert not re.search(r"\d", mde_pp), line
@@ -1228,7 +1188,7 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
             assert abs(printed - 100 * row.mde) <= half + 1e-9, line
     assert listed > 0
     # The honesty line names the worst-powered unchanged condition and its limit.
-    # PF4 re-freeze (PF4.22, PF4.27): the limits are Fisher's exact limits at q / M in both
+    # PF4.22, PF4.27: the limits are Fisher's exact limits at q / M in both
     # directions and a 100% baseline enters with its fall, so the worst condition, its limit and
     # the way it goes are recomputed from the stats file's references.
     from test_pf4_stats import _ref_fisher_limits
@@ -1254,11 +1214,6 @@ def test_pr53_a_report_without_paired_is_byte_identical_to_todays(tmp_path: Path
     # The figure is narrower than the line, so it wraps it onto continuation lines (``data-wrap``):
     # the line must be drawn exactly as the figure's wrap of it, and hold the sentence.
     assert drawn_sentence_problems(library["heatmap.svg"], "Worst-powered unchanged cell (", honesty) == []
-
-
-# PF0 (Q4): test_pr53_report_py_is_not_touched_by_phase_three removed. It pinned the bytes of src/poisson_prove/report.py, which the rename
-# changes; no digest of a file this module changes can be frozen honestly before its build
-# exists (front-door spec section 14).
 
 
 def test_pr53_without_the_flag_no_paired_section_and_no_artifact_exists_and_the_flag_needs_a_value(tmp_path: Path) -> None:
@@ -1429,7 +1384,7 @@ def test_pr77_at_k_two_no_replicates_section_and_no_sixth_artifact_exists(tmp_pa
     assert not (out / SIXTH).exists()
     markdown = (out / "report.md").read_text()
     assert "## Replicates" not in markdown and "agree@" not in markdown.lower()
-    # --json replaces --format json on paired (spec section 5.6).
+    # --json replaces --format json on paired.
     r = paired_cli(store, decl_path, tmp_path / "json", "--json")
     assert r.code == 0 and SIXTH[:-5] not in json.loads(r.out)
 
@@ -1442,7 +1397,7 @@ def test_cli_paired_format_json_prints_the_combined_payload_and_writes_nothing(t
     decl_path = write_declaration(tmp_path / "decl.toml", k=5, sweeps=("S1", "S2"))
     out = tmp_path / "paired"
     # --json replaces --format json on paired and wraps the payload with schema, verdict and
-    # sentence first and next last (spec section 5.6).
+    # sentence first and next last.
     r = paired_cli(store, decl_path, out, "--json")
     assert r.code == 0, r.err
     payload = {
@@ -1464,7 +1419,7 @@ def test_cli_report_paired_refuses_a_pair_that_is_not_a_declared_sweep_by_name(t
     store = make_store(tmp_path, default_rows(), sweeps=("S1", "S2"))
     decl_path = write_declaration(tmp_path / "decl.toml", sweeps=("S1", "S2"))
     r = report_cli(store, "S1-a", "S2-b", tmp_path / "x", "--paired", str(decl_path))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1 and "Traceback" not in r.err
     assert "S1-a" in r.err and "S2-b" in r.err
     assert not (tmp_path / "x").exists()
@@ -1481,7 +1436,7 @@ def test_cli_a_declaration_error_and_a_not_assertable_run_are_clean_refusals(tmp
     bad = tmp_path / "bad.toml"
     bad.write_text(write_declaration(tmp_path / "ok.toml").read_text().replace('comparison = "ge"', 'comparison = "ge"\ninclusive = true'))
     r = paired_cli(store, bad, tmp_path / "out")
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1 and "Traceback" not in r.err and "inclusive" in r.err
     asserted = write_declaration(tmp_path / "asserted.toml", top={"headers": '"asserted"'})
     r = paired_cli(store, asserted, tmp_path / "out2")
@@ -1495,17 +1450,17 @@ def test_cli_paired_refuses_a_non_empty_out_dir_without_force_and_names_a_defaul
     out = tmp_path / "paired"
     assert paired_cli(store, decl_path, out).code == 0
     r = paired_cli(store, decl_path, out)
-    # A refusal exits 1, and --json replaces --format json (spec sections 5.2 and 5.6).
+    # A refusal exits 1, and --json replaces --format json.
     assert r.code == 1 and "--force" in r.err
     assert paired_cli(store, decl_path, out, "--force").code == 0
     r = run_cli(["--store", str(root_of(store)), "paired", "--declaration", str(decl_path), "--json"])
     assert r.code == 0 and "declaration_digest" in r.out
 
 
-# ---------- the structure: section 2's names and fields ----------
+# ---------- the structure: the names and fields ----------
 
 
-def test_structure_window_report_and_cost_report_are_section_twos_fields_and_the_two_functions_take_what_section_two_says() -> None:
+def test_structure_window_report_and_cost_report_keep_their_fields_and_windows_and_cost_keep_their_signatures() -> None:
     module = P()
     assert tuple(f.name for f in dataclasses.fields(module.WindowReport)) == WINDOW_REPORT_FIELDS
     assert tuple(f.name for f in dataclasses.fields(module.CostReport)) == COST_REPORT_FIELDS

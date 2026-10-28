@@ -240,9 +240,9 @@ max_observation_bytes = 16384
 `instrument` lists instrumentors by the name they register under OpenTelemetry's
 `opentelemetry_instrumentor` entry points; only those are switched on. `content = false` (the
 default) keeps prompts and completions out of the store; `max_observation_bytes` has no default
-and bounds each stored value. An instrumentor that is not installed is not refused: the run goes
-on without capture and its manifest records why, so check that `inspect` shows spans after a first
-small sweep. [What capture stores](what-capture-stores.md) says exactly what is kept. A rollout can also record its own steps with `poisson_prove.record` and
+and bounds each stored value. An instrumentor that is not installed is not refused: the plan's
+`capture` line and the `done` line name it, the run goes on without its spans and the manifest
+records why, so check that `inspect` shows spans after a first small sweep. [What capture stores](what-capture-stores.md) says exactly what is kept. A rollout can also record its own steps with `poisson_prove.record` and
 `poisson_prove.step`, with no OpenTelemetry at all; see [Traces](concepts/traces.md).
 
 ## What Prove does with your code
@@ -256,5 +256,5 @@ change what happens around a call: `[capture]` switches on the instrumentors you
 `[chaos]` injects the faults you name into your client's HTTP calls
 ([Fault injection](fault-injection.md)). On the local backend each call runs in Prove's own
 process, one after another; with `--episode-timeout` each runs in a child process, and one that
-runs past the limit is stopped and stored with no outcome, as an error of kind `timeout`. The
+runs past the limit is stopped and stored with no outcome, as an error of kind `episode_timeout`. The
 other backends are on [Backends](backends.md).

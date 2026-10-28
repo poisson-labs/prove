@@ -48,7 +48,7 @@ examples:
   stored. Without it the refusal lists the events the run carries.
 - `--where KEY=VALUE` keeps only the episodes whose condition has that value; repeat it to narrow
   further. The value is read as TOML, so a word is quoted: `--where 'task_id="refund"'`.
-- `--limit N` prints at most `N` episodes.
+- `--limit N` prints at most `N` episodes; `N` is 1 or more.
 - `--json` prints the episodes and the snippet's parts as one JSON document,
   `poisson-prove.inspect/1`.
 - `--store PATH` is the store folder; `--plain` prints plain text on a terminal too; `--debug`

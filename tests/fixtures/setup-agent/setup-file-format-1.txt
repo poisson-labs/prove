@@ -1,5 +1,5 @@
-Poisson setup file, format 1: the shared text, byte for byte, as the page "Poisson — Spec Setup File"
-gives it on 2026-10-23 (sections 3, 4, 5 and 6). Each part runs from its marker line to the next.
+Poisson setup file, format 1: the shared text, byte for byte, that every Poisson tool's setup
+file carries (rules, check, prompt and hand-over). Each part runs from its marker line to the next.
 A tool fills <command>, <Product>, <docs-url>, <check>, <next command>, <tool> and <Product full name>.
 ==> rules <==
 ## Rules

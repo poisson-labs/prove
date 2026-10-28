@@ -5,7 +5,7 @@ read.
 
 PF6 (the pretty rendering, the terminal app and the look file) is reached the way a user reaches
 it: commands run on a pipe or on a pseudo-terminal, the app driven by keys, what is on the screen,
-the files left in the store, and the core's boundary as the front-door spec's section 17.1 names it
+the files left in the store, and the core's boundary as its public names draw it
 (``poisson_prove.core``). The one private name the tests take from Prove is the app's entry point,
 ``poisson_prove._cli_app.ProveApp`` (reading A1 in ``test_pf6_app.py``), which Textual's pilot needs.
 
@@ -50,9 +50,9 @@ QS_A = OLD_RUNS["quickstart_before"]
 QS_B = OLD_RUNS["quickstart_after"]
 LOOK = ROOT / "docs" / "cli-look.md"
 LOOK_FIXTURES = TESTS / "fixtures" / "cli-look"
-#: Under a ``__snapshots__`` folder, where PF8's public-hygiene test reads the app's screens (its r7).
+#: Under a ``__snapshots__`` folder, where PF8's public-hygiene test reads the app's screens.
 SNAPSHOTS = TESTS / "__snapshots__" / "pf6"
-#: The one documented command that rewrites the snapshots (section 10.6), the same for PF6 and PF12.
+#: The one documented command that rewrites the snapshots, the same for PF6 and PF12.
 SNAPSHOT_COMMAND = "python -m pytest tests -k snapshot --update-snapshots"
 COMMAND = "poisson-prove"
 MOCK = "poisson_prove.examples.mock_agent"
@@ -74,8 +74,8 @@ ISO_UTC = re.compile(r"^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)(:\d\d)(\.\d+)?Z$")
 #: A value spelled as a code (``mcnemar_bh``, ``tool_calls``): shown verbatim or by its words.
 CODE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 
-#: Section 5.5's four meanings, as each verdict word takes them (reading A9 adds PF4.20's
-#: direction words and a row's ``unchanged`` to the results that are bold with no colour).
+#: The look's four meanings, as each verdict word takes them (the direction words and a row's
+#: ``unchanged`` are among the results that are bold with no colour).
 GREEN_WORDS = ("ok", "done", "passed", "under cap")
 YELLOW_WORDS = ("stopped", "too small to tell", "no significant change")
 RED_WORDS = ("failed", "at cap")
@@ -92,7 +92,7 @@ def _norm(text: str) -> str:
 
 def says(text: str, words: str) -> bool:
     """A phrase, whatever its case, wherever a line breaks it, and whichever hyphen or dash joins
-    its words (PF4's reading R30)."""
+    its words."""
     return _norm(words) in _norm(text)
 
 
@@ -227,7 +227,7 @@ def blocker(folder: Path, *modules: str) -> Path:
 
 def child_env(home: Path, *paths: Path, **extra: str | None) -> dict[str, str]:
     """A ``poisson-prove`` process's environment: this checkout's ``src`` first on its path, then
-    ``paths``; ``HOME`` an empty folder; no store variable; none of the switches section 5.5 reads
+    ``paths``; ``HOME`` an empty folder; no store variable; none of the switches the look reads
     (``NO_COLOR``, ``CI``, ``TERM``, ``COLUMNS``) unless ``extra`` sets one; the planted keys set; UTF-8
     streams. ``extra`` with ``None`` removes a variable."""
     drop = ("PROOFLOAD_STORE", "POISSON_PROVE_STORE", "PYTHONWARNINGS", "PYTHONIOENCODING", "NO_COLOR", "CI",
@@ -526,7 +526,7 @@ def styled(text: str) -> tuple[list[Styled], list[str]]:
 
 
 def role_of(cell: Styled) -> str:
-    """A cell's colour role, as the design's masks mark it: ``G`` green, ``Y`` yellow, ``R`` red,
+    """A cell's colour role, as a snapshot's masks mark it: ``G`` green, ``Y`` yellow, ``R`` red,
     ``B`` bold, ``D`` dim, blank for none."""
     if cell.fg in (2, 10):
         return "G"
@@ -637,7 +637,7 @@ def _role(style: Any) -> str:
 
 def _off(color: Any, *, background: bool = False) -> str | None:
     """A colour the look does not allow: any background, and any foreground but the 16 named
-    colours' green, yellow and red (section 5.5: colour has four meanings, and dim is the fourth)."""
+    colours' green, yellow and red (the look: colour has four meanings, and dim is the fourth)."""
     if color is None or color.is_default:
         return None
     if not background and color.type.name in ("STANDARD", "WINDOWS") and color.number in (1, 2, 3, 9, 10, 11):
@@ -679,7 +679,7 @@ def grid_of(app: Any) -> Grid:
 
 class Spy:
     """What the core returned to the app: every call of an operation the app reads through
-    ``poisson_prove.core`` (reading f of section 17), with its arguments and result or refusal, and
+    ``poisson_prove.core`` (reading f in ``test_pf5_api_core.py``), with its arguments and result or refusal, and
     every event ``start`` and ``resume`` reported."""
 
     OPERATIONS = ("open_store", "runs", "resolve", "run", "episodes", "read_spec", "plan", "start", "resume", "compare",
@@ -781,7 +781,7 @@ def as_document(obj: Any) -> dict[str, Any]:
 
 
 HEX16 = r"[0-9a-f]{16}"
-#: The views' addresses: PF12's seven as ``views.md`` gives them (Y17), and home's (reading A5).
+#: The views' addresses: PF12's seven, and home's (reading A5).
 VIEW_ADDRESSES = {
     "home": re.compile(r"^home$"),
     "runs": re.compile(r"^index\.html$"),
@@ -999,8 +999,11 @@ def shows_number(text: str, value: float) -> bool:
             shown /= 100.0
         if "e" in body.lower():
             mantissa, exponent = body.lower().split("e")
+            power = int(exponent.replace("\u2212", "-"))
+            if abs(power) > 400:
+                continue  # no float has this exponent: a whole token of digits, an e and digits
             decimals = len(mantissa.split(".")[1]) if "." in mantissa else 0
-            tolerance = 0.5 * 10 ** (int(exponent.replace("\u2212", "-")) - decimals)
+            tolerance = 0.5 * 10 ** (power - decimals)
         else:
             decimals = len(body.split(".")[1]) if "." in body else 0
             tolerance = 0.5 * 10 ** (-decimals) * (0.01 if percent else 1.0)
@@ -1058,7 +1061,7 @@ def cut_shown(text: str, value: str) -> bool:
 
 
 def comparison_name(name: str) -> str:
-    """A comparison's name as the app writes it (Y8): ``<before> → <after>`` with the words the two
+    """A comparison's name as the app writes it: ``<before> → <after>`` with the words the two
     runs' names share at the start written once (``mock-agent 2026-10-23 a → b``)."""
     before, _, after = name.partition(" → ")
     a, b = before.split(" "), after.split(" ")
@@ -1070,14 +1073,14 @@ def comparison_name(name: str) -> str:
 
 #: Keys a screen shows by what they stand for, not as text (reading A6): the document's schema and
 #: kind by the screen itself; a condition's hash by the condition's axes; an address by the link or
-#: the row that opens it (PF6.11 holds the links); a chart's drawing by its link (section 16.1: the
+#: the row that opens it (PF6.11 holds the links); a chart's drawing by its link (the
 #: app draws no chart).
 IDENTIFYING_KEYS = frozenset({"schema", "view", "config_hash", "condition_hash", "svg"})
 #: A page's address inside the UI, whatever key holds it.
 ADDRESS = re.compile(r"^(?:index|(?:runs|comparisons)/\S+)\.html(?:#\S*)?$")
 
-#: The tables each view's screen shows, with the columns the design gives them at 120 columns
-#: (``screens/*.md``): a list item's other facts are on the screen the row opens, so only these are
+#: The tables each view's screen shows, with the columns the screen gives them at 120
+#: columns: a list item's other facts are on the screen the row opens, so only these are
 #: checked here (reading A6). ``*`` is any key or index; a column's ``_note`` (its value's reason when
 #: it is null) goes with it. A list not named is shown whole.
 TABLE_COLUMNS: dict[str, dict[str, tuple[str, ...]]] = {
@@ -1096,7 +1099,7 @@ TABLE_COLUMNS: dict[str, dict[str, tuple[str, ...]]] = {
 
 
 def unshown_rows(document: dict[str, Any], text: str, kind: str) -> list[str]:
-    """Each row of a table ``TABLE_COLUMNS`` names, whose designed columns are not all on one line
+    """Each row of a table ``TABLE_COLUMNS`` names, whose listed columns are not all on one line
     of ``text`` (its rows joined into lines where a row wraps): a table's facts are checked row by
     row, so a value shown in another row never stands in for this one (reading A6)."""
     lines = [line for line in joined_lines(text) if line.strip()]
@@ -1312,8 +1315,8 @@ def build_small(folder: Path) -> dict[str, Any]:
 
 def _stats_stores() -> dict[str, Callable[[Path], dict[str, Any]]]:
     """Hand-written pairs, one store each, for the facts the verdict, conditions and condition
-    screens must carry from the statistics build (section 19's list, PF4.34 to PF4.46). Every run
-    is written through the public ``Store`` by PF4's own frozen helpers."""
+    screens must carry from the statistics (PF4.34 to PF4.46). Every run
+    is written through the public ``Store`` by PF4's own test helpers."""
     from test_pf4_surfaces import A_ID, B_ID, MID, STANDARD_A, STANDARD_B, _argon_pair, _arm, _declared, _pair, _write_run
 
     failures = _declared(failures=("fell",))
@@ -1425,5 +1428,5 @@ def run_times(store: Path) -> set[str]:
     return times
 
 
-if str(TESTS) not in sys.path:  # PF4's frozen helpers are imported by name from its test file
+if str(TESTS) not in sys.path:  # PF4's test helpers are imported by name from its test file
     sys.path.insert(0, str(TESTS))

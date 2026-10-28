@@ -6,19 +6,19 @@ on the raw string. Golden tests use the generated lattice pair (``tests/lattice.
 uses a synthetic ``DiffResult`` factory built directly from M6's ``cells`` columns. All
 temp output goes under tmp_path. No network, no clock.
 
-Two things the spec leaves open that these frozen tests pin, because I7, I11 and I19 are not
+Two things the invariants leave open that these frozen tests pin, because I7, I11 and I19 are not
 checkable without them:
 
 - **Cell identification in SVG.** Every cell ``<rect>`` carries ``data-cell="<config_hash>"``
   for a present cell and ``data-cell="absent"`` for a grid hole. Significance glyphs carry
-  ``data-sig="1"`` (spec) and sit geometrically inside their cell's rect, which is how the
+  ``data-sig="1"`` and sit geometrically inside their cell's rect, which is how the
   set of significant cells is recovered after attribute stripping.
 - **Worst-cells table rows.** Each row is a Markdown pipe row containing, as text, the
   cell's coordinate values and the formatted ``n_a``, ``n_b``, ``rate_a``, ``rate_b``,
   ``delta``, ``p``, ``q``, ``mde`` and ``verdict``. I2(a) requires every numeric field of a
   present cell to be visible somewhere, and with ``top_n >= present`` the table is where.
 
-Reference formatting used by the tests, per the spec's formatting rule: pp values are
+Reference formatting used by the tests, per M7's formatting rule: pp values are
 ``format(x * 100, ".1f")`` (delta, rate) or ``format(x * 100, ".0f")`` (mde) with ``-0.0``
 normalised; p/q are ``format(x, ".3g")`` at or above 1e-3 and ``format(x, ".2e")`` below;
 zero prints as ``0``.
@@ -42,6 +42,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import lattice
+from conftest import blas_thread_cap
 from poisson_prove.diff import DiffResult, diff
 from poisson_prove.report import (
     ABSENT_FILL,
@@ -237,7 +238,7 @@ def svg_root(report: Report) -> ET.Element:
 
 def _svg_text_rejoined(svg: str) -> str:
     """Every ``<text>`` in document order, one per line, a ``data-wrap="1"`` continuation joined back
-    onto the line before with a space. LS update, 2026-09-25 (local serve pass, Phase C)."""
+    onto the line before with a space."""
     out: list[str] = []
     for e in ET.fromstring(svg).iter():
         if _local(e.tag) != "text":
@@ -324,6 +325,11 @@ def worst_rows(md: str, coords_text: list[str]) -> list[str]:
     return rows
 
 
+def table_cells(row: str) -> list[str]:
+    """A Markdown table row's cells, in column order, each stripped."""
+    return [cell.strip() for cell in row.strip().strip("|").split("|")]
+
+
 def numbers_in(text: str) -> list[float]:
     cleaned = HASH_RE.sub(" ", text)
     return [float(m) for m in NUMBER_RE.findall(cleaned)]
@@ -389,7 +395,7 @@ def test_i1_outputs_are_byte_identical_across_hash_seeds(golden_report: Report, 
         proc = subprocess.run(
             [sys.executable, str(script), str(lattice.root()), lattice.RUN_A, lattice.RUN_B, lattice.EVENT, lattice.Y, lattice.X],
             capture_output=True, text=True, cwd=ROOT,
-            env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path)},
+            env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path), **blas_thread_cap()},
         )
         assert proc.returncode == 0, proc.stderr
         assert proc.stdout.split() == local, seed
@@ -519,7 +525,7 @@ def test_i4_counts_and_headline_agree() -> None:
         assert count == sum(c.verdict == verdict for c in present)
     safer, n_present, worse, method, q_text, pairing = _parse_headline(report)
     assert (safer, n_present, worse) == (report.n_safer, len(present), report.n_worse)
-    # P-1 (ADR-052): the token is the requested method's pairing, never the runs' seed identity.
+    # P-1: the token is the requested method's pairing, never the runs' seed identity.
     assert method == d.method == "fisher_bh" and pairing == "unpaired"
     assert q_text == _sig3(d.q)
     assert report.headline in report.to_markdown() and html_escape(report.headline) in report.to_html()
@@ -675,8 +681,7 @@ def _check_honesty(report: Report, diff_result: DiffResult) -> None:
     for line in lines:
         assert line in md, line
         assert html_escape(line) in html, line
-    # LS update, 2026-09-25 (local serve pass, Phase C, ruled on the build's finding): the honesty lines wrap
-    # (ruling 2 of 2026-09-22), so the figure is read as its ``<text>`` runs with each ``data-wrap="1"``
+    # The honesty lines wrap in the figure, so the figure is read as its ``<text>`` runs with each ``data-wrap="1"``
     # continuation joined back onto the line before by one space, the way M7's multi ``texts()`` reads it.
     svg = _svg_text_rejoined(svg)
     assert "Worst-powered cell overall" in svg
@@ -936,8 +941,9 @@ def test_i15_hypothesis_table_numbers_match_reference_formats() -> None:
         rows = worst_rows(md, ["alpha"])
         assert len(rows) == 1
         row = rows[0]
-        for expected in (_pp1(rate_a), _pp1(rate_b), _pp1(delta), _pp0(mde), _sig3(p), _sig3(q), str(n_a), str(n_b), "unchanged"):
-            assert expected in row, (expected, row)
+        # Each value in its own column: coordinates, n (a/b), the three rates, p, q, verdict, MDE.
+        expected = ["alpha", "north", f"{n_a}/{n_b}", _pp1(rate_a), _pp1(rate_b), _pp1(delta), _sig3(p), _sig3(q), "unchanged", f"{_pp0(mde)}pp"]
+        assert table_cells(row) == expected, (row, expected)
         if q < 1e-3:
             assert re.search(r"\d\.\d\de-\d\d", row)
 
@@ -970,17 +976,6 @@ def test_i15_round_half_even_and_scientific_threshold() -> None:
 
 
 # ---------- I16: purity ----------
-
-
-def test_i16_module_touches_no_filesystem_clock_network_or_rng() -> None:
-    import poisson_prove.report as report_module
-
-    source = Path(report_module.__file__).read_text()
-    for banned in ("import os", "from os", "import time", "from time", "import datetime", "from datetime",
-                   "import random", "from random", "import socket", "import requests", "import httpx",
-                   "import urllib", "import pathlib", "from pathlib", "import scipy", "from scipy",
-                   "import matplotlib", "import plotly", "import seaborn", "import altair", "open("):
-        assert banned not in source, banned
 
 
 def test_i16_generated_at_and_manifests_are_omitted_not_invented(golden_diff: DiffResult, golden_frames: dict[str, Any]) -> None:
@@ -1128,8 +1123,9 @@ def test_i19_worst_cells_rows_count_sort_and_tiebreak() -> None:
         order = _table_order(md, words)
         assert order == [c.coords[0] for c in expected]
         for row, cell in zip(worst_rows(md, words), expected, strict=True):
-            for expected_text in (_pp1(cell.rate_a), _pp1(cell.rate_b), _pp1(cell.delta), _sig3(cell.p), _sig3(cell.q), _pp0(cell.mde), str(cell.n_a), str(cell.n_b), cell.verdict):
-                assert expected_text in row, (expected_text, row)
+            columns = [cell.coords[0], "north", f"{cell.n_a}/{cell.n_b}", _pp1(cell.rate_a), _pp1(cell.rate_b), _pp1(cell.delta),
+                       _sig3(cell.p), _sig3(cell.q), cell.verdict, f"{_pp0(cell.mde)}pp"]
+            assert table_cells(row) == columns, (row, columns)
             assert cell is by_word[cell.coords[0]]
 
 

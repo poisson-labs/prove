@@ -1,15 +1,14 @@
-"""PF0, the name: the frozen tests for the rename from ``proofload`` to Poisson Prove.
+"""PF0, the name: the frozen tests for Prove's names and for reading what ``proofload`` 0.0.1 wrote.
 
-Written from the front-door spec's section 2 and its invariants PF0.1 to PF0.13. The build is
-written against this file and does not edit it.
+Its invariants are PF0.1 to PF0.13.
 
-What the rename promises, in one line: new names everywhere, old names read forever. A build of
-this branch installs one package, ``poisson_prove``, and one command, ``poisson-prove``; it writes
+What PF0 promises, in one line: new names everywhere, old names read forever. A build of
+this checkout installs one package, ``poisson_prove``, and one command, ``poisson-prove``; it writes
 ``poisson-prove.*`` schema strings, ``poisson_prove.*`` span keys and ``poisson_prove_version``;
 and every store ``proofload`` 0.0.1 wrote is read by every verb with nothing in it rewritten.
 
 **The 0.0.1 stores.** ``tests/fixtures/stores-0.0.1/`` holds seven runs written by clean installs
-of two 0.0.1 wheels (its README and ``build/`` say how): the quickstart pair, a run with a
+of two 0.0.1 wheels (its README says how): the quickstart pair, a run with a
 timed-out and a crashed episode, a run whose captured observation was cut, a run under a declared
 fault, a run from the Modal backend's offline stand-in, and a run in the layout before the trace
 was split into two columns. ``SHA256SUMS`` is every file's digest as written. ``recorded/`` is
@@ -20,8 +19,8 @@ installed into a throwaway virtual environment of its own, first alone (PF0.1 re
 and then with its dependencies (PF0.2 runs the command it installed). Nothing falls back to the
 environment the suite runs in, and nothing skips: the point is that the command exists.
 
-**Lanes.** Every test here is in the fast lane (ten seconds of setup and call, measured on the
-runner, decides it; PF10 declares the ``slow`` marker).
+**Markers.** No test here is marked ``slow`` (the marker is for more than ten seconds of setup
+and call, measured on the runner).
 
 **Invariant-to-test map**
 
@@ -31,7 +30,6 @@ runner, decides it; PF10 declares the ``slow`` marker).
 | PF0.2 ``python -m poisson_prove`` is the command | ``test_pf0_2_*`` |
 | PF0.3 every schema string written is the new one | ``test_pf0_3_*`` |
 | PF0.4 span keys use ``poisson_prove.``; old keys lift; the new key wins | ``test_pf0_4_*`` |
-| PF0.5 the old name is spelled in one module only, and every reader goes through it | ``test_pf0_5_*``: two literal checks and one behaviour check with that module made to fail |
 | PF0.6 every read verb reads the 0.0.1 stores and rewrites nothing | ``test_pf0_6_*`` |
 | PF0.7 the 0.0.1 quickstart pair gives what 0.0.1 gave, method named | ``test_pf0_7_*`` |
 | PF0.8 ``POISSON_PROVE_STORE``; ``PROOFLOAD_STORE`` alone is noted, not read | ``test_pf0_8_*`` |
@@ -39,12 +37,11 @@ runner, decides it; PF10 declares the ``slow`` marker).
 | PF0.10 default output folders | ``test_pf0_10_*`` |
 | PF0.11 install hints | ``test_pf0_11_*`` |
 | PF0.12 an old run's provenance on the report, the receipt and the page | ``test_pf0_12_*`` |
-| PF0.13 the fixture pair's numbers | the existing fixture-pair tests (now on the generated lattice pair, ``tests/lattice.py``), moved for the names only |
+| PF0.13 the fixture pair's numbers | the fixture-pair tests, on the generated lattice pair (``tests/lattice.py``) |
 """
 
 from __future__ import annotations
 
-import ast
 import functools
 import hashlib
 import html
@@ -67,19 +64,18 @@ from test_pf4_stats import _ref_fisher_limits, _ref_limit, _ref_paired_power
 from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src" / "poisson_prove"
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "stores-0.0.1"
-# PF12 (spec section 18.2, Q59): report and serve save into the store they read, so these tests read a
+# PF12: report and serve save into the store they read, so these tests read a
 # per-process copy of the committed fixture (conftest.writable_copy); the committed folder is never written.
 STORE = writable_copy(FIXTURE / "store")
 RECORDED = FIXTURE / "recorded"
 RUNS: dict[str, str] = json.loads((FIXTURE / "runs.json").read_text(encoding="utf-8"))
 QA, QB = RUNS["quickstart_before"], RUNS["quickstart_after"]
 MOCK = "poisson_prove.examples.mock_agent"
-#: Section 2.3's note, word for word.
+#: The store variable's note, word for word.
 STORE_VARIABLE_NOTE = "note: PROOFLOAD_STORE is set and no longer read; Prove reads POISSON_PROVE_STORE"
 
-#: The eleven span keys Prove writes, documents or stamps (section 2.3).
+#: The eleven span keys Prove writes, documents or stamps.
 SPAN_KEYS = (
     "attempt", "episode", "error_type", "fault", "gate", "logprobs", "outcome", "outcome_by",
     "run_id", "step_name", "truncated",
@@ -178,7 +174,7 @@ def _no_store_variables(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(scope="module")
 def new_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str]:
-    """A pair written by this build: the mock agent, then the patched one paired with it."""
+    """A pair written by the code under test: the mock agent, then the patched one paired with it."""
     base = tmp_path_factory.mktemp("new-pair")
     spec = base / "small.toml"
     spec.write_text(SMALL_SPEC, encoding="utf-8")
@@ -338,16 +334,15 @@ def test_pf0_3_serve_json_is_poisson_prove_viewpair_7(new_pair: tuple[Path, str,
     assert "proofload" not in r.out.lower()
 
 
-#: The schema string the agreement form is hashed behind, and the one the 0.0.1 builds used.
+#: The schema string the agreement form is hashed behind.
 AGREEMENT_SCHEMA = "poisson-prove.agreement/1"
-OLD_AGREEMENT_SCHEMA = "proofload.agreement/1"
 
 
 def lattice_agreement(event: str, schema: str) -> str:
-    """The lattice pair's agreement digest for ``event`` in A28 section 3.2's canonical form,
-    written here from the design's counts (``lattice.counts``) and not from ``tree.py``: one line
-    per cell, ``[event, config_hash, n_a, n_b, events_a, events_b]``, sorted, the pair
-    ``[schema, lines]`` as compact ASCII JSON, sha256, lowercase hex."""
+    """The lattice pair's agreement digest for ``event`` in A28's canonical form, written here from
+    the lattice design's counts (``lattice.counts``) and not from ``tree.py``: one line per cell,
+    ``[event, config_hash, n_a, n_b, events_a, events_b]``, sorted, the pair ``[schema, lines]`` as
+    compact ASCII JSON, sha256, lowercase hex."""
     import hashlib
 
     import lattice
@@ -362,17 +357,16 @@ def lattice_agreement(event: str, schema: str) -> str:
 def test_pf0_3_the_agreement_digest_diff_prints_is_built_over_poisson_prove_agreement_1() -> None:
     import lattice
 
-    # --json replaces --format json on diff (front-door spec section 5.6).
+    # --json replaces --format json on diff.
     r = run_cli(["--store", str(lattice.root()), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--json"])
     assert r.code == 0, r
     printed = json.loads(r.out)["tree"]["agreement"]
     assert printed == lattice_agreement(lattice.EVENT, AGREEMENT_SCHEMA)
-    assert printed != lattice_agreement(lattice.EVENT, OLD_AGREEMENT_SCHEMA)
 
 
 @pytest.fixture(scope="module")
 def chaos_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
-    """A run with ``[capture]`` and ``[chaos]``, swept by this build in a fresh interpreter, so
+    """A run with ``[capture]`` and ``[chaos]``, swept by the code under test in a fresh interpreter, so
     the provider capture installs is never this process's."""
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
     pytest.importorskip("openai", reason="the fault is declared on an OpenAI chat completion")
@@ -380,8 +374,8 @@ def chaos_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
     (base / "pf0_chaos_target.py").write_text(CHAOS_TARGET, encoding="utf-8")
     (base / "chaos.toml").write_text(CHAOS_SPEC, encoding="utf-8")
     store = base / "store"
-    # PF4 re-freeze (PF4.49, reading R17): no lone condition of this 3-replicate design can be
-    # flagged, which any accepted change below 1 refuses; --max-mde 1 admits it as 0.99 did.
+    # PF4.49: no lone condition of this 3-replicate design can be flagged, which any
+    # accepted change below 1 refuses; --max-mde 1 admits it.
     r = subprocess.run(
         [sys.executable, "-m", "poisson_prove", "--store", str(store), "sweep", str(base / "chaos.toml"),
          "--target", "pf0_chaos_target:rollout", "--max-mde", "1", "--yes"],
@@ -458,7 +452,7 @@ def test_pf0_3_a_chaos_run_records_the_catalogue_as_poisson_prove_chaos_catalog_
 
 def test_pf0_4_every_span_key_a_capture_and_chaos_run_stores_uses_the_new_prefix(chaos_run: tuple[Path, str]) -> None:
     """What Prove stamps (the routing keys, the fault) and writes (the cut's wrapper around an
-    observation over the cap), read off the stored rows of a run this build swept."""
+    observation over the cap), read off the stored rows of a run the code under test swept."""
     store, run = chaos_run
     keys: set[str] = set()
     observations = ""
@@ -488,7 +482,7 @@ def otlp_span(attributes: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-#: One value per specced span key (section 2.3's eleven). The first five become span fields; the
+#: One value per span key (the eleven of ``SPAN_KEYS``). The first five become span fields; the
 #: other six stay attributes, under the new prefix.
 FIELD_KEYS: dict[str, Any] = {"step_name": "lookup-order", "outcome": "violated", "outcome_by": "code", "attempt": 2, "gate": "emitted"}
 ATTR_KEYS: dict[str, Any] = {
@@ -551,275 +545,11 @@ def test_pf0_4_the_docs_name_only_the_new_span_key_prefix() -> None:
     assert hits == [], hits
 
 
-# ---------- PF0.5 one module spells the old name ----------
-
-
-def string_constants(path: Path) -> tuple[list[str], list[str]]:
-    """``path``'s string literals, split into docstrings and every other string."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    docstring_nodes: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            body = node.body
-            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
-                docstring_nodes.add(id(body[0].value))
-    docs: list[str] = []
-    others: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            (docs if id(node) in docstring_nodes else others).append(node.value)
-    return docs, others
-
-
-OLD = re.compile(r"proofload|m11-catalog", re.IGNORECASE)
-
-
-def test_pf0_5_the_old_strings_are_spelled_in_poisson_prove_compat_and_nowhere_else_in_src() -> None:
-    compat = SRC / "_compat.py"
-    assert compat.is_file(), compat
-    spelled = {
-        str(path.relative_to(SRC)): sorted({s for s in string_constants(path)[1] if OLD.search(s)})
-        for path in sorted(SRC.rglob("*.py"))
-    }
-    outside = {name: found for name, found in spelled.items() if found and name != "_compat.py"}
-    assert outside == {}, outside
-    held = " ".join(spelled["_compat.py"])
-    for old in ("proofload.trace/1", "proofload_version", "m11-catalog/1", "PROOFLOAD_STORE", "proofload-runs"):
-        assert old in held, (old, spelled["_compat.py"])
-
-
-def test_pf0_5_no_docstring_outside_the_compat_module_names_the_old_name() -> None:
-    assert (SRC / "__init__.py").is_file(), SRC
-    hits = {
-        str(path.relative_to(SRC)): [d[:80] for d in string_constants(path)[0] if OLD.search(d)]
-        for path in sorted(SRC.rglob("*.py"))
-        if path.name != "_compat.py"
-    }
-    assert {name: found for name, found in hits.items() if found} == {}
-
-
-#: Run in a fresh interpreter, so the package is imported once with the compatibility module as the
-#: probe leaves it. ``poisson_prove._compat`` is loaded from its file first and made to fail one of
-#: two ways: ``raise`` replaces every function in it with one that raises and spoils every string it
-#: holds that spells the old name; ``spoil`` rewrites its source so every string literal spelling the
-#: old name, function bodies included, is spoiled, and its functions run on as written, knowing no
-#: old string. Then the package is imported against that module. Each probe reads one kind of old
-#: string through the public surface twice: with the old string there, and with it absent.
-COMPAT_PROBE = r"""
-import ast, importlib.util, io, json, os, re, shutil, sys, types
-
-args = json.loads(sys.argv[1])
-OLD = re.compile(r"proofload|m11-catalog", re.IGNORECASE)
-
-
-class Sabotaged(Exception):
-    pass
-
-
-def spoil(value):
-    if isinstance(value, str):
-        return "<spoiled>" if OLD.search(value) else value
-    if isinstance(value, (tuple, list, set, frozenset)):
-        return type(value)(spoil(v) for v in value)
-    if isinstance(value, dict):
-        return {spoil(k): spoil(v) for k, v in value.items()}
-    return value
-
-
-class Spoiler(ast.NodeTransformer):
-    def visit_Constant(self, node):
-        if isinstance(node.value, str) and OLD.search(node.value):
-            return ast.copy_location(ast.Constant("<spoiled>"), node)
-        return node
-
-
-compat_path = os.path.join(args["src"], "_compat.py")
-if args["sabotage"] == "spoil":
-    compat = types.ModuleType("poisson_prove._compat")
-    compat.__file__ = compat_path
-    tree = ast.fix_missing_locations(Spoiler().visit(ast.parse(open(compat_path, encoding="utf-8").read())))
-    sys.modules["poisson_prove._compat"] = compat
-    exec(compile(tree, compat_path, "exec"), compat.__dict__)
-if args["sabotage"] == "raise":
-    spec = importlib.util.spec_from_file_location("poisson_prove._compat", compat_path)
-    compat = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(compat)
-    for name, value in list(vars(compat).items()):
-        if name.startswith("__") or isinstance(value, (types.ModuleType, type)):
-            continue
-        if isinstance(value, types.FunctionType):
-            def broken(*a, _name=name, **k):
-                raise Sabotaged(_name)
-            setattr(compat, name, broken)
-        else:
-            setattr(compat, name, spoil(value))
-    sys.modules["poisson_prove._compat"] = compat
-
-import pyarrow.parquet as pq
-from poisson_prove import cli
-from poisson_prove.store import Store
-from poisson_prove.trace import Trace, from_otel
-
-work = args["work"]
-
-
-def attempt(read):
-    try:
-        return ["read", read()]
-    except Exception as exc:
-        return ["failed", type(exc).__name__]
-
-
-def run(argv, cwd, variables):
-    here = os.getcwd()
-    saved = {k: os.environ.pop(k) for k in ("PROOFLOAD_STORE", "POISSON_PROVE_STORE") if k in os.environ}
-    os.environ.update(variables)
-    os.chdir(cwd)
-    try:
-        out, err = io.StringIO(), io.StringIO()
-        code = cli.main(argv, stdout=out, stderr=err, stdin=io.StringIO())
-        return [code, out.getvalue(), err.getvalue()]
-    finally:
-        os.chdir(here)
-        for k in variables:
-            os.environ.pop(k, None)
-        os.environ.update(saved)
-
-
-def copy(run_id, dest):
-    shutil.copytree(os.path.join(args["store"], run_id), os.path.join(dest, run_id))
-    return os.path.join(dest, run_id)
-
-
-def edit_manifest(run_dir, change):
-    path = os.path.join(run_dir, "manifest.json")
-    manifest = json.load(open(path, encoding="utf-8"))
-    change(manifest)
-    open(path, "w", encoding="utf-8").write(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-
-
-observed = {}
-
-# A trace stored under the old schema string, and the same trace under a schema nobody reads.
-part = sorted(os.listdir(os.path.join(args["store"], args["qa"], "episodes")))[0]
-stored = json.loads(pq.read_table(os.path.join(args["store"], args["qa"], "episodes", part)).to_pylist()[0]["trace"])
-observed["trace schema"] = {
-    "with": attempt(lambda: len(Trace.from_dict(stored).spans)),
-    "without": attempt(lambda: len(Trace.from_dict({**stored, "schema": "unknown.trace/1"}).spans)),
-}
-
-# The version an old manifest recorded under the old key, and the same manifest with no version key.
-def version(dest, change):
-    edit_manifest(copy(args["qa"], dest), change)
-    return lambda: Store(dest).manifest(args["qa"]).to_dict()["poisson_prove_version"]
-observed["manifest version key"] = {
-    "with": attempt(version(os.path.join(work, "with-version"), lambda m: m.__setitem__("proofload_version", "0.0.1rc7"))),
-    "without": attempt(version(os.path.join(work, "without-version"), lambda m: m.pop("proofload_version"))),
-}
-
-# Span keys under the old prefix, and the same span without them.
-def span(extra):
-    return {
-        "traceId": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a", "spanId": "0000000000000001", "name": "execute_tool lookup",
-        "kind": 1, "startTimeUnixNano": "1756900000000000000", "endTimeUnixNano": "1756900000500000000",
-        "attributes": [{"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}}, *extra],
-        "status": {"code": "STATUS_CODE_UNSET"},
-    }
-def lifted(raw):
-    def read():
-        (one,) = from_otel([raw]).spans
-        return [one.step_name, one.attrs.get("poisson_prove.run_id")]
-    return read
-old_keys = [
-    {"key": "proofload.step_name", "value": {"stringValue": "lookup-order"}},
-    {"key": "proofload.run_id", "value": {"stringValue": "run-pf0"}},
-]
-observed["span keys"] = {"with": attempt(lifted(span(old_keys))), "without": attempt(lifted(span([])))}
-
-# The old store variable, set alone, and no variable set.
-noted = os.path.join(work, "noted")
-copy(args["qa"], os.path.join(noted, "prove-runs"))
-observed["store variable"] = {
-    "with": attempt(lambda: run(["runs"], noted, {"PROOFLOAD_STORE": os.path.join(work, "elsewhere")})),
-    "without": attempt(lambda: run(["runs"], noted, {})),
-}
-
-# The old default store alone in the folder, and an empty folder.
-old_default, empty = os.path.join(work, "old-default"), os.path.join(work, "empty")
-copy(args["qa"], os.path.join(old_default, "proofload-runs"))
-os.makedirs(empty)
-# A missing store now exits 1 like the old-store refusal (front-door spec section 5.2), so each is
-# read as its exit code and whether its stderr names the old folder.
-def default_store(cwd):
-    code, _, err = run(["runs"], cwd, {})
-    return [code, "proofload-runs" in err]
-observed["old default store"] = {
-    "with": attempt(lambda: default_store(old_default)),
-    "without": attempt(lambda: default_store(empty)),
-}
-
-# Who wrote an old pair, and the same pair with no version recorded.
-def writer(store, label):
-    def read():
-        out = os.path.join(work, "report-" + label)
-        code, _, err = run(["--store", store, "report", args["qa"], args["qb"], "--x", "task_id", "--y", "tool_fail_rate", "--out", out], work, {})
-        assert code == 0, err
-        return "written by proofload 0.0.1" in open(os.path.join(out, "report.md"), encoding="utf-8").read()
-    return read
-unversioned = os.path.join(work, "unversioned")
-for run_id in (args["qa"], args["qb"]):
-    edit_manifest(copy(run_id, unversioned), lambda m: m.pop("proofload_version"))
-observed["old run's writer"] = {"with": attempt(writer(args["store"], "with")), "without": attempt(writer(unversioned, "without"))}
-
-print(json.dumps(observed))
-"""
-
-
-def probe_compat(work: Path, *, sabotage: str | None) -> dict[str, Any]:
-    work.mkdir(parents=True)
-    arguments = json.dumps({"src": str(SRC), "store": str(STORE), "qa": QA, "qb": QB, "work": str(work), "sabotage": sabotage})
-    done = subprocess.run([sys.executable, "-c", COMPAT_PROBE, arguments], cwd=work, env=clean_env(), capture_output=True, text=True, timeout=600)
-    assert done.returncode == 0, done.stderr
-    observed: dict[str, Any] = json.loads(done.stdout.strip().splitlines()[-1])
-    return observed
-
-
-def test_pf0_5_with_the_compat_module_failing_no_reader_recognises_an_old_string(tmp_path: Path) -> None:
-    """Section 2.4 item 2, by behaviour: each reader of an old string goes through
-    ``poisson_prove._compat``. Untouched, every reader reads its old string, and reads something
-    else when the old string is absent. With that module failing, either way the probe makes it
-    fail, an old string makes no difference to any reader: each gives what it gives when the
-    string is absent. A reader that recognises an old string on its own, by any spelling and in
-    any part, behaves differently and fails this test."""
-    fixture_before = tree_digest(STORE)
-    readers = probe_compat(tmp_path / "untouched", sabotage=None)
-    untouched = {name: reader["with"] for name, reader in readers.items()}
-    assert untouched["trace schema"][0] == "read" and untouched["trace schema"][1] > 0, readers
-    assert untouched["manifest version key"] == ["read", "0.0.1rc7"], readers
-    assert untouched["span keys"] == ["read", ["lookup-order", "run-pf0"]], readers
-    assert untouched["store variable"][0] == "read", readers
-    code, out, err = untouched["store variable"][1]
-    assert code == 0 and STORE_VARIABLE_NOTE in err.splitlines() and out == readers["store variable"]["without"][1][1], readers
-    # The old-store refusal exits 1 and names the old folder (front-door spec section 5.2).
-    assert untouched["old default store"] == ["read", [1, True]], readers
-    assert untouched["old run's writer"] == ["read", True], readers
-    assert {name: reader for name, reader in readers.items() if reader["with"] == reader["without"]} == {}, readers
-    for way in ("raise", "spoil"):
-        sabotaged = probe_compat(tmp_path / way, sabotage=way)
-        assert sorted(sabotaged) == sorted(readers), way
-        still_recognised = {name: reader for name, reader in sabotaged.items() if reader["with"] != reader["without"]}
-        assert still_recognised == {}, (way, still_recognised)
-    # PF12 (spec sections 14 and 18.2, PF12.1): the probes' report and serve save under ``.poisson/``;
-    # no byte the build wrote moves.
-    assert {k: v for k, v in tree_digest(STORE).items() if not k.startswith(".poisson/")} == {
-        k: v for k, v in fixture_before.items() if not k.startswith(".poisson/")}
-
-
 # ---------- PF0.6 the 0.0.1 stores are read, never rewritten ----------
 
 
 def test_pf0_6_the_committed_fixture_is_intact() -> None:
-    """The precondition of every byte check below: the files are the ones the build wrote."""
+    """The precondition of every byte check below: the files are the ones 0.0.1 wrote."""
     sums = {}
     for line in (FIXTURE / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
         digest, name = line.split(maxsplit=1)
@@ -865,7 +595,7 @@ def test_pf0_6_every_pair_verb_exits_0_on_the_0_0_1_quickstart_pair_and_no_store
     before = tree_digest(STORE)
     invocations = [
         ["diff", QA, QB],
-        # PF4 (PF4.20): a 0.0.1 run records no kind, so check's default --fail-on worse is refused;
+        # PF4.20: a 0.0.1 run records no kind, so check's default --fail-on worse is refused;
         # --fail-on higher is the same gate on a failure event (fail when the rate rose).
         ["check", QA, QB, "--event", "violated", "--fail-on", "higher"],
         ["report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(tmp_path / "report")],
@@ -874,8 +604,8 @@ def test_pf0_6_every_pair_verb_exits_0_on_the_0_0_1_quickstart_pair_and_no_store
     for argv in invocations:
         r = run_cli(["--store", str(STORE), *argv])
         assert r.code == 0, (argv, r)
-    # PF12 (spec sections 14 and 18.2, PF12.1): report and serve save the comparison they show under
-    # ``.poisson/``; no byte the build wrote moves.
+    # PF12.1: report and serve save the comparison they show under
+    # ``.poisson/``; no byte 0.0.1 wrote moves.
     def stored(digest: dict[str, str]) -> dict[str, str]:
         return {k: v for k, v in digest.items() if not k.startswith(".poisson/")}
 
@@ -890,8 +620,8 @@ def test_pf0_6_runs_lists_every_0_0_1_run() -> None:
 
 
 def test_pf0_6_an_old_manifest_is_read_with_the_version_it_recorded_under_the_new_key(tmp_path: Path) -> None:
-    """Section 2.3: a manifest with either key reads, and the manifest exposes one field. The copy's
-    recorded version is one no build of Prove can be, so the running version cannot stand in for it."""
+    """A manifest with either key reads, and the manifest exposes one field. The copy's
+    recorded version is one no release of Prove can be, so the running version cannot stand in for it."""
     from poisson_prove.store import Store
 
     store = copy_runs(tmp_path / "store", QA)
@@ -914,17 +644,17 @@ ROOT_FIELDS = ("p_omnibus", "p_location", "p_dispersion", "rejects")
 BOUND_FIELDS = ("depth_configured", "depth", "q", "delta_star", "bound", "discoveries")
 
 
-#: PF4 (PF4.20): a 0.0.1 run records no event kind, so a cell's verdict is now the direction word:
+#: PF4.20: a 0.0.1 run records no event kind, so a cell's verdict is the direction word:
 #: 0.0.1's ``safer`` (the rate fell) reads ``lower`` and its ``worse`` (rose) reads ``higher``.
 DIRECTION_OF = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
-#: PF4 (PF4.18): the omnibus and every group p-value are Westfall-Young on one scale, so these
+#: PF4.18: the omnibus and every group p-value are Westfall-Young on one scale, so these
 #: three fields move; every other field of the tree is 0.0.1's.
 TREE_FIELDS_PF4_MOVES = ("p_omnibus", "p_group", "q_group")
 
 
 def same(got: Any, want: Any) -> bool:
     """Equal, where a NaN 0.0.1 wrote (a statistic with no value) equals a NaN read back. Strict JSON
-    now writes a NaN or an infinity as null (front-door spec section 5.6), so null equals either."""
+    writes a NaN or an infinity as null, so null equals either."""
     if got is None and isinstance(want, float) and (want != want or want in (float("inf"), float("-inf"))):
         return True
     return bool(got == want or (isinstance(want, float) and want != want and isinstance(got, float) and got != got))
@@ -944,7 +674,7 @@ def reference_mde(method: str, events_a: int, n: int, level: float) -> float | N
     """A condition's detection limit at the lone-change level, from the stats file's references:
     Fisher's exact enumeration under ``fisher_bh``, the paired test's over ``n`` matched pairs under
     ``mcnemar_bh``; ``mde`` is the larger of the two directions, the one that is a number when the
-    other has no room, and null otherwise (front-door spec section 8.10)."""
+    other has no room, and null otherwise."""
     p_a = events_a / n
     if method == "fisher_bh":
         rise, fall = _ref_fisher_limits(events_a, n, n, level)
@@ -966,7 +696,7 @@ def assert_same_cell(got: dict[str, Any], want: dict[str, Any], method: str, whe
     the number of rows the comparison tests."""
     for field in CELL_FIELDS:
         if field == "mde":
-            # PF4 re-freeze (PF4.22 to PF4.24): the limit is the exact power definition at the
+            # PF4.22 to PF4.24: the limit is the exact power definition at the
             # lone-change level q / M, both directions, so 0.0.1's normal-approximation number moves;
             # it is recomputed here from the stats file's references.
             want_mde = reference_mde(method, got["events_a"], got["pairs"] if method == "mcnemar_bh" else got["n_a"],
@@ -976,11 +706,11 @@ def assert_same_cell(got: dict[str, Any], want: dict[str, Any], method: str, whe
             else:
                 assert got[field] is not None and abs(got[field] - want_mde) <= 1e-4 + 1e-12, (*where, field, got[field], want_mde)
         elif field == "verdict":
-            # PF4 (PF4.20): the direction word in place of 0.0.1's safer/worse; the cell's
+            # PF4.20: the direction word in place of 0.0.1's safer/worse; the cell's
             # direction says the same.
             assert got[field] == got["direction"] == DIRECTION_OF[want[field]], (*where, field)
         elif field == "delta" and method == "mcnemar_bh":
-            # PF4 (PF4.14): delta is the matched-pair difference (n01 - n10) / pairs. Every run of
+            # PF4.14: delta is the matched-pair difference (n01 - n10) / pairs. Every run of
             # this pair is matched, so n01 - n10 is events_b - events_a and the value is 0.0.1's
             # horizon difference up to floating-point order.
             assert got["pairs"] == got["n_a"] == got["n_b"], (*where, got["pairs"])
@@ -1007,7 +737,7 @@ def assert_same_tree(got: dict[str, Any], want: dict[str, Any]) -> None:
         if field in TREE_FIELDS_PF4_MOVES:
             continue
         assert got["root"][field] == want["root"][field], field
-    # PF4 (PF4.18): the root's p is the min-p over its statistics on one scale, which is never
+    # PF4.18: the root's p is the min-p over its statistics on one scale, which is never
     # below the smallest of their own p-values; whether it rejects is 0.0.1's (above).
     root = got["root"]
     assert min([*root["p_location"].values(), *root["p_dispersion"].values()]) <= root["p_omnibus"] <= 1.0, root
@@ -1019,7 +749,7 @@ def assert_same_tree(got: dict[str, Any], want: dict[str, Any]) -> None:
             if field in TREE_FIELDS_PF4_MOVES:
                 continue
             assert got_groups[group["label"]][field] == group[field], (group["label"], field)
-    # PF4 (PF4.18): each group's p is a min-p on one scale as the root's is, and its q is the
+    # PF4.18: each group's p is a min-p on one scale as the root's is, and its q is the
     # Benjamini-Hochberg adjustment of those p-values, computed here.
     labels = sorted(got_groups)
     for label in labels:
@@ -1034,7 +764,7 @@ def assert_same_tree(got: dict[str, Any], want: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("method", METHODS)
 def test_pf0_7_diff_json_on_the_0_0_1_pair_gives_0_0_1s_cells_omnibus_fault_lines_and_bound(method: str) -> None:
-    # --json replaces --format json on diff (front-door spec section 5.6).
+    # --json replaces --format json on diff.
     r = run_cli(["--store", str(STORE), "diff", QA, QB, "--method", method, "--json"])
     assert r.code == 0, r
     got, want = json.loads(r.out), recorded(f"diff-{method}.json")
@@ -1046,7 +776,7 @@ def test_pf0_7_diff_json_on_the_0_0_1_pair_gives_0_0_1s_cells_omnibus_fault_line
         assert sorted(got_cells) == sorted(c["config_hash"] for c in block["cells"]), event
         for cell in block["cells"]:
             assert_same_cell(got_cells[cell["config_hash"]], cell, method, (event, cell["config_hash"]), rows)
-    # PF4 (PF4.18): the omnibus p moves with the tree's root, which it is.
+    # PF4.18: the omnibus p moves with the tree's root, which it is.
     assert got["omnibus"]["p_omnibus"] == got["tree"]["root"]["p_omnibus"]
     assert_same_tree(got["tree"], want["tree"])
 
@@ -1088,8 +818,8 @@ def section(markdown: str, heading: str) -> str:
 
 
 #: A number as a report prints it: 0.0.1 printed rates in percentage points (``31.0``, ``17pp``) and
-#: p and q in ``:g`` form; the command line now prints them under rule 10 (front-door spec section
-#: 5.4), so a number is compared by value.
+#: p and q in ``:g`` form; the command line prints them by rule 10, so a number is
+#: compared by value.
 PRINTED_NUMBER = re.compile(r"(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?(?:pp)?(?![\w]|\.\d)")
 
 
@@ -1174,22 +904,22 @@ def test_pf0_7_report_on_the_0_0_1_pair_gives_0_0_1s_tables_and_bound(method: st
     assert r.code == 0, r
     got = (out / "report.md").read_text(encoding="utf-8")
     want = (RECORDED / f"report-{method}" / "report.md").read_text(encoding="utf-8")
-    # PF4 (PF4.3): report.md gains a Shares section, which 0.0.1 did not print; the rows compared
+    # PF4.3: report.md gains a Shares section, which 0.0.1 did not print; the rows compared
     # are those of every section 0.0.1 had.
     got = got.replace(section(got, "## Shares"), "")
-    # PF4 (PF4.20): a 0.0.1 run records no kind, so a row's verdict is the direction word.
+    # PF4.20: a 0.0.1 run records no kind, so a row's verdict is the direction word.
     want = re.sub(r"\b(safer|worse)\b", lambda m: DIRECTION_OF[m.group(1)], want)
-    # PF4 (PF4.18): a fault-line row's p and q (its last-but-two and last-but-one cells) are the
+    # PF4.18: a fault-line row's p and q (its last-but-two and last-but-one cells) are the
     # one-scale values, read from the same comparison's JSON; every other cell is 0.0.1's.
     tree = json.loads(run_cli(["--store", str(STORE), "diff", QA, QB, "--method", method, "--json"]).out)["tree"]
     groups = {g["label"]: g for g in tree["fault_lines"]["groups"]}
     fault_rows = set(table_data_rows(section(got, "## Fault lines")))
     assert len(fault_rows) == len(groups), fault_rows
-    # report.md's numbers are printed under rule 10 now (front-door spec section 5.4): each row and
+    # report.md's numbers are printed by rule 10: each row and
     # the bound carry 0.0.1's numbers by value.
     got_rows, want_rows = table_data_rows(got), table_data_rows(want)
     assert len(got_rows) == len(want_rows)
-    # PF4 re-freeze (PF4.22 to PF4.24, PF4.45): every condition's and every group's limit moves (the
+    # PF4.22 to PF4.24, PF4.45: every condition's and every group's limit differs from 0.0.1's (the
     # exact power at the lone-change level; the group's from each cell's own baseline, unconditional),
     # so each printed MDE is read against the JSON of the same comparison (the same events) and left
     # out of the comparison with 0.0.1's row; every other cell is still 0.0.1's.
@@ -1242,7 +972,7 @@ def verb_argv(verb: str, inputs: dict[str, Path], out: Path) -> list[str]:
     return {
         "sweep": ["sweep", str(inputs["spec"]), "--target", f"{MOCK}:rollout", "--max-mde", "0.99", "--yes"],
         "diff": ["diff", QA, QB],
-        # PF4 (PF4.20): as in PF0.6, the same gate named for an event of unknown kind.
+        # PF4.20: as in PF0.6, the same gate named for an event of unknown kind.
         "check": ["check", QA, QB, "--event", "violated", "--fail-on", "higher"],
         "report": ["report", QA, QB, "--x", "task_id", "--y", "tool_fail_rate", "--out", str(out)],
         "paired": ["paired", "--declaration", str(inputs["declaration"]), "--out", str(out)],
@@ -1295,19 +1025,28 @@ def test_pf0_8_proofload_store_set_alone_is_not_read_and_every_verb_notes_it(ver
 
 @pytest.mark.parametrize("verb", STORE_VERBS)
 def test_pf0_8_with_both_variables_set_the_new_one_names_the_store_and_nothing_is_noted(verb: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each verb exits 0 on the new variable's store, which holds what it needs while the old
+    variable's holds none of it; the old store does not move and the working folder stays empty."""
     store = copy_runs(tmp_path / "new-variable-store", QA, QB)
+    write_paired_store(store)
     old = copy_runs(tmp_path / "old-variable-store", RUNS["modal"])
     inputs = write_inputs(tmp_path / "inputs")
+    (inputs["declaration"]).write_text(PAIRED_DECLARATION, encoding="utf-8")
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
     monkeypatch.setenv("PROOFLOAD_STORE", str(old))
     monkeypatch.setenv("POISSON_PROVE_STORE", str(store))
+    before, old_before = run_ids(store), tree_digest(old)
     r = run_cli(verb_argv(verb, inputs, tmp_path / "out"))
     assert "PROOFLOAD_STORE" not in r.out + r.err, r
+    assert r.code == 0, r
+    assert tree_digest(old) == old_before
+    assert list(cwd.iterdir()) == []
     if verb == "runs":
-        assert r.code == 0, r
         assert QA in r.out and QB in r.out and RUNS["modal"] not in r.out, r.out
+    if verb == "sweep":
+        assert len(run_ids(store) - before) == 1
 
 
 # ---------- PF0.9 the default store ----------
@@ -1369,13 +1108,13 @@ def test_pf0_9_sweep_with_no_store_anywhere_writes_into_prove_runs(tmp_path: Pat
 # ---------- PF0.10 default output folders ----------
 
 
-#: Two runs whose names need cleaning: capitals and spaces (section 2.3: "names slugged: lowercase,
-#: spaces and / to -"). A run's id is a folder name, so it cannot carry a slash; a slash reaches a
-#: run's name only through a name given to it, which PF2 reads, and PF2 freezes that case. The
+#: Two runs whose names need cleaning: capitals and spaces (names are slugged: lowercase,
+#: spaces and / to -). A run's id is a folder name, so it cannot carry a slash; a slash reaches a
+#: run's name only through a name given to it, which PF2 reads, and PF2's tests pin that case. The
 #: target carries capitals, a space and a slash for the names PF2 computes from it.
 SLUG_RUNS = ("Base Line A", "Cand Two B")
 SLUG_TARGET = "Team/Agent X"
-# PF2 (spec section 4.3/5.3): default report folders are named by run names, slugged, so the
+# PF2: default report folders are named by run names, slugged, so the
 # slug check on capitals and spaces uses names given at sweep time that carry them (and differ
 # from the ids, so a folder named by id cannot pass).
 SLUG_NAMES = ("Before Fix A", "After Fix B")
@@ -1395,7 +1134,7 @@ def write_mock_pair(
         store.create_run(RunManifest(
             run_id=run_id, target_id=target_id, t_unit="tool_calls", run_salt="pf0-slug-salt",
             axis_types={"task_id": "categorical", "tool_fail_rate": "continuous"}, backend="local", environment={},
-            name=name,  # PF2 (spec section 4.3): the name given at sweep time
+            name=name,  # PF2: the name given at sweep time
         ))
         store.append(run_id, [
             EpisodeRecord.from_episode(agent(cfg, 1000 * i + k), run_id=run_id, config=cfg, seed=1000 * i + k, replicate_index=k, wall_time=0.01)
@@ -1413,7 +1152,7 @@ def test_pf0_10_a_pair_reports_into_prove_report_a_vs_b_slugged(tmp_path: Path, 
     monkeypatch.chdir(cwd)
     r = run_cli(["--store", str(store), "report", *SLUG_RUNS, "--event", "violated", "--x", "task_id", "--y", "tool_fail_rate"])
     assert r.code == 0, r
-    # PF2 (spec section 4.3/5.3): the folder is named by the run names, not the ids, slugged.
+    # PF2: the folder is named by the run names, not the ids, slugged.
     assert [p.name for p in cwd.iterdir()] == ["prove-report-before-fix-a-vs-after-fix-b"]
     assert (cwd / "prove-report-before-fix-a-vs-after-fix-b" / "report.md").is_file()
 
@@ -1425,7 +1164,7 @@ def test_pf0_10_a_single_run_reports_into_prove_report_run_slugged(tmp_path: Pat
     monkeypatch.chdir(cwd)
     r = run_cli(["--store", str(store), "report", SLUG_RUNS[0], "--event", "violated", "--x", "task_id", "--y", "tool_fail_rate"])
     assert r.code == 0, r
-    # PF2 (spec section 4.3/5.3): the folder is named by the run name, not the id, slugged.
+    # PF2: the folder is named by the run name, not the id, slugged.
     assert [p.name for p in cwd.iterdir()] == ["prove-report-before-fix-a"]
     assert (cwd / "prove-report-before-fix-a" / "report.md").is_file()
 
@@ -1520,37 +1259,9 @@ def test_pf0_11_the_modal_backend_without_modal_names_poisson_prove_with_its_ext
     assert 'pip install "poisson-prove[modal]"' in r.err, r.err
 
 
-def formatted_strings(path: Path) -> list[str]:
-    """``path``'s f-strings, each with its replacement fields shown as ``{}``."""
-    return [
-        "".join(part.value if isinstance(part, ast.Constant) else "{}" for part in node.values)
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(node, ast.JoinedStr)
-    ]
-
-
-def test_pf0_11_every_install_hint_in_src_that_names_prove_is_the_quoted_distribution_with_an_extra() -> None:
-    """Over plain strings and f-strings alike. Burla's hint names Burla's own pin and waits for the
-    ``[burla]`` extra (ruled 2026-10-14: PF9 moves it)."""
-    hints = sorted({
-        s
-        for path in sorted(SRC.rglob("*.py"))
-        for s in (*string_constants(path)[1], *formatted_strings(path))
-        if "pip install" in s
-    })
-    naming_prove = [h for h in hints if "burla==" not in h and "burla=={}" not in h]
-    assert naming_prove, hints
-    for hint in naming_prove:
-        # PF12 (PF12.4): a file in a newer format than this Prove reads is refused with the upgrade,
-        # which names the distribution alone.
-        if hint == "pip install -U poisson-prove":
-            continue
-        assert re.search(r'pip install "poisson-prove\[(?:[a-z]+|\{\})\]"', hint), hint
-
-
 # ---------- PF0.12 an old run's provenance ----------
 
-#: The words sections 2.3 and 2.5 give, by surface (ruled 2026-10-14): the report and the receipt say
+#: The words each surface gives: the report and the receipt say
 #: who wrote an old run; the page gives Prove's version as the run recorded it.
 WRITTEN_BY_0_0_1 = "written by proofload 0.0.1"
 PAGE_VERSION_0_0_1 = "Prove version: 0.0.1 (as proofload)"

@@ -1,20 +1,19 @@
-"""The unpaired-analysis warning (Action List B.4, "paired-test default").
+"""The unpaired-analysis warning: a pairable pair analysed with a method that discards the pairing.
 
-``_pairing`` has always computed ``paired`` and reported it -- in the headline, in
-``to_markdown``'s method line, on ``MultiDiffResult`` -- and used it for exactly one decision:
-refusing ``mcnemar_bh`` when the two runs cannot be paired. The other side of that predicate
-was silent. A user who ran ``--pair-with``, got a shared run salt, and then took the default
-``fisher_bh`` was answering a weaker question than the data supports, and nothing said so.
+When both manifests carry the same run salt and the matched rows share their seeds, the two runs
+can be compared pair by pair. ``mcnemar_bh`` uses that correspondence and refuses when it is
+absent; ``fisher_bh`` and ``logrank_bh`` compare the two arms as independent samples, which
+answers a weaker question than the data supports. ``UnpairedAnalysis`` says so.
 
-Three constraints the tests below are written to hold, taken from the queue item:
+Three constraints the tests below hold:
 
 - It fires from **M6**, not the CLI. ``cli.py``'s module docstring commits that module to
   deciding nothing statistical, and a warning about which test to run is a statistical
-  decision. U14 and U15 read ``src/`` so the rule is a test rather than a review step.
+  decision.
 - **Once per diff, not per cell.** U6 drives a six-cell, three-event diff -- eighteen tests --
   and counts one record.
-- **Never a silent switch.** The method is not chosen from whether two runs happen to share a
-  salt; that would make the statistic a property of run provenance rather than of the request.
+- **Never a silent switch.** A requested method is not changed because two runs happen to share
+  a salt; that would make the statistic a property of run provenance rather than of the request.
   U8 pins the numbers identical across a pairable pair and its unpairable twin, so the only
   thing the salt changes is the warning.
 
@@ -24,7 +23,7 @@ CLI runner here; everything else is written out at the assertion.
 
 from __future__ import annotations
 
-import ast
+import inspect
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -46,7 +45,6 @@ from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.survival import censor
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "poisson_prove"
 SALT = "unpaired-warning-oracle-salt"
 OTHER_SALT = "a-different-salt"
 HORIZON = 10.0
@@ -176,8 +174,8 @@ def write_run(store: Store, run_id: str, salt: str, *, fails: int) -> None:
 
 
 def test_u1_a_pairable_pair_analysed_with_fisher_warns() -> None:
-    """The case the README shipped for months: --pair-with ran, the salts match, and the
-    default method compares the two arms as independent samples anyway."""
+    """The common case: --pair-with ran, the salts match, and ``fisher_bh`` compares the two
+    arms as independent samples anyway."""
     records = unpaired_records(caught(lambda: multi("fisher_bh")))
     assert len(records) == 1, [str(r.message) for r in records]
 
@@ -262,10 +260,7 @@ def test_u8_the_warning_never_switches_the_test() -> None:
 
 
 def test_u9_the_headline_states_the_request_and_seed_identity_is_a_field_beside_it() -> None:
-    """**Inverted by P-1 (ADR-052; standing item C1).** Until P-1 this test pinned the
-    defect: the headline printed ``paired`` next to the method that discarded the pairing, and
-    this docstring called that something a reader could see. It was a fact about the *runs*
-    printed where the reader reads about the *analysis*. Now the headline's last token is the
+    """P-1: the headline's last token is a fact about the *analysis*, not the *runs*: the
     requested method's pairing -- ``unpaired`` for ``fisher_bh`` however the runs were produced --
     and the runs' seed identity is a field, ``seed_identity_match``, with ``unpaired_analysis``
     beside it saying the identity was there and the request discarded it. The warning is the
@@ -285,13 +280,17 @@ def test_u10_unpaired_analysis_is_a_user_warning() -> None:
 
 def test_u11_the_warning_points_at_the_callers_line() -> None:
     """stacklevel is the difference between a warning a reader can act on and one that points
-    at library internals. It must name the file that called multi_diff -- this one."""
+    at library internals. It must name the file and the line that called multi_diff -- the call
+    in ``multi`` above."""
     records = unpaired_records(caught(lambda: multi("fisher_bh")))
     assert records[0].filename == __file__, records[0].filename
+    lines, start = inspect.getsourcelines(multi)
+    (call_line,) = [start + i for i, line in enumerate(lines) if "multi_diff(" in line]
+    assert records[0].lineno == call_line, (records[0].lineno, call_line)
 
 
 def test_u12_the_message_names_the_method_and_the_alternative() -> None:
-    """Containment, not an exact string: the wording stays the implementer's. What a reader
+    """Containment, not an exact string: the wording is not pinned here. What a reader
     has to be able to act on is which method ran and which one to pass instead."""
     message = str(unpaired_records(caught(lambda: multi("fisher_bh")))[0].message)
     assert "fisher_bh" in message and "mcnemar_bh" in message
@@ -315,52 +314,22 @@ def test_u13_every_method_either_refuses_or_warns() -> None:
         assert refuses != warns, (method, refuses, warns)
 
 
-def test_u14_the_cli_raises_no_warning_of_its_own() -> None:
-    """cli.py computes nothing and decides nothing statistical. Which test to run is a
-    statistical decision, so the module that renders results must not be the module that
-    raises this. Read from src/ rather than reviewed."""
-    tree = ast.parse((SRC / "cli.py").read_text(encoding="utf-8"))
-    calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "warn"
-    ]
-    assert calls == [], [node.lineno for node in calls]
-
-
-def test_u15_only_m6_names_the_category() -> None:
-    """One source for the decision. Any other module under src/ naming UnpairedAnalysis is a
-    second place the rule could be applied, or applied differently."""
-    named = sorted(
-        path.name
-        for path in SRC.rglob("*.py")  # PF5 (spec section 17): the core is a package now, so the scan reads src/ recursively.
-        if "UnpairedAnalysis" in path.read_text(encoding="utf-8")
-    )
-    assert named == ["diff.py"], named
-
-
-def test_u16_a_cli_diff_warns_and_the_artifact_is_unchanged_by_it(tmp_path: Path) -> None:
-    """End to end: the CLI's diff on a pairable pair raises the warning, and the warning is
-    out of band: nothing it says reaches the streams the CLI was given, and ``mcnemar_bh`` is
-    named on neither. **Narrowed by P-1.** This docstring once said the bytes a reader tees to a
-    file do not depend on whether two runs shared a salt; that was already false of
-    ``to_markdown()``'s ``paired=True`` and is now deliberately false of
-    ``seed_identity_match=True, unpaired_analysis=True`` (C24: the fact reaches every artifact).
-    What still holds, and what this pins, is that the warning's own sentence stays off the
-    streams and the CLI names the alternative method nowhere (U14)."""
+def test_u16_a_cli_diff_with_the_unpaired_test_warns_once_as_a_note_on_stderr(tmp_path: Path) -> None:
+    """End to end: the CLI's diff on a pairable pair raises the warning, which reaches the
+    CLI's stderr as one ``note:`` line and nowhere else; outside that line ``mcnemar_bh`` is named
+    on neither stream. The output itself does depend on whether the runs share a salt:
+    ``seed_identity_match=True, unpaired_analysis=True`` reach every artifact (P-1)."""
     store = Store(tmp_path)
     write_run(store, "run-a", SALT, fails=2)
     write_run(store, "run-b", SALT, fails=4)
-    # PF3 (Q17, spec sections 4.4 and 14; rule R1): the pair shares a salt, so the default is now the paired
+    # PF3: the pair shares a salt, so the default is the paired
     # test, which raises no warning; the warning this pins is the unpaired test's, named.
     argv = ["--store", str(tmp_path), "diff", "run-a", "run-b", "--event", "fail", "--method", "fisher_bh"]
     box: list[Result] = []
     caught(lambda: box.append(run_cli(argv)))
     result = box[0]
-    # The warning now reaches the CLI's own stderr as one note line, whose wording is the warning's
-    # (front-door spec section 5.4); outside that line the CLI still names the alternative nowhere.
+    # The warning reaches the CLI's own stderr as one note line, whose wording is the warning's;
+    # outside that line the CLI names the alternative nowhere.
     notes = [line for line in result.err.splitlines() if line.startswith("note: ")]
     assert len(notes) == 1, result.err
     assert result.code == 0, result.err

@@ -1,23 +1,22 @@
 """MC -- the Modal backend hands a sweep's ``[chaos]`` table to its containers, and the shared
 orchestration refuses a chaos run whose rows come back without the per-row chaos record.
 
-The rulings of 2026-09-26 ("Modal chaos fix" in the decisions log), on the check that
-found ``run_modal`` never passing ``[chaos]`` into its containers: every episode of a faulted
-Modal arm ran with no fault while its manifest recorded the fault as requested, so the arm was a
-second control arm that read as a clean measurement.
+What goes wrong without them: if ``run_modal`` does not pass ``[chaos]`` into its containers,
+every episode of a faulted Modal arm runs with no fault while its manifest records the fault as
+requested, so the arm is a second control arm that reads as a clean measurement.
 
-- **MC1, MC2** (ruling 1): the chaos settings travel into the containers the way the capture
+- **MC1, MC2** (the hand-off): the chaos settings travel into the containers the way the capture
   settings already do, and ``worker_batch`` receives them. Driven through the real
   ``run_modal``, ``_ModalMapper`` and ``_container_batch``: a chaos sweep's rollouts see the
   same chaos settings on the Modal path as on ``run_local``, and every ok Modal row carries
   ``backend_meta["chaos"]``, the record of what its container armed.
-- **MC3, MC4** (ruling 2): ``run_with_mapper`` is the orchestration every mapper backend shares
+- **MC3, MC4** (the refusal): ``run_with_mapper`` is the orchestration every mapper backend shares
   (Modal's, and the seam a Burla backend plugs into). It refuses a chaos run whose ok rows come
   back without ``backend_meta["chaos"]``, loudly, naming the run and the missing record, whichever
   mapper produced them. MC4 is its scope: a run without ``[chaos]``, and a chaos run's errored
   rows (which carry no ``backend_meta`` from a container), are not refused.
 
-**The harness is the check's** (the project's records of the check). Only the ``modal``
+**The harness.** Only the ``modal``
 package is replaced: a stub placed in ``sys.modules`` before ``run_modal`` imports it, whose
 ``Function.map`` pickles the map items across a process boundary and calls the shipped function
 on each in a fresh spawned interpreter, which is what a Modal container does with it. Everything
@@ -30,9 +29,8 @@ spawned interpreter and hands JSON-native results back through a pipe, and the p
 never installs. Spawn rather than fork, so an arm inherits nothing the pytest process holds.
 
 **The target** is in this file, not under ``examples/``: one chat completion at the declared
-position ``solve`` over ``httpx.MockTransport`` (no socket). It records the injection block the
-executor opened around the episode, if any, and the content it received. A faulted episode
-falls; an untouched one survives.
+position ``solve`` over ``httpx.MockTransport`` (no socket). It records the content it received.
+A faulted episode falls; an untouched one survives.
 """
 
 from __future__ import annotations
@@ -45,7 +43,6 @@ import multiprocessing
 import pickle
 import socket
 import sys
-import time
 import traceback
 import types
 from collections.abc import Callable, Iterator, Sequence
@@ -58,6 +55,7 @@ import pytest
 from poisson_prove import chaos
 from poisson_prove.episode import Episode
 from poisson_prove.store import Store, StoreError
+from isolated_support import isolated as run_isolated
 
 MODULE = __name__
 TARGET = f"{MODULE}:rollout"
@@ -95,8 +93,6 @@ def _handler(request: httpx.Request) -> httpx.Response:
 
 
 def rollout(cfg: dict[str, Any], seed: int) -> Episode:
-    block = chaos._BLOCK
-    seen = None if block is None else {"fault": block.spec.fault, "rate": block.spec.rate, "steps": list(block.spec.steps)}
     with httpx.Client(transport=httpx.MockTransport(_handler), base_url="http://scripted.invalid") as client:
         with chaos.position("solve", 1):
             response = client.post("/v1/chat/completions", json={"model": "scripted-model", "messages": [{"role": "user", "content": "hi"}]})
@@ -106,7 +102,7 @@ def rollout(cfg: dict[str, Any], seed: int) -> Episode:
         outcome="fell" if injected else "survived",
         t=1.0 if injected else HORIZON,
         horizon=HORIZON,
-        meta={"chaos_block": seen, "content": content},
+        meta={"content": content},
     )
 
 
@@ -305,44 +301,9 @@ def child_mapper(root: str, table: dict[str, Any] | None, target: str, hands_ove
 # ---------- running an arm in its own interpreter ----------
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    _arm_tripwire()
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
 def isolated(fn: Callable[..., Any], *args: Any) -> Any:
     """Run ``fn(*args)`` in a fresh spawned interpreter with the tripwire armed; return its result."""
-    ctx = multiprocessing.get_context("spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + ARM_DEADLINE_S
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {ARM_DEADLINE_S}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
+    return run_isolated(fn, *args, timeout=ARM_DEADLINE_S, method="spawn", prepare=_arm_tripwire)
 
 
 def rows(root: Path, run_id: str) -> list[dict[str, Any]]:
@@ -360,7 +321,6 @@ def rows(root: Path, run_id: str) -> list[dict[str, Any]]:
                 "key": (row.config["body"], int(row.replicate_index)),
                 "outcome": row.outcome if isinstance(row.outcome, str) else None,
                 "error": row.error if isinstance(row.error, str) else None,
-                "saw": meta.get("chaos_block"),
                 "content": meta.get("content"),
                 "record": backend_meta.get("chaos"),
             }
@@ -405,10 +365,9 @@ def test_mc1_a_chaos_sweep_on_the_modal_path_hands_each_rollout_the_chaos_settin
     assert modal["modal_file"] == STUB_FILE and modal["shipped"] and set(modal["shipped"]) == {"poisson_prove.executor_modal._container_batch"}, modal
     local_rows = rows(local_root, local["run_id"])
     modal_rows = rows(modal_root, modal["run_id"])
-    assert len(local_rows) == N_ROWS and all(r["saw"] == CHAOS and r["outcome"] == "fell" for r in local_rows), local_rows  # the reference arm
+    assert len(local_rows) == N_ROWS and all(r["outcome"] == "fell" for r in local_rows), local_rows  # the reference arm
     assert len(modal_rows) == N_ROWS and all(r["error"] is None for r in modal_rows), modal_rows
-    assert {r["key"]: r["saw"] for r in modal_rows} == {r["key"]: r["saw"] for r in local_rows}, "the Modal path's rollouts did not receive [chaos]"
-    assert {r["key"]: (r["outcome"], r["content"]) for r in modal_rows} == {r["key"]: (r["outcome"], r["content"]) for r in local_rows}
+    assert {r["key"]: (r["outcome"], r["content"]) for r in modal_rows} == {r["key"]: (r["outcome"], r["content"]) for r in local_rows}, "the Modal path's rollouts did not receive [chaos]"
     assert modal["summary"] == local["summary"] == {"n_ok": N_ROWS, "n_errored": 0, "complete": True}
 
 
@@ -467,7 +426,7 @@ def test_mc3b_the_modal_path_is_refused_when_its_containers_return_rows_without_
 
 
 def test_mc4_a_run_without_chaos_and_a_chaos_runs_errored_rows_are_not_refused(tmp_path: Path) -> None:
-    """Green before and after on its own: it pins the refusal's reach, not the fix."""
+    """Passes with or without the refusal: it pins the refusal's reach, not the refusal."""
     bare = isolated(child_mapper, str(tmp_path / "bare"), None, TARGET, False)
     assert bare.get("summary") == {"n_ok": N_ROWS, "n_errored": 0, "complete": True}, bare
     assert "chaos" not in Store(tmp_path / "bare" / "store").manifest(bare["run_id"]).environment

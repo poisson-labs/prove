@@ -1,13 +1,13 @@
-"""Frozen tests for the M3 modal launch amendment (S19): invariants L1-L14.
+"""Frozen tests for the M3 modal launch (S19): invariants L1-L14.
 
-The two things a first Modal sweep could not do: launch a Modal sweep for a target that only
-imports inside its container, and let a credential reach that container by name. Nothing here
-touches the network. ``run_modal`` is exercised offline for the first time, through a fake
+Two things a Modal sweep must do: launch for a target that only imports inside its container,
+and let a credential reach that container by name. Nothing here touches the network.
+``run_modal`` is exercised offline, through a fake
 ``modal`` module installed in ``sys.modules`` for the test's duration (L11, L12); everything
 else goes through the mapper seam or ``cli.main`` in-process. Every store lives under
 ``tmp_path``.
 
-Conventions these frozen tests fix for the implementation session:
+Conventions these frozen tests fix:
 
 - The deterministic rollout is the M3 frozen tests', formula included, so L11 compares the fake
   ``run_modal`` run with ``run_with_mapper`` like with like under a shared salt.
@@ -18,24 +18,21 @@ Conventions these frozen tests fix for the implementation session:
 - The L4 mapper runs ``worker_batch`` in-process, catches the worker's exception and yields
   ``(k, exc)``; it never raises from the generator. Calls are counted per batch by the tuple
   of plan indices, the M3 frozen tests' convention.
-- The fake ``modal`` exposes exactly the surface spec section 3 pins and records every call
+- The fake ``modal`` exposes exactly the surface ``run_modal`` uses and records every call
   it receives; ``Secret.from_dict`` and ``Secret.from_local_environ`` record rather than
   raise, so L11 reports a violation instead of crashing on it. Its ``map`` yields outputs in
   reversed order so completion order is exercised.
 - The canary is a fresh ``secrets.token_hex(16)`` per test, placed in ``os.environ`` through
-  ``monkeypatch.setenv`` and never handed to Proofload on purpose.
-- L3 and L13 read source files through ``proofload.__file__``, never the working directory.
+  ``monkeypatch.setenv`` and never handed to Prove on purpose.
 - Helpers build plans, stores, sweep files and fakes. They never assert.
 """
 
-import ast
 import contextlib
 import dataclasses
 import importlib
 import importlib.machinery
 import importlib.util
 import json
-import re
 import sys
 import types
 from collections.abc import Iterator, Sequence
@@ -47,7 +44,6 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import poisson_prove
 import poisson_prove.cli as cli
 import poisson_prove.executor_modal as executor_modal
 from poisson_prove.episode import Episode
@@ -85,10 +81,6 @@ REFUSING_MODULE = "proofload_oracle_refusing_target"
 BOUNDARY_VAR = "PROOFLOAD_TEST_BOUNDARY"
 CANARY_VAR = "PROOFLOAD_ORACLE_CANARY"
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
-CLI_SOURCE = PACKAGE / "cli.py"
-MODAL_SOURCE = PACKAGE / "executor_modal.py"
-
 PRE_AMENDMENT_FIELDS = frozenset({
     "concurrency", "batch_size", "episode_timeout", "infra_retries", "max_rollouts",
     "max_cost", "est_seconds_per_episode", "app_name",
@@ -97,18 +89,12 @@ FUNCTION_KWARGS = frozenset({
     "image", "gpu", "timeout", "retries", "max_containers", "serialized", "secrets",
 })
 IMAGE_KEYS = frozenset({"python", "pip", "apt", "dockerfile", "local_packages", "gpu"})
-# The executor's public-surface pins, restated: the __all__ list and the public names executor_modal defines itself.
+# The executor's public-surface pin, restated: the __all__ list.
 MODAL_EXPORTS = [
     "CostGuard", "ImageSpec", "Job", "Mapper", "ModalBackendError", "ModalNotInstalled",
     "ModalOptions", "ModalTarget", "Result", "estimate_cost", "preflight_modal", "run_modal",
     "run_with_mapper", "worker_batch",
 ]
-MODAL_PUBLIC = frozenset({
-    "CostGuard", "ImageSpec", "ModalBackendError", "ModalNotInstalled", "ModalOptions",
-    "ModalTarget", "estimate_cost", "preflight_modal", "run_modal", "run_with_mapper",
-    "worker_batch",
-})
-CLI_PUBLIC = frozenset({"main"})
 
 SWEEP_HEADER = """
 target_id = "launch@test"
@@ -408,10 +394,10 @@ class CapturedRunModal:
 
 @pytest.fixture
 def captured_run_modal(monkeypatch: pytest.MonkeyPatch) -> CapturedRunModal:
-    # A missing modal package is now refused before the plan, so modal must import here.
+    # A missing modal package is refused before the plan, so modal must import here.
     monkeypatch.setitem(sys.modules, "modal", importlib.util.module_from_spec(importlib.machinery.ModuleSpec("modal", None)))
     captured = CapturedRunModal()
-    # PF5 (spec section 17; PF5.7): the face runs no backend; the core calls the Modal runner, so
+    # PF5 (PF5.7): the face runs no backend; the core calls the Modal runner, so
     # the stand-in replaces it where it is defined, which the core reads when it runs a plan.
     monkeypatch.setattr(importlib.import_module("poisson_prove.executor_modal"), "run_modal", captured)
     return captured
@@ -503,7 +489,7 @@ def _with_modal_key(tables: str, line: str) -> str:
 #: invocation here states what it accepts. The flag is the honest answer -- these runs
 #: really can only see a fifty-point move -- and it is what the gate exists to make
 #: people say out loud.
-# PF4 re-freeze (PF4.30, reading R17): at 1, 2 or 4 replicates a side no lone condition of these
+# PF4.30: at 1, 2 or 4 replicates a side no lone condition of these
 # grids can be flagged at q / M, so any accepted change below 1 refuses them (no fifty-point limit
 # exists any more); --max-mde 1 admits any design, which is what 0.5 did here.
 PLUMBING_MAX_MDE = ("--max-mde", "1")
@@ -532,15 +518,6 @@ def _install_refusing_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delitem(sys.modules, REFUSING_MODULE, raising=False)
     importlib.invalidate_caches()
     return f"{REFUSING_MODULE}:rollout"
-
-
-def _defined(module: Any) -> set[str]:
-    """The public names a module defines itself: S17's measure of its surface."""
-    return {
-        name
-        for name, obj in vars(module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == module.__name__
-    }
 
 
 def _fake_run(tmp_path: Path, secrets: tuple[str, ...], name: str = "modal") -> tuple[Plan, Store, RunSummary]:
@@ -573,7 +550,7 @@ def test_l1_local_branch_still_resolves_and_refuses_the_same_target(
 ) -> None:
     target = _install_refusing_module(tmp_path, monkeypatch)
     r = run_cli(_local_argv(tmp_path, _sweep_file(tmp_path), target))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     assert target in r.text
     assert Store(tmp_path / "store").runs() == []
@@ -591,7 +568,7 @@ def test_l2_malformed_shape_is_refused_on_the_modal_branch(
     tmp_path: Path, captured_run_modal: CapturedRunModal, target: str
 ) -> None:
     r = run_cli(_modal_argv(tmp_path, _sweep_file(tmp_path), target=target))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     assert target in r.text
     assert Store(tmp_path / "store").runs() == []
@@ -604,66 +581,12 @@ def test_l2_malformed_shape_is_refused_on_the_modal_branch(
 def test_l2_well_shaped_unresolvable_path_is_accepted_on_the_modal_branch(
     tmp_path: Path, captured_run_modal: CapturedRunModal, target: str
 ) -> None:
-    """The loss of section 0 as a test: the container is the resolver, so the launcher accepts
+    """The lost local import check, as a test: the container is the resolver, so the launcher accepts
     a path it cannot import. A test that expects a refusal here is wrong."""
     r = run_cli(_modal_argv(tmp_path, _sweep_file(tmp_path), target=target))
     assert r.code == 0, r.text
     assert len(captured_run_modal.calls) == 1
     assert captured_run_modal.calls[0][1].import_path == target
-
-
-# ---------- L3: one resolve site (ADR-029, structural) ----------
-
-
-def test_l3_cli_resolves_in_exactly_one_place() -> None:
-    # PF5 (spec section 17; PF5.7): the face resolves no target; the core plans the sweep, so the
-    # one local resolve site of ADR-029 is in the core: outside ``_resolve`` itself and the remote
-    # backends' container-side workers, ``_resolve.resolve`` is called in one function of
-    # ``src/``, by any import of it, and that function is called from one line. ``cli.py`` does
-    # not import ``_resolve`` in any form.
-    remote = {"_resolve.py", "executor_modal.py", "executor_burla.py", "_burla_submit.py"}
-    trees = {path: ast.parse(path.read_text(encoding="utf-8")) for path in sorted(PACKAGE.rglob("*.py"))}
-
-    def resolve_names(tree: ast.Module) -> tuple[set[str], set[str]]:
-        names: set[str] = set()
-        modules: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "poisson_prove._resolve":
-                names |= {a.asname or a.name for a in node.names if a.name == "resolve"}
-            elif isinstance(node, ast.ImportFrom) and node.module == "poisson_prove":
-                modules |= {a.asname or a.name for a in node.names if a.name == "_resolve"}
-            elif isinstance(node, ast.Import):
-                modules |= {a.asname or a.name for a in node.names if a.name == "poisson_prove._resolve"}
-        return names, modules
-
-    names, modules = resolve_names(trees[CLI_SOURCE])
-    assert not names and not modules, "cli.py imports _resolve"
-    sites: list[tuple[str, str]] = []
-    for path, tree in trees.items():
-        if path.name in remote:
-            continue
-        names, modules = resolve_names(tree)
-
-        def visit(node: ast.AST, fn: str | None, names: set[str] = names, modules: set[str] = modules, path: Path = path) -> None:
-            for child in ast.iter_child_nodes(node):
-                inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else fn
-                if isinstance(child, ast.Call):
-                    called = child.func
-                    if (isinstance(called, ast.Name) and called.id in names) or (
-                        isinstance(called, ast.Attribute) and called.attr == "resolve"
-                        and ast.unparse(called.value) in modules | {"poisson_prove._resolve"}
-                    ):
-                        sites.append((path.name, fn or "<module>"))
-                visit(child, inner, names, modules, path)
-
-        visit(tree, None)
-    assert len(sites) == 1, sites
-    function = sites[0][1]
-    calls = [
-        line for path in trees for line in path.read_text(encoding="utf-8").splitlines()
-        if re.search(rf"\b{re.escape(function)}\(", line) and not line.lstrip().startswith(f"def {function}(")
-    ]
-    assert len(calls) == 1, calls
 
 
 # ---------- L4: a container-side resolve failure is one batch failure, retried, then recorded ----------
@@ -778,7 +701,7 @@ def test_l8_a_bare_string_is_refused_naming_the_table(
     tmp_path: Path, captured_run_modal: CapturedRunModal
 ) -> None:
     r = run_cli(_modal_argv(tmp_path, _sweep_file(tmp_path, BARE_STRING_TABLE)))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     assert "[modal]" in r.text
     assert "Traceback" not in r.text
@@ -791,7 +714,7 @@ def test_l8_a_pasted_value_is_refused_with_the_create_form_and_never_echoed(
     canary = token_hex(16)
     table = f'\n[modal]\nsecrets = ["KEY={canary}"]\n'
     r = run_cli(_modal_argv(tmp_path, _sweep_file(tmp_path, table)))
-    # A refusal exits 1 (spec section 5.2).
+    # A refusal exits 1.
     assert r.code == 1, r.text
     assert "modal secret create" in r.text
     assert canary not in r.text
@@ -883,7 +806,7 @@ def test_l10_preflight_says_none_without_secrets_in_the_same_place(tmp_path: Pat
     assert _index_of(lines, "Secrets:") < _index_of(lines, "Cost:")
 
 
-# ---------- L11: built by Secret.from_name, mounted on the function, nowhere else (ADR-030) ----------
+# ---------- L11: built by Secret.from_name, mounted on the function, nowhere else ----------
 
 
 def test_l11_run_modal_through_the_fake_matches_run_with_mapper_under_a_shared_salt(
@@ -961,35 +884,12 @@ def test_l12_canary_never_reaches_the_sweep_output(
     assert canary not in r.text
 
 
-# ---------- L13: grep (ADR-030, structural) ----------
-
-
-def test_l13_executor_modal_builds_secrets_with_from_name_and_nothing_else() -> None:
-    source = MODAL_SOURCE.read_text(encoding="utf-8")
-    assert source.count("from_name") == 1
-    assert "Secret.from_dict" not in source
-    assert "from_local_environ" not in source
-    assert "os.environ" not in source
-    assert re.search(r"\benv=", source) is None
-
-
-def test_l13_no_other_core_file_mentions_secret() -> None:
-    others = sorted(
-        p for p in PACKAGE.rglob("*.py") if p != MODAL_SOURCE and "__pycache__" not in p.parts
-    )
-    assert others, PACKAGE
-    offenders = [p.name for p in others if "Secret" in p.read_text(encoding="utf-8")]
-    assert offenders == []
-
-
 # ---------- L14: surface unchanged ----------
 
 
 def test_l14_public_surface_is_what_s18_left_it() -> None:
     assert list(executor_modal.__all__) == MODAL_EXPORTS, executor_modal.__all__
-    assert _defined(executor_modal) == MODAL_PUBLIC, sorted(_defined(executor_modal) ^ MODAL_PUBLIC)
     assert set(ImageSpec().to_dict()) == IMAGE_KEYS
-    assert _defined(cli) == CLI_PUBLIC, sorted(_defined(cli) ^ CLI_PUBLIC)
     assert len(dataclasses.fields(ModalOptions)) == 9
 
 

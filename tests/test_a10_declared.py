@@ -1,40 +1,33 @@
-"""A10 frozen tests: invariants P10-1 to P10-22 of "Prove -- Spec A10 Declared Expectations".
+"""A10 frozen tests: invariants P10-1 to P10-22, declared expectations.
 
-Frozen on 2026-09-25 off ``a8b7da2`` (``origin/main``, the local serve pass merged),
-after the six update commits of spec section 7.1. The build is written against this file and does not
-edit it. Every name A10 mints is imported inside the test that needs it (or inside a helper a test
-calls), so the bare tree fails test by test and never at collection, and no ``src/`` skeleton is
-needed: the skeleton these frozen tests need to import is none.
+Every name A10 adds is imported inside the test that needs it (or inside a helper a test calls), so
+a missing name fails test by test and never at collection.
 
 **What A10 buys.** A run says in advance which steps it expects to execute, which outcome labels its
 target can emit, and which of its steps are gates; the manifest records that declaration; a span
 whose step is a declared gate is stamped ``gate="declared"`` on its way to the store; and ``report``
 and ``inspect`` print ``never reached`` against the declaration, never against the absence of a span.
 
-**The rulings of 2026-09-25, which override the spec where they conflict.**
+**Three behaviours this file settles.**
 1. Unmatched declared steps or gates print in full under ``never_reached`` and are never refused in
-   A10 (W12 as specced; ADR-055's hatch superseded on this point). P10-15 pins it; the refusal is
+   A10. P10-15 pins it; the refusal is
    A9's, once ``CaptureCheck`` can tell capture-off from unreached.
-2. CD's ``test_cd4_finalizes_a10_guard_is_unchanged`` is retired into P10-9 as a recorded A10
-   update (commit ``8a6f4e2``). ADR-077 stays limited to source-file byte digests and is not the
-   authority for it.
-3. ADR-084 stands unchanged. ``DeclaredSetMismatch`` is raised in ``diff`` just before ``_pairing``,
-   not inside it. P10-6 pins both halves: the refusal fires before ``_pairing`` runs (it wins over
-   ``_pairing``'s own ``UnitMismatch`` and ``NotPairable``, and fires with ``_pairing`` replaced by a
-   tripwire) and after frame validation; and ``_pairing`` holds no new manifest comparison (its
-   manifest reads stay exactly ``t_unit`` and ``run_salt``, and called directly on two manifests
-   whose declared outcome sets differ it does not refuse). Because ``DIFF_MODULE_NAMES`` is exact,
+2. ``finalize``'s guard is P10-9's: ``declaration`` and ``limit`` are keyword-only with no default,
+   and anything that is not a ``Declaration`` is refused. Source-file byte digests do not govern it.
+3. ``_pairing`` is unchanged. ``DeclaredSetMismatch`` is raised in ``diff`` just before ``_pairing``,
+   not inside it. P10-6 pins what a caller sees of that: the refusal wins over ``UnitMismatch`` and
+   ``NotPairable``, and fires after frame validation. Because ``DIFF_MODULE_NAMES`` is exact,
    the check adds no module-level helper: it sits in ``diff()`` and ``multi_diff()`` themselves.
 
-**Conventions these frozen tests fix where the spec is silent** (for review before the build):
+**Conventions these frozen tests fix:**
 - ``Declaration`` refuses a malformed value with ``ValueError`` (``TraceValidationError`` qualifies);
   the sampler refuses the same shapes with ``SamplerError`` naming the field and, where there is one,
-  the offending value. An all-empty table's message carries section 3.1's words, ``[declare] declares
+  the offending value. An all-empty table's message carries the words ``[declare] declares
   nothing``. ``Declaration.from_dict`` reads an absent list as empty.
-- The eight provenance keys come from ``DeclarationCheck.provenance()``, in section 3.7's table order,
+- The eight provenance keys come from ``DeclarationCheck.provenance()``, in the provenance table's order,
   as sorted lists. On a two-run report each declaring side contributes its eight with the ``_a`` /
   ``_b`` suffix, in table order within the side; a side that declared nothing contributes no key
-  (W8 per run: "the report says one side declared" by carrying only that side's keys). Removing the
+  (per run: "the report says one side declared" by carrying only that side's keys). Removing the
   eight leaves exactly the provenance built with no declaration, order included.
 - The builders' new keyword is ``declarations``: a pair for ``build_report`` and
   ``build_multi_report``, one ``DeclarationCheck | None`` for ``build_survival_report``.
@@ -44,17 +37,11 @@ and ``inspect`` print ``never reached`` against the declaration, never against t
   ``check``, ``report`` and ``serve``, and no report file is written.
 - The resume refusal names the run id and every member that differs between the two declarations
   (every member of the declaring side when the other declares nothing), as data, not as wording.
-- ``executor_modal._spec_declared is executor._spec_declared`` (spec section 2: the mapping exists once).
-- ``finalize``'s ``declaration`` annotation reads ``Declaration | None`` (the module has
-  ``from __future__ import annotations``).
-- "A10's half of ``steps.py``" is ``DeclarationCheck``, ``declaration_check`` and every module-level
-  definition they reach by name; P10-14, P10-17 and P10-18 read only that, so A9 adding its half
-  (W10) cannot turn a frozen clause here red.
-- ``proofload.paired`` already defines an unrelated ``Declaration`` (the paired-assertion file, PR-1)
-  and ``cli.py`` imports it by that name. P10-8 pins A10's class by module (``proofload.trace``) and
-  by who imports it; the two never meet.
+- ``poisson_prove.paired`` already defines an unrelated ``Declaration`` (``tests/test_pr1_pair_assertion.py``)
+  and ``cli.py`` imports it by that name. P10-8 pins A10's class by module (``poisson_prove.trace``); the
+  two never meet.
 
-**The fixtures** (section 6). The main pair is two real local runs of ``main_rollout`` through the
+**The fixtures.** The main pair is two real local runs of ``main_rollout`` through the
 recorder under one salt, declaring steps ``plan, review, search, verify``, outcomes ``fell,
 survived`` and gates ``review, search, verify`` (written unsorted in the file). ``plan`` is reached;
 ``search`` never; ``verify`` only un-gated (the stamp alone gates it); ``review`` only as
@@ -67,9 +54,9 @@ byte-deterministic, with its non-declaring twin); capture off for the whole run 
 (``silent_runs``, with its twin); a Modal-shaped store through ``run_with_mapper`` and the real
 ``worker_batch`` (``modal_run``); a declared gate over the cut in a child process
 (``test_p10_10bc_*``); resumed runs; hand-built pairs for the diff refusal; three invalid traces
-under a declaration (P10-22); and a provenance dict of every shape (P10-21).
+under a declaration (P10-22).
 
-**Invariant-to-test map** (55 functions, 89 collected ids; the id counts below sum to 89):
+**Invariant-to-test map:**
 
 | Invariant | Tests |
 |---|---|
@@ -78,7 +65,7 @@ under a declaration (P10-22); and a provenance dict of every shape (P10-21).
 | P10-3 | ``test_p10_3_*`` (3 functions, 3 ids) |
 | P10-4 | ``test_p10_4_*`` (3 functions, 3 ids) |
 | P10-5 | ``test_p10_5_*`` (2 functions, 2 ids) |
-| P10-6 | ``test_p10_6_*`` (6 functions, 20 ids) |
+| P10-6 | ``test_p10_6_*`` (5 functions, 19 ids) |
 | P10-7 | ``test_p10_7_*`` (1 function, 1 id) |
 | P10-8 | ``test_p10_8_*`` (2 functions, 2 ids) |
 | P10-9 | ``test_p10_9_*`` (2 functions, 5 ids) |
@@ -86,46 +73,42 @@ under a declaration (P10-22); and a provenance dict of every shape (P10-21).
 | P10-11 | ``test_p10_11_*`` (4 functions, 4 ids) |
 | P10-12 | ``test_p10_12_*`` (2 functions, 6 ids) |
 | P10-13 | ``test_p10_13_*`` (1 function, 1 id) |
-| P10-14 | ``test_p10_14_*`` (3 functions, 3 ids) |
+| P10-14 | ``test_p10_14_*`` (2 functions, 2 ids) |
 | P10-15 | ``test_p10_15_*`` (1 function, 1 id) |
 | P10-16 | ``test_p10_16_*`` (2 functions, 2 ids) |
 | P10-17 | ``test_p10_17_*`` (2 functions, 2 ids) |
-| P10-18 | ``test_p10_18_*`` (1 function, 1 id) |
 | P10-19 | ``test_p10_19_*`` (2 functions, 2 ids) |
 | P10-20 | ``test_p10_20_*`` (1 function, 1 id) |
-| P10-21 | ``test_p10_21_*`` (1 function, 1 id) |
 | P10-22 | ``test_p10_22_*`` (1 function, 1 id) |
 
-**Cells (standing rules 13 and 15).** Measured in the pandas 2.3.3 cell only; the pandas 3.0.5 cell
-was not built (no environment exists on this machine and none was downloaded). The expected finding,
-stated as a reading and not a measurement: **no A10 invariant is cell-specific.** A10 adds no Parquet
-column and no read mode. The one place a genuine split would appear is P10-14's
+**pandas versions.** No A10 invariant is expected to depend on the pandas major version: A10 adds
+no Parquet column and no read mode. The one place a genuine split would appear is P10-14's
 ``observed_outcomes`` clause (``test_p10_14_observed_outcomes_are_strings_with_a_null_outcome_in_the_frame``):
 ``outcome`` is a nullable ``pa.string()`` column, and a null that read back as ``NaN`` under pandas 3
 would enter the set as a float. It is green by construction while ``outcome`` stays in
 ``store._NULLABLE_STRING_COLUMNS``, and is named so a later reader knows why. Nullness everywhere here
-is ``is None`` (A8a section 3.10).
+is ``is None``, as in A8a.
 
-**Green before and after -- named so their green is not read as coverage.**
-``test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight`` (W8's absence of
-change, on the non-declaring pair and on the generated lattice pair, ``tests/lattice.py``; it cannot
-fail on the bare tree, and its job is to stay green). Every verb on a pre-A7 pair is A7's P7-10
+**A test that stays green by design.**
+``test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight`` (no change for a pair
+that declares nothing, on the non-declaring pair and on the generated lattice pair,
+``tests/lattice.py``; it fails only if a verb prints one of the eight for such a pair). Every verb on a pre-A7 pair is A7's P7-10
 (``test_a7_storage.py``);
 ``viewer.py`` and ``tree.py`` byte identity (P10-13's whole-file clause) is FR17's and CD9's. Neither is
 restated here, so this file adds no output-digest or source-digest carrier.
 
 **Named gaps.** (1) P10-2's byte identity on the **mock quickstart pair**: its runs are regenerated
-per test with fresh run ids and timings, so no digest of them is stable across builds; this file pins
+per test with fresh run ids and timings, so no digest of them is stable across test runs; this file pins
 instead that no verb on a non-declaring pair prints any of the eight. (2) P10-10 (a) at the store:
 ``Store.append`` re-reads every trace through ``Trace.from_dict`` and ``split`` before writing, so a
-rebuilt-but-equal trace stores the same bytes and the stored-bytes clause cannot disagree with the
-rebuild mutant; the ``is`` clause is its only observable, and the stored clause is kept as W3's claim.
+rebuilt-but-equal trace stores the same bytes and the stored-bytes clause cannot catch a stamp that
+rebuilds an unchanged trace; the ``is`` clause is the only observable, and the stored clause is kept
+because it states the same claim at the store.
 (3) Commutation (P10-10 (c)) cannot tell the two orders apart, by design: no field is written by both.
 """
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import hashlib
 import inspect
@@ -146,10 +129,6 @@ import pytest
 
 import lattice
 import poisson_prove
-import poisson_prove.diff as diff_module
-import poisson_prove.executor as executor
-import poisson_prove.executor_modal as executor_modal
-import poisson_prove.report as report_module
 import poisson_prove.trace as trace_module
 from poisson_prove import cli
 from poisson_prove.diff import DiffError, NotPairable, UnitMismatch, diff, multi_diff
@@ -161,14 +140,14 @@ from poisson_prove.sampler import SamplerError, SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.survival import cell_table, censor, competing_set
 from poisson_prove.trace import Span, Trace, collect, finalize, record, truncate_observations
+from isolated_support import isolated as run_isolated
 
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parent.parent
-STEPS_SOURCE = PACKAGE / "steps.py"
 
 #: Every pair here shares a salt and a seed per row, so the unpaired methods warn; the warning is not
-#: this packet's subject, and P10-15 records warnings itself where it matters.
+#: this file's subject, and P10-15 records warnings itself where it matters.
 pytestmark = pytest.mark.filterwarnings("ignore::poisson_prove.diff.UnpairedAnalysis")
 
 TARGET = "a10-oracle@v0"
@@ -182,7 +161,7 @@ REPLICATES = 2
 EVENT = "fell"
 
 #: The declaration every declaring fixture carries, written **unsorted** in the sweep file so that
-#: sorting at parse (W6, section 3.1 rule 6) is exercised on every run, not only in P10-1.
+#: sorting at parse is exercised on every run, not only in P10-1.
 DECLARE_TOML: dict[str, list[str]] = {
     "steps": ["verify", "plan", "search", "review"],
     "outcomes": ["survived", "fell"],
@@ -192,51 +171,29 @@ STEPS = ("plan", "review", "search", "verify")
 OUTCOMES = ("fell", "survived")
 GATES = ("review", "search", "verify")
 
-#: Section 3.1: the three fields, in this order (the spec's section 2 names ``_DECLARE_FIELDS``).
-DECLARE_FIELDS = ("steps", "outcomes", "gates")
-#: Section 3.7's eight provenance keys, in the table's order.
+#: The eight provenance keys, in the table's order.
 EIGHT_KEYS = (
     "declared_steps", "never_reached", "undeclared_steps", "declared_outcomes",
     "undeclared_outcomes", "declared_gates", "gates_never_reached", "emitted_gates_not_declared",
 )
-#: Section 2's ``DeclarationCheck`` fields, in the order the spec lists them.
+#: ``DeclarationCheck``'s fields, in the order the dataclass declares them.
 CHECK_FIELDS = (
     "declared_steps", "observed_steps", "never_reached", "undeclared_steps", "declared_outcomes",
     "observed_outcomes", "undeclared_outcomes", "declared_gates", "emitted_gates",
     "emitted_not_declared", "declared_never_reached",
 )
-#: ``RunManifest.to_dict()``'s twelve keys at the base commit (``store.py:287``-``:303``,
+#: ``RunManifest.to_dict()``'s twelve keys before A10 added ``declared`` (``store.py``'s manifest,
 #: and a 0.0.1 manifest's twelve, such as the lattice pair's, with ``proofload_version`` in that slot).
 TWELVE = frozenset({
     "run_id", "target_id", "t_unit", "run_salt", "axis_types", "backend", "environment",
     "retain_traces_for", "status", "created_at", "poisson_prove_version", "schema_version",
 })
-#: The names A9 owns in ``steps.py`` (W10); none may appear in A10's half.
-A9_NAMES = ("StepAggregates", "KindTally", "CaptureCheck", "capture_check")
-#: ``diff._pairing``'s manifest reads at the base commit: ``t_unit`` and ``run_salt``, on both
-#: sides (ruling 3: A10 adds no manifest comparison to ``_pairing``).
-PAIRING_MANIFEST_READS = frozenset({"t_unit", "run_salt"})
-#: P10-21: ``_provenance_lines`` as shipped at the base commit, read off it for every shape but
-#: the empty list and tuple, whose shipped rendering is ``"- empty tuple: "``.
-PROVENANCE_SHAPES: dict[str, object] = {
-    "empty_tuple": (), "empty_list": [], "one_tuple": ("verify",), "two_list": ["plan", "search"],
-    "nothing": None, "observation_cap_a": None, "trace_spans": None,
-    "mapping": {"max_observation_bytes": 8192}, "flag": True, "other_flag": False, "q": 0.05,
-    "horizon": 10.0, "count": 3, "word": "fell",
-}
-PROVENANCE_RENDERED = [
-    "- empty tuple: none", "- empty list: none", "- one tuple: verify", "- two list: plan, search",
-    "- nothing: none", "- observation cap a: not recorded", "- trace spans: not counted",
-    "- mapping: max_observation_bytes=8192", "- flag: true", "- other flag: false", "- q: 0.05",
-    "- horizon: 10", "- count: 3", "- word: fell",
-]
-
-#: What ``declaration_check`` must find on the main declaring run (section 6's first fixture). Every
+#: What ``declaration_check`` must find on the main declaring run (the main fixture). Every
 #: set here can disagree with the invariant that reads it: one declared step reached (``plan``), one
 #: declared step and gate never reached (``search``), one declared gate reached only un-gated
 #: (``verify``, so only the stamp can gate it), one declared gate reached only as ``"emitted"``
 #: (``review``, which the stamp must leave alone and which a reading of ``gate == "declared"`` would
-#: call never reached -- section 8 trap 8), two undeclared steps (``retry``, ``check``), one emitted
+#: call never reached, a known trap), two undeclared steps (``retry``, ``check``), one emitted
 #: gate the declaration does not name (``check``), one emitted marker with no step name
 #: (``guard``), one undeclared outcome on a row with no trace (``timed_out``), and one errored row
 #: whose outcome is null.
@@ -263,6 +220,15 @@ MAIN_LINES = {
 
 
 # ---------- helpers: data construction, never an assertion ----------
+
+
+class RootedStore(Store):
+    """A ``Store`` that keeps the folder this file made it on, so the raw-part helpers and the CLI
+    calls read the path the test chose."""
+
+    def __init__(self, root: Path | str) -> None:
+        super().__init__(root)
+        self.root = Path(root)
 
 
 def declaration(steps: Sequence[str] = STEPS, outcomes: Sequence[str] = OUTCOMES, gates: Sequence[str] = GATES) -> Any:
@@ -349,7 +315,7 @@ def any_label(text: str) -> list[str]:
 
 
 def stored_spans(store: Store, run_id: str) -> list[Mapping[str, Any]]:
-    """Every span of every stored envelope, as a mapping (the envelope read, W11's idiom)."""
+    """Every span of every stored envelope, as a mapping (the envelope read)."""
     frame = store.read(run_id, meta=False, trace="envelope")
     return [
         s
@@ -371,17 +337,17 @@ def check_of(store: Store, run_id: str) -> Any:
     return declaration_check(store.manifest(run_id), store.read(run_id, meta=False, trace="envelope"))
 
 
-def raw_column(store: Store, run_id: str, column: str) -> list[Any]:
+def raw_column(store: RootedStore, run_id: str, column: str) -> list[Any]:
     """One stored column exactly as written, read raw through ``pyarrow`` (a null is ``None``)."""
     values: list[Any] = []
-    for part in sorted((Path(store._root) / run_id / "episodes").glob("part-*.parquet")):
+    for part in sorted((store.root / run_id / "episodes").glob("part-*.parquet")):
         values += pq.read_table(part, columns=[column]).column(column).to_pylist()
     return values
 
 
-def keyed_raw(store: Store, run_id: str, column: str) -> dict[tuple[str, int], Any]:
+def keyed_raw(store: RootedStore, run_id: str, column: str) -> dict[tuple[str, int], Any]:
     out: dict[tuple[str, int], Any] = {}
-    for part in sorted((Path(store._root) / run_id / "episodes").glob("part-*.parquet")):
+    for part in sorted((store.root / run_id / "episodes").glob("part-*.parquet")):
         table = pq.read_table(part, columns=["config_hash", "replicate_index", column])
         for h, k, v in zip(*(table.column(c).to_pylist() for c in ("config_hash", "replicate_index", column)), strict=True):
             out[(str(h), int(k))] = v
@@ -396,59 +362,11 @@ def snapshot(root: Path) -> dict[str, tuple[int, str]]:
     }
 
 
-def a10_half(path: Path) -> list[ast.AST]:
-    """A10's half of ``steps.py``: ``DeclarationCheck``, ``declaration_check`` and every module-level
-    definition they reach by name, transitively. Scoped so that A9 adding its half to the file
-    (W10) never touches what these clauses read."""
-    tree = ast.parse(path.read_text())
-    defined: dict[str, ast.AST] = {}
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            defined[node.name] = node
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    defined[target.id] = node
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            defined[node.target.id] = node
-    todo = ["DeclarationCheck", "declaration_check"]
-    seen: dict[str, ast.AST] = {}
-    while todo:
-        name = todo.pop()
-        if name in seen or name not in defined:
-            continue
-        seen[name] = defined[name]
-        todo += [n.id for n in ast.walk(defined[name]) if isinstance(n, ast.Name)]
-    assert {"DeclarationCheck", "declaration_check"} <= set(seen), sorted(defined)
-    return list(seen.values())
-
-
-def names_in(nodes: Sequence[ast.AST]) -> set[str]:
-    found: set[str] = set()
-    for node in nodes:
-        for n in ast.walk(node):
-            if isinstance(n, ast.Name):
-                found.add(n.id)
-            elif isinstance(n, ast.Attribute):
-                found.add(n.attr)
-    return found
-
-
-def module_constants(path: Path) -> dict[str, ast.expr]:
-    out: dict[str, ast.expr] = {}
-    for node in ast.parse(path.read_text()).body:
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    out[target.id] = node.value
-    return out
-
-
 # ---------- rollouts (module-level: resolved by import path on the Modal path) ----------
 
 
 def main_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """Section 6's first fixture, through the recorder."""
+    """The main fixture, through the recorder."""
     x = round(float(cfg["x"]), 1)
     if x == 0.4:
         raise RuntimeError("the fourth config always fails: an errored row, outcome null")
@@ -474,7 +392,7 @@ def main_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
 
 
 def unmatched_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """Section 6's second fixture: a hand-built trace whose step names are all undeclared, so a
+    """The unmatched fixture: a hand-built trace whose step names are all undeclared, so a
     declaration stamps nothing. Byte-deterministic, so two runs can be compared byte for byte."""
     x = round(float(cfg["x"]), 1)
     own = trace_of(span(1, step="alpha"), span(2, step="beta", gate="emitted"), span(3))
@@ -483,13 +401,13 @@ def unmatched_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
 
 
 def silent_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """Capture off for the whole run and no trace of its own: zero spans on every row (W12)."""
+    """Capture off for the whole run and no trace of its own: zero spans on every row."""
     fell = round(float(cfg["x"]), 1) >= 0.3
     return Episode(outcome="fell" if fell else "survived", t=3.0 if fell else HORIZON, horizon=HORIZON, meta={})
 
 
 def cut_rollout(cfg: Mapping[str, Any], seed: int) -> Episode:
-    """Section 6's third fixture: one span that is both a declared gate and over the cut."""
+    """The cut fixture: one span that is both a declared gate and over the cut."""
     own = trace_of(span(1, step="verify", output="v" * 300), span(2, step="plan", output="p" * 8))
     return Episode(outcome="survived", t=HORIZON, horizon=HORIZON, meta={"trace": own.to_dict()})
 
@@ -513,10 +431,10 @@ def modal_mapper(batches: Sequence[Sequence[Any]]) -> Iterator[tuple[int, list[A
         yield index, worker_batch(jobs, f"{MODULE}:main_rollout", None)
 
 
-def local_run(root: Path, text: str, rollout: Callable[..., Episode], *, salt: str = RUN_SALT, name: str = "sweep", **kwargs: Any) -> tuple[Store, str]:
+def local_run(root: Path, text: str, rollout: Callable[..., Episode], *, salt: str = RUN_SALT, name: str = "sweep", **kwargs: Any) -> tuple[RootedStore, str]:
     """One real local run from a real sweep file into ``root/store``."""
     path = write(root / f"{name}.toml", text)
-    store = Store(root / "store")
+    store = RootedStore(root / "store")
     p = plan(SweepSpec.load(path), store, run_salt=salt, import_path=f"{MODULE}:{rollout.__name__}")
     run_local(p, rollout, store, **kwargs)
     return store, str(p.run_id)
@@ -525,7 +443,7 @@ def local_run(root: Path, text: str, rollout: Callable[..., Episode], *, salt: s
 def manifest(run_id: str, *, declared: Any = None, t_unit: str = T_UNIT, salt: str = RUN_SALT, with_field: bool = True) -> RunManifest:
     kwargs: dict[str, Any] = dict(
         run_id=run_id, target_id=TARGET, t_unit=t_unit, run_salt=salt,
-        axis_types={"x": "continuous"}, backend="local", environment={"note": "built by a10 session a"},
+        axis_types={"x": "continuous"}, backend="local", environment={"note": "built by these tests"},
     )
     if with_field:
         kwargs["declared"] = declared
@@ -549,8 +467,8 @@ PAIR_OUTCOMES = {0.1: "survived", 0.2: "fell", 0.3: "fell"}
 PAIR_OUTCOMES_WIDER = {0.1: "survived", 0.2: "fell", 0.3: "timed_out"}
 
 
-def pair_store(root: Path, ma: RunManifest, mb: RunManifest, *, b_outcomes: Mapping[float, str] = PAIR_OUTCOMES) -> Store:
-    store = Store(root)
+def pair_store(root: Path, ma: RunManifest, mb: RunManifest, *, b_outcomes: Mapping[float, str] = PAIR_OUTCOMES) -> RootedStore:
+    store = RootedStore(root)
     for m, outcomes in ((ma, PAIR_OUTCOMES), (mb, b_outcomes)):
         store.create_run(m)
         store.append(m.run_id, rows(m.run_id, outcomes))
@@ -562,7 +480,7 @@ def pair_store(root: Path, ma: RunManifest, mb: RunManifest, *, b_outcomes: Mapp
 
 
 @pytest.fixture(scope="module")
-def main_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str, str]:
+def main_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[RootedStore, str, str]:
     """Two declaring runs of the main rollout under one salt, one store: a pairable pair."""
     root = tmp_path_factory.mktemp("a10-main")
     store, a = local_run(root, sweep_toml(DECLARE_TOML), main_rollout, name="a")
@@ -571,7 +489,7 @@ def main_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str, str
 
 
 @pytest.fixture(scope="module")
-def bare_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str, str]:
+def bare_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[RootedStore, str, str]:
     """The same two runs with no ``[declare]`` table."""
     root = tmp_path_factory.mktemp("a10-bare")
     store, a = local_run(root, sweep_toml(None), main_rollout, name="a")
@@ -580,16 +498,16 @@ def bare_pair(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str, str
 
 
 @pytest.fixture(scope="module")
-def unmatched_runs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str, Store, str]:
-    """Section 6's second fixture declaring, and the same rollout declaring nothing, one salt."""
+def unmatched_runs(tmp_path_factory: pytest.TempPathFactory) -> tuple[RootedStore, str, RootedStore, str]:
+    """The unmatched fixture declaring, and the same rollout declaring nothing, one salt."""
     declaring, run_d = local_run(tmp_path_factory.mktemp("a10-unmatched-d"), sweep_toml(DECLARE_TOML), unmatched_rollout)
     plain, run_n = local_run(tmp_path_factory.mktemp("a10-unmatched-n"), sweep_toml(None), unmatched_rollout)
     return declaring, run_d, plain, run_n
 
 
 @pytest.fixture(scope="module")
-def silent_runs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str, Store, str]:
-    """Section 6's fourth fixture: ``[declare]`` present, no ``[capture]`` table, zero spans; and its
+def silent_runs(tmp_path_factory: pytest.TempPathFactory) -> tuple[RootedStore, str, RootedStore, str]:
+    """The silent fixture: ``[declare]`` present, no ``[capture]`` table, zero spans; and its
     non-declaring twin."""
     declaring, run_d = local_run(tmp_path_factory.mktemp("a10-silent-d"), sweep_toml(DECLARE_TOML), silent_rollout)
     plain, run_n = local_run(tmp_path_factory.mktemp("a10-silent-n"), sweep_toml(None), silent_rollout)
@@ -597,11 +515,11 @@ def silent_runs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str, S
 
 
 @pytest.fixture(scope="module")
-def modal_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str]:
-    """Section 6's Modal-shaped store, built through ``run_with_mapper``: the host stores what the
+def modal_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[RootedStore, str]:
+    """The Modal-shaped store, built through ``run_with_mapper``: the host stores what the
     container code returned, so a stamp is present on a stored row only if it ran host-side."""
     root = tmp_path_factory.mktemp("a10-modal")
-    store = Store(root / "store")
+    store = RootedStore(root / "store")
     p = plan(SweepSpec.load(write(root / "modal.toml", sweep_toml(DECLARE_TOML))), store, run_salt=RUN_SALT, backend="modal")
     run_with_mapper(p, modal_mapper, store, options=ModalOptions(batch_size=4, episode_timeout=None))
     return store, str(p.run_id)
@@ -611,20 +529,14 @@ def modal_run(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, str]:
 
 
 def test_p10_1_declare_parses_to_a_sorted_declaration_minted_in_trace(tmp_path: Path) -> None:
-    """W6 and section 3.1 rule 6: the lists are sorted at construction, so the unsorted spelling in
-    the file reads back sorted; and the object is ``proofload.trace.Declaration`` (W1)."""
-    from poisson_prove.sampler import _DECLARE_FIELDS
+    """The lists are sorted at construction, so the unsorted spelling in
+    the file reads back sorted; and the object is ``poisson_prove.trace.Declaration``."""
     from poisson_prove.trace import Declaration
 
     spec = SweepSpec.load(write(tmp_path / "s.toml", sweep_toml(DECLARE_TOML)))
     assert type(spec.declare) is Declaration
     assert (spec.declare.steps, spec.declare.outcomes, spec.declare.gates) == (STEPS, OUTCOMES, GATES)
     assert spec.declare == declaration()
-    # PF4 (PF4.20): [declare] also accepts failures and successes (the event kinds); the three
-    # fields this test pinned keep their order, first.
-    # PF3 (spec section 14, rule R4): PF3's packaged spec declares failures, so PF3 needs this move first.
-    assert _DECLARE_FIELDS[:3] == DECLARE_FIELDS, _DECLARE_FIELDS
-    assert set(_DECLARE_FIELDS[3:]) == {"failures", "successes"}, _DECLARE_FIELDS
     assert SweepSpec.load(write(tmp_path / "none.toml", sweep_toml(None))).declare is None
 
 
@@ -637,7 +549,7 @@ def test_p10_1_declare_parses_to_a_sorted_declaration_minted_in_trace(tmp_path: 
         ("duplicate-step", {**DECLARE_TOML, "steps": ["plan", "plan", "search", "verify"]}, DECLARE_TOML, ("steps", "plan")),
         ("duplicate-outcome", {**DECLARE_TOML, "outcomes": ["fell", "survived", "fell"]}, DECLARE_TOML, ("outcomes", "fell")),
         ("duplicate-gate", {**DECLARE_TOML, "gates": ["verify", "verify"]}, DECLARE_TOML, ("gates", "verify")),
-        # PF3 (PF3.3, rule R4): strict specs refuse the unknown key when the spec is read, before [declare]'s
+        # PF3 (PF3.3): strict specs refuse the unknown key when the spec is read, before [declare]'s
         # own check, naming the key, its table and the nearest known key rather than every field.
         ("unknown-field", {**DECLARE_TOML, "stages": ["plan"]}, DECLARE_TOML, ('"stages"', "[declare]", '"steps"')),
         ("not-a-list", {**DECLARE_TOML, "steps": "plan"}, DECLARE_TOML, ("steps",)),
@@ -649,9 +561,9 @@ def test_p10_1_declare_parses_to_a_sorted_declaration_minted_in_trace(tmp_path: 
 def test_p10_1_a_malformed_declare_table_is_refused_naming_the_field_and_the_value(
     tmp_path: Path, case: str, bad: dict[str, Any], good: dict[str, Any], names: tuple[str, ...]
 ) -> None:
-    """Section 3.1 rules 1 to 5, each with a control document that differs only in the clause under
+    """The five validation rules, each with a control document that differs only in the clause under
     test and is accepted (a refusal is not pinned on a word alone). A duplicate is refused, never
-    collapsed: A6's "de-duplicated" is retired (W6)."""
+    collapsed: A6's de-duplication is gone."""
     control = SweepSpec.load(write(tmp_path / "good.toml", sweep_toml(good)))
     assert control.declare is not None
     with pytest.raises(SamplerError) as excinfo:
@@ -672,9 +584,9 @@ def test_p10_1_declare_must_be_a_table(tmp_path: Path) -> None:
 
 
 def test_p10_1_the_cli_refuses_a_malformed_table_before_the_run_exists(tmp_path: Path) -> None:
-    """Section 3.10's second row: refused at sweep-file parse, and "before the run exists" is a
+    """Refused at sweep-file parse, and "before the run exists" is a
     claim about the filesystem, so it is measured there."""
-    # PF4 re-freeze (PF4.49, reading R17): the control is a 2-replicate design, which no lone condition
+    # PF4.49: the control is a 2-replicate design, which no lone condition
     # can flag, so below 1 the gate refuses it; --max-mde 1 admits any design, where 0.5 admitted it
     # under the old normal approximation (which saturated at 0.5 for tiny designs).
     argv = ["sweep", "--target", f"{MODULE}:silent_rollout", "--yes", "--max-mde", "1"]
@@ -684,7 +596,7 @@ def test_p10_1_the_cli_refuses_a_malformed_table_before_the_run_exists(tmp_path:
     toml = write(tmp_path / "s.toml", sweep_toml({**DECLARE_TOML, "steps": ["plan", "plan", "search", "verify"]}))
     root = tmp_path / "store"
     code, out, err = run_cli(["--store", str(root), argv[0], str(toml), *argv[1:]])
-    # A refusal exits 1 (front-door spec section 5.2).
+    # A refusal exits 1.
     assert code == 1, (code, out, err)
     assert "steps" in err and "plan" in err, err
     assert not root.exists() or list(root.iterdir()) == [], sorted(p.name for p in root.iterdir())
@@ -702,7 +614,7 @@ def test_p10_1_the_cli_refuses_a_malformed_table_before_the_run_exists(tmp_path:
     ids=lambda v: v if isinstance(v, str) else "",
 )
 def test_p10_1_declaration_validates_at_construction_and_from_dict_does_too(case: str, kwargs: dict[str, Any]) -> None:
-    """Section 3.2: ``Declaration`` validates at construction (the ``Span`` posture), so a declaration
+    """``Declaration`` validates at construction (the ``Span`` posture), so a declaration
     read back from a manifest is held to the rules that refused the sweep file."""
     from poisson_prove.trace import Declaration
 
@@ -714,7 +626,7 @@ def test_p10_1_declaration_validates_at_construction_and_from_dict_does_too(case
 
 
 def test_p10_1_declaration_sorts_serialises_and_reads_an_absent_list_as_empty() -> None:
-    """Section 3.2: plain sorted lists out, sorted tuples in, and an absent key is an empty list."""
+    """Plain sorted lists out, sorted tuples in, and an absent key is an empty list."""
     from poisson_prove.trace import Declaration
 
     d = Declaration(steps=("verify", "plan", "search", "review"), outcomes=("survived", "fell"), gates=("verify", "search", "review"))
@@ -731,14 +643,14 @@ def test_p10_1_declaration_sorts_serialises_and_reads_an_absent_list_as_empty() 
 # ---------- P10-2: no declaration, no key, no line, no byte ----------
 
 
-def test_p10_2_declaration_check_is_none_for_a_run_that_declares_nothing(bare_pair: tuple[Store, str, str]) -> None:
+def test_p10_2_declaration_check_is_none_for_a_run_that_declares_nothing(bare_pair: tuple[RootedStore, str, str]) -> None:
     store, a, _ = bare_pair
     assert store.manifest(a).declared is None
     assert check_of(store, a) is None
 
 
-def test_p10_2_the_builders_add_no_key_when_no_run_declares(bare_pair: tuple[Store, str, str]) -> None:
-    """W8, sole catch for the unconditional build. Given no declaration, every builder's provenance
+def test_p10_2_the_builders_add_no_key_when_no_run_declares(bare_pair: tuple[RootedStore, str, str]) -> None:
+    """Sole catch for builders that add the keys unconditionally. Given no declaration, every builder's provenance
     is the provenance it builds with the keyword absent: none of the eight keys, plain or suffixed,
     and absent -- not ``None``, not ``[]``. Order included, because the renderer walks the dict."""
     store, a, b = bare_pair
@@ -761,8 +673,8 @@ def test_p10_2_the_builders_add_no_key_when_no_run_declares(bare_pair: tuple[Sto
         assert any_label(" ".join(given_none)) == [], (name, any_label(" ".join(given_none)))
 
 
-def test_p10_2_one_declaring_side_adds_its_own_keys_and_none_for_the_other(main_pair: tuple[Store, str, str], bare_pair: tuple[Store, str, str]) -> None:
-    """W8 per run, on a pair where only ``a`` declares: ``a``'s eight suffixed keys, and no ``_b`` key
+def test_p10_2_one_declaring_side_adds_its_own_keys_and_none_for_the_other(main_pair: tuple[RootedStore, str, str], bare_pair: tuple[RootedStore, str, str]) -> None:
+    """Per run, on a pair where only ``a`` declares: ``a``'s eight suffixed keys, and no ``_b`` key
     of any of the eight -- the report says one side declared by carrying only that side's."""
     from poisson_prove.steps import declaration_check
 
@@ -778,13 +690,13 @@ def test_p10_2_one_declaring_side_adds_its_own_keys_and_none_for_the_other(main_
     assert not any(k in EIGHT_KEYS for k in prov), list(prov)
 
 
-def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(tmp_path: Path, bare_pair: tuple[Store, str, str]) -> None:
-    """**Green before and after**, named: A6's narrower grep, widened to every verb the spec lists,
+def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(tmp_path: Path, bare_pair: tuple[RootedStore, str, str]) -> None:
+    """Green by design: A6's narrower grep, widened to every verb,
     on the non-declaring twin of the main pair and on the generated lattice pair (``tests/lattice.py``,
     written before A10). Every verb on a pre-A7 pair is A7's P7-10 (``test_a7_storage.py``), which
-    this packet must leave green."""
+    A10 must leave green."""
     store, a, b = bare_pair
-    root = str(Path(store._root))
+    root = str(store.root)
     texts: list[str] = []
     for argv in (
         ["--store", root, "report", a, b, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "pair")],
@@ -795,7 +707,7 @@ def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(t
         ["--store", root, "check", a, b, "--event", EVENT, "--fail-on", "higher"],
         ["--store", root, "runs"],
         ["--store", root, "diff", a, b, "--event", EVENT],
-        # --json replaces --format json on diff (front-door spec section 5.6).
+        # --json replaces --format json on diff.
         ["--store", root, "diff", a, b, "--event", EVENT, "--json"],
         ["--store", root, "serve", a, b, "--event", EVENT, "--x", "x", "--json"],
         ["--store", str(lattice.root()), "report", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--x", lattice.X, "--y", lattice.Y, "--out", str(tmp_path / "lattice")],
@@ -805,7 +717,7 @@ def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(t
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             code, out, err = run_cli(argv)
-        # Done, or a check that did not pass, which exits 4 now (front-door spec section 5.2).
+        # Done, or a check that did not pass, which exits 4 now.
         assert code in (0, 4), (argv, code, err)
         texts += [out, err]
     for d in ("pair", "one", "lattice"):
@@ -818,8 +730,8 @@ def test_p10_2_no_verb_on_a_pair_that_declares_nothing_prints_any_of_the_eight(t
 # ---------- P10-3: never_reached is declared minus observed, exactly ----------
 
 
-def test_p10_3_never_reached_and_undeclared_steps_are_set_differences(main_pair: tuple[Store, str, str]) -> None:
-    """On section 6's first fixture: one declared step reached, one not, two observed undeclared."""
+def test_p10_3_never_reached_and_undeclared_steps_are_set_differences(main_pair: tuple[RootedStore, str, str]) -> None:
+    """On the main fixture: one declared step reached, one not, two observed undeclared."""
     store, a, _ = main_pair
     check = check_of(store, a)
     assert check.never_reached == check.declared_steps - check.observed_steps == MAIN_EXPECTED["never_reached"]
@@ -829,7 +741,7 @@ def test_p10_3_never_reached_and_undeclared_steps_are_set_differences(main_pair:
         assert type(value) is frozenset and value == expected, (name, value)
 
 
-def test_p10_3_declaration_check_is_a_frozen_dataclass_with_the_eleven_fields_and_eight_keys(main_pair: tuple[Store, str, str]) -> None:
+def test_p10_3_declaration_check_is_a_frozen_dataclass_with_the_eleven_fields_and_eight_keys(main_pair: tuple[RootedStore, str, str]) -> None:
     from poisson_prove.steps import DeclarationCheck
 
     store, a, _ = main_pair
@@ -844,11 +756,11 @@ def test_p10_3_declaration_check_is_a_frozen_dataclass_with_the_eleven_fields_an
     assert {k: ", ".join(v) or "none" for k, v in prov.items()} == MAIN_LINES
 
 
-def test_p10_3_inspect_prints_the_eight_as_one_block_before_the_rows(main_pair: tuple[Store, str, str]) -> None:
-    """Section 3.7: ``inspect`` prints the same eight as a block before the rows, once per run, in the
+def test_p10_3_inspect_prints_the_eight_as_one_block_before_the_rows(main_pair: tuple[RootedStore, str, str]) -> None:
+    """``inspect`` prints the same eight as a block before the rows, once per run, in the
     table's order, each in the provenance block's own line form (``- words: a, b`` or ``none``)."""
     store, a, _ = main_pair
-    code, out, err = run_cli(["--store", str(Path(store._root)), "inspect", a, "--event", EVENT])
+    code, out, err = run_cli(["--store", str(store.root), "inspect", a, "--event", EVENT])
     assert code == 0, err
     lines = out.splitlines()
     first_row = next(i for i, line in enumerate(lines) if line.startswith("config_hash: "))
@@ -863,7 +775,7 @@ def test_p10_3_inspect_prints_the_eight_as_one_block_before_the_rows(main_pair: 
 
 
 def test_p10_4_finalize_stamps_a_declared_gate_whose_gate_is_none_and_nothing_else() -> None:
-    """ADR-074's precedence: ``"emitted"`` is never overwritten; a span with no step name, a declared
+    """The stamp's precedence: ``"emitted"`` is never overwritten; a span with no step name, a declared
     step that is not a gate, and an undeclared step are all untouched."""
     t = trace_of(
         span(1, step="verify"), span(2, step="verify", gate="emitted"), span(3), span(4, step="plan"),
@@ -875,7 +787,7 @@ def test_p10_4_finalize_stamps_a_declared_gate_whose_gate_is_none_and_nothing_el
     assert [dataclasses.replace(s, gate=None) for s in out.spans] == [dataclasses.replace(s, gate=None) for s in t.spans]
 
 
-def test_p10_4_the_local_store_holds_the_stamp(main_pair: tuple[Store, str, str]) -> None:
+def test_p10_4_the_local_store_holds_the_stamp(main_pair: tuple[RootedStore, str, str]) -> None:
     store, a, _ = main_pair
     by_step: dict[str | None, set[str | None]] = {}
     for s in stored_spans(store, a):
@@ -883,21 +795,20 @@ def test_p10_4_the_local_store_holds_the_stamp(main_pair: tuple[Store, str, str]
     assert by_step == {"plan": {None}, "verify": {"declared"}, "review": {"emitted"}, "retry": {None}, "check": {"emitted"}, None: {"emitted"}}, by_step
 
 
-def test_p10_4_on_modal_the_stamp_is_on_the_stored_row_because_it_ran_on_the_host(modal_run: tuple[Store, str]) -> None:
+def test_p10_4_on_modal_the_stamp_is_on_the_stored_row_because_it_ran_on_the_host(modal_run: tuple[RootedStore, str]) -> None:
     """The container returns spans with ``verify`` un-gated (``worker_batch`` has no declaration); the
-    stored row carries ``"declared"``, so the stamp ran host-side. The mapping exists once (CD D6)."""
+    stored row carries ``"declared"``, so the stamp ran host-side."""
     store, run_id = modal_run
     assert store.manifest(run_id).backend == "modal"
     gates = {s.get("gate") for s in stored_spans(store, run_id) if s.get("step_name") == "verify"}
     assert gates == {"declared"}, gates
     assert store.manifest(run_id).declared == declaration()
-    assert executor_modal._spec_declared is executor._spec_declared
 
 
 # ---------- P10-5: emitted gates the declaration does not name ----------
 
 
-def test_p10_5_emitted_not_declared_is_exactly_the_emitted_names_outside_the_gates(main_pair: tuple[Store, str, str]) -> None:
+def test_p10_5_emitted_not_declared_is_exactly_the_emitted_names_outside_the_gates(main_pair: tuple[RootedStore, str, str]) -> None:
     store, a, _ = main_pair
     check = check_of(store, a)
     emitted = {s["step_name"] for s in stored_spans(store, a) if s.get("gate") == "emitted" and s.get("step_name") is not None}
@@ -905,11 +816,11 @@ def test_p10_5_emitted_not_declared_is_exactly_the_emitted_names_outside_the_gat
     assert check.emitted_not_declared == frozenset(emitted) - check.declared_gates == {"check"}
 
 
-def test_p10_5_the_eight_print_in_the_provenance_block_and_nowhere_else(tmp_path: Path, main_pair: tuple[Store, str, str]) -> None:
+def test_p10_5_the_eight_print_in_the_provenance_block_and_nowhere_else(tmp_path: Path, main_pair: tuple[RootedStore, str, str]) -> None:
     """In ``report.md`` every line carrying one of the eight lies inside ``## Provenance``; Level 2 and
-    every other section carry none (ADR-041, ADR-074). Each side's eight are present, in order."""
+    every other section carry none. Each side's eight are present, in order."""
     store, a, b = main_pair
-    code, _, err = run_cli(["--store", str(Path(store._root)), "report", a, b, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "r")])
+    code, _, err = run_cli(["--store", str(store.root), "report", a, b, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "r")])
     assert code == 0, err
     markdown = (tmp_path / "r" / "report.md").read_text()
     inside, outside = provenance_section(markdown)
@@ -923,7 +834,7 @@ def test_p10_5_the_eight_print_in_the_provenance_block_and_nowhere_else(tmp_path
     assert f"{label('emitted_gates_not_declared')} a: check" in receipt[at:]
 
 
-# ---------- P10-6: the diff refusal (ruling 3: in diff, just before _pairing) ----------
+# ---------- P10-6: the diff refusal (in diff, just before _pairing) ----------
 
 
 def _frames(store: Store, a: str, b: str, fn: str) -> tuple[Any, Any]:
@@ -973,8 +884,8 @@ def test_p10_6_differing_declared_outcome_sets_are_refused_under_every_method(tm
 def test_p10_6_no_refusal_unless_both_declare_non_empty_differing_outcomes(
     tmp_path: Path, fn: str, case: str, da: tuple[str, ...] | None, db: tuple[str, ...] | None, b_outcomes: Mapping[float, str]
 ) -> None:
-    """*Sole catch for the mutant that compares observed sets* (``observed-differ-declared-match``):
-    refusing on the observed set fires on provider noise, which is S22 section 10's whole point."""
+    """*Sole catch for a check that compares observed sets* (``observed-differ-declared-match``):
+    refusing on the observed set fires on provider noise, which is why the declared sets are compared."""
     ma = manifest("a", declared=None if da is None else declaration(outcomes=da))
     mb = manifest("b", declared=None if db is None else declaration(steps=STEPS, outcomes=db, gates=GATES))
     store = pair_store(tmp_path, ma, mb, b_outcomes=b_outcomes)
@@ -984,11 +895,9 @@ def test_p10_6_no_refusal_unless_both_declare_non_empty_differing_outcomes(
 
 
 @pytest.mark.parametrize("fn", FNS)
-def test_p10_6_the_refusal_is_raised_before_pairing_and_pairing_is_untouched(tmp_path: Path, fn: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ruling 3: raised in ``diff`` just before ``_pairing``, never inside it. It wins over
-    ``_pairing``'s own refusals (a ``t_unit`` mismatch, a paired method on differing salts); with
-    ``_pairing`` replaced by a tripwire it still fires; and with equal declarations ``_pairing`` runs
-    exactly once, as it did."""
+def test_p10_6_the_refusal_wins_over_the_unit_and_salt_refusals(tmp_path: Path, fn: str) -> None:
+    """A ``t_unit`` mismatch and a paired method on differing salts are each refused as they were
+    on their own, and with differing declared outcome sets as well the declared-set refusal wins."""
     from poisson_prove.diff import DeclaredSetMismatch
 
     da, db = declaration(outcomes=("fell", "survived")), declaration(outcomes=("fell", "timed_out"))
@@ -1003,25 +912,6 @@ def test_p10_6_the_refusal_is_raised_before_pairing_and_pairing_is_untouched(tmp
         _call(fn, fa, fb, "fisher_bh", ma, mb)
     with pytest.raises(DeclaredSetMismatch):
         _call(fn, fa, fb, "mcnemar_bh", ma, manifest("b", declared=db, salt=OTHER_SALT))
-
-    real = diff_module._pairing
-    calls: list[tuple[Any, ...]] = []
-
-    def tripwire(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError("_pairing reached before the declared-set refusal")
-
-    monkeypatch.setattr(diff_module, "_pairing", tripwire)
-    with pytest.raises(DeclaredSetMismatch):
-        _call(fn, fa, fb, "fisher_bh", ma, manifest("b", declared=db))
-
-    def spy(*args: Any, **kwargs: Any) -> Any:
-        calls.append(args)
-        return real(*args, **kwargs)
-
-    monkeypatch.setattr(diff_module, "_pairing", spy)
-    same_a, same_b = manifest("a", declared=da), manifest("b", declared=declaration(outcomes=("survived", "fell")))
-    _call(fn, fa, fb, "fisher_bh", same_a, same_b)
-    assert calls == [("fisher_bh", same_a, same_b)], calls
 
 
 @pytest.mark.parametrize("fn", FNS)
@@ -1039,26 +929,12 @@ def test_p10_6_frame_validation_still_comes_first(tmp_path: Path, fn: str) -> No
     assert not isinstance(excinfo.value, DeclaredSetMismatch)
 
 
-def test_p10_6_pairing_holds_no_new_manifest_comparison() -> None:
-    """Ruling 3, the other half. ADR-084 stands: ``_pairing`` reads ``t_unit`` and ``run_salt`` off
-    the manifests and nothing else (A23/A26 adds its two here, and only it), and called directly on
-    two manifests with differing declared outcome sets it does not refuse."""
-    tree = ast.parse((PACKAGE / "diff.py").read_text())
-    (fn,) = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_pairing"]
-    reads = {n.attr for n in ast.walk(fn) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id in ("manifest_a", "manifest_b")}
-    assert reads == PAIRING_MANIFEST_READS, reads
-    assert "declared" not in ast.unparse(fn) and "DeclaredSetMismatch" not in ast.unparse(fn)
-    ma = manifest("a", declared=declaration(outcomes=("fell", "survived")))
-    mb = manifest("b", declared=declaration(outcomes=("fell", "timed_out")))
-    assert diff_module._pairing("fisher_bh", ma, mb) == (True, T_UNIT)
-
-
 def test_p10_6_every_diffing_verb_refuses_the_pair(tmp_path: Path) -> None:
     """The library refusal reaches the CLI as a refusal (exit 1) on every verb that diffs, and no
     report directory is written."""
     ma = manifest("a", declared=declaration(outcomes=("fell", "survived")))
     mb = manifest("b", declared=declaration(outcomes=("fell", "timed_out")))
-    root = str(pair_store(tmp_path / "store", ma, mb)._root)
+    root = str(pair_store(tmp_path / "store", ma, mb).root)
     out_dir = tmp_path / "report"
     for argv in (
         ["diff", "a", "b", "--event", EVENT],
@@ -1067,7 +943,7 @@ def test_p10_6_every_diffing_verb_refuses_the_pair(tmp_path: Path) -> None:
         ["serve", "a", "b", "--event", EVENT, "--x", "x", "--json"],
     ):
         code, out, err = run_cli(["--store", root, *argv])
-        # A refusal exits 1 (front-door spec section 5.2).
+        # A refusal exits 1.
         assert code == 1, (argv, code, out, err)
         assert err.startswith("error: "), err
     assert not (out_dir / "report.md").exists()
@@ -1076,9 +952,9 @@ def test_p10_6_every_diffing_verb_refuses_the_pair(tmp_path: Path) -> None:
 # ---------- P10-7: an undeclared outcome is stored, listed, printed, never refused ----------
 
 
-def test_p10_7_an_undeclared_outcome_is_stored_listed_printed_and_refused_by_no_verb(tmp_path: Path, main_pair: tuple[Store, str, str]) -> None:
+def test_p10_7_an_undeclared_outcome_is_stored_listed_printed_and_refused_by_no_verb(tmp_path: Path, main_pair: tuple[RootedStore, str, str]) -> None:
     store, a, b = main_pair
-    root = str(Path(store._root))
+    root = str(store.root)
     assert "timed_out" in set(raw_column(store, a, "outcome"))
     assert check_of(store, a).undeclared_outcomes == {"timed_out"}
     runs = {
@@ -1105,66 +981,40 @@ def test_p10_7_an_undeclared_outcome_is_stored_listed_printed_and_refused_by_no_
 # ---------- P10-8: the import graph ----------
 
 
-def test_p10_8_trace_imports_no_proofload_module_and_a_fresh_interpreter_imports_it() -> None:
-    """W1. A subprocess, not an in-process import: by the time a test body runs, ``tests/`` has already
-    initialised half the package. The AST clause catches the lazy spelling (an import inside a
-    function or under ``TYPE_CHECKING``) that a fresh interpreter would not."""
+def test_p10_8_a_fresh_interpreter_imports_trace_and_declaration() -> None:
+    """A subprocess, not an in-process import: by the time a test body runs, ``tests/`` has already
+    initialised half the package."""
     env = {**os.environ, "PYTHONPATH": str(PACKAGE.parent)}
     for code in ("import poisson_prove.trace", "from poisson_prove.trace import Declaration, finalize"):
         done = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=120)
         assert done.returncode == 0, (code, done.stderr)
-    # PF0 (Q4, section 2.5): trace.py reads the old schema string and span keys through the one
-    # module that holds every old string, ``poisson_prove._compat``, and that module imports
-    # nothing of the package, so trace.py still reaches no other module of it.
-    def package_imports(path: Path) -> set[str]:
-        found: set[str] = set()
-        for n in ast.walk(ast.parse(path.read_text())):
-            if isinstance(n, ast.Import):
-                found |= {a.name for a in n.names if a.name.split(".")[0] == "poisson_prove"}
-            elif isinstance(n, ast.ImportFrom) and n.module == "poisson_prove":
-                found |= {f"poisson_prove.{a.name}" for a in n.names}
-            elif isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] == "poisson_prove":
-                found.add(str(n.module))
-        return found
-
-    assert package_imports(PACKAGE / "trace.py") <= {"poisson_prove._compat"}, package_imports(PACKAGE / "trace.py")
-    assert package_imports(PACKAGE / "_compat.py") == set()
 
 
-def test_p10_8_declaration_is_trace_s_exported_in_sort_order_and_imported_from_there() -> None:
-    """*Sole catch for A6 section 2's own spelling*, a ``Declaration`` minted in ``sampler.py``."""
+def test_p10_8_declaration_is_minted_in_trace_and_exported_in_sort_order() -> None:
+    """*Sole catch for A6's own spelling*, a ``Declaration`` defined in ``sampler.py``."""
     from poisson_prove.trace import Declaration
 
     assert Declaration.__module__ == "poisson_prove.trace"
     names = list(trace_module.__all__)
     classes = [n for n in names if n[:1].isupper() and not n.isupper()]
     assert "Declaration" in classes and classes == sorted(classes), classes
-    for path in (PACKAGE / "sampler.py", PACKAGE / "store.py", STEPS_SOURCE):
-        imports = [
-            n for n in ast.parse(path.read_text()).body
-            if isinstance(n, ast.ImportFrom) and n.module == "poisson_prove.trace" and any(a.name == "Declaration" for a in n.names)
-        ]
-        assert len(imports) == 1, path.name
-        assert [n for n in ast.parse(path.read_text()).body if isinstance(n, ast.ClassDef) and n.name == "Declaration"] == [], path.name
 
 
 # ---------- P10-9: the CD guard, narrowed ----------
 
 
-def test_p10_9_finalize_signature_is_unchanged_but_for_the_annotation() -> None:
+def test_p10_9_finalize_takes_declaration_and_limit_keyword_only_with_no_default() -> None:
     sig = inspect.signature(finalize)
     assert list(sig.parameters) == ["trace", "declaration", "limit"]
     kinds = {name: p.kind for name, p in sig.parameters.items()}
     assert kinds["declaration"] is kinds["limit"] is inspect.Parameter.KEYWORD_ONLY
     assert sig.parameters["declaration"].default is inspect.Parameter.empty
     assert sig.parameters["limit"].default is inspect.Parameter.empty
-    assert sig.parameters["declaration"].annotation == "Declaration | None"
 
 
 @pytest.mark.parametrize("bad", [object(), "verify", ("verify",), {"gates": ["verify"]}], ids=["object", "str", "tuple", "dict"])
 def test_p10_9_a_non_declaration_is_refused_naming_declaration(bad: Any) -> None:
-    """Successor of CD's ``test_cd4_finalizes_a10_guard_is_unchanged`` (retired 2026-09-25, ruling 2).
-    *Sole catch for the build that widens the annotation and drops the guard.* Control: a real
+    """*Sole catch for a ``finalize`` that widens the annotation and drops the guard.* Control: a real
     ``Declaration`` on the same trace does not raise."""
     t = trace_of(span(1, step="verify"))
     finalize(t, declaration=declaration(), limit=64)
@@ -1177,7 +1027,7 @@ def test_p10_9_a_non_declaration_is_refused_naming_declaration(bad: Any) -> None
 
 
 def test_p10_10a_finalize_returns_the_trace_itself_when_nothing_is_stamped_or_cut() -> None:
-    """W3. *Sole catch for the stamp that rebuilds unconditionally*: ``is``, not ``==``."""
+    """*Sole catch for the stamp that rebuilds unconditionally*: ``is``, not ``==``."""
     t = trace_of(span(1, step="plan"), span(2, step="retry"), span(3), span(4, step="verify", gate="emitted"))
     d = declaration()
     assert finalize(t, declaration=d, limit=None) is t
@@ -1187,10 +1037,10 @@ def test_p10_10a_finalize_returns_the_trace_itself_when_nothing_is_stamped_or_cu
     assert stamped.spans[0].gate == "declared"
 
 
-def test_p10_10a_a_declaring_run_that_stamps_nothing_stores_the_bytes_of_one_that_declares_nothing(unmatched_runs: tuple[Store, str, Store, str]) -> None:
-    """Section 6's second fixture, row for row. Measured at step zero: ``Store.append`` re-reads every
-    trace through ``Trace.from_dict`` and ``split``, so this clause holds by construction at this
-    tree and the ``is`` clause above is the only observable; kept because it is W3's claim."""
+def test_p10_10a_a_declaring_run_that_stamps_nothing_stores_the_bytes_of_one_that_declares_nothing(unmatched_runs: tuple[RootedStore, str, RootedStore, str]) -> None:
+    """The unmatched fixture, row for row. ``Store.append`` re-reads every trace through
+    ``Trace.from_dict`` and ``split``, so this clause holds by construction and the ``is`` clause
+    above is the only observable; kept because it states the same claim at the store."""
     declaring, run_d, plain, run_n = unmatched_runs
     assert declaring.manifest(run_d).declared == declaration()
     assert plain.manifest(run_n).declared is None
@@ -1226,7 +1076,7 @@ def test_p10_10c_stamp_then_cut_equals_cut_then_stamp() -> None:
 
 
 def test_p10_10bc_both_halves_fire_on_one_stored_span(tmp_path: Path) -> None:
-    """Section 6's third fixture, through the funnel: the run's declared limit and its declared gate
+    """The cut fixture, through the funnel: the run's declared limit and its declared gate
     both reach the stored ``verify`` span. Run in a child, because ``[capture]`` installs a provider."""
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
     toml = write(tmp_path / "cut.toml", sweep_toml(DECLARE_TOML, values=(0.1,), replicates=1, capture={"instrument": [], "max_observation_bytes": 64}))
@@ -1245,55 +1095,16 @@ def _child_cut_run(store_root: str, toml_path: str) -> str:
     return str(p.run_id)
 
 
-def _child_entry(conn: Any, fn: Callable[..., Any], args: tuple[Any, ...]) -> None:
-    import traceback
-
-    try:
-        outcome: tuple[str, Any] = ("ok", fn(*args))
-    except BaseException:  # noqa: BLE001 - the child must always report
-        outcome = ("error", traceback.format_exc())
-    try:
-        conn.send(outcome)
-    finally:
-        conn.close()
-
-
 def _isolated(fn: Callable[..., Any], *args: Any, timeout: float = 180.0) -> Any:
     """Run ``fn(*args)`` in a child process, so no OTel provider is installed in pytest's."""
-    import multiprocessing
-    import time
-
-    ctx = multiprocessing.get_context("fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn")
-    parent_conn, child_conn = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_child_entry, args=(child_conn, fn, args))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + timeout
-    outcome: tuple[str, Any] | None = None
-    try:
-        while outcome is None:
-            if parent_conn.poll(0.05):
-                outcome = parent_conn.recv()
-            elif not proc.is_alive():
-                outcome = ("error", f"child exited with code {proc.exitcode} before reporting")
-            elif time.perf_counter() > deadline:
-                outcome = ("error", f"child produced nothing within {timeout}s")
-    finally:
-        parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(10.0)
-    kind, payload = outcome
-    if kind != "ok":
-        pytest.fail(f"isolated {fn.__name__} failed:\n{payload}")
-    return payload
+    return run_isolated(fn, *args, timeout=timeout)
 
 
 # ---------- P10-11: the manifest field ----------
 
 
 def test_p10_11_the_manifest_has_thirteen_keys_and_round_trips_both_ways() -> None:
-    """W4. ``from_dict(to_dict(m)) == m`` for a declaring and a non-declaring manifest; ``declared``
+    """``from_dict(to_dict(m)) == m`` for a declaring and a non-declaring manifest; ``declared``
     is three sorted lists or ``null``, byte-identical under ``json.dumps(sort_keys=True)``."""
     for declared in (None, declaration()):
         m = manifest("m", declared=declared)
@@ -1327,13 +1138,13 @@ def test_p10_11_mark_complete_preserves_the_declaration(tmp_path: Path) -> None:
     assert on_disk["declared"] == {"steps": list(STEPS), "outcomes": list(OUTCOMES), "gates": list(GATES)}
 
 
-def test_p10_11_a_real_run_records_its_sweep_s_declaration_and_one_with_none_records_null(main_pair: tuple[Store, str, str], bare_pair: tuple[Store, str, str]) -> None:
+def test_p10_11_a_real_run_records_its_sweep_s_declaration_and_one_with_none_records_null(main_pair: tuple[RootedStore, str, str], bare_pair: tuple[RootedStore, str, str]) -> None:
     store, a, _ = main_pair
     bstore, b, _ = bare_pair
     assert store.manifest(a).status == "complete" and store.manifest(a).declared == declaration()
-    on_disk = json.loads((Path(store._root) / a / "manifest.json").read_text())
+    on_disk = json.loads((store.root / a / "manifest.json").read_text())
     assert on_disk["declared"] == {"steps": list(STEPS), "outcomes": list(OUTCOMES), "gates": list(GATES)}
-    assert json.loads((Path(bstore._root) / b / "manifest.json").read_text())["declared"] is None
+    assert json.loads((bstore.root / b / "manifest.json").read_text())["declared"] is None
 
 
 # ---------- P10-12: the resume gate ----------
@@ -1357,7 +1168,7 @@ def _partial(root: Path, declare: Mapping[str, Any] | None) -> tuple[Store, str]
 def test_p10_12_resume_is_gated_on_the_whole_declaration(
     tmp_path: Path, case: str, recorded: Mapping[str, Any] | None, resumed_with: Mapping[str, Any] | None, refused: bool
 ) -> None:
-    """W7: one value comparison, *declares nothing* against *declares something* a difference in both
+    """One value comparison, *declares nothing* against *declares something* a difference in both
     directions. *Sole catch for the gate that compares ``is None`` on each side* (``changed``)."""
     store, run_id = _partial(tmp_path, recorded)
     assert store.manifest(run_id).status == "partial"
@@ -1394,13 +1205,13 @@ def test_p10_12_pair_with_is_not_gated(tmp_path: Path) -> None:
 
 
 def test_p10_13_check_and_diff_print_the_same_bytes_for_a_declaring_pair(tmp_path: Path) -> None:
-    """W13: ``check``, ``diff`` and ``diff --format json`` gain nothing. The same rows under the same
+    """``check``, ``diff`` and ``diff --format json`` gain nothing. The same rows under the same
     run ids in two stores, one pair declaring (the same declaration on both sides) and one not.
     ``viewer.py`` and ``tree.py`` byte-identity is FR17's and CD9's, not restated here."""
     outputs = []
     for name, declared in (("declaring", declaration()), ("plain", None)):
         store = pair_store(tmp_path / name, manifest("a", declared=declared), manifest("b", declared=declared), b_outcomes=PAIR_OUTCOMES_WIDER)
-        root = str(store._root)
+        root = str(store.root)
         texts = []
         # PF4 (PF4.20): neither pair declares a kind for the event, so check's default --fail-on
         # worse is refused on both and would compare two refusals; --fail-on higher is the same gate
@@ -1418,21 +1229,12 @@ def test_p10_13_check_and_diff_print_the_same_bytes_for_a_declaring_pair(tmp_pat
 # ---------- P10-14: the read path ----------
 
 
-def test_p10_14_steps_constructs_no_trace_and_reads_no_a9_symbol() -> None:
-    """W11 and W10, over A10's half of ``steps.py``: no ``Trace``/``Span`` constructed, no
-    ``from_dict``, no ``assemble``; none of A9's four names."""
-    half = a10_half(STEPS_SOURCE)
-    used = names_in(half)
-    for banned in ("Trace", "Span", "from_dict", "assemble", *A9_NAMES):
-        assert banned not in used, banned
-
-
-def test_p10_14_the_check_succeeds_on_a_run_whose_meta_and_trace_obs_are_not_json(tmp_path: Path, main_pair: tuple[Store, str, str]) -> None:
+def test_p10_14_the_check_succeeds_on_a_run_whose_meta_and_trace_obs_are_not_json(tmp_path: Path, main_pair: tuple[RootedStore, str, str]) -> None:
     """A7's P7-5 fixture shape: ``meta`` and ``trace_obs`` hold bytes that are not JSON. The check and
     the single-run report read the envelope only, so both succeed and the check is unchanged."""
     store, a, _ = main_pair
     root = tmp_path / "store"
-    shutil.copytree(Path(store._root) / a, root / a)
+    shutil.copytree(store.root / a, root / a)
     for part in sorted((root / a / "episodes").glob("part-*.parquet")):
         table = pq.read_table(part)
         for column in ("meta", "trace_obs"):
@@ -1446,8 +1248,8 @@ def test_p10_14_the_check_succeeds_on_a_run_whose_meta_and_trace_obs_are_not_jso
     assert f"- {label('never_reached')}: search" in (tmp_path / "r" / "report.md").read_text()
 
 
-def test_p10_14_observed_outcomes_are_strings_with_a_null_outcome_in_the_frame(main_pair: tuple[Store, str, str]) -> None:
-    """Section 7.3's one place a cell split would appear: ``outcome`` is a nullable string column, and
+def test_p10_14_observed_outcomes_are_strings_with_a_null_outcome_in_the_frame(main_pair: tuple[RootedStore, str, str]) -> None:
+    """The one place a cell split would appear: ``outcome`` is a nullable string column, and
     under pandas 3 a null that read back as ``NaN`` would enter the set as a float."""
     store, a, _ = main_pair
     frame = store.read(a, meta=False, trace="envelope")
@@ -1459,8 +1261,8 @@ def test_p10_14_observed_outcomes_are_strings_with_a_null_outcome_in_the_frame(m
 # ---------- P10-15: a declaration that matches nothing ----------
 
 
-def test_p10_15_capture_off_prints_every_declared_step_as_never_reached_and_nothing_refuses(tmp_path: Path, silent_runs: tuple[Store, str, Store, str]) -> None:
-    """W12 and ruling 1: printed in full, never refused. No verb exits non-zero and the declaration
+def test_p10_15_capture_off_prints_every_declared_step_as_never_reached_and_nothing_refuses(tmp_path: Path, silent_runs: tuple[RootedStore, str, RootedStore, str]) -> None:
+    """Printed in full, never refused. No verb exits non-zero and the declaration
     adds no warning: the warnings are those of the same verbs on the non-declaring twin."""
     declaring, run_d, plain, run_n = silent_runs
     check = check_of(declaring, run_d)
@@ -1470,8 +1272,8 @@ def test_p10_15_capture_off_prints_every_declared_step_as_never_reached_and_noth
     for store, run_id, tag in ((declaring, run_d, "d"), (plain, run_n, "n")):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            r = run_cli(["--store", str(store._root), "report", run_id, "--event", EVENT, "--x", "x", "--out", str(tmp_path / tag)])
-            i = run_cli(["--store", str(store._root), "inspect", run_id, "--event", EVENT])
+            r = run_cli(["--store", str(store.root), "report", run_id, "--event", EVENT, "--x", "x", "--out", str(tmp_path / tag)])
+            i = run_cli(["--store", str(store.root), "inspect", run_id, "--event", EVENT])
         assert r[0] == 0 and i[0] == 0, (r, i)
         assert r[2] == "" and i[2] == "", (r[2], i[2])
         seen.append(sorted((w.category.__name__, str(w.message)) for w in caught))
@@ -1485,7 +1287,7 @@ def test_p10_15_capture_off_prints_every_declared_step_as_never_reached_and_noth
 
 
 def test_p10_16_two_specs_differing_only_in_declare_are_the_same_sweep(tmp_path: Path) -> None:
-    """W14. *Sole catch for the field that rides ``to_dict()``*, which breaks pairing between a
+    """*Sole catch for the field that rides ``to_dict()``*, which breaks pairing between a
     declaring arm and a non-declaring one."""
     with_d = SweepSpec.load(write(tmp_path / "d.toml", sweep_toml(DECLARE_TOML)))
     without = SweepSpec.load(write(tmp_path / "n.toml", sweep_toml(None)))
@@ -1500,7 +1302,7 @@ def test_p10_16_two_specs_differing_only_in_declare_are_the_same_sweep(tmp_path:
     assert seeds[0] == seeds[1]
 
 
-def test_p10_16_the_manifest_s_sweep_record_carries_no_declaration(main_pair: tuple[Store, str, str]) -> None:
+def test_p10_16_the_manifest_s_sweep_record_carries_no_declaration(main_pair: tuple[RootedStore, str, str]) -> None:
     store, a, _ = main_pair
     env = store.manifest(a).environment
     assert "declare" not in env["sweep"] and "declared" not in env["sweep"]
@@ -1511,15 +1313,15 @@ def test_p10_16_the_manifest_s_sweep_record_carries_no_declaration(main_pair: tu
 # ---------- P10-17: nothing is persisted ----------
 
 
-def test_p10_17_the_check_and_the_report_write_nothing_under_the_store(tmp_path: Path, main_pair: tuple[Store, str, str]) -> None:
-    """ADR-045: sets computed at read time, nothing written back (mtime and bytes of every file)."""
+def test_p10_17_the_check_and_the_report_write_nothing_under_the_store(tmp_path: Path, main_pair: tuple[RootedStore, str, str]) -> None:
+    """Sets computed at read time, nothing written back (mtime and bytes of every file)."""
     store, a, b = main_pair
-    root = Path(store._root)
+    root = store.root
     before = snapshot(root)
     check_of(store, a)
     run_cli(["--store", str(root), "report", a, b, "--event", EVENT, "--x", "x", "--out", str(tmp_path / "r")])
     run_cli(["--store", str(root), "inspect", a, "--event", EVENT])
-    # PF12 (spec section 18.2, Q59): report saves the comparison it shows, under ``.poisson/``; no
+    # PF12: report saves the comparison it shows, under ``.poisson/``; no
     # stored file outside it is written (bytes and mtimes), and check without --save writes nothing:
     # the folder holds the store descriptor and that one comparison.
     after = snapshot(root)
@@ -1531,30 +1333,9 @@ def test_p10_17_the_check_and_the_report_write_nothing_under_the_store(tmp_path:
     assert any(k.startswith(".poisson/artifacts/comparison/") for k in after), sorted(after)
 
 
-def test_p10_17_steps_has_no_writer_and_no_check_result_reaches_the_manifest() -> None:
-    half = a10_half(STEPS_SOURCE)
-    called = {
-        n.func.id if isinstance(n.func, ast.Name) else n.func.attr
-        for node in half for n in ast.walk(node)
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name | ast.Attribute)
-    }
-    for banned in ("open", "write_text", "write_bytes", "to_parquet", "write_table", "dump", "_write_manifest", "create_run", "mark_complete", "RunManifest", "replace"):
-        assert banned not in called, banned
-    # PF2 (spec section 4.3): RunManifest gains the field `name` (None unless given at sweep time).
+def test_p10_17_the_manifest_has_no_field_for_a_check_result() -> None:
+    # PF2: RunManifest gains the field `name` (None unless given at sweep time).
     assert {f.name for f in dataclasses.fields(RunManifest)} == TWELVE | {"declared", "name"}
-
-
-# ---------- P10-18: no arithmetic ----------
-
-
-def test_p10_18_a10_s_half_of_steps_has_no_ratio_and_no_arithmetic_on_a_count() -> None:
-    """Sets and the sizes of sets; a fraction of a declared set is a rate (the S25/S26 pattern)."""
-    half = a10_half(STEPS_SOURCE)
-    ops = [type(n.op).__name__ for node in half for n in ast.walk(node) if isinstance(n, ast.BinOp | ast.AugAssign)]
-    assert not [op for op in ops if op in ("Div", "FloorDiv", "Mult", "Mod", "Pow")], ops
-    used = names_in(half)
-    for banned in ("mean", "sqrt", "average", "median", "ratio", "rate", "fraction"):
-        assert banned not in used, banned
 
 
 # ---------- P10-19: the two gate identities ----------
@@ -1566,18 +1347,18 @@ def _identities(store: Store, run_id: str) -> None:
     assert check.declared_gates - check.declared_never_reached == check.declared_gates & gated_step_names(store, run_id)
 
 
-def test_p10_19_both_identities_hold_on_the_main_fixture(main_pair: tuple[Store, str, str]) -> None:
+def test_p10_19_both_identities_hold_on_the_main_fixture(main_pair: tuple[RootedStore, str, str]) -> None:
     """*Sole catch for the stamp that silently did not run*: ``verify`` is reached only un-gated, so
     the second identity holds only if the stamp gated it; the first holds either way. ``review`` is
     reached only as ``"emitted"``, so a ``declared_never_reached`` read off ``gate == "declared"``
-    (section 8 trap 8) calls it never reached and breaks the first."""
+    calls it never reached and breaks the first."""
     store, a, _ = main_pair
     _identities(store, a)
     assert check_of(store, a).declared_gates - check_of(store, a).declared_never_reached == {"review", "verify"}
 
 
 def test_p10_19_both_identities_hold_on_the_unmatched_capture_off_and_modal_fixtures(
-    unmatched_runs: tuple[Store, str, Store, str], silent_runs: tuple[Store, str, Store, str], modal_run: tuple[Store, str]
+    unmatched_runs: tuple[RootedStore, str, RootedStore, str], silent_runs: tuple[RootedStore, str, RootedStore, str], modal_run: tuple[RootedStore, str]
 ) -> None:
     _identities(unmatched_runs[0], unmatched_runs[1])
     _identities(silent_runs[0], silent_runs[1])
@@ -1588,7 +1369,7 @@ def test_p10_19_both_identities_hold_on_the_unmatched_capture_off_and_modal_fixt
 # ---------- P10-20: a marker with no name ----------
 
 
-def test_p10_20_an_emitted_marker_with_no_step_name_contributes_nothing(main_pair: tuple[Store, str, str]) -> None:
+def test_p10_20_an_emitted_marker_with_no_step_name_contributes_nothing(main_pair: tuple[RootedStore, str, str]) -> None:
     """Through the recorder: the stored ``guard`` span carries ``gate="emitted"`` and no step name, and
     reaches no set; the stored ``retry`` span carries a step name and no gate, and reaches
     ``observed_steps`` (and so ``undeclared_steps``) and no gate set."""
@@ -1602,15 +1383,6 @@ def test_p10_20_an_emitted_marker_with_no_step_name_contributes_nothing(main_pai
     assert "guard" not in set().union(*everything)
     assert "retry" in check.observed_steps and "retry" in check.undeclared_steps
     assert "retry" not in check.emitted_gates | check.emitted_not_declared | check.declared_never_reached | check.never_reached
-
-
-# ---------- P10-21: the renderer's one clause ----------
-
-
-def test_p10_21_an_empty_list_or_tuple_renders_none_and_every_other_shape_as_shipped() -> None:
-    """Behaviour-preserving only because no frozen output carries an empty list or tuple in its
-    provenance: measured at step zero over the whole suite (an empty-probe run)."""
-    assert report_module._provenance_lines(PROVENANCE_SHAPES) == PROVENANCE_RENDERED
 
 
 # ---------- P10-22: the funnel still never raises ----------

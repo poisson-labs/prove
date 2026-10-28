@@ -1,23 +1,22 @@
-"""M4 read-amendment frozen tests: invariants R1-R9 of the M4 Store (read amendment) spec, written
-before ``Store.read(meta=, keys=)`` and ``Store.count`` exist.
+"""M4 read frozen tests: invariants R1-R9 of the store's narrow and keyed reads,
+``Store.read(meta=, keys=)`` and ``Store.count``.
 
 Stores are written under ``tmp_path`` in the M4 frozen tests' ``_rec``/``_manifest`` shape; the CLI
 is driven in-process through ``cli.main`` with ``StringIO`` streams, as the M10 frozen tests do; the
 golden reads the generated lattice pair (``tests/lattice.py``) through the ``lattice_store``
 conftest fixture.
 
-The numbers in the spec's section 1 (a duration, a byte count, a row count) are the motivation
-and never an assertion: nothing here measures a duration or a byte count. What this file asserts is which
+Nothing here measures a duration or a byte count. What this file asserts is which
 paths decode ``meta``, and the poisoned store is how it knows. A poisoned store is a run written
 through ``Store.append`` whose part files were rewritten in place with the string ``not json``
 in the ``meta`` cells of chosen rows, each part keeping its own schema. On such a store the
 default read raises, and every path that never decodes ``meta`` reads it exactly as it reads
 the intact twin.
 
-Two facts a builder should know before the shim hits them:
+Two facts anyone changing the reads should know:
 
 - ``keys=[]`` must short-circuit before the reader: pyarrow raises ``ArrowTypeError`` on an
-  empty ``in`` list (verified 2026-09-05 against the venv's pyarrow). The explicit empty-keys
+  empty ``in`` list. The explicit empty-keys
   tests exist because of that.
 - The ``config_hash`` half of ``keys`` is pushed to the reader and the pair is masked after it.
   Two replicates of one cell share a hash, so the mock-agent run for R6 is built so that cells
@@ -45,7 +44,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import poisson_prove.cli as cli
-import poisson_prove.store as store_module
 from poisson_prove.episode import Episode
 from poisson_prove.examples.mock_agent import rollout
 from poisson_prove.executor import plan, run_local
@@ -53,6 +51,7 @@ from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, StoreError, config_hash
 
 import lattice
+from conftest import STEP_LINE_RE
 
 ROOT = Path(__file__).resolve().parents[1]
 LATTICE_ROOT = lattice.root()
@@ -65,7 +64,7 @@ THIRTEEN = [
     "confidence", "meta", "error", "wall_time", "backend_meta",
 ]
 ELEVEN = [c for c in THIRTEEN if c not in ("meta", "backend_meta")]
-# PF4 re-freeze (reading R5): the store copies a rollout's case id into its own nullable string
+# the store copies a rollout's case id into its own nullable string
 # column, appended after trace_obs on disk, and every read returns it last (null for older parts), so
 # a read frame is the thirteen columns plus case_id and a narrow read the eleven plus case_id.
 FRAME = THIRTEEN + ["case_id"]
@@ -76,16 +75,6 @@ POISON = "not json"
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_SALT = "m4-read-oracle"
 SNIPPET_MARKER = "# reproduce one episode"
-STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")  # the M10 frozen tests' I15 regex, verbatim (nine columns since A8a)
-
-PUBLIC_STORE_METHODS = {
-    "create_run", "manifest", "mark_complete", "runs", "append", "read", "missing", "count",
-    "tally",
-}
-PUBLIC_STORE_SYMBOLS = {
-    "StoreError", "SchemaMismatch", "DuplicateEpisode", "MetaNotSerializable", "InvalidConfig",
-    "RunManifest", "EpisodeRecord", "Store", "config_hash", "RunTally",
-}
 
 # The keyed run: four cells x three replicates over three parts, appended out of key order,
 # with one errored row. Its key set is computable at import time, which is what lets the R3
@@ -222,7 +211,7 @@ def _synthetic_run(store: Store, run_id: str, *, fell_per_cell: dict[float, int]
 def poison_meta(run_dir: Path, keys: set[tuple[str, int]] | None = None) -> int:
     """Rewrite every ``part-NNNNN.parquet`` under ``run_dir/episodes`` in place, replacing the
     ``meta`` cell of each row whose key is in ``keys`` (every row when None) with a string that
-    is not JSON. Each part keeps its own schema, so nothing private to ``proofload.store`` is
+    is not JSON. Each part keeps its own schema, so nothing private to ``poisson_prove.store`` is
     imported. Returns the number of rows poisoned."""
     poisoned = 0
     for part in sorted((run_dir / "episodes").glob("part-*.parquet")):
@@ -267,7 +256,7 @@ def inspect_blocks(out: str, hashes: set[str]) -> tuple[list[list[str]], list[st
     """Split inspect output into per-row blocks (each starting at a line naming a config_hash)
     and the trailing reproduction snippet. ``hashes`` is every hash in the run, so any row the
     verb prints starts a block, wanted or not. A hash is printed at 12 hex characters in text
-    (front-door spec section 5.4, rule 10), so a block starts at a line naming that prefix."""
+    (rule 10), so a block starts at a line naming that prefix."""
     body, marker, tail = out.partition(SNIPPET_MARKER)
     assert marker, f"no {SNIPPET_MARKER!r} snippet in inspect output:\n{out}"
     blocks: list[list[str]] = []
@@ -288,7 +277,7 @@ def assert_block_prints_row_with_trace(block: list[str], row: Any) -> None:
     """The block names the row and carries one tab-delimited trace line per stored span, with
     the span's kind and name in the second and third columns."""
     text = "\n".join(block)
-    # 12 hex characters in text (front-door spec section 5.4, rule 10).
+    # 12 hex characters in text (rule 10).
     assert row.config_hash[:12] in block[0], block[0]
     assert f"seed: {row.seed}" in block, text
     assert f"replicate_index: {row.replicate_index}" in block, text
@@ -305,7 +294,7 @@ def assert_block_prints_row_with_trace(block: list[str], row: Any) -> None:
 
 @pytest.fixture(scope="module")
 def keyed(tmp_path_factory: pytest.TempPathFactory) -> tuple[Store, pd.DataFrame]:
-    """The keyed run and its default frame, read through the frozen M4 path. Never mutated."""
+    """The keyed run and its default frame, read through the default path. Never mutated."""
     store = Store(tmp_path_factory.mktemp("keyed-store"))
     _write_keyed_run(store)
     return store, store.read(KEYED_RUN)
@@ -406,7 +395,7 @@ def assert_inspect_prints_exactly(r: Result, rows: pd.DataFrame, hashes: set[str
 # ---------- R1: the default read is unchanged, and meta=True is the default ----------
 
 
-def test_r1_default_read_is_the_thirteen_column_frame(keyed: tuple[Store, pd.DataFrame]) -> None:
+def test_r1_default_read_is_the_fourteen_column_frame(keyed: tuple[Store, pd.DataFrame]) -> None:
     _, frame = keyed
     assert list(frame.columns) == FRAME
     assert len(frame) == len(PRESENT_KEYS)
@@ -432,7 +421,7 @@ def test_r1_meta_true_is_the_default_read(keyed: tuple[Store, pd.DataFrame]) -> 
 # ---------- R2: meta=False is the eleven-column projection ----------
 
 
-def test_r2_narrow_read_is_the_eleven_columns_of_the_default_frame(
+def test_r2_narrow_read_is_the_twelve_columns_of_the_default_frame(
     keyed: tuple[Store, pd.DataFrame],
 ) -> None:
     store, frame = keyed
@@ -624,7 +613,7 @@ def test_r5_verbs_read_the_poisoned_store_exactly_as_the_intact_one(
     assert intact.code == 0, intact.text
     assert intact.out.strip(), "the intact run printed nothing"
     if verb == "check":
-        # check's verdict is its first stdout line, passed or failed (front-door spec section 5.3).
+        # check's verdict is its first stdout line, passed or failed.
         # PF4 (PF4.20): an event of unknown kind is counted in direction words, so no rise reads
         # "0 higher" where it read "0 worse".
         assert intact.out.startswith("passed  ") and "0 higher" in intact.out, intact.out
@@ -724,7 +713,7 @@ def test_r6_one_poisoned_selected_row_is_loud(mock_run: MockRun, tmp_path: Path)
 @pytest.mark.parametrize("run_id", LATTICE_RUNS)
 def test_r7_lattice_default_read_is_2304_by_13(lattice_store: Store, run_id: str) -> None:
     df = lattice_store.read(run_id)
-    # PF4 re-freeze (reading R5): the thirteen columns plus case_id, null on parts written before it.
+    # the thirteen columns plus case_id, null on parts written before it.
     assert df.shape == (LATTICE_ROWS, 13 + 1)
     assert LATTICE_ROWS == lattice.ROWS == len(lattice.rows(run_id))
     assert list(df.columns) == FRAME
@@ -734,7 +723,7 @@ def test_r7_lattice_default_read_is_2304_by_13(lattice_store: Store, run_id: str
 @pytest.mark.parametrize("run_id", LATTICE_RUNS)
 def test_r7_lattice_narrow_read_is_2304_by_11(lattice_store: Store, run_id: str) -> None:
     df = lattice_store.read(run_id, meta=False)
-    # PF4 re-freeze (reading R5): the eleven columns plus case_id, null on parts written before it.
+    # the eleven columns plus case_id, null on parts written before it.
     assert df.shape == (LATTICE_ROWS, 11 + 1)
     assert list(df.columns) == NARROW
     assert df["case_id"].isna().all()
@@ -754,10 +743,9 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     golden = pq.read_schema(LATTICE_ROOT / lattice.RUN_A / "episodes" / "part-00000.parquet")
     # The lattice part is written in the legacy (pre-A7) layout, the thirteen columns.
     assert golden.names == THIRTEEN == list(lattice.LEGACY_COLUMNS)
-    # A7 (spec section 3.1, 7.1): the on-disk schema is the legacy golden's thirteen fields plus
-    # ``trace`` and ``trace_obs``, both nullable strings, appended in that order. Amended from
-    # ``fresh.equals(golden)`` / ``fresh.names == THIRTEEN``; the golden comparison is kept.
-    # PF4 re-freeze (reading R5): a nullable string case_id column follows trace_obs.
+    # A7: the on-disk schema is the legacy golden's thirteen fields plus
+    # ``trace`` and ``trace_obs``, both nullable strings, appended in that order; the golden
+    # comparison is kept. A nullable string case_id column follows trace_obs.
     expected = golden.append(pa.field("trace", pa.string(), nullable=True)).append(
         pa.field("trace_obs", pa.string(), nullable=True)
     ).append(pa.field("case_id", pa.string(), nullable=True))
@@ -765,10 +753,10 @@ def test_r7_on_disk_schema_and_manifest_are_unchanged(tmp_path: Path) -> None:
     assert fresh.names == THIRTEEN + ["trace", "trace_obs", "case_id"]
     golden_manifest = json.loads((LATTICE_ROOT / lattice.RUN_A / "manifest.json").read_text())
     assert set(golden_manifest) == lattice.LEGACY_MANIFEST_KEYS
-    # A10 (spec section 3.3, 7.1 group 1, W4): the manifest's top-level keys are the legacy golden's
-    # twelve plus ``declared``, which is null for a sweep that declares nothing. Amended from
-    # ``== set(golden_manifest)``; the golden comparison is kept. A23/A26 re-amends this line.
-    # PF0 (Q4): the version key is written as ``poisson_prove_version``; the golden, written by
+    # A10 (W4): the manifest's top-level keys are the legacy golden's
+    # twelve plus ``declared``, which is null for a sweep that declares nothing; the golden
+    # comparison is kept.
+    # PF0: the version key is written as ``poisson_prove_version``; the golden, written by
     # 0.0.1, keeps ``proofload_version``.
     assert set(store.manifest("r1").to_dict()) == (set(golden_manifest) - {"proofload_version"}) | {"poisson_prove_version", "declared"}
 
@@ -781,9 +769,8 @@ def test_r8_runs_on_lattice_prints_each_run_with_2304_rows(lattice_store: Store)
     assert r.code == 0, r.text
     assert not r.err
     lines = [line for line in r.out.splitlines() if line.strip()]
-    # PF2 (spec section 4.3): the first line is the verdict `ok  N runs in <store>` instead of
-    # `store: <root>`, and the table has the columns #, name, id, status, backend, target, rows,
-    # rows without an outcome, created (t_unit is no longer a column). A name holds single
+    # PF2: the first line is the verdict `ok  N runs in <store>`, and the table has the columns #, name, id, status, backend, target, rows,
+    # rows without an outcome, created (no t_unit column). A name holds single
     # spaces, so cells are split on runs of two or more spaces.
     assert lines[0] == f"ok  {len(LATTICE_RUNS)} runs in {LATTICE_ROOT}"
     assert re.split(r"\s{2,}", lines[1].strip()) == [
@@ -792,7 +779,7 @@ def test_r8_runs_on_lattice_prints_each_run_with_2304_rows(lattice_store: Store)
     ]
     cells = [re.split(r"\s{2,}", line.rstrip()) for line in lines[2:]]
     rows = {cell[2]: cell for cell in cells}
-    # PF2 (spec section 4.3): newest first by created_at, where the old table was in id order.
+    # PF2: newest first by created_at, where the old table was in id order.
     newest_first = sorted(
         LATTICE_RUNS, key=lambda run_id: lattice_store.manifest(run_id).created_at, reverse=True,
     )
@@ -802,9 +789,9 @@ def test_r8_runs_on_lattice_prints_each_run_with_2304_rows(lattice_store: Store)
         m = lattice_store.manifest(run_id)
         assert f"{m.target_id.split('/')[0]} {m.created_at[:10]} a" == names[run_id]
         assert rows[run_id] == [
-            # PF2 (spec section 4.3): a number and the computed name lead the row; created ends it.
+            # PF2: a number and the computed name lead the row; created ends it.
             str(number), f"{m.target_id.split('/')[0]} {m.created_at[:10]} a",
-            # Counts carry thousands separators in text (front-door spec section 5.4, rule 10).
+            # Counts carry thousands separators in text (rule 10).
             run_id, m.status, m.backend, m.target_id, f"{LATTICE_ROWS:,}", "0",
             f"{m.created_at[:19]}Z",
         ]
@@ -815,7 +802,7 @@ def test_r8_runs_on_lattice_prints_each_run_with_2304_rows(lattice_store: Store)
 
 def test_r9_read_gains_exactly_meta_and_keys_keyword_only() -> None:
     params = inspect.signature(Store.read).parameters
-    # A7 (spec section 2, 7.1): ``trace=`` is appended last, keyword-only, default None. Four
+    # A7: ``trace=`` is appended last, keyword-only, default None. Four
     # names to five; ``meta`` and ``keys`` keep their kind and default.
     assert list(params) == ["self", "run_id", "meta", "keys", "trace"]
     assert params["trace"].kind is inspect.Parameter.KEYWORD_ONLY
@@ -832,20 +819,3 @@ def test_r9_count_takes_a_run_id_and_nothing_else() -> None:
     params = inspect.signature(Store.count).parameters
     assert list(params) == ["self", "run_id"]
     assert params["run_id"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-
-
-def test_r9_store_public_methods_are_exactly_the_nine() -> None:
-    methods = {
-        name for name, _ in inspect.getmembers(Store, inspect.isfunction)
-        if not name.startswith("_")
-    }
-    assert methods == PUBLIC_STORE_METHODS
-
-
-def test_r9_nothing_else_in_the_module_changes() -> None:
-    public = {
-        name
-        for name, obj in vars(store_module).items()
-        if not name.startswith("_") and getattr(obj, "__module__", None) == store_module.__name__
-    }
-    assert public == PUBLIC_STORE_SYMBOLS

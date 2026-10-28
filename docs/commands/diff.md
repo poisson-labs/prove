@@ -30,7 +30,8 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --event NAME          an outcome that counts as the event; repeatable
-                        (default: inferred from the outcomes present)
+                        (default: the failures and successes the runs declare,
+                        else every outcome present but the most frequent)
   --method {fisher_bh,mcnemar_bh,logrank_bh}
                         the per-condition test: fisher_bh treats the two runs
                         as separate samples, mcnemar_bh pairs them on their
@@ -79,12 +80,11 @@ examples:
 - `RUN ...` names the baseline and the candidate, in that order: a run's name, its id, `latest`,
   `previous` or `#1`, as `runs` numbers them. With none, `previous` and `latest`.
 - `--event NAME` is an outcome that counts as the event; give it once per event. Without it the
-  events are inferred: every outcome but the most frequent, which is named as the non-event.
-  The inference does not read the runs' `[declare]` tables: when the most frequent outcome is a
-  failure, it is left out, so name the events you mean when it matters. Whether a rise of an event
-  is worse or safer comes from those tables; for runs that declare nothing, the name can carry it,
-  `--event timeout:failure`, and otherwise the verdict uses the kindless words `higher`, `lower`
-  and `mixed`.
+  events are the failures and successes the runs' `[declare]` tables name; for runs that declare
+  none, every outcome but the most frequent, which is named as the non-event. Whether a rise of an
+  event is worse or safer comes from those tables; for runs that declare nothing, the name can
+  carry it, `--event timeout:failure`, and otherwise the verdict uses the kindless words `higher`,
+  `lower` and `mixed`.
 - `--method` is the test each condition gets. `mcnemar_bh` pairs the runs' episodes on their shared
   seeds, and is the default for runs paired at sweep time; `fisher_bh` treats the runs as two
   separate samples, the default otherwise; `logrank_bh` compares the time to the event. Naming
