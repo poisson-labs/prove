@@ -33,6 +33,7 @@ SECRET_NAME = "proofload-live-test"
 SECRET_SALT = "live-secret-salt"
 
 pytestmark = [
+    pytest.mark.slow,
     pytest.mark.backend,
     pytest.mark.skipif(not LIVE, reason="set POISSON_PROVE_MODAL_LIVE=1 to run the live Modal test"),
     pytest.mark.skipif(not HAS_CREDENTIALS, reason="no Modal credentials (MODAL_TOKEN_ID or ~/.modal.toml)"),
