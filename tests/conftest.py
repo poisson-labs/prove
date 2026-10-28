@@ -118,6 +118,20 @@ LOOPBACK_MODULES = {
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
+def _importable(module: str) -> bool:
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+#: A test that runs OpenTelemetry's SDK (capture, the stamper): skipped, saying so, where the
+#: ``[agent]`` extra is not installed. Only the tests that need it carry it.
+needs_otel = pytest.mark.skipif(not _importable("opentelemetry.sdk"), reason="capture lives behind the [agent] extra")
+
+
 class NetworkBlocked(OSError):
     """A network connection or name lookup was attempted in a test."""
 
