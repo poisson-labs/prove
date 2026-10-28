@@ -629,7 +629,8 @@ def tours(tmp_path_factory: pytest.TempPathFactory, qs_world: tuple[Path, dict[s
     return tour
 
 
-@pytest.mark.parametrize("size", list(SIZES))
+# Slow (PF10): over 10 s of setup and call on the runner; 120x40 keeps the invariant on a pull request.
+@pytest.mark.parametrize("size", [pytest.param(size, marks=pytest.mark.slow) if size == "80x24" else size for size in SIZES])
 def test_pf6_every_screen_has_the_six_bands_one_focus_and_its_key_bar(size: str, tours: Callable[[str], dict[str, Any]]) -> None:
     """The look's layout: row 1 the header (``poisson-prove · <title>``, the store at the
     right edge), row 2 and row H − 1 a dim hairline, row H the key bar (keys bold, words dim, ending ``?

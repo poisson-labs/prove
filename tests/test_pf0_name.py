@@ -264,6 +264,8 @@ def test_pf0_1_the_wheel_is_poisson_prove_and_installs_one_package_and_one_scrip
     assert gone.returncode != 0 and "ModuleNotFoundError" in gone.stderr, gone
 
 
+# Slow (PF10): over 10 s of setup and call on the runner; 23 argument lists through two interpreters.
+@pytest.mark.slow
 def test_pf0_2_python_dash_m_gives_the_installed_commands_stdout_stderr_and_exit_code(installed: Installed, tmp_path: Path) -> None:
     """The command the wheel installed, against ``python -m poisson_prove`` in the same environment."""
     assert installed.command.is_file(), installed.command
