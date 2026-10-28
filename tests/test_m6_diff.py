@@ -59,7 +59,7 @@ CELLS = 72
 #: The reference's flagged conditions under fisher_bh (``lattice.directions(lattice.fisher())``).
 REFERENCE_SAFER, REFERENCE_WORSE = 22, 0
 TOL_EXACT = 1e-12
-TOL_ORACLE = 1e-9
+TOL_REFERENCE = 1e-9
 TOL_MDE = 1e-6
 
 CELLS_COLUMNS = [
@@ -398,8 +398,8 @@ def test_i7_logrank_matches_lifelines() -> None:
         assume(np.isfinite(ref.test_statistic) and np.isfinite(ref.p_value))
         result = _paired("logrank_bh", _one_cell(rows_a), _one_cell(rows_b), salt="x")
         row = result.cells.iloc[0]
-        assert abs(row["stat"] - float(ref.test_statistic)) <= TOL_ORACLE
-        assert abs(row["p"] - float(ref.p_value)) <= TOL_ORACLE
+        assert abs(row["stat"] - float(ref.test_statistic)) <= TOL_REFERENCE
+        assert abs(row["p"] - float(ref.p_value)) <= TOL_REFERENCE
 
     check()
 
@@ -488,7 +488,7 @@ def test_i9_mde_positive_bounded_and_decreasing_in_n(rate_a: float, n: int, rati
     assert m > 0.0
     assert rate_a + m <= 1.0 + TOL_EXACT
     bigger = mde_two_proportion(rate_a, 2 * n, 2 * n * ratio, alpha=Q, power=POWER)
-    assert bigger <= m + TOL_ORACLE
+    assert bigger <= m + TOL_REFERENCE
 
 
 @pytest.mark.math
@@ -529,7 +529,7 @@ def test_i10_cell_mde_is_mde_two_proportion_at_q(golden: DiffResult) -> None:
         if row.events_a == row.n_a:
             assert np.isnan(row.mde) and np.isnan(expected)
             continue
-        assert abs(row.mde - expected) <= TOL_ORACLE
+        assert abs(row.mde - expected) <= TOL_REFERENCE
 
 
 # ---------- I11: verdict rule ----------

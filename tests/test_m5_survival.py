@@ -52,7 +52,7 @@ TRIPPED_KEY = {lattice.RUN_A: "tripped_a", lattice.RUN_B: "tripped_b"}
 CELLS = 72
 HORIZON_S = 5.0
 TOL_EXACT = 1e-12
-TOL_ORACLE = 1e-9
+TOL_REFERENCE = 1e-9
 
 CELL_TABLE_COLUMNS = [
     "config_hash",
@@ -346,7 +346,7 @@ def test_i6_km_matches_lifelines() -> None:
         ref_s_at = ref_s.reindex(curve.times, method="ffill").to_numpy()
         ref_var_at = (ref_s**2 * ref_sum).reindex(curve.times, method="ffill").to_numpy()
         np.testing.assert_allclose(curve.survival, ref_s_at, rtol=0, atol=TOL_EXACT)
-        np.testing.assert_allclose(curve.var, ref_var_at, rtol=0, atol=TOL_ORACLE)
+        np.testing.assert_allclose(curve.var, ref_var_at, rtol=0, atol=TOL_REFERENCE)
 
     check()
 
@@ -428,7 +428,7 @@ def test_i9_aj_matches_lifelines() -> None:
                 )
             ref = ajf.cumulative_density_.iloc[:, 0].reindex(taus, method="ffill").to_numpy()
             ours = np.array([cif.at(k, tau) for tau in taus])
-            np.testing.assert_allclose(ours, ref, rtol=0, atol=TOL_ORACLE)
+            np.testing.assert_allclose(ours, ref, rtol=0, atol=TOL_REFERENCE)
 
     check()
 
