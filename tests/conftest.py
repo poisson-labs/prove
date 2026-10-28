@@ -5,7 +5,7 @@ import os
 import re
 import socket
 import tokenize
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -207,6 +207,33 @@ def blocked_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(socket.socket, "sendto", sendto)
     yield attempts
     assert attempts == [], f"network attempted in a test: {attempts}"
+
+
+def shared(tmp_path_factory: pytest.TempPathFactory, name: str, build: Callable[[Path], Any]) -> Any:
+    """``build(folder)`` once per test session, however many ``-n`` workers ask: the first to ask
+    builds into a folder of the session's own base and pickles what ``build`` returns, and every
+    other worker waits for it and reads the pickle. ``build`` writes every file it makes under
+    ``folder``; what it returns names paths there, which every worker can read. For a module
+    fixture whose tests only read what it built."""
+    import fcntl
+    import pickle
+    import shutil
+
+    base = tmp_path_factory.getbasetemp()
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        base = base.parent
+    folder, value = base / f"shared-{name}", base / f"shared-{name}.pickle"
+    with open(base / f"shared-{name}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not value.exists():
+            shutil.rmtree(folder, ignore_errors=True)
+            folder.mkdir(parents=True)
+            built = build(folder)
+            staged = value.with_suffix(".staged")
+            staged.write_bytes(pickle.dumps(built))
+            staged.replace(value)
+            return built
+    return pickle.loads(value.read_bytes())
 
 
 @functools.cache
