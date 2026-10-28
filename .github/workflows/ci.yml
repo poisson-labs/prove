@@ -179,9 +179,11 @@ jobs:
       - name: Code suite in a Linux container (Docker Desktop on the runner)
         run: |
           docker info --format 'docker {{.ServerVersion}}, {{.NCPU}} cpus, {{.OperatingSystem}}'
-          # As a user that is not root: chmod-based tests cannot fail as root.
+          # As a user that is not root: chmod-based tests cannot fail as root. --init puts an init at
+          # PID 1 that reaps orphaned children, as a Linux host's does; without it the Burla tests
+          # that wait for an orphaned launcher to exit see a zombie that never goes.
           set +e
-          docker run --rm -v "$PWD":/src:ro -e CODE_SUITE -e OPENBLAS_NUM_THREADS python:3.11-bookworm bash -c '
+          docker run --rm --init -v "$PWD":/src:ro -e CODE_SUITE -e OPENBLAS_NUM_THREADS python:3.11-bookworm bash -c '
             set -e
             pip install --quiet --root-user-action=ignore uv
             useradd --create-home tester

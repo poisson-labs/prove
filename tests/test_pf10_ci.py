@@ -164,6 +164,7 @@ def test_pf10_4_slow_floors_linux_run_nightly_and_before_a_release_and_history_b
     for name in ("slow", "floors", "linux"):
         condition = jobs()[name]["if"]
         assert all(event in condition for event in NIGHTLY) and "pull_request" not in condition and "push" not in condition, name
+    assert "docker run --rm --init " in runs("linux"), "PID 1 in the container must reap orphans"
     assert jobs()["history"]["if"] == "github.event_name == 'workflow_dispatch' && inputs.lane == 'release'"
     assert "history.py" in runs("history")
     assert jobs()["history"]["steps"][0]["with"]["fetch-depth"] == 0
