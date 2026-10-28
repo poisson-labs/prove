@@ -1098,7 +1098,7 @@ def by_name(pairs: Sequence[Pair]) -> dict[str, Pair]:
     return {p.name: p for p in pairs}
 
 
-# ---------- the pins (LS3, LS19): the page before anything wraps ----------
+# ---------- the pins (LS3): the page before anything wraps ----------
 
 # ---- pins begin ----
 #: LS3. Per pair, the stacked figure's width and, per panel, its unwrapped body height. Wrapping

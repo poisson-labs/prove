@@ -218,6 +218,8 @@ def test_i2_new_run_id_shape_and_uniqueness(monkeypatch: pytest.MonkeyPatch) -> 
     seeded = random.Random(0)
     monkeypatch.setattr(os, "urandom", seeded.randbytes)
     a, b = new_run_id(TARGET), new_run_id(TARGET)
+    drawn = random.Random(0)
+    assert (a[-4:], b[-4:]) == (drawn.randbytes(2).hex(), drawn.randbytes(2).hex()), (a, b)
     for rid in (a, b):
         assert RUN_ID_RE.match(rid), rid
         assert not any(ch in rid for ch in "/\\ :")

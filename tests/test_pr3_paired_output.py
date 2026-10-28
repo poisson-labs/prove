@@ -984,13 +984,12 @@ def test_pr52_the_cli_phases_are_the_declared_sweeps(tmp_path: Path) -> None:
 # ---------- PR53: without --paired, the library's rendering ----------
 
 
-def one_prove_version_entry(text: str) -> str:
+def assert_one_prove_version_entry(text: str) -> None:
     """A rendered report, receipt or page names its version once in its provenance list, as
     ``Prove version`` (a store 0.0.1 wrote says so inside that entry), and never as ``proofload
-    version``. Returns ``text`` unchanged."""
+    version``."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
-    return text
 
 
 # The command line prints report.md, receipt.html and the heatmap's labels under rule 10,
@@ -1142,7 +1141,9 @@ def test_pr53_a_report_without_paired_writes_the_library_rendering_and_the_latti
     assert (names[PAIR_A], names[PAIR_B]) == (lattice.NAME_A, lattice.NAME_B)
     for name in E14_FILES:
         assert named in library[name] and by_id not in library[name], name
-        text = library[name] if name == "heatmap.svg" else one_prove_version_entry(library[name])
+        text = library[name]
+        if name != "heatmap.svg":
+            assert_one_prove_version_entry(text)
         # PF4 (PF4.20): the event has no kind in the pair, so the headline counts are direction words
         # and no rendering says safer or worse.
         assert f"{lattice.EVENT}: {lower} lower, {higher} higher" in text, name
