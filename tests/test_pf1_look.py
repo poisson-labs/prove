@@ -85,7 +85,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from test_pf4_surfaces import _ref_gate
+from test_pf4_surfaces import ref_gate
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -126,7 +126,7 @@ MAX_MDE = "0.3"
 LOW_SPEC = SPEC.replace("replicates = 120", "replicates = 10")
 #: PF4.30, PF4.48a: the gate's limit for LOW_SPEC is the exact Fisher limit at level q / 9 at
 #: its worst base rate, computed from the stats file's references.
-LOW_LIMIT = _ref_gate(10, 9, 0.2)[2]
+LOW_LIMIT = ref_gate(10, 9, 0.2)[2]
 #: Three cells of three replicates for the targets that never return an episode.
 TRIPLE_SPEC = """\
 target_id = "pf1-errors"

@@ -165,7 +165,7 @@ def _fisher_p(n_a: int, n_b: int) -> np.ndarray:
     return out
 
 
-def _ref_fisher_power(p_a: float, n_a: int, n_b: int, level: float, deltas: np.ndarray, rise: bool) -> np.ndarray:
+def ref_fisher_power(p_a: float, n_a: int, n_b: int, level: float, deltas: np.ndarray, rise: bool) -> np.ndarray:
     """The power model: A ~ Binomial(n_a, p_a), B ~ Binomial(n_b, p_a +- delta); a table counts when
     its Fisher p is below the level and B's share moved the way the change does."""
     xa, xb = np.arange(n_a + 1), np.arange(n_b + 1)
@@ -193,7 +193,7 @@ def _paired_region(pairs: int, level: float) -> tuple[np.ndarray, np.ndarray]:
     return np.array(rise, dtype=int).reshape(-1, 2), np.array(fall, dtype=int).reshape(-1, 2)
 
 
-def _ref_paired_power(p_a: float, pairs: int, level: float, deltas: np.ndarray, rise: bool) -> np.ndarray:
+def ref_paired_power(p_a: float, pairs: int, level: float, deltas: np.ndarray, rise: bool) -> np.ndarray:
     """The paired power model: the two arms independent within a pair at A's share; the multinomial over
     (n01, n10, concordant) enumerated cell by cell, in chunks of the grid."""
     from scipy.special import gammaln
@@ -229,7 +229,7 @@ def _grid_within(room: float) -> np.ndarray:
     return grid[grid <= room + 1e-15]
 
 
-def _ref_limit(power: Callable[[np.ndarray], np.ndarray], room: float) -> float | None:
+def ref_limit(power: Callable[[np.ndarray], np.ndarray], room: float) -> float | None:
     """PF4.22: the smallest grid value whose power reaches the target and stays at or above it at every
     larger grid value within the room; None when there is none."""
     grid = _grid_within(room)
@@ -243,12 +243,12 @@ def _ref_limit(power: Callable[[np.ndarray], np.ndarray], room: float) -> float 
 
 def ref_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> tuple[float | None, float | None]:
     p_a = events_a / n_a
-    rise = _ref_limit(lambda g: _ref_fisher_power(p_a, n_a, n_b, level, g, True), 1.0 - p_a)
-    fall = _ref_limit(lambda g: _ref_fisher_power(p_a, n_a, n_b, level, g, False), p_a)
+    rise = ref_limit(lambda g: ref_fisher_power(p_a, n_a, n_b, level, g, True), 1.0 - p_a)
+    fall = ref_limit(lambda g: ref_fisher_power(p_a, n_a, n_b, level, g, False), p_a)
     return rise, fall
 
 
-def _assert_limit(got: Any, want: float | None, what: Any) -> None:
+def assert_limit(got: Any, want: float | None, what: Any) -> None:
     """The limit to the grid step: floating-point order
     can move a power that sits on the target by one ulp."""
     if want is None:
@@ -373,8 +373,8 @@ def test_pf4_23_fishers_limits_are_the_exact_power_definition_both_ways_on_any_a
         assert row["mde_rise_note"] in ("cannot be flagged", "no room") and row["mde_fall_note"] in ("cannot be flagged", "no room")
         assert _none(row["mde_rise"]) and _none(row["mde_fall"])
         return
-    _assert_limit(row["mde_rise"], rise, ("rise", n_a, n_b, events_a, rows))
-    _assert_limit(row["mde_fall"], fall, ("fall", n_a, n_b, events_a, rows))
+    assert_limit(row["mde_rise"], rise, ("rise", n_a, n_b, events_a, rows))
+    assert_limit(row["mde_fall"], fall, ("fall", n_a, n_b, events_a, rows))
     for value, room in ((row["mde_rise"], 1 - events_a / n_a), (row["mde_fall"], events_a / n_a)):
         if not _none(value):
             assert 0 < value <= room + 1e-15  # PF4.48: never past the room
@@ -417,8 +417,8 @@ def test_pf4_48_a_fall_from_a_share_off_the_grid_never_steps_past_the_room() -> 
     row = _cell(result, "fell", "c")
     room = 5 / 194
     assert _none(row["mde_fall"]) or row["mde_fall"] <= room + 1e-15, row["mde_fall"]
-    want = _ref_limit(lambda g: _ref_paired_power(5 / 194, 194, Q / 18, g, False), room)
-    _assert_limit(row["mde_fall"], want, "fall from 5 of 194")
+    want = ref_limit(lambda g: ref_paired_power(5 / 194, 194, Q / 18, g, False), room)
+    assert_limit(row["mde_fall"], want, "fall from 5 of 194")
     if want is None:
         assert row["mde_fall_note"] == "none detectable"
 
@@ -448,10 +448,10 @@ def test_pf4_24_the_paired_limits_are_the_independent_arms_enumeration_over_the_
     row = _cell(result, "fell", "c")
     assert row["pairs"] == pairs and row["mde_test"] == "mcnemar"
     p_a = k / pairs
-    rise = _ref_limit(lambda g: _ref_paired_power(p_a, pairs, Q / rows, g, True), 1 - p_a)
-    fall = _ref_limit(lambda g: _ref_paired_power(p_a, pairs, Q / rows, g, False), p_a)
-    _assert_limit(row["mde_rise"], rise, "rise")
-    _assert_limit(row["mde_fall"], fall, "fall")
+    rise = ref_limit(lambda g: ref_paired_power(p_a, pairs, Q / rows, g, True), 1 - p_a)
+    fall = ref_limit(lambda g: ref_paired_power(p_a, pairs, Q / rows, g, False), p_a)
+    assert_limit(row["mde_rise"], rise, "rise")
+    assert_limit(row["mde_fall"], fall, "fall")
     assert abs(row["p_min"] - min(1.0, 2 * 0.5**pairs)) <= 1e-15
     moved = _compare({"c": a}, {"c": _counts(pairs - k, pairs)}, method="mcnemar_bh", q=Q / rows)
     other = _cell(moved, "fell", "c")
@@ -553,7 +553,7 @@ def _check_logrank_limits(a: dict[str, list[tuple[int, str, float]]], n: int, ro
         assert _ref_logrank(t, o, n, 1e-6, level)[0] < POWER
     else:
         assert row["mde_fall"] >= GRID - 1e-12
-        k = _fall_step(t, o, n, row["mde_fall"], cif_a)
+        k = fall_step(t, o, n, row["mde_fall"], cif_a)
         assert k is not None and k >= 1, row["mde_fall"]
         power, _ = _ref_logrank(t, o, n, math.exp(-k * 1e-3), level)
         above, _ = _ref_logrank(t, o, n, math.exp(-(k - 1) * 1e-3), level)
@@ -576,7 +576,7 @@ def test_pf4_43_on_any_template_both_limits_are_the_discrete_mapping(n: int, bas
     _check_logrank_limits(a, n, rows, False)
 
 
-def _fall_step(t: np.ndarray, o: np.ndarray, n_b: int, value: float, cif_a: float) -> int | None:
+def fall_step(t: np.ndarray, o: np.ndarray, n_b: int, value: float, cif_a: float) -> int | None:
     """The step k of the fall's grid, theta = exp(-0.001 k), whose incidence change is ``value`` (the
     change grows with k, so a bisection finds it)."""
     def change(k: int) -> float:
@@ -653,8 +653,8 @@ def test_pf4_43_a_zero_baseline_uses_logranks_own_threshold_not_fishers(n_a: int
     r_b = int(math.floor(n_b * (n_a - other) / n_a + 0.5))
     kstar = _zero_baseline_kstar(n_a, other, n_b, r_b, level)
     assert kstar is not None
-    want = _ref_limit(lambda g: sps.binom.sf(kstar - 1, r_b, np.clip(g * n_b / r_b, 0.0, 1.0)), r_b / n_b)
-    _assert_limit(row["mde_rise"], want, ("zero baseline", n_a, other, n_b, rows))
+    want = ref_limit(lambda g: sps.binom.sf(kstar - 1, r_b, np.clip(g * n_b / r_b, 0.0, 1.0)), r_b / n_b)
+    assert_limit(row["mde_rise"], want, ("zero baseline", n_a, other, n_b, rows))
     assert want is None or want <= r_b / n_b + 1e-12
 
 
@@ -704,7 +704,7 @@ def test_pf4_27_at_a_baseline_of_one_the_rise_has_no_room_and_the_fall_is_the_li
     assert top["events_a"] == top["n_a"] == 40
     assert _none(top["mde_rise"]) and top["mde_rise_note"] == "no room"
     _, fall = ref_fisher_limits(40, 40, 40, Q / 2)
-    _assert_limit(top["mde_fall"], fall, "fall from 40 of 40")
+    assert_limit(top["mde_fall"], fall, "fall from 40 of 40")
     assert top["mde"] == top["mde_fall"] and top["mde_note"] is None
     ev = result.by_event["fell"]
     numbers = [r["mde"] for r in ev.cells.to_dict(orient="records") if not _none(r["mde"])]
@@ -1899,11 +1899,11 @@ def test_pf4_47_exact_complements_are_flagged_together_and_their_limit_is_at_twi
         assert c["mde_moves_with"] == other and abs(c["mde_level"] - 2 * Q / m) <= 1e-15
         k = 30 if event == "fell" else 70
         rise, fall = ref_fisher_limits(k, 100, 100, 2 * Q / m)
-        _assert_limit(c["mde_rise"], rise, (event, "rise"))
-        _assert_limit(c["mde_fall"], fall, (event, "fall"))
+        assert_limit(c["mde_rise"], rise, (event, "rise"))
+        assert_limit(c["mde_fall"], fall, (event, "fall"))
         vrise, vfall = ref_fisher_limits(k, 100, 100, Q / m)
-        _assert_limit(c["mde_rise_verdict"], vrise, (event, "verdict rise"))
-        _assert_limit(c["mde_fall_verdict"], vfall, (event, "verdict fall"))
+        assert_limit(c["mde_rise_verdict"], vrise, (event, "verdict rise"))
+        assert_limit(c["mde_fall_verdict"], vfall, (event, "verdict fall"))
         d = _cell(result, event, "d")
         assert d["mde_moves_with"] is None and abs(d["mde_level"] - Q / m) <= 1e-15
         assert (d["mde_rise_verdict"], d["mde_fall_verdict"]) == (d["mde_rise"], d["mde_fall"])
@@ -1930,13 +1930,13 @@ def test_pf4_47_on_any_arms_rows_that_move_together_carry_both_levels_limits(na:
         assert c["mde_moves_with"] == ("ok" if event == "fell" else "fell")
         for key, level in (("", 2 * Q / 4), ("_verdict", Q / 4)):
             rise, fall = ref_fisher_limits(events_a, na, nb, level)
-            _assert_limit(c[f"mde_rise{key}"], rise, (event, "rise", key))
-            _assert_limit(c[f"mde_fall{key}"], fall, (event, "fall", key))
+            assert_limit(c[f"mde_rise{key}"], rise, (event, "rise", key))
+            assert_limit(c[f"mde_fall{key}"], fall, (event, "fall", key))
         d = _cell(result, event, "d")
         assert d["mde_moves_with"] is None and abs(d["mde_level"] - Q / 4) <= 1e-15
         rise, fall = ref_fisher_limits(events_a, na + 1, nb, Q / 4)
-        _assert_limit(d["mde_rise"], rise, (event, "d rise"))
-        _assert_limit(d["mde_fall"], fall, (event, "d fall"))
+        assert_limit(d["mde_rise"], rise, (event, "d rise"))
+        assert_limit(d["mde_fall"], fall, (event, "d fall"))
         assert (d["mde_rise_verdict"], d["mde_fall_verdict"]) == (d["mde_rise"], d["mde_fall"])
 
 
@@ -1967,7 +1967,7 @@ def test_pf4_47_on_rows_that_move_together_flaggable_and_the_notes_are_at_their_
         assert abs(c["p_min"] - p_min) <= 1e-12 and c["flaggable"] is True
         rise, fall = ref_fisher_limits(2, 4, 4, Q)
         for way, want in (("rise", rise), ("fall", fall)):
-            _assert_limit(c[f"mde_{way}"], want, (event, way))
+            assert_limit(c[f"mde_{way}"], want, (event, way))
             assert (c[f"mde_{way}_note"] == "none detectable") is (want is None)
         assert _none(c["mde_rise_verdict"]) and _none(c["mde_fall_verdict"])
     assert result.comparison_verdict() == "too small to tell"

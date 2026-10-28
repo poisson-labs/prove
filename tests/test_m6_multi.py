@@ -69,7 +69,7 @@ from poisson_prove.diff import (
 )
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import censor
-from test_pf4_stats import _assert_limit, ref_fisher_limits
+from test_pf4_stats import assert_limit, ref_fisher_limits
 
 import lattice
 
@@ -781,7 +781,7 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
         else:
             want = None  # a direction with room and no limit leaves no single number
         assert abs(float(row.mde_level) - level) <= 1e-15, row.Index
-        _assert_limit(row.mde, want, (row.Index, events_a))
+        assert_limit(row.mde, want, (row.Index, events_a))
     # PF4.20: the comparison's "tripped" has no kind, so its verdict column reads direction words
     # where DiffResult's reads safer/worse.
     as_direction = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}

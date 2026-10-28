@@ -229,11 +229,11 @@ def _write_stores(stores: Path) -> None:
     """The corpus's stores, written once and copied into each variant's folder."""
     from pf6_support import cli
     from test_pf1_look import PAIRED_DECLARATION, write_paired_store
-    from test_pf4_surfaces import MID, STANDARD_A, STANDARD_B, _arm, _declared, _pair
+    from test_pf4_surfaces import MID, STANDARD_A, STANDARD_B, arm_runs, declared_outcomes, write_pair
 
-    failures = _declared(failures=("fell",))
+    failures = declared_outcomes(failures=("fell",))
     # A condition where nothing happens, so a comparison given no event infers ``fell``.
-    quiet = {"quiet": _arm(0, 120)}
+    quiet = {"quiet": arm_runs(0, 120)}
     small = stores / "small"
     spec = stores.parent / "small.toml"
     spec.write_text(SMALL_SPEC, encoding="utf-8")
@@ -241,11 +241,11 @@ def _write_stores(stores: Path) -> None:
                  ["sweep", str(spec), "--yes", "--max-mde", "1", "--target", f"{MOCK}:rollout_patched", "--pair-with", "latest"]):
         result = cli("--store", small, *argv)
         assert result.code == 0, result
-    _pair(stores / "standard", {**STANDARD_A, **quiet}, {**STANDARD_B, **quiet}, declared_a=failures, declared_b=failures)
-    _pair(stores / "nokind", {**STANDARD_A, **quiet}, {**STANDARD_B, **quiet})
+    write_pair(stores / "standard", {**STANDARD_A, **quiet}, {**STANDARD_B, **quiet}, declared_a=failures, declared_b=failures)
+    write_pair(stores / "nokind", {**STANDARD_A, **quiet}, {**STANDARD_B, **quiet})
     env = {"max_mde_accepted": 0.3}
-    _pair(stores / "mid", {**MID, **quiet}, {**MID, **quiet}, environment_a=env, environment_b=env, declared_a=failures, declared_b=failures)
-    _pair(stores / "tiny", {"c": _arm(1, 4), "d": _arm(2, 4), "q": _arm(0, 8)}, {"c": _arm(3, 4), "d": _arm(2, 4), "q": _arm(0, 8)},
+    write_pair(stores / "mid", {**MID, **quiet}, {**MID, **quiet}, environment_a=env, environment_b=env, declared_a=failures, declared_b=failures)
+    write_pair(stores / "tiny", {"c": arm_runs(1, 4), "d": arm_runs(2, 4), "q": arm_runs(0, 8)}, {"c": arm_runs(3, 4), "d": arm_runs(2, 4), "q": arm_runs(0, 8)},
           declared_a=failures, declared_b=failures)
     write_paired_store(stores / "paired")
     (stores.parent / "decl-under.toml").write_text(PAIRED_DECLARATION.format(cap="token_cap = 1000000000\n"), encoding="utf-8")

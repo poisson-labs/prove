@@ -60,7 +60,7 @@ from typing import Any
 
 import pyarrow.parquet as pq
 import pytest
-from test_pf4_stats import ref_fisher_limits, _ref_limit, _ref_paired_power
+from test_pf4_stats import ref_fisher_limits, ref_limit, ref_paired_power
 from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -680,8 +680,8 @@ def reference_mde(method: str, events_a: int, n: int, level: float) -> float | N
     if method == "fisher_bh":
         rise, fall = ref_fisher_limits(events_a, n, n, level)
     else:
-        rise = _ref_limit(lambda g: _ref_paired_power(p_a, n, level, g, True), 1.0 - p_a)
-        fall = _ref_limit(lambda g: _ref_paired_power(p_a, n, level, g, False), p_a)
+        rise = ref_limit(lambda g: ref_paired_power(p_a, n, level, g, True), 1.0 - p_a)
+        fall = ref_limit(lambda g: ref_paired_power(p_a, n, level, g, False), p_a)
     if rise is not None and fall is not None:
         return max(rise, fall)
     if rise is not None and p_a == 0.0:

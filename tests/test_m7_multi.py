@@ -81,7 +81,7 @@ from poisson_prove.report import (
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import cell_table, censor
 from conftest import blas_thread_cap, quickstart_design
-from test_pf4_stats import POWER, _ref_fisher_power
+from test_pf4_stats import POWER, ref_fisher_power
 
 ROOT = Path(__file__).resolve().parents[1]
 #: B1. The single-event report's title on the lattice pair.
@@ -847,7 +847,7 @@ def limit_kind(gain: float, load: float) -> str:
     if cell.tripped_a == lattice.N:
         return "ceiling"
     p_a = cell.tripped_a / lattice.N
-    power = float(_ref_fisher_power(p_a, lattice.N, lattice.N, 0.05, np.array([1.0 - p_a]), True)[0])
+    power = float(ref_fisher_power(p_a, lattice.N, lattice.N, 0.05, np.array([1.0 - p_a]), True)[0])
     return "none" if power < POWER else "limit"
 
 

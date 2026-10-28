@@ -172,13 +172,13 @@ def _page_text(page: dict[str, Any]) -> str:
 # ---------- stores, built by hand ----------
 
 
-def _arm(k: int, n: int, *, start: float = 1.0, step: float = 0.1, event: str = "fell") -> list[tuple[int, str | None, float]]:
+def arm_runs(k: int, n: int, *, start: float = 1.0, step: float = 0.1, event: str = "fell") -> list[tuple[int, str | None, float]]:
     """``n`` runs of which the first ``k`` ended in ``event``, at ``start``, ``start + step``, ...; the
     rest end ``ok`` at the horizon."""
     return [(i, event, start + step * i) if i < k else (i, "ok", HORIZON) for i in range(n)]
 
 
-def _write_run(
+def write_run(
     root: Path,
     run_id: str,
     cells: dict[str, list[tuple[int, str | None, float]]],
@@ -225,7 +225,7 @@ def _write_run(
         path.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def _pair(
+def write_pair(
     root: Path,
     a: dict[str, list[tuple[int, str | None, float]]],
     b: dict[str, list[tuple[int, str | None, float]]],
@@ -237,8 +237,8 @@ def _pair(
     decl_b = kw.pop("declared_b", None)
     meta_a = kw.pop("meta_a", None)
     meta_b = kw.pop("meta_b", None)
-    _write_run(root, A_ID, a, environment=env_a, declared=decl_a, meta=meta_a, created_at="2026-10-20T10:00:00Z", **kw)
-    _write_run(root, B_ID, b, environment=env_b, declared=decl_b, meta=meta_b, created_at="2026-10-20T10:01:00Z", **kw)
+    write_run(root, A_ID, a, environment=env_a, declared=decl_a, meta=meta_a, created_at="2026-10-20T10:00:00Z", **kw)
+    write_run(root, B_ID, b, environment=env_b, declared=decl_b, meta=meta_b, created_at="2026-10-20T10:01:00Z", **kw)
     return root
 
 
@@ -246,18 +246,18 @@ def _pair(
 #: ("down"), one unchanged, one whose baseline fell in every run, one at 38 of 40 where no rise is
 #: detectable, and one at zero.
 STANDARD_A = {
-    "up": _arm(4, 40), "down": _arm(30, 40), "same": _arm(10, 40),
-    "top": _arm(40, 40), "near_top": _arm(38, 40), "zero": _arm(0, 40),
+    "up": arm_runs(4, 40), "down": arm_runs(30, 40), "same": arm_runs(10, 40),
+    "top": arm_runs(40, 40), "near_top": arm_runs(38, 40), "zero": arm_runs(0, 40),
 }
 STANDARD_B = {
-    "up": _arm(30, 40), "down": _arm(4, 40), "same": _arm(10, 40),
-    "top": _arm(40, 40), "near_top": _arm(38, 40), "zero": _arm(0, 40),
+    "up": arm_runs(30, 40), "down": arm_runs(4, 40), "same": arm_runs(10, 40),
+    "top": arm_runs(40, 40), "near_top": arm_runs(38, 40), "zero": arm_runs(0, 40),
 }
 
 
 @pytest.fixture(scope="module")
 def standard(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    return _pair(tmp_path_factory.mktemp("standard") / "prove-runs", STANDARD_A, STANDARD_B)
+    return write_pair(tmp_path_factory.mktemp("standard") / "prove-runs", STANDARD_A, STANDARD_B)
 
 
 def _hash(name: str) -> str:
@@ -521,8 +521,8 @@ def test_pf4_37_a_two_run_share_counts_by_the_common_horizon_and_is_never_marked
          "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 10.0) for i in range(40)]}
     b = {"late": [(i, "ok", 5.0) for i in range(40)],
          "early": [(i, "fell", 1.0 + 0.1 * i) if i < 20 else (i, "ok", 5.0) for i in range(40)]}
-    _write_run(root, A_ID, a, created_at="2026-10-20T10:00:00Z")
-    _write_run(root, B_ID, b, created_at="2026-10-20T10:01:00Z", horizon=5.0)
+    write_run(root, A_ID, a, created_at="2026-10-20T10:00:00Z")
+    write_run(root, B_ID, b, created_at="2026-10-20T10:01:00Z", horizon=5.0)
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
     cells = _cells_of(doc)
     late, early = cells[_hash("late")], cells[_hash("early")]
@@ -564,13 +564,13 @@ def test_pf4_3_the_two_run_report_prints_the_shares_and_the_caption_says_they_ar
 # ---------- PF4.4 and PF4.30: the design's limit, recorded and printed ----------
 
 
-def _ref_gate(n: int, rows: int, threshold: float) -> tuple[float, str, float]:
+def ref_gate(n: int, rows: int, threshold: float) -> tuple[float, str, float]:
     """The gate's worst base rate on a 0.005 grid among those with room for the threshold, the way the
     change goes there, and the limit that way at that base rate (Fisher, level q / rows), from the
     stats file's references."""
     import numpy as np
 
-    from test_pf4_stats import _ref_fisher_power, _ref_limit
+    from test_pf4_stats import ref_fisher_power, ref_limit
 
     level = Q / rows
     worst = (2.0, 0.0, "rise")
@@ -578,13 +578,13 @@ def _ref_gate(n: int, rows: int, threshold: float) -> tuple[float, str, float]:
         for way in ("rise", "fall"):
             if (way == "rise" and base > 1 - threshold + 1e-9) or (way == "fall" and base < threshold - 1e-9):
                 continue
-            power = float(_ref_fisher_power(float(base), n, n, level, np.array([threshold]), way == "rise")[0])
+            power = float(ref_fisher_power(float(base), n, n, level, np.array([threshold]), way == "rise")[0])
             # Ties (within 1e-12) go to the lower base rate, a rise before a fall (PF4.30).
             if power < worst[0] - 1e-12:
                 worst = (power, float(base), way)
     _, base, way = worst
     room = 1 - base if way == "rise" else base
-    limit = _ref_limit(lambda g: _ref_fisher_power(base, n, n, level, g, way == "rise"), room)
+    limit = ref_limit(lambda g: ref_fisher_power(base, n, n, level, g, way == "rise"), room)
     assert limit is not None
     return base, way, limit
 
@@ -617,7 +617,7 @@ def swept(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
 
 def _assert_design(design: dict[str, Any], *, n: int, conditions: int, events: int, threshold: float) -> None:
     rows = conditions * events
-    base, way, limit = _ref_gate(n, rows, threshold)
+    base, way, limit = ref_gate(n, rows, threshold)
     assert design["base_rate"] == base, (design["base_rate"], base)
     assert design["direction"] == way, (design["direction"], way)
     assert abs(design["mde"] - limit) <= 1e-4 + 1e-12, (design["mde"], limit)
@@ -740,17 +740,17 @@ def _verdict_table_rows() -> list[tuple[str, dict[str, Any], dict[str, Any], str
     failure on the command line. 200 runs give an unchanged condition a limit near 0.1 both ways; 20,
     one near 0.5."""
     return [
-        ("trade", {"w": _arm(4, 40), "s": _arm(30, 40)}, {"w": _arm(30, 40), "s": _arm(4, 40)}, "trade"),
-        ("worse", {"w": _arm(4, 40), "u": _arm(5, 200)}, {"w": _arm(30, 40), "u": _arm(5, 200)}, "worse"),
-        ("safer", {"s": _arm(30, 40), "u": _arm(5, 200)}, {"s": _arm(4, 40), "u": _arm(5, 200)}, "safer"),
-        ("too small", {"u": _arm(10, 20), "v": _arm(10, 20)}, {"u": _arm(10, 20), "v": _arm(10, 20)}, "too small to tell"),
-        ("no change", {"u": _arm(20, 200), "v": _arm(5, 200)}, {"u": _arm(20, 200), "v": _arm(5, 200)}, "no significant change"),
+        ("trade", {"w": arm_runs(4, 40), "s": arm_runs(30, 40)}, {"w": arm_runs(30, 40), "s": arm_runs(4, 40)}, "trade"),
+        ("worse", {"w": arm_runs(4, 40), "u": arm_runs(5, 200)}, {"w": arm_runs(30, 40), "u": arm_runs(5, 200)}, "worse"),
+        ("safer", {"s": arm_runs(30, 40), "u": arm_runs(5, 200)}, {"s": arm_runs(4, 40), "u": arm_runs(5, 200)}, "safer"),
+        ("too small", {"u": arm_runs(10, 20), "v": arm_runs(10, 20)}, {"u": arm_runs(10, 20), "v": arm_runs(10, 20)}, "too small to tell"),
+        ("no change", {"u": arm_runs(20, 200), "v": arm_runs(5, 200)}, {"u": arm_runs(20, 200), "v": arm_runs(5, 200)}, "no significant change"),
         # PF4.29: a condition that can tell a rise of 0.20 from 0.70 at 120 runs but not a fall: too small.
-        ("only up", {"u": _arm(84, 120), "v": _arm(84, 120)}, {"u": _arm(84, 120), "v": _arm(84, 120)}, "too small to tell"),
+        ("only up", {"u": arm_runs(84, 120), "v": arm_runs(84, 120)}, {"u": arm_runs(84, 120), "v": arm_runs(84, 120)}, "too small to tell"),
         # No room downward at T: from 0.05 a fall of 0.20 has no room, so only the rise is asked.
-        ("no room down", {"u": _arm(10, 200), "v": _arm(10, 200)}, {"u": _arm(10, 200), "v": _arm(10, 200)}, "no significant change"),
+        ("no room down", {"u": arm_runs(10, 200), "v": arm_runs(10, 200)}, {"u": arm_runs(10, 200), "v": arm_runs(10, 200)}, "no significant change"),
         # Every condition cannot be flagged at all: too small, whatever the threshold.
-        ("cannot flag", {"u": _arm(1, 3), "v": _arm(1, 3)}, {"u": _arm(1, 3), "v": _arm(1, 3)}, "too small to tell"),
+        ("cannot flag", {"u": arm_runs(1, 3), "v": arm_runs(1, 3)}, {"u": arm_runs(1, 3), "v": arm_runs(1, 3)}, "too small to tell"),
     ]
 
 
@@ -760,7 +760,7 @@ ROW_IDS = ["trade", "worse", "safer", "too-small", "no-change", "only-up", "no-r
 @pytest.mark.parametrize("row", range(len(ROW_IDS)), ids=ROW_IDS)
 def test_pf4_5_every_surface_gives_the_same_word_for_each_row_of_the_verdict_table(row: int, tmp_path: Path) -> None:
     name, a, b, word = _verdict_table_rows()[row]
-    root = _pair(tmp_path / "prove-runs", a, b)
+    root = write_pair(tmp_path / "prove-runs", a, b)
     assert _one_word(_verdicts(root, tmp_path, "fell:failure")) == word, name
 
 
@@ -770,7 +770,7 @@ def test_pf4_29_the_question_reads_each_direction_with_room_and_t_above_both_roo
     about 0.5."""
     up, down = ref_fisher_limits(84, 120, 120, Q / 2)
     assert up is not None and down is not None and up <= 0.20 < down, (up, down)
-    root = _pair(tmp_path / "prove-runs", {"u": _arm(100, 200)}, {"u": _arm(100, 200)},
+    root = write_pair(tmp_path / "prove-runs", {"u": arm_runs(100, 200)}, {"u": arm_runs(100, 200)},
                  environment_a={"max_mde_accepted": 0.6}, environment_b={"max_mde_accepted": 0.6})
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh", "--json"))
     assert doc["verdict"] == "no significant change" and doc["threshold"] == 0.6
@@ -783,12 +783,12 @@ def test_pf4_5_a_condition_that_trades_two_events_counts_as_both(tmp_path: Path)
     b_rows = [(i, "fell", 1.0 + 0.01 * i) if i < 4 else (i, "stuck", 2.0) if i < 34 else (i, "ok", HORIZON)
               for i in range(60)]
     quiet = [(i, "ok", HORIZON) for i in range(60)]
-    root = _pair(tmp_path / "prove-runs", {"c": a_rows, "quiet": quiet}, {"c": b_rows, "quiet": quiet})
+    root = write_pair(tmp_path / "prove-runs", {"c": a_rows, "quiet": quiet}, {"c": b_rows, "quiet": quiet})
     assert _one_word(_verdicts(root, tmp_path, "fell:failure", "stuck:failure")) == "trade"
 
 
 #: Every unchanged condition at 60 runs and a rate of 0.5: a limit between 0.20 and 0.30 both ways.
-MID = {"u": _arm(30, 60), "v": _arm(30, 60)}
+MID = {"u": arm_runs(30, 60), "v": arm_runs(30, 60)}
 
 
 @pytest.mark.parametrize(
@@ -806,7 +806,7 @@ def test_pf4_5_the_threshold_is_the_recorded_one_the_smaller_of_two_or_the_defau
 ) -> None:
     rise, fall = ref_fisher_limits(30, 60, 60, Q / 2)
     assert rise is not None and fall is not None and 0.20 < max(rise, fall) <= 0.30  # the construction
-    root = _pair(tmp_path / "prove-runs", MID, MID, environment_a=env_a, environment_b=env_b)
+    root = write_pair(tmp_path / "prove-runs", MID, MID, environment_a=env_a, environment_b=env_b)
     assert _one_word(_verdicts(root, tmp_path, "fell:failure")) == word
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh", "--json"))
     assert doc["threshold"] == threshold and doc["threshold_source"] == source
@@ -816,7 +816,7 @@ def test_pf4_5_the_threshold_is_the_recorded_one_the_smaller_of_two_or_the_defau
 
 
 def test_pf4_5_the_page_summarys_50_point_rule_is_gone(tmp_path: Path) -> None:
-    root = _pair(tmp_path / "prove-runs", MID, MID, environment_a={}, environment_b={})
+    root = write_pair(tmp_path / "prove-runs", MID, MID, environment_a={}, environment_b={})
     page = _json(_cli(root, "serve", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh",
                       "--x", "cell", "--json"))
     assert page["summary"]["verdict"] == "too small to tell"
@@ -829,7 +829,7 @@ def test_pf4_50_the_threshold_line_sits_under_the_nothing_moved_words_only(stand
     once, after the method line and before the before line."""
     moved = _cli(standard, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
     assert _first_word(moved.out) == "trade" and _detail(moved.out, "threshold") == []
-    root = _pair(tmp_path / "prove-runs", MID, MID)
+    root = write_pair(tmp_path / "prove-runs", MID, MID)
     still = _cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
     block = _block(still.out)
     assert len(_detail(still.out, "threshold")) == 1
@@ -878,9 +878,9 @@ def test_pf4_6_no_help_names_a_phase_or_offers_a_trace_grouping(verb: str, tmp_p
 @pytest.mark.parametrize("verb", ["diff", "diff --json", "check", "report", "serve"])
 def test_pf4_7_a_pair_with_no_comparable_condition_is_refused_naming_the_holes(verb: str, tmp_path: Path) -> None:
     """Every comparing verb refuses, not only diff."""
-    a = {"c1": _arm(4, 20), "c2": _arm(4, 20), "c3": _arm(4, 20)}
-    b = {"d1": _arm(4, 20), "d2": _arm(4, 20)}
-    root = _pair(tmp_path / "prove-runs", a, b)
+    a = {"c1": arm_runs(4, 20), "c2": arm_runs(4, 20), "c3": arm_runs(4, 20)}
+    b = {"d1": arm_runs(4, 20), "d2": arm_runs(4, 20)}
+    root = write_pair(tmp_path / "prove-runs", a, b)
     name, *extra = verb.split()
     argv = [name, A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", *extra]
     if name in ("report", "serve"):
@@ -1115,7 +1115,7 @@ def test_pf4_11_no_output_carries_the_store_path_the_platform_the_python_build_o
 def test_pf4_13_diff_json_carries_the_direction_and_its_timing_note_under_logrank(tmp_path: Path) -> None:
     a = {"c": [(i, "fell", 8.0 + 0.05 * i) for i in range(32)]}
     b = {"c": [(i, "fell", 1.0 + 0.05 * i) for i in range(32)]}
-    root = _pair(tmp_path / "prove-runs", a, b, salt="unshared")
+    root = write_pair(tmp_path / "prove-runs", a, b, salt="unshared")
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "logrank_bh", "--json"))
     (cell,) = doc["by_event"]["fell"]["cells"]
     assert cell["delta"] == 0.0 and cell["direction"] == "higher" and cell["verdict"] == "worse"
@@ -1137,10 +1137,10 @@ def test_pf4_14_diff_json_carries_the_matched_difference_and_the_pair_count_unde
     the change; each run's own counts and rates still count every run."""
     a = [(i, "fell" if i < 4 else "ok", HORIZON if i >= 4 else 1.0) for i in range(20)]
     b = [(i, "fell" if i < 12 else "ok", HORIZON if i >= 12 else 1.0) for i in range(20)]
-    matched_root = _pair(tmp_path / "matched", {"c": a}, {"c": b})
+    matched_root = write_pair(tmp_path / "matched", {"c": a}, {"c": b})
     a += [(20 + j, "fell", 1.0) for j in range(12)]
     b += [(40 + j, "ok", HORIZON) for j in range(12)]
-    root = _pair(tmp_path / "prove-runs", {"c": a}, {"c": b})
+    root = write_pair(tmp_path / "prove-runs", {"c": a}, {"c": b})
     argv = ("diff", A_ID, B_ID, "--event", "fell:failure", "--method", "mcnemar_bh", "--json")
     (cell,) = _json(_cli(root, *argv))["by_event"]["fell"]["cells"]
     (matched,) = _json(_cli(matched_root, *argv))["by_event"]["fell"]["cells"]
@@ -1218,9 +1218,9 @@ def test_pf4_27_a_null_limit_prints_its_reason_and_no_number(standard: Path, tmp
 
 
 def test_pf4_27_the_honesty_line_that_names_an_undetectable_condition_says_so(tmp_path: Path) -> None:
-    a = {"w": _arm(4, 40), "s": _arm(30, 40), "near": _arm(38, 40)}
-    b = {"w": _arm(30, 40), "s": _arm(4, 40), "near": _arm(38, 40)}
-    root = _pair(tmp_path / "prove-runs", a, b)
+    a = {"w": arm_runs(4, 40), "s": arm_runs(30, 40), "near": arm_runs(38, 40)}
+    b = {"w": arm_runs(30, 40), "s": arm_runs(4, 40), "near": arm_runs(38, 40)}
+    root = write_pair(tmp_path / "prove-runs", a, b)
     _cli(root, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell", "--out", str(tmp_path / "r"))
     page = _json(_cli(root, "serve", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell", "--json"))
     (entry,) = page["summary"]["events"]
@@ -1261,10 +1261,10 @@ def test_pf4_32_every_surface_names_the_limits_test_level_family_and_power_from_
 
 
 def test_pf4_17_when_every_compared_condition_moved_the_lines_count_what_was_not_compared(tmp_path: Path) -> None:
-    a = {"c1": _arm(4, 40), "c2": _arm(30, 40), "c3": _arm(5, 40), "c4": _arm(5, 40), "c5": _arm(5, 40),
-         "c6": _arm(5, 40)}
-    b = {"c1": _arm(30, 40), "c2": _arm(4, 40)}
-    root = _pair(tmp_path / "prove-runs", a, b)
+    a = {"c1": arm_runs(4, 40), "c2": arm_runs(30, 40), "c3": arm_runs(5, 40), "c4": arm_runs(5, 40), "c5": arm_runs(5, 40),
+         "c6": arm_runs(5, 40)}
+    b = {"c1": arm_runs(30, 40), "c2": arm_runs(4, 40)}
+    root = write_pair(tmp_path / "prove-runs", a, b)
     page = _json(_cli(root, "serve", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell", "--json"))
     (entry,) = page["summary"]["events"]
     line = entry["limit"]["line"]
@@ -1362,7 +1362,7 @@ SOLVED_B = {"c": [(i, "solved" if i < 26 else "failed", 1.0) for i in range(32)]
 @pytest.fixture(scope="module")
 def solved(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """The re-check's success event: B solves 26 of 32 where A solved 6."""
-    return _pair(tmp_path_factory.mktemp("solved") / "prove-runs", SOLVED_A, SOLVED_B)
+    return write_pair(tmp_path_factory.mktemp("solved") / "prove-runs", SOLVED_A, SOLVED_B)
 
 
 def test_pf4_20_a_success_event_that_rose_is_safer_and_never_worse(solved: Path) -> None:
@@ -1386,7 +1386,7 @@ def test_pf4_20_a_success_event_that_rose_is_safer_and_never_worse(solved: Path)
     # The independent read's finding 2: the report, the receipt and the page say safer too, never worse.
     # A report needs an axis that varies, so the pair gains a quiet second condition.
     quiet = [(i, "failed", 1.0) for i in range(32)]
-    two = _pair(solved.parent / f"two-{uuid.uuid4().hex[:6]}", {**SOLVED_A, "d": quiet}, {**SOLVED_B, "d": quiet})
+    two = write_pair(solved.parent / f"two-{uuid.uuid4().hex[:6]}", {**SOLVED_A, "d": quiet}, {**SOLVED_B, "d": quiet})
     out = solved.parent / f"success-{uuid.uuid4().hex[:6]}"
     assert _cli(two, "report", A_ID, B_ID, "--event", "solved:success", "--method", "fisher_bh", "--x", "cell",
                 "--out", str(out)).code == 0
@@ -1422,28 +1422,28 @@ def test_pf4_20_check_fail_on_higher_and_lower_gate_on_the_direction(solved: Pat
     assert doc["passed"] is True and doc["fail_on"] == "lower"
 
 
-def _declared(failures: tuple[str, ...] = (), successes: tuple[str, ...] = ()) -> dict[str, Any]:
+def declared_outcomes(failures: tuple[str, ...] = (), successes: tuple[str, ...] = ()) -> dict[str, Any]:
     return {"outcomes": ["fell", "ok"], "failures": list(failures), "successes": list(successes)}
 
 
 def test_pf4_20_a_kind_the_runs_declare_gives_the_words_without_the_command_line(tmp_path: Path) -> None:
-    root = _pair(tmp_path / "prove-runs", STANDARD_A, STANDARD_B,
-                 declared_a=_declared(failures=["fell"]), declared_b=_declared(failures=["fell"]))
+    root = write_pair(tmp_path / "prove-runs", STANDARD_A, STANDARD_B,
+                 declared_a=declared_outcomes(failures=["fell"]), declared_b=declared_outcomes(failures=["fell"]))
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
     assert doc["verdict"] == "trade"
     assert doc["by_event"]["fell"]["kind"] == "failure"
 
 
 def test_pf4_20_a_kind_declared_by_one_run_only_is_used(tmp_path: Path) -> None:
-    root = _pair(tmp_path / "prove-runs", STANDARD_A, STANDARD_B,
-                 declared_b=_declared(failures=["fell"]))
+    root = write_pair(tmp_path / "prove-runs", STANDARD_A, STANDARD_B,
+                 declared_b=declared_outcomes(failures=["fell"]))
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
     assert doc["by_event"]["fell"]["kind"] == "failure"
 
 
 def test_pf4_20_a_command_line_kind_that_contradicts_a_declaration_is_refused(tmp_path: Path) -> None:
-    root = _pair(tmp_path / "prove-runs", STANDARD_A, STANDARD_B,
-                 declared_a=_declared(failures=["fell"]), declared_b=_declared(failures=["fell"]))
+    root = write_pair(tmp_path / "prove-runs", STANDARD_A, STANDARD_B,
+                 declared_a=declared_outcomes(failures=["fell"]), declared_b=declared_outcomes(failures=["fell"]))
     agreeing = _cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
     assert agreeing.code == 0, agreeing.err
     result = _cli(root, "diff", A_ID, B_ID, "--event", "fell:success", "--method", "fisher_bh")
@@ -1454,8 +1454,8 @@ def test_pf4_20_a_command_line_kind_that_contradicts_a_declaration_is_refused(tm
 
 
 def test_pf4_20_two_runs_declaring_opposite_kinds_are_refused(tmp_path: Path) -> None:
-    root = _pair(tmp_path / "prove-runs", STANDARD_A, STANDARD_B,
-                 declared_a=_declared(failures=["fell"]), declared_b=_declared(successes=["fell"]))
+    root = write_pair(tmp_path / "prove-runs", STANDARD_A, STANDARD_B,
+                 declared_a=declared_outcomes(failures=["fell"]), declared_b=declared_outcomes(successes=["fell"]))
     for verb in ("diff", "check"):
         result = _cli(root, verb, A_ID, B_ID, "--event", "fell", "--method", "fisher_bh")
         assert result.code == 1, (verb, result.code, result.err)
@@ -1533,27 +1533,27 @@ def test_pf4_20_when_one_event_has_a_kind_and_another_does_not_the_comparison_re
 def test_pf4_20_without_a_kind_the_comparison_word_is_a_direction_word(row: int, tmp_path: Path) -> None:
     name, a, b, known = _verdict_table_rows()[row]
     expected = {"trade": "mixed", "worse": "higher", "safer": "lower"}.get(known, known)
-    root = _pair(tmp_path / "prove-runs", a, b)
+    root = write_pair(tmp_path / "prove-runs", a, b)
     assert _one_word(_verdicts(root, tmp_path, "fell")) == expected, name
 
 
 # ---------- PF4.34, PF4.35: the word counts Holm's rows; every surface names both rules ----------
 
 
-def _argon_pair(root: Path, **kw: Any) -> Path:
+def argon_pair(root: Path, **kw: Any) -> Path:
     """Nine conditions fell far, twenty did not move, one rose by a step-up margin (0 to 7 of 40): the
     rise is flagged by Benjamini-Hochberg and does not count at the family-wise level."""
-    a = {f"down{i}": _arm(30, 40) for i in range(9)}
-    b = {f"down{i}": _arm(2, 40) for i in range(9)}
+    a = {f"down{i}": arm_runs(30, 40) for i in range(9)}
+    b = {f"down{i}": arm_runs(2, 40) for i in range(9)}
     for i in range(20):
-        a[f"same{i:02d}"] = b[f"same{i:02d}"] = _arm(5, 40)
-    a["up"], b["up"] = _arm(0, 40), _arm(7, 40)
-    return _pair(root, a, b, **kw)
+        a[f"same{i:02d}"] = b[f"same{i:02d}"] = arm_runs(5, 40)
+    a["up"], b["up"] = arm_runs(0, 40), arm_runs(7, 40)
+    return write_pair(root, a, b, **kw)
 
 
 @pytest.mark.parametrize("event,word", [("fell:failure", "safer"), ("fell", "lower")], ids=["failure", "no-kind"])
 def test_pf4_34_a_step_up_flag_does_not_turn_the_word_into_a_trade_on_any_surface(event: str, word: str, tmp_path: Path) -> None:
-    root = _argon_pair(tmp_path / "prove-runs")
+    root = argon_pair(tmp_path / "prove-runs")
     assert _one_word(_verdicts(root, tmp_path, event)) == word
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", event, "--method", "fisher_bh", "--json"))
     assert doc["n_flagged_only"] == 1
@@ -1568,7 +1568,7 @@ def test_pf4_34_a_step_up_flag_does_not_turn_the_word_into_a_trade_on_any_surfac
 def test_pf4_34_check_fails_on_the_rows_that_count_not_the_flags(fail_on: str, code: int, tmp_path: Path) -> None:
     """On Argon's pair the rise is flagged and does not count, the nine falls count. check
     gates on the rows that count, so ``--fail-on higher`` passes."""
-    root = _argon_pair(tmp_path / "prove-runs")
+    root = argon_pair(tmp_path / "prove-runs")
     result = _cli(root, "check", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--fail-on", fail_on)
     assert result.code == code, (fail_on, result.code, result.err)
     assert _first_word(result.out) == ("passed" if code == 0 else "failed")
@@ -1594,10 +1594,10 @@ def test_pf4_35_every_surface_names_the_flags_rule_and_the_verdicts(standard: Pa
 
 @pytest.mark.parametrize("verb", ["diff", "check", "report", "serve"])
 def test_pf4_38_a_comparison_whose_condition_ran_several_cases_is_refused_on_every_verb(verb: str, tmp_path: Path) -> None:
-    rows = _arm(5, 20)
+    rows = arm_runs(5, 20)
     root = tmp_path / "prove-runs"
-    _write_run(root, A_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t1"}, "d": {"case_id": "t2"}})
-    _write_run(root, B_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t3"}, "d": {"case_id": "t2"}},
+    write_run(root, A_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t1"}, "d": {"case_id": "t2"}})
+    write_run(root, B_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t3"}, "d": {"case_id": "t2"}},
                created_at="2026-10-20T10:01:00Z")
     # The store copies each rollout's case id into its own column, read without decoding meta.
     assert {str(v) for v in Store(root).read(B_ID, meta=False)["case_id"]} == {"t3", "t2"}
@@ -1612,8 +1612,8 @@ def test_pf4_38_a_comparison_whose_condition_ran_several_cases_is_refused_on_eve
     assert re.search(r"\b2\b", errors[0]) and "t1" in errors[0] and "t3" in errors[0], errors[0]
     assert any("axis" in line for line in nexts) and any("your-own-agent" in line for line in nexts), nexts
     one_case = tmp_path / "one"
-    _write_run(one_case, A_ID, {"c": rows}, meta={"c": {"case_id": "t1"}})
-    _write_run(one_case, B_ID, {"c": rows}, meta={"c": {"case_id": "t1"}}, created_at="2026-10-20T10:01:00Z")
+    write_run(one_case, A_ID, {"c": rows}, meta={"c": {"case_id": "t1"}})
+    write_run(one_case, B_ID, {"c": rows}, meta={"c": {"case_id": "t1"}}, created_at="2026-10-20T10:01:00Z")
     assert _cli(one_case, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").code == 0
 
 
@@ -1703,7 +1703,7 @@ def test_pf4_39_a_resume_with_no_comparison_before_it_is_recorded_without_a_cave
 
 
 def test_pf4_40_no_significant_change_prints_its_limit_on_the_same_line_everywhere(tmp_path: Path) -> None:
-    root = _pair(tmp_path / "prove-runs", MID, MID, environment_a={"max_mde_accepted": 0.3}, environment_b={"max_mde_accepted": 0.3})
+    root = write_pair(tmp_path / "prove-runs", MID, MID, environment_a={"max_mde_accepted": 0.3}, environment_b={"max_mde_accepted": 0.3})
     s = _surfaces(root, tmp_path, "fell:failure")
     limit = s["diff --json"]["verdict_limit"]
     rise, fall = ref_fisher_limits(30, 60, 60, Q / 2)
@@ -1727,7 +1727,7 @@ def test_pf4_41_logrank_is_labelled_the_cause_specific_hazard_and_a_shifted_comp
     def arm(fell: int, stuck: int, n: int) -> list[tuple[int, str | None, float]]:
         return [(i, "fell", 3.0) if i < fell else (i, "stuck", 2.0) if i < fell + stuck else (i, "ok", HORIZON) for i in range(n)]
 
-    root = _pair(tmp_path / "prove-runs", {"c": arm(10, 5, 60), "quiet": arm(10, 5, 60)},
+    root = write_pair(tmp_path / "prove-runs", {"c": arm(10, 5, 60), "quiet": arm(10, 5, 60)},
                  {"c": arm(10, 25, 60), "quiet": arm(10, 5, 60)}, salt="unshared")
     s = _surfaces(root, tmp_path, "fell", method="logrank_bh")
     for name, text in _texts(s).items():
@@ -1772,7 +1772,7 @@ def test_pf4_42_every_comparison_carries_an_interval_on_each_change_labelled_wit
 
 
 def test_pf4_42_with_nothing_flagged_the_intervals_are_simultaneous(tmp_path: Path) -> None:
-    root = _pair(tmp_path / "prove-runs", MID, MID)
+    root = write_pair(tmp_path / "prove-runs", MID, MID)
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--json"))
     assert doc["n_rejected"] == 0 and doc["interval_rule"] == "bonferroni"
     assert abs(doc["interval_level"] - (1 - Q / 2)) <= 1e-15 and len(doc["intervals"]) == 2
@@ -1821,9 +1821,9 @@ def test_pf4_45_the_group_limit_is_labelled_unconditional_where_it_is_printed(tm
 
 
 def test_pf4_46_a_warning_names_the_conditions_whose_errors_differ_on_every_surface(tmp_path: Path) -> None:
-    a = {"c": _arm(5, 40), "d": _arm(5, 40)}
-    b = {"c": _arm(5, 30) + [(30 + i, None, 1.0) for i in range(10)], "d": _arm(5, 40)}
-    root = _pair(tmp_path / "prove-runs", a, b)
+    a = {"c": arm_runs(5, 40), "d": arm_runs(5, 40)}
+    b = {"c": arm_runs(5, 30) + [(30 + i, None, 1.0) for i in range(10)], "d": arm_runs(5, 40)}
+    root = write_pair(tmp_path / "prove-runs", a, b)
     s = _surfaces(root, tmp_path, "fell")
     (entry,) = s["diff --json"]["errors_differ"]
     assert entry["config_hash"] == _hash("c") and (entry["errored_a"], entry["errored_b"]) == (0, 10)
@@ -1838,7 +1838,7 @@ def test_pf4_46_a_warning_names_the_conditions_whose_errors_differ_on_every_surf
 
 
 def test_pf4_47_complementary_rows_name_each_other_in_every_json(tmp_path: Path) -> None:
-    root = _pair(tmp_path / "prove-runs", {"c": _arm(12, 60)}, {"c": _arm(12, 60)})
+    root = write_pair(tmp_path / "prove-runs", {"c": arm_runs(12, 60)}, {"c": arm_runs(12, 60)})
     doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell", "--event", "ok", "--method", "fisher_bh", "--json"))
     fell, ok = _cells_of(doc, "fell")[_hash("c")], _cells_of(doc, "ok")[_hash("c")]
     assert (fell["mde_moves_with"], ok["mde_moves_with"]) == ("ok", "fell")
