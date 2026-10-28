@@ -21,13 +21,16 @@ PACKAGED_QUICKSTART = Path(__file__).resolve().parents[1] / "src" / "poisson_pro
 @functools.cache
 def quickstart_design(replicates: int = 100) -> Path:
     """The packaged quickstart's design (its target id, unit and axes) at ``replicates``, with no
-    ``target`` and no ``[declare]``, written once per process to a temporary file.
+    ``target`` and no ``[declare]``, written once per process to a temporary file that is removed
+    when the process ends.
 
     PF3: the packaged spec runs 194 replicates. The tests whose numbers are pinned at 100
     replicates sweep this instead: the packaged design at 100 replicates, the target typed on
     the command line, and nothing declared.
     """
+    import atexit
     import json
+    import shutil
     import tempfile
     import tomllib
 
@@ -35,7 +38,9 @@ def quickstart_design(replicates: int = 100) -> Path:
     lines = [f"target_id = {json.dumps(doc['target_id'])}", f"t_unit = {json.dumps(doc['t_unit'])}", f"replicates = {replicates}"]
     for name, axis in doc["axes"].items():
         lines += ["", f"[axes.{name}]", f"type = {json.dumps(axis['type'])}", f"values = {json.dumps(axis['values'])}"]
-    path = Path(tempfile.mkdtemp(prefix="quickstart-design-")) / "quickstart.toml"
+    base = Path(tempfile.mkdtemp(prefix="quickstart-design-"))
+    atexit.register(shutil.rmtree, base, True)
+    path = base / "quickstart.toml"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
