@@ -337,8 +337,9 @@ def test_v14_the_real_core_dependencies_are_the_four_math_names_and_packaging_is
     """The core dependencies as ``pyproject.toml`` declares them. ``packaging`` is declared
     rather than leaned on through pytest."""
     data = tomllib.loads(PYPROJECT.read_text())
-    # Rich and Textual are core too; the math names are still all there.
-    assert {Requirement(d).name.lower() for d in data["project"]["dependencies"]} == CORE_NAMES | {"rich", "textual"}
+    # Rich and Textual are core too, and threadpoolctl, which caps a worker's BLAS threads (PF10);
+    # the math names are still all there.
+    assert {Requirement(d).name.lower() for d in data["project"]["dependencies"]} == CORE_NAMES | {"rich", "textual", "threadpoolctl"}
     assert "packaging" in {Requirement(d).name.lower() for d in data["project"]["optional-dependencies"]["dev"]}
 
 

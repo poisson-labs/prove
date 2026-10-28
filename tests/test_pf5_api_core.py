@@ -262,8 +262,8 @@ CORE = frozenset({
 #: The environment variables Prove's own code reads (PF5.8, reading s).
 CORE_ENV = frozenset({"POISSON_PROVE_STORE", "PROOFLOAD_STORE"})
 FACE_ENV = frozenset({"NO_COLOR", "CI", "TERM"})
-#: PF10 (Taylor, 2026-10-27): a Modal or Burla worker reads the BLAS thread counts its environment
-#: names (docs/backends.md) and takes out the ``KMP_DUPLICATE_LIB_OK`` threadpoolctl sets on import.
+#: PF10: a Modal or Burla worker reads the BLAS thread counts its environment names
+#: (docs/backends.md) and takes out the ``KMP_DUPLICATE_LIB_OK`` threadpoolctl sets on import.
 WORKER_ENV = {"poisson_prove.executor_modal": frozenset({
     "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "BLIS_NUM_THREADS", "KMP_DUPLICATE_LIB_OK",
 })}
