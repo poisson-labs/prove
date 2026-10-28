@@ -145,12 +145,16 @@ def environment(**variables: str | None) -> Iterator[None]:
 
 @contextlib.contextmanager
 def read_only(root: Path) -> Iterator[None]:
-    """``root`` and every folder under it without write permission, restored afterwards."""
+    """``root`` and every folder under it without write permission, restored afterwards; the test is
+    skipped where that does not stop a write (root)."""
+    from conftest import skip_if_still_writable
+
     folders = [root, *[p for p in root.rglob("*") if p.is_dir()]]
     modes = {p: p.stat().st_mode for p in folders}
     for p in folders:
         p.chmod(stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP)
     try:
+        skip_if_still_writable(root)
         yield
     finally:
         for p in reversed(folders):

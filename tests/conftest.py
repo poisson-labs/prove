@@ -58,6 +58,20 @@ METHOD_OWN_NAMES = ("Fisher", "McNemar", "log-rank")
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")
 
 
+def skip_if_still_writable(folder: Path) -> None:
+    """Skip the test when ``folder``, whose mode now forbids writing, can still be written: root ignores
+    a folder's mode, so as root no folder is one the test cannot write."""
+    import tempfile
+
+    try:
+        handle, probe = tempfile.mkstemp(dir=folder)
+    except PermissionError:
+        return
+    os.close(handle)
+    os.unlink(probe)
+    pytest.skip(f"{folder} can be written although its mode forbids it (as root can)")
+
+
 def blas_thread_cap() -> dict[str, str]:
     """The BLAS thread cap the suite runs under, for a child whose environment is built from nothing:
     without it an old OpenBLAS (numpy at its floor) runs a thread on every core in every child."""

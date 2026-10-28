@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import skip_if_still_writable
 from pf12_support import OLD, QS_A, QS_B, cli, copy_fixture, saved_id
 
 
@@ -48,6 +49,7 @@ def test_pf12_5_a_save_whose_refresh_fails_says_so_once_and_leaves_the_previous_
     # the refresh needs a new tree beside ui/, which a read-only .poisson/ refuses.
     dot.chmod(stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP)
     try:
+        skip_if_still_writable(dot)
         second = cli(store, "diff", QS_A, QS_B, "--q", "0.1", "--save")
     finally:
         dot.chmod(mode)
