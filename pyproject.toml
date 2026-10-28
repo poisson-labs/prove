@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "poisson-prove"
-version = "0.0.1"
+version = "0.1.0"
 description = "Did your change to the agent really change how often it fails? Replays the same cases before and after, and says per condition, with stated error bounds and detection limits."
 readme = "README.md"
 license = "MIT"
