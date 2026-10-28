@@ -67,7 +67,7 @@ from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
 from isolated_support import isolated
 from conftest import STEP_LINE_RE
 
-pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
+from conftest import needs_otel
 
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
@@ -499,6 +499,7 @@ def assert_intact_ok_rows(others: pd.DataFrame, run_id: str) -> None:
 # ---------- K4: run_local, both paths ----------
 
 
+@needs_otel
 @pytest.mark.parametrize("fixture", ["crash_run", "forked_crash_run"], ids=["in-process", "forked"])
 def test_k4_run_local_stores_the_crashed_row_with_its_trace_counted_as_errored_and_not_as_timeout(
     request: pytest.FixtureRequest, fixture: str
@@ -520,6 +521,7 @@ def test_k4_run_local_stores_the_crashed_row_with_its_trace_counted_as_errored_a
     assert_intact_ok_rows(run.others, run.run_id)
 
 
+@needs_otel
 @needs_fork
 def test_k4_on_the_fork_path_the_parent_never_installs_and_the_row_is_the_same(
     forked_crash_run: CrashRun, crash_run: CrashRun
@@ -540,6 +542,7 @@ def test_k4_on_the_fork_path_the_parent_never_installs_and_the_row_is_the_same(
 # ---------- K5: worker_batch and run_with_mapper ----------
 
 
+@needs_otel
 @pytest.mark.parametrize(
     "episode_timeout", [None, pytest.param(NO_HANG_TIMEOUT_S, marks=needs_fork)], ids=["in-process", "forked"]
 )
@@ -571,6 +574,7 @@ def test_k5_worker_batch_returns_the_two_key_dict_for_the_crashing_job_with_capt
     assert not _global_provider_is_sdk(), "the pytest process installed a provider"
 
 
+@needs_otel
 def test_k5_worker_batch_returns_the_string_for_the_crashing_job_without_capture(tmp_path: Path) -> None:
     p = plan(SweepSpec.load(write(tmp_path / "sweep.toml", sweep_toml(capture=None))), Store(tmp_path / "store"), run_salt=SALT)
     jobs = jobs_of(p)
@@ -590,6 +594,7 @@ def test_k5_worker_batch_returns_the_string_for_the_crashing_job_without_capture
     assert not _global_provider_is_sdk(), "a worker_batch call without capture installed a provider"
 
 
+@needs_otel
 @needs_fork
 def test_k5_run_with_mapper_stores_the_dict_form_as_an_errored_row_with_its_trace(tmp_path: Path) -> None:
     toml = write(tmp_path / "sweep.toml", sweep_toml(capture={"instrument": []}))
@@ -710,6 +715,7 @@ def assert_block_is_row(block: list[str], row: Any) -> None:
     assert found, f"no JSON line equal to {row.config!r} in block:\n{text}"
 
 
+@needs_otel
 def test_k7_inspect_selects_the_crashed_row_by_its_exact_error_text_and_prints_its_complete_trace(
     crash_run: CrashRun,
 ) -> None:
@@ -770,6 +776,7 @@ def test_k8_the_transport_aliases_and_signatures_are_untouched() -> None:
     assert meta.kind is meta.KEYWORD_ONLY and meta.default is None
 
 
+@needs_otel
 def test_k8_capture_trace_and_otel_export_exactly_their_public_names() -> None:
     import poisson_prove.capture as capture_module
     import poisson_prove.otel as otel_module

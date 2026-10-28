@@ -476,7 +476,7 @@ class _Template:
             np.float64
         )
         ended = np.bincount(index, minlength=times.size).astype(np.float64)
-        at_risk = ended[::-1].cumsum()[::-1]
+        at_risk = np.cumsum(ended[::-1])[::-1]
         return cls(at_risk=at_risk, events=events, other=ended - events, n=int(t.size))
 
 
@@ -812,13 +812,13 @@ def group_limit(
     ``2K`` statistics, and the two are treated as independent, so the power is
     their product. 1.0 when the group has no room or nothing within it reaches the target."""
     rooms = 1.0 - p_a[members]
-    if rooms.size == 0 or float(rooms.max()) <= 0.0:
+    if rooms.size == 0 or float(np.max(rooms)) <= 0.0:
         return 1.0
     q = alpha * groups
     z_group = float(stats.norm.isf(alpha / 2.0))
     z_root = float(stats.norm.isf(q / (2.0 * 2.0 * max(1, events))))
     baseline_var = p_a * (1.0 - p_a) / np.maximum(n_a, 1.0)
-    grid = _grid(float(rooms.max()))
+    grid = _grid(float(np.max(rooms)))
     moved = np.minimum(grid[:, None], rooms[None, :])
     p_b = p_a[members][None, :] + moved
     cell_var = baseline_var[members][None, :] + p_b * (1.0 - p_b) / np.maximum(

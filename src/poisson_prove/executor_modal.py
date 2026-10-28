@@ -16,6 +16,7 @@ off to ``run_with_mapper``. Core ``poisson_prove`` imports and runs without ``mo
 from __future__ import annotations
 
 import importlib.metadata
+import os
 import re
 import time
 import traceback
@@ -920,7 +921,7 @@ def preflight_modal(p: Plan, target: ModalTarget, options: ModalOptions) -> str:
 
 # ---------- the real mapper ----------
 
-_CORE_REQUIREMENTS_FALLBACK = ("numpy", "pandas", "scipy", "pyarrow")
+_CORE_REQUIREMENTS_FALLBACK = ("numpy", "pandas", "scipy", "pyarrow", "threadpoolctl")
 
 
 def _core_requirements() -> tuple[str, ...]:
@@ -959,6 +960,25 @@ _MapItem = tuple[int, list[Job], str, float | None, dict[str, Any] | None, dict[
 _MapOutput = tuple[int, list[Result] | None, str | None]
 
 
+def _cap_blas_threads() -> None:
+    """One BLAS thread in this process, unless its environment names a count. threadpoolctl sets
+    ``KMP_DUPLICATE_LIB_OK`` when imported; it is taken out again, so the rollout's environment
+    holds nothing Prove put there."""
+    if (
+        "OPENBLAS_NUM_THREADS" in os.environ
+        or "OMP_NUM_THREADS" in os.environ
+        or "MKL_NUM_THREADS" in os.environ
+        or "BLIS_NUM_THREADS" in os.environ
+    ):
+        return
+    had = "KMP_DUPLICATE_LIB_OK" in os.environ
+    from threadpoolctl import threadpool_limits
+
+    if not had and "KMP_DUPLICATE_LIB_OK" in os.environ:
+        del os.environ["KMP_DUPLICATE_LIB_OK"]
+    threadpool_limits(limits=1, user_api="blas")
+
+
 def _container_batch(item: _MapItem) -> _MapOutput:
     """The Modal function body. The batch index travels inside the item and comes back inside
     the output, because ``order_outputs=False`` loses position. A failure of the batch as a
@@ -966,9 +986,15 @@ def _container_batch(item: _MapItem) -> _MapOutput:
     index; only a container death loses it. The capture request rides the item too: it is the
     only way the run id reaches ``worker_batch`` without extending ``Job``. The chaos request
     rides beside it for the same reason: the hooks belong to the container, and nothing else
-    crosses the boundary."""
+    crosses the boundary.
+
+    A run's workers share machines, and OpenBLAS (numpy and SciPy on Linux, and on macOS below
+    numpy 2.0) starts a thread on every core in each process that names no thread count, so each
+    worker caps its BLAS at one thread first, unless its environment names a count. The cap is
+    the process's, so the forked child of a timed episode inherits it."""
     k, jobs, import_path, episode_timeout, capture, chaos = item
     try:
+        _cap_blas_threads()
         results = worker_batch(jobs, import_path, episode_timeout, capture=capture, chaos=chaos)
         return k, results, None
     except Exception:

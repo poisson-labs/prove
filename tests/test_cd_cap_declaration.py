@@ -75,7 +75,7 @@ from poisson_prove.store import RunManifest, Store
 from poisson_prove.trace import Span, Trace, assemble, split
 from isolated_support import isolated as run_isolated
 
-pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
+from conftest import needs_otel
 
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
@@ -407,6 +407,7 @@ def test_cd4_a_limit_below_one_is_refused_naming_the_parameter(limit: int) -> No
 # ---------- CD5: what is declared is what the store does, read back through the store ----------
 
 
+@needs_otel
 @pytest.mark.parametrize(
     ("declared", "target", "value_bytes", "whole"),
     [
@@ -629,6 +630,7 @@ def int_vs_none(declared_runs: dict[str, Any]) -> dict[str, str]:
     }
 
 
+@needs_otel
 @pytest.mark.parametrize("surface", ["report.md", "receipt.html", "viewer page"])
 def test_cd9_every_surface_reads_the_declaration_as_declared(int_vs_none: dict[str, str], surface: str) -> None:
     """The declaration as declared, through the CLI on stored runs. The int reads as the number, and
@@ -642,6 +644,7 @@ def test_cd9_every_surface_reads_the_declaration_as_declared(int_vs_none: dict[s
     assert labels["observation cap b"] == "max_observation_bytes=none", labels
 
 
+@needs_otel
 def test_cd9_a_run_with_no_capture_table_still_reads_not_recorded(declared_runs: dict[str, Any]) -> None:
     """The fourth case, a run with no table, which reads ``not recorded``."""
     root, ids, out = declared_runs["root"], declared_runs["ids"], declared_runs["out"] / "bare"
@@ -653,6 +656,7 @@ def test_cd9_a_run_with_no_capture_table_still_reads_not_recorded(declared_runs:
     assert labels["observation cap b"] == "not recorded", labels
 
 
+@needs_otel
 def test_cd9_inspect_names_the_limit_the_run_recorded(tmp_path: Path) -> None:
     """``poisson-prove inspect``'s cut line reads the run's own record of the limit, spelled as recorded.
 

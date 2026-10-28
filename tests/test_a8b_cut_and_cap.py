@@ -57,7 +57,7 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import OBSERVATION_KEYS, Span, Trace, assemble, from_otel, split
 from isolated_support import isolated
 
-pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
+from conftest import needs_otel
 
 MODULE = __name__
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "trace"
@@ -493,6 +493,7 @@ def test_p8_8_a_wrapper_is_detected_on_its_sole_key_never_on_its_shape() -> None
 # ---------- P8-9: the cut runs in the child, before transport, with content off ----------
 
 
+@needs_otel
 @pytest.mark.parametrize("episode_timeout", [None, pytest.param(30.0, marks=needs_fork)], ids=["no-timeout", "fork"])
 def test_p8_9_the_stored_row_carries_the_wrapper_and_a_value_cut_below_the_default_still_leaves_the_envelope(tmp_path: Path, episode_timeout: float | None) -> None:
     """The second half is the routing rule: whatever the child cut is an observation in the store
@@ -543,6 +544,7 @@ CAPTURE_PATH_ATTRS = {
 }
 
 
+@needs_otel
 @pytest.mark.parametrize("content", [False, True], ids=["content-off", "content-on"])
 def test_p8_10_through_the_recorder_content_off_strips_all_eight_and_keeps_the_tool_observation(content: bool) -> None:
     """The two ``llm.*`` content families. Through the recorder, because ``_is_content`` runs only in ``_span_mapping`` and a
@@ -562,6 +564,7 @@ def test_p8_10_through_the_recorder_content_off_strips_all_eight_and_keeps_the_t
     assert s.attrs["server.address"] == "api.example"
 
 
+@needs_otel
 def test_p8_10_a_bare_family_key_is_stripped_as_the_shipped_rule_stripped_it() -> None:
     attrs = {family: f"bare {family}" for family in CONTENT_FAMILIES}
     attrs["gen_ai.promptx"] = "not content"
@@ -650,6 +653,7 @@ def test_p8_12_a_bad_value_is_refused_naming_the_field(tmp_path: Path, table: di
         SweepSpec.load(write(tmp_path / "bad.toml", sweep_toml({"instrument": [], **table})))
 
 
+@needs_otel
 def test_p8_12_with_no_cap_every_closed_span_is_kept() -> None:
     """The span cap is off by default: all 1,001 closed spans are kept, none dropped."""
     r = isolated(child_capture_spans, {}, [{"name": f"s{i}"} for i in range(1001)])
@@ -718,6 +722,7 @@ def test_p8_23_below_four_the_tail_bound_is_zero_and_the_tail_is_empty(limit: in
     assert s.attrs["big.attribute"] == {TRUNCATED_KEY_SPEC: {"head": "y" * limit, "tail": "", "bytes_original": 50}}
 
 
+@needs_otel
 def test_p8_23_a_raised_limit_through_the_recorder_stores_the_raised_split() -> None:
     value = "y" * 20000
     r = isolated(child_capture_spans, {"max_observation_bytes": 16384}, [{"name": "chat", "attrs": {"big.attribute": value, "mid.attribute": "m" * 10000}}])

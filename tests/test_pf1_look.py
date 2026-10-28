@@ -662,7 +662,9 @@ def test_pf1_4_an_unexpected_failure_exits_3_naming_the_log_and_appends_the_comm
     again = prove_with(RAISE_IN_STORE, argv, home=home, cwd=tmp_path)
     assert again.code == 3
     later = log.read_text(encoding="utf-8")
-    assert later.startswith(text) and later.count(MARK) == 2, later
+    # One entry per failure, counted by its last line: from Python 3.13 a traceback also prints
+    # the raising line of a ``-c`` script, which holds the marker too.
+    assert later.startswith(text) and later.count(f"RuntimeError: {MARK}") == 2, later
 
 
 def test_pf1_4_a_failure_after_the_sweep_started_still_names_only_the_log(world: World, tmp_path: Path) -> None:

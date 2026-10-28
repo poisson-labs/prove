@@ -97,7 +97,10 @@ def _worse(panel: Mapping[str, Any], top_n: int) -> list[dict[str, Any]]:
     cells = sorted(
         (c for c in panel["cells"] if c["verdict"] == word),
         key=lambda c: (
-            -c["delta"], c["q"], math.inf if c["mde"] is None else c["mde"], c["config_hash"]
+            -c["delta"],
+            c["q"],
+            math.inf if c["mde"] is None else c["mde"],
+            c["config_hash"],
         ),
     )
     return [_row(str(panel["event"]), c, way) for c in cells[:top_n]]
@@ -145,7 +148,7 @@ def _partial(pair: Mapping[str, Any]) -> dict[str, Any] | None:
     if not partial:
         return None
     lines = [
-        f"Run {arm['run_id']} ({arm['role']}) recorded status \"partial\": it stopped before "
+        f'Run {arm["run_id"]} ({arm["role"]}) recorded status "partial": it stopped before '
         "everything it planned had run. What is below compares the conditions both runs have."
         for arm in partial
     ]

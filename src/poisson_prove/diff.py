@@ -91,11 +91,31 @@ CELLS_COLUMNS = (
 # The columns that hold None, a string, a list or a bool: kept as objects, so an absent value
 # reads ``None`` and never the NaN a float column would put there.
 _OBJECT_COLUMNS = (
-    "config", "verdict", "direction", "direction_note", "pairs", "n01", "n10", "mde_note",
+    "config",
+    "verdict",
+    "direction",
+    "direction_note",
+    "pairs",
+    "n01",
+    "n10",
+    "mde_note",
     "mde_rise_note",
-    "mde_fall_note", "mde_test", "mde_basis", "mde_anchor", "mde_moves_with", "competing_shift",
-    "ci_lo", "ci_hi", "ci_method", "mde_rise", "mde_fall", "mde_hr", "mde_rise_verdict",
-    "mde_fall_verdict", "holm", "flaggable",
+    "mde_fall_note",
+    "mde_test",
+    "mde_basis",
+    "mde_anchor",
+    "mde_moves_with",
+    "competing_shift",
+    "ci_lo",
+    "ci_hi",
+    "ci_method",
+    "mde_rise",
+    "mde_fall",
+    "mde_hr",
+    "mde_rise_verdict",
+    "mde_fall_verdict",
+    "holm",
+    "flaggable",
 )
 COVERAGE_COLUMNS = (
     "config_hash",
@@ -705,7 +725,11 @@ def diff(
     # After ``common`` and before the first test: the seed check needs the matched rows, and the
     # warning it raises names their count.
     seed_identity_match, unpaired_analysis = _seed_identity(
-        method, pairable, a_t, b_t, common,
+        method,
+        pairable,
+        a_t,
+        b_t,
+        common,
         manifest_a.run_salt if manifest_a is not None else None,
     )
 
@@ -887,8 +911,10 @@ class EventDiff:
         when the kind is not known."""
         if self.kind is None:
             return _verdict.HIGHER, _verdict.LOWER
-        return (_verdict.judged(_verdict.HIGHER, self.kind),
-                _verdict.judged(_verdict.LOWER, self.kind))
+        return (
+            _verdict.judged(_verdict.HIGHER, self.kind),
+            _verdict.judged(_verdict.LOWER, self.kind),
+        )
 
     def counts(self) -> tuple[tuple[str, int], tuple[str, int]]:
         """The event's flagged rows in its own words, the change for the worse first:
@@ -940,8 +966,13 @@ class EventDiff:
         if self.kind is None:
             out["n_safer"] = out["n_worse"] = out["n_holm_safer"] = out["n_holm_worse"] = None
         else:
-            judged = {_verdict.judged(way, self.kind): n for way, n in
-                      ((_verdict.HIGHER, self.n_holm_higher), (_verdict.LOWER, self.n_holm_lower))}
+            judged = {
+                _verdict.judged(way, self.kind): n
+                for way, n in (
+                    (_verdict.HIGHER, self.n_holm_higher),
+                    (_verdict.LOWER, self.n_holm_lower),
+                )
+            }
             out["n_holm_safer"], out["n_holm_worse"] = int(judged["safer"]), int(judged["worse"])
         out["n_unflaggable"] = int(self.n_unflaggable)
         out["together_needed"] = self.together_needed
@@ -1070,6 +1101,7 @@ class MultiDiffResult:
     def _ordered_events(self) -> list[str]:
         """Worst first: by the count of the change for the worse (a rise, without a kind), then
         the other way's, then the name."""
+
         def key(e: str) -> tuple[int, int, str]:
             (_, up), (_, down) = self.by_event[e].counts()
             return -up, -down, e
@@ -1094,8 +1126,7 @@ class MultiDiffResult:
         # identity was there and the request discarded it.
         pairing = "paired" if self.method in _PAIRED_METHODS else "unpaired"
         return (
-            " · ".join(parts)
-            + f"\n(aalen_johansen + {self._method_label()}, BH q<{self.q} over "
+            " · ".join(parts) + f"\n(aalen_johansen + {self._method_label()}, BH q<{self.q} over "
             f"{self.n_tests} tests, {pairing})"
         )
 
@@ -1191,9 +1222,23 @@ class MultiDiffResult:
             level = level_label(self.interval_level)
             change = f"change [{level}, {_facts.interval_method(self.method)}]"
         head = [
-            "config_hash", "config", "n_a", "n_b", "events_a", "events_b", "rate_a", "rate_b",
-            f"share_a [{share_label}]", f"share_b [{share_label}]", "delta", change, "stat", "p",
-            "q", "verdict", "mde",
+            "config_hash",
+            "config",
+            "n_a",
+            "n_b",
+            "events_a",
+            "events_b",
+            "rate_a",
+            "rate_b",
+            f"share_a [{share_label}]",
+            f"share_b [{share_label}]",
+            "delta",
+            change,
+            "stat",
+            "p",
+            "q",
+            "verdict",
+            "mde",
         ]
         for e in self._ordered_events():
             ev = self.by_event[e]
@@ -1706,6 +1751,7 @@ class _Arms:
     def outside(self, compared: Sequence[str]) -> tuple[NDArray[np.bool_], NDArray[np.bool_]]:
         """The runs of each arm that ended in an outcome outside the compared events: the only
         runs a flip may make end in the event."""
+
         def of(outcomes: NDArray[Any]) -> NDArray[np.bool_]:
             ended = [o is not None and str(o) not in compared for o in outcomes]
             return np.array(ended, dtype=bool)
@@ -1753,9 +1799,17 @@ def _errors_differ(coverage: pd.DataFrame, q: float) -> list[dict[str, Any]]:
             continue
         p = _fisher(errored_a, rows_a, errored_b, rows_b)[1]
         if p < q:
-            out.append({"config_hash": str(record["config_hash"]), "config": record["config"],
-                        "errored_a": errored_a, "rows_a": rows_a, "errored_b": errored_b,
-                        "rows_b": rows_b, "p": p})
+            out.append(
+                {
+                    "config_hash": str(record["config_hash"]),
+                    "config": record["config"],
+                    "errored_a": errored_a,
+                    "rows_a": rows_a,
+                    "errored_b": errored_b,
+                    "rows_b": rows_b,
+                    "p": p,
+                }
+            )
     return out
 
 
@@ -1815,8 +1869,15 @@ def _limits_of(
     return _limits.logrank_limits(arms.t[0], arms.had[0], int(r["n_b"]), horizon, level, power)
 
 
-def _set_limits(rows: list[dict[str, Any]], event_set: Sequence[str], *, method: str, q: float,
-                power: float, horizon: float) -> list[_limits.Limits]:
+def _set_limits(
+    rows: list[dict[str, Any]],
+    event_set: Sequence[str],
+    *,
+    method: str,
+    q: float,
+    power: float,
+    horizon: float,
+) -> list[_limits.Limits]:
     """Every row's limits, written into the row; returns each row's
     limits at the verdict's level ``q / M``, which the nothing-moved question reads."""
     m = len(rows)
@@ -1831,27 +1892,29 @@ def _set_limits(rows: list[dict[str, Any]], event_set: Sequence[str], *, method:
             limits if partner is None else _limits_of(r, method, verdict_level, power, horizon)
         )
         mde, note = limits.one_number()
-        r.update({
-            "mde": math.nan if mde is None else mde,
-            "mde_note": note,
-            "mde_rise": limits.rise.value,
-            "mde_fall": limits.fall.value,
-            "mde_rise_note": limits.rise.note,
-            "mde_fall_note": limits.fall.note,
-            "mde_test": limits.test,
-            "mde_basis": limits.basis,
-            "mde_level": level,
-            "mde_family": m,
-            "mde_power": power,
-            "mde_anchor": "observed baseline",
-            "mde_hr": limits.rise.hazard_ratio,
-            "p_min": float(limits.p_min),
-            "flaggable": bool(limits.p_min < level),
-            "mde_moves_with": partner,
-            "mde_rise_verdict": at_verdict.rise.value,
-            "mde_fall_verdict": at_verdict.fall.value,
-            "competing_shift": None,
-        })
+        r.update(
+            {
+                "mde": math.nan if mde is None else mde,
+                "mde_note": note,
+                "mde_rise": limits.rise.value,
+                "mde_fall": limits.fall.value,
+                "mde_rise_note": limits.rise.note,
+                "mde_fall_note": limits.fall.note,
+                "mde_test": limits.test,
+                "mde_basis": limits.basis,
+                "mde_level": level,
+                "mde_family": m,
+                "mde_power": power,
+                "mde_anchor": "observed baseline",
+                "mde_hr": limits.rise.hazard_ratio,
+                "p_min": float(limits.p_min),
+                "flaggable": bool(limits.p_min < level),
+                "mde_moves_with": partner,
+                "mde_rise_verdict": at_verdict.rise.value,
+                "mde_fall_verdict": at_verdict.fall.value,
+                "competing_shift": None,
+            }
+        )
         out.append(at_verdict)
     return out
 
@@ -1872,8 +1935,9 @@ def _set_competing_shift(rows: list[dict[str, Any]], q: float) -> None:
         r["competing_shift"] = shifted
 
 
-def _event_diff(event: str, rows: Sequence[dict[str, Any]], kind: str | None, method: str, q: float,
-                family: int) -> EventDiff:
+def _event_diff(
+    event: str, rows: Sequence[dict[str, Any]], kind: str | None, method: str, q: float, family: int
+) -> EventDiff:
     """One event's rows as an ``EventDiff``: the cells, the counts each way, the largest limits,
     and the design facts when a condition of it cannot be flagged alone."""
     cells = _cells_frame(rows)
@@ -1905,15 +1969,23 @@ def _event_diff(event: str, rows: Sequence[dict[str, Any]], kind: str | None, me
         n_holm_higher=sum(1 for r in rows if r["holm"] and r["direction"] == _verdict.HIGHER),
         n_holm_lower=sum(1 for r in rows if r["holm"] and r["direction"] == _verdict.LOWER),
         n_unflaggable=len(unflaggable),
-        together_needed=(_limits.together_needed([r["p_min"] for r in rows], q, family)
-                         if unflaggable else None),
-        replicates_for_lone_flag=(_limits.replicates_for_lone_flag(rows[0]["mde_test"], q / family)
-                                  if unflaggable else None),
+        together_needed=(
+            _limits.together_needed([r["p_min"] for r in rows], q, family) if unflaggable else None
+        ),
+        replicates_for_lone_flag=(
+            _limits.replicates_for_lone_flag(rows[0]["mde_test"], q / family)
+            if unflaggable
+            else None
+        ),
     )
 
 
-def _trades(by_event: Mapping[str, EventDiff], event_set: Sequence[str], common: Sequence[str],
-            groups_a: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
+def _trades(
+    by_event: Mapping[str, EventDiff],
+    event_set: Sequence[str],
+    common: Sequence[str],
+    groups_a: Mapping[str, pd.DataFrame],
+) -> pd.DataFrame:
     """The conditions where one event's flagged row went one way and another's the other: a fall
     (or, with kinds, a change for the better) in the first slot, a rise (for the worse) in the
     second. With no kind such a condition is still recorded, and the comparison reads it as
@@ -1927,8 +1999,14 @@ def _trades(by_event: Mapping[str, EventDiff], event_set: Sequence[str], common:
         better = tuple(k for k in event_set if verdicts[k].get(h) in ("safer", _verdict.LOWER))
         worse = tuple(k for k in event_set if verdicts[k].get(h) in ("worse", _verdict.HIGHER))
         if better and worse:
-            records.append({"config_hash": h, "config": groups_a[h]["config"].iloc[0],
-                            "safer_events": better, "worse_events": worse})
+            records.append(
+                {
+                    "config_hash": h,
+                    "config": groups_a[h]["config"].iloc[0],
+                    "safer_events": better,
+                    "worse_events": worse,
+                }
+            )
     trades = pd.DataFrame.from_records(records, columns=list(_TRADES_COLUMNS))
     for col in ("config", "safer_events", "worse_events"):
         trades[col] = trades[col].astype(object)
@@ -1950,28 +2028,44 @@ def _fragile_row(
     outside = arms.outside(events)
     common = {"facts": facts, "event": r["event"], "config_hash": r["config_hash"]}
     if method == "fisher_bh":
+
         def reps(arm: int, chosen: NDArray[np.bool_]) -> tuple[int, ...]:
             return tuple(int(x) for x in arms.reps[arm][chosen])
 
         return _verdict.FisherRow(
-            **common, n=(int(r["n_a"]), int(r["n_b"])),
+            **common,
+            n=(int(r["n_a"]), int(r["n_b"])),
             had=(reps(0, arms.had[0]), reps(1, arms.had[1])),
             spare=(reps(0, outside[0]), reps(1, outside[1])),
-            level=level, power=power,
+            level=level,
+            power=power,
         )
     if method == "mcnemar_bh":
         pairs = arms.pairs()
         spare_a = frozenset(int(x) for x in arms.reps[0][outside[0]])
         spare_b = frozenset(int(x) for x in arms.reps[1][outside[1]])
         return _verdict.PairedRow(
-            **common, only_a=tuple(pairs["only_a"]), only_b=tuple(pairs["only_b"]),
-            both=tuple(pairs["both"]), neither=tuple(pairs["neither"]),
-            spare_a=spare_a, spare_b=spare_b, level=level, power=power,
+            **common,
+            only_a=tuple(pairs["only_a"]),
+            only_b=tuple(pairs["only_b"]),
+            both=tuple(pairs["both"]),
+            neither=tuple(pairs["neither"]),
+            spare_a=spare_a,
+            spare_b=spare_b,
+            level=level,
+            power=power,
         )
     return _verdict.LogrankRow(
-        facts, event=r["event"], config_hash=r["config_hash"], t=arms.t, had=arms.had,
-        spare=outside, reps=(np.asarray(arms.reps[0]), np.asarray(arms.reps[1])),
-        horizon=horizon, level=level, power=power,
+        facts,
+        event=r["event"],
+        config_hash=r["config_hash"],
+        t=arms.t,
+        had=arms.had,
+        spare=outside,
+        reps=(np.asarray(arms.reps[0]), np.asarray(arms.reps[1])),
+        horizon=horizon,
+        level=level,
+        power=power,
     )
 
 
@@ -2073,7 +2167,11 @@ def multi_diff(
     # After ``common`` and before the first test, over the analysed frames: truncation rewrites
     # ``t`` and ``outcome`` and never ``seed``, so the check is the same before and after it.
     seed_identity_match, unpaired_analysis = _seed_identity(
-        method, pairable, a_t, b_t, common,
+        method,
+        pairable,
+        a_t,
+        b_t,
+        common,
         manifest_a.run_salt if manifest_a is not None else None,
     )
 
@@ -2194,8 +2292,12 @@ def multi_diff(
     trades = _trades(by_event, event_set, common, groups_a)
 
     def search() -> _verdict.Fragility:
-        candidates = [_fragile_row(r, f, method=method, events=event_set, level=q / m, power=power,
-                                   horizon=horizon) for r, f in zip(rows, facts, strict=True)]
+        candidates = [
+            _fragile_row(
+                r, f, method=method, events=event_set, level=q / m, power=power, horizon=horizon
+            )
+            for r, f in zip(rows, facts, strict=True)
+        ]
         return _verdict.fragility(candidates, q=q, threshold=threshold, events=len(event_set))
 
     return MultiDiffResult(
@@ -2339,9 +2441,7 @@ def _maximise(slope: Callable[[float], float], lo: float, hi: float) -> float:
     return float(brentq(slope, left, right, xtol=1e-15, rtol=_ROOT_RTOL))
 
 
-def score_p_rd(
-    events_a: int, n_a: int, events_b: int, n_b: int, *, delta: float = 0.0
-) -> float:
+def score_p_rd(events_a: int, n_a: int, events_b: int, n_b: int, *, delta: float = 0.0) -> float:
     """Two-sided p-value of the Miettinen-Nurminen score test of ``H0: p_b - p_a == delta``.
 
     The variance is evaluated at the constrained MLEs under the null and carries the

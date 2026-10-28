@@ -74,7 +74,7 @@ from poisson_prove.store import EpisodeRecord, Store
 from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace
 from isolated_support import isolated
 
-pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
+from conftest import needs_otel
 
 MODULE = __name__
 RUN_ID_KEY = "poisson_prove.run_id"
@@ -561,6 +561,7 @@ def child_cli(argv: list[str], extra_path: str | None) -> dict[str, Any]:
 
 # ---------- C1: install() cannot own a provider someone else set ----------
 
+@needs_otel
 def test_c1_install_reports_inactive_when_it_cannot_own_the_global_provider() -> None:
     r = isolated(child_install, {}, None, "noop")
     assert r["status"]["active"] is False, r["status"]
@@ -573,6 +574,7 @@ def test_c1_install_reports_inactive_when_it_cannot_own_the_global_provider() ->
 # ---------- C2: the capture provider does not use the global random ----------
 
 
+@needs_otel
 def test_c2_capture_ids_stay_distinct_when_the_global_random_is_reseeded() -> None:
     spans = [{"name": f"span-{i}"} for i in range(10)]
     r = isolated(child_capture_spans, {}, spans, 1234)
@@ -583,6 +585,7 @@ def test_c2_capture_ids_stay_distinct_when_the_global_random_is_reseeded() -> No
     assert not warnings_under_poisson_prove(r["logs"]), r["logs"]
 
 
+@needs_otel
 def test_c2_capture_never_draws_from_the_global_random() -> None:
     r = isolated(child_capture_spans, {}, [{"name": "one"}], 1234)
     assert r["stream_untouched"] is True, "a span consumed bits from the global random stream"
@@ -591,6 +594,7 @@ def test_c2_capture_never_draws_from_the_global_random() -> None:
 # ---------- C2a: installing a provider is permanent ----------
 
 
+@needs_otel
 def test_c2a_install_adds_its_processors_to_a_user_provider_and_leaves_their_exporter_alone() -> None:
     r = isolated(child_install, {}, None, "sdk")
     assert r["status"]["active"] is True, r["status"]
@@ -605,6 +609,7 @@ def test_c2a_install_adds_its_processors_to_a_user_provider_and_leaves_their_exp
     assert names(r["meta"]) == ["probe"] and trace.source == "otel"
 
 
+@needs_otel
 def test_c2a_install_is_once_per_process() -> None:
     r = isolated(child_install, {}, None, None, False, True)
     assert r["status"]["active"] is True and r["second"] is not None
@@ -643,6 +648,7 @@ def test_c3_no_capture_means_no_trace_and_no_otel_import_in_worker_batch(tmp_pat
 # ---------- C4: install() never raises ----------
 
 
+@needs_otel
 def test_c4_a_missing_sdk_yields_an_inactive_status_with_a_reason() -> None:
     r = isolated(child_install, {}, None, None, True)
     assert r["status"]["active"] is False and r["status"]["requested"] is True, r["status"]
@@ -650,6 +656,7 @@ def test_c4_a_missing_sdk_yields_an_inactive_status_with_a_reason() -> None:
     assert r["meta"] is None
 
 
+@needs_otel
 def test_c4_an_unknown_instrumentor_name_yields_an_inactive_status_naming_it(tmp_path: Path) -> None:
     fake = register_fake_instrumentors(tmp_path / "fake")
     r = isolated(child_install, {"instrument": (FAKE_INSTRUMENTOR, UNKNOWN_INSTRUMENTOR)}, str(fake))
@@ -658,6 +665,7 @@ def test_c4_an_unknown_instrumentor_name_yields_an_inactive_status_naming_it(tmp
     assert r["meta"] is None
 
 
+@needs_otel
 def test_c4_an_instrumentor_raising_a_dependency_conflict_yields_an_inactive_status(tmp_path: Path) -> None:
     fake = register_fake_instrumentors(tmp_path / "fake")
     r = isolated(child_install, {"instrument": (CONFLICT_INSTRUMENTOR,)}, str(fake))
@@ -667,6 +675,7 @@ def test_c4_an_instrumentor_raising_a_dependency_conflict_yields_an_inactive_sta
     assert r["meta"] is None
 
 
+@needs_otel
 def test_c4_a_named_instrumentor_is_activated_and_recorded(tmp_path: Path) -> None:
     fake = register_fake_instrumentors(tmp_path / "fake")
     r = isolated(child_install, {"instrument": (FAKE_INSTRUMENTOR,)}, str(fake))
@@ -675,6 +684,7 @@ def test_c4_a_named_instrumentor_is_activated_and_recorded(tmp_path: Path) -> No
     assert names(r["meta"]) == ["probe"]
 
 
+@needs_otel
 def test_c4_the_reason_reaches_the_manifest_and_the_run_proceeds(tmp_path: Path) -> None:
     toml = write(tmp_path / "sweep.toml", sweep_toml(capture={"instrument": [UNKNOWN_INSTRUMENTOR]}))
     r = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:otel_rollout", SALT, None, None)
@@ -688,6 +698,7 @@ def test_c4_the_reason_reaches_the_manifest_and_the_run_proceeds(tmp_path: Path)
     assert all("trace" not in meta for meta in df["meta"]), "an inactive capture stored a trace"
 
 
+@needs_otel
 def test_c4_the_manifest_records_the_whole_capture_request(tmp_path: Path) -> None:
     fake = register_fake_instrumentors(tmp_path / "fake")
     table = {"instrument": [FAKE_INSTRUMENTOR], "content": True, "max_observation_bytes": 4096, "max_spans": 50}
@@ -715,6 +726,7 @@ def assert_stamped_rows(df: Any, run_id: str) -> None:
         assert {s.kind for s in trace.spans} == {"agent", "llm"} and len(trace.roots()) == 1
 
 
+@needs_otel
 @pytest.mark.parametrize(
     "episode_timeout",
     [
@@ -748,6 +760,7 @@ def capture_payload(run_id: str, **overrides: Any) -> dict[str, Any]:
     return payload
 
 
+@needs_otel
 @pytest.mark.parametrize(
     "episode_timeout",
     [
@@ -784,6 +797,7 @@ def test_c6_worker_batch_carries_stamped_traces_in_both_branches(tmp_path: Path,
 # ---------- C7: collision with a rollout that already wrote meta["trace"] ----------
 
 
+@needs_otel
 def test_c7_rule_zero_the_mock_agent_trace_is_byte_identical_with_capture_on_and_off(tmp_path: Path) -> None:
     off_toml = write(tmp_path / "off.toml", mock_toml(capture=None))
     on_toml = write(tmp_path / "on.toml", mock_toml(capture={"instrument": []}))
@@ -806,6 +820,7 @@ def test_c7_rule_zero_the_mock_agent_trace_is_byte_identical_with_capture_on_and
     assert not warnings_under_poisson_prove(on["logs"]), on["logs"]
 
 
+@needs_otel
 def test_c7_a_valid_user_trace_gets_the_capture_merged_in(tmp_path: Path) -> None:
     toml = write(tmp_path / "sweep.toml", sweep_toml(capture={"instrument": []}, axes={"x": [0.1]}))
     r = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:recording_rollout", SALT, None, None)
@@ -823,6 +838,7 @@ def test_c7_a_valid_user_trace_gets_the_capture_merged_in(tmp_path: Path) -> Non
         assert captured.attrs[EPISODE_KEY] == episode_id(row.config_hash, row.replicate_index)
 
 
+@needs_otel
 def test_c7_a_span_id_collision_keeps_the_user_trace_drops_the_capture_and_warns_once(tmp_path: Path) -> None:
     toml = write(tmp_path / "sweep.toml", sweep_toml(capture={"instrument": []}, replicates=1, axes={"x": [0.1]}))
     r = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:colliding_rollout", SALT, None, None)
@@ -837,6 +853,7 @@ def test_c7_a_span_id_collision_keeps_the_user_trace_drops_the_capture_and_warns
     assert len(warned) == 1, r["logs"]
 
 
+@needs_otel
 def test_c7_an_invalid_user_trace_is_left_exactly_as_the_rollout_wrote_it(tmp_path: Path) -> None:
     toml = write(tmp_path / "sweep.toml", sweep_toml(capture={"instrument": []}, replicates=1, axes={"shape": ["list", "dict"]}))
     r = isolated(child_run_local, str(tmp_path / "store"), str(toml), f"{MODULE}:garbage_trace_rollout", SALT, None, None)
@@ -874,6 +891,7 @@ def test_c8_job_result_outcome_mapper_and_from_episode_are_unchanged() -> None:
     ]
 
 
+@needs_otel
 def test_c8_the_existing_positional_call_still_works(tmp_path: Path) -> None:
     p = plan(SweepSpec.load(write(tmp_path / "sweep.toml", sweep_toml(capture=None))), Store(tmp_path / "store"), run_salt=SALT)
     jobs = jobs_of(p)
@@ -894,6 +912,7 @@ CONTENT_ATTRS = {
 }
 
 
+@needs_otel
 def test_c9_content_attributes_are_stripped_when_content_is_off() -> None:
     r = isolated(child_capture_spans, {}, [{"name": "chat", "attrs": CONTENT_ATTRS}])
     assert r["status"]["active"] is True
@@ -904,6 +923,7 @@ def test_c9_content_attributes_are_stripped_when_content_is_off() -> None:
     assert span.attrs[RUN_ID_KEY] == RUN_ID and span.attrs[EPISODE_KEY] == "cfg-7:1"
 
 
+@needs_otel
 def test_c9_content_attributes_survive_when_content_is_on() -> None:
     r = isolated(child_capture_spans, {"content": True}, [{"name": "chat", "attrs": CONTENT_ATTRS}])
     (span,) = Trace.from_dict(r["meta"]).spans
@@ -914,6 +934,7 @@ def test_c9_content_attributes_survive_when_content_is_on() -> None:
 # ---------- C10: the cut, asserted against attrs ----------
 
 
+@needs_otel
 def test_c10_an_oversized_observation_value_is_stored_head_and_tail_in_attrs() -> None:
     """The unit is one observation value and the bounds are the limit's split: 768 + 256 at 1024.
     No per-span bound of 1024 is asserted: the wrapper alone holds 1,024 bytes of content plus its
@@ -935,6 +956,7 @@ def test_c10_an_oversized_observation_value_is_stored_head_and_tail_in_attrs() -
     assert span.attrs[RUN_ID_KEY] == RUN_ID and span.attrs[EPISODE_KEY] == "cfg-7:1"
 
 
+@needs_otel
 def test_c10_the_cut_runs_when_content_is_off() -> None:
     """The cut does not depend on ``content``. The worked case: fixed head and tail sizes larger
     than the value would store ``"y" * 300`` as both head and tail; the limit's split stores 48 + 16."""
@@ -945,6 +967,7 @@ def test_c10_the_cut_runs_when_content_is_off() -> None:
     assert span.truncated == "observation" and span.bytes_original == 300, (span.truncated, span.bytes_original)
 
 
+@needs_otel
 def test_c10_spans_beyond_max_spans_are_dropped_and_counted() -> None:
     spans = [{"name": f"s{i}"} for i in range(5)]
     r = isolated(child_capture_spans, {"max_spans": 3}, spans)
@@ -953,6 +976,7 @@ def test_c10_spans_beyond_max_spans_are_dropped_and_counted() -> None:
     assert names(r["meta"]) == ["s0", "s1", "s2"]
 
 
+@needs_otel
 def test_c10_max_spans_keeps_the_earliest_started_spans_and_drops_the_deepest() -> None:
     """Spans end innermost-first, so a cap applied as spans end keeps the leaves and loses the
     root. C10, as amended, caps in start order: the root and its first descendants
@@ -968,6 +992,7 @@ def test_c10_max_spans_keeps_the_earliest_started_spans_and_drops_the_deepest() 
 # ---------- C11: two episodes in one process stay apart ----------
 
 
+@needs_otel
 def test_c11_a_span_closing_after_its_episode_falls_on_the_floor() -> None:
     r = isolated(child_sequential_captures)
     assert names(r["second"]) == ["second-own"], r["second"]
@@ -1006,6 +1031,7 @@ class LoggedStringIO(StringIO):
 PLUMBING_MAX_MDE = ("--max-mde", "1")
 
 
+@needs_otel
 def test_c12_preflight_prints_one_capture_line_before_the_prompt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.syspath_prepend(str(register_fake_instrumentors(tmp_path / "fake")))
     toml = write(tmp_path / "sweep.toml", mock_toml(capture={"instrument": [FAKE_INSTRUMENTOR]}))
@@ -1032,6 +1058,7 @@ def test_c12_preflight_prints_one_capture_line_before_the_prompt(tmp_path: Path,
     assert not _global_provider_is_sdk(), "a declined pre-flight installed a provider"
 
 
+@needs_otel
 def test_c12_yes_does_not_suppress_the_capture_line(tmp_path: Path) -> None:
     fake = register_fake_instrumentors(tmp_path / "fake")
     toml = write(tmp_path / "sweep.toml", mock_toml(capture={"instrument": [FAKE_INSTRUMENTOR]}, replicates=1))
@@ -1051,6 +1078,7 @@ def test_c12_yes_does_not_suppress_the_capture_line(tmp_path: Path) -> None:
     assert record["active"] is True and record["instrumented"] == [FAKE_INSTRUMENTOR], record
 
 
+@needs_otel
 def test_c12_the_modal_preflight_prints_the_capture_line_too(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[Any] = []
 

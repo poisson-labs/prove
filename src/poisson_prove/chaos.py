@@ -280,9 +280,7 @@ def _corrupt(current: Any, mode: Any, arguments: bool, content_seed: int) -> Any
     rng = random.Random(content_seed)
     if arguments and isinstance(current, str):
         parsed = json.loads(current)
-        return json.dumps(
-            {key: _corrupt_text(value, mode, rng) for key, value in parsed.items()}
-        )
+        return json.dumps({key: _corrupt_text(value, mode, rng) for key, value in parsed.items()})
     return _corrupt_text(current, mode, rng)
 
 

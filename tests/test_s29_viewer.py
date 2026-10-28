@@ -177,7 +177,7 @@ from poisson_prove.episode import Episode
 from poisson_prove.report import MultiReport, ReportSpec, build_multi_report
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.tree import tree as grow_tree
-from conftest import quickstart_design
+from conftest import quickstart_design, shared
 
 import lattice
 
@@ -1111,8 +1111,12 @@ def synth_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """One store holding every builder-made pair this file names: the axes pair, the identical
     pair, the BH pair, the gate fixture, the multi-event pair (``crash`` carried outside ``t0``
     so the CLI admits the event), the one-value pair, the empty family, the fixed-third-key
-    pair, the vocabulary pair and the hostile pair."""
-    root = tmp_path_factory.mktemp("s29-synth")
+    pair, the vocabulary pair and the hostile pair. Built once for the session
+    and read by every worker (``conftest.shared``)."""
+    return shared(tmp_path_factory, "s29-synth", _synth_root)
+
+
+def _synth_root(root: Path) -> Path:
     store = Store(root)
     write_run(store, "axes-a", salt=AXES_SALT, axis_types=AXES_TYPES_TASK_FIRST, cells=axes_cells(False))
     write_run(store, "axes-b", salt=AXES_SALT, axis_types=AXES_TYPES_TASK_FIRST, cells=axes_cells(True))
@@ -1146,9 +1150,12 @@ def synth_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.fixture(scope="module")
 def quickstart(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str, str]:
     """The two quickstart runs of the mock agent under the S12 salt: ``t_unit`` ``tool_calls``,
-    a trade line under two events."""
-    root = tmp_path_factory.mktemp("s29-quickstart")
+    a trade line under two events. Built once for the session
+    and read by every worker (``conftest.shared``)."""
+    return shared(tmp_path_factory, "s29-quickstart", _quickstart)
 
+
+def _quickstart(root: Path) -> tuple[Path, str, str]:
     def sweep(target: str, *extra: str) -> str:
         # A sweep does not end in a "run_id:" line; the new run is the one
         # the store gained.
@@ -1177,9 +1184,14 @@ def lattice_pair() -> Pair:
 
 
 @pytest.fixture(scope="module")
-def every_pair(synth_root: Path, quickstart: tuple[Path, str, str]) -> list[Pair]:
+def every_pair(tmp_path_factory: pytest.TempPathFactory, synth_root: Path, quickstart: tuple[Path, str, str]) -> list[Pair]:
     """Every named pair through ``serve --json`` with no tree flag but the ``--by grp`` the
-    BH and gate pairs need, beside the tree the API grows on the same frames."""
+    BH and gate pairs need, beside the tree the API grows on the same frames. Built once for the session
+    and read by every worker (``conftest.shared``)."""
+    return shared(tmp_path_factory, "s29-every-pair", lambda _folder: _every_pair(synth_root, quickstart))
+
+
+def _every_pair(synth_root: Path, quickstart: tuple[Path, str, str]) -> list[Pair]:
     qroot, qa, qb = quickstart
     # PF4.45: group limits from each cell's own baseline, unconditional, refuse the grouping
     # these rows pin (the lattice's gain, the BH and gate pairs' grp, the multi-event pair's task)

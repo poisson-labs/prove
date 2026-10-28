@@ -551,8 +551,13 @@ def _commands(piped: dict[str, Any]) -> list[str]:
     return found
 
 
-@pytest.mark.parametrize("cols", [80, 100])
-@pytest.mark.parametrize("rendering", ["pretty", "plain"])
+# Slow (PF10): over 10 s of setup and call on the runner; pretty-80, the quickest, keeps the invariant on a pull request.
+@pytest.mark.parametrize(("rendering", "cols"), [
+    pytest.param("pretty", 80, id="pretty-80"),
+    pytest.param("pretty", 100, id="pretty-100", marks=pytest.mark.slow),
+    pytest.param("plain", 80, id="plain-80", marks=pytest.mark.slow),
+    pytest.param("plain", 100, id="plain-100", marks=pytest.mark.slow),
+])
 def test_pf6_6_tables_fit_the_terminal_and_no_command_to_copy_is_broken(
     cols: int, rendering: str, switch_folder: Path, corpus: dict[str, dict[str, dict[str, Any]]], tmp_path: Path
 ) -> None:

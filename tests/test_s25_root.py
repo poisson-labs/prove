@@ -549,6 +549,7 @@ PROPERTY_SETTINGS = settings(deadline=None, max_examples=40, suppress_health_che
 # ---------- O1: the unweighted forms ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", METHODS)
 def test_o1_location_is_the_mean_and_dispersion_the_rms_of_units_delta_on_the_lattice(
     lattice_roots: dict[str, tuple[Any, Any]], method: str
@@ -568,6 +569,7 @@ def test_o1_location_is_the_mean_and_dispersion_the_rms_of_units_delta_on_the_la
         assert row.delta == row.events_b / row.n_b - row.events_a / row.n_a + 0.0, row
 
 
+@pytest.mark.math
 def test_o1_holds_where_n_differs_across_cells_so_n_weighting_is_caught(
     unequal_n: dict[str, tuple[Any, Any, pd.DataFrame, pd.DataFrame]]
 ) -> None:
@@ -585,6 +587,7 @@ def test_o1_holds_where_n_differs_across_cells_so_n_weighting_is_caught(
         assert row.delta == row.events_b / row.n_b - row.events_a / row.n_a + 0.0, row
 
 
+@pytest.mark.math
 @PROPERTY_SETTINGS
 @given(case=small_pairs())
 def test_o1_is_universal_over_small_synthetic_pairs(case: Any) -> None:
@@ -688,6 +691,7 @@ def test_o2_the_rebuild_truncates_at_the_minimum_horizon_the_way_multi_diff_does
 # ---------- O3: Phipson-Smyth form ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", METHODS)
 def test_o3_every_p_is_one_plus_an_integer_over_b_plus_one_on_the_lattice(
     lattice_roots: dict[str, tuple[Any, Any]], method: str
@@ -704,6 +708,7 @@ def test_o3_every_p_is_one_plus_an_integer_over_b_plus_one_on_the_lattice(
         assert 1.0 / (permutations + 1) <= p <= 1.0, p
 
 
+@pytest.mark.math
 @PROPERTY_SETTINGS
 @given(case=small_pairs())
 def test_o3_the_form_holds_over_small_synthetic_pairs_and_both_schemes(case: Any) -> None:
@@ -725,6 +730,7 @@ def test_o3_the_form_holds_over_small_synthetic_pairs_and_both_schemes(case: Any
 # ---------- O4: strictness, against multi.q ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", ("fisher_bh", "mcnemar_bh"))
 @pytest.mark.parametrize("q,expected", ((0.25, False), (0.5, True), (0.2, False)))
 def test_o4_rejects_is_strictly_p_omnibus_below_multi_q(
@@ -746,6 +752,7 @@ def test_o4_rejects_is_strictly_p_omnibus_below_multi_q(
     assert root.rejects == (root.p_omnibus < multi.q)
 
 
+@pytest.mark.math
 def test_o4_rejects_equals_the_strict_comparison_on_every_fixture(
     lattice_roots: dict[str, tuple[Any, Any]],
     mirrored_lattice: dict[str, tuple[Any, Any]],
@@ -849,6 +856,7 @@ def test_o6_the_pairable_pair_and_its_unpairable_twin_give_identical_json(synth_
 # ---------- O7: degeneracy, counted ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", METHODS)
 def test_o7_informative_cells_and_discordant_pairs_are_recomputed_from_the_frames_on_the_lattice(
     pair: Any, lattice_roots: dict[str, tuple[Any, Any]], method: str
@@ -879,6 +887,7 @@ def test_o7_informative_cells_and_discordant_pairs_are_recomputed_from_the_frame
     assert 0 < root.n_informative_cells < root.n_cells
 
 
+@pytest.mark.math
 def test_o7_the_byte_identical_pair_is_a_point_mass_under_pair_swap(identical_lattice: dict[str, tuple[Any, Any]]) -> None:
     """``b = a.copy()`` with equal salts under ``mcnemar_bh``: no pair differs, so no exchange
     changes anything, every statistic is ``0.0``, every p is ``1.0`` (all ``B`` permutations tie
@@ -893,6 +902,7 @@ def test_o7_the_byte_identical_pair_is_a_point_mass_under_pair_swap(identical_la
     assert root.n_informative_cells == 0 and root.n_discordant == 0
 
 
+@pytest.mark.math
 def test_o7_the_byte_identical_pair_keeps_its_mixed_cells_informative_under_arm_label(
     pair: Any, identical_lattice: dict[str, tuple[Any, Any]]
 ) -> None:
@@ -914,6 +924,7 @@ def test_o7_the_byte_identical_pair_keeps_its_mixed_cells_informative_under_arm_
     assert root.n_informative_cells == mixed > 0
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", ("fisher_bh", "mcnemar_bh"))
 def test_o7_the_counts_are_over_outcomes_not_over_one_event_on_the_three_outcome_pair(
     three_outcome: Any, three_outcome_roots: dict[str, tuple[Any, Any]], method: str
@@ -938,6 +949,7 @@ def test_o7_the_counts_are_over_outcomes_not_over_one_event_on_the_three_outcome
 # ---------- O8: golden, the lattice rejects at the floor ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", ("fisher_bh", "mcnemar_bh"))
 def test_o8_the_lattice_rejects_at_the_floor_under_both_schemes(
     lattice_roots: dict[str, tuple[Any, Any]], method: str
@@ -962,6 +974,7 @@ def test_o8_the_lattice_rejects_at_the_floor_under_both_schemes(
 # ---------- O9: the mirrored lattice separates the roots ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", ("fisher_bh", "mcnemar_bh"))
 def test_o9_the_mirrored_lattice_is_invisible_to_location_and_rejected_by_dispersion(
     mirrored_lattice: dict[str, tuple[Any, Any]], method: str
@@ -990,6 +1003,7 @@ def test_o9_the_mirrored_lattice_is_invisible_to_location_and_rejected_by_disper
     print(f"O9 {method}: p_omnibus={root.p_omnibus:g} p_bonferroni={bonferroni:g}")
 
 
+@pytest.mark.math
 def test_o9_the_mirrored_fixture_still_separates_the_roots(mirrored_lattice: dict[str, tuple[Any, Any]]) -> None:
     """Before asserting on a fixture, check the fixture could disagree. From ``units``: the deltas
     sum to zero by construction and their squares do not, so a location root has nothing to see
@@ -1002,6 +1016,7 @@ def test_o9_the_mirrored_fixture_still_separates_the_roots(mirrored_lattice: dic
     assert len(deltas) == 2 * lattice.CELLS == 144
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", ("fisher_bh", "mcnemar_bh"))
 def test_the_one_pair_per_cell_fixture_is_invisible_to_dispersion_and_rejected_by_location(method: str) -> None:
     """**Not a numbered invariant: the mirror image of O9, the sole catch for a dispersion-only
@@ -1026,6 +1041,7 @@ def test_the_one_pair_per_cell_fixture_is_invisible_to_dispersion_and_rejected_b
 # ---------- O10: calibration on sharp-null resamples ----------
 
 
+@pytest.mark.math
 @pytest.mark.calibration
 @pytest.mark.parametrize("method", ("mcnemar_bh", "fisher_bh"))
 def test_o10_the_root_is_calibrated_on_sharp_null_resamples_of_the_lattice(pair: Any, method: str) -> None:
@@ -1085,6 +1101,7 @@ def test_o10_the_root_is_calibrated_on_sharp_null_resamples_of_the_lattice(pair:
     assert CALIBRATION_BAND[0] <= rate <= CALIBRATION_BAND[1], (method, scheme, rate)
 
 
+@pytest.mark.math
 def test_the_omnibus_p_is_the_calibrated_count_and_not_the_bare_minimum_p() -> None:
     """**Not a numbered invariant: the deterministic guard for an uncalibrated min-p.**
     ``p_omnibus`` counts the permutations whose own min-p reaches the observed one; the bare
@@ -1125,6 +1142,7 @@ def test_o11_more_permutations_move_only_the_p_driven_fields(pair: Any, lattice_
 # ---------- O12: multi-event ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", ("fisher_bh", "mcnemar_bh"))
 def test_o12_only_the_moving_event_rejects_and_every_map_carries_both_events(
     three_outcome: Any, three_outcome_roots: dict[str, tuple[Any, Any]], method: str
@@ -1147,6 +1165,7 @@ def test_o12_only_the_moving_event_rejects_and_every_map_carries_both_events(
     assert root_x.rejects is False
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", ("fisher_bh", "mcnemar_bh"))
 def test_complementary_events_give_exact_duplicate_p_values_and_negated_locations(method: str) -> None:
     """**Not a numbered invariant: a property of the whole-outcome exchange, and the catch for exchanging per-event indicators.**

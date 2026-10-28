@@ -419,7 +419,8 @@ def refusal(spec: SweepSpec, max_mde: float | None) -> executor.UnderpoweredDesi
     return excinfo.value
 
 
-@pytest.mark.parametrize("replicates", [8, 16, LATTICE_REPLICATES, 64])
+# Slow (PF10): over 10 s of setup and call on the runner; the other three replicate counts keep the invariant on a pull request.
+@pytest.mark.parametrize("replicates", [pytest.param(8, marks=pytest.mark.slow), 16, LATTICE_REPLICATES, 64])
 def test_w4_the_refusal_names_the_mde_the_accepted_value_the_n_and_a_reachable_n(replicates: int) -> None:
     spec = spec_at(replicates)
     accepted = executor.DEFAULT_MAX_MDE

@@ -40,8 +40,18 @@ _DECLARE_FIELDS: tuple[str, ...] = ("steps", "outcomes", "gates", "failures", "s
 #: Every top-level key and table a sweep spec has; ``[[scenarios]]`` entries are configs and
 #: hold any key, and ``[modal]``'s subtables are image sections under any name.
 _TOP_FIELDS: tuple[str, ...] = (
-    "target", "target_id", "t_unit", "replicates", "retain_traces_for",
-    "axes", "scenarios", "capture", "chaos", "declare", "modal", "burla",
+    "target",
+    "target_id",
+    "t_unit",
+    "replicates",
+    "retain_traces_for",
+    "axes",
+    "scenarios",
+    "capture",
+    "chaos",
+    "declare",
+    "modal",
+    "burla",
 )
 _AXIS_FIELDS: tuple[str, ...] = ("type", "values")
 _PART = r'(?:"[^"]*"|\'[^\']*\'|[A-Za-z0-9_-]+)'
@@ -112,9 +122,7 @@ def grid(axes: Mapping[str, Sequence[Any]]) -> list[dict[str, Any]]:
     return [dict(zip(keys, combo, strict=True)) for combo in product(*columns)]
 
 
-def sobol(
-    bounds: Mapping[str, tuple[float, float]], n: int, *, seed: int
-) -> list[dict[str, Any]]:
+def sobol(bounds: Mapping[str, tuple[float, float]], n: int, *, seed: int) -> list[dict[str, Any]]:
     """n scrambled Sobol points scaled into bounds. n must be a power of 2."""
     if isinstance(n, bool) or not isinstance(n, int) or n < 1 or (n & (n - 1)) != 0:
         raise SamplerError(f"sobol needs n to be a power of 2 (1, 2, 4, 8, ...), got {n!r}")
@@ -164,8 +172,7 @@ def infer_axis_types(configs: Sequence[Mapping[str, Any]]) -> dict[str, AxisType
             out[key] = "categorical"
             continue
         numeric = all(
-            isinstance(cfg[key], (int, float)) and not isinstance(cfg[key], bool)
-            for cfg in configs
+            isinstance(cfg[key], (int, float)) and not isinstance(cfg[key], bool) for cfg in configs
         )
         out[key] = "continuous" if numeric else "categorical"
     return out
@@ -406,7 +413,7 @@ def _strict(file: Path, text: str, data: Mapping[str, Any]) -> None:
             line = _line_of(lines, (*path, key))
             what = f"[{key}]" if not path and isinstance(data.get(key), Mapping) else f'"{key}"'
             raise SamplerError(
-                f'{file}, line {line}: {what} is not {where}; the nearest known key is '
+                f"{file}, line {line}: {what} is not {where}; the nearest known key is "
                 f'"{nearest[0]}"'
             )
 

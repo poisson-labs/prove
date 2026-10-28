@@ -493,8 +493,7 @@ def _axes(
 
     kept = [r for r in rows if all(r["config"].get(k) == v for k, v in spec.fixed.items())]
     varying = sorted(
-        k for k in keys
-        if k not in spec.fixed and len({repr(r["config"].get(k)) for r in kept}) > 1
+        k for k in keys if k not in spec.fixed and len({repr(r["config"].get(k)) for r in kept}) > 1
     )
     if not varying:
         raise AxisError(
@@ -535,6 +534,7 @@ def _diff_cell(coords: tuple[object, ...], r: dict[str, Any]) -> Cell:
 def _way_of(r: Mapping[str, Any]) -> str | None:
     """Which direction a cell's one limit is: the rise's or the fall's, whichever it
     equals, the rise first; None when the cell has no limit or carries no directions."""
+
     def number(value: Any) -> float | None:
         missing = value is None or (isinstance(value, float) and math.isnan(value))
         return None if missing else float(value)
@@ -721,8 +721,7 @@ def _honesty(
     attaining = [c for c in present if c.mde == max_mde]
     overall = attaining[0] if attaining else max(present, key=_mde_key)
     second = (
-        f"Worst-powered cell overall: {_fmt(max_mde, 'pp0')}{_pp()} "
-        f"({_coord_text(spec, overall)})."
+        f"Worst-powered cell overall: {_fmt(max_mde, 'pp0')}{_pp()} ({_coord_text(spec, overall)})."
     )
     return first + "\n" + second
 
@@ -965,9 +964,14 @@ def _diff_honesty(
 ) -> Callable[[Sequence[Cell], int], str]:
     def honesty(present: Sequence[Cell], n_worse: int) -> str:
         return _honesty(
-            present, spec, n_worse=n_worse, max_mde=max_mde,
-            max_mde_unchanged=max_mde_unchanged, max_mde_unchanged_cell=max_mde_unchanged_cell,
-            compared=compared, not_compared=not_compared,
+            present,
+            spec,
+            n_worse=n_worse,
+            max_mde=max_mde,
+            max_mde_unchanged=max_mde_unchanged,
+            max_mde_unchanged_cell=max_mde_unchanged_cell,
+            compared=compared,
+            not_compared=not_compared,
         )
 
     return honesty
@@ -1150,7 +1154,9 @@ def build_report(
         bound=None,
         headline_of=_single_headline(diff),
         honesty_of=_diff_honesty(
-            spec, max_mde=diff.max_mde, max_mde_unchanged=diff.max_mde_unchanged,
+            spec,
+            max_mde=diff.max_mde,
+            max_mde_unchanged=diff.max_mde_unchanged,
             max_mde_unchanged_cell=diff.max_mde_unchanged_cell,
         ),
         provenance=provenance,
@@ -1193,15 +1199,17 @@ def _multi_method_rows(
         for e in m.events:
             ev = m.by_event[e]
             (_, n_up), (_, n_down) = ev.counts()
-            rows.append((
-                f"{_method_label(m.method)} · {e}",
-                "paired" if m.method in _PAIRED_METHODS else "unpaired",
-                _fmt(n_down, "int"),
-                _fmt(n_up, "int"),
-                _fmt(ev.n_unchanged, "int"),
-                f"{_fmt(ev.max_mde, 'pp0')}{_pp()}",
-                _fmt(m.q, "sig3"),
-            ))
+            rows.append(
+                (
+                    f"{_method_label(m.method)} · {e}",
+                    "paired" if m.method in _PAIRED_METHODS else "unpaired",
+                    _fmt(n_down, "int"),
+                    _fmt(n_up, "int"),
+                    _fmt(ev.n_unchanged, "int"),
+                    f"{_fmt(ev.max_mde, 'pp0')}{_pp()}",
+                    _fmt(m.q, "sig3"),
+                )
+            )
 
     add_multi(multi)
     for other in comparison.values():
@@ -1321,7 +1329,11 @@ def build_multi_report(
         words = _panel_words(ev)
 
         def headline(
-            present: Sequence[Cell], n_safer: int, n_worse: int, n_unchanged: int, e: str = e,
+            present: Sequence[Cell],
+            n_safer: int,
+            n_worse: int,
+            n_unchanged: int,
+            e: str = e,
             words: tuple[str, str] = words,
         ) -> str:
             return _caption(e, n_safer, n_worse, words)
@@ -1334,9 +1346,12 @@ def build_multi_report(
             bound=bound,
             headline_of=headline,
             honesty_of=_diff_honesty(
-                spec, max_mde=ev.max_mde, max_mde_unchanged=ev.max_mde_unchanged,
+                spec,
+                max_mde=ev.max_mde,
+                max_mde_unchanged=ev.max_mde_unchanged,
                 max_mde_unchanged_cell=ev.max_mde_unchanged_cell,
-                compared=len(ev.cells), not_compared=multi.n_not_comparable,
+                compared=len(ev.cells),
+                not_compared=multi.n_not_comparable,
             ),
             provenance=provenance,
             trades=trades,
@@ -1545,7 +1560,10 @@ def build_survival_report(
             horizon=float(horizon),
         )
     return SurvivalReport(
-        spec=spec, events=event_list, panels=panels, provenance=provenance,
+        spec=spec,
+        events=event_list,
+        panels=panels,
+        provenance=provenance,
         header_lines=() if design_mde is None else (_design_line(design_mde),),
         extra_md=() if shares is None else _single_shares_md(shares, event_list),
     )
@@ -1554,8 +1572,11 @@ def build_survival_report(
 def _design_line(design: Mapping[str, Any]) -> str:
     """The run's design limit with its direction, test, level, family and power,
     and whether it was recorded at sweep time or computed now from what the run recorded."""
-    how = ("computed at read time from the recorded replicates" if design["computed_at_read_time"]
-           else "recorded at sweep time")
+    how = (
+        "computed at read time from the recorded replicates"
+        if design["computed_at_read_time"]
+        else "recorded at sweep time"
+    )
     limit = "none" if design["mde"] is None else _look.fmt_rate(design["mde"])
     way = design.get("direction", "rise")
     return (
@@ -1581,12 +1602,14 @@ def _single_shares_md(
             share = c["share"]
             label = _look.level_label(share["level"])
             marked = marked or bool(c["share_differs"])
-            rows.append([
-                _fmt(json.dumps(c["config"], sort_keys=True), "coord"),
-                f"{share['value']:.3f} [{share['lo']:.3f}, {share['hi']:.3f}]"
-                + (" *" if c["share_differs"] else ""),
-                _look.fmt_rate(c["incidence"]),
-            ])
+            rows.append(
+                [
+                    _fmt(json.dumps(c["config"], sort_keys=True), "coord"),
+                    f"{share['value']:.3f} [{share['lo']:.3f}, {share['hi']:.3f}]"
+                    + (" *" if c["share_differs"] else ""),
+                    _look.fmt_rate(c["incidence"]),
+                ]
+            )
         label = label or _look.level_label(WILSON_LEVEL)
         out += [
             f"{e}: share of episodes that ended in the event, {label} Wilson interval; and "
@@ -1679,9 +1702,7 @@ def _svg_body(rep: Report) -> tuple[list[str], int, int]:
 def _notch(x: int, y: int, w: int, h: int) -> str:
     """Diagonal notches in two corners: the trade marker."""
     n = max(2, min(5, w // 3, h // 3))
-    return (
-        f'<path d="M{x},{y}h{n}v{n}z M{x + w},{y + h}h-{n}v-{n}z"/>'
-    )
+    return f'<path d="M{x},{y}h{n}v{n}z M{x + w},{y + h}h-{n}v-{n}z"/>'
 
 
 def _limit_pp(value: float) -> str:
@@ -1824,7 +1845,7 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
         y = top + rows * cell_h + 14
         out.append(
             f'<text x="{x}" y="{y}" text-anchor="middle">'
-            f'{_xml_escape(_truncate(_fmt(xv, "coord"), x_label_budget * x_step))}</text>'
+            f"{_xml_escape(_truncate(_fmt(xv, 'coord'), x_label_budget * x_step))}</text>"
         )
     if rep.spec.y_axis is not None:
         y_step = max(1, -(-rows // 30))
@@ -1835,7 +1856,7 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
             y = top + j * cell_h + cell_h // 2 + (font - 2) // 2 - 1
             out.append(
                 f'<text x="{x}" y="{y}" text-anchor="end">'
-                f'{_xml_escape(_truncate(_fmt(yv, "coord"), y_label_budget))}</text>'
+                f"{_xml_escape(_truncate(_fmt(yv, 'coord'), y_label_budget))}</text>"
             )
     axis_y = top + rows * cell_h + 30
     axis_label = rep.spec.x_axis + (f" (rows: {rep.spec.y_axis})" if rep.spec.y_axis else "")
@@ -1897,6 +1918,7 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
     width = left + axis_w + right
     title_lines = _wrap(rep.spec.title, _wrap_budget(width, left, font + 2))
     headline_lines = _wrap(rep.headline, _wrap_budget(width, left, font))
+
     def caption_text() -> str:
         text = (
             f"point = delta (rate_b - rate_a, {_unit()}) on the shared scale; bracket = ±MDE, "
@@ -1940,7 +1962,7 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
         out.append(
             f'<text x="{left - 6}" y="{_fmt(cy + (font - 2) / 2 - 1, "num")}" text-anchor="end" '
             f'fill="{_MUTED[theme]}" font-size="{font - 2}">'
-            f'{_xml_escape(_truncate(_fmt(c.coords[0], "coord"), label_budget))}</text>'
+            f"{_xml_escape(_truncate(_fmt(c.coords[0], 'coord'), label_budget))}</text>"
         )
         if not c.present:
             out.append("</g>")
@@ -1966,19 +1988,17 @@ def _forest_body(rep: Report) -> tuple[list[str], int, int]:
         out.append(
             f'<text x="{left + axis_w + 20}" y="{_fmt(cy + (font - 2) / 2 - 1, "num")}" '
             f'fill="{_TEXT[theme]}" font-size="{font - 2}">'
-            f'{_fmt(c.n_a, "int")}/{_fmt(c.n_b, "int")}</text>'
+            f"{_fmt(c.n_a, 'int')}/{_fmt(c.n_b, 'int')}</text>"
         )
         out.append("</g>")
 
     axis_y = top + n_rows * row_h + 14
     out.append(f'<g fill="{_MUTED[theme]}" font-size="{font - 2}">')
-    out.append(
-        f'<text x="{left}" y="{axis_y}">-{_xml_escape(_fmt(rep._bound, "pp1"))}</text>'
-    )
+    out.append(f'<text x="{left}" y="{axis_y}">-{_xml_escape(_fmt(rep._bound, "pp1"))}</text>')
     out.append(f'<text x="{_fmt(x0, "num")}" y="{axis_y}" text-anchor="middle">0.0</text>')
     out.append(
         f'<text x="{left + axis_w}" y="{axis_y}" text-anchor="end">'
-        f'+{_xml_escape(_fmt(rep._bound, "pp1"))}</text>'
+        f"+{_xml_escape(_fmt(rep._bound, 'pp1'))}</text>"
     )
     out.append(f'<text x="{left}" y="{axis_y + 16}">{_xml_escape(rep.spec.x_axis)} (rows)</text>')
     out.append("</g>")
@@ -2088,7 +2108,14 @@ def _worst_table_rows(rep: Report) -> list[list[str]]:
 
 
 _WORST_HEADER_TAIL = [
-    "n (a/b)", "rate_a (pp)", "rate_b (pp)", "delta (pp)", "p", "q", "verdict", "MDE",
+    "n (a/b)",
+    "rate_a (pp)",
+    "rate_b (pp)",
+    "delta (pp)",
+    "p",
+    "q",
+    "verdict",
+    "MDE",
 ]
 _RATE_HEADER_TAIL = ["n", "F at horizon (pp)"]
 
@@ -2099,6 +2126,8 @@ def _worst_header_tail() -> list[str]:
 
 def _rate_header_tail() -> list[str]:
     return ["n", _h("F at horizon")]
+
+
 _METHOD_HEADER = ["method", "pairing", "safer", "worse", "unchanged", "max MDE", "q"]
 
 
@@ -2184,9 +2213,7 @@ def _provenance_lines(provenance: Mapping[str, object]) -> list[str]:
 
 def _survival_rows(rep: Report) -> list[list[str]]:
     assert rep._survival is not None
-    return [
-        [*_coords_text(c), _fmt(sa, "pp1"), _fmt(sb, "pp1")] for c, sa, sb in rep._survival
-    ]
+    return [[*_coords_text(c), _fmt(sa, "pp1"), _fmt(sb, "pp1")] for c, sa, sb in rep._survival]
 
 
 def _honesty_heading(rep: Report) -> str:
@@ -2432,7 +2459,7 @@ def _fault_lines_items(tree: TreeResult, power: float | None = None) -> list[_Tr
     if fault.tested:
         items.append(
             f'"{fault.null}" tested by BH across {_fmt(fault.n_groups, "int")} groups at q '
-            f'{_fmt(fault.q, "sig3")}: {_fmt(fault.n_rejected_groups, "int")} rejected'
+            f"{_fmt(fault.q, 'sig3')}: {_fmt(fault.n_rejected_groups, 'int')} rejected"
         )
         # A group p is drawn from the same permutations the root was, so it has the
         # same floor. Only where a level was tested -- there is no floor under a p nobody drew.
@@ -2490,8 +2517,8 @@ def _cells_items(leaves: Leaves, bound: Bound) -> list[_TreeItem]:
         return [f"not tested: {_not_tested(leaves.reason, bound)}"]
     items: list[_TreeItem] = [
         f'"{leaves.null}" tested by BH within each of {_fmt(leaves.n_families, "int")} '
-        f'rejecting groups at q {_fmt(leaves.q, "sig3")}: {_fmt(leaves.n_rejected, "int")} of '
-        f'{_fmt(leaves.n_tests, "int")} rejected'
+        f"rejecting groups at q {_fmt(leaves.q, 'sig3')}: {_fmt(leaves.n_rejected, 'int')} of "
+        f"{_fmt(leaves.n_tests, 'int')} rejected"
     ]
     if leaves.families:
         items.append(_LEAF_MDE_MEANING)

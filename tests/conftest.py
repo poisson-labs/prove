@@ -5,7 +5,7 @@ import os
 import re
 import socket
 import tokenize
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -104,69 +104,97 @@ def without_run_lines(text: str) -> str:
         out.append(_RUN_ID_ITEM.sub("", line))
     return "".join(out)
 
-#: PF9.4: every module that drives a remote backend offline runs with network
-#: sockets blocked in the pytest process (the interpreters the Burla and Modal fakes start arm
-#: their own tripwire). A new module that drives a backend is added here by hand.
-NETWORK_BLOCKED_MODULES = frozenset({
-    "test_a10_declared", "test_bu_burla_backend", "test_m10_cli", "test_m10_multi", "test_m11a_chaos",
-    "test_m3_capture", "test_m3_crash_trace", "test_m3_modal", "test_m3_modal_launch",
-    "test_m3_timeout_trace", "test_mc_modal_chaos", "test_pf11_setup_agent", "test_pf1_look", "test_pf9_backends",
-    "test_pr1_pair_assertion", "test_s21_errors", "test_s23_power", "test_capture_crash_and_timeout_behaviour",
-    "test_storage_and_chaos_behaviour",
-})
-#: A module that drives a backend but must serve on a local socket, with its reason.
-NETWORK_EXEMPT_MODULES = {
+#: Every test runs with network sockets blocked in the pytest process (PF9.4 for the modules that
+#: drive a remote backend offline; PF10 for all the rest). The interpreters the Burla and Modal fakes
+#: start arm their own tripwire. A module whose tests serve on a loopback socket and read it back is
+#: listed here with its reason; its tests may reach 127.0.0.1, ::1 and localhost, and nothing else.
+LOOPBACK_MODULES = {
+    "test_m13_viewer": "the viewer's tests serve the page on a loopback port and request it",
     "test_pf0_name": "test_pf0_12 serves the comparison page on a loopback socket and reads it back",
+    "test_pf2_names": "serve's tests read the page they serve on a loopback port",
+    "test_pf3_first_run": "pf3_6 reads the page serve puts up on a loopback port",
+    "test_pf8_public_hygiene": "pf8_4 reads the quickstart's served page on a loopback port",
 }
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _importable(module: str) -> bool:
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+#: A test that runs OpenTelemetry's SDK (capture, the stamper): skipped, saying so, where the
+#: ``[agent]`` extra is not installed. Only the tests that need it carry it.
+needs_otel = pytest.mark.skipif(not _importable("opentelemetry.sdk"), reason="capture lives behind the [agent] extra")
 
 
 class NetworkBlocked(OSError):
-    """A network connection or name lookup was attempted in a module that runs offline."""
+    """A network connection or name lookup was attempted in a test."""
 
 
-def network_blocked_for(module: str) -> bool:
-    return module.rsplit(".", 1)[-1] in NETWORK_BLOCKED_MODULES
+def loopback_allowed_for(module: str) -> bool:
+    return module.rsplit(".", 1)[-1] in LOOPBACK_MODULES
 
 
 @pytest.fixture(autouse=True)
 def blocked_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> Iterator[list[str]]:
-    """In a guarded module: every socket other than a Unix one refuses to connect or send, and every
-    name lookup refuses, with ``NetworkBlocked``; each attempt is recorded, and a test that made one
-    fails at teardown even if the code under test swallowed the error. Elsewhere: nothing."""
+    """In every test: every socket other than a Unix one refuses to connect or send, and every name
+    lookup refuses, with ``NetworkBlocked``, except to a loopback host in a module listed in
+    ``LOOPBACK_MODULES``; each attempt is recorded, and a test that made one fails at teardown even if
+    the code under test swallowed the error."""
     attempts: list[str] = []
-    if not network_blocked_for(request.module.__name__):
-        yield attempts
-        return
+    loopback = loopback_allowed_for(request.module.__name__)
     real_connect = socket.socket.connect
     real_connect_ex = socket.socket.connect_ex
+    real_create_connection = socket.create_connection
+    real_getaddrinfo = socket.getaddrinfo
+    real_gethostbyname = socket.gethostbyname
+    real_gethostbyname_ex = socket.gethostbyname_ex
+    real_sendto = socket.socket.sendto
+
+    def local(address: Any) -> bool:
+        return loopback and isinstance(address, tuple) and bool(address) and address[0] in LOOPBACK_HOSTS
 
     def refuse(what: str) -> NetworkBlocked:
         attempts.append(what)
-        return NetworkBlocked(f"network blocked in an offline backend test: {what}")
+        return NetworkBlocked(f"network blocked in a test: {what}")
 
     def connect(self: socket.socket, address: Any) -> None:
-        if self.family != socket.AF_UNIX:
+        if self.family != socket.AF_UNIX and not local(address):
             raise refuse(f"connect {address!r}")
         real_connect(self, address)
 
     def connect_ex(self: socket.socket, address: Any) -> int:
-        if self.family != socket.AF_UNIX:
+        if self.family != socket.AF_UNIX and not local(address):
             raise refuse(f"connect_ex {address!r}")
         return real_connect_ex(self, address)
 
     def create_connection(address: Any, *args: Any, **kwargs: Any) -> socket.socket:
-        raise refuse(f"create_connection {address!r}")
+        if not local(address):
+            raise refuse(f"create_connection {address!r}")
+        return real_create_connection(address, *args, **kwargs)
 
     def getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> list[Any]:
-        raise refuse(f"getaddrinfo {host!r}")
+        if not (loopback and host in LOOPBACK_HOSTS):
+            raise refuse(f"getaddrinfo {host!r}")
+        return real_getaddrinfo(host, *args, **kwargs)
 
-    def lookup(host: Any) -> Any:
-        raise refuse(f"name lookup {host!r}")
+    def gethostbyname(host: Any) -> Any:
+        if not (loopback and host in LOOPBACK_HOSTS):
+            raise refuse(f"name lookup {host!r}")
+        return real_gethostbyname(host)
 
-    real_sendto = socket.socket.sendto
+    def gethostbyname_ex(host: Any) -> Any:
+        if not (loopback and host in LOOPBACK_HOSTS):
+            raise refuse(f"name lookup {host!r}")
+        return real_gethostbyname_ex(host)
 
     def sendto(self: socket.socket, data: Any, *args: Any) -> int:
-        if self.family != socket.AF_UNIX:
+        if self.family != socket.AF_UNIX and not local(args[-1]):
             raise refuse(f"sendto {args[-1]!r}")
         return real_sendto(self, data, *args)
 
@@ -174,11 +202,53 @@ def blocked_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
     monkeypatch.setattr(socket, "create_connection", create_connection)
     monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
-    monkeypatch.setattr(socket, "gethostbyname", lookup)
-    monkeypatch.setattr(socket, "gethostbyname_ex", lookup)
+    monkeypatch.setattr(socket, "gethostbyname", gethostbyname)
+    monkeypatch.setattr(socket, "gethostbyname_ex", gethostbyname_ex)
     monkeypatch.setattr(socket.socket, "sendto", sendto)
     yield attempts
-    assert attempts == [], f"network attempted in an offline backend test: {attempts}"
+    assert attempts == [], f"network attempted in a test: {attempts}"
+
+
+@pytest.fixture(autouse=True)
+def _a_capture_install_ends_with_its_test() -> Iterator[None]:
+    """Prove's capture installs once per process. A test that runs a capture sweep in the pytest
+    worker itself leaves that install behind, and a child a later test forks from the worker
+    inherits it and records no trace (test_defaults_refusals_and_faces's missing-instrumentor test,
+    then the storage tests' capture routes). An install the test itself made is undone after it;
+    one a module fixture made before the test stays."""
+    import poisson_prove.capture as capture
+
+    before = (capture._STATUS, capture._BUCKET)
+    yield
+    if before[0] is None and capture._STATUS is not None:
+        capture._STATUS, capture._BUCKET = before
+
+
+def shared(tmp_path_factory: pytest.TempPathFactory, name: str, build: Callable[[Path], Any]) -> Any:
+    """``build(folder)`` once per test session, however many ``-n`` workers ask: the first to ask
+    builds into a folder of the session's own base and pickles what ``build`` returns, and every
+    other worker waits for it and reads the pickle. ``build`` writes every file it makes under
+    ``folder``; what it returns names paths there, which every worker can read. For a module
+    fixture whose tests only read what it built."""
+    import fcntl
+    import pickle
+    import shutil
+
+    base = tmp_path_factory.getbasetemp()
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        base = base.parent
+    folder, value = base / f"shared-{name}", base / f"shared-{name}.pickle"
+    with open(base / f"shared-{name}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not value.exists():
+            shutil.rmtree(folder, ignore_errors=True)
+            folder.mkdir(parents=True)
+            built = build(folder)
+            staged = value.with_suffix(".staged")
+            staged.write_bytes(pickle.dumps(built))
+            staged.replace(value)
+            return built
+    return pickle.loads(value.read_bytes())
 
 
 @functools.cache

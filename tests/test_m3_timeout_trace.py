@@ -72,7 +72,7 @@ from poisson_prove.trace import OTEL_SEMCONV_VERSION, Span, Trace, TraceValidati
 from isolated_support import isolated
 from conftest import STEP_LINE_RE
 
-pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
+from conftest import needs_otel
 
 MODULE = __name__
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
@@ -681,6 +681,7 @@ def assert_intact_ok_rows(others: pd.DataFrame, run_id: str) -> None:
             assert span.attrs[EPISODE_KEY] == episode_id(row.config_hash, row.replicate_index)
 
 
+@needs_otel
 @needs_fork
 def test_e4_the_timed_out_row_carries_its_truncated_trace_and_every_other_row_is_intact(timeout_run: TimeoutRun) -> None:
     summary = timeout_run.report["summary"]
@@ -703,6 +704,7 @@ def test_e4_the_timed_out_row_carries_its_truncated_trace_and_every_other_row_is
 # ---------- E5: no [capture] table, nothing changes ----------
 
 
+@needs_otel
 @needs_fork
 def test_e5_without_a_capture_table_the_timed_out_row_is_bare_and_the_child_keeps_the_default_disposition(
     bare_timeout_run: TimeoutRun, timeout_run: TimeoutRun
@@ -726,6 +728,7 @@ def test_e5_without_a_capture_table_the_timed_out_row_is_bare_and_the_child_keep
 # ---------- E7: worker_batch and run_with_mapper ----------
 
 
+@needs_otel
 @needs_fork
 def test_e7_worker_batch_returns_the_dict_form_for_the_timed_out_job_with_capture(tmp_path: Path) -> None:
     p = plan(SweepSpec.load(write(tmp_path / "sweep.toml", sweep_toml(capture=None))), Store(tmp_path / "store"), run_salt=SALT)
@@ -750,6 +753,7 @@ def test_e7_worker_batch_returns_the_dict_form_for_the_timed_out_job_with_captur
     assert r["sdk_provider_in_this_process"] is False, "worker_batch installed in the forking parent"
 
 
+@needs_otel
 @needs_fork
 def test_e7_worker_batch_returns_the_string_for_the_timed_out_job_without_capture(tmp_path: Path) -> None:
     p = plan(SweepSpec.load(write(tmp_path / "sweep.toml", sweep_toml(capture=None))), Store(tmp_path / "store"), run_salt=SALT)
@@ -767,6 +771,7 @@ def test_e7_worker_batch_returns_the_string_for_the_timed_out_job_without_captur
     assert not _global_provider_is_sdk(), "a worker_batch call without capture installed a provider"
 
 
+@needs_otel
 @needs_fork
 def test_e7_run_with_mapper_stores_the_dict_form_as_an_errored_row_with_its_trace(tmp_path: Path) -> None:
     toml = write(tmp_path / "sweep.toml", sweep_toml(capture={"instrument": []}))
@@ -915,6 +920,7 @@ def step_columns(block: list[str]) -> list[list[str]]:
     return [line.split("\t") for line in block if STEP_LINE_RE.match(line)]
 
 
+@needs_otel
 @needs_fork
 def test_e9_inspect_selects_the_timed_out_row_by_error_and_prints_its_truncated_trace(timeout_run: TimeoutRun) -> None:
     r = inspect_run(timeout_run.root, timeout_run.run_id, REASON)
@@ -950,6 +956,7 @@ def test_e9_inspect_selects_the_timed_out_row_by_error_and_prints_its_truncated_
     assert f"seed={seed}" in "\n".join(snippet), snippet
 
 
+@needs_otel
 @needs_fork
 def test_e9_a_row_selected_by_outcome_prints_no_truncated_line(timeout_run: TimeoutRun) -> None:
     others = timeout_run.others
@@ -971,6 +978,7 @@ def test_e9_a_row_selected_by_outcome_prints_no_truncated_line(timeout_run: Time
         assert all(float(cols[3]) >= 0.0 for cols in columns), columns
 
 
+@needs_otel
 @needs_fork
 def test_e9_a_timed_out_row_without_a_trace_prints_its_error_and_no_trace_lines(bare_timeout_run: TimeoutRun) -> None:
     r = inspect_run(bare_timeout_run.root, bare_timeout_run.run_id, REASON)
@@ -985,6 +993,7 @@ def test_e9_a_timed_out_row_without_a_trace_prints_its_error_and_no_trace_lines(
     assert "trace: truncated" not in r.out and not step_columns(block), "\n".join(block)
 
 
+@needs_otel
 @needs_fork
 def test_e9_an_event_matching_neither_outcome_nor_error_prints_the_no_rows_message_naming_it(timeout_run: TimeoutRun) -> None:
     r = inspect_run(timeout_run.root, timeout_run.run_id, "no-such-event")
@@ -999,6 +1008,7 @@ def test_e9_an_event_matching_neither_outcome_nor_error_prints_the_no_rows_messa
 # ---------- E10: the parent never installs; the child owned the spans ----------
 
 
+@needs_otel
 @needs_fork
 def test_e10_the_forking_parent_never_installs_and_the_snapshot_came_from_the_child_that_owned_the_spans(timeout_run: TimeoutRun) -> None:
     assert timeout_run.report["sdk_provider_in_this_process"] is False, "run_local installed in the forking parent"

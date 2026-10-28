@@ -924,6 +924,8 @@ def test_m10_control_an_agreeing_record_is_stored(fake: Fake, tmp_path: Path) ->
     assert_complete(outcome, store, p)
 
 
+# Slow (PF10): over 10 s of setup and call on the runner; it waits the real 15 s.
+@pytest.mark.slow
 def test_m11_busy_nodes_are_asked_again_every_15_s(fake: Fake, tmp_path: Path) -> None:
     fake.script(attempts=[{"busy": True}])
     p, store, opts, outcome = burla_run(fake, tmp_path)

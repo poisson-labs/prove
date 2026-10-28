@@ -86,7 +86,7 @@ def span_key(key: str) -> str:
     """The current spelling of a span attribute key: a key under the retired prefix comes back
     under the current one, and any other key comes back as it is."""
     if key.startswith(RETIRED_SPAN_PREFIX):
-        return _CURRENT_SPAN_PREFIX + key[len(RETIRED_SPAN_PREFIX):]
+        return _CURRENT_SPAN_PREFIX + key[len(RETIRED_SPAN_PREFIX) :]
     return key
 
 
@@ -112,9 +112,7 @@ def retired_store_variable_note(environ: Mapping[str, str], current: str) -> str
     ``current``, does not name a store: the old one is not read. ``None`` otherwise."""
     if RETIRED_STORE_VARIABLE not in environ or environ.get(current):
         return None
-    return (
-        f"{RETIRED_STORE_VARIABLE} is set and no longer read; Prove reads {current}"
-    )
+    return f"{RETIRED_STORE_VARIABLE} is set and no longer read; Prove reads {current}"
 
 
 def retired_default_store(default: Path) -> Path | None:

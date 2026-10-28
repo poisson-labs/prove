@@ -79,6 +79,7 @@ class Episode:
 class Rollout(Protocol):
     """A rollout: a function ``(cfg, seed) -> Episode`` that runs one episode of the target for
     one condition and seed."""
+
     def __call__(self, cfg: Mapping[str, Any], seed: int) -> Episode: ...
 
 
