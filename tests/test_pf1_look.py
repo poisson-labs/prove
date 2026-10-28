@@ -535,9 +535,12 @@ def corpus(world: World) -> dict[str, Ran]:
 # ---------- PF1.1 exit codes ----------
 
 
-def test_pf1_1_every_invocation_exits_with_its_own_code(corpus: dict[str, Ran]) -> None:
+def test_pf1_1_every_invocation_exits_with_its_own_code_and_every_code_is_a_documented_one(corpus: dict[str, Ran]) -> None:
     wrong = {name: (r.code, r.call.code, r.err[-400:]) for name, r in corpus.items() if r.code != r.call.code}
     assert not wrong, wrong
+    table = (ROOT / "docs" / "cli-look.md").read_text(encoding="utf-8").split("\n## Exit codes\n", 1)[1].split("\n## ", 1)[0]
+    documented = {int(code) for code in re.findall(r"^\| (\d+) \| ", table, re.MULTILINE)}
+    assert documented and {r.code for r in corpus.values()} <= documented, documented
 
 
 # ---------- PF1.2 refusals ----------
