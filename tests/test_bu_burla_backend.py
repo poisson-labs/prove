@@ -24,8 +24,10 @@ network tripwire (a socket other than a Unix one raises); the pytest process nev
   ``slots_per_node``, ``usd_per_node_hour``, ``price_asof``, ``estimate``, ``ledger_total``,
   ``stop_cost`` and ``max_cost``) and ``bundle`` (``sha256``, ``size`` and ``packages``, each
   package's ``version``, ``commit`` and ``dirty``).
-- ``_build_bundle(packages) -> _Bundle`` with ``.data`` (the gzip'd tar) and ``.sha256``;
-  ``_Ledger(path)`` with ``.total()`` and ``.unclosed()``; ``_BACKSTOP_S`` and ``_KILL_GRACE_S``.
+- The bundle is read where it travels: ``tests/bu_fixtures/keep_bundle.py`` starts the launcher as
+  ``launch.py`` does and keeps the gzip'd tar each call ships inside the function it hands the fake.
+  The ledger is read as the JSON-lines file it is, and as the pre-flight and the manifest report it.
+- ``_BACKSTOP_S`` and ``_KILL_GRACE_S``, shortened for the backstop's test ($5).
 - ``BurlaOptions`` refuses a bad value, and ``from_sweep_file`` a missing or unknown field, with
   ``ValueError``; a bundle version is ``importlib.metadata.version`` of the package's name or of
   the distribution that provides it, else ``None``; a bundle's ``commit`` and ``dirty`` are what
@@ -67,7 +69,7 @@ from typing import Any
 import pytest
 
 import poisson_prove
-from poisson_prove import _burla_submit, cli, executor_burla, executor_modal
+from poisson_prove import cli, executor_burla, executor_modal
 from poisson_prove.executor import ExecutorError, plan, run_local
 from poisson_prove.executor_modal import ModalBackendError, ModalOptions, run_with_mapper
 from poisson_prove.sampler import SweepSpec
@@ -81,6 +83,7 @@ FIXTURES = REPO / "tests" / "bu_fixtures"
 TARGETS = FIXTURES / "targets"
 LAUNCH = FIXTURES / "launch.py"
 DEAF = FIXTURES / "deaf_launcher.py"
+KEEP = FIXTURES / "keep_bundle.py"
 WORKER = FIXTURES / "worker.py"
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
@@ -89,7 +92,7 @@ PIN = "1.8.2"
 # PF9: Burla's install line names Prove's extra.
 INSTALL_HINT = 'pip install "poisson-prove[burla]"'
 HEAD = "http://localhost:5001"
-SALT = "bu-oracle-salt"
+SALT = "bu-test-salt"
 PLAIN = "bu_targets.plain:rollout"
 VIEW = "bu_targets.view:rollout"
 PROBE = "bu_targets.probe:rollout"
@@ -139,7 +142,6 @@ RUNNER_PARAMS = [
     ("placement", "KEYWORD_ONLY", None),
     ("cost_check", "KEYWORD_ONLY", None),
 ]
-BOOTSTRAP_PARAMS = ["k", "jobs", "import_path", "episode_timeout", "capture", "chaos"]
 ARM_DEADLINE_S = 240.0
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
 
@@ -166,7 +168,7 @@ def write_sweep(
     name: str = "sweep.toml",
 ) -> Path:
     text = (
-        'target_id = "bu-oracle@v0"\nt_unit = "steps"\n'
+        'target_id = "bu-test@v0"\nt_unit = "steps"\n'
         f"replicates = {replicates}\n\n[axes.cell]\ntype = \"categorical\"\n"
         f"values = {_toml(list(cells))}\n"
     )
@@ -369,6 +371,14 @@ class Fake:
     def argv(self, mode: str = "fake") -> list[str]:
         return [sys.executable, "-I", str(LAUNCH), str(self.state), mode, str(SUBMIT)]
 
+    def keeping_argv(self) -> list[str]:
+        """The launcher as ``argv`` starts it, keeping the bundle each call ships (``bundles``)."""
+        return [sys.executable, "-I", str(KEEP), str(self.state), "fake", str(SUBMIT)]
+
+    def bundles(self) -> list[bytes]:
+        """The gzip'd bundle each call shipped inside its function, in call order."""
+        return [path.read_bytes() for path in sorted(self.state.glob("bundle-*.tar.gz"))]
+
     def _lines(self, name: str) -> list[dict[str, Any]]:
         path = self.state / name
         if not path.exists():
@@ -534,7 +544,7 @@ PLACEMENT = {"burla": {"nodes": 3, "machine_type": "m7i.2xlarge"}, "bundle": {"s
              "cluster_note": "fixture"}
 
 
-def test_r1_without_the_new_keywords_the_modal_manifest_and_cost_guard_are_mains(tmp_path: Path) -> None:
+def test_r1_a_modal_run_on_the_shared_runner_keeps_the_modal_manifest_and_cost_guard(tmp_path: Path) -> None:
     """Without the Burla keywords, a Modal run through the shared runner keeps the Modal manifest
     keys and capture reason, and its cost guard refuses before the mapper is called."""
     p, store = r_plan(tmp_path / "plain", capture=True)
@@ -702,9 +712,13 @@ def test_m2_one_item_per_batch_carrying_six_fields_in_order(fake: Fake, tmp_path
         for k, jobs in enumerate(batches_of(p, opts.batch_size))
     ]
     assert json.loads(json.dumps(call["items"])) == json.loads(json.dumps(expected))
-    names = [n for n, prm in inspect.signature(_burla_submit._bootstrap).parameters.items()
-             if prm.kind in (prm.POSITIONAL_ONLY, prm.POSITIONAL_OR_KEYWORD)]
-    assert names == BOOTSTRAP_PARAMS
+    # Burla calls the shipped function with an item's fields in order, so each field reaches the
+    # worker as what it is: every row ran the probe, under the capture and the chaos it was handed.
+    for row in stored(store, p.run_id):
+        assert row["error"] is None and row["meta"]["content"] == "SCRIPTED-OK", row
+        assert row["backend_meta"]["capture"]["requested"] is True, row["backend_meta"]
+        record = row["backend_meta"]["chaos"]
+        assert (record["fault"], record["rate"], record["steps"]) == ("none", 1.0, []), record
 
 
 def local_rows(root: Path, target: str) -> list[dict[str, Any]]:
@@ -1115,7 +1129,7 @@ def _expected_package(name: str) -> dict[str, Any]:
             "dirty": None if porcelain is None else bool(porcelain)}
 
 
-def test_w1_the_bundle_is_deterministic_and_complete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_w1_the_bundle_is_deterministic_and_complete(fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     copy = tmp_path / "pkgs" / "bu_w1pkg"
     shutil.copytree(TARGETS / "bu_targets", copy, ignore=shutil.ignore_patterns("__pycache__"))
     (copy / "tool.sh").write_text("#!/bin/sh\necho fixture\n", encoding="utf-8")
@@ -1123,12 +1137,17 @@ def test_w1_the_bundle_is_deterministic_and_complete(tmp_path: Path, monkeypatch
     monkeypatch.syspath_prepend(str(copy.parent))
     importlib.import_module("bu_w1pkg.plain")
     assert (copy / "__pycache__").is_dir(), "the fixture has no cache folder to leave out"
-    first = eb._build_bundle(("bu_w1pkg",))
-    os.utime(copy / "plain.py", (1, 1))  # a new mtime, the same tree
-    second = eb._build_bundle(("bu_w1pkg",))
-    assert first.data == second.data and first.sha256 == second.sha256 == hashlib.sha256(first.data).hexdigest()
-    assert first.data[:2] == b"\x1f\x8b" and first.data[4:8] == b"\x00\x00\x00\x00", "gzip mtime is not zero"
-    with tarfile.open(fileobj=io.BytesIO(first.data), mode="r:gz") as tar:
+    monkeypatch.setattr(eb, "_launcher_argv", fake.keeping_argv)
+    recorded = []
+    for name in ("first", "second"):
+        p, store, opts, outcome = burla_run(fake, tmp_path / name, "bu_w1pkg.plain:rollout", packages=("bu_w1pkg",))
+        assert_complete(outcome, store, p)
+        recorded.append(store.manifest(p.run_id).environment["bundle"]["sha256"])
+        os.utime(copy / "plain.py", (1, 1))  # a new mtime, the same tree
+    first, second = fake.bundles()
+    assert first == second and recorded[0] == recorded[1] == hashlib.sha256(first).hexdigest()
+    assert first[:2] == b"\x1f\x8b" and first[4:8] == b"\x00\x00\x00\x00", "gzip mtime is not zero"
+    with tarfile.open(fileobj=io.BytesIO(first), mode="r:gz") as tar:
         members = tar.getmembers()
         names = [m.name for m in members]
         assert names == sorted(names)
@@ -1147,13 +1166,14 @@ def test_w1_the_bundle_is_deterministic_and_complete(tmp_path: Path, monkeypatch
 
 
 def test_w1_the_manifest_records_the_bundle_prove_s_version_and_each_package_s_version_commit_and_dirty_flag(
-    fake: Fake, tmp_path: Path
+    fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(eb, "_launcher_argv", fake.keeping_argv)
     p, store, opts, outcome = burla_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     record = store.manifest(p.run_id).environment["bundle"]
-    rebuilt = eb._build_bundle(("bu_targets",))
-    assert record["sha256"] == rebuilt.sha256 and record["size"] == len(rebuilt.data)
+    (shipped,) = fake.bundles()
+    assert record["sha256"] == hashlib.sha256(shipped).hexdigest() and record["size"] == len(shipped)
     assert record["packages"] == {"poisson_prove": {"version": _expected_version("poisson_prove")},
                                   "bu_targets": _expected_package("bu_targets")}
 
@@ -1559,8 +1579,6 @@ def test_dollar7_a_run_that_never_closed_blocks_the_next_preflight(fake: Fake, t
     ledger = tmp_path / "ledger.jsonl"
     crashed = {**PRIOR[0], "run_id": "crashed-run-7e2", "stop_cost": 1.25}
     before = _seed_ledger(ledger, [*PRIOR, crashed])
-    assert eb._Ledger(ledger).unclosed() == ["crashed-run-7e2"]
-    assert abs(eb._Ledger(ledger).total() - (0.37 + 1.25)) < 1e-9
     spec_path = write_sweep(tmp_path)
     store = Store(tmp_path / "store")
     p = make_plan(spec_path, store, PLAIN)
@@ -1568,13 +1586,23 @@ def test_dollar7_a_run_that_never_closed_blocks_the_next_preflight(fake: Fake, t
     for call in (lambda: eb.preflight_burla(p, PLAIN, o), lambda: eb.run_burla(p, PLAIN, store, options=o)):
         with pytest.raises(eb.BurlaBackendError) as refused:
             call()
-        assert "crashed-run-7e2" in str(refused.value)
+        # The run with an open line and no close is named; the closed one beside it is not.
+        message = str(refused.value).replace(str(tmp_path), "")
+        assert "crashed-run-7e2" in message and "prior-run" not in message, message
     assert ledger.read_bytes() == before and store.runs() == [] and fake.launchers() == []
+    # The plan the command line keeps on screen when it refuses: the unclosed run counts as
+    # having spent its whole stop, beside the closed run's charge.
+    cli_spec = write_sweep(tmp_path / "cli", burla=burla_table(ledger=str(ledger), stop_cost=50.0, max_cost=100.0))
+    code, out, err = run_cli(sweep_argv(cli_spec.parent, cli_spec))
+    cost = [line for line in out.splitlines() if line.strip().startswith("Cost: ")]
+    assert code == 1 and len(cost) == 1 and f"ledger {ledger} $1.62 so far" in cost[0], (code, out, err)
+    assert ledger.read_bytes() == before and fake.launchers() == []
     with ledger.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({"event": "close", "run_id": "crashed-run-7e2", "end": 3.0, "charge": 0.2,
                              "ended": "error"}) + "\n")
-    assert eb._Ledger(ledger).unclosed() == []
+    # Closed by hand, it no longer blocks, and the run records the two charges as the ledger's total.
     assert_complete(eb.run_burla(p, PLAIN, store, options=o), store, p)
+    assert abs(store.manifest(p.run_id).environment["burla"]["ledger_total"] - (0.37 + 0.2)) < 1e-9
 
 
 def test_dollar8_the_ledger_reads_high_by_both_allowances_per_run(fake: Fake, tmp_path: Path) -> None:
@@ -1596,7 +1624,10 @@ def test_dollar8_the_ledger_reads_high_by_both_allowances_per_run(fake: Fake, tm
         want = 2 * 3600.0 * (window / 3600 + (1.5 + 2.5) / 60)
         assert abs(closed["charge"] - want) < 0.005, (closed["charge"], want)
         assert 2 * 3600.0 * window / 3600 > 0.005, "the window is too short to show in the charge"
-    total = eb._Ledger(tmp_path / "ledger.jsonl").total()
+    # The ledger's total as the next run reads it before it starts, and records it in its manifest.
+    p, store, opts, outcome = burla_run(fake, tmp_path / "third", ledger=tmp_path / "ledger.jsonl", **over)
+    assert_complete(outcome, store, p)
+    total = store.manifest(p.run_id).environment["burla"]["ledger_total"]
     floor = 2 * 3600.0 * (sum(windows) / 3600 + (1.5 + 2.5) / 60)
     assert total >= floor
     assert abs((total - floor) - 2 * 3600.0 * (1.5 + 2.5) / 60) < 0.005
@@ -1790,20 +1821,21 @@ def _git_package(root: Path, name: str) -> Path:
 def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.syspath_prepend(str(_git_package(tmp_path / "checkout", "bu_dirty")))
     spec_path = write_sweep(tmp_path, chaos={"fault": "none", "rate": 1.0, "steps": []})
-    p = make_plan(spec_path, Store(tmp_path / "store"), PLAIN)
-    text = eb.preflight_burla(p, PLAIN, options(tmp_path, packages=("bu_targets", "bu_dirty")))
+    store = Store(tmp_path / "store")
+    p = make_plan(spec_path, store, PLAIN)
+    dirty_options = options(tmp_path, packages=("bu_targets", "bu_dirty"))
+    text = eb.preflight_burla(p, PLAIN, dirty_options)
     lines = text.splitlines()
     positions = [next(i for i, line in enumerate(lines) if line.startswith(prefix)) for prefix in PREFLIGHT_ORDER]
     assert positions == sorted(positions), lines
     cluster = lines[positions[1]]
     assert "grow off" in cluster, cluster
     bundle_line = lines[positions[2]]
-    bundle = eb._build_bundle(("bu_targets", "bu_dirty"))
     for name in ("poisson_prove", "bu_targets", "bu_dirty"):
         assert name in bundle_line, (name, bundle_line)
     assert f"Bundle: poisson_prove {_expected_version('poisson_prove') or 'unversioned'}, " in bundle_line, bundle_line
     commit = _git(tmp_path / "checkout", "rev-parse", "HEAD")
-    assert commit and commit[:7] in bundle_line and bundle.sha256 in bundle_line, bundle_line
+    assert commit and commit[:7] in bundle_line, bundle_line
     assert "uncommitted changes" in bundle_line
     # PF4.22: no "MDE at N=" line in the preflight block.
     assert not any(line.startswith("MDE at N=") for line in lines), lines
@@ -1811,6 +1843,11 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     plain_bundle = next(line for line in plain.splitlines() if line.startswith("Bundle: "))
     dirty = bool(_expected_package("bu_targets")["dirty"])
     assert ("uncommitted changes" in plain_bundle) == dirty, (dirty, plain_bundle)
+    # The sha256 the pre-flight prints is the one of the bundle the run then ships.
+    monkeypatch.setattr(eb, "_launcher_argv", fake.keeping_argv)
+    assert_complete(eb.run_burla(p, PLAIN, store, options=dirty_options), store, p)
+    (shipped,) = fake.bundles()
+    assert f"sha256 {hashlib.sha256(shipped).hexdigest()}" in bundle_line, bundle_line
 
 
 def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None:

@@ -194,8 +194,8 @@ DEFAULT_PERMUTATIONS = 4000
 INTERVAL_TOKEN_RE = re.compile(r"\[-?\d+\.\d, -?\d+\.\d\]")
 PAIRED_TOKEN_RE = re.compile(r"\bpaired\b")
 HORIZON, EVENT_T = 10.0, 3.0
-SALT = "p1-oracle-salt"
-OTHER_SALT = "p1-oracle-other-salt"
+SALT = "p1-test-salt"
+OTHER_SALT = "p1-test-other-salt"
 
 
 # ---------- helpers: the CLI, the store, the frames ----------
@@ -235,10 +235,6 @@ def caught(fn: Callable[[], Any]) -> list[warnings.WarningMessage]:
         warnings.simplefilter("always")
         fn()
     return [r for r in records if r.category is UnpairedAnalysis]
-
-
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def manifest(run_id: str, salt: str, axis_types: Mapping[str, str] | None = None) -> RunManifest:
@@ -801,8 +797,14 @@ def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_a
         assert multi.headline().endswith(f", {token})"), (method, multi.headline())
         single = quiet(lambda m=method: diff(censor(fa, "fail"), censor(fb, "fail"), event="fail", method=m, manifest_a=ma, manifest_b=mb))  # type: ignore[arg-type]
         assert build_report(single, ReportSpec(title="p1", x_axis="task", y_axis="temp")).headline.endswith(f"({method}, BH q<0.05, {token}).")
-        rows = build_multi_report(multi, ReportSpec(title="p1", x_axis="task", y_axis="temp", comparison={method: single}))._method_rows
-        assert rows and all(row[1] == token for row in rows), (method, rows)
+        report = build_multi_report(multi, ReportSpec(title="p1", x_axis="task", y_axis="temp", comparison={method: single}))
+        # The Methods table as both renderings print it: its pairing column is the method's token on every row.
+        md = md_sections(report.to_markdown())["Methods"]
+        assert [c.strip() for c in md[0].strip("|").split("|")][:2] == ["method", "pairing"], md
+        md_rows = [[c.strip() for c in line.strip("|").split("|")] for line in md[2:] if line.startswith("|")]
+        assert md_rows and all(row[1] == token for row in md_rows), (method, md)
+        ((header, html_rows),) = html_tables("\n".join(html_sections(report.to_html())["Methods"]))
+        assert header[:2] == ["method", "pairing"] and html_rows == md_rows, (method, header, html_rows, md_rows)
     table = [line for line in lattice_cli["diff methods all"].splitlines() if line.startswith("| ") and EVENT in line]
     assert table and {tuple(c.strip() for c in line.strip("|").split("|"))[:3] for line in table} == {
         ("fisher_bh", EVENT, "unpaired"), ("mcnemar_bh", EVENT, "paired"), ("logrank_bh", EVENT, "unpaired")

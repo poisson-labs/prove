@@ -7,9 +7,10 @@ requested, so the arm is a second control arm that reads as a clean measurement.
 
 - **MC1, MC2** (the hand-off): the chaos settings travel into the containers the way the capture
   settings already do, and ``worker_batch`` receives them. Driven through the real
-  ``run_modal``, ``_ModalMapper`` and ``_container_batch``: a chaos sweep's rollouts see the
-  same chaos settings on the Modal path as on ``run_local``, and every ok Modal row carries
-  ``backend_meta["chaos"]``, the record of what its container armed.
+  ``run_modal`` and the function it ships to its containers: every stored row is one a container
+  returned, a chaos sweep's rollouts see the same chaos settings on the Modal path as on
+  ``run_local``, and every ok Modal row carries ``backend_meta["chaos"]``, the record of what its
+  container armed.
 - **MC3, MC4** (the refusal): ``run_with_mapper`` is the orchestration every mapper backend shares
   (Modal's, and the seam a Burla backend plugs into). It refuses a chaos run whose ok rows come
   back without ``backend_meta["chaos"]``, loudly, naming the run and the missing record, whichever
@@ -60,7 +61,7 @@ from isolated_support import isolated as run_isolated
 MODULE = __name__
 TARGET = f"{MODULE}:rollout"
 ERRING_TARGET = f"{MODULE}:rollout_raising_on_b"
-SALT = "mc-oracle-salt"
+SALT = "mc-test-salt"
 CHAOS = {"fault": "llm_empty_single", "rate": 1.0, "steps": ["solve"]}
 RECORD_KEYS = frozenset({"requested", "fault", "rate", "steps", "engine_version", "hooks"})
 FAULTED_HOOKS = ["sync", "async"]
@@ -167,13 +168,12 @@ class _StubImage:
 
 
 class _StubFunction:
-    def __init__(self, fn: Any, strip_record: bool, shipped: list[str]) -> None:
+    def __init__(self, fn: Any, strip_record: bool, returned: list[dict[str, Any]]) -> None:
         self.fn = fn
         self.strip_record = strip_record
-        self.shipped = shipped
+        self.returned = returned
 
     def map(self, items: Any, order_outputs: bool = True, return_exceptions: bool = False) -> Iterator[Any]:
-        self.shipped.append(f"{self.fn.__module__}.{self.fn.__qualname__}")
         wire = pickle.dumps(list(items))
         ctx = multiprocessing.get_context("spawn")
         parent, child = ctx.Pipe(duplex=False)
@@ -187,18 +187,25 @@ class _StubFunction:
             proc.join(30.0)
         if status != "ok":
             raise RuntimeError(f"stub container failed: {payload}")
-        yield from pickle.loads(payload)
+        outputs = pickle.loads(payload)
+        for _k, results, _failure in outputs:
+            for result in results or []:
+                if isinstance(result, dict):
+                    self.returned.append({"i": (result.get("backend_meta") or {}).get("i"),
+                                          "outcome": result.get("outcome"),
+                                          "content": (result.get("meta") or {}).get("content")})
+        yield from outputs
 
 
 class _StubApp:
-    def __init__(self, name: str, *, strip_record: bool, shipped: list[str]) -> None:
+    def __init__(self, name: str, *, strip_record: bool, returned: list[dict[str, Any]]) -> None:
         self.name = name
         self.strip_record = strip_record
-        self.shipped = shipped
+        self.returned = returned
 
     def function(self, **kwargs: Any) -> Callable[[Any], _StubFunction]:
         def decorate(fn: Any) -> _StubFunction:
-            return _StubFunction(fn, self.strip_record, self.shipped)
+            return _StubFunction(fn, self.strip_record, self.returned)
 
         return decorate
 
@@ -213,16 +220,17 @@ class _StubSecret:
         return name
 
 
-def _install_modal_stub(strip_record: bool) -> list[str]:
-    """Put the stub in ``sys.modules["modal"]``; returns the list the shipped function's name lands in."""
-    shipped: list[str] = []
+def _install_modal_stub(strip_record: bool) -> list[dict[str, Any]]:
+    """Put the stub in ``sys.modules["modal"]``; returns the list every result a container returned
+    lands in, as ``{"i", "outcome", "content"}``."""
+    returned: list[dict[str, Any]] = []
     stub = types.ModuleType("modal")
-    stub.App = functools.partial(_StubApp, strip_record=strip_record, shipped=shipped)  # type: ignore[attr-defined]
+    stub.App = functools.partial(_StubApp, strip_record=strip_record, returned=returned)  # type: ignore[attr-defined]
     stub.Image = _StubImage  # type: ignore[attr-defined]
     stub.Secret = _StubSecret  # type: ignore[attr-defined]
     stub.__file__ = STUB_FILE
     sys.modules["modal"] = stub
-    return shipped
+    return returned
 
 
 # ---------- the arms: each is the body of a spawned interpreter ----------
@@ -231,7 +239,7 @@ def _install_modal_stub(strip_record: bool) -> list[str]:
 def _sweep(root: str, table: dict[str, Any] | None) -> Any:
     from poisson_prove.sampler import SweepSpec
 
-    text = 'target_id = "mc-oracle@v0"\nt_unit = "steps"\nreplicates = 2\n\n[axes.body]\ntype = "categorical"\nvalues = ["a", "b"]\n'
+    text = 'target_id = "mc-test@v0"\nt_unit = "steps"\nreplicates = 2\n\n[axes.body]\ntype = "categorical"\nvalues = ["a", "b"]\n'
     if table is not None:
         text += f'\n[chaos]\nfault = "{table["fault"]}"\nrate = {table["rate"]}\nsteps = {json.dumps(table["steps"])}\n'
     path = Path(root) / "sweep.toml"
@@ -256,7 +264,7 @@ def child_local(root: str, episode_timeout: float | None) -> dict[str, Any]:
 
 def child_modal(root: str, episode_timeout: float | None, strip_record: bool) -> dict[str, Any]:
     """``run_modal`` as built, with only the ``modal`` package stubbed."""
-    shipped = _install_modal_stub(strip_record)
+    returned = _install_modal_stub(strip_record)
     from poisson_prove.executor import ExecutorError, plan
     from poisson_prove.executor_modal import ImageSpec, ModalOptions, ModalTarget, run_modal
 
@@ -270,7 +278,7 @@ def child_modal(root: str, episode_timeout: float | None, strip_record: bool) ->
     except ExecutorError as exc:
         report["refused"] = {"type": type(exc).__name__, "message": str(exc)}
     report["modal_file"] = sys.modules["modal"].__file__
-    report["shipped"] = list(shipped)
+    report["returned"] = list(returned)
     return report
 
 
@@ -323,6 +331,7 @@ def rows(root: Path, run_id: str) -> list[dict[str, Any]]:
                 "error": row.error if isinstance(row.error, str) else None,
                 "content": meta.get("content"),
                 "record": backend_meta.get("chaos"),
+                "i": backend_meta.get("i"),
             }
         )
     return sorted(out, key=lambda r: r["key"])
@@ -362,9 +371,13 @@ def test_mc1_a_chaos_sweep_on_the_modal_path_hands_each_rollout_the_chaos_settin
     local_root, local = arms("local", episode_timeout)
     modal_root, modal = arms("modal", episode_timeout)
     assert "refused" not in modal, modal
-    assert modal["modal_file"] == STUB_FILE and modal["shipped"] and set(modal["shipped"]) == {"poisson_prove.executor_modal._container_batch"}, modal
+    assert modal["modal_file"] == STUB_FILE, modal
     local_rows = rows(local_root, local["run_id"])
     modal_rows = rows(modal_root, modal["run_id"])
+    # Every stored row is one the stub's containers returned, each once: the batches ran there.
+    from_containers = sorted((r["i"], r["outcome"], r["content"]) for r in modal["returned"])
+    assert from_containers == sorted((r["i"], r["outcome"], r["content"]) for r in modal_rows), (modal["returned"], modal_rows)
+    assert sorted(r["i"] for r in modal["returned"]) == list(range(N_ROWS)), modal["returned"]
     assert len(local_rows) == N_ROWS and all(r["outcome"] == "fell" for r in local_rows), local_rows  # the reference arm
     assert len(modal_rows) == N_ROWS and all(r["error"] is None for r in modal_rows), modal_rows
     assert {r["key"]: (r["outcome"], r["content"]) for r in modal_rows} == {r["key"]: (r["outcome"], r["content"]) for r in local_rows}, "the Modal path's rollouts did not receive [chaos]"
