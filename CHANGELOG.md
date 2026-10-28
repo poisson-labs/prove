@@ -61,7 +61,7 @@ limits. Python 3.11 to 3.14, on macOS and Linux.
 
 ### Install
 
-- `pip install poisson-prove`. The extras are `[modal]` (Modal 0.73.76 or later), `[burla]`
+- `pip install poisson-prove`. The extras are `[modal]` (Modal 1.0.0 or later), `[burla]`
   (exactly Burla 1.8.2; the backend is experimental), `[agent]` (OpenTelemetry capture and the
   OpenAI client), and `[all]`.
 - Prove sends nothing anywhere beyond the backend you choose: no telemetry, no analytics, no update

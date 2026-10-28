@@ -47,10 +47,10 @@ Changelog = "https://github.com/poisson-labs/prove/blob/main/CHANGELOG.md"
 Issues = "https://github.com/poisson-labs/prove/issues"
 
 [project.optional-dependencies]
-modal = ["modal>=0.73.76"]
+modal = ["modal>=1.0.0"]
 burla = ["burla==1.8.2"]
 agent = ["openai>=2.20,<3", "opentelemetry-sdk>=1.41.0"]
-all = ["modal>=0.73.76", "burla==1.8.2", "openai>=2.20,<3", "opentelemetry-sdk>=1.41.0"]
+all = ["modal>=1.0.0", "burla==1.8.2", "openai>=2.20,<3", "opentelemetry-sdk>=1.41.0"]
 dev = [
     "cloudpickle>=3.1.1",
     "hatchling>=1.27.0",

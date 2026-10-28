@@ -94,7 +94,7 @@ DESCRIPTION = (
 PEOPLE = [{"name": "Poisson Labs", "email": "work@poissonlabs.ai"}]
 PYTHONS = ("3.11", "3.12", "3.13", "3.14")
 EXTRAS = {"modal", "agent", "burla", "all", "dev"}
-MODAL_FLOOR = "modal>=0.73.76"
+MODAL_FLOOR = "modal>=1.0.0"
 BURLA_PIN = "burla==1.8.2"
 DEV_NEEDS = ("pytest-xdist", "hypothesis", "hatchling", "markdown-it-py", "pyyaml", "pyte")
 SDIST_FILES = {"PKG-INFO", "pyproject.toml", ".gitignore", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"}
