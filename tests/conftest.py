@@ -209,6 +209,21 @@ def blocked_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
     assert attempts == [], f"network attempted in a test: {attempts}"
 
 
+@pytest.fixture(autouse=True)
+def _a_capture_install_ends_with_its_test() -> Iterator[None]:
+    """Prove's capture installs once per process. A test that runs a capture sweep in the pytest
+    worker itself leaves that install behind, and a child a later test forks from the worker
+    inherits it and records no trace (test_defaults_refusals_and_faces's missing-instrumentor test,
+    then the storage tests' capture routes). An install the test itself made is undone after it;
+    one a module fixture made before the test stays."""
+    import poisson_prove.capture as capture
+
+    before = (capture._STATUS, capture._BUCKET)
+    yield
+    if before[0] is None and capture._STATUS is not None:
+        capture._STATUS, capture._BUCKET = before
+
+
 def shared(tmp_path_factory: pytest.TempPathFactory, name: str, build: Callable[[Path], Any]) -> Any:
     """``build(folder)`` once per test session, however many ``-n`` workers ask: the first to ask
     builds into a folder of the session's own base and pickles what ``build`` returns, and every
