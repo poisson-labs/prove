@@ -1124,16 +1124,32 @@ def test_pf4_13_diff_json_carries_the_direction_and_its_timing_note_under_logran
     assert doc["by_event"]["fell"]["n_worse"] == 1
 
 
+#: The paired row's figures that are the matched pairs' own: equal with and without the unmatched runs.
+PAIRED_FIELDS = ("pairs", "n01", "n10", "delta", "p", "q", "direction", "verdict", "ci_lo", "ci_hi",
+                 "mde_rise", "mde_fall", "mde_rise_note", "mde_fall_note", "mde_test")
+
+
 def test_pf4_14_diff_json_carries_the_matched_difference_and_the_pair_count_under_the_paired_test(tmp_path: Path) -> None:
+    """Replicates 0 to 19 in both runs: A ended in ``fell`` on 0 to 3, B on 0 to 11, so 8 pairs had it in B
+    only and none in A only. A also holds twelve runs of its own that fell, B twelve that did not. The
+    change, the discordant counts, the p-value, the interval and both limits are the matched pairs' alone,
+    as the same comparison with the unmatched runs taken out shows, whose two shares are the matched
+    pairs' and differ by the change; each run's own counts and rates still count every run."""
     a = [(i, "fell" if i < 4 else "ok", HORIZON if i >= 4 else 1.0) for i in range(20)]
-    a += [(20 + j, "fell", 1.0) for j in range(12)]
     b = [(i, "fell" if i < 12 else "ok", HORIZON if i >= 12 else 1.0) for i in range(20)]
+    matched_root = _pair(tmp_path / "matched", {"c": a}, {"c": b})
+    a += [(20 + j, "fell", 1.0) for j in range(12)]
     b += [(40 + j, "ok", HORIZON) for j in range(12)]
     root = _pair(tmp_path / "prove-runs", {"c": a}, {"c": b})
-    doc = _json(_cli(root, "diff", A_ID, B_ID, "--event", "fell:failure", "--method", "mcnemar_bh", "--json"))
-    (cell,) = doc["by_event"]["fell"]["cells"]
-    assert cell["pairs"] == 20 and abs(cell["delta"] - 8 / 20) <= 1e-12
+    argv = ("diff", A_ID, B_ID, "--event", "fell:failure", "--method", "mcnemar_bh", "--json")
+    (cell,) = _json(_cli(root, *argv))["by_event"]["fell"]["cells"]
+    (matched,) = _json(_cli(matched_root, *argv))["by_event"]["fell"]["cells"]
+    assert (cell["pairs"], cell["n01"], cell["n10"]) == (20, 8, 0) and abs(cell["delta"] - 8 / 20) <= 1e-12
     assert cell["direction"] == "higher" and cell["verdict"] == "worse"
+    assert {k: cell[k] for k in PAIRED_FIELDS} == {k: matched[k] for k in PAIRED_FIELDS}
+    assert (matched["share_a"]["value"], matched["share_b"]["value"]) == (4 / 20, 12 / 20)
+    assert abs(cell["delta"] - (matched["share_b"]["value"] - matched["share_a"]["value"])) <= 1e-12
+    assert (cell["n_a"], cell["n_b"], cell["events_a"], cell["events_b"]) == (32, 32, 16, 12)
     assert abs(cell["rate_a"] - 0.5) <= 1e-12 and abs(cell["rate_b"] - 0.375) <= 1e-12
 
 
