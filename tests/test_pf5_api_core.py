@@ -262,6 +262,11 @@ CORE = frozenset({
 #: The environment variables Prove's own code reads (PF5.8, reading s).
 CORE_ENV = frozenset({"POISSON_PROVE_STORE", "PROOFLOAD_STORE"})
 FACE_ENV = frozenset({"NO_COLOR", "CI", "TERM"})
+#: PF10 (Taylor, 2026-10-27): a Modal or Burla worker reads the BLAS thread counts its environment
+#: names (docs/backends.md) and takes out the ``KMP_DUPLICATE_LIB_OK`` threadpoolctl sets on import.
+WORKER_ENV = {"poisson_prove.executor_modal": frozenset({
+    "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "BLIS_NUM_THREADS", "KMP_DUPLICATE_LIB_OK",
+})}
 
 
 # ---------- helpers ----------
@@ -1318,11 +1323,12 @@ def _env_reads(path: Path) -> tuple[set[str], list[str]]:
 def test_pf5_8_prove_reads_only_the_environment_variables_it_documents() -> None:
     """PF5.8's one source check (reading s): the core reads ``POISSON_PROVE_STORE`` (and the
     retired ``PROOFLOAD_STORE``, to say so), the faces and renderers ``NO_COLOR``, ``CI`` and
-    ``TERM``, and nothing else reads any."""
+    ``TERM``, the Modal and Burla workers' batch the BLAS thread counts (PF10), and nothing else
+    reads any."""
     problems: list[str] = []
     for module, path in _modules().items():
         reads, odd = _env_reads(path)
-        allowed = CORE_ENV if _class_of(module) == "core" else FACE_ENV
+        allowed = (CORE_ENV if _class_of(module) == "core" else FACE_ENV) | WORKER_ENV.get(module, frozenset())
         problems += [f"{module}: {p}" for p in odd]
         if reads - allowed:
             problems.append(f"{module} reads {sorted(reads - allowed)}")

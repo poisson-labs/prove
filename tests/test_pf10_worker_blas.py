@@ -4,13 +4,14 @@ A Modal container and a Burla worker each run one batch at a time, and a run use
 once. At numpy's floor (1.24, OpenBLAS) a process whose environment names no thread count starts a
 BLAS thread on every core, so a machine running several workers runs several times as many busy
 threads as it has cores. The invariant: **a worker process runs its rollout's BLAS on one thread
-when its environment sets no thread count.**
+when its environment names no thread count, and on the count it names when it names one.**
 
 **Both backends, through their own boundary.** Burla runs through the fake client of
 ``tests/bu_fixtures/burla``, whose workers are long-lived interpreters started with an empty
 environment, as ``test_bu_burla_backend.py`` drives it. Modal runs through ``run_modal`` with a fake
 ``modal`` whose ``map`` does what Modal does: the function Prove hands ``app.function`` is pickled
-and run in a fresh interpreter, here one started with an empty environment. The target,
+and run in a fresh interpreter, here one started with an empty environment, or with only
+``OPENBLAS_NUM_THREADS=2`` for the case where the worker names its own count. The target,
 ``bu_targets.blas``, does linear algebra and reports the thread pools ``threadpoolctl`` sees in its
 own process.
 
@@ -52,13 +53,16 @@ CONTAINER = (
 
 
 class ContainerFunction(FakeFunction):
-    """``map`` runs the wrapped function on each item in a fresh interpreter with an empty environment."""
+    """``map`` runs the wrapped function on each item in a fresh interpreter whose environment is
+    ``ENVIRONMENT`` and nothing else."""
+
+    ENVIRONMENT: dict[str, str] = {}
 
     def map(self, items: Any, **kwargs: Any) -> Iterator[Any]:
         self.records.map_calls.append(dict(kwargs))
         for item in items:
             done = subprocess.run([sys.executable, "-I", "-c", CONTAINER, str(TARGETS)], input=pickle.dumps((self.fn, item)),
-                                  capture_output=True, env={}, timeout=300)
+                                  capture_output=True, env=dict(self.ENVIRONMENT), timeout=300)
             assert done.returncode == 0, done.stderr.decode(errors="replace")
             yield pickle.loads(done.stdout)
 
@@ -74,8 +78,9 @@ class ContainerModal(FakeModal):
         return ContainerApp(self.records, name, *args, **kwargs)
 
 
-def modal_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+def modal_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, environment: dict[str, str]) -> list[dict[str, Any]]:
     monkeypatch.setitem(sys.modules, "modal", ContainerModal())
+    monkeypatch.setattr(ContainerFunction, "ENVIRONMENT", environment)
     monkeypatch.syspath_prepend(str(TARGETS))
     store = Store(tmp_path / "store")
     spec = SweepSpec.build([{"cell": "a"}, {"cell": "b"}], replicates=2, target_id="blas@test", t_unit="steps")
@@ -87,22 +92,26 @@ def modal_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[dict[str
     return rows
 
 
-@pytest.mark.parametrize("backend", ["modal", "burla"])
-def test_pf10_a_worker_runs_its_rollouts_blas_on_one_thread(
-    backend: str, request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(("backend", "environment", "threads"), [
+    ("modal", {}, 1),
+    ("burla", {}, 1),
+    ("modal", {"OPENBLAS_NUM_THREADS": "2"}, 2),
+], ids=["modal", "burla", "modal-names-two"])
+def test_pf10_a_worker_runs_its_rollouts_blas_on_one_thread_unless_it_names_a_count(
+    backend: str, environment: dict[str, str], threads: int, request: pytest.FixtureRequest, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     if backend == "modal":
-        rows = modal_rows(tmp_path, monkeypatch)
+        rows = modal_rows(tmp_path, monkeypatch, environment)
     else:
         p, store, _, outcome = burla_run(request.getfixturevalue("fake"), tmp_path, BLAS)
         assert_complete(outcome, store, p)
         rows = stored(store, p.run_id)
-    assert len({row["meta"]["pid"] for row in rows}) >= 1
     for row in rows:
-        assert row["meta"]["set"] == [], f"the worker's environment named a thread count: {row['meta']['set']}"
-    pools = [p for row in rows for p in row["meta"]["pools"] if p[0] == "blas" and p[1] in CAPPABLE]
+        assert row["meta"]["set"] == sorted(environment), f"the worker's environment named: {row['meta']['set']}"
+    pools = [each for row in rows for each in row["meta"]["pools"] if each[0] == "blas" and each[1] in CAPPABLE]
     if not pools:
-        seen = sorted({tuple(p) for row in rows for p in row["meta"]["pools"]})
+        seen = sorted({tuple(each) for row in rows for each in row["meta"]["pools"]})
         pytest.skip(f"no BLAS a thread cap reaches in the worker (pools seen: {seen}); this numpy uses Accelerate")
-    wide = [p for p in pools if p[2] != 1]
-    assert wide == [], f"BLAS pools running more than one thread in a worker: {wide}"
+    off = [each for each in pools if each[2] != threads]
+    assert off == [], f"BLAS pools in a worker not at {threads} thread(s): {off}"

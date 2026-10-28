@@ -39,6 +39,8 @@ limits.
 - The layered report: one omnibus test over every condition, the fault lines that group them, and
   the conditions under each.
 - Fault injection through a `[chaos]` table, and capture of an agent's trace through OpenTelemetry.
+- A Modal or Burla worker runs the rollout's BLAS on one thread unless its environment sets a
+  thread count; `threadpoolctl` is a core requirement for this.
 - The Python API (`poisson_prove`) gives the same comparisons the command line prints.
 
 ### Renamed

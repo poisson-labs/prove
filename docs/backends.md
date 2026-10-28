@@ -130,6 +130,15 @@ plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on burla, ~$0.080 t
 A Burla client the Python running Prove cannot import is refused before the plan, with the
 install line. Every Burla install line Prove prints is `pip install "poisson-prove[burla]"`.
 
+## Threads in a worker
+
+A Modal container or a Burla worker runs your rollout's BLAS, the linear algebra numpy and SciPy
+call, on one thread. A run's workers share machines, and OpenBLAS, which numpy and SciPy use on
+Linux and on macOS below numpy 2.0, otherwise starts a thread on every core in each worker. If a
+worker's environment sets `OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS` or
+`BLIS_NUM_THREADS`, for example through your Dockerfile, Prove leaves that count alone. A local
+sweep runs one episode at a time and sets no count.
+
 ## What a backend never changes
 
 The rows. A sweep's seeds come from its run salt, not from where it ran, so a local run and a
