@@ -33,6 +33,11 @@ on:
         type: choice
         options: [release, nightly]
         default: release
+      pythons:
+        description: "all four Pythons, or 3.11 only for a quicker run"
+        type: choice
+        options: [all, "3.11"]
+        default: all
 
 permissions:
   contents: read
@@ -56,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || (github.event_name == 'push' && '["3.11", "3.14"]' || '["3.11", "3.12", "3.13", "3.14"]')) }}
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || (github.event_name == 'push' && '["3.11", "3.14"]' || (inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]'))) }}
     env:
       UV_PYTHON_PREFERENCE: only-system
     steps:
@@ -103,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]') }}
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || (inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]')) }}
     env:
       UV_PYTHON_PREFERENCE: only-system
     steps:
@@ -125,7 +130,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12", "3.13", "3.14"]
+        python: ${{ fromJSON((inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]')) }}
     env:
       UV_PYTHON_PREFERENCE: only-system
     steps:

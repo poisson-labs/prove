@@ -104,6 +104,8 @@ def test_pf10_1_the_only_triggers_are_pull_requests_pushes_to_main_the_nightly_a
     assert on["push"] == {"branches": ["main"]}, "no other branch and no tag runs anything"
     assert len(on["schedule"]) == 1 and set(on["schedule"][0]) == {"cron"}
     assert on["workflow_dispatch"]["inputs"]["lane"]["options"] == ["release", "nightly"]
+    assert on["workflow_dispatch"]["inputs"]["pythons"] == {
+        "description": "all four Pythons, or 3.11 only for a quicker run", "type": "choice", "options": ["all", "3.11"], "default": "all"}
 
 
 # ---------- PF10.2: the runner ----------
@@ -157,7 +159,8 @@ def test_pf10_4_the_code_lane_runs_in_parallel_on_311_for_a_pull_request_311_and
     matrix = code["strategy"]["matrix"]["python"]
     assert "github.event_name == 'pull_request' && '[\"3.11\"]'" in matrix
     assert "github.event_name == 'push' && '[\"3.11\", \"3.14\"]'" in matrix
-    assert matrix.endswith("'[\"3.11\", \"3.12\", \"3.13\", \"3.14\"]')) }}")
+    assert matrix.endswith("'[\"3.11\", \"3.12\", \"3.13\", \"3.14\"]'))) }}")
+    assert "inputs.pythons == '3.11'" in matrix
 
 
 def test_pf10_4_slow_floors_linux_run_nightly_and_before_a_release_and_history_before_a_release() -> None:
