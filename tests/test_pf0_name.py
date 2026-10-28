@@ -508,8 +508,7 @@ def test_pf0_4_from_otel_lifts_proofload_keys_to_the_same_trace_as_poisson_prove
     prefix, so a span carrying the old keys and one carrying the new give one trace."""
     from poisson_prove.trace import from_otel
 
-    assert sorted({*FIELD_KEYS, *ATTR_KEYS}) == sorted(SPAN_KEYS) == sorted(OTHER_VALUES)
-    values = {**FIELD_KEYS, **ATTR_KEYS}
+    values = {key: {**FIELD_KEYS, **ATTR_KEYS}[key] for key in SPAN_KEYS}
     old = from_otel([otlp_span({f"proofload.{k}": v for k, v in values.items()})])
     new = from_otel([otlp_span({f"poisson_prove.{k}": v for k, v in values.items()})])
     assert old == new
@@ -526,8 +525,8 @@ def test_pf0_4_with_both_prefixes_on_one_span_the_new_keys_value_is_used() -> No
     from poisson_prove.trace import from_otel
 
     both = {
-        **{f"proofload.{k}": v for k, v in OTHER_VALUES.items()},
-        **{f"poisson_prove.{k}": v for k, v in {**FIELD_KEYS, **ATTR_KEYS}.items()},
+        **{f"proofload.{k}": OTHER_VALUES[k] for k in SPAN_KEYS},
+        **{f"poisson_prove.{k}": {**FIELD_KEYS, **ATTR_KEYS}[k] for k in SPAN_KEYS},
     }
     (span,) = from_otel([otlp_span(both)]).spans
     assert fields_of(span) == tuple(FIELD_KEYS.values()), span

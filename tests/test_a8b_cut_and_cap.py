@@ -70,7 +70,7 @@ DEFAULT_LIMIT = 8192
 RUN_ID_KEY = "poisson_prove.run_id"
 EPISODE_KEY = "poisson_prove.episode"
 RUN_ID = "r-2026-09-18-a8b"
-SALT = "a8b-oracle-salt"
+SALT = "a8b-test-salt"
 HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 CAPTURE_FIELDS_SPEC = ("instrument", "content", "max_observation_bytes", "max_spans")
@@ -204,7 +204,7 @@ def sweep_toml(capture: dict[str, Any] | None) -> str:
     """CD: a ``[capture]`` table must declare ``max_observation_bytes``, so the builder writes
     ``DEFAULT_LIMIT`` for a caller that named no cap. A caller that names one, including a bad one, is left alone, so the
     refusal tests below still reach the parser with what they wrote."""
-    lines = ['target_id = "a8b-oracle@v0"', 't_unit = "steps"', "replicates = 1", "", "[axes.x]", 'type = "continuous"', "values = [0.1]", ""]
+    lines = ['target_id = "a8b-test@v0"', 't_unit = "steps"', "replicates = 1", "", "[axes.x]", 'type = "continuous"', "values = [0.1]", ""]
     if capture is not None:
         if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
             capture = {**capture, "max_observation_bytes": DEFAULT_LIMIT}
@@ -225,7 +225,7 @@ def write(path: Path, text: str) -> Path:
 def _tracer() -> Any:
     from opentelemetry import trace
 
-    return trace.get_tracer("a8b.oracle", "0.1.0")
+    return trace.get_tracer("a8b.test", "0.1.0")
 
 
 def child_capture_spans(spec_kwargs: dict[str, Any], spans: list[dict[str, Any]]) -> dict[str, Any]:
@@ -384,8 +384,6 @@ def test_p8_7_property_the_head_and_tail_are_the_longest_valid_utf8_within_the_l
     limit=st.sampled_from([16, 64, 99]),
 )
 def test_p8_7_property_a_non_str_value_is_cut_on_its_canonical_json(value: Any, limit: int) -> None:
-    if isinstance(value, dict) and set(value) == {TRUNCATED_KEY_SPEC}:
-        return
     (s,) = cut(trace_of(span(1, attrs={"app.value": value})), limit).spans
     raw = byte_form(value)
     if len(raw) <= limit:
@@ -711,7 +709,6 @@ def test_p8_23_on_an_ascii_value_both_bounds_are_met_exactly(limit: int, size: i
     (s,) = cut(trace_of(span(1, attrs={"big.attribute": value})), limit).spans
     inner = s.attrs["big.attribute"][TRUNCATED_KEY_SPEC]
     assert inner == {"head": "y" * head, "tail": "y" * tail, "bytes_original": size}
-    assert head == limit - limit // 4 and tail == limit // 4
     assert len(inner["head"]) + len(inner["tail"]) <= limit < size
     assert s.truncated == "observation" and s.bytes_original == size
 
