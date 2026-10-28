@@ -1102,7 +1102,15 @@ def run_modal(
         _capture_payload(p.spec.capture, p.run_id),
         _chaos_payload(p.spec.chaos),
     )
+    finished: list[RunSummary] = []
     with app.run():
-        return run_with_mapper(
-            p, mapper, store, options=options, image=target.image, on_progress=on_progress
+        finished.append(
+            run_with_mapper(
+                p, mapper, store, options=options, image=target.image, on_progress=on_progress
+            )
         )
+    if not finished:
+        # Modal's app.run() catches a Ctrl-C raised inside it, stops the app and returns
+        # without raising it again; raised here, the sweep stops as an interrupted one.
+        raise KeyboardInterrupt
+    return finished[0]
