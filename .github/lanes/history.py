@@ -1,7 +1,7 @@
 """The history check the release bar asks for: no commit reachable from HEAD names an AI assistant
 in its message, and every author and committer address is the work identity.
 
-    python .github/scripts/history.py
+    python .github/lanes/history.py
 
 An address passes when it ends ``@poissonlabs.ai`` or is GitHub's own ``noreply@github.com``, the
 committer of a merge GitHub makes. Prints each commit that fails and why; exits 1 if any does.

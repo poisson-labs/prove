@@ -1,6 +1,6 @@
 """Whether a pull request runs the math suite, and why.
 
-    python .github/scripts/math_lane.py BASE_SHA HEAD_SHA
+    python .github/lanes/math_lane.py BASE_SHA HEAD_SHA
 
 The math suite runs on a pull request that changes the statistics code, a test of the math suite,
 or the version the requirements resolve to of a library the statistics rest on. The files and

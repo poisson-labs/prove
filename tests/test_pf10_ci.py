@@ -29,9 +29,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 WORKFLOW = WORKFLOWS / "ci.yml"
-SCRIPTS = ROOT / ".github" / "scripts"
+SCRIPTS = ROOT / ".github" / "lanes"
 PYPROJECT = ROOT / "pyproject.toml"
-RUNNER = ["self-hosted", "macOS", "ARM64"]
+#: GitHub matches a self-hosted runner's labels whatever their case.
+RUNNER = ["self-hosted", "macos", "arm64"]
 FLOORS_TEST = "tests/test_pf7_packaging.py::test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor"
 NIGHTLY = ("schedule", "workflow_dispatch")
 
@@ -64,12 +65,12 @@ def lanes() -> Iterator[tuple[str, list[str]]]:
     for name in jobs():
         env = env_of(name)
         for line in runs(name).splitlines():
-            if ".github/scripts/lane.py" not in line:
+            if ".github/lanes/lane.py" not in line:
                 continue
             line = line.replace("\\$", "$").replace('\\"', '"')
             for key, value in env.items():
                 line = line.replace(f'"${key}"', f'"{value}"')
-            words = line.split(".github/scripts/lane.py", 1)[1]
+            words = line.split(".github/lanes/lane.py", 1)[1]
             yield name, re.findall(r'"[^"]*"|\S+', words)
 
 
@@ -111,7 +112,7 @@ def test_pf10_1_the_only_triggers_are_pull_requests_pushes_to_main_the_nightly_a
 def test_pf10_2_every_job_runs_on_the_self_hosted_mac_and_none_on_a_hosted_runner() -> None:
     assert jobs()
     for name, job in jobs().items():
-        assert job["runs-on"] == RUNNER, name
+        assert [label.lower() for label in job["runs-on"]] == RUNNER, name
         assert "container" not in job and "services" not in job, name
 
 
@@ -231,14 +232,17 @@ def test_pf10_7_the_math_job_follows_that_decision_on_a_pull_request_and_runs_ni
 # ---------- PF10.8: each lane's count, time and load in the job summary ----------
 
 
-def test_pf10_8_a_lane_writes_its_count_wall_time_budget_and_load_to_the_job_summary(tmp_path: Path) -> None:
-    (tmp_path / "test_two.py").write_text("def test_passes():\n    pass\n\n\ndef test_fails():\n    assert False\n", encoding="utf-8")
+def test_pf10_8_a_lane_writes_its_count_wall_time_budget_load_and_slow_tests_to_the_job_summary(tmp_path: Path) -> None:
+    (tmp_path / "test_two.py").write_text(
+        "import time\n\n\ndef test_passes():\n    time.sleep(1.2)\n\n\ndef test_fails():\n    assert False\n", encoding="utf-8")
     summary = tmp_path / "summary.md"
-    done = subprocess.run([sys.executable, str(SCRIPTS / "lane.py"), "demo", "300", "-q", "-p", "no:cacheprovider", "test_two.py"],
+    done = subprocess.run([sys.executable, str(SCRIPTS / "lane.py"), "demo", "300", "--over", "1", "-q", "-p", "no:cacheprovider", "test_two.py"],
                           cwd=tmp_path, env={"GITHUB_STEP_SUMMARY": str(summary), "PATH": "/usr/bin:/bin"},
                           capture_output=True, text=True, timeout=120)
     assert done.returncode == 1, done.stdout + done.stderr
-    header, _, row = summary.read_text(encoding="utf-8").splitlines()
+    header, _, row, *listed = summary.read_text(encoding="utf-8").splitlines()
+    assert [line for line in listed if line] == ["1 tests over 1 s (setup, call and teardown):", listed[-1]]
+    assert re.fullmatch(r"- 1\.\d s `test_two\.py::test_passes`", listed[-1]), listed
     cells = dict(zip([c.strip() for c in header.strip("|").split("|")], [c.strip() for c in row.strip("|").split("|")], strict=True))
     assert cells["lane"] == "demo" and cells["ran"] == "2" and cells["passed"] == "1" and cells["failed"] == "1"
     assert re.fullmatch(r"\d+:\d\d", cells["wall"]) and cells["budget"] == "5:00 (within)" and cells["exit"] == "1"
@@ -256,11 +260,11 @@ def test_pf10_8_every_job_that_runs_tests_runs_them_through_the_lane_script() ->
 
 
 @pytest.mark.parametrize(("commit", "flagged"), [
-    (("a" * 40, "taylor@poissonlabs.ai", "taylor@poissonlabs.ai", "fix: a thing\n"), False),
-    (("b" * 40, "taylor@poissonlabs.ai", "noreply@github.com", "Merge pull request #1\n"), False),
-    (("c" * 40, "someone@gmail.com", "taylor@poissonlabs.ai", "fix: a thing\n"), True),
-    (("d" * 40, "taylor@poissonlabs.ai", "taylor@poissonlabs.ai", "fix: a thing\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"), True),
-    (("e" * 40, "taylor@poissonlabs.ai", "taylor@poissonlabs.ai", "docs: thing\n\nGenerated with Claude Code\n"), True),
+    (("a" * 40, "dev@poissonlabs.ai", "dev@poissonlabs.ai", "fix: a thing\n"), False),
+    (("b" * 40, "dev@poissonlabs.ai", "noreply@github.com", "Merge pull request #1\n"), False),
+    (("c" * 40, "someone@gmail.com", "dev@poissonlabs.ai", "fix: a thing\n"), True),
+    (("d" * 40, "dev@poissonlabs.ai", "dev@poissonlabs.ai", "fix: a thing\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"), True),
+    (("e" * 40, "dev@poissonlabs.ai", "dev@poissonlabs.ai", "docs: thing\n\nGenerated with Claude Code\n"), True),
 ], ids=["work-address", "a-github-merge", "a-personal-address", "an-assistant-trailer", "an-assistant-line"])
 def test_the_history_check_flags_a_personal_address_or_an_assistant_and_nothing_else(commit: tuple[str, str, str, str], flagged: bool) -> None:
     history = import_script("history")
