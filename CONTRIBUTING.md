@@ -46,7 +46,7 @@ OPENBLAS_NUM_THREADS=1 python -m pytest tests -n 6 -m "slow and not backend"
 ## CI
 
 Every pull request and every push to main runs the code lane: ruff, the format check on `src`,
-mypy and the code suite, on Python 3.11 and 3.14. A pull request that changes the statistics, a test
+mypy and the code suite, on Python 3.11 for a pull request and on 3.11 and 3.14 for main. A pull request that changes the statistics, a test
 of the math suite, or the version a statistics library resolves to also runs the math suite, and the
 job summary says why. Every night, and before a release, CI runs everything else: the code suite on
 every supported Python, the math suite, the slow tests, the floors run and the code suite in a Linux

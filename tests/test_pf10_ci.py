@@ -147,7 +147,7 @@ def test_pf10_4_each_lane_selects_its_tests_and_none_selects_a_backend_test() ->
         assert not selects(expression, {"backend"}) and not selects(expression, {"backend", "slow"}), name
 
 
-def test_pf10_4_the_code_lane_runs_in_parallel_on_every_pull_request_and_push_to_main() -> None:
+def test_pf10_4_the_code_lane_runs_in_parallel_on_311_for_a_pull_request_311_and_314_on_main_and_all_four_nightly() -> None:
     code = jobs()["code"]
     assert "if" not in code
     (arguments,) = [a for name, a in lanes() if name == "code"]
@@ -155,7 +155,9 @@ def test_pf10_4_the_code_lane_runs_in_parallel_on_every_pull_request_and_push_to
     assert "ruff check ." in runs("code") and "ruff format --check src" in runs("code") and "mypy src" in runs("code")
     assert '-e ".[all,dev]"' in runs("code")
     matrix = code["strategy"]["matrix"]["python"]
-    assert '["3.11", "3.14"]' in matrix and '["3.11", "3.12", "3.13", "3.14"]' in matrix
+    assert "github.event_name == 'pull_request' && '[\"3.11\"]'" in matrix
+    assert "github.event_name == 'push' && '[\"3.11\", \"3.14\"]'" in matrix
+    assert matrix.endswith("'[\"3.11\", \"3.12\", \"3.13\", \"3.14\"]')) }}")
 
 
 def test_pf10_4_slow_floors_linux_run_nightly_and_before_a_release_and_history_before_a_release() -> None:

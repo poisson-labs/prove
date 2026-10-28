@@ -2,8 +2,9 @@
 # spends nothing on Actions, so no job uses a GitHub-hosted runner, and none reads a secret.
 #
 # The lanes (CONTRIBUTING.md, "Running the tests"):
-# - code: the code suite, ruff, the format check and mypy, on every pull request and every push
-#   to main; all four Pythons nightly and before a release. Budget: 5 minutes.
+# - code: the code suite, ruff, the format check and mypy, on every pull request (Python 3.11) and
+#   every push to main (3.11 and 3.14); all four Pythons nightly and before a release. Budget: 5
+#   minutes per Python, so a pull request runs one.
 # - math: the statistics, on a pull request that changes them (math_lane.py says why), nightly
 #   and before a release.
 # - slow: nightly and before a release. Tests marked backend never run in CI.
@@ -55,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["3.11", "3.12", "3.13", "3.14"]' || '["3.11", "3.14"]') }}
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || (github.event_name == 'push' && '["3.11", "3.14"]' || '["3.11", "3.12", "3.13", "3.14"]')) }}
     env:
       UV_PYTHON_PREFERENCE: only-system
     steps:
