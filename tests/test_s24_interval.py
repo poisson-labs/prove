@@ -35,7 +35,7 @@ Six facts about the data and the method explain why several tests below look the
    set (``held``). C1's primary fixture is still the synthetic identical-arms pair, because the
    lattice route rests on a log-rank tie convention that is still open; the
    lattice corroborates.
-6. **The censoring guard cannot fire.** ``_truncate_raw`` censors at the horizon, which is ``>=``
+6. **The censoring guard cannot fire.** The diff's horizon truncation censors at the horizon, which is ``>=``
    every retained event time, and the estimator reduces to the naive proportion when no
    censoring precedes an event. Five constructed shapes were measured -- late truncation, two
    event times, a tie exactly at the horizon, three competing kinds, and 19 distinct event times
@@ -987,7 +987,7 @@ def test_c13_the_endpoints_are_none_exactly_when_the_basis_is_censored(
     """The frame's contract, over every fixture that produces a frame.
 
     **This does not pin the censored branch, and saying so is the point.** The censoring guard was
-    written against ``_truncate_raw``, which censors at the horizon -- and the horizon is ``>=``
+    written against the diff's horizon truncation, which censors at the horizon -- and the horizon is ``>=``
     every retained event time, so the Aalen-Johansen estimate there reduces to the naive
     proportion and the guard cannot fire. Five shapes were measured (late
     truncation, two event times, a tie exactly at the horizon, three competing kinds, and 19
@@ -1048,7 +1048,7 @@ def test_c13b_the_rejection_count_covers_every_cell_whatever_its_basis(lattice_l
 
 
 def test_c17_interval_bases_is_exactly_the_three_names_the_spec_states() -> None:
-    """Written once in ``diff.py``, the way ``_CAUSES`` is."""
+    """Written once in ``diff.py``, the way the hole causes are."""
     assert tuple(diff_mod.INTERVAL_BASES) == EXPECTED_INTERVAL_BASES
 
 
@@ -1344,7 +1344,7 @@ def test_c18_the_diff_output_prints_the_no_interval_line_when_nothing_was_reject
 
 
 def test_c18_the_interval_block_follows_the_coverage_block(synth_root: Path) -> None:
-    """After ``_coverage_block``. The order is the reading order -- what was
+    """After the coverage block. The order is the reading order -- what was
     measured, then what the measurement bounds."""
     code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
     assert code == 0, out

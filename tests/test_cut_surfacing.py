@@ -1,7 +1,7 @@
 """Truncation-surfacing frozen tests: what the report, the receipt, the viewer and ``inspect`` say about a cut.
 
 **Two different things are called ``truncated``.** ``diff.truncated`` is the count of episodes
-re-censored at the common horizon (``diff._truncate``: rows with ``t > horizon``); the observation
+re-censored at the common horizon (by the diff: rows with ``t > horizon``); the observation
 cut is another thing. Printed as ``truncated: N``, the horizon count would read as a statement
 about the cut, and a pair whose runs dropped a third of their observation values would read
 ``truncated: 0``. So the horizon count is named for what it counts, and every surface says
@@ -190,7 +190,7 @@ def expect(limit: int, big: int = BIG) -> Expect:
 
 
 def capture_record(**limits: int) -> dict[str, Any]:
-    """The record ``executor._capture_record`` writes, with the given ``*_bytes`` entries."""
+    """The record the executor writes to ``manifest.environment["capture"]``, with the given ``*_bytes`` entries."""
     return {
         "requested": True, "active": True, "reason": None, "instrumented": [], "semconv": "1.42.0",
         "alias_map_version": "1", "content": True, "max_spans": 1000, **limits,

@@ -57,9 +57,9 @@ test, so a check that let a wrong page through would fail here first.
   docstrings and comments not counted. The test needs ``openai`` installed, as the code suite's
   environment (``[all,dev]``) has it.
 - **d14** The sweep spec page and the backends page are checked against lists read from the code:
-  the spec reader's own field lists (``sampler._TOP_FIELDS`` and the four tables' lists,
+  the spec reader's own field lists (the top-level list and the four tables' lists,
   ``ModalOptions``, ``ImageSpec``, ``BurlaOptions``), the Modal price table's date
-  (``executor_modal._PRICES_ASOF``) and ``BurlaOptions``' fields with no default; ``[axes.*]`` or
+  (the Modal backend's own) and ``BurlaOptions``' fields with no default; ``[axes.*]`` or
   ``[axes.<name>]`` both name the axis table.
 - **d15** The recipes' skip reasons are ``RECIPES``' words exactly, and each recipe shows what
   ``RECIPE_SHOWS`` checks it shows: ``in-ci`` a ``check`` that exits 4 and a ``--json`` command;

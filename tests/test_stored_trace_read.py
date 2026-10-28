@@ -16,7 +16,7 @@ keys, each ``None``, makes every such trace validate and changes nothing else.
 **The fix is a read, at the store, and only the store.** ``from_dict`` stays strict: A8a's P8-1 pins that it
 rejects thirteen-key spans and a six-key trace, and a stored dict that is *not* the old shape must keep
 being rejected. The store knows what it wrote, so the store recognises the old shape and reads it as the
-current one, the way A7's ``_legacy_envelope`` already reads the layout before the split. It is not a
+current one, the way A7's read of a pre-split row's envelope already reads the layout before the split. It is not a
 migration: nothing stored is rewritten (R10), and a migration would need a verb, which is a new public
 symbol, and would leave every unmigrated store failing as before.
 

@@ -399,7 +399,7 @@ def write_pre_a7_part(store: RootedStore, run_id: str, records: Sequence[Episode
     """F1: the checked-in pre-A7 writer. Emits one part in the lattice pair's own on-disk schema --
     thirteen fields, read off the generated pre-A7 part rather than spelled here -- with ``meta["trace"]``
     left inside ``meta`` exactly as the record carries it. The run must already exist; the part
-    is numbered after any part already present so ``Store._parts`` sees it."""
+    is numbered after any part already present so the store's listing of a run's parts sees it."""
     schema = pq.read_schema(LATTICE_PART)
     assert schema.names == THIRTEEN, schema.names
     rows = []

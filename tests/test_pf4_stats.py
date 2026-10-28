@@ -34,7 +34,7 @@ ways, one condition, ties.
 - A family of ``M`` rows at level ``q`` is checked through ``multi_diff``'s own ``q`` where only
   the level ``q / M`` matters: one row at ``q / M`` gives the level of ``M`` rows at ``q``. The
   count of rows is checked on real families of 18 (9 conditions by 2 events) and of 328.
-- The Westfall-Young tests call ``tree._min_p(observed, permuted)``: it holds the calibration and
+- The Westfall-Young tests call the tree module's min-p step on ``(observed, permuted)``: it holds the calibration and
   no public path exposes the permutation draws.
 - A rollout's case id is ``Episode.meta["case_id"]``; the store copies it into its own ``case_id``
   column when the episode is appended, and a store frame carries it there (null for older parts),

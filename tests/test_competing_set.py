@@ -15,7 +15,7 @@ Reading notes:
 - H3, H4 and H10 drive ``poisson_prove.cli.main`` and read the report objects the CLI built, by
   wrapping ``cli.build_survival_report`` / ``cli.build_multi_report`` (the name must be bound in
   ``cli``). The wrappers call the real builders, so the files are still written. Reading the
-  rendered Markdown instead would not work: ``_fmt(..., "pp1")`` rounds every rate to a tenth
+  rendered Markdown instead would not work: the report's ``pp1`` format rounds every rate to a tenth
   of a percentage point, and H4 is a 1e-12 comparison.
 - Each ``report`` invocation builds two report objects when the theme is dark -- the report
   and the light-themed receipt -- so the tests read index 0, the one the CLI renders.
@@ -47,7 +47,7 @@ Not asserted here:
   below.
 - "``build_survival_report`` remains permissive". The invariants pin only ``multi_diff`` (H9),
   and since H13 routes ``cell_table`` through ``competing_set`` an absent event is not a key on
-  the cell table's ``CIFCurve``, so ``_cif_at`` raises ``SurvivalError`` there rather than
+  the cell table's ``CIFCurve``, so the report's read of that curve at the horizon raises ``SurvivalError`` there rather than
   returning zero. That path is unreachable from the CLI, which refuses first, and what
   "permissive" should mean at that boundary is not stated.
 """

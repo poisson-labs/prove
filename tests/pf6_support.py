@@ -7,7 +7,7 @@ PF6 (the pretty rendering, the terminal app and the look file) is reached the wa
 it: commands run on a pipe or on a pseudo-terminal, the app driven by keys, what is on the screen,
 the files left in the store, and the core's boundary as its public names draw it
 (``poisson_prove.core``). The one private name the tests take from Prove is the app's entry point,
-``poisson_prove._cli_app.ProveApp`` (reading A1 in ``test_pf6_app.py``), which Textual's pilot needs.
+the terminal app's class ``ProveApp`` (reading A1 in ``test_pf6_app.py``), which Textual's pilot needs.
 
 **The stores are built once per test session.** ``shared_world`` builds each behind a lock file in
 the folder the ``-n`` workers share; the others wait and read it. Nothing a test does may change a

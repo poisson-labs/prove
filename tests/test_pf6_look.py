@@ -50,8 +50,8 @@ test at the end (reading L3).
   header" is read through the same width rule and is not pinned on its own.
 - L7 PF6.7's "gone from the screen when the work ends": the stderr terminal's final screen, read by
   a terminal emulator, holds no progress line, and stdout's stream never held one.
-- L8 "imported only by": ``rich`` only by renderer modules (``poisson_prove._render_*``)
-  and the app's modules (``poisson_prove._cli_app*``), ``textual`` only by the app's modules, and
+- L8 "imported only by": ``rich`` only by the renderer modules
+  and the terminal app's modules, ``textual`` only by the app's modules, and
   neither by ``cli.py``; importing ``poisson_prove.cli`` imports no Textual.
 - L9 Rich and Textual are core dependencies with a floor each (the lowest working
   version); ``test_a22_pandas3::test_v14_…`` and

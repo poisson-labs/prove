@@ -114,8 +114,8 @@ resamples.
 - Every number on a fault-lines block line is a ``:g`` rendering of a field of the object that
   line describes, or the group's label; the check is on tokens, never on wording.
 
-**Named non-observables.** A weight *inside* ``_statistics``; ``omnibus`` called a
-second time from ``_cmd_diff`` with the same seed (same bytes); a ``--by`` naming an axis declared
+**Named non-observables.** A weight *inside* the tree's per-statistic arithmetic; ``omnibus`` called a
+second time from the ``diff`` verb with the same seed (same bytes); a ``--by`` naming an axis declared
 in one manifest only (F6 pins "neither", F29 pins the unrequested ``not_shared`` row); the
 ``detail`` wording of ``one_group`` and ``not_shared`` refusals beyond their fields.
 """
@@ -515,7 +515,7 @@ def grown(a: pd.DataFrame, b: pd.DataFrame, multi: Any, ma: RunManifest, mb: Run
 
 
 def second_smallest_rounded_up(mdes: Sequence[float]) -> float:
-    """S23's offered-override rule restated (``_offered_override``): the
+    """S23's offered-override rule restated (the value a refusal offers to paste): the
     ``MIN_RESOLVABLE_GROUPS``-th smallest group MDE rounded **up** at four decimals, bumped by
     ``1e-4`` when the rounding fell short, so that pasting it admits the grouping."""
     mde = sorted(mdes)[EXPECTED_MIN_RESOLVABLE_GROUPS - 1]
@@ -1038,7 +1038,7 @@ def test_f8_the_offered_value_pasted_back_admits_the_refused_grouping(axes: dict
     """A ``max_group_mde`` of 0.37 cannot admit ``task`` here (the group MDE is the cap 0.5000 at N=8, the
     axes pair's own number; 0.37 is the value for a design at N=32 -- module docstring). What is pinned
     is the property 0.37 would stand for: the value the refusal offers, pasted back, admits the grouping
-    (rounding up, S23's ``_offered_override``), and an explicit larger value admits it without
+    (rounding up, S23's offered-override rule), and an explicit larger value admits it without
     ``--by`` and is carried on the structure."""
     multi = quiet_multi_diff(axes["a"], axes["b"], axes["ma"], axes["mb"], events=("fail",), method="mcnemar_bh")
     offered = grown(axes["a"], axes["b"], multi, axes["ma"], axes["mb"], by="task", n_permutations=50, seed=GOLDEN_SEED).grouping.refused[0].offered_max_group_mde
@@ -1266,7 +1266,7 @@ def test_f13_on_the_bh_pair_the_weak_groups_p_equals_the_roots_bit_for_bit(bh_tr
     exchange, so the root statistic is ``g00``'s divided by a constant and the two p-values are
     the same count over the same draws. Measured equal at seeds 0-2 and at four sizes of the weak
     group. A Level 2 that drew its own ``(C_g, W)`` block from the same seed gets different bits
-    and fails here alone; O16 does not see it because ``_draw`` is still the one site."""
+    and fails here alone; O16 does not see it because the tree's one permutation draw is still the one site."""
     multi, result = bh_trees["mcnemar_bh"]
     groups = result.fault_lines.groups
     assert result.root.rejects is True and result.fault_lines.tested is True

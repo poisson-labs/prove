@@ -1,7 +1,7 @@
 """LS -- local serve: the frozen tests for LS1-LS21.
 
 The surfaces under test are ``src/poisson_prove/diff.py`` (``complementary_events``,
-``trade_line``), ``src/poisson_prove/report.py`` (``_wrap`` and the wrapped texts,
+``trade_line``), ``src/poisson_prove/report.py`` (the figure's text wrapping and the wrapped texts,
 ``MultiReport.complement``), ``src/poisson_prove/plain.py``, ``src/poisson_prove/viewer.py`` (the
 inert rule, the docstring and both refusals, the hole's ``where``, the holes block, the ``summary``
 key, the schema, the page order, the unverified tails) and ``src/poisson_prove/cli.py`` (help and two
@@ -31,7 +31,7 @@ every other test in the repo still reports. Source is read through ``poisson_pro
   threshold and not a field; LS9 admits the spellings of the module's own thresholds and nothing
   else beyond the payload.
 - **The ``worse`` rows are the panel's ``worse`` cells sorted by ``(-delta, q, mde, config_hash)``**
-  -- ``_worst``'s tie-break key -- cut at ``view.top_n``; a sort is not arithmetic.
+  -- the report's tie-break key for its worst cells -- cut at ``view.top_n``; a sort is not arithmetic.
 - **The complement sentence's second clause names the traded pair, not ``events`` order**:
   ``The {k} conditions where {worse} rose are the {k} where {safer} fell``, with
   ``(safer, worse)`` the pair ``trade_line()`` picks. On the two-event lattice pair the two readings coincide.
@@ -49,7 +49,7 @@ every other test in the repo still reports. Source is read through ``poisson_pro
 - **LS2 is pinned over five texts**: the four wrapped texts -- the title (stacked and per panel), the
   headline lines (stacked header and panel caption), the trade or complement line, the legend caption
   -- and the honesty lines, each identified by content through this file's restatement of
-  ``_wrap`` and its budget. LS2's clause reads "every ``<text>``"; that
+  the figure's wrapping and its budget. LS2's clause reads "every ``<text>``"; that
   cannot hold on a box 200 px wide, whose legend swatch *rects* sit at a fixed 46 px
   pitch and already leave it; the swatch labels are the named exception.
 - **A wrapped text is drawn as one ``<text>`` per line, the continuation lines carrying
@@ -73,9 +73,9 @@ every other test in the repo still reports. Source is read through ``poisson_pro
   ``", ".join(f"{axis}={config_text[axis]}")`` over ``x_axis``, ``y_axis`` and the keys of
   ``view.fixed`` in that order**, or ``off grid: <config_hash>`` when the config carries none of them.
   The Holes summary paragraph is the on-grid and off-grid count sentence with the cause counts after it.
-- **``mde_unchanged.where``** is the ``coords`` string of the cell ``_honesty``'s three-step search
+- **``mde_unchanged.where``** is the ``coords`` string of the cell the honesty line's three-step search
   names, and ``mde_unchanged.text`` is the value in M7's ``pp0`` form; ``None`` for all three when the
-  honesty line is ``_HONESTY_NONE``.
+  honesty line is the fixed "no unchanged cells" sentence.
 - **LS19 reads the eight regions by their facts**: the ``Result`` region line by line from the
   library's counts (with the pairing line and the trade or complement line), ``Not verified``
   entry by entry from the 0.0.1 store's recorded payload with the new tails, ``Provenance`` item
@@ -98,7 +98,7 @@ whose one all-``fail``/all-``crash`` cell is a trade and whose ``ok`` rows break
 The lattice's run ids are short, so the wrapped title needs ``--title``.
 
 **Named non-observables.** A ``q`` below 0.001 spelled two ways (above). A wrapped text whose
-lines are joined with a different separator than one space: ``_wrap`` breaks on spaces only.
+lines are joined with a different separator than one space: the figure breaks on spaces only.
 A sentence composed inside ``render_html`` that equals a ``line`` value character for character:
 LS20's equality cannot see it.
 """
@@ -874,7 +874,7 @@ def right_edge(t: Text) -> float:
 
 
 def wrap(text: str, budget: int) -> list[str]:
-    """``_wrap``, restated: broken on spaces into lines of at most ``budget``
+    """The figure's text wrapping, restated: broken on spaces into lines of at most ``budget``
     characters, greedy, a word longer than the budget hard-split; ``[""]`` for empty text."""
     if not text:
         return [""]
@@ -955,7 +955,7 @@ def rect_set(panel: Sequence[ET.Element], shift: float) -> str:
 
 
 def header_lines(p: Pair) -> list[str]:
-    """``_multi_header``'s texts, restated: the inference line, the headline's lines, the trade line."""
+    """The multi-event figure's header texts, restated: the inference line, the headline's lines, the trade line."""
     lines = []
     if p.structure["diff"]["inferred"]:
         lines.append(p.multi.to_markdown().splitlines()[0])
@@ -1184,12 +1184,12 @@ LATTICE_PAIRS = ("lattice", "lattice-two-events", "lattice-titled")
 #: The builder-made pairs (``build_synth_store``). Their figure and their Result and Provenance
 #: regions are checked against the stored runs and the library's frame on the same runs.
 BUILDER_PAIRS = ("axes", "identical", "bh", "gate", "multi-event", "one-value", "three-key", "vocab", "hostile", "partial", "partial-b", "traded")
-#: The grid body's layout, restated (``report._grid_body``): a cell is at most 40 px wide over 880 px
+#: The grid body's layout, restated (the report's grid drawing): a cell is at most 40 px wide over 880 px
 #: and at most 28 px high over 560 px, the grid starts 96 px in when there is a y axis, 24 px of
 #: margin on the right, 52 px of top band and 112 px of bottom band before anything wraps, and the
 #: significance glyph is a 4 px square 1 px inside the cell's top right corner.
 GRID_LEFT_WITH_Y, GRID_RIGHT, GRID_TOP, GRID_BOTTOM, GLYPH = 96, 24, 52, 112, 4
-#: The dark theme's colour rule, restated (``report._fill``, ``_cell_fill``): a nine-stop ramp from
+#: The dark theme's colour rule, restated (the report's cell colouring): a nine-stop ramp from
 #: the survived colour through neutral to the failed colour, linear in sRGB, a non-significant
 #: change drawn 0.45 of the way toward neutral, both arms at 0% or both at 100% drawn saturated.
 DARK_NEUTRAL, DARK_SATURATED, SURVIVED, FAILED, NONSIG_SCALE = "#1F1F22", "#2A2A2E", "#3ECF8E", "#FF4D4D", 0.45
@@ -1841,7 +1841,7 @@ def test_ls10_the_labels_on_every_real_worse_row_follow_the_cells_q(all_pairs: l
             # event rose: their verdict reads "higher" where it read "worse", and their direction is
             # "higher" either way.
             # PF4.27: a rising condition can have no limit (null with its note); it
-            # sorts after every condition with one, as _worst's tie-break puts it.
+            # sorts after every condition with one, as the report's worst-cell tie-break puts it.
             worse = sorted((c for c in panel["cells"] if c["direction"] == "higher"), key=lambda c: (-c["delta"], c["q"], 2.0 if c["mde"] is None else c["mde"], c["config_hash"]))
             assert [row["config_hash"] for row in entry["worse"]] == [c["config_hash"] for c in worse[: p.structure["view"]["top_n"]]], (p.name, entry["event"])
             for row in entry["worse"]:

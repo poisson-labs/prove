@@ -49,13 +49,13 @@ lettered so the tests below can cite it).
   ``core.__all__``, renderer modules and its own modules, and reads on ``core`` only names in
   ``core.__all__``; ``core.__all__`` holds the table's operations, data and exception classes and
   constants, and no other function.
-- (g) The classes: faces ``cli`` and ``__main__``; renderers ``_look``, ``_facts``, ``plain``,
+- (g) The classes: faces ``cli`` and ``__main__``; renderers the look and facts modules, ``plain``,
   ``report`` and ``viewer``; the core everything else, ``poisson_prove.core`` and its submodules
   among it. A new module is a submodule of ``poisson_prove.core`` (the core), or is named
   ``poisson_prove._cli_<name>`` (the face's own) or ``poisson_prove._render_<name>`` (a renderer).
   A class in ``core.__all__`` is a data class, a named tuple, an enum, an exception, a protocol or
   a class with ``to_json()`` (a result). A renderer imports from Prove only
-  ``_look``, other renderers, and from core modules names that are types (data classes, named
+  the look module, other renderers, and from core modules names that are types (data classes, named
   tuples, enums, exceptions, type aliases) or constants: no function, no module.
 - (h) Each result's ``to_json()`` is one strict document: ``schema`` (``poisson-prove.<kind>/<n>``;
   the comparison's is ``poisson-prove.comparison/1``, the artifact format's name for it), then
@@ -1259,7 +1259,7 @@ def _env_reads(path: Path) -> tuple[set[str], list[str]]:
                     aliases[alias.name].add(alias.asname or alias.name)
         module = node.module if isinstance(node, ast.ImportFrom) else None
         if isinstance(node, ast.ImportFrom) and node.level:
-            # A relative import of a constant, ``from ._ops import ENV_STORE``.
+            # A relative import of a constant, ``from .<module> import ENV_STORE``.
             anchor = package.split(".")[: len(package.split(".")) - node.level + 1]
             module = ".".join([*anchor, *([node.module] if node.module else [])])
         if isinstance(node, ast.ImportFrom) and (module or "").startswith("poisson_prove"):

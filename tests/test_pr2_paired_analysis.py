@@ -56,7 +56,7 @@ open):
   zero, ``m_bar`` the mean observations per item, ``deff = 1 + (m_bar - 1) icc``. Pinned on
   balanced fixtures; the unbalanced ``m_bar`` is not pinned. At ``m_bar = 1`` ``deff`` is ``1.0``.
 - *McNemar.* ``p`` is the two-sided exact binomial on ``min(n10, n01)`` of ``n10 + n01`` at one
-  half (``diff._mcnemar``'s own arithmetic, ``1.0`` at zero discordant pairs); ``can_reject`` is
+  half (the diff's own McNemar arithmetic, ``1.0`` at zero discordant pairs); ``can_reject`` is
   ``n_discordant >= 6``.
 - *The outcome.* With ``floor`` declared: ``"A"`` when ``lo == 0 and hi < floor``, ``"B"`` when
   ``lo > 0``, ``"C"`` when ``lo == 0 and hi >= floor``, decided from the pooled ``flip_rate``

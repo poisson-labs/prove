@@ -15,7 +15,7 @@ produces what the two-arm analysis alone produced (PR60). ``replicates`` is a se
 ``PairAssertion`` and answers, per cut and under both action rules: ``agree@j``, how often the
 first ``j`` calls all took the same action (PR65, PR66), and ``MS@j``, how often two sweeps'
 ``j``-call majorities agreed (PR67 to PR69), each with the item-clustered interval of PR28 through
-the one ``_cluster_bootstrap`` (PR71), the fallback of PR31 pointed the other way (PR72), the
+the one cluster bootstrap (PR71), the fallback of PR31 pointed the other way (PR72), the
 design effect of PR32 on that metric's own footing (PR73), no cross-cut and no cross-rule figure
 (PR74), a paired step between prefixes and never two intervals to eyeball (PR75), and the cost
 framing pre-declared whole (PR76).

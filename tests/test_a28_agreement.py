@@ -38,7 +38,7 @@ messages) are preservation clauses; that ``diff --json`` prints the digest is te
   can drift apart.
 
 **Which tests fail on which defect**: the viewer's digest clause deleted -> G10, G13; the report's
--> G11, G13; ``_require_agreement`` not raising -> G5 here (and S25's O13, S26's F30 and S27's
+-> G11, G13; the tree's rebuild guard not raising -> G5 here (and S25's O13, S26's F30 and S27's
 L24, which pin that refusal too); the digest computed from ``cells`` instead of the rebuilt tuples
 -> nothing, by construction (no fixture lets the two drift apart); the sort dropped -> every
 render refuses; ``AGREEMENT_SCHEMA`` dropped -> G16, G17; a separator join instead of
@@ -383,7 +383,7 @@ def test_g4_changing_any_one_rebuild_integer_in_any_one_cell_of_any_one_event_ch
 
 
 def test_g5_tree_carries_the_digest_and_still_raises_on_both_paths_with_the_messages_unchanged(crossed: dict[str, Grown]) -> None:
-    """The one test here that fails if ``_require_agreement`` stops raising. ``tree`` carries the
+    """The one test here that fails if the tree's rebuild guard stops raising. ``tree`` carries the
     digest the diff recomputes, and its two
     ``TreeError`` paths and their messages are pinned by substring: a cell rebuilt but absent from
     an event's family, and a rebuild that disagrees."""

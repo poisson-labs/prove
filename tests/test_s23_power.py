@@ -28,7 +28,7 @@ file's own tests and every other test in the repo still reports. The other names
   ``DEFAULT_MAX_MDE``: that is the threshold that was in force, and W8 requires every launched
   run to carry one.
 - **A resume inherits by the CLI resolving the effective threshold, not by skipping the gate.**
-  ``check_power`` takes no store and so cannot read a manifest. Instead ``_cmd_sweep``
+  ``check_power`` takes no store and so cannot read a manifest. Instead the ``sweep`` verb
   passes ``max_mde=ns.max_mde`` when given, else ``manifest.environment["max_mde_accepted"]`` on a
   resume, else ``None``; ``check_power`` then compares against the *current* design exactly as it
   always does. That keeps the comparison in M3 (the CLI decides nothing statistical),

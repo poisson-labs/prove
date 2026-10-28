@@ -3,7 +3,7 @@
 The injection adapter has no ``agentchaos-sdk`` dependency: the hook and the applier are
 Prove's own, and the fault vocabulary is copied under MIT with attribution. These tests cover
 ``src/poisson_prove/chaos.py``, ``src/poisson_prove/chaos_catalog.py``, ``NOTICE``, the ``[chaos]``
-table in ``sampler.py``, ``chaos_call`` on ``executor._call_in_process``, ``chaos`` on
+table in ``sampler.py``, ``chaos_call`` on the executor's one call funnel, ``chaos`` on
 ``executor_modal.worker_batch``, ``environment["chaos"]`` and ``backend_meta["chaos"]``.
 ``poisson_prove.chaos`` and ``poisson_prove.chaos_catalog`` are
 imported **inside** test bodies and inside the forked children only, so a failure to import
@@ -84,8 +84,8 @@ level and asserts nothing, deliberately: the seam cannot be observed without an 
 ``chaos.py`` is core, and ``test_s0_scaffold.py::test_no_network_imports_in_core`` bans any
 ``import httpx`` in ``src/poisson_prove`` at any nesting level (an AST walk, not a substring).
 So ``chaos.py`` reaches the client through ``sys.modules["httpx"]`` (the client the target already
-loaded), and ``FaultRecord``'s ``start_ns``/``end_ns`` come from ``trace._span_clock()``, the
-clock the spans use. A faulted arm whose process has not loaded ``httpx`` by ``install()`` has
+loaded), and ``FaultRecord``'s ``start_ns``/``end_ns`` come from the trace module's span clock,
+the clock the spans use. A faulted arm whose process has not loaded ``httpx`` by ``install()`` has
 no LLM client to inject into and is refused with ``ChaosError`` before the manifest exists
 (M11a-33); the ``none`` arm still installs.
 """

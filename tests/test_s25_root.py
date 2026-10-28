@@ -78,7 +78,7 @@ exact negatives and their p-values exact duplicates, which a whole-outcome excha
 independent exchange breaks.
 
 **Named non-observables.** ``units.delta`` versus ``cells.delta`` on censored data has no fixture:
-``_truncate_raw`` censors at the horizon, so the Aalen-Johansen estimate equals the naive
+the diff's horizon truncation censors at the horizon, so the Aalen-Johansen estimate equals the naive
 proportion on every input. Under ``arm_label`` with unequal ``n``, a builder that
 assigns the first ``n_b`` of the pool to arm a is a valid permutation of a mirrored design and is
 not distinguishable from the surface. The ``--methods all --format json`` shape and the exit code
@@ -666,7 +666,7 @@ def test_o2_the_rebuild_truncates_at_the_minimum_horizon_the_way_multi_diff_does
     """The rebuild trap's hardest case: the lattice cannot express truncation. Arm a's horizon is 5 and
     carries events at t=4.5; arm b's horizon is 3, so ``multi.horizon`` is 3 and every t=4.5 event
     in a is re-censored -- still in ``n_a``, no longer in ``events_a``. A rebuild that skips
-    ``_truncate_raw`` counts them as events and disagrees with ``cells``. Replicates stay matched
+    the horizon truncation counts them as events and disagrees with ``cells``. Replicates stay matched
     (a truncated row keeps its index), so all three methods apply."""
     a = raw_frame("trunc-a", {"k0": ["late"] * 10 + ["fail"] * 4 + ["ok"] * 18, "k1": ["late"] * 6 + ["ok"] * 26}, horizon=5.0)
     a.loc[a["outcome"] == "late", "t"] = 4.5
@@ -1200,7 +1200,7 @@ def test_complementary_events_give_exact_duplicate_p_values_and_negated_location
 )
 def test_o13_a_bad_knob_is_refused_with_tree_error(lattice_roots: dict[str, tuple[Any, Any]], pair: Any, knobs: dict[str, Any]) -> None:
     """``bool`` is an ``int`` to Python and is refused anyway: ``seed=True`` is a typo, never a
-    seed. ``TreeError`` subclasses ``DiffError`` so ``cli``'s ``_REFUSABLE`` maps it to exit 2
+    seed. ``TreeError`` subclasses ``DiffError`` so the CLI's list of refusable errors maps it to exit 2
     without a change to ``cli.py``."""
     a, b, _, _ = pair
     multi, _ = lattice_roots["fisher_bh"]

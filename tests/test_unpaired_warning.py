@@ -224,7 +224,7 @@ def test_u6_once_per_diff_not_per_cell() -> None:
 
 def test_u7_the_single_event_diff_warns_from_the_same_place() -> None:
     """diff() is the other public entry point and takes the same manifests. It routes through
-    _pairing, so there is one predicate rather than two copies that can drift apart."""
+    the same pairing check, so there is one predicate rather than two copies that can drift apart."""
     a = censor(raw(fails=2), "fail")
     b = censor(raw(fails=4), "fail")
     records = caught(

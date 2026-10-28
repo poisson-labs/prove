@@ -17,7 +17,7 @@ Two invariants are deliberately not tested:
 
 - A4 names "the ordering helper" (delta desc, q asc, mde asc, config_hash) but the public API
   declares no such symbol, and no extra public symbol may be added. M7's
-  private ``_worst`` sorts by (delta desc, config_hash) and is covered by M7 I19.
+  own worst-cell ordering sorts by (delta desc, config_hash) and is covered by M7 I19.
 - A7 asks for early censoring from errored rows, but M4's ``EpisodeRecord`` requires
   ``t`` and ``horizon`` to be None on errored rows, so they carry no censoring time, and
   A20 excludes them from every denominator. As written the CIF cannot differ from the

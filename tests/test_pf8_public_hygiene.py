@@ -46,7 +46,7 @@ names) masked, at word boundaries, before it is read.
   stay in test names. This file spells the patterns between two markers, and only those lines are
   left out. A hit is fixed in a docstring or comment, never in an assertion; the digests over test
   files are over their code (``conftest.code_of``), so such a fix moves none of them.
-- **r6** The old name may appear in the wheel only in ``poisson_prove/_compat.py``, in the
+- **r6** The old name may appear in the wheel only in the package's compatibility module, in the
   CHANGELOG on one line, and in the output of a command given a store the private builds wrote.
 - **r7** The terminal app's screens are read from its home screen, opened on a pseudo-terminal
   over the quickstart pair, and from the snapshot files PF6.14 commits (every file under a

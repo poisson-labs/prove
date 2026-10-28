@@ -24,7 +24,7 @@ Conventions these frozen tests fix where the invariants are silent:
   row is visible by name.
 - The child's ``SIGTERM`` disposition (E5) is read by the *sibling* rollouts of the same run and
   returned in their ``Episode.meta["sigterm"]``: the timed-out child cannot report, and every
-  episode child of a run is started by the same ``_child_main`` with the same capture call. The
+  episode child of a run is started by the same child entry point with the same capture call. The
   contrast is asserted both ways: ``default`` without a ``[capture]`` table, a handler with one.
 - E1's ``str | None`` is asserted at the constructor and at ``from_dict``, the M12 frozen tests'
   convention for every typed field of the schema.
@@ -89,8 +89,8 @@ ROLES = ("a", "b", "c", HANG)
 HORIZON = 10.0
 TIMEOUT_S = 0.5  # the deadline, as the frozen I9 and I3 tests set it
 HANG_S = 12.0  # longer than timeout + both graces: only the handler's exit, SIGTERM's default, or kill() ends a hung child
-DRAIN_GRACE_S = 2.0  # the executor's _DRAIN_GRACE_S
-JOIN_GRACE_S = 5.0  # the executor's existing _JOIN_GRACE_S
+DRAIN_GRACE_S = 2.0  # the executor's drain grace
+JOIN_GRACE_S = 5.0  # the executor's existing join grace
 PROCESS_SLACK_S = 1.0  # poll steps, kill and join on top of the deadline plus both graces
 PID_KEY = "test.pid"
 EPOCH = 1_756_900_000_000_000_000
@@ -692,7 +692,7 @@ def test_e4_the_timed_out_row_carries_its_truncated_trace_and_every_other_row_is
     assert slow["outcome"] is None and slow["error"] == REASON and pd.isna(slow["t"])
     assert set(slow["meta"]) == {"trace"}, slow["meta"]
     # The handler exited the child (never back into the rollout), so the parent's
-    # join was immediate: _call_with_timeout returned well inside the drain grace, not at kill().
+    # join was immediate: the executor's timed call returned well inside the drain grace, not at kill().
     assert float(slow["wall_time"]) < TIMEOUT_S + DRAIN_GRACE_S + PROCESS_SLACK_S, slow["wall_time"]
     assert_snapshot_of(
         Trace.from_dict(slow["meta"]["trace"]), int(slow["seed"]), timeout_run.run_id,
@@ -714,7 +714,7 @@ def test_e5_without_a_capture_table_the_timed_out_row_is_bare_and_the_child_keep
     slow = bare_timeout_run.timed_out
     assert slow["outcome"] is None and slow["error"] == REASON
     assert slow["meta"] == {}, slow["meta"]
-    # _call_with_timeout returned within timeout + _JOIN_GRACE_S, as today: wall_time is that call.
+    # The executor's timed call returned within timeout + the join grace, as today: wall_time is that call.
     assert float(slow["wall_time"]) < TIMEOUT_S + JOIN_GRACE_S, slow["wall_time"]
     others = bare_timeout_run.others
     assert len(others) == 3 and others["error"].isna().all()

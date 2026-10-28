@@ -15,7 +15,7 @@ prevent, with a receipt attached, so CD5 and CD6 are as much this file's centre 
 ``[capture]`` table declares nothing, is not refused, and its rows are stored **uncut**. "No cap"
 is declarable and its spelling is the string ``"none"``, and exactly that spelling. The missing
 declaration and the malformed one are two refusals. The funnel takes the run's limit as
-``int | None``, read by one ``_declared_limit`` helper; declaring a cap moves where the cut falls,
+``int | None``, read from the sweep by one helper in the executor; declaring a cap moves where the cut falls,
 not how it is computed. ``OBSERVATION_ROUTING_BYTES`` (8192) decides where a stored value lives
 and is not a cap. The manifest records the declaration as declared. The container refuses a
 payload short of a field. A sweep file that asks for capture without a cap is a hard error, with
@@ -40,7 +40,7 @@ no warning first. ``CaptureSpec`` is ``kw_only``. ``--resume`` is gated on the c
 
 **pandas.** No CD invariant depends on the pandas major version: CD adds no Parquet column and no
 store read path. Every stored byte it moves travels inside the ``trace`` / ``trace_obs`` JSON
-strings registered in ``store._NULLABLE_STRING_COLUMNS``. Where a test reads a trace column
+strings the store registers as nullable string columns. Where a test reads a trace column
 directly (CD7) it reads it raw through ``pyarrow`` and tests nullness with ``is None``,
 never ``pd.isna`` and never a truth test (as in A8a and A22).
 
@@ -313,7 +313,7 @@ def test_cd1_the_cli_refuses_the_same_file_and_creates_no_run_directory(tmp_path
 
 def test_cd1_a_sweep_file_with_no_capture_table_at_all_is_not_refused(tmp_path: Path) -> None:
     """A sweep with no ``[capture]`` table is not refused, and the reason CD-E1 is at
-    ``_capture_table`` and not at ``load``: a sweep that never asked for capture is not made to
+    the sampler's read of the ``[capture]`` table and not at ``load``: a sweep that never asked for capture is not made to
     declare a cap for capture it will not do."""
     spec = SweepSpec.load(write(tmp_path / "bare.toml", sweep_toml(None)))
     assert spec.capture is None
@@ -543,8 +543,8 @@ def read_capture_record(store: Store, run_id: str) -> dict[str, Any]:
 )
 def test_cd9_the_manifest_records_the_declaration_as_declared(tmp_path: Path, declared: Any, recorded: Any) -> None:
     """The manifest records the declaration as declared: it is a record of the *request*, so it
-    carries what was requested in the words it was requested in. ``None`` maps back to the string at
-    ``_capture_record`` and at that one site.
+    carries what was requested in the words it was requested in. ``None`` maps back to the string where
+    the executor writes ``environment["capture"]`` and at that one site.
 
     The only test that catches code which records JSON ``null`` for ``"none"`` -- which the report's
     cap echo would print as the Python spelling ``None`` or drop with its ``*_bytes`` filter."""
@@ -638,7 +638,7 @@ def test_cd9_every_surface_reads_the_declaration_as_declared(int_vs_none: dict[s
     ``"none"`` reads as ``none`` -- **not** as ``not recorded``, which is what a run that never
     asked for capture reads and is a different fact.
 
-    ``report._observation_cap`` keeps the string ``"none"`` as well as ints; dropping it would print
+    The report's read of a run's recorded byte limits keeps the string ``"none"`` as well as ints; dropping it would print
     ``not recorded`` for a run that declared every value whole."""
     labels = provenance_of(int_vs_none[surface], html=surface != "report.md")
     assert labels["observation cap a"] == "max_observation_bytes=65536", labels
@@ -765,7 +765,7 @@ def test_cd11_the_three_retired_names_are_out_of_the_public_surface() -> None:
 
 def split_fixture() -> Trace:
     """Attribute values at 8191, 8192 and 8193 bytes, a 20,000-byte wrapper, a named observation key
-    and both routing stamps far over the constant. Every clause of ``_is_observation``, once."""
+    and both routing stamps far over the constant. Every clause of the rule that routes an attribute out of the envelope, once."""
     wrapper = {TRUNCATED_KEY: {"head": "h" * 100, "tail": "t" * 20, "bytes_original": HUGE_BYTES}}
     attrs = {
         "app.under": "u" * (ROUTING_BYTES - 1), "app.at": "a" * ROUTING_BYTES, "app.over": "o" * (ROUTING_BYTES + 1),

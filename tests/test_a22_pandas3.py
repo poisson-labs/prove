@@ -1,5 +1,5 @@
 """Invariants V1-V15 of the pandas 3 port: every nullable string column of the store reads a stored
-null back as ``None``, ``diff._coverage`` rebuilds its ``cause`` column from the records list, and the
+null back as ``None``, the diff's coverage frame rebuilds its ``cause`` column from the records list, and the
 dependency parser reads PEP 508 names.
 
 **This file runs under two pandas versions and the invariant set does not partition between
@@ -31,7 +31,7 @@ holes lets an unported build pass V9. ``mixed_pair`` therefore carries comparabl
 
 Fixture limits, stated rather than left to be rediscovered:
 
-- ``two_records`` says nothing about the coverage frame; its frames never reach ``_coverage``.
+- ``two_records`` says nothing about the coverage frame; its frames never reach the coverage rebuild.
 - ``mixed_pair`` says nothing about the store's own null columns beyond what it reads back;
   its coverage rows come from the raw frames, not from ``censor()``.
 - Nothing here measures a live provider or a Modal run.
@@ -76,7 +76,7 @@ POISON = "not json"
 
 #: The mixed pair. ``(outcome rows in A, errored rows in A, outcome rows in B, errored in B)``
 #: per cell, built so the coverage frame carries comparable rows beside one hole of each of
-#: ``diff._CAUSES``'s five values. ``mixed`` is comparable **and** has errored rows in both
+#: the five values its ``cause`` column can take. ``mixed`` is comparable **and** has errored rows in both
 #: arms, which is the row a build that confuses "has errored rows" with "is a hole" gets wrong.
 PAIR_A, PAIR_B = "cov-a", "cov-b"
 PAIR_SALT = "a22-coverage"
@@ -254,9 +254,9 @@ def test_v4_the_three_nullable_float_columns_read_back_nan_and_not_none(two_reco
 
 
 def test_v6_tally_succeeds_on_a_store_whose_meta_is_not_json_and_read_raises(tmp_path: Path) -> None:
-    """``tally`` and ``_existing_keys`` read through ``to_pylist``, never ``to_pandas``, so the
-    port cannot reach them and resume is untouched. A build that normalises by routing either
-    through the frame fails here, not in the field."""
+    """``tally`` and the store's lookup of the keys resume skips read through ``to_pylist``, never
+    ``to_pandas``, so the port cannot reach them and resume is untouched. A build that normalises
+    by routing either through the frame fails here, not in the field."""
     store = Store(tmp_path / "poison")
     store.create_run(
         RunManifest(
