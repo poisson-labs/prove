@@ -19,8 +19,8 @@ this file from the generated lattice pair's design counts (``lattice.counts``), 
 K = 2, and requires both methods to carry it.
 
 **Every test reaches** ``agreement_digest``, ``.agreement`` and the digest refusals inside its
-body. G6 (``omnibus`` and ``RootResult`` do not move), G12 (the five older refusals and their
-messages) and G15 (``cli.py`` never mentions ``agreement``) are preservation clauses.
+body. G6 (``omnibus`` and ``RootResult`` do not move) and G12 (the five older refusals and their
+messages) are preservation clauses; that ``diff --json`` prints the digest is test_pf0_name's pf0_3.
 
 **Fixture limits, stated rather than left to be rediscovered:**
 
@@ -54,7 +54,6 @@ the two-value cells.
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 import hashlib
 import inspect
@@ -69,7 +68,6 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import poisson_prove
 import lattice
 from poisson_prove import diff as diff_mod
 from poisson_prove import report as report_mod
@@ -81,8 +79,6 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.tree import RootResult, TreeError, TreeResult, omnibus
 from poisson_prove.tree import tree as grow_tree
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
-CLI_SOURCE = PACKAGE / "cli.py"
 LATTICE_ROOT = lattice.root()
 
 # ---------- the literals ----------
@@ -330,13 +326,6 @@ def same_family_shape(diff: Grown, other: Grown) -> None:
     assert carried == tested
 
 
-# ---------- ast helpers (restated; never imported across test modules) ----------
-
-
-def parsed(path: Path) -> ast.Module:
-    return ast.parse(path.read_text(encoding="utf-8"))
-
-
 # ---------- G1-G4: the digest itself ----------
 
 
@@ -536,17 +525,6 @@ def test_g12_the_five_pre_existing_refusals_fire_first_with_their_messages_uncha
     report_refusal(single, two, REPORT_EVENTS_MESSAGE)
     message = report_refusal(p, r, REPORT_ARITY_MESSAGE)
     assert "4 cells x 2 events" in message and "10 tests" in message, message
-
-
-# ---------- G15: the CLI ----------
-
-
-def test_g15_cli_neither_binds_nor_reads_agreement() -> None:
-    """``cli.py`` serialises ``nested.to_json()`` wholesale and reads no attribute named
-    ``agreement`` and binds no such name."""
-    cli = parsed(CLI_SOURCE)
-    assert [n.lineno for n in ast.walk(cli) if isinstance(n, ast.Attribute) and n.attr == "agreement"] == []
-    assert [n.lineno for n in ast.walk(cli) if isinstance(n, ast.Name) and n.id == "agreement"] == []
 
 
 # ---------- G17: not a config hash, not a method hash ----------
