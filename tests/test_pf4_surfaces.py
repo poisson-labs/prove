@@ -735,7 +735,7 @@ def _one_word(words: dict[str, str]) -> str:
     return next(iter(words.values()))
 
 
-def _rows_of_8_4() -> list[tuple[str, dict[str, Any], dict[str, Any], str]]:
+def _verdict_table_rows() -> list[tuple[str, dict[str, Any], dict[str, Any], str]]:
     """One constructed pair per row of the verdict table and PF4.29's edges, the event declared a
     failure on the command line. 200 runs give an unchanged condition a limit near 0.1 both ways; 20,
     one near 0.5."""
@@ -758,8 +758,8 @@ ROW_IDS = ["trade", "worse", "safer", "too-small", "no-change", "only-up", "no-r
 
 
 @pytest.mark.parametrize("row", range(len(ROW_IDS)), ids=ROW_IDS)
-def test_pf4_5_every_surface_gives_the_same_word_by_section_8_4s_table(row: int, tmp_path: Path) -> None:
-    name, a, b, word = _rows_of_8_4()[row]
+def test_pf4_5_every_surface_gives_the_same_word_for_each_row_of_the_verdict_table(row: int, tmp_path: Path) -> None:
+    name, a, b, word = _verdict_table_rows()[row]
     root = _pair(tmp_path / "prove-runs", a, b)
     assert _one_word(_verdicts(root, tmp_path, "fell:failure")) == word, name
 
@@ -996,7 +996,7 @@ from opentelemetry import trace
 from poisson_prove.capture import CaptureSpec, capture, install
 content = sys.argv[1] == "on"
 install(CaptureSpec(content=content, max_observation_bytes=8192))
-tracer = trace.get_tracer("pf4.oracle", "0.1.0")
+tracer = trace.get_tracer("pf4.test", "0.1.0")
 with capture("pf4-run", "cfg:1") as recorder:
     for name, attrs in json.loads(sys.argv[2]):
         with tracer.start_as_current_span(name) as span:
@@ -1514,7 +1514,7 @@ def test_pf4_20_when_one_event_has_a_kind_and_another_does_not_the_comparison_re
 
 @pytest.mark.parametrize("row", range(5), ids=["mixed", "higher", "lower", "too-small", "no-change"])
 def test_pf4_20_without_a_kind_the_comparison_word_is_a_direction_word(row: int, tmp_path: Path) -> None:
-    name, a, b, known = _rows_of_8_4()[row]
+    name, a, b, known = _verdict_table_rows()[row]
     expected = {"trade": "mixed", "worse": "higher", "safer": "lower"}.get(known, known)
     root = _pair(tmp_path / "prove-runs", a, b)
     assert _one_word(_verdicts(root, tmp_path, "fell")) == expected, name

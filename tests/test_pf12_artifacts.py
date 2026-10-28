@@ -330,7 +330,7 @@ def _seconds(at: str) -> float:
 
 
 @pytest.mark.parametrize("which", ["complete", "resumed", "paired", "errored", "slow"])
-def test_pf12_2_every_new_run_writes_its_events_in_section_17_2s_order(which: str, request: pytest.FixtureRequest) -> None:
+def test_pf12_2_every_new_run_writes_its_events_in_the_run_event_order(which: str, request: pytest.FixtureRequest) -> None:
     """Each line is one ``poisson.run-event/1`` object (``schema`` first, then ``at``, ``kind``,
     ``detail``) in the grammar ``planned started (progress|note)* (finished|interrupted)``, a resume
     adding ``resumed (progress|note)* (finished|interrupted)``; times never go back; ``progress``

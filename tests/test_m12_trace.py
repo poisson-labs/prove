@@ -385,7 +385,7 @@ def test_t1_from_dict_rejects_a_missing_span_key() -> None:
 # ---------- T2: JSON round-trip (property) ----------
 
 
-def test_t2_section_3_example_round_trips() -> None:
+def test_t2_the_documented_example_trace_round_trips() -> None:
     from poisson_prove.trace import Trace
 
     d = trace_dict(SPAN_B, SPAN_A)
@@ -1125,7 +1125,7 @@ def test_t23_chat_under_invoke_agent_and_resource_attrs_survive() -> None:
         assert span.attrs["scope.flavor"] == "hand-built", span.span_id
 
 
-def test_t23_section_3_per_span_mapping() -> None:
+def test_t23_from_otel_maps_each_span_to_its_fields() -> None:
     from poisson_prove.trace import from_otel
 
     tr = from_otel(load_fixture("otlp_agent_chat.json"))
@@ -1330,7 +1330,7 @@ def test_t29_mock_agent_traces_decode_and_are_deterministic() -> None:
                 assert fn(dict(cfg), seed).meta["trace"] == ep.meta["trace"], (cfg, seed, fn.__name__)
 
 
-def test_t29_mock_agent_per_step_shape_from_section_3() -> None:
+def test_t29_the_mock_agent_records_one_span_per_step_back_to_back() -> None:
     import poisson_prove.examples.mock_agent as mock_agent
     from poisson_prove.trace import Trace
 

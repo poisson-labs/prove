@@ -35,18 +35,18 @@ def build() -> tuple[Any, InMemorySpanExporter, Any]:
     """A provider with the stamper registered, its exporter, and a tracer. No global state."""
     from poisson_prove.otel import EpisodeStamper
 
-    provider = TracerProvider(resource=Resource.create({"service.name": "oracle"}))
+    provider = TracerProvider(resource=Resource.create({"service.name": "stamper-tests"}))
     provider.add_span_processor(EpisodeStamper())
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-    return provider, exporter, provider.get_tracer("oracle.instrumentation", "0.1.0")
+    return provider, exporter, provider.get_tracer("test.instrumentation", "0.1.0")
 
 
 def as_otlp(exporter: InMemorySpanExporter) -> Any:
     """The finished spans as the OTLP/JSON payload ``from_otel`` actually consumes."""
     pytest.importorskip(
         "opentelemetry.exporter.otlp.proto.common",
-        reason="the OTLP encoder is a dev-only oracle, like lifelines",
+        reason="the OTLP encoder is a dev-only reference, like lifelines",
     )
     from google.protobuf.json_format import MessageToDict
 

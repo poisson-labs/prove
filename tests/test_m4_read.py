@@ -73,7 +73,7 @@ JSON_COLUMNS = ("config", "meta", "backend_meta")
 
 POISON = "not json"
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
-MOCK_SALT = "m4-read-oracle"
+MOCK_SALT = "m4-read-test"
 SNIPPET_MARKER = "# reproduce one episode"
 
 # The keyed run: four cells x three replicates over three parts, appended out of key order,

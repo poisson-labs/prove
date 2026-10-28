@@ -80,9 +80,9 @@ needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path nee
 
 RUN_ID_KEY = "poisson_prove.run_id"
 EPISODE_KEY = "poisson_prove.episode"
-RUN_ID = "r-2026-09-05-timeout-oracle"
+RUN_ID = "r-2026-09-05-timeout-test"
 EPISODE = "cfg-7:1"
-SALT = "timeout-oracle-salt"
+SALT = "timeout-test-salt"
 REASON = "timeout"  # the executor's error and the reason the drain records: one vocabulary
 HANG = "hang"
 ROLES = ("a", "b", "c", HANG)
@@ -92,7 +92,7 @@ HANG_S = 12.0  # longer than timeout + both graces: only the handler's exit, SIG
 DRAIN_GRACE_S = 2.0  # the executor's _DRAIN_GRACE_S
 JOIN_GRACE_S = 5.0  # the executor's existing _JOIN_GRACE_S
 PROCESS_SLACK_S = 1.0  # poll steps, kill and join on top of the deadline plus both graces
-PID_KEY = "oracle.pid"
+PID_KEY = "test.pid"
 EPOCH = 1_756_900_000_000_000_000
 TRUNCATED_LINE = f"trace: truncated ({REASON})"
 SNIPPET_MARKER = "# reproduce one episode"
@@ -175,7 +175,7 @@ def _episode(cfg: Mapping[str, Any], seed: int, **meta: Any) -> Episode:
 def _tracer() -> Any:
     from opentelemetry import trace
 
-    return trace.get_tracer("oracle.instrumentation", "0.1.0")
+    return trace.get_tracer("test.instrumentation", "0.1.0")
 
 
 def _sigterm_disposition() -> str:
@@ -232,7 +232,7 @@ def sweep_toml(
     capture: dict[str, Any] | None,
     replicates: int = 1,
     axes: dict[str, list[Any]] | None = None,
-    target_id: str = "timeout-oracle@v0",
+    target_id: str = "timeout-test@v0",
     t_unit: str = "steps",
 ) -> str:
     """A sweep file over ``role``; ``capture`` is the sweep's ``[capture]`` table, or absent."""

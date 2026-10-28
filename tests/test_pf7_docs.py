@@ -100,14 +100,14 @@ able to show and which the hygiene module's double-bracket family would read as 
 
 | invariant | tests |
 |---|---|
-| PF7.1 the README's first screen: title, commands block exactly, the three facts, the description words | ``test_pf7_1_the_readme_first_screen_is_section_6_2s`` |
+| PF7.1 the README's first screen: title, commands block exactly, the three facts, the description words | ``test_pf7_1_the_readme_first_screen_has_the_title_the_first_commands_and_the_three_facts`` |
 | PF7.1 every link in the README is absolute | ``test_pf7_1_every_link_in_the_readme_is_absolute_and_resolves`` |
-| PF7.1 the README's sections in order, under 250 lines | ``test_pf7_1_the_readme_sections_are_section_6_2s_in_order`` |
+| PF7.1 the README's sections in order, under 250 lines | ``test_pf7_1_the_readme_has_its_sections_in_order_in_under_250_lines`` |
 | PF7.1 every command block of the README is run | ``test_pf7_1_every_block_of_the_readme_is_run`` |
 | PF7.1 the README links the three pages kept | ``test_pf7_1_the_readme_links_the_three_pages_it_keeps`` |
 | PF7.1 each README section carries its facts | ``test_pf7_1_each_readme_section_carries_its_facts`` (one case per section) |
 | PF7.1 the never-phones-home paragraph word for word | ``test_pf7_1_the_readme_keeps_the_never_phones_home_paragraph`` |
-| PF7.2 every required page exists | ``test_pf7_2_every_page_of_section_6_3_exists`` (one case per page) |
+| PF7.2 every required page exists | ``test_pf7_2_every_required_page_exists_and_opens_with_a_title`` (one case per page) |
 | PF7.2 each verb page's help equals ``--help``; options, examples, exit codes, what it writes | ``test_pf7_2_each_verb_page_has_its_help_options_examples_exit_codes_and_writes`` (one case per verb) |
 | PF7.2 the first run's pages show its commands and its verdict | ``test_pf7_2_the_first_run_pages_show_its_commands_and_its_verdict`` (README, quickstart) |
 | PF7.2 the sweep spec page names every key and table | ``test_pf7_2_the_sweep_spec_page_names_every_key_and_table`` |
@@ -124,8 +124,8 @@ able to show and which the hygiene module's double-bracket family would read as 
 | PF7.2 ``json.dumps`` on an unread result | ``test_pf7_2_the_python_page_says_json_dumps_on_an_unread_result_is_unsupported`` |
 | PF7.3 every marked block runs and does what its page shows; unmarked fails; skips name reasons | ``test_pf7_3_every_marked_block_runs_and_does_what_its_page_shows`` (one case per page and install, but the your-own-agent page from the checkout, which the agent pages' test runs; the wheel's slow) |
 | PF7.3 the docs check catches each way a page can be wrong | ``test_pf7_3_the_docs_check_catches_each_way_a_page_can_be_wrong`` (one case per way, and a right page) |
-| PF7.7 the six recipes | ``test_pf7_7_the_recipes_are_section_6_4s_six`` |
-| PF7.7 each recipe: under 150 lines, ends with "What this does not tell you", no run id, run or skip as ``RECIPES`` says | ``test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_marked_as_section_6_4_says`` (one case per recipe) |
+| PF7.7 the six recipes | ``test_pf7_7_the_recipes_are_the_six_named`` |
+| PF7.7 each recipe: under 150 lines, ends with "What this does not tell you", no run id, run or skip as ``RECIPES`` says | ``test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_run_or_skipped_as_listed`` (one case per recipe) |
 | PF7.8 the example runs keyless with its client replaced by a stand-in | ``test_pf7_8_the_example_runs_keyless_with_its_client_replaced`` |
 | PF7 every link of every page resolves | ``test_pf7_every_link_of_every_page_resolves`` (one case per page) |
 | every docs page Prove's code or skill names exists | ``test_pf7_every_docs_page_prove_points_to_exists`` |
@@ -418,7 +418,7 @@ def first_screen(text: str) -> str:
     return text[: at.start()] if at else text
 
 
-def test_pf7_1_the_readme_first_screen_is_section_6_2s() -> None:
+def test_pf7_1_the_readme_first_screen_has_the_title_the_first_commands_and_the_three_facts() -> None:
     text = text_of(README)
     assert text.splitlines()[0] == "# Poisson Prove", text.splitlines()[:1]
     screen = first_screen(text)
@@ -454,7 +454,7 @@ def test_pf7_1_the_readme_links_the_three_pages_it_keeps() -> None:
     assert [p for p in kept if not _links_to(text_of(README), p)] == []
 
 
-def test_pf7_1_the_readme_sections_are_section_6_2s_in_order() -> None:
+def test_pf7_1_the_readme_has_its_sections_in_order_in_under_250_lines() -> None:
     text = text_of(README)
     headings = re.findall(r"^## (.+?)\s*$", text, flags=re.M)
     assert headings == SECTIONS, headings
@@ -586,7 +586,7 @@ def test_pf7_1_the_readme_keeps_the_never_phones_home_paragraph() -> None:
 
 
 @pytest.mark.parametrize("rel", REQUIRED_PAGES)
-def test_pf7_2_every_page_of_section_6_3_exists(rel: str) -> None:
+def test_pf7_2_every_required_page_exists_and_opens_with_a_title(rel: str) -> None:
     assert (ROOT / rel).is_file(), f"{rel} does not exist"
     if rel == "CHANGELOG.md":
         return  # its form is the hygiene module's
@@ -952,13 +952,13 @@ def test_pf7_3_the_docs_check_catches_each_way_a_page_can_be_wrong(case: str, tm
 # ---------- PF7.7 the recipes ----------
 
 
-def test_pf7_7_the_recipes_are_section_6_4s_six() -> None:
+def test_pf7_7_the_recipes_are_the_six_named() -> None:
     found = sorted(p.stem for p in (ROOT / "docs" / "recipes").glob("*.md")) if (ROOT / "docs" / "recipes").is_dir() else []
     assert found == sorted(RECIPES), found
 
 
 @pytest.mark.parametrize("name", list(RECIPES))
-def test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_marked_as_section_6_4_says(name: str, tmp_path: Path) -> None:
+def test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_run_or_skipped_as_listed(name: str, tmp_path: Path) -> None:
     rel = f"docs/recipes/{name}.md"
     text = text_of(rel)
     assert len(text.splitlines()) < 150, len(text.splitlines())

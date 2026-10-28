@@ -258,7 +258,7 @@ ERRORS = ("timeout", "infra: RuntimeError('x')", "boom")
 
 # The synthetic pair. (task, level, variant) -> (rows with an outcome, errored rows).
 SYN_A, SYN_B = "syn-a", "syn-b"
-SYN_SALT = "s21-oracle"
+SYN_SALT = "s21-test"
 SYN_EVENTS = ("fail", "ok")
 SYN_X, SYN_Y = "task", "level"
 HORIZON = 10.0

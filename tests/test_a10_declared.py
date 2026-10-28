@@ -150,10 +150,10 @@ REPO = PACKAGE.parent.parent
 #: this file's subject, and P10-15 records warnings itself where it matters.
 pytestmark = pytest.mark.filterwarnings("ignore::poisson_prove.diff.UnpairedAnalysis")
 
-TARGET = "a10-oracle@v0"
+TARGET = "a10-test@v0"
 T_UNIT = "steps"
-RUN_SALT = "a10-oracle-salt"
-OTHER_SALT = "a10-oracle-other-salt"
+RUN_SALT = "a10-test-salt"
+OTHER_SALT = "a10-test-other-salt"
 HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 X_VALUES = (0.1, 0.2, 0.3, 0.4)

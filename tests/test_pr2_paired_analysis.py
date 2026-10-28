@@ -425,7 +425,7 @@ def make_store(root: Path, values: Mapping[tuple[str, str], tuple[str, str]]) ->
             run_id=run_id, target_id="scorer@v1", t_unit="steps", run_salt=SALT,
             axis_types={"item": "categorical", "cut": "categorical"}, backend="local",
             environment={
-                "python": "3.11.7", "platform": "oracle",
+                "python": "3.11.7", "platform": "test-platform",
                 "poisson_prove_version": poisson_prove.__version__,
                 "capture": {"content": True, "max_observation_bytes": "none"},
             },

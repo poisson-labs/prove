@@ -45,7 +45,7 @@ from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.survival import censor
 
-SALT = "unpaired-warning-oracle-salt"
+SALT = "unpaired-warning-test-salt"
 OTHER_SALT = "a-different-salt"
 HORIZON = 10.0
 EVENTS = ("fail", "timed_out")

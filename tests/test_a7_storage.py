@@ -222,7 +222,7 @@ Q = 0.05
 
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
-MOCK_SALT = "a7-storage-oracle"
+MOCK_SALT = "a7-storage-test"
 MOCK_CONFIGS = [
     {"task_id": task, "tool_fail_rate": rate}
     for task in ("search", "checkout")

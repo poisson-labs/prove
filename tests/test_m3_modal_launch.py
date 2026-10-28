@@ -77,9 +77,9 @@ WELL_SHAPED = f"{MOCK_MODULE}:rollout"  # any well-shaped path; the modal branch
 MISSING_MODULE_PATH = "poisson_prove.examples.no_such_module_xyz:rollout"
 MISSING_ATTR_PATH = f"{MOCK_MODULE}:no_such_attr"
 
-REFUSING_MODULE = "proofload_oracle_refusing_target"
+REFUSING_MODULE = "prove_test_refusing_target"
 BOUNDARY_VAR = "PROOFLOAD_TEST_BOUNDARY"
-CANARY_VAR = "PROOFLOAD_ORACLE_CANARY"
+CANARY_VAR = "PROVE_TESTS_CANARY"
 
 PRE_AMENDMENT_FIELDS = frozenset({
     "concurrency", "batch_size", "episode_timeout", "infra_retries", "max_rollouts",
@@ -142,7 +142,7 @@ if os.environ.get("{BOUNDARY_VAR}") != "container":
 
 
 def rollout(cfg, seed):
-    raise NotImplementedError("never called by this oracle")
+    raise NotImplementedError("never called by these tests")
 '''
 
 

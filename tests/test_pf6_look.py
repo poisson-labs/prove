@@ -147,7 +147,7 @@ def test_pf6_0_its_rules_and_exit_code_table_are_the_base_with_the_three_changes
     assert len(re.findall(r"^    - ", rule_16, re.MULTILINE)) == 11
 
 
-def test_pf6_0_the_exit_code_table_has_section_5_2s_codes_and_meanings() -> None:
+def test_pf6_0_the_exit_code_table_has_the_six_codes_and_their_meanings() -> None:
     table = _look().split("\n## Exit codes\n", 1)[1].split("\n## ", 1)[0]
     rows = dict(re.findall(r"^\| (\d+) \| (.+?) \|$", table, re.MULTILINE))
     assert sorted(rows, key=int) == sorted(EXIT_CODES, key=int), rows
