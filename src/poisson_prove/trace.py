@@ -553,9 +553,7 @@ class Span:
                     "not recorded"
                 )
         if self.attempt is not None and not (_is_int(self.attempt) and self.attempt >= 1):
-            raise TraceValidationError(
-                f"attempt must be an int >= 1 or None, got {self.attempt!r}"
-            )
+            raise TraceValidationError(f"attempt must be an int >= 1 or None, got {self.attempt!r}")
         if self.gate is not None and self.gate not in GATE:
             raise TraceValidationError(f"gate {self.gate!r} is not one of {', '.join(GATE)}")
         if self.bytes_original is not None:
@@ -677,9 +675,7 @@ class Trace:
         """
         known = {span.span_id for span in self.spans}
         return tuple(
-            span
-            for span in self.ordered()
-            if span.parent_id is None or span.parent_id not in known
+            span for span in self.ordered() if span.parent_id is None or span.parent_id not in known
         )
 
     def children(self, span_id: str) -> tuple[Span, ...]:
@@ -1055,16 +1051,10 @@ def split(trace: Trace) -> tuple[dict[str, Any], dict[str, Any]]:
                 span[name] = None
         # An observation attribute whose value is None is still observation content, and
         # leaving it behind puts a content key in the envelope.
-        moved = {
-            key: value
-            for key, value in span["attrs"].items()
-            if _is_observation(key, value)
-        }
+        moved = {key: value for key, value in span["attrs"].items() if _is_observation(key, value)}
         if moved:
             body["attrs"] = moved
-            span["attrs"] = {
-                key: value for key, value in span["attrs"].items() if key not in moved
-            }
+            span["attrs"] = {key: value for key, value in span["attrs"].items() if key not in moved}
         if body:
             bodies[span["span_id"]] = body
     return envelope, bodies
@@ -1137,9 +1127,7 @@ class Collector:
     def trace(self) -> Trace:
         """The completed trace. Raises before the enclosing ``collect()`` block exits."""
         if self._trace is None:
-            raise TraceValidationError(
-                "the trace is not available until the collect() block exits"
-            )
+            raise TraceValidationError("the trace is not available until the collect() block exits")
         return self._trace
 
 
@@ -1561,7 +1549,7 @@ def _otel_span(raw: Mapping[str, Any], inherited: Mapping[str, Any]) -> Span:
     else:
         kind = _vendor_kind(lifted) or _transport_kind(attrs)
 
-    name =lifted["gen_ai.tool.name"] or lifted["gen_ai.request.model"] or raw.get("name")
+    name = lifted["gen_ai.tool.name"] or lifted["gen_ai.request.model"] or raw.get("name")
 
     tokens: dict[str, int] = {}
     for field_name, token_key in (
@@ -1720,7 +1708,7 @@ def _cyclic_span_ids(spans: Iterable[Span]) -> set[str]:
             path.append(current)
             current = by_id[current].parent_id
         if current is not None and current in walked:
-            cyclic.update(path[path.index(current):])
+            cyclic.update(path[path.index(current) :])
     return cyclic
 
 

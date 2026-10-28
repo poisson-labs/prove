@@ -126,7 +126,10 @@ def share(k: int, n: int) -> dict[str, Any]:
     Wilson interval at ``WILSON_LEVEL`` and that level beside it."""
     interval = wilson(k, n)
     return {
-        "value": k / n, "lo": interval.lo, "hi": interval.hi, "level": interval.level,
+        "value": k / n,
+        "lo": interval.lo,
+        "hi": interval.hi,
+        "level": interval.level,
         "method": interval.method,
     }
 

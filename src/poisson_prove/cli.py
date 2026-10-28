@@ -93,7 +93,15 @@ _LATEST_PARTIAL = core.LATEST_PARTIAL
 _REPORT_FILES = ("report.md", "heatmap.svg", "receipt.html")
 _SNIPPET_MARKER = "# reproduce one episode"
 _DIFF_ONLY_FLAGS = (
-    "method", "methods", "q", "permutations", "seed", "by", "max_group_mde", "depth", "paired",
+    "method",
+    "methods",
+    "q",
+    "permutations",
+    "seed",
+    "by",
+    "max_group_mde",
+    "depth",
+    "paired",
 )
 _RUN_ONLY_FLAGS = ("horizon",)
 _REPORT_FORMS = (
@@ -107,7 +115,16 @@ _SERVE_FORM = (
 #: The tool's own options, accepted before or after the verb.
 _GLOBAL_OPTIONS = ("--store", "--plain", "--debug")
 _VERB_NAMES = (
-    "init", "sweep", "diff", "check", "report", "paired", "serve", "inspect", "runs", "ui",
+    "init",
+    "sweep",
+    "diff",
+    "check",
+    "report",
+    "paired",
+    "serve",
+    "inspect",
+    "runs",
+    "ui",
 )
 _SCHEMAS = {verb: f"{_COMMAND}.{verb}/1" for verb in _VERB_NAMES}
 _ERRORS_LOG = "~/.cache/poisson-prove/errors.log"
@@ -226,11 +243,11 @@ class _IO:
 
     def note(self, text: str) -> None:
         """A ``note:`` line on stderr."""
-        self._err(f"note: {text}", lambda term, t: term.note(t[len("note: "):]))
+        self._err(f"note: {text}", lambda term, t: term.note(t[len("note: ") :]))
 
     def error(self, text: str) -> None:
         """An ``error:`` line on stderr."""
-        self._err(f"error: {text}", lambda term, t: term.error(t[len("error: "):]))
+        self._err(f"error: {text}", lambda term, t: term.error(t[len("error: ") :]))
 
     def err_next(self, command: str) -> None:
         self._err(f"  next: {command}", lambda term, t: term.command(t, "next:"))
@@ -604,7 +621,9 @@ def _build_parser(io: _IO) -> _Parser:
         ),
     )
     diff_p.add_argument(
-        "runs", nargs="*", metavar="RUN",
+        "runs",
+        nargs="*",
+        metavar="RUN",
         help="the baseline and the candidate (default: previous and latest)",
     )
     _add_event_argument(
@@ -630,7 +649,7 @@ def _build_parser(io: _IO) -> _Parser:
     report_p = sub.add_parser(
         "report",
         help="write report.md, heatmap.svg and receipt.html for two runs, or one, and save the "
-            "comparison",
+        "comparison",
         description=(
             "Write a report folder: two runs give the comparison with its heatmap, one run gives\n"
             "its survival report. The folder holds report.md, heatmap.svg and receipt.html. A\n"
@@ -643,7 +662,9 @@ def _build_parser(io: _IO) -> _Parser:
         ),
     )
     report_p.add_argument(
-        "runs", nargs="*", metavar="RUN",
+        "runs",
+        nargs="*",
+        metavar="RUN",
         help="A B for a comparison, one RUN for a survival report (default: previous and latest)",
     )
     _add_event_argument(
@@ -767,7 +788,9 @@ def _build_parser(io: _IO) -> _Parser:
         ),
     )
     check_p.add_argument(
-        "runs", nargs="*", metavar="RUN",
+        "runs",
+        nargs="*",
+        metavar="RUN",
         help="the baseline and the candidate (default: previous and latest)",
     )
     _add_event_argument(
@@ -795,7 +818,7 @@ def _build_parser(io: _IO) -> _Parser:
     serve_p = sub.add_parser(
         "serve",
         help="serve a read-only page comparing two runs on a loopback port, and save the "
-            "comparison",
+        "comparison",
         description=(
             "Serve a read-only page for one pair of runs on an ephemeral loopback port, built\n"
             "before the bind; the comparison it shows is saved into the store, under\n"
@@ -808,7 +831,9 @@ def _build_parser(io: _IO) -> _Parser:
         ),
     )
     serve_p.add_argument(
-        "runs", nargs="*", metavar="RUN",
+        "runs",
+        nargs="*",
+        metavar="RUN",
         help="the baseline and the candidate, in that order (default: previous and latest)",
     )
     _add_event_argument(
@@ -831,9 +856,7 @@ def _build_parser(io: _IO) -> _Parser:
         "runs carry; no default)",
     )
     sx.shown_required = True  # type: ignore[attr-defined]
-    serve_p.add_argument(
-        "--y", metavar="AXIS", help="the config key on the y axis (default: none)"
-    )
+    serve_p.add_argument("--y", metavar="AXIS", help="the config key on the y axis (default: none)")
     serve_p.add_argument(
         "--fix",
         action="append",
@@ -930,8 +953,9 @@ def _build_parser(io: _IO) -> _Parser:
         epilog=f"examples:\n  {_COMMAND} ui\n  {_COMMAND} ui --open",
     )
     ui_p.add_argument(
-        "--open", action="store_true", help="open the dashboard in the browser (default: not "
-            "opened)"
+        "--open",
+        action="store_true",
+        help="open the dashboard in the browser (default: not opened)",
     )
     _add_json_option(ui_p, "where the dashboard is")
     _add_global_options(ui_p, top=False)
@@ -1028,7 +1052,6 @@ def _add_tree_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None:
 # ---------- entry point ----------
 
 
-
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -1083,7 +1106,9 @@ def _app_wanted(io: _IO) -> bool:
     """Whether the bare command opens the terminal app: stdin and stdout terminals, ``CI`` unset
     (set to anything, empty included, is CI) and ``TERM`` not ``dumb``."""
     return (
-        _tty(io.inp) and _tty(io.out) and os.environ.get("CI") is None
+        _tty(io.inp)
+        and _tty(io.out)
+        and os.environ.get("CI") is None
         and os.environ.get("TERM") != "dumb"
     )
 
@@ -1139,9 +1164,14 @@ def _terminal_rendering(io: _IO, args: Sequence[str]) -> None:
     encoding = (getattr(io.out, "encoding", "") or "").lower().replace("-", "").replace("_", "")
     styler = None
     if (
-        out_tty and err_tty and not os.environ.get("NO_COLOR") and os.environ.get("CI") is None
-        and os.environ.get("TERM") != "dumb" and encoding == "utf8"
-        and not asked_json and not asked_plain
+        out_tty
+        and err_tty
+        and not os.environ.get("NO_COLOR")
+        and os.environ.get("CI") is None
+        and os.environ.get("TERM") != "dumb"
+        and encoding == "utf8"
+        and not asked_json
+        and not asked_plain
     ):
         from poisson_prove import _render_pretty
 
@@ -1356,9 +1386,7 @@ def _write_json(
             document[key] = value
     if nexts is not None:
         document["next"] = list(nexts)
-    text = json.dumps(
-        _look.strict(document), indent=2, allow_nan=False, ensure_ascii=io.ascii
-    )
+    text = json.dumps(_look.strict(document), indent=2, allow_nan=False, ensure_ascii=io.ascii)
     io.write(text + "\n")
 
 
@@ -1420,8 +1448,7 @@ def _save(io: _IO, store: Any, result: core.Comparison) -> core.ArtifactRef | No
     if saved.unrefreshed is not None:
         # The pages are derived and the previous ones stand; the one line says so and names ui.
         io.note(
-            f"the dashboard's pages were not refreshed ({saved.unrefreshed}); "
-            f"run {_COMMAND} ui"
+            f"the dashboard's pages were not refreshed ({saved.unrefreshed}); run {_COMMAND} ui"
         )
     return saved
 
@@ -1746,9 +1773,23 @@ def _print_plan(io: _IO, p: core.Plan) -> None:
 
 def _sweep_overrides(ns: argparse.Namespace, state: _State) -> dict[str, Any]:
     keys = (
-        "target", "replicates", "backend", "image", "salt", "pair_with", "resume", "name",
-        "max_mde", "episode_timeout", "max_rollouts", "batch_size", "concurrency",
-        "infra_retries", "max_cost", "est_seconds", "app_name",
+        "target",
+        "replicates",
+        "backend",
+        "image",
+        "salt",
+        "pair_with",
+        "resume",
+        "name",
+        "max_mde",
+        "episode_timeout",
+        "max_rollouts",
+        "batch_size",
+        "concurrency",
+        "infra_retries",
+        "max_cost",
+        "est_seconds",
+        "app_name",
     )
     out = {key: getattr(ns, key, None) for key in keys}
     out["typed"] = list(state.argv)
@@ -1864,8 +1905,18 @@ def _cmd_init_agent(ns: argparse.Namespace, io: _IO, state: _State) -> int:
 def _cmd_diff(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     a, b = _two_runs("diff", ns.runs)
     result = core.compare(
-        store, a, b, events=ns.event, method=ns.method, q=ns.q, methods=ns.methods, by=ns.by,
-        permutations=ns.permutations, seed=ns.seed, max_group_mde=ns.max_group_mde, depth=ns.depth,
+        store,
+        a,
+        b,
+        events=ns.event,
+        method=ns.method,
+        q=ns.q,
+        methods=ns.methods,
+        by=ns.by,
+        permutations=ns.permutations,
+        seed=ns.seed,
+        max_group_mde=ns.max_group_mde,
+        depth=ns.depth,
     )
     _notes_of(io, result)
     saved = _save(io, store, result) if ns.save else None
@@ -2049,9 +2100,21 @@ def _report_pair(
         _named_words(state.argv, named),
     )
     result = core.compare(
-        store, a, b, events=ns.event, method=ns.method, q=_DEFAULT_Q if ns.q is None else ns.q,
-        methods=ns.methods, by=ns.by, permutations=ns.permutations, seed=ns.seed,
-        max_group_mde=ns.max_group_mde, depth=ns.depth, verb="report", for_report=True, fix=ns.fix,
+        store,
+        a,
+        b,
+        events=ns.event,
+        method=ns.method,
+        q=_DEFAULT_Q if ns.q is None else ns.q,
+        methods=ns.methods,
+        by=ns.by,
+        permutations=ns.permutations,
+        seed=ns.seed,
+        max_group_mde=ns.max_group_mde,
+        depth=ns.depth,
+        verb="report",
+        for_report=True,
+        fix=ns.fix,
         paired=ns.paired,
     )
     _notes_of(io, result)
@@ -2068,15 +2131,22 @@ def _report_pair(
     )
     with _look.rule10():
         report = build_multi_report(
-            multi, spec, manifests=result.manifests, tree=result.tree,
-            observations=result.observations, declarations=result.declarations,
+            multi,
+            spec,
+            manifests=result.manifests,
+            tree=result.tree,
+            observations=result.observations,
+            declarations=result.declarations,
         )
         receipt = (
             report
             if spec.theme == "light"
             else build_multi_report(
-                multi, dataclasses.replace(spec, theme="light"), manifests=result.manifests,
-                tree=result.tree, observations=result.observations,
+                multi,
+                dataclasses.replace(spec, theme="light"),
+                manifests=result.manifests,
+                tree=result.tree,
+                observations=result.observations,
                 declarations=result.declarations,
             )
         )
@@ -2133,9 +2203,7 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
         )
     named = core.runs(store, counted=False)
     name = next((run.run_name for run in named if run.run_id == run_id), run_id)
-    out_dir = _prepare_out_dir(
-        ns, f"./prove-report-{_slug(name)}", _named_words(state.argv, named)
-    )
+    out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(name)}", _named_words(state.argv, named))
     # The word as typed, so the note on what latest, previous and the numbers leave out is said.
     detail = core.run(store, word, events=ns.event, horizon=ns.horizon, fix=ns.fix)
     _notes_of(io, detail)
@@ -2150,21 +2218,35 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
         forest=ns.forest,
     )
     kwargs: dict[str, Any] = dict(
-        events=events, horizon=detail.horizon, manifest=detail.manifest,
+        events=events,
+        horizon=detail.horizon,
+        manifest=detail.manifest,
         observations=detail.observations,
-        declarations=detail.declarations, shares=detail.shares, design_mde=detail.design,
+        declarations=detail.declarations,
+        shares=detail.shares,
+        design_mde=detail.design,
     )
     with _look.rule10():
         report = build_survival_report(detail.cells, spec, **kwargs)
-        receipt = report if spec.theme == "light" else build_survival_report(
-            detail.cells, dataclasses.replace(spec, theme="light"), **kwargs
+        receipt = (
+            report
+            if spec.theme == "light"
+            else build_survival_report(
+                detail.cells, dataclasses.replace(spec, theme="light"), **kwargs
+            )
         )
     written = _write_report_files(io, out_dir, report, receipt)
     if ns.json:
         doc = detail.to_json()
         payload = {"out": str(out_dir), "wrote": [str(p) for p in written]}
         for key in (
-            "run_id", "run_name", "events", "non_event", "horizon", "by_event", "design_mde",
+            "run_id",
+            "run_name",
+            "events",
+            "non_event",
+            "horizon",
+            "by_event",
+            "design_mde",
         ):
             payload[key] = doc[key]
         _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
@@ -2215,7 +2297,13 @@ def _cmd_paired(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> i
 def _cmd_check(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     a, b = _two_runs("check", ns.runs)
     result = core.check(
-        store, a, b, events=ns.event, fail_on=ns.fail_on, method=ns.method, q=ns.q,
+        store,
+        a,
+        b,
+        events=ns.event,
+        fail_on=ns.fail_on,
+        method=ns.method,
+        q=ns.q,
         typed=state.argv,
     )
     _notes_of(io, result)
@@ -2242,13 +2330,28 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
     a, b = _two_runs("serve", words)
     if ns.x is None or ns.event is None:
         core.compare(
-            store, a, b, verb="serve", require_x=ns.x is None,
-            require_events=ns.event is None, typed=state.argv,
+            store,
+            a,
+            b,
+            verb="serve",
+            require_x=ns.x is None,
+            require_events=ns.event is None,
+            typed=state.argv,
         )
     result = core.compare(
-        store, a, b, events=ns.event, method=ns.method, q=ns.q, by=ns.by,
+        store,
+        a,
+        b,
+        events=ns.event,
+        method=ns.method,
+        q=ns.q,
+        by=ns.by,
         permutations=ns.permutations,
-        seed=ns.seed, max_group_mde=ns.max_group_mde, depth=ns.depth, verb="serve", for_report=True,
+        seed=ns.seed,
+        max_group_mde=ns.max_group_mde,
+        depth=ns.depth,
+        verb="serve",
+        for_report=True,
         fix=ns.fix,
     )
     _notes_of(io, result)
@@ -2262,7 +2365,10 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
         forest=ns.forest,
     )
     report = build_multi_report(
-        result.multi, spec, manifests=result.manifests, observations=result.observations,
+        result.multi,
+        spec,
+        manifests=result.manifests,
+        observations=result.observations,
         declarations=result.declarations,
     )
     _name_provenance(report.provenance, result)
@@ -2312,7 +2418,12 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
 
 def _cmd_inspect(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     result = core.inspect(
-        store, ns.run, event=ns.event, where=ns.where, limit=ns.limit, typed=state.argv,
+        store,
+        ns.run,
+        event=ns.event,
+        where=ns.where,
+        limit=ns.limit,
+        typed=state.argv,
     )
     _notes_of(io, result)
     if ns.json:
@@ -2340,16 +2451,20 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> 
             if trace.truncated is not None:
                 io.line(f"trace: truncated ({trace.truncated})")
             cut = [
-                (j, span) for j, span in enumerate(trace.ordered())
+                (j, span)
+                for j, span in enumerate(trace.ordered())
                 if span.truncated == "observation"
             ]
             if cut:
                 limits = result.observation_cap
-                limit = "not recorded" if limits is None else ", ".join(
-                    f"{name}={value}" for name, value in limits.items()
+                limit = (
+                    "not recorded"
+                    if limits is None
+                    else ", ".join(f"{name}={value}" for name, value in limits.items())
                 )
                 sizes = [
-                    f"span {j}" if span.bytes_original is None
+                    f"span {j}"
+                    if span.bytes_original is None
                     else f"span {j}: {span.bytes_original} bytes originally"
                     for j, span in cut
                 ]
@@ -2391,18 +2506,32 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
             io.next(command)
         return 0
     header = (
-        "#", "name", "id", "status", "backend", "target", "rows", "rows without an outcome",
+        "#",
+        "name",
+        "id",
+        "status",
+        "backend",
+        "target",
+        "rows",
+        "rows without an outcome",
         "created",
     )
     lines: list[tuple[str, ...]] = [header]
     for run in listed:
         entry = run.entry
-        lines.append((
-            "" if entry["number"] is None else str(entry["number"]), str(entry["run_name"]),
-            str(entry["run_id"]), str(entry["status"]), str(entry["backend"]),
-            str(entry["target_id"]), _look.fmt_count(entry["rows"]),
-            _look.fmt_count(entry["no_outcome"]), run.created,
-        ))
+        lines.append(
+            (
+                "" if entry["number"] is None else str(entry["number"]),
+                str(entry["run_name"]),
+                str(entry["run_id"]),
+                str(entry["status"]),
+                str(entry["backend"]),
+                str(entry["target_id"]),
+                _look.fmt_count(entry["rows"]),
+                _look.fmt_count(entry["no_outcome"]),
+                run.created,
+            )
+        )
     io.line()
     io.table(lines, numeric=frozenset({0, 6, 7}), key=1)
     return 0

@@ -144,17 +144,25 @@ class BurlaOptions:
             (_int(self.nodes) and self.nodes >= 1, "nodes must be an integer >= 1"),
             (bool(self.machine_type), "machine_type must be named"),
             (_int(self.slots_per_node) and self.slots_per_node >= 1, "slots_per_node must be >= 1"),
-            (_num(self.usd_per_node_hour) and self.usd_per_node_hour > 0,
-             "usd_per_node_hour must be > 0"),
+            (
+                _num(self.usd_per_node_hour) and self.usd_per_node_hour > 0,
+                "usd_per_node_hour must be > 0",
+            ),
             (bool(self.price_asof), "price_asof must say where and when the price was read"),
             (bool(str(self.ledger)) and str(self.ledger) != ".", "ledger must name a file"),
-            (isinstance(self.head_url, str) and _is_local_head(self.head_url),
-             "head_url must be a local http URL or an https one"),
+            (
+                isinstance(self.head_url, str) and _is_local_head(self.head_url),
+                "head_url must be a local http URL or an https one",
+            ),
             (_num(self.stop_cost) and self.stop_cost > 0, "stop_cost must be > 0"),
-            (_num(self.max_cost) and _num(self.stop_cost) and self.max_cost >= self.stop_cost,
-             "max_cost must be at least stop_cost"),
-            (_num(self.est_seconds_per_episode) and self.est_seconds_per_episode > 0,
-             "est_seconds_per_episode must be > 0"),
+            (
+                _num(self.max_cost) and _num(self.stop_cost) and self.max_cost >= self.stop_cost,
+                "max_cost must be at least stop_cost",
+            ),
+            (
+                _num(self.est_seconds_per_episode) and self.est_seconds_per_episode > 0,
+                "est_seconds_per_episode must be > 0",
+            ),
             (_int(self.func_cpu) and self.func_cpu >= 1, "func_cpu must be an integer >= 1"),
             (_int(self.func_ram) and self.func_ram >= 1, "func_ram must be an integer >= 1"),
             (_num(self.boot_minutes) and self.boot_minutes >= 0, "boot_minutes must be >= 0"),
@@ -446,7 +454,10 @@ def _build_bundle(packages: Sequence[str]) -> _Bundle:
 def _stdlib_and_dist_prefixes() -> tuple[str, ...]:
     paths = sysconfig.get_paths()
     prefixes = {
-        paths.get("stdlib"), paths.get("platstdlib"), paths.get("purelib"), paths.get("platlib")
+        paths.get("stdlib"),
+        paths.get("platstdlib"),
+        paths.get("purelib"),
+        paths.get("platlib"),
     }
     return tuple(sorted(os.path.realpath(p) + os.sep for p in prefixes if p))
 
@@ -543,9 +554,7 @@ def _comparable(result: Result) -> Any:
     return {key: value for key, value in result.items() if key != "wall_time"}
 
 
-def _rehearse(
-    p: Plan, import_path: str, bundle: _Bundle, options: BurlaOptions
-) -> tuple[Any, Any]:
+def _rehearse(p: Plan, import_path: str, bundle: _Bundle, options: BurlaOptions) -> tuple[Any, Any]:
     """Job 0 twice: in this machine's view, and in the worker's. Each runs in an interpreter
     started for it, so nothing is armed in this process. This machine's view is a plain
     interpreter with this process's ``sys.path``, environment and working directory. The
@@ -886,8 +895,12 @@ class _BurlaMapper:
                     elif kind in ("done", "missing"):
                         done = message
                 if done is None and pipe.eof:
-                    done = ("done", "error", "LauncherExited",
-                            f"the launcher exited ({proc.poll()}) without reporting")
+                    done = (
+                        "done",
+                        "error",
+                        "LauncherExited",
+                        f"the launcher exited ({proc.poll()}) without reporting",
+                    )
                 now = time.time()
                 if done is None and sigint_at is None and now > self.deadline + _BACKSTOP_S:
                     sigint_at = now
@@ -1072,4 +1085,3 @@ def run_burla(
         f"(ledger {options.ledger}); the stored batches stay, and --resume {p.run_id} continues it "
         f"once the stop is raised in the sweep file. {stop}"
     ) from stop
-

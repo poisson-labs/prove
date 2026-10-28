@@ -109,9 +109,7 @@ def kaplan_meier(t: NDArray[Any], observed: NDArray[Any]) -> KMCurve:
     return KMCurve(times=times, survival=survival, var=var, n_at_risk=n_at_risk, n_events=n_events)
 
 
-def aalen_johansen(
-    t: NDArray[Any], outcome: NDArray[Any], events: Sequence[str]
-) -> CIFCurve:
+def aalen_johansen(t: NDArray[Any], outcome: NDArray[Any], events: Sequence[str]) -> CIFCurve:
     """Competing risks. Rows whose outcome is not in `events` are censored."""
     tt = np.asarray(t, dtype=np.float64)
     out = np.asarray(outcome, dtype=object)

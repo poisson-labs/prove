@@ -208,9 +208,7 @@ def _resolve_trace_mode(trace: str | None, *, meta: bool) -> str:
     if trace is None:
         return "full" if meta else "none"
     if trace not in _TRACE_MODES:
-        raise ValueError(
-            f"trace must be one of {', '.join(_TRACE_MODES)} or None, got {trace!r}"
-        )
+        raise ValueError(f"trace must be one of {', '.join(_TRACE_MODES)} or None, got {trace!r}")
     if trace == "full" and not meta:
         # Refused rather than quietly downgraded: the full read puts the reassembled trace in
         # the meta column, meta=False projects that column away, and a caller who asked for
@@ -285,6 +283,7 @@ class RunManifest:
     """A run's manifest: its id and name, the target and its time unit, the salt its seeds
     come from, the axes' types, the backend, its status (``partial`` or ``complete``), and what
     the sweep recorded about itself in ``environment``."""
+
     run_id: str
     target_id: str
     t_unit: str
@@ -387,6 +386,7 @@ class RunManifest:
 class EpisodeRecord:
     """One stored episode: the condition and its hash, the replicate and its seed, the outcome
     and its time, or the error that ended it, and its trace."""
+
     run_id: str
     config_hash: str
     config: Mapping[str, Any]
@@ -521,6 +521,7 @@ class Store:
     """A folder of runs: each run a manifest and its episodes. Reads and writes runs; refuses a
     run whose schema it does not know with ``SchemaMismatch`` and other faults with
     ``StoreError``."""
+
     def __init__(self, root: Path | str) -> None:
         self._root = Path(root)
 
@@ -681,10 +682,7 @@ class Store:
             return table.select(columns) if columns is not None else table
         filters = None if hashes is None else [("config_hash", "in", list(hashes))]
         return pa.concat_tables(
-            [
-                pq.read_table(p, schema=_SCHEMA, columns=columns, filters=filters)
-                for p in parts
-            ]
+            [pq.read_table(p, schema=_SCHEMA, columns=columns, filters=filters) for p in parts]
         )
 
     def _existing_keys(self, run_id: str) -> set[tuple[str, int]]:
@@ -748,9 +746,7 @@ class Store:
         # "full" and "none" and the wrong one for "envelope", and it couples two knobs the
         # interface defines as independent.
         columns = [
-            c
-            for c in _SCHEMA.names
-            if c not in _TRACE_COLUMNS and (meta or c not in _META_COLUMNS)
+            c for c in _SCHEMA.names if c not in _TRACE_COLUMNS and (meta or c not in _META_COLUMNS)
         ]
         needed = set(columns)
         if mode == "full":
@@ -788,9 +784,7 @@ class Store:
                 )
         for col in _JSON_COLUMNS:
             if col in df.columns:
-                df[col] = pd.Series(
-                    [json.loads(s) for s in df[col]], index=df.index, dtype=object
-                )
+                df[col] = pd.Series([json.loads(s) for s in df[col]], index=df.index, dtype=object)
         if mode == "full":
             self._reassemble(df)
         elif mode == "envelope":
@@ -900,8 +894,6 @@ class Store:
             other=no_outcome - timed_out - infra,
         )
 
-    def missing(
-        self, run_id: str, expected: Iterable[tuple[str, int]]
-    ) -> list[tuple[str, int]]:
+    def missing(self, run_id: str, expected: Iterable[tuple[str, int]]) -> list[tuple[str, int]]:
         existing = self._existing_keys(run_id)
         return [(h, i) for h, i in expected if (str(h), int(i)) not in existing]

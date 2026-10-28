@@ -324,8 +324,14 @@ def _design(spec: SweepSpec, *, threshold: float, paired_replicates: int | None)
     test = "fisher" if paired_replicates is None else "mcnemar"
     n_a = spec.replicates if paired_replicates is None else paired_replicates
     return design(
-        conditions=len(spec.configs), events=_design_events(_spec_declared(spec)), n_a=n_a,
-        n_b=spec.replicates, threshold=threshold, q=_GATE_Q, power=stats.POWER, test=test,
+        conditions=len(spec.configs),
+        events=_design_events(_spec_declared(spec)),
+        n_a=n_a,
+        n_b=spec.replicates,
+        threshold=threshold,
+        q=_GATE_Q,
+        power=stats.POWER,
+        test=test,
     )
 
 
@@ -367,6 +373,7 @@ def _recorded_design(manifest: RunManifest) -> dict[str, Any] | None:
 def _smallest_passing(spec: SweepSpec, accepted: float, paired_replicates: int | None) -> int:
     """The fewest replicates at which the gate passes ``accepted``, by doubling then bisection on
     N; under ``--pair-with`` the earlier run's replicates move with N, as a fresh pair's would."""
+
     def passes(n: int) -> bool:
         paired = None if paired_replicates is None else n
         resized = replace(spec, replicates=n)
@@ -391,6 +398,7 @@ def _smallest_accepted(
     design as it stands; None when only 1, which accepts any design, would. A larger accepted
     change only makes the gate easier to pass (more power at it, fewer base rates with room), so
     a bisection over thousandths finds it."""
+
     def passes(thousandths: int) -> bool:
         threshold = thousandths / 1000
         return _design(spec, threshold=threshold, paired_replicates=paired_replicates).passes
@@ -441,14 +449,21 @@ def check_power(p: Plan, *, max_mde: float | None = None) -> None:
             f"no single condition of this design can be flagged: with {n} replicates a side the "
             f"smallest possible p is {_look.fmt_p(found.p_min)}, and a flag needs less than "
             f"{_look.fmt_p(found.level)} (q {_GATE_Q:g} over {found.family} tests)",
-            mde=math.nan, accepted=accepted, replicates=n, replicates_needed=needed, offered=None,
+            mde=math.nan,
+            accepted=accepted,
+            replicates=n,
+            replicates_needed=needed,
+            offered=None,
             most_conditions=most,
         )
     mde = math.nan if found.mde is None else found.mde
     raise UnderpoweredDesign(
         f"underpowered design: one condition alone would be flagged for a change of {mde:.3f} at "
         f"its worst base rate, {found.base_rate:.3f}, and you accept {accepted:.3f}",
-        mde=mde, accepted=accepted, replicates=n, replicates_needed=needed,
+        mde=mde,
+        accepted=accepted,
+        replicates=n,
+        replicates_needed=needed,
         offered=_smallest_accepted(p.spec, accepted, p.paired_replicates),
     )
 
@@ -462,9 +477,8 @@ def _capture_line(spec: CaptureSpec | None) -> str | None:
     if spec is None:
         return None
     named = ", ".join(spec.instrument) if spec.instrument else "none (OTel API only)"
-    return (
-        f"Capture: on · instrument: {named} · content: {'on' if spec.content else 'off'} · "
-        + ("no span cap" if spec.max_spans is None else f"max {spec.max_spans} spans/episode")
+    return f"Capture: on · instrument: {named} · content: {'on' if spec.content else 'off'} · " + (
+        "no span cap" if spec.max_spans is None else f"max {spec.max_spans} spans/episode"
     )
 
 

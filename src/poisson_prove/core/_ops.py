@@ -876,9 +876,7 @@ def _by_id(declaration: Declaration, idx: Index) -> Declaration:
         return named[0] if len(hits) == 1 and named else word
 
     sweeps = tuple(
-        dataclasses.replace(
-            s, a=run_id(s.a), b=run_id(s.b), more=tuple(run_id(m) for m in s.more)
-        )
+        dataclasses.replace(s, a=run_id(s.a), b=run_id(s.b), more=tuple(run_id(m) for m in s.more))
         for s in declaration.sweeps
     )
     return dataclasses.replace(declaration, sweeps=sweeps)
@@ -1724,7 +1722,7 @@ _ERRORS_LOG = Path("~") / ".cache" / "poisson-prove" / "errors.log"
 #: with no byte code written; the target is looked up and its signature read, never called; the
 #: answer goes to a file, and the process ends at once, so nothing the import left running reaches
 #: the network after it. Standard library only.
-_CHECK_IMPORT = r'''
+_CHECK_IMPORT = r"""
 import ipaddress, json, os, sys
 
 _ATTEMPTS = []
@@ -1823,7 +1821,7 @@ else:
 with open(_out, "w", encoding="utf-8") as fh:
     json.dump({**_result, "attempts": list(_ATTEMPTS)}, fh)
 os._exit(0)
-'''
+"""
 
 
 @dataclasses.dataclass(frozen=True)

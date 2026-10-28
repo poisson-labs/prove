@@ -668,9 +668,7 @@ def assert_pairs(store: Store, declaration: Declaration) -> PairAssertion:
             else:
                 verdict = _judge(held, arm_labels, declaration)
                 if verdict.cause is not None:
-                    excluded.append(
-                        _excluded_row(row, verdict.cause, verdict.arm, verdict.detail)
-                    )
+                    excluded.append(_excluded_row(row, verdict.cause, verdict.arm, verdict.detail))
                     verdict = _declared_pair(held[:2], arm_labels, declaration)
             if verdict is None:
                 continue
@@ -743,9 +741,7 @@ def _value_columns(arm_labels: Sequence[str]) -> tuple[str, ...]:
 
 
 def _timing_columns(arm_labels: Sequence[str]) -> tuple[str, ...]:
-    return tuple(
-        f"{edge}_ns_{label}" for label in arm_labels for edge in ("start", "end")
-    )
+    return tuple(f"{edge}_ns_{label}" for label in arm_labels for edge in ("start", "end"))
 
 
 def _stamp(value: Any) -> int | None:
@@ -1123,9 +1119,7 @@ def _judge(rows: Sequence[_Row], arm_labels: Sequence[str], declaration: Declara
     names: set[str] = set()
     for recorded in headers:
         names |= set(recorded)
-    differing = sorted(
-        name for name in names if len({h.get(name) for h in headers}) > 1
-    )
+    differing = sorted(name for name in names if len({h.get(name) for h in headers}) > 1)
     unexempted = [name for name in differing if name not in exempt]
     if unexempted:
         return _Verdict(
@@ -1157,9 +1151,7 @@ def _judge(rows: Sequence[_Row], arm_labels: Sequence[str], declaration: Declara
             "the interval is [0, 1]",
         )
 
-    exercised = tuple(
-        name.lower() for name in declaration.exemptions if name.lower() in differing
-    )
+    exercised = tuple(name.lower() for name in declaration.exemptions if name.lower() in differing)
     digest = request_digest(
         rows[0].spans[0].input,
         target=targets[0],
@@ -1171,9 +1163,7 @@ def _judge(rows: Sequence[_Row], arm_labels: Sequence[str], declaration: Declara
             (_stamp(r.spans[0].start_ns), _stamp(r.spans[0].end_ns)) for r in rows
         )
     )
-    return _Verdict(
-        digest=digest, exercised=exercised, values=tuple(values), timing=timing
-    )
+    return _Verdict(digest=digest, exercised=exercised, values=tuple(values), timing=timing)
 
 
 def _failing(arm_labels: Sequence[str], flags: Sequence[bool]) -> str | None:
@@ -1220,9 +1210,7 @@ def _headers_of(span: Any) -> dict[str, str]:
         if isinstance(key, str) and key.lower().startswith(_HEADER_PREFIX):
             name = key[len(_HEADER_PREFIX) :].lower()
             out[name] = (
-                ", ".join(str(v) for v in value)
-                if isinstance(value, (list, tuple))
-                else str(value)
+                ", ".join(str(v) for v in value) if isinstance(value, (list, tuple)) else str(value)
             )
     return out
 
@@ -1264,9 +1252,7 @@ def _counts(
     cuts: list[Any] = [c.name for c in declaration.cuts]
     cuts += [cut for cut in keys_by_cut if cut not in cuts]
     arms = (*arm_labels, "both")
-    by_cut = {
-        cut: _block(pairs, excluded, keys_by_cut.get(cut, 0), cut, arms) for cut in cuts
-    }
+    by_cut = {cut: _block(pairs, excluded, keys_by_cut.get(cut, 0), cut, arms) for cut in cuts}
     total = _block(pairs, excluded, sum(keys_by_cut.values()), None, arms)
     return {
         "total": total,
@@ -1462,7 +1448,10 @@ def _canonical_rows(pairs: pd.DataFrame, cut: Cut, columns: Sequence[str]) -> pd
     rows["_order"] = [
         (str(s), str(c), str(h), int(r))
         for s, c, h, r in zip(
-            rows["sweep"], rows["cluster"], rows["config_hash"], rows["replicate_index"],
+            rows["sweep"],
+            rows["cluster"],
+            rows["config_hash"],
+            rows["replicate_index"],
             strict=True,
         )
     ]
@@ -1585,10 +1574,7 @@ def _clusters(rows: pd.DataFrame, column: str) -> list[NDArray[np.int64]]:
     """One array per item, the items in ascending order of the cluster key -- a stable sort,
     strings as strings -- so the bootstrap's index draw lands on the same item whatever order
     the rows arrived in."""
-    return [
-        grp[column].to_numpy(dtype=np.int64)
-        for _, grp in rows.groupby("cluster", sort=True)
-    ]
+    return [grp[column].to_numpy(dtype=np.int64) for _, grp in rows.groupby("cluster", sort=True)]
 
 
 def _cluster_bootstrap(
@@ -1724,9 +1710,7 @@ def windows(assertion: PairAssertion) -> WindowReport:
         elif first is None:
             reason = "arm a records no request start_ns on any eligible request span"
         elif last is None:
-            reason = (
-                f"arm {arm_labels[-1]} records no response end_ns on any eligible request span"
-            )
+            reason = f"arm {arm_labels[-1]} records no response end_ns on any eligible request span"
         span: float | None = None
         if reason is None and first is not None and last is not None:
             span = (last - first) / _NS
@@ -1976,9 +1960,7 @@ def _replicate_cut(
     values = [list(rows[column]) for column in value_columns]
     clusters = list(rows["cluster"])
     sweeps = [str(s) for s in rows["sweep"]]
-    set_keys = list(
-        zip(rows["cluster"], rows["config_hash"], rows["replicate_index"], strict=True)
-    )
+    set_keys = list(zip(rows["cluster"], rows["config_hash"], rows["replicate_index"], strict=True))
     sweep_names = [sweep.name for sweep in declaration.sweeps]
 
     rules = {"primary": cut.comparison, "sensitivity": _OTHER_COMPARISON[cut.comparison]}
@@ -2629,9 +2611,7 @@ def _html_lines(lines: Sequence[str]) -> list[str]:
             out.append("<ul>" + "".join(f"<li>{_html.escape(b)}</li>" for b in bullets) + "</ul>")
             bullets.clear()
         if table:
-            rows = [
-                [cell.strip() for cell in line.strip().strip("|").split("|")] for line in table
-            ]
+            rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in table]
             head = "".join(f"<th>{_html.escape(h)}</th>" for h in rows[0])
             body = "".join(
                 "<tr>" + "".join(f"<td>{_html.escape(v)}</td>" for v in r) + "</tr>"

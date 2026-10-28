@@ -184,7 +184,10 @@ _NO_COVERAGE: dict[str, int] = dict.fromkeys(_COVERAGE_FIELDS, 0)
 # share and whether it differs from the arm's rate.
 _CELL_DETAIL_FIELDS = (
     *CELLS_COLUMNS[CELLS_COLUMNS.index("direction") :],
-    "share_a", "share_b", "share_a_differs", "share_b_differs",
+    "share_a",
+    "share_b",
+    "share_a_differs",
+    "share_b_differs",
 )
 
 # The five tally rows the identity table prints after ``rows_stored``, read from the arm's own
@@ -427,8 +430,13 @@ def _panel(
     rows = {str(r["config_hash"]): r for r in ev.cells.to_dict(orient="records")}
     records = {str(r["config_hash"]): r for r in ev.records()}
     cells = [
-        _cell(spec, c, rows[str(c.config_hash)], records[str(c.config_hash)],
-              coverage.get(str(c.config_hash), _NO_COVERAGE))
+        _cell(
+            spec,
+            c,
+            rows[str(c.config_hash)],
+            records[str(c.config_hash)],
+            coverage.get(str(c.config_hash), _NO_COVERAGE),
+        )
         for c in present
     ]
     header = _worst_header(panel)
@@ -485,12 +493,21 @@ def _hole(
     if coords is not None:
         where = coords
     else:
-        named = [] if config_text is None else [
-            f"{axis}={config_text[axis]}" for axis in axes if isinstance(config_text.get(axis), str)
-        ]
+        named = (
+            []
+            if config_text is None
+            else [
+                f"{axis}={config_text[axis]}"
+                for axis in axes
+                if isinstance(config_text.get(axis), str)
+            ]
+        )
         where = ", ".join(named) if named else f"{_OFF_GRID}{config_hash}"
     out: dict[str, Any] = {
-        "coords": coords, "where": where, "config_hash": config_hash, "cause": cause
+        "coords": coords,
+        "where": where,
+        "config_hash": config_hash,
+        "cause": cause,
     }
     for name in _COVERAGE_FIELDS:
         out[name] = 0 if row is None else int(row[name])
@@ -526,9 +543,7 @@ def _holes(
         found = None if cell.config_hash is None else str(cell.config_hash)
         entries.append(_hole(_coord_text(spec, cell), found, str(cell.hole_cause), coverage, axes))
     off_grid = sorted(
-        name
-        for name, row in coverage.items()
-        if not row["comparable"] and name not in on_grid
+        name for name, row in coverage.items() if not row["comparable"] and name not in on_grid
     )
     entries.extend(
         _hole(None, name, str(coverage[name]["cause"]), coverage, axes) for name in off_grid
@@ -719,7 +734,6 @@ def _intervals(report: MultiReport, multi: MultiDiffResult) -> dict[str, Any]:
     }
 
 
-
 def _share_level(cells: Any) -> float:
     """The level the cells' shares were recorded at."""
     for cell in cells:
@@ -756,9 +770,7 @@ def build_structure(
     spec = report.spec
     coverage = {
         str(record["config_hash"]): record
-        for record in (
-            [] if multi.coverage is None else multi.coverage.to_dict(orient="records")
-        )
+        for record in ([] if multi.coverage is None else multi.coverage.to_dict(orient="records"))
     }
     panels = [
         _panel(spec, event, report.panels[event], multi.by_event[event], coverage, multi.threshold)
@@ -802,7 +814,11 @@ def build_structure(
             ],
             "facts": [{"label": label, "line": text} for label, text in _facts.lines(multi)],
             **build_summary(
-                panels=panels, view=view, pair=pair, diff=diff, complement=report.complement,
+                panels=panels,
+                view=view,
+                pair=pair,
+                diff=diff,
+                complement=report.complement,
                 trade_line=report.trade_line,
             ),
         },
@@ -1123,14 +1139,11 @@ def _fault_lines_html(tree: Mapping[str, Any]) -> list[str]:
         )
     if fault["tested"]:
         null = (
-            f"\"{fault['null']}\" tested by BH across {fault['n_groups']} groups at q "
+            f'"{fault["null"]}" tested by BH across {fault["n_groups"]} groups at q '
             f"{fault['text']['q']}: {fault['n_rejected_groups']} rejected"
         )
     else:
-        null = (
-            f"\"{fault['null']}\" not tested: "
-            f"{_not_tested_text(fault['reason'], tree['bound'])}"
-        )
+        null = f'"{fault["null"]}" not tested: {_not_tested_text(fault["reason"], tree["bound"])}'
     parts.append(_paragraph(null))
     if fault["tested"]:
         # Only where the level was tested: there is no floor under a p nobody drew.
@@ -1192,7 +1205,7 @@ def _cells_html(leaves: Mapping[str, Any], bound: Mapping[str, Any]) -> list[str
         parts.append(_paragraph(f"not tested: {_not_tested_text(leaves['reason'], bound)}"))
         return parts
     head = (
-        f"\"{leaves['null']}\" tested by BH within each of {leaves['n_families']} rejecting "
+        f'"{leaves["null"]}" tested by BH within each of {leaves["n_families"]} rejecting '
         f"groups at q {leaves['text']['q']}: {leaves['n_rejected']} of {leaves['n_tests']} "
         "rejected"
     )
@@ -1250,7 +1263,7 @@ def _picker_html(
             mark = " selected" if key == selected else ""
             parts.append(
                 f'<option value="{_html.escape(key)}"{mark}>'
-                f'{_html.escape(str(cell["coords"]))}</option>'
+                f"{_html.escape(str(cell['coords']))}</option>"
             )
         parts.append("</optgroup>")
     parts.append(f'<optgroup label="{_HOLES_OPTGROUP}">')
@@ -1464,16 +1477,12 @@ def render_html(structure: Mapping[str, Any]) -> str:
     parts.append("</div>")
     opened = _html_table(["field", "value"], _cell_rows(index[selected]))
     parts.append(f'<div id="pl-cell">{opened}</div>')
-    parts.append(
-        f'<script type="application/json" id="{_INDEX_ID}">{_script_json(index)}</script>'
-    )
+    parts.append(f'<script type="application/json" id="{_INDEX_ID}">{_script_json(index)}</script>')
     # The holes ride in a block of their own rather than as entries in the cell index: every
     # absent rect carries the same ``data-cell="absent"`` and cannot say which hole it is, so
     # a hole is reached through the picker and the table, and a click on a hole still gets the
     # one message that is true of all of them.
-    parts.append(
-        f'<script type="application/json" id="{_HOLES_ID}">{_script_json(holes)}</script>'
-    )
+    parts.append(f'<script type="application/json" id="{_HOLES_ID}">{_script_json(holes)}</script>')
     script = _SCRIPT.replace("PL_INDEX_ID", _INDEX_ID).replace("PL_HOLE_MESSAGE", _HOLE_MESSAGE)
     parts.append(f"<script>{script}</script>")
 

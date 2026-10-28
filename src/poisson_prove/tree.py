@@ -456,9 +456,7 @@ def _design(
             informative.append(bool(np.any(pooled != pooled[0])))
         per_cell.append((codes_a, codes_b))
     informative_flags = np.array(informative, dtype=np.bool_)
-    discordant_counts = (
-        np.array(discordant, dtype=np.int64) if scheme == "pair_swap" else None
-    )
+    discordant_counts = np.array(discordant, dtype=np.int64) if scheme == "pair_swap" else None
 
     n_a = np.array([len(x) for x, _ in per_cell], dtype=np.int64)
     n_b = np.array([len(y) for _, y in per_cell], dtype=np.int64)
@@ -625,9 +623,7 @@ def _statistics(
     n_cells = deltas.shape[-2]
     signed: NDArray[np.float64] = deltas.sum(axis=-2) / n_cells
     root_mean_square: NDArray[np.float64] = np.sqrt((deltas * deltas).sum(axis=-2) / n_cells)
-    extremeness: NDArray[np.float64] = np.concatenate(
-        [np.abs(signed), root_mean_square], axis=-1
-    )
+    extremeness: NDArray[np.float64] = np.concatenate([np.abs(signed), root_mean_square], axis=-1)
     return signed, root_mean_square, extremeness
 
 
@@ -972,7 +968,6 @@ def _units(
     return frame
 
 
-
 # ---------- the grouping, the refusal chain, and the fault lines ----------
 
 
@@ -1008,9 +1003,7 @@ class Refusal:
                 None if self.n_resolvable_groups is None else int(self.n_resolvable_groups)
             ),
             "offered_max_group_mde": (
-                None
-                if self.offered_max_group_mde is None
-                else float(self.offered_max_group_mde)
+                None if self.offered_max_group_mde is None else float(self.offered_max_group_mde)
             ),
         }
 
@@ -1428,9 +1421,7 @@ def _require_max_group_mde(value: Any) -> float:
         raise TreeError(f"--max-group-mde must be a float, got {value!r}")
     accepted = float(value)
     if not 0.0 < accepted < 1.0:
-        raise TreeError(
-            f"--max-group-mde must be greater than 0 and less than 1, got {accepted!r}"
-        )
+        raise TreeError(f"--max-group-mde must be greater than 0 and less than 1, got {accepted!r}")
     return accepted
 
 
@@ -1506,8 +1497,16 @@ def _group_mdes(
     events = len(table.baselines)
     return tuple(
         max(
-            group_limit(sizes_a, sizes_b, baseline, np.asarray(partition[label], dtype=np.int64),
-                        alpha=alpha, groups=len(labels), events=events, power=stats.POWER)
+            group_limit(
+                sizes_a,
+                sizes_b,
+                baseline,
+                np.asarray(partition[label], dtype=np.int64),
+                alpha=alpha,
+                groups=len(labels),
+                events=events,
+                power=stats.POWER,
+            )
             for baseline in table.baselines
         )
         for label in labels
@@ -1913,9 +1912,7 @@ def _fault_lines(
             group_permuted = permuted[:, rows, :]
             _, _, permuted_extremeness = _statistics(group_permuted)
             p_statistics, p_group = _min_p(extremeness[0], permuted_extremeness)
-            record["p_location"] = {
-                e: float(p_statistics[k]) for k, e in enumerate(root.events)
-            }
+            record["p_location"] = {e: float(p_statistics[k]) for k, e in enumerate(root.events)}
             record["p_dispersion"] = {
                 e: float(p_statistics[n_events + k]) for k, e in enumerate(root.events)
             }
@@ -2035,9 +2032,7 @@ def _family(
     )
 
 
-def _leaves_reason(
-    root: RootResult, fault_lines: FaultLines, depth_configured: int
-) -> str | None:
+def _leaves_reason(root: RootResult, fault_lines: FaultLines, depth_configured: int) -> str | None:
     """The first entry of ``LEAVES_NOT_TESTED_REASONS`` that applies, or ``None`` when tested.
 
     Stated in the tuple's order rather than by a chain of ``if``s, so the precedence lives in
@@ -2075,9 +2070,7 @@ def _leaves(
     if reason is None:
         flat = _flat_rows(multi)
         labels = fault_lines.rejected_groups if fault_lines.tested else grouping.labels
-        families = tuple(
-            _family(flat, root.events, grouping, label, root.q) for label in labels
-        )
+        families = tuple(_family(flat, root.events, grouping, label, root.q) for label in labels)
     return Leaves(
         tested=reason is None,
         reason=reason,
@@ -2188,6 +2181,7 @@ def tree(
         bound=_bound(depth_configured, _depth(depth_configured, grouping), float(root.q)),
         agreement=agreement,
     )
+
 
 __all__ = [
     "AGREEMENT_SCHEMA",
