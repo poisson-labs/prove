@@ -114,6 +114,7 @@ is not compared; whether ``"0.30"`` and ``"0.3"`` give one declaration digest; t
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import importlib
 import inspect
 import json
@@ -351,7 +352,7 @@ def make_arm(
     version: str | None = None,
 ) -> None:
     environment: dict[str, Any] = {
-        "python": PYTHON, "platform": "oracle", "poisson_prove_version": poisson_prove.__version__,
+        "python": PYTHON, "platform": "test-platform", "poisson_prove_version": poisson_prove.__version__,
         "capture": {"content": True, "max_observation_bytes": "none", "max_spans": 200},
     }
     environment.update(env or {})
@@ -953,6 +954,12 @@ def test_pr11_the_request_digest_is_a_sha256_hex_over_body_target_and_unexempted
     body = body_text(BASE_FIELDS)
     base = request_digest(body, target=target, headers={"content-type": "application/json", "x-request-id": "1"}, exemptions=("x-request-id",))
     assert HEX64.match(base), base
+    # The stored digest's form, restated: the canonical body, the target and the unexempted headers
+    # (names lower-cased) as one key-sorted, compact JSON object, hashed as UTF-8.
+    restated = {"body": P().canonical_request(body).decode("utf-8"), "target": dict(sorted(target.items())),
+                "headers": {"content-type": "application/json"}}
+    serialised = json.dumps(restated, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    assert base == hashlib.sha256(serialised.encode("utf-8")).hexdigest()
     same = request_digest(body, target=target, headers={"content-type": "application/json", "x-request-id": "2"}, exemptions=("X-Request-Id",))
     assert same == base
     moved = {
