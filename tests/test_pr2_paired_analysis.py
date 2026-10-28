@@ -491,6 +491,7 @@ def test_control_a_hand_built_assertion_reads_like_the_stored_one() -> None:
 # ---------- PR22: the ineligibility rate per cut is carried into the analysis ----------
 
 
+@pytest.mark.math
 def test_pr22_the_ineligibility_rate_per_cut_is_carried_into_the_analysis() -> None:
     rows = grid(9, ["S1"], concordant) + grid(4, ["S1"], concordant, cut="c50")
     dropped = [
@@ -506,6 +507,7 @@ def test_pr22_the_ineligibility_rate_per_cut_is_carried_into_the_analysis() -> N
     assert intervals["cuts"]["c50"]["ineligibility_rate"] == 0.0
 
 
+@pytest.mark.math
 def test_pr22_an_unmatched_key_is_not_an_ineligible_pair() -> None:
     """PR20 read to the letter: ``ineligible`` counts matched pairs that failed; an unmatched key
     is its own count and does not enter the rate."""
@@ -522,6 +524,7 @@ def test_pr22_an_unmatched_key_is_not_an_ineligible_pair() -> None:
     assert cut_of(result).pooled["ineligibility_rate"] == pytest.approx(2 / 8)
 
 
+@pytest.mark.math
 def test_pr22_the_module_computes_the_rate_and_chooses_no_threshold_for_it() -> None:
     """Half the matched pairs ineligible: the cut still carries its full result and the rate, and
     nothing in the block flags, refuses or grades the rate."""
@@ -545,6 +548,7 @@ def test_pr22_the_module_computes_the_rate_and_chooses_no_threshold_for_it() -> 
 # ---------- PR23: the action is value >= threshold (ge) or value > threshold (gt), on Decimal ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize(
     ("comparison", "literal", "action"),
     [("ge", "0.59", 0), ("ge", "0.60", 1), ("ge", "0.61", 1), ("ge", "0.6", 1), ("ge", "0.599", 0),
@@ -560,6 +564,7 @@ def test_pr23_the_action_is_value_at_or_above_the_threshold(comparison: str, lit
     assert (n11, n01) == ((1, 0) if action else (0, 1)), (comparison, literal, two_by_two(cut_of(result)))
 
 
+@pytest.mark.math
 @pytest.mark.parametrize(
     ("comparison", "literal", "threshold", "action"),
     [
@@ -594,6 +599,7 @@ def test_pr23_a_literal_a_float_cannot_place_is_placed_by_its_text(
     assert (n11, n01) == ((1, 0) if action else (0, 1)), (literal, threshold)
 
 
+@pytest.mark.math
 def test_pr23_no_rounding_is_applied_before_the_comparison() -> None:
     """A value one ten-thousandth under the cut stays under it; rounding to two places would
     lift it across, and the module would be measuring the rounding."""
@@ -602,6 +608,7 @@ def test_pr23_no_rounding_is_applied_before_the_comparison() -> None:
 
 
 @settings(max_examples=150, deadline=None, derandomize=True)
+@pytest.mark.math
 @given(
     value=st.decimals(min_value=Decimal(0), max_value=Decimal(1), places=22, allow_nan=False),
     value_b=st.decimals(min_value=Decimal(0), max_value=Decimal(1), places=22, allow_nan=False),
@@ -622,6 +629,7 @@ def test_pr23_property_the_action_is_the_decimal_comparison_at_any_length(
 # ---------- PR24: a tie is action 1 and is counted, per cut and per arm ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize(("comparison", "table"), [("ge", (3, 1, 0, 1)), ("gt", (0, 1, 1, 3))], ids=["ge", "gt"])
 def test_pr24_a_tie_acts_only_under_ge_and_is_counted_per_arm_under_both(comparison: str, table: tuple[int, ...]) -> None:
     """The same five pairs under each comparison. Under ``ge`` every tie acts; under ``gt`` the
@@ -641,6 +649,7 @@ def test_pr24_a_tie_acts_only_under_ge_and_is_counted_per_arm_under_both(compari
     assert contingency["cuts"][CUT]["per_sweep"]["S1"]["ties"] == {"a": 3, "b": 2}
 
 
+@pytest.mark.math
 def test_pr24_ties_are_per_cut_and_summed_over_sweeps() -> None:
     rows = [
         Pair("i0", "0.60", "0.25", sweep="S1"), Pair("i0", "0.60", "0.60", sweep="S2"),
@@ -657,6 +666,7 @@ def test_pr24_ties_are_per_cut_and_summed_over_sweeps() -> None:
 # ---------- PR25: the 2x2 per cut and per sweep sums to that cut's eligible pairs ----------
 
 
+@pytest.mark.math
 def test_pr25_the_two_by_two_sums_to_the_cuts_eligible_pairs_in_that_sweep() -> None:
     def action(i: int, s: str) -> tuple[int, int]:
         return {(0, "S1"): (1, 0), (1, "S1"): (0, 1), (2, "S2"): (1, 0)}.get((i, s), (1, 1))
@@ -681,6 +691,7 @@ def test_pr25_the_two_by_two_sums_to_the_cuts_eligible_pairs_in_that_sweep() -> 
 # ---------- PR26: flip rate and net swing, paired ----------
 
 
+@pytest.mark.math
 def test_pr26_flip_rate_and_net_swing_per_sweep_and_pooled() -> None:
     def action(i: int, s: str) -> tuple[int, int]:
         if s == "S1":
@@ -706,6 +717,7 @@ def test_pr26_flip_rate_and_net_swing_per_sweep_and_pooled() -> None:
     assert intervals["cuts"][CUT]["per_sweep"]["S1"]["net_swing"]["direction"] == "b_minus_a"
 
 
+@pytest.mark.math
 def test_pr26_each_item_contributes_one_indicator_built_from_both_arms() -> None:
     """Two arms with the same action rate and every pair flipped. An unpaired reading -- the
     difference of the two rates -- sees nothing; the paired one sees a flip rate of one."""
@@ -717,6 +729,7 @@ def test_pr26_each_item_contributes_one_indicator_built_from_both_arms() -> None
 
 
 @settings(max_examples=100, deadline=None, derandomize=True)
+@pytest.mark.math
 @given(
     actions=st.lists(
         st.tuples(st.integers(0, 1), st.integers(0, 1)), min_size=1, max_size=24
@@ -744,6 +757,7 @@ def test_pr26_property_the_two_by_two_and_both_rates_follow_from_the_actions(
 # ---------- PR27: no interval on an arm's rate or on the unpaired difference ----------
 
 
+@pytest.mark.math
 def test_pr27_arm_rates_are_descriptive_and_every_interval_sits_on_a_paired_quantity() -> None:
     result = analyse(assertion(grid(12, ["S1", "S2"], lambda i, s: (1, 0) if i < 5 else (0, 0))))
     cut = cut_of(result)
@@ -771,6 +785,7 @@ def correlated(i: int, s: str) -> tuple[int, int]:
     return (1, 0) if i < 5 else (1, 1)
 
 
+@pytest.mark.math
 def test_pr28_the_pooled_flip_rate_interval_is_the_cluster_bootstrap_as_published() -> None:
     rows = grid(12, ["S1", "S2", "S3"], correlated)
     cut = cut_of(analyse(assertion(rows, b=500, seed=7)))
@@ -783,6 +798,7 @@ def test_pr28_the_pooled_flip_rate_interval_is_the_cluster_bootstrap_as_publishe
     assert lo <= cut.pooled["flip_rate"]["estimate"] <= hi
 
 
+@pytest.mark.math
 def test_pr28_the_net_swing_interval_is_the_same_procedure_on_d() -> None:
     def action(i: int, s: str) -> tuple[int, int]:
         return (1, 0) if i < 3 else (0, 1) if i < 8 else (1, 1)
@@ -801,6 +817,7 @@ def test_pr28_the_net_swing_interval_is_the_same_procedure_on_d() -> None:
 # ---------- PR29: reproducible, seeded from bootstrap_seed alone, clusters stably sorted ----------
 
 
+@pytest.mark.math
 def test_pr29_the_same_declaration_over_the_same_rows_is_byte_identical(tmp_path: Path) -> None:
     """In process twice, shuffled, and in two child processes under two hash seeds."""
     rows = grid(12, ["S1", "S2", "S3"], correlated)
@@ -829,6 +846,7 @@ def test_pr29_the_same_declaration_over_the_same_rows_is_byte_identical(tmp_path
         assert out.stdout == first, hash_seed
 
 
+@pytest.mark.math
 def test_pr29_the_seed_alone_moves_the_interval() -> None:
     rows = grid(12, ["S1", "S2", "S3"], correlated)
     base = cut_of(analyse(assertion(rows, b=300, seed=3))).pooled["flip_rate"]
@@ -842,6 +860,7 @@ def test_pr29_the_seed_alone_moves_the_interval() -> None:
         assert (moved["lo"], moved["hi"]) == (base["lo"], base["hi"]), change
 
 
+@pytest.mark.math
 def test_pr29_clusters_are_ordered_by_a_stable_sort_of_the_cluster_key_not_by_row_order() -> None:
     """The reference with its groups in a different order gives a different interval on this
     fixture -- so the sort is load-bearing -- and ``analyse`` matches the sorted one whatever the
@@ -871,6 +890,7 @@ def test_pr29_clusters_are_ordered_by_a_stable_sort_of_the_cluster_key_not_by_ro
         assert math.isclose(got["hi"], sorted_ref[1], abs_tol=1e-12)
 
 
+@pytest.mark.math
 def test_pr29_an_item_only_a_later_sweep_holds_takes_its_sorted_place_in_the_bootstrap() -> None:
     """The analysis reads its rows sweep by sweep, so an item that only the second sweep holds
     arrives after every item of the first even when its key sorts first. The bootstrap must still
@@ -896,6 +916,7 @@ def test_pr29_an_item_only_a_later_sweep_holds_takes_its_sorted_place_in_the_boo
     assert math.isclose(got["hi"], sorted_ref[1], abs_tol=1e-12), (got, sorted_ref)
 
 
+@pytest.mark.math
 @settings(max_examples=25, deadline=None, derandomize=True)
 @given(permutation=st.permutations(list(range(36))))
 def test_pr29_property_any_row_order_gives_the_same_bytes(permutation: list[int]) -> None:
@@ -908,6 +929,7 @@ def test_pr29_property_any_row_order_gives_the_same_bytes(permutation: list[int]
 # ---------- PR30: whole items are resampled, never observations ----------
 
 
+@pytest.mark.math
 def test_pr30_the_bootstrap_resamples_whole_items_never_observations() -> None:
     """On a fixture with within-item correlation the observation bootstrap is narrower -- right
     shape, wrong width -- so a bootstrap that resamples observations fails here."""
@@ -923,6 +945,7 @@ def test_pr30_the_bootstrap_resamples_whole_items_never_observations() -> None:
     assert not math.isclose(got["hi"] - got["lo"], obs_hi - obs_lo, abs_tol=1e-9)
 
 
+@pytest.mark.math
 def test_pr30_control_a_frame_with_no_within_item_correlation_has_no_design_effect() -> None:
     """Each item flips in exactly one of its three sweeps: the item means are all equal, ``MSB``
     is zero, the ICC clips to zero and ``deff`` is one. The correlated fixture is the other end."""
@@ -936,6 +959,7 @@ def test_pr30_control_a_frame_with_no_within_item_correlation_has_no_design_effe
 # ---------- PR31: the declared fallback ----------
 
 
+@pytest.mark.math
 def test_pr31_zero_flips_is_the_exact_upper_bound_and_never_a_precise_zero() -> None:
     """Zero flips give the one-sided exact upper bound, never a zero-width interval at zero."""
     g = 20
@@ -956,6 +980,7 @@ def test_pr31_zero_flips_is_the_exact_upper_bound_and_never_a_precise_zero() -> 
     assert block["lo"] == 0.0 and block["hi"] > 0.0
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("k", [1, 2, 3, 4])
 def test_pr31_fewer_than_five_flipping_items_fall_back_too(k: int) -> None:
     g = 40
@@ -967,6 +992,7 @@ def test_pr31_fewer_than_five_flipping_items_fall_back_too(k: int) -> None:
     assert flip["estimate"] == pytest.approx(k / (3 * g))
 
 
+@pytest.mark.math
 def test_pr31_five_flipping_items_is_the_bootstrap_again() -> None:
     rows = grid(40, ["S1", "S2", "S3"], lambda i, s: (1, 0) if i < 5 and s == "S2" else (1, 1))
     flip = cut_of(analyse(assertion(rows))).pooled["flip_rate"]
@@ -977,6 +1003,7 @@ def test_pr31_five_flipping_items_is_the_bootstrap_again() -> None:
     assert math.isclose(flip["lo"], lo, abs_tol=1e-12) and math.isclose(flip["hi"], hi, abs_tol=1e-12)
 
 
+@pytest.mark.math
 def test_pr31_the_fallback_counts_flipping_items_not_flip_observations() -> None:
     """Two items flipping in all three sweeps are six flips and two clusters: still the fallback."""
     rows = grid(30, ["S1", "S2", "S3"], lambda i, s: (0, 1) if i < 2 else (0, 0))
@@ -988,6 +1015,7 @@ def test_pr31_the_fallback_counts_flipping_items_not_flip_observations() -> None
 # ---------- PR32: ICC(1) and the design effect ----------
 
 
+@pytest.mark.math
 def test_pr32_icc_is_one_way_anova_on_the_items_flip_indicators_and_deff_reads_one_plus_two_rho() -> None:
     def action(i: int, s: str) -> tuple[int, int]:
         if i < 3:
@@ -1007,6 +1035,7 @@ def test_pr32_icc_is_one_way_anova_on_the_items_flip_indicators_and_deff_reads_o
     assert intervals["cuts"][CUT]["design_effect"]["deff"] == pytest.approx(deff)
 
 
+@pytest.mark.math
 def test_pr32_the_icc_is_clipped_at_zero_and_m_bar_is_observations_per_item() -> None:
     spread = grid(9, ["S1", "S2", "S3"], lambda i, s: (1, 0) if s == f"S{i % 3 + 1}" else (1, 1))
     icc, _, _ = icc1([r.cluster for r in spread], [int(r.a != r.b) for r in spread])
@@ -1023,6 +1052,7 @@ def test_pr32_the_icc_is_clipped_at_zero_and_m_bar_is_observations_per_item() ->
 # ---------- PR33: a per-sweep interval is exact binomial, never clustered ----------
 
 
+@pytest.mark.math
 def test_pr33_a_per_sweep_interval_is_exact_binomial_and_never_labelled_clustered() -> None:
     def action(i: int, s: str) -> tuple[int, int]:
         if s == "S1":
@@ -1051,6 +1081,7 @@ def test_pr33_a_per_sweep_interval_is_exact_binomial_and_never_labelled_clustere
 # ---------- PR34: the pooled n is items and sweeps, never their product ----------
 
 
+@pytest.mark.math
 def test_pr34_the_pooled_n_is_items_and_sweeps_and_no_key_holds_their_product() -> None:
     """Seven items by three sweeps is twenty-one observations, and the number
     twenty-one appears nowhere in either artifact."""
@@ -1072,6 +1103,7 @@ def test_pr34_the_pooled_n_is_items_and_sweeps_and_no_key_holds_their_product() 
 # ---------- PR35: McNemar under arm_order_check only, with its floor ----------
 
 
+@pytest.mark.math
 def test_pr35_mcnemar_is_per_cut_per_sweep_under_arm_order_check_only() -> None:
     def action(i: int, s: str) -> tuple[int, int]:
         if s == "S1":
@@ -1102,6 +1134,7 @@ def test_pr35_mcnemar_is_per_cut_per_sweep_under_arm_order_check_only() -> None:
     assert "arm_order_check" not in cut.pooled
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("n_d", list(range(0, 9)))
 def test_pr35_can_reject_is_false_below_six_discordant_pairs_however_lopsided(n_d: int) -> None:
     rows = grid(12, ["S1"], lambda i, s: (1, 0) if i < n_d else (1, 1))
@@ -1120,6 +1153,7 @@ def test_pr35_can_reject_is_false_below_six_discordant_pairs_however_lopsided(n_
 # ---------- PR36: nothing downstream reads the arm-order check ----------
 
 
+@pytest.mark.math
 def test_pr36_the_outcome_and_every_interval_are_blind_to_the_arm_order_check() -> None:
     """Two fixtures with the same flip pattern -- the same items flip in the same sweeps -- one
     with every flip one way and one balanced. McNemar moves from near zero to one; the flip-rate
@@ -1148,6 +1182,7 @@ def test_pr36_the_artifacts_never_say_reproducible() -> None:
 # ---------- PR37: no cross-cut statistic exists ----------
 
 
+@pytest.mark.math
 def test_pr37_every_statistic_is_nested_under_exactly_one_cut_name() -> None:
     rows = grid(6, ["S1", "S2"], correlated) + grid(6, ["S1", "S2"], concordant, cut="c50")
     rows += grid(6, ["S1", "S2"], lambda i, s: (0, 1) if i < 5 else (0, 0), cut="c90")
@@ -1169,6 +1204,7 @@ def test_pr37_every_statistic_is_nested_under_exactly_one_cut_name() -> None:
                 ), path
 
 
+@pytest.mark.math
 def test_pr37_a_cuts_result_does_not_depend_on_any_other_cut() -> None:
     """The c60 block is byte-for-byte the same whether the declaration lists one cut or three,
     which also pins a fresh generator per cut: the draws c50 takes cannot move c60."""
@@ -1202,6 +1238,7 @@ def test_pr37_analyse_and_its_two_result_types_are_public_and_no_function_return
 # ---------- PR38: the outcome, only against a declared floor ----------
 
 
+@pytest.mark.math
 def test_pr38_outcome_a_flips_ruled_out_below_the_floor_needs_a_large_stratum() -> None:
     """Three hundred items, one sweep, no flip, floor 0.01: the exact upper bound is 0.00994 and
     outcome A fires. Ten items under the same floor cannot rule anything out: outcome C."""
@@ -1214,6 +1251,7 @@ def test_pr38_outcome_a_flips_ruled_out_below_the_floor_needs_a_large_stratum() 
     assert c.pooled["flip_rate"]["hi"] >= 0.01 and c.pooled["flip_rate"]["lo"] == 0.0
 
 
+@pytest.mark.math
 def test_pr38_outcome_c_under_the_fallback_when_the_upper_bound_reaches_the_floor() -> None:
     """Two of forty items flip: the fallback fires, the lower bound is zero by observation, the
     upper bound is 0.153 and clears a floor of 0.01, so the reading is C -- and under a floor of
@@ -1230,6 +1268,7 @@ def test_pr38_outcome_c_under_the_fallback_when_the_upper_bound_reaches_the_floo
     assert a.pooled["flip_rate"]["hi"] < 0.20 and a.outcome == "A"
 
 
+@pytest.mark.math
 def test_pr38_the_outcome_is_per_cut_and_is_emitted_with_the_interval_it_was_decided_from() -> None:
     rows = grid(300, ["S1"], concordant, cut="c50") + grid(10, ["S1"], concordant, cut="c90")
     rows += grid(20, ["S1", "S2", "S3"], correlated)
@@ -1243,6 +1282,7 @@ def test_pr38_the_outcome_is_per_cut_and_is_emitted_with_the_interval_it_was_dec
         assert decided["basis"] == block["flip_rate"]["basis"]
 
 
+@pytest.mark.math
 def test_pr38_outcome_b_when_the_lower_bound_leaves_zero_and_with_no_floor_the_outcome_is_null() -> None:
     rows = grid(20, ["S1", "S2", "S3"], correlated)
     with_floor = analyse(assertion(rows, floor="0.01"))
@@ -1323,6 +1363,7 @@ def stored_columns() -> tuple[list[str], list[int], list[int]]:
     return ([p["item"] for p in pairs], [int(p["a"] != p["b"]) for p in pairs], [p["b"] - p["a"] for p in pairs])
 
 
+@pytest.mark.math
 def test_pr39_the_stored_arms_give_their_two_by_two_and_the_arm_order_check() -> None:
     cut = stored_cut()
     n11, n10, n01, n00 = replay_arms.TWO_BY_TWO
@@ -1336,6 +1377,7 @@ def test_pr39_the_stored_arms_give_their_two_by_two_and_the_arm_order_check() ->
     assert cut.ties == {"a": 85, "b": 79}  # every solved episode sits exactly at the cut
 
 
+@pytest.mark.math
 def test_pr39_the_item_clustered_interval_on_the_stored_arms_is_0_095_to_0_275() -> None:
     cut = stored_cut()
     flip = cut.pooled["flip_rate"]
@@ -1354,6 +1396,7 @@ def test_pr39_the_item_clustered_interval_on_the_stored_arms_is_0_095_to_0_275()
     assert (round(lo, 4), round(hi, 4)) == (0.1294, 0.2404)
 
 
+@pytest.mark.math
 def test_pr39_the_net_swing_on_the_stored_arms_is_b_minus_a_with_its_clustered_interval() -> None:
     """PR26 is A' minus A -- kept as written -- so the swing is ``(n01 - n10) / n`` and
     the output says which way it subtracts."""
@@ -1367,6 +1410,7 @@ def test_pr39_the_net_swing_on_the_stored_arms_is_b_minus_a_with_its_clustered_i
     assert (round(swing["lo"], 3), round(swing["hi"], 3)) == (-0.080, 0.015)
 
 
+@pytest.mark.math
 def test_pr39_the_design_effect_and_the_outcome_on_the_stored_arms() -> None:
     cut = stored_cut()
     clusters, flips, _ = stored_columns()
@@ -1379,6 +1423,7 @@ def test_pr39_the_design_effect_and_the_outcome_on_the_stored_arms() -> None:
     assert cut.threshold == Decimal("1") and cut.name == "solved"
 
 
+@pytest.mark.math
 def test_pr39_the_interval_follows_the_declared_seed_and_moves_off_it() -> None:
     """The same arms under another seed give the reference's interval at that seed, which is not
     the first one: the interval is the procedure at the declared seed, not a property of the arms."""

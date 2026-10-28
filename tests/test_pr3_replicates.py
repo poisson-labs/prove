@@ -897,6 +897,7 @@ def test_pr60_a_sweep_pair_built_without_more_is_the_sweep_pair_built_with_an_em
 # ---------- PR61: the declared pair carries the whole two-arm analysis ----------
 
 
+@pytest.mark.math
 def test_pr61_arms_three_to_k_move_no_byte_of_the_contingency_and_intervals_artifacts_and_do_move_the_replicates() -> None:
     """Two assertions under one declaration, identical in arms a and b, wild in
     arms 3 to 5: ``analyse`` writes the same bytes for both and ``replicates`` does not."""
@@ -916,6 +917,7 @@ def test_pr61_arms_three_to_k_move_no_byte_of_the_contingency_and_intervals_arti
     assert (cut.per_sweep[0]["n11"], cut.per_sweep[0]["n10"], cut.per_sweep[0]["n01"], cut.per_sweep[0]["n00"]) == (6, 6, 0, 0)
 
 
+@pytest.mark.math
 def test_pr61_the_pair_statistics_at_k_five_equal_the_same_rows_analysed_as_pairs() -> None:
     def pattern(i: int, s: str) -> tuple[int, ...]:
         return ((i + ord(s[-1])) % 2, (i // 2) % 2, 1, 0, 1)
@@ -929,6 +931,7 @@ def test_pr61_the_pair_statistics_at_k_five_equal_the_same_rows_analysed_as_pair
     assert mask.sub("", five.intervals_json()) == mask.sub("", two.intervals_json())
 
 
+@pytest.mark.math
 def test_pr61_a_tie_in_arm_three_is_not_a_pair_tie_and_is_a_replicate_tie() -> None:
     rows = [RSet("i0", (HI, HI, TIE, HI, TIE)), RSet("i1", (TIE, LO, LO, LO, LO))]
     cut = {c.name: c for c in P().analyse(assertion(rows)).cuts}[CUT]
@@ -939,6 +942,7 @@ def test_pr61_a_tie_in_arm_three_is_not_a_pair_tie_and_is_a_replicate_tie() -> N
 # ---------- PR62: matched across all k arms ----------
 
 
+@pytest.mark.math
 def test_pr62_a_key_absent_from_one_arm_makes_the_set_unmatched_and_names_the_arm_that_lacked_it(tmp_path: Path) -> None:
     rows = k_rows(4, lambda i: (1, 1, 1, 1, 1))
     rows[1] = dataclasses.replace(rows[1], absent=frozenset({"4"}))
@@ -955,6 +959,7 @@ def test_pr62_a_key_absent_from_one_arm_makes_the_set_unmatched_and_names_the_ar
     assert result_of(a).counts["eligible_sets"] == {"S1": 2}
 
 
+@pytest.mark.math
 def test_pr62_a_set_matched_in_all_k_arms_is_one_row_of_pairs_carrying_k_values(tmp_path: Path) -> None:
     rows = [KRow("c60-i000", CUT, ("0.95", "0.05", "0.60", "0.61", "0.59"))]
     a = P().assert_pairs(make_k_store(tmp_path, rows), declaration())
@@ -980,6 +985,7 @@ def errored_rows() -> list[KRow]:
     return rows
 
 
+@pytest.mark.math
 def test_pr63_a_set_with_one_errored_arm_is_excluded_whole_with_the_cause_and_the_arm_named(tmp_path: Path) -> None:
     a = P().assert_pairs(make_k_store(tmp_path, errored_rows()), declaration())
     assert len(a.pairs) == 12 and len(a.excluded) == 4
@@ -993,6 +999,7 @@ def test_pr63_a_set_with_one_errored_arm_is_excluded_whole_with_the_cause_and_th
     assert result_of(a).counts["excluded_by_arm"] == {**result_of(a).counts["excluded_by_arm"], "4": 3, "3": 1}
 
 
+@pytest.mark.math
 def test_pr63_a_partial_set_is_never_analysed_at_the_j_its_calls_reached(tmp_path: Path) -> None:
     """Fails on ``agree@2`` taken over the easy items and the errored ones under one name."""
     a = P().assert_pairs(make_k_store(tmp_path, errored_rows()), declaration())
@@ -1003,6 +1010,7 @@ def test_pr63_a_partial_set_is_never_analysed_at_the_j_its_calls_reached(tmp_pat
     assert r.counts["excluded_by_arm"] == {**r.counts["excluded_by_arm"], "4": 3, "3": 1}
 
 
+@pytest.mark.math
 @pytest.mark.parametrize(
     ("change", "cause", "arm"),
     [
@@ -1035,6 +1043,7 @@ def test_pr63_every_pr19_cause_on_any_arm_excludes_the_whole_set(
     assert a.counts["by_cut"][CUT]["ineligible"] == (0 if past_the_pair else 1) and a.counts["by_cut"][CUT]["reconciles"]
 
 
+@pytest.mark.math
 def test_pr63_an_excluded_set_leaves_every_sweep_pair_it_was_in(tmp_path: Path) -> None:
     """An item eligible in two sweeps of three contributes one ``MS`` observation, not three."""
     rows = k_rows(4, lambda i: (1, 1, 1, 1, 1))
@@ -1050,6 +1059,7 @@ def test_pr63_an_excluded_set_leaves_every_sweep_pair_it_was_in(tmp_path: Path) 
 # ---------- PR64: arm order is the declaration's ----------
 
 
+@pytest.mark.math
 def test_pr64_the_prefix_at_j_is_the_declared_order_not_the_run_id_order_nor_the_store_order(tmp_path: Path) -> None:
     """Arms 3, 4, 5 are the runs ``S1-z``, ``S1-m``, ``S1-c`` in that declared order, written to
     the store as ``c``, ``m``, ``z``. Only the declared third arm disagrees, so ``agree@3`` is
@@ -1067,6 +1077,7 @@ def test_pr64_the_prefix_at_j_is_the_declared_order_not_the_run_id_order_nor_the
     assert r.majority["primary"]["j3"]["estimate"] is None  # one sweep: no sweep pair to compare
 
 
+@pytest.mark.math
 def test_pr64_the_prefix_is_never_a_per_set_subset_chosen_after_the_calls_are_seen() -> None:
     """Every set has some three arms that agree; the first three never do."""
     rows = [from_actions(f"i{i}", (1, 1, 0, 1, 1)) for i in range(4)]
@@ -1092,6 +1103,7 @@ def agree_pattern(i: int, s: str) -> tuple[int, ...]:
     return AGREE_PATTERN[i % 12]
 
 
+@pytest.mark.math
 def test_pr65_agree_at_j_is_the_mean_over_eligible_sets_of_the_first_j_actions_all_equal() -> None:
     rows = grid(12, ["S1", "S2"], agree_pattern)
     r = result_of(assertion(rows))
@@ -1107,6 +1119,7 @@ def test_pr65_agree_at_j_is_the_mean_over_eligible_sets_of_the_first_j_actions_a
         assert r.agree["primary"][f"j{j}"]["estimate"] == pytest.approx(estimate)
 
 
+@pytest.mark.math
 def test_pr65_the_interval_is_the_item_clustered_percentile_bootstrap_with_pr29s_seed() -> None:
     rows = grid(24, ["S1", "S2", "S3"], agree_pattern)
     r = result_of(assertion(rows, b=500, seed=7))
@@ -1118,6 +1131,7 @@ def test_pr65_the_interval_is_the_item_clustered_percentile_bootstrap_with_pr29s
         )
 
 
+@pytest.mark.math
 def test_pr65_agree_is_over_every_sweep_and_the_cluster_is_the_item_not_the_set() -> None:
     """Twelve items in three sweeps: 36 sets, 12 clusters, ``m_bar = 3``."""
     rows = grid(12, ["S1", "S2", "S3"], agree_pattern)
@@ -1128,6 +1142,7 @@ def test_pr65_agree_is_over_every_sweep_and_the_cluster_is_the_item_not_the_set(
 
 
 @settings(max_examples=60, deadline=None, derandomize=True)
+@pytest.mark.math
 @given(
     codes=st.lists(
         st.tuples(*([st.sampled_from([0, 1, 2])] * 5)), min_size=6, max_size=14,

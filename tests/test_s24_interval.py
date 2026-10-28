@@ -408,6 +408,7 @@ def without_notes(err: str) -> str:
 # ---------- C7: the analytic point, the one place the constrained MLE is known ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("events_a,n_a,events_b,n_b", TABLES)
 def test_c7_the_unpaired_statistic_is_one_at_the_point_estimate(
     events_a: int, n_a: int, events_b: int, n_b: int
@@ -422,6 +423,7 @@ def test_c7_the_unpaired_statistic_is_one_at_the_point_estimate(
     assert abs(diff_mod.score_p_rd(events_a, n_a, events_b, n_b, delta=delta) - 1.0) <= 1e-12
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("b,c,n", PAIRED_TABLES)
 def test_c7_the_paired_statistic_is_one_at_the_point_estimate(b: int, c: int, n: int) -> None:
     """Tango's paired twin of the clause above. The point estimate for ``n`` pairs with ``b``
@@ -430,6 +432,7 @@ def test_c7_the_paired_statistic_is_one_at_the_point_estimate(b: int, c: int, n:
 
 
 @settings(deadline=None, max_examples=120)
+@pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
     n_b=st.integers(min_value=1, max_value=200),
@@ -450,6 +453,7 @@ def test_c7_the_unpaired_statistic_is_one_at_the_point_estimate_for_any_table(
 # ---------- C8: arm-swap symmetry ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("events_a,n_a,events_b,n_b", TABLES)
 @pytest.mark.parametrize("delta", (-0.5, -0.125, 0.0, 0.125, 0.5))
 def test_c8_swapping_the_arms_negates_the_delta_and_leaves_the_p_value_alone(
@@ -464,6 +468,7 @@ def test_c8_swapping_the_arms_negates_the_delta_and_leaves_the_p_value_alone(
 
 
 @settings(deadline=None, max_examples=120)
+@pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
     n_b=st.integers(min_value=1, max_value=200),
@@ -483,6 +488,7 @@ def test_c8_arm_swap_symmetry_holds_for_any_table_and_any_delta(
 # ---------- C9: the boundary guard ----------
 
 
+@pytest.mark.math
 def test_c9_the_all_zero_table_gets_a_finite_non_degenerate_interval() -> None:
     """**The boundary guard.** A Wald interval on the risk difference collapses to the single
     point ``(0.0, 0.0)`` here, because its standard error is zero at ``p_hat = 0`` in both arms.
@@ -496,6 +502,7 @@ def test_c9_the_all_zero_table_gets_a_finite_non_degenerate_interval() -> None:
     assert -1.0 < lo < 0.0 < hi < 1.0, (lo, hi)
 
 
+@pytest.mark.math
 def test_c9_the_all_zero_paired_table_gets_a_finite_non_degenerate_interval() -> None:
     """The paired mirror: no discordant pairs either way, over 32 pairs."""
     lo, hi = diff_mod.interval_rd_paired(0, 0, 32, alpha=0.05)
@@ -505,6 +512,7 @@ def test_c9_the_all_zero_paired_table_gets_a_finite_non_degenerate_interval() ->
 # ---------- C6: the inversion, at interior endpoints ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("events_a,n_a,events_b,n_b", TABLES)
 @pytest.mark.parametrize("alpha", ALPHAS)
 def test_c6_an_interior_unpaired_endpoint_solves_the_score_test_at_alpha(
@@ -525,6 +533,7 @@ def test_c6_an_interior_unpaired_endpoint_solves_the_score_test_at_alpha(
             assert abs(p - alpha) <= 1e-9, (endpoint, p, alpha)
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("b,c,n", PAIRED_TABLES)
 @pytest.mark.parametrize("alpha", ALPHAS)
 def test_c6_an_interior_paired_endpoint_solves_the_paired_score_test_at_alpha(
@@ -539,6 +548,7 @@ def test_c6_an_interior_paired_endpoint_solves_the_paired_score_test_at_alpha(
 # ---------- C6b: the boundary the carve-out exempts, pinned positively ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("alpha", ALPHAS)
 def test_c6b_the_upper_endpoint_is_exactly_one_when_the_point_estimate_is_one(
     alpha: float
@@ -552,6 +562,7 @@ def test_c6b_the_upper_endpoint_is_exactly_one_when_the_point_estimate_is_one(
     assert hi == 1.0 and lo < 1.0, (lo, hi)
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("alpha", ALPHAS)
 def test_c6b_the_lower_endpoint_is_exactly_minus_one_when_the_point_estimate_is_minus_one(
     alpha: float
@@ -560,6 +571,7 @@ def test_c6b_the_lower_endpoint_is_exactly_minus_one_when_the_point_estimate_is_
     assert lo == -1.0 and hi > -1.0, (lo, hi)
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("alpha", ALPHAS)
 def test_c6b_the_paired_endpoints_are_attained_at_the_two_extremes(alpha: float) -> None:
     """``c == n`` is every pair discordant in one direction, point estimate ``+1``; ``b == n`` is
@@ -568,6 +580,7 @@ def test_c6b_the_paired_endpoints_are_attained_at_the_two_extremes(alpha: float)
     assert diff_mod.interval_rd_paired(32, 0, 32, alpha=alpha)[0] == -1.0
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("events_a,n_a,events_b,n_b", TABLES)
 def test_c6b_an_endpoint_reaches_the_boundary_only_where_the_point_estimate_does(
     events_a: int, n_a: int, events_b: int, n_b: int
@@ -586,6 +599,7 @@ def test_c6b_an_endpoint_reaches_the_boundary_only_where_the_point_estimate_does
 # ---------- C10: nesting in alpha ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("events_a,n_a,events_b,n_b", TABLES)
 def test_c10_a_smaller_alpha_gives_an_interval_containing_the_larger_alphas(
     events_a: int, n_a: int, events_b: int, n_b: int
@@ -597,6 +611,7 @@ def test_c10_a_smaller_alpha_gives_an_interval_containing_the_larger_alphas(
     assert wide[0] <= narrow[0] and narrow[1] <= wide[1], (wide, narrow)
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("b,c,n", PAIRED_TABLES)
 def test_c10_the_paired_interval_is_nested_in_alpha_too(b: int, c: int, n: int) -> None:
     wide = diff_mod.interval_rd_paired(b, c, n, alpha=0.001)
@@ -608,6 +623,7 @@ def test_c10_the_paired_interval_is_nested_in_alpha_too(b: int, c: int, n: int) 
 
 
 @settings(deadline=None, max_examples=150)
+@pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
     n_b=st.integers(min_value=1, max_value=200),
@@ -624,6 +640,7 @@ def test_c4_every_interval_contains_the_point_estimate(
 
 
 @settings(deadline=None, max_examples=150)
+@pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
     n_b=st.integers(min_value=1, max_value=200),
@@ -640,6 +657,7 @@ def test_c5_every_interval_lies_inside_the_unit_interval(
     assert -1.0 <= lo <= hi <= 1.0, (lo, hi)
 
 
+@pytest.mark.math
 @settings(deadline=None, max_examples=120)
 @given(data=st.data())
 def test_c4_and_c5_hold_for_the_paired_interval_too(data: st.DataObject) -> None:
@@ -818,6 +836,7 @@ def test_c3_there_is_one_row_per_event_and_common_cell_and_no_duplicates(lattice
 # ---------- C4 and C5 on the frame ----------
 
 
+@pytest.mark.math
 def test_c4_every_constructed_interval_brackets_the_cells_delta(lattice_pair: Any) -> None:
     """The frame-level form of C4: the ``delta`` an interval is *on* is the one ``cells``
     already reports at the same ``(event, config_hash)``, not one recomputed inside the interval
@@ -834,6 +853,7 @@ def test_c4_every_constructed_interval_brackets_the_cells_delta(lattice_pair: An
         assert row.ci_lo <= delta <= row.ci_hi, (row.event, row.config_hash, row.ci_lo, delta, row.ci_hi)
 
 
+@pytest.mark.math
 def test_c5_every_constructed_endpoint_is_inside_the_unit_interval(lattice_pair: Any) -> None:
     for row in lattice_pair.intervals.itertuples(index=False):
         if row.ci_lo is None:

@@ -191,6 +191,7 @@ def km_tables(frames: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
 # ---------- I1: censor ----------
 
 
+@pytest.mark.math
 def test_i1_censor_adds_observed_and_drops_errored() -> None:
     df = _frame(
         [
@@ -211,6 +212,7 @@ def test_i1_censor_adds_observed_and_drops_errored() -> None:
     assert list(out["t"]) == list(kept["t"])
 
 
+@pytest.mark.math
 def test_i1_censor_no_errored_rows_records_zero() -> None:
     df = _frame([({"a": 1}, "fell", 1.0, 5.0), ({"a": 1}, "survived", 5.0, 5.0)])
     out = censor(df, "fell")
@@ -220,6 +222,7 @@ def test_i1_censor_no_errored_rows_records_zero() -> None:
 # ---------- I2: KM with zero censoring is the empirical survival function ----------
 
 
+@pytest.mark.math
 @given(data=tied_survival_data())
 def test_i2_km_uncensored_equals_empirical_survival(data) -> None:
     t, _ = data
@@ -234,6 +237,7 @@ def test_i2_km_uncensored_equals_empirical_survival(data) -> None:
 # ---------- I3: monotone, starts at 1, right-continuous ----------
 
 
+@pytest.mark.math
 @given(data=tied_survival_data())
 def test_i3_km_monotone_and_starts_at_one(data) -> None:
     t, observed = data
@@ -249,6 +253,7 @@ def test_i3_km_monotone_and_starts_at_one(data) -> None:
         assert curve.at(1e9) == 1.0
 
 
+@pytest.mark.math
 @given(data=tied_survival_data())
 def test_i3_km_at_is_right_continuous_step(data) -> None:
     t, observed = data
@@ -266,6 +271,7 @@ def test_i3_km_at_is_right_continuous_step(data) -> None:
 # ---------- I4: ties ----------
 
 
+@pytest.mark.math
 @given(data=tied_survival_data())
 def test_i4_km_ties_one_step_per_distinct_time(data) -> None:
     t, observed = data
@@ -280,6 +286,7 @@ def test_i4_km_ties_one_step_per_distinct_time(data) -> None:
     np.testing.assert_allclose(curve.survival, np.cumprod(factors), rtol=0, atol=TOL_EXACT)
 
 
+@pytest.mark.math
 def test_i4_km_tie_factor_worked_example() -> None:
     t = np.array([1.0, 1.0, 1.0, 2.0, 2.0, 3.0])
     observed = np.array([True, True, False, True, True, False])
@@ -293,6 +300,7 @@ def test_i4_km_tie_factor_worked_example() -> None:
 # ---------- I5: Greenwood ----------
 
 
+@pytest.mark.math
 @given(data=tied_survival_data())
 def test_i5_greenwood_starts_from_zero_and_sum_is_non_decreasing(data) -> None:
     t, observed = data
@@ -309,6 +317,7 @@ def test_i5_greenwood_starts_from_zero_and_sum_is_non_decreasing(data) -> None:
     assert np.all(curve.var[~alive] == 0.0)
 
 
+@pytest.mark.math
 def test_i5_greenwood_all_censored_has_no_variance() -> None:
     t = np.array([1.0, 2.0, 3.0])
     curve = kaplan_meier(t, np.zeros(3, dtype=bool))
@@ -319,6 +328,7 @@ def test_i5_greenwood_all_censored_has_no_variance() -> None:
 # ---------- I6: lifelines KM reference ----------
 
 
+@pytest.mark.math
 def test_i6_km_matches_lifelines() -> None:
     lifelines = pytest.importorskip("lifelines")
 
@@ -344,6 +354,7 @@ def test_i6_km_matches_lifelines() -> None:
 # ---------- I7: AJ with one event is 1 - KM ----------
 
 
+@pytest.mark.math
 @given(data=tied_competing_data(events=("fell",)))
 def test_i7_aj_single_event_equals_one_minus_km(data) -> None:
     t, outcome = data
@@ -360,6 +371,7 @@ def test_i7_aj_single_event_equals_one_minus_km(data) -> None:
 # ---------- I8: CIF shape ----------
 
 
+@pytest.mark.math
 @given(data=tied_competing_data(events=("fell", "violated", "timeout")))
 def test_i8_cif_monotone_and_sum_bounded(data) -> None:
     t, outcome = data
@@ -379,6 +391,7 @@ def test_i8_cif_monotone_and_sum_bounded(data) -> None:
         assert sum(cif.at(k, tau) for k in events) <= 1.0 + TOL_EXACT
 
 
+@pytest.mark.math
 @given(data=tied_competing_data(events=("fell", "violated")))
 def test_i8_rows_outside_events_are_censored(data) -> None:
     t, outcome = data
@@ -393,6 +406,7 @@ def test_i8_rows_outside_events_are_censored(data) -> None:
 # ---------- I9: lifelines Aalen-Johansen reference ----------
 
 
+@pytest.mark.math
 def test_i9_aj_matches_lifelines() -> None:
     lifelines = pytest.importorskip("lifelines")
 
@@ -422,6 +436,7 @@ def test_i9_aj_matches_lifelines() -> None:
 # ---------- I10: Wilson ----------
 
 
+@pytest.mark.math
 @given(n=st.integers(min_value=1, max_value=500), frac=st.floats(min_value=0, max_value=1))
 def test_i10_wilson_bounds_and_containment(n: int, frac: float) -> None:
     k = min(n, int(round(frac * n)))
@@ -433,6 +448,7 @@ def test_i10_wilson_bounds_and_containment(n: int, frac: float) -> None:
         assert hi == 1.0
 
 
+@pytest.mark.math
 def test_i10_wilson_edges_exact() -> None:
     assert wilson(0, 10)[0] == 0.0
     assert wilson(10, 10)[1] == 1.0
@@ -440,6 +456,7 @@ def test_i10_wilson_edges_exact() -> None:
     assert lo < 0.5 < hi
 
 
+@pytest.mark.math
 def test_i10_wilson_matches_statsmodels() -> None:
     proportion = pytest.importorskip("statsmodels.stats.proportion")
     from scipy.stats import norm
@@ -488,6 +505,7 @@ def test_i11_cell_table_one_row_per_hash_sorted_exact_columns() -> None:
     assert by_hash.loc[h_low, "event_rate_lo"] <= 5 / 8 <= by_hash.loc[h_low, "event_rate_hi"]
 
 
+@pytest.mark.math
 def test_i11_cell_table_aj_curve_type_and_s_at_horizon() -> None:
     df = _two_cell_frame()
     table = cell_table(df, "fell", method="aj", events=["fell"])
@@ -496,6 +514,7 @@ def test_i11_cell_table_aj_curve_type_and_s_at_horizon() -> None:
     assert np.all((table["s_at_horizon"] >= -TOL_EXACT) & (table["s_at_horizon"] <= 1 + TOL_EXACT))
 
 
+@pytest.mark.math
 def test_i11_cell_table_horizon_defaults_to_frame_max() -> None:
     df = _two_cell_frame()
     default = cell_table(df, "fell").drop(columns=["curve"])
@@ -564,6 +583,7 @@ def test_i13_cell_table_km_silent_when_guard_empty() -> None:
 # ---------- I14 / I15: golden per-cell counts ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("run_id", RUNS)
 def test_i14_i15_golden_per_cell_event_counts(km_tables: dict[str, pd.DataFrame], run_id: str) -> None:
     golden_cells = _load_golden_cells()
@@ -583,6 +603,7 @@ def test_i14_i15_golden_per_cell_event_counts(km_tables: dict[str, pd.DataFrame]
 # ---------- I17: no mid-horizon censoring on the fixture ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("run_id", RUNS)
 def test_i17_s_at_horizon_is_one_minus_event_rate(
     km_tables: dict[str, pd.DataFrame], run_id: str
@@ -599,6 +620,7 @@ def test_i17_s_at_horizon_is_one_minus_event_rate(
 # ---------- I18: AJ with a single event agrees with KM on the fixture ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("run_id", RUNS)
 def test_i18_aj_single_event_matches_km_on_fixture(
     frames: dict[str, pd.DataFrame], km_tables: dict[str, pd.DataFrame], run_id: str
@@ -617,12 +639,14 @@ def test_i18_aj_single_event_matches_km_on_fixture(
 # ---------- KMCurve.median (not an invariant) ----------
 
 
+@pytest.mark.math
 def test_median_none_when_survival_never_reaches_half() -> None:
     t = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
     observed = np.array([True, False, False, False, False])
     assert kaplan_meier(t, observed).median() is None
 
 
+@pytest.mark.math
 def test_median_is_first_crossing_time() -> None:
     t = np.array([1.0, 2.0, 3.0, 4.0])
     observed = np.array([True, True, True, True])

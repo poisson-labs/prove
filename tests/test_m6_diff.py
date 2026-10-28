@@ -237,6 +237,7 @@ def golden(frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]) -
 # ---------- I2: null diff ----------
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", METHODS)
 def test_i2_null_diff_finds_nothing(
     frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest], method: str
@@ -252,6 +253,7 @@ def test_i2_null_diff_finds_nothing(
 # ---------- I3: BH against statsmodels ----------
 
 
+@pytest.mark.math
 def test_i3_bh_matches_statsmodels() -> None:
     multitest = pytest.importorskip("statsmodels.stats.multitest")
 
@@ -272,6 +274,7 @@ def test_i3_bh_matches_statsmodels() -> None:
     check()
 
 
+@pytest.mark.math
 def test_i3_bh_hand_example() -> None:
     p = np.array([0.01, 0.04, 0.03, 0.5, 1.0])
     q = bh(p, Q)
@@ -284,6 +287,7 @@ def test_i3_bh_hand_example() -> None:
 # ---------- I4: BH controls FDR on uniform nulls ----------
 
 
+@pytest.mark.math
 def test_i4_bh_controls_false_discovery_on_uniform_nulls() -> None:
     rng = np.random.default_rng(20260902)
     draws, m = 250, 400
@@ -298,6 +302,7 @@ def test_i4_bh_controls_false_discovery_on_uniform_nulls() -> None:
 
 
 @settings(deadline=None)
+@pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=40),
     n_b=st.integers(min_value=1, max_value=40),
@@ -320,6 +325,7 @@ def test_i5_fisher_p_equals_scipy_exactly(n_a: int, n_b: int, fa: float, fb: flo
 # ---------- I6: McNemar against statsmodels ----------
 
 
+@pytest.mark.math
 def test_i6_mcnemar_matches_statsmodels() -> None:
     tables = pytest.importorskip("statsmodels.stats.contingency_tables")
 
@@ -349,12 +355,14 @@ def test_i6_mcnemar_matches_statsmodels() -> None:
     check()
 
 
+@pytest.mark.math
 def test_i6_mcnemar_p_is_one_when_no_discordant_pairs() -> None:
     a = _one_cell([(1.0, True), (5.0, False), (5.0, False)])
     result = _paired("mcnemar_bh", a, a.copy())
     assert result.cells.iloc[0]["p"] == 1.0 and result.cells.iloc[0]["stat"] == 0
 
 
+@pytest.mark.math
 def test_i6_mcnemar_drops_unmatched_replicate_instead_of_mispairing() -> None:
     a = _one_cell([(1.0, True, 0), (5.0, False, 1), (2.0, True, 2)])
     b = _one_cell([(1.0, True, 0), (5.0, False, 2)])
@@ -370,6 +378,7 @@ def test_i6_mcnemar_drops_unmatched_replicate_instead_of_mispairing() -> None:
 # ---------- I7: log-rank against lifelines ----------
 
 
+@pytest.mark.math
 def test_i7_logrank_matches_lifelines() -> None:
     statistics = pytest.importorskip("lifelines.statistics")
 
@@ -399,6 +408,7 @@ def test_i7_logrank_matches_lifelines() -> None:
 # ---------- I8: log-rank on identical frames ----------
 
 
+@pytest.mark.math
 def test_i8_logrank_identical_frames_p_is_one_everywhere(
     frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest]
 ) -> None:
@@ -408,6 +418,7 @@ def test_i8_logrank_identical_frames_p_is_one_everywhere(
     assert np.all(np.abs(result.cells["stat"].to_numpy(dtype=float)) <= TOL_EXACT)
 
 
+@pytest.mark.math
 def test_i8_logrank_identical_synthetic_including_no_events() -> None:
     a = _cframe(
         {
@@ -449,6 +460,7 @@ def _reference_mde(rate_a: float, n_a: int, n_b: int, alpha: float, power: float
     return hi
 
 
+@pytest.mark.math
 def test_i9_mde_matches_statsmodels_power_inversion() -> None:
     proportion = pytest.importorskip("statsmodels.stats.proportion")
 
@@ -466,6 +478,7 @@ def test_i9_mde_matches_statsmodels_power_inversion() -> None:
     check()
 
 
+@pytest.mark.math
 @given(
     rate_a=st.floats(min_value=0.0, max_value=0.95),
     n=st.integers(min_value=2, max_value=2000),
@@ -479,6 +492,7 @@ def test_i9_mde_positive_bounded_and_decreasing_in_n(rate_a: float, n: int, rati
     assert bigger <= m + TOL_ORACLE
 
 
+@pytest.mark.math
 def test_i9_mde_guards_rate_zero_and_one() -> None:
     # A rate of exactly 0 goes through the 0.5/n continuity guard: finite, positive, unit-bounded.
     m = mde_two_proportion(0.0, 32, 32)
@@ -491,6 +505,7 @@ def test_i9_mde_guards_rate_zero_and_one() -> None:
 # ---------- I10: max_mde ----------
 
 
+@pytest.mark.math
 def test_i10_max_mde_is_column_max_and_positive_on_fixture(golden: DiffResult) -> None:
     # PF4 (PF4.15): a cell whose baseline had the event in every run (decided from the counts) has
     # no limit (NaN) and is left out of max_mde; every other cell keeps a positive limit, and
@@ -506,6 +521,7 @@ def test_i10_max_mde_is_column_max_and_positive_on_fixture(golden: DiffResult) -
     assert golden.max_mde > 0.0
 
 
+@pytest.mark.math
 def test_i10_cell_mde_is_mde_two_proportion_at_q(golden: DiffResult) -> None:
     for row in golden.cells.head(50).itertuples(index=False):
         expected = mde_two_proportion(row.rate_a, int(row.n_a), int(row.n_b), alpha=Q, power=POWER)
@@ -531,12 +547,14 @@ def _assert_verdicts(cells: pd.DataFrame, q_threshold: float) -> None:
         assert row.verdict == expected, (row.q, row.delta, row.verdict)
 
 
+@pytest.mark.math
 def test_i11_verdict_rule_on_golden(golden: DiffResult) -> None:
     _assert_verdicts(golden.cells, Q)
     assert set(golden.cells["verdict"]) <= {"safer", "worse", "unchanged"}
 
 
 @settings(deadline=None)
+@pytest.mark.math
 @given(
     tables=st.lists(
         st.tuples(
@@ -563,12 +581,14 @@ def test_i11_verdict_rule_property(tables: list[tuple[int, int]], q_threshold: f
 # ---------- I12: counts ----------
 
 
+@pytest.mark.math
 def test_i12_counts_add_up_on_golden(golden: DiffResult) -> None:
     assert golden.n_safer + golden.n_worse + golden.n_unchanged == len(golden.cells)
     assert len(golden.cells) + golden.n_not_comparable == CELLS
     assert golden.dropped_a == 0 and golden.dropped_b == 0
 
 
+@pytest.mark.math
 def test_i12_counts_with_partial_overlap() -> None:
     a = _cframe({"x": [(1.0, True)] * 4, "y": [(5.0, False)] * 4, "z": [(2.0, True)] * 4})
     b = _cframe({"y": [(5.0, False)] * 4, "z": [(2.0, True)] * 4, "w": [(1.0, True)] * 4})
@@ -640,6 +660,7 @@ def test_i13_seed_identity_match_true_when_salts_and_stored_seeds_match() -> Non
 # ---------- I14: horizon truncation ----------
 
 
+@pytest.mark.math
 def test_i14_horizon_truncation_recensors_and_counts() -> None:
     # Only the t=4 event in A lies above the shared horizon of 3; the censored rows at
     # t=3 and t=2 are untouched, so exactly one row is re-censored.
@@ -654,10 +675,12 @@ def test_i14_horizon_truncation_recensors_and_counts() -> None:
     assert row["p"] == 1.0
 
 
+@pytest.mark.math
 def test_i14_no_truncation_when_horizons_match(golden: DiffResult) -> None:
     assert golden.truncated == 0
 
 
+@pytest.mark.math
 def test_i14_truncation_applies_to_both_runs() -> None:
     a = _one_cell([(2.5, True), (5.0, False)], horizon=5.0)
     b = _one_cell([(4.5, True), (2.0, False)], horizon=5.0)
@@ -723,6 +746,7 @@ def test_i16_check_on_null_and_worse_diffs(
 # ---------- I17: paired methods on the fixture, captured and checked against the references ----------
 
 
+@pytest.mark.math
 def test_i17_capture_paired_and_logrank_counts(
     frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest], tmp_path: Path
 ) -> None:
@@ -770,6 +794,7 @@ def _assert_same_result(x: DiffResult, y: DiffResult) -> None:
     pd.testing.assert_frame_equal(x.cells, y.cells)
 
 
+@pytest.mark.math
 def test_i18_diff_is_deterministic_on_fixture(
     frames: dict[str, pd.DataFrame], manifests: dict[str, RunManifest], golden: DiffResult
 ) -> None:
@@ -777,6 +802,7 @@ def test_i18_diff_is_deterministic_on_fixture(
     _assert_same_result(golden, again)
 
 
+@pytest.mark.math
 @pytest.mark.parametrize("method", METHODS)
 def test_i18_diff_is_deterministic_on_synthetic(method: str) -> None:
     a = _cframe(
@@ -796,6 +822,7 @@ def test_i18_diff_is_deterministic_on_synthetic(method: str) -> None:
     _assert_same_result(first, second)
 
 
+@pytest.mark.math
 def test_i18_bh_and_mde_are_deterministic() -> None:
     p = np.array([0.2, 0.01, 0.01, 0.7, 1.0, 0.03])
     np.testing.assert_array_equal(bh(p, Q), bh(p.copy(), Q))
