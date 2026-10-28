@@ -43,7 +43,7 @@ data and the top-10 table that B1's Markdown clause pins). B3 is asserted on the
 
 from __future__ import annotations
 
-import hashlib
+import json
 import math
 import re
 import subprocess
@@ -625,10 +625,6 @@ def present_cells(report: Report) -> list[Cell]:
 
 def headline_order(multi: MultiDiffResult) -> tuple[str, ...]:
     return tuple(m[0] for m in HEADLINE_EVENT_RE.findall(multi.headline().splitlines()[0]))
-
-
-def _sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _shuffled(cells: list[dict[str, Any]], seed: int) -> list[dict[str, Any]]:
@@ -1614,7 +1610,7 @@ def test_b13_stacked_svg_re_roots_escaped_text_intact() -> None:
 # ---------- B14: determinism and theme separation ----------
 
 _SUBPROCESS_SCRIPT = """
-import hashlib, sys
+import json, sys
 from pathlib import Path
 from poisson_prove.store import Store
 from poisson_prove.diff import multi_diff
@@ -1626,8 +1622,7 @@ m = multi_diff(a, b, events=[event, other],
                manifest_a=store.manifest(run_a), manifest_b=store.manifest(run_b))
 rep = build_multi_report(m, ReportSpec(title=title, x_axis=x, y_axis=y),
                          manifests=(store.manifest(run_a), store.manifest(run_b)))
-for text in (rep.to_markdown(), rep.to_svg(), rep.to_html()):
-    print(hashlib.sha256(text.encode("utf-8")).hexdigest())
+print(json.dumps([rep.to_markdown(), rep.to_svg(), rep.to_html()]))
 """
 
 
@@ -1638,7 +1633,7 @@ def test_b14_multi_report_is_byte_identical_across_hash_seeds(
         golden_multi, ReportSpec(title=LATTICE_TITLE, x_axis=lattice.Y, y_axis=lattice.X),
         manifests=(golden_frames["ma"], golden_frames["mb"]),
     )
-    local = [_sha(rep.to_markdown()), _sha(rep.to_svg()), _sha(rep.to_html())]
+    local = [rep.to_markdown(), rep.to_svg(), rep.to_html()]
     script = tmp_path / "render.py"
     script.write_text(_SUBPROCESS_SCRIPT)
     for seed in ("1", "4242"):
@@ -1649,7 +1644,7 @@ def test_b14_multi_report_is_byte_identical_across_hash_seeds(
             env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path), **blas_thread_cap()},
         )
         assert proc.returncode == 0, proc.stderr
-        assert proc.stdout.split() == local, seed
+        assert json.loads(proc.stdout) == local, seed
 
 
 def test_b14_dark_and_light_stacked_trees_identical_after_stripping_presentation() -> None:

@@ -15,7 +15,7 @@ test in the repo still collects and reports. The static tests read the source as
 
 **No test in this file carries the ``calibration`` marker, and none may.** The renderer draws
 nothing: every number it prints is a field of a ``TreeResult`` M14 already computed, formatted
-once at assembly by M7's ``_fmt``, so every assembly or rendering error is caught
+once at assembly by M7's number formatter, so every assembly or rendering error is caught
 deterministically and there is no rejection rate to hold in a band.
 
 **What the fixtures hold.**
@@ -37,11 +37,11 @@ deterministically and there is no rejection rate to hold in a band.
 
 - **One element per line.** The page is ``"\\n".join(parts)`` and every part of the three new
   regions is one line: ``<h2>Omnibus</h2>``, ``<h2>Fault lines</h2>`` and ``<h2>Cells</h2>``
-  with no attributes, then a ``<p>`` through ``_lines_html`` per line and a ``_html_table`` per
-  table, carrying no ``id``, ``class``, ``style`` or ``data-`` attribute and no script. A region
-  runs from its ``<h2>`` line to the next ``<h2>`` line. The bound paragraph is one ``<p>``
-  through ``_lines_html`` of two lines -- the rule line, then the assumption line -- and is the
-  last line of the *Honesty* region, after the last panel's paragraph.
+  with no attributes, then a ``<p>`` per line (its escaped lines joined by ``<br>``) and a
+  ``<table>`` per table, carrying no ``id``, ``class``, ``style`` or ``data-`` attribute and no
+  script. A region runs from its ``<h2>`` line to the next ``<h2>`` line. The bound paragraph
+  is one ``<p>`` of two lines joined by ``<br>`` -- the rule line, then the assumption line --
+  and is the last line of the *Honesty* region, after the last panel's paragraph.
 - **Region contents, in order.** Omnibus: ``root.headline`` verbatim; a method line carrying
   ``scheme``, ``n_permutations`` and ``seed``; one table (``event``, ``mean delta (pp)``, ``p``,
   ``rms delta (pp)``, ``p``) with one row per event in ``root.events`` order; the informative
@@ -58,19 +58,20 @@ deterministically and there is no rejection rate to hold in a band.
 - **Config on the leaf row, and the one row this file adds to the kind table.** A leaf row's
   first cell is ``key=value`` over every key of ``config`` in the config's own order, joined by
   a comma and a space, where the value is ``text["config"][key]`` when that is a string and
-  ``_scalar_text(value)`` otherwise -- exactly how ``_cell_rows`` prints a cell's config from
-  ``config_text``. So each leaf's ``text`` carries, beside ``delta``, ``q_within`` and ``mde``,
-  a ``config`` mapping over the config's keys whose values are ``_fmt(value, "coord")`` for a
-  scalar and ``None`` for anything else -- ``_config_text``'s rule. **Why:** M13's V16 requires
-  every float token on the page to be a substring of some structure string, and a ``str(value)``
-  spelling (``key=10.0``) puts tokens on the page that no structure string carries; the same
-  value prints as ``10`` in the drill-down. The page therefore spells a config value as the rest
-  of the page does, formatted once at assembly; the receipt's ``10.0`` is S28's spelling.
+  the value as one line of text otherwise -- exactly how the drill-down's table prints a cell's
+  config from ``config_text``. So each leaf's ``text`` carries, beside ``delta``, ``q_within``
+  and ``mde``, a ``config`` mapping over the config's keys whose values are the report's
+  coordinate rendering for a scalar and ``None`` for anything else -- the rule ``config_text``
+  follows. **Why:** M13's V16 requires every float token on the page to be a substring of some
+  structure string, and a ``str(value)`` spelling (``key=10.0``) puts tokens on the page that no
+  structure string carries; the same value prints as ``10`` in the drill-down. The page
+  therefore spells a config value as the rest of the page does, formatted once at assembly; the
+  receipt's ``10.0`` is S28's spelling.
 - **The untested forms.** The fault-lines null line reads ``not tested`` and either ``the root
   did not reject`` or ``one group is the whole family restated``; the cells head reads ``not
   tested`` and exactly one of: ``depth`` with ``depth_configured`` and without ``root``; ``the
   root did not reject``; ``no group rejected``. Nothing else follows an untested cells head.
-- **``_TREE_KINDS`` is a ``dict[str, dict[str, str]]``** keyed by the object's dotted path in
+- **The kind table is a ``dict[str, dict[str, str]]``** keyed by the object's dotted path in
   the tree JSON with list indices dropped (``root``, ``grouping``, ``fault_lines``,
   ``fault_lines.groups``, ``leaves``, ``leaves.families``, ``leaves.families.cells``,
   ``bound``), each value the field-to-kind mapping; ``TREE_KINDS`` below is the literal.
@@ -143,9 +144,9 @@ different tree); the multi-event pair is the only ``K = 2`` whose events are not
 the quickstart pair cannot show a refusal; the hostile pair and the vocabulary pair collapse to
 the whole grid, so their group labels never carry a value.
 
-**Named non-observables.** A second ``tree()`` call in ``_cmd_serve`` on the same frames and
-knobs: the same bytes. A ``text`` entry produced by a private copy of ``_fmt`` that agrees with
-it on every fixture.
+**Named non-observables.** A second ``tree()`` call inside ``serve`` on the same frames and
+knobs: the same bytes. A ``text`` entry produced by a private copy of the report's number
+formatter that agrees with it on every fixture.
 """
 
 from __future__ import annotations
@@ -1232,20 +1233,18 @@ def titled_structure(p: Pair, title: str) -> dict[str, Any]:
     )
 
 
-def page_as_ids_named_it(page: str, events: str) -> str:
+def assert_page_titled_by_name(page: str, events: str) -> None:
     """PF2: on a lattice page the default title names the runs by name in three
-    places, the ``<title>``, the ``<h1>`` and the figure's title line, and nowhere else. Assert that,
-    then put the title by id back before the rest of the page is checked."""
-    named, by_id = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}", f"{LATTICE_A} vs {LATTICE_B}: {events}"
+    places, the ``<title>``, the ``<h1>`` and the figure's title line, and nowhere else."""
+    named = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}"
     # The figure's title line wraps onto ``data-wrap`` lines when the figure is narrower than the
     # title (the lattice's two-outcome page, six columns wide, does); it is one place, read whole.
     titles = [m for m in FIGURE_TITLE_RE.finditer(page) if " ".join([m.group(2), *WRAPPED_RE.findall(m.group(3))]) == named]
     assert len(titles) == 1, [m.group(0)[:200] for m in FIGURE_TITLE_RE.finditer(page)]
     figure = titles[0]
-    page = page[: figure.start()] + f'<text {figure.group(1)}font-size="13">{by_id}</text>' + page[figure.end() :]
+    outside = page[: figure.start()] + page[figure.end() :]
     places = (f"<title>{named}</title>", f"<h1>{named}</h1>")
-    assert [page.count(place) for place in places] == [1, 1] and page.count(named) == 2, [page.count(place) for place in places]
-    return page.replace(named, by_id)
+    assert [outside.count(place) for place in places] == [1, 1] and outside.count(named) == 2, [outside.count(place) for place in places]
 
 
 #: The figure's title line and the lines it wraps onto, in the page's SVG.
@@ -1510,10 +1509,10 @@ def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_th
     pairs = by_name(every_pair)
     for name in PAGE_2_PAIRS:
         p = pairs[name]
-        # PF2: the title by name is asserted in its three places, then put back by id.
-        page = page_as_ids_named_it(p.page, ", ".join(p.events))
-        assert_page_names(page)
-        page = excised(page)
+        # PF2: the title by name is asserted in its three places; the page is read as it is served.
+        assert_page_titled_by_name(p.page, ", ".join(p.events))
+        assert_page_names(p.page)
+        page = excised(p.page)
         assert h2_sequence(page) == [h for h in H2_SEQUENCE if h not in EXCISED_REGIONS], name
         assert "Store root" not in page and str(LATTICE_ROOT) not in page and not JUDGEMENT_RE.search(page), name
         headline = str(p.structure["headline"]).splitlines()

@@ -24,8 +24,8 @@ raises; ``OBSERVATION_HEAD_BYTES`` and ``OBSERVATION_TAIL_BYTES`` do not exist; 
 ``test_q5_*`` belongs with P8-23.
 
 **No A8b invariant depends on the pandas version.** A8b adds no Parquet column, and
-everything it writes reaches disk inside the ``trace`` / ``trace_obs`` JSON strings listed in
-``store._NULLABLE_STRING_COLUMNS``. P8-11's and P8-20's store clauses, which read the
+everything it writes reaches disk inside the ``trace`` / ``trace_obs`` JSON strings, which the
+store reads back as nullable strings. P8-11's and P8-20's store clauses, which read the
 ``trace_obs`` column itself, read it raw through ``pyarrow`` and test nullness with ``is None``,
 never ``pd.isna`` and never a truth test, as in A8a and A22.
 
@@ -230,7 +230,7 @@ def _tracer() -> Any:
 
 def child_capture_spans(spec_kwargs: dict[str, Any], spans: list[dict[str, Any]]) -> dict[str, Any]:
     """``install(CaptureSpec(**spec_kwargs))``, then one capture block emitting ``spans`` in order
-    through the real recorder -- the only path ``_is_content`` and the child's cut run on."""
+    through the real recorder -- the only path the content filter and the child's cut run on."""
     from poisson_prove.capture import CaptureSpec, capture, install
 
     # CD: CaptureSpec has no default cap, so the harness supplies DEFAULT_LIMIT. A caller that
@@ -304,7 +304,8 @@ def test_the_two_cut_functions_keep_their_signatures() -> None:
 
 
 def test_content_keys_is_a_frozenset_whose_in_answers_members_and_descendants() -> None:
-    """``CONTENT_KEYS`` takes the ``_ObservationKeys`` shape. A plain ``frozenset`` loses the families."""
+    """``CONTENT_KEYS`` is a ``frozenset`` whose ``in`` also answers a family's descendants. A plain
+    ``frozenset`` loses the families."""
     from poisson_prove.trace import CONTENT_KEYS
 
     assert isinstance(CONTENT_KEYS, frozenset)
@@ -545,9 +546,10 @@ CAPTURE_PATH_ATTRS = {
 @needs_otel
 @pytest.mark.parametrize("content", [False, True], ids=["content-off", "content-on"])
 def test_p8_10_through_the_recorder_content_off_strips_all_eight_and_keeps_the_tool_observation(content: bool) -> None:
-    """The two ``llm.*`` content families. Through the recorder, because ``_is_content`` runs only in ``_span_mapping`` and a
-    hand-built ``Span`` never reaches it. ``input.value`` / ``output.value`` on an ``llm``-kind span
-    are not classified by kind, and nothing here asserts them either way."""
+    """The two ``llm.*`` content families. Through the recorder, because the content filter runs
+    only where the recorder maps a captured span, and a hand-built ``Span`` never reaches it.
+    ``input.value`` / ``output.value`` on an ``llm``-kind span are not classified by kind, and
+    nothing here asserts them either way."""
     r = isolated(child_capture_spans, {"content": True} if content else {}, [{"name": "execute_tool lookup", "attrs": CAPTURE_PATH_ATTRS}])
     assert r["active"] is True
     (s,) = Trace.from_dict(r["meta"]).spans
@@ -623,8 +625,8 @@ def test_p8_11_a_wrapper_is_an_observation_at_any_size_and_the_split_never_cuts(
 
 
 def test_p8_12_capture_spec_fields_and_the_cap_that_has_no_default() -> None:
-    """CD and P8-12: the field-name tuple is in ``_CAPTURE_FIELDS`` order, and ``CaptureSpec()``
-    with no cap does not build. The other three fields have defaults."""
+    """CD and P8-12: the field-name tuple is the ``[capture]`` table's keys in order, and
+    ``CaptureSpec()`` with no cap does not build. The other three fields have defaults."""
     from poisson_prove.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == CAPTURE_FIELDS_SPEC

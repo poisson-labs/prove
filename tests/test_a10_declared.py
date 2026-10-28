@@ -14,10 +14,11 @@ and ``inspect`` print ``never reached`` against the declaration, never against t
    A9's, once ``CaptureCheck`` can tell capture-off from unreached.
 2. ``finalize``'s guard is P10-9's: ``declaration`` and ``limit`` are keyword-only with no default,
    and anything that is not a ``Declaration`` is refused. Source-file byte digests do not govern it.
-3. ``_pairing`` is unchanged. ``DeclaredSetMismatch`` is raised in ``diff`` just before ``_pairing``,
-   not inside it. P10-6 pins what a caller sees of that: the refusal wins over ``UnitMismatch`` and
-   ``NotPairable``, and fires after frame validation. Because ``DIFF_MODULE_NAMES`` is exact,
-   the check adds no module-level helper: it sits in ``diff()`` and ``multi_diff()`` themselves.
+3. The pairing check is unchanged. ``DeclaredSetMismatch`` is raised in ``diff`` just before the
+   pairing check, not inside it. P10-6 pins what a caller sees of that: the refusal wins over
+   ``UnitMismatch`` and ``NotPairable``, and fires after frame validation. Because
+   ``DIFF_MODULE_NAMES`` is exact, the check adds no module-level helper: it sits in ``diff()``
+   and ``multi_diff()`` themselves.
 
 **Conventions these frozen tests fix:**
 - ``Declaration`` refuses a malformed value with ``ValueError`` (``TraceValidationError`` qualifies);
@@ -85,8 +86,8 @@ under a declaration (P10-22).
 no Parquet column and no read mode. The one place a genuine split would appear is P10-14's
 ``observed_outcomes`` clause (``test_p10_14_observed_outcomes_are_strings_with_a_null_outcome_in_the_frame``):
 ``outcome`` is a nullable ``pa.string()`` column, and a null that read back as ``NaN`` under pandas 3
-would enter the set as a float. It is green by construction while ``outcome`` stays in
-``store._NULLABLE_STRING_COLUMNS``, and is named so a later reader knows why. Nullness everywhere here
+would enter the set as a float. It is green by construction while the store reads a null
+``outcome`` back as ``None``, and is named so a later reader knows why. Nullness everywhere here
 is ``is None``, as in A8a.
 
 **A test that stays green by design.**
@@ -297,7 +298,7 @@ def canonical(trace: Trace) -> str:
 
 
 def label(key: str) -> str:
-    """A provenance key as ``_provenance_lines`` prints it."""
+    """A provenance key as the report's provenance list prints it."""
     return key.replace("_", " ")
 
 
@@ -834,7 +835,7 @@ def test_p10_5_the_eight_print_in_the_provenance_block_and_nowhere_else(tmp_path
     assert f"{label('emitted_gates_not_declared')} a: check" in receipt[at:]
 
 
-# ---------- P10-6: the diff refusal (in diff, just before _pairing) ----------
+# ---------- P10-6: the diff refusal (in diff, just before the pairing check) ----------
 
 
 def _frames(store: Store, a: str, b: str, fn: str) -> tuple[Any, Any]:
@@ -916,8 +917,8 @@ def test_p10_6_the_refusal_wins_over_the_unit_and_salt_refusals(tmp_path: Path, 
 
 @pytest.mark.parametrize("fn", FNS)
 def test_p10_6_frame_validation_still_comes_first(tmp_path: Path, fn: str) -> None:
-    """"Just before ``_pairing``": a malformed frame is refused as it was, by the check that precedes
-    ``_pairing``, and not as a declared-set mismatch."""
+    """"Just before the pairing check": a malformed frame is refused as it was, by the check that
+    precedes the pairing check, and not as a declared-set mismatch."""
     from poisson_prove.diff import DeclaredSetMismatch
 
     ma = manifest("a", declared=declaration(outcomes=("fell", "survived")))

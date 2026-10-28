@@ -1641,9 +1641,9 @@ def is_null(value: Any) -> bool:
 def reference_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> tuple[float | None, float | None]:
     """PF4.23: the stats file's independent Fisher enumeration, rise then fall.
     Imported here, not at module level, so this file still collects where the stats file cannot."""
-    from test_pf4_stats import _ref_fisher_limits
+    from test_pf4_stats import ref_fisher_limits
 
-    return _ref_fisher_limits(events_a, n_a, n_b, level)
+    return ref_fisher_limits(events_a, n_a, n_b, level)
 
 
 def reference_mde(events_a: int, n_a: int, n_b: int, level: float) -> float | None:

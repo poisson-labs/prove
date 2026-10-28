@@ -1211,12 +1211,12 @@ def test_pr53_a_report_without_paired_writes_the_library_rendering_and_the_latti
     # PF4.22, PF4.27: the limits are Fisher's exact limits at q / M in both
     # directions and a 100% baseline enters with its fall, so the worst condition, its limit and
     # the way it goes are recomputed from the stats file's references.
-    from test_pf4_stats import _ref_fisher_limits
+    from test_pf4_stats import ref_fisher_limits
 
     level = report_args[0].q / report_args[0].n_tests
     reference: dict[str, tuple[float, str]] = {}
     for row in cells[cells["direction"] == "unchanged"].itertuples():
-        rise, fall = _ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
+        rise, fall = ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
         if rise is not None and fall is not None:
             reference[row.config_hash] = (max(rise, fall), "rise" if rise >= fall else "fall")
         elif rise is not None and row.events_a == 0:

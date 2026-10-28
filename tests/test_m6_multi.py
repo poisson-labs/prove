@@ -69,7 +69,7 @@ from poisson_prove.diff import (
 )
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import censor
-from test_pf4_stats import _assert_limit, _ref_fisher_limits
+from test_pf4_stats import _assert_limit, ref_fisher_limits
 
 import lattice
 
@@ -768,7 +768,7 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
     for row in ours.itertuples():
         n_a, events_a = int(row.n_a), int(row.events_a)
         if events_a not in refs:
-            refs[events_a] = _ref_fisher_limits(events_a, n_a, int(row.n_b), level)
+            refs[events_a] = ref_fisher_limits(events_a, n_a, int(row.n_b), level)
         rise, fall = refs[events_a]
         if events_a == n_a:
             rise = None  # no room to rise

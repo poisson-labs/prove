@@ -18,8 +18,9 @@ pandas major cannot see any of them. Nullness is by identity in every clause: ``
 ``is not None``, never ``pd.isna`` and never a bare truth test.
 
 **The guard on the kind ladder.** T36's tests in ``test_m12_kinds.py`` are the guard that fails if
-the vendor keys are lifted before the kind ladder reads them: adding ``openinference.span.kind`` to
-``_LIFTED_KEYS`` fails them.
+the kind ladder loses the vendor keys when they are lifted out of a span's attributes: a ladder that
+reads ``openinference.span.kind`` from what is left after the lift sends every such span to
+``other`` and fails them.
 """
 
 from __future__ import annotations

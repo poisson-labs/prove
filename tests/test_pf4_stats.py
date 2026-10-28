@@ -241,7 +241,7 @@ def _ref_limit(power: Callable[[np.ndarray], np.ndarray], room: float) -> float 
     return float(grid[hits[0]]) if hits.size else None
 
 
-def _ref_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> tuple[float | None, float | None]:
+def ref_fisher_limits(events_a: int, n_a: int, n_b: int, level: float) -> tuple[float | None, float | None]:
     p_a = events_a / n_a
     rise = _ref_limit(lambda g: _ref_fisher_power(p_a, n_a, n_b, level, g, True), 1.0 - p_a)
     fall = _ref_limit(lambda g: _ref_fisher_power(p_a, n_a, n_b, level, g, False), p_a)
@@ -363,7 +363,7 @@ def test_pf4_23_fishers_limits_are_the_exact_power_definition_both_ways_on_any_a
     level = Q / rows
     result = _compare({"c": _counts(events_a, n_a)}, {"c": _counts(events_a, n_b)}, q=level)
     row = _cell(result, "fell", "c")
-    rise, fall = _ref_fisher_limits(events_a, n_a, n_b, level)
+    rise, fall = ref_fisher_limits(events_a, n_a, n_b, level)
     assert row["mde_test"] == "fisher" and row["mde_basis"] == "test"
     assert abs(row["mde_level"] - level) <= 1e-15 and row["mde_family"] == 1 and row["mde_power"] == POWER
     assert row["mde_anchor"] == "observed baseline"
@@ -703,7 +703,7 @@ def test_pf4_27_at_a_baseline_of_one_the_rise_has_no_room_and_the_fall_is_the_li
     top = _cell(result, "fell", "all_fell")
     assert top["events_a"] == top["n_a"] == 40
     assert _none(top["mde_rise"]) and top["mde_rise_note"] == "no room"
-    _, fall = _ref_fisher_limits(40, 40, 40, Q / 2)
+    _, fall = ref_fisher_limits(40, 40, 40, Q / 2)
     _assert_limit(top["mde_fall"], fall, "fall from 40 of 40")
     assert top["mde"] == top["mde_fall"] and top["mde_note"] is None
     ev = result.by_event["fell"]
@@ -1279,8 +1279,8 @@ def test_pf4_34_the_nothing_moved_question_reads_the_rows_flagged_without_counti
     for i in range(3):
         a[f"up{i}"], b[f"up{i}"] = _counts(0, 40), _counts(9, 40)
     doc = _compare(a, b, env={"max_mde_accepted": threshold}).to_json()
-    rise, _ = _ref_fisher_limits(0, 40, 40, Q / 30)
-    s_rise, s_fall = _ref_fisher_limits(50, 200, 200, Q / 30)
+    rise, _ = ref_fisher_limits(0, 40, 40, Q / 30)
+    s_rise, s_fall = ref_fisher_limits(50, 200, 200, Q / 30)
     assert rise is not None and s_rise is not None and s_fall is not None
     assert max(s_rise, s_fall) < 0.25 < rise < 0.32
     assert doc["n_flagged_only"] == 3 and doc["comparison_verdict"] == word
@@ -1315,11 +1315,11 @@ def test_pf4_40_the_verdict_limit_reads_the_verdict_level_limits_of_rows_that_mo
     for i in range(3):
         k = 20 + 10 * i
         for events in (k, 100 - k):
-            rise, fall = _ref_fisher_limits(events, 100, 100, Q / m)
+            rise, fall = ref_fisher_limits(events, 100, 100, Q / m)
             ok, read = _ref_question(rise, fall, events / 100, threshold)
             tells.append(ok)
             reads.append(read)
-            flag_level += [v for v in _ref_fisher_limits(events, 100, 100, 2 * Q / m) if v is not None]
+            flag_level += [v for v in ref_fisher_limits(events, 100, 100, 2 * Q / m) if v is not None]
     assert max(flag_level) < 0.24 and all(tells) is (word == "no significant change")
     assert doc["comparison_verdict"] == word
     if word == "no significant change":
@@ -1898,10 +1898,10 @@ def test_pf4_47_exact_complements_are_flagged_together_and_their_limit_is_at_twi
         c = _cell(result, event, "c")
         assert c["mde_moves_with"] == other and abs(c["mde_level"] - 2 * Q / m) <= 1e-15
         k = 30 if event == "fell" else 70
-        rise, fall = _ref_fisher_limits(k, 100, 100, 2 * Q / m)
+        rise, fall = ref_fisher_limits(k, 100, 100, 2 * Q / m)
         _assert_limit(c["mde_rise"], rise, (event, "rise"))
         _assert_limit(c["mde_fall"], fall, (event, "fall"))
-        vrise, vfall = _ref_fisher_limits(k, 100, 100, Q / m)
+        vrise, vfall = ref_fisher_limits(k, 100, 100, Q / m)
         _assert_limit(c["mde_rise_verdict"], vrise, (event, "verdict rise"))
         _assert_limit(c["mde_fall_verdict"], vfall, (event, "verdict fall"))
         d = _cell(result, event, "d")
@@ -1929,12 +1929,12 @@ def test_pf4_47_on_any_arms_rows_that_move_together_carry_both_levels_limits(na:
         c = _cell(result, event, "c")
         assert c["mde_moves_with"] == ("ok" if event == "fell" else "fell")
         for key, level in (("", 2 * Q / 4), ("_verdict", Q / 4)):
-            rise, fall = _ref_fisher_limits(events_a, na, nb, level)
+            rise, fall = ref_fisher_limits(events_a, na, nb, level)
             _assert_limit(c[f"mde_rise{key}"], rise, (event, "rise", key))
             _assert_limit(c[f"mde_fall{key}"], fall, (event, "fall", key))
         d = _cell(result, event, "d")
         assert d["mde_moves_with"] is None and abs(d["mde_level"] - Q / 4) <= 1e-15
-        rise, fall = _ref_fisher_limits(events_a, na + 1, nb, Q / 4)
+        rise, fall = ref_fisher_limits(events_a, na + 1, nb, Q / 4)
         _assert_limit(d["mde_rise"], rise, (event, "d rise"))
         _assert_limit(d["mde_fall"], fall, (event, "d fall"))
         assert (d["mde_rise_verdict"], d["mde_fall_verdict"]) == (d["mde_rise"], d["mde_fall"])
@@ -1965,7 +1965,7 @@ def test_pf4_47_on_rows_that_move_together_flaggable_and_the_notes_are_at_their_
         c = _cell(result, event, "c")
         assert c["mde_moves_with"] is not None and abs(c["mde_level"] - Q) <= 1e-15
         assert abs(c["p_min"] - p_min) <= 1e-12 and c["flaggable"] is True
-        rise, fall = _ref_fisher_limits(2, 4, 4, Q)
+        rise, fall = ref_fisher_limits(2, 4, 4, Q)
         for way, want in (("rise", rise), ("fall", fall)):
             _assert_limit(c[f"mde_{way}"], want, (event, way))
             assert (c[f"mde_{way}_note"] == "none detectable") is (want is None)

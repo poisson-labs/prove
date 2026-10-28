@@ -1480,10 +1480,10 @@ def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
     """The largest limit over an event's unchanged conditions (each the larger of its two Fisher
     limits at ``level``, or the one way with room; PF4.27), from the stats file's references, and
     the way that limit goes on the condition the result names as worst."""
-    from test_pf4_stats import _ref_fisher_limits
+    from test_pf4_stats import ref_fisher_limits
 
     def limit(row: Any) -> tuple[float | None, float | None, float | None]:
-        rise, fall = _ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
+        rise, fall = ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
         no_rise, no_fall = row.events_a == row.n_a, row.events_a == 0
         if rise is not None and fall is not None:
             return max(rise, fall), rise, fall

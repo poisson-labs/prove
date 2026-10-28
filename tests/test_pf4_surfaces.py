@@ -62,7 +62,7 @@ from poisson_prove import cli
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
 import lattice
-from test_pf4_stats import _ref_fisher_limits
+from test_pf4_stats import ref_fisher_limits
 from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -768,7 +768,7 @@ def test_pf4_29_the_question_reads_each_direction_with_room_and_t_above_both_roo
     """The constructions the rows above rest on, against the stats file's references: 'only up' (0.7 at 120
     runs, two rows) can tell a rise of 0.20 and not a fall; with T at 0.6 a condition at 0.5 is asked
     about 0.5."""
-    up, down = _ref_fisher_limits(84, 120, 120, Q / 2)
+    up, down = ref_fisher_limits(84, 120, 120, Q / 2)
     assert up is not None and down is not None and up <= 0.20 < down, (up, down)
     root = _pair(tmp_path / "prove-runs", {"u": _arm(100, 200)}, {"u": _arm(100, 200)},
                  environment_a={"max_mde_accepted": 0.6}, environment_b={"max_mde_accepted": 0.6})
@@ -804,7 +804,7 @@ MID = {"u": _arm(30, 60), "v": _arm(30, 60)}
 def test_pf4_5_the_threshold_is_the_recorded_one_the_smaller_of_two_or_the_default(
     env_a: dict[str, Any], env_b: dict[str, Any], word: str, threshold: float, source: str, tmp_path: Path
 ) -> None:
-    rise, fall = _ref_fisher_limits(30, 60, 60, Q / 2)
+    rise, fall = ref_fisher_limits(30, 60, 60, Q / 2)
     assert rise is not None and fall is not None and 0.20 < max(rise, fall) <= 0.30  # the construction
     root = _pair(tmp_path / "prove-runs", MID, MID, environment_a=env_a, environment_b=env_b)
     assert _one_word(_verdicts(root, tmp_path, "fell:failure")) == word
@@ -1706,7 +1706,7 @@ def test_pf4_40_no_significant_change_prints_its_limit_on_the_same_line_everywhe
     root = _pair(tmp_path / "prove-runs", MID, MID, environment_a={"max_mde_accepted": 0.3}, environment_b={"max_mde_accepted": 0.3})
     s = _surfaces(root, tmp_path, "fell:failure")
     limit = s["diff --json"]["verdict_limit"]
-    rise, fall = _ref_fisher_limits(30, 60, 60, Q / 2)
+    rise, fall = ref_fisher_limits(30, 60, 60, Q / 2)
     assert rise is not None and fall is not None and abs(limit - max(rise, fall)) <= 1e-4 + 1e-12
     assert s["diff --json"]["verdict"] == "no significant change"
     # Check's word is passed or failed, so its block names the comparison's word.

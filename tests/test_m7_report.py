@@ -25,8 +25,8 @@ zero prints as ``0``.
 """
 
 import dataclasses
-import hashlib
 from html import escape as html_escape
+import json
 import math
 import re
 import subprocess
@@ -366,7 +366,7 @@ def golden_report(golden_diff: DiffResult) -> Report:
 # ---------- I1: determinism across processes ----------
 
 _SUBPROCESS_SCRIPT = """
-import hashlib, sys
+import json, sys
 from pathlib import Path
 from poisson_prove.store import Store
 from poisson_prove.survival import censor
@@ -378,17 +378,12 @@ a, b = (censor(store.read(r), event) for r in (run_a, run_b))
 d = diff(a, b, event=event, method="fisher_bh", q=0.05,
          manifest_a=store.manifest(run_a), manifest_b=store.manifest(run_b))
 rep = build_report(d, ReportSpec(title="Lattice before -> after", x_axis=x, y_axis=y))
-for text in (rep.to_markdown(), rep.to_svg(), rep.to_html()):
-    print(hashlib.sha256(text.encode("utf-8")).hexdigest())
+print(json.dumps([rep.to_markdown(), rep.to_svg(), rep.to_html()]))
 """
 
 
-def _sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
 def test_i1_outputs_are_byte_identical_across_hash_seeds(golden_report: Report, tmp_path: Path) -> None:
-    local = [_sha(t) for t in render_all(golden_report)]
+    local = list(render_all(golden_report))
     script = tmp_path / "render.py"
     script.write_text(_SUBPROCESS_SCRIPT)
     for seed in ("1", "4242"):
@@ -398,7 +393,7 @@ def test_i1_outputs_are_byte_identical_across_hash_seeds(golden_report: Report, 
             env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path), **blas_thread_cap()},
         )
         assert proc.returncode == 0, proc.stderr
-        assert proc.stdout.split() == local, seed
+        assert json.loads(proc.stdout) == local, seed
 
 
 def test_i1_same_process_repeat_is_identical() -> None:
