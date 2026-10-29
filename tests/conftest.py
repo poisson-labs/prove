@@ -130,7 +130,8 @@ def without_run_lines(text: str) -> str:
     return "".join(out)
 
 #: Every test runs with network sockets blocked in the pytest process (PF9.4 for the modules that
-#: drive a remote backend offline; PF10 for all the rest). The interpreters the Burla and Modal fakes
+#: drive a remote backend offline; PF10 for all the rest), except a test marked ``backend``, which
+#: calls a real account and is run by hand only. The interpreters the Burla and Modal fakes
 #: start arm their own tripwire. A module whose tests serve on a loopback socket and read it back is
 #: listed here with its reason; its tests may reach 127.0.0.1, ::1 and localhost, and nothing else.
 LOOPBACK_MODULES = {
@@ -170,8 +171,12 @@ def blocked_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPa
     """In every test: every socket other than a Unix one refuses to connect or send, and every name
     lookup refuses, with ``NetworkBlocked``, except to a loopback host in a module listed in
     ``LOOPBACK_MODULES``; each attempt is recorded, and a test that made one fails at teardown even if
-    the code under test swallowed the error."""
+    the code under test swallowed the error. A test marked ``backend`` calls a real account by its
+    mark's definition (run by hand, never in CI), so it runs with the network open."""
     attempts: list[str] = []
+    if request.node.get_closest_marker("backend") is not None:
+        yield attempts
+        return
     loopback = loopback_allowed_for(request.module.__name__)
     real_connect = socket.socket.connect
     real_connect_ex = socket.socket.connect_ex
