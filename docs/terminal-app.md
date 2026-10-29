@@ -21,6 +21,9 @@ script never finds itself inside an app. With `NO_COLOR` set to anything but emp
 and bold, dim and reverse stay. The app needs a window of at least 80 by 24; in a smaller one it
 says the size it needs and waits.
 
+It opens on Prove's banner, the mark of the Poisson Labs tools with Prove's name and version, while
+it reads the store, then shows home after a moment; any key shows home sooner, and `q` quits.
+
 ## The screens
 
 Every screen has the same frame: the tool and the screen's name at the top with what it is about,
