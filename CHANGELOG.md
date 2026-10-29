@@ -4,7 +4,7 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
-## 0.1.0 — Unreleased
+## 0.1.0 — 2026-10-29
 
 The first public release. Prove tells you whether a change to an AI agent really changed how often
 it fails. It replays the same cases before and after the change, on the same seeds, compares the
