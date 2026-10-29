@@ -120,7 +120,11 @@ class ProveApp(App[int], Screens):
             self.redraw()
             return
         left = OPENING_HOLD - (time.monotonic() - self._opened_at)
-        self.set_timer(max(0.0, left), self._end_opening)
+        if left > 0:
+            self.set_timer(left, self._end_opening)
+        else:
+            # Home took the whole hold. A 0 s Textual timer divides by its delay and never fires.
+            self._end_opening()
 
     def _end_opening(self) -> None:
         if self.opening and self.stack:
