@@ -35,7 +35,7 @@ from textual.events import Key, Resize
 from textual.filter import Monochrome, NoColor
 from textual.widgets import Static
 
-from poisson_prove import _look, core
+from poisson_prove import _banner, _look, core
 from poisson_prove._cli_app_pages import (
     BACK,
     BLANK,
@@ -56,6 +56,9 @@ __all__ = ["ProveApp"]
 MIN_WIDTH, MIN_HEIGHT = 80, 24
 _COLOURS = ("green", "yellow", "red")
 _QUESTION = "Proceed? [y/N]"
+#: How long the opening screen, the banner, stays up at the least while home is read; any key
+#: opens home sooner.
+OPENING_HOLD = 1.0
 
 
 class ProveApp(App[int], Screens):
@@ -92,14 +95,37 @@ class ProveApp(App[int], Screens):
         self._ui: bool | None = None
         self._ui_base = ""
         self._mounted = False
+        #: The opening screen, the banner, is up: home is read behind it.
+        self.opening = False
+        self._opened_at = 0.0
 
     def compose(self) -> ComposeResult:
         yield Static(id="canvas")
 
     def on_mount(self) -> None:
         self._mounted = True
-        self.stack = [self.home()]
+        if self.is_headless:
+            # No one is looking at a headless run: it opens on home.
+            self.stack = [self.home()]
+            self.redraw()
+            return
+        self.opening, self._opened_at = True, time.monotonic()
         self.redraw()
+        self.call_after_refresh(self._read_home)
+
+    def _read_home(self) -> None:
+        """Home is read while the banner is up, which stays for ``OPENING_HOLD`` at the least."""
+        self.stack = [self.home()]
+        if not self.opening:
+            self.redraw()
+            return
+        left = OPENING_HOLD - (time.monotonic() - self._opened_at)
+        self.set_timer(max(0.0, left), self._end_opening)
+
+    def _end_opening(self) -> None:
+        if self.opening and self.stack:
+            self.opening = False
+            self.redraw()
 
     # ---------- the store ----------
 
@@ -518,8 +544,21 @@ class ProveApp(App[int], Screens):
             if event.character == "q" and not self.sweeping:
                 self.exit(return_code=0)
             return
-        page = self.stack[-1]
         key, ch = event.key, event.character or ""
+        if self.opening:
+            # On the banner, q quits and any other key opens home (``?`` its help).
+            if ch == "q":
+                self.exit(return_code=0)
+                return
+            self.opening = False
+            if self.stack and ch == "?":
+                self.push(self.help_page())
+                return
+            self.redraw()
+            return
+        if not self.stack:
+            return
+        page = self.stack[-1]
         if not page.keep_message:
             page.message = ""
         if page.filtering:
@@ -631,7 +670,7 @@ class ProveApp(App[int], Screens):
     # ---------- drawing ----------
 
     def redraw(self) -> None:
-        if not self._mounted or not self.stack:
+        if not self._mounted or not (self.stack or self.opening):
             return
         try:
             canvas = self.query_one("#canvas", Static)
@@ -646,6 +685,9 @@ class ProveApp(App[int], Screens):
                 )
             )
             return
+        if self.opening or not self.stack:
+            canvas.update(self._draw_opening(w, h))
+            return
         page = self.stack[-1]
         if page.layout is not None and page.laid_width != w:
             page.layout(w)
@@ -656,6 +698,40 @@ class ProveApp(App[int], Screens):
 
     def _style(self, style: str) -> str:
         return "" if self.mono and style in _COLOURS else style
+
+    def _draw_opening(self, w: int, h: int) -> Text:
+        """The opening screen: the frame's six bands, with the banner in the middle of the body."""
+        out = Text()
+
+        def put(text: str, spans: list[tuple[int, int, str]]) -> None:
+            t = Text(text[:w].ljust(w))
+            for a, b, style in spans:
+                t.stylize(style, a, min(b, w))
+            out.append(t)
+            out.append("\n")
+
+        tool = "poisson-prove"
+        put(
+            tool.ljust(w - len(self.shown)) + self.shown,
+            [(0, len(tool), "bold"), (w - len(self.shown), w, "dim")],
+        )
+        put("─" * w, [(0, w, "dim")])
+        body_room = h - 5
+        banner = _banner.lines()
+        above = (body_room - len(banner)) // 2
+        left = max(0, (w - _banner.WIDTH) // 2)
+        for _ in range(above):
+            put("", [])
+        for text, spans in banner:
+            put(" " * left + text, [(a + left, b + left, style) for a, b, style in spans])
+        for _ in range(body_room - above - len(banner)):
+            put("", [])
+        put("", [])
+        put("─" * w, [(0, w, "dim")])
+        bar, spans = _key_bar([("enter", "home")], w, help_screen=False)
+        put(bar, spans)
+        out.rstrip()
+        return out
 
     def _draw(self, page: Page, w: int, h: int) -> Text:
         out = Text()
