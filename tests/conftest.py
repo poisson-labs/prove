@@ -10,8 +10,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import settings
 
 from poisson_prove.store import Store
+
+#: Every property test is the same run every time and is never timed: its examples are drawn from
+#: a fixed seed, no example has a deadline, and no database replays an earlier run's failures.
+settings.register_profile("prove", derandomize=True, deadline=None, database=None)
+settings.load_profile("prove")
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 #: PF3: the quickstart's one copy is the packaged spec.
@@ -21,13 +27,16 @@ PACKAGED_QUICKSTART = Path(__file__).resolve().parents[1] / "src" / "poisson_pro
 @functools.cache
 def quickstart_design(replicates: int = 100) -> Path:
     """The packaged quickstart's design (its target id, unit and axes) at ``replicates``, with no
-    ``target`` and no ``[declare]``, written once per process to a temporary file.
+    ``target`` and no ``[declare]``, written once per process to a temporary file that is removed
+    when the process ends.
 
     PF3: the packaged spec runs 194 replicates. The tests whose numbers are pinned at 100
     replicates sweep this instead: the packaged design at 100 replicates, the target typed on
     the command line, and nothing declared.
     """
+    import atexit
     import json
+    import shutil
     import tempfile
     import tomllib
 
@@ -35,7 +44,9 @@ def quickstart_design(replicates: int = 100) -> Path:
     lines = [f"target_id = {json.dumps(doc['target_id'])}", f"t_unit = {json.dumps(doc['t_unit'])}", f"replicates = {replicates}"]
     for name, axis in doc["axes"].items():
         lines += ["", f"[axes.{name}]", f"type = {json.dumps(axis['type'])}", f"values = {json.dumps(axis['values'])}"]
-    path = Path(tempfile.mkdtemp(prefix="quickstart-design-")) / "quickstart.toml"
+    base = Path(tempfile.mkdtemp(prefix="quickstart-design-"))
+    atexit.register(shutil.rmtree, base, True)
+    path = base / "quickstart.toml"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
@@ -45,6 +56,20 @@ METHOD_OWN_NAMES = ("Fisher", "McNemar", "log-rank")
 #: A step row of ``inspect``'s text output: the step's index, then eight more tab-separated
 #: columns.
 STEP_LINE_RE = re.compile(r"^\s*\d+(?:\t[^\t]*){8}$")
+
+
+def skip_if_still_writable(folder: Path) -> None:
+    """Skip the test when ``folder``, whose mode now forbids writing, can still be written: root ignores
+    a folder's mode, so as root no folder is one the test cannot write."""
+    import tempfile
+
+    try:
+        handle, probe = tempfile.mkstemp(dir=folder)
+    except PermissionError:
+        return
+    os.close(handle)
+    os.unlink(probe)
+    pytest.skip(f"{folder} can be written although its mode forbids it (as root can)")
 
 
 def blas_thread_cap() -> dict[str, str]:
@@ -404,13 +429,28 @@ def _a_home_of_its_own() -> None:
 
 #: The ``HOME`` this process made, which only it removes.
 _MADE_HOME: list[str] = []
+#: Hypothesis's folder in this process, which only it removes.
+_MADE_HYPOTHESIS: list[str] = []
+
+
+def _a_hypothesis_folder_of_its_own() -> None:
+    """Hypothesis keeps what it learns from the source in a folder of this process's own, removed
+    with the process, not in ``.hypothesis/`` in the working directory."""
+    import tempfile
+
+    from hypothesis.configuration import set_hypothesis_home_dir
+
+    _MADE_HYPOTHESIS.append(tempfile.mkdtemp(prefix="prove-hypothesis-"))
+    set_hypothesis_home_dir(_MADE_HYPOTHESIS[-1])
 
 
 def pytest_configure(config: pytest.Config) -> None:
     """Check both generated stores before any test runs, rebuilding one that fails (a crash or an
     earlier session left it), then mark them checked for this session and its workers: from here
     on a store that fails was written by a test, and ``lattice.cached_store`` refuses it. First,
-    the session's own ``HOME`` (``_a_home_of_its_own``)."""
+    the session's own ``HOME`` (``_a_home_of_its_own``). Every process, worker or not, gets its own
+    Hypothesis folder."""
+    _a_hypothesis_folder_of_its_own()
     if hasattr(config, "workerinput"):
         return
     _a_home_of_its_own()
@@ -426,10 +466,11 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
-    """The session's own ``HOME`` goes with the session that made it."""
+    """The session's own ``HOME`` goes with the session that made it, and each process's Hypothesis
+    folder with that process."""
     import shutil
 
-    for home in _MADE_HOME:
+    for home in (*_MADE_HOME, *_MADE_HYPOTHESIS):
         shutil.rmtree(home, ignore_errors=True)
 
 

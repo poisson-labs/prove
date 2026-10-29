@@ -15,7 +15,7 @@ test in the repo still collects and reports. The static tests read the source as
 
 **No test in this file carries the ``calibration`` marker, and none may.** The renderer draws
 nothing: every number it prints is a field of a ``TreeResult`` M14 already computed, formatted
-once at assembly by M7's ``_fmt``, so every assembly or rendering error is caught
+once at assembly by M7's number formatter, so every assembly or rendering error is caught
 deterministically and there is no rejection rate to hold in a band.
 
 **What the fixtures hold.**
@@ -37,11 +37,11 @@ deterministically and there is no rejection rate to hold in a band.
 
 - **One element per line.** The page is ``"\\n".join(parts)`` and every part of the three new
   regions is one line: ``<h2>Omnibus</h2>``, ``<h2>Fault lines</h2>`` and ``<h2>Cells</h2>``
-  with no attributes, then a ``<p>`` through ``_lines_html`` per line and a ``_html_table`` per
-  table, carrying no ``id``, ``class``, ``style`` or ``data-`` attribute and no script. A region
-  runs from its ``<h2>`` line to the next ``<h2>`` line. The bound paragraph is one ``<p>``
-  through ``_lines_html`` of two lines -- the rule line, then the assumption line -- and is the
-  last line of the *Honesty* region, after the last panel's paragraph.
+  with no attributes, then a ``<p>`` per line (its escaped lines joined by ``<br>``) and a
+  ``<table>`` per table, carrying no ``id``, ``class``, ``style`` or ``data-`` attribute and no
+  script. A region runs from its ``<h2>`` line to the next ``<h2>`` line. The bound paragraph
+  is one ``<p>`` of two lines joined by ``<br>`` -- the rule line, then the assumption line --
+  and is the last line of the *Honesty* region, after the last panel's paragraph.
 - **Region contents, in order.** Omnibus: ``root.headline`` verbatim; a method line carrying
   ``scheme``, ``n_permutations`` and ``seed``; one table (``event``, ``mean delta (pp)``, ``p``,
   ``rms delta (pp)``, ``p``) with one row per event in ``root.events`` order; the informative
@@ -58,19 +58,20 @@ deterministically and there is no rejection rate to hold in a band.
 - **Config on the leaf row, and the one row this file adds to the kind table.** A leaf row's
   first cell is ``key=value`` over every key of ``config`` in the config's own order, joined by
   a comma and a space, where the value is ``text["config"][key]`` when that is a string and
-  ``_scalar_text(value)`` otherwise -- exactly how ``_cell_rows`` prints a cell's config from
-  ``config_text``. So each leaf's ``text`` carries, beside ``delta``, ``q_within`` and ``mde``,
-  a ``config`` mapping over the config's keys whose values are ``_fmt(value, "coord")`` for a
-  scalar and ``None`` for anything else -- ``_config_text``'s rule. **Why:** M13's V16 requires
-  every float token on the page to be a substring of some structure string, and a ``str(value)``
-  spelling (``key=10.0``) puts tokens on the page that no structure string carries; the same
-  value prints as ``10`` in the drill-down. The page therefore spells a config value as the rest
-  of the page does, formatted once at assembly; the receipt's ``10.0`` is S28's spelling.
+  the value as one line of text otherwise -- exactly how the drill-down's table prints a cell's
+  config from ``config_text``. So each leaf's ``text`` carries, beside ``delta``, ``q_within``
+  and ``mde``, a ``config`` mapping over the config's keys whose values are the report's
+  coordinate rendering for a scalar and ``None`` for anything else -- the rule ``config_text``
+  follows. **Why:** M13's V16 requires every float token on the page to be a substring of some
+  structure string, and a ``str(value)`` spelling (``key=10.0``) puts tokens on the page that no
+  structure string carries; the same value prints as ``10`` in the drill-down. The page
+  therefore spells a config value as the rest of the page does, formatted once at assembly; the
+  receipt's ``10.0`` is S28's spelling.
 - **The untested forms.** The fault-lines null line reads ``not tested`` and either ``the root
   did not reject`` or ``one group is the whole family restated``; the cells head reads ``not
   tested`` and exactly one of: ``depth`` with ``depth_configured`` and without ``root``; ``the
   root did not reject``; ``no group rejected``. Nothing else follows an untested cells head.
-- **``_TREE_KINDS`` is a ``dict[str, dict[str, str]]``** keyed by the object's dotted path in
+- **The kind table is a ``dict[str, dict[str, str]]``** keyed by the object's dotted path in
   the tree JSON with list indices dropped (``root``, ``grouping``, ``fault_lines``,
   ``fault_lines.groups``, ``leaves``, ``leaves.families``, ``leaves.families.cells``,
   ``bound``), each value the field-to-kind mapping; ``TREE_KINDS`` below is the literal.
@@ -143,16 +144,15 @@ different tree); the multi-event pair is the only ``K = 2`` whose events are not
 the quickstart pair cannot show a refusal; the hostile pair and the vocabulary pair collapse to
 the whole grid, so their group labels never carry a value.
 
-**Named non-observables.** A second ``tree()`` call in ``_cmd_serve`` on the same frames and
-knobs: the same bytes. A ``text`` entry produced by a private copy of ``_fmt`` that agrees with
-it on every fixture.
+**Named non-observables.** A second ``tree()`` call inside ``serve`` on the same frames and
+knobs: the same bytes. A ``text`` entry produced by a private copy of the report's number
+formatter that agrees with it on every fixture.
 """
 
 from __future__ import annotations
 
 import ast
 import dataclasses
-import hashlib
 import html as html_mod
 import inspect
 import json
@@ -184,8 +184,6 @@ import lattice
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 VIEWER_SOURCE = PACKAGE / "viewer.py"
 CLI_SOURCE = PACKAGE / "cli.py"
-REPORT_SOURCE = PACKAGE / "report.py"
-DIFF_SOURCE = PACKAGE / "diff.py"
 #: The generated pair (``tests/lattice.py``).
 LATTICE_ROOT = lattice.root()
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
@@ -1036,18 +1034,6 @@ def config_cell(leaf: Mapping[str, Any]) -> str:
     return ", ".join(f"{k}={shown[k]}" for k in leaf["config"])
 
 
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def json_bytes(payload: Mapping[str, Any]) -> str:
-    return json.dumps(payload, sort_keys=True)
-
-
-def tree_less_digest(structure: Mapping[str, Any]) -> str:
-    return sha256_of_text(json_bytes({k: structure[k] for k in TREE_LESS_KEYS}))
-
-
 # ---------- ast helpers (restated; never imported across test modules) ----------
 
 
@@ -1247,20 +1233,18 @@ def titled_structure(p: Pair, title: str) -> dict[str, Any]:
     )
 
 
-def page_as_ids_named_it(page: str, events: str) -> str:
+def assert_page_titled_by_name(page: str, events: str) -> None:
     """PF2: on a lattice page the default title names the runs by name in three
-    places, the ``<title>``, the ``<h1>`` and the figure's title line, and nowhere else. Assert that,
-    then put the title by id back before the rest of the page is checked."""
-    named, by_id = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}", f"{LATTICE_A} vs {LATTICE_B}: {events}"
+    places, the ``<title>``, the ``<h1>`` and the figure's title line, and nowhere else."""
+    named = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}"
     # The figure's title line wraps onto ``data-wrap`` lines when the figure is narrower than the
     # title (the lattice's two-outcome page, six columns wide, does); it is one place, read whole.
     titles = [m for m in FIGURE_TITLE_RE.finditer(page) if " ".join([m.group(2), *WRAPPED_RE.findall(m.group(3))]) == named]
     assert len(titles) == 1, [m.group(0)[:200] for m in FIGURE_TITLE_RE.finditer(page)]
     figure = titles[0]
-    page = page[: figure.start()] + f'<text {figure.group(1)}font-size="13">{by_id}</text>' + page[figure.end() :]
+    outside = page[: figure.start()] + page[figure.end() :]
     places = (f"<title>{named}</title>", f"<h1>{named}</h1>")
-    assert [page.count(place) for place in places] == [1, 1] and page.count(named) == 2, [page.count(place) for place in places]
-    return page.replace(named, by_id)
+    assert [outside.count(place) for place in places] == [1, 1] and outside.count(named) == 2, [outside.count(place) for place in places]
 
 
 #: The figure's title line and the lines it wraps onto, in the page's SVG.
@@ -1271,29 +1255,18 @@ WRAPPED_RE = re.compile(r'data-wrap="1">([^<]*)</text>')
 # ---------- W1: literals ----------
 
 
-def structure_as_ids_named_it(structure: dict[str, Any], events: str) -> dict[str, Any]:
-    """PF2: ``serve --json`` on the lattice moves in two places only: ``run_name`` beside
-    each arm's ``run_id``, and the default title, which names the runs by name (``view.title`` and
-    the figure's title line). First assert each is there as PF2 writes it and nowhere else, then
-    put the structure back as it reads without names (no ``run_name``, the title by id) before its
-    other facts are checked."""
-    arms = {}
+def assert_runs_are_named(structure: Mapping[str, Any], events: str) -> None:
+    """PF2: ``serve --json`` on the lattice names the runs in two places only: ``run_name`` right
+    after each arm's ``run_id``, and the default title, which names the runs by name
+    (``view.title`` and the figure's title line, once)."""
     for role, run_id, name in (("a", LATTICE_A, LATTICE_NAME_A), ("b", LATTICE_B, LATTICE_NAME_B)):
         arm = structure["pair"][role]
         keys = list(arm)
         assert (arm["run_id"], arm.get("run_name")) == (run_id, name), arm
         assert keys.index("run_name") == keys.index("run_id") + 1, keys
-        arms[role] = {k: v for k, v in arm.items() if k != "run_name"}
-    named, by_id = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}", f"{LATTICE_A} vs {LATTICE_B}: {events}"
+    named = f"{LATTICE_NAME_A} vs {LATTICE_NAME_B}: {events}"
     assert structure["view"]["title"] == named, structure["view"]["title"]
-    line = f'font-size="13">{named}</text>'
-    assert structure["heatmap_svg"].count(line) == 1, structure["heatmap_svg"][:600]
-    return {
-        **structure,
-        "pair": {**structure["pair"], **arms},
-        "view": {**structure["view"], "title": by_id},
-        "heatmap_svg": structure["heatmap_svg"].replace(line, f'font-size="13">{by_id}</text>'),
-    }
+    assert structure["heatmap_svg"].count(f'font-size="13">{named}</text>') == 1, structure["heatmap_svg"][:600]
 
 
 def assert_version_keys(structure: dict[str, Any]) -> None:
@@ -1304,20 +1277,15 @@ def assert_version_keys(structure: dict[str, Any]) -> None:
     assert "poisson_prove_version" in structure["diff"] and "proofload_version" not in structure["diff"]
 
 
-def page_as_0_0_1_wrote_it(page: str) -> str:
-    """PF0: three things on a page differ from what 0.0.1 wrote: the version entry of the
-    provenance list, the version key in the arm table, and the ids of the page's two data blocks.
-    First assert each is there as this version writes it (the data blocks are ``prove-cells`` and
-    ``prove-holes``), then put each back as 0.0.1 wrote it before the rest of the page is
-    checked."""
+def assert_page_names(page: str) -> None:
+    """PF0: the page's two data blocks are ``prove-cells`` and ``prove-holes``, the arm table's
+    version key is ``poisson_prove_version``, and the provenance list has one ``Prove version:``
+    entry; none of the three is spelled with the old name."""
     assert 'id="prove-cells"' in page and 'id="prove-holes"' in page and 'getElementById("prove-cells")' in page
     assert "<td>poisson_prove_version</td>" in page and "proofload-cells" not in page and "proofload-holes" not in page
+    assert "<td>proofload_version</td>" not in page
     found = re.findall(r"<li>Prove version: [^<]*</li>", page)
     assert len(found) == 1 and "proofload version:" not in page, found
-    page = re.sub(r'(id="|getElementById\(")prove-(cells|holes)"', r'\1proofload-\2"', page)
-    page = page.replace("<td>poisson_prove_version</td>", "<td>proofload_version</td>")
-    page = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", page)
-    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", page)
 
 
 def test_w1_the_schema_and_the_signatures_are_the_literals(lattice_pair: Pair) -> None:
@@ -1541,9 +1509,10 @@ def test_w4_excising_the_three_regions_and_the_bound_line_gives_the_2_page_on_th
     pairs = by_name(every_pair)
     for name in PAGE_2_PAIRS:
         p = pairs[name]
-        # PF2: the title by name is asserted in its three places, then put back by id.
-        page = page_as_ids_named_it(p.page, ", ".join(p.events))
-        page = excised(page_as_0_0_1_wrote_it(page))
+        # PF2: the title by name is asserted in its three places; the page is read as it is served.
+        assert_page_titled_by_name(p.page, ", ".join(p.events))
+        assert_page_names(p.page)
+        page = excised(p.page)
         assert h2_sequence(page) == [h for h in H2_SEQUENCE if h not in EXCISED_REGIONS], name
         assert "Store root" not in page and str(LATTICE_ROOT) not in page and not JUDGEMENT_RE.search(page), name
         headline = str(p.structure["headline"]).splitlines()
@@ -1605,9 +1574,8 @@ def test_w17_the_narrowed_payload_and_the_tree_less_keys_carry_the_librarys_fact
     # and the direction counts and its cells the direction, the notes and the shares, and its
     # strings say lower and higher. These facts are asserted against the library's frame on the
     # same pair: on the narrowed O23 structure, and on every pair TREE_LESS_KEYS_PAIRS names.
-    # PF2: run_name beside each arm's run_id and the title by name are asserted,
-    # then set aside.
-    structure = structure_as_ids_named_it(structure, EVENT)
+    # PF2: run_name beside each arm's run_id, and the title by name.
+    assert_runs_are_named(structure, EVENT)
     pairs = by_name(every_pair)
     assert_version_keys(structure)
     assert_tree_less_facts(pairs["lattice"], structure)
@@ -2211,17 +2179,16 @@ def test_w19_the_vocabulary_pair_renders_green_under_the_mask_and_red_without_it
 # ---------- W20: nothing else moves ----------
 
 
-def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0: the one field of a rendered report, receipt or page that differs from what 0.0.1
-    wrote is the version in its provenance list. First assert it is there as this version writes
-    it -- one ``Prove version:`` entry and no ``proofload version:`` -- then put it back as 0.0.1
-    wrote it and drop any separate ``written by proofload`` entry, before the rest is checked."""
-    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
-    assert len(found) == 1 and "proofload version:" not in text, found
-    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
-    text = re.sub(r"<li>Prove version: [^<]*</li>", "<li>proofload version: 0.0.1</li>", text)
-    text = re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
-    return re.sub(r"<li>[^<]*written by proofload[^<]*</li>", "", text)
+def assert_lattice_version_entries(text: str) -> None:
+    """PF0: the lattice's runs were written by 0.0.1 under the old name, so a rendered report or
+    receipt over them gives the version as the manifests recorded it, says which name wrote them,
+    and has no other version entry."""
+    version = lattice.manifest(LATTICE_A)["proofload_version"]
+    assert version == lattice.manifest(LATTICE_B)["proofload_version"]
+    found = re.findall(r"(?m)^- (?:Prove version: [^\n]*|written by [^\n]*)$", text) + re.findall(r"<li>(Prove version: [^<]*|written by [^<]*)</li>", text)
+    found = [entry.removeprefix("- ") for entry in found]
+    assert found == [f"Prove version: {version} (as proofload)", f"written by proofload {version}"], found
+    assert "proofload version:" not in text
 
 
 SVG_TEXT_RE = re.compile(r"<text\b[^>]*>([^<]*)</text>")
@@ -2247,8 +2214,10 @@ def assert_e14_facts(multi: Any, ma: RunManifest, mb: RunManifest) -> None:
     # kindless event; the falls and rises are n_lower and n_higher.
     assert (ev.n_safer, ev.n_worse) == (None, None)
     caption = f"{EVENT}: {ev.n_lower} lower, {ev.n_higher} higher"
-    md = as_0_0_1_wrote_it(report.to_markdown())
-    html = html_mod.unescape(as_0_0_1_wrote_it(receipt.to_html()))
+    md = report.to_markdown()
+    html = html_mod.unescape(receipt.to_html())
+    assert_lattice_version_entries(md)
+    assert_lattice_version_entries(html)
     svg = report.to_svg()
     svg_texts = [html_mod.unescape(t) for t in SVG_TEXT_RE.findall(svg)]
     md_lines = md.splitlines()

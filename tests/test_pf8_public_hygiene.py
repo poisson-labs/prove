@@ -46,7 +46,7 @@ names) masked, at word boundaries, before it is read.
   stay in test names. This file spells the patterns between two markers, and only those lines are
   left out. A hit is fixed in a docstring or comment, never in an assertion; the digests over test
   files are over their code (``conftest.code_of``), so such a fix moves none of them.
-- **r6** The old name may appear in the wheel only in ``poisson_prove/_compat.py``, in the
+- **r6** The old name may appear in the wheel only in the package's compatibility module, in the
   CHANGELOG on one line, and in the output of a command given a store the private builds wrote.
 - **r7** The terminal app's screens are read from its home screen, opened on a pseudo-terminal
   over the quickstart pair, and from the snapshot files PF6.14 commits (every file under a
@@ -79,7 +79,7 @@ hold), PF4.11 (paths in output), PF0's accept-list (the old name read back).
 | invariant | tests |
 |---|---|
 | PF8.0 the link check and the study records | checked outside the suite; no test |
-| PF8.1 none of the removed files is in the tree, the sdist or the wheel | ``test_pf8_1_no_file_section_9_1_removes_ships`` (tree, sdist, wheel) |
+| PF8.1 none of the removed files is in the tree, the sdist or the wheel | ``test_pf8_1_no_excluded_path_ships`` (tree, sdist, wheel) |
 | PF8.1 (r12) the three contributor rules are in ``CONTRIBUTING.md`` | ``test_pf8_1_contributing_md_carries_the_three_rules`` |
 | PF8.2 ``.gitignore`` lists ``devlog.md`` and no ``notes`` | ``test_pf8_2_gitignore_lists_devlog_md_and_no_notes`` (tree, sdist) |
 | PF8.3 LICENSE is MIT with the copyright line | ``test_pf8_3_license_is_mit_with_the_copyright_line`` (tree, sdist, wheel) |
@@ -87,7 +87,7 @@ hold), PF4.11 (paths in output), PF0's accept-list (the old name read back).
 | PF8.4 the pattern list catches every family, passes ordinary words, and each exception allows its case and no more | ``test_pf8_4_each_family_catches_its_terms_and_passes_ordinary_words`` (one case per family) |
 | PF8.4 the plain-words test passes over its whole corpus | ``test_pf8_4_the_plain_words_test_passes_over_its_whole_corpus`` (one case per part) |
 | PF8.5 no skip caused by data outside the repo | ``test_pf8_5_no_test_names_a_place_outside_the_repository``; ``test_pf8_5_with_home_empty_no_skip_names_a_place`` (slow) |
-| PF8.6 the CHANGELOG has the form of r9 | ``test_pf8_6_the_changelog_has_section_9_4s_form`` |
+| PF8.6 the CHANGELOG has the form of r9 | ``test_pf8_6_the_changelog_has_the_keep_a_changelog_form`` |
 | PF8.7 ``docs/repo-hygiene.md`` equals the canonical copy | ``test_pf8_7_repo_hygiene_md_equals_the_canonical_copy`` (tree, sdist) |
 
 PF8.4 has two tests because the pattern list is the instrument the second one reads with: each
@@ -301,10 +301,10 @@ FAMILIES = (
 )
 TERMS = {t.label: t for f in FAMILIES for t in f.terms}
 
-#: r5: what Q38 holds over the tests: these anywhere in a test file's strings and comments ...
+#: r5: what the words rule holds over the tests: these anywhere in a test file's strings and comments ...
 TESTS_TERMS = ("Taylor", "Kolasinski", "wikilink", "vault", "Obsidian", "notes/", "dispatch",
                "/Users/", "~/code", "a Windows profile", "a scratch folder", "Session A or B", "oracle", "retrofit")
-#: ... and these only in its docstrings and comments, where Q38 makes them plain; a test's own data
+#: ... and these only in its docstrings and comments, where the words rule makes them plain; a test's own data
 #: (a run id, a salt, a file name) may say them.
 PROSE_ONLY_TERMS = ("oracle", "retrofit")
 
@@ -859,7 +859,7 @@ def docs_hits(archives: dict[str, Archive]) -> list[Hit]:
     return hits
 
 
-def q38_hits(archives: dict[str, Archive]) -> list[Hit]:
+def words_in_test_files(archives: dict[str, Archive]) -> list[Hit]:
     """The tests case (r5) over the sdist's ``tests/``, a test module read as ``src/`` is (its
     strings, docstrings and comments); this file's lines between its two pattern markers are left
     out."""
@@ -887,7 +887,7 @@ PARTS = ("package", "help", "conformance", "quickstart", "static-ui", "setup-ski
 
 
 @pytest.mark.parametrize("kind", ["tree", "sdist", "wheel"])
-def test_pf8_1_no_file_section_9_1_removes_ships(kind: str, archives: dict[str, Archive]) -> None:
+def test_pf8_1_no_excluded_path_ships(kind: str, archives: dict[str, Archive]) -> None:
     present = {path: archives[kind].has(path) for path in REMOVED}
     assert not {p: found[:5] for p, found in present.items() if found}
 
@@ -971,7 +971,7 @@ def test_pf8_4_the_plain_words_test_passes_over_its_whole_corpus(part: str, requ
         "setup-skill": lambda: setup_skill_hits(tmp_path),
         "terminal-app": lambda: terminal_app_hits(factory, archives),
         "docs": lambda: docs_hits(archives),
-        "tests": lambda: q38_hits(archives),
+        "tests": lambda: words_in_test_files(archives),
     }[part]()
     failed = failures(hits)
     by_term: dict[str, int] = {}
@@ -1036,7 +1036,7 @@ def test_pf8_5_with_home_empty_no_skip_names_a_place(tmp_path: Path) -> None:
 RELEASE_HEADING = re.compile(r"^## ([0-9]+\.[0-9]+\.[0-9]+) — ([0-9]{4}-[0-9]{2}-[0-9]{2}|Unreleased)$")
 
 
-def test_pf8_6_the_changelog_has_section_9_4s_form(archives: dict[str, Archive], tmp_path: Path) -> None:
+def test_pf8_6_the_changelog_has_the_keep_a_changelog_form(archives: dict[str, Archive], tmp_path: Path) -> None:
     lines = archives["sdist"].text("CHANGELOG.md").splitlines()
     assert lines[0] == "# Changelog", lines[:1]
     headings = [(no, line) for no, line in enumerate(lines) if line.startswith("## ")]

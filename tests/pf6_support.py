@@ -7,7 +7,7 @@ PF6 (the pretty rendering, the terminal app and the look file) is reached the wa
 it: commands run on a pipe or on a pseudo-terminal, the app driven by keys, what is on the screen,
 the files left in the store, and the core's boundary as its public names draw it
 (``poisson_prove.core``). The one private name the tests take from Prove is the app's entry point,
-``poisson_prove._cli_app.ProveApp`` (reading A1 in ``test_pf6_app.py``), which Textual's pilot needs.
+the terminal app's class ``ProveApp`` (reading A1 in ``test_pf6_app.py``), which Textual's pilot needs.
 
 **The stores are built once per test session.** ``shared_world`` builds each behind a lock file in
 the folder the ``-n`` workers share; the others wait and read it. Nothing a test does may change a
@@ -145,12 +145,16 @@ def environment(**variables: str | None) -> Iterator[None]:
 
 @contextlib.contextmanager
 def read_only(root: Path) -> Iterator[None]:
-    """``root`` and every folder under it without write permission, restored afterwards."""
+    """``root`` and every folder under it without write permission, restored afterwards; the test is
+    skipped where that does not stop a write (root)."""
+    from conftest import skip_if_still_writable
+
     folders = [root, *[p for p in root.rglob("*") if p.is_dir()]]
     modes = {p: p.stat().st_mode for p in folders}
     for p in folders:
         p.chmod(stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP)
     try:
+        skip_if_still_writable(root)
         yield
     finally:
         for p in reversed(folders):
@@ -1317,30 +1321,30 @@ def _stats_stores() -> dict[str, Callable[[Path], dict[str, Any]]]:
     """Hand-written pairs, one store each, for the facts the verdict, conditions and condition
     screens must carry from the statistics (PF4.34 to PF4.46). Every run
     is written through the public ``Store`` by PF4's own test helpers."""
-    from test_pf4_surfaces import A_ID, B_ID, MID, STANDARD_A, STANDARD_B, _argon_pair, _arm, _declared, _pair, _write_run
+    from test_pf4_surfaces import A_ID, B_ID, MID, STANDARD_A, STANDARD_B, argon_pair, arm_runs, declared_outcomes, write_pair, write_run
 
-    failures = _declared(failures=("fell",))
+    failures = declared_outcomes(failures=("fell",))
     # A condition where nothing ever happens, in both runs, so the runs' commonest outcome is ``ok``
     # and a comparison given no event infers ``fell``, as one given ``--event fell`` reads it.
-    quiet = {"quiet": _arm(0, 120)}
+    quiet = {"quiet": arm_runs(0, 120)}
 
     def standard(root: Path) -> dict[str, Any]:
-        _pair(root, {**STANDARD_A, **quiet}, {**STANDARD_B, **quiet}, declared_a=failures, declared_b=failures)
+        write_pair(root, {**STANDARD_A, **quiet}, {**STANDARD_B, **quiet}, declared_a=failures, declared_b=failures)
         return {}
 
     def mid(root: Path) -> dict[str, Any]:
         env = {"max_mde_accepted": 0.3}
-        _pair(root, {**MID, **quiet}, {**MID, **quiet}, environment_a=env, environment_b=env, declared_a=failures, declared_b=failures)
+        write_pair(root, {**MID, **quiet}, {**MID, **quiet}, environment_a=env, environment_b=env, declared_a=failures, declared_b=failures)
         return {}
 
     def argon(root: Path) -> dict[str, Any]:
-        _argon_pair(root, declared_a=failures, declared_b=failures)
+        argon_pair(root, declared_a=failures, declared_b=failures)
         return {}
 
     def errors(root: Path) -> dict[str, Any]:
-        a = {"c": _arm(5, 40), "d": _arm(5, 40)}
-        b = {"c": _arm(5, 30) + [(30 + i, None, 1.0) for i in range(10)], "d": _arm(5, 40)}
-        _pair(root, a, b, declared_a=failures, declared_b=failures)
+        a = {"c": arm_runs(5, 40), "d": arm_runs(5, 40)}
+        b = {"c": arm_runs(5, 30) + [(30 + i, None, 1.0) for i in range(10)], "d": arm_runs(5, 40)}
+        write_pair(root, a, b, declared_a=failures, declared_b=failures)
         return {}
 
     def peeking(root: Path) -> dict[str, Any]:
@@ -1348,23 +1352,23 @@ def _stats_stores() -> dict[str, Callable[[Path], dict[str, Any]]]:
             "at": "2026-10-20T10:05:00Z", "episodes_before": 160, "episodes_after": 240,
             "replicates_before": 20, "replicates_after": 40, "after_comparison": True,
         }]}
-        _pair(root, {**STANDARD_A, **quiet}, {**STANDARD_B, **quiet}, environment_b=resumed, declared_a=failures, declared_b=failures)
+        write_pair(root, {**STANDARD_A, **quiet}, {**STANDARD_B, **quiet}, environment_b=resumed, declared_a=failures, declared_b=failures)
         return {}
 
     def cases(root: Path) -> dict[str, Any]:
-        rows = _arm(5, 20)
-        _write_run(root, A_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t1"}, "d": {"case_id": "t2"}})
-        _write_run(root, B_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t3"}, "d": {"case_id": "t2"}},
+        rows = arm_runs(5, 20)
+        write_run(root, A_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t1"}, "d": {"case_id": "t2"}})
+        write_run(root, B_ID, {"c": rows, "d": rows}, meta={"c": {"case_id": "t3"}, "d": {"case_id": "t2"}},
                    created_at="2026-10-20T10:01:00Z")
         return {}
 
     def nothing(root: Path) -> dict[str, Any]:
-        _write_run(root, A_ID, {"only_a": _arm(5, 20)})
-        _write_run(root, B_ID, {"only_b": _arm(5, 20)}, created_at="2026-10-20T10:01:00Z")
+        write_run(root, A_ID, {"only_a": arm_runs(5, 20)})
+        write_run(root, B_ID, {"only_b": arm_runs(5, 20)}, created_at="2026-10-20T10:01:00Z")
         return {}
 
     def tiny(root: Path) -> dict[str, Any]:
-        _pair(root, {"c": _arm(1, 4), "d": _arm(2, 4), "q": _arm(0, 8)}, {"c": _arm(3, 4), "d": _arm(2, 4), "q": _arm(0, 8)},
+        write_pair(root, {"c": arm_runs(1, 4), "d": arm_runs(2, 4), "q": arm_runs(0, 8)}, {"c": arm_runs(3, 4), "d": arm_runs(2, 4), "q": arm_runs(0, 8)},
               declared_a=failures, declared_b=failures)
         return {}
 
@@ -1374,7 +1378,7 @@ def _stats_stores() -> dict[str, Callable[[Path], dict[str, Any]]]:
         def arm(fell: int, stuck: int, n: int) -> list[tuple[int, str | None, float]]:
             return [(i, "fell", 3.0) if i < fell else (i, "stuck", 2.0) if i < fell + stuck else (i, "ok", HORIZON) for i in range(n)]
 
-        _pair(root, {"c": arm(10, 5, 60), "quiet": arm(10, 5, 60)}, {"c": arm(10, 25, 60), "quiet": arm(10, 5, 60)}, salt="unshared")
+        write_pair(root, {"c": arm(10, 5, 60), "quiet": arm(10, 5, 60)}, {"c": arm(10, 25, 60), "quiet": arm(10, 5, 60)}, salt="unshared")
         _ok(cli("--store", root, "diff", A_ID, B_ID, "--event", "fell", "--method", "logrank_bh", "--save"))
         (cid,) = saved_id(root)
         return {"comparison": cid}

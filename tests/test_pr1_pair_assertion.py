@@ -114,6 +114,7 @@ is not compared; whether ``"0.30"`` and ``"0.3"`` give one declaration digest; t
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import importlib
 import inspect
 import json
@@ -351,7 +352,7 @@ def make_arm(
     version: str | None = None,
 ) -> None:
     environment: dict[str, Any] = {
-        "python": PYTHON, "platform": "oracle", "poisson_prove_version": poisson_prove.__version__,
+        "python": PYTHON, "platform": "test-platform", "poisson_prove_version": poisson_prove.__version__,
         "capture": {"content": True, "max_observation_bytes": "none", "max_spans": 200},
     }
     environment.update(env or {})
@@ -674,7 +675,7 @@ def test_pr6_adding_one_exemption_changes_the_digest() -> None:
 HEADER_NAMES = st.text(alphabet="abcdefghijklmnopqrstuvwxyz-", min_size=1, max_size=12)
 
 
-@settings(max_examples=60, deadline=None, derandomize=True)
+@settings(max_examples=60)
 @given(
     first=st.lists(HEADER_NAMES, unique=True, max_size=5),
     second=st.lists(HEADER_NAMES, unique=True, max_size=5),
@@ -927,14 +928,14 @@ def leaf_at(obj: list[tuple[str, Any]], where: tuple[int, ...]) -> str:
     return value if len(where) == 1 else leaf_at(value, where[1:])
 
 
-@settings(max_examples=200, deadline=None, derandomize=True)
+@settings(max_examples=200)
 @given(obj=raw_objects(), seed=st.integers(min_value=0, max_value=2**16))
 def test_pr11_property_reordering_and_reindenting_never_move_the_digest(obj: list[tuple[str, Any]], seed: int) -> None:
     canonical_request = P().canonical_request
     assert canonical_request(render(obj)) == canonical_request(render(obj, random.Random(seed)))
 
 
-@settings(max_examples=200, deadline=None, derandomize=True)
+@settings(max_examples=200)
 @given(obj=raw_objects(), pick=st.integers(min_value=0, max_value=10**6), new=LEAF_LITERALS)
 def test_pr11_property_changing_one_leafs_literal_always_moves_the_digest(
     obj: list[tuple[str, Any]], pick: int, new: str
@@ -953,6 +954,12 @@ def test_pr11_the_request_digest_is_a_sha256_hex_over_body_target_and_unexempted
     body = body_text(BASE_FIELDS)
     base = request_digest(body, target=target, headers={"content-type": "application/json", "x-request-id": "1"}, exemptions=("x-request-id",))
     assert HEX64.match(base), base
+    # The stored digest's form, restated: the canonical body, the target and the unexempted headers
+    # (names lower-cased) as one key-sorted, compact JSON object, hashed as UTF-8.
+    restated = {"body": P().canonical_request(body).decode("utf-8"), "target": dict(sorted(target.items())),
+                "headers": {"content-type": "application/json"}}
+    serialised = json.dumps(restated, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    assert base == hashlib.sha256(serialised.encode("utf-8")).hexdigest()
     same = request_digest(body, target=target, headers={"content-type": "application/json", "x-request-id": "2"}, exemptions=("X-Request-Id",))
     assert same == base
     moved = {
@@ -1424,7 +1431,7 @@ FAILURES: dict[str, Callable[[Row], Row | None]] = {
 KEEP_ELIGIBLE = frozenset({"c50-i003", "c60-i003", "c90-i003"})
 
 
-@settings(max_examples=25, deadline=None, derandomize=True)
+@settings(max_examples=25)
 @given(
     plan_a=st.lists(st.sampled_from(["ok", "ok", "ok", "errored", "unmatched"]), min_size=12, max_size=12),
     plan_b=st.lists(st.sampled_from(sorted(FAILURES)), min_size=12, max_size=12),

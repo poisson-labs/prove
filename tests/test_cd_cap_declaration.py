@@ -15,7 +15,7 @@ prevent, with a receipt attached, so CD5 and CD6 are as much this file's centre 
 ``[capture]`` table declares nothing, is not refused, and its rows are stored **uncut**. "No cap"
 is declarable and its spelling is the string ``"none"``, and exactly that spelling. The missing
 declaration and the malformed one are two refusals. The funnel takes the run's limit as
-``int | None``, read by one ``_declared_limit`` helper; declaring a cap moves where the cut falls,
+``int | None``, read from the sweep by one helper in the executor; declaring a cap moves where the cut falls,
 not how it is computed. ``OBSERVATION_ROUTING_BYTES`` (8192) decides where a stored value lives
 and is not a cap. The manifest records the declaration as declared. The container refuses a
 payload short of a field. A sweep file that asks for capture without a cap is a hard error, with
@@ -40,7 +40,7 @@ no warning first. ``CaptureSpec`` is ``kw_only``. ``--resume`` is gated on the c
 
 **pandas.** No CD invariant depends on the pandas major version: CD adds no Parquet column and no
 store read path. Every stored byte it moves travels inside the ``trace`` / ``trace_obs`` JSON
-strings registered in ``store._NULLABLE_STRING_COLUMNS``. Where a test reads a trace column
+strings the store registers as nullable string columns. Where a test reads a trace column
 directly (CD7) it reads it raw through ``pyarrow`` and tests nullness with ``is None``,
 never ``pd.isna`` and never a truth test (as in A8a and A22).
 
@@ -55,7 +55,6 @@ observations.
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping, Sequence
@@ -81,7 +80,7 @@ MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 REPO = PACKAGE.parent.parent
 
-RUN_SALT = "cd-oracle-salt"
+RUN_SALT = "cd-test-salt"
 HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 TRUNCATED_KEY = "poisson_prove.truncated"
@@ -120,9 +119,11 @@ SHIPPED_SWEEP_FILES = tuple(
 )
 assert SHIPPED_SWEEP_FILES, "the packaged quickstart spec at least ships"
 
-#: CD11: ``split``'s envelope/bodies partition over the fixture below, hashed with the old
-#: ``proofload.`` schema string and span prefix put back (see the test).
-SPLIT_PARTITION_SHA256 = "7b1cc5c99c397fd66e3aade809701df3a4f0e01d8cf155ffbaec0c9fa779db19"
+#: CD11: the fixture's attributes ``split`` routes into the bodies -- over the routing constant,
+#: a named observation key, a cut value's wrapper -- and the ones it leaves in the envelope: at or
+#: under the constant, and the two routing stamps by name, whatever their size.
+ROUTED_ATTRS = ("app.over", "app.wrapped", "gen_ai.input.messages")
+KEPT_ATTRS = ("app.at", "app.under", "poisson_prove.episode", "poisson_prove.run_id")
 
 
 # ---------- helpers: never an assertion ----------
@@ -158,7 +159,7 @@ def sweep_toml(capture: dict[str, Any] | None, *, replicates: int = 1, values: S
     """A sweep file. ``capture`` is written verbatim: this builder declares nothing of its own,
     because what a ``[capture]`` table does or does not say is the whole subject here."""
     lines = [
-        'target_id = "cd-oracle@v0"', 't_unit = "steps"', f"replicates = {replicates}", "",
+        'target_id = "cd-test@v0"', 't_unit = "steps"', f"replicates = {replicates}", "",
         "[axes.x]", 'type = "continuous"', f"values = {json.dumps(list(values))}", "",
     ]
     if capture is not None:
@@ -186,7 +187,7 @@ def manifest(run_id: str, capture: Mapping[str, Any] | None) -> RunManifest:
     return RunManifest(
         # The same target_id, t_unit and axis_types ``sweep_toml`` writes, so the three gates that
         # sit beside the cap gate (target, unit, axes) pass and the cap gate is what is measured.
-        run_id=run_id, target_id="cd-oracle@v0", t_unit="steps", run_salt=RUN_SALT,
+        run_id=run_id, target_id="cd-test@v0", t_unit="steps", run_salt=RUN_SALT,
         axis_types={"x": "continuous"}, backend="local", environment=environment,
     )
 
@@ -218,7 +219,7 @@ def isolated(fn: Callable[..., Any], *args: Any, timeout: float = 180.0) -> Any:
 def _tracer() -> Any:
     from opentelemetry import trace
 
-    return trace.get_tracer("cd.oracle", "0.1.0")
+    return trace.get_tracer("cd.test", "0.1.0")
 
 
 def child_run_local(store_root: str, toml_path: str, target: str, salt: str) -> str:
@@ -312,7 +313,7 @@ def test_cd1_the_cli_refuses_the_same_file_and_creates_no_run_directory(tmp_path
 
 def test_cd1_a_sweep_file_with_no_capture_table_at_all_is_not_refused(tmp_path: Path) -> None:
     """A sweep with no ``[capture]`` table is not refused, and the reason CD-E1 is at
-    ``_capture_table`` and not at ``load``: a sweep that never asked for capture is not made to
+    the sampler's read of the ``[capture]`` table and not at ``load``: a sweep that never asked for capture is not made to
     declare a cap for capture it will not do."""
     spec = SweepSpec.load(write(tmp_path / "bare.toml", sweep_toml(None)))
     assert spec.capture is None
@@ -542,8 +543,8 @@ def read_capture_record(store: Store, run_id: str) -> dict[str, Any]:
 )
 def test_cd9_the_manifest_records_the_declaration_as_declared(tmp_path: Path, declared: Any, recorded: Any) -> None:
     """The manifest records the declaration as declared: it is a record of the *request*, so it
-    carries what was requested in the words it was requested in. ``None`` maps back to the string at
-    ``_capture_record`` and at that one site.
+    carries what was requested in the words it was requested in. ``None`` maps back to the string where
+    the executor writes ``environment["capture"]`` and at that one site.
 
     The only test that catches code which records JSON ``null`` for ``"none"`` -- which the report's
     cap echo would print as the Python spelling ``None`` or drop with its ``*_bytes`` filter."""
@@ -637,7 +638,7 @@ def test_cd9_every_surface_reads_the_declaration_as_declared(int_vs_none: dict[s
     ``"none"`` reads as ``none`` -- **not** as ``not recorded``, which is what a run that never
     asked for capture reads and is a different fact.
 
-    ``report._observation_cap`` keeps the string ``"none"`` as well as ints; dropping it would print
+    The report's read of a run's recorded byte limits keeps the string ``"none"`` as well as ints; dropping it would print
     ``not recorded`` for a run that declared every value whole."""
     labels = provenance_of(int_vs_none[surface], html=surface != "report.md")
     assert labels["observation cap a"] == "max_observation_bytes=65536", labels
@@ -764,7 +765,7 @@ def test_cd11_the_three_retired_names_are_out_of_the_public_surface() -> None:
 
 def split_fixture() -> Trace:
     """Attribute values at 8191, 8192 and 8193 bytes, a 20,000-byte wrapper, a named observation key
-    and both routing stamps far over the constant. Every clause of ``_is_observation``, once."""
+    and both routing stamps far over the constant. Every clause of the rule that routes an attribute out of the envelope, once."""
     wrapper = {TRUNCATED_KEY: {"head": "h" * 100, "tail": "t" * 20, "bytes_original": HUGE_BYTES}}
     attrs = {
         "app.under": "u" * (ROUTING_BYTES - 1), "app.at": "a" * ROUTING_BYTES, "app.over": "o" * (ROUTING_BYTES + 1),
@@ -779,16 +780,18 @@ def test_cd11_splits_partition_of_the_fixture_is_unchanged() -> None:
     into ``split`` changes which column stored bytes live in and breaks ``Store.read`` on rows
     written with any other limit."""
     envelope, bodies = split(split_fixture())
-    assert sorted(envelope["spans"][0]["attrs"]) == ["app.at", "app.under", "poisson_prove.episode", "poisson_prove.run_id"]
-    assert sorted(next(iter(bodies.values()))["attrs"]) == ["app.over", "app.wrapped", "gen_ai.input.messages"]
-    # PF0: the trace schema string and the span key prefix carry the new names; with the old
-    # names put back, the partition hashes to SPLIT_PARTITION_SHA256 byte for byte.
-    as_written = json.dumps([envelope, bodies], sort_keys=True)
-    assert '"poisson-prove.trace/1"' in as_written and '"poisson_prove.' in as_written and "proofload" not in as_written
-    as_0_0_1 = as_written.replace('"poisson-prove.trace/1"', '"proofload.trace/1"').replace('"poisson_prove.', '"proofload.')
-    digest = hashlib.sha256(as_0_0_1.encode()).hexdigest()
-    assert digest == SPLIT_PARTITION_SHA256, digest
-    assert assemble(envelope, bodies).to_dict() == split_fixture().to_dict()
+    assert sorted(envelope["spans"][0]["attrs"]) == list(KEPT_ATTRS)
+    assert sorted(next(iter(bodies.values()))["attrs"]) == list(ROUTED_ATTRS)
+    # The whole partition: the envelope is the fixture's own trace dict with the routed attributes
+    # taken out and nothing else changed, and the bodies hold exactly those attributes, whole,
+    # under the span's id. The schema string carries the current name.
+    whole = split_fixture().to_dict()
+    attrs = whole["spans"][0]["attrs"]
+    expected_envelope = {**whole, "spans": [{**whole["spans"][0], "attrs": {k: attrs[k] for k in attrs if k in KEPT_ATTRS}}]}
+    assert envelope == expected_envelope
+    assert bodies == {"0000000000000001": {"attrs": {k: attrs[k] for k in ROUTED_ATTRS}}}
+    assert envelope["schema"] == "poisson-prove.trace/1" and "proofload" not in json.dumps([envelope, bodies])
+    assert assemble(envelope, bodies).to_dict() == whole
 
 
 def test_cd11_split_does_not_take_a_limit() -> None:

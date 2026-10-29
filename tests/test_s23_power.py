@@ -28,7 +28,7 @@ file's own tests and every other test in the repo still reports. The other names
   ``DEFAULT_MAX_MDE``: that is the threshold that was in force, and W8 requires every launched
   run to carry one.
 - **A resume inherits by the CLI resolving the effective threshold, not by skipping the gate.**
-  ``check_power`` takes no store and so cannot read a manifest. Instead ``_cmd_sweep``
+  ``check_power`` takes no store and so cannot read a manifest. Instead the ``sweep`` verb
   passes ``max_mde=ns.max_mde`` when given, else ``manifest.environment["max_mde_accepted"]`` on a
   resume, else ``None``; ``check_power`` then compares against the *current* design exactly as it
   always does. That keeps the comparison in M3 (the CLI decides nothing statistical),
@@ -214,7 +214,7 @@ GATE_T = np.arange(1, 1001) / 1000
 def _ref_gate_table(n: int, rows: int, test: str) -> tuple[tuple[tuple[float, str], ...], np.ndarray]:
     """For each base rate on the 0.005 grid and each way (a rise first), the power at exactly each
     accepted change of ``GATE_T``, at level q / rows, NaN where that change has no room (PF4.30)."""
-    from test_pf4_stats import _ref_fisher_power, _ref_paired_power
+    from test_pf4_stats import ref_fisher_power, ref_paired_power
 
     level = Q / rows
     keys: list[tuple[float, str]] = []
@@ -223,9 +223,9 @@ def _ref_gate_table(n: int, rows: int, test: str) -> tuple[tuple[tuple[float, st
         for way in ("rise", "fall"):
             room = 1 - base if way == "rise" else base
             if test == "fisher":
-                power = _ref_fisher_power(float(base), n, n, level, GATE_T, way == "rise")
+                power = ref_fisher_power(float(base), n, n, level, GATE_T, way == "rise")
             else:
-                power = _ref_paired_power(float(base), n, level, GATE_T, way == "rise")
+                power = ref_paired_power(float(base), n, level, GATE_T, way == "rise")
             keys.append((float(base), way))
             table.append(np.where(GATE_T <= room + 1e-9, power, np.nan))
     return tuple(keys), np.array(table)
@@ -248,7 +248,7 @@ def ref_admits(n: int, rows: int, accepted: float, test: str = "fisher") -> bool
 def ref_worst(n: int, rows: int, accepted: float, test: str = "fisher") -> tuple[float, str, float | None]:
     """The worst base rate at exactly ``accepted`` (ties within 1e-12 to the lower base rate, a rise
     first; PF4.48a), the way the change goes there, and the limit that way at that base rate."""
-    from test_pf4_stats import _ref_fisher_power, _ref_limit, _ref_paired_power
+    from test_pf4_stats import ref_fisher_power, ref_limit, ref_paired_power
 
     keys, table = _ref_gate_table(n, rows, test)
     worst = (2.0, 0.0, "rise")
@@ -259,9 +259,9 @@ def ref_worst(n: int, rows: int, accepted: float, test: str = "fisher") -> tuple
     level = Q / rows
     room = 1 - base if way == "rise" else base
     if test == "fisher":
-        limit = _ref_limit(lambda g: _ref_fisher_power(base, n, n, level, g, way == "rise"), room)
+        limit = ref_limit(lambda g: ref_fisher_power(base, n, n, level, g, way == "rise"), room)
     else:
-        limit = _ref_limit(lambda g: _ref_paired_power(base, n, level, g, way == "rise"), room)
+        limit = ref_limit(lambda g: ref_paired_power(base, n, level, g, way == "rise"), room)
     return base, way, limit
 
 

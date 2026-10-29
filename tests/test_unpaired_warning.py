@@ -45,7 +45,7 @@ from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 from poisson_prove.survival import censor
 
-SALT = "unpaired-warning-oracle-salt"
+SALT = "unpaired-warning-test-salt"
 OTHER_SALT = "a-different-salt"
 HORIZON = 10.0
 EVENTS = ("fail", "timed_out")
@@ -224,7 +224,7 @@ def test_u6_once_per_diff_not_per_cell() -> None:
 
 def test_u7_the_single_event_diff_warns_from_the_same_place() -> None:
     """diff() is the other public entry point and takes the same manifests. It routes through
-    _pairing, so there is one predicate rather than two copies that can drift apart."""
+    the same pairing check, so there is one predicate rather than two copies that can drift apart."""
     a = censor(raw(fails=2), "fail")
     b = censor(raw(fails=4), "fail")
     records = caught(

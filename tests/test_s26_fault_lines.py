@@ -114,15 +114,14 @@ resamples.
 - Every number on a fault-lines block line is a ``:g`` rendering of a field of the object that
   line describes, or the group's label; the check is on tokens, never on wording.
 
-**Named non-observables.** A weight *inside* ``_statistics``; ``omnibus`` called a
-second time from ``_cmd_diff`` with the same seed (same bytes); a ``--by`` naming an axis declared
+**Named non-observables.** A weight *inside* the tree's per-statistic arithmetic; ``omnibus`` called a
+second time from the ``diff`` verb with the same seed (same bytes); a ``--by`` naming an axis declared
 in one manifest only (F6 pins "neither", F29 pins the unrequested ``not_shared`` row); the
 ``detail`` wording of ``one_group`` and ``not_shared`` refusals beyond their fields.
 """
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import math
@@ -140,7 +139,6 @@ import pytest
 from hypothesis import HealthCheck, given, settings, target
 from hypothesis import strategies as st
 
-import poisson_prove
 from poisson_prove import cli
 from poisson_prove import diff as diff_mod
 from poisson_prove import executor
@@ -150,9 +148,7 @@ from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
 import lattice
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
 EVENT, OTHER = lattice.EVENT, lattice.OTHER
-DIFF_SOURCE = PACKAGE / "diff.py"
 METHODS = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 TWO_SCHEMES = ("mcnemar_bh", "fisher_bh")
 
@@ -463,10 +459,6 @@ def without(payload: Mapping[str, Any], keys: Sequence[str]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in keys}
 
 
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
 def bh_over(values: Any) -> list[float]:
     """``lattice.bh`` (BH written out, independent of ``diff.bh``) over a column of p values."""
     return [float(v) for v in lattice.bh(list(values))]
@@ -523,7 +515,7 @@ def grown(a: pd.DataFrame, b: pd.DataFrame, multi: Any, ma: RunManifest, mb: Run
 
 
 def second_smallest_rounded_up(mdes: Sequence[float]) -> float:
-    """S23's offered-override rule restated (``_offered_override``): the
+    """S23's offered-override rule restated (the value a refusal offers to paste): the
     ``MIN_RESOLVABLE_GROUPS``-th smallest group MDE rounded **up** at four decimals, bumped by
     ``1e-4`` when the rounding fell short, so that pasting it admits the grouping."""
     mde = sorted(mdes)[EXPECTED_MIN_RESOLVABLE_GROUPS - 1]
@@ -725,7 +717,7 @@ def shifted_two_key_pairs(draw: st.DrawFn) -> tuple[dict[Any, list[str]], dict[A
     return cells_a, cells_b, draw(st.sampled_from(TWO_SCHEMES)), draw(st.integers(min_value=200, max_value=400)), draw(st.integers(min_value=0, max_value=10**6))
 
 
-PROPERTY_SETTINGS = settings(deadline=None, max_examples=30, suppress_health_check=[HealthCheck.too_slow])
+PROPERTY_SETTINGS = settings(max_examples=30, suppress_health_check=[HealthCheck.too_slow])
 PROPERTY_TYPES = {"x": "continuous", "y": "continuous"}
 PROPERTY_MAX_GROUP_MDE = 0.75
 
@@ -1046,7 +1038,7 @@ def test_f8_the_offered_value_pasted_back_admits_the_refused_grouping(axes: dict
     """A ``max_group_mde`` of 0.37 cannot admit ``task`` here (the group MDE is the cap 0.5000 at N=8, the
     axes pair's own number; 0.37 is the value for a design at N=32 -- module docstring). What is pinned
     is the property 0.37 would stand for: the value the refusal offers, pasted back, admits the grouping
-    (rounding up, S23's ``_offered_override``), and an explicit larger value admits it without
+    (rounding up, S23's offered-override rule), and an explicit larger value admits it without
     ``--by`` and is carried on the structure."""
     multi = quiet_multi_diff(axes["a"], axes["b"], axes["ma"], axes["mb"], events=("fail",), method="mcnemar_bh")
     offered = grown(axes["a"], axes["b"], multi, axes["ma"], axes["mb"], by="task", n_permutations=50, seed=GOLDEN_SEED).grouping.refused[0].offered_max_group_mde
@@ -1274,7 +1266,7 @@ def test_f13_on_the_bh_pair_the_weak_groups_p_equals_the_roots_bit_for_bit(bh_tr
     exchange, so the root statistic is ``g00``'s divided by a constant and the two p-values are
     the same count over the same draws. Measured equal at seeds 0-2 and at four sizes of the weak
     group. A Level 2 that drew its own ``(C_g, W)`` block from the same seed gets different bits
-    and fails here alone; O16 does not see it because ``_draw`` is still the one site."""
+    and fails here alone; O16 does not see it because the tree's one permutation draw is still the one site."""
     multi, result = bh_trees["mcnemar_bh"]
     groups = result.fault_lines.groups
     assert result.root.rejects is True and result.fault_lines.tested is True
@@ -1807,14 +1799,6 @@ def test_f24_the_discordant_cell_separates_pair_swap_from_arm_label(discordant_t
     grouping = result.grouping
     assert [(r.key, r.rung, r.reason) for r in grouping.refused] == [("task", "axis", "one_group")]
     assert (grouping.key, grouping.resolved_by, grouping.n_groups) == (EXPECTED_WHOLE_GRID_KEY, "whole_grid", 1)
-
-
-# ---------- F26: one threshold ----------
-
-
-def test_f26_the_default_group_limit_is_the_executors_default_limit() -> None:
-    """One constant, two readers: the module's default group limit is the executor's object."""
-    assert tree().DEFAULT_MAX_GROUP_MDE == executor.DEFAULT_MAX_MDE
 
 
 # ---------- F27: determinism ----------

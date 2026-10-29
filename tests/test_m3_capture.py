@@ -91,15 +91,15 @@ SPEC_FIELDS = ("instrument", "content", "max_observation_bytes", "max_spans")  #
 DECLARED_LIMIT = 8192
 STATUS_FIELDS = ("requested", "active", "reason", "instrumented")
 FORK_AVAILABLE = "fork" in multiprocessing.get_all_start_methods()
-FAKE_INSTRUMENTOR = "oracle-fake"
-CONFLICT_INSTRUMENTOR = "oracle-conflict"
+FAKE_INSTRUMENTOR = "test-fake"
+CONFLICT_INSTRUMENTOR = "test-conflict"
 UNKNOWN_INSTRUMENTOR = "no-such-instrumentor-xyz"
-FAKE_MODULE = "oracle_fake_instrumentation"
+FAKE_MODULE = "capture_fake_instrumentation"
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 HORIZON = 10.0
-SALT = "capture-oracle-salt"
+SALT = "capture-test-salt"
 EPOCH = 1_756_900_000_000_000_000
-RUN_ID = "r-2026-09-04-oracle"
+RUN_ID = "r-2026-09-04-capture"
 GARBAGE_TRACES: dict[str, Any] = {
     "list": ["step-a", "step-b"],
     "dict": {"schema": "not/proofload", "steps": []},
@@ -123,7 +123,7 @@ def _episode(cfg: dict[str, Any], seed: int, **meta: Any) -> Episode:
 def _tracer() -> Any:
     from opentelemetry import trace
 
-    return trace.get_tracer("oracle.instrumentation", "0.1.0")
+    return trace.get_tracer("test.instrumentation", "0.1.0")
 
 
 def plain_rollout(cfg: dict[str, Any], seed: int) -> Episode:
@@ -192,7 +192,7 @@ def sweep_toml(
     capture: dict[str, Any] | None,
     replicates: int = 2,
     axes: dict[str, list[Any]] | None = None,
-    target_id: str = "capture-oracle@v0",
+    target_id: str = "capture-test@v0",
     t_unit: str = "steps",
 ) -> str:
     """A sweep file; ``capture`` is the ``[capture]`` table, or absent."""
@@ -272,7 +272,7 @@ class TtyStringIO(StringIO):
 # ---------- helpers: the fake instrumentors ----------
 
 FAKE_SOURCE = '''\
-"""Two throwaway instrumentors for the M3 capture oracle. Nothing here patches anything."""
+"""Two throwaway instrumentors for the capture tests. Nothing here patches anything."""
 
 INSTRUMENTED = []
 
@@ -294,7 +294,7 @@ class FakeInstrumentor:
 
 class ConflictingInstrumentor(FakeInstrumentor):
     def instrument(self, **kwargs):
-        raise DependencyConflict("oracle-lib 1.0 found, oracle-lib>=2.0 required")
+        raise DependencyConflict("some-lib 1.0 found, some-lib>=2.0 required")
 '''
 
 
@@ -453,7 +453,7 @@ def child_install(
     second = install(CaptureSpec(**spec_kwargs)) if twice else None
     with capture(RUN_ID, "cfg-7:3") as recorder:
         with _tracer().start_as_current_span("probe") as span:
-            span.set_attribute("server.address", "oracle")
+            span.set_attribute("server.address", "test-server")
     out: dict[str, Any] = {
         "status": status_dict(status),
         "second": None if second is None else status_dict(second),
@@ -671,7 +671,7 @@ def test_c4_an_instrumentor_raising_a_dependency_conflict_yields_an_inactive_sta
     r = isolated(child_install, {"instrument": (CONFLICT_INSTRUMENTOR,)}, str(fake))
     assert r["status"]["active"] is False, r["status"]
     reason = str(r["status"]["reason"])
-    assert CONFLICT_INSTRUMENTOR in reason or "oracle-lib" in reason or "DependencyConflict" in reason, reason
+    assert CONFLICT_INSTRUMENTOR in reason or "some-lib" in reason or "DependencyConflict" in reason, reason
     assert r["meta"] is None
 
 

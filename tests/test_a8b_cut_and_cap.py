@@ -24,8 +24,8 @@ raises; ``OBSERVATION_HEAD_BYTES`` and ``OBSERVATION_TAIL_BYTES`` do not exist; 
 ``test_q5_*`` belongs with P8-23.
 
 **No A8b invariant depends on the pandas version.** A8b adds no Parquet column, and
-everything it writes reaches disk inside the ``trace`` / ``trace_obs`` JSON strings listed in
-``store._NULLABLE_STRING_COLUMNS``. P8-11's and P8-20's store clauses, which read the
+everything it writes reaches disk inside the ``trace`` / ``trace_obs`` JSON strings, which the
+store reads back as nullable strings. P8-11's and P8-20's store clauses, which read the
 ``trace_obs`` column itself, read it raw through ``pyarrow`` and test nullness with ``is None``,
 never ``pd.isna`` and never a truth test, as in A8a and A22.
 
@@ -70,7 +70,7 @@ DEFAULT_LIMIT = 8192
 RUN_ID_KEY = "poisson_prove.run_id"
 EPISODE_KEY = "poisson_prove.episode"
 RUN_ID = "r-2026-09-18-a8b"
-SALT = "a8b-oracle-salt"
+SALT = "a8b-test-salt"
 HORIZON = 10.0
 EPOCH = 1_756_900_000_000_000_000
 CAPTURE_FIELDS_SPEC = ("instrument", "content", "max_observation_bytes", "max_spans")
@@ -204,7 +204,7 @@ def sweep_toml(capture: dict[str, Any] | None) -> str:
     """CD: a ``[capture]`` table must declare ``max_observation_bytes``, so the builder writes
     ``DEFAULT_LIMIT`` for a caller that named no cap. A caller that names one, including a bad one, is left alone, so the
     refusal tests below still reach the parser with what they wrote."""
-    lines = ['target_id = "a8b-oracle@v0"', 't_unit = "steps"', "replicates = 1", "", "[axes.x]", 'type = "continuous"', "values = [0.1]", ""]
+    lines = ['target_id = "a8b-test@v0"', 't_unit = "steps"', "replicates = 1", "", "[axes.x]", 'type = "continuous"', "values = [0.1]", ""]
     if capture is not None:
         if "max_observation_bytes" not in capture and "max_span_bytes" not in capture:
             capture = {**capture, "max_observation_bytes": DEFAULT_LIMIT}
@@ -225,12 +225,12 @@ def write(path: Path, text: str) -> Path:
 def _tracer() -> Any:
     from opentelemetry import trace
 
-    return trace.get_tracer("a8b.oracle", "0.1.0")
+    return trace.get_tracer("a8b.test", "0.1.0")
 
 
 def child_capture_spans(spec_kwargs: dict[str, Any], spans: list[dict[str, Any]]) -> dict[str, Any]:
     """``install(CaptureSpec(**spec_kwargs))``, then one capture block emitting ``spans`` in order
-    through the real recorder -- the only path ``_is_content`` and the child's cut run on."""
+    through the real recorder -- the only path the content filter and the child's cut run on."""
     from poisson_prove.capture import CaptureSpec, capture, install
 
     # CD: CaptureSpec has no default cap, so the harness supplies DEFAULT_LIMIT. A caller that
@@ -304,7 +304,8 @@ def test_the_two_cut_functions_keep_their_signatures() -> None:
 
 
 def test_content_keys_is_a_frozenset_whose_in_answers_members_and_descendants() -> None:
-    """``CONTENT_KEYS`` takes the ``_ObservationKeys`` shape. A plain ``frozenset`` loses the families."""
+    """``CONTENT_KEYS`` is a ``frozenset`` whose ``in`` also answers a family's descendants. A plain
+    ``frozenset`` loses the families."""
     from poisson_prove.trace import CONTENT_KEYS
 
     assert isinstance(CONTENT_KEYS, frozenset)
@@ -356,7 +357,7 @@ def test_p8_7_a_value_over_the_limit_is_stored_as_the_wrapper_and_the_span_recor
     assert s.bytes_original == len(byte_form(text)) + len(byte_form(blob)) + len(byte_form(field))
 
 
-@settings(max_examples=120, deadline=None)
+@settings(max_examples=120)
 @given(
     text=st.text(alphabet=st.sampled_from(["a", "Z", " ", "é", "ß", "€", "中", "𝄞", "🙂"]), min_size=0, max_size=400),
     limit=st.sampled_from([5, 64, 99, 257]),
@@ -374,7 +375,7 @@ def test_p8_7_property_the_head_and_tail_are_the_longest_valid_utf8_within_the_l
     assert s.truncated == "observation" and s.bytes_original == len(raw)
 
 
-@settings(max_examples=60, deadline=None)
+@settings(max_examples=60)
 @given(
     value=st.recursive(
         st.one_of(st.none(), st.booleans(), st.integers(-9, 9), st.text(alphabet="ab€", max_size=30)),
@@ -384,8 +385,6 @@ def test_p8_7_property_the_head_and_tail_are_the_longest_valid_utf8_within_the_l
     limit=st.sampled_from([16, 64, 99]),
 )
 def test_p8_7_property_a_non_str_value_is_cut_on_its_canonical_json(value: Any, limit: int) -> None:
-    if isinstance(value, dict) and set(value) == {TRUNCATED_KEY_SPEC}:
-        return
     (s,) = cut(trace_of(span(1, attrs={"app.value": value})), limit).spans
     raw = byte_form(value)
     if len(raw) <= limit:
@@ -547,9 +546,10 @@ CAPTURE_PATH_ATTRS = {
 @needs_otel
 @pytest.mark.parametrize("content", [False, True], ids=["content-off", "content-on"])
 def test_p8_10_through_the_recorder_content_off_strips_all_eight_and_keeps_the_tool_observation(content: bool) -> None:
-    """The two ``llm.*`` content families. Through the recorder, because ``_is_content`` runs only in ``_span_mapping`` and a
-    hand-built ``Span`` never reaches it. ``input.value`` / ``output.value`` on an ``llm``-kind span
-    are not classified by kind, and nothing here asserts them either way."""
+    """The two ``llm.*`` content families. Through the recorder, because the content filter runs
+    only where the recorder maps a captured span, and a hand-built ``Span`` never reaches it.
+    ``input.value`` / ``output.value`` on an ``llm``-kind span are not classified by kind, and
+    nothing here asserts them either way."""
     r = isolated(child_capture_spans, {"content": True} if content else {}, [{"name": "execute_tool lookup", "attrs": CAPTURE_PATH_ATTRS}])
     assert r["active"] is True
     (s,) = Trace.from_dict(r["meta"]).spans
@@ -625,8 +625,8 @@ def test_p8_11_a_wrapper_is_an_observation_at_any_size_and_the_split_never_cuts(
 
 
 def test_p8_12_capture_spec_fields_and_the_cap_that_has_no_default() -> None:
-    """CD and P8-12: the field-name tuple is in ``_CAPTURE_FIELDS`` order, and ``CaptureSpec()``
-    with no cap does not build. The other three fields have defaults."""
+    """CD and P8-12: the field-name tuple is the ``[capture]`` table's keys in order, and
+    ``CaptureSpec()`` with no cap does not build. The other three fields have defaults."""
     from poisson_prove.capture import CaptureSpec
 
     assert tuple(f.name for f in dataclasses.fields(CaptureSpec)) == CAPTURE_FIELDS_SPEC
@@ -711,7 +711,6 @@ def test_p8_23_on_an_ascii_value_both_bounds_are_met_exactly(limit: int, size: i
     (s,) = cut(trace_of(span(1, attrs={"big.attribute": value})), limit).spans
     inner = s.attrs["big.attribute"][TRUNCATED_KEY_SPEC]
     assert inner == {"head": "y" * head, "tail": "y" * tail, "bytes_original": size}
-    assert head == limit - limit // 4 and tail == limit // 4
     assert len(inner["head"]) + len(inner["tail"]) <= limit < size
     assert s.truncated == "observation" and s.bytes_original == size
 

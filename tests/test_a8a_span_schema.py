@@ -8,8 +8,9 @@ through ``from_otel`` has none of its 21 keys aliased or lifted, ten of them are
 content, ``tokens`` and the model name do not reach the fields that exist for them, and none of
 A8a's eight carriers is present. No ``graph.node.*`` identity
 entries in ``ATTRIBUTE_ALIASES``. ``FAULT_KEY`` and ``FAULT_POSITION_KEY`` are not A8a's.
-``ALIAS_MAP_VERSION == "1"``. ``EVALUATOR`` is not a gate marker. ``_ORIGINAL_ERROR_TYPE``
-survives. ``inspect``'s four new columns come after ``error``.
+``ALIAS_MAP_VERSION == "1"``. ``EVALUATOR`` is not a gate marker. An ``error.type`` on a span
+that is not an error survives under ``poisson_prove.error_type``. ``inspect``'s four new columns
+come after ``error``.
 
 **pandas 2 and pandas 3, and no invariant is specific to one.** Every one of A8a's nine fields
 reaches disk inside the ``trace`` / ``trace_obs`` JSON columns, never as a Parquet column, so the
@@ -17,8 +18,9 @@ pandas major cannot see any of them. Nullness is by identity in every clause: ``
 ``is not None``, never ``pd.isna`` and never a bare truth test.
 
 **The guard on the kind ladder.** T36's tests in ``test_m12_kinds.py`` are the guard that fails if
-the vendor keys are lifted before the kind ladder reads them: adding ``openinference.span.kind`` to
-``_LIFTED_KEYS`` fails them.
+the kind ladder loses the vendor keys when they are lifted out of a span's attributes: a ladder that
+reads ``openinference.span.kind`` from what is left after the lift sends every such span to
+``other`` and fails them.
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ import logging
 from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -41,6 +42,7 @@ from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store
 from poisson_prove.trace import Span, Trace, TraceValidationError
 from conftest import STEP_LINE_RE, quickstart_design
+from isolated_support import isolated
 
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS / "fixtures" / "trace"
@@ -114,6 +116,22 @@ def flat_span(n: int, name: str, **attrs: Any) -> dict[str, Any]:
         "spanId": f"{n:016x}", "name": name, "startTimeUnixNano": str(EPOCH), "endTimeUnixNano": str(EPOCH + 1_000_000),
         "attributes": [{"key": k, "value": {"stringValue": str(v)}} for k, v in attrs.items()],
     }
+
+
+def child_captured_meta() -> dict[str, Any]:
+    """``install()`` in a child process (it is once per process), then two capture blocks through
+    the real recorder: one that holds no span and one that holds one. Each block's ``to_meta()``."""
+    from opentelemetry import trace as otel_trace
+
+    from poisson_prove.capture import CaptureSpec, capture, install
+
+    status = install(CaptureSpec(max_observation_bytes=8192))  # a [capture] table's cap has no default
+    with capture("r-a8a", "cfg:0") as empty:
+        pass
+    with capture("r-a8a", "cfg:1") as one:
+        with otel_trace.get_tracer("a8a").start_as_current_span("captured"):
+            pass
+    return {"active": status.active, "empty": empty.to_meta(), "stamped": one.to_meta()}
 
 
 def synthetic_run_with_trace(root: Path, run_id: str, trace: Mapping[str, Any]) -> None:
@@ -446,15 +464,14 @@ def test_p8_13_from_otel_stamps_it_and_record_and_litellm_leave_it_none() -> Non
             pass
     assert c.trace.alias_map_version is None
     assert from_litellm([]).alias_map_version is None
-    # The recorder's capture path reaches it for free: Recorder._trace builds through from_otel.
+    # The capture path stamps it too: a captured episode's trace is built through from_otel.
     pytest.importorskip("opentelemetry.sdk", reason="capture lives behind the [agent] extra")
-    from poisson_prove.capture import CaptureSpec, Recorder
-
-    rec = Recorder(CaptureSpec(max_observation_bytes=8192), "r-a8a", "cfg:1")  # a [capture] table's cap has no default
-    empty = rec._trace([], None)
-    assert empty is None  # nothing captured, so _trace itself builds no envelope
-    stamped = rec._trace([flat_span(0x31, "captured")], None)
-    assert stamped is not None and stamped["alias_map_version"] == ALIAS_MAP_VERSION
+    captured = isolated(child_captured_meta)
+    assert captured["active"] is True, captured
+    assert captured["empty"] is None  # nothing captured, so the recorder builds no envelope
+    stamped = captured["stamped"]
+    assert stamped is not None and stamped["alias_map_version"] == ALIAS_MAP_VERSION, stamped
+    assert [s["name"] for s in stamped["spans"]] == ["captured"], stamped["spans"]
 
 
 def test_p8_13_merge_mirrors_source_version_keeps_agreement_and_erases_disagreement() -> None:
@@ -497,13 +514,29 @@ def test_p8_14_on_the_fixtures_every_span_carries_both_and_error_keeps_the_shipp
 # ---------- P8-15: the two renames ----------
 
 
-def test_p8_15_modal_backend_meta_carries_infra_attempt_and_no_attempt() -> None:
-    from poisson_prove import executor_modal
+def test_p8_15_modal_backend_meta_carries_infra_attempt_and_no_attempt(tmp_path: Path) -> None:
+    from poisson_prove.executor import plan
+    from poisson_prove.executor_modal import ModalOptions, run_with_mapper
+    from poisson_prove.sampler import SweepSpec
 
-    job = ({"x": 1.0}, 7, 3, "hash", 0)
-    record = executor_modal._infra_record(SimpleNamespace(run_id="r-modal"), job, RuntimeError("boom"), 2)
-    assert record.backend_meta.get("infra_attempt") == 2 and "attempt" not in record.backend_meta, record.backend_meta
-    assert record.backend_meta.get("i") == 3
+    store = Store(tmp_path / "store")
+    spec = SweepSpec.build([{"x": 1.0}, {"x": 2.0}], replicates=2, target_id="a8a@v0", t_unit="steps")
+    p = plan(spec, store, backend="modal", run_salt="a8a-test-salt")
+
+    def lost(batches: Any) -> Any:
+        # Every batch is lost on every attempt: one try and one retry, then infra rows.
+        for index, _jobs in enumerate(batches):
+            yield index, RuntimeError("boom")
+
+    summary = run_with_mapper(p, lost, store, options=ModalOptions(batch_size=2, infra_retries=1))
+    assert summary.n_infra_failed == len(p.pairs) == 4, summary
+    position = {(q.config_hash, q.replicate_index): i for i, q in enumerate(p.pairs)}
+    rows = store.read(p.run_id).to_dict("records")
+    assert len(rows) == 4
+    for row in rows:
+        meta = row["backend_meta"]
+        assert meta.get("infra_attempt") == 2 and "attempt" not in meta, meta
+        assert meta.get("i") == position[(row["config_hash"], row["replicate_index"])], (meta, row["config_hash"])
 
 
 def test_p8_15_the_mock_emits_tries_and_never_attempt() -> None:
@@ -539,10 +572,11 @@ def test_p8_16_operation_is_the_source_operation_name_stripped_and_lowercased_in
     by = loop_spans()
     assert (by[16].operation, by[16].kind) == ("frobnicate", "other")
     assert (by[14].operation, by[14].kind, by[14].name) == ("chat", "llm", "gpt-4o")
-    from poisson_prove import trace as trace_module
-
-    assert not hasattr(trace_module, "_ORIGINAL_OPERATION")
-    assert getattr(trace_module, "_ORIGINAL_ERROR_TYPE", None) == "poisson_prove.error_type"  # survives
+    # An error.type on a span whose status is not an error has no field to land in: it survives
+    # in attrs under Prove's own key, and the key it arrived under is gone.
+    (kept,) = from_otel([flat_span(0x51, "lookup", **{"error.type": "TimeoutError"})]).spans
+    assert kept.error is None and kept.attrs.get("poisson_prove.error_type") == "TimeoutError", dict(kept.attrs)
+    assert "error.type" not in kept.attrs
 
 
 # ---------- P8-18: inspect's nine columns ----------
@@ -651,7 +685,7 @@ def span_forests(draw: st.DrawFn) -> list[dict[str, Any]]:
     return spans
 
 
-@settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=150, suppress_health_check=[HealthCheck.too_slow])
 @given(spans=span_forests(), source=st.sampled_from(("record", "otel", "litellm", "mixed")), alias=st.none() | st.sampled_from(["1", "2"]), truncated=st.none() | st.just("timeout"))
 def test_p8_19_assemble_of_split_round_trips_the_twenty_one_key_span_and_the_seventh_trace_key(spans: list[dict[str, Any]], source: str, alias: str | None, truncated: str | None) -> None:
     from poisson_prove.trace import OBSERVATION_KEYS, assemble, split

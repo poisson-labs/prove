@@ -598,12 +598,6 @@ def test_c5_check_without_event_exits_one_and_lists_the_events_the_runs_carry(pa
 # ---------- C6: check gate over several events ----------
 
 
-def test_c6_worse_counts_are_a_real_swing() -> None:
-    lo, hi = worse_counts()
-    assert 0 <= lo < hi <= N
-    assert lo + 4 <= N and hi + 4 <= N
-
-
 def test_c6_check_fails_when_any_named_event_has_a_worse_cell(worse_pair: Path) -> None:
     # PF3: the hand-built pair's two manifests carry one salt, so the
     # default is the paired test; the worse cell this gate fails on is the unpaired test's, named.

@@ -76,9 +76,9 @@ needs_fork = pytest.mark.skipif(not FORK_AVAILABLE, reason="the timeout path nee
 
 RUN_ID_KEY = "poisson_prove.run_id"
 EPISODE_KEY = "poisson_prove.episode"
-RUN_ID = "r-2026-09-05-crash-oracle"
+RUN_ID = "r-2026-09-05-crash-test"
 EPISODE = "cfg-7:1"
-SALT = "crash-oracle-salt"
+SALT = "crash-test-salt"
 CRASH = "crash"
 ROLES = ("a", "b", "c", CRASH)
 HORIZON = 10.0
@@ -181,7 +181,7 @@ def _episode(cfg: Mapping[str, Any], seed: int, **meta: Any) -> Episode:
 def _tracer() -> Any:
     from opentelemetry import trace
 
-    return trace.get_tracer("oracle.instrumentation", "0.1.0")
+    return trace.get_tracer("test.instrumentation", "0.1.0")
 
 
 def is_crash(cfg: Any) -> bool:
@@ -232,7 +232,7 @@ def sweep_toml(
     capture: dict[str, Any] | None,
     replicates: int = 1,
     axes: dict[str, list[Any]] | None = None,
-    target_id: str = "crash-oracle@v0",
+    target_id: str = "crash-test@v0",
     t_unit: str = "steps",
 ) -> str:
     """A sweep file over ``role``; ``capture`` is the ``[capture]`` table, or absent."""

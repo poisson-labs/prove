@@ -701,6 +701,21 @@ def test_pf3_4_the_five_commands_run_from_a_fresh_install_with_no_key_and_no_net
 # ---------- PF3.5 the packaged quickstart ----------
 
 
+def checkout_files() -> list[str]:
+    """The files the repository tracks, relative to its root; without git (a copy of the tree), every
+    file outside its environments and work folders."""
+    if (ROOT / ".git").exists() and shutil.which("git"):
+        done = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--cached"], capture_output=True, timeout=60)
+        assert done.returncode == 0, done.stderr.decode()
+        return sorted(p for p in done.stdout.decode().split("\0") if p and (ROOT / p).is_file() and not (ROOT / p).is_symlink())
+    skip = {".git", ".venv", ".work", "dist", "build", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"}
+    found = []
+    for folder, dirs, files in os.walk(ROOT):
+        dirs[:] = [d for d in dirs if d not in skip and not d.endswith(".egg-info")]
+        found += [str((Path(folder) / name).relative_to(ROOT)) for name in files]
+    return sorted(found)
+
+
 @pytest.mark.parametrize("source", ["package", pytest.param("wheel", marks=pytest.mark.slow)])
 def test_pf3_5_the_packaged_quickstart_is_written_byte_for_byte_and_is_the_only_copy(source: str, request: pytest.FixtureRequest, tmp_path: Path) -> None:
     cwd = tmp_path / "cwd"
@@ -729,15 +744,11 @@ def test_pf3_5_the_packaged_quickstart_is_written_byte_for_byte_and_is_the_only_
     assert list(doc["axes"]) == ["task_id", "tool_fail_rate"]
     assert len(doc["axes"]["task_id"]["values"]) * len(doc["axes"]["tool_fail_rate"]["values"]) == 9
 
-    # Every file of the checkout outside its environments and work folders, git or not.
-    skip = {".git", ".venv", ".work", "dist", "build", "__pycache__", ".mypy_cache", ".ruff_cache", ".pytest_cache"}
     copies = []
-    for folder, dirs, files in os.walk(ROOT):
-        dirs[:] = [d for d in dirs if d not in skip and not d.endswith(".egg-info")]
-        for name in files:
-            path = Path(folder) / name
-            if name.endswith("quickstart.toml") or (path.stat().st_size == len(packaged) and path.read_bytes() == packaged):
-                copies.append(str(path.relative_to(ROOT)))
+    for rel in checkout_files():
+        path = ROOT / rel
+        if path.name.endswith("quickstart.toml") or (path.stat().st_size == len(packaged) and path.read_bytes() == packaged):
+            copies.append(rel)
     assert sorted(copies) == ["src/poisson_prove/examples/quickstart.toml"], copies
     assert not (ROOT / "examples" / "quickstart.toml").exists()
 

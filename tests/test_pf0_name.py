@@ -60,7 +60,7 @@ from typing import Any
 
 import pyarrow.parquet as pq
 import pytest
-from test_pf4_stats import _ref_fisher_limits, _ref_limit, _ref_paired_power
+from test_pf4_stats import ref_fisher_limits, ref_limit, ref_paired_power
 from conftest import writable_copy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -508,8 +508,7 @@ def test_pf0_4_from_otel_lifts_proofload_keys_to_the_same_trace_as_poisson_prove
     prefix, so a span carrying the old keys and one carrying the new give one trace."""
     from poisson_prove.trace import from_otel
 
-    assert sorted({*FIELD_KEYS, *ATTR_KEYS}) == sorted(SPAN_KEYS) == sorted(OTHER_VALUES)
-    values = {**FIELD_KEYS, **ATTR_KEYS}
+    values = {key: {**FIELD_KEYS, **ATTR_KEYS}[key] for key in SPAN_KEYS}
     old = from_otel([otlp_span({f"proofload.{k}": v for k, v in values.items()})])
     new = from_otel([otlp_span({f"poisson_prove.{k}": v for k, v in values.items()})])
     assert old == new
@@ -526,8 +525,8 @@ def test_pf0_4_with_both_prefixes_on_one_span_the_new_keys_value_is_used() -> No
     from poisson_prove.trace import from_otel
 
     both = {
-        **{f"proofload.{k}": v for k, v in OTHER_VALUES.items()},
-        **{f"poisson_prove.{k}": v for k, v in {**FIELD_KEYS, **ATTR_KEYS}.items()},
+        **{f"proofload.{k}": OTHER_VALUES[k] for k in SPAN_KEYS},
+        **{f"poisson_prove.{k}": {**FIELD_KEYS, **ATTR_KEYS}[k] for k in SPAN_KEYS},
     }
     (span,) = from_otel([otlp_span(both)]).spans
     assert fields_of(span) == tuple(FIELD_KEYS.values()), span
@@ -679,10 +678,10 @@ def reference_mde(method: str, events_a: int, n: int, level: float) -> float | N
     other has no room, and null otherwise."""
     p_a = events_a / n
     if method == "fisher_bh":
-        rise, fall = _ref_fisher_limits(events_a, n, n, level)
+        rise, fall = ref_fisher_limits(events_a, n, n, level)
     else:
-        rise = _ref_limit(lambda g: _ref_paired_power(p_a, n, level, g, True), 1.0 - p_a)
-        fall = _ref_limit(lambda g: _ref_paired_power(p_a, n, level, g, False), p_a)
+        rise = ref_limit(lambda g: ref_paired_power(p_a, n, level, g, True), 1.0 - p_a)
+        fall = ref_limit(lambda g: ref_paired_power(p_a, n, level, g, False), p_a)
     if rise is not None and fall is not None:
         return max(rise, fall)
     if rise is not None and p_a == 0.0:

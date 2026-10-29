@@ -3,7 +3,7 @@
 The layered report's four tree sections: ``tree`` on ``MultiReport``, the ``tree=`` keyword on
 ``build_multi_report``, the four sections behind one ``if`` in each renderer, the reason mapping
 and the formatting in ``src/poisson_prove/report.py``; the tree-flag helper, the five flags on
-``report``, the one ``_diff_tree`` call and the five names on ``_DIFF_ONLY_FLAGS`` in
+``report``, the one tree call and the five names on the CLI's list of diff-only flags in
 ``src/poisson_prove/cli.py``.
 
 **``poisson_prove.report``'s tree keyword and field are reached inside test bodies**
@@ -31,10 +31,10 @@ deterministically and there is no rejection rate to hold in a band.
 **Conventions this file fixes beyond the invariants' own sentences. The code follows these.**
 
 - **Markdown layout.** ``## Omnibus`` and a blank line, then each item -- a line or a
-  ``_md_table`` -- followed by a blank line, the same for the other three headings, and the
+  markdown table -- followed by a blank line, the same for the other three headings, and the
   figure line right after the bound section's last blank. **Receipt layout.** One element per
-  line: ``<h2>Omnibus</h2>`` (no attributes), a ``<p>`` through ``_html_lines`` per line, a
-  ``_html_table`` per table, then the figure ``div``.
+  line: ``<h2>Omnibus</h2>`` (no attributes), a ``<p>`` of HTML-escaped text per line, an
+  escaped ``<table>`` per table, then the figure ``div``.
 - **Section contents, in order.** Omnibus: ``root.headline()`` verbatim; a method line
   carrying ``scheme``, ``n_permutations`` and ``seed``; one table whose rows are ``[event,
   location[e], p_location[e], dispersion[e], p_dispersion[e]]`` in ``root.events`` order; the
@@ -59,7 +59,7 @@ deterministically and there is no rejection rate to hold in a band.
 - **Identity is R5-R8's, the kind is R4's.** A numeric cell or token is matched to its field
   under *any* of M7's kinds (``renders``), so a correct field under a wrong kind passes the
   section invariant and fails R4 alone; a wrong field fails the section invariant.
-- **R4's allowed set** is every ``_fmt(field, kind)`` of the kind table, every count under
+- **R4's allowed set** is every field in its kind's number form from the kind table, every count under
   ``int``, the numeric tokens of every label, config value, event name and requested key, the
   tokens of the verbatim ``headline()`` and ``detail`` strings, and the rule's ``2``. **The
   assumption line is the one line R4 skips**: it is free text under R10 and carries a citation
@@ -91,7 +91,7 @@ deterministically and there is no rejection rate to hold in a band.
   roots rendering identical files; R5 itself runs the report-pair verb with the tree on its
   poisoned twin.
 - R14's "the stdout summary is unchanged" is pinned as the flat headline plus the three paths,
-  built from ``multi.headline()``, which is what ``_write_summary`` prints.
+  built from ``multi.headline()``, which is what the CLI's stdout summary prints.
 - R4's "every numeric token is a field" admits the verbatim ``headline()`` (``:g`` under R5),
   the verbatim ``detail`` (a string field) and the rule's literal ``2``, and skips the
   assumption line (above).
@@ -100,7 +100,7 @@ deterministically and there is no rejection rate to hold in a band.
 - R21: ``seed_identity_match`` is the salt plus the stored seeds on every matched row, and the
   ``overlap`` fixture stores the same seed in both arms (``seed_of``).
 
-**Named non-observables.** A second ``tree()`` call in ``_report_pair`` on the same frames and
+**Named non-observables.** A second ``tree()`` call in ``report`` on a pair on the same frames and
 knobs: the same bytes. R16's "before any string is built": a source property; this file sees
 the raise at ``build_multi_report`` and no page.
 """
@@ -108,7 +108,6 @@ the raise at ``build_multi_report`` and no page.
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import html as html_mod
 import importlib
 import inspect
@@ -125,7 +124,6 @@ from typing import Any
 import pandas as pd
 import pytest
 
-import poisson_prove
 from poisson_prove import cli
 from poisson_prove import diff as diff_mod
 from poisson_prove.diff import multi_diff
@@ -135,8 +133,6 @@ from conftest import quickstart_design, shared, without_method_lines, without_ru
 
 import lattice
 
-PACKAGE = Path(poisson_prove.__file__).resolve().parent
-DIFF_SOURCE = PACKAGE / "diff.py"
 #: The generated pair (``tests/lattice.py``).
 LATTICE_ROOT = lattice.root()
 LATTICE_A, LATTICE_B = lattice.RUN_A, lattice.RUN_B
@@ -844,8 +840,8 @@ def masked(text: str, result: Any, requested: str | None) -> str:
 
 
 def expected_tokens(result: Any, *, requested: str | None = None) -> tuple[set[str], set[frozenset[str]]]:
-    """R4's two sets, rebuilt from the tree and the kind table: ``allowed`` -- every ``_fmt(field,
-    kind)`` the table assigns, every count under ``int``, the numeric tokens of every user-data
+    """R4's two sets, rebuilt from the tree and the kind table: ``allowed`` -- every field in the
+    number form of the kind the table assigns, every count under ``int``, the numeric tokens of every user-data
     string, of the verbatim ``headline()`` and ``detail`` strings, and the rule's ``2``; and
     ``required`` -- the fields the sections' layout prints, given what was tested.
     The command line prints each field by the look file's rule 10, so a field's token is its
@@ -959,10 +955,6 @@ def assert_one_prove_version_entry(text: str) -> None:
     list and no ``proofload version:``."""
     found = re.findall(r"(?m)^- Prove version: [^\n]*$", text) + re.findall(r"<li>Prove version: [^<]*</li>", text)
     assert len(found) == 1 and "proofload version:" not in text, found
-
-
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # ---------- help text ----------
@@ -1410,7 +1402,7 @@ def test_r3_the_receipts_stylesheet_and_everything_outside_the_span_is_the_tree_
 def test_r4_every_numeric_token_in_the_four_sections_is_a_field_under_the_kind_table_and_every_layout_field_is_printed(every_pair: Any) -> None:
     """The token rule. For each fixture the expected set is rebuilt from the ``TreeResult`` and
     the kind table -- never read back from the page -- and every numeric token of the four
-    sections, on both surfaces, is in it: ``_fmt(field, kind)`` under the kind the kind table
+    sections, on both surfaces, is in it: a field in the number form of the kind the kind table
     assigns, the ``int`` of a count, a numeric token of a config value, a label, an event name,
     the verbatim ``headline()`` or a verbatim ``detail``, or the rule's ``2``. The bound
     section's assumption line, free text that carries a citation, is the one line skipped
@@ -2006,13 +1998,13 @@ def test_r15_identical_arguments_and_twin_stores_write_byte_identical_files(tmp_
     """Two runs with identical arguments are byte-identical (I12 with the tree); the same pair
     written to two roots renders the same three files, so nothing in the sections echoes a
     store path (R5 of ``test_m4_read.py`` runs the same verb on its poisoned twin)."""
-    digests = []
+    written = []
     for k in range(2):
         out = tmp_path / f"twice-{k}"
         code, stdout, stderr = run_cli(["--store", str(synth_root), "report", "me-a", "me-b", "--event", "fail", "--event", "crash", "--x", "task", "--y", "temp", "--methods", "all", "--out", str(out)])
         assert code == 0, stdout + stderr
-        digests.append({name: sha256_of_text((out / name).read_text()) for name in ("report.md", "heatmap.svg", "receipt.html")})
-    assert digests[0] == digests[1]
+        written.append({name: (out / name).read_bytes() for name in ("report.md", "heatmap.svg", "receipt.html")})
+    assert written[0] == written[1]
     twins = []
     for k in range(2):
         root = tmp_path / f"twin-{k}"
@@ -2022,7 +2014,7 @@ def test_r15_identical_arguments_and_twin_stores_write_byte_identical_files(tmp_
         out = tmp_path / f"twin-out-{k}"
         code, stdout, stderr = run_cli(["--store", str(root), "report", "ov-a", "ov-b", "--event", "fail", "--x", "task", "--y", "temp", "--out", str(out)])
         assert code == 0, stdout + stderr
-        twins.append({name: sha256_of_text((out / name).read_text()) for name in ("report.md", "heatmap.svg", "receipt.html")})
+        twins.append({name: (out / name).read_bytes() for name in ("report.md", "heatmap.svg", "receipt.html")})
     assert twins[0] == twins[1]
 
 
@@ -2128,7 +2120,7 @@ def test_r17_a_hostile_value_in_a_group_label_renders_as_text_on_a_pair_whose_gr
 def test_r17_the_markdown_carries_a_hostile_group_label_verbatim_and_keeps_its_column_count(outs: Path, synth_root: Path) -> None:
     """R17's markdown half, and it is a **correctness** claim rather than a safety one.
 
-    ``_md_table`` does not escape, so the value rides into the receipt's markdown verbatim and the
+    The report's markdown table does not escape, so the value rides into the receipt's markdown verbatim and the
     guarantee the receipt can offer there is exactly that: what the structure holds is what the
     file says. A pipe in a label would split the row into extra columns -- it would break the
     table, not execute anything -- so the column-count clause below is what that failure mode

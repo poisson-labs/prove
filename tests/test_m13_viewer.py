@@ -12,7 +12,7 @@ What is asserted where:
   reads the provenance list off M7's public markdown, because the page shows the items with no
   marker of what was dropped. V36 and V39 build
   their expectations from M7's *public* ``to_html()`` receipt (its worst-cell tables and its
-  fence blockquote) rather than from ``_worst_header``/``_worst_table_rows``/``_EPISTEMIC_FENCE``.
+  fence blockquote) rather than from the report module's own builders of those tables and that fence.
 - **Servers.** Every server test binds ``127.0.0.1:0`` in a ``threading.Thread(daemon=True)``,
   waits on an Event set from ``on_bind`` (no fixed-duration sleep), talks to it with
   ``http.client``, and stops it with ``shutdown()`` then ``server_close()`` in a ``finally``.

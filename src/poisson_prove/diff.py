@@ -896,6 +896,9 @@ class EventDiff:
     n_unflaggable: int = 0
     together_needed: int | None = None
     replicates_for_lone_flag: int | None = None
+    #: Under the paired test, each condition's matched pairs: ``config_hash`` to the pairs in which
+    #: A had the event, those in which B had it, and how many there are. The shares count these.
+    _matched: Mapping[str, tuple[int, int, int]] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         # A result built by hand carries no direction counts; they are read from its cells.
@@ -926,8 +929,9 @@ class EventDiff:
 
     def records(self) -> list[dict[str, Any]]:
         """The cells as JSON-ready records: every number native, every NaN None, the direction
-        filled in, each arm's share with its Wilson interval at its level, and whether a
-        share differs from its rate, which no store 0.1.0 writes can make true."""
+        filled in, each arm's share with its Wilson interval at its level (under the paired test,
+        its share of the condition's matched pairs, as the change is), and whether a share differs
+        from its rate, which no store 0.1.0 writes can make true."""
         cached: list[dict[str, Any]] | None = self.__dict__.get("_records")
         if cached is None:
             cached = self._build_records()
@@ -947,10 +951,17 @@ class EventDiff:
             cell = {col: _none_if_nan(_native(value)) for col, value in record.items()}
             cell["direction"] = _direction_of_record(cell, self.kind)
             cell["verdict"] = _verdict_word(cell["direction"], self.kind)
-            for arm in ("a", "b"):
-                # An arm with no run (only a frame built by hand has one) has no share.
+            matched = self._matched.get(str(cell["config_hash"]))
+            for i, arm in enumerate(("a", "b")):
+                # An arm with no run (only a frame built by hand has one) has no share, and under
+                # the paired test a condition with no matched pair has none either.
                 events, n = int(cell[f"events_{arm}"]), int(cell[f"n_{arm}"])
-                cell[f"share_{arm}"] = share(events, n) if n else None
+                if matched is None:
+                    cell[f"share_{arm}"] = share(events, n) if n else None
+                else:
+                    cell[f"share_{arm}"] = share(matched[i], matched[2]) if matched[2] else None
+                # Whether the share differs from its rate is a fact about censoring: each run's
+                # own count against its own rate.
                 gap = abs(events / n - float(cell[f"rate_{arm}"])) if n else 0.0
                 cell[f"share_{arm}_differs"] = gap > _CIF_EQUALITY_TOLERANCE
             out.append(cell)
@@ -1184,7 +1195,7 @@ class MultiDiffResult:
 
     def to_markdown(self) -> str:
         from poisson_prove import _facts, _look
-        from poisson_prove.stats import WILSON_LEVEL, level_label, wilson
+        from poisson_prove.stats import WILSON_LEVEL, level_label
 
         look = _look.active()
         mde = _look.fmt_rate if look else (lambda x: f"{x:.4f}")
@@ -1258,13 +1269,13 @@ class MultiDiffResult:
             for record in ev.records():
                 values = [_md_cell(record[col], col) for col in head[:8]]
                 for arm in ("a", "b"):
-                    k, n = int(record[f"events_{arm}"]), int(record[f"n_{arm}"])
-                    if not n:
+                    arm_share = record[f"share_{arm}"]
+                    if arm_share is None:
                         values.append("none")
                         continue
-                    interval = wilson(k, n)
                     mark = " *" if record[f"share_{arm}_differs"] else ""
-                    values.append(f"{k / n:.3f} [{interval.lo:.3f}, {interval.hi:.3f}]{mark}")
+                    value, lo, hi = arm_share["value"], arm_share["lo"], arm_share["hi"]
+                    values.append(f"{value:.3f} [{lo:.3f}, {hi:.3f}]{mark}")
                 values.append(_md_cell(record["delta"], "delta"))
                 lo, hi = record.get("ci_lo"), record.get("ci_hi")
                 interval_text = "censored" if lo is None or hi is None else f"[{lo:.3f}, {hi:.3f}]"
@@ -1275,7 +1286,7 @@ class MultiDiffResult:
                 values.append(f"{limit} (timing)" if record.get("direction_note") else limit)
                 lines.append("| " + " | ".join(values) + " |")
             lines.append("")
-            lines.append(_facts.shares_caption(e, WILSON_LEVEL))
+            lines.append(_facts.shares_caption(e, WILSON_LEVEL, paired=self.method == "mcnemar_bh"))
             lines.append(_facts.limits_caption(_facts.power_of(self)))
         if len(self.trades):
             tcols = list(_TRADES_COLUMNS)
@@ -1953,6 +1964,16 @@ def _event_diff(
         _verdict.judged(_verdict.HIGHER, kind): n_higher,
         _verdict.judged(_verdict.LOWER, kind): n_lower,
     }
+    matched: dict[str, tuple[int, int, int]] = {}
+    for r in rows:
+        if r["pairs"] is not None:
+            pairs = r["_arms"].pairs()
+            both = len(pairs["both"])
+            matched[str(r["config_hash"])] = (
+                len(pairs["only_a"]) + both,
+                len(pairs["only_b"]) + both,
+                int(r["pairs"]),
+            )
     return EventDiff(
         event=event,
         cells=cells,
@@ -1969,6 +1990,7 @@ def _event_diff(
         n_holm_higher=sum(1 for r in rows if r["holm"] and r["direction"] == _verdict.HIGHER),
         n_holm_lower=sum(1 for r in rows if r["holm"] and r["direction"] == _verdict.LOWER),
         n_unflaggable=len(unflaggable),
+        _matched=matched,
         together_needed=(
             _limits.together_needed([r["p_min"] for r in rows], q, family) if unflaggable else None
         ),

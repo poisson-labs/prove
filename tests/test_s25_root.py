@@ -78,7 +78,7 @@ exact negatives and their p-values exact duplicates, which a whole-outcome excha
 independent exchange breaks.
 
 **Named non-observables.** ``units.delta`` versus ``cells.delta`` on censored data has no fixture:
-``_truncate_raw`` censors at the horizon, so the Aalen-Johansen estimate equals the naive
+the diff's horizon truncation censors at the horizon, so the Aalen-Johansen estimate equals the naive
 proportion on every input. Under ``arm_label`` with unequal ``n``, a builder that
 assigns the first ``n_b`` of the pool to arm a is a valid permutation of a mirrored design and is
 not distinguishable from the surface. The ``--methods all --format json`` shape and the exit code
@@ -88,7 +88,6 @@ former's top-level key set to the three methods, and nothing pins the latter.
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import math
@@ -405,10 +404,6 @@ def without(payload: Mapping[str, Any], keys: Sequence[str]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in keys}
 
 
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
 # ---------- fixtures ----------
 
 
@@ -543,7 +538,7 @@ def small_pairs(draw: st.DrawFn) -> tuple[dict[str, list[str]], dict[str, list[s
     return cells_a, cells_b, vocab[1:], method, permutations, seed
 
 
-PROPERTY_SETTINGS = settings(deadline=None, max_examples=40, suppress_health_check=[HealthCheck.too_slow])
+PROPERTY_SETTINGS = settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
 
 
 # ---------- O1: the unweighted forms ----------
@@ -671,7 +666,7 @@ def test_o2_the_rebuild_truncates_at_the_minimum_horizon_the_way_multi_diff_does
     """The rebuild trap's hardest case: the lattice cannot express truncation. Arm a's horizon is 5 and
     carries events at t=4.5; arm b's horizon is 3, so ``multi.horizon`` is 3 and every t=4.5 event
     in a is re-censored -- still in ``n_a``, no longer in ``events_a``. A rebuild that skips
-    ``_truncate_raw`` counts them as events and disagrees with ``cells``. Replicates stay matched
+    the horizon truncation counts them as events and disagrees with ``cells``. Replicates stay matched
     (a truncated row keeps its index), so all three methods apply."""
     a = raw_frame("trunc-a", {"k0": ["late"] * 10 + ["fail"] * 4 + ["ok"] * 18, "k1": ["late"] * 6 + ["ok"] * 26}, horizon=5.0)
     a.loc[a["outcome"] == "late", "t"] = 4.5
@@ -784,10 +779,10 @@ def test_o5_the_same_inputs_give_identical_json_bytes_twice_in_one_process(pair:
 def test_o5_the_same_inputs_give_identical_json_bytes_across_two_processes(pair: Any, lattice_trees: Any) -> None:
     a, b, _, _ = pair
     multi = lattice_trees.multi((EVENT,), "fisher_bh")
-    here = sha256_of_text(json_bytes(tree().omnibus(a, b, multi, n_permutations=200, seed=0)))
+    here = json_bytes(tree().omnibus(a, b, multi, n_permutations=200, seed=0))
     script = "\n".join(
         [
-            "import hashlib, json, sys, warnings",
+            "import json, sys, warnings",
             "from poisson_prove.store import Store",
             "from poisson_prove.diff import multi_diff, UnpairedAnalysis",
             "from poisson_prove.tree import omnibus",
@@ -796,12 +791,12 @@ def test_o5_the_same_inputs_give_identical_json_bytes_across_two_processes(pair:
             "a = s.read(ra, meta=False); b = s.read(rb, meta=False)",
             "m = multi_diff(a, b, events=[event], method='fisher_bh', manifest_a=s.manifest(ra), manifest_b=s.manifest(rb))",
             "r = omnibus(a, b, m, n_permutations=200, seed=0)",
-            "print(hashlib.sha256(json.dumps(r.to_json(), sort_keys=True).encode('utf-8')).hexdigest())",
+            "print(json.dumps(r.to_json(), sort_keys=True))",
         ]
     )
     done = subprocess.run([sys.executable, "-c", script, str(LATTICE_ROOT), RUN_A, RUN_B, EVENT], capture_output=True, text=True, check=False)
     assert done.returncode == 0, done.stderr
-    assert done.stdout.strip() == here
+    assert done.stdout.rstrip("\n") == here
 
 
 def test_o5_a_different_seed_moves_only_the_p_driven_fields(
@@ -1205,7 +1200,7 @@ def test_complementary_events_give_exact_duplicate_p_values_and_negated_location
 )
 def test_o13_a_bad_knob_is_refused_with_tree_error(lattice_roots: dict[str, tuple[Any, Any]], pair: Any, knobs: dict[str, Any]) -> None:
     """``bool`` is an ``int`` to Python and is refused anyway: ``seed=True`` is a typo, never a
-    seed. ``TreeError`` subclasses ``DiffError`` so ``cli``'s ``_REFUSABLE`` maps it to exit 2
+    seed. ``TreeError`` subclasses ``DiffError`` so the CLI's list of refusable errors maps it to exit 2
     without a change to ``cli.py``."""
     a, b, _, _ = pair
     multi, _ = lattice_roots["fisher_bh"]

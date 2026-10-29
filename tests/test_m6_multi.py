@@ -17,7 +17,7 @@ Two invariants are deliberately not tested:
 
 - A4 names "the ordering helper" (delta desc, q asc, mde asc, config_hash) but the public API
   declares no such symbol, and no extra public symbol may be added. M7's
-  private ``_worst`` sorts by (delta desc, config_hash) and is covered by M7 I19.
+  own worst-cell ordering sorts by (delta desc, config_hash) and is covered by M7 I19.
 - A7 asks for early censoring from errored rows, but M4's ``EpisodeRecord`` requires
   ``t`` and ``horizon`` to be None on errored rows, so they carry no censoring time, and
   A20 excludes them from every denominator. As written the CIF cannot differ from the
@@ -69,7 +69,7 @@ from poisson_prove.diff import (
 )
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import censor
-from test_pf4_stats import _assert_limit, _ref_fisher_limits
+from test_pf4_stats import assert_limit, ref_fisher_limits
 
 import lattice
 
@@ -768,7 +768,7 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
     for row in ours.itertuples():
         n_a, events_a = int(row.n_a), int(row.events_a)
         if events_a not in refs:
-            refs[events_a] = _ref_fisher_limits(events_a, n_a, int(row.n_b), level)
+            refs[events_a] = ref_fisher_limits(events_a, n_a, int(row.n_b), level)
         rise, fall = refs[events_a]
         if events_a == n_a:
             rise = None  # no room to rise
@@ -781,7 +781,7 @@ def test_a5_single_event_via_multi_per_cell_agrees_with_diff(golden: DiffResult,
         else:
             want = None  # a direction with room and no limit leaves no single number
         assert abs(float(row.mde_level) - level) <= 1e-15, row.Index
-        _assert_limit(row.mde, want, (row.Index, events_a))
+        assert_limit(row.mde, want, (row.Index, events_a))
     # PF4.20: the comparison's "tripped" has no kind, so its verdict column reads direction words
     # where DiffResult's reads safer/worse.
     as_direction = {"safer": "lower", "worse": "higher", "unchanged": "unchanged"}
@@ -901,7 +901,7 @@ def _assert_counts(result: MultiDiffResult, a: pd.DataFrame, b: pd.DataFrame) ->
     assert result.n_not_comparable == result.dropped_a + result.dropped_b
 
 
-@settings(max_examples=40, deadline=None)
+@settings(max_examples=40)
 @given(pair=run_pair())
 def test_a9_counts_add_up_property(pair: tuple[pd.DataFrame, pd.DataFrame]) -> None:
     a, b = pair
@@ -1327,7 +1327,7 @@ def test_a18_no_truncation_when_horizons_match(multi_tripped: MultiDiffResult) -
 # ---------- A19: determinism ----------
 
 
-@settings(max_examples=25, deadline=None)
+@settings(max_examples=25)
 @given(pair=run_pair(max_cells=3))
 def test_a19_multi_diff_is_deterministic_property(pair: tuple[pd.DataFrame, pd.DataFrame]) -> None:
     a, b = pair

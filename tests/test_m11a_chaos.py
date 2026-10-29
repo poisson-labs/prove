@@ -3,7 +3,7 @@
 The injection adapter has no ``agentchaos-sdk`` dependency: the hook and the applier are
 Prove's own, and the fault vocabulary is copied under MIT with attribution. These tests cover
 ``src/poisson_prove/chaos.py``, ``src/poisson_prove/chaos_catalog.py``, ``NOTICE``, the ``[chaos]``
-table in ``sampler.py``, ``chaos_call`` on ``executor._call_in_process``, ``chaos`` on
+table in ``sampler.py``, ``chaos_call`` on the executor's one call funnel, ``chaos`` on
 ``executor_modal.worker_batch``, ``environment["chaos"]`` and ``backend_meta["chaos"]``.
 ``poisson_prove.chaos`` and ``poisson_prove.chaos_catalog`` are
 imported **inside** test bodies and inside the forked children only, so a failure to import
@@ -84,8 +84,8 @@ level and asserts nothing, deliberately: the seam cannot be observed without an 
 ``chaos.py`` is core, and ``test_s0_scaffold.py::test_no_network_imports_in_core`` bans any
 ``import httpx`` in ``src/poisson_prove`` at any nesting level (an AST walk, not a substring).
 So ``chaos.py`` reaches the client through ``sys.modules["httpx"]`` (the client the target already
-loaded), and ``FaultRecord``'s ``start_ns``/``end_ns`` come from ``trace._span_clock()``, the
-clock the spans use. A faulted arm whose process has not loaded ``httpx`` by ``install()`` has
+loaded), and ``FaultRecord``'s ``start_ns``/``end_ns`` come from the trace module's span clock,
+the clock the spans use. A faulted arm whose process has not loaded ``httpx`` by ``install()`` has
 no LLM client to inject into and is refused with ``ChaosError`` before the manifest exists
 (M11a-33); the ``none`` arm still installs.
 """
@@ -124,7 +124,7 @@ from poisson_prove.survival import censor
 from poisson_prove.trace import Trace
 from isolated_support import isolated as run_isolated
 
-openai = pytest.importorskip("openai", reason="the injection oracle drives the openai SDK over a scripted transport")
+openai = pytest.importorskip("openai", reason="the injection tests drive the openai SDK over a scripted transport")
 
 MODULE = __name__
 PACKAGE = Path(poisson_prove.__file__).resolve().parent  # the tree under test; a shadow tree under PYTHONPATH
@@ -199,17 +199,17 @@ INSTALL_FAULT = "llm_error_single"
 
 # ---------- the scripted wire ----------
 
-BASE_URL = "http://oracle.invalid/v1"
+BASE_URL = "http://chaos.invalid/v1"
 CHAT_PATH = "/chat/completions"
 OTHER_PATH = "/embeddings"
-MODEL = "oracle-model"
+MODEL = "test-model"
 MESSAGES = [{"role": "user", "content": "solve the task"}]
 TOOLS = [{"type": "function", "function": {"name": "run_tests", "parameters": {"type": "object", "properties": {}}}}]
 CONTENT = "Voilà: the café résumé is naïve — jalapeño über straße, done."  # non-ASCII, 61 chars
 ARGUMENTS = '{"code": "print(\\"solved\\")", "path": "solution.py"}'
-RESPONSE_HEADERS = {"x-request-id": "req-oracle-1", "x-ratelimit-remaining-requests": "99", "openai-processing-ms": "12"}
+RESPONSE_HEADERS = {"x-request-id": "req-test-1", "x-ratelimit-remaining-requests": "99", "openai-processing-ms": "12"}
 COMPLETION: dict[str, Any] = {
-    "id": "chatcmpl-oracle",
+    "id": "chatcmpl-test",
     "object": "chat.completion",
     "created": 1,
     "model": MODEL,
@@ -233,7 +233,7 @@ COMPLETION_PLAIN: dict[str, Any] = {
 EMBEDDING: dict[str, Any] = {
     "object": "list",
     "data": [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2]}],
-    "model": "oracle-embed",
+    "model": "test-embed",
     "usage": {"prompt_tokens": 1, "total_tokens": 1},
 }
 COMPLETION_EMPTY: dict[str, Any] = {
@@ -243,8 +243,8 @@ COMPLETION_EMPTY: dict[str, Any] = {
 BODIES: dict[str, dict[str, Any]] = {"tools": COMPLETION, "plain": COMPLETION_PLAIN, "empty": COMPLETION_EMPTY}
 HORIZON = 10.0
 STEPS = ("plan", "solve")
-SALT = "m11a-oracle-salt"
-TARGET_ID = "chaos-oracle@v0"
+SALT = "m11a-test-salt"
+TARGET_ID = "chaos-test@v0"
 POSITION = ("plan", 1)
 MIXED_SEED = 7
 MIXED_POSITIONS = [
@@ -281,7 +281,7 @@ def _sync_client(transport: ScriptedTransport) -> httpx.Client:
 
 
 def _openai(client: httpx.Client) -> Any:
-    return openai.OpenAI(api_key="oracle", base_url=BASE_URL, max_retries=0, http_client=client)
+    return openai.OpenAI(api_key="test", base_url=BASE_URL, max_retries=0, http_client=client)
 
 
 # ---------- reference constants ----------
@@ -436,7 +436,7 @@ def chaos_otel_rollout(cfg: dict[str, Any], seed: int) -> Episode:
     from opentelemetry import trace as otel_trace
 
     chaos = importlib.import_module(CHAOS_MODULE)
-    tracer = otel_trace.get_tracer("oracle.chaos", "0.1.0")
+    tracer = otel_trace.get_tracer("test.chaos", "0.1.0")
     client = _client_for(cfg)
     observed = []
     for name in STEPS:
@@ -458,7 +458,7 @@ def _send(call: dict[str, Any], transport: ScriptedTransport, sync_client: httpx
     via = call.get("via", "httpx")
     path = call.get("path", CHAT_PATH)
     stream = bool(call.get("stream", False))
-    body = _request(stream) if path == CHAT_PATH else {"model": "oracle-embed", "input": "x"}
+    body = _request(stream) if path == CHAT_PATH else {"model": "test-embed", "input": "x"}
     if via == "httpx":
         return sync_client.post(path, json=body)
     if via == "httpx-async":
@@ -477,7 +477,7 @@ def _send(call: dict[str, Any], transport: ScriptedTransport, sync_client: httpx
 
         async def go_openai() -> httpx.Response:
             async with httpx.AsyncClient(transport=httpx.MockTransport(transport), base_url=BASE_URL) as ac:
-                aoai = openai.AsyncOpenAI(api_key="oracle", base_url=BASE_URL, max_retries=0, http_client=ac)
+                aoai = openai.AsyncOpenAI(api_key="test", base_url=BASE_URL, max_retries=0, http_client=ac)
                 raw = await aoai.chat.completions.with_raw_response.create(model=MODEL, messages=MESSAGES, tools=TOOLS)
                 return raw.http_response
 
@@ -666,7 +666,7 @@ def child_both_hooks() -> dict[str, Any]:
 
     async def go() -> str | None:
         async with httpx.AsyncClient(transport=httpx.MockTransport(transport), base_url=BASE_URL) as ac:
-            aoai = openai.AsyncOpenAI(api_key="oracle", base_url=BASE_URL, max_retries=0, http_client=ac)
+            aoai = openai.AsyncOpenAI(api_key="test", base_url=BASE_URL, max_retries=0, http_client=ac)
             completion = await aoai.chat.completions.create(model=MODEL, messages=MESSAGES, tools=TOOLS)
             return completion.choices[0].message.content
 
@@ -683,15 +683,15 @@ def child_error_override(seed: int) -> dict[str, Any]:
     catalog = importlib.import_module(CATALOG_MODULE)
     template = catalog.CATALOG["llm_error_single"]
     entry_type = type(_entries(template)[0])
-    entry = entry_type(name="oracle_error_tool", intercept="response", action="error", target_path=ARGUMENTS_PATH, value=418)
+    entry = entry_type(name="test_error_tool", intercept="response", action="error", target_path=ARGUMENTS_PATH, value=418)
     extended = dict(catalog.CATALOG)
-    extended["oracle_error_tool"] = entry if dataclasses.is_dataclass(template) else (entry,)
+    extended["test_error_tool"] = entry if dataclasses.is_dataclass(template) else (entry,)
     catalog.CATALOG = extended
-    listed = "oracle_error_tool" in chaos.fault_names()
-    chaos.install(chaos.ChaosSpec(fault="oracle_error_tool"))
+    listed = "test_error_tool" in chaos.fault_names()
+    chaos.install(chaos.ChaosSpec(fault="test_error_tool"))
     transport = ScriptedTransport()
     client = _sync_client(transport)
-    with chaos.injecting(chaos.ChaosSpec(fault="oracle_error_tool"), seed) as records:
+    with chaos.injecting(chaos.ChaosSpec(fault="test_error_tool"), seed) as records:
         observed = _perform(chaos, {"position": list(POSITION)}, transport, client, None)
     return {"listed": listed, "observed": observed, "records": _records(records)}
 

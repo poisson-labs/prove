@@ -9,7 +9,7 @@ What is asserted where:
 - **The public surface first.** ``RunTally`` values, coverage frames, ``Cell`` fields, the
   structure, the page, and the CLI's exit code and streams. One clause reaches a private name
   because the name itself is what is pinned and nothing rendered carries it: E3 (the store's
-  infra marker against ``executor_modal._INFRA_PREFIX``, so they cannot drift).
+  infra marker against the Modal backend's own ``infra: `` prefix, so they cannot drift).
 - **The lattice pair is the zero case** (E4, E14, E15, E21, E23, E24): the generated pair
   (``tests/lattice.py``) has no errored rows, no holes, both tallies ``(2304, 2304, 0, 0, 0, 0)``.
   E14 checks the facts of
@@ -34,8 +34,8 @@ Literals left to the frozen tests, pinned here rather than buried in a test:
 - ``coverage_block``: ``MultiDiffResult.to_markdown()`` is UNCHANGED (A20 in the M6 frozen tests
   requires a diff with errored rows to render identically to one without); the ``diff``
   verb's text output appends the block instead, after the markdown and after the
-  ``--methods all`` table, as ``_method_table`` is appended: the exact ``coverage:``
-  line, a ``## coverage`` heading and the table over ``COVERAGE_COLUMNS`` in ``_md_cell``
+  ``--methods all`` table, as that table is appended: the exact ``coverage:``
+  line, a ``## coverage`` heading and the table over ``COVERAGE_COLUMNS`` in the verb's own table-cell
   style, a comparable row's cause printed ``None``.
 - ``NONE_TEXT``: the Holes table prints ``none`` for a null coords or hash.
 - R8's fixture-pair row literal is ``"0"``: the lattice pair has no errored rows.
@@ -258,7 +258,7 @@ ERRORS = ("timeout", "infra: RuntimeError('x')", "boom")
 
 # The synthetic pair. (task, level, variant) -> (rows with an outcome, errored rows).
 SYN_A, SYN_B = "syn-a", "syn-b"
-SYN_SALT = "s21-oracle"
+SYN_SALT = "s21-test"
 SYN_EVENTS = ("fail", "ok")
 SYN_X, SYN_Y = "task", "level"
 HORIZON = 10.0
@@ -1467,7 +1467,7 @@ def e14_multi() -> MultiDiffResult:
 
 def e14_builder_texts(multi: MultiDiffResult) -> dict[str, str]:
     """The E14 argv's ``multi`` and spec, rendered by the M7 builder with no tree, the way
-    ``_report_pair`` builds them: the dark-theme report's markdown and the light-theme receipt."""
+    ``report`` on a pair builds them: the dark-theme report's markdown and the light-theme receipt."""
     store = Store(LATTICE_ROOT)
     ma, mb = store.manifest(LATTICE_A), store.manifest(LATTICE_B)
     spec = ReportSpec(title=f"{LATTICE_A} vs {LATTICE_B}: {lattice.EVENT}", x_axis=lattice.X, y_axis=lattice.Y)
@@ -1480,10 +1480,10 @@ def ref_worst_unchanged(ev: Any, level: float) -> tuple[float, str]:
     """The largest limit over an event's unchanged conditions (each the larger of its two Fisher
     limits at ``level``, or the one way with room; PF4.27), from the stats file's references, and
     the way that limit goes on the condition the result names as worst."""
-    from test_pf4_stats import _ref_fisher_limits
+    from test_pf4_stats import ref_fisher_limits
 
     def limit(row: Any) -> tuple[float | None, float | None, float | None]:
-        rise, fall = _ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
+        rise, fall = ref_fisher_limits(int(row.events_a), int(row.n_a), int(row.n_b), level)
         no_rise, no_fall = row.events_a == row.n_a, row.events_a == 0
         if rise is not None and fall is not None:
             return max(rise, fall), rise, fall

@@ -484,7 +484,7 @@ def test_pf4_26_the_logrank_limits_are_caught_four_times_in_five(base: float, co
     (PF4.43: the rise's ``mde_hr``, the fall's grid point recovered from its printed change); B's other
     endings are A's. The 17 unmoved rows' (p, direction) come from a pool of 4,000 draws of the same
     truth, sampled with replacement, except in the subset, where every row is drawn fresh."""
-    from test_pf4_stats import _fall_step
+    from test_pf4_stats import fall_step
 
     n, rows = 100, 18
     rng = np.random.default_rng(int(2800 + base * 100 + competing * 10))
@@ -500,7 +500,7 @@ def test_pf4_26_the_logrank_limits_are_caught_four_times_in_five(base: float, co
             tmpl_e[s] = had / at_risk
             rest = at_risk - had
             tmpl_o[s] = np.sum((ta == s + 1) & ~ea & (ta < STEPS)) / rest if rest else 0.0
-    k = _fall_step(ta, ea, n, float(row["mde_fall"]), float(ea.mean()))
+    k = fall_step(ta, ea, n, float(row["mde_fall"]), float(ea.mean()))
     assert k is not None
     pool = np.array([_logrank(_logrank_arm(rng, n, tmpl_e, tmpl_o), _logrank_arm(rng, n, tmpl_e, tmpl_o)) for _ in range(POOL)])
     for way, theta in (("rise", float(row["mde_hr"])), ("fall", math.exp(-k * 1e-3))):

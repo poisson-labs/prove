@@ -1,5 +1,5 @@
-"""Invariants V1-V15 of the pandas 3 port: ``store._NULLABLE_STRING_COLUMNS`` reads a stored null
-back as ``None``, ``diff._coverage`` rebuilds its ``cause`` column from the records list, and the
+"""Invariants V1-V15 of the pandas 3 port: every nullable string column of the store reads a stored
+null back as ``None``, the diff's coverage frame rebuilds its ``cause`` column from the records list, and the
 dependency parser reads PEP 508 names.
 
 **This file runs under two pandas versions and the invariant set does not partition between
@@ -9,15 +9,15 @@ asserted under both:
 
 - **pandas 2.3.3.** The store normalisation and the coverage rebuild are identities here
   (measured), so the read-path and coverage tests check the port's "no-op on pandas 2" claim:
-  it is asserted rather than assumed. V5, V14 and V15 do not depend on the pandas version.
+  it is asserted rather than assumed. V14 and V15 do not depend on the pandas version.
 - **pandas 3.0.5.** V1, V2, V3, V7, V9 and V11 catch an unported read as well, because
   ``pyarrow.Table.to_pandas`` gives a ``str`` column with ``NaN`` for null and
   ``DataFrame.from_records`` replaces a mixed column's ``None`` before an ``astype(object)``
   guard in ``diff.py`` ever runs.
 
-Twelve tests, one per invariant for twelve of the fifteen (V8, V10 and V12 have none here), in both
-versions: 12 + 12 = 24 ids over the two runs against the file's own 12, because no invariant is
-version-specific. An invariant
+Ten tests, one per invariant for ten of the fifteen (V1 holds V5's columns, V13 is gone, and V8, V10
+and V12 have none here), in both versions: 10 + 10 = 20 ids over the two runs against the file's own
+10, because no invariant is version-specific. An invariant
 that could only be asserted under one pandas would be named here with the version it is missing
 from; there is none.
 
@@ -31,7 +31,7 @@ holes lets an unported build pass V9. ``mixed_pair`` therefore carries comparabl
 
 Fixture limits, stated rather than left to be rediscovered:
 
-- ``two_records`` says nothing about the coverage frame; its frames never reach ``_coverage``.
+- ``two_records`` says nothing about the coverage frame; its frames never reach the coverage rebuild.
 - ``mixed_pair`` says nothing about the store's own null columns beyond what it reads back;
   its coverage rows come from the raw frames, not from ``censor()``.
 - Nothing here measures a live provider or a Modal run.
@@ -56,7 +56,6 @@ from packaging.requirements import Requirement
 from packaging.version import Version
 
 import poisson_prove.diff as diff_mod
-import poisson_prove.store as store_mod
 from poisson_prove.episode import Episode
 from poisson_prove.store import EpisodeRecord, RunManifest, Store, config_hash
 
@@ -77,7 +76,7 @@ POISON = "not json"
 
 #: The mixed pair. ``(outcome rows in A, errored rows in A, outcome rows in B, errored in B)``
 #: per cell, built so the coverage frame carries comparable rows beside one hole of each of
-#: ``diff._CAUSES``'s five values. ``mixed`` is comparable **and** has errored rows in both
+#: the five values its ``cause`` column can take. ``mixed`` is comparable **and** has errored rows in both
 #: arms, which is the row a build that confuses "has errored rows" with "is a hole" gets wrong.
 PAIR_A, PAIR_B = "cov-a", "cov-b"
 PAIR_SALT = "a22-coverage"
@@ -115,7 +114,7 @@ def two_records(tmp_path: Path) -> Store:
     store = Store(tmp_path / "store")
     store.create_run(
         RunManifest(
-            run_id=RUN, target_id="policy@abc123", t_unit="steps", run_salt="a22-oracle",
+            run_id=RUN, target_id="policy@abc123", t_unit="steps", run_salt="a22-test",
             axis_types={"f": "continuous"}, backend="local", environment={"python": "3.11"},
         )
     )
@@ -178,10 +177,14 @@ def mixed_pair(tmp_path: Path) -> Any:
 # ---------- V1-V7: the read path ----------
 
 
-def test_v1_a_stored_null_reads_back_as_none_in_both_nullable_string_columns(two_records: Store) -> None:
+def test_v1_a_stored_null_reads_back_as_none_in_every_nullable_string_column(two_records: Store, tmp_path: Path) -> None:
     """``is None``, not ``pd.isna``. Under pandas 3 an unported ``to_pandas`` gives a ``str``
     column whose null is ``NaN``, on which ``row.outcome is not None`` is true and wrong -- the
-    trap ``trace`` and ``trace_obs`` meet twice over."""
+    trap ``trace`` and ``trace_obs`` meet twice over. The columns are read off the stored file's
+    own schema: every nullable ``string`` field that a read shows as a column (``trace`` shows under
+    ``trace="envelope"``; ``trace_obs`` shows as no column) is null in at least one stored row and
+    reads back ``None`` there, so a field added to the format and not to the read path fails here:
+    a test of the new field spelled naturally passes on a NaN."""
     frame = two_records.read(RUN)
     by_hash = {str(h): i for i, h in enumerate(frame["config_hash"])}
     errored, with_outcome = by_hash[config_hash(ERRORED_CONFIG)], by_hash[config_hash(OUTCOME_CONFIG)]
@@ -189,6 +192,19 @@ def test_v1_a_stored_null_reads_back_as_none_in_both_nullable_string_columns(two
     assert frame.loc[with_outcome, "error"] is None
     assert frame.loc[errored, "error"] == ERROR_TEXT
     assert frame.loc[with_outcome, "outcome"] == OUTCOME_TEXT
+    (part,) = (tmp_path / "store" / RUN / "episodes").glob("part-*.parquet")
+    table = pq.read_table(part)
+    nullable = {f.name for f in table.schema if f.nullable and f.type == pa.string()}
+    assert {"outcome", "error", "trace", "trace_obs"} <= nullable, nullable
+    read_null = set()
+    for read in (frame, two_records.read(RUN, trace="envelope")):
+        rows = {str(h): i for i, h in enumerate(read["config_hash"])}
+        for stored in table.to_pylist():
+            for column in nullable & set(read.columns):
+                if stored[column] is None:
+                    assert read.loc[rows[stored["config_hash"]], column] is None, column
+                    read_null.add(column)
+    assert read_null == nullable - {"trace_obs"}, nullable - read_null
 
 
 def test_v2_the_projection_and_the_keys_mask_each_keep_the_none(two_records: Store) -> None:
@@ -213,7 +229,7 @@ def test_v3_the_two_nullable_string_columns_are_object_dtype_on_every_frame_shap
     empty_store = Store(tmp_path / "empty")
     empty_store.create_run(
         RunManifest(
-            run_id="none", target_id="policy@abc123", t_unit="steps", run_salt="a22-oracle",
+            run_id="none", target_id="policy@abc123", t_unit="steps", run_salt="a22-test",
             axis_types={"f": "continuous"}, backend="local", environment={},
         )
     )
@@ -237,24 +253,14 @@ def test_v4_the_three_nullable_float_columns_read_back_nan_and_not_none(two_reco
         assert pd.isna(value) and value is not None, column
 
 
-def test_v5_nullable_string_columns_is_exactly_the_schemas_nullable_string_fields(two_records: Store, tmp_path: Path) -> None:
-    """A structural guard: every nullable ``pa.string()`` field of ``_SCHEMA`` (``trace`` and
-    ``trace_obs`` among them) must be in ``_NULLABLE_STRING_COLUMNS``, so a field added to one and
-    not the other fails here. A test of the new field spelled naturally passes on a NaN, so this
-    loud failure is what stops invariants that are green and wrong."""
-    (part,) = (tmp_path / "store" / RUN / "episodes").glob("part-*.parquet")
-    schema_fields = {f.name for f in pq.read_schema(part) if f.nullable and f.type == pa.string()}
-    assert set(store_mod._NULLABLE_STRING_COLUMNS) == schema_fields
-
-
 def test_v6_tally_succeeds_on_a_store_whose_meta_is_not_json_and_read_raises(tmp_path: Path) -> None:
-    """``tally`` and ``_existing_keys`` read through ``to_pylist``, never ``to_pandas``, so the
-    port cannot reach them and resume is untouched. A build that normalises by routing either
-    through the frame fails here, not in the field."""
+    """``tally`` and the store's lookup of the keys resume skips read through ``to_pylist``, never
+    ``to_pandas``, so the port cannot reach them and resume is untouched. A build that normalises
+    by routing either through the frame fails here, not in the field."""
     store = Store(tmp_path / "poison")
     store.create_run(
         RunManifest(
-            run_id=RUN, target_id="policy@abc123", t_unit="steps", run_salt="a22-oracle",
+            run_id=RUN, target_id="policy@abc123", t_unit="steps", run_salt="a22-test",
             axis_types={"f": "continuous"}, backend="local", environment={},
         )
     )
@@ -285,7 +291,7 @@ def test_v7_a_retained_run_strips_the_unretained_rows_trace_and_its_error_is_non
     store = Store(tmp_path / "retain")
     store.create_run(
         RunManifest(
-            run_id=RUN, target_id="policy@abc123", t_unit="steps", run_salt="a22-oracle",
+            run_id=RUN, target_id="policy@abc123", t_unit="steps", run_salt="a22-test",
             axis_types={"f": "continuous"}, backend="local", environment={},
             retain_traces_for=("survived",),
         )

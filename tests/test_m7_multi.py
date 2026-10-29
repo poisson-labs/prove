@@ -43,7 +43,7 @@ data and the top-10 table that B1's Markdown clause pins). B3 is asserted on the
 
 from __future__ import annotations
 
-import hashlib
+import json
 import math
 import re
 import subprocess
@@ -64,7 +64,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import lattice
-from poisson_prove import cli
+from poisson_prove import __version__, cli
 from poisson_prove.diff import DiffResult, EventDiff, MultiDiffResult, diff, multi_diff
 from poisson_prove.report import (
     SATURATED_FILL,
@@ -81,7 +81,7 @@ from poisson_prove.report import (
 from poisson_prove.store import RunManifest, Store, config_hash
 from poisson_prove.survival import cell_table, censor
 from conftest import blas_thread_cap, quickstart_design
-from test_pf4_stats import POWER, _ref_fisher_power
+from test_pf4_stats import POWER, ref_fisher_power
 
 ROOT = Path(__file__).resolve().parents[1]
 #: B1. The single-event report's title on the lattice pair.
@@ -627,10 +627,6 @@ def headline_order(multi: MultiDiffResult) -> tuple[str, ...]:
     return tuple(m[0] for m in HEADLINE_EVENT_RE.findall(multi.headline().splitlines()[0]))
 
 
-def _sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
 def _shuffled(cells: list[dict[str, Any]], seed: int) -> list[dict[str, Any]]:
     order = list(range(len(cells)))
     for k in range(len(order) - 1, 0, -1):
@@ -747,17 +743,6 @@ def strip_honesty(text: str) -> str:
     return "\n".join(line for line in text.splitlines() if not _is_honesty_line(line))
 
 
-def as_0_0_1_wrote_it(text: str) -> str:
-    """PF0: the one line of a rendered report the rename changes is the version
-    in its provenance list. First assert it is there as the rename writes it -- one ``Prove version:``
-    line and no ``proofload version:`` -- then put it back as 0.0.1 wrote it and drop any separate
-    ``written by proofload`` line, so every other byte is still compared."""
-    found = re.findall(r"(?m)^- Prove version: [^\n]*$", text)
-    assert len(found) == 1 and "proofload version:" not in text, found
-    text = re.sub(r"(?m)^- Prove version: [^\n]*$", "- proofload version: 0.0.1", text)
-    return re.sub(r"(?m)^- [^\n]*written by proofload[^\n]*\n", "", text)
-
-
 def lattice_headline() -> str:
     """The single-event headline the lattice's references give: Fisher + BH over the design's counts."""
     lower, higher = lattice.directions(lattice.fisher())
@@ -862,7 +847,7 @@ def limit_kind(gain: float, load: float) -> str:
     if cell.tripped_a == lattice.N:
         return "ceiling"
     p_a = cell.tripped_a / lattice.N
-    power = float(_ref_fisher_power(p_a, lattice.N, lattice.N, 0.05, np.array([1.0 - p_a]), True)[0])
+    power = float(ref_fisher_power(p_a, lattice.N, lattice.N, 0.05, np.array([1.0 - p_a]), True)[0])
     return "none" if power < POWER else "limit"
 
 
@@ -912,7 +897,8 @@ def test_b1_markdown_matches_the_layout_built_from_the_references_outside_the_ho
         f"- event: {lattice.EVENT}", f"- t unit: {lattice.T_UNIT}", f"- horizon: {lattice.HORIZON:g}",
         "- method: fisher_bh", "- seed identity match: true", "- unpaired analysis: true", "- q: 0.05",
         "- n not comparable: 0", "- dropped a: 0", "- dropped b: 0", "- episodes censored at horizon: 0",
-        "- n absent: 0", "- proofload version: 0.0.1",
+        # The report is built with no manifests, so the version it gives is this build's.
+        "- n absent: 0", f"- Prove version: {__version__}",
     ]
     # The record's own facts, pinned so a drift of the generator or of the references is seen too.
     assert expected[2] == "22 of 72 cells safer, 0 worse (fisher_bh, BH q<0.05, unpaired)."
@@ -922,7 +908,7 @@ def test_b1_markdown_matches_the_layout_built_from_the_references_outside_the_ho
     assert {k for k, v in kinds.items() if v == "limit"} == set(LATTICE_LIMITS)
     assert sum(v == "ceiling" for v in kinds.values()) == 37
     assert LATTICE_MAX_MDE_PP == f"{_pp0(golden_diff.max_mde)}pp"
-    now, printed = _set_aside_mde(as_0_0_1_wrote_it(golden_report.to_markdown()))
+    now, printed = _set_aside_mde(golden_report.to_markdown())
     assert strip_honesty(now).splitlines() == expected
     assert len(printed) == len(worst) == golden_report.spec.top_n
     notes = dict(zip(golden_diff.cells["config_hash"], golden_diff.cells["mde_note"], strict=True))
@@ -1070,7 +1056,7 @@ def test_b3_delta_stays_the_primary_key_in_each_panel() -> None:
 
 
 def test_b3_hypothesis_ten_zero_delta_rows_order_by_q_mde_hash_under_shuffling() -> None:
-    @settings(max_examples=40, deadline=None)
+    @settings(max_examples=40)
     @given(
         qs=st.lists(st.sampled_from([0.1, 0.2, 0.3, 0.6]), min_size=10, max_size=10),
         mdes=st.lists(st.sampled_from([0.05, 0.1, 0.2]), min_size=10, max_size=10),
@@ -1221,7 +1207,7 @@ def test_b5_two_events_with_different_ranges_share_one_bound_and_one_ramp() -> N
 
 
 def test_b5_hypothesis_identical_delta_gives_identical_fill_across_panels() -> None:
-    @settings(max_examples=40, deadline=None)
+    @settings(max_examples=40)
     @given(
         common=st.floats(min_value=-1.0, max_value=1.0, allow_nan=False),
         a_rest=st.lists(st.floats(min_value=-1.0, max_value=1.0, allow_nan=False), min_size=1, max_size=5),
@@ -1624,7 +1610,7 @@ def test_b13_stacked_svg_re_roots_escaped_text_intact() -> None:
 # ---------- B14: determinism and theme separation ----------
 
 _SUBPROCESS_SCRIPT = """
-import hashlib, sys
+import json, sys
 from pathlib import Path
 from poisson_prove.store import Store
 from poisson_prove.diff import multi_diff
@@ -1636,8 +1622,7 @@ m = multi_diff(a, b, events=[event, other],
                manifest_a=store.manifest(run_a), manifest_b=store.manifest(run_b))
 rep = build_multi_report(m, ReportSpec(title=title, x_axis=x, y_axis=y),
                          manifests=(store.manifest(run_a), store.manifest(run_b)))
-for text in (rep.to_markdown(), rep.to_svg(), rep.to_html()):
-    print(hashlib.sha256(text.encode("utf-8")).hexdigest())
+print(json.dumps([rep.to_markdown(), rep.to_svg(), rep.to_html()]))
 """
 
 
@@ -1648,7 +1633,7 @@ def test_b14_multi_report_is_byte_identical_across_hash_seeds(
         golden_multi, ReportSpec(title=LATTICE_TITLE, x_axis=lattice.Y, y_axis=lattice.X),
         manifests=(golden_frames["ma"], golden_frames["mb"]),
     )
-    local = [_sha(rep.to_markdown()), _sha(rep.to_svg()), _sha(rep.to_html())]
+    local = [rep.to_markdown(), rep.to_svg(), rep.to_html()]
     script = tmp_path / "render.py"
     script.write_text(_SUBPROCESS_SCRIPT)
     for seed in ("1", "4242"):
@@ -1659,7 +1644,7 @@ def test_b14_multi_report_is_byte_identical_across_hash_seeds(
             env={"PYTHONHASHSEED": seed, "PATH": "", "HOME": str(tmp_path), **blas_thread_cap()},
         )
         assert proc.returncode == 0, proc.stderr
-        assert proc.stdout.split() == local, seed
+        assert json.loads(proc.stdout) == local, seed
 
 
 def test_b14_dark_and_light_stacked_trees_identical_after_stripping_presentation() -> None:
@@ -1672,7 +1657,7 @@ def test_b14_dark_and_light_stacked_trees_identical_after_stripping_presentation
 
 
 def test_b14_hypothesis_repeat_renders_identical_and_themes_differ_only_in_presentation() -> None:
-    @settings(max_examples=25, deadline=None)
+    @settings(max_examples=25)
     @given(
         nx=st.integers(min_value=2, max_value=4),
         ny=st.integers(min_value=1, max_value=3),

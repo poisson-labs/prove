@@ -18,7 +18,7 @@ FR11's two cross-checks read both lists off live output (E3's, and the error a w
 ``--event`` provokes); comparing E3's list to a constant would pin nothing. (c) FR1 gives every
 invocation its own missing root, so FR6 is the only test that catches a check that creates the
 root. (d) FR4 also pins the empty-store templates (E and E-runs) in each source form, and a
-set-but-empty ``$POISSON_PROVE_STORE`` as *not* the source: ``_store_root`` reads it as unset and
+set-but-empty ``$POISSON_PROVE_STORE`` as *not* the source: the store lookup reads it as unset and
 the source must be "set and non-empty". (e) FR10 pins a third ``timeout`` case that FR10's text
 does not state: a run whose ``timeout`` is already an outcome lists it once. (f) FR12's order
 matrix adds the empty store to its store row. (g) FR13's "nothing else moves" is two tests (the
@@ -36,8 +36,6 @@ test that the marker matches real inferred output.
 
 from __future__ import annotations
 
-import ast
-import hashlib
 import json
 import re
 import shlex
@@ -741,7 +739,7 @@ def test_fr10_inspect_adds_episode_timeout_only_when_rows_timed_out(tmp_path: Pa
 KEYS = ("a", "b", "c", "d")
 LABELS = ("fell", "ok", "late", "slow")
 ERRORS = ("timeout", "boom")
-PROPERTY = settings(max_examples=60, deadline=None, derandomize=True, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+PROPERTY = settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 
 
 @st.composite
@@ -1138,7 +1136,7 @@ LATTICE_LINE_DRAWN = [
 
 
 def wrap(text: str, budget: int) -> list[str]:
-    """LS2's restatement of the figure's ``_wrap``: broken on spaces into lines of at most ``budget``
+    """LS2's restatement of how the figure wraps text: broken on spaces into lines of at most ``budget``
     characters, greedy, a word longer than the budget hard-split; ``[""]`` for empty text."""
     if not text:
         return [""]
@@ -1377,30 +1375,6 @@ def test_fr17_report_md_provenance_still_prints_inferred(lattice_ran: dict[str, 
     assert line in md, [m for m in md if "inferred" in m]
 
 
-# The resolver and the digest are restated, never imported.
-
-
-def resolve_region(module: ast.Module, qualified: str) -> ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef:
-    node: ast.AST = module
-    definition: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | None = None
-    for segment in qualified.split("."):
-        matches = [c for c in ast.iter_child_nodes(node) if isinstance(c, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and c.name == segment]
-        assert len(matches) == 1, (qualified, segment, len(matches))
-        definition = matches[0]
-        node = definition
-    assert definition is not None
-    return definition
-
-
-def digest_excluding(path: Path, regions: Sequence[str]) -> str:
-    """The file's sha256 with each region's ``lineno`` to ``end_lineno`` removed, whole lines; the ``def``
-    line is the region's first, so a decorator above it stays guarded."""
-    source = path.read_bytes()
-    spans = [(n.lineno, n.end_lineno or 0) for n in (resolve_region(ast.parse(source), q) for q in regions)]
-    kept = [line for i, line in enumerate(source.decode().splitlines(keepends=True), start=1) if not any(lo <= i <= hi for lo, hi in spans)]
-    return hashlib.sha256("".join(kept).encode()).hexdigest()
-
-
 # FR18: no new surface.
 
 
@@ -1548,7 +1522,7 @@ def test_fr20_a_single_run_with_given_events_prints_no_inference_line(tmp_path: 
 
 
 def test_fr20_a_tie_on_a_single_run_refuses_byte_for_byte_as_before_with_nothing_ahead_of_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The tie refusal (``_report_run``) keeps its exact words, with nothing printed ahead of it."""
+    """The tie refusal (``report`` on one run) keeps its exact words, with nothing printed ahead of it."""
     monkeypatch.chdir(tmp_path)
     write_run(Store(tmp_path / "store"), "tie", [({"cell": "c"}, {"fell": 16, "survived": 16}, {})])
     r = run_cli(["--store", str(tmp_path / "store"), "report", "tie", "--x", "cell"])

@@ -1,7 +1,7 @@
 """P-1 frozen tests: invariants Y1 to Y22 of the P-1 payload shape -- ``seed_identity_match``,
-``unpaired_analysis``, ``_seed_identity``, ``RootResult.p_floor``, the ``intervals`` payload key, the
-interval column, the floor lines, the ``seed_identity_basis`` statement and ``render_html``'s
-intervals refusal.
+``unpaired_analysis``, the seed check that sets both, ``RootResult.p_floor``, the ``intervals``
+payload key, the interval column, the floor lines, the ``seed_identity_basis`` statement and
+``render_html``'s intervals refusal.
 
 **What this file holds fixed.** Seed identity is the salt plus the stored seed on every matched
 row; Y1-Y6 are written against that pairing rule. ``check`` prints no permutation p, and Y17's last
@@ -64,7 +64,7 @@ EVENT, X, Y = lattice.EVENT, lattice.X, lattice.Y
 
 # ---------- the literals, verbatim ----------
 
-#: ``_PAIRED_METHODS`` stays private and is the one predicate every pairing token reads.
+#: The methods that test pairs; Prove keeps its own list unexported, and every pairing token reads it.
 PAIRED_METHODS = ("mcnemar_bh",)
 METHODS = ("fisher_bh", "mcnemar_bh", "logrank_bh")
 #: Y7. Both key-set literals, ``seed_identity_match`` and ``unpaired_analysis`` in ``paired``'s slot.
@@ -163,30 +163,9 @@ H2_SEQUENCE = (
     "Summary", "Events", "Omnibus", "Result", "Honesty", "Not verified", "Fault lines", "Cells", "Heatmap", "Cell",
     "Holes", "Worst cells", "Run pair", "Provenance",
 )
-#: Y21. Every panel honesty string, byte for byte, in its wording before PF4, for the two
-#: stored pairs (one honesty block per panel, and no other rewording).
-# PF4 (PF4.17, PF4.20): Y21 reads each panel's honesty through honesty_as_a626cd3, which puts PF4's
-# two rewordings back after asserting them, so these literals keep the wording from before PF4.
-# Y21 reads only each entry's length here (one string per panel); the facts
-# of every honesty string are assert_honesty_facts'. The lattice's entry is its one panel's
-# honesty, standing for the count.
-LATTICE_HONESTY = (
-    'Worst-powered unchanged cell (gain=0.4, load=30, n=32/32) can only detect a 50pp fall. '
-    '"0 higher" is an honest claim only above that.\nWorst-powered cell overall: 50pp (gain=0.6, load=20).',
-)
-HONESTY_AT_A626CD3 = {
-    "lattice": LATTICE_HONESTY,
-    "k2": (
-        "No unchanged cells; every cell moved significantly.\nWorst-powered cell overall: 28pp (task=t0, temp=0).",
-        'Worst-powered unchanged cell (task=t5, temp=0, n=32/32) can only detect a 28pp rise. "0 worse" is an honest '
-        "claim only above that.\nWorst-powered cell overall: 28pp (task=t0, temp=0).",
-    ),
-    "same": (
-        'Worst-powered unchanged cell (task=t0, temp=0, n=8/8) can only detect a 64pp rise. "0 worse" is an honest '
-        "claim only above that.\nWorst-powered cell overall: 64pp (task=t0, temp=0).",
-    ),
-}
-HONESTY_NONE_AT_A626CD3 = "No unchanged cells; every cell moved significantly."
+#: Y21. How many panels, so how many honesty blocks, the lattice and the two stored pairs show, in
+#: panel order. The facts of every honesty block are assert_honesty_facts'; its wording is not pinned.
+HONESTY_PANELS = {"lattice": 1, "k2": 2, "same": 1}
 #: Y16. The lattice at the default 4000 permutations: ``p_omnibus == p_floor == 1/4001`` exactly
 #: (measured).
 DEFAULT_PERMUTATIONS = 4000
@@ -194,8 +173,8 @@ DEFAULT_PERMUTATIONS = 4000
 INTERVAL_TOKEN_RE = re.compile(r"\[-?\d+\.\d, -?\d+\.\d\]")
 PAIRED_TOKEN_RE = re.compile(r"\bpaired\b")
 HORIZON, EVENT_T = 10.0, 3.0
-SALT = "p1-oracle-salt"
-OTHER_SALT = "p1-oracle-other-salt"
+SALT = "p1-test-salt"
+OTHER_SALT = "p1-test-other-salt"
 
 
 # ---------- helpers: the CLI, the store, the frames ----------
@@ -235,10 +214,6 @@ def caught(fn: Callable[[], Any]) -> list[warnings.WarningMessage]:
         warnings.simplefilter("always")
         fn()
     return [r for r in records if r.category is UnpairedAnalysis]
-
-
-def sha256_of_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def manifest(run_id: str, salt: str, axis_types: Mapping[str, str] | None = None) -> RunManifest:
@@ -470,21 +445,6 @@ def interval_text(lo: Any, hi: Any) -> str:
     return f"[{fmt_pp1(lo)}, {fmt_pp1(hi)}]"
 
 
-def honesty_as_a626cd3(honesty: str, n_compared: int) -> str:
-    """PF4 (PF4.17, PF4.20): a panel's honesty with PF4's two rewordings put back in their older
-    wording, each first asserted in PF4's form. No event here declares a kind, so the claim the bound
-    guards counts rises ("N higher" where it read "N worse"); a panel with no unchanged condition
-    counts its compared conditions instead of saying every cell moved."""
-    lines = honesty.splitlines()
-    if "can only detect" in lines[0]:
-        assert re.search(r'"\d+ higher" is an honest claim', lines[0]) and not re.search(r'"\d+ worse"', lines[0]), lines[0]
-        lines[0] = re.sub(r'"(\d+) higher" is an honest claim', r'"\1 worse" is an honest claim', lines[0])
-    else:
-        assert lines[0] != HONESTY_NONE_AT_A626CD3 and str(n_compared) in re.findall(r"\d+", lines[0]), lines[0]
-        lines[0] = HONESTY_NONE_AT_A626CD3
-    return "\n".join(lines)
-
-
 def without_text(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: without_text(v) for k, v in value.items() if k != "text"}
@@ -635,13 +595,13 @@ draws = st.builds(
     Draw, salt_equal=st.booleans(), seed_a=st.booleans(), seed_b=st.booleans(),
     overlap=st.sampled_from(("full", "partial", "none")), one_differs=st.booleans(), n=st.integers(min_value=2, max_value=6),
 )
-HYPOTHESIS = settings(max_examples=60, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
+HYPOTHESIS = settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture])
 
 
 @given(draw=draws, method=st.sampled_from(METHODS))
 @HYPOTHESIS
 def test_y2_unpaired_analysis_is_seed_identity_and_the_method_is_not_a_paired_one_on_every_result(draw: Draw, method: str) -> None:
-    """``unpaired_analysis == seed_identity_match and method not in _PAIRED_METHODS`` on every result
+    """``unpaired_analysis == seed_identity_match and method not in PAIRED_METHODS`` on every result
     either entry point returns; ``mcnemar_bh`` returns only when the predicate holds (Y3 has the
     refusals). Fails if ``unpaired_analysis`` stops following the predicate."""
     a, b, ma, mb = draw.frames()
@@ -801,8 +761,14 @@ def test_y8_the_headline_states_the_requested_methods_pairing_on_every_surface_a
         assert multi.headline().endswith(f", {token})"), (method, multi.headline())
         single = quiet(lambda m=method: diff(censor(fa, "fail"), censor(fb, "fail"), event="fail", method=m, manifest_a=ma, manifest_b=mb))  # type: ignore[arg-type]
         assert build_report(single, ReportSpec(title="p1", x_axis="task", y_axis="temp")).headline.endswith(f"({method}, BH q<0.05, {token}).")
-        rows = build_multi_report(multi, ReportSpec(title="p1", x_axis="task", y_axis="temp", comparison={method: single}))._method_rows
-        assert rows and all(row[1] == token for row in rows), (method, rows)
+        report = build_multi_report(multi, ReportSpec(title="p1", x_axis="task", y_axis="temp", comparison={method: single}))
+        # The Methods table as both renderings print it: its pairing column is the method's token on every row.
+        md = md_sections(report.to_markdown())["Methods"]
+        assert [c.strip() for c in md[0].strip("|").split("|")][:2] == ["method", "pairing"], md
+        md_rows = [[c.strip() for c in line.strip("|").split("|")] for line in md[2:] if line.startswith("|")]
+        assert md_rows and all(row[1] == token for row in md_rows), (method, md)
+        ((header, html_rows),) = html_tables("\n".join(html_sections(report.to_html())["Methods"]))
+        assert header[:2] == ["method", "pairing"] and html_rows == md_rows, (method, header, html_rows, md_rows)
     table = [line for line in lattice_cli["diff methods all"].splitlines() if line.startswith("| ") and EVENT in line]
     assert table and {tuple(c.strip() for c in line.strip("|").split("|"))[:3] for line in table} == {
         ("fisher_bh", EVENT, "unpaired"), ("mcnemar_bh", EVENT, "paired"), ("logrank_bh", EVENT, "unpaired")
@@ -911,9 +877,9 @@ def assert_zero_r_interval_lines(built: Built) -> None:
 def _ref_cell_limit(row: Any) -> tuple[float | None, float | None, float | None]:
     """A condition's limit under Fisher at its row's level, from the stats file's references: the
     larger of the two ways, or the one way with room, else None (PF4.22, PF4.27); then each way's."""
-    from test_pf4_stats import _ref_fisher_limits
+    from test_pf4_stats import ref_fisher_limits
 
-    rise, fall = _ref_fisher_limits(int(row["events_a"]), int(row["n_a"]), int(row["n_b"]), float(row["mde_level"]))
+    rise, fall = ref_fisher_limits(int(row["events_a"]), int(row["n_a"]), int(row["n_b"]), float(row["mde_level"]))
     if rise is not None and fall is not None:
         return max(rise, fall), rise, fall
     if rise is not None and row["events_a"] == 0:
@@ -941,7 +907,12 @@ def assert_honesty_facts(built: Built, panel: Mapping[str, Any]) -> None:
     unchanged = [row for row in records if row["direction"] == "unchanged"]
     numbers = {row["config_hash"]: limits[row["config_hash"]][0] for row in unchanged if limits[row["config_hash"]][0] is not None}
     if not unchanged:
-        assert honesty_as_a626cd3(first, panel["n_present"]) == HONESTY_NONE_AT_A626CD3, (built.name, first)
+        # No condition is unchanged: the line counts the conditions compared and, when there are
+        # any, those not compared, and names no limit.
+        n_not = built.multi.n_not_comparable
+        stated = [int(n) for n in re.findall(r"\d+", first)]
+        assert stated == ([panel["n_present"], n_not] if n_not else [panel["n_present"]]), (built.name, first)
+        assert "pp" not in first and "honest claim" not in first, (built.name, first)
     elif numbers:
         worst = max(numbers.values())
         found = re.fullmatch(r'Worst-powered unchanged cell \((.*), n=(\d+)/(\d+)\) can only detect a (\d+)pp (rise|fall)\. '
@@ -1215,10 +1186,10 @@ def test_y21_one_honesty_block_per_panel_carrying_its_facts_and_no_interval(latt
     """One honesty block per panel, each carrying its facts and no interval."""
     # PF4.22, PF4.27: the honesty's limits are the exact limits at q / M, both directions, and a
     # condition with no limit is named with its reason instead of a number. Each honesty is checked
-    # by its facts against the stats file's references; its wording through honesty_as_a626cd3.
+    # by its facts against the stats file's references; its wording is not pinned.
     assert [p["honesty"] for p in lattice_built.structure["panels"]] == [p["honesty"] for p in lattice_cli["serve json"]["panels"]]
     for built in (lattice_built, k2, same):
-        assert len(built.structure["panels"]) == len(HONESTY_AT_A626CD3[built.name]), built.name
+        assert len(built.structure["panels"]) == HONESTY_PANELS[built.name], built.name
         for panel in built.structure["panels"]:
             assert_honesty_facts(built, panel)
         for panel in built.structure["panels"]:

@@ -11,8 +11,8 @@ refused with a ``ValueError`` naming both arguments; no ``environment.code_root`
 
 **pandas 2 and pandas 3.** The claim spans both because six invariants --
 P7-2, P7-3, P7-7, P7-8, P7-9, P7-11 -- have null halves that **cannot fail on pandas 2**:
-pyarrow gives an ``object`` column with ``None`` there whether or not the two columns are
-registered in ``store._NULLABLE_STRING_COLUMNS``, while on pandas 3 an unregistered column reads
+pyarrow gives an ``object`` column with ``None`` there whether or not the store reads the two
+columns as nullable strings, while on pandas 3 a column it does not read that way comes
 back as a float ``NaN``. No invariant is specific to one pandas. **Nullness is by identity
 throughout**: ``is None`` / ``is not None`` on every column in every clause, never ``pd.isna`` and
 never a bare truth test, and the on-disk ``trace_obs`` column -- which no read mode presents as a
@@ -55,7 +55,7 @@ P7-12 asserts a value and not only an equality.
 - **F1**, ``write_pre_a7_part`` -- the checked-in pre-A7 writer, emitting the lattice part's own on-disk schema
   through ``pyarrow`` -- is the load-bearing helper: P7-3's mixed run and P7-12's first copy are
   both built on it, and it is the only thing in the repo that can write the old layout now that
-  ``_SCHEMA`` has moved. It cannot express the post-A7 layout, by construction.
+  the store's on-disk schema has moved. It cannot express the post-A7 layout, by construction.
 - **The observation trace** (``observation_trace``) carries every class of A6's table
   -- prompt/completion under the GenAI, Traceloop, OpenInference-flattened and older-GenAI
   spellings, ``input.value``/``output.value`` on an ``llm`` span and on a ``tool`` span, the two
@@ -222,7 +222,7 @@ Q = 0.05
 
 MOCK_ROLLOUT = "poisson_prove.examples.mock_agent:rollout"
 MOCK_PATCHED = "poisson_prove.examples.mock_agent:rollout_patched"
-MOCK_SALT = "a7-storage-oracle"
+MOCK_SALT = "a7-storage-test"
 MOCK_CONFIGS = [
     {"task_id": task, "tool_fail_rate": rate}
     for task in ("search", "checkout")
@@ -399,7 +399,7 @@ def write_pre_a7_part(store: RootedStore, run_id: str, records: Sequence[Episode
     """F1: the checked-in pre-A7 writer. Emits one part in the lattice pair's own on-disk schema --
     thirteen fields, read off the generated pre-A7 part rather than spelled here -- with ``meta["trace"]``
     left inside ``meta`` exactly as the record carries it. The run must already exist; the part
-    is numbered after any part already present so ``Store._parts`` sees it."""
+    is numbered after any part already present so the store's listing of a run's parts sees it."""
     schema = pq.read_schema(LATTICE_PART)
     assert schema.names == THIRTEEN, schema.names
     rows = []
@@ -495,7 +495,7 @@ def grown(store: Store, a: str, b: str, *, events: Sequence[str], method: str) -
 
 
 def render_both(store: RootedStore, g: Grown, tree: Any) -> None:
-    """Both renderers' ``_check_tree`` through their public builders: a refusal raises."""
+    """Both renderers' tree check through their public builders: a refusal raises."""
     import poisson_prove.viewer as viewer
 
     spec = ReportSpec(title=f"{g.a} vs {g.b}", x_axis="task", y_axis="temp", fixed={})
@@ -1408,7 +1408,7 @@ def test_p7_3_a_pre_a7_part_and_a_post_a7_part_in_one_run_read_as_one_frame(mixe
 # ---------- P7-4: assemble(*split(t)) is the identity over A7's whole valid space ----------
 
 
-@settings(max_examples=75, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=75, suppress_health_check=[HealthCheck.too_slow])
 @given(
     spans=span_forests(),
     source=st.sampled_from(("record", "otel", "litellm", "mixed")),

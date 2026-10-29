@@ -25,7 +25,7 @@ own copy, since the app writes into the store it shows.
 
 **Readings, named here** (where the invariants leave a choice, the one this file makes).
 
-- A1 The app's entry point is ``poisson_prove._cli_app.ProveApp``, a Textual ``App`` built as
+- A1 The app's entry point is the terminal app's class ``ProveApp``, a Textual ``App`` built as
   ``ProveApp(store=None)``: ``store`` is the ``--store`` value as typed, ``None`` when none was given
   (the store is then found as every verb finds it, from the folder the app runs in); ``sweep`` reads
   that folder's ``prove.toml``. Its exit code is Textual's ``return_code``; ``poisson-prove`` with no

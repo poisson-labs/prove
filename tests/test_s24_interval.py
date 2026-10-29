@@ -35,7 +35,7 @@ Six facts about the data and the method explain why several tests below look the
    set (``held``). C1's primary fixture is still the synthetic identical-arms pair, because the
    lattice route rests on a log-rank tie convention that is still open; the
    lattice corroborates.
-6. **The censoring guard cannot fire.** ``_truncate_raw`` censors at the horizon, which is ``>=``
+6. **The censoring guard cannot fire.** The diff's horizon truncation censors at the horizon, which is ``>=``
    every retained event time, and the estimator reduces to the naive proportion when no
    censoring precedes an event. Five constructed shapes were measured -- late truncation, two
    event times, a tie exactly at the horizon, three competing kinds, and 19 distinct event times
@@ -431,7 +431,7 @@ def test_c7_the_paired_statistic_is_one_at_the_point_estimate(b: int, c: int, n:
     assert abs(diff_mod.score_p_rd_paired(b, c, n, delta=(c - b) / n) - 1.0) <= 1e-12
 
 
-@settings(deadline=None, max_examples=120)
+@settings(max_examples=120)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
@@ -467,7 +467,7 @@ def test_c8_swapping_the_arms_negates_the_delta_and_leaves_the_p_value_alone(
     assert abs(forward - reversed_) <= 1e-12
 
 
-@settings(deadline=None, max_examples=120)
+@settings(max_examples=120)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
@@ -622,7 +622,7 @@ def test_c10_the_paired_interval_is_nested_in_alpha_too(b: int, c: int, n: int) 
 # ---------- C4 and C5 at the function level ----------
 
 
-@settings(deadline=None, max_examples=150)
+@settings(max_examples=150)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
@@ -639,7 +639,7 @@ def test_c4_every_interval_contains_the_point_estimate(
     assert lo <= events_b / n_b - events_a / n_a <= hi, (lo, hi)
 
 
-@settings(deadline=None, max_examples=150)
+@settings(max_examples=150)
 @pytest.mark.math
 @given(
     n_a=st.integers(min_value=1, max_value=200),
@@ -658,7 +658,7 @@ def test_c5_every_interval_lies_inside_the_unit_interval(
 
 
 @pytest.mark.math
-@settings(deadline=None, max_examples=120)
+@settings(max_examples=120)
 @given(data=st.data())
 def test_c4_and_c5_hold_for_the_paired_interval_too(data: st.DataObject) -> None:
     """``b + c <= n``: the discordant pairs cannot outnumber the pairs."""
@@ -987,7 +987,7 @@ def test_c13_the_endpoints_are_none_exactly_when_the_basis_is_censored(
     """The frame's contract, over every fixture that produces a frame.
 
     **This does not pin the censored branch, and saying so is the point.** The censoring guard was
-    written against ``_truncate_raw``, which censors at the horizon -- and the horizon is ``>=``
+    written against the diff's horizon truncation, which censors at the horizon -- and the horizon is ``>=``
     every retained event time, so the Aalen-Johansen estimate there reduces to the naive
     proportion and the guard cannot fire. Five shapes were measured (late
     truncation, two event times, a tie exactly at the horizon, three competing kinds, and 19
@@ -1048,7 +1048,7 @@ def test_c13b_the_rejection_count_covers_every_cell_whatever_its_basis(lattice_l
 
 
 def test_c17_interval_bases_is_exactly_the_three_names_the_spec_states() -> None:
-    """Written once in ``diff.py``, the way ``_CAUSES`` is."""
+    """Written once in ``diff.py``, the way the hole causes are."""
     assert tuple(diff_mod.INTERVAL_BASES) == EXPECTED_INTERVAL_BASES
 
 
@@ -1344,7 +1344,7 @@ def test_c18_the_diff_output_prints_the_no_interval_line_when_nothing_was_reject
 
 
 def test_c18_the_interval_block_follows_the_coverage_block(synth_root: Path) -> None:
-    """After ``_coverage_block``. The order is the reading order -- what was
+    """After the coverage block. The order is the reading order -- what was
     measured, then what the measurement bounds."""
     code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
     assert code == 0, out

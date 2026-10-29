@@ -700,7 +700,7 @@ def test_i12_manifest_records_modal_backend_and_environment(tmp_path: Path) -> N
     spec = _spec()
     p = _modal_plan(spec, store)
     image = ImageSpec(python="3.11", pip=("numpy",), gpu=None, local_packages=("poisson_prove",))
-    options = _options(concurrency=3, app_name="proofload-oracle")
+    options = _options(concurrency=3, app_name="prove-test")
     run_with_mapper(p, in_process_mapper, store, options=options, image=image)
     m = store.manifest(p.run_id)
     assert m.run_id == p.run_id
@@ -712,7 +712,7 @@ def test_i12_manifest_records_modal_backend_and_environment(tmp_path: Path) -> N
     for key in ("python", "platform", "poisson_prove_version", "sweep", "image", "modal_app", "concurrency", "import_path"):
         assert key in env, key
     assert env["image"] == image.to_dict()
-    assert env["modal_app"] == "proofload-oracle"
+    assert env["modal_app"] == "prove-test"
     assert env["concurrency"] == 3
     assert env["sweep"] == spec.to_dict()
     assert json.loads(json.dumps(env)) == env
