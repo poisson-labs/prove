@@ -181,7 +181,7 @@ def heatmap(chart: Mapping[str, Any]) -> str:
                 f"change {_signed(delta)}, q {_p(cell['q'])}, {cell['verdict']}"
             )
             if flagged and direction:
-                depth = 0.25 + 0.6 * min(abs(float(delta)) / largest, 1.0)
+                depth = 0.2 + 0.4 * min(abs(float(delta)) / largest, 1.0)
                 body.append(
                     f'<rect class="{direction} cell" x="{px}" y="{py}" width="{cw - 2}" '
                     f'height="{ch - 2}" '
@@ -198,7 +198,15 @@ def heatmap(chart: Mapping[str, Any]) -> str:
             glyph = "▲" if direction == "rise" else "▼" if direction == "fall" else ""
             body.append(_text(px + 10, py + 22, str(cell["verdict"]), cls="bold"))
             body.append(_text(px + 10, py + 42, f"{glyph} {_signed(delta)}".strip()))
-            body.append(_text(px + 10, py + 60, f"q {_p(cell['q'])}", cls="dimt"))
+            # On a filled cell the q is in the text colour: dim on the fill would not read.
+            body.append(
+                _text(
+                    px + 10,
+                    py + 60,
+                    f"q {_p(cell['q'])}",
+                    cls="" if flagged and direction else "dimt",
+                )
+            )
     body.append(
         _text(x0 + cw * len(x_values) / 2, height - 30, x_axis, cls="dimt", anchor="middle")
     )
@@ -249,7 +257,7 @@ def _cell_body(
     )
     out = []
     if flagged and direction:
-        depth = 0.25 + 0.6 * min(abs(float(delta)) / largest, 1.0)
+        depth = 0.2 + 0.4 * min(abs(float(delta)) / largest, 1.0)
         out.append(
             f'<rect class="{direction} cell" x="{_n(px)}" y="{_n(py)}" width="{cw - 2}" '
             f'height="{ch - 2}" rx="4" fill-opacity="{depth:.2f}"><title>{_esc(tip)}</title></rect>'
@@ -262,7 +270,10 @@ def _cell_body(
     glyph = "▲" if direction == "rise" else "▼" if direction == "fall" else ""
     out.append(_text(px + 10, py + 22, str(cell["verdict"]), cls="bold"))
     out.append(_text(px + 10, py + 42, f"{glyph} {_signed(delta)}".strip()))
-    out.append(_text(px + 10, py + 60, f"q {_p(cell['q'])}", cls="dimt"))
+    # On a filled cell the q is in the text colour: dim on the fill would not read.
+    out.append(
+        _text(px + 10, py + 60, f"q {_p(cell['q'])}", cls="" if flagged and direction else "dimt")
+    )
     return out
 
 
