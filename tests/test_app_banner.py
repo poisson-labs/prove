@@ -52,3 +52,31 @@ def test_q_on_the_banner_quits_before_home(old_world: tuple[Path, dict[str, Any]
     run = run_pty([], home=home, cwd=folder, cols=80, rows=24, steps=(Step(b"q", until=("poisson labs", "q quit")),), timeout=90)
     assert run.code == 0, run.err[-500:]
     assert "poisson-prove · home" not in strip_escapes(run.out)
+
+
+#: The app started as ``python -m poisson_prove`` would start it, on a store that takes longer to
+#: open than the banner's hold, as a large store or a busy machine does.
+_SLOW_STORE = """\
+import sys, time
+from poisson_prove import core
+opened = core.open_store
+def slow(*args, **kwargs):
+    time.sleep(1.5)
+    return opened(*args, **kwargs)
+core.open_store = slow
+from poisson_prove.cli import main
+sys.argv = ["poisson-prove"]
+sys.exit(main())
+"""
+
+
+@pytest.mark.parametrize("attempt", range(3))
+def test_home_follows_the_banner_on_its_own_when_the_store_opens_slower_than_the_hold(
+    attempt: int, old_world: tuple[Path, dict[str, Any]], tmp_path: Path
+) -> None:
+    folder, home = _folder(old_world, tmp_path)
+    steps = (Step(b"", until=("poisson labs", "q quit")), Step(b"q", until=("poisson-prove · home", "saved comparison", "q quit")))
+    run = run_pty([], home=home, cwd=folder, cols=80, rows=24, steps=steps, timeout=60, command=["-c", _SLOW_STORE])
+    assert run.code == 0, run.err[-500:]
+    assert "Error" not in strip_escapes(run.out), strip_escapes(run.out)[-500:]
+    assert run.seen[1][0].startswith("poisson-prove · home"), run.seen[1][0]
