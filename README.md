@@ -1,11 +1,12 @@
 # Poisson Prove
 
+[![PyPI version](https://img.shields.io/pypi/v/poisson-prove?style=flat-square&color=3B5BDB)](https://pypi.org/project/poisson-prove/) [![Python versions](https://img.shields.io/pypi/pyversions/poisson-prove?style=flat-square&color=3B5BDB)](https://pypi.org/project/poisson-prove/) [![Licence: MIT](https://img.shields.io/pypi/l/poisson-prove?style=flat-square&color=3B5BDB)](https://github.com/poisson-labs/prove/blob/main/LICENSE)
+
 Did your change to the agent really change how often it fails?
 
-Prove replays the same cases before and after a change, on the same seeds, and tells you per condition
-whether failures went up, went down, or did not move by more than it could have detected, with stated
-error bounds and detection limits. Every verdict comes with the smallest change that condition could
-have shown.
+![The terminal app as it opens, drawn in a terminal: the poisson labs prove banner between the header and the keys enter home, ? help and q quit](https://raw.githubusercontent.com/poisson-labs/prove/main/docs/images/opening-screen.png)
+
+Prove replays the same cases before and after a change, on the same seeds, and tells you per condition whether failures went up, went down, or did not move by more than it could have detected, with stated error bounds and detection limits. Every verdict comes with the smallest change that condition could have shown.
 
 <!-- docs-check: run -->
 
