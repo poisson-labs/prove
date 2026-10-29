@@ -3,8 +3,9 @@
 **What is pinned.** The parsed ``.github/workflows/ci.yml`` and ``pyproject.toml``, and the three
 scripts the workflow runs, each run on made-up inputs: ``lane.py`` (one lane of the suite and its
 row in the job summary), ``math_lane.py`` (whether a pull request runs the math suite) and
-``history.py`` (the release's history check). Whether a job really starts on the runner is not
-something a test here can see; the pull request that adds the workflow is that check.
+``history.py`` (the release's history check). Whether a job really starts on a GitHub-hosted
+runner is not something a test here can see; the pull request that changes the workflow is that
+check.
 
 **The lanes.** The code lane runs on every pull request and every push to main. The math lane
 runs on a pull request that changes the statistics, nightly, and before a release (the workflow
@@ -31,8 +32,10 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 WORKFLOW = WORKFLOWS / "ci.yml"
 SCRIPTS = ROOT / ".github" / "lanes"
 PYPROJECT = ROOT / "pyproject.toml"
-#: GitHub matches a self-hosted runner's labels whatever their case.
-RUNNER = ["self-hosted", "macos", "arm64"]
+#: The GitHub-hosted runner labels a job may name: free on a public repository.
+HOSTED = {"ubuntu-latest", "macos-latest"}
+#: ``owner/name@<40 hex digits>``: an action pinned to one commit.
+PINNED = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 FLOORS_TEST = "tests/test_pf7_packaging.py::test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor"
 NIGHTLY = ("schedule", "workflow_dispatch")
 
@@ -111,14 +114,29 @@ def test_pf10_1_the_only_triggers_are_pull_requests_pushes_to_main_the_nightly_a
 # ---------- PF10.2: the runner ----------
 
 
-def test_pf10_2_every_job_runs_on_the_self_hosted_mac_and_none_on_a_hosted_runner() -> None:
+def test_pf10_2_every_job_runs_on_a_github_hosted_runner_and_none_on_a_self_hosted_one() -> None:
     assert jobs()
     for name, job in jobs().items():
-        assert [label.lower() for label in job["runs-on"]] == RUNNER, name
+        runs_on = job["runs-on"]
+        if runs_on == "${{ matrix.os }}":
+            runs_on = job["strategy"]["matrix"]["os"]
+            assert runs_on.startswith("${{ fromJSON("), name
+            options = set(re.findall(r'"([^"]+)"', runs_on))
+        else:
+            options = {runs_on}
+        assert options and options <= HOSTED, (name, options)
         assert "container" not in job and "services" not in job, name
+    assert not re.search(r"self-hosted", yaml.safe_dump(workflow()), re.IGNORECASE), "a label, a group or a matrix value"
 
 
-# ---------- PF10.3: no secret, no publish ----------
+def test_pf10_2_the_pull_request_check_the_ruleset_requires_is_the_linux_code_lane_on_311() -> None:
+    code = jobs()["code"]
+    assert code["name"] == "code (${{ matrix.os }}, ${{ matrix.python }})"
+    assert "github.event_name == 'pull_request' && '[\"ubuntu-latest\"]'" in code["strategy"]["matrix"]["os"]
+    assert "github.event_name == 'pull_request' && '[\"3.11\"]'" in code["strategy"]["matrix"]["python"]
+
+
+# ---------- PF10.3: a public repository: no secret, no publish, a read-only token ----------
 
 
 def test_pf10_3_no_job_reads_a_secret_holds_an_id_token_or_publishes() -> None:
@@ -130,6 +148,28 @@ def test_pf10_3_no_job_reads_a_secret_holds_an_id_token_or_publishes() -> None:
         for step in job["steps"]:
             assert "publish" not in step.get("uses", ""), (name, step)
             assert not re.search(r"\b(twine|uv publish|hatch publish|flit publish)\b", step.get("run", "")), (name, step)
+
+
+def test_pf10_3_a_pull_request_runs_with_the_forks_own_read_only_token_never_pull_request_target() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "pull_request_target" not in text and "workflow_run" not in text
+    assert "pull_request" in triggers()
+    assert "GITHUB_TOKEN" not in text and "id-token" not in text
+    for name, job in jobs().items():
+        for step in job["steps"]:
+            if step.get("uses", "").startswith("actions/checkout@"):
+                assert step["with"]["persist-credentials"] is False, (name, "the token stays out of .git/config")
+
+
+def test_pf10_3_every_action_is_pinned_to_a_full_commit_sha_with_its_version_beside_it() -> None:
+    lines = [line for line in WORKFLOW.read_text(encoding="utf-8").splitlines() if re.match(r"\s*(- )?uses:", line)]
+    assert lines
+    for line in lines:
+        _, _, reference = line.partition("uses:")
+        action, _, comment = reference.strip().partition(" # ")
+        assert PINNED.fullmatch(action), line
+        assert re.fullmatch(r"v\d+\.\d+\.\d+", comment), line
+    assert len(lines) == sum(1 for job in jobs().values() for step in job["steps"] if "uses" in step)
 
 
 # ---------- PF10.4: the lanes ----------
@@ -200,13 +240,18 @@ def test_pf10_5_the_four_markers_are_declared_with_their_lane_in_plain_words() -
         assert (ROOT / path).is_file(), path
 
 
-# ---------- PF10.6: uv finds only the runner's own Pythons ----------
+# ---------- PF10.6: uv finds only the Python the job installed ----------
 
 
-def test_pf10_6_every_job_sets_uv_python_preference_only_system() -> None:
-    for name in jobs():
+def test_pf10_6_every_job_that_builds_a_venv_installs_its_python_and_uv_uses_only_that_one() -> None:
+    for name in ("code", "math", "slow", "floors"):
         assert env_of(name)["UV_PYTHON_PREFERENCE"] == "only-system", name
-        assert "setup-python" not in str(jobs()[name]["steps"]), name
+        assert env_of(name)["UV_PYTHON_DOWNLOADS"] == "never", name
+        steps = jobs()[name]["steps"]
+        (setup,) = [s for s in steps if s.get("uses", "").startswith("actions/setup-python@")]
+        (built,) = re.findall(r'uv venv --quiet --python (".*?"|\S+) \.venv', runs(name))
+        assert built.strip('"') == setup["with"]["python-version"].strip('"'), name
+        assert "uv==$UV_VERSION" in runs(name) and re.fullmatch(r"\d+\.\d+\.\d+", env_of(name)["UV_VERSION"]), name
 
 
 # ---------- PF10.7: when a pull request runs the math suite ----------
