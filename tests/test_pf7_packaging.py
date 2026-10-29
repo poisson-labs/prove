@@ -281,12 +281,14 @@ def test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor(tmp_pat
     assert off == [], off
     run_env = dict(env, PATH=f"{venv / 'bin'}:{env.get('PATH', '')}")
     run_env.pop("PYTHONDONTWRITEBYTECODE", None)
-    # A fixed eight workers: at -n auto the suite's own load fails whichever timing-bound test it lands on.
+    # One worker per core, and never more than eight: at -n auto on a many-core machine the suite's own
+    # load fails whichever timing-bound test it lands on, and more workers than cores on a small runner
+    # starve the tests that wait a fixed time for a server to bind.
     # The inner run's whole output goes to a file the failure names, since its warnings summary
     # alone outgrows any tail of it.
     output = tmp_path / "floors-suite-output.txt"
     with output.open("w", encoding="utf-8") as sink:
-        suite = subprocess.run([str(python), "-m", "pytest", "-q", "-x", "-n", "8", "-p", "no:cacheprovider", "-m", CODE_SUITE, "tests"],
+        suite = subprocess.run([str(python), "-m", "pytest", "-q", "-x", "-n", str(min(8, os.cpu_count() or 1)), "-p", "no:cacheprovider", "-m", CODE_SUITE, "tests"],
                                cwd=ROOT, env=run_env, stdout=sink, stderr=subprocess.STDOUT, text=True, timeout=3600)
     failed = [line for line in output.read_text(encoding="utf-8").splitlines() if line.startswith(("FAILED", "ERROR"))]
     assert suite.returncode == 0, f"the code suite failed at the floors; its whole output is in {output}\n" + "\n".join(failed)

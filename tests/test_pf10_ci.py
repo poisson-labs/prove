@@ -222,7 +222,18 @@ def test_pf10_4_the_floors_run_is_alone_at_its_own_thread_cap_and_keeps_its_whol
     (upload,) = [s for s in jobs()["floors"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]
     assert upload["if"] == "always()" and upload["with"]["path"].endswith("floors-suite-output.txt")
     source = (ROOT / "tests" / "test_pf7_packaging.py").read_text(encoding="utf-8")
-    assert '"-n", "8"' in source and "floors-suite-output.txt" in source
+    assert '"-n", str(min(8, os.cpu_count() or 1))' in source and "floors-suite-output.txt" in source
+
+
+def test_pf10_4_every_hosted_lane_runs_one_pytest_worker_per_core() -> None:
+    for name in ("code", "math", "slow"):
+        (arguments,) = [a for lane, a in lanes() if lane == name]
+        assert arguments[arguments.index("-n") + 1] == '"$WORKERS"', name
+        assert 'echo "WORKERS=$(python -c \'import os; print(os.cpu_count())\')" >> "$GITHUB_ENV"' in runs(name), name
+    (container,) = [a for lane, a in lanes() if lane == "linux"]
+    assert container[container.index("-n") + 1] == '"$(nproc)"'
+    (floors,) = [a for lane, a in lanes() if lane == "floors"]
+    assert "-n" not in floors, "the floors test sets its inner suite's workers itself"
 
 
 # ---------- PF10.5: the markers ----------

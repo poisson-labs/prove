@@ -79,13 +79,14 @@ jobs:
           uv venv --quiet --python "${{ matrix.python }}" .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Lint and types
         run: |
           .venv/bin/ruff check .
           .venv/bin/ruff format --check src
           .venv/bin/mypy src
       - name: Code suite
-        run: .venv/bin/python .github/lanes/lane.py code 300 --over 10 -q -p no:cacheprovider -n 10 -m "$CODE_SUITE" tests
+        run: .venv/bin/python .github/lanes/lane.py code 300 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "$CODE_SUITE" tests
 
   math-changes:
     if: github.event_name == 'pull_request'
@@ -133,8 +134,9 @@ jobs:
           uv venv --quiet --python "${{ matrix.python }}" .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Math suite
-        run: .venv/bin/python .github/lanes/lane.py math 900 -q -p no:cacheprovider -n 10 -m "math or calibration" tests
+        run: .venv/bin/python .github/lanes/lane.py math 900 -q -p no:cacheprovider -n "$WORKERS" -m "math or calibration" tests
 
   slow:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -159,8 +161,9 @@ jobs:
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           .venv/bin/python -m playwright install --with-deps chromium firefox webkit
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Slow suite
-        run: .venv/bin/python .github/lanes/lane.py slow 900 -q -p no:cacheprovider -n 6 -m "slow and not backend" --deselect "$FLOORS_TEST" tests
+        run: .venv/bin/python .github/lanes/lane.py slow 900 -q -p no:cacheprovider -n "$WORKERS" -m "slow and not backend" --deselect "$FLOORS_TEST" tests
 
   floors:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -181,7 +184,7 @@ jobs:
           uv venv --quiet --python 3.11 .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-      - name: Floors (the code suite at -n 8, every requirement at its floor)
+      - name: Floors (the code suite at one worker per core, up to 8, every requirement at its floor)
         run: .venv/bin/python .github/lanes/lane.py floors 900 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/floors" "$FLOORS_TEST"
       - name: Keep the inner run's whole output
         if: always()
@@ -212,7 +215,7 @@ jobs:
             pip install --quiet --root-user-action=ignore "uv==$UV_VERSION"
             useradd --create-home tester
             cp -a /src /work && chown -R tester /work
-            su tester -c "cd /work && export PATH=/work/.venv/bin:\$PATH && uv venv --quiet .venv && uv pip install --quiet --python .venv/bin/python -e \".[all,dev]\" && .venv/bin/python .github/lanes/lane.py linux 300 -q -p no:cacheprovider -n 8 -m \"\$CODE_SUITE\" tests"' 2>&1 | tee linux.log
+            su tester -c "cd /work && export PATH=/work/.venv/bin:\$PATH && uv venv --quiet .venv && uv pip install --quiet --python .venv/bin/python -e \".[all,dev]\" && .venv/bin/python .github/lanes/lane.py linux 300 -q -p no:cacheprovider -n \"\$(nproc)\" -m \"\$CODE_SUITE\" tests"' 2>&1 | tee linux.log
           status=${PIPESTATUS[0]}
           grep -E '^\|( lane | linux |---)' linux.log >> "$GITHUB_STEP_SUMMARY"
           exit "$status"

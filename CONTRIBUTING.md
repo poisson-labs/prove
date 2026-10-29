@@ -54,7 +54,8 @@ of the math suite, or the version a statistics library resolves to also runs the
 job summary says why. Every night, and before a release, CI runs everything else: the code suite on
 every supported Python on both systems, the math suite, the slow tests, the floors run and the code
 suite in a Debian container. Tests marked `backend` never run in CI. Each job's summary gives the
-tests it ran, its time against the lane's budget, and the code lane's tests over 10 seconds.
+tests it ran, its time against the lane's budget, and the code lane's tests over 10 seconds. Every
+lane runs one pytest worker per core of its runner.
 
 ## The docs are tested
 
