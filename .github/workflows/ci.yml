@@ -1,15 +1,17 @@
-# Every job runs on the self-hosted Mac runner registered to this repository: the organisation
-# spends nothing on Actions, so no job uses a GitHub-hosted runner, and none reads a secret.
+# Every job runs on a GitHub-hosted runner, which costs nothing on a public repository. No job
+# uses a self-hosted runner (a fork's pull request could run code on it), reads a secret, or holds
+# more than read access to the repository. Every action is pinned to a full commit SHA.
 #
 # The lanes (CONTRIBUTING.md, "Running the tests"):
-# - code: the code suite, ruff, the format check and mypy, on every pull request (Python 3.11) and
-#   every push to main (3.11 and 3.14); all four Pythons nightly and before a release. Budget: 5
-#   minutes per Python, so a pull request runs one.
+# - code: the code suite, ruff, the format check and mypy, on every pull request (Linux, Python
+#   3.11) and every push to main (Linux and macOS, 3.11 and 3.14); all four Pythons on both
+#   nightly and before a release. Budget: 5 minutes per Python on the maintainer's Mac.
 # - math: the statistics, on a pull request that changes them (math_lane.py says why), nightly
 #   and before a release.
 # - slow: nightly and before a release. Tests marked backend never run in CI.
 # - floors: the code suite with every requirement at its floor, nightly and before a release.
-# - linux: the code suite in a Linux container on the same runner, nightly and before a release.
+# - linux: the code suite in a Debian container, as a user that is not root, nightly and before a
+#   release.
 # - history: before a release, no commit names an assistant and every address is the work one.
 #
 # Each lane runs pytest through .github/lanes/lane.py, which adds the lane's row (tests, wall
@@ -47,6 +49,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  UV_VERSION: "0.12.24"
   UV_PYTHON_PREFERENCE: only-system
   UV_PYTHON_DOWNLOADS: never
   OPENBLAS_NUM_THREADS: "1"
@@ -55,114 +58,133 @@ env:
 
 jobs:
   code:
-    name: code (${{ matrix.python }})
-    runs-on: [self-hosted, macOS, arm64]
-    timeout-minutes: 30
+    name: code (${{ matrix.os }}, ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
         python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || (github.event_name == 'push' && '["3.11", "3.14"]' || (inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]'))) }}
-    env:
-      UV_PYTHON_PREFERENCE: only-system
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
       - name: Environment
         run: |
-          echo "UV_CACHE_DIR=$RUNNER_WORKSPACE/../cache/uv" >> "$GITHUB_ENV"
+          python -m pip install --quiet "uv==$UV_VERSION"
           uv venv --quiet --python "${{ matrix.python }}" .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Lint and types
         run: |
           .venv/bin/ruff check .
           .venv/bin/ruff format --check src
           .venv/bin/mypy src
       - name: Code suite
-        run: .venv/bin/python .github/lanes/lane.py code 300 --over 10 -q -p no:cacheprovider -n 10 -m "$CODE_SUITE" tests
+        run: .venv/bin/python .github/lanes/lane.py code 300 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "$CODE_SUITE" tests
 
   math-changes:
     if: github.event_name == 'pull_request'
-    runs-on: [self-hosted, macOS, arm64]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      UV_PYTHON_PREFERENCE: only-system
     outputs:
       math: ${{ steps.decide.outputs.math }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
       - id: decide
         name: Does this pull request run the math suite?
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          echo "UV_CACHE_DIR=$RUNNER_WORKSPACE/../cache/uv" >> "$GITHUB_ENV"
-          export UV_CACHE_DIR="$RUNNER_WORKSPACE/../cache/uv"
-          python3 .github/lanes/math_lane.py "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+          python -m pip install --quiet "uv==$UV_VERSION"
+          python .github/lanes/math_lane.py "$BASE_SHA" "$HEAD_SHA"
 
   math:
     needs: [math-changes]
     if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.math-changes.outputs.math == 'true') }}
     name: math (${{ matrix.python }})
-    runs-on: [self-hosted, macOS, arm64]
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || (inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]')) }}
-    env:
-      UV_PYTHON_PREFERENCE: only-system
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
       - name: Environment
         run: |
-          echo "UV_CACHE_DIR=$RUNNER_WORKSPACE/../cache/uv" >> "$GITHUB_ENV"
+          python -m pip install --quiet "uv==$UV_VERSION"
           uv venv --quiet --python "${{ matrix.python }}" .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Math suite
-        run: .venv/bin/python .github/lanes/lane.py math 900 -q -p no:cacheprovider -n 10 -m "math or calibration" tests
+        run: .venv/bin/python .github/lanes/lane.py math 900 -q -p no:cacheprovider -n "$WORKERS" -m "math or calibration" tests
 
   slow:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     name: slow (${{ matrix.python }})
-    runs-on: [self-hosted, macOS, arm64]
-    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
         python: ${{ fromJSON((inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]')) }}
-    env:
-      UV_PYTHON_PREFERENCE: only-system
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
       - name: Environment
         run: |
-          echo "UV_CACHE_DIR=$RUNNER_WORKSPACE/../cache/uv" >> "$GITHUB_ENV"
-          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_WORKSPACE/../cache/ms-playwright" >> "$GITHUB_ENV"
-          export UV_CACHE_DIR="$RUNNER_WORKSPACE/../cache/uv" PLAYWRIGHT_BROWSERS_PATH="$RUNNER_WORKSPACE/../cache/ms-playwright"
+          python -m pip install --quiet "uv==$UV_VERSION"
           uv venv --quiet --python "${{ matrix.python }}" .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-          .venv/bin/python -m playwright install chromium firefox webkit
+          .venv/bin/python -m playwright install --with-deps chromium firefox webkit
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Slow suite
-        run: .venv/bin/python .github/lanes/lane.py slow 900 -q -p no:cacheprovider -n 6 -m "slow and not backend" --deselect "$FLOORS_TEST" tests
+        run: .venv/bin/python .github/lanes/lane.py slow 900 -q -p no:cacheprovider -n "$WORKERS" -m "slow and not backend" --deselect "$FLOORS_TEST" tests
 
   floors:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, macOS, arm64]
-    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     env:
-      UV_PYTHON_PREFERENCE: only-system
       OPENBLAS_NUM_THREADS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
       - name: Environment
         run: |
-          echo "UV_CACHE_DIR=$RUNNER_WORKSPACE/../cache/uv" >> "$GITHUB_ENV"
+          python -m pip install --quiet "uv==$UV_VERSION"
           uv venv --quiet --python 3.11 .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-      - name: Floors (the code suite at -n 8, every requirement at its floor)
+      - name: Floors (the code suite at one worker per core, up to 8, every requirement at its floor)
         run: .venv/bin/python .github/lanes/lane.py floors 900 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/floors" "$FLOORS_TEST"
       - name: Keep the inner run's whole output
         if: always()
@@ -175,38 +197,40 @@ jobs:
 
   linux:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, macOS, arm64]
-    timeout-minutes: 60
-    env:
-      UV_PYTHON_PREFERENCE: only-system
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Code suite in a Linux container (Docker Desktop on the runner)
+        with:
+          persist-credentials: false
+      - name: Code suite in a Debian container
         run: |
           docker info --format 'docker {{.ServerVersion}}, {{.NCPU}} cpus, {{.OperatingSystem}}'
           # As a user that is not root: chmod-based tests cannot fail as root. --init puts an init at
           # PID 1 that reaps orphaned children, as a Linux host's does; without it the Burla tests
           # that wait for an orphaned launcher to exit see a zombie that never goes.
           set +e
-          docker run --rm --init -v "$PWD":/src:ro -e CODE_SUITE -e OPENBLAS_NUM_THREADS python:3.11-bookworm bash -c '
+          docker run --rm --init -v "$PWD":/src:ro -e CODE_SUITE -e OPENBLAS_NUM_THREADS -e UV_VERSION python:3.11-bookworm bash -c '
             set -e
-            pip install --quiet --root-user-action=ignore uv
+            pip install --quiet --root-user-action=ignore "uv==$UV_VERSION"
             useradd --create-home tester
             cp -a /src /work && chown -R tester /work
-            su tester -c "cd /work && export PATH=/work/.venv/bin:\$PATH && uv venv --quiet .venv && uv pip install --quiet --python .venv/bin/python -e \".[all,dev]\" && .venv/bin/python .github/lanes/lane.py linux 300 -q -p no:cacheprovider -n 8 -m \"\$CODE_SUITE\" tests"' 2>&1 | tee linux.log
+            su tester -c "cd /work && export PATH=/work/.venv/bin:\$PATH && uv venv --quiet .venv && uv pip install --quiet --python .venv/bin/python -e \".[all,dev]\" && .venv/bin/python .github/lanes/lane.py linux 300 -q -p no:cacheprovider -n \"\$(nproc)\" -m \"\$CODE_SUITE\" tests"' 2>&1 | tee linux.log
           status=${PIPESTATUS[0]}
           grep -E '^\|( lane | linux |---)' linux.log >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
   history:
     if: github.event_name == 'workflow_dispatch' && inputs.lane == 'release'
-    runs-on: [self-hosted, macOS, arm64]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      UV_PYTHON_PREFERENCE: only-system
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
       - name: History check
-        run: python3 .github/lanes/history.py
+        run: python .github/lanes/history.py

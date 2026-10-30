@@ -45,13 +45,17 @@ OPENBLAS_NUM_THREADS=1 python -m pytest tests -n 6 -m "slow and not backend"
 
 ## CI
 
-Every pull request and every push to main runs the code lane: ruff, the format check on `src`,
-mypy and the code suite, on Python 3.11 for a pull request and on 3.11 and 3.14 for main. A pull request that changes the statistics, a test
+CI runs on GitHub's own runners, which cost nothing on a public repository. No job runs on a
+machine of ours, reads a secret or holds more than read access to the repository, and every action
+is pinned to a full commit SHA. Every pull request runs the code lane: ruff, the format check on
+`src`, mypy and the code suite, on Linux with Python 3.11. Every push to main runs it on Linux and
+macOS, on 3.11 and 3.14. A pull request that changes the statistics, a test
 of the math suite, or the version a statistics library resolves to also runs the math suite, and the
 job summary says why. Every night, and before a release, CI runs everything else: the code suite on
-every supported Python, the math suite, the slow tests, the floors run and the code suite in a Linux
-container. Tests marked `backend` never run in CI. Each job's summary gives the tests it ran, its
-time against the lane's budget, and the code lane's tests over 10 seconds.
+every supported Python on both systems, the math suite, the slow tests, the floors run and the code
+suite in a Debian container. Tests marked `backend` never run in CI. Each job's summary gives the
+tests it ran, its time against the lane's budget, and the code lane's tests over 10 seconds. Every
+lane runs one pytest worker per core of its runner.
 
 ## The docs are tested
 
