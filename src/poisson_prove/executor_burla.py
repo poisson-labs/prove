@@ -1,6 +1,6 @@
 """The Burla backend: a sweep on a small fixed cluster in the user's own cloud, through Burla.
 
-Burla 1.8.2 ships only the ``.py`` files of the local modules a caller has imported, and refuses
+Burla 1.8.4 ships only the ``.py`` files of the local modules a caller has imported, and refuses
 a call whose shipped code imports a local package inside a function. Prove as it stands trips
 that rule, and a target package may read data files beside its own source. So this backend ships its
 own bundle -- a deterministic tarball of the real package folders, data files included -- from a
@@ -73,7 +73,7 @@ __all__ = [
 ]
 
 _BACKEND = "burla"
-_BURLA_PIN = "1.8.2"
+_BURLA_PIN = "1.8.4"
 _INSTALL_HINT = 'pip install "poisson-prove[burla]"'
 #: After the stop's deadline, how long the launcher has to report before the parent sends it
 #: SIGINT, and how long after that before its whole process group is killed.
@@ -89,7 +89,7 @@ class BurlaBackendError(ExecutorError):
 
 
 class BurlaNotInstalled(BurlaBackendError):
-    """``burla==1.8.2`` is not importable by the launcher. ``nexts`` holds the install line."""
+    """``burla==1.8.4`` is not importable by the launcher. ``nexts`` holds the install line."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
@@ -684,9 +684,9 @@ def preflight_burla(p: Plan, import_path: str, options: BurlaOptions) -> str:
         f"idle allowance {options.idle_minutes:g} min · head {options.head_url}",
         _head_line(options, bundle),
         "Worker view: job 0 matches this machine",
-        "Traffic: code, inputs and results go through Burla's relay unless the head was started "
-        "with DISABLE_BURLA_RELAY=True; Prove cannot tell from the head whether it was; "
-        "the store stays on this machine",
+        "Traffic: code, inputs and results go through Burla's relay unless the head runs with "
+        "BURLA_PRIVATE=True, and then directly between this machine and the nodes; Prove cannot "
+        "tell from the head which; the store stays on this machine",
         f"Cost: ~{_usd(estimate)} this run ({options.nodes} × "
         f"${options.usd_per_node_hour:g}/node-hour, {options.price_asof}) · "
         f"ledger {options.ledger} {_usd(total)} so far · "
@@ -754,7 +754,9 @@ _FIXES = {
     "JobStalled": "the job ended short; a Python mismatch shows up this way (the workers must run "
     "this machine's 3.<minor>)",
     "NodesFailedToBoot": "the nodes failed to boot; check `burla nodes list` and the EC2 console",
-    "NoNodes": "no node is running; start the cluster with `burla cluster start`",
+    "NoNodes": "no node is running; start the cluster with `burla cluster start`, or, in private "
+    "mode, through the coordinator's localhost API (POST /v1/settings, then "
+    "POST /v1/management/cluster/start)",
     "NoCompatibleNodes": "no node fits func_cpu and func_ram; check `burla settings show`",
     "UnsupportedLocalImport": "Burla refused shipped code; the launcher must import nothing local",
     "FunctionTooBig": "the bundle is over Burla's 0.1 GB function limit",

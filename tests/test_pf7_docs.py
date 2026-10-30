@@ -678,7 +678,7 @@ def _burla_backend(text: str) -> list[str]:
     from poisson_prove.executor_burla import BurlaOptions
 
     pin = [r for r in tomllib.loads(text_of("pyproject.toml"))["project"]["optional-dependencies"]["burla"]]
-    need = ["experimental", "DISABLE_BURLA_RELAY", 'pip install "poisson-prove[burla]"', *pin, "Windows"]
+    need = ["experimental", "BURLA_PRIVATE", 'pip install "poisson-prove[burla]"', *pin, "Windows"]
     out = [w for w in need if w not in text]
     required = [f.name for f in dataclasses.fields(BurlaOptions)
                 if f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING]

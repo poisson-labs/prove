@@ -185,7 +185,7 @@ def __getattr__(name):
     raise StandInUsed(f"the stand-in modal package was used: modal.{name}")
 """
 #: A stand-in burla package, importable so a missing extra is never the refusal a test reads.
-FAKE_BURLA = FAKE_MODAL.replace('"99.0.0"', '"1.8.2"').replace("modal", "burla")
+FAKE_BURLA = FAKE_MODAL.replace('"99.0.0"', '"1.8.4"').replace("modal", "burla")
 
 PAIRED_DECLARATION = """\
 value_key = "answers.q1.score"

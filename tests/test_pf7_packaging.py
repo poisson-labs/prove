@@ -22,7 +22,7 @@ package.
   ``main`` that exists in this tree; ``Source`` is the repository and ``Issues`` its issues page.
 - **k4** Every requirement has a lower bound: the core, every extra, ``dev`` included (the floors
   run resolves ``[dev]`` at its lowest too), and the build backend. An upper bound only on
-  ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.2``.
+  ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.4``.
 - **k5** ``[dev]`` carries what the contributors' test runs need that this file and the docs check
   read: ``pytest-xdist`` (the suite runs on parallel workers), ``hypothesis`` (the property tests), ``hatchling`` (the archives built
   here), ``markdown-it-py`` (the docs check reads pages with it), ``pyyaml`` (it parses YAML
@@ -95,7 +95,7 @@ PEOPLE = [{"name": "Poisson Labs", "email": "work@poissonlabs.ai"}]
 PYTHONS = ("3.11", "3.12", "3.13", "3.14")
 EXTRAS = {"modal", "agent", "burla", "all", "dev"}
 MODAL_FLOOR = "modal>=1.0.0"
-BURLA_PIN = "burla==1.8.2"
+BURLA_PIN = "burla==1.8.4"
 DEV_NEEDS = ("pytest-xdist", "hypothesis", "hatchling", "markdown-it-py", "pyyaml", "pyte")
 SDIST_FILES = {"PKG-INFO", "pyproject.toml", ".gitignore", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"}
 SDIST_FOLDERS = ("src", "tests", "docs", "examples")
@@ -229,7 +229,7 @@ def test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_openai_and_burla
         name = name_of(req)
         operators = {s.operator for s in req.specifier}
         if name == "burla":
-            if str(req.specifier) != "==1.8.2":
+            if str(req.specifier) != "==1.8.4":
                 problems.append(f"{req}: burla is pinned exactly to the client the backend runs")
             continue
         if ">=" not in operators:

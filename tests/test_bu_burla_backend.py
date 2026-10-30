@@ -88,7 +88,7 @@ WORKER = FIXTURES / "worker.py"
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
 SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
-PIN = "1.8.2"
+PIN = "1.8.4"
 # PF9: Burla's install line names Prove's extra.
 INSTALL_HINT = 'pip install "poisson-prove[burla]"'
 HEAD = "http://localhost:5001"

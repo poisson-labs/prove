@@ -79,7 +79,7 @@ is.
 ## Burla
 
 `--backend burla` runs the rollouts on a Burla cluster in your own cloud. It is experimental: it
-runs with exactly one version of the Burla client, `burla==1.8.2`, which the extra pins, and its
+runs with exactly one version of the Burla client, `burla==1.8.4`, which the extra pins, and its
 plan and refusals may change. It is not available on Windows: there it is refused before anything
 else.
 
@@ -113,8 +113,17 @@ est_seconds_per_episode = 0.5
 
 Prove ships its own code and your local packages to the workers as one bundle, and the plan names
 it with its digest. The plan's `Traffic` line says where your data goes: code, inputs and results
-pass through Burla's relay unless the cluster's head was started with `DISABLE_BURLA_RELAY=True`,
-which Prove cannot see from the head; the store stays on this machine either way.
+pass through Burla's relay unless the cluster's head runs in Burla's private mode
+(`BURLA_PRIVATE=True`), and then go directly between this machine and the nodes. Prove cannot see
+from the head which it is. The store stays on this machine either way.
+
+In private mode a fixed cluster is started through the coordinator's localhost API:
+`POST /v1/settings` with the machine type and the number of nodes, then
+`POST /v1/management/cluster/start`. The dashboard's Start button makes the same calls. `head_url` is
+the coordinator's own address, such as `http://127.0.0.1:5001`, and the sweep runs as the user that
+started the coordinator, whose Burla folder holds the cluster's token. Prove neither sets nor
+checks `BURLA_PRIVATE`: the Burla client Prove starts is in private mode only when the environment
+Prove runs in sets it.
 
 <!-- docs-check: skip: needs the burla extra and your own cluster's settings -->
 ```console
@@ -123,7 +132,7 @@ plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on burla, ~$0.080 t
 …
   Cluster: 2 × n4-standard-4 · 4 slots each · 8 at once · grow off · idle allowance 5 min · head http://localhost:5001
 …
-  Traffic: code, inputs and results go through Burla's relay unless the head was started with DISABLE_BURLA_RELAY=True; Prove cannot tell from the head whether it was; the store stays on this machine
+  Traffic: code, inputs and results go through Burla's relay unless the head runs with BURLA_PRIVATE=True, and then directly between this machine and the nodes; Prove cannot tell from the head which; the store stays on this machine
 …
 ```
 
@@ -148,5 +157,5 @@ other pair. The store is always on this machine.
 What leaves the machine is up to the backend you choose. Locally, nothing but your agent's own
 calls. On Modal, your rollout's code, the image you declare and each batch's conditions and seeds
 go to your Modal account, and the rows come back. On Burla, Prove's bundle of your code and the
-same inputs go to your cluster, through Burla's relay unless its head runs with
-`DISABLE_BURLA_RELAY=True`. Prove itself sends nothing to Poisson Labs or anyone else.
+same inputs go to your cluster, through Burla's relay unless its head runs in private mode
+(`BURLA_PRIVATE=True`). Prove itself sends nothing to Poisson Labs or anyone else.
