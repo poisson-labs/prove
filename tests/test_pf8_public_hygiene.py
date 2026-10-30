@@ -1019,7 +1019,8 @@ def test_pf8_5_with_home_empty_no_skip_names_a_place(tmp_path: Path) -> None:
             "--deselect", f"{THIS_FILE}::test_pf8_5_with_home_empty_no_skip_names_a_place", f"--junitxml={junit}"]
     if importlib_has("xdist"):
         argv += ["-n", "auto"]
-    done = subprocess.run(argv, cwd=ROOT, env=env, capture_output=True, text=True, timeout=3600, preexec_fn=PF1.default_sigint)
+    # Two hours: the inner suite takes over an hour on the four vCPUs of a hosted runner.
+    done = subprocess.run(argv, cwd=ROOT, env=env, capture_output=True, text=True, timeout=7200, preexec_fn=PF1.default_sigint)
     assert junit.is_file(), done.stdout[-2000:] + done.stderr[-2000:]
     root = ET.parse(junit).getroot()
     assert sum(1 for _ in root.iter("testcase")) > 1000, done.stdout[-2000:]
