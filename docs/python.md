@@ -19,7 +19,7 @@ What a rollout needs.
 - `Rollout`: the shape of a rollout, a function `(cfg, seed) -> Episode`.
 - `record`: record a traced step inside a rollout.
 - `step`: name a step of a rollout, for the trace.
-- `__version__`: the installed version of Prove, as a string such as `0.1.0`.
+- `__version__`: the installed version of Prove, as a string such as `0.1.1`.
 
 <!-- docs-check: run -->
 ```python
