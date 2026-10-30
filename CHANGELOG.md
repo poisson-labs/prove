@@ -4,6 +4,24 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.1.1 — 2026-10-30
+
+Prove's Burla backend now runs on Burla 1.8.4, the first Burla client with private mode, in which
+a cluster in your own cloud account never contacts Burla's servers.
+
+### Changed
+
+- The `[burla]` extra pins exactly Burla 1.8.4, in place of 1.8.2. The backend is still
+  experimental.
+- The plan's `Traffic` line says that code, inputs and results go through Burla's relay unless the
+  cluster's head runs in private mode (`BURLA_PRIVATE=True`), and directly between your machine
+  and the nodes when it does. Burla 1.8.4 no longer has the `DISABLE_BURLA_RELAY` switch the line
+  used to name.
+- When no node is running, the error also says how to start a cluster in private mode: through
+  the coordinator's localhost API, `POST /v1/settings`, then `POST /v1/management/cluster/start`.
+- Prove neither sets nor checks private mode. Its Burla client is private when the environment
+  Prove runs in sets `BURLA_PRIVATE=True`.
+
 ## 0.1.0 — 2026-10-29
 
 The first public release. Prove tells you whether a change to an AI agent really changed how often
