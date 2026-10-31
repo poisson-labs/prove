@@ -14,6 +14,7 @@ and ledger; a per-step JSON-lines ledger is checked before anything starts; the 
 the job itself when the ledger total plus the run's accrued charge reaches the stop; and a
 backstop kills the launcher's process group if it ever stops reporting.
 """
+# A scratch comment: this pull request only shows that a backend change runs the backend tests.
 
 from __future__ import annotations
 
