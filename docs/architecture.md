@@ -1,7 +1,7 @@
 # Architecture
 
 For contributors: how Prove is put together, and where a change belongs. The short version is
-one core and several faces. The core computes, reads and writes; a face asks, prints, draws or
+one core and several faces. The core alone computes, reads and writes; a face asks, prints, draws or
 serves what the core returns. Nothing a person reads is computed twice.
 
 ## The core

@@ -4,6 +4,10 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.1.2 — 2026-10-31
+
+A scratch entry: this pull request only shows which CI jobs a version bump runs.
+
 ## 0.1.1 — 2026-10-30
 
 Prove's Burla backend now runs on Burla 1.8.4, the first Burla client with private mode, in which
