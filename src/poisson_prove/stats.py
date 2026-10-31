@@ -6,6 +6,7 @@ quantile it used. ``WILSON_LEVEL`` and ``POWER`` are the two settings every surf
 computes, never copies: the level of the shares' intervals, and the power every detection limit is
 stated at.
 """
+# A scratch comment: this pull request only shows that a statistics change runs the math suite.
 
 from __future__ import annotations
 
