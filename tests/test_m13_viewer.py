@@ -49,6 +49,7 @@ import json
 import math
 import os
 import re
+import socket
 import socketserver
 import subprocess
 import sys
@@ -958,6 +959,17 @@ def test_v6_the_server_binds_loopback(lattice_built: Built) -> None:
         assert server.server_address[0] == HOST, server.server_address
 
 
+def test_v6_the_server_binds_without_a_reverse_name_lookup(lattice_built: Built, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A reverse lookup of the host can take tens of seconds on a slow resolver (35 s on a
+    # hosted macOS runner); binding must not wait on one.
+    def no_lookup(name: str = "") -> str:
+        raise AssertionError(f"reverse name lookup of {name!r} while binding")
+
+    monkeypatch.setattr(socket, "getfqdn", no_lookup)
+    with served(lattice_built.page) as server:
+        assert server.server_address[0] == HOST, server.server_address
+
+
 def test_v7_get_root_returns_the_page_with_the_four_headers(lattice_built: Built) -> None:
     with served(lattice_built.page) as server:
         r = get(server, "/")
@@ -1591,7 +1603,7 @@ def test_v38_bind_failure_is_a_viewer_error_and_exit_one(lattice_built: Built, m
     def refuse(self: Any) -> None:
         raise OSError(98, "address in use (injected)")
 
-    monkeypatch.setattr(http.server.HTTPServer, "server_bind", refuse)
+    monkeypatch.setattr(socketserver.TCPServer, "server_bind", refuse)
     with pytest.raises(viewer().ViewerError):
         viewer().serve_page(lattice_built.page, on_bind=lambda server: None)
     r = run_cli(lattice_full_argv())
