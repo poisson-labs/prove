@@ -5,7 +5,7 @@
 # The lanes (CONTRIBUTING.md, "Running the tests"):
 # - code: the code suite, ruff, the format check and mypy, on every pull request (Linux, Python
 #   3.11) and every push to main (Linux and macOS, 3.11 and 3.14); all four Pythons on both
-#   nightly and before a release. Budget: 5 minutes per Python on the maintainer's Mac.
+#   nightly and before a release.
 # - math: the statistics, on a pull request that changes them (math_lane.py says why), nightly
 #   and before a release.
 # - slow: nightly and before a release. Tests marked backend never run in CI.
@@ -16,6 +16,10 @@
 #
 # Each lane runs pytest through .github/lanes/lane.py, which adds the lane's row (tests, wall
 # time against its budget, the runner's load) to the job summary.
+#
+# The budgets are a hosted runner's (4 vCPUs on Linux, 3 on macOS), report-only: code, linux and
+# floors 30 minutes, math 70, slow 150. The maintainer's Mac (16 cores) stays the target: 5 minutes
+# for the code lane, 15 for the others.
 #
 # Nightly is the schedule below; "before a release" is this workflow run by hand with lane
 # "release" (Actions tab, or `gh workflow run CI -f lane=release`).
@@ -86,7 +90,7 @@ jobs:
           .venv/bin/ruff format --check src
           .venv/bin/mypy src
       - name: Code suite
-        run: .venv/bin/python .github/lanes/lane.py code 300 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "$CODE_SUITE" tests
+        run: .venv/bin/python .github/lanes/lane.py code 1800 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "$CODE_SUITE" tests
 
   math-changes:
     if: github.event_name == 'pull_request'
@@ -136,7 +140,7 @@ jobs:
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Math suite
-        run: .venv/bin/python .github/lanes/lane.py math 900 -q -p no:cacheprovider -n "$WORKERS" -m "math or calibration" tests
+        run: .venv/bin/python .github/lanes/lane.py math 4200 -q -p no:cacheprovider -n "$WORKERS" -m "math or calibration" tests
 
   slow:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -163,7 +167,7 @@ jobs:
           .venv/bin/python -m playwright install --with-deps chromium firefox webkit
           echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Slow suite
-        run: .venv/bin/python .github/lanes/lane.py slow 900 -q -p no:cacheprovider -n "$WORKERS" -m "slow and not backend" --deselect "$FLOORS_TEST" tests
+        run: .venv/bin/python .github/lanes/lane.py slow 9000 -q -p no:cacheprovider -n "$WORKERS" -m "slow and not backend" --deselect "$FLOORS_TEST" tests
 
   floors:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -185,7 +189,7 @@ jobs:
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Floors (the code suite at one worker per core, up to 8, every requirement at its floor)
-        run: .venv/bin/python .github/lanes/lane.py floors 900 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/floors" "$FLOORS_TEST"
+        run: .venv/bin/python .github/lanes/lane.py floors 1800 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/floors" "$FLOORS_TEST"
       - name: Keep the inner run's whole output
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -215,7 +219,7 @@ jobs:
             pip install --quiet --root-user-action=ignore "uv==$UV_VERSION"
             useradd --create-home tester
             cp -a /src /work && chown -R tester /work
-            su tester -c "cd /work && export PATH=/work/.venv/bin:\$PATH && uv venv --quiet .venv && uv pip install --quiet --python .venv/bin/python -e \".[all,dev]\" && .venv/bin/python .github/lanes/lane.py linux 300 -q -p no:cacheprovider -n \"\$(nproc)\" -m \"\$CODE_SUITE\" tests"' 2>&1 | tee linux.log
+            su tester -c "cd /work && export PATH=/work/.venv/bin:\$PATH && uv venv --quiet .venv && uv pip install --quiet --python .venv/bin/python -e \".[all,dev]\" && .venv/bin/python .github/lanes/lane.py linux 1800 -q -p no:cacheprovider -n \"\$(nproc)\" -m \"\$CODE_SUITE\" tests"' 2>&1 | tee linux.log
           status=${PIPESTATUS[0]}
           grep -E '^\|( lane | linux |---)' linux.log >> "$GITHUB_STEP_SUMMARY"
           exit "$status"

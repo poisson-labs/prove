@@ -26,6 +26,7 @@ from __future__ import annotations
 import html as _html
 import json
 import math
+import socketserver
 from collections import Counter
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
@@ -1513,9 +1514,20 @@ class _Server(ThreadingHTTPServer):
     separator, the client address and a full traceback to the real ``sys.stderr`` on any
     exception inside a handler, which is the loudest stream this process has and the one every
     other verb routes through its given ``_IO``. Both are silenced.
+
+    ``server_bind`` binds without ``HTTPServer``'s reverse lookup of the host: the standard
+    library fills ``server_name`` from ``socket.getfqdn``, which nothing here reads, and on a
+    macOS host whose resolver is slow the first such lookup in a process took 35 s before the
+    URL line could be printed.
     """
 
     daemon_threads = True
+
+    def server_bind(self) -> None:
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = str(host)
+        self.server_port = int(port)
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         return

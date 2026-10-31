@@ -318,6 +318,12 @@ def test_pf10_8_every_job_that_runs_tests_runs_them_through_the_lane_script() ->
     assert {name for name, _ in lanes()} == {"code", "math", "slow", "floors", "linux"}
 
 
+def test_pf10_8_each_lane_reports_against_its_hosted_budget() -> None:
+    # Report-only budgets for a hosted runner, in seconds; the maintainer's Mac keeps 5:00 and 15:00.
+    budgets = {name: arguments[1] for name, arguments in lanes()}
+    assert budgets == {"code": "1800", "linux": "1800", "floors": "1800", "math": "4200", "slow": "9000"}
+
+
 # ---------- the release's history check ----------
 
 
