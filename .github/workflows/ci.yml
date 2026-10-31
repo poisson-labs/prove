@@ -13,12 +13,15 @@
 # against its budget, the runner's load, and the tests over 10 seconds) to the job summary.
 #
 # The shard table (shards.py reads it): a number, a colon and the test files that shard runs,
-# continued on indented lines. The shard that says `rest` runs every test file no other line
-# names, so a new test file runs there with no change here. `backends` is the fakes' own job. To
-# move a file, move its path between lines. The table was balanced from the per-file times of the
-# code suite at four workers on 2026-10-31, then from the shards' own runs on a hosted runner,
-# whose test reports each shard keeps for a week (artifact `junit-shard-N`); the target is under
-# five minutes from the first job's start to the gate's end.
+# continued on indented lines; a word starting with `--` is a pytest option for that shard alone.
+# The shard that says `rest` runs every test file no other line names, so a new test file runs
+# there with no change here. `backends` is the fakes' own job. To move a file, move its path
+# between lines. The table was balanced from the per-file times of the shards' own runs on a
+# hosted runner (each shard keeps its test report for a week, artifact `junit-shard-N`), to about
+# two and a half minutes of tests per shard; the target is under five minutes from the run's start
+# to the gate's end. Shard 1 runs each file on one worker (`--dist=loadfile`): every test of
+# test_pf1_look.py's corpus shares one module fixture of about eighty command-line calls, and
+# spread over four workers it was built four times at once, three minutes each on a hosted runner.
 #
 # Everything slow runs in nightly.yml, never here; the release runs from a tag in release.yml.
 # Every job runs on a GitHub-hosted runner, reads no secret and holds only read access to the
@@ -45,21 +48,21 @@ env:
   OPENBLAS_NUM_THREADS: "1"
   CODE_SUITE: not math and not calibration and not backend and not slow
   SHARDS: |
-    1: tests/test_pf6_app.py
-    2: tests/test_pf7_docs.py tests/test_pf0_name.py tests/test_m7_multi.py
-    3: tests/test_s27_leaves.py tests/test_pf5_api_core.py tests/test_app_banner.py
-       tests/test_m10_multi.py tests/test_m6_multi.py
-    4: tests/test_s29_viewer.py tests/test_pf12_artifacts.py tests/test_ls_local_serve.py
-       tests/test_fr_first_run.py
-    5: tests/test_pf1_look.py tests/test_pf6_look.py tests/test_pf12_ui.py tests/test_p1_payload.py
-    6: tests/test_s26_fault_lines.py tests/test_pf3_first_run.py tests/test_pf11_setup_agent.py
-       tests/test_defaults_refusals_and_faces.py
-    7: tests/test_s28_report.py tests/test_s23_power.py tests/test_pf8_public_hygiene.py
-       tests/test_m13_viewer.py tests/test_capture_crash_and_timeout_behaviour.py
-       tests/test_competing_set.py
-    8: rest
+    1: --dist=loadfile tests/test_pf1_look.py tests/test_pf11_setup_agent.py
+       tests/test_defaults_refusals_and_faces.py tests/test_app_banner.py tests/test_m6_multi.py
+       tests/test_m10_multi.py
+    2: tests/test_s27_leaves.py
+    3: tests/test_s26_fault_lines.py tests/test_s21_errors.py
+    4: tests/test_s28_report.py tests/test_p1_payload.py tests/test_s25_root.py
+    5: tests/test_pf7_docs.py tests/test_pf5_api_core.py tests/test_pf2_names.py
+    6: tests/test_s23_power.py tests/test_m10_cli.py tests/test_pf0_name.py
+    7: tests/test_pf6_app.py tests/test_pf6_look.py tests/test_fr_first_run.py
+    8: tests/test_s29_viewer.py tests/test_pf8_public_hygiene.py tests/test_pf12_ui.py
+    9: tests/test_pf4_surfaces.py tests/test_ls_local_serve.py tests/test_pf3_first_run.py
+       tests/test_pf12_artifacts.py
+    10: rest
     backends: tests/test_bu_burla_backend.py tests/test_m3_modal.py tests/test_m3_modal_launch.py
-       tests/test_mc_modal_chaos.py tests/test_pf9_backends.py
+       tests/test_mc_modal_chaos.py tests/test_pf9_backends.py tests/test_pf10_worker_blas.py
 
 jobs:
   changes:
@@ -118,7 +121,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -145,7 +148,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-shard-${{ matrix.shard }}
-          path: /tmp/lane-*/junit.xml
+          path: /tmp/lane-code-*/junit.xml
           retention-days: 7
           if-no-files-found: warn
 

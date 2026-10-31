@@ -4,7 +4,8 @@
 
 Reads the table from ``$SHARDS`` (the gate workflow's ``env``) and prints the pytest paths of one
 shard, one per line. The table is one entry per shard: a name, a colon, and the test files it
-runs, continued on indented lines. The numbered entries are the gate's test shards, and one of
+runs, continued on indented lines; a word starting with ``--`` is a pytest option for that entry
+alone, printed before its files. The numbered entries are the gate's test shards, and one of
 them is the word ``rest``: every test file no other entry names, so a new test file runs there
 with no change to the table. ``backends`` is the Burla and Modal fakes, which run in a job of
 their own only when backend code changes (``backends_lane.py``), so ``rest`` leaves them out.
@@ -56,7 +57,7 @@ def problems(table: dict[str, list[str]], tests: list[str], total: int | None = 
         out.append(f"the numbered shards are {numbered}, not 1 to {len(numbered)}")
     if total is not None and len(numbered) != total:
         out.append(f"the table has {len(numbered)} shards and the matrix runs {total}")
-    rests = [name for name in numbered if table[name] == [REST]]
+    rests = [name for name in numbered if files(table[name]) == [REST]]
     if len(rests) != 1:
         out.append(f"{len(rests)} shards are {REST}; exactly one must be")
     if not table.get(BACKENDS):
@@ -65,10 +66,10 @@ def problems(table: dict[str, list[str]], tests: list[str], total: int | None = 
     if others:
         out.append(f"entries that are neither numbered nor {BACKENDS}: {others}")
     seen: dict[str, str] = {}
-    for name, files in table.items():
+    for name, words in table.items():
         if name in rests:
             continue
-        for path in files:
+        for path in files(words):
             if path in seen:
                 out.append(f"{path} is in {seen[path]} and {name}")
             seen[path] = name
@@ -77,12 +78,18 @@ def problems(table: dict[str, list[str]], tests: list[str], total: int | None = 
     return out
 
 
+def files(words: list[str]) -> list[str]:
+    """An entry's words without its options."""
+    return [word for word in words if not word.startswith("-")]
+
+
 def paths(table: dict[str, list[str]], name: str, tests: list[str]) -> list[str]:
-    """The pytest paths entry ``name`` runs."""
-    if table[name] == [REST]:
-        named = {path for files in table.values() for path in files if path != REST}
-        return [path for path in tests if path not in named]
-    return list(table[name])
+    """The pytest options and paths entry ``name`` runs."""
+    options = [word for word in table[name] if word.startswith("-")]
+    if files(table[name]) == [REST]:
+        named = {path for words in table.values() for path in files(words) if path != REST}
+        return options + [path for path in tests if path not in named]
+    return options + files(table[name])
 
 
 def test_files() -> list[str]:

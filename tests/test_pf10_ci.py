@@ -274,7 +274,7 @@ def test_pf10_4_the_gate_runs_lint_and_the_sharded_code_suite_on_linux_and_311()
 
 
 @pytest.mark.parametrize(("table", "wrong"), [
-    ("1: tests/test_a.py\n2: tests/test_b.py\n   tests/test_c.py\n3: rest\nbackends: tests/test_d.py\n", None),
+    ("1: --dist=loadfile tests/test_a.py\n2: tests/test_b.py\n   tests/test_c.py\n3: rest\nbackends: tests/test_d.py\n", None),
     ("1: tests/test_a.py\n2: tests/test_a.py\n3: rest\nbackends: tests/test_d.py\n", "tests/test_a.py is in 1 and 2"),
     ("1: tests/test_a.py\n2: tests/test_b.py\nbackends: tests/test_d.py\n", "0 shards are rest; exactly one must be"),
     ("1: tests/test_a.py\n3: rest\nbackends: tests/test_d.py\n", "the numbered shards are ['1', '3'], not 1 to 2"),
@@ -290,6 +290,7 @@ def test_pf10_4_the_shard_table_puts_every_test_file_in_exactly_one_place(table:
         assert found == []
         assert shards.paths(parsed, "3", tests) == ["tests/test_e.py", "tests/test_f.py"], "rest leaves out every named file"
         assert shards.paths(parsed, "2", tests) == ["tests/test_b.py", "tests/test_c.py"]
+        assert shards.paths(parsed, "1", tests) == ["--dist=loadfile", "tests/test_a.py"], "an option is the shard's own"
         assert shards.problems(parsed, tests, 4) == ["the table has 3 shards and the matrix runs 4"]
     else:
         assert wrong in found, found
