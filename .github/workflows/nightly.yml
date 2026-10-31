@@ -20,6 +20,9 @@
 name: Nightly
 
 on:
+  # Scratch: the one push that starts this workflow before it reaches main (not for merging).
+  push:
+    branches: [ci-proof-nightly]
   schedule:
     - cron: "17 7 * * *"
   workflow_dispatch:
