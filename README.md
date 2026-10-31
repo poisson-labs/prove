@@ -1,6 +1,6 @@
 # Poisson Prove
 
-[![CI](https://img.shields.io/github/actions/workflow/status/poisson-labs/prove/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/poisson-labs/prove/actions/workflows/ci.yml) [![PyPI version](https://img.shields.io/pypi/v/poisson-prove?style=flat-square&color=3B5BDB)](https://pypi.org/project/poisson-prove/) [![Python versions](https://img.shields.io/pypi/pyversions/poisson-prove?style=flat-square&color=3B5BDB)](https://pypi.org/project/poisson-prove/) [![Licence: MIT](https://img.shields.io/pypi/l/poisson-prove?style=flat-square&color=3B5BDB)](https://github.com/poisson-labs/prove/blob/main/LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/poisson-labs/prove/ci.yml?branch=main&event=push&style=flat-square&label=CI)](https://github.com/poisson-labs/prove/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush) [![PyPI version](https://img.shields.io/pypi/v/poisson-prove?style=flat-square&color=3B5BDB)](https://pypi.org/project/poisson-prove/) [![Python versions](https://img.shields.io/pypi/pyversions/poisson-prove?style=flat-square&color=3B5BDB)](https://pypi.org/project/poisson-prove/) [![Licence: MIT](https://img.shields.io/pypi/l/poisson-prove?style=flat-square&color=3B5BDB)](https://github.com/poisson-labs/prove/blob/main/LICENSE)
 
 Did your change to the agent really change how often it fails?
 
