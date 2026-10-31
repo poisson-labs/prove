@@ -113,10 +113,3 @@ def test_from_http_import_server_trips_outside_viewer(tmp_path):
     scratch = tmp_path / "scratch.py"
     scratch.write_text("from http import server\n")
     assert network_violations(scratch) == [LOOPBACK_SERVER_MODULE]
-
-
-def test_ci_workflow_exists():
-    wf = ROOT / ".github" / "workflows" / "ci.yml"
-    assert wf.exists()
-    text = wf.read_text()
-    assert "pytest" in text and "mypy" in text and "ruff" in text

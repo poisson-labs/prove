@@ -91,8 +91,8 @@ lettered so the tests below can cite it).
   folder whose ``./prove-runs`` holds the quickstart pair. PF7's docs check later takes it in.
 - (q) PF5.2's "plain words" in the public docstrings and ``docs/python.md`` is checked by the release
   plain-words test (``test_pf8_public_hygiene.py``, PF8.4), over the wheel and the docs.
-- (r) ``mypy --strict`` over ``src/`` is one case of the code suite, run with no cache (about 2 s),
-  not a ``slow`` one.
+- (r) ``mypy --strict`` over ``src/`` is the gate's lint job (``mypy src`` with ``strict = true`` in
+  ``pyproject.toml``) on every pull request and push to main, not a case of the code suite.
 - (s) PF5.8's scan: a read is ``os.environ.get(N)``, ``os.environ[N]``, ``N in os.environ`` or
   ``os.getenv(N)`` with ``N`` a string or a module constant; copying the environment whole for a
   child process is not a read; any other use of ``os.environ`` is a failure. The core may also
@@ -127,7 +127,7 @@ suite runs on ``pytest-xdist`` workers (``_shared``).
 | invariant | tests |
 |---|---|
 | PF5.1 each public module's ``__all__`` | ``test_pf5_1_*`` |
-| PF5.2 docstrings, annotations, ``docs/python.md``, ``mypy`` | ``test_pf5_2_*`` |
+| PF5.2 docstrings, annotations, ``docs/python.md`` | ``test_pf5_2_*``; ``mypy``: the gate |
 | PF5.3 the public statistics give the numbers comparisons report | ``test_pf5_3_*`` |
 | PF5.4 ``compare`` returns what ``--json`` prints; ``resolve`` takes every form | ``test_pf5_4_*`` |
 | PF5.5 ``from poisson_prove import step, record, Episode, Rollout`` | ``test_pf5_5_*`` |
@@ -673,16 +673,6 @@ def test_pf5_2_docs_python_lists_every_public_name_and_constant_and_marks_the_pr
         if not any("private" in p.lower() for p in found):
             problems.append(f"{private} not named private")
     assert not problems, problems
-
-
-def test_pf5_2_mypy_strict_passes_over_src(tmp_path: Path) -> None:
-    """PF5.2, reading r: ``mypy --strict`` over ``src/``, with a fresh cache, in the code suite (it
-    takes about 2 s)."""
-    done = subprocess.run(
-        [sys.executable, "-m", "mypy", "--strict", f"--cache-dir={tmp_path / 'mypy'}", "src/poisson_prove"],
-        cwd=ROOT, capture_output=True, text=True, timeout=900,
-    )
-    assert done.returncode == 0, done.stdout[-3000:] + done.stderr[-2000:]
 
 
 # ---------- PF5.3 ----------
