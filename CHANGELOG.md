@@ -4,6 +4,14 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.1.2 — 2026-10-31
+
+### Fixed
+
+- `prove ui` prints its address as soon as the viewer is listening. It no longer waits on a reverse
+  lookup of its own host name, which took 35 seconds on some machines, among them GitHub's hosted
+  macOS runners.
+
 ## 0.1.1 — 2026-10-30
 
 Prove's Burla backend now runs on Burla 1.8.4, the first Burla client with private mode, in which
