@@ -1,28 +1,31 @@
-# Every job runs on a GitHub-hosted runner, which costs nothing on a public repository. No job
-# uses a self-hosted runner (a fork's pull request could run code on it), reads a secret, or holds
-# more than read access to the repository. Every action is pinned to a full commit SHA.
+# The gate: every pull request and every push to main. The check main's ruleset requires is the job
+# `gate`, which always runs and passes only when every job below passed or was not called for.
 #
-# The lanes (CONTRIBUTING.md, "Running the tests"):
-# - code: the code suite, ruff, the format check and mypy, on every pull request (Linux, Python
-#   3.11) and every push to main (Linux and macOS, 3.11 and 3.14); all four Pythons on both
-#   nightly and before a release.
-# - math: the statistics, on a pull request that changes them (math_lane.py says why), nightly
-#   and before a release.
-# - slow: nightly and before a release. Tests marked backend never run in CI.
-# - floors: the code suite with every requirement at its floor, nightly and before a release.
-# - linux: the code suite in a Debian container, as a user that is not root, nightly and before a
-#   release.
-# - history: before a release, no commit names an assistant and every address is the work one.
+# - changes: decides whether this change runs the math suite (math_lane.py) and the backend tests,
+#   the Burla and Modal fakes (backends_lane.py). A change to the docs, the version or the CHANGELOG
+#   runs neither.
+# - lint: ruff, the format check on src, and mypy.
+# - tests: the code suite on Linux and Python 3.11, the lowest Prove supports, cut into the shards
+#   of SHARDS below, which run side by side. One worker per core in each.
+# - math, backends: only when `changes` says so.
 #
-# Each lane runs pytest through .github/lanes/lane.py, which adds the lane's row (tests, wall
-# time against its budget, the runner's load) to the job summary.
+# Each lane runs pytest through .github/lanes/lane.py, which adds the lane's row (tests, wall time
+# against its budget, the runner's load, and the tests over 10 seconds) to the job summary.
 #
-# The budgets are a hosted runner's (4 vCPUs on Linux, 3 on macOS), report-only: code, linux and
-# floors 30 minutes, math 70, slow 150. The maintainer's Mac (16 cores) stays the target: 5 minutes
-# for the code lane, 15 for the others.
+# The shard table (shards.py reads it): a number, a colon and the test files that shard runs,
+# continued on indented lines; a word starting with `--` is a pytest option for that shard alone.
+# The shard that says `rest` runs every test file no other line names, so a new test file runs
+# there with no change here. `backends` is the fakes' own job. To move a file, move its path
+# between lines. The table was balanced from the per-file times of the shards' own runs on a
+# hosted runner (each shard keeps its test report for a week, artifact `junit-shard-N`), to about
+# two and a half minutes of tests per shard; the target is under five minutes from the run's start
+# to the gate's end. Shard 1 runs each file on one worker (`--dist=loadfile`): every test of
+# test_pf1_look.py's corpus shares one module fixture of about eighty command-line calls, and
+# spread over four workers it was built four times at once, three minutes each on a hosted runner.
 #
-# Nightly is the schedule below; "before a release" is this workflow run by hand with lane
-# "release" (Actions tab, or `gh workflow run CI -f lane=release`).
+# Everything slow runs in nightly.yml, never here; the release runs from a tag in release.yml.
+# Every job runs on a GitHub-hosted runner, reads no secret and holds only read access to the
+# repository; every action is pinned to a full commit SHA.
 
 name: CI
 
@@ -30,20 +33,6 @@ on:
   pull_request:
   push:
     branches: [main]
-  schedule:
-    - cron: "17 7 * * *"
-  workflow_dispatch:
-    inputs:
-      lane:
-        description: "nightly runs every lane; release runs every lane and the history check"
-        type: choice
-        options: [release, nightly]
-        default: release
-      pythons:
-        description: "all four Pythons, or 3.11 only for a quicker run"
-        type: choice
-        options: [all, "3.11"]
-        default: all
 
 permissions:
   contents: read
@@ -58,46 +47,34 @@ env:
   UV_PYTHON_DOWNLOADS: never
   OPENBLAS_NUM_THREADS: "1"
   CODE_SUITE: not math and not calibration and not backend and not slow
-  FLOORS_TEST: tests/test_pf7_packaging.py::test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor
+  SHARDS: |
+    1: --dist=loadfile tests/test_pf1_look.py tests/test_pf11_setup_agent.py
+       tests/test_defaults_refusals_and_faces.py tests/test_app_banner.py tests/test_m6_multi.py
+       tests/test_m10_multi.py
+    2: tests/test_s27_leaves.py
+    3: tests/test_s26_fault_lines.py tests/test_s21_errors.py
+    4: tests/test_s28_report.py tests/test_p1_payload.py tests/test_s25_root.py
+    5: tests/test_pf7_docs.py tests/test_pf5_api_core.py tests/test_pf2_names.py
+    6: tests/test_s23_power.py tests/test_m10_cli.py tests/test_pf0_name.py
+    7: tests/test_pf6_app.py tests/test_pf6_look.py tests/test_fr_first_run.py
+    8: tests/test_s29_viewer.py tests/test_pf8_public_hygiene.py tests/test_pf12_ui.py
+    9: tests/test_pf4_surfaces.py tests/test_ls_local_serve.py tests/test_pf3_first_run.py
+       tests/test_pf12_artifacts.py
+    10: rest
+    backends: tests/test_bu_burla_backend.py tests/test_m3_modal.py tests/test_m3_modal_launch.py
+       tests/test_mc_modal_chaos.py tests/test_pf9_backends.py tests/test_pf10_worker_blas.py
 
 jobs:
-  code:
-    name: code (${{ matrix.os }}, ${{ matrix.python }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
-        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || (github.event_name == 'push' && '["3.11", "3.14"]' || (inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]'))) }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: ${{ matrix.python }}
-      - name: Environment
-        run: |
-          python -m pip install --quiet "uv==$UV_VERSION"
-          uv venv --quiet --python "${{ matrix.python }}" .venv
-          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
-      - name: Lint and types
-        run: |
-          .venv/bin/ruff check .
-          .venv/bin/ruff format --check src
-          .venv/bin/mypy src
-      - name: Code suite
-        run: .venv/bin/python .github/lanes/lane.py code 1800 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "$CODE_SUITE" tests
-
-  math-changes:
-    if: github.event_name == 'pull_request'
+  changes:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      math: ${{ steps.decide.outputs.math }}
+      math: ${{ steps.math.outputs.math }}
+      backends: ${{ steps.backends.outputs.backends }}
+    env:
+      # A pull request against its base; a push to main against main before the push.
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -106,135 +83,131 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
-      - id: decide
-        name: Does this pull request run the math suite?
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          python -m pip install --quiet "uv==$UV_VERSION"
-          python .github/lanes/math_lane.py "$BASE_SHA" "$HEAD_SHA"
+      - name: Environment
+        run: python -m pip install --quiet "uv==$UV_VERSION"
+      - id: math
+        name: Does this change run the math suite?
+        run: python .github/lanes/math_lane.py "$BASE_SHA" "$HEAD_SHA"
+      - id: backends
+        name: Does this change run the backend tests?
+        run: python .github/lanes/backends_lane.py "$BASE_SHA" "$HEAD_SHA"
 
-  math:
-    needs: [math-changes]
-    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.math-changes.outputs.math == 'true') }}
-    name: math (${{ matrix.python }})
+  lint:
+    name: ruff and mypy
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || (inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]')) }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.11"
       - name: Environment
         run: |
           python -m pip install --quiet "uv==$UV_VERSION"
-          uv venv --quiet --python "${{ matrix.python }}" .venv
+          uv venv --quiet --python "3.11" .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+      - name: Lint and types
+        run: |
+          .venv/bin/ruff check .
+          .venv/bin/ruff format --check src
+          .venv/bin/mypy src
+
+  tests:
+    name: tests (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python "3.11" .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
+      - name: Code suite, this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ strategy.job-total }}
+        run: |
+          files=$(.venv/bin/python .github/lanes/shards.py "$SHARD" --total "$SHARD_COUNT")
+          .venv/bin/python .github/lanes/lane.py "code-$SHARD" 300 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "$CODE_SUITE" $files
+      - name: Keep the shard's test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-shard-${{ matrix.shard }}
+          path: /tmp/lane-code-*/junit.xml
+          retention-days: 7
+          if-no-files-found: warn
+
+  math:
+    needs: [changes]
+    if: needs.changes.outputs.math == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python "3.11" .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Math suite
         run: .venv/bin/python .github/lanes/lane.py math 4200 -q -p no:cacheprovider -n "$WORKERS" -m "math or calibration" tests
 
-  slow:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    name: slow (${{ matrix.python }})
+  backends:
+    needs: [changes]
+    if: needs.changes.outputs.backends == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 300
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ${{ fromJSON((inputs.pythons == '3.11' && '["3.11"]' || '["3.11", "3.12", "3.13", "3.14"]')) }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.11"
       - name: Environment
         run: |
           python -m pip install --quiet "uv==$UV_VERSION"
-          uv venv --quiet --python "${{ matrix.python }}" .venv
+          uv venv --quiet --python "3.11" .venv
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-          .venv/bin/python -m playwright install --with-deps chromium firefox webkit
           echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
-      - name: Slow suite
-        run: .venv/bin/python .github/lanes/lane.py slow 9000 -q -p no:cacheprovider -n "$WORKERS" -m "slow and not backend" --deselect "$FLOORS_TEST" tests
-
-  floors:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    env:
-      OPENBLAS_NUM_THREADS: "1"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.11"
-      - name: Environment
+      - name: Backend tests, the Burla and Modal fakes
         run: |
-          python -m pip install --quiet "uv==$UV_VERSION"
-          uv venv --quiet --python 3.11 .venv
-          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
-          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-      - name: Floors (the code suite at one worker per core, up to 8, every requirement at its floor)
-        run: .venv/bin/python .github/lanes/lane.py floors 1800 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/floors" "$FLOORS_TEST"
-      - name: Keep the inner run's whole output
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: floors-suite-output
-          path: ${{ runner.temp }}/floors/**/floors-suite-output.txt
-          retention-days: 30
-          if-no-files-found: warn
+          files=$(.venv/bin/python .github/lanes/shards.py backends)
+          .venv/bin/python .github/lanes/lane.py backends 600 -q -p no:cacheprovider -n "$WORKERS" -m "$CODE_SUITE" $files
 
-  linux:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  gate:
+    needs: [changes, lint, tests, math, backends]
+    if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Code suite in a Debian container
-        run: |
-          docker info --format 'docker {{.ServerVersion}}, {{.NCPU}} cpus, {{.OperatingSystem}}'
-          # As a user that is not root: chmod-based tests cannot fail as root. --init puts an init at
-          # PID 1 that reaps orphaned children, as a Linux host's does; without it the Burla tests
-          # that wait for an orphaned launcher to exit see a zombie that never goes.
-          set +e
-          docker run --rm --init -v "$PWD":/src:ro -e CODE_SUITE -e OPENBLAS_NUM_THREADS -e UV_VERSION python:3.11-bookworm bash -c '
-            set -e
-            pip install --quiet --root-user-action=ignore "uv==$UV_VERSION"
-            useradd --create-home tester
-            cp -a /src /work && chown -R tester /work
-            su tester -c "cd /work && export PATH=/work/.venv/bin:\$PATH && uv venv --quiet .venv && uv pip install --quiet --python .venv/bin/python -e \".[all,dev]\" && .venv/bin/python .github/lanes/lane.py linux 1800 -q -p no:cacheprovider -n \"\$(nproc)\" -m \"\$CODE_SUITE\" tests"' 2>&1 | tee linux.log
-          status=${PIPESTATUS[0]}
-          grep -E '^\|( lane | linux |---)' linux.log >> "$GITHUB_STEP_SUMMARY"
-          exit "$status"
-
-  history:
-    if: github.event_name == 'workflow_dispatch' && inputs.lane == 'release'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.11"
-      - name: History check
-        run: python .github/lanes/history.py
+      - name: Every job passed, or was not called for
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/lanes/gate.py

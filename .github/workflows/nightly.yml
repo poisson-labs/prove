@@ -1,0 +1,209 @@
+# Nightly: everything too slow for the gate, every night and when run by hand (Actions tab, or
+# `gh workflow run Nightly`). No check requires it; a pull request never waits on it.
+#
+# - code: the whole code suite, the backend fakes included, on every supported Python, on Linux
+#   and macOS.
+# - math: the statistics, on every supported Python.
+# - slow: the slow tests, on every supported Python.
+# - floors: the code suite with every requirement at its floor.
+# - linux: the code suite in a Debian container, as a user that is not root.
+# - report: when any job fails, opens one issue titled "Nightly run failed", or comments on it if
+#   it is already open, naming each failed job; when every job passes, it closes that issue.
+#
+# Each lane runs pytest through .github/lanes/lane.py, which adds the lane's row (tests, wall time
+# against its budget, the runner's load) to the job summary. The budgets are a hosted runner's
+# (4 vCPUs on Linux, 3 on macOS) and are reported, not enforced: code, linux and floors 30
+# minutes, math 70, slow 150. Tests marked backend need a real account and never run in CI.
+# Every job runs on a GitHub-hosted runner and reads no secret; only `report` may write, and only
+# issues. Every action is pinned to a full commit SHA.
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.24"
+  UV_PYTHON_PREFERENCE: only-system
+  UV_PYTHON_DOWNLOADS: never
+  OPENBLAS_NUM_THREADS: "1"
+  CODE_SUITE: not math and not calibration and not backend and not slow
+  FLOORS_TEST: tests/test_pf7_packaging.py::test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor
+
+jobs:
+  code:
+    name: code (${{ matrix.os }}, ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python "${{ matrix.python }}" .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
+      - name: Code suite
+        run: .venv/bin/python .github/lanes/lane.py code 1800 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "$CODE_SUITE" tests
+
+  math:
+    name: math (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python "${{ matrix.python }}" .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
+      - name: Math suite
+        run: .venv/bin/python .github/lanes/lane.py math 4200 -q -p no:cacheprovider -n "$WORKERS" -m "math or calibration" tests
+
+  slow:
+    name: slow (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python "${{ matrix.python }}" .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/python -m playwright install --with-deps chromium firefox webkit
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
+      - name: Slow suite
+        run: .venv/bin/python .github/lanes/lane.py slow 9000 -q -p no:cacheprovider -n "$WORKERS" -m "slow and not backend" --deselect "$FLOORS_TEST" tests
+
+  floors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python 3.11 .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Floors (the code suite at one worker per core, up to 8, every requirement at its floor)
+        run: .venv/bin/python .github/lanes/lane.py floors 1800 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/floors" "$FLOORS_TEST"
+      - name: Keep the inner run's whole output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: floors-suite-output
+          path: ${{ runner.temp }}/floors/**/floors-suite-output.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Code suite in a Debian container
+        run: |
+          docker info --format 'docker {{.ServerVersion}}, {{.NCPU}} cpus, {{.OperatingSystem}}'
+          # As a user that is not root: chmod-based tests cannot fail as root. --init puts an init at
+          # PID 1 that reaps orphaned children, as a Linux host's does; without it the Burla tests
+          # that wait for an orphaned launcher to exit see a zombie that never goes.
+          set +e
+          docker run --rm --init -v "$PWD":/src:ro -e CODE_SUITE -e OPENBLAS_NUM_THREADS -e UV_VERSION python:3.11-bookworm bash -c '
+            set -e
+            pip install --quiet --root-user-action=ignore "uv==$UV_VERSION"
+            useradd --create-home tester
+            cp -a /src /work && chown -R tester /work
+            su tester -c "cd /work && export PATH=/work/.venv/bin:\$PATH && uv venv --quiet .venv && uv pip install --quiet --python .venv/bin/python -e \".[all,dev]\" && .venv/bin/python .github/lanes/lane.py linux 1800 -q -p no:cacheprovider -n \"\$(nproc)\" -m \"\$CODE_SUITE\" tests"' 2>&1 | tee linux.log
+          status=${PIPESTATUS[0]}
+          grep -E '^\|( lane | linux |---)' linux.log >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  report:
+    needs: [code, math, slow, floors, linux]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      TITLE: Nightly run failed
+    steps:
+      - name: Open, update or close the one nightly issue
+        run: |
+          failed=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs" --paginate \
+            --jq '.jobs[] | select(.name != "report" and (.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out")) | "- \(.name): \(.conclusion), \(.html_url)"')
+          open=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n 1)
+          if [ -n "$failed" ]; then
+            body=$(printf 'The nightly run of %s on %s failed: %s\n\n%s\n' "$(date -u +%F)" "${GITHUB_SHA::7}" "$RUN_URL" "$failed")
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --body "$body"
+              echo "commented on #$open" >> "$GITHUB_STEP_SUMMARY"
+            else
+              gh issue create --title "$TITLE" --body "$body"
+              echo "opened an issue" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            printf '%s\n' "$failed" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --comment "The nightly run of $(date -u +%F) on ${GITHUB_SHA::7} passed: $RUN_URL"
+            echo "every job passed; closed #$open" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "every job passed" >> "$GITHUB_STEP_SUMMARY"
+          fi

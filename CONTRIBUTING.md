@@ -46,17 +46,37 @@ OPENBLAS_NUM_THREADS=1 python -m pytest tests -n 6 -m "slow and not backend"
 ## CI
 
 CI runs on GitHub's own runners, which cost nothing on a public repository. No job runs on a
-machine of ours, reads a secret or holds more than read access to the repository, and every action
-is pinned to a full commit SHA. Every pull request runs the code lane: ruff, the format check on
-`src`, mypy and the code suite, on Linux with Python 3.11. Every push to main runs it on Linux and
-macOS, on 3.11 and 3.14. A pull request that changes the statistics, a test
-of the math suite, or the version a statistics library resolves to also runs the math suite, and the
-job summary says why. Every night, and before a release, CI runs everything else: the code suite on
-every supported Python on both systems, the math suite, the slow tests, the floors run and the code
-suite in a Debian container. Tests marked `backend` never run in CI. Each job's summary gives the
-tests it ran, its time against the lane's budget, and the code lane's tests over 10 seconds. Every
-lane runs one pytest worker per core of its runner. The budgets are a hosted runner's and are
-reported, not enforced: 30 minutes for the code, Linux and floors lanes, 70 for math, 150 for slow.
+machine of ours or reads a secret, and every action is pinned to a full commit SHA.
+
+- **The gate** (`ci.yml`) runs on every pull request and every push to main: ruff, the format check
+  on `src`, mypy, and the code suite on Linux with Python 3.11, cut into shards that run side by
+  side, in under five minutes. A change to the statistics, a test of the math suite, or the version
+  a statistics library resolves to also runs the math suite; a change to the Modal or Burla backend,
+  its fakes or its tests also runs the backend tests. A change to the docs, the version or the
+  CHANGELOG runs the gate alone. The job `gate` always runs and is the one check main requires; the
+  job summary says why the math suite or the backend tests ran or not.
+- **Nightly** (`nightly.yml`) runs everything slow: the code suite on every supported Python on Linux
+  and macOS, the math suite and the slow tests on every supported Python, the floors run and the
+  code suite in a Debian container. No pull request waits on it. When it fails it opens an issue
+  titled "Nightly run failed", or comments on the one already open, and a green night closes it.
+
+Tests marked `backend` never run in CI. Each job's summary gives the tests it ran, its time against
+the lane's budget, and its tests over 10 seconds. Every lane runs one pytest worker per core of its
+runner.
+
+## Releasing
+
+A release is a version bump (`pyproject.toml` and `__version__`) and a dated CHANGELOG entry,
+`## X.Y.Z — YYYY-MM-DD`, merged through the gate like any change. Then a signed tag on that merge:
+
+<!-- docs-check: skip: tags and publishes a release -->
+```bash
+git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z
+```
+
+The tag runs `release.yml`: it checks that the tag, the version and the CHANGELOG agree, builds the
+sdist and the wheel from the tagged tree, runs the packaging and hygiene tests on those two files,
+and publishes them to PyPI by trusted publishing. Nothing slow runs at a release.
 
 ## The docs are tested
 

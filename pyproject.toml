@@ -115,6 +115,6 @@ testpaths = ["tests"]
 markers = [
     "math: the math suite, the statistics (stats, survival, diff's tests and limits, tree's omnibus and bound, paired's analysis, the simulation checks of the detection limits, calibration); runs on a pull request that changes the statistics code (src/poisson_prove/stats.py, survival.py, diff.py, tree.py, paired.py, _limits.py, _verdict.py), a test of the math suite, or the resolved numpy, scipy, pandas, lifelines or statsmodels, nightly and before every release",
     "calibration: a rejection rate over sharp-null resamples (the slow lane); deselected only by typing -m \"not calibration\", never by configuration",
-    "slow: over 10 s of setup and call on the runner, such as a wheel built and installed into a fresh environment; runs on main and nightly, never on a pull request",
+    "slow: over 10 s of setup and call on the runner, such as a wheel built and installed into a fresh environment; runs nightly, never on a pull request or a push to main",
     "backend: calls a real Modal or Burla account (a paid call, needs the user's own credentials); run by hand only, never on a pull request and never in CI; each such test is also skipped unless its opt-in variable is set",
 ]

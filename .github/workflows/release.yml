@@ -1,0 +1,92 @@
+# Release: pushing a tag vX.Y.Z publishes that version to PyPI.
+#
+# A release is a version bump and a dated CHANGELOG entry, merged through the gate, then a signed
+# tag on that merge (CONTRIBUTING.md, "Releasing"). This workflow runs nothing slow:
+#
+# - build: checks that the tag, pyproject.toml, __version__ and the CHANGELOG entry agree
+#   (release_check.py); builds the sdist and the wheel from the tagged tree (`git archive`, never
+#   the checkout); runs twine's metadata check; then runs the packaging and hygiene tests on those
+#   exact two files (use_built.py swaps them in), and keeps them as an artifact.
+# - publish: uploads that artifact to PyPI by trusted publishing. It is the only job in any
+#   workflow that may ask for an OIDC token, and only in the environment `pypi`, which PyPI's
+#   publisher for this repository names; no password or API token is stored anywhere.
+#
+# Every action is pinned to a full commit SHA.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.24"
+  UV_PYTHON_PREFERENCE: only-system
+  UV_PYTHON_DOWNLOADS: never
+  OPENBLAS_NUM_THREADS: "1"
+  BUILD_VERSION: "1.6.1"
+  TWINE_VERSION: "7.0.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: The tag, the version and the CHANGELOG agree
+        run: python .github/lanes/release_check.py "$GITHUB_REF_NAME"
+      - name: Build the sdist and the wheel from the tagged tree
+        run: |
+          python -m pip install --quiet "build==$BUILD_VERSION" "twine==$TWINE_VERSION"
+          mkdir "$RUNNER_TEMP/tree"
+          git archive --format=tar HEAD | tar -x -C "$RUNNER_TEMP/tree"
+          python -m build --outdir dist "$RUNNER_TEMP/tree"
+          twine check --strict dist/*
+          ls -l dist
+          sha256sum dist/* | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python "3.11" .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Packaging and hygiene tests on these two files
+        env:
+          PROVE_DIST: dist
+          PYTHONPATH: .github/lanes
+        run: .venv/bin/python .github/lanes/lane.py release 600 -q -p no:cacheprovider -p use_built -m "not slow and not backend" tests/test_pf7_packaging.py tests/test_pf8_public_hygiene.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          retention-days: 90
+          if-no-files-found: error
+
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/project/poisson-prove/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
