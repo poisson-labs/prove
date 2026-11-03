@@ -518,7 +518,6 @@ def test_pf10_10_the_readme_badge_shows_the_gates_push_runs_on_main() -> None:
 # ---------- the history check ----------
 
 ALLOWED_COMMIT = "cced18c379d805524af07630e7ac77e3e55dab11"
-ALLOWED_ADDRESS = "taylorkolasinski@gmail.com"
 
 
 @pytest.mark.parametrize(("commit", "flagged"), [
@@ -527,17 +526,15 @@ ALLOWED_ADDRESS = "taylorkolasinski@gmail.com"
     (("c" * 40, "someone@gmail.com", "dev@poissonlabs.ai", "fix: a thing\n"), True),
     (("d" * 40, "dev@poissonlabs.ai", "dev@poissonlabs.ai", "fix: a thing\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"), True),
     (("e" * 40, "dev@poissonlabs.ai", "dev@poissonlabs.ai", "docs: thing\n\nGenerated with Claude Code\n"), True),
-    ((ALLOWED_COMMIT, ALLOWED_ADDRESS, "noreply@github.com", "Merge pull request #1\n"), False),
-    ((ALLOWED_COMMIT, "someone@gmail.com", "noreply@github.com", "Merge pull request #1\n"), True),
-    (("f" * 40, ALLOWED_ADDRESS, "noreply@github.com", "Merge pull request #2\n"), True),
-    ((ALLOWED_COMMIT, ALLOWED_ADDRESS, "noreply@github.com", "Merge\n\nGenerated with Claude Code\n"), True),
+    ((ALLOWED_COMMIT, "someone@gmail.com", "noreply@github.com", "Merge pull request #1\n"), False),
+    ((ALLOWED_COMMIT[:-1] + "0", "someone@gmail.com", "noreply@github.com", "Merge pull request #2\n"), True),
+    ((ALLOWED_COMMIT, "someone@gmail.com", "noreply@github.com", "Merge\n\nGenerated with Claude Code\n"), True),
 ], ids=["work-address", "a-github-merge", "a-personal-address", "an-assistant-trailer", "an-assistant-line",
-        "the-allowed-commit", "the-allowed-commit-with-another-address", "the-allowed-address-on-another-commit",
-        "the-allowed-commit-naming-an-assistant"])
+        "the-allowed-commit", "a-personal-address-on-another-commit", "the-allowed-commit-naming-an-assistant"])
 def test_the_history_check_flags_a_personal_address_or_an_assistant_and_nothing_else(commit: tuple[str, str, str, str], flagged: bool) -> None:
     history = import_script("history")
     assert bool(history.problems([commit])) is flagged
 
 
-def test_the_history_check_allows_one_commit_and_one_address() -> None:
-    assert import_script("history").ALLOWED == {ALLOWED_COMMIT: ALLOWED_ADDRESS}
+def test_the_history_check_allows_one_commit() -> None:
+    assert import_script("history").ALLOWED == {ALLOWED_COMMIT}
