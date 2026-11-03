@@ -4,8 +4,9 @@ in its message, and every author and committer address is the work identity.
     python .github/lanes/history.py
 
 An address passes when it ends ``@poissonlabs.ai`` or is GitHub's own ``noreply@github.com``, the
-committer of a merge GitHub makes. Prints each commit that fails and why; exits 1 if any does.
-The check needs the whole history (``fetch-depth: 0``).
+committer of a merge GitHub makes. A commit in ``ALLOWED`` also passes with the one address named
+for it. Prints each commit that fails and why; exits 1 if any does. The check needs the whole
+history (``fetch-depth: 0``); a release runs it on every tag.
 """
 
 from __future__ import annotations
@@ -23,6 +24,9 @@ ATTRIBUTION = re.compile(
 )
 WORK_DOMAIN = "@poissonlabs.ai"
 GITHUB = "noreply@github.com"
+#: A full hash and the one address it may carry. The merge of pull request #1 took the GitHub
+#: account's default address; main's history stays as it is rather than rewritten for one merge.
+ALLOWED = {"cced18c379d805524af07630e7ac77e3e55dab11": "taylorkolasinski@gmail.com"}
 
 
 def problems(commits: Iterable[tuple[str, str, str, str]]) -> list[str]:
@@ -31,7 +35,8 @@ def problems(commits: Iterable[tuple[str, str, str, str]]) -> list[str]:
     for sha, author, committer, message in commits:
         why = []
         for role, address in (("author", author), ("committer", committer)):
-            if not (address.lower().endswith(WORK_DOMAIN) or address.lower() == GITHUB):
+            address_ok = address.lower().endswith(WORK_DOMAIN) or address.lower() == GITHUB
+            if not (address_ok or ALLOWED.get(sha) == address.lower()):
                 why.append(f"{role} {address}")
         if ATTRIBUTION.search(message):
             why.append("an assistant named in the message")

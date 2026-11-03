@@ -500,6 +500,13 @@ def test_pf10_10_the_release_checks_the_tag_builds_from_the_tagged_tree_and_test
     assert [s["uses"].split("@")[0] for s in publish["steps"]] == ["actions/download-artifact", "pypa/gh-action-pypi-publish"]
 
 
+def test_pf10_10_the_release_checks_the_whole_history_before_it_builds() -> None:
+    build = jobs("release.yml")["build"]
+    assert build["steps"][0]["with"]["fetch-depth"] == 0
+    body = runs("release.yml", "build")
+    assert body.index("release_check.py") < body.index("python .github/lanes/history.py") < body.index("python -m build")
+
+
 def test_pf10_10_the_readme_badge_shows_the_gates_push_runs_on_main() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     (badge,) = re.findall(r"\[!\[CI\]\(([^)]+)\)\]\(([^)]+)\)", readme)
@@ -510,6 +517,9 @@ def test_pf10_10_the_readme_badge_shows_the_gates_push_runs_on_main() -> None:
 
 # ---------- the history check ----------
 
+ALLOWED_COMMIT = "cced18c379d805524af07630e7ac77e3e55dab11"
+ALLOWED_ADDRESS = "taylorkolasinski@gmail.com"
+
 
 @pytest.mark.parametrize(("commit", "flagged"), [
     (("a" * 40, "dev@poissonlabs.ai", "dev@poissonlabs.ai", "fix: a thing\n"), False),
@@ -517,7 +527,17 @@ def test_pf10_10_the_readme_badge_shows_the_gates_push_runs_on_main() -> None:
     (("c" * 40, "someone@gmail.com", "dev@poissonlabs.ai", "fix: a thing\n"), True),
     (("d" * 40, "dev@poissonlabs.ai", "dev@poissonlabs.ai", "fix: a thing\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"), True),
     (("e" * 40, "dev@poissonlabs.ai", "dev@poissonlabs.ai", "docs: thing\n\nGenerated with Claude Code\n"), True),
-], ids=["work-address", "a-github-merge", "a-personal-address", "an-assistant-trailer", "an-assistant-line"])
+    ((ALLOWED_COMMIT, ALLOWED_ADDRESS, "noreply@github.com", "Merge pull request #1\n"), False),
+    ((ALLOWED_COMMIT, "someone@gmail.com", "noreply@github.com", "Merge pull request #1\n"), True),
+    (("f" * 40, ALLOWED_ADDRESS, "noreply@github.com", "Merge pull request #2\n"), True),
+    ((ALLOWED_COMMIT, ALLOWED_ADDRESS, "noreply@github.com", "Merge\n\nGenerated with Claude Code\n"), True),
+], ids=["work-address", "a-github-merge", "a-personal-address", "an-assistant-trailer", "an-assistant-line",
+        "the-allowed-commit", "the-allowed-commit-with-another-address", "the-allowed-address-on-another-commit",
+        "the-allowed-commit-naming-an-assistant"])
 def test_the_history_check_flags_a_personal_address_or_an_assistant_and_nothing_else(commit: tuple[str, str, str, str], flagged: bool) -> None:
     history = import_script("history")
     assert bool(history.problems([commit])) is flagged
+
+
+def test_the_history_check_allows_one_commit_and_one_address() -> None:
+    assert import_script("history").ALLOWED == {ALLOWED_COMMIT: ALLOWED_ADDRESS}

@@ -4,7 +4,7 @@
 # tag on that merge (CONTRIBUTING.md, "Releasing"). This workflow runs nothing slow:
 #
 # - build: checks that the tag, pyproject.toml, __version__ and the CHANGELOG entry agree
-#   (release_check.py); builds the sdist and the wheel from the tagged tree (`git archive`, never
+#   (release_check.py); checks every commit's addresses and message (history.py); builds the sdist and the wheel from the tagged tree (`git archive`, never
 #   the checkout); runs twine's metadata check; then runs the packaging and hygiene tests on those
 #   exact two files (use_built.py swaps them in), and keeps them as an artifact.
 # - publish: uploads that artifact to PyPI by trusted publishing. It is the only job in any
@@ -42,11 +42,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
       - name: The tag, the version and the CHANGELOG agree
         run: python .github/lanes/release_check.py "$GITHUB_REF_NAME"
+      - name: No commit names an assistant or a personal address
+        run: python .github/lanes/history.py
       - name: Build the sdist and the wheel from the tagged tree
         run: |
           python -m pip install --quiet "build==$BUILD_VERSION" "twine==$TWINE_VERSION"
