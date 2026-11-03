@@ -74,8 +74,8 @@ A release is a version bump (`pyproject.toml` and `__version__`) and a dated CHA
 git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z
 ```
 
-The tag runs `release.yml`: it checks that the tag, the version and the CHANGELOG agree, builds the
-sdist and the wheel from the tagged tree, runs the packaging and hygiene tests on those two files,
+The tag runs `release.yml`: it checks that the tag, the version and the CHANGELOG agree and that no
+commit names an assistant or a personal address (`.github/lanes/history.py`), builds the sdist and the wheel from the tagged tree, runs the packaging and hygiene tests on those two files,
 and publishes them to PyPI by trusted publishing. Nothing slow runs at a release.
 
 ## The docs are tested
