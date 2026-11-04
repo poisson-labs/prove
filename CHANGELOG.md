@@ -4,6 +4,29 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.1.3 — 2026-11-04
+
+### Fixed
+
+- When every rollout of a sweep errored, the sweep's `next:` line suggests `inspect` with
+  `--limit 3`, so the first look shows three of the failing episodes rather than every one.
+- `diff`, `report` and `check` of a run in which every episode errored name that run in plain
+  words and suggest `inspect` of its commonest error with `--limit 3`, one line per such run, in
+  place of an error about the event set. `report` writes nothing for it.
+- `report` ends with a `next:` line, `poisson-prove ui`, on the store that was typed, so the chain
+  of `next:` lines has no dead end; `--json` carries the same command.
+- `runs`, the dashboard and the terminal app show a complete run in which every episode errored as
+  `stopped`, as the sweep did. Its manifest and `runs --json` keep `complete`, with `rows` and
+  `no_outcome` carrying the fact; a partial run stays `partial`. The app's comparison screen takes
+  complete runs, so it no longer offers such a run.
+
+### Changed
+
+- Before a release, and on every pull request, CI runs Poisson Tasks' own Prove check against
+  Prove built from the tree: the check from Tasks' latest release, unedited, on a wheel built under
+  a version the package index cannot hold, so the check cannot quietly test the release already
+  out. A red check stops the release.
+
 ## 0.1.2 — 2026-10-31
 
 ### Fixed
