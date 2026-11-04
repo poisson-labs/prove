@@ -328,7 +328,7 @@ def _surfaces(root: Path, tmp: Path, *event_args: str, method: str = "fisher_bh"
     assert report.code == 0, report.err
     page = _json(_cli(root, "serve", A_ID, B_ID, *ev, "--method", method, "--x", "cell", "--json"))
     return {
-        "diff": _cli(root, "diff", A_ID, B_ID, *ev, "--method", method),
+        "diff": _cli(root, "diff", "--full", A_ID, B_ID, *ev, "--method", method),
         "diff --json": _json(_cli(root, "diff", A_ID, B_ID, *ev, "--method", method, "--json")),
         "check": _cli(root, "check", A_ID, B_ID, *ev, "--method", method, "--fail-on", "any"),
         "check --json": _json(_cli(root, "check", A_ID, B_ID, *ev, "--method", method, "--fail-on", "any", "--json")),
@@ -456,7 +456,7 @@ def test_pf4_1c_with_the_level_patched_to_90_every_surface_says_90_and_none_95(
     two = _cli(standard, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell",
                "--out", str(tmp_path / "two"))
     assert two.code == 0, two.err
-    diff_text = _cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh")
+    diff_text = _cli(standard, "diff", "--full", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh")
     assert diff_text.code == 0, diff_text.err
     check_text = _cli(standard, "check", A_ID, B_ID, "--event", "fell:failure", "--method", "fisher_bh")
     page = _json(_cli(standard, "serve", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell", "--json"))
@@ -531,7 +531,7 @@ def test_pf4_37_a_two_run_share_counts_by_the_common_horizon_and_is_never_marked
     _assert_share(early["share_a"], 20, 40)
     for c in (late, early):
         assert c["share_a_differs"] is False and c["share_b_differs"] is False
-    text = _cli(root, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
+    text = _cli(root, "diff", "--full", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
     assert "*" not in _row(text, "late") and "*" not in _row(text, "early")
 
 
@@ -539,7 +539,7 @@ def test_pf4_37_a_two_run_share_counts_by_the_common_horizon_and_is_never_marked
 
 
 def test_pf4_3_diffs_text_table_prints_both_shares_beside_the_rates_labelled_by_the_level(standard: Path) -> None:
-    result = _cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh")
+    result = _cli(standard, "diff", "--full", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh")
     assert result.code == 0, result.err
     assert "95%" in result.out
     for name in STANDARD_A:
@@ -551,7 +551,7 @@ def test_pf4_3_diffs_text_table_prints_both_shares_beside_the_rates_labelled_by_
 
 
 def test_pf4_3_the_two_run_report_prints_the_shares_and_the_caption_says_they_are_not_adjusted(standard: Path, tmp_path: Path) -> None:
-    diff_text = _cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
+    diff_text = _cli(standard, "diff", "--full", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
     result = _cli(standard, "report", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh", "--x", "cell",
                   "--out", str(tmp_path / "r"))
     assert result.code == 0, result.err
@@ -1204,7 +1204,7 @@ def test_pf4_27_a_null_limit_prints_its_reason_and_no_number(standard: Path, tmp
             assert (c[f"mde_{way}"] is None) is (c[f"mde_{way}_note"] in NOTES), (c["config_hash"], way)
     numbers = [c["mde"] for c in cells.values() if c["mde"] is not None]
     assert doc["by_event"]["fell"]["max_mde"] == max(numbers)
-    text = _cli(standard, "diff", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
+    text = _cli(standard, "diff", "--full", A_ID, B_ID, "--event", "fell", "--method", "fisher_bh").out
     top_text, near_text = _column(text, "top", "mde"), _column(text, "near_top", "mde")
     assert f"{top['mde_fall']:.3f}" in top_text and "no room" in top_text, top_text
     assert "none detectable" in near_text and "rise" in near_text, near_text

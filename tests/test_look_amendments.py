@@ -30,7 +30,7 @@ LOOK = ROOT / "docs" / "cli-look.md"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 CHANGES = json.loads((FIXTURES / "cli-look" / "amendments.json").read_text(encoding="utf-8"))["changes"]
 STYLE = ROOT / "src" / "poisson_prove" / "_ui_bundle" / "style.css"
-#: The file before the amendments, the sha256 the fixture's README gives for it.
+#: The file before the amendments.
 BEFORE_SHA256 = "92e71488c2824c056252be9a7b340e7fc138d15359fbcb7431bcfc6fa267d85f"
 TYPE_RULE, BANNER = CHANGES
 SANS = "system-ui"

@@ -1379,7 +1379,7 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     # The command line prints the markdown and the block under rule 10: each
     # printed line carries the library line's numbers and table cells, hashes at 12 hex.
     md_n, block_n = len(md.splitlines()), len(block.splitlines())
-    r = run_cli(diff_argv(syn_root, "--method", "fisher_bh"))
+    r = run_cli(diff_argv(syn_root, "--full", "--method", "fisher_bh"))
     assert r.code == 0, r.text
     # PF2: diff's stdout opens with the verdict block naming both runs; the
     # rest of the text follows the first blank line, and the prefix and ordering are read there.
@@ -1389,7 +1389,7 @@ def test_e12_to_markdown_is_unchanged_and_diff_text_appends_the_coverage_block(s
     assert rendered_problems(shortened(md + "\n" + block), head, "diff.md") == [], r.out
     # PF3: the synthetic pair's manifests carry one salt, so the
     # default is the paired test; the markdown --methods all prints first is the unpaired test's, named.
-    every = run_cli(diff_argv(syn_root, "--methods", "all", "--method", "fisher_bh"))
+    every = run_cli(diff_argv(syn_root, "--full", "--methods", "all", "--method", "fisher_bh"))
     assert every.code == 0, every.text
     lines = after_verdict_block(every.out, names[SYN_A], names[SYN_B]).splitlines(keepends=True)
     assert rendered_problems(shortened(md), "".join(lines[:md_n]), "diff.md") == [], every.out

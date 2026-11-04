@@ -427,7 +427,7 @@ CORPUS: tuple[Call, ...] = (
     Call("sweep-dry-run", "--store {base}/dry-store sweep {spec} --target " + MOCK + ":rollout --dry-run --max-mde " + MAX_MDE, 0, "result"),
     Call("sweep-yes", "--store {base}/sweep-store sweep {spec} --target " + MOCK + ":rollout --yes --max-mde " + MAX_MDE, 0, "result"),
     Call("diff", f"{S} diff {{A}} {{B}}", 0, "result"),
-    Call("diff-fisher-named", f"{S} diff {{A}} {{B}} --method fisher_bh", 0, "result"),
+    Call("diff-fisher-named", f"{S} diff --full {{A}} {{B}} --method fisher_bh", 0, "result"),
     Call("diff-mcnemar-named", f"{S} diff {{A}} {{B}} --method mcnemar_bh", 0, "result"),
     # PF4 (PF4.20): neither event has a kind in these runs, so check's default --fail-on worse is
     # refused; --fail-on higher is the same gate on a failure event (fail when the rate rose).

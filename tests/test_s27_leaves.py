@@ -1230,7 +1230,7 @@ def test_l10_no_reason_and_no_block_line_uses_the_conditional_vocabulary(every_t
             assert phrase not in reason, (name, phrase, reason)
     for a, b, events in (("axes-a", "axes-b", ("fail",)), ("same-a", "same-b", ("fail",)), ("me-a", "me-b", ME_EVENTS)):
         for extra in ((), ("--depth", "2"), ("--by", "grid")):
-            argv = ["--store", str(synth_root), "diff", a, b, "--method", "fisher_bh"]
+            argv = ["--store", str(synth_root), "diff", "--full", a, b, "--method", "fisher_bh"]
             for event in events:
                 argv += ["--event", event]
             knobs: dict[str, Any] = {"depth": int(extra[1])} if extra[:1] == ("--depth",) else ({"by": extra[1]} if extra else {})
@@ -1383,7 +1383,7 @@ def cli_pair(synth_root: Path, a: str, b: str, events: Sequence[str], *extra: st
     multi, result = store_tree(synth_root, a, b, events=events, method="fisher_bh", **{"n_permutations": GOLDEN_PERMUTATIONS, "seed": GOLDEN_SEED, **knobs})
     # PF3: the synthetic pairs share a salt, so the default is the
     # paired test; the tree built beside the CLI is the unpaired test's, so the CLI names it.
-    argv = ["--store", str(synth_root), "diff", a, b, "--method", "fisher_bh"]
+    argv = ["--store", str(synth_root), "diff", "--full", a, b, "--method", "fisher_bh"]
     for event in events:
         argv += ["--event", event]
     code, out, err = run_cli(argv + list(extra))
@@ -1950,7 +1950,7 @@ def test_l21_the_axes_pair_holds_a_moved_group_with_nothing_nameable_inside_it(a
         assert family_rows(multi, result, "0.0")["p"].min() >= AXES_MIN_LEAF_P, method
         assert not any(family.label == "0.7" for family in leaves.families), method
     for method in TWO_SCHEMES:
-        code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--method", method])
+        code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "axes-a", "axes-b", "--event", "fail", "--method", method])
         # A shared salt adds one note line on stderr.
         assert code == 0 and without_notes(err) == "", (method, out, err)
         lines = family_lines(cells_block(out))

@@ -32,9 +32,9 @@ Each page sets one set of colour tokens, for light and for dark, and follows the
 
 ### Type
 
-- The system's own fonts, no other: prose in `system-ui, -apple-system, "Segoe UI", sans-serif`;
-  verdict words, numbers, names, addresses and tables in `ui-monospace, Menlo, Consolas, monospace`
-  with tabular figures.
+- The system's own fonts, no other: prose and labels (table headers, detail labels, captions) in
+  `system-ui, -apple-system, "Segoe UI", sans-serif`; verdict words, numbers, names, addresses and
+  table cells in `ui-monospace, Menlo, Consolas, monospace` with tabular figures.
 - One size for prose (15 px) and one for tables and detail (13 px); headings by weight, not size,
   except the page title.
 - Numbers are printed by rule 10, as the commands print them.
