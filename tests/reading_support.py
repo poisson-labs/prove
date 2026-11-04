@@ -59,6 +59,11 @@ def both_ways(cfg, seed):
     return Episode(outcome="violated" if seed % 100 < share else "completed", t=1, horizon=10, meta={})
 
 
+def at_the_ends(cfg, seed):
+    # Rates of 0 and 1 on few episodes: one direction has no room, the other no limit.
+    return Episode(outcome="violated" if cfg["cell"] == "c" else "completed", t=1, horizon=10, meta={})
+
+
 def long_horizon(cfg, seed):
     return Episode(outcome="violated" if seed % 2 == 0 else "completed", t=7, horizon=20, meta={})
 
@@ -212,6 +217,12 @@ def _build(root: Path) -> dict[str, Any]:
     sweep_in(base, "spec.toml", "both_ways")
     sweep_in(base, "spec.toml", "both_ways", "--pair-with", "latest")
     stores["one_limit"] = str(base / "prove-runs")
+
+    # Rates of 0 and of 1 on three episodes: no room one way, and no limit the other.
+    base = _folder(root, "at_the_ends", spec=cells_spec())
+    sweep_in(base, "spec.toml", "at_the_ends")
+    sweep_in(base, "spec.toml", "at_the_ends", "--pair-with", "latest")
+    stores["at_the_ends"] = str(base / "prove-runs")
 
     # Three replicates: too few for most conditions to have a limit in either direction.
     base = _folder(root, "small", spec=cells_spec())

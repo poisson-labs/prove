@@ -69,6 +69,7 @@ PAIRS = {
     "small": (),
     "both_ways": (),
     "one_limit": (),
+    "at_the_ends": (),
 }
 
 
@@ -313,6 +314,21 @@ def test_a_row_with_no_limit_either_way_keeps_the_claim_of_any_size(name: str, r
     clause = _limits_clause(_diff(reading_world, name).out)
     assert re.search(rf"\b{both}\b", clause), clause
     assert "no change of any size" in clause, clause
+
+
+def test_a_direction_with_no_room_is_not_counted_as_one_with_no_limit(reading_world: dict[str, Path]) -> None:  # noqa: F811
+    """A rate of 0 cannot fall, and a rate of 1 cannot rise. Such a row has no limit one way only, so
+    the claim of any size does not reach it."""
+    document = _json(reading_world, "at_the_ends")
+    notes = {(cell["mde_rise_note"], cell["mde_fall_note"]) for _, cell in _cells(document)}
+    assert any("no room" in pair for pair in notes), notes
+    fall, rise, both = _no_limit(document)
+    assert both == 0 and fall + rise > 0, (fall, rise, both, notes)
+    clause = _limits_clause(_diff(reading_world, "at_the_ends").out)
+    assert "no change of any size" not in clause, clause
+    for count, word in ((fall, "fall"), (rise, "rise")):
+        if count:
+            assert re.search(rf"\b{count}\b[^;]*\b{word}\b", clause), clause
 
 
 def test_the_limits_line_agrees_in_number(reading_world: dict[str, Path]) -> None:  # noqa: F811
