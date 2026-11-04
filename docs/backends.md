@@ -136,6 +136,12 @@ plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on burla, ~$0.080 t
 …
 ```
 
+Burla pins every distribution your environment installed from an index and installs those pins on
+each node from the index: a Prove installed from PyPI is reinstalled there at the same version, so a
+version that is not on PyPI cannot be installed on the workers. An editable checkout of Prove is
+shipped in the bundle, not installed. Either way the bundle goes first on each worker's path, so
+the code that runs your rollouts is the Prove on this machine.
+
 A Burla client the Python running Prove cannot import is refused before the plan, with the
 install line. Every Burla install line Prove prints is `pip install "poisson-prove[burla]"`.
 
