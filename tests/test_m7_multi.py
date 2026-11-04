@@ -451,11 +451,6 @@ def rgb_distance(a: str, b: str) -> float:
     return math.dist(rgb(a), rgb(b))
 
 
-def is_red_family(hexstr: str) -> bool:
-    r, g, b = rgb(hexstr)
-    return r > g and r > b
-
-
 def fills_by_hash(root: ET.Element) -> dict[str, str]:
     return {
         r.attrib["data-cell"]: r.attrib["fill"]
@@ -1750,12 +1745,12 @@ def _survival_report(theme: str = "dark") -> tuple[pd.DataFrame, SurvivalReport]
     return table, rep
 
 
-def test_b16_sequential_ramp_is_public_with_nine_stops_ending_in_the_failed_family() -> None:
+def test_b16_sequential_ramp_is_public_with_nine_stops_ending_in_the_worse_colour() -> None:
     assert set(SEQUENTIAL_RAMP) == {"dark", "light"}
     for theme, stops in SEQUENTIAL_RAMP.items():
         assert len(stops) == 9, theme
         assert all(HEX_RE.match(s) for s in stops)
-        assert is_red_family(stops[-1])
+        assert stops[-1] == {"dark": "#E6E6E6", "light": "#111111"}[theme]
         assert len(set(stops)) == 9
 
 

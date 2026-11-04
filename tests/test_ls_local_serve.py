@@ -1190,9 +1190,9 @@ BUILDER_PAIRS = ("axes", "identical", "bh", "gate", "multi-event", "one-value", 
 #: significance glyph is a 4 px square 1 px inside the cell's top right corner.
 GRID_LEFT_WITH_Y, GRID_RIGHT, GRID_TOP, GRID_BOTTOM, GLYPH = 96, 24, 52, 112, 4
 #: The dark theme's colour rule, restated (the report's cell colouring): a nine-stop ramp from
-#: the survived colour through neutral to the failed colour, linear in sRGB, a non-significant
+#: the safer colour through neutral to the worse colour, linear in sRGB, a non-significant
 #: change drawn 0.45 of the way toward neutral, both arms at 0% or both at 100% drawn saturated.
-DARK_NEUTRAL, DARK_SATURATED, SURVIVED, FAILED, NONSIG_SCALE = "#1F1F22", "#2A2A2E", "#3ECF8E", "#FF4D4D", 0.45
+DARK_NEUTRAL, DARK_SATURATED, SURVIVED, FAILED, NONSIG_SCALE = "#1F1F22", "#2A2A2E", "#3B82F6", "#E6E6E6", 0.45
 #: A grid position no condition is on is drawn in the dark theme's no-data colour, its
 #: ``data-cell`` the word ``absent``.
 DARK_ABSENT = "#141416"

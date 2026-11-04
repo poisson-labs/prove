@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 Theme = Literal["dark", "light"]
 
-NEUTRAL_FILL: dict[Theme, str] = {"dark": "#1F1F22", "light": "#EDEDEA"}
+NEUTRAL_FILL: dict[Theme, str] = {"dark": "#1F1F22", "light": "#D6D3D1"}
 ABSENT_FILL: dict[Theme, str] = {"dark": "#141416", "light": "#F7F7F4"}
 SATURATED_FILL: dict[Theme, str] = {"dark": "#2A2A2E", "light": "#E3E3DF"}
 
@@ -50,11 +50,14 @@ _EPISTEMIC_FENCE = (
     "replicate count and can only detect effects at or above the reported MDE."
 )
 
-_SURVIVED = "#3ECF8E"
-_FAILED = "#FF4D4D"
+# The verdict scale: cobalt for the arm that fell, ink for the arm that rose. Ink has to be light
+# on the dark canvas to show at all. Hue is never the only cue: a significant rise also carries a
+# hatch.
+_SAFER: dict[Theme, str] = {"dark": "#3B82F6", "light": "#2A4DD0"}
+_WORSE: dict[Theme, str] = {"dark": "#E6E6E6", "light": "#111111"}
 _CANVAS: dict[Theme, str] = {"dark": "#0E0E10", "light": "#FFFFFF"}
 _TEXT: dict[Theme, str] = {"dark": "#E6E6E6", "light": "#1A1A1A"}
-_MUTED: dict[Theme, str] = {"dark": "#8A8A90", "light": "#6B6B70"}
+_MUTED: dict[Theme, str] = {"dark": "#8A8A90", "light": "#78716C"}
 _GLYPH: dict[Theme, str] = {"dark": "#FFFFFF", "light": "#000000"}
 _GRID_STROKE: dict[Theme, str] = {"dark": "#0E0E10", "light": "#FFFFFF"}
 _NONSIG_SCALE = 0.45  # non-significant cells sit this far along the ramp toward neutral
@@ -63,7 +66,6 @@ _CHAR_EM = 0.6  # assumed advance of a mono glyph, in em
 _HONESTY_NONE = "No unchanged cells; every cell moved significantly."
 _SATURATION_LEGEND = "both 0% / both 100%"
 _SMALL_N = 16  # the survival coverage line counts cells below this
-_TRADE_STYLE = f".trade{{fill:{_FAILED}}}"
 
 
 def _version_as_recorded(version: str) -> str:
@@ -225,17 +227,17 @@ def _ramp_stops(theme: Theme) -> list[str]:
     """Nine stops, neutral at the centre, piecewise-linear in sRGB toward the two extremes.
 
     Not perceptually uniform: the stops are straight lines in sRGB from NEUTRAL_FILL to the
-    survived and failed colours, so RGB distance from neutral grows linearly with |delta|.
+    safer and worse colours, so RGB distance from neutral grows linearly with |delta|.
     """
     neutral = NEUTRAL_FILL[theme]
-    left = [_mix(neutral, _SURVIVED, t) for t in (1.0, 0.75, 0.5, 0.25)]
-    right = [_mix(neutral, _FAILED, t) for t in (0.25, 0.5, 0.75, 1.0)]
+    left = [_mix(neutral, _SAFER[theme], t) for t in (1.0, 0.75, 0.5, 0.25)]
+    right = [_mix(neutral, _WORSE[theme], t) for t in (0.25, 0.5, 0.75, 1.0)]
     return [*left, neutral, *right]
 
 
 def _sequential_stops(theme: Theme) -> tuple[str, ...]:
-    """Nine stops from NEUTRAL_FILL (rate 0) to the failed colour (rate 1), linear in sRGB."""
-    return tuple(_mix(NEUTRAL_FILL[theme], _FAILED, i / 8) for i in range(9))
+    """Nine stops from NEUTRAL_FILL (rate 0) to the worse colour (rate 1), linear in sRGB."""
+    return tuple(_mix(NEUTRAL_FILL[theme], _WORSE[theme], i / 8) for i in range(9))
 
 
 SEQUENTIAL_RAMP: dict[Theme, tuple[str, ...]] = {
@@ -278,6 +280,55 @@ def _cell_fill(c: Cell, bound: float, theme: Theme, mode: Mode) -> str:
     if _is_saturated(c):
         return SATURATED_FILL[theme]
     return _fill(c.delta / bound, c.verdict != "unchanged", theme)
+
+
+def _contrast(a: str, b: str) -> float:
+    """WCAG contrast ratio between two colours."""
+
+    def lum(h: str) -> float:
+        def ch(v: int) -> float:
+            s = v / 255
+            return s / 12.92 if s <= 0.03928 else ((s + 0.055) / 1.055) ** 2.4
+
+        r, g, bl = _hex_to_rgb(h)
+        return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(bl)
+
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _on(fill: str) -> str:
+    """Black or white, whichever reads better on a fill."""
+    return "#FFFFFF" if _contrast("#FFFFFF", fill) >= _contrast("#000000", fill) else "#000000"
+
+
+def _ink_attr(fill: str, default: str, floor: float = 3.0) -> str:
+    """A fill attribute for a mark over a cell, only when the panel's own colour would not read."""
+    return "" if _contrast(default, fill) >= floor else f' fill="{_on(fill)}"'
+
+
+def _hatch(x: int, y: int, w: int, h: int, fill: str) -> str:
+    """Diagonal lines over a rectangle, drawn as a path: an SVG here references nothing."""
+    segments = []
+    for c in range(6, w + h, 6):
+        x0, y0 = (x, y + c) if c <= h else (x + c - h, y + h)
+        x1, y1 = (x + c, y) if c <= w else (x + w, y + c - w)
+        segments.append(f"M{x0} {y0}L{x1} {y1}")
+    return (
+        f'<path d="{"".join(segments)}" fill="none" stroke="{_on(fill)}" stroke-width="1" '
+        'stroke-opacity="0.6" data-hatch="1"/>'
+    )
+
+
+def _is_hatched(c: Cell, mode: Mode) -> bool:
+    """A significant rise in a comparison. A rate map carries no verdict, so it has no hatch."""
+    return (
+        mode == "diff"
+        and c.present
+        and not _is_saturated(c)
+        and c.delta > 0
+        and c.verdict not in ("unchanged", "")
+    )
 
 
 # ---------- data ----------
@@ -1699,10 +1750,10 @@ def _svg_body(rep: Report) -> tuple[list[str], int, int]:
     return _grid_body(rep)
 
 
-def _notch(x: int, y: int, w: int, h: int) -> str:
+def _notch(x: int, y: int, w: int, h: int, ink: str = "") -> str:
     """Diagonal notches in two corners: the trade marker."""
     n = max(2, min(5, w // 3, h // 3))
-    return f'<path d="M{x},{y}h{n}v{n}z M{x + w},{y + h}h-{n}v-{n}z"/>'
+    return f'<path d="M{x},{y}h{n}v{n}z M{x + w},{y + h}h-{n}v-{n}z"{ink}/>'
 
 
 def _limit_pp(value: float) -> str:
@@ -1798,6 +1849,16 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
             )
     out.append("</g>")
 
+    hatched = [
+        (i, j, c)
+        for j in range(rows)
+        for i, c in enumerate(rep.cells[j * cols : (j + 1) * cols])
+        if _is_hatched(c, rep._mode)
+    ]
+    for i, j, c in hatched:
+        fill = _cell_fill(c, rep._bound, theme, rep._mode)
+        out.append(_hatch(left + i * cell_w, top + j * cell_h, cell_w, cell_h, fill))
+
     if rep._mode == "diff":
         out.append(f'<g fill="{_GLYPH[theme]}">')
         for j in range(rows):
@@ -1806,6 +1867,11 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
                 if c.present and c.verdict not in ("unchanged", ""):
                     x = left + i * cell_w + cell_w - glyph - 1
                     y = top + j * cell_h + 1
+                    # a backing square, so the mark reads on the strongest fills of either arm
+                    out.append(
+                        f'<rect x="{x - 1}" y="{y - 1}" width="{glyph + 2}" height="{glyph + 2}" '
+                        f'fill="{_on(_GLYPH[theme])}" data-sig-back="1"/>'
+                    )
                     out.append(
                         f'<rect x="{x}" y="{y}" width="{glyph}" height="{glyph}" data-sig="1"/>'
                     )
@@ -1817,7 +1883,8 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
             for i in range(cols):
                 c = rep.cells[j * cols + i]
                 if c.present and c.config_hash in rep._trades:
-                    out.append(_notch(left + i * cell_w, top + j * cell_h, cell_w, cell_h))
+                    ink = _ink_attr(_cell_fill(c, rep._bound, theme, rep._mode), _GLYPH[theme])
+                    out.append(_notch(left + i * cell_w, top + j * cell_h, cell_w, cell_h, ink))
         out.append("</g>")
 
     if show_cell_labels:
@@ -1833,7 +1900,12 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
                 label = _fmt(value, "pp1")
                 if not _look.active():
                     label = _truncate(label, label_budget)
-                out.append(f'<text x="{x}" y="{y}">{_xml_escape(label)}</text>')
+                under = _cell_fill(c, rep._bound, theme, rep._mode)
+                ink = _ink_attr(under, _TEXT[theme], 4.5)
+                if _is_hatched(c, rep._mode):
+                    # the cell's own colour behind the digits, so the hatch never crosses them
+                    ink += f' stroke="{under}" stroke-width="3" paint-order="stroke"'
+                out.append(f'<text x="{x}" y="{y}"{ink}>{_xml_escape(label)}</text>')
         out.append("</g>")
 
     out.append(f'<g fill="{_MUTED[theme]}" font-size="{font - 2}">')
@@ -1888,9 +1960,12 @@ def _grid_body(rep: Report) -> tuple[list[str], int, int]:
             ]
         if any(_is_saturated(c) for c in present):
             swatches.append((SATURATED_FILL[theme], _SATURATION_LEGEND))
+    worse_swatches = {_fill(0.5, True, theme), _fill(1.0, True, theme)}
     for k, (fill, label) in enumerate(swatches):
         sx = lx + k * 46
         out.append(f'<rect x="{sx}" y="{ly}" width="40" height="10" fill="{fill}"/>')
+        if rep._mode == "diff" and fill in worse_swatches:
+            out.append(_hatch(sx, ly, 40, 10, fill))
         if label:
             out.append(
                 f'<text x="{sx}" y="{ly + 22}" fill="{_MUTED[theme]}">{_xml_escape(label)}</text>'
@@ -2057,7 +2132,7 @@ def _render_stacked_svg(
     header_h = 36 + 18 * (len(title_lines) - 1) + 16 * len(wrapped)
     height = header_h + sum(h for (_, _, h), _ in bodies)
     out = [_svg_start(width, height, font)]
-    out.append(f"<style>{_TRADE_STYLE}</style>")
+    out.append("<style>.trade{font-weight:700}</style>")
     out.append(f'<rect x="0" y="0" width="{width}" height="{height}" fill="{_CANVAS[theme]}"/>')
     y_next = _running_text(
         out, 24, 20, title_lines, 18, f' fill="{_TEXT[theme]}" font-size="{font + 2}"'
@@ -2065,7 +2140,10 @@ def _render_stacked_svg(
     for k, (line, kind, mark) in enumerate(wrapped):
         y = y_next + 16 * k
         if kind == "trade":
-            out.append(f'<text x="24" y="{y}" class="trade"{mark}>{_xml_escape(line)}</text>')
+            out.append(
+                f'<text x="24" y="{y}" class="trade" fill="{_WORSE[theme]}"{mark}>'
+                f"{_xml_escape(line)}</text>"
+            )
         else:
             colour = _MUTED[theme] if kind == "muted" else _TEXT[theme]
             out.append(f'<text x="24" y="{y}" fill="{colour}"{mark}>{_xml_escape(line)}</text>')
@@ -2602,7 +2680,7 @@ def _html_style(theme: Theme) -> str:
         ".figure{width:100%;overflow-x:auto;margin:12px 0}"
         ".figure svg{display:block;width:100%;height:auto;max-width:none}"
         f"blockquote{{border-left:3px solid {_MUTED[theme]};margin:12px 0;padding-left:12px}}"
-        f".trade{{color:{_FAILED}}}"
+        f".trade{{color:{_WORSE[theme]};font-weight:700}}"
         "@media print{body{max-width:none;background:#FFFFFF;color:#000000}"
         ".figure{overflow:visible;page-break-inside:avoid}"
         ".figure svg{width:100%;height:auto}}"

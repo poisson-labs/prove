@@ -292,11 +292,6 @@ def rgb_distance(a: str, b: str) -> float:
     return math.dist(rgb(a), rgb(b))
 
 
-def is_red_family(hexstr: str) -> bool:
-    r, g, b = rgb(hexstr)
-    return r > g and r > b
-
-
 def all_fills(root: ET.Element) -> list[str]:
     return [e.attrib["fill"] for e in root.iter() if "fill" in e.attrib and HEX_RE.match(e.attrib["fill"])]
 
@@ -548,15 +543,16 @@ def test_i5_verdicts_are_copied_not_recomputed() -> None:
 
 
 @pytest.mark.parametrize("theme", ["dark", "light"])
-def test_i6_red_family_fill_iff_some_positive_delta(theme: str) -> None:
+def test_i6_a_hatch_iff_some_significant_positive_delta(theme: str) -> None:
     negative = grid_diff([0.1, 0.2], [10, 20], delta_fn=lambda i, j: -0.1 * (1 + i + j),
                          verdict_fn=lambda i, j, dl: "safer" if i == 0 else "unchanged")
     positive = grid_diff([0.1, 0.2], [10, 20], delta_fn=lambda i, j: 0.3 if (i, j) == (0, 0) else -0.2,
                          verdict_fn=lambda i, j, dl: "worse" if dl > 0 else "unchanged")
     neg_root = svg_root(build_report(negative, spec2(theme=theme)))
     pos_root = svg_root(build_report(positive, spec2(theme=theme)))
-    assert not any(is_red_family(f) for f in all_fills(neg_root))
-    assert any(is_red_family(f) for f in all_fills(pos_root))
+    hatches = lambda root: [e for e in root.iter() if e.attrib.get("data-hatch") == "1"]
+    assert not hatches(neg_root)
+    assert hatches(pos_root)
 
 
 # ---------- I7: redundant encoding ----------
