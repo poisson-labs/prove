@@ -770,6 +770,21 @@ def _writer_note(page: _Page, role: str) -> str:
     return f' <span class="dim">{page.fact(f"/{role}/writer", kind="plain")}</span>'
 
 
+def _chart_figure(page: _Page, i: int, chart: Mapping[str, Any]) -> str:
+    """One chart of a comparison in its panel: the kind, the event and a link to its page as the
+    caption, the drawing under it."""
+    p = f"/charts/{i}"
+    page.shown.add(f"{p}/svg")
+    return (
+        f"<figure "
+        f'id="{_esc(chart["kind"])}-{_esc(chart["event"])}">'
+        f"<figcaption>{page.fact(f'{p}/kind', kind='plain')} "
+        f"· "
+        f"{page.fact(f'{p}/event', kind='plain')} · "
+        f"{page.link(f'{p}/address', 'open')}</figcaption>{chart['svg']}</figure>"
+    )
+
+
 def _comparison(page: _Page) -> None:
     v = page.view
     page.title = str(v["name"])
@@ -823,6 +838,15 @@ def _comparison(page: _Page) -> None:
             ]
         )
     )
+    # The heatmaps, one per event, come before the facts the verdict rests on, so the shape of
+    # the change is on the first screen; the other charts follow the conditions they draw.
+    heatmaps = [
+        _chart_figure(page, i, chart)
+        for i, chart in enumerate(v["charts"])
+        if chart["kind"] == "heatmap"
+    ]
+    if heatmaps:
+        page.add('<div class="charts">' + "".join(heatmaps) + "</div>")
     page.add("<h3>What the verdict rests on</h3>" + _facts_dl(page, "/facts") + "</section>")
     page.add('<h2 id="counts">Per event</h2>')
     rows = []
@@ -947,16 +971,8 @@ def _comparison(page: _Page) -> None:
     page.add(f'<p class="note">{page.fact("/rows_rule", kind="plain")}</p>')
     page.add('<h2 id="charts">Charts</h2><div class="charts">')
     for i, chart in enumerate(v["charts"]):
-        p = f"/charts/{i}"
-        page.add(
-            f"<figure "
-            f'id="{_esc(chart["kind"])}-{_esc(chart["event"])}">'
-            f"<figcaption>{page.fact(f'{p}/kind', kind='plain')} "
-            f"· "
-            f"{page.fact(f'{p}/event', kind='plain')} · "
-            f"{page.link(f'{p}/address', 'open')}</figcaption>{chart['svg']}</figure>"
-        )
-        page.shown.add(f"{p}/svg")
+        if chart["kind"] != "heatmap":
+            page.add(_chart_figure(page, i, chart))
     page.add("</div>")
     page.add('<p class="note">Each condition\'s cumulative incidence chart is on its page.</p>')
 

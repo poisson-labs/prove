@@ -239,6 +239,9 @@ class InspectResult(Result):
     provenance: tuple[str, ...] = ()
     reproduce: Mapping[str, Any] = field(default_factory=dict)
     observation_cap: Mapping[str, Any] | None = None
+    #: Each distinct error among every matching episode (after ``--where``, before ``--limit``),
+    #: in the order its first episode is stored, with how many episodes have it, byte for byte.
+    errors: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True, eq=False)

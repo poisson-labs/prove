@@ -1428,6 +1428,12 @@ def inspect(
     if condition is not None:
         rows = rows[rows["config_hash"].astype(str) == condition]
     total = len(rows)
+    # The narrow read holds every episode's error, so identical ones are counted over every
+    # match without decoding the rows ``--limit`` leaves out.
+    errors: dict[str, int] = {}
+    for error in rows["error"]:
+        if isinstance(error, str):
+            errors[error] = errors.get(error, 0) + 1
     if limit is not None:
         rows = rows.head(max(limit, 0))
     if rows.empty:
@@ -1473,6 +1479,7 @@ def inspect(
         provenance=provenance,
         reproduce=cast("Mapping[str, Any]", payload["reproduce"]),
         observation_cap=_observation_cap(manifest),
+        errors=tuple(errors.items()),
     )
 
 

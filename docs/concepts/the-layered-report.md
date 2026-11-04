@@ -1,6 +1,7 @@
 # The layered report
 
-Under the verdict block and the per-condition tables, `diff` and `report` print a layered report:
+Under the verdict block and the per-condition tables, `diff --full` and `report` print a layered
+report:
 the same comparison asked from the top down. First, did anything change at all? Then, along which
 lines did it change? Only then, which conditions? Each layer is tested only where the one above it
 found something, and the last line gives a bound on the false discoveries of the whole procedure,
@@ -11,7 +12,7 @@ worked here on the example's two runs, the mock agent before and after its retry
 
 <!-- docs-check: run -->
 ```console
-$ poisson-prove diff
+$ poisson-prove diff --full
 trade  timeout: … safer, … worse · violated: … safer, … worse (paired test on shared seeds); …
 …
 omnibus: "no cell changed" is rejected (p = … < q 0.050) over 9 cells x 2 events
