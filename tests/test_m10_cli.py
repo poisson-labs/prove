@@ -756,7 +756,7 @@ def test_i8_rollout_that_always_raises_exits_three(store_root: Path) -> None:
 def test_i9_diff_markdown_summary_line(lattice_store: Store) -> None:
     # PF3: the lattice's runs share a salt, so the default is now the paired
     # test; these numbers are the unpaired test's, named.
-    r = run_cli(["--store", str(LATTICE_ROOT), "diff", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--method", "fisher_bh"])
+    r = run_cli(["--store", str(LATTICE_ROOT), "diff", "--full", lattice.RUN_A, lattice.RUN_B, "--event", lattice.EVENT, "--method", "fisher_bh"])
     assert r.code == 0, r.text
     # PF2: diff's first lines are now a verdict block ending at the first
     # blank line; the report that follows it is unchanged, so its summary line is read there.

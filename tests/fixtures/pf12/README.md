@@ -2,8 +2,8 @@
 
 `look-static-ui.md` is the static-UI section of `docs/cli-look.md`, copied byte for byte: every
 line from its `## The static UI` heading to the end. The whole file's sha256 is
-`92e71488c2824c056252be9a7b340e7fc138d15359fbcb7431bcfc6fa267d85f` (the one PF6.0 pins); this
-section's is `f39b5a83b13e3a3378a994150a3187cc7e764d63e01365641b9409e9c6febfa7`. The tests read
+`c6765e0efe58ad202204774185587b24192ce6d981eb1cf06f6f6edbe6909338` (the one PF6.0 pins); this
+section's is `4cd818b59514a24af59142c6500b2b9ae24dc1f33d65a1e5272fb58c8c0f663e`. The tests read
 its colour table (twelve tokens, light and dark) and nothing outside this repository.
 
 The stores the tests compare are built while the tests run, from the 0.0.1 stores in

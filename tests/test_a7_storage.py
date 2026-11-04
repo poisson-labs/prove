@@ -569,7 +569,7 @@ def run_every_verb(root: Path, a: str, b: str, *, event: str, x: str, y: str, ou
     store_arg = str(root)
     results: dict[str, Result] = {}
     results["runs"] = run_cli(["--store", store_arg, "runs"])
-    results["diff"] = run_cli(["--store", store_arg, "diff", a, b, "--event", event, *method])
+    results["diff"] = run_cli(["--store", store_arg, "diff", "--full", a, b, "--event", event, *method])
     # diff's --format json is now --json.
     results["diff --json"] = r = run_cli(["--store", store_arg, "diff", a, b, "--event", event, "--json", *method])
     if root == LATTICE_ROOT:

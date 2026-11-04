@@ -1429,7 +1429,7 @@ def test_f15_the_block_prints_the_grouping_line_and_not_tested_and_no_p(synth_ro
     _, result = store_tree(synth_root, "same-a", "same-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
     # PF3: the synthetic pair shares a salt, so the default is the
     # paired test; the tree here is the unpaired test's, named.
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail", "--method", "fisher_bh"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "same-a", "same-b", "--event", "fail", "--method", "fisher_bh"])
     # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
@@ -1607,7 +1607,7 @@ def test_f18_the_temp_zero_group_rejects_while_the_flat_family_rejects_nothing_i
 
 
 def test_f18_the_block_shows_both_groups_with_their_verdicts(synth_root: Path) -> None:
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "axes-a", "axes-b", "--event", "fail"])
     # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)
@@ -1646,7 +1646,7 @@ def test_f19_no_detail_reason_or_block_line_uses_the_second_vocabulary(every_tre
             assert phrase not in reason, (name, phrase, reason)
     for extra in ((), ("--by", "step_kind"), ("--by", "kind"), ("--by", "grid")):
         for pair in (("axes-a", "axes-b"), ("same-a", "same-b")):
-            code, out, err = run_cli(["--store", str(synth_root), "diff", *pair, "--event", "fail", *extra])
+            code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", *pair, "--event", "fail", *extra])
             if extra and extra[1] in EXPECTED_TRACE_GROUPINGS:
                 # PF4 (PF4.6): a refusal, exit 1, with no block; its error line keeps the vocabulary.
                 assert code == 1 and out == "", (pair, extra, out, err)
@@ -1692,7 +1692,7 @@ def test_f20_the_block_follows_the_omnibus_block_and_its_first_line_carries_the_
     is never the tail of stdout (P4.3 appends after it). Every number on the first line is a
     field under rule 10 (``:g`` before it) and the key and the rung are named; the wording is free."""
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, (out, err)
     # A shared salt adds one note line on stderr.
     assert without_notes(err) == "", err
@@ -1717,7 +1717,7 @@ def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) ->
     for extra, expected in ((("--by", "task"), ("task", "requested", "underpowered", "trace")), ((), ("task", "axis", "underpowered", "axis"))):
         _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=50, seed=GOLDEN_SEED, by=extra[1] if extra else None)
         assert [(r.key, r.rung, r.reason, r.next_rung) for r in result.grouping.refused] == [expected], extra
-        code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh", *extra])
+        code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh", *extra])
         # A shared salt adds one note line on stderr.
         assert code == 0 and without_notes(err) == "", (extra, out, err)
         block = fault_lines_block(out)
@@ -1730,7 +1730,7 @@ def test_f20_one_refused_line_per_row_of_the_chain_in_order(synth_root: Path) ->
 
 def test_f20_one_group_line_per_group_in_labels_order_carrying_counts_p_q_and_the_verdict(synth_root: Path) -> None:
     _, result = store_tree(synth_root, "axes-a", "axes-b", events=("fail",), method="fisher_bh", n_permutations=GOLDEN_PERMUTATIONS, seed=GOLDEN_SEED)
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "axes-a", "axes-b", "--event", "fail", "--method", "fisher_bh"])
     # A shared salt adds one note line on stderr.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = fault_lines_block(out)

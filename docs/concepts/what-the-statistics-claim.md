@@ -115,4 +115,4 @@ comparison's word is on its `comparison` line.
   not known to it.
 
 [The layered report](the-layered-report.md) covers the tests that sit above the conditions: the
-omnibus, the fault lines and the bound.
+omnibus, the fault lines and the bound, which `diff --full` prints.

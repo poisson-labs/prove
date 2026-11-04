@@ -515,7 +515,7 @@ def run_report_argv(pair: MockPair, out: Path, *extra: str) -> list[str]:
 def test_c1_single_event_diff_headline_reads_twenty_two_lower_zero_higher_fisher() -> None:
     # PF3: the lattice's runs share a salt, so the default is the paired
     # test; these numbers are the unpaired test's, named.
-    r = run_cli(lattice_argv("diff", "--event", lattice.EVENT, "--method", "fisher_bh"))
+    r = run_cli(lattice_argv("diff", "--full", "--event", lattice.EVENT, "--method", "fisher_bh"))
     assert r.code == 0, r.text
     lower, higher = lattice.directions(lattice.fisher(lattice.EVENT, Q))
     assert (lower, higher) == (22, 0)
@@ -529,7 +529,7 @@ def test_c1_single_event_diff_headline_reads_twenty_two_lower_zero_higher_fisher
 
 
 def test_c2_no_event_prints_inference_line_first_then_a_headline_naming_both_events(pair: MockPair) -> None:
-    r = run_cli(pair_argv(pair, "diff"))
+    r = run_cli(pair_argv(pair, "diff", "--full"))
     assert r.code == 0, r.text
     # PF2: diff opens with a verdict block that ends at the first blank
     # line; the inference line is the first line of the report after it.
@@ -547,7 +547,7 @@ def test_c2_no_event_prints_inference_line_first_then_a_headline_naming_both_eve
 
 
 def test_c2_explicit_event_prints_one_event_and_no_inference_line(pair: MockPair) -> None:
-    r = run_cli(pair_argv(pair, "diff", "--event", "violated"))
+    r = run_cli(pair_argv(pair, "diff", "--full", "--event", "violated"))
     assert r.code == 0, r.text
     assert not [line for line in r.out.splitlines() if line.startswith(INFERENCE_MARKER)], r.out
     assert any(line.startswith("violated:") for line in r.lines), r.out

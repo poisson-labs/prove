@@ -67,6 +67,8 @@ section#verdict{background:var(--bg);border:1px solid var(--rule);border-radius:
 section#verdict > .verdict,section#verdict > dl{border:0;border-radius:0;box-shadow:none;margin:0;background:none}
 section#verdict > .verdict{padding-bottom:16px}
 section#verdict > .verdict + dl{padding-top:16px}
+/* the heatmaps sit in the panel between the detail lines and what the verdict rests on */
+section#verdict > .charts{padding:4px 20px 18px;gap:14px}
 section#verdict > h3{border-top:1px solid var(--rule);background:var(--surface);padding:10px 20px}
 section#verdict > h3 + dl{padding-top:14px;padding-bottom:18px;background:var(--surface)}
 section#verdict > dl:last-child{padding-bottom:18px}

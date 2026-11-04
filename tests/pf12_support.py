@@ -940,7 +940,7 @@ def build_resume_old(folder: Path) -> dict[str, Any]:
     return {"store": str(store), "before": before, "after": listing(store), "result": result.__dict__}
 
 
-# ---------- the look's static-UI tokens (look file sha256 92e71488…d85f, Y14) ----------
+# ---------- the look's static-UI tokens (look file sha256 c6765e0e…9338, Y14) ----------
 
 
 def look_tokens() -> dict[str, tuple[str, str]]:

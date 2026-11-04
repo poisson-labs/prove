@@ -42,10 +42,12 @@ share links to the episodes behind it.
 
 ## Comparison
 
-One saved comparison: the verdict word and its sentence, then the detail lines `diff` prints (the
-method, the two runs, the verdict rule, the limits, the intervals, the fragility), a count per
-event of the conditions that got worse, got safer, did not move, or could not tell, the trades,
-and every condition with its change. Charts and the could-not-detect page are linked from it.
+One saved comparison: the verdict word and its sentence, the detail lines `diff` prints (the
+method, the two runs), then the heatmaps, one per event, so the shape of the change is on the
+first screen; under them what the verdict rests on (the verdict rule, the limits, the intervals,
+the fragility), a count per event of the conditions that got worse, got safer, did not move, or
+could not tell, the trades, every condition with its change, and the other charts. Each chart's
+own page and the could-not-detect page are linked from it.
 
 ## Condition
 

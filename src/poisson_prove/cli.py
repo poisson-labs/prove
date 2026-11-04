@@ -637,6 +637,13 @@ def _build_parser(io: _IO) -> _Parser:
         choices=("all",),
         help="also run the other two methods and print them side by side (default: one method)",
     )
+    diff_p.add_argument(
+        "--full",
+        action="store_true",
+        help="also print the machine sections: the per-event tables by hash, the coverage table, "
+        "the omnibus, the fault lines and the bound (default: the verdict and one table of the "
+        "conditions)",
+    )
     _add_json_option(diff_p, "the comparison")
     diff_p.add_argument(
         "--save",
@@ -1497,8 +1504,9 @@ def _method_of(result: core.Comparison) -> str:
 
 
 def _method_table(results: Sequence[Any]) -> str:
-    # The two count columns are an event's safer and worse with a kind, and its falls and rises
-    # (lower, higher) without one, named so in the header.
+    """The ``--methods all`` table: each method's counts per event, in the one form it has
+    always had. The two count columns are an event's safer and worse with a kind, and its falls
+    and rises (lower, higher) without one, named so in the header."""
     known = all(m.all_kinds_known() for m in results)
     down, up = ("safer", "worse") if known else ("lower", "higher")
     header = ("method", "event", "pairing", down, up, "unchanged", "max_mde")
@@ -1719,8 +1727,9 @@ def _bound_block(bound: Any) -> str:
 
 def _write_summary(io: _IO, multi: Any) -> None:
     """Inference line when inferred, the headline, and the trade line when present."""
-    if multi.inferred:
-        io.line(multi.to_markdown().splitlines()[0])
+    inferred = multi.inferred_line()
+    if inferred is not None:
+        io.line(inferred)
     io.write(multi.headline() + "\n")
     trade = multi.trade_line()
     if trade is not None:
@@ -1902,6 +1911,137 @@ def _cmd_init_agent(ns: argparse.Namespace, io: _IO, state: _State) -> int:
 # ---------- diff / report / check ----------
 
 
+#: The options that shape a machine section of ``diff``'s output: each asks for that section by
+#: name, so typing one prints the full output.
+_SHAPING_OPTIONS = ("--by", "--depth", "--permutations", "--seed", "--max-group-mde")
+#: The plain reading's table: the terminal app's conditions screen without its ``p`` and ``q``.
+_CONDITION_COLUMNS = ("condition", "event", "before", "after", "change", "verdict", "rise", "fall")
+
+
+def _typed(argv: Sequence[str], options: Sequence[str]) -> bool:
+    """Whether any of ``options`` was typed, as ``--name VALUE`` or ``--name=VALUE``."""
+    return any(word == name or word.startswith(f"{name}=") for word in argv for name in options)
+
+
+def _axis_order(config: Mapping[str, Any]) -> tuple[tuple[int, float, str], ...]:
+    """A condition's place among the others: axis by axis in the order the condition prints
+    them, numbers as numbers (so 2 comes before 10) and words alphabetically. Declared order is
+    not used, since two runs may declare different ones."""
+    key = []
+    for value in config.values():
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            key.append((0, float(value), ""))
+        else:
+            key.append((1, 0.0, str(value)))
+    return tuple(key)
+
+
+def _share_cell(share: Mapping[str, Any] | None) -> str:
+    return "none" if share is None else _look.fmt_rate(share["value"])
+
+
+def _limit_cell(record: Mapping[str, Any], way: str) -> str:
+    """A direction's limit as a number, or the reason it has none."""
+    value = record.get(f"mde_{way}")
+    if value is None:
+        return str(record.get(f"mde_{way}_note") or "none detectable")
+    return _look.fmt_rate(value)
+
+
+def _conditions_rows(result: core.Comparison) -> list[list[str]]:
+    """The plain reading's one table, its first row the header: a row per condition and event,
+    ordered by the condition's axis values and then by the event in the order the verdict names
+    them, so what one condition did stays on adjacent rows."""
+    multi = result.multi
+    events = multi.ordered_events()
+    rank = {event: i for i, event in enumerate(events)}
+    entries = [(event, record) for event in events for record in multi.by_event[event].records()]
+    entries.sort(key=lambda item: (_axis_order(item[1]["config"]), rank[item[0]]))
+    rows = [list(_CONDITION_COLUMNS)]
+    for event, record in entries:
+        delta = record.get("delta")
+        rows.append(
+            [
+                _look.condition_words(record["config"]),
+                event,
+                _share_cell(record.get("share_a")),
+                _share_cell(record.get("share_b")),
+                "none" if delta is None else _look.fmt_signed(delta),
+                str(record["verdict"]),
+                _limit_cell(record, "rise"),
+                _limit_cell(record, "fall"),
+            ]
+        )
+    return rows
+
+
+def _plain_reading(io: _IO, result: core.Comparison) -> None:
+    """What ``diff`` prints after the verdict block by default: which events were compared when
+    none was named, the table of the conditions, what the comparison left out (in words, only when
+    there is any), and the flag that prints the rest."""
+    multi = result.multi
+    n = _look.fmt_count
+    inferred = multi.inferred_line()
+    if inferred is not None:
+        io.line(inferred)
+        io.line()
+    io.table(_conditions_rows(result), numeric=frozenset({2, 3, 4}))
+    if result.others:
+        # The methods' table keeps the one form it has always had.
+        with _look.rule10():
+            io.write("\n" + _method_table([multi, *result.others.values()]))
+    io.line()
+    holes = int(multi.n_not_comparable)
+    if holes:
+        io.detail(
+            "not compared",
+            f"{n(holes)} {'condition is' if holes == 1 else 'conditions are'} in one run only, or "
+            "without an outcome in one of them",
+        )
+    frame = multi.coverage
+    if frame is not None:
+        before, after = int(frame["no_outcome_a"].sum()), int(frame["no_outcome_b"].sum())
+        if before or after:
+            io.detail(
+                "no outcome",
+                f"{n(before)} episodes of the first run and {n(after)} of the second ended with "
+                "none, and are in neither the shares nor the tests",
+            )
+    if multi.truncated:
+        io.detail(
+            "cut",
+            f"{n(multi.truncated)} episodes ran past the comparison's horizon of "
+            f"{_look.fmt_num(multi.horizon)} and count as not having ended by it",
+        )
+    io.detail(
+        "more",
+        "--full prints the per-event tables by hash, the coverage, the omnibus, the fault lines "
+        "and the bound",
+    )
+
+
+def _full_reading(io: _IO, result: core.Comparison, nested: Any) -> None:
+    """Every machine section, in the order ``diff`` has always printed them, from the tree the
+    caller grew before anything was printed."""
+    multi = result.multi
+    with _look.rule10():
+        io.write(multi.to_markdown())
+        if result.others:
+            io.write("\n" + _method_table([multi, *result.others.values()]))
+        coverage = _coverage_block(multi)
+        if coverage:
+            io.write("\n" + coverage)
+        io.write("\n" + _interval_block(multi))
+        io.write("\n")
+        io.write(_omnibus_block(nested.root))
+        io.write("\n")
+        io.write(_fault_lines_block(nested))
+        io.write("\n")
+        io.write(_cells_block(nested))
+        io.write("\n")
+        io.write(_bound_block(nested.bound))
+
+
 def _cmd_diff(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     a, b = _two_runs("diff", ns.runs)
     result = core.compare(
@@ -1925,24 +2065,15 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
         doc = _with_saved(result.to_json(), saved)
         _write_json(io, "diff", doc["verdict"], doc["sentence"], doc, doc["next"])
         return 0
-    multi, nested = result.multi, result.tree
+    full = ns.full or _typed(state.argv, _SHAPING_OPTIONS)
+    # The tree grows before anything is printed: a refusal of one of its options leaves stdout
+    # empty, as every refusal does.
+    nested = result.tree if full else None
     _verdict_block(io, result, saved)
-    with _look.rule10():
-        io.write(multi.to_markdown())
-        if result.others:
-            io.write("\n" + _method_table([multi, *result.others.values()]))
-        coverage = _coverage_block(multi)
-        if coverage:
-            io.write("\n" + coverage)
-        io.write("\n" + _interval_block(multi))
-        io.write("\n")
-        io.write(_omnibus_block(nested.root))
-        io.write("\n")
-        io.write(_fault_lines_block(nested))
-        io.write("\n")
-        io.write(_cells_block(nested))
-        io.write("\n")
-        io.write(_bound_block(nested.bound))
+    if full:
+        _full_reading(io, result, nested)
+    else:
+        _plain_reading(io, result)
     for command in result.next:
         io.write("\n")
         io.next(command)
@@ -2434,6 +2565,59 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
 # ---------- inspect / runs ----------
 
 
+def _inspect_episode(io: _IO, row: Mapping[str, Any], result: Any, *, one_line: bool) -> None:
+    """One episode ``inspect`` lists: its fields one to a line, or on one line under the
+    traceback its group shares; then its trace, when the run stored one."""
+    fields = [
+        ("config_hash", _look.fmt_hash(row["config_hash"])),
+        ("config", json.dumps(row["config"], sort_keys=True)),
+        ("seed", str(row["seed"])),
+        ("replicate_index", _look.fmt_count(row["replicate_index"])),
+    ]
+    if one_line:
+        io.line(" · ".join(f"{label}: {value}" for label, value in fields))
+    else:
+        for label, value in fields:
+            io.line(f"{label}: {value}")
+        if isinstance(row["error"], str):
+            io.line("outcome: -")
+            io.line("t: -")
+            io.line(f"error: {row['error']}")
+        else:
+            io.line(f"t: {_look.fmt_num(row['t'])}")
+    trace = row["trace"]
+    if trace is None:
+        return
+    if trace.truncated is not None:
+        io.line(f"trace: truncated ({trace.truncated})")
+    cut = [(j, span) for j, span in enumerate(trace.ordered()) if span.truncated == "observation"]
+    if cut:
+        limits = result.observation_cap
+        limit = (
+            "not recorded"
+            if limits is None
+            else ", ".join(f"{name}={value}" for name, value in limits.items())
+        )
+        sizes = [
+            f"span {j}"
+            if span.bytes_original is None
+            else f"span {j}: {span.bytes_original} bytes originally"
+            for j, span in cut
+        ]
+        io.line(f"observation: cut ({'; '.join([f'limit {limit}', *sizes])})")
+    for j, span in enumerate(trace.ordered()):
+        duration = span.duration_ms
+        io.line(
+            f"  {j}\t{span.kind or '-'}\t{span.name or '-'}\t"
+            f"{'-' if duration is None else duration}\t"
+            f"{'-' if span.error in (None, '') else span.error}\t"
+            f"{'-' if span.step_name is None else span.step_name}\t"
+            f"{'-' if span.attempt is None else span.attempt}\t"
+            f"{'-' if span.outcome is None else span.outcome}\t"
+            f"{'-' if span.gate is None else span.gate}"
+        )
+
+
 def _cmd_inspect(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     result = core.inspect(
         store,
@@ -2453,51 +2637,36 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> 
     for line in result.provenance:
         io.line(line)
     io.line()
+    counts = dict(result.errors)
+    grouped: set[str] = set()
     for row in result.rows:
-        io.line(f"config_hash: {_look.fmt_hash(row['config_hash'])}")
-        io.line(f"config: {json.dumps(row['config'], sort_keys=True)}")
-        io.line(f"seed: {row['seed']}")
-        io.line(f"replicate_index: {_look.fmt_count(row['replicate_index'])}")
-        if isinstance(row["error"], str):
-            io.line("outcome: -")
-            io.line("t: -")
-            io.line(f"error: {row['error']}")
-        else:
-            io.line(f"t: {_look.fmt_num(row['t'])}")
-        trace = row["trace"]
-        if trace is not None:
-            if trace.truncated is not None:
-                io.line(f"trace: truncated ({trace.truncated})")
-            cut = [
-                (j, span)
-                for j, span in enumerate(trace.ordered())
-                if span.truncated == "observation"
-            ]
-            if cut:
-                limits = result.observation_cap
-                limit = (
-                    "not recorded"
-                    if limits is None
-                    else ", ".join(f"{name}={value}" for name, value in limits.items())
-                )
-                sizes = [
-                    f"span {j}"
-                    if span.bytes_original is None
-                    else f"span {j}: {span.bytes_original} bytes originally"
-                    for j, span in cut
-                ]
-                io.line(f"observation: cut ({'; '.join([f'limit {limit}', *sizes])})")
-            for j, span in enumerate(trace.ordered()):
-                duration = span.duration_ms
-                io.line(
-                    f"  {j}\t{span.kind or '-'}\t{span.name or '-'}\t"
-                    f"{'-' if duration is None else duration}\t"
-                    f"{'-' if span.error in (None, '') else span.error}\t"
-                    f"{'-' if span.step_name is None else span.step_name}\t"
-                    f"{'-' if span.attempt is None else span.attempt}\t"
-                    f"{'-' if span.outcome is None else span.outcome}\t"
-                    f"{'-' if span.gate is None else span.gate}"
-                )
+        error = row["error"]
+        if not isinstance(error, str) or counts.get(error, 1) == 1:
+            # An outcome, or an error only one episode has: nothing repeats, so the episode
+            # prints as it always has.
+            _inspect_episode(io, row, result, one_line=False)
+            io.line()
+            continue
+        if error in grouped:
+            continue
+        # Identical errors, byte for byte: the traceback once, with how many episodes have it
+        # (every match, before --limit), then each listed episode on a line of its own.
+        grouped.add(error)
+        io.line(f"error: {_look.fmt_count(counts[error])} episodes with this error")
+        io.line(error.rstrip("\n"))
+        for same in result.rows:
+            if same["error"] == error:
+                _inspect_episode(io, same, result, one_line=True)
+        io.line()
+    listed = {row["error"] for row in result.rows if isinstance(row["error"], str)}
+    hidden = [(error, k) for error, k in result.errors if error not in listed]
+    if hidden:
+        total = sum(k for _, k in hidden)
+        kinds = (
+            "1 other error" if len(hidden) == 1 else f"{_look.fmt_count(len(hidden))} other errors"
+        )
+        noun = "episode" if total == 1 else "episodes"
+        io.line(f"{_look.fmt_count(total)} {noun} with {kinds}, not shown")
         io.line()
     reproduce = result.reproduce
     io.code(_SNIPPET_MARKER)

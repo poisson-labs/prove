@@ -1,0 +1,14 @@
+{
+  "changes": [
+    {
+      "what": "the static UI's type rule: labels may be in the system's sans",
+      "old": "- The system's own fonts, no other: prose in `system-ui, -apple-system, \"Segoe UI\", sans-serif`;\n  verdict words, numbers, names, addresses and tables in `ui-monospace, Menlo, Consolas, monospace`\n  with tabular figures.\n",
+      "new": "- The system's own fonts, no other: prose and labels (table headers, detail labels, captions) in\n  `system-ui, -apple-system, \"Segoe UI\", sans-serif`; verdict words, numbers, names, addresses and\n  table cells in `ui-monospace, Menlo, Consolas, monospace` with tabular figures.\n"
+    },
+    {
+      "what": "a banner section shared by the tools, before the static UI's",
+      "before": "## The static UI\n",
+      "new": "## The banner\n\nA tool may open with a banner: a session on its first screen, a full-screen app on a screen of its\nown. Every tool's banner has one shape, so a person who has seen one knows the next. No verb prints\nit: rule 3's first line stays the verdict, and a pipe and `--json` never carry it.\n\n### Shape\n\nTwo rows, 26 columns.\n\n| row | holds |\n|---|---|\n| 1 | the tool's mark, one terminal row of twelve cells; two spaces; `poisson labs`, bold |\n| 2 | under the name: the tool's name, bold; two spaces; its version, dim |\n\n- The mark is the tool's own, cell for cell the mark the site draws for it.\n- The mark may carry one colour of the tool's own, stepped down as the terminal's declared depth\n  requires, or none: the terminal's foreground with dim. This is the one colour outside the four\n  meanings, and it colours nothing else. The rest of the banner is bold and dim.\n\n### Narrow and plain forms\n\n- Below 26 columns, and in a session with `--plain` or `TERM=dumb`, the banner is one line:\n  `Poisson Labs  <tool> <version>`.\n- Under `NO_COLOR` the banner has no colour. A session prints the same two rows with no escape\n  sequence; a full-screen app keeps bold and dim, as on its other screens.\n\n### The opening screen\n\n- A full-screen app opens on the banner, centred in the body of the usual bands. The header holds the\n  tool's name and the store; the key bar lists `enter`, `? help` and `q quit`.\n- The app's first screen follows after a hold of 1.0 s, sooner on any key. `?` opens that screen's\n  help and `q` quits, exit 0. `Ctrl-C` exits 130, as everywhere.\n- A headless run opens straight on the first screen, since no one is watching it.\n- A session that is not full-screen prints the banner and one blank line, then its first screen.\n\n"
+    }
+  ]
+}

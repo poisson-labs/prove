@@ -1109,6 +1109,11 @@ class MultiDiffResult:
         could = not unread and (not limits or max(limits) <= self.threshold)
         return _verdict.word_of(ways, known, could)
 
+    def ordered_events(self) -> list[str]:
+        """The events in the order the verdict line names them. Worst first: by the count of the
+        change for the worse (a rise, without a kind), then the other way's, then the name."""
+        return self._ordered_events()
+
     def _ordered_events(self) -> list[str]:
         """Worst first: by the count of the change for the worse (a rise, without a kind), then
         the other way's, then the name."""
@@ -1193,6 +1198,22 @@ class MultiDiffResult:
             )
         return f"Trade: {safer} {fell} in {n} {'cell' if n == 1 else 'cells'} where {worse} {rose}."
 
+    def inferred_line(self) -> str | None:
+        """The sentence that says which events were compared when none was named, and how they
+        were found; None when the events were given."""
+        if not self.inferred:
+            return None
+        events = ", ".join(self.events)
+        if self.non_event is None:
+            return (
+                f"inferred: no event was given, so the event set is {events}, the failures and "
+                "successes the runs declared"
+            )
+        return (
+            f"inferred: no event was given, so the event set is {events}; the non-event is "
+            f"{self.non_event}, the most frequent outcome"
+        )
+
     def to_markdown(self) -> str:
         from poisson_prove import _facts, _look
         from poisson_prove.stats import WILSON_LEVEL, level_label
@@ -1203,16 +1224,9 @@ class MultiDiffResult:
         shown = _look.fmt_hash if look else str
         num = _look.fmt_num if look else str
         lines: list[str] = []
-        if self.inferred and self.non_event is None:
-            lines.append(
-                f"inferred: no event was given, so the event set is {', '.join(self.events)}, "
-                "the failures and successes the runs declared"
-            )
-        elif self.inferred:
-            lines.append(
-                f"inferred: no event was given, so the event set is {', '.join(self.events)}; "
-                f"the non-event is {self.non_event}, the most frequent outcome"
-            )
+        inferred = self.inferred_line()
+        if inferred is not None:
+            lines.append(inferred)
         lines.extend(self.headline().splitlines())
         trade = self.trade_line()
         if trade is not None:

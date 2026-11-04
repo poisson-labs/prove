@@ -24,7 +24,7 @@ test at the end (reading L3).
 - L1 PF6.0's "equal, byte for byte, the base with the three changes applied": the base is committed
   as ``tests/fixtures/cli-look/bfe802d.md`` with each change's old and new text in ``changes.json``
   (each old text occurs exactly once), and the file's first 120 lines are the result;
-  ``docs/cli-look.md`` itself is held to its sha256 (``92e71488…d85f``).
+  ``docs/cli-look.md`` itself is held to its sha256 (``c6765e0e…9338``).
 - L2 "Piped, the pretty build's output equals the plain build's": the same code on streams that are
   not terminals gives the same bytes with and without ``--plain`` and with Rich unimportable, each
   variant running the whole corpus through the command's own entry point in a process of its own; a
@@ -86,12 +86,12 @@ from pf6_support import (
     run_pty, sha256_of, shared_world, split_first_line, squash, strip_escapes, styled, styled_lines,
 )
 
-LOOK_SHA256 = "92e71488c2824c056252be9a7b340e7fc138d15359fbcb7431bcfc6fa267d85f"
+LOOK_SHA256 = "c6765e0efe58ad202204774185587b24192ce6d981eb1cf06f6f6edbe6909338"
 BASE_SHA256 = "af0bb656e8a955befbdcdc031cce7c78d62248cd3b90adebf1e63d837298ce79"
 PREFIX_SHA256 = "fca2017b1923ed0725d54fd8829e288f677b75a78b93eff12bd862ad07312697"
 #: The look file's two added sections, the terminal app and the static UI, each from its heading to the next one (or the end).
 APP_SECTION_SHA256 = "2b18ab73f23aa95571ab971d548e464ed5dfeec1678e836e0b35eee5a1312049"
-UI_SECTION_SHA256 = "f39b5a83b13e3a3378a994150a3187cc7e764d63e01365641b9409e9c6febfa7"
+UI_SECTION_SHA256 = "4cd818b59514a24af59142c6500b2b9ae24dc1f33d65a1e5272fb58c8c0f663e"
 #: The exit codes and their meanings, the look file's exit-code table's first column and the start of
 #: its second.
 EXIT_CODES = {
@@ -162,8 +162,8 @@ def test_pf6_0_the_new_sections_follow_the_files_old_end_and_no_dated_note_is_ad
     look = _look()
     rest = look[len(_amended_base()):]
     assert rest.startswith("\n## The terminal app\n"), rest[:60]
-    assert re.findall(r"^## .+$", rest, re.MULTILINE) == ["## The terminal app", "## The static UI"]
-    app = rest[1:].split("## The static UI", 1)[0]
+    assert re.findall(r"^## .+$", rest, re.MULTILINE) == ["## The terminal app", "## The banner", "## The static UI"]
+    app = rest[1:].split("## The banner", 1)[0]
     ui = "## The static UI" + rest.split("## The static UI", 1)[1]
     import hashlib
 

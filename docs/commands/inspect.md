@@ -3,7 +3,8 @@
 Prints the episodes of one run that ended in an outcome, or in an error of a kind: each with its
 condition, its seed and, when the run stored one, its trace, step by step. It ends with a snippet
 that reproduces the first of them: the rollout, called with that condition and that seed. It is
-the one verb that reads what a rollout put in `meta`.
+the one verb that reads what a rollout put in `meta`. Identical errors print as one traceback with
+a count of the episodes that have it, each of them on a line of its own under it.
 
 <!-- docs-check: setup quickstart -->
 
@@ -48,7 +49,9 @@ examples:
   stored. Without it the refusal lists the events the run carries.
 - `--where KEY=VALUE` keeps only the episodes whose condition has that value; repeat it to narrow
   further. The value is read as TOML, so a word is quoted: `--where 'task_id="refund"'`.
-- `--limit N` prints at most `N` episodes; `N` is 1 or more.
+- `--limit N` prints at most `N` episodes; `N` is 1 or more. A count under a traceback is of
+  every episode with that error, listed or not; an error none of the listed episodes has is
+  counted in one line.
 - `--json` prints the episodes and the snippet's parts as one JSON document,
   `poisson-prove.inspect/1`.
 - `--store PATH` is the store folder; `--plain` prints plain text on a terminal too; `--debug`

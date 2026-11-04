@@ -1275,7 +1275,7 @@ def test_o18_the_block_follows_the_interval_block_and_its_first_line_carries_the
     never by ``endswith``: a later change may append after it. The first line's p, q, verdict,
     cell count and event count are captured and checked against the fields under rule 10."""
     multi, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, (out, err)
     # The pair shares a salt, so stderr now carries one note line.
     assert without_notes(err) == "", err
@@ -1292,7 +1292,7 @@ def test_o18_the_block_follows_the_interval_block_and_its_first_line_carries_the
 
 def test_o18_the_other_branch_reads_not_rejected(synth_root: Path) -> None:
     _, root = store_root(synth_root, "same-a", "same-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail", "--method", "fisher_bh"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "same-a", "same-b", "--event", "fail", "--method", "fisher_bh"])
     # The pair shares a salt, so stderr now carries one note line.
     assert code == 0 and without_notes(err) == "", (out, err)
     match = OMNIBUS_FIRST_LINE.search(out)
@@ -1308,7 +1308,7 @@ def test_o18_the_second_line_and_the_informative_line_carry_the_fields(synth_roo
     _, root = store_root(synth_root, "moved-a", "moved-b", events=("fail",), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
     # PF3: the synthetic pair shares a salt, so the default is now the
     # paired test (scheme pair_swap); the root here is the unpaired test's, named.
-    code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
+    code, out, _ = run_cli(["--store", str(synth_root), "diff", "--full", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, out
     second = OMNIBUS_SECOND_LINE.search(out)
     assert second is not None, out
@@ -1325,7 +1325,7 @@ def test_o18_one_location_and_one_dispersion_line_per_event_in_events_order(synt
     """The three-outcome pair on the store, both events requested: two ``location`` lines and two
     ``dispersion`` lines, in ``multi.events`` order, values under rule 10 (``:g`` before it)."""
     _, root = store_root(synth_root, "tri-a", "tri-b", events=("x", "y"), method="fisher_bh", n_permutations=EXPECTED_DEFAULT_PERMUTATIONS, seed=EXPECTED_DEFAULT_SEED)
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "tri-a", "tri-b", "--event", "x", "--event", "y"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "tri-a", "tri-b", "--event", "x", "--event", "y"])
     # The pair shares a salt, so stderr now carries one note line.
     assert code == 0 and without_notes(err) == "", (out, err)
     block = omnibus_block(out)
@@ -1394,7 +1394,7 @@ def test_o19_the_cli_block_uses_none_of_the_forbidden_vocabulary(synth_root: Pat
     ``steps``, so a block that printed the unit would trip ``step``; the block does not
     print it."""
     for a, b, events in (("moved-a", "moved-b", ("fail",)), ("same-a", "same-b", ("fail",)), ("tri-a", "tri-b", ("x", "y"))):
-        argv = ["--store", str(synth_root), "diff", a, b]
+        argv = ["--store", str(synth_root), "diff", "--full", a, b]
         for event in events:
             argv += ["--event", event]
         code, out, _ = run_cli(argv)
@@ -1425,7 +1425,7 @@ def test_o20_every_headline_quotes_the_null_and_names_the_family(
 
 def test_o20_the_cli_block_quotes_the_null_and_names_the_family(synth_root: Path) -> None:
     for a, b, events in (("moved-a", "moved-b", ("fail",)), ("tri-a", "tri-b", ("x", "y"))):
-        argv = ["--store", str(synth_root), "diff", a, b]
+        argv = ["--store", str(synth_root), "diff", "--full", a, b]
         for event in events:
             argv += ["--event", event]
         code, out, _ = run_cli(argv)

@@ -4,6 +4,31 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.2.0 — 2026-11-04
+
+### Changed
+
+- `diff` reads in plain words by default: the verdict block, then one table of the conditions in
+  the order of their axis values, each with its change and the smallest rise and fall it could
+  have detected, and what the comparison left out, in words. The machine sections (the per-event
+  tables by hash, the coverage table, the omnibus, the fault lines and the bound) moved behind
+  `--full`, which prints what `diff` printed before. A tool that read them from the text passes
+  `--full` or reads `--json`, which did not change.
+- Saved comparison ids change at this minor: an id hashes the tool's major and minor version, so
+  the same comparison saved again under 0.2.0 gets a new id. Comparisons saved by 0.1.x stay
+  readable.
+- `inspect` prints identical errors as one traceback with a count of the episodes that have it,
+  each listed episode on a line of its own under it; an error none of the listed episodes has is
+  counted in one line. `--json` is unchanged.
+- The dashboard's comparison page shows its heatmaps on the first screen, between the verdict's
+  detail lines and what the verdict rests on; the differences and limits charts stay after the
+  conditions.
+- The `limits` line of `diff`, `check`, `report`, the dashboard and the terminal app counts the
+  rows with no limit by direction, so a row with no limit on its fall is not said to have none on
+  its rise; "no change of any size" is said only of a row with no limit either way.
+- The look file gains the banner section the Poisson Labs tools share, and its static UI's type
+  rule lets labels (table headers, detail labels, captions) take the system's sans.
+
 ## 0.1.3 — 2026-11-04
 
 ### Fixed

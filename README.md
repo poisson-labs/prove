@@ -54,9 +54,9 @@ tools fail most the retries use up its budget. "Paired test on shared seeds" say
 the same random numbers, so each episode is compared with its twin. The counts move a little from
 one pair of sweeps to the next, since each pair draws fresh seeds; the verdict did not, in our runs.
 
-The lines under it name the method and the two runs; the full output goes on, with every
-condition's change, an interval on it and the smallest change it could have detected. The `next:`
-line is the command to run next, whole.
+The lines under it name the method and the two runs; then comes one table of the conditions, each
+with its change and the smallest change it could have detected, and `--full` adds the intervals and
+the layered report. The `next:` line is the command to run next, whole.
 
 ## Let your coding agent set it up
 

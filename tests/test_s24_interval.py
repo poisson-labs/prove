@@ -1291,7 +1291,7 @@ def test_c18_the_diff_output_prints_the_alpha_star_arithmetic_and_names_the_fami
     result = synth_diff(synth_root, "moved-a", "moved-b", "fisher_bh")
     # PF3: the synthetic pair shares a salt, so the default is the paired test (basis
     # score_rd_paired); these fields are the unpaired test's, named.
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "moved-a", "moved-b", "--event", "fail", "--method", "fisher_bh"])
     assert code == 0, (out, err)
     # A shared salt adds one note line on stderr; nothing else is there.
     assert without_notes(err) == "", err
@@ -1312,7 +1312,7 @@ def test_c18_the_diff_output_prints_both_disagreement_counts(lattice_pair: Any) 
     result = lattice_pair
     assert result.n_interval_only != result.n_verdict_only, (result.n_interval_only, result.n_verdict_only)
     code, out, _ = run_cli(
-        ["--store", str(LATTICE_ROOT), "diff", RUN_A, RUN_B, "--event", EVENT, "--event", OTHER, "--method", "fisher_bh"]
+        ["--store", str(LATTICE_ROOT), "diff", "--full", RUN_A, RUN_B, "--event", EVENT, "--event", OTHER, "--method", "fisher_bh"]
     )
     assert code == 0, out
     assert f"interval excludes zero, verdict unchanged: {result.n_interval_only} cells" in out
@@ -1324,7 +1324,7 @@ def test_c18_the_diff_output_prints_the_no_interval_line_when_nothing_was_reject
 ) -> None:
     """The branch where nothing was rejected. The interval line is printed there too, at the
     simultaneous level 1 - q / M, and no line says no interval was computed."""
-    code, out, err = run_cli(["--store", str(synth_root), "diff", "same-a", "same-b", "--event", "fail"])
+    code, out, err = run_cli(["--store", str(synth_root), "diff", "--full", "same-a", "same-b", "--event", "fail"])
     assert code == 0, (out, err)
     # A shared salt adds one note line on stderr; nothing else is there.
     assert without_notes(err) == "", err
@@ -1346,7 +1346,7 @@ def test_c18_the_diff_output_prints_the_no_interval_line_when_nothing_was_reject
 def test_c18_the_interval_block_follows_the_coverage_block(synth_root: Path) -> None:
     """After the coverage block. The order is the reading order -- what was
     measured, then what the measurement bounds."""
-    code, out, _ = run_cli(["--store", str(synth_root), "diff", "moved-a", "moved-b", "--event", "fail"])
+    code, out, _ = run_cli(["--store", str(synth_root), "diff", "--full", "moved-a", "moved-b", "--event", "fail"])
     assert code == 0, out
     assert "## coverage" in out, out
     assert out.index("## coverage") < out.index("intervals: "), out

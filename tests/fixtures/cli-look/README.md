@@ -14,9 +14,9 @@ made from, both kept in this folder so the tests read nothing outside the reposi
 
 The base with the three changes applied is the first 120 lines of `docs/cli-look.md`, up to and
 including the paragraph that closes the exit-code table (sha256
-`fca2017b1923ed0725d54fd8829e288f677b75a78b93eff12bd862ad07312697`). The two sections after it, the
-terminal app and the static UI, are new. The whole file's sha256 is
-`92e71488c2824c056252be9a7b340e7fc138d15359fbcb7431bcfc6fa267d85f`, 275 lines.
+`fca2017b1923ed0725d54fd8829e288f677b75a78b93eff12bd862ad07312697`). The three sections after it, the
+terminal app, the banner and the static UI, are new. The whole file's sha256 is
+`c6765e0efe58ad202204774185587b24192ce6d981eb1cf06f6f6edbe6909338`, 311 lines.
 
 Another tool's amended copy carries the same three changes and a dated note under the title;
 Prove's copy does not carry the note, since the file states rules, not their history.

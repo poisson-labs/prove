@@ -1,0 +1,2794 @@
+{
+  "schema": "poisson-prove.diff/1",
+  "verdict": "mixed",
+  "sentence": "timeout: 1 lower, 1 higher · violated: 6 lower, 0 higher (paired test on shared seeds)",
+  "method": "mcnemar_bh",
+  "method_chosen": "default",
+  "seed_identity_match": true,
+  "unpaired_analysis": false,
+  "q": 0.05,
+  "t_unit": "tool_calls",
+  "horizon": 20.0,
+  "n_tests": 18,
+  "n_not_comparable": 0,
+  "dropped_a": 0,
+  "dropped_b": 0,
+  "truncated": 0,
+  "inferred": true,
+  "non_event": "completed",
+  "events": [
+    "violated",
+    "timeout"
+  ],
+  "by_event": {
+    "violated": {
+      "event": "violated",
+      "n_safer": null,
+      "n_worse": null,
+      "n_unchanged": 3,
+      "max_mde": 0.278,
+      "max_mde_unchanged": 0.12300000000000001,
+      "max_mde_unchanged_cell": "b4a971a744b471f8",
+      "cause_specific": false,
+      "kind": null,
+      "n_higher": 0,
+      "n_lower": 6,
+      "n_holm_higher": 0,
+      "n_holm_lower": 6,
+      "n_holm_safer": null,
+      "n_holm_worse": null,
+      "n_unflaggable": 0,
+      "together_needed": null,
+      "replicates_for_lone_flag": null,
+      "cells": [
+        {
+          "config_hash": "1ad7c42d72bbb09d",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 26,
+          "events_b": 1,
+          "rate_a": 0.25999999999999995,
+          "rate_b": 0.009999999999999998,
+          "delta": -0.25,
+          "stat": 25.0,
+          "p": 5.960464477539063e-08,
+          "q": 1.7881393432617188e-07,
+          "verdict": "lower",
+          "mde": 0.2742,
+          "direction": "lower",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 25,
+          "mde_note": null,
+          "q_holm": 7.748603820800781e-07,
+          "holm": true,
+          "mde_rise": 0.2742,
+          "mde_fall": 0.20090000000000002,
+          "mde_rise_note": null,
+          "mde_fall_note": null,
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.2742,
+          "mde_fall_verdict": 0.20090000000000002,
+          "competing_shift": null,
+          "ci_lo": -0.35973672572663185,
+          "ci_hi": -0.16510593284261638,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.26,
+            "lo": 0.18404698464748132,
+            "hi": 0.3537098944918718,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.01,
+            "lo": 0.0017674320641406505,
+            "hi": 0.054486196178705315,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "2f1955b54cf0584f",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 30,
+          "events_b": 1,
+          "rate_a": 0.29999999999999993,
+          "rate_b": 0.01,
+          "delta": -0.29,
+          "stat": 29.0,
+          "p": 3.725290298461914e-09,
+          "q": 1.3411045074462891e-08,
+          "verdict": "lower",
+          "mde": 0.278,
+          "direction": "lower",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 29,
+          "mde_note": null,
+          "q_holm": 5.21540641784668e-08,
+          "holm": true,
+          "mde_rise": 0.278,
+          "mde_fall": 0.21810000000000002,
+          "mde_rise_note": null,
+          "mde_fall_note": null,
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.278,
+          "mde_fall_verdict": 0.21810000000000002,
+          "competing_shift": null,
+          "ci_lo": -0.4021151509268255,
+          "ci_hi": -0.1987526822713429,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.3,
+            "lo": 0.2189488529493276,
+            "hi": 0.3958485463334666,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.01,
+            "lo": 0.0017674320641406505,
+            "hi": 0.054486196178705315,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "7b806df50938571e",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 84,
+          "events_b": 29,
+          "rate_a": 0.8400000000000002,
+          "rate_b": 0.2900000000000001,
+          "delta": -0.55,
+          "stat": 55.0,
+          "p": 5.551115123125783e-17,
+          "q": 3.3306690738754696e-16,
+          "verdict": "lower",
+          "mde": 0.2534,
+          "direction": "lower",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 55,
+          "mde_note": null,
+          "q_holm": 8.881784197001252e-16,
+          "holm": true,
+          "mde_rise": 0.1484,
+          "mde_fall": 0.2534,
+          "mde_rise_note": null,
+          "mde_fall_note": null,
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.1484,
+          "mde_fall_verdict": 0.2534,
+          "competing_shift": null,
+          "ci_lo": -0.65843591972093,
+          "ci_hi": -0.43659554856522054,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.84,
+            "lo": 0.7557973061072976,
+            "hi": 0.8990471151119521,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.29,
+            "lo": 0.2101483574912227,
+            "hi": 0.3853889117557111,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "aa41370fbf30bb3a",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 19,
+          "events_b": 0,
+          "rate_a": 0.18999999999999997,
+          "rate_b": 0.0,
+          "delta": -0.19,
+          "stat": 19.0,
+          "p": 3.814697265625e-06,
+          "q": 8.58306884765625e-06,
+          "verdict": "lower",
+          "mde": 0.2617,
+          "direction": "lower",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 19,
+          "mde_note": null,
+          "q_holm": 4.1961669921875e-05,
+          "holm": true,
+          "mde_rise": 0.2617,
+          "mde_fall": 0.16570000000000001,
+          "mde_rise_note": null,
+          "mde_fall_note": null,
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.2617,
+          "mde_fall_verdict": 0.16570000000000001,
+          "competing_shift": null,
+          "ci_lo": -0.2941932458183465,
+          "ci_hi": -0.11661165080752126,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.19,
+            "lo": 0.12514751509768735,
+            "hi": 0.27778845379064376,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "b4a971a744b471f8",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": 0.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": 0.12300000000000001,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 0,
+          "mde_note": null,
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.12300000000000001,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "no room",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.12300000000000001,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.04968531713849632,
+          "ci_hi": 0.04968531713849632,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "b67467242f0e71da",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 80,
+          "events_b": 22,
+          "rate_a": 0.8000000000000002,
+          "rate_b": 0.21999999999999997,
+          "delta": -0.58,
+          "stat": 58.0,
+          "p": 6.938893903907228e-18,
+          "q": 6.245004513516506e-17,
+          "verdict": "lower",
+          "mde": 0.264,
+          "direction": "lower",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 58,
+          "mde_note": null,
+          "q_holm": 1.1796119636642288e-16,
+          "holm": true,
+          "mde_rise": 0.171,
+          "mde_fall": 0.264,
+          "mde_rise_note": null,
+          "mde_fall_note": null,
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.171,
+          "mde_fall_verdict": 0.264,
+          "competing_shift": null,
+          "ci_lo": -0.6861121515683761,
+          "ci_hi": -0.46593819768946443,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.8,
+            "lo": 0.7111708344068411,
+            "hi": 0.8666330666689676,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.22,
+            "lo": 0.150012823846054,
+            "hi": 0.31070353514985793,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "b7b476846d983a43",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 90,
+          "events_b": 31,
+          "rate_a": 0.9000000000000004,
+          "rate_b": 0.31,
+          "delta": -0.59,
+          "stat": 59.0,
+          "p": 3.469446951953614e-18,
+          "q": 6.245004513516506e-17,
+          "verdict": "lower",
+          "mde": null,
+          "direction": "lower",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 59,
+          "mde_note": "none detectable",
+          "q_holm": 6.245004513516506e-17,
+          "holm": true,
+          "mde_rise": null,
+          "mde_fall": 0.22870000000000001,
+          "mde_rise_note": "none detectable",
+          "mde_fall_note": null,
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": null,
+          "mde_fall_verdict": 0.22870000000000001,
+          "competing_shift": null,
+          "ci_lo": -0.695250124782077,
+          "ci_hi": -0.4758065181329937,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.9,
+            "lo": 0.8256343384950865,
+            "hi": 0.9447708629393249,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.31,
+            "lo": 0.22779697212376038,
+            "hi": 0.40626055719489407,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "c9d973c669310f5d",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": 0.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": 0.12300000000000001,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 0,
+          "mde_note": null,
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.12300000000000001,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "no room",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.12300000000000001,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.04968531713849632,
+          "ci_hi": 0.04968531713849632,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "dfe7178686aa319c",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": 0.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": 0.12300000000000001,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 0,
+          "mde_note": null,
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.12300000000000001,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "no room",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.12300000000000001,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.04968531713849632,
+          "ci_hi": 0.04968531713849632,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        }
+      ]
+    },
+    "timeout": {
+      "event": "timeout",
+      "n_safer": null,
+      "n_worse": null,
+      "n_unchanged": 7,
+      "max_mde": 0.2712,
+      "max_mde_unchanged": 0.12300000000000001,
+      "max_mde_unchanged_cell": "aa41370fbf30bb3a",
+      "cause_specific": false,
+      "kind": null,
+      "n_higher": 1,
+      "n_lower": 1,
+      "n_holm_higher": 1,
+      "n_holm_lower": 1,
+      "n_holm_safer": null,
+      "n_holm_worse": null,
+      "n_unflaggable": 0,
+      "together_needed": null,
+      "replicates_for_lone_flag": null,
+      "cells": [
+        {
+          "config_hash": "1ad7c42d72bbb09d",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 1,
+          "events_b": 0,
+          "rate_a": 0.009999999999999995,
+          "rate_b": 0.0,
+          "delta": -0.01,
+          "stat": 1.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": null,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 1,
+          "mde_note": "none detectable",
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.1457,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "none detectable",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.1457,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.06727911498165295,
+          "ci_hi": 0.04018217030988128,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.01,
+            "lo": 0.0017674320641406505,
+            "hi": 0.054486196178705315,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "2f1955b54cf0584f",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 51,
+          "events_b": 2,
+          "rate_a": 0.5099999999999999,
+          "rate_b": 0.020000000000000004,
+          "delta": -0.49,
+          "stat": 49.0,
+          "p": 3.1796787425264483e-13,
+          "q": 1.4308554341369017e-12,
+          "verdict": "lower",
+          "mde": 0.2712,
+          "direction": "lower",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 2,
+          "n10": 51,
+          "mde_note": null,
+          "q_holm": 4.7695181137896725e-12,
+          "holm": true,
+          "mde_rise": 0.26830000000000004,
+          "mde_fall": 0.2712,
+          "mde_rise_note": null,
+          "mde_fall_note": null,
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.26830000000000004,
+          "mde_fall_verdict": 0.2712,
+          "competing_shift": null,
+          "ci_lo": -0.6070016071883597,
+          "ci_hi": -0.360739725427517,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.51,
+            "lo": 0.4134801193402717,
+            "hi": 0.6057800106955886,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.02,
+            "lo": 0.00550196755016235,
+            "hi": 0.07001179072854388,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "7b806df50938571e",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 16,
+          "events_b": 47,
+          "rate_a": 0.16000000000000003,
+          "rate_b": 0.4699999999999998,
+          "delta": 0.31,
+          "stat": -31.0,
+          "p": 1.636124125070637e-06,
+          "q": 4.207176321610209e-06,
+          "verdict": "higher",
+          "mde": 0.2534,
+          "direction": "higher",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 37,
+          "n10": 6,
+          "mde_note": null,
+          "q_holm": 1.9633489500847645e-05,
+          "holm": true,
+          "mde_rise": 0.2534,
+          "mde_fall": 0.1484,
+          "mde_rise_note": null,
+          "mde_fall_note": null,
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.2534,
+          "mde_fall_verdict": 0.1484,
+          "competing_shift": null,
+          "ci_lo": 0.17281775459765025,
+          "ci_hi": 0.43981741580474953,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.16,
+            "lo": 0.10095288488804782,
+            "hi": 0.24420269389270244,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.47,
+            "lo": 0.3751081795934127,
+            "hi": 0.5671114302990063,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "aa41370fbf30bb3a",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": 0.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": 0.12300000000000001,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 0,
+          "mde_note": null,
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.12300000000000001,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "no room",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.12300000000000001,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.04968531713849632,
+          "ci_hi": 0.04968531713849632,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "b4a971a744b471f8",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": 0.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": 0.12300000000000001,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 0,
+          "mde_note": null,
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.12300000000000001,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "no room",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.12300000000000001,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.04968531713849632,
+          "ci_hi": 0.04968531713849632,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "b67467242f0e71da",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 1,
+          "events_b": 0,
+          "rate_a": 0.009999999999999998,
+          "rate_b": 0.0,
+          "delta": -0.01,
+          "stat": 1.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": null,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 1,
+          "mde_note": "none detectable",
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.1457,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "none detectable",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.1457,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.06727911498165295,
+          "ci_hi": 0.04018217030988128,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.01,
+            "lo": 0.0017674320641406505,
+            "hi": 0.054486196178705315,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "b7b476846d983a43",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 4,
+          "events_b": 2,
+          "rate_a": 0.040000000000000015,
+          "rate_b": 0.01999999999999999,
+          "delta": -0.02,
+          "stat": 2.0,
+          "p": 0.6875,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": null,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 2,
+          "n10": 4,
+          "mde_note": "none detectable",
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.1829,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "none detectable",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.1829,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.09555002811800828,
+          "ci_hi": 0.04907392449454058,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.04,
+            "lo": 0.01566330399154762,
+            "hi": 0.0983707143588792,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.02,
+            "lo": 0.00550196755016235,
+            "hi": 0.07001179072854388,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "c9d973c669310f5d",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": 0.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": 0.12300000000000001,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 0,
+          "mde_note": null,
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.12300000000000001,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "no room",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.12300000000000001,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.04968531713849632,
+          "ci_hi": 0.04968531713849632,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        },
+        {
+          "config_hash": "dfe7178686aa319c",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "rate_a": 0.0,
+          "rate_b": 0.0,
+          "delta": 0.0,
+          "stat": 0.0,
+          "p": 1.0,
+          "q": 1.0,
+          "verdict": "unchanged",
+          "mde": 0.12300000000000001,
+          "direction": "unchanged",
+          "direction_note": null,
+          "pairs": 100,
+          "n01": 0,
+          "n10": 0,
+          "mde_note": null,
+          "q_holm": 1.0,
+          "holm": false,
+          "mde_rise": 0.12300000000000001,
+          "mde_fall": null,
+          "mde_rise_note": null,
+          "mde_fall_note": "no room",
+          "mde_test": "mcnemar",
+          "mde_basis": "test",
+          "mde_level": 0.002777777777777778,
+          "mde_family": 18,
+          "mde_power": 0.8,
+          "mde_anchor": "observed baseline",
+          "mde_hr": null,
+          "p_min": 1.5777218104420236e-30,
+          "flaggable": true,
+          "mde_moves_with": null,
+          "mde_rise_verdict": 0.12300000000000001,
+          "mde_fall_verdict": null,
+          "competing_shift": null,
+          "ci_lo": -0.04968531713849632,
+          "ci_hi": 0.04968531713849632,
+          "ci_level": 0.9777777777777777,
+          "ci_method": "tango",
+          "share_a": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_a_differs": false,
+          "share_b": {
+            "value": 0.0,
+            "lo": 0.0,
+            "hi": 0.03699349820698568,
+            "level": 0.95,
+            "method": "wilson"
+          },
+          "share_b_differs": false
+        }
+      ]
+    }
+  },
+  "trades": [
+    {
+      "config_hash": "7b806df50938571e",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.55
+      },
+      "safer_events": [
+        "violated"
+      ],
+      "worse_events": [
+        "timeout"
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "config_hash": "1ad7c42d72bbb09d",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.3
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    },
+    {
+      "config_hash": "2f1955b54cf0584f",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.3
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.55
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    },
+    {
+      "config_hash": "aa41370fbf30bb3a",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.3
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    },
+    {
+      "config_hash": "b4a971a744b471f8",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.0
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    },
+    {
+      "config_hash": "b67467242f0e71da",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.55
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    },
+    {
+      "config_hash": "b7b476846d983a43",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.55
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    },
+    {
+      "config_hash": "c9d973c669310f5d",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.0
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    },
+    {
+      "config_hash": "dfe7178686aa319c",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.0
+      },
+      "rows_a": 100,
+      "rows_b": 100,
+      "no_outcome_a": 0,
+      "no_outcome_b": 0,
+      "comparable": true,
+      "cause": null
+    }
+  ],
+  "intervals": [
+    {
+      "event": "violated",
+      "config_hash": "1ad7c42d72bbb09d",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.3
+      },
+      "ci_lo": -0.35973672572663185,
+      "ci_hi": -0.16510593284261638,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "1ad7c42d72bbb09d",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.3
+      },
+      "ci_lo": -0.06727911498165295,
+      "ci_hi": 0.04018217030988128,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "violated",
+      "config_hash": "2f1955b54cf0584f",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.3
+      },
+      "ci_lo": -0.4021151509268255,
+      "ci_hi": -0.1987526822713429,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "2f1955b54cf0584f",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.3
+      },
+      "ci_lo": -0.6070016071883597,
+      "ci_hi": -0.360739725427517,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "violated",
+      "config_hash": "7b806df50938571e",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.55
+      },
+      "ci_lo": -0.65843591972093,
+      "ci_hi": -0.43659554856522054,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "7b806df50938571e",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.55
+      },
+      "ci_lo": 0.17281775459765025,
+      "ci_hi": 0.43981741580474953,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "violated",
+      "config_hash": "aa41370fbf30bb3a",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.3
+      },
+      "ci_lo": -0.2941932458183465,
+      "ci_hi": -0.11661165080752126,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "aa41370fbf30bb3a",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.3
+      },
+      "ci_lo": -0.04968531713849632,
+      "ci_hi": 0.04968531713849632,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "violated",
+      "config_hash": "b4a971a744b471f8",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.0
+      },
+      "ci_lo": -0.04968531713849632,
+      "ci_hi": 0.04968531713849632,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "b4a971a744b471f8",
+      "config": {
+        "task_id": "refund",
+        "tool_fail_rate": 0.0
+      },
+      "ci_lo": -0.04968531713849632,
+      "ci_hi": 0.04968531713849632,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "violated",
+      "config_hash": "b67467242f0e71da",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.55
+      },
+      "ci_lo": -0.6861121515683761,
+      "ci_hi": -0.46593819768946443,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "b67467242f0e71da",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.55
+      },
+      "ci_lo": -0.06727911498165295,
+      "ci_hi": 0.04018217030988128,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "violated",
+      "config_hash": "b7b476846d983a43",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.55
+      },
+      "ci_lo": -0.695250124782077,
+      "ci_hi": -0.4758065181329937,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "b7b476846d983a43",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.55
+      },
+      "ci_lo": -0.09555002811800828,
+      "ci_hi": 0.04907392449454058,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "violated",
+      "config_hash": "c9d973c669310f5d",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.0
+      },
+      "ci_lo": -0.04968531713849632,
+      "ci_hi": 0.04968531713849632,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "c9d973c669310f5d",
+      "config": {
+        "task_id": "search",
+        "tool_fail_rate": 0.0
+      },
+      "ci_lo": -0.04968531713849632,
+      "ci_hi": 0.04968531713849632,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "violated",
+      "config_hash": "dfe7178686aa319c",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.0
+      },
+      "ci_lo": -0.04968531713849632,
+      "ci_hi": 0.04968531713849632,
+      "basis": "score_rd_paired"
+    },
+    {
+      "event": "timeout",
+      "config_hash": "dfe7178686aa319c",
+      "config": {
+        "task_id": "checkout",
+        "tool_fail_rate": 0.0
+      },
+      "ci_lo": -0.04968531713849632,
+      "ci_hi": 0.04968531713849632,
+      "basis": "score_rd_paired"
+    }
+  ],
+  "interval_level": 0.9777777777777777,
+  "interval_rule": "benjamini-yekutieli",
+  "alpha_star": 0.022222222222222223,
+  "n_rejected": 8,
+  "n_interval_only": 0,
+  "n_verdict_only": 0,
+  "threshold": 0.2,
+  "threshold_source": "recorded",
+  "comparison_verdict": "mixed",
+  "flag_rule": "benjamini-hochberg",
+  "verdict_rule": "holm",
+  "n_flagged_only": 0,
+  "verdict_limit": 0.1829,
+  "fragility": 10,
+  "fragility_flips": [
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 3,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 2,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 25,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 42,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 51,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 52,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 67,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 78,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 84,
+      "to": "not event"
+    },
+    {
+      "config_hash": "7b806df50938571e",
+      "event": "timeout",
+      "run": "b",
+      "replicate_index": 89,
+      "to": "not event"
+    }
+  ],
+  "fragility_note": null,
+  "fragility_exact": false,
+  "peeking": [],
+  "errors_differ": [],
+  "headline": "timeout: 1 lower, 1 higher · violated: 6 lower, 0 higher\n(aalen_johansen + mcnemar_bh, BH q<0.05 over 18 tests, paired)",
+  "trade_line": "Trade: violated fell in 1 cell where timeout rose.",
+  "omnibus": {
+    "events": [
+      "violated",
+      "timeout"
+    ],
+    "method": "mcnemar_bh",
+    "scheme": "pair_swap",
+    "q": 0.05,
+    "n_cells": 9,
+    "n_informative_cells": 6,
+    "n_uninformative_cells": 3,
+    "n_discordant": 308,
+    "n_permutations": 4000,
+    "p_floor": 0.00024993751562109475,
+    "seed": 0,
+    "units": [
+      {
+        "event": "violated",
+        "config_hash": "1ad7c42d72bbb09d",
+        "config": {
+          "task_id": "checkout",
+          "tool_fail_rate": 0.3
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 26,
+        "events_b": 1,
+        "delta": -0.25
+      },
+      {
+        "event": "violated",
+        "config_hash": "2f1955b54cf0584f",
+        "config": {
+          "task_id": "refund",
+          "tool_fail_rate": 0.3
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 30,
+        "events_b": 1,
+        "delta": -0.29
+      },
+      {
+        "event": "violated",
+        "config_hash": "7b806df50938571e",
+        "config": {
+          "task_id": "refund",
+          "tool_fail_rate": 0.55
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 84,
+        "events_b": 29,
+        "delta": -0.55
+      },
+      {
+        "event": "violated",
+        "config_hash": "aa41370fbf30bb3a",
+        "config": {
+          "task_id": "search",
+          "tool_fail_rate": 0.3
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 19,
+        "events_b": 0,
+        "delta": -0.19
+      },
+      {
+        "event": "violated",
+        "config_hash": "b4a971a744b471f8",
+        "config": {
+          "task_id": "refund",
+          "tool_fail_rate": 0.0
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 0,
+        "events_b": 0,
+        "delta": 0.0
+      },
+      {
+        "event": "violated",
+        "config_hash": "b67467242f0e71da",
+        "config": {
+          "task_id": "search",
+          "tool_fail_rate": 0.55
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 80,
+        "events_b": 22,
+        "delta": -0.5800000000000001
+      },
+      {
+        "event": "violated",
+        "config_hash": "b7b476846d983a43",
+        "config": {
+          "task_id": "checkout",
+          "tool_fail_rate": 0.55
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 90,
+        "events_b": 31,
+        "delta": -0.5900000000000001
+      },
+      {
+        "event": "violated",
+        "config_hash": "c9d973c669310f5d",
+        "config": {
+          "task_id": "search",
+          "tool_fail_rate": 0.0
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 0,
+        "events_b": 0,
+        "delta": 0.0
+      },
+      {
+        "event": "violated",
+        "config_hash": "dfe7178686aa319c",
+        "config": {
+          "task_id": "checkout",
+          "tool_fail_rate": 0.0
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 0,
+        "events_b": 0,
+        "delta": 0.0
+      },
+      {
+        "event": "timeout",
+        "config_hash": "1ad7c42d72bbb09d",
+        "config": {
+          "task_id": "checkout",
+          "tool_fail_rate": 0.3
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 1,
+        "events_b": 0,
+        "delta": -0.01
+      },
+      {
+        "event": "timeout",
+        "config_hash": "2f1955b54cf0584f",
+        "config": {
+          "task_id": "refund",
+          "tool_fail_rate": 0.3
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 51,
+        "events_b": 2,
+        "delta": -0.49
+      },
+      {
+        "event": "timeout",
+        "config_hash": "7b806df50938571e",
+        "config": {
+          "task_id": "refund",
+          "tool_fail_rate": 0.55
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 16,
+        "events_b": 47,
+        "delta": 0.30999999999999994
+      },
+      {
+        "event": "timeout",
+        "config_hash": "aa41370fbf30bb3a",
+        "config": {
+          "task_id": "search",
+          "tool_fail_rate": 0.3
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 0,
+        "events_b": 0,
+        "delta": 0.0
+      },
+      {
+        "event": "timeout",
+        "config_hash": "b4a971a744b471f8",
+        "config": {
+          "task_id": "refund",
+          "tool_fail_rate": 0.0
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 0,
+        "events_b": 0,
+        "delta": 0.0
+      },
+      {
+        "event": "timeout",
+        "config_hash": "b67467242f0e71da",
+        "config": {
+          "task_id": "search",
+          "tool_fail_rate": 0.55
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 1,
+        "events_b": 0,
+        "delta": -0.01
+      },
+      {
+        "event": "timeout",
+        "config_hash": "b7b476846d983a43",
+        "config": {
+          "task_id": "checkout",
+          "tool_fail_rate": 0.55
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 4,
+        "events_b": 2,
+        "delta": -0.02
+      },
+      {
+        "event": "timeout",
+        "config_hash": "c9d973c669310f5d",
+        "config": {
+          "task_id": "search",
+          "tool_fail_rate": 0.0
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 0,
+        "events_b": 0,
+        "delta": 0.0
+      },
+      {
+        "event": "timeout",
+        "config_hash": "dfe7178686aa319c",
+        "config": {
+          "task_id": "checkout",
+          "tool_fail_rate": 0.0
+        },
+        "n_a": 100,
+        "n_b": 100,
+        "events_a": 0,
+        "events_b": 0,
+        "delta": 0.0
+      }
+    ],
+    "location": {
+      "violated": -0.27222222222222225,
+      "timeout": -0.02444444444444445
+    },
+    "dispersion": {
+      "violated": 0.3605088995665248,
+      "timeout": 0.19344824171395877
+    },
+    "p_location": {
+      "violated": 0.00024993751562109475,
+      "timeout": 0.02799300174956261
+    },
+    "p_dispersion": {
+      "violated": 0.00024993751562109475,
+      "timeout": 0.00024993751562109475
+    },
+    "p_omnibus": 0.0004998750312421895,
+    "rejects": true,
+    "headline": "\"no cell changed\" is rejected (p = 0.000499875 < q 0.05) over 9 cells x 2 events"
+  },
+  "tree": {
+    "root": {
+      "events": [
+        "violated",
+        "timeout"
+      ],
+      "method": "mcnemar_bh",
+      "scheme": "pair_swap",
+      "q": 0.05,
+      "n_cells": 9,
+      "n_informative_cells": 6,
+      "n_uninformative_cells": 3,
+      "n_discordant": 308,
+      "n_permutations": 4000,
+      "p_floor": 0.00024993751562109475,
+      "seed": 0,
+      "units": [
+        {
+          "event": "violated",
+          "config_hash": "1ad7c42d72bbb09d",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 26,
+          "events_b": 1,
+          "delta": -0.25
+        },
+        {
+          "event": "violated",
+          "config_hash": "2f1955b54cf0584f",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 30,
+          "events_b": 1,
+          "delta": -0.29
+        },
+        {
+          "event": "violated",
+          "config_hash": "7b806df50938571e",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 84,
+          "events_b": 29,
+          "delta": -0.55
+        },
+        {
+          "event": "violated",
+          "config_hash": "aa41370fbf30bb3a",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 19,
+          "events_b": 0,
+          "delta": -0.19
+        },
+        {
+          "event": "violated",
+          "config_hash": "b4a971a744b471f8",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "violated",
+          "config_hash": "b67467242f0e71da",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 80,
+          "events_b": 22,
+          "delta": -0.5800000000000001
+        },
+        {
+          "event": "violated",
+          "config_hash": "b7b476846d983a43",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 90,
+          "events_b": 31,
+          "delta": -0.5900000000000001
+        },
+        {
+          "event": "violated",
+          "config_hash": "c9d973c669310f5d",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "violated",
+          "config_hash": "dfe7178686aa319c",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "timeout",
+          "config_hash": "1ad7c42d72bbb09d",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 1,
+          "events_b": 0,
+          "delta": -0.01
+        },
+        {
+          "event": "timeout",
+          "config_hash": "2f1955b54cf0584f",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 51,
+          "events_b": 2,
+          "delta": -0.49
+        },
+        {
+          "event": "timeout",
+          "config_hash": "7b806df50938571e",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 16,
+          "events_b": 47,
+          "delta": 0.30999999999999994
+        },
+        {
+          "event": "timeout",
+          "config_hash": "aa41370fbf30bb3a",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.3
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "timeout",
+          "config_hash": "b4a971a744b471f8",
+          "config": {
+            "task_id": "refund",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "timeout",
+          "config_hash": "b67467242f0e71da",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 1,
+          "events_b": 0,
+          "delta": -0.01
+        },
+        {
+          "event": "timeout",
+          "config_hash": "b7b476846d983a43",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.55
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 4,
+          "events_b": 2,
+          "delta": -0.02
+        },
+        {
+          "event": "timeout",
+          "config_hash": "c9d973c669310f5d",
+          "config": {
+            "task_id": "search",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        },
+        {
+          "event": "timeout",
+          "config_hash": "dfe7178686aa319c",
+          "config": {
+            "task_id": "checkout",
+            "tool_fail_rate": 0.0
+          },
+          "n_a": 100,
+          "n_b": 100,
+          "events_a": 0,
+          "events_b": 0,
+          "delta": 0.0
+        }
+      ],
+      "location": {
+        "violated": -0.27222222222222225,
+        "timeout": -0.02444444444444445
+      },
+      "dispersion": {
+        "violated": 0.3605088995665248,
+        "timeout": 0.19344824171395877
+      },
+      "p_location": {
+        "violated": 0.00024993751562109475,
+        "timeout": 0.02799300174956261
+      },
+      "p_dispersion": {
+        "violated": 0.00024993751562109475,
+        "timeout": 0.00024993751562109475
+      },
+      "p_omnibus": 0.0004998750312421895,
+      "rejects": true,
+      "headline": "\"no cell changed\" is rejected (p = 0.000499875 < q 0.05) over 9 cells x 2 events"
+    },
+    "grouping": {
+      "key": "task_id",
+      "resolved_by": "axis",
+      "requested": null,
+      "labels": [
+        "checkout",
+        "refund",
+        "search"
+      ],
+      "groups": {
+        "checkout": [
+          "1ad7c42d72bbb09d",
+          "b7b476846d983a43",
+          "dfe7178686aa319c"
+        ],
+        "refund": [
+          "2f1955b54cf0584f",
+          "7b806df50938571e",
+          "b4a971a744b471f8"
+        ],
+        "search": [
+          "aa41370fbf30bb3a",
+          "b67467242f0e71da",
+          "c9d973c669310f5d"
+        ]
+      },
+      "n_groups": 3,
+      "group_sizes": [
+        3,
+        3,
+        3
+      ],
+      "size_min": 3,
+      "size_median": 3.0,
+      "size_max": 3,
+      "alpha_floor": 0.016666666666666666,
+      "max_group_mde": 0.2,
+      "group_mde": [
+        0.18610000000000002,
+        0.1545,
+        0.1563
+      ],
+      "n_resolvable_groups": 3,
+      "refused": []
+    },
+    "fault_lines": {
+      "tested": true,
+      "reason": null,
+      "null": "no cell in the group changed",
+      "q": 0.05,
+      "n_groups": 3,
+      "n_degenerate_groups": 0,
+      "n_rejected_groups": 3,
+      "rejected_groups": [
+        "checkout",
+        "refund",
+        "search"
+      ],
+      "groups": [
+        {
+          "label": "checkout",
+          "key": "task_id",
+          "cells": [
+            "1ad7c42d72bbb09d",
+            "b7b476846d983a43",
+            "dfe7178686aa319c"
+          ],
+          "n_cells": 3,
+          "n_informative_cells": 2,
+          "n_uninformative_cells": 1,
+          "n_discordant": 89,
+          "n_a": 300,
+          "n_b": 300,
+          "mde": 0.18610000000000002,
+          "degenerate": false,
+          "location": {
+            "violated": -0.28,
+            "timeout": -0.01
+          },
+          "dispersion": {
+            "violated": 0.36995495221265345,
+            "timeout": 0.012909944487358056
+          },
+          "p_location": {
+            "violated": 0.00024993751562109475,
+            "timeout": 0.4358910272431892
+          },
+          "p_dispersion": {
+            "violated": 0.00024993751562109475,
+            "timeout": 0.6743314171457135
+          },
+          "p_group": 0.00024993751562109475,
+          "q_group": 0.0003749062734316421,
+          "rejects": true
+        },
+        {
+          "label": "refund",
+          "key": "task_id",
+          "cells": [
+            "2f1955b54cf0584f",
+            "7b806df50938571e",
+            "b4a971a744b471f8"
+          ],
+          "n_cells": 3,
+          "n_informative_cells": 2,
+          "n_uninformative_cells": 1,
+          "n_discordant": 141,
+          "n_a": 300,
+          "n_b": 300,
+          "mde": 0.1545,
+          "degenerate": false,
+          "location": {
+            "violated": -0.28,
+            "timeout": -0.06000000000000002
+          },
+          "dispersion": {
+            "violated": 0.35898003658513755,
+            "timeout": 0.33476359818036766
+          },
+          "p_location": {
+            "violated": 0.00024993751562109475,
+            "timeout": 0.06348412896775806
+          },
+          "p_dispersion": {
+            "violated": 0.00024993751562109475,
+            "timeout": 0.00024993751562109475
+          },
+          "p_group": 0.0004998750312421895,
+          "q_group": 0.0004998750312421895,
+          "rejects": true
+        },
+        {
+          "label": "search",
+          "key": "task_id",
+          "cells": [
+            "aa41370fbf30bb3a",
+            "b67467242f0e71da",
+            "c9d973c669310f5d"
+          ],
+          "n_cells": 3,
+          "n_informative_cells": 2,
+          "n_uninformative_cells": 1,
+          "n_discordant": 78,
+          "n_a": 300,
+          "n_b": 300,
+          "mde": 0.1563,
+          "degenerate": false,
+          "location": {
+            "violated": -0.25666666666666665,
+            "timeout": -0.0033333333333333335
+          },
+          "dispersion": {
+            "violated": 0.35237290853109965,
+            "timeout": 0.005773502691896258
+          },
+          "p_location": {
+            "violated": 0.00024993751562109475,
+            "timeout": 1.0
+          },
+          "p_dispersion": {
+            "violated": 0.00024993751562109475,
+            "timeout": 1.0
+          },
+          "p_group": 0.00024993751562109475,
+          "q_group": 0.0003749062734316421,
+          "rejects": true
+        }
+      ],
+      "mde_basis": "unconditional"
+    },
+    "leaves": {
+      "tested": true,
+      "reason": null,
+      "null": "this cell did not change",
+      "q": 0.05,
+      "n_families": 3,
+      "n_tests": 18,
+      "n_rejected": 8,
+      "families": [
+        {
+          "label": "checkout",
+          "key": "task_id",
+          "n_tests": 6,
+          "n_rejected": 2,
+          "rejected": [
+            [
+              "1ad7c42d72bbb09d",
+              "violated"
+            ],
+            [
+              "b7b476846d983a43",
+              "violated"
+            ]
+          ],
+          "mde_median": 0.12300000000000001,
+          "mde_max": 0.2742,
+          "cells": [
+            {
+              "config_hash": "1ad7c42d72bbb09d",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.3
+              },
+              "event": "violated",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 26,
+              "events_b": 1,
+              "delta": -0.25,
+              "p": 5.960464477539063e-08,
+              "q_within": 1.7881393432617188e-07,
+              "rejects": true,
+              "mde": 0.2742,
+              "mde_note": null
+            },
+            {
+              "config_hash": "1ad7c42d72bbb09d",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.3
+              },
+              "event": "timeout",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 1,
+              "events_b": 0,
+              "delta": -0.01,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": null,
+              "mde_note": "none detectable"
+            },
+            {
+              "config_hash": "b7b476846d983a43",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.55
+              },
+              "event": "violated",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 90,
+              "events_b": 31,
+              "delta": -0.59,
+              "p": 3.469446951953614e-18,
+              "q_within": 2.0816681711721685e-17,
+              "rejects": true,
+              "mde": null,
+              "mde_note": "none detectable"
+            },
+            {
+              "config_hash": "b7b476846d983a43",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.55
+              },
+              "event": "timeout",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 4,
+              "events_b": 2,
+              "delta": -0.02,
+              "p": 0.6875,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": null,
+              "mde_note": "none detectable"
+            },
+            {
+              "config_hash": "dfe7178686aa319c",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.0
+              },
+              "event": "violated",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.12300000000000001,
+              "mde_note": null
+            },
+            {
+              "config_hash": "dfe7178686aa319c",
+              "config": {
+                "task_id": "checkout",
+                "tool_fail_rate": 0.0
+              },
+              "event": "timeout",
+              "group": "checkout",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.12300000000000001,
+              "mde_note": null
+            }
+          ]
+        },
+        {
+          "label": "refund",
+          "key": "task_id",
+          "n_tests": 6,
+          "n_rejected": 4,
+          "rejected": [
+            [
+              "2f1955b54cf0584f",
+              "violated"
+            ],
+            [
+              "2f1955b54cf0584f",
+              "timeout"
+            ],
+            [
+              "7b806df50938571e",
+              "violated"
+            ],
+            [
+              "7b806df50938571e",
+              "timeout"
+            ]
+          ],
+          "mde_median": 0.2534,
+          "mde_max": 0.278,
+          "cells": [
+            {
+              "config_hash": "2f1955b54cf0584f",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.3
+              },
+              "event": "violated",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 30,
+              "events_b": 1,
+              "delta": -0.29,
+              "p": 3.725290298461914e-09,
+              "q_within": 7.450580596923828e-09,
+              "rejects": true,
+              "mde": 0.278,
+              "mde_note": null
+            },
+            {
+              "config_hash": "2f1955b54cf0584f",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.3
+              },
+              "event": "timeout",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 51,
+              "events_b": 2,
+              "delta": -0.49,
+              "p": 3.1796787425264483e-13,
+              "q_within": 9.539036227579345e-13,
+              "rejects": true,
+              "mde": 0.2712,
+              "mde_note": null
+            },
+            {
+              "config_hash": "7b806df50938571e",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.55
+              },
+              "event": "violated",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 84,
+              "events_b": 29,
+              "delta": -0.55,
+              "p": 5.551115123125783e-17,
+              "q_within": 3.3306690738754696e-16,
+              "rejects": true,
+              "mde": 0.2534,
+              "mde_note": null
+            },
+            {
+              "config_hash": "7b806df50938571e",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.55
+              },
+              "event": "timeout",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 16,
+              "events_b": 47,
+              "delta": 0.31,
+              "p": 1.636124125070637e-06,
+              "q_within": 2.4541861876059556e-06,
+              "rejects": true,
+              "mde": 0.2534,
+              "mde_note": null
+            },
+            {
+              "config_hash": "b4a971a744b471f8",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.0
+              },
+              "event": "violated",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.12300000000000001,
+              "mde_note": null
+            },
+            {
+              "config_hash": "b4a971a744b471f8",
+              "config": {
+                "task_id": "refund",
+                "tool_fail_rate": 0.0
+              },
+              "event": "timeout",
+              "group": "refund",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.12300000000000001,
+              "mde_note": null
+            }
+          ]
+        },
+        {
+          "label": "search",
+          "key": "task_id",
+          "n_tests": 6,
+          "n_rejected": 2,
+          "rejected": [
+            [
+              "aa41370fbf30bb3a",
+              "violated"
+            ],
+            [
+              "b67467242f0e71da",
+              "violated"
+            ]
+          ],
+          "mde_median": 0.12300000000000001,
+          "mde_max": 0.264,
+          "cells": [
+            {
+              "config_hash": "aa41370fbf30bb3a",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.3
+              },
+              "event": "violated",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 19,
+              "events_b": 0,
+              "delta": -0.19,
+              "p": 3.814697265625e-06,
+              "q_within": 1.1444091796875e-05,
+              "rejects": true,
+              "mde": 0.2617,
+              "mde_note": null
+            },
+            {
+              "config_hash": "aa41370fbf30bb3a",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.3
+              },
+              "event": "timeout",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.12300000000000001,
+              "mde_note": null
+            },
+            {
+              "config_hash": "b67467242f0e71da",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.55
+              },
+              "event": "violated",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 80,
+              "events_b": 22,
+              "delta": -0.58,
+              "p": 6.938893903907228e-18,
+              "q_within": 4.163336342344337e-17,
+              "rejects": true,
+              "mde": 0.264,
+              "mde_note": null
+            },
+            {
+              "config_hash": "b67467242f0e71da",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.55
+              },
+              "event": "timeout",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 1,
+              "events_b": 0,
+              "delta": -0.01,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": null,
+              "mde_note": "none detectable"
+            },
+            {
+              "config_hash": "c9d973c669310f5d",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.0
+              },
+              "event": "violated",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.12300000000000001,
+              "mde_note": null
+            },
+            {
+              "config_hash": "c9d973c669310f5d",
+              "config": {
+                "task_id": "search",
+                "tool_fail_rate": 0.0
+              },
+              "event": "timeout",
+              "group": "search",
+              "n_a": 100,
+              "n_b": 100,
+              "events_a": 0,
+              "events_b": 0,
+              "delta": 0.0,
+              "p": 1.0,
+              "q_within": 1.0,
+              "rejects": false,
+              "mde": 0.12300000000000001,
+              "mde_note": null
+            }
+          ]
+        }
+      ]
+    },
+    "bound": {
+      "depth_configured": 3,
+      "depth": 3,
+      "q": 0.05,
+      "delta_star": 1.44,
+      "bound": 0.43200000000000005,
+      "discoveries": "outer_nodes"
+    },
+    "agreement": "16bea8156c6675c4cd7bf47343ea235f5c28d437e8a518423ae0a5e5b30dbedb"
+  },
+  "next": [
+    "poisson-prove report \"mock-agent@v0 2026-10-14 a\" \"mock-agent@v0 2026-10-14 b\" --x task_id --y tool_fail_rate"
+  ]
+}

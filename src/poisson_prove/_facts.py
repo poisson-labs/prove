@@ -249,24 +249,49 @@ def lines(multi: MultiDiffResult, names: Mapping[str, str] | None = None) -> lis
 
 
 def _without_limit(multi: MultiDiffResult) -> str:
-    """The rows that did not count and have no limit, by reason: a largest limit elsewhere says
-    nothing about them, so a claim that nothing changed holds at no size there."""
-    reasons: dict[str, int] = {}
+    """The rows that did not count and have no limit, counted by direction and by reason: a
+    largest limit elsewhere says nothing about them. A row with no limit on its fall may still
+    have one on its rise, so only a row with neither lets no change of any size be excluded; and a
+    direction with no room to move (a rate of 0 cannot fall, a rate of 1 cannot rise) is not one
+    with no limit."""
+    from poisson_prove._limits import NO_ROOM
+
+    counted: dict[str, dict[str, int]] = {"both": {}, "fall": {}, "rise": {}}
     for event in multi.events:
         for record in multi.by_event[event].records():
-            if record.get("holm") or record.get("mde") is not None:
+            if record.get("holm"):
                 continue
-            note = str(record.get("mde_note") or "none detectable")
-            reasons[note] = reasons.get(note, 0) + 1
-    if not reasons:
-        return ""
-    n = sum(reasons.values())
-    counts = ", ".join(f"{note}: {_look.fmt_count(k)}" for note, k in sorted(reasons.items()))
-    rows = "row" if n == 1 else "rows"
-    return (
-        f"; {_look.fmt_count(n)} {rows} that did not count have no limit ({counts}), so no "
-        "change of any size can be excluded there"
-    )
+            no_rise = record.get("mde_rise") is None and record.get("mde_rise_note") != NO_ROOM
+            no_fall = record.get("mde_fall") is None and record.get("mde_fall_note") != NO_ROOM
+            if not (no_rise or no_fall):
+                continue
+            way = "both" if no_rise and no_fall else "fall" if no_fall else "rise"
+            note = record.get("mde_note") if way == "both" else record.get(f"mde_{way}_note")
+            reasons = counted[way]
+            reasons[str(note or "none detectable")] = (
+                reasons.get(str(note or "none detectable"), 0) + 1
+            )
+    parts = []
+    for way, where, tail in (
+        ("both", "either way", "no change of any size can be excluded there"),
+        ("fall", "on {whose} fall", "a fall of any size cannot be excluded there"),
+        ("rise", "on {whose} rise", "a rise of any size cannot be excluded there"),
+    ):
+        reasons = counted[way]
+        if not reasons:
+            continue
+        n = sum(reasons.values())
+        by_reason = ", ".join(
+            f"{note}: {_look.fmt_count(k)}" for note, k in sorted(reasons.items())
+        )
+        rows = (
+            "1 row that did not count has"
+            if n == 1
+            else f"{_look.fmt_count(n)} rows that did not count have"
+        )
+        place = where.format(whose="its" if n == 1 else "their")
+        parts.append(f"; {rows} no limit {place} ({by_reason}), so {tail}")
+    return "".join(parts)
 
 
 def _fragility_text(multi: MultiDiffResult) -> str:
