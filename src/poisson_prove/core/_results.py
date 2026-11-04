@@ -113,6 +113,17 @@ class Spec:
     path: str | None = None
 
 
+def shown_status(status: str, rows: int, no_outcome: int) -> str:
+    """The status a person reads for a run: ``stopped`` for a run the store holds as complete
+    whose rows all lack an outcome, since every episode errored and there is nothing to compare;
+    otherwise the stored status. A partial run stays ``partial``, since it can be resumed, and a
+    run with some outcomes stays ``complete``. The manifest and ``runs --json`` keep the stored
+    word; ``rows`` and ``no_outcome`` carry the fact there."""
+    if status == "complete" and rows and rows == no_outcome:
+        return "stopped"
+    return status
+
+
 @dataclass(frozen=True, eq=False)
 class RunInfo:
     """One run as the runs table lists it."""
@@ -127,6 +138,16 @@ class RunInfo:
     @property
     def run_name(self) -> str:
         return str(self.entry["run_name"])
+
+    @property
+    def shown_status(self) -> str:
+        """The status the runs table shows: :func:`shown_status` over the entry's counts, or the
+        stored status when the rows were not counted."""
+        if "rows" not in self.entry:
+            return str(self.entry["status"])
+        return shown_status(
+            str(self.entry["status"]), int(self.entry["rows"]), int(self.entry["no_outcome"])
+        )
 
     def to_json(self) -> dict[str, Any]:
         """The run's row as ``runs --json`` lists it."""

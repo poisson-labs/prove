@@ -244,6 +244,33 @@ def _opened(store: Any) -> OpenedStore:
     return OpenedStore(Path(store))
 
 
+def _all_errored(
+    st: Store, idx: Index, runs_: Sequence[str], verb: str, typed: Sequence[str]
+) -> Refusal | None:
+    """The one answer when a run has rows and none of them has an outcome: every episode
+    errored, so there is nothing to compare or report. Names each such run in plain words, and
+    gives one ``next:`` line per run, ``inspect`` of its commonest error with ``--limit 3``, on
+    the store that was typed. ``None`` when every run has an outcome to work with."""
+    bad = [r for r in dict.fromkeys(runs_) if st.count(r) and st.tally(r).with_outcome == 0]
+    if not bad:
+        return None
+    store = _look.typed_store(typed)
+    named = " and ".join(f'"{idx.name_of(r)}"' for r in bad)
+    runs_word = "run" if len(bad) == 1 else "runs"
+    doing = "report" if verb == "report" and len(runs_) == 1 else "compare"
+    nexts = []
+    for r in bad:
+        commonest = _commonest_error(st, r)
+        if commonest is None:
+            nexts.append(join([COMMAND, "runs", *store]))
+            continue
+        words = [COMMAND, "inspect", idx.word_for(r), "--event", commonest, "--limit", "3"]
+        nexts.append(join([*words, *store]))
+    return refusal(
+        f"every episode errored in {runs_word} {named}; there is nothing to {doing}", nexts
+    )
+
+
 def _store_source(given: bool) -> str:
     if given:
         return "it came from --store"
@@ -742,6 +769,7 @@ def _run_diffs(
     method: str | None,
     q: float,
     all_methods: bool,
+    typed: Sequence[str] = (),
 ) -> tuple[
     MultiDiffResult,
     dict[str, Any],
@@ -749,6 +777,9 @@ def _run_diffs(
     tuple[pd.DataFrame, pd.DataFrame],
 ]:
     st = Store(store.root)
+    errored = _all_errored(st, idx, [a, b], verb, typed)
+    if errored is not None:
+        raise errored
     ma, mb = st.manifest(a), st.manifest(b)
     fa, fb = st.read(a, meta=False), st.read(b, meta=False)
     names, kinds = _split_events(events)
@@ -945,6 +976,7 @@ def compare(
         method=method,
         q=q,
         all_methods=methods == "all",
+        typed=typed,
     )
 
     @functools.cache
@@ -1104,6 +1136,7 @@ def check(
         method=method,
         q=q,
         all_methods=False,
+        typed=typed,
     )
     if fail_on == "worse":
         unknown = [e for e in multi.events if multi.by_event[e].kind is None]
@@ -1198,6 +1231,9 @@ def run(
         raise _missing_flags_refusal(
             st, "report", [run_id], typed, idx, x_missing=True, event_missing=False
         )
+    errored = _all_errored(st, idx, [run_id], "report", typed)
+    if errored is not None:
+        raise errored
     manifest = st.manifest(run_id)
     fixed = _typed_fix(fix, (manifest,)) if fix else {}
     df = st.read(run_id, meta=False)
@@ -2471,14 +2507,8 @@ def _resume_command(o: Mapping[str, Any], typed_target: str | None) -> str:
 
 def _typed_store(o: Mapping[str, Any]) -> list[str]:
     """``--store PATH`` when the sweep was typed with it, for its next lines, which act on the
-    same store (the tool's options are accepted after the verb)."""
-    typed = list(o.get("typed_named") or ())
-    for i, token in enumerate(typed):
-        if token == "--store" and i + 1 < len(typed):
-            return ["--store", typed[i + 1]]
-        if token.startswith("--store="):
-            return ["--store", token.split("=", 1)[1]]
-    return []
+    same store."""
+    return _look.typed_store(list(o.get("typed_named") or ()))
 
 
 def _after_sweep(o: Mapping[str, Any], idx: Index, run_id: str, target: str) -> list[str]:
@@ -2842,7 +2872,7 @@ def _sweep_result(
             f"commonest {commonest or 'unknown'}"
         )
         if commonest is not None:
-            inspect = [COMMAND, "inspect", "latest", "--event", commonest]
+            inspect = [COMMAND, "inspect", "latest", "--event", commonest, "--limit", "3"]
             nexts.append(join([*inspect, *_typed_store(o)]))
         stopped = True
     else:

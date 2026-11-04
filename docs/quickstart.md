@@ -94,8 +94,11 @@ ok  wrote prove-report-mock-agent-2026-10-26-a-vs-mock-agent-2026-10-26-b (3 fil
   wrote  prove-report-mock-agent-2026-10-26-a-vs-mock-agent-2026-10-26-b/receipt.html
   saved  comparison …
 …
+
+  next: poisson-prove ui
 ```
 
+The report's own `next:` line builds the [dashboard](dashboard.md) over the store.
 Everything is in `./prove-runs`: the runs, and under `.poisson/` the saved comparison.
 `poisson-prove` alone on a terminal opens the [terminal app](terminal-app.md) over it, and
 `poisson-prove ui` builds the [dashboard](dashboard.md).

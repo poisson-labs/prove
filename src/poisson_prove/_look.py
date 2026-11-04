@@ -19,7 +19,7 @@ import ast
 import json
 import math
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from decimal import ROUND_HALF_EVEN, Decimal
@@ -410,6 +410,18 @@ def word(text: str) -> str:
 def command(*words: str) -> str:
     """A command line to copy, each word quoted by :func:`word` where it needs it."""
     return " ".join(word(w) for w in words)
+
+
+def typed_store(argv: Sequence[str]) -> list[str]:
+    """``["--store", PATH]`` when the command was typed with it, else nothing: a ``next:`` line
+    acts on the store that was typed, and names none when none was (the tool's options are
+    accepted after the verb)."""
+    for i, token in enumerate(argv):
+        if token == "--store" and i + 1 < len(argv):
+            return ["--store", argv[i + 1]]
+        if token.startswith("--store="):
+            return ["--store", token.split("=", 1)[1]]
+    return []
 
 
 # ---------- the shared words for levels, powers and table cells ----------

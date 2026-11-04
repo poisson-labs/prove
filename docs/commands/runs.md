@@ -54,7 +54,9 @@ ok  2 runs in prove-runs
 ```
 
 `rows without an outcome` counts the episodes that errored, those stopped at `--episode-timeout`
-included; `inspect` shows them by their error. The same list as JSON:
+included; `inspect` shows them by their error. A complete run in which every episode errored is
+shown as `stopped`, as the sweep showed it; `runs --json` and the run's manifest keep `complete`,
+with `rows` and `no_outcome` carrying the fact. The same list as JSON:
 
 <!-- docs-check: run -->
 ```console
