@@ -46,6 +46,7 @@ from poisson_prove.core._results import (
     Unsaved,
     View,
     _document,
+    shown_status,
 )
 from poisson_prove.executor import _recorded_design
 from poisson_prove.store import Store
@@ -659,7 +660,7 @@ def runs_view(ctx: _Context) -> View:
                     "number": row["number"],
                     "name": row["run_name"],
                     "run_id": row["run_id"],
-                    "status": row["status"],
+                    "status": info.shown_status,
                     "backend": row["backend"],
                     "target": row["target_id"],
                     "rows": row["rows"],
@@ -876,7 +877,7 @@ def run_view(ctx: _Context, run: str) -> View:
         "sentence": f'"{ctx.run_name(run)}": {m.status}, {_look.fmt_count(len(frame))} rows',
         "name": ctx.run_name(run),
         "run_id": run,
-        "status": m.status,
+        "status": shown_status(m.status, len(frame), int(frame["outcome"].isna().sum())),
         "done": int(len(frame)),
         "total": total,
         "created_at": m.created_at,

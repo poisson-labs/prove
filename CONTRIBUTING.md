@@ -55,6 +55,13 @@ machine of ours or reads a secret, and every action is pinned to a full commit S
   its fakes or its tests also runs the backend tests. A change to the docs, the version or the
   CHANGELOG runs the gate alone. The job `gate` always runs and is the one check main requires; the
   job summary says why the math suite or the backend tests ran or not.
+- **tasks-check** (in `ci.yml`, one more need of `gate`) runs Poisson Tasks' own Prove check,
+  `scripts/release/prove_e2e.py` from Tasks' latest release tag, unedited, against Prove built from
+  this tree. The check installs Prove from PyPI on purpose, so the job builds the wheel under a
+  local version PyPI cannot hold and offers it through a pip config (`.github/lanes/tasks_check.py`);
+  the job passes only when the check's last line names that version. It runs on every pull request,
+  whatever it changes, and a red check closes the gate. It needs the network: PyPI, GitHub for the
+  Tasks tag, and the tokenizer file the check fetches.
 - **Nightly** (`nightly.yml`) runs everything slow: the code suite on every supported Python on Linux
   and macOS, the math suite and the slow tests on every supported Python, the floors run and the
   code suite in a Debian container. No pull request waits on it. When it fails it opens an issue
@@ -76,7 +83,9 @@ git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z
 
 The tag runs `release.yml`: it checks that the tag, the version and the CHANGELOG agree and that no
 commit names an assistant or a personal address (`.github/lanes/history.py`), builds the sdist and the wheel from the tagged tree, runs the packaging and hygiene tests on those two files,
-and publishes them to PyPI by trusted publishing. Nothing slow runs at a release.
+and publishes them to PyPI by trusted publishing. Beside `build`, the same `tasks-check` job as
+the gate's runs Tasks' Prove check on a labelled build of the tagged tree, and `publish` waits for
+both: a red check stops the release. Nothing slow runs at a release.
 
 ## The docs are tested
 

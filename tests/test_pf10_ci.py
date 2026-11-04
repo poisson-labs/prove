@@ -196,7 +196,7 @@ def test_pf10_3_no_job_reads_a_secret_and_only_the_release_publishes_with_an_id_
     held = {job: spec["permissions"] for job, spec in jobs("nightly.yml").items() if "permissions" in spec}
     assert held == {"report": {"actions": "read", "issues": "write"}}, "only the report may write, and only issues"
     release = jobs("release.yml")
-    assert {job: spec.get("permissions") for job, spec in release.items()} == {"build": None, "publish": {"id-token": "write"}}
+    assert {job: spec.get("permissions") for job, spec in release.items()} == {"build": None, "tasks-check": None, "publish": {"id-token": "write"}}
     assert release["publish"]["environment"]["name"] == "pypi" and "environment" not in release["build"]
     publishers = [(job, s) for job, spec in release.items() for s in spec["steps"] if s.get("uses", "").startswith(PUBLISH)]
     assert [job for job, _ in publishers] == ["publish"] and "with" not in publishers[0][1], "trusted publishing: no password"
@@ -496,7 +496,7 @@ def test_pf10_10_the_release_checks_the_tag_builds_from_the_tagged_tree_and_test
     assert step["env"] == {"PROVE_DIST": "dist", "PYTHONPATH": ".github/lanes"}
     assert order[-1].startswith("actions/upload-artifact@")
     publish = jobs("release.yml")["publish"]
-    assert publish["needs"] == ["build"]
+    assert publish["needs"] == ["build", "tasks-check"]
     assert [s["uses"].split("@")[0] for s in publish["steps"]] == ["actions/download-artifact", "pypa/gh-action-pypi-publish"]
 
 

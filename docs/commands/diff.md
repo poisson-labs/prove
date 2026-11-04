@@ -175,7 +175,9 @@ $ poisson-prove diff --json
   `no significant change` are results too.
 - `1`: refused, and nothing was compared: a run the store does not have, two runs that declare
   different outcomes, an event neither run has, no condition with an outcome in both runs, or a
-  condition that ran several cases. A partial run is compared over the conditions it has.
+  condition that ran several cases. A partial run is compared over the conditions it has. A run in
+  which every episode errored has nothing to compare: `diff` names it, in plain words, and its
+  `next:` line is `inspect` of that run's commonest error with `--limit 3`.
 - `2`: the command line is wrong, such as an unknown `--method`.
 - `3`: an unexpected failure; `--debug` prints its traceback.
 - `130`: interrupted with Ctrl-C.

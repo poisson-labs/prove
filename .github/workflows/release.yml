@@ -7,6 +7,9 @@
 #   (release_check.py); checks every commit's addresses and message (history.py); builds the sdist and the wheel from the tagged tree (`git archive`, never
 #   the checkout); runs twine's metadata check; then runs the packaging and hygiene tests on those
 #   exact two files (use_built.py swaps them in), and keeps them as an artifact.
+# - tasks-check: Poisson Tasks' own Prove check (tasks_check.py), from Tasks' latest release tag,
+#   run unedited against Prove built from the tagged tree under a local version PyPI cannot hold.
+#   It needs no publish rights and reads no secret; `publish` waits for it.
 # - publish: uploads that artifact to PyPI by trusted publishing. It is the only job in any
 #   workflow that may ask for an OIDC token, and only in the environment `pypi`, which PyPI's
 #   publisher for this repository names; no password or API token is stored anywhere.
@@ -77,8 +80,42 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
+  tasks-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - id: tasks
+        name: Tasks' latest release tag
+        run: python .github/lanes/tasks_check.py tag
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: poisson-labs/tasks
+          ref: ${{ steps.tasks.outputs.tag }}
+          path: tasks
+          persist-credentials: false
+      - name: Build Prove from this tree under a version PyPI cannot hold, and the Tasks wheel
+        run: |
+          python -m pip install --quiet "build==$BUILD_VERSION"
+          mkdir "$RUNNER_TEMP/tree"
+          git archive --format=tar HEAD | tar -x -C "$RUNNER_TEMP/tree"
+          python .github/lanes/tasks_check.py label "$RUNNER_TEMP/tree"
+          python -m build --wheel --outdir "$RUNNER_TEMP/prove" "$RUNNER_TEMP/tree"
+          python -m build --wheel --outdir "$RUNNER_TEMP/tasks-dist" tasks
+      - name: Tasks' own Prove check, on that wheel
+        run: |
+          python .github/lanes/tasks_check.py run --tasks tasks \
+            --tasks-wheel "$RUNNER_TEMP"/tasks-dist/poisson_tasks-*.whl \
+            --prove-wheel "$RUNNER_TEMP"/prove/poisson_prove-*.whl \
+            --work "$RUNNER_TEMP/work"
+
   publish:
-    needs: [build]
+    needs: [build, tasks-check]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:

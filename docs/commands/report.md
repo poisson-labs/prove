@@ -135,6 +135,8 @@ ok  wrote prove-report-mock-agent-2026-10-26-a-vs-mock-agent-2026-10-26-b (3 fil
   wrote  prove-report-mock-agent-2026-10-26-a-vs-mock-agent-2026-10-26-b/receipt.html
   saved  comparison …
 …
+
+  next: poisson-prove ui
 ```
 
 One run's survival report on the forbidden fallback, in a folder named for it:
@@ -147,6 +149,8 @@ ok  wrote one-run (3 files)
   wrote  one-run/heatmap.svg
   wrote  one-run/receipt.html
 …
+
+  next: poisson-prove ui
 ```
 
 The same survival report as JSON, for a script, written to its own folder:
@@ -178,6 +182,9 @@ $ poisson-prove report  # exits 1
 error: report requires --x AXIS, which was not given. …
   next: poisson-prove report --x task_id --y tool_fail_rate
 ```
+
+A run in which every episode errored has nothing to report: `report` names it, suggests
+`inspect` of its commonest error with `--limit 3`, and writes nothing.
 
 ## Exit codes
 

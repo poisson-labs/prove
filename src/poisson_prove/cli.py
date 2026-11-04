@@ -1917,6 +1917,7 @@ def _cmd_diff(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
         seed=ns.seed,
         max_group_mde=ns.max_group_mde,
         depth=ns.depth,
+        typed=state.argv,
     )
     _notes_of(io, result)
     saved = _save(io, store, result) if ns.save else None
@@ -2063,6 +2064,11 @@ def _name_provenance(provenance: dict[str, object], result: core.Comparison) -> 
     provenance.update(added)
 
 
+def _report_next(state: _State) -> str:
+    """What follows a report: the dashboard, over the store that was typed."""
+    return _look.command(_COMMAND, "ui", *_look.typed_store(state.argv))
+
+
 def _cmd_report(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     """The positional arity picks the verb: two runs (or none) compare, one run is a survival
     report."""
@@ -2116,6 +2122,7 @@ def _report_pair(
         for_report=True,
         fix=ns.fix,
         paired=ns.paired,
+        typed=state.argv,
     )
     _notes_of(io, result)
     multi = result.multi
@@ -2173,13 +2180,17 @@ def _report_pair(
         payload.update({k: v for k, v in body.items() if k not in dropped})
         if saved is not None:
             payload["saved"] = saved.path
-        _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
+        _write_json(
+            io, "report", "ok", _wrote_sentence(out_dir, written), payload, [_report_next(state)]
+        )
         return 0
     _wrote(io, out_dir, written)
     if saved is not None:
         io.detail("saved", f"{saved.kind} {_look.fmt_hash(saved.id)}")
     io.line()
     _write_summary(io, multi)
+    io.line()
+    io.next(_report_next(state))
     return 0
 
 
@@ -2205,7 +2216,9 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
     name = next((run.run_name for run in named if run.run_id == run_id), run_id)
     out_dir = _prepare_out_dir(ns, f"./prove-report-{_slug(name)}", _named_words(state.argv, named))
     # The word as typed, so the note on what latest, previous and the numbers leave out is said.
-    detail = core.run(store, word, events=ns.event, horizon=ns.horizon, fix=ns.fix)
+    detail = core.run(
+        store, word, events=ns.event, horizon=ns.horizon, fix=ns.fix, typed=state.argv
+    )
     _notes_of(io, detail)
     events = detail.events
     spec = ReportSpec(
@@ -2249,7 +2262,9 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
             "design_mde",
         ):
             payload[key] = doc[key]
-        _write_json(io, "report", "ok", _wrote_sentence(out_dir, written), payload, [])
+        _write_json(
+            io, "report", "ok", _wrote_sentence(out_dir, written), payload, [_report_next(state)]
+        )
         return 0
     _wrote(io, out_dir, written)
     io.line()
@@ -2259,6 +2274,8 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
         f'"{detail.run_name}": survival report over {", ".join(events)} at horizon '
         f"{_look.fmt_num(report.provenance['horizon'])}"
     )
+    io.line()
+    io.next(_report_next(state))
     return 0
 
 
@@ -2353,6 +2370,7 @@ def _cmd_serve(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
         verb="serve",
         for_report=True,
         fix=ns.fix,
+        typed=state.argv,
     )
     _notes_of(io, result)
     spec = ReportSpec(
@@ -2524,7 +2542,7 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
                 "" if entry["number"] is None else str(entry["number"]),
                 str(entry["run_name"]),
                 str(entry["run_id"]),
-                str(entry["status"]),
+                run.shown_status,
                 str(entry["backend"]),
                 str(entry["target_id"]),
                 _look.fmt_count(entry["rows"]),
