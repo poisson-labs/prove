@@ -1494,7 +1494,7 @@ def test_pf1_13_a_sweep_in_which_every_rollout_raised_exits_3_naming_the_commone
     assert not any(line.startswith("done  ") for line in r.out.splitlines()), r.out
     # The next line acts on the store the sweep was typed with, so it carries that --store.
     store = world.base / "errored-store"
-    assert f"  next: poisson-prove inspect latest --event ValueError --store {store}" in r.out.splitlines() + r.err.splitlines(), (r.out, r.err)
+    assert f"  next: poisson-prove inspect latest --event ValueError --limit 3 --store {store}" in r.out.splitlines() + r.err.splitlines(), (r.out, r.err)
     (run_id,) = run_ids(store)
     rows = Store(store).read(run_id, meta=False)
     assert rows["error"].notna().all() and len(rows) == 9
@@ -1518,7 +1518,7 @@ def test_pf1_13_a_sweep_in_which_every_rollout_timed_out_exits_3_naming_episode_
     assert r.code == 3, (r.out, r.err)
     assert len([line for line in r.out.splitlines() if line.startswith("stopped  ")]) == 1, r.out
     # The next line acts on the store the sweep was typed with, so it carries that --store.
-    assert f"  next: poisson-prove inspect latest --event episode_timeout --store {store}" in r.out.splitlines() + r.err.splitlines(), (r.out, r.err)
+    assert f"  next: poisson-prove inspect latest --event episode_timeout --limit 3 --store {store}" in r.out.splitlines() + r.err.splitlines(), (r.out, r.err)
     assert_clean_stderr(r.err)
 
 

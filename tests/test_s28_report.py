@@ -114,6 +114,7 @@ import inspect
 import json
 import math
 import re
+import shlex
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -1987,7 +1988,9 @@ def test_r14_the_single_run_report_writes_none_of_the_four_headings_and_the_latt
     # PF12: the saved comparison's line ends the first block.
     saved = re.findall(r"^  saved  comparison [0-9a-f]{12}\n", r.out, re.MULTILINE)
     assert len(saved) == 1, r.out
-    expected = wrote + saved[0] + "\n" + multi.headline() + "\n"
+    # After one more blank line the report ends with its next line, on the store that was typed.
+    closing = f"\n  next: poisson-prove ui --store {shlex.quote(str(LATTICE_ROOT))}\n"
+    expected = wrote + saved[0] + "\n" + multi.headline() + "\n" + closing
     assert r.out == expected, (r.out, expected)
 
 
