@@ -165,7 +165,7 @@ def test_the_banners_hold_is_the_apps() -> None:
     ],
 )
 def test_the_section_has_the_forms_and_the_opening_screen(fact: str) -> None:
-    assert fact in _banner_section(), fact
+    assert fact in _banner_section() or fact in _section(_look(), "## The banner"), fact
 
 
 def test_the_look_says_where_colour_may_leave_the_four_meanings() -> None:

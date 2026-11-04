@@ -17,7 +17,8 @@ its own error and does not change.
   and its replicate. A trace the episode stored stays with it.
 - **r5** A group ``--limit`` left no listed episode in is not printed, and its episodes are counted
   in one line, so the output does not read as if the error shown were the only one.
-- **r6** An episode that ended in an outcome has no error to group and prints as it always has.
+- **r6** An episode that ended in an outcome has no error to group and prints as it always has, and
+  so does an error only one episode has: nothing repeats there, and a count of one says nothing.
 - **r7** ``--json`` does not change.
 """
 
@@ -138,8 +139,11 @@ def test_an_error_that_names_its_seed_is_not_identical_to_the_next(reading_world
     assert len(_groups(episodes)) == 9
     result = _inspect(reading_world, "own_text", "ValueError")
     assert result.out.count(TRACEBACK) == 9, result.out[:800]
-    assert re.search(r"(?<![\d,])1 episode\b", result.out.split("\n", 1)[1]), result.out[:800]
-    assert not re.search(r"(?<![\d,])1 episodes\b", result.out), result.out[:800]
+    assert not re.search(r"(?<![\d,])\d[\d,]* episodes?\b", result.out.split("\n", 1)[1]), result.out[:800]
+    lines = result.out.splitlines()
+    assert sum(line.startswith("config_hash: ") for line in lines) == 9, lines
+    assert sum(line == "outcome: -" for line in lines) == 9, lines
+    assert sum(line.startswith("error: Traceback") for line in lines) == 9, lines
 
 
 def test_an_error_with_no_traceback_is_grouped_too(reading_world: dict[str, Path]) -> None:  # noqa: F811

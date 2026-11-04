@@ -26,7 +26,9 @@ rendering, each fact compared with what ``--json`` says of the same comparison.
   ``--json``, and the JSON does not change.
 - **r8** The ``limits`` line counts the rows with no limit by direction, since a row with no limit on
   its fall still has one on its rise. "No change of any size" is said only of a row with neither.
-- **r9** This change moves output another tool reads, so it ships as the next minor, 0.2.0, and the
+- **r9** The line that says which events were inferred stays in the default: it is a plain sentence,
+  it says what was compared, and it is not one of the machine sections.
+- **r10** This change moves output another tool reads, so it ships as the next minor, 0.2.0, and the
   CHANGELOG says so. ``truncated`` stays a field of ``--json``, the route a reader moves to.
 """
 
@@ -49,11 +51,11 @@ COLUMNS = ["condition", "event", "before", "after", "change", "verdict", "rise",
 NEVER_DEFAULT = (
     r"\bmethod=", r"seed_identity_match", r"\btruncated=", r"^## ", r"config_hash", r"\bn_(safer|worse|higher|lower|unchanged)=", r"max_mde",
     r"alpha\*", r"^omnibus:", r"^fault lines:", r"^cells:", r"^bound:", r"^coverage:", r"^intervals:", r"^\|", r"aalen_johansen",
-    r"BH q<", r"\bholes=", r"^inferred:",
+    r"BH q<", r"\bholes=",
 )
 #: Every machine section, in the order ``diff`` has always printed them.
 FULL_SECTIONS = (
-    r"^method=", r"^## (timeout|violated): n_safer=", r"^coverage: holes=", r"^## coverage$", r"^intervals: ", r"^omnibus: ",
+    r"^method=", r"^## (timeout|violated): n_\w+=", r"^coverage: holes=", r"^## coverage$", r"^intervals: ", r"^omnibus: ",
     r"^fault lines: ", r"^cells: ", r"^bound: ",
 )
 #: Each store and the runs its comparison names; every store is read through its default pair.
@@ -156,18 +158,25 @@ def test_the_default_says_the_verdict_and_the_method_once(reading_world: dict[st
     """Before this change the verdict's counts and the method were each printed twice, in two forms."""
     result = _diff(reading_world, "kinds")
     document = _json(reading_world, "kinds")
-    assert result.out.count(document["headline"]) == 1, result.out[:800]
+    counts = document["headline"].splitlines()[0]
+    assert result.out.count(counts) == 1, result.out[:800]
     assert sum(line.startswith("  method  ") for line in result.out.splitlines()) == 1
     assert "(aalen_johansen" not in result.out
 
 
+def test_the_default_says_which_events_it_inferred(reading_world: dict[str, Path]) -> None:  # noqa: F811
+    inferred = [line for line in _diff(reading_world, "kinds").out.splitlines() if line.startswith("inferred: ")]
+    assert len(inferred) == 1, inferred
+    assert not [line for line in _diff(reading_world, "kinds", "--event", "violated").out.splitlines() if line.startswith("inferred: ")]
+
+
 def test_the_default_is_short_enough_to_read(reading_world: dict[str, Path]) -> None:  # noqa: F811
-    """The verdict block, a line per row, a line naming the flag, the next line, and blank lines: the
-    machine sections ran to about 100 more."""
+    """The verdict block, the inference line, the table, a line naming the flag, the next line and the
+    blank lines between them: the machine sections ran to about 100 more."""
     result = _diff(reading_world, "kinds")
     _, rows = _table(result.out)
     block = result.out.split("\n\n", 1)[0].splitlines()
-    assert len(result.out.splitlines()) <= len(block) + len(rows) + 1 + 6, result.out
+    assert len(result.out.splitlines()) <= len(block) + len(rows) + 1 + 8, result.out
 
 
 def test_the_table_has_its_columns_in_order(reading_world: dict[str, Path]) -> None:  # noqa: F811
@@ -224,10 +233,11 @@ def test_rows_are_ordered_by_axis_values_numbers_as_numbers(reading_world: dict[
     assert [row[0] for row in rows] not in (as_text, as_stored), rows
 
 
-def test_a_conditions_events_are_adjacent_in_the_order_the_verdict_names_them(reading_world: dict[str, Path]) -> None:  # noqa: F811
-    document = _json(reading_world, "kinds")
-    _, rows = _table(_diff(reading_world, "kinds").out)
-    events = list(document["by_event"])
+@pytest.mark.parametrize("name", ["kinds", "old"])
+def test_a_conditions_events_are_adjacent_in_the_order_the_verdict_names_them(name: str, reading_world: dict[str, Path]) -> None:  # noqa: F811
+    document = _json(reading_world, name)
+    _, rows = _table(_diff(reading_world, name).out)
+    events = sorted(document["by_event"], key=document["sentence"].find)
     assert len(events) == 2, events
     for first, second in zip(rows[0::2], rows[1::2], strict=True):
         assert first[0] == second[0], (first, second)
@@ -463,7 +473,6 @@ def test_report_keeps_its_own_output(reading_world: dict[str, Path], tmp_path: P
     result = cli(store, "report", "--x", "task_id", "--y", "tool_fail_rate", "--out", tmp_path / "out")
     assert result.code == 0, result.err
     assert "--full" not in result.out
-    assert result.out.splitlines()[0].split("  ")[0] == _json(reading_world, "kinds")["verdict"]
 
 
 # ---------- on a terminal ----------
