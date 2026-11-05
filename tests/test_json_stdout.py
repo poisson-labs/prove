@@ -33,12 +33,11 @@ to the StringIO, so every case here that means to see it starts an interpreter o
 - **r8** Burla's rehearsal and its fresh-interpreter batches read a pickle from a child's stdout, so a
   rollout that writes through fd 1 fails the sweep with ``UnpicklingError``, with or without
   ``--json``. An unflushed ``print`` only escapes because the pickle overtakes it. Held here so that
-  such a target runs (yes/no in the session's log; a no takes out the ``test_burla_rollout_*`` cases).
+  such a target runs.
 - **r9** A target that ends the process by ``sys.exit`` must not leave exit 0 and no document: the code
-  says it failed, or the document says so (yes/no; a no takes out ``test_sys_exit_*``). ``os._exit`` in
+  says it failed, or the document says so. ``os._exit`` in
   the sweep's own process cannot be held and is not pinned.
-- **r10** A target that closes or replaces its stdout still leaves one document (yes/no; a no takes out
-  ``test_a_target_that_closes_*``). ``sys.stdout.detach()`` is not pinned: it ends in exit 120 from the
+- **r10** A target that closes or replaces its stdout still leaves one document. ``sys.stdout.detach()`` is not pinned: it ends in exit 120 from the
   interpreter's own shutdown, after the document.
 
 The marker text starts with ``f`` on purpose: ``MARK\\n`` happens to parse as pickle opcodes, and
@@ -668,7 +667,7 @@ def test_a_reader_that_has_gone_is_not_an_error_and_the_run_is_whole(in_rollout:
 @pytest.mark.parametrize("way", [*IMPORT_WAYS, "print from atexit"])
 def test_dry_run_keeps_one_document(way: str, tmp_path: Path) -> None:
     """A guard. The check imports the target in a process of its own with stdout discarded, so what
-    it writes there is not shown, with or without ``--json``. That stays (yes/no in the log)."""
+    it writes there is not shown, with or without ``--json``. That stays."""
     _folder(tmp_path, _target(WAYS[way].at_import))
     done = _prove(tmp_path, "sweep", "--json", "--dry-run", "--max-mde", "1")
     assert done.returncode == 0, _report(done)

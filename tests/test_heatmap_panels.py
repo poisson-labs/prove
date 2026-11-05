@@ -24,11 +24,10 @@ may scroll.
   ``test_comparison_first_screen.py`` holds the example at 1,280 and 1,440; this adds the other shapes,
   because a fix that widens a panel past half the page would stack the two and push the second down.
 - **r5** A phone is held to no clipping and no sideways scroll of the page, and not to the first screen.
-- **r7** The same fault cuts other panels on main: at phone width the differences and limits charts on
-  the comparison page and the charts on a condition's page. Not in the ruling, which names the heatmaps
-  on the comparison page, so held by one test of its own (yes/no in the session's log; a no takes it out).
 - **r6** Chromium holds every case; Firefox and WebKit hold one desktop and one phone width, as the
   dashboard's other browser check does.
+- **r7** The same fault cuts other panels on main: at phone width the differences and limits charts on
+  the comparison page and the charts on a condition's page. Held by one test of its own.
 """
 
 from __future__ import annotations
