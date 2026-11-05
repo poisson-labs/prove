@@ -24,6 +24,9 @@ may scroll.
   ``test_comparison_first_screen.py`` holds the example at 1,280 and 1,440; this adds the other shapes,
   because a fix that widens a panel past half the page would stack the two and push the second down.
 - **r5** A phone is held to no clipping and no sideways scroll of the page, and not to the first screen.
+- **r7** The same fault cuts other panels on main: at phone width the differences and limits charts on
+  the comparison page and the charts on a condition's page. Not in the ruling, which names the heatmaps
+  on the comparison page, so held by one test of its own (yes/no in the session's log; a no takes it out).
 - **r6** Chromium holds every case; Firefox and WebKit hold one desktop and one phone width, as the
   dashboard's other browser check does.
 """
@@ -261,3 +264,39 @@ def test_the_first_screen_still_holds_at_1280_by_800(key: str, pages: dict[str, 
     if len(boxes) == 2:
         assert boxes[0][1] == pytest.approx(boxes[1][1], abs=1), boxes
         assert boxes[0][0] + boxes[0][2] <= boxes[1][0], boxes
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("size", [DESKTOP[0], PHONE[0]], ids=["1280x800", "390x844"])
+def test_no_panel_on_any_page_of_the_dashboard_clips_its_chart(size: tuple[int, int], pages: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    """r7. Every figure on every page the dashboard writes for a two-event comparison."""
+    from playwright.sync_api import sync_playwright
+
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(BROWSERS))
+    root = pages["two_events"].parent.parent
+    files = sorted(root.rglob("*.html"))
+    assert len(files) > 5, files
+    width, height = size
+    cut: list[Any] = []
+    seen = 0
+    with sync_playwright() as p:
+        browser = _launch(p)
+        try:
+            page = browser.new_page(viewport={"width": width, "height": height})
+            for path in files:
+                page.goto(path.as_uri(), wait_until="load")
+                figures = page.evaluate(
+                    """() => [...document.querySelectorAll('figure')].filter(f => f.querySelector('svg')).map(f => {
+                      const chart = f.querySelector('svg');
+                      const between = [];
+                      for (let e = chart.parentElement; e; e = e.parentElement) { between.push(e); if (e === f) break; }
+                      return {panel: f.clientWidth, chart: chart.getBoundingClientRect().width,
+                              scrolls: between.some(e => /(auto|scroll)/.test(getComputedStyle(e).overflowX))};
+                    })"""
+                )
+                seen += len(figures)
+                cut += [(path.relative_to(root).as_posix(), figure) for figure in figures if figure["chart"] > figure["panel"] + 0.5 and not figure["scrolls"]]
+        finally:
+            browser.close()
+    assert seen, files
+    assert cut == [], (len(cut), cut[:5])
