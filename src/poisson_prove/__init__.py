@@ -11,6 +11,6 @@ from poisson_prove.episode import Rollout as Rollout
 from poisson_prove.trace import record as record
 from poisson_prove.trace import step as step
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = ["Episode", "EpisodeValidationError", "Rollout", "__version__", "record", "step"]
