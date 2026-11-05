@@ -14,6 +14,8 @@ may scroll.
 - **r2** Beyond the box, every cell and every label the chart draws can be reached: inside every box
   that clips it, or by a scroller's scrolling. And the last column's far edge answers a hit test as part
   of the chart once the page is scrolled to it, which no measurement of boxes can fake.
+  Nor may a chart fit by shrinking away: it stays within 15% of its panel's width, or at 540 px or
+  more, its cells being unreadable well before that. The chart stops at about 600 px on a wide panel.
 - **r3** The widths are 1,280, 1,440 and 1,920, and phone width is 390 and 375, with the shapes of chart
   a comparison can have: two events side by side, one event alone, two axes, and one axis wrapped into
   rows of six.
@@ -222,6 +224,8 @@ def _holds_every_chart(found: dict[str, Any], key: str, size: tuple[int, int]) -
         scrolls = any(scroll_width >= panel["chart"] - 0.5 and scroll_width > client for _, client, scroll_width in panel["scrolls"])
         assert fits or scrolls, (key, size, panel)
         assert panel["clipped"] == [], (key, size, panel)
+        # Fitting by shrinking away is no fix: the chart stays near the panel's width, or its own 540 px.
+        assert panel["chart"] >= min(0.85 * panel["panel"], 540), (key, size, panel)
     for hit in found["hits"]:
         assert hit["cells"] >= 1, (key, size, hit)
         assert hit["misses"] == [], (key, size, hit)

@@ -239,6 +239,23 @@ def test_stdout_is_one_document_and_the_text_is_on_stderr_once_a_write(way: str,
     assert _err(done).count(BANNER) == times, _report(done)
 
 
+@pytest.mark.parametrize(
+    "write",
+    [f'print("{BANNER}")', f'sys.stdout.write("{BANNER}")', f'sys.stdout.buffer.write(b"{BANNER}\\n")', f'sys.__stdout__.write("{BANNER}\\n")'],
+    ids=["print", "no newline", "binary buffer", "interpreter's stdout"],
+)
+def test_text_in_a_timed_childs_buffer_is_not_lost_when_the_parent_ends_it(write: str, tmp_path: Path) -> None:
+    """r1. The parent ends a timed child the moment it has the outcome. A thread the rollout left
+    running keeps the child alive at that moment, so what it has not flushed by then is gone, every
+    time: the race the other cases only sometimes lose."""
+    leave = "threading.Thread(target=time.sleep, args=(30,)).start()"
+    _folder(tmp_path, _target(in_rollout=f"{write}; {leave}"))
+    done = _prove(tmp_path, *SWEEP, *TIMEOUT)
+    assert done.returncode == 0, _report(done)
+    _document(done.stdout)
+    assert _err(done).count(BANNER) == ROLLOUTS, _report(done)
+
+
 def test_binary_text_from_the_target_leaves_the_document_utf8(tmp_path: Path) -> None:
     _folder(tmp_path, _target(in_rollout=r'os.write(1, b"\xff\xfe framework banner\n")'))
     done = _prove(tmp_path, *SWEEP)
@@ -507,12 +524,22 @@ def test_a_child_that_outlives_the_sweep_cannot_reach_the_document_later(tmp_pat
     assert BANNER in _err(done), _report(done)
 
 
-def test_a_background_child_does_not_hold_stdout_open(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "start",
+    [
+        'open({pid!r}, "w").write(str(subprocess.Popen(["sleep", "60"]).pid))',
+        # Through a shell, which passes on every inheritable descriptor; its own stdout is elsewhere,
+        # so only a copy of the pipe that was left inheritable could hold stdout open.
+        'os.system("sleep 60 > /dev/null 2>&1 & echo $! > {pid}")',
+    ],
+    ids=["inherits stdout", "inherits only what is inheritable"],
+)
+def test_a_background_child_does_not_hold_stdout_open(start: str, tmp_path: Path) -> None:
     """Stdout reaches its end when the sweep exits, though a child the target left running holds its
     own stdout: the document's copy of the pipe is not inherited, so a caller reading to the end of
     stdout does not wait for that child. Stderr is a file here because the child keeps that open."""
     pid_file = tmp_path / "child.pid"
-    _folder(tmp_path, _target(f'open({str(pid_file)!r}, "w").write(str(subprocess.Popen(["sleep", "60"]).pid))'))
+    _folder(tmp_path, _target(start.format(pid=str(pid_file))))
     with (tmp_path / "stderr.txt").open("wb") as err:
         proc = subprocess.Popen(
             [sys.executable, "-m", "poisson_prove", *SWEEP], cwd=tmp_path, env=_child_env(tmp_path),
@@ -538,7 +565,7 @@ def test_a_background_child_does_not_hold_stdout_open(tmp_path: Path) -> None:
         if proc.poll() is None:
             proc.kill()
         with contextlib.suppress(FileNotFoundError, ProcessLookupError, ValueError):
-            os.kill(int(pid_file.read_text()), signal.SIGKILL)
+            os.kill(int(pid_file.read_text().strip()), signal.SIGKILL)
 
 
 # ---------- terminals ----------
