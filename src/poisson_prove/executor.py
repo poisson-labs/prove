@@ -692,6 +692,11 @@ def _child_main(
         outcome = _call_in_process(rollout, config, seed, capture_call, chaos_call)
     except BaseException:  # noqa: BLE001 - the child must always report
         outcome = ("error", traceback.format_exc())
+    # The parent ends this process the moment it has the outcome, so what the rollout wrote and
+    # the interpreter still holds in a buffer goes out first, or it is lost.
+    for stream in (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__):
+        with contextlib.suppress(Exception):
+            stream.flush()  # type: ignore[union-attr]
     try:
         conn.send(outcome)
     finally:

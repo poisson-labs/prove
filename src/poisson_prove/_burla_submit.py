@@ -52,12 +52,18 @@ _LOCK = ".held"
 _STATE = "_poisson_prove_bundle_held"
 #: A folder with no lock file yet is being created, unless it has been sitting this long.
 _STALE_S = 600.0
+#: The reply is a pickle on the child's stdout, so the child keeps a copy of that pipe for the
+#: reply alone and points file descriptor 1 at its stderr before anything of the target's runs:
+#: what a rollout writes to stdout, at any level, cannot land in the reply.
 _FRESH = (
-    "import pickle, sys\n"
+    "import os, pickle, sys\n"
+    "reply = os.fdopen(os.dup(1), 'wb')\n"
+    "os.dup2(2, 1)\n"
     "paths, item = pickle.load(sys.stdin.buffer)\n"
     "sys.path[:] = paths\n"
     "module = __import__('poisson_prove.executor_modal', fromlist=['_container_batch'])\n"
-    "sys.stdout.buffer.write(pickle.dumps(module._container_batch(item)))\n"
+    "reply.write(pickle.dumps(module._container_batch(item)))\n"
+    "reply.flush()\n"
 )
 
 
@@ -195,6 +201,12 @@ def _bootstrap(
     if done.returncode != 0 or not done.stdout:
         return k, None, done.stderr.decode("utf-8", "replace")
     out = pickle.loads(done.stdout)
+    # What the batch wrote stays with this worker, as it does when a batch runs in this process.
+    try:
+        sys.stderr.write(done.stderr.decode("utf-8", "replace"))
+        sys.stderr.flush()
+    except Exception:  # noqa: BLE001 - the rows are in hand; a log line is not worth a batch
+        pass
     return out
 
 

@@ -126,11 +126,12 @@ figure{margin:0 0 16px;max-width:none;padding:0;background:var(--bg);border:1px 
 figcaption{font-size:13px;line-height:1.5;padding:11px 18px;border-bottom:1px solid var(--rule);background:var(--surface);color:var(--dim)}
 figcaption > span:first-child{color:var(--text);font-weight:650}
 figcaption a{color:var(--text)}
-figure svg{padding:16px 18px 14px}
-figure.wide svg{padding:22px 26px 18px}
+figure svg{--side:18px;padding:16px var(--side) 14px}
+figure.wide svg{--side:26px;padding:22px var(--side) 18px}
 svg{display:block;width:100%;height:auto}
-/* a chart is never drawn larger than about its own size, so its type stays the size of the page's */
-figure svg{margin:0 auto;box-sizing:content-box}
+/* a chart is never drawn larger than about its own size, so its type stays the size of the page's;
+   its width leaves room for its own side padding, so chart and padding together never pass the panel's edge */
+figure svg{margin:0 auto;box-sizing:content-box;width:calc(100% - 2*var(--side))}
 svg[id^="heatmap"],svg[id^="incidence"]{max-width:600px}
 svg[id^="limits"]{max-width:880px}svg[id^="differences"]{max-width:1000px}
 svg text{font:11px ui-monospace,Menlo,Consolas,monospace;fill:var(--text)}
@@ -170,7 +171,7 @@ th:first-child,td:first-child{padding-left:14px}
 th:last-child,td:last-child{padding-right:14px}
 figcaption{padding:10px 14px}
 th{white-space:nowrap}
-figure svg{padding:12px 10px 10px}
+figure svg{--side:10px;padding:12px var(--side) 10px}
 ul.plain li{padding:10px 14px}
 .store{margin-left:0}
 }

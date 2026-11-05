@@ -524,8 +524,13 @@ def _local_installs() -> list[str]:
     return sorted(set(found))
 
 
+#: The reply is a pickle on the child's stdout, so the child keeps a copy of that pipe for the
+#: reply alone and points file descriptor 1 at its stderr before anything of the target's runs:
+#: what a rollout writes to stdout, at any level, cannot land in the reply.
 _REHEARSAL = r"""
 import os, pickle, sys, tarfile, io
+reply = os.fdopen(os.dup(1), "wb")
+os.dup2(2, 1)
 request = pickle.load(sys.stdin.buffer)
 root = request["root"]
 if root is None:
@@ -542,7 +547,8 @@ try:
 except BaseException as exc:
     name = exc.name if isinstance(exc, ModuleNotFoundError) else None
     out = ("raised", f"{type(exc).__name__}: {exc}", name)
-sys.stdout.buffer.write(pickle.dumps(out))
+reply.write(pickle.dumps(out))
+reply.flush()
 """
 
 

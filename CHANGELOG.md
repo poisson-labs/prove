@@ -4,6 +4,45 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.2.1 — 2026-11-05
+
+### Fixed
+
+- With `--json`, stdout is the one JSON document whatever the target writes (#28). Before, a
+  target that printed put its text in stdout beside the document and the sweep still exited 0, so
+  a caller got success and a document it could not parse. Now everything the target writes to
+  stdout goes to stderr instead, once, as it is written: a `print` in the rollout or at import, a
+  write to `sys.stdout.buffer`, `os.write(1, ...)`, the C library, a program the target starts,
+  an `atexit` hook, and all of these under `--episode-timeout`. The same holds for
+  `ui --open --json`, whose browser inherits stdout, and for what the Modal client or a Burla
+  sweep's own process writes. The document, the exit codes and everything without `--json` are
+  as they were.
+- What that means for a caller of `sweep --json`: read both streams, because a caller that pipes
+  stdout and stderr and reads only stdout can hang on a target that prints a lot (200 kB a
+  rollout is enough; `subprocess.run(capture_output=True)` reads both); look for the line that
+  starts `error: `, not stderr's first line, which can be the target's text; and with stderr a
+  terminal the target sees `sys.stdout.isatty()` true, so a framework may draw there.
+- A target that calls `sys.exit`, at import or in a rollout, no longer ends `sweep --json` with
+  exit 0 and an empty stdout: the sweep exits 3 with one `error: ` line. Without `--json` it ends
+  the process as before.
+- A target that closes its stdout no longer costs `sweep --json` its document.
+- `main()` called in the caller's own process with `--json` and no `stdout=` leaves file
+  descriptor 1 pointing at stderr for the rest of that process, so a host script that prints
+  afterwards prints to stderr; Prove's own output from later calls still goes to the process's
+  real stdout. A caller that passes `stdout=` or uses `contextlib.redirect_stdout` is untouched.
+- Under `--episode-timeout`, text a rollout printed and had not yet flushed is no longer lost
+  when the episode's process is ended. This holds without `--json` too, where it was lost in some
+  runs.
+- On Burla, a rollout that writes to stdout through the file descriptor (a flushed `print`,
+  `os.write`, a child process, or any `print` under `--episode-timeout`) no longer fails the
+  sweep with an `UnpicklingError`, with or without `--json`. What a rollout writes stays with the
+  worker.
+- The dashboard no longer cuts a chart off at its panel's edge (#31). On the comparison page the
+  heatmaps' last column was cut at 1,280, 1,440 and 1,920 wide, and on a phone the differences
+  and limits charts and the charts on a condition's page were cut too. A chart now leaves room
+  for its own padding inside its panel; a chart in a panel wider than the chart is drawn as
+  before.
+
 ## 0.2.0 — 2026-11-04
 
 ### Changed
