@@ -1058,6 +1058,59 @@ def _add_tree_arguments(p: argparse.ArgumentParser, *, defaults: bool) -> None:
 
 # ---------- entry point ----------
 
+#: The process's own stdout, kept for ``--json``'s document once file descriptor 1 has been moved.
+_DOCUMENT: TextIO | None = None
+
+
+def _document_stream(args: Sequence[str]) -> TextIO | None:
+    """Where ``--json``'s document goes when the caller left stdout to the process: a private copy
+    of stdout, with file descriptor 1 pointed at stderr for the rest of the process's life.
+
+    Rule 9 says stdout is exactly one document. The target runs in this process and shares its
+    stdout, and so does every program either starts, so the only stdout nothing else can reach is
+    one nothing else holds. The copy is not inherited by a child, so a child that outlives the
+    command neither writes after the document nor keeps the reader waiting. Descriptor 1 is not
+    put back, because an ``atexit`` hook writes after the document; every later call in the same
+    process, with ``--json`` or without, writes its own output to the same copy.
+
+    ``sys.stdout`` stays the interpreter's own object, on descriptor 1, so a target that closes
+    it closes that and not stderr. It is made to write a line as soon as it is whole, as it would
+    on a terminal, so the text arrives while the work runs and beside the progress lines.
+
+    ``None`` leaves everything as it is: no ``--json`` in this call or any before it, a
+    ``sys.stdout`` the caller replaced (a redirect is the caller's own choice of where the
+    document goes), or a stdout or stderr that is not an open file descriptor.
+    """
+    global _DOCUMENT
+    out = sys.__stdout__
+    if out is None or sys.stdout is not out:
+        return None
+    if _DOCUMENT is not None:
+        return _DOCUMENT
+    words = list(args[: args.index("--")] if "--" in args else args)
+    if "--json" not in words:
+        return None
+    try:
+        if out.fileno() != 1:
+            return None
+        out.flush()
+        os.fstat(2)
+        kept = os.dup(1)  # not inheritable
+    except (AttributeError, OSError, ValueError):
+        return None
+    try:
+        os.dup2(2, 1)
+    except OSError:
+        os.close(kept)
+        return None
+    # The copy lives as long as the process, so nothing closes it and nothing warns that nobody did.
+    _DOCUMENT = open(kept, "w", encoding=out.encoding, errors=out.errors, closefd=False)
+    try:
+        out.reconfigure(line_buffering=True, write_through=True)
+    except (AttributeError, OSError, ValueError):  # a text layer that cannot be re-set still works
+        pass
+    return _DOCUMENT
+
 
 def main(
     argv: Sequence[str] | None = None,
@@ -1066,14 +1119,21 @@ def main(
     stderr: TextIO | None = None,
     stdin: TextIO | None = None,
 ) -> int:
-    """Entry point. Streams default to ``sys.*``; tests pass ``StringIO``. Returns the exit code."""
+    """Entry point. Streams default to ``sys.*``; tests pass ``StringIO``. Returns the exit code.
+
+    With ``--json`` and no ``stdout`` given, the document is written to a private copy of the
+    process's stdout and file descriptor 1 is pointed at stderr until the process ends (see
+    ``_document_stream``), so a caller in the same process that prints afterwards prints to stderr.
+    """
+    args = list(sys.argv[1:] if argv is None else argv)
+    # Before anything is imported or opened: whatever writes from here on finds stdout moved.
+    document = _document_stream(args) if stdout is None else None
     io = _IO(
-        out=sys.stdout if stdout is None else stdout,
+        out=stdout if stdout is not None else sys.stdout if document is None else document,
         err=sys.stderr if stderr is None else stderr,
         inp=sys.stdin if stdin is None else stdin,
     )
     io.ascii = not _look.can_encode(getattr(io.out, "encoding", None))
-    args = list(sys.argv[1:] if argv is None else argv)
     store = _app_store(args)
     if store is not None and _app_wanted(io):
         return _open_app(io, store or None)
@@ -1339,6 +1399,13 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
         return 130
     except BrokenPipeError:
         raise
+    except SystemExit as exc:
+        # The target ended the process (``sys.exit`` at import or in a rollout). Under --json
+        # that would be an exit code of the target's choosing and no document, 0 included, so
+        # it is a failure with its line; without --json it ends the process as it always has.
+        if not state.json:
+            raise
+        return _unexpected(io, state, exc)
     except Exception as exc:
         return _unexpected(io, state, exc)
 

@@ -41,7 +41,8 @@ examples:
 
 - `--open` also opens the dashboard in your browser.
 - `--json` prints where the dashboard is as one JSON document, `poisson-prove.ui/1`, with its
-  `location`.
+  `location`. With `--open` too, anything the browser's launcher prints goes to stderr, so stdout
+  stays the one document.
 - `--store PATH` builds the dashboard of another store; `--plain` prints plain text on a terminal
   too; `--debug` adds the traceback of an unexpected failure.
 

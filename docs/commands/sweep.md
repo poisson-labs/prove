@@ -113,7 +113,9 @@ examples:
 - `--dry-run` prints the plan and stops. It checks the spec, imports the rollout in a process of
   its own with the network blocked, and checks it takes `(cfg, seed)`, without calling it.
 - `--yes` skips the question after the plan.
-- `--json` prints the plan and the result as one JSON document.
+- `--json` prints the plan and the result as one JSON document on stdout, and nothing else
+  there: what the target writes to stdout goes to stderr (see "What the target prints, with
+  `--json`" below).
 - `--concurrency N`, `--infra-retries N`, `--max-cost USD`, `--est-seconds S`, `--app-name NAME`
   and `--image SECTION` override the `[modal]` table for one run; `--infra-retries`, `--max-cost`
   and `--est-seconds` also override `[burla]`. `--max-cost` refuses a sweep whose estimate is above
@@ -182,6 +184,34 @@ $ poisson-prove sweep --dry-run --json
 }
 ```
 
+## What the target prints, with `--json`
+
+With `--json`, stdout holds the one document and nothing else, whatever the target does.
+Everything the target writes to stdout goes to stderr instead, once, as it is written: a `print`
+in the rollout or at import, a write to `sys.stdout.buffer`, `os.write(1, ...)`, the C library, a
+program the target starts, an `atexit` hook, and all of these under `--episode-timeout` too.
+Nothing is dropped, and the exit code is the one the sweep would have had without `--json`.
+
+For a caller, three things follow:
+
+- Read both streams. A caller that pipes stdout and stderr and reads only stdout can hang on a
+  target that prints a lot, because stderr's pipe fills: 200 kB a rollout is enough.
+  `subprocess.run(capture_output=True)` reads both and does not hang.
+- Look for the line that starts `error: `, not for stderr's first line, which can be the
+  target's text. The target's lines sit among the progress lines, and text the target left
+  without a newline at its end sits in front of whatever stderr gets next.
+- The target sees stderr as its stdout. With stdout piped and stderr a terminal,
+  `sys.stdout.isatty()` is true in the target, so a framework may draw there.
+
+A target that calls `sys.exit`, at import or in a rollout, ends a `--json` sweep with exit 3 and
+one `error: ` line that names the errors log, never with exit 0 and an empty stdout.
+
+Without `--json` nothing moves: the target's text stays on stdout, around Prove's own lines.
+`--dry-run` shows nothing of what the import writes, with `--json` or without, because the check
+is not a run. On Modal and Burla, what a rollout writes stays with the worker, in Modal's logs
+and Burla's; what the target's import or the Modal client writes in the sweep's own process goes
+to stderr as above.
+
 ## Exit codes
 
 - `0`: the sweep ran to the end and the run is complete; with `--dry-run`, the plan was printed.
@@ -191,7 +221,8 @@ $ poisson-prove sweep --dry-run --json
   nothing.
 - `2`: the command line is wrong, such as `--pair-with` and `--resume` together.
 - `3`: stopped or failed after work started: `--max-rollouts` reached (resume it), or every
-  rollout errored (the run is stored complete; `inspect` shows the errors).
+  rollout errored (the run is stored complete; `inspect` shows the errors). With `--json`, also a
+  target that called `sys.exit`.
 - `130`: interrupted with Ctrl-C; what ran is kept and the run is partial, to resume.
 
 ## What it writes
