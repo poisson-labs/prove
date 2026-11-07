@@ -238,7 +238,7 @@ jobs:
           PART: ${{ matrix.part }}
           PARTS: ${{ strategy.job-total }}
           PYTHONPATH: .github/lanes
-        run: .venv/bin/python .github/lanes/lane.py "calibration-$PART" 900 --over 10 -q -p no:cacheprovider -p cut --cut "$PART/$PARTS" -n "$WORKERS" --dist worksteal -m "calibration and not slow" tests
+        run: .venv/bin/python .github/lanes/lane.py "calibration-$PART" 900 --over 10 -q -p no:cacheprovider -p cut --cut "$PART/$PARTS" -n "$WORKERS" -m "calibration and not slow" tests
       - name: Keep the part's test report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
