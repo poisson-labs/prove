@@ -1374,7 +1374,7 @@ def test_w6_a_target_that_does_not_import_in_the_worker_is_stored_as_infra_rows(
     fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("BU_HOST_ONLY", "1")
-    p, store, opts, outcome = burla_run(fake, tmp_path, HOSTONLY, infra_retries=1)
+    p, store, opts, outcome = burla_run(fake, tmp_path, HOSTONLY, infra_retries=1, batch_size=4)
     assert not isinstance(outcome, BaseException), outcome
     rows = stored(store, p.run_id)
     assert len(rows) == len(p.pairs) and all((r["error"] or "").startswith("infra: ") for r in rows), rows
