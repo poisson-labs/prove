@@ -101,7 +101,8 @@ def test_a_red_check_is_never_let_through(name: str) -> None:
 def test_a_red_or_skipped_check_closes_the_gate() -> None:
     assert JOB in jobs("ci.yml")["gate"]["needs"]
     gate = import_script("gate")
-    passed = {"changes": {"result": "success", "outputs": {"math": "false", "backends": "false"}}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}}
+    passed = {"changes": {"result": "success", "outputs": {"math": "false", "backends": "false", "calibration": "false"}},
+              "math": {"result": "skipped"}, "backends": {"result": "skipped"}, "calibration": {"result": "skipped"}}
     assert gate.problems({**passed, JOB: {"result": "success"}}) == []
     assert gate.problems({**passed, JOB: {"result": "failure"}}) != []
     assert gate.problems({**passed, JOB: {"result": "skipped"}}) != [], "not a job a change may skip"

@@ -28,8 +28,9 @@ under log-rank, whose power is an approximation. Seeds are fixed here.
 **Runtime.** Each test records its wall time as the junit property ``seconds``, so a run's times can
 be read against the suite's time budgets.
 
-**Markers.** The math suite (``math``), and each test is ``calibration``: it runs on main, nightly and
-before a release, and on a pull request that changes the statistics.
+**Markers.** The math suite (``math``), and each test is ``calibration``: it runs on the release pull
+request (the one that changes ``project.version``), on the push to main after a change that ran the
+math suite, and nightly, never on an ordinary pull request. The gate cuts it by test into eight jobs.
 """
 
 from __future__ import annotations

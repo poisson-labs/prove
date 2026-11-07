@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from typing import Any
 
 #: Jobs that run only when ``changes`` says so, and the output that says it.
-CONDITIONAL = {"math": "math", "backends": "backends"}
+CONDITIONAL = {"math": "math", "calibration": "calibration", "backends": "backends"}
 
 
 def problems(needs: Mapping[str, Any]) -> list[str]:

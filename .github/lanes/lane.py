@@ -52,6 +52,18 @@ def over(junit: Path, seconds: float) -> list[tuple[float, str]]:
     return sorted(found, reverse=True)
 
 
+def processor() -> str:
+    """The processor's model name: the first ``model name`` of ``/proc/cpuinfo``, else ``-``."""
+    try:
+        text = Path("/proc/cpuinfo").read_text(encoding="utf-8")
+    except OSError:
+        return "-"
+    for line in text.splitlines():
+        if line.startswith("model name"):
+            return line.split(":", 1)[1].strip()
+    return "-"
+
+
 def clock(seconds: float) -> str:
     return f"{int(seconds // 60)}:{int(seconds % 60):02d}"
 
@@ -84,9 +96,17 @@ def main(argv: list[str]) -> int:
     verdict = "within" if wall <= budget else "over"
     load = f"{min(loads):.1f} / {statistics.median(loads):.1f} / {max(loads):.1f}" if loads else "-"
     columns = ["lane", "python", "ran", "passed", "failed", "errors", "skipped", "wall", "budget"]
-    columns += ["load min / median / max", "cores", "exit"]
+    columns += ["load min / median / max", "cores", "processor", "exit"]
     cells = [lane, platform.python_version(), n["tests"], passed, n["failures"], n["errors"]]
-    cells += [n["skipped"], clock(wall), f"{clock(budget)} ({verdict})", load, os.cpu_count(), code]
+    cells += [
+        n["skipped"],
+        clock(wall),
+        f"{clock(budget)} ({verdict})",
+        load,
+        os.cpu_count(),
+        processor(),
+        code,
+    ]
     header = "| " + " | ".join(columns) + " |\n" + "|---" * len(columns) + "|\n"
     row = "| " + " | ".join(str(cell) for cell in cells) + " |\n"
     text = header + row

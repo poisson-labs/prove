@@ -51,7 +51,11 @@ machine of ours or reads a secret, and every action is pinned to a full commit S
 - **The gate** (`ci.yml`) runs on every pull request and every push to main: ruff, the format check
   on `src`, mypy, and the code suite on Linux with Python 3.11, cut into shards that run side by
   side, in under five minutes. A change to the statistics, a test of the math suite, or the version
-  a statistics library resolves to also runs the math suite; a change to the Modal or Burla backend,
+  a statistics library resolves to also runs the math suite, without calibration and without
+  anything slow, in two jobs. The release pull request (the one that changes the version) and the
+  push to main after a change that ran the math suite also run `calibration`, every calibration
+  test cut by test into eight jobs; an ordinary pull request does not, nightly does. A change to
+  the Modal or Burla backend,
   its fakes or its tests also runs the backend tests. A change to the docs, the version or the
   CHANGELOG runs the gate alone. The job `gate` always runs and is the one check main requires; the
   job summary says why the math suite or the backend tests ran or not.
