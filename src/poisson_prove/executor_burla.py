@@ -52,6 +52,7 @@ from poisson_prove.executor import (
     _capture_line,
 )
 from poisson_prove.executor_modal import (
+    FIRST_BATCH_ERRORED,
     Job,
     ModalOptions,
     Result,
@@ -1083,7 +1084,9 @@ def run_burla(
             placement=_placement(p, options, bundle, estimate, total),
             cost_check=cost_check,
         )
-        ended = "complete"
+        # A run the runner stopped early (its first batch had no outcome) closes ``stopped``, as
+        # a spend stop does: the cluster ran, and the run did not get what it was asked for.
+        ended = "stopped" if summary.stopped_by == FIRST_BATCH_ERRORED else "complete"
         return summary
     except BurlaSpendStop as exc:
         ended = "stopped"

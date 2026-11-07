@@ -143,6 +143,11 @@ class RunInfo:
     def shown_status(self) -> str:
         """The status the runs table shows: :func:`shown_status` over the entry's counts, or the
         stored status when the rows were not counted."""
+        if self.entry.get("stopped_by") == "first_batch_errored":
+            # A remote sweep that stopped because its first batch had no outcome: nothing to
+            # compare and nothing to resume, so the table reads ``stopped``, as it does for a
+            # complete run whose every row lacks an outcome.
+            return "stopped"
         if "rows" not in self.entry:
             return str(self.entry["status"])
         return shown_status(
@@ -510,6 +515,8 @@ class RunResult(Result):
     run_name: str = ""
     details: tuple[tuple[str, str], ...] = ()
     stopped: bool = False
+    #: The ``error:`` line a sweep that stopped early ends with on stderr, or None.
+    error: str | None = None
 
 
 @dataclass(frozen=True, eq=False)

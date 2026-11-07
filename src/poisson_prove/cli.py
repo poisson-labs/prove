@@ -1902,12 +1902,14 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
     _notes_of(io, result)
     if ns.json:
         _print_result(io, "sweep", result)
-        return 3 if result.stopped else 0
-    io.verdict(result.verdict, result.sentence)
-    for label, value in result.details:
-        io.detail(label, value)
-    for command in result.next:
-        io.next(command)
+    else:
+        io.verdict(result.verdict, result.sentence)
+        for label, value in result.details:
+            io.detail(label, value)
+        for command in result.next:
+            io.next(command)
+    if result.error is not None:
+        io.error(result.error)
     return 3 if result.stopped else 0
 
 
