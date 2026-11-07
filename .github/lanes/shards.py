@@ -27,6 +27,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 REST = "rest"
 BACKENDS = "backends"
+MATH = re.compile(r"math\d+")
+
+
+def group(name: str) -> str:
+    """Which cut an entry belongs to: the math entries are a second cut of the same files."""
+    return "math" if MATH.fullmatch(name) else "code"
 
 
 def parse(text: str) -> dict[str, list[str]]:
@@ -62,17 +68,20 @@ def problems(table: dict[str, list[str]], tests: list[str], total: int | None = 
         out.append(f"{len(rests)} shards are {REST}; exactly one must be")
     if not table.get(BACKENDS):
         out.append(f"no {BACKENDS} entry")
-    others = sorted(set(table) - set(numbered) - {BACKENDS})
+    others = sorted(
+        set(table) - set(numbered) - {BACKENDS} - {n for n in table if group(n) == "math"}
+    )
     if others:
         out.append(f"entries that are neither numbered nor {BACKENDS}: {others}")
-    seen: dict[str, str] = {}
+    seen: dict[tuple[str, str], str] = {}
     for name, words in table.items():
-        if name in rests:
+        if name in rests or files(words) == [REST]:
             continue
         for path in files(words):
-            if path in seen:
-                out.append(f"{path} is in {seen[path]} and {name}")
-            seen[path] = name
+            key = (group(name), path)
+            if key in seen:
+                out.append(f"{path} is in {seen[key]} and {name}")
+            seen[key] = name
             if path not in tests:
                 out.append(f"{path} ({name}) is not a test file")
     return out
@@ -87,7 +96,13 @@ def paths(table: dict[str, list[str]], name: str, tests: list[str]) -> list[str]
     """The pytest options and paths entry ``name`` runs."""
     options = [word for word in table[name] if word.startswith("-")]
     if files(table[name]) == [REST]:
-        named = {path for words in table.values() for path in files(words) if path != REST}
+        named = {
+            path
+            for other, words in table.items()
+            if group(other) == group(name)
+            for path in files(words)
+            if path != REST
+        }
         return options + [path for path in tests if path not in named]
     return options + files(table[name])
 

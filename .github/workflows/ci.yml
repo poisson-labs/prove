@@ -7,7 +7,14 @@
 # - lint: ruff, the format check on src, and mypy.
 # - tests: the code suite on Linux and Python 3.11, the lowest Prove supports, cut into the shards
 #   of SHARDS below, which run side by side. One worker per core in each.
-# - math, backends: only when `changes` says so.
+# - math: only when `changes` says so; the math tests without calibration and without anything slow, in
+#   two jobs by file (math1, math2 of the shard table below), 300 seconds each.
+# - calibration: only when `changes` says so, that is on the release pull request (the one that changes
+#   project.version) and on a push to main whose change ran the math lane. Every calibration test,
+#   cut by test into eight jobs (.github/lanes/cut.py), 900 seconds each, a need of `gate`; a red part
+#   turns the push's run, and main's badge, red. Where calibration runs is also said by the `math`
+#   marker in pyproject.toml and the docstring of tests/test_pf4_calibration.py.
+# - backends: only when `changes` says so.
 # - tasks-check: Poisson Tasks' own Prove check (tasks_check.py), from Tasks' latest release tag,
 #   run unedited against Prove built from this tree under a local version PyPI cannot hold, so the
 #   check cannot quietly test the release already out. It runs on every pull request, whatever it
@@ -26,6 +33,10 @@
 # to the gate's end. Shard 1 runs each file on one worker (`--dist=loadfile`): every test of
 # test_pf1_look.py's corpus shares one module fixture of about eighty command-line calls, and
 # spread over four workers it was built four times at once, three minutes each on a hosted runner.
+#
+# The math entries of the table (`math1`, `math2`) are a second cut of the same files: a file may be in a
+# code shard and a math entry. `math1` is the statistics file alone; `math2: rest` is every test file
+# no other math entry names, so a new file of math tests runs in the gate with no change here.
 #
 # Everything slow runs in nightly.yml, never here; the release runs from a tag in release.yml.
 # Every job runs on a GitHub-hosted runner, reads no secret and holds only read access to the
@@ -63,10 +74,12 @@ env:
     7: tests/test_pf6_app.py tests/test_pf6_look.py tests/test_fr_first_run.py
     8: tests/test_s29_viewer.py tests/test_pf8_public_hygiene.py tests/test_pf12_ui.py
     9: tests/test_pf4_surfaces.py tests/test_ls_local_serve.py tests/test_pf3_first_run.py
-       tests/test_pf12_artifacts.py
+       tests/test_pf12_artifacts.py tests/test_json_stdout.py
     10: rest
     backends: tests/test_bu_burla_backend.py tests/test_m3_modal.py tests/test_m3_modal_launch.py
        tests/test_mc_modal_chaos.py tests/test_pf9_backends.py tests/test_pf10_worker_blas.py
+    math1: tests/test_pf4_stats.py
+    math2: rest
 
 jobs:
   changes:
@@ -74,6 +87,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       math: ${{ steps.math.outputs.math }}
+      calibration: ${{ steps.math.outputs.calibration }}
       backends: ${{ steps.backends.outputs.backends }}
     env:
       # A pull request against its base; a push to main against main before the push.
@@ -157,10 +171,15 @@ jobs:
           if-no-files-found: warn
 
   math:
+    name: math (${{ matrix.shard }})
     needs: [changes]
     if: needs.changes.outputs.math == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [math1, math2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -175,8 +194,59 @@ jobs:
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
-      - name: Math suite
-        run: .venv/bin/python .github/lanes/lane.py math 4200 -q -p no:cacheprovider -n "$WORKERS" -m "math or calibration" tests
+      - name: Math suite, this job's files
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          files=$(.venv/bin/python .github/lanes/shards.py "$SHARD")
+          .venv/bin/python .github/lanes/lane.py "math-$SHARD" 300 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "math and not calibration and not slow" $files
+      - name: Keep the job's test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-${{ matrix.shard }}
+          path: /tmp/lane-math-*/junit.xml
+          retention-days: 7
+          if-no-files-found: warn
+
+  calibration:
+    name: calibration (part ${{ matrix.part }} of ${{ strategy.job-total }})
+    needs: [changes]
+    if: needs.changes.outputs.calibration == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python "3.11" .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
+      - name: Calibration, this part
+        env:
+          PART: ${{ matrix.part }}
+          PARTS: ${{ strategy.job-total }}
+          PYTHONPATH: .github/lanes
+        run: .venv/bin/python .github/lanes/lane.py "calibration-$PART" 900 --over 10 -q -p no:cacheprovider -p cut --cut "$PART/$PARTS" -n "$WORKERS" --dist worksteal -m "calibration and not slow" tests
+      - name: Keep the part's test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-calibration-${{ matrix.part }}
+          path: /tmp/lane-calibration-*/junit.xml
+          retention-days: 7
+          if-no-files-found: warn
 
   backends:
     needs: [changes]
@@ -239,7 +309,7 @@ jobs:
             --work "$RUNNER_TEMP/work"
 
   gate:
-    needs: [changes, lint, tests, math, backends, tasks-check]
+    needs: [changes, lint, tests, math, calibration, backends, tasks-check]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

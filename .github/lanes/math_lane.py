@@ -67,6 +67,17 @@ def reasons(
     return out
 
 
+def calibration(event: str, base_pyproject: str, head_pyproject: str, math: bool) -> list[str]:
+    """Why this change runs calibration; empty when it does not."""
+    if event == "pull_request":
+        base = tomllib.loads(base_pyproject)["project"]["version"]
+        head = tomllib.loads(head_pyproject)["project"]["version"]
+        return [f"changes project.version from {base} to {head}, a release"] if base != head else []
+    if event == "push" and math:
+        return ["a push to main that ran the math suite"]
+    return []
+
+
 def resolved(pyproject: str) -> dict[str, str]:
     """Every pinned version ``uv pip compile`` resolves the project with all its extras to, for
     Python 3.11, the lowest Python Prove supports."""
@@ -119,9 +130,16 @@ def main(base_sha: str, head_sha: str) -> int:
         if why
         else "- not run: no statistics file, math test or resolved version changed\n"
     )
+    cal = calibration(
+        os.environ.get("GITHUB_EVENT_NAME", ""), base_pyproject, head_pyproject, bool(why)
+    )
+    text += "".join(f"- calibration runs: {r}\n" for r in cal)
     print(text, end="")
     for name, value in (
-        ("GITHUB_OUTPUT", f"math={'true' if why else 'false'}\n"),
+        (
+            "GITHUB_OUTPUT",
+            f"math={'true' if why else 'false'}\ncalibration={'true' if cal else 'false'}\n",
+        ),
         ("GITHUB_STEP_SUMMARY", text),
     ):
         if os.environ.get(name):
