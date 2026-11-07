@@ -2786,7 +2786,12 @@ def start(
             sentence, nexts = _kept(
                 st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
             )
-            kept = closing_progress()
+            try:
+                kept = closing_progress()
+            except BrokenPipeError:
+                # The face's stream is gone (a reader that left with the interrupt); the log is
+                # not, and the record comes before anything a face would say.
+                kept = st.count(p.run_id)
             events.emit("interrupted", {"kept": kept, "status": "partial"})
             raise Interrupted(f"interrupted: {sentence}", nexts) from exc
         raise
