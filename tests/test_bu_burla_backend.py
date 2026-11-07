@@ -862,6 +862,30 @@ def test_m7_a_job_level_failure_keeps_what_arrived_and_resubmits_the_rest(fake: 
     assert [item["jobs"] for item in second["items"]] == [b for k, b in enumerate(batches) if k not in delivered]
 
 
+def test_rb_p1_a_cluster_runs_produced_by_names_its_bundle(fake: Fake, tmp_path: Path) -> None:
+    """Remote backends P1 on the cluster backend, through the command line: ``produced_by`` holds the
+    version, the spec and the target, the tool, the manifest's backend, and the bundle's sha256, the
+    same digest the manifest's bundle record carries."""
+    spec = write_sweep(tmp_path / "w", burla=burla_table(ledger=str(tmp_path / "ledger.jsonl")))
+    out, err = io.StringIO(), io.StringIO()
+    code = cli.main(["--store", str(tmp_path / "store"), "sweep", str(spec), "--target", PLAIN, "--backend", "burla",
+                     "--max-mde", "1", "--yes", "--json"], stdout=out, stderr=err, stdin=io.StringIO())
+    assert code == 0, (code, out.getvalue(), err.getvalue())
+    run_id = json.loads(out.getvalue())["run_id"]
+    manifest = json.loads((tmp_path / "store" / run_id / "manifest.json").read_text(encoding="utf-8"))
+    produced = manifest.get("produced_by")
+    assert isinstance(produced, dict), manifest
+    assert set(produced) == {"version", "from", "tool", "backend", "bundle"}, produced
+    assert produced["version"] == poisson_prove.__version__ and produced["tool"] == "poisson-prove", produced
+    assert produced["backend"] == manifest["backend"], produced
+    assert produced["bundle"] == {"sha256": manifest["environment"]["bundle"]["sha256"]}, produced
+    target_file = TARGETS / "bu_targets" / "plain.py"
+    assert produced["from"] == [
+        {"name": "sweep.toml", "sha256": hashlib.sha256(spec.read_bytes()).hexdigest()},
+        {"name": "bu_targets.plain", "sha256": hashlib.sha256(target_file.read_bytes()).hexdigest()},
+    ], produced
+
+
 REFUSALS = ["JobStalled", "NodesFailedToBoot", "NoNodes", "NoCompatibleNodes", "UnsupportedLocalImport",
             "FunctionTooBig", "Unnamed"]
 ENDINGS = ["ClusterShutdown", "ClusterRestarted", "JobCanceled"]
