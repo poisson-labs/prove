@@ -10,8 +10,11 @@ runner, or a run really takes under five minutes, is not something a test here c
 request that changes the workflows is that check.
 
 **The lanes.** The gate runs on every pull request and every push to main: ruff, mypy and the code
-suite on Linux and 3.11, sharded, with the math suite when the statistics change and the backend
-fakes when backend code changes; its job ``gate`` always runs and is the check main requires.
+suite on Linux and 3.11, sharded, with the math suite (without calibration and without anything
+slow, in two jobs) when the statistics change and the backend fakes when backend code changes;
+calibration runs, cut by test into eight jobs, on the release pull request and on the push to main
+after a change that ran the math suite (``test_math_lane_ci.py``); its job ``gate`` always runs and
+is the check main requires.
 Nightly runs everything slow and every supported Python on Linux and macOS, and keeps one issue
 open while it fails. A tag ``v*`` builds, checks and publishes; nothing slow runs there. No lane
 runs a test marked ``backend``.
@@ -156,21 +159,28 @@ def test_pf10_2_the_gate_job_always_runs_and_depends_on_every_other_job_of_the_g
 
 
 @pytest.mark.parametrize(("needs", "opens"), [
-    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "false"}}, "lint": {"result": "success"},
-      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}}, True),
-    ({"changes": {"result": "success", "outputs": {"math": "true", "backends": "false"}}, "lint": {"result": "success"},
-      "tests": {"result": "success"}, "math": {"result": "success"}, "backends": {"result": "skipped"}}, True),
-    ({"changes": {"result": "success", "outputs": {"math": "true", "backends": "false"}}, "lint": {"result": "success"},
-      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}}, False),
-    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "false"}}, "lint": {"result": "success"},
-      "tests": {"result": "failure"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}}, False),
-    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "true"}}, "lint": {"result": "success"},
-      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "cancelled"}}, False),
-    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "false"}}, "lint": {"result": "skipped"},
-      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}}, False),
+    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "false", "calibration": "false"}}, "lint": {"result": "success"},
+      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}, "calibration": {"result": "skipped"}}, True),
+    ({"changes": {"result": "success", "outputs": {"math": "true", "backends": "false", "calibration": "false"}}, "lint": {"result": "success"},
+      "tests": {"result": "success"}, "math": {"result": "success"}, "backends": {"result": "skipped"}, "calibration": {"result": "skipped"}}, True),
+    ({"changes": {"result": "success", "outputs": {"math": "true", "backends": "false", "calibration": "false"}}, "lint": {"result": "success"},
+      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}, "calibration": {"result": "skipped"}}, False),
+    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "false", "calibration": "false"}}, "lint": {"result": "success"},
+      "tests": {"result": "failure"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}, "calibration": {"result": "skipped"}}, False),
+    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "true", "calibration": "false"}}, "lint": {"result": "success"},
+      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "cancelled"}, "calibration": {"result": "skipped"}}, False),
+    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "false", "calibration": "false"}}, "lint": {"result": "skipped"},
+      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}, "calibration": {"result": "skipped"}}, False),
     ({"changes": {"result": "failure", "outputs": {}}, "lint": {"result": "success"},
-      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}}, False),
-], ids=["nothing-called-for", "math-ran", "math-asked-but-skipped", "a-shard-failed", "backends-cancelled", "lint-skipped", "changes-failed"])
+      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}, "calibration": {"result": "skipped"}}, False),
+    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "false", "calibration": "true"}}, "lint": {"result": "success"},
+      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}, "calibration": {"result": "success"}}, True),
+    ({"changes": {"result": "success", "outputs": {"math": "false", "backends": "false", "calibration": "true"}}, "lint": {"result": "success"},
+      "tests": {"result": "success"}, "math": {"result": "skipped"}, "backends": {"result": "skipped"}, "calibration": {"result": "skipped"}}, False),
+    ({"changes": {"result": "success", "outputs": {"math": "true", "backends": "false", "calibration": "true"}}, "lint": {"result": "success"},
+      "tests": {"result": "success"}, "math": {"result": "success"}, "backends": {"result": "skipped"}, "calibration": {"result": "failure"}}, False),
+], ids=["nothing-called-for", "math-ran", "math-asked-but-skipped", "a-shard-failed", "backends-cancelled", "lint-skipped", "changes-failed",
+        "calibration-ran", "calibration-asked-but-skipped", "a-calibration-job-failed"])
 def test_pf10_2_the_gate_opens_only_when_every_job_passed_or_was_not_called_for(needs: dict[str, Any], opens: bool) -> None:
     gate = import_script("gate")
     assert (gate.problems(needs) == []) is opens
@@ -232,13 +242,19 @@ def test_pf10_3_every_action_is_pinned_to_a_full_commit_sha_with_its_version_bes
 
 def test_pf10_4_each_lane_selects_its_tests_and_none_selects_a_backend_test() -> None:
     by_lane = {(name, job): marker_expression(arguments) for name, job, arguments in lanes() if "-m" in arguments}
-    assert set(by_lane) == {("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "backends"), ("nightly.yml", "code"),
-                            ("nightly.yml", "math"), ("nightly.yml", "slow"), ("nightly.yml", "floors"), ("nightly.yml", "linux"),
-                            ("release.yml", "build")}
+    assert set(by_lane) == {("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "calibration"), ("ci.yml", "backends"),
+                            ("nightly.yml", "code"), ("nightly.yml", "math"), ("nightly.yml", "slow"), ("nightly.yml", "floors"),
+                            ("nightly.yml", "linux"), ("release.yml", "build")}
     for key in (("ci.yml", "tests"), ("ci.yml", "backends"), ("nightly.yml", "code"), ("nightly.yml", "linux")):
         assert is_code_suite(by_lane[key]), key
-    for key in (("ci.yml", "math"), ("nightly.yml", "math")):
-        assert selects(by_lane[key], {"math"}) and selects(by_lane[key], {"calibration"}) and not selects(by_lane[key], set()), key
+    gate_math = by_lane[("ci.yml", "math")]
+    assert selects(gate_math, {"math"}) and not selects(gate_math, set()), "the exact checks"
+    assert not selects(gate_math, {"math", "calibration"}) and not selects(gate_math, {"calibration"}), "calibration left the pull request"
+    calibration = by_lane[("ci.yml", "calibration")]
+    assert selects(calibration, {"math", "calibration"}) and selects(calibration, {"calibration"}), "every calibration test"
+    assert not selects(calibration, {"math"}) and not selects(calibration, set()), "and nothing else"
+    nightly_math = by_lane[("nightly.yml", "math")]
+    assert selects(nightly_math, {"math"}) and selects(nightly_math, {"calibration"}) and not selects(nightly_math, set())
     assert selects(by_lane[("nightly.yml", "slow")], {"slow"}) and not selects(by_lane[("nightly.yml", "slow")], set())
     for key, expression in by_lane.items():
         assert not selects(expression, {"backend"}) and not selects(expression, {"backend", "slow"}), key
@@ -247,7 +263,8 @@ def test_pf10_4_each_lane_selects_its_tests_and_none_selects_a_backend_test() ->
 def test_pf10_4_nothing_slow_runs_in_the_gate_or_at_a_release() -> None:
     for name, job, arguments in lanes():
         if name in ("ci.yml", "release.yml") and "-m" in arguments:
-            assert not selects(marker_expression(arguments), {"slow"}), (name, job)
+            for marks in ({"slow"}, {"slow", "math"}, {"slow", "calibration"}, {"slow", "math", "calibration"}):
+                assert not selects(marker_expression(arguments), marks), (name, job, marks)
         if name in ("ci.yml", "release.yml"):
             assert FLOORS_TEST not in " ".join(arguments), (name, job)
     for name in ("ci.yml", "release.yml"):
@@ -256,7 +273,7 @@ def test_pf10_4_nothing_slow_runs_in_the_gate_or_at_a_release() -> None:
 
 def test_pf10_4_the_gate_runs_lint_and_the_sharded_code_suite_on_linux_and_311() -> None:
     gate = jobs("ci.yml")
-    for job in ("changes", "lint", "tests", "math", "backends"):
+    for job in ("changes", "lint", "tests", "math", "calibration", "backends"):
         assert gate[job]["runs-on"] == "ubuntu-latest", job
         (setup,) = [s for s in gate[job]["steps"] if s.get("uses", "").startswith("actions/setup-python@")]
         assert setup["with"]["python-version"] == "3.11", job
@@ -280,7 +297,13 @@ def test_pf10_4_the_gate_runs_lint_and_the_sharded_code_suite_on_linux_and_311()
     ("1: tests/test_a.py\n3: rest\nbackends: tests/test_d.py\n", "the numbered shards are ['1', '3'], not 1 to 2"),
     ("1: tests/test_a.py\n2: rest\nbackends: tests/test_d.py tests/test_z.py\n", "tests/test_z.py (backends) is not a test file"),
     ("1: tests/test_a.py\n2: rest\n", "no backends entry"),
-], ids=["a-good-table", "a-file-twice", "no-rest", "a-gap", "not-a-test-file", "no-backends"])
+    ("1: --dist=loadfile tests/test_a.py\n2: tests/test_b.py\n   tests/test_c.py\n3: rest\nbackends: tests/test_d.py\n"
+     "math1: tests/test_a.py\nmath2: rest\n", None),
+    ("1: tests/test_a.py\n2: rest\nbackends: tests/test_d.py\nmath1: tests/test_b.py\nmath2: tests/test_b.py tests/test_c.py\n",
+     "tests/test_b.py is in math1 and math2"),
+    ("1: tests/test_a.py\n2: rest\nbackends: tests/test_d.py\nmath1: tests/test_z.py\nmath2: rest\n", "tests/test_z.py (math1) is not a test file"),
+], ids=["a-good-table", "a-file-twice", "no-rest", "a-gap", "not-a-test-file", "no-backends",
+        "math-entries", "a-file-twice-in-the-math-entries", "a-math-entry-not-a-test-file"])
 def test_pf10_4_the_shard_table_puts_every_test_file_in_exactly_one_place(table: str, wrong: str | None) -> None:
     shards = import_script("shards")
     tests = ["tests/test_a.py", "tests/test_b.py", "tests/test_c.py", "tests/test_d.py", "tests/test_e.py", "tests/test_f.py"]
@@ -292,6 +315,11 @@ def test_pf10_4_the_shard_table_puts_every_test_file_in_exactly_one_place(table:
         assert shards.paths(parsed, "2", tests) == ["tests/test_b.py", "tests/test_c.py"]
         assert shards.paths(parsed, "1", tests) == ["--dist=loadfile", "tests/test_a.py"], "an option is the shard's own"
         assert shards.problems(parsed, tests, 4) == ["the table has 3 shards and the matrix runs 4"]
+        if "math2" in parsed:
+            # The math entries are a second cut of the same files: they take nothing from the code shards' rest.
+            assert shards.paths(parsed, "math1", tests) == ["tests/test_a.py"]
+            math_rest = shards.paths(parsed, "math2", tests)
+            assert "tests/test_a.py" not in math_rest and {"tests/test_b.py", "tests/test_c.py", "tests/test_e.py", "tests/test_f.py"} <= set(math_rest)
     else:
         assert wrong in found, found
 
@@ -321,7 +349,7 @@ def test_pf10_4_the_floors_run_is_alone_at_its_own_thread_cap_and_keeps_its_whol
 
 
 def test_pf10_4_every_hosted_lane_runs_one_pytest_worker_per_core() -> None:
-    for name, job in (("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "backends"),
+    for name, job in (("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "calibration"), ("ci.yml", "backends"),
                       ("nightly.yml", "code"), ("nightly.yml", "math"), ("nightly.yml", "slow")):
         arguments = lane(name, job)
         assert arguments[arguments.index("-n") + 1] == '"$WORKERS"', (name, job)
@@ -339,6 +367,9 @@ def test_pf10_5_the_four_markers_are_declared_with_their_lane_in_plain_words() -
     described = dict(m.split(": ", 1) for m in markers)
     assert {"math", "calibration", "slow", "backend"} <= set(described)
     assert "pull request" in described["math"] and "nightly" in described["math"] and "release" in described["math"]
+    assert "release pull request" in described["math"] and "push to main" in described["math"], "where calibration runs now"
+    assert described["calibration"] == ('a rejection rate over sharp-null resamples (the slow lane); '
+                                        'deselected only by typing -m "not calibration", never by configuration')
     assert "nightly" in described["slow"] and "never on a pull request" in described["slow"]
     assert "never in CI" in described["backend"]
     math_lane = import_script("math_lane")
@@ -406,7 +437,11 @@ def test_pf10_7_the_math_and_backend_jobs_follow_the_changes_job_and_nightly_run
     assert 'math_lane.py "$BASE_SHA" "$HEAD_SHA"' in runs("ci.yml", "changes")
     assert 'backends_lane.py "$BASE_SHA" "$HEAD_SHA"' in runs("ci.yml", "changes")
     assert gate["changes"]["steps"][0]["with"]["fetch-depth"] == 0
-    assert set(gate["changes"]["outputs"]) == {"math", "backends"}
+    assert set(gate["changes"]["outputs"]) == {"math", "backends", "calibration"}
+    assert gate["calibration"]["if"] == "needs.changes.outputs.calibration == 'true'" and gate["calibration"]["needs"] == ["changes"]
+    (source,) = re.findall(r"\$\{\{ steps\.([\w-]+)\.outputs\.calibration \}\}", gate["changes"]["outputs"]["calibration"])
+    (step,) = [s for s in gate["changes"]["steps"] if s.get("id") == source]
+    assert "math_lane.py" in step["run"], "the calibration output is math_lane.py's"
     shards = import_script("shards")
     for path in shards.parse(env_of("ci.yml", "tests")["SHARDS"])["backends"]:
         assert (ROOT / path).is_file(), path
@@ -433,6 +468,11 @@ def test_pf10_8_a_lane_writes_its_count_wall_time_budget_load_and_slow_tests_to_
     assert cells["lane"] == "demo" and cells["ran"] == "2" and cells["passed"] == "1" and cells["failed"] == "1"
     assert re.fullmatch(r"\d+:\d\d", cells["wall"]) and cells["budget"] == "5:00 (within)" and cells["exit"] == "1"
     assert re.fullmatch(r"[\d.]+ / [\d.]+ / [\d.]+", cells["load min / median / max"])
+    cpuinfo = Path("/proc/cpuinfo")
+    models = re.findall(r"^model name\s*:\s*(.+)$", cpuinfo.read_text(encoding="utf-8"), re.MULTILINE) if cpuinfo.exists() else []
+    assert "processor" in cells, "the processor's model name, read on the runner"
+    if models:
+        assert cells["processor"] == models[0].strip()
 
 
 def test_pf10_8_every_job_that_runs_tests_runs_them_through_the_lane_script() -> None:
@@ -440,14 +480,14 @@ def test_pf10_8_every_job_that_runs_tests_runs_them_through_the_lane_script() ->
         for job in jobs(name):
             assert "pytest" not in runs(name, job).replace("-p no:cacheprovider", ""), (name, job)
     assert {(name, job) for name, job, _ in lanes()} == {
-        ("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "backends"), ("nightly.yml", "code"), ("nightly.yml", "math"),
-        ("nightly.yml", "slow"), ("nightly.yml", "floors"), ("nightly.yml", "linux"), ("release.yml", "build")}
+        ("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "calibration"), ("ci.yml", "backends"), ("nightly.yml", "code"),
+        ("nightly.yml", "math"), ("nightly.yml", "slow"), ("nightly.yml", "floors"), ("nightly.yml", "linux"), ("release.yml", "build")}
 
 
 def test_pf10_8_each_lane_reports_against_its_hosted_budget() -> None:
     # Report-only budgets for a hosted runner, in seconds: a gate shard has five minutes.
     budgets = {(name, job): arguments[1] for name, job, arguments in lanes()}
-    assert budgets == {("ci.yml", "tests"): "300", ("ci.yml", "math"): "4200", ("ci.yml", "backends"): "600",
+    assert budgets == {("ci.yml", "tests"): "300", ("ci.yml", "math"): "300", ("ci.yml", "calibration"): "900", ("ci.yml", "backends"): "600",
                        ("nightly.yml", "code"): "1800", ("nightly.yml", "linux"): "1800", ("nightly.yml", "floors"): "1800",
                        ("nightly.yml", "math"): "4200", ("nightly.yml", "slow"): "9000", ("release.yml", "build"): "600"}
 
