@@ -394,7 +394,7 @@ def test_pf10_6_every_job_that_builds_a_venv_installs_its_python_and_uv_uses_onl
             (built,) = re.findall(r'uv venv --quiet --python (".*?"|\S+) \.venv', body)
             assert built.strip('"') == str(setup["with"]["python-version"]).strip('"'), (name, job)
             assert "uv==$UV_VERSION" in body and re.fullmatch(r"\d+\.\d+\.\d+", env_of(name, job)["UV_VERSION"]), (name, job)
-    assert len(built_any) == 9, built_any
+    assert len(built_any) == 10, built_any
 
 
 # ---------- PF10.7: when a change runs the math suite, and the backend fakes ----------
