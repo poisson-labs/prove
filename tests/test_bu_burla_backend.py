@@ -862,6 +862,29 @@ def test_m7_a_job_level_failure_keeps_what_arrived_and_resubmits_the_rest(fake: 
     assert [item["jobs"] for item in second["items"]] == [b for k, b in enumerate(batches) if k not in delivered]
 
 
+def test_e5_an_all_errored_first_batch_stops_the_run_and_the_ledger_closes_it_stopped(
+    fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Remote backends E1 and E5 on the cluster backend: no batch of a target that does not import in
+    a worker has an outcome; with no retry left, the first stored batch is rows with no outcome, so
+    the run stops in its first call, partial, and the ledger closes it ``stopped``. The launcher is
+    gone when ``run_burla`` returns. (The cluster stop that follows belongs with the cluster's life.)"""
+    monkeypatch.setenv("BU_HOST_ONLY", "1")
+    p, store, opts, outcome = burla_run(fake, tmp_path, HOSTONLY, sweep={"replicates": 3}, infra_retries=0)
+    assert not isinstance(outcome, BaseException), outcome
+    assert outcome.stopped_by == "first_batch_errored" and not outcome.complete, outcome
+    assert len(fake.starts()) == 1, "a batch was submitted after the first stored batch"
+    rows = stored(store, p.run_id)
+    assert rows and all((r["error"] or "").startswith("infra: ") for r in rows), rows
+    assert len(rows) < len(p.pairs) and len(rows) % 2 == 0, len(rows)
+    assert status(store, p.run_id) == "partial"
+    manifest = json.loads((tmp_path / "store" / p.run_id / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest.get("stopped_by") == "first_batch_errored", manifest
+    assert close_of(opts.ledger, p.run_id)["ended"] == "stopped"
+    (start,) = fake.starts()
+    assert wait_gone(start["launcher_pid"], 15) is not None, "the launcher outlived the run"
+
+
 def test_rb_p1_a_cluster_runs_produced_by_names_its_bundle(fake: Fake, tmp_path: Path) -> None:
     """Remote backends P1 on the cluster backend, through the command line: ``produced_by`` holds the
     version, the spec and the target, the tool, the manifest's backend, and the bundle's sha256, the
