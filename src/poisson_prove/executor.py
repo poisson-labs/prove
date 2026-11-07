@@ -157,6 +157,11 @@ class Plan:
     #: Under ``pair_with=``, the earlier run's replicates: the gate then asks the paired test, its
     #: pairs the smaller of the two runs'. None for a run paired with nothing.
     paired_replicates: int | None = None
+    #: What this segment of the run was made from (the manifest's ``produced_by``: the version,
+    #: the spec and the target with their digests, the tool, the backend). A new run's manifest
+    #: records it; a resumed run keeps its manifest's and records this one in its ``resumed``
+    #: event. Set by the launcher, like ``import_path``; None when nothing was given.
+    produced_by: Mapping[str, Any] | None = None
 
 
 def _all_keys(spec: SweepSpec) -> list[tuple[str, int]]:
@@ -1222,7 +1227,8 @@ def run_local(
                 retain_traces_for=p.spec.retain_traces_for,
                 declared=_spec_declared(p.spec),
                 name=p.name,
-            )
+            ),
+            produced_by=p.produced_by,
         )
 
     total = len(p.pairs)

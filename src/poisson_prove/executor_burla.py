@@ -18,6 +18,7 @@ backstop kills the launcher's process group if it ever stops reporting.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import gzip
 import hashlib
 import importlib.metadata
@@ -1051,6 +1052,12 @@ def run_burla(
         stop_cost=options.stop_cost,
         max_cost=options.max_cost,
     )
+    if p.produced_by is not None:
+        # The bundle names every package shipped to the cluster: its digest is part of what the
+        # run was made from, and the manifest's bundle record carries the same one.
+        p = dataclasses.replace(
+            p, produced_by={**p.produced_by, "bundle": {"sha256": bundle.sha256}}
+        )
     mapper = _BurlaMapper(p, import_path, options, bundle, deadline)
     runner_options = ModalOptions(
         batch_size=options.batch_size,

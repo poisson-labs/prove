@@ -2376,7 +2376,7 @@ def _planned(
         )
     except ExecutorError as exc:
         raise refusal(_with_names(_look.plain_words(str(exc)), idx)) from exc
-    p = dataclasses.replace(p, name=name)
+    p = dataclasses.replace(p, name=name, produced_by=_produced_by(spec_path, target, backend))
     if backend == "modal":
         assert modal is not None
         block = _modal.preflight_modal(p, modal[0], modal[1])
@@ -2492,6 +2492,40 @@ def _planned(
             "spec_folder": folder,
         },
     )
+
+
+def _produced_by(spec_path: str | None, target: str, backend: str) -> dict[str, Any]:
+    """What this segment of the run is made from, as the manifest's ``produced_by`` records it
+    (the artifact format's 1.1): this version; ``from``, the sweep spec file by its name without
+    its folder and then the target's module by its import path less the function, each a SHA-256
+    over the bytes read; the tool; the backend. A segment that read no spec file (a resume from
+    the record) lists the target alone. A module with no source file (a compiled module, a
+    namespace) is listed with a null digest, never left out. Nothing here is a path outside the
+    spec's folder, a host name or a key."""
+    import hashlib
+
+    from poisson_prove import __version__
+
+    made_from: list[dict[str, Any]] = []
+    if spec_path is not None:
+        spec_file = Path(spec_path)
+        made_from.append(
+            {"name": spec_file.name, "sha256": hashlib.sha256(spec_file.read_bytes()).hexdigest()}
+        )
+    module = split_import_path(target)[0]
+    digest: str | None = None
+    try:
+        found = importlib.util.find_spec(module)
+    except (ImportError, ValueError):
+        found = None
+    origin = None if found is None else found.origin
+    if isinstance(origin, str) and origin.endswith(".py"):
+        try:
+            digest = hashlib.sha256(Path(origin).read_bytes()).hexdigest()
+        except OSError:
+            digest = None
+    made_from.append({"name": module, "sha256": digest})
+    return {"version": __version__, "from": made_from, "tool": COMMAND, "backend": backend}
 
 
 def _resume_command(o: Mapping[str, Any], typed_target: str | None) -> str:
@@ -2682,9 +2716,16 @@ def start(
         except (OSError, ValueError):
             pass  # the run is written; the descriptor follows on the next write that can
         if p.resumed:
+            # The manifest keeps the first segment's ``produced_by``; this segment's own goes
+            # here, since the spec or the target may have changed between the two.
             events.emit(
                 "resumed",
-                {"run_id": p.run_id, "already_stored": p.already_stored, "rollouts": total},
+                {
+                    "run_id": p.run_id,
+                    "already_stored": p.already_stored,
+                    "rollouts": total,
+                    **({} if p.produced_by is None else {"produced_by": dict(p.produced_by)}),
+                },
             )
         else:
             events.emit(
