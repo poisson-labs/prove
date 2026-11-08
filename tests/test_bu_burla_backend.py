@@ -765,10 +765,29 @@ def test_m3_a_shuffled_burla_run_stores_what_run_local_stores(fake: Fake, tmp_pa
 
 
 def test_m4_a_batch_returned_twice_is_stored_once_and_the_run_completes(fake: Fake, tmp_path: Path) -> None:
-    fake.script(attempts=[{"duplicate": [0]}])
+    """Input 0 arrives first and its copy second, so the copy pushes input 2 out of the call's three
+    results: input 2 is missing and is resubmitted in a second call. The order is pinned: the fake,
+    like Burla, yields the first ``len(inputs)`` results it composes, and which one a duplicate
+    pushes out depends on the order the results arrive in (the case where input 0 arrives last is
+    the next test)."""
+    fake.script(attempts=[{"duplicate": [0], "order": [0, 1, 2]}])
     p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3})
     assert_complete(outcome, store, p)
     assert len(fake.starts()) == 2, "the result the duplicate pushed out was not resubmitted"
+    assert fake.ends()[0]["yielded"] == [0, 0, 1], fake.ends()[0]
+    assert [item["jobs"] for item in fake.starts()[1]["items"]] == [batches_of(p, 2)[2]]
+
+
+def test_m4_a_duplicate_arriving_last_is_the_one_cut_and_the_run_completes_in_one_call(
+    fake: Fake, tmp_path: Path
+) -> None:
+    """Input 0 arrives last: its copy is the result past ``len(inputs)``, so the call yields each
+    input once, nothing is missing, and the run completes in one call with every row stored once."""
+    fake.script(attempts=[{"duplicate": [0], "order": [1, 2, 0]}])
+    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3})
+    assert_complete(outcome, store, p)
+    assert len(fake.starts()) == 1, fake.starts()
+    assert fake.ends()[0]["yielded"] == [1, 2, 0], fake.ends()[0]
 
 
 def test_m5_a_missing_batch_is_resubmitted_in_a_new_call(fake: Fake, tmp_path: Path) -> None:
@@ -841,6 +860,53 @@ def test_m7_a_job_level_failure_keeps_what_arrived_and_resubmits_the_rest(fake: 
     second = fake.starts()[1]
     batches = batches_of(p, 2)
     assert [item["jobs"] for item in second["items"]] == [b for k, b in enumerate(batches) if k not in delivered]
+
+
+def test_e5_an_all_errored_first_batch_stops_the_run_and_the_ledger_closes_it_stopped(
+    fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Remote backends E1 and E5 on the cluster backend: no batch of a target that does not import in
+    a worker has an outcome; with no retry left, the first stored batch is rows with no outcome, so
+    the run stops in its first call, partial, and the ledger closes it ``stopped``. The launcher is
+    gone when ``run_burla`` returns. (The cluster stop that follows belongs with the cluster's life.)"""
+    monkeypatch.setenv("BU_HOST_ONLY", "1")
+    p, store, opts, outcome = burla_run(fake, tmp_path, HOSTONLY, sweep={"replicates": 3}, infra_retries=0)
+    assert not isinstance(outcome, BaseException), outcome
+    assert outcome.stopped_by == "first_batch_errored" and not outcome.complete, outcome
+    assert len(fake.starts()) == 1, "a batch was submitted after the first stored batch"
+    rows = stored(store, p.run_id)
+    assert rows and all((r["error"] or "").startswith("infra: ") for r in rows), rows
+    assert len(rows) < len(p.pairs) and len(rows) % 2 == 0, len(rows)
+    assert status(store, p.run_id) == "partial"
+    manifest = json.loads((tmp_path / "store" / p.run_id / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest.get("stopped_by") == "first_batch_errored", manifest
+    assert close_of(opts.ledger, p.run_id)["ended"] == "stopped"
+    (start,) = fake.starts()
+    assert wait_gone(start["launcher_pid"], 15) is not None, "the launcher outlived the run"
+
+
+def test_rb_p1_a_cluster_runs_produced_by_names_its_bundle(fake: Fake, tmp_path: Path) -> None:
+    """Remote backends P1 on the cluster backend, through the command line: ``produced_by`` holds the
+    version, the spec and the target, the tool, the manifest's backend, and the bundle's sha256, the
+    same digest the manifest's bundle record carries."""
+    spec = write_sweep(tmp_path / "w", burla=burla_table(ledger=str(tmp_path / "ledger.jsonl")))
+    out, err = io.StringIO(), io.StringIO()
+    code = cli.main(["--store", str(tmp_path / "store"), "sweep", str(spec), "--target", PLAIN, "--backend", "burla",
+                     "--max-mde", "1", "--yes", "--json"], stdout=out, stderr=err, stdin=io.StringIO())
+    assert code == 0, (code, out.getvalue(), err.getvalue())
+    run_id = json.loads(out.getvalue())["run_id"]
+    manifest = json.loads((tmp_path / "store" / run_id / "manifest.json").read_text(encoding="utf-8"))
+    produced = manifest.get("produced_by")
+    assert isinstance(produced, dict), manifest
+    assert set(produced) == {"version", "from", "tool", "backend", "bundle"}, produced
+    assert produced["version"] == poisson_prove.__version__ and produced["tool"] == "poisson-prove", produced
+    assert produced["backend"] == manifest["backend"], produced
+    assert produced["bundle"] == {"sha256": manifest["environment"]["bundle"]["sha256"]}, produced
+    target_file = TARGETS / "bu_targets" / "plain.py"
+    assert produced["from"] == [
+        {"name": "sweep.toml", "sha256": hashlib.sha256(spec.read_bytes()).hexdigest()},
+        {"name": "bu_targets.plain", "sha256": hashlib.sha256(target_file.read_bytes()).hexdigest()},
+    ], produced
 
 
 REFUSALS = ["JobStalled", "NodesFailedToBoot", "NoNodes", "NoCompatibleNodes", "UnsupportedLocalImport",
@@ -1308,7 +1374,7 @@ def test_w6_a_target_that_does_not_import_in_the_worker_is_stored_as_infra_rows(
     fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("BU_HOST_ONLY", "1")
-    p, store, opts, outcome = burla_run(fake, tmp_path, HOSTONLY, infra_retries=1)
+    p, store, opts, outcome = burla_run(fake, tmp_path, HOSTONLY, infra_retries=1, batch_size=4)
     assert not isinstance(outcome, BaseException), outcome
     rows = stored(store, p.run_id)
     assert len(rows) == len(p.pairs) and all((r["error"] or "").startswith("infra: ") for r in rows), rows

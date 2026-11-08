@@ -417,6 +417,7 @@ def runs(store: Any, *, counted: bool = True, _notes: list[str]) -> RunList:
                     "run_id": named.run_id,
                     "run_name": named.name,
                     "status": m.status,
+                    **_stopped_by(st, named.run_id),
                     "backend": m.backend,
                     "target_id": m.target_id,
                     "t_unit": m.t_unit,
@@ -438,6 +439,13 @@ def runs(store: Any, *, counted: bool = True, _notes: list[str]) -> RunList:
             )
         )
     return RunList(entries, store=store.shown, unreadable=idx.unreadable)
+
+
+def _stopped_by(st: Store, run_id: str) -> dict[str, str]:
+    """``stopped_by`` as the run's manifest holds it, for a run that stopped early; nothing for
+    any other run."""
+    why = st.manifest_extras(run_id).get("stopped_by")
+    return {"stopped_by": str(why)} if isinstance(why, str) else {}
 
 
 @_operation
@@ -2376,7 +2384,7 @@ def _planned(
         )
     except ExecutorError as exc:
         raise refusal(_with_names(_look.plain_words(str(exc)), idx)) from exc
-    p = dataclasses.replace(p, name=name)
+    p = dataclasses.replace(p, name=name, produced_by=_produced_by(spec_path, target, backend))
     if backend == "modal":
         assert modal is not None
         block = _modal.preflight_modal(p, modal[0], modal[1])
@@ -2492,6 +2500,40 @@ def _planned(
             "spec_folder": folder,
         },
     )
+
+
+def _produced_by(spec_path: str | None, target: str, backend: str) -> dict[str, Any]:
+    """What this segment of the run is made from, as the manifest's ``produced_by`` records it
+    (the artifact format's 1.1): this version; ``from``, the sweep spec file by its name without
+    its folder and then the target's module by its import path less the function, each a SHA-256
+    over the bytes read; the tool; the backend. A segment that read no spec file (a resume from
+    the record) lists the target alone. A module with no source file (a compiled module, a
+    namespace) is listed with a null digest, never left out. Nothing here is a path outside the
+    spec's folder, a host name or a key."""
+    import hashlib
+
+    from poisson_prove import __version__
+
+    made_from: list[dict[str, Any]] = []
+    if spec_path is not None:
+        spec_file = Path(spec_path)
+        made_from.append(
+            {"name": spec_file.name, "sha256": hashlib.sha256(spec_file.read_bytes()).hexdigest()}
+        )
+    module = split_import_path(target)[0]
+    digest: str | None = None
+    try:
+        found = importlib.util.find_spec(module)
+    except (ImportError, ValueError):
+        found = None
+    origin = None if found is None else found.origin
+    if isinstance(origin, str) and origin.endswith(".py"):
+        try:
+            digest = hashlib.sha256(Path(origin).read_bytes()).hexdigest()
+        except OSError:
+            digest = None
+    made_from.append({"name": module, "sha256": digest})
+    return {"version": __version__, "from": made_from, "tool": COMMAND, "backend": backend}
 
 
 def _resume_command(o: Mapping[str, Any], typed_target: str | None) -> str:
@@ -2682,9 +2724,16 @@ def start(
         except (OSError, ValueError):
             pass  # the run is written; the descriptor follows on the next write that can
         if p.resumed:
+            # The manifest keeps the first segment's ``produced_by``; this segment's own goes
+            # here, since the spec or the target may have changed between the two.
             events.emit(
                 "resumed",
-                {"run_id": p.run_id, "already_stored": p.already_stored, "rollouts": total},
+                {
+                    "run_id": p.run_id,
+                    "already_stored": p.already_stored,
+                    "rollouts": total,
+                    **({} if p.produced_by is None else {"produced_by": dict(p.produced_by)}),
+                },
             )
         else:
             events.emit(
@@ -2737,7 +2786,12 @@ def start(
             sentence, nexts = _kept(
                 st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
             )
-            kept = closing_progress()
+            try:
+                kept = closing_progress()
+            except BrokenPipeError:
+                # The face's stream is gone (a reader that left with the interrupt); the log is
+                # not, and the record comes before anything a face would say.
+                kept = st.count(p.run_id)
             events.emit("interrupted", {"kept": kept, "status": "partial"})
             raise Interrupted(f"interrupted: {sentence}", nexts) from exc
         raise
@@ -2775,7 +2829,10 @@ def start(
     # A run that stopped short (a cancel, a --max-rollouts stop) ends its segment with
     # ``interrupted`` and is resumable; only a complete run ends with ``finished``.
     end = "finished" if summary.complete and not stopped_by_cancel else "interrupted"
-    events.emit(end, {"status": result.payload.get("status"), "kept": done_now - errored_now})
+    why = {"why": summary.stopped_by} if summary.stopped_by == _modal.FIRST_BATCH_ERRORED else {}
+    events.emit(
+        end, {"status": result.payload.get("status"), "kept": done_now - errored_now, **why}
+    )
     from poisson_prove.core._views import refresh_ui
 
     unrefreshed = refresh_ui(store.root)
@@ -2863,7 +2920,26 @@ def _sweep_result(
     n = _look.fmt_count
     nexts: list[str] = []
     stopped = False
-    if not summary.complete:
+    error: str | None = None
+    details: list[tuple[str, str]] = []
+    if summary.stopped_by == _modal.FIRST_BATCH_ERRORED:
+        # No resume line: resuming would run the same broken target. The one next is a look at
+        # three of the episodes that errored.
+        verdict = "stopped"
+        sentence = (
+            "every rollout of the first batch had no outcome, so the sweep stopped after "
+            f'{n(kept)} of {planned} (run "{name}")'
+        )
+        kind, line, count = _commonest_error_line(st, run_id)
+        if line is not None:
+            details.append(("the commonest error", f"{line} ({n(count)} of {n(kept)})"))
+        inspect = [COMMAND, "inspect", idx.word_for(run_id)]
+        if kind is not None:
+            inspect += ["--event", kind]
+        nexts.append(join([*inspect, "--limit", "3", *_typed_store(o)]))
+        error = "every rollout of the first batch had no outcome; the rest of the sweep was not run"
+        stopped = True
+    elif not summary.complete:
         verdict = "stopped"
         sentence = (
             f'{n(kept)} of {planned} rollouts kept in run "{name}" ({status}) in '
@@ -2891,7 +2967,7 @@ def _sweep_result(
             f'{n(kept)} rollouts in run "{name}" ({status}) in '
             f"{_look.fmt_duration(summary.wall_time)}{paired_clause}{unrecorded}"
         )
-    details = [
+    details += [
         ("episodes with an outcome", n(with_outcome)),
         ("episodes with no outcome", n(no_outcome)),
         ("episodes timed out", n(timed_out)),
@@ -2919,7 +2995,26 @@ def _sweep_result(
         run_name=name,
         details=tuple(details),
         stopped=stopped,
+        error=error,
     )
+
+
+def _commonest_error_line(st: Store, run_id: str) -> tuple[str | None, str | None, int]:
+    """The commonest error among the run's rows: its kind, its last line as stored (a
+    traceback's last line, the exception and its message), and how many rows end in that line."""
+    try:
+        frame = st.read(run_id, meta=False)
+    except StoreError:
+        return None, None, 0
+    lines = Counter(
+        next((ln.strip() for ln in reversed(e.splitlines()) if ln.strip()), e)
+        for e in frame["error"].tolist()
+        if isinstance(e, str) and e
+    )
+    if not lines:
+        return None, None, 0
+    line, count = lines.most_common(1)[0]
+    return _error_kind(line), line, count
 
 
 @_operation

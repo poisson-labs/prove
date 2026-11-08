@@ -1143,10 +1143,24 @@ def main(
         io.flush()
         io.err.flush()
         return code
-    except BrokenPipeError:
-        # The reader went away: nothing more to say, and nothing to say about it.
+    except BrokenPipeError as exc:
+        # The reader went away: nothing more to say, and nothing to say about it. Unless an
+        # interrupt came first: then the command was interrupted, whatever the pipe's state.
         _quiet_closed_pipe(io)
-        return 0
+        return 130 if _interrupted(exc) else 0
+
+
+def _interrupted(exc: BaseException) -> bool:
+    """Whether a closed pipe was found while an interrupt was being answered: a
+    ``KeyboardInterrupt`` is in the exception's context chain."""
+    seen: set[int] = set()
+    at: BaseException | None = exc
+    while at is not None and id(at) not in seen:
+        seen.add(id(at))
+        if isinstance(at, KeyboardInterrupt):
+            return True
+        at = at.__context__
+    return False
 
 
 def _tty(stream: Any) -> bool:
@@ -1383,19 +1397,29 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
         io.error(exc.error)
         return 3
     except core.Interrupted as exc:
-        if state.json:
-            _write_json(io, state.verb, "stopped", exc.sentence, {}, exc.next)
-        else:
-            io.verdict("stopped", exc.sentence)
-            for command in exc.next:
-                io.next(command)
+        # An interrupt wins over a closed pipe: the reader that left with the Ctrl-C (``| head``)
+        # gets nothing more, and the exit code carries the result.
+        try:
+            if state.json:
+                _write_json(io, state.verb, "stopped", exc.sentence, {}, exc.next)
+            else:
+                io.verdict("stopped", exc.sentence)
+                for command in exc.next:
+                    io.next(command)
+            io.flush()
+        except BrokenPipeError:
+            _quiet_closed_pipe(io)
         return 130
     except KeyboardInterrupt:
         sentence = "interrupted" if state.saved else "interrupted; nothing was written"
-        if state.json:
-            _write_json(io, state.verb, "stopped", sentence, {}, [])
-        else:
-            io.verdict("stopped", sentence)
+        try:
+            if state.json:
+                _write_json(io, state.verb, "stopped", sentence, {}, [])
+            else:
+                io.verdict("stopped", sentence)
+            io.flush()
+        except BrokenPipeError:
+            _quiet_closed_pipe(io)
         return 130
     except BrokenPipeError:
         raise
@@ -1902,12 +1926,14 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
     _notes_of(io, result)
     if ns.json:
         _print_result(io, "sweep", result)
-        return 3 if result.stopped else 0
-    io.verdict(result.verdict, result.sentence)
-    for label, value in result.details:
-        io.detail(label, value)
-    for command in result.next:
-        io.next(command)
+    else:
+        io.verdict(result.verdict, result.sentence)
+        for label, value in result.details:
+            io.detail(label, value)
+        for command in result.next:
+            io.next(command)
+    if result.error is not None:
+        io.error(result.error)
     return 3 if result.stopped else 0
 
 

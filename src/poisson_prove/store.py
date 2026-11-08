@@ -379,6 +379,13 @@ class RunManifest:
         return manifest
 
 
+#: The manifest's optional keys, kept in the file and not as fields of :class:`RunManifest`:
+#: ``produced_by`` (the artifact format's 1.1: what made the run) and ``stopped_by`` (why a remote
+#: sweep stopped before it ran everything it was asked for). A reader that does not know one of
+#: them ignores it; every rewrite of the manifest carries them over.
+MANIFEST_EXTRAS = ("produced_by", "stopped_by")
+
+
 # ---------- EpisodeRecord ----------
 
 
@@ -542,16 +549,47 @@ class Store:
             return []
         return sorted(p for p in d.glob(f"{_PART_PREFIX}*{_PART_SUFFIX}") if p.is_file())
 
-    def _write_manifest(self, manifest: RunManifest) -> None:
+    def _write_manifest(
+        self, manifest: RunManifest, extras: Mapping[str, Any] | None = None
+    ) -> None:
+        """Write the manifest whole, by rename. The file's optional keys (``MANIFEST_EXTRAS``)
+        are carried over from the file as it stands, then ``extras`` is applied: a value sets
+        its key, ``None`` removes it."""
         path = self._manifest_path(manifest.run_id)
         tmp = path.with_name(path.name + ".tmp")
-        text = json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n"
+        doc = manifest.to_dict()
+        doc.update(self._extras(path))
+        for key, value in (extras or {}).items():
+            if value is None:
+                doc.pop(key, None)
+            else:
+                doc[key] = value
+        text = json.dumps(doc, indent=2, sort_keys=True) + "\n"
         tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, path)
 
+    @staticmethod
+    def _extras(path: Path) -> dict[str, Any]:
+        if not path.is_file():
+            return {}
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        return {key: doc[key] for key in MANIFEST_EXTRAS if key in doc}
+
+    def manifest_extras(self, run_id: str) -> dict[str, Any]:
+        """The manifest's optional keys (``produced_by``, ``stopped_by``) as the file holds them;
+        only the keys the file has."""
+        path = self._manifest_path(run_id)
+        if not path.is_file():
+            raise StoreError(f"unknown run: {run_id!r}")
+        return self._extras(path)
+
     # -- lifecycle --
 
-    def create_run(self, manifest: RunManifest) -> None:
+    def create_run(
+        self, manifest: RunManifest, *, produced_by: Mapping[str, Any] | None = None
+    ) -> None:
+        """Open a run: its folder and its manifest, ``partial``. ``produced_by`` is written beside
+        the record's fields when given (what the run was made from, the format's 1.1 key)."""
         run_id = manifest.run_id
         if not run_id or "/" in run_id or "\\" in run_id or run_id in (".", ".."):
             raise StoreError(f"invalid run_id: {run_id!r}")
@@ -559,7 +597,10 @@ class Store:
         if run_dir.exists():
             raise StoreError(f"run already exists: {run_id!r}")
         self._episodes_dir(run_id).mkdir(parents=True, exist_ok=False)
-        self._write_manifest(replace(manifest, status="partial"))
+        self._write_manifest(
+            replace(manifest, status="partial"),
+            None if produced_by is None else {"produced_by": dict(produced_by)},
+        )
 
     def manifest(self, run_id: str) -> RunManifest:
         path = self._manifest_path(run_id)
@@ -576,7 +617,16 @@ class Store:
         self._write_manifest(replace(manifest, environment=environment))
 
     def mark_complete(self, run_id: str) -> None:
-        self._write_manifest(replace(self.manifest(run_id), status="complete"))
+        """The run has every row it was asked for: ``complete``, and no ``stopped_by`` (a later
+        segment that finished the run is not a run that stopped early)."""
+        self._write_manifest(
+            replace(self.manifest(run_id), status="complete"), {"stopped_by": None}
+        )
+
+    def mark_stopped(self, run_id: str, why: str) -> None:
+        """The run stopped before it ran everything it was asked for, for ``why``: the status
+        stays ``partial`` and the manifest records ``stopped_by``."""
+        self._write_manifest(self.manifest(run_id), {"stopped_by": why})
 
     def runs(self) -> list[str]:
         if not self._root.is_dir():

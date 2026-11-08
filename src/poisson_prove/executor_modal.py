@@ -576,8 +576,41 @@ def _open_run(
             retain_traces_for=p.spec.retain_traces_for,
             declared=_spec_declared(p.spec),
             name=p.name,
-        )
+        ),
+        produced_by=p.produced_by,
     )
+
+
+#: ``stopped_by`` when a remote sweep stopped because no rollout of its first stored batch had an
+#: outcome: the target raised, timed out, or its batch failed for infrastructure after its retries.
+FIRST_BATCH_ERRORED = "first_batch_errored"
+#: The stop waits for a first stored batch of at least ``min(batch_size, _JUDGED_FLOOR)`` rows, or
+#: for that many rows stored in all, so a small tail batch that lands first cannot stop a sweep
+#: that is otherwise fine. Every row stored until the floor is met is judged.
+_JUDGED_FLOOR = 32
+
+
+class _FirstBatch:
+    """The early stop's judge: the rows stored in this segment until the floor is met, and whether
+    any of them had an outcome. Once judged it is done for the segment; ``stop`` says whether
+    the sweep stops, which it does only when something it was asked for is still unrun."""
+
+    def __init__(self, batch_size: int, asked: int) -> None:
+        self.floor = min(batch_size, _JUDGED_FLOOR)
+        self.asked = asked
+        self.judging = True
+        self.rows = 0
+        self.outcome = False
+        self.stop = False
+
+    def stored(self, records: Sequence[EpisodeRecord], executed: int) -> None:
+        if not self.judging:
+            return
+        self.rows += len(records)
+        self.outcome = self.outcome or any(r.error is None for r in records)
+        if len(records) >= self.floor or self.rows >= _JUDGED_FLOOR:
+            self.judging = False
+            self.stop = not self.outcome and executed < self.asked
 
 
 def _batch_capture_active(payload: Sequence[Result]) -> bool:
@@ -730,6 +763,12 @@ def run_with_mapper(
     stored, then the run is left partial with ``stopped_by="max_rollouts"``. Anything the
     mapper raises propagates after every batch that arrived has been stored. A batch of a
     ``[chaos]`` run whose ok rows lack ``backend_meta["chaos"]`` is refused before it is stored.
+
+    The early stop: when the first batch stored in this segment (the first to land, not batch
+    0; of at least ``min(batch_size, 32)`` rows, or 32 rows in all) has no row with an outcome
+    and something asked for is still unrun, nothing more is taken from the mapper, its iterator
+    is closed (the backend's cancel), every batch already returned stays stored, and the run is
+    left partial with ``stopped_by="first_batch_errored"``.
     """
     _validate_options(options)
     if backend != _BACKEND and (placement is None or cost_check is None):
@@ -772,11 +811,13 @@ def run_with_mapper(
     n_ok = n_errored = n_timeout = n_infra_retried = n_infra_failed = 0
     executed = 0
     t_run = time.perf_counter()
+    first = _FirstBatch(size, sum(len(batches[k]) for k in range(n_submit)))
 
     def store_batch(records: list[EpisodeRecord]) -> None:
         nonlocal executed
         store.append(p.run_id, list(records))
         executed += len(records)
+        first.stored(records, executed)
         if on_progress is not None:
             on_progress(executed, total)
 
@@ -790,48 +831,67 @@ def run_with_mapper(
         n_errored += len(records)
         store_batch(records)
 
-    while pending:
+    while pending and not first.stop:
         submitted, pending = pending, []
         for k in submitted:
             attempts[k] += 1
         seen: set[int] = set()
-        for local_index, payload in mapper([batches[k] for k in submitted]):
-            if not 0 <= local_index < len(submitted):
-                raise ModalBackendError(
-                    f"mapper yielded batch index {local_index} for {len(submitted)} batches"
-                )
-            k = submitted[local_index]
-            if k in seen:
-                raise ModalBackendError(f"mapper yielded batch {local_index} twice")
-            seen.add(k)
-            if isinstance(payload, BaseException):
-                infra(k, payload)
-                continue
-            batch = batches[k]
-            if len(payload) != len(batch):
-                raise ModalBackendError(
-                    f"mapper returned {len(payload)} results for a batch of {len(batch)} jobs"
-                )
-            if attempts[k] > 1:
-                n_infra_retried += 1
-            records: list[EpisodeRecord] = []
-            batch_capture = _batch_capture_active(payload)
-            for job, result in zip(batch, payload, strict=True):
-                record = _record(p, job, result, attempts[k], capture_active=batch_capture)
-                records.append(record)
-                if record.error is None:
-                    n_ok += 1
+        stream = iter(mapper([batches[k] for k in submitted]))
+        try:
+            for local_index, payload in stream:
+                if not 0 <= local_index < len(submitted):
+                    raise ModalBackendError(
+                        f"mapper yielded batch index {local_index} for {len(submitted)} batches"
+                    )
+                k = submitted[local_index]
+                if k in seen:
+                    raise ModalBackendError(f"mapper yielded batch {local_index} twice")
+                seen.add(k)
+                if isinstance(payload, BaseException):
+                    infra(k, payload)
                 else:
-                    n_errored += 1
-                    if record.error == _TIMEOUT_ERROR:
-                        n_timeout += 1
-            _require_chaos_records(p, records)
-            store_batch(records)
+                    batch = batches[k]
+                    if len(payload) != len(batch):
+                        raise ModalBackendError(
+                            f"mapper returned {len(payload)} results for a batch of "
+                            f"{len(batch)} jobs"
+                        )
+                    if attempts[k] > 1:
+                        n_infra_retried += 1
+                    records: list[EpisodeRecord] = []
+                    batch_capture = _batch_capture_active(payload)
+                    for job, result in zip(batch, payload, strict=True):
+                        record = _record(p, job, result, attempts[k], capture_active=batch_capture)
+                        records.append(record)
+                        if record.error is None:
+                            n_ok += 1
+                        else:
+                            n_errored += 1
+                            if record.error == _TIMEOUT_ERROR:
+                                n_timeout += 1
+                    _require_chaos_records(p, records)
+                    store_batch(records)
+                if first.stop:
+                    # Nothing more is taken from the mapper, and closing its iterator is how a
+                    # backend learns to cancel what is in flight, as a Ctrl-C does.
+                    break
+        finally:
+            close = getattr(stream, "close", None)
+            if close is not None:
+                close()
+        if first.stop:
+            break
         for k in submitted:
             if k not in seen:
                 infra(k, ModalBackendError("mapper returned no result for the batch"))
+                if first.stop:
+                    break
 
-    stopped_by = "max_rollouts" if n_submit < len(batches) else None
+    if first.stop:
+        store.mark_stopped(p.run_id, FIRST_BATCH_ERRORED)
+    stopped_by = (
+        FIRST_BATCH_ERRORED if first.stop else "max_rollouts" if n_submit < len(batches) else None
+    )
     complete = executed == total and stopped_by is None
     if complete:
         store.mark_complete(p.run_id)
@@ -1040,18 +1100,26 @@ class _ModalMapper:
         ]
         seen: set[int] = set()
         stray: list[BaseException] = []
-        for payload in self.remote.map(items, order_outputs=False, return_exceptions=True):
-            if isinstance(payload, BaseException):
-                stray.append(payload)
-                continue
-            k, results, failure = payload
-            if k in seen:
-                continue
-            seen.add(k)
-            if results is None:
-                yield k, ModalBackendError(f"worker failed: {failure}")
-            else:
-                yield k, results
+        outputs = iter(self.remote.map(items, order_outputs=False, return_exceptions=True))
+        try:
+            for payload in outputs:
+                if isinstance(payload, BaseException):
+                    stray.append(payload)
+                    continue
+                k, results, failure = payload
+                if k in seen:
+                    continue
+                seen.add(k)
+                if results is None:
+                    yield k, ModalBackendError(f"worker failed: {failure}")
+                else:
+                    yield k, results
+        finally:
+            # Closed by the runner before the map is drained (an early stop): closing the map's
+            # own iterator is Modal's cancel of the calls still in flight.
+            close = getattr(outputs, "close", None)
+            if close is not None:
+                close()
         for k in range(len(batches)):
             if k not in seen:
                 exc = stray.pop(0) if stray else ModalBackendError("no result returned")

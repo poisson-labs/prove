@@ -865,6 +865,18 @@ def run_view(ctx: _Context, run: str) -> View:
             }
         )
     events = A.read_events(ctx.root / run)
+    if events is not None:
+        # A resumed segment's own ``produced_by`` (what it was made from, with digests) is the
+        # log's record, not a fact the run's page shows: the manifest's is the run's provenance.
+        events = [
+            {
+                **e,
+                "detail": {
+                    k: v for k, v in dict(e.get("detail") or {}).items() if k != "produced_by"
+                },
+            }
+            for e in events
+        ]
     design = _recorded_design(m)
     horizon_values = frame["horizon"].dropna() if "horizon" in frame else pd.Series(dtype=float)
     horizon = float(horizon_values.max()) if len(horizon_values) else None

@@ -76,6 +76,15 @@ by 0.0.1 recorded its version under the old name's key and reads as it is. The m
 `environment` keeps the run's provenance (the platform, the Python build, the target's import
 path, the sweep as planned); no artifact and no page copies those out.
 
+Two optional keys follow, which a reader that does not know them ignores. `produced_by` (the
+format's 1.1) says what made the run: `version`, the writing tool's version; `from`, a list of
+`{"name", "sha256"}` digests, the sweep spec by its file name and then the target's module by its
+import path, each over its bytes (`sha256` is null for a module with no source file); and Prove's
+own `tool` (`poisson-prove`), `backend`, and on a cloud account `bundle` (the bundle's `sha256`).
+It is written when the run is opened; a resume keeps it and records its own under its `resumed`
+event. `stopped_by` is `"first_batch_errored"` when a remote sweep stopped because no rollout of
+its first stored batch had an outcome; a later segment that completes the run removes it.
+
 ### `events.jsonl` (`poisson.run-event/1`)
 
 One JSON object per line, appended and flushed line by line, never rewritten: every run a

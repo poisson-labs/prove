@@ -528,7 +528,7 @@ def test_p8_15_modal_backend_meta_carries_infra_attempt_and_no_attempt(tmp_path:
         for index, _jobs in enumerate(batches):
             yield index, RuntimeError("boom")
 
-    summary = run_with_mapper(p, lost, store, options=ModalOptions(batch_size=2, infra_retries=1))
+    summary = run_with_mapper(p, lost, store, options=ModalOptions(batch_size=4, infra_retries=1))
     assert summary.n_infra_failed == len(p.pairs) == 4, summary
     position = {(q.config_hash, q.replicate_index): i for i, q in enumerate(p.pairs)}
     rows = store.read(p.run_id).to_dict("records")

@@ -1149,7 +1149,7 @@ def test_e3_rows_the_modal_executor_stores_after_exhausting_its_infra_retries_ar
     store = Store(tmp_path)
     spec = SweepSpec.build([{"task": "a"}, {"task": "b"}], replicates=2, target_id="synthetic@v0", t_unit="steps")
     p = plan(spec, store, backend="modal")
-    summary = executor_modal.run_with_mapper(p, _never_runs, store, options=executor_modal.ModalOptions(batch_size=2, infra_retries=0))
+    summary = executor_modal.run_with_mapper(p, _never_runs, store, options=executor_modal.ModalOptions(batch_size=4, infra_retries=0))
     assert summary.n_infra_failed == 4, summary
     errors = store.read(p.run_id, meta=False)["error"]
     assert all(str(e).startswith(INFRA_MARK) for e in errors), list(errors)
