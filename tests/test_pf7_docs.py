@@ -125,7 +125,7 @@ able to show and which the hygiene module's double-bracket family would read as 
 | PF7.3 every marked block runs and does what its page shows; unmarked fails; skips name reasons | ``test_pf7_3_every_marked_block_runs_and_does_what_its_page_shows`` (one case per page and install, but the your-own-agent page from the checkout, which the agent pages' test runs; the wheel's slow) |
 | PF7.3 the docs check catches each way a page can be wrong | ``test_pf7_3_the_docs_check_catches_each_way_a_page_can_be_wrong`` (one case per way, and a right page) |
 | PF7.7 the six recipes | ``test_pf7_7_the_recipes_are_the_six_named`` |
-| PF7.7 each recipe: under 150 lines, ends with "What this does not tell you", no run id, run or skip as ``RECIPES`` says | ``test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_run_or_skipped_as_listed`` (one case per recipe) |
+| PF7.7 each recipe: under 150 lines (in-ci, which gives three files whole, under 200), ends with "What this does not tell you", no run id, run or skip as ``RECIPES`` says | ``test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_run_or_skipped_as_listed`` (one case per recipe) |
 | PF7.8 the example runs keyless with its client replaced by a stand-in | ``test_pf7_8_the_example_runs_keyless_with_its_client_replaced`` |
 | PF7 every link of every page resolves | ``test_pf7_every_link_of_every_page_resolves`` (one case per page) |
 | every docs page Prove's code or skill names exists | ``test_pf7_every_docs_page_prove_points_to_exists`` |
@@ -198,6 +198,9 @@ RECIPES = {
     "when-it-says-too-small-to-tell": (True, None, False),
     "paired-replay": (False, "needs runs recorded against a real model", True),
 }
+#: A recipe's length in lines, below which it must stay. in-ci gives its comment script and its
+#: two workflows whole (ruled 2026-11-08), so it has more room than the other five.
+RECIPE_LINES = {name: 200 if name == "in-ci" else 150 for name in RECIPES}
 CONCEPTS = ("what-the-statistics-claim", "the-layered-report", "pairing", "censoring-and-competing-risks", "traces")
 VERDICT_WORDS = ("worse", "safer", "trade", "mixed", "higher", "lower", "no significant change", "too small to tell")
 QUICKSTART_VERDICT = "trade"
@@ -961,7 +964,7 @@ def test_pf7_7_the_recipes_are_the_six_named() -> None:
 def test_pf7_7_each_recipe_is_short_ends_with_what_it_cannot_tell_and_is_run_or_skipped_as_listed(name: str, tmp_path: Path) -> None:
     rel = f"docs/recipes/{name}.md"
     text = text_of(rel)
-    assert len(text.splitlines()) < 150, len(text.splitlines())
+    assert len(text.splitlines()) < RECIPE_LINES[name], len(text.splitlines())
     headings = re.findall(r"^## (.+?)\s*$", text, flags=re.M)
     assert headings and headings[-1] == "What this does not tell you", headings
     assert RUN_ID.findall(text) == [], RUN_ID.findall(text)
