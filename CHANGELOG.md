@@ -4,6 +4,30 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.2.2 — 2026-11-08
+
+A release of the docs alone: the package's code is the same as 0.2.1's.
+
+### Added
+
+- A new page, `docs/what-a-declaration-checks.md`: what a `[declare]` table records, stamps and
+  prints, and what `never reached` means and does not. It held the second half of
+  `docs/what-capture-stores.md` before, and the sweep spec now links to it for what `steps` and
+  `gates` report.
+
+### Changed
+
+- `docs/recipes/in-ci.md` gives every file a GitHub repository needs to gate its pull requests on
+  Prove. `make_comment.py` is given in full: it reads the `check --json` file named on its command
+  line and prints the comment, and an empty file, which a refused check leaves, gets a comment
+  that says so. The main branch's workflow, `prove-baseline.yml`, is given in full beside the pull
+  request's, `prove.yml`, which now also posts the comment. Every action in both is pinned to a
+  full commit SHA. One line says that `unresolved` and `timeout` are the support bot's events, an
+  example: on the quickstart's runs `unresolved` is refused with exit 1, so name your own.
+- `docs/artifact-format.md` and `docs/what-capture-stores.md` are in short sections under headings
+  you can jump by, with lists and tables where a paragraph listed, and an example of each stored
+  format a paragraph describes, from a real run. No fact was cut.
+
 ## 0.2.1 — 2026-11-05
 
 ### Fixed

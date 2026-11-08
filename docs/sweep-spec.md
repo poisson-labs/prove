@@ -96,7 +96,7 @@ Refused: a name in both `failures` and `successes`; a failure or success that is
 `outcomes`, when `outcomes` is given; a gate that is not among `steps`; a name listed twice; and a
 table that declares nothing. Without `failures` or `successes` a comparison says `higher` and `lower` for
 an outcome, never `worse` and `safer`, and the plan says so. What `steps` and `gates` report is in
-[What capture stores](what-capture-stores.md).
+[What a declaration checks](what-a-declaration-checks.md).
 
 ## `[capture]`
 
