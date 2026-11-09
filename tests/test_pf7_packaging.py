@@ -22,7 +22,8 @@ package.
   ``main`` that exists in this tree; ``Source`` is the repository and ``Issues`` its issues page.
 - **k4** Every requirement has a lower bound: the core, every extra, ``dev`` included (the floors
   run resolves ``[dev]`` at its lowest too), and the build backend. An upper bound only on
-  ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.4``.
+  ``openai`` (``openai<3``), an exact pin only for ``burla==1.8.4``, and no bound at all on
+  ``botocore[crt]``, which ``burla``'s ``boto3`` pins exactly (Remote Backends Spec §2.2, RB-3).
 - **k5** ``[dev]`` carries what the contributors' test runs need that this file and the docs check
   read: ``pytest-xdist`` (the suite runs on parallel workers), ``hypothesis`` (the property tests), ``hatchling`` (the archives built
   here), ``markdown-it-py`` (the docs check reads pages with it), ``pyyaml`` (it parses YAML
@@ -93,9 +94,11 @@ DESCRIPTION = (
 )
 PEOPLE = [{"name": "Poisson Labs", "email": "work@poissonlabs.ai"}]
 PYTHONS = ("3.11", "3.12", "3.13", "3.14")
-EXTRAS = {"modal", "agent", "burla", "all", "dev"}
+EXTRAS = {"modal", "agent", "cloud", "burla", "all", "dev"}
 MODAL_FLOOR = "modal>=1.0.0"
 BURLA_PIN = "burla==1.8.4"
+#: RB-3: the cloud extra is the pinned cluster software and botocore's ``crt`` extra, unpinned.
+CLOUD = [BURLA_PIN, "botocore[crt]"]
 DEV_NEEDS = ("pytest-xdist", "hypothesis", "hatchling", "markdown-it-py", "pyyaml", "pyte")
 SDIST_FILES = {"PKG-INFO", "pyproject.toml", ".gitignore", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"}
 SDIST_FOLDERS = ("src", "tests", "docs", "examples")
@@ -197,14 +200,16 @@ def _floor_only(req: Requirement) -> bool:
 
 
 def _all_holds(reqs: list[Requirement]) -> bool:
-    union = [str(r) for group in ("modal", "agent", "burla") for r in requirements(group)]
+    union = [str(r) for group in ("modal", "agent", "cloud") for r in requirements(group)]
     return _same(reqs, union)
 
 
 EXTRA_CASES = {
     "the set": lambda: set(pyproject()["project"]["optional-dependencies"]) == EXTRAS,
     "modal": lambda: _same(requirements("modal"), [MODAL_FLOOR]),
-    "burla": lambda: _same(requirements("burla"), [BURLA_PIN]),
+    "cloud": lambda: _same(requirements("cloud"), CLOUD),
+    # RB-4: the old extra installs exactly what the cloud extra does until 0.4.0.
+    "burla": lambda: _same(requirements("burla"), CLOUD),
     "agent": lambda: _agent_holds(requirements("agent")),
     "all": lambda: _all_holds(requirements("all")),
     "dev": lambda: set(DEV_NEEDS) <= {name_of(r) for r in requirements("dev")},
@@ -231,6 +236,11 @@ def test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_openai_and_burla
         if name == "burla":
             if str(req.specifier) != "==1.8.4":
                 problems.append(f"{req}: burla is pinned exactly to the client the backend runs")
+            continue
+        if name == "botocore":
+            # RB-3: unpinned; boto3, which the cluster software requires, pins botocore exactly.
+            if str(req.specifier) or req.extras != {"crt"}:
+                problems.append(f"{req}: botocore is unpinned, with its crt extra")
             continue
         if ">=" not in operators:
             problems.append(f"{req}: no floor")

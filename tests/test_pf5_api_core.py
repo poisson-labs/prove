@@ -115,7 +115,7 @@ lettered so the tests below can cite it).
 - (y) The core runs a remote backend through its module's attribute (``executor_modal.run_modal``,
   read when the plan runs), where four tests in other files put their stand-ins.
 - (z) ``resume`` continues a run recorded on this machine's backend; a run recorded on Modal or
-  Burla is refused, naming ``sweep --resume`` with its backend, since its image or bundle comes from
+  a cloud account is refused, naming ``sweep --resume`` with its backend, since its image or bundle comes from
   the spec. No test here reaches a remote run.
 
 **Suites.** The code suite, but for reading (x)'s two ``math`` cases. The shared stores and
@@ -238,8 +238,8 @@ PUBLIC: dict[str, frozenset[str]] = {
 #: The private modules (the core among them), each named private in
 #: ``docs/python.md``.
 PRIVATE_MODULES = (
-    "executor", "executor_modal", "executor_burla", "sampler", "diff", "tree", "report", "viewer", "plain",
-    "paired", "capture", "chaos_catalog", "survival", "cli", "_compat", "_resolve", "_burla_submit", "core",
+    "executor", "executor_modal", "executor_cloud", "sampler", "diff", "tree", "report", "viewer", "plain",
+    "paired", "capture", "chaos_catalog", "survival", "cli", "_compat", "_resolve", "_cloud_submit", "core",
 )
 
 #: The three classes, every module of ``src/`` in exactly one (reading g).
@@ -249,24 +249,35 @@ RENDERERS = frozenset({
     "poisson_prove.viewer",
 })
 CORE = frozenset({
-    "poisson_prove", "poisson_prove._burla_submit", "poisson_prove._compat", "poisson_prove._limits",
+    "poisson_prove", "poisson_prove._cloud_submit", "poisson_prove._compat", "poisson_prove._limits",
     "poisson_prove._names", "poisson_prove._resolve", "poisson_prove._verdict", "poisson_prove.capture",
     "poisson_prove.chaos", "poisson_prove.chaos_catalog", "poisson_prove.compare", "poisson_prove.core",
     "poisson_prove.diff", "poisson_prove.episode", "poisson_prove.examples", "poisson_prove.examples.mock_agent",
-    "poisson_prove.executor", "poisson_prove.executor_burla", "poisson_prove.executor_modal",
+    "poisson_prove.executor", "poisson_prove.executor_cloud", "poisson_prove.executor_modal",
     "poisson_prove.otel", "poisson_prove.paired", "poisson_prove.sampler", "poisson_prove.stats",
     "poisson_prove.steps", "poisson_prove.store", "poisson_prove.survival", "poisson_prove.trace",
     "poisson_prove.tree",
+    # 0.3.0's cloud backend beside its executor (Remote Backends Spec §15, C1 to C3).
+    "poisson_prove._cloud_head", "poisson_prove._cloud_record", "poisson_prove._prices_cloud",
+    "poisson_prove._where_checks",
 })
 
 #: The environment variables Prove's own code reads (PF5.8, reading s).
 CORE_ENV = frozenset({"POISSON_PROVE_STORE", "PROOFLOAD_STORE"})
 FACE_ENV = frozenset({"NO_COLOR", "CI", "TERM"})
-#: PF10: a Modal or Burla worker reads the BLAS thread counts its environment names
+#: PF10: a Modal or cloud worker reads the BLAS thread counts its environment names
 #: (docs/backends.md) and takes out the ``KMP_DUPLICATE_LIB_OK`` threadpoolctl sets on import.
 WORKER_ENV = {"poisson_prove.executor_modal": frozenset({
     "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "BLIS_NUM_THREADS", "KMP_DUPLICATE_LIB_OK",
 })}
+#: 0.3.0's cloud backend: the ownership record lives under ``$XDG_STATE_HOME`` (Remote Backends
+#: Spec §6.1, RB-21), and the sign-in check reads which AWS profile is active and where its
+#: configuration is, to name ``aws sso login`` for an SSO profile (§7.1, R3); documented in
+#: ``docs/backends.md``.
+CLOUD_ENV = {
+    "poisson_prove._cloud_record": frozenset({"XDG_STATE_HOME"}),
+    "poisson_prove._where_checks": frozenset({"AWS_CONFIG_FILE", "AWS_PROFILE", "AWS_DEFAULT_PROFILE"}),
+}
 
 
 # ---------- helpers ----------
@@ -1313,12 +1324,12 @@ def _env_reads(path: Path) -> tuple[set[str], list[str]]:
 def test_pf5_8_prove_reads_only_the_environment_variables_it_documents() -> None:
     """PF5.8's one source check (reading s): the core reads ``POISSON_PROVE_STORE`` (and the
     retired ``PROOFLOAD_STORE``, to say so), the faces and renderers ``NO_COLOR``, ``CI`` and
-    ``TERM``, the Modal and Burla workers' batch the BLAS thread counts (PF10), and nothing else
-    reads any."""
+    ``TERM``, the Modal and cloud workers' batch the BLAS thread counts (PF10), the cloud backend
+    its state folder and the active AWS profile (0.3.0), and nothing else reads any."""
     problems: list[str] = []
     for module, path in _modules().items():
         reads, odd = _env_reads(path)
-        allowed = (CORE_ENV if _class_of(module) == "core" else FACE_ENV) | WORKER_ENV.get(module, frozenset())
+        allowed = (CORE_ENV if _class_of(module) == "core" else FACE_ENV) | WORKER_ENV.get(module, frozenset()) | CLOUD_ENV.get(module, frozenset())
         problems += [f"{module}: {p}" for p in odd]
         if reads - allowed:
             problems.append(f"{module} reads {sorted(reads - allowed)}")

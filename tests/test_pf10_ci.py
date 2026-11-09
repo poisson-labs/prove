@@ -416,7 +416,7 @@ def test_pf10_7_a_pull_request_runs_the_math_suite_only_when_the_statistics_chan
 
 @pytest.mark.parametrize(("changed", "base", "head", "why"), [
     (["README.md", "CHANGELOG.md", "pyproject.toml", "src/poisson_prove/__init__.py"], {"burla": "1.8.4"}, {"burla": "1.8.4"}, []),
-    (["src/poisson_prove/executor_burla.py"], {}, {}, ["changes src/poisson_prove/executor_burla.py"]),
+    (["src/poisson_prove/executor_cloud.py"], {}, {}, ["changes src/poisson_prove/executor_cloud.py"]),
     (["tests/bu_fixtures/burla/__init__.py"], {}, {}, ["changes tests/bu_fixtures/burla/__init__.py, a fake backend"]),
     (["tests/test_m3_modal.py"], {}, {}, ["changes tests/test_m3_modal.py, a backend test"]),
     (["pyproject.toml"], {"modal": "1.2.0"}, {"modal": "1.3.0"}, ["modal resolves to 1.3.0 here and 1.2.0 on the base"]),
@@ -426,7 +426,7 @@ def test_pf10_7_a_change_runs_the_backend_fakes_only_when_backend_code_changes(
     changed: list[str], base: dict[str, str], head: dict[str, str], why: list[str]
 ) -> None:
     backends_lane = import_script("backends_lane")
-    tests = ["tests/test_bu_burla_backend.py", "tests/test_m3_modal.py"]
+    tests = ["tests/test_bu_cloud_backend.py", "tests/test_m3_modal.py"]
     assert backends_lane.reasons(changed, tests, base, head) == why
 
 

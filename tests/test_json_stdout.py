@@ -27,11 +27,11 @@ to the StringIO, so every case here that means to see it starts an interpreter o
 - **r6** Modal. The target runs in the container and is never imported in the sweep's process, so a
   target's write cannot reach the document there; the fake's container shows that. The Modal client
   does run in the sweep's process, and whatever it writes to stdout is held like a target's.
-- **r7** Burla. The target is imported in the sweep's process, so a print at import and an ``atexit``
-  hook break the document as they do locally. A rollout runs on a worker, and what it writes there
+- **r7** The cloud backend (0.2.1's Burla backend, renamed in 0.3.0). The target is imported in the
+  sweep's process, so a print at import and an ``atexit`` hook break the document as they do locally. A rollout runs on a worker, and what it writes there
   stays there; the launcher's own output goes to its log.
-- **r8** Burla's rehearsal and its fresh-interpreter batches read a pickle from a child's stdout, so a
-  rollout that writes through fd 1 fails the sweep with ``UnpicklingError``, with or without
+- **r8** The cloud backend's rehearsal and its fresh-interpreter batches read a pickle from a child's
+  stdout, so a rollout that writes through fd 1 fails the sweep with ``UnpicklingError``, with or without
   ``--json``. An unflushed ``print`` only escapes because the pickle overtakes it. Held here so that
   such a target runs.
 - **r9** A target that ends the process by ``sys.exit`` must not leave exit 0 and no document: the code
@@ -57,14 +57,15 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import pytest
 from pf12_support import copy_store
 from reading_support import cli, reading_world  # noqa: F401
-from test_bu_burla_backend import LAUNCH, PIN, SUBMIT, Fake, Pool, burla_table, write_sweep
+from rb_cloud_support import CloudWorld, world
+from test_bu_cloud_backend import LAUNCH, PIN, SUBMIT, Fake, Pool, cloud_fields, write_sweep
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 BANNER = "framework banner"
@@ -942,12 +943,13 @@ def test_modal_what_the_client_writes_goes_to_stderr(client_write: str, tmp_path
     assert _err(done).count(BANNER) == 3, _report(done)
 
 
-# ---------- the Burla backend, on the fake of its client ----------
+# ---------- the cloud backend, on the fake of its client ----------
 
-_BURLA_MAIN = """\
+_CLOUD_MAIN = """\
 import sys
-import poisson_prove.executor_burla as eb
-eb._launcher_argv = lambda: {argv!r}
+import poisson_prove.executor_cloud as ec
+for name, argv in {seams!r}.items():
+    setattr(ec, name, lambda argv=argv: list(argv))
 from poisson_prove.cli import main
 sys.exit(main())
 """
@@ -960,7 +962,15 @@ def pool() -> Any:
     shared.stop()
 
 
-class Burla(NamedTuple):
+@pytest.fixture
+def cloud_world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pool: Pool) -> Iterator[CloudWorld]:
+    """Since 0.3.0 a cloud sweep starts and stops its cluster: the fake coordinator, the fake CLI,
+    the fake AWS CLI on ``PATH`` and the ownership record, in the test's own folder."""
+    with world(tmp_path, monkeypatch, pool) as made:
+        yield made
+
+
+class Cloud(NamedTuple):
     base: Path
     fake: Fake
     spec: Path
@@ -973,14 +983,16 @@ class Burla(NamedTuple):
         env.pop("PYTHONDONTWRITEBYTECODE", None)
         return subprocess.run(
             [sys.executable, str(self.base / "main.py"), "--store", str(self.base / "store"), "sweep", str(self.spec),
-             "--target", "noisy_bu.target:rollout", "--backend", "burla", "--salt", "0123456789abcdef", "--max-mde", "1", "--yes", *flag, *more],
+             "--target", "noisy_bu.target:rollout", "--backend", "cloud", "--salt", "0123456789abcdef", "--max-mde", "1", "--yes", *flag, *more],
             cwd=self.base, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=600,
         )
 
 
-def _burla(base: Path, pool: Pool, source: str, *, capture: bool = False) -> Burla:
-    """A real process of the command line, with only its launcher pointed at the fake, as the Burla
-    tests point it. The target is a package of its own, which the bundle carries to the workers."""
+def _cloud(w: CloudWorld, source: str, *, capture: bool = False) -> Cloud:
+    """A real process of the command line, with its three seams pointed at the fake (the job's
+    launcher as the cloud backend's own tests point it, the coordinator and the CLI as the world's).
+    The target is a package of its own, which the bundle carries to the workers."""
+    base = w.root
     package = base / "noisy_bu"
     package.mkdir()
     (package / "__init__.py").write_text("", encoding="utf-8")
@@ -990,18 +1002,18 @@ def _burla(base: Path, pool: Pool, source: str, *, capture: bool = False) -> Bur
     (findable / "burla" / "__init__.py").write_text("", encoding="utf-8")
     (findable / f"burla-{PIN}.dist-info").mkdir()
     (findable / f"burla-{PIN}.dist-info" / "METADATA").write_text(f"Metadata-Version: 2.1\nName: burla\nVersion: {PIN}\n", encoding="utf-8")
-    fake = Fake(base / "fake-state", pool)
-    spec = write_sweep(base, capture=capture, burla=burla_table(packages=["noisy_bu"], ledger=str(base / "ledger.jsonl")))
-    argv = [sys.executable, "-I", str(LAUNCH), str(fake.state), "fake", str(SUBMIT)]
-    (base / "main.py").write_text(_BURLA_MAIN.format(argv=argv), encoding="utf-8")
-    return Burla(base, fake, spec)
+    fake = Fake(base / "fake-state", w.pool)
+    spec = write_sweep(base, capture=capture, cloud=cloud_fields(packages=["noisy_bu"], ledger=str(base / "ledger.jsonl")))
+    seams = {**w.seams(), "_launcher_argv": [sys.executable, "-I", str(LAUNCH), str(fake.state), "fake", str(SUBMIT)]}
+    (base / "main.py").write_text(_CLOUD_MAIN.format(seams=seams), encoding="utf-8")
+    return Cloud(base, fake, spec)
 
 
 #: ``write_sweep``'s two cells at two replicates.
-BURLA_ROWS = 4
+CLOUD_ROWS = 4
 
 
-def _burla_stored(base: Path) -> dict[str, Any]:
+def _cloud_stored(base: Path) -> dict[str, Any]:
     done = _prove(base, "--store", str(base / "store"), "runs", "--json")
     assert done.returncode == 0, _report(done)
     (run,) = _document(done.stdout, "poisson-prove.runs/1")["runs"]
@@ -1013,36 +1025,36 @@ def _burla_stored(base: Path) -> dict[str, Any]:
     [(f'print("{BANNER}")', "print at import"), (f'atexit.register(lambda: print("{BANNER}"))', "print from atexit")],
     ids=["import", "atexit"],
 )
-def test_burla_what_the_sweeps_own_process_writes_goes_to_stderr(at_import: str, where: str, tmp_path: Path, pool: Pool) -> None:
+def test_cloud_what_the_sweeps_own_process_writes_goes_to_stderr(at_import: str, where: str, cloud_world: CloudWorld) -> None:
     """The target is imported in the sweep's process to plan the run, so these break the document as
     they do locally (r7). Exit 0 and an unparseable stdout on main."""
-    burla = _burla(tmp_path, pool, _target(at_import))
-    done = burla.run()
+    cloud = _cloud(cloud_world, _target(at_import))
+    done = cloud.run()
     assert done.returncode == 0, (where, _report(done))
     _document(done.stdout)
     assert BANNER in _err(done), _report(done)
 
 
-def test_burla_the_launchers_output_stays_in_its_log(tmp_path: Path, pool: Pool) -> None:
+def test_cloud_the_launchers_output_stays_in_its_log(cloud_world: CloudWorld) -> None:
     """A guard, and part of the finding: the launcher's stdout and stderr are its log, so what the
     client prints never reaches the document. Green on main."""
-    burla = _burla(tmp_path, pool, _target())
-    burla.fake.script(default={"print": BANNER})
-    done = burla.run()
+    cloud = _cloud(cloud_world, _target())
+    cloud.fake.script(default={"print": BANNER})
+    done = cloud.run()
     assert done.returncode == 0, _report(done)
     _document(done.stdout)
     assert BANNER not in _err(done), _report(done)
-    logs = [path.read_text(encoding="utf-8", errors="replace") for path in tmp_path.rglob("*.log")]
+    logs = [path.read_text(encoding="utf-8", errors="replace") for path in cloud_world.root.rglob("*.log")]
     assert any(BANNER in text for text in logs), "the launcher's output is not in its log"
 
 
-def test_burla_a_rollouts_unflushed_print_stays_off_the_document(tmp_path: Path, pool: Pool) -> None:
+def test_cloud_a_rollouts_unflushed_print_stays_off_the_document(cloud_world: CloudWorld) -> None:
     """A guard: green on main, by luck (r8). The pickle overtakes the text still in its buffer."""
-    burla = _burla(tmp_path, pool, _target(in_rollout=f'print("{BANNER}")'))
-    done = burla.run()
+    cloud = _cloud(cloud_world, _target(in_rollout=f'print("{BANNER}")'))
+    done = cloud.run()
     assert done.returncode == 0, _report(done)
     _document(done.stdout)
-    assert (_burla_stored(tmp_path)["rows"], _burla_stored(tmp_path)["no_outcome"]) == (BURLA_ROWS, 0)
+    assert (_cloud_stored(cloud_world.root)["rows"], _cloud_stored(cloud_world.root)["no_outcome"]) == (CLOUD_ROWS, 0)
 
 
 _THROUGH_FD_1 = {
@@ -1053,43 +1065,43 @@ _THROUGH_FD_1 = {
 
 
 @pytest.mark.parametrize("write", list(_THROUGH_FD_1))
-def test_burla_rollout_writing_through_fd_1_does_not_fail_the_sweep(write: str, tmp_path: Path, pool: Pool) -> None:
+def test_cloud_rollout_writing_through_fd_1_does_not_fail_the_sweep(write: str, cloud_world: CloudWorld) -> None:
     """r8. The rehearsal reads a pickle from the child's stdout, so on main this ends in exit 3 and an
     ``UnpicklingError`` in the errors log, for a target that does nothing wrong."""
-    burla = _burla(tmp_path, pool, _target(in_rollout=_THROUGH_FD_1[write]))
-    done = burla.run()
+    cloud = _cloud(cloud_world, _target(in_rollout=_THROUGH_FD_1[write]))
+    done = cloud.run()
     assert done.returncode == 0, _report(done)
     assert _document(done.stdout)["status"] == "complete"
-    run = _burla_stored(tmp_path)
-    assert (run["rows"], run["no_outcome"]) == (BURLA_ROWS, 0), run
+    run = _cloud_stored(cloud_world.root)
+    assert (run["rows"], run["no_outcome"]) == (CLOUD_ROWS, 0), run
 
 
-def test_burla_rollout_print_under_a_timeout_does_not_fail_the_sweep(tmp_path: Path, pool: Pool) -> None:
+def test_cloud_rollout_print_under_a_timeout_does_not_fail_the_sweep(cloud_world: CloudWorld) -> None:
     """r8. A timed rollout's forked child flushes as it ends, so a plain print is enough here."""
-    burla = _burla(tmp_path, pool, _target(in_rollout=f'print("{BANNER}")'))
-    done = burla.run(*TIMEOUT)
+    cloud = _cloud(cloud_world, _target(in_rollout=f'print("{BANNER}")'))
+    done = cloud.run(*TIMEOUT)
     assert done.returncode == 0, _report(done)
     _document(done.stdout)
-    run = _burla_stored(tmp_path)
-    assert (run["rows"], run["no_outcome"]) == (BURLA_ROWS, 0), run
+    run = _cloud_stored(cloud_world.root)
+    assert (run["rows"], run["no_outcome"]) == (CLOUD_ROWS, 0), run
 
 
-def test_burla_rollout_writing_under_capture_keeps_its_rows(tmp_path: Path, pool: Pool) -> None:
+def test_cloud_rollout_writing_under_capture_keeps_its_rows(cloud_world: CloudWorld) -> None:
     """r8, the other reader of a child's stdout: a batch with ``[capture]`` or ``[chaos]`` runs in an
     interpreter spawned for it, and its pickle comes back the same way."""
-    burla = _burla(tmp_path, pool, _target(in_rollout=f'os.write(1, b"{BANNER}\\n")'), capture=True)
-    done = burla.run()
+    cloud = _cloud(cloud_world, _target(in_rollout=f'os.write(1, b"{BANNER}\\n")'), capture=True)
+    done = cloud.run()
     assert done.returncode == 0, _report(done)
     assert _document(done.stdout)["status"] == "complete"
-    run = _burla_stored(tmp_path)
-    assert (run["rows"], run["no_outcome"]) == (BURLA_ROWS, 0), run
+    run = _cloud_stored(cloud_world.root)
+    assert (run["rows"], run["no_outcome"]) == (CLOUD_ROWS, 0), run
 
 
-def test_burla_rollout_writing_through_fd_1_runs_without_json_too(tmp_path: Path, pool: Pool) -> None:
+def test_cloud_rollout_writing_through_fd_1_runs_without_json_too(cloud_world: CloudWorld) -> None:
     """r8 is not about the document, so it holds without ``--json`` as well. This is the one change
     in this file that a person without ``--json`` sees: a sweep that failed now runs."""
-    burla = _burla(tmp_path, pool, _target(in_rollout=f'os.write(1, b"{BANNER}\\n")'))
-    done = burla.run(json_flag=False)
+    cloud = _cloud(cloud_world, _target(in_rollout=f'os.write(1, b"{BANNER}\\n")'))
+    done = cloud.run(json_flag=False)
     assert done.returncode == 0, _report(done)
-    run = _burla_stored(tmp_path)
-    assert (run["rows"], run["no_outcome"]) == (BURLA_ROWS, 0), run
+    run = _cloud_stored(cloud_world.root)
+    assert (run["rows"], run["no_outcome"]) == (CLOUD_ROWS, 0), run

@@ -6,7 +6,7 @@ form).
 every Markdown page of the README, ``CONTRIBUTING.md``, ``docs/`` (but the two standards)
 and the example is read by the docs check and the link check, so a page a later
 change adds is checked by being there. Where a page must carry what the code has (every verb, every
-option of a verb, every key a sweep spec takes, every fault, every required ``[burla]`` field, the
+option of a verb, every key a sweep spec takes, every fault, every required ``[cloud]`` field, the
 prompt ``init --agent`` prints, the steps of the skill it writes), the list is read from what ships:
 the command's own output, the public modules, or the field lists the spec reader checks a spec
 against. Facts are pinned, never prose, but for the words fixed here: the README's
@@ -58,8 +58,8 @@ test, so a check that let a wrong page through would fail here first.
   environment (``[all,dev]``) has it.
 - **d14** The sweep spec page and the backends page are checked against lists read from the code:
   the spec reader's own field lists (the top-level list and the four tables' lists,
-  ``ModalOptions``, ``ImageSpec``, ``BurlaOptions``), the Modal price table's date
-  (the Modal backend's own) and ``BurlaOptions``' fields with no default; ``[axes.*]`` or
+  ``ModalOptions``, ``ImageSpec``, ``CloudOptions``), the Modal price table's date
+  (the Modal backend's own) and ``CloudOptions``' fields with no default; ``[axes.*]`` or
   ``[axes.<name>]`` both name the axis table.
 - **d15** The recipes' skip reasons are ``RECIPES``' words exactly, and each recipe shows what
   ``RECIPE_SHOWS`` checks it shows: ``in-ci`` a ``check`` that exits 4 and a ``--json`` command;
@@ -112,7 +112,7 @@ able to show and which the hygiene module's double-bracket family would read as 
 | PF7.2 the first run's pages show its commands and its verdict | ``test_pf7_2_the_first_run_pages_show_its_commands_and_its_verdict`` (README, quickstart) |
 | PF7.2 the sweep spec page names every key and table | ``test_pf7_2_the_sweep_spec_page_names_every_key_and_table`` |
 | PF7.2 the statistics page explains every verdict word | ``test_pf7_2_the_statistics_page_explains_every_verdict_word`` |
-| PF7.2 the backends page: local, Modal, Burla | ``test_pf7_2_the_backends_page_carries_what_each_backend_needs`` (one case per backend) |
+| PF7.2 the backends page: local, Modal, your cloud account | ``test_pf7_2_the_backends_page_carries_what_each_backend_needs`` (one case per backend) |
 | PF7.2 the fault-injection page | ``test_pf7_2_the_fault_injection_page_names_every_fault_and_the_chaos_table`` |
 | PF7.2 each case its own sweep axis; the refusal | ``test_pf7_2_the_agent_pages_say_each_case_is_its_own_sweep_axis`` (two pages) |
 | PF7.2 the setup page around its table | ``test_pf7_2_the_setup_page_carries_the_prompt_the_steps_and_the_options`` |
@@ -642,7 +642,7 @@ def test_pf7_2_the_first_run_pages_show_its_commands_and_its_verdict(rel: str) -
 
 def test_pf7_2_the_sweep_spec_page_names_every_key_and_table() -> None:
     from poisson_prove import sampler
-    from poisson_prove.executor_burla import BurlaOptions
+    from poisson_prove.executor_cloud import CloudOptions
     from poisson_prove.executor_modal import ImageSpec, ModalOptions
 
     names = backticked(text_of("docs/sweep-spec.md"))
@@ -654,7 +654,7 @@ def test_pf7_2_the_sweep_spec_page_names_every_key_and_table() -> None:
         "declare": list(sampler._DECLARE_FIELDS),
         "modal": [f.name for f in dataclasses.fields(ModalOptions)],
         "modal.<image>": [f.name for f in dataclasses.fields(ImageSpec)],
-        "burla": [f.name for f in dataclasses.fields(BurlaOptions)],
+        "cloud": [f.name for f in dataclasses.fields(CloudOptions)],
     }
     missing = [f"[{table}]" for table in fields if table and f"[{table}]" not in names
                and not (table == "axes.<name>" and re.search(r"\[axes\.[^\]]+\]", names))]
@@ -677,13 +677,17 @@ def _modal_backend(text: str) -> list[str]:
     return out
 
 
-def _burla_backend(text: str) -> list[str]:
-    from poisson_prove.executor_burla import BurlaOptions
+def _cloud_backend(text: str) -> list[str]:
+    """RB-1 to RB-4, RB-9, RB-15, RB-16: the cloud backend's section names the cloud it offers,
+    who carries the reader's code (the data-flow disclosure), the install line, the extra's
+    pins, the Windows refusal and every required key. 0.2's "experimental" and private-mode
+    switch are gone with the backend they described (RB-10)."""
+    from poisson_prove.executor_cloud import CloudOptions
 
-    pin = [r for r in tomllib.loads(text_of("pyproject.toml"))["project"]["optional-dependencies"]["burla"]]
-    need = ["experimental", "BURLA_PRIVATE", 'pip install "poisson-prove[burla]"', *pin, "Windows"]
+    pin = [r for r in tomllib.loads(text_of("pyproject.toml"))["project"]["optional-dependencies"]["cloud"]]
+    need = ["AWS", "Burla's relay", 'pip install "poisson-prove[cloud]"', *pin, "Windows"]
     out = [w for w in need if w not in text]
-    required = [f.name for f in dataclasses.fields(BurlaOptions)
+    required = [f.name for f in dataclasses.fields(CloudOptions)
                 if f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING]
     return out + [f"the required field {name}" for name in required if f"`{name}`" not in text]
 
@@ -691,7 +695,7 @@ def _burla_backend(text: str) -> list[str]:
 BACKENDS = {
     "local": lambda text: [w for w in ("--episode-timeout",) if f"`{w}" not in text],
     "modal": _modal_backend,
-    "burla": _burla_backend,
+    "cloud": _cloud_backend,
 }
 
 

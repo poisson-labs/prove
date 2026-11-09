@@ -479,7 +479,7 @@ CORPUS: tuple[Call, ...] = (
     Call("refuse-over-max-cost", "--store {base}/cost-store sweep {spec} --target " + MOCK + ":rollout --backend modal --max-cost 0.5 --est-seconds 36000 --yes --max-mde " + MAX_MDE, 1, "plan", ("$0.50",), paths=("fake_modal",)),
     Call("refuse-existing-folder", f"{S} report {{A}} {{B}} {PAIR_X} --out {{full}}", 1, "refusal", ("{full}",)),
     Call("refuse-unknown-spec-key", "--store {base}/bad-store sweep {bad_capture} --target " + MOCK + ":rollout --yes --max-mde " + MAX_MDE, 1, "refusal", ("not_a_field",)),
-    Call("refuse-missing-burla-table", "--store {base}/burla-store sweep {spec} --target " + MOCK + ":rollout --backend burla --yes --max-mde " + MAX_MDE, 1, "refusal", ("[burla]", "{spec}"), paths=("fake_burla",)),
+    Call("refuse-missing-cloud-table", "--store {base}/cloud-store sweep {spec} --target " + MOCK + ":rollout --backend cloud --yes --max-mde " + MAX_MDE, 1, "refusal", ("[cloud]", "{spec}"), paths=("fake_burla",)),
     Call("refuse-empty-store", "--store {empty} diff {A} {B}", 1, "refusal", ("{empty}",)),
     Call("refuse-unresolvable-target", "--store {base}/target-store sweep {spec} --target poisson_prove.examples.no_such_module_xyz:rollout --yes --max-mde " + MAX_MDE, 1, "refusal", ("no_such_module_xyz",)),
     Call("refuse-unknown-event", f"{S} diff {{A}} {{B}} --event nope", 1, "refusal", ("violated", "timeout")),
@@ -557,7 +557,7 @@ def test_pf1_2_a_refusal_exits_1_with_one_error_line_then_only_next_lines_and_sa
     for fact in r.call.facts:
         # A plan refusal may state its numbers in the plan it keeps on stdout (rule 7).
         assert world.fill(fact) in (r.out + r.err if r.call.kind == "plan" else r.err), (fact, r.err)
-    if name == "refuse-missing-burla-table":
+    if name == "refuse-missing-cloud-table":
         assert "pip install" not in r.err, "the table's refusal, not the missing extra's"
     if r.call.kind == "plan":
         # The plan, and nothing else: its verdict line, then its detail as lines indented two
@@ -1434,32 +1434,38 @@ def test_pf1_13_on_modal_an_estimate_over_max_cost_is_refused_before_the_questio
     assert run_ids(tmp_path / "store") == set()
 
 
-def test_pf1_13_burlas_cap_refusal_keeps_the_plan_on_screen(world: World, tmp_path: Path) -> None:
-    folder = tmp_path / "sweep"
-    folder.mkdir()
-    spec = folder / "sweep.toml"
-    spec.write_text(
-        'target_id = "bu-test@v0"\nt_unit = "steps"\nreplicates = 2\n\n[axes.cell]\ntype = "categorical"\nvalues = ["a", "b"]\n\n'
-        '[burla]\nnodes = 1\nmachine_type = "m7i.2xlarge"\nslots_per_node = 2\nusd_per_node_hour = 360.0\n'
-        'price_asof = "fixture price, 2026-09-27"\nledger = "ledgers/step.jsonl"\nhead_url = "http://localhost:5001"\n'
-        'stop_cost = 0.005\nmax_cost = 0.01\nest_seconds_per_episode = 0.01\npackages = ["bu_targets"]\nbatch_size = 2\n'
-        "boot_minutes = 20.0\nidle_minutes = 0.0\n",
-        encoding="utf-8",
-    )
-    store = tmp_path / "store"
-    # PF4.49: the 2-replicate design's limit is over 0.99, so its sweep passes --max-mde 1.
-    r = prove(
-        ["--store", str(store), "sweep", str(spec), "--target", "bu_targets.plain:rollout", "--backend", "burla", "--max-mde", "1", "--yes"],
-        home=world.home, cwd=tmp_path, paths=(BU_TARGETS, world.folders["fake_burla"]),
-    )
-    assert r.code == 1, (r.out, r.err)
-    assert r.out.splitlines()[0].startswith("plan  "), r.out
-    lines = r.err.splitlines()
-    assert lines[0].startswith("error: ") and all(line.startswith("  next: ") for line in lines[1:]), r.err
-    assert "$0.01" in r.err and str(folder / "ledgers" / "step.jsonl") in r.out + r.err, (r.out, r.err)
-    assert_clean_stderr(r.err)
-    assert not (folder / "ledgers" / "step.jsonl").exists()
-    assert run_ids(store) == set()
+def test_pf1_13_the_clouds_cap_refusal_keeps_the_plan_on_screen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rule 7 on a cloud account. 0.3.0 checks the sign-in before the plan (Remote Backends Spec
+    §7.1), so the sweep runs in this process on the cloud backend's fakes (``rb_cloud_support``)."""
+    from types import SimpleNamespace
+
+    from rb_cloud_support import CloudWorld, table_text
+
+    w = CloudWorld(tmp_path, monkeypatch, SimpleNamespace(workers=[]))  # type: ignore[arg-type]
+    try:
+        w.spec.write_text(
+            'target_id = "bu-test@v0"\nt_unit = "steps"\nreplicates = 2\n\n[axes.cell]\ntype = "categorical"\nvalues = ["a", "b"]\n'
+            + table_text("cloud", {
+                "provider": "aws", "region": "us-east-2", "machine_type": "m7i.2xlarge", "nodes": 1,
+                "slots_per_node": 2, "usd_per_node_hour": 360.0, "price_asof": "fixture price, 2026-09-27",
+                "ledger": "ledgers/step.jsonl", "stop_cost": 0.005, "max_cost": 0.01,
+                "est_seconds_per_episode": 0.01, "packages": ["bu_targets"], "batch_size": 2,
+                "boot_minutes": 20.0, "idle_minutes": 2,
+            }),
+            encoding="utf-8",
+        )
+        # PF4.49: the 2-replicate design's limit is over 0.99, so its sweep passes --max-mde 1.
+        r = w.sweep(target="bu_targets.plain:rollout")
+        assert r.code == 1, (r.out, r.err)
+        assert r.out.splitlines()[0].startswith("plan  "), r.out
+        lines = r.err.splitlines()
+        assert lines[0].startswith("error: ") and all(line.startswith("  next: ") for line in lines[1:]), r.err
+        assert "$0.01" in r.err and str(tmp_path / "ledgers" / "step.jsonl") in r.out + r.err, (r.out, r.err)
+        assert_clean_stderr(r.err)
+        assert not (tmp_path / "ledgers" / "step.jsonl").exists()
+        assert run_ids(w.store) == set()
+    finally:
+        w.cleanup()
 
 
 def test_pf1_13_a_sweep_stopped_by_max_rollouts_exits_3_with_what_was_kept_and_the_resume(corpus: dict[str, Ran], world: World) -> None:

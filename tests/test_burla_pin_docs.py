@@ -1,7 +1,7 @@
-"""The Burla pin agrees everywhere it is named: the backend's ``_BURLA_PIN``, the ``[burla]`` and
-``[all]`` extras, and every Burla version the README, the docs pages and Prove's own source name.
+"""The Burla pin agrees everywhere it is named: the cloud backend's ``_PIN``, the ``[cloud]``
+extra, its ``[burla]`` alias and the ``[all]`` extra, and every Burla version the README, the docs pages and Prove's own source name.
 
-**What is pinned.** The launcher runs exactly one client, ``_BURLA_PIN``; both extras require
+**What is pinned.** The launcher runs exactly one client, ``_PIN``; the three extras require
 exactly that version; and a page or docstring that names a Burla version (``burla==X.Y.Z`` or
 "Burla X.Y.Z") names that one. The backends page must name the pin, so the scan cannot pass by
 finding nothing.
@@ -19,10 +19,10 @@ import re
 import tomllib
 from pathlib import Path
 
-from poisson_prove import executor_burla
+from poisson_prove import executor_cloud
 
 REPO = Path(__file__).resolve().parents[1]
-PIN = executor_burla._BURLA_PIN
+PIN = executor_cloud._PIN
 #: ``burla==1.8.4``, ``Burla 1.8.4``, ``burla client 1.8.4``: a Burla version as a page names one.
 NAMED = re.compile(r"(?i)\bburla(?:==|\s+(?:client\s+)?v?)(\d+\.\d+\.\d+)")
 
@@ -34,7 +34,7 @@ def _pages() -> list[Path]:
 
 def test_the_extras_require_exactly_the_client_the_backend_runs() -> None:
     extras = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["optional-dependencies"]
-    for extra in ("burla", "all"):
+    for extra in ("cloud", "burla", "all"):
         burla = [req for req in extras[extra] if re.match(r"burla\b", req)]
         assert burla == [f"burla=={PIN}"], (extra, burla, PIN)
 
