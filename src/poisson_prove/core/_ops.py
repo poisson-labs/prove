@@ -2841,6 +2841,8 @@ def start(
             sentence, nexts = _kept(
                 st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
             )
+            if p.backend == "cloud" and cluster:
+                sentence += "; the cluster was stopped"
             try:
                 kept = closing_progress()
             except BrokenPipeError:
@@ -2878,6 +2880,8 @@ def start(
     if before is not None:
         _record_resume(st, p, before)
     result = _sweep_result(plan, store, st, p, summary)
+    if cluster:
+        result = _with_cluster(result, cluster)
     for note in _notes:
         events.emit("note", {"sentence": note})
     # The closing progress reads the store: done is every stored rollout, errored those with no
@@ -2908,6 +2912,33 @@ def start(
             notes=(*result.notes, _dashboard_note(unrefreshed)),
         )
     return result
+
+
+def _with_cluster(result: RunResult, cluster: Mapping[str, Any]) -> RunResult:
+    """The result's cluster line and its ``cluster`` object."""
+    stopped = str(cluster["stopped"])
+    line = (
+        f"{cluster['nodes']} × {cluster['machine_type']} up "
+        f"{_look.fmt_duration(cluster['up_seconds'])}, stopped {stopped[11:19]}Z · ledger "
+        f"{_look.fmt_dollars(cluster['charge'])}"
+    )
+    shown = {
+        key: cluster[key]
+        for key in (
+            "provider",
+            "region",
+            "machine_type",
+            "nodes",
+            "started",
+            "stopped",
+            "up_seconds",
+        )
+    }
+    return dataclasses.replace(
+        result,
+        details=(*result.details, ("cluster", line)),
+        payload={**result.payload, "cluster": shown},
+    )
 
 
 def _dashboard_note(why: str) -> str:

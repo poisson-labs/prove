@@ -1845,9 +1845,13 @@ class _Progress:
         self.live = io.err_term is not None
         self.decile = 0
         self.dirty = False
+        self.shown_starting = False
 
     def __call__(self, event: Any) -> None:
         doc = event.to_json()
+        if doc["kind"] == "cluster":
+            self.cluster(doc["detail"])
+            return
         if doc["kind"] != "progress":
             return
         done, total = int(doc["detail"]["done"]), int(doc["detail"]["total"])
@@ -1862,6 +1866,43 @@ class _Progress:
             self.decile = decile
             self.io.err_write(f"{text}\n")
             self.io.err.flush()
+
+    def cluster(self, detail: Mapping[str, Any]) -> None:
+        """The cluster's lines on stderr: a live line in a terminal, each once when piped."""
+        phase = detail.get("phase")
+        if phase == "note":
+            self.io.note(str(detail["sentence"]))
+            return
+        n = int(detail.get("nodes", 0) or 0)
+        nodes = f"{_look.fmt_count(n)} node{'s' if n != 1 else ''}"
+        seconds = _look.fmt_duration(float(detail.get("seconds", 0.0) or 0.0))
+        if phase == "starting":
+            text = (
+                f"starting  {n} × {detail['machine_type']} in {detail['region']}  "
+                f"{_look.fmt_count(int(detail.get('ready', 0)))} of {_look.fmt_count(n)} ready"
+                f" · {seconds}"
+            )
+            if self.live:
+                self.io.progress(text)
+                self.dirty = True
+                return
+            if self.shown_starting:
+                return
+            self.shown_starting = True
+        elif phase == "ready":
+            text = f"ready  {nodes} · {_look.fmt_count(int(detail['vcpus']))} vCPU · {seconds}"
+        elif phase == "stopping":
+            text = "stopping  the cluster"
+        elif phase == "stopped":
+            text = f"stopped  {nodes}, up {seconds}"
+        else:
+            return
+        if self.live:
+            self.io.progress(text)
+            self.dirty = True
+            return
+        self.io.err_write(f"{text}\n")
+        self.io.err.flush()
 
     def finish(self) -> None:
         if self.dirty:
