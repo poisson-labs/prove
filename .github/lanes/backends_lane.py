@@ -25,8 +25,12 @@ from shards import BACKENDS, parse
 #: The backend code, beside the backend tests themselves.
 SOURCES = (
     "src/poisson_prove/executor.py",
-    "src/poisson_prove/executor_burla.py",
-    "src/poisson_prove/_burla_submit.py",
+    "src/poisson_prove/executor_cloud.py",
+    "src/poisson_prove/_cloud_head.py",
+    "src/poisson_prove/_cloud_record.py",
+    "src/poisson_prove/_where_checks.py",
+    "src/poisson_prove/_prices_cloud.py",
+    "src/poisson_prove/_cloud_submit.py",
     "src/poisson_prove/executor_modal.py",
 )
 FAKES = "tests/bu_fixtures/"
