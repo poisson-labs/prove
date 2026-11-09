@@ -519,10 +519,11 @@ def _build_parser(io: _IO) -> _Parser:
     )
     sweep.add_argument(
         "--backend",
-        choices=("local", "modal", "burla"),
+        choices=("local", "modal", "cloud", "burla"),
+        metavar="{local,modal,cloud}",
         default="local",
-        help="where the rollouts run: local, modal or burla (burla is experimental; "
-        "default: local)",
+        help="where the rollouts run: local (this machine), modal, or cloud (your own cloud "
+        "account; Prove starts the cluster and stops it after) (default: local)",
     )
     identity = sweep.add_mutually_exclusive_group()
     identity.add_argument(
@@ -576,7 +577,7 @@ def _build_parser(io: _IO) -> _Parser:
     _add_json_option(sweep, "the plan and the result")
     remote = sweep.add_argument_group(
         "remote backends (override the [modal] table; --infra-retries, --max-cost and "
-        "--est-seconds also override [burla])"
+        "--est-seconds also override [cloud])"
     )
     remote.add_argument(
         "--concurrency", type=int, metavar="N", help="containers at once (default: the table's)"
@@ -1366,10 +1367,17 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
     )
     try:
         with _notes(io):
-            if ns.verb == "sweep" and ns.backend == "burla" and os.name == "nt":
-                # Burla's launcher needs fcntl, select on pipes and process groups.
+            if ns.verb == "sweep" and ns.backend == "burla":
+                raise _Usage(
+                    "--backend burla is now --backend cloud, and Prove starts and stops the "
+                    "cluster itself",
+                    [f"{_COMMAND} where cloud"],
+                )
+            if ns.verb == "sweep" and ns.backend == "cloud" and os.name == "nt":
+                # The cloud backend's launcher needs fcntl, select on pipes and process groups.
                 raise _Refusal(
-                    "the burla backend cannot run on Windows; run it from macOS or Linux"
+                    "your cloud account is not available on Windows yet; run the sweep from "
+                    "macOS or Linux"
                 )
             store = core.open_store(getattr(ns, "store", None), verb=ns.verb)
             for note in store.notes:
@@ -1837,9 +1845,13 @@ class _Progress:
         self.live = io.err_term is not None
         self.decile = 0
         self.dirty = False
+        self.shown_starting = False
 
     def __call__(self, event: Any) -> None:
         doc = event.to_json()
+        if doc["kind"] == "cluster":
+            self.cluster(doc["detail"])
+            return
         if doc["kind"] != "progress":
             return
         done, total = int(doc["detail"]["done"]), int(doc["detail"]["total"])
@@ -1854,6 +1866,43 @@ class _Progress:
             self.decile = decile
             self.io.err_write(f"{text}\n")
             self.io.err.flush()
+
+    def cluster(self, detail: Mapping[str, Any]) -> None:
+        """The cluster's lines on stderr: a live line in a terminal, each once when piped."""
+        phase = detail.get("phase")
+        if phase == "note":
+            self.io.note(str(detail["sentence"]))
+            return
+        n = int(detail.get("nodes", 0) or 0)
+        nodes = f"{_look.fmt_count(n)} node{'s' if n != 1 else ''}"
+        seconds = _look.fmt_duration(float(detail.get("seconds", 0.0) or 0.0))
+        if phase == "starting":
+            text = (
+                f"starting  {n} × {detail['machine_type']} in {detail['region']}  "
+                f"{_look.fmt_count(int(detail.get('ready', 0)))} of {_look.fmt_count(n)} ready"
+                f" · {seconds}"
+            )
+            if self.live:
+                self.io.progress(text)
+                self.dirty = True
+                return
+            if self.shown_starting:
+                return
+            self.shown_starting = True
+        elif phase == "ready":
+            text = f"ready  {nodes} · {_look.fmt_count(int(detail['vcpus']))} vCPU · {seconds}"
+        elif phase == "stopping":
+            text = "stopping  the cluster"
+        elif phase == "stopped":
+            text = f"stopped  {nodes}, up {seconds}"
+        else:
+            return
+        if self.live:
+            self.io.progress(text)
+            self.dirty = True
+            return
+        self.io.err_write(f"{text}\n")
+        self.io.err.flush()
 
     def finish(self) -> None:
         if self.dirty:

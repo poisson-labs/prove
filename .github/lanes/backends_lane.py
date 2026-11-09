@@ -3,11 +3,13 @@
     python .github/lanes/backends_lane.py BASE_SHA HEAD_SHA
 
 The backend tests run when a change touches backend code: the Modal and Burla executors, the
-shared runner they drive, the fake Burla client under ``tests/bu_fixtures/``, a test file of the
-gate's ``backends`` entry (``$SHARDS``, read with ``shards.py``), or the version the requirements
-resolve to of Modal or Burla. Versions are resolved the way ``math_lane.py`` resolves them, the
-base's ``pyproject.toml`` and the head's at the same moment. The nightly run runs the backend tests
-whatever changed, so a change that reaches a backend through another file is caught there.
+shared runner they drive, the command line and the core's operations (the cluster's life is
+tested only here, and its stop on an interrupt is in those two), the fake Burla client under
+``tests/bu_fixtures/``, a test file of the gate's ``backends`` entry (``$SHARDS``, read with
+``shards.py``), or the version the requirements resolve to of Modal or Burla. Versions are
+resolved the way ``math_lane.py`` resolves them, the base's ``pyproject.toml`` and the head's at
+the same moment. The nightly run runs the backend tests whatever changed, so a change that
+reaches a backend through another file is caught there.
 
 Writes ``backends=true`` or ``backends=false`` to ``$GITHUB_OUTPUT`` and the reasons to the job
 summary.
@@ -25,9 +27,17 @@ from shards import BACKENDS, parse
 #: The backend code, beside the backend tests themselves.
 SOURCES = (
     "src/poisson_prove/executor.py",
-    "src/poisson_prove/executor_burla.py",
-    "src/poisson_prove/_burla_submit.py",
+    "src/poisson_prove/executor_cloud.py",
+    "src/poisson_prove/_cloud_head.py",
+    "src/poisson_prove/_cloud_record.py",
+    "src/poisson_prove/_where_checks.py",
+    "src/poisson_prove/_prices_cloud.py",
+    "src/poisson_prove/_cloud_submit.py",
     "src/poisson_prove/executor_modal.py",
+    # The cluster's life is tested only in the backends job, and its stop on an interrupt, its
+    # exit codes and its lines are in these two.
+    "src/poisson_prove/cli.py",
+    "src/poisson_prove/core/_ops.py",
 )
 FAKES = "tests/bu_fixtures/"
 LIBRARIES = ("modal", "burla")

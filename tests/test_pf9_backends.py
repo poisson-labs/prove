@@ -1,53 +1,66 @@
-"""PF9 -- backends and platforms: the Modal extra's floor and its plan, the Burla extra and its
-label, and the refusal on Windows (PF9.1 to PF9.4; the Burla pin at exactly 1.8.4, the
-relay line, and the Burla install line).
+"""PF9 -- backends and platforms: the Modal extra's floor and its plan, the cloud extra and its
+label, and the refusal on Windows (PF9.1 to PF9.4; the cluster software's pin at exactly 1.8.4,
+the relay line, and the cloud extra's install line).
+
+**0.3.0, Remote backends.** ``--backend burla`` and ``[burla]`` are now ``--backend cloud`` and
+``[cloud]`` (Remote Backends Spec §2, RB-1 to RB-5): the names moved here as names; ``head_url``
+left the table and ``provider`` and ``region`` joined it (RB-2); a cloud sweep now checks the
+cloud extra, the cloud's CLI and its sign-in before its plan (§7.1), so the tests that reach a
+cloud plan run beside the fakes of ``rb_cloud_support.py`` (a fake ``aws`` on ``PATH``, the
+coordinator launcher and the cluster software's CLI pointed at the fake). Three invariants are
+replaced by ruled text, each said where it is pinned: the relay line (RB-9, RB-10), the Windows
+refusal's words (RB-16, and C1's name scan) and the extra's set (RB-3, RB-4).
 
 **What is pinned is public behaviour.** The command line in this process (``cli.main`` with string
 streams, as every frozen command-line test drives it), the package's declared extras (read from
 ``pyproject.toml``, the file the wheel's metadata is built from), the store, the ledger file a
-Burla run writes. Facts are pinned, never prose: the price table's date, that the estimate is of
-compute and not of model tokens, the switch ``BURLA_PRIVATE=True``, the pin, the install line.
+cloud run writes. Facts are pinned, never prose: the price table's date, that the estimate is of
+compute and not of model tokens, the relay line, the pin, the install line.
 
 **Fakes sit at the backend boundary only.** Modal and Burla are never imported for real here.
 A test that needs one present puts a package of that name, with a ``dist-info`` giving its version,
 first on ``sys.path``; it is findable and its version readable, and nothing of it runs. A test that
 needs ``burla`` missing puts a finder first on ``sys.meta_path`` that refuses to find or import it,
 so the case holds where the real client is installed: missing means not importable in Prove's
-interpreter, which is what the launcher needs. Burla's launcher is the backend's own
-seam, ``executor_burla._launcher_argv``, pointed at ``tests/bu_fixtures/launch.py`` with the fake
-client of ``tests/bu_fixtures/burla``, as ``test_bu_burla_backend.py`` points it. The fake reports
+interpreter, which is what the launcher needs. The job's launcher is the backend's own
+seam, ``executor_cloud._launcher_argv``, pointed at ``tests/bu_fixtures/launch.py`` with the fake
+client of ``tests/bu_fixtures/burla``, as ``test_bu_cloud_backend.py`` points it. The fake reports
 the version a test writes into its ``script.json`` and refuses any call it gets, so no worker pool
-is needed and a launcher that reaches Burla ends at once, with the call on record.
+is needed and a launcher that reaches the cluster software ends at once, with the call on record.
 
 **Sockets are blocked** in this module and in every module that drives a remote backend offline
 (PF9.4), by ``conftest.py``'s guard; the fake's own interpreters arm their own tripwire.
 
 **Choices this file pins:**
 
-- The ``[burla]`` extra pins exactly the client the backend runs, ``burla==1.8.4``: the extra
-  admits a version exactly when the backend runs it. Under the alternative, a floor, the 1.8.5 and 1.9.0 cases flip.
+- The ``[cloud]`` extra (and its ``[burla]`` alias, RB-4) pins exactly the client the backend
+  runs, ``burla==1.8.4``: the extra admits a version exactly when the backend runs it. Under the
+  alternative, a floor, the 1.8.5 and 1.9.0 cases flip.
 - A ``burla`` that Prove's interpreter cannot import is refused before the plan, as a missing
-  ``modal`` is (PF1.2: one ``error:`` line, then ``next:`` lines): exit 1, the next line ``pip install "poisson-prove[burla]"``, nothing on
-  stdout, no launcher, no ledger, no run stored, before the ``[burla]`` table is read. The
+  ``modal`` is (PF1.2: one ``error:`` line, then ``next:`` lines): exit 1, the next line ``pip install "poisson-prove[cloud]"``, nothing on
+  stdout, no launcher, no ledger, no run stored, before the ``[cloud]`` table is read. The
   launcher's own check stays as the backstop and names the extra too.
 - Every Modal plan names the price table's date and says the estimate covers compute, not
   model tokens, also with no estimate (no ``--est-seconds``, or a GPU the price table lacks).
-- On Windows the Burla refusal comes before anything else a Burla sweep does (the spec file,
-  the store, the flags, the extra, the ``[burla]`` table, the target), names burla and Windows in
-  its ``error:`` line, and offers no install line; local and Modal are not refused.
-- The Burla plan's relay line names the switch ``BURLA_PRIVATE=True`` (private mode, the only way
-  off the relay in Burla 1.8.4), says relay and says where the store stays (pinned by its facts,
-  not its wording); no line names ``DISABLE_BURLA_RELAY``, a switch 1.8.4 does not have.
+- On Windows the cloud refusal comes before anything else a cloud sweep does (the spec file,
+  the store, the flags, the extra, the ``[cloud]`` table, the target), names Windows and not the
+  cluster software in its ``error:`` line (RB-16; C1's name scan), and offers no install line;
+  local and Modal are not refused.
+- The cloud plan's relay line says relay and says where the store stays (pinned by its facts,
+  not its wording), and names neither ``BURLA_PRIVATE=True`` (0.3.0 runs through the relay and
+  refuses private mode from a laptop, RB-10) nor ``DISABLE_BURLA_RELAY``, a switch 1.8.4 does not
+  have.
 - Real-backend tests carry the ``slow`` and ``backend`` markers and are skipped
   unless their own opt-in variable is set, so a plain ``pytest`` never makes a paid call.
 - The price table's date is pinned as Prove prints it, ``2026-09-03``: re-reading Modal's
   prices is a deliberate change that moves this test with it.
 
 **Seams with PF3 and PF7, tested only on PF9's side:** PF3's ``prove.toml`` default spec and
-``init`` (a Burla sweep with no spec argument on Windows meets the same first check, pinned here
+``init`` (a cloud sweep with no spec argument on Windows meets the same first check, pinned here
 with a spec named, a missing one included); PF7's measured floors and its
 ``all`` extra (this file pins only that ``all`` carries the ``modal`` and ``burla`` requirements
-their own extras carry, and that no other extra names ``burla``).
+their own extras carry, and that no extra but ``cloud``, its ``burla`` alias and ``all`` names
+``burla``).
 """
 
 from __future__ import annotations
@@ -73,29 +86,31 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 import conftest
-from poisson_prove import cli, executor_burla
+from poisson_prove import cli, executor_cloud
 from poisson_prove.store import Store
+from rb_cloud_support import CloudWorld, world
 
 REPO = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO / "pyproject.toml"
 FIXTURES = REPO / "tests" / "bu_fixtures"
 LAUNCH = FIXTURES / "launch.py"
-SUBMIT = Path(executor_burla.__file__).resolve().with_name("_burla_submit.py")
+SUBMIT = Path(executor_cloud.__file__).resolve().with_name("_cloud_submit.py")
 MOCK = "poisson_prove.examples.mock_agent:rollout"
 UNRESOLVABLE = "poisson_prove.examples.no_such_module_pf9:rollout"
-BURLA_HINT = 'pip install "poisson-prove[burla]"'
+CLOUD_HINT = 'pip install "poisson-prove[cloud]"'
 OLD_BURLA_HINT = "pip install burla=="
 PIN = "1.8.4"
 NEVER_RUN = "0.0.0"
 PRICE_DATE = "2026-09-03"
 NEGATION = re.compile(r"\b(not|no|excludes?|excluding|without)\b")
-BACKENDS = ("local", "modal", "burla")
+BACKENDS = ("local", "modal", "cloud")
 
-BURLA_TABLE: dict[str, Any] = {
+#: 0.2.1's table less ``head_url``, plus the cloud and its region (RB-2).
+CLOUD_TABLE: dict[str, Any] = {
+    "provider": "aws", "region": "us-east-2",
     "nodes": 1, "machine_type": "m7i.2xlarge", "slots_per_node": 2, "usd_per_node_hour": 0.403,
     "price_asof": "fixture price, 2026-09-27", "ledger": "ledgers/step.jsonl",
-    "head_url": "http://localhost:5001", "stop_cost": 5.0, "max_cost": 5.0,
-    "est_seconds_per_episode": 0.01,
+    "stop_cost": 5.0, "max_cost": 5.0, "est_seconds_per_episode": 0.01,
 }
 
 
@@ -108,7 +123,7 @@ def _toml(value: Any) -> str:
     return json.dumps(value)
 
 
-def write_spec(root: Path, *, burla: dict[str, Any] | None = None, modal_gpu: str | None = None,
+def write_spec(root: Path, *, cloud: dict[str, Any] | None = None, modal_gpu: str | None = None,
                modal: bool = False, name: str = "sweep.toml") -> Path:
     """Two cells, two replicates, the keyless mock agent's design; ``--max-mde 1`` passes it."""
     text = ('target_id = "pf9@v0"\nt_unit = "steps"\nreplicates = 2\n\n'
@@ -117,8 +132,8 @@ def write_spec(root: Path, *, burla: dict[str, Any] | None = None, modal_gpu: st
         text += '\n[modal.image]\npython = "3.11"\n'
         if modal_gpu is not None:
             text += f"gpu = {_toml(modal_gpu)}\n"
-    if burla is not None:
-        text += "\n[burla]\n" + "".join(f"{k} = {_toml(v)}\n" for k, v in burla.items())
+    if cloud is not None:
+        text += "\n[cloud]\n" + "".join(f"{k} = {_toml(v)}\n" for k, v in cloud.items())
     root.mkdir(parents=True, exist_ok=True)
     path = root / name
     path.write_text(text, encoding="utf-8")
@@ -154,8 +169,8 @@ def named(requirements: Sequence[Requirement], name: str) -> list[Requirement]:
     return [r for r in requirements if r.name.lower() == name]
 
 
-def burla_specifier() -> SpecifierSet | None:
-    found = named(extras().get("burla", []), "burla")
+def burla_specifier(extra: str = "cloud") -> SpecifierSet | None:
+    found = named(extras().get(extra, []), "burla")
     return found[0].specifier if len(found) == 1 else None
 
 
@@ -192,7 +207,7 @@ def make_missing(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
 
 
 class Launches:
-    """Burla's launcher seam, pointed at the fake client (or at none: ``mode="absent"``), with the
+    """The job launcher's seam, pointed at the fake client (or at none: ``mode="absent"``), with the
     fake's state in ``state``. The fake reports ``version`` (by default one no build runs) and
     refuses every call it receives at once, so no worker pool is needed; ``called()`` lists the
     calls that reached it."""
@@ -220,7 +235,16 @@ class Launches:
 
 
 def point_launcher(monkeypatch: pytest.MonkeyPatch, launches: Launches) -> None:
-    monkeypatch.setattr(executor_burla, "_launcher_argv", launches.argv)
+    monkeypatch.setattr(executor_cloud, "_launcher_argv", launches.argv)
+
+
+@pytest.fixture
+def cloud(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[CloudWorld]:
+    """The fakes a cloud sweep's checks and its cluster need (§7.1, §6): a fake ``aws`` on
+    ``PATH``, the coordinator launcher and the CLI pointed at the fake cluster software. No worker
+    pool: no test here reaches a job."""
+    with world(tmp_path / "cloud-fakes", monkeypatch, types.SimpleNamespace(workers=[])) as made:  # type: ignore[arg-type]
+        yield made
 
 
 def simulate_windows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -308,38 +332,43 @@ def test_pf9_1_the_modal_plan_dates_its_prices_and_covers_compute_not_tokens(
     assert runs_in(tmp_path) == []
 
 
-# ---------- PF9.2: the burla extra and its label
+# ---------- PF9.2: the cloud extra and its label
 
 
 @pytest.mark.parametrize(("version", "runs"), [("1.8.2", False), (PIN, True), ("1.8.5", False), ("1.9.0", False)])
-def test_pf9_2_the_burla_extra_admits_exactly_the_client_the_backend_runs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: str, runs: bool,
+def test_pf9_2_the_cloud_extra_admits_exactly_the_client_the_backend_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud: CloudWorld, version: str, runs: bool,
 ) -> None:
-    """The exact pin: ``[burla]`` declares one ``burla``
-    requirement, ``all`` carries the same, no other extra names ``burla``, and it admits a version
-    exactly when the backend runs that client. A client the backend refuses is refused before
-    Burla is called, naming the client's version, the pin and the install line. (The pinned client
-    running is every test of ``test_bu_burla_backend.py``.)"""
+    """The exact pin: ``[cloud]`` declares one ``burla``
+    requirement, its ``[burla]`` alias and ``all`` carry the same, no other extra names ``burla``
+    (RB-3, RB-4), and it admits a version exactly when the backend runs that client. A client the
+    backend refuses is refused before the cluster software is called, naming the client's version,
+    the pin and the install line. (The pinned client running is every test of
+    ``test_bu_cloud_backend.py``.)"""
     spec_set = burla_specifier()
-    assert spec_set is not None, extras().get("burla")
+    assert spec_set is not None, extras().get("cloud")
     assert spec_set.contains(version, prereleases=True) is runs, (str(spec_set), version)
     declared = extras()
-    assert [str(r) for r in named(declared["all"], "burla")] == [str(r) for r in named(declared["burla"], "burla")]
-    assert {name for name, reqs in declared.items() if named(reqs, "burla")} == {"burla", "all"}
+    pinned = [str(r) for r in named(declared["cloud"], "burla")]
+    assert [str(r) for r in named(declared["all"], "burla")] == pinned
+    assert [str(r) for r in named(declared["burla"], "burla")] == pinned
+    assert {name for name, reqs in declared.items() if named(reqs, "burla")} == {"cloud", "burla", "all"}
     if runs:
         return
     make_findable(monkeypatch, tmp_path, "burla", version)
     launches = Launches(tmp_path / "fake-state", version=version)
     point_launcher(monkeypatch, launches)
-    spec = write_spec(tmp_path, burla=BURLA_TABLE)
-    code, out, err = run_cli(sweep_argv(tmp_path, spec, "burla", "--yes"))
+    spec = write_spec(tmp_path, cloud=CLOUD_TABLE)
+    code, out, err = run_cli(sweep_argv(tmp_path, spec, "cloud", "--yes"))
     assert code != 0, (out, err)
-    assert launches.called() == [], "Burla was called with a client the backend does not run"
-    assert version in err and PIN in err and BURLA_HINT in err, err
+    assert launches.called() == [], "the cluster software was called with a client the backend does not run"
+    assert version in err and PIN in err and CLOUD_HINT in err, err
 
 
-def test_pf9_2_the_help_calls_the_burla_backend_experimental() -> None:
-    """PF9.2: ``--backend``'s help line calls burla, and only burla, experimental."""
+def test_pf9_2_the_help_calls_the_cloud_backend_the_readers_own_cloud_account() -> None:
+    """PF9.2's label, as 0.3.0 replaces it: ``--backend``'s help line offers ``cloud`` as the
+    reader's own cloud account, the words nearest ``cloud`` (§2.1: the reader reads their cloud,
+    never the cluster software's name), and names the cluster software nowhere (C1's N8)."""
     code, out, err = run_cli(["sweep", "--help"])
     assert code == 0, err
     lines = out.splitlines()
@@ -349,20 +378,21 @@ def test_pf9_2_the_help_calls_the_burla_backend_experimental() -> None:
         if line.lstrip().startswith("-") or not line.strip():
             break
         entry.append(line)
-    prose = " ".join(" ".join(entry).split()).replace("{local,modal,burla}", " ").lower()
-    assert prose.count("experimental") == 1, prose
-    assert nearest_backend(prose, "experimental") == "burla", prose
+    prose = " ".join(" ".join(entry).split()).replace("{local,modal,cloud}", " ").lower()
+    assert "burla" not in prose, prose
+    assert prose.count("cloud account") == 1, prose
+    assert nearest_backend(prose, "cloud account") == "cloud", prose
 
 
 @pytest.mark.parametrize("case", ["missing-here", "launcher-cannot-import"])
-def test_pf9_2b_every_burla_install_line_names_the_extra(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str,
+def test_pf9_2b_every_cloud_install_line_names_the_extra(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud: CloudWorld, case: str,
 ) -> None:
-    """Burla's install line is ``pip install "poisson-prove[burla]"``
+    """The cloud extra's install line is ``pip install "poisson-prove[cloud]"``
     wherever Prove prints one, never ``pip install burla==``: when ``burla`` cannot be imported here,
     and from the launcher's backstop when it cannot import ``burla`` there. (A client the backend
     does not run is the pin test's.)"""
-    spec = write_spec(tmp_path, burla=BURLA_TABLE)
+    spec = write_spec(tmp_path, cloud=CLOUD_TABLE)
     if case == "missing-here":
         make_missing(monkeypatch, "burla")
         launches = Launches(tmp_path / "fake-state")
@@ -370,31 +400,31 @@ def test_pf9_2b_every_burla_install_line_names_the_extra(
         make_findable(monkeypatch, tmp_path, "burla", PIN)
         launches = Launches(tmp_path / "fake-state", mode="absent")
     point_launcher(monkeypatch, launches)
-    code, out, err = run_cli(sweep_argv(tmp_path, spec, "burla", "--yes"))
+    code, out, err = run_cli(sweep_argv(tmp_path, spec, "cloud", "--yes"))
     assert code != 0, (case, out, err)
     if case == "missing-here":
-        assert BURLA_HINT in err, (case, err)
+        assert CLOUD_HINT in err, (case, err)
     else:
         # The launcher's report stops the sweep after its plan: the install line is a next line
         # beside the stopped line, and the error sentence names no install line of its own.
-        assert f"  next: {BURLA_HINT}" in out.splitlines(), (case, out)
-        assert BURLA_HINT not in err, (case, err)
+        assert f"  next: {CLOUD_HINT}" in out.splitlines(), (case, out)
+        assert CLOUD_HINT not in err, (case, err)
     assert OLD_BURLA_HINT not in out + err, (case, out, err)
     assert launches.called() == [], case
 
 
-@pytest.mark.parametrize("table", [True, False], ids=["with-burla-table", "without-burla-table"])
-def test_pf9_2c_a_missing_burla_is_refused_before_the_plan(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: bool,
+@pytest.mark.parametrize("table", [True, False], ids=["with-cloud-table", "without-cloud-table"])
+def test_pf9_2c_a_missing_cloud_extra_is_refused_before_the_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud: CloudWorld, table: bool,
 ) -> None:
     """PF1.2, as for ``modal`` today: with ``burla`` not importable, a
-    Burla sweep exits 1 with one ``error:`` line naming burla and the install line as its one next
-    line, prints nothing on stdout, starts no launcher, writes no ledger and stores no run, before
-    the ``[burla]`` table is read. The control is the same command in the same kind of folder with
-    ``burla`` importable: it does something else."""
+    cloud sweep exits 1 with one ``error:`` line naming the cloud extra and the install line as its
+    one next line, prints nothing on stdout, starts no launcher, writes no ledger and stores no run,
+    before the ``[cloud]`` table is read. The control is the same command in the same kind of
+    folder with ``burla`` importable: it does something else."""
 
     def attempt(root: Path, missing: bool) -> tuple[int, str, str, Launches]:
-        spec = write_spec(root, burla=BURLA_TABLE if table else None)
+        spec = write_spec(root, cloud=CLOUD_TABLE if table else None)
         launches = Launches(root / "fake-state")
         with monkeypatch.context() as inner:
             point_launcher(inner, launches)
@@ -402,15 +432,15 @@ def test_pf9_2c_a_missing_burla_is_refused_before_the_plan(
                 make_missing(inner, "burla")
             else:
                 make_findable(inner, root, "burla", PIN)
-            code, out, err = run_cli(sweep_argv(root, spec, "burla", "--yes"))
+            code, out, err = run_cli(sweep_argv(root, spec, "cloud", "--yes"))
         return code, out, err, launches
 
     code, out, err, launches = attempt(tmp_path / "missing", True)
     assert code == 1, (out, err)
     assert out == "", out
     first, rest = refusal_lines(err, tmp_path)
-    assert first.startswith("error: ") and "burla" in first, err
-    assert rest == [f"  next: {BURLA_HINT}"], err
+    assert first.startswith("error: ") and "cloud extra" in first, err
+    assert rest == [f"  next: {CLOUD_HINT}"], err
     assert launches.started() == []
     assert not (tmp_path / "missing" / "ledgers").exists()
     assert runs_in(tmp_path / "missing") == []
@@ -420,21 +450,24 @@ def test_pf9_2c_a_missing_burla_is_refused_before_the_plan(
         assert c_out.startswith("plan  "), (c_out, c_err)
 
 
-def test_pf9_2d_the_burla_plan_names_the_relay_switch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The relay line: the Burla plan has one line naming ``BURLA_PRIVATE=True`` that also says
-    relay and store, in text and in ``--json``'s plan lines, and no line names the switch Burla
+def test_pf9_2d_the_cloud_plan_has_one_relay_line_and_names_no_switch_off_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud: CloudWorld,
+) -> None:
+    """The relay line, as 0.3.0 replaces it (RB-9, RB-10): the cloud plan has one line that says
+    relay and store, in text and in ``--json``'s plan lines; no line names ``BURLA_PRIVATE=True``
+    (private mode from a laptop is refused, so there is no switch to offer) nor the switch Burla
     1.8.4 dropped."""
     make_findable(monkeypatch, tmp_path, "burla", PIN)
-    spec = write_spec(tmp_path, burla=BURLA_TABLE)
-    code, out, err = run_cli(sweep_argv(tmp_path, spec, "burla", "--dry-run"))
+    spec = write_spec(tmp_path, cloud=CLOUD_TABLE)
+    code, out, err = run_cli(sweep_argv(tmp_path, spec, "cloud", "--dry-run"))
     assert code == 0, err
-    code_j, out_j, err_j = run_cli(sweep_argv(tmp_path, spec, "burla", "--dry-run", "--json"))
+    code_j, out_j, err_j = run_cli(sweep_argv(tmp_path, spec, "cloud", "--dry-run", "--json"))
     assert code_j == 0, err_j
     for lines in (out.splitlines()[1:], [str(line) for line in json.loads(out_j)["plan"]["lines"]]):
-        relay = [line for line in lines if "BURLA_PRIVATE=True" in line]
+        relay = [line for line in lines if "relay" in line.lower()]
         assert len(relay) == 1, lines
-        assert not [line for line in lines if "DISABLE_BURLA_RELAY" in line], lines
-        assert "relay" in relay[0].lower() and "store" in relay[0].lower(), relay
+        assert not [line for line in lines if "BURLA_PRIVATE" in line or "DISABLE_BURLA_RELAY" in line], lines
+        assert "store" in relay[0].lower(), relay
     assert runs_in(tmp_path) == [] and not (tmp_path / "ledgers").exists()
 
 
@@ -443,33 +476,33 @@ def test_pf9_2d_the_burla_plan_names_the_relay_switch(tmp_path: Path, monkeypatc
 
 @pytest.mark.parametrize(
     "case",
-    ["burla-findable", "burla-missing", "no-burla-table", "dry-run", "unresolvable-target",
+    ["burla-findable", "burla-missing", "no-cloud-table", "dry-run", "unresolvable-target",
      "missing-spec-file", "stray-flag", "unknown-resume"],
 )
-def test_pf9_3_burla_on_windows_is_refused_before_any_work(
+def test_pf9_3_cloud_on_windows_is_refused_before_any_work(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, windows: None, case: str,
 ) -> None:
-    """PF9.3: with ``os.name == "nt"``, ``--backend burla`` exits 1 with one
-    ``error:`` line naming burla and Windows, before the spec file, the flags, the store, the extra,
-    the ``[burla]`` table or the target is looked at: nothing on stdout, no install line, no
-    launcher, no ledger, no run stored."""
+    """PF9.3: with ``os.name == "nt"``, ``--backend cloud`` exits 1 with one
+    ``error:`` line naming Windows and not the cluster software (RB-16; C1's name scan), before
+    the spec file, the flags, the store, the extra, the ``[cloud]`` table or the target is looked
+    at: nothing on stdout, no install line, no launcher, no ledger, no run stored."""
     if case == "burla-missing":
         make_missing(monkeypatch, "burla")
     else:
         make_findable(monkeypatch, tmp_path, "burla", PIN)
     launches = Launches(tmp_path / "fake-state")
     point_launcher(monkeypatch, launches)
-    spec = write_spec(tmp_path, burla=None if case == "no-burla-table" else BURLA_TABLE)
+    spec = write_spec(tmp_path, cloud=None if case == "no-cloud-table" else CLOUD_TABLE)
     if case == "missing-spec-file":
         spec = tmp_path / "no-such-sweep.toml"
     extra = {"dry-run": ("--dry-run",), "stray-flag": ("--concurrency", "2", "--yes"),
              "unknown-resume": ("--resume", "20991231T000000Z-dead", "--yes")}.get(case, ("--yes",))
     target = UNRESOLVABLE if case == "unresolvable-target" else MOCK
-    code, out, err = run_cli(sweep_argv(tmp_path, spec, "burla", *extra, target=target))
+    code, out, err = run_cli(sweep_argv(tmp_path, spec, "cloud", *extra, target=target))
     assert code == 1, (case, out, err)
     assert out == "", (case, out)
     first, rest = refusal_lines(err, tmp_path)
-    assert first.startswith("error: ") and "burla" in first.lower() and "windows" in first.lower(), (case, err)
+    assert first.startswith("error: ") and "burla" not in first.lower() and "windows" in first.lower(), (case, err)
     assert all(line.startswith("  next: ") for line in rest), (case, err)
     assert "pip install" not in err, (case, err)
     assert launches.started() == [], case
@@ -477,18 +510,18 @@ def test_pf9_3_burla_on_windows_is_refused_before_any_work(
     assert runs_in(tmp_path) == [], case
 
 
-@pytest.mark.parametrize("backend", ["local", "modal", "burla-on-posix"])
-def test_pf9_3_control_only_burla_on_windows_is_refused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str,
+@pytest.mark.parametrize("backend", ["local", "modal", "cloud-on-posix"])
+def test_pf9_3_control_only_cloud_on_windows_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cloud: CloudWorld, backend: str,
 ) -> None:
-    """The controls for PF9.3: the same dry run plans on Windows for local and Modal, and for Burla
-    when ``os.name`` is not ``nt``."""
+    """The controls for PF9.3: the same dry run plans on Windows for local and Modal, and for the
+    cloud backend when ``os.name`` is not ``nt``."""
     make_findable(monkeypatch, tmp_path, "modal", "99.0")
     make_findable(monkeypatch, tmp_path, "burla", PIN)
-    name = "burla" if backend == "burla-on-posix" else backend
-    spec = write_spec(tmp_path, modal=name == "modal", burla=BURLA_TABLE if name == "burla" else None)
+    name = "cloud" if backend == "cloud-on-posix" else backend
+    spec = write_spec(tmp_path, modal=name == "modal", cloud=CLOUD_TABLE if name == "cloud" else None)
     with monkeypatch.context() as inner:
-        if backend != "burla-on-posix":
+        if backend != "cloud-on-posix":
             simulate_windows(inner)
         code, out, err = run_cli(sweep_argv(tmp_path, spec, name, "--dry-run"))
     assert code == 0 and out.startswith("plan  "), (backend, out, err)
@@ -559,28 +592,29 @@ def test_pf9_backend_modal_runs_at_the_extras_floor(tmp_path: Path) -> None:
 
 @pytest.mark.slow
 @pytest.mark.backend
-@pytest.mark.skipif(os.environ.get("POISSON_PROVE_BURLA_LIVE") != "1" or not os.environ.get("POISSON_PROVE_BURLA_TABLE"),
-                    reason="real Burla: set POISSON_PROVE_BURLA_LIVE=1 and POISSON_PROVE_BURLA_TABLE to a TOML "
-                           "file holding your cluster's [burla] table (a paid call)")
-def test_pf9_backend_burla_runs_from_the_extra(tmp_path: Path) -> None:
-    """PF9.2 against a real Burla cluster the user started: the installed client is one the extra
-    admits, and a two-cell sweep of the keyless mock agent runs on it to a complete run, its plan
-    naming the relay switch. The ``[burla]`` table (head, nodes, price, ledger, stop and cap) is
-    the user's, read from the file the variable names; never a key."""
+@pytest.mark.skipif(os.environ.get("POISSON_PROVE_CLOUD_LIVE") != "1" or not os.environ.get("POISSON_PROVE_CLOUD_TABLE"),
+                    reason="a real cloud account: set POISSON_PROVE_CLOUD_LIVE=1 and POISSON_PROVE_CLOUD_TABLE to a TOML "
+                           "file holding your [cloud] table (a paid call)")
+def test_pf9_backend_cloud_runs_from_the_extra(tmp_path: Path) -> None:
+    """PF9.2 against the user's own cloud account: the installed client is one the extra admits,
+    and a two-cell sweep of the keyless mock agent runs on a cluster Prove starts and stops to a
+    complete run, its plan saying who carries the traffic. The ``[cloud]`` table (cloud, region,
+    nodes, ledger, stop and cap) is the user's, read from the file the variable names; never a
+    key. The cluster's whole life on a real account is §17's real-cloud check."""
     from importlib.metadata import PackageNotFoundError
     from importlib.metadata import version as dist_version
 
     try:
         installed = dist_version("burla")
     except PackageNotFoundError:
-        pytest.fail(f"install the extra first: {BURLA_HINT}")
+        pytest.fail(f"install the extra first: {CLOUD_HINT}")
     spec_set = burla_specifier()
     assert spec_set is not None and spec_set.contains(installed, prereleases=True), (installed, spec_set)
-    table = tomllib.loads(Path(os.environ["POISSON_PROVE_BURLA_TABLE"]).read_text(encoding="utf-8"))["burla"]
-    spec = write_spec(tmp_path, burla=table)
-    code, out, err = run_cli(sweep_argv(tmp_path, spec, "burla", "--yes"))
+    table = tomllib.loads(Path(os.environ["POISSON_PROVE_CLOUD_TABLE"]).read_text(encoding="utf-8"))["cloud"]
+    spec = write_spec(tmp_path, cloud=table)
+    code, out, err = run_cli(sweep_argv(tmp_path, spec, "cloud", "--yes"))
     assert code == 0, (out, err)
-    assert "BURLA_PRIVATE=True" in out, out
+    assert any(line.strip().startswith("Traffic: ") and "relay" in line for line in out.splitlines()), out
     (run_id,) = runs_in(tmp_path)
     store = Store(tmp_path / "store")
     assert store.manifest(run_id).status == "complete"

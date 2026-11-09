@@ -63,7 +63,10 @@ what your agent spends at its model provider is on that provider's bill. Without
 `est_seconds_per_episode` there is no estimate and the plan says so; with `max_cost` (or
 `--max-cost`) a sweep whose estimate is above it is refused before anything starts:
 
-<!-- docs-check: run -->
+A Modal sweep first checks that this machine is signed in to Modal, without reading the token;
+`modal setup` signs it in.
+
+<!-- docs-check: skip: needs a Modal sign-in on this machine -->
 ```console
 $ poisson-prove sweep --backend modal --dry-run
 plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on modal, unknown (no estimate; Modal's 2026-09-03 prices, which cover compute, not model tokens)
@@ -76,74 +79,64 @@ Episodes that hit an infrastructure failure after their retries are recorded as 
 your agent's own errors. A sweep stopped part way is resumed with `sweep --resume`, as a local one
 is.
 
-## Burla
+## Your cloud account
 
-`--backend burla` runs the rollouts on a Burla cluster in your own cloud. It is experimental: it
-runs with exactly one version of the Burla client, `burla==1.8.4`, which the extra pins, and its
-plan and refusals may change. It is not available on Windows: there it is refused before anything
-else.
+`--backend cloud` runs the rollouts on a cluster Prove starts in your own cloud account and stops
+when the sweep ends, whether it finished, failed, stopped early or was interrupted. This release
+offers AWS; a spec naming Google Cloud or Azure is refused as not yet supported. It is not
+available on Windows: there it is refused before anything else.
 
-<!-- docs-check: skip: needs your own Burla cluster -->
+<!-- docs-check: skip: needs your own AWS account -->
 ```bash
-pip install "poisson-prove[burla]"
+pip install "poisson-prove[cloud]"
+aws login
 ```
 
-Spend is capped by Prove, not only stated, so a `[burla]` table has no defaults for money or for
-the cluster. These keys are required: `nodes`, `machine_type`, `slots_per_node`,
-`usd_per_node_hour`, `price_asof` (where and when you read that price), `ledger` (a JSON-lines
+The extra installs the cluster software Prove uses, pinned to exactly one version
+(`burla==1.8.4`), and `botocore[crt]`, which a sign-in made by `aws login` needs. The AWS CLI is
+not a Python package: install it yourself, and Prove names it when it is missing. Before anything
+starts Prove checks, in this order, the extra, the AWS CLI, that this machine is signed in (a
+read-only `aws sts get-caller-identity`), the region and machine type against its price table,
+the image's Python against this machine's, the vCPU ceiling and the account's vCPU quota. Every
+install line Prove prints for this backend is `pip install "poisson-prove[cloud]"`.
+
+These keys are required: `provider`, `region`, `machine_type`, `nodes`, `ledger` (a JSON-lines
 file of what has been spent, checked before anything starts and written as the job goes),
-`head_url` (the cluster's head), `stop_cost` (the spend at which Prove stops the job itself),
-`max_cost` (the estimate above which the sweep is refused) and `est_seconds_per_episode`.
-[The sweep spec](sweep-spec.md#burla) has the optional keys.
+`stop_cost` (the spend at which Prove stops the job itself), `max_cost` (the estimate above which
+the sweep is refused) and `est_seconds_per_episode`. The price comes from Prove's own AWS price
+table unless `usd_per_node_hour` and `price_asof` are given together.
+[The sweep spec](sweep-spec.md#cloud) has the optional keys.
 
 <!-- docs-check: run -->
 ```toml
-[burla]
-nodes = 2
-machine_type = "n4-standard-4"
-slots_per_node = 4
-usd_per_node_hour = 0.19
-price_asof = "the cloud's price page, 2026-10-20"
-ledger = "burla-ledger.jsonl"
-head_url = "http://localhost:5001"
+[cloud]
+provider = "aws"
+region = "us-east-2"
+machine_type = "m7i.2xlarge"
+nodes = 4
+ledger = "cloud-ledger.jsonl"
 stop_cost = 2.0
 max_cost = 3.0
 est_seconds_per_episode = 0.5
 ```
 
+What leaves this machine: your code, its inputs and its results go between this machine and the
+nodes through Burla's relay (the cluster software Prove uses), and the plan's `Traffic` line says
+so. Prove turns the software's telemetry off. The store stays on this machine. If this machine
+stops first, the nodes stop themselves within `idle_minutes` (5 by default) or 3 minutes,
+whichever is longer, and the next cloud sweep finds what was left, stops it and closes its ledger
+line. What Prove started is recorded under `$XDG_STATE_HOME/poisson-prove/cloud/`
+(`~/.local/state` when the variable is unset), beside the cluster software's log. The sign-in
+check reads which AWS profile is active from `AWS_PROFILE` (or `AWS_DEFAULT_PROFILE`) and
+`AWS_CONFIG_FILE`, to name `aws sso login` for an SSO profile; it never reads a credential.
+
 Prove ships its own code and your local packages to the workers as one bundle, and the plan names
-it with its digest. The plan's `Traffic` line says where your data goes: code, inputs and results
-pass through Burla's relay unless the cluster's head runs in Burla's private mode
-(`BURLA_PRIVATE=True`), and then go directly between this machine and the nodes. Prove cannot see
-from the head which it is. The store stays on this machine either way.
-
-In private mode a fixed cluster is started through the coordinator's localhost API:
-`POST /v1/settings` with the machine type and the number of nodes, then
-`POST /v1/management/cluster/start`. The dashboard's Start button makes the same calls. `head_url` is
-the coordinator's own address, such as `http://127.0.0.1:5001`, and the sweep runs as the user that
-started the coordinator, whose Burla folder holds the cluster's token. Prove neither sets nor
-checks `BURLA_PRIVATE`: the Burla client Prove starts is in private mode only when the environment
-Prove runs in sets it.
-
-<!-- docs-check: skip: needs the burla extra and your own cluster's settings -->
-```console
-$ poisson-prove sweep --backend burla --dry-run
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on burla, ~$0.080 this run (2 × $0.19/node-hour, the cloud's price page, 2026-10-20) · ledger burla-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
-…
-  Cluster: 2 × n4-standard-4 · 4 slots each · 8 at once · grow off · idle allowance 5 min · head http://localhost:5001
-…
-  Traffic: code, inputs and results go through Burla's relay unless the head runs with BURLA_PRIVATE=True, and then directly between this machine and the nodes; Prove cannot tell from the head which; the store stays on this machine
-…
-```
-
-Burla pins every distribution your environment installed from an index and installs those pins on
-each node from the index: a Prove installed from PyPI is reinstalled there at the same version, so a
-version that is not on PyPI cannot be installed on the workers. An editable checkout of Prove is
-shipped in the bundle, not installed. Either way the bundle goes first on each worker's path, so
-the code that runs your rollouts is the Prove on this machine.
-
-A Burla client the Python running Prove cannot import is refused before the plan, with the
-install line. Every Burla install line Prove prints is `pip install "poisson-prove[burla]"`.
+it with its digest. The cluster software pins every distribution your environment installed from
+an index and installs those pins on each node from the index: a Prove installed from PyPI is
+reinstalled there at the same version, so a version that is not on PyPI cannot be installed on
+the workers. An editable checkout of Prove is shipped in the bundle, not installed. Either way the
+bundle goes first on each worker's path, so the code that runs your rollouts is the Prove on this
+machine.
 
 ## Threads in a worker
 

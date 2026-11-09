@@ -50,7 +50,7 @@ max_observation_bytes = 16384
 | `[capture]` | table | no capture | store the OpenTelemetry spans of a traced agent with each episode |
 | `[chaos]` | table | no faults | inject a fault into the target's HTTP calls |
 | `[modal]` | table | Modal's defaults below | how a `--backend modal` sweep runs |
-| `[burla]` | table | required for `--backend burla` | how a `--backend burla` sweep runs |
+| `[cloud]` | table | required for `--backend cloud` | how a `--backend cloud` sweep runs on your own cloud account |
 
 A spec has no `name`: a run is named on the command line with `sweep --name`.
 
@@ -161,29 +161,35 @@ unless `--image SECTION` names another, so one spec can hold several images.
 | `local_packages` | list of package names | none | importable local packages shipped into the image (Prove itself always is); `dockerfile` excludes `pip` and `apt` |
 | `gpu` | a GPU type, or none | no GPU | the GPU to attach, such as `"A10G"` |
 
-## `[burla]`
+## `[cloud]`
 
-How a `--backend burla` sweep runs, on your own Burla cluster. The first ten keys are required:
-there is no default for a price, a cap or a cluster. [Backends](backends.md#burla) says what it
-needs.
+How a `--backend cloud` sweep runs: the cluster Prove starts in your own cloud account and stops
+when the sweep ends. The first eight keys are required: there is no default for a cap or a
+cluster. The price comes from Prove's own price table unless `usd_per_node_hour` and `price_asof`
+are given together. [Backends](backends.md#your-cloud-account) says what it needs. A 0.2 spec's
+`[burla]` table is refused, naming the move to `[cloud]`.
 
 | key | type | default | what it is |
 |---|---|---|---|
-| `nodes` | integer | no default, required | the cluster's nodes |
-| `machine_type` | string | no default, required | the nodes' machine type |
-| `slots_per_node` | integer | no default, required | episodes run at once on a node |
-| `usd_per_node_hour` | dollars | no default, required | the price of a node for an hour |
-| `price_asof` | string | no default, required | where and when that price was read |
+| `provider` | `"aws"` | no default, required | the cloud (Google Cloud and Azure are refused as not yet supported) |
+| `region` | string | no default, required | where the nodes start, from Prove's price table |
+| `machine_type` | string | no default, required | the nodes' machine type, from Prove's price table |
+| `nodes` | integer | no default, required | how many nodes Prove starts |
 | `ledger` | path | no default, required | the spend ledger, checked before the run starts and written as it goes |
-| `head_url` | URL | no default, required | the cluster's head, a local `http` URL or an `https` one |
 | `stop_cost` | dollars | no default, required | the spend at which the job is stopped |
 | `max_cost` | dollars, at least `stop_cost` | no default, required | the estimate above which the sweep is refused before it starts |
 | `est_seconds_per_episode` | seconds | no default, required | the time one episode takes, for the estimate |
+| `max_vcpus` | integer | `nodes` × the machine's vCPUs | the ceiling: a plan whose nodes need more is refused |
+| `slots_per_node` | integer | the machine's vCPUs ÷ `func_cpu` | episodes run at once on a node |
+| `image` | string | `python:3.<this machine's minor>` | the container the rollouts run in; its Python must be this machine's |
+| `idle_minutes` | minutes, 2 to 60 | `5` | billed idle time in the estimate, and the nodes' own idle stop |
+| `boot_minutes` | minutes | `5.0` | billed time to boot the cluster, in the estimate |
+| `usd_per_node_hour` | dollars | Prove's price table | the price of a node for an hour, given with `price_asof` |
+| `price_asof` | string | Prove's price table | where and when that price was read, given with `usd_per_node_hour` |
+| `disk_gb` | integer, 10 to 2,000 | the cluster software's default | each node's disk |
 | `packages` | list of package names | none | local packages shipped to the workers, beside Prove itself |
 | `func_cpu` | integer | `1` | CPUs per worker |
 | `func_ram` | gigabytes | `4` | memory per worker |
-| `boot_minutes` | minutes | `5.0` | billed time to boot the cluster, in the estimate |
-| `idle_minutes` | minutes | `5.0` | billed idle time before the cluster stops, in the estimate |
 | `batch_size` | integer | `256` | episodes per worker call |
 | `episode_timeout` | seconds, or none | no limit | the limit on one episode |
 | `infra_retries` | integer | `2` | retries of a batch that failed for an infrastructure reason |

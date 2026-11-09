@@ -145,6 +145,21 @@ def _head_refusal() -> BaseException | None:
     return None
 
 
+def _no_ready_node() -> BaseException | None:
+    """With the fake's cluster in use (``cluster.json`` exists), a call reaches no node unless the
+    head it names is alive and a node is ready: 1.8.4's ``NoNodes("Zero nodes are ready. Is your
+    cluster turned on?")`` with ``grow=False`` (``_remote_parallel_map.py``, the 1.8.4 facts §1)."""
+    if not os.path.exists(os.path.join(_fake.state_dir(), "cluster.json")):
+        return None
+    from burla import _cluster
+
+    url = os.environ.get("BURLA_CLUSTER_DASHBOARD_URL", "")
+    ready = [n for n in _cluster.snapshot().get("nodes", []) if n.get("status") in ("READY", "RUNNING")]
+    if _cluster.head_for(url) is None or not ready:
+        return NoNodes("Zero nodes are ready. Is your cluster turned on?")
+    return None
+
+
 def _edit_rows(value: Any, script: dict[str, Any]) -> Any:
     """``strip_chaos_record`` and ``alter_record``, applied to Prove's ``(k, rows, failure)``."""
     if not (script.get("strip_chaos_record") or script.get("alter_record")):
@@ -182,17 +197,25 @@ class _Dispatch:
         self.call_no = call_no
         self.script = script
         self.served = os.path.join(_fake.state_dir(), "served.jsonl")
+        # Each worker of the call serves its own first input before any takes from the shared
+        # queue, so every worker a call can reach serves it whenever the inputs number at least
+        # the workers, whichever thread finishes loading first (prove#35).
+        workers = pool[: max(1, parallelism)]
+        self.first: dict[int, tuple[int, tuple[Any, ...]]] = {}
+        for k in range(min(len(workers), len(self.todo))):
+            self.first[k] = self.todo.popleft()
         self.threads = [
-            threading.Thread(target=self._serve, args=(worker,), daemon=True)
-            for worker in pool[: max(1, parallelism)]
+            threading.Thread(target=self._serve, args=(worker, k), daemon=True)
+            for k, worker in enumerate(workers)
         ]
         for thread in self.threads:
             thread.start()
 
-    def _serve(self, worker: dict[str, Any]) -> None:
+    def _serve(self, worker: dict[str, Any], k: int) -> None:
         try:
             conn = _fake.connect(worker["socket"])
         except OSError:
+            self._give_back(k)
             self.replies.put((-1, ("infra", traceback.format_exc())))
             return
         index = -1
@@ -203,9 +226,12 @@ class _Dispatch:
             _fake.recv(conn)
             while not self.stopped.is_set():
                 with self.lock:
-                    if not self.todo:
+                    if k in self.first:
+                        index, item = self.first.pop(k)
+                    elif not self.todo:
                         return
-                    index, item = self.todo.popleft()
+                    else:
+                        index, item = self.todo.popleft()
                 if self.script.get("strip_chaos_field") and len(item) == 6:
                     item = (*item[:5], None)
                 _fake.send(conn, ("call", index, cloudpickle.dumps(item)))
@@ -214,10 +240,17 @@ class _Dispatch:
                     return  # a cancelled call's late result is dropped (worker_client.py:1858-1868)
                 self.replies.put((index, reply))
         except (OSError, EOFError):
+            self._give_back(k)
             if not self.stopped.is_set():
                 self.replies.put((index, ("infra", traceback.format_exc())))
         finally:
             conn.close()
+
+    def _give_back(self, k: int) -> None:
+        """A worker that never took its first input leaves it to the others."""
+        with self.lock:
+            if k in self.first:
+                self.todo.appendleft(self.first.pop(k))
 
     def stop(self) -> None:
         self.stopped.set()
@@ -350,6 +383,9 @@ def remote_parallel_map(
                 raise AllNodesBusy()
             if script.get("refuse") and script.get("refuse_after") is None:
                 raise _refusal(str(script["refuse"]), token, len(inputs))
+            unready = _no_ready_node()
+            if unready is not None:
+                raise unready
             pool = _fake.workers()
             parallelism = min(len(pool), max_parallelism or len(inputs), len(inputs))
             dispatch = _Dispatch(fn_bytes, inputs, pool, parallelism, call_no, script)

@@ -51,7 +51,7 @@ _TOP_FIELDS: tuple[str, ...] = (
     "chaos",
     "declare",
     "modal",
-    "burla",
+    "cloud",
 )
 _AXIS_FIELDS: tuple[str, ...] = ("type", "values")
 _PART = r'(?:"[^"]*"|\'[^\']*\'|[A-Za-z0-9_-]+)'
@@ -397,10 +397,10 @@ def _strict(file: Path, text: str, data: Mapping[str, Any]) -> None:
     is refused naming the file, the line and the nearest known key of the same table.
 
     Checked when the spec is read, before the target is resolved or any table's values are
-    read. The ``[modal]`` and ``[burla]`` fields are their option classes' own, imported here so
+    read. The ``[modal]`` and ``[cloud]`` fields are their option classes' own, imported here so
     the two lists cannot drift.
     """
-    from poisson_prove.executor_burla import BurlaOptions
+    from poisson_prove.executor_cloud import CloudOptions
     from poisson_prove.executor_modal import ImageSpec, ModalOptions
 
     lines = _key_lines(text)
@@ -420,6 +420,20 @@ def _strict(file: Path, text: str, data: Mapping[str, Any]) -> None:
     def names(cls: Any) -> list[str]:
         return [f.name for f in dataclasses.fields(cls)]
 
+    if isinstance(data.get("burla"), Mapping):
+        moved = SamplerError(
+            f"{file}, line {_line_of(lines, ('burla',))}: [burla] is now [cloud]; rename the "
+            "table, delete head_url, and add provider and region (Prove now starts the cluster on "
+            "your cloud account and stops it after)"
+        )
+        moved.nexts = ["poisson-prove where cloud"]  # type: ignore[attr-defined]
+        raise moved
+    cloud = data.get("cloud")
+    if isinstance(cloud, Mapping) and "head_url" in cloud:
+        raise SamplerError(
+            f"{file}, line {_line_of(lines, ('cloud', 'head_url'))}: head_url is gone from "
+            "[cloud], since Prove now starts the cluster itself; delete the line"
+        )
     check((), data, _TOP_FIELDS, "a key or table a sweep spec has")
     axes = data.get("axes")
     if isinstance(axes, Mapping):
@@ -430,7 +444,7 @@ def _strict(file: Path, text: str, data: Mapping[str, Any]) -> None:
         ("capture", _CAPTURE_FIELDS),
         ("chaos", _CHAOS_FIELDS),
         ("declare", _DECLARE_FIELDS),
-        ("burla", tuple(names(BurlaOptions))),
+        ("cloud", tuple(names(CloudOptions))),
     ):
         table = data.get(name)
         if isinstance(table, Mapping):

@@ -20,9 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _burla_section() -> str:
+def _cloud_section() -> str:
     page = (ROOT / "docs" / "backends.md").read_text(encoding="utf-8")
-    return page.split("\n## Burla\n", 1)[1].split("\n## ", 1)[0]
+    return page.split("\n## Your cloud account\n", 1)[1].split("\n## ", 1)[0]
 
 
 def _paragraphs(section: str) -> list[str]:
@@ -30,12 +30,12 @@ def _paragraphs(section: str) -> list[str]:
 
 
 def _the_paragraph() -> str:
-    found = [p for p in _paragraphs(_burla_section()) if "PyPI" in p and re.search(r"\b(worker|node)s?\b", p)]
+    found = [p for p in _paragraphs(_cloud_section()) if "PyPI" in p and re.search(r"\b(worker|node)s?\b", p)]
     assert len(found) == 1, found
     return found[0]
 
 
-def test_the_burla_section_says_its_workers_install_prove_from_pypi() -> None:
+def test_the_cloud_section_says_its_workers_install_prove_from_pypi() -> None:
     paragraph = _the_paragraph()
     assert re.search(r"\b(installs?|reinstalls?)\b", paragraph), paragraph
     assert "Prove" in paragraph, paragraph
@@ -57,8 +57,8 @@ def test_it_says_an_editable_checkout_is_shipped_not_installed() -> None:
     assert re.search(r"\beditable\b", paragraph) and re.search(r"\bcheckout\b", paragraph), paragraph
 
 
-def test_only_the_burla_section_says_it() -> None:
-    """Modal builds its image from what the spec declares: the sentence is about Burla."""
+def test_only_the_cloud_section_says_it() -> None:
+    """Modal builds its image from what the spec declares: the sentence is about the cloud backend."""
     page = (ROOT / "docs" / "backends.md").read_text(encoding="utf-8")
     modal = page.split("\n## Modal\n", 1)[1].split("\n## ", 1)[0] if "\n## Modal\n" in page else ""
     assert _the_paragraph() not in " ".join(modal.split())

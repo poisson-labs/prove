@@ -186,7 +186,7 @@ retrying a failed call once.
 
 ## Private modules
 
-These are private and may change in any release: `executor`, `executor_modal`, `executor_burla`,
+These are private and may change in any release: `executor`, `executor_modal`, `executor_cloud`,
 `sampler`, `diff`, `tree`, `report`, `viewer`, `plain`, `paired`, `capture`, `chaos_catalog`,
 `survival` (its functions are public through `stats`), `cli`, `_compat`, `_resolve`,
-`_burla_submit`, and `core`, the core every face sits on.
+`_cloud_submit`, and `core`, the core every face sits on.

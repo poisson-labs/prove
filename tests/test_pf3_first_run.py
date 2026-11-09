@@ -630,7 +630,8 @@ STRICT_CASES = {
     "a key in [declare]": ('\n[declare]\noutcome = ["violated"]\n', "outcome", "outcomes", "gates"),
     "a key in [modal]": ('\n[modal]\nconcurency = 4\n', "concurency", "concurrency", "est_seconds_per_episode"),
     "a key in a [modal] image table": ('\n[modal.image]\npyhton = "3.11"\n', "pyhton", "python", "dockerfile"),
-    "a key in [burla]": ('\n[burla]\nnodez = 2\n', "nodez", "nodes", "head_url"),
+    # RB-1, RB-2: the cluster's table is [cloud], and head_url is no longer one of its keys.
+    "a key in [cloud]": ('\n[cloud]\nnodez = 2\n', "nodez", "nodes", "provider"),
 }
 
 

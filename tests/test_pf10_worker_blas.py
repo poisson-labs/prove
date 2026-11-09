@@ -1,14 +1,14 @@
 """PF10 -- Prove's workers at numpy's floor (the must-fix before release, spec §14).
 
-A Modal container and a Burla worker each run one batch at a time, and a run uses many of them at
+A Modal container and a cloud worker each run one batch at a time, and a run uses many of them at
 once. At numpy's floor (1.24, OpenBLAS) a process whose environment names no thread count starts a
 BLAS thread on every core, so a machine running several workers runs several times as many busy
 threads as it has cores. The invariant: **a worker process runs its rollout's BLAS on one thread
 when its environment names no thread count, and on the count it names when it names one.**
 
-**Both backends, through their own boundary.** Burla runs through the fake client of
+**Both backends, through their own boundary.** The cloud backend runs through the fake client of
 ``tests/bu_fixtures/burla``, whose workers are long-lived interpreters started with an empty
-environment, as ``test_bu_burla_backend.py`` drives it. Modal runs through ``run_modal`` with a fake
+environment, as ``test_bu_cloud_backend.py`` drives it. Modal runs through ``run_modal`` with a fake
 ``modal`` whose ``map`` does what Modal does: the function Prove hands ``app.function`` is pickled
 and run in a fresh interpreter, here one started with an empty environment, or with only
 ``OPENBLAS_NUM_THREADS=2`` for the case where the worker names its own count. The target,
@@ -37,7 +37,7 @@ from poisson_prove.executor_modal import ImageSpec, ModalOptions, ModalTarget, r
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import Store
 
-from test_bu_burla_backend import TARGETS, assert_complete, burla_run, fake, pool, stored  # noqa: F401
+from test_bu_cloud_backend import TARGETS, assert_complete, cloud_run, fake, pool, stored  # noqa: F401
 from test_m3_modal_launch import FakeApp, FakeFunction, FakeModal
 
 BLAS = "bu_targets.blas:rollout"
@@ -94,9 +94,9 @@ def modal_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, environment: dic
 
 @pytest.mark.parametrize(("backend", "environment", "threads"), [
     ("modal", {}, 1),
-    ("burla", {}, 1),
+    ("cloud", {}, 1),
     ("modal", {"OPENBLAS_NUM_THREADS": "2"}, 2),
-], ids=["modal", "burla", "modal-names-two"])
+], ids=["modal", "cloud", "modal-names-two"])
 def test_pf10_a_worker_runs_its_rollouts_blas_on_one_thread_unless_it_names_a_count(
     backend: str, environment: dict[str, str], threads: int, request: pytest.FixtureRequest, tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -104,7 +104,7 @@ def test_pf10_a_worker_runs_its_rollouts_blas_on_one_thread_unless_it_names_a_co
     if backend == "modal":
         rows = modal_rows(tmp_path, monkeypatch, environment)
     else:
-        p, store, _, outcome = burla_run(request.getfixturevalue("fake"), tmp_path, BLAS)
+        p, store, _, outcome = cloud_run(request.getfixturevalue("fake"), tmp_path, BLAS)
         assert_complete(outcome, store, p)
         rows = stored(store, p.run_id)
     for row in rows:

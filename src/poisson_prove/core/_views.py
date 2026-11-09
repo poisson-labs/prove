@@ -34,6 +34,7 @@ from poisson_prove.core._ops import (
     _operation,
     method_line,
     refusal,
+    shown_backend,
 )
 from poisson_prove.core._ops import run as run_detail
 from poisson_prove.core._ops import runs as list_runs
@@ -894,7 +895,7 @@ def run_view(ctx: _Context, run: str) -> View:
         "total": total,
         "created_at": m.created_at,
         "target": m.target_id,
-        "backend": m.backend,
+        "backend": shown_backend(m.backend),
         "t_unit": m.t_unit,
         "horizon": horizon,
         "paired_with": None if not isinstance(paired, str) else paired,

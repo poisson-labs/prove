@@ -32,7 +32,7 @@ from typing import Any, Protocol, cast
 
 import pandas as pd
 
-from poisson_prove import _facts, _look, stats
+from poisson_prove import _facts, _look, _where_checks, stats
 from poisson_prove import executor_modal as _modal
 from poisson_prove._compat import (
     RETIRED_STORE_VARIABLE,
@@ -93,7 +93,13 @@ from poisson_prove.executor import (
     run_local,
 )
 from poisson_prove.executor import plan as _executor_plan
-from poisson_prove.executor_burla import BurlaOptions, preflight_burla, run_burla
+from poisson_prove.executor_cloud import (
+    CloudOptions,
+    estimate_cloud_cost,
+    plan_object,
+    preflight_cloud,
+    run_cloud,
+)
 from poisson_prove.paired import Declaration, PairedError, _artifact_text, _bundle, _cost_block
 from poisson_prove.paired import cost as paired_cost
 from poisson_prove.report import ReportError, _observation_cap, _provenance_lines
@@ -130,7 +136,7 @@ SWEEP_NEXT = "sweep SPEC.toml --target pkg.module:rollout"
 LATEST_PARTIAL = "\0latest-partial"
 EXTRA_HINTS = {
     "modal": 'pip install "poisson-prove[modal]"',
-    "burla": 'pip install "poisson-prove[burla]"',
+    "cloud": 'pip install "poisson-prove[cloud]"',
     "agent": 'pip install "poisson-prove[agent]"',
 }
 NEVER_INFERS = {
@@ -146,7 +152,7 @@ THRESHOLD_SOURCES = {
     "default": "the default; neither run recorded one",
 }
 MODAL_ONLY_FLAGS = ("concurrency", "infra_retries", "max_cost", "est_seconds", "app_name")
-BURLA_REFUSED_FLAGS = ("concurrency", "app_name")
+CLOUD_REFUSED_FLAGS = ("concurrency", "app_name")
 _REFUSABLE = (
     SamplerError,
     ExecutorError,
@@ -165,6 +171,11 @@ _PACKAGE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _final(message: str) -> str:
     return _look.reprint(_look.one_line(_look.plain_words(message)))
+
+
+def shown_backend(backend: str) -> str:
+    """A backend as every face shows it: a run 0.2.1 stored on its cluster backend is ``cloud``."""
+    return "cloud" if backend == "burla" else backend
 
 
 def refusal(message: str, nexts: Sequence[str] = (), **kw: Any) -> Refusal:
@@ -210,6 +221,8 @@ def _operation(fn: Callable[..., Any]) -> _Operation:
         except NamesError as exc:
             raise refusal(str(exc), exc.nexts, notes=notes) from exc
         except _REFUSABLE as exc:
+            if getattr(exc, "verbatim", False):
+                raise Refusal(str(exc), getattr(exc, "nexts", ()), notes=notes) from exc
             raise refusal(str(exc), getattr(exc, "nexts", ()), notes=notes) from exc
         if isinstance(result, Result) and notes:
             result = dataclasses.replace(result, notes=(*result.notes, *notes))
@@ -418,7 +431,7 @@ def runs(store: Any, *, counted: bool = True, _notes: list[str]) -> RunList:
                     "run_name": named.name,
                     "status": m.status,
                     **_stopped_by(st, named.run_id),
-                    "backend": m.backend,
+                    "backend": shown_backend(m.backend),
                     "target_id": m.target_id,
                     "t_unit": m.t_unit,
                     **(
@@ -2120,9 +2133,11 @@ def _setup_notes(spec: SweepSpec) -> list[str]:
 
 def _require_extra(name: str) -> None:
     try:
-        found = importlib.util.find_spec(name) is not None
+        found = importlib.util.find_spec("burla" if name == "cloud" else name) is not None
     except (ImportError, ValueError):
         found = False
+    if not found and name == "cloud":
+        raise refusal("the cloud extra is not installed", [EXTRA_HINTS[name]])
     if not found:
         raise refusal(
             f'the {name} backend needs the "{name}" extra, which is not installed',
@@ -2174,9 +2189,9 @@ def _modal_config(o: Mapping[str, Any], spec_path: Path, target_path: str) -> tu
     return target, options
 
 
-def _burla_config(o: Mapping[str, Any], spec_path: Path) -> BurlaOptions:
+def _cloud_config(o: Mapping[str, Any], spec_path: Path) -> CloudOptions:
     try:
-        options = BurlaOptions.from_sweep_file(spec_path)
+        options = CloudOptions.from_sweep_file(spec_path)
         overrides = {
             name: o.get(key)
             for name, key in (
@@ -2191,7 +2206,7 @@ def _burla_config(o: Mapping[str, Any], spec_path: Path) -> BurlaOptions:
         }
         return dataclasses.replace(options, **cast("dict[str, Any]", overrides))
     except (TypeError, ValueError) as exc:
-        raise refusal(f"[burla] in {spec_path}: {exc}") from exc
+        raise refusal(f"[cloud] in {spec_path}: {exc}") from exc
 
 
 def _recorded_max_mde(store: Store, resume_id: str | None) -> float | None:
@@ -2211,13 +2226,27 @@ def _cost_phrase(block: str) -> str:
     return "no estimate"
 
 
+def _reprinted(line: str) -> str:
+    """A plan line the look's way; an account number is given back as it is."""
+    return line if line.startswith("Account: ") else _look.reprint(line)
+
+
 def _plan_sentence(p: Any, block: str) -> str:
     spec = p.spec
     return (
         f"{_look.fmt_count(spec.total_rollouts())} rollouts of {spec.target_id}: "
         f"{_look.fmt_count(len(spec.configs))} cells x {_look.fmt_count(spec.replicates)} "
-        f"replicates on {p.backend}, {_cost_phrase(block)}"
+        f"replicates on {_where_words(p.backend, block)}, {_cost_phrase(block)}"
     )
+
+
+def _where_words(backend: str, block: str) -> str:
+    """Where the sweep runs, as the plan's sentence says it: the cloud by its own name."""
+    if backend == "cloud":
+        for line in block.splitlines():
+            if line.startswith("Backend: cloud · "):
+                return f"your {line.split(' · ')[1]} account"
+    return backend
 
 
 def _planned_name(idx: Index, p: Any, given: str | None) -> str:
@@ -2269,12 +2298,12 @@ def _planned(
         if stray or image != "image":
             names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
             raise refusal(f"{names} only applies to --backend modal")
-    if backend == "burla":
-        stray = [name for name in BURLA_REFUSED_FLAGS if o.get(name) is not None]
+    if backend == "cloud":
+        stray = [name for name in CLOUD_REFUSED_FLAGS if o.get(name) is not None]
         if stray or image != "image":
             names = ", ".join("--" + n.replace("_", "-") for n in stray) or "--image"
-            raise refusal(f"{names} does not apply to --backend burla")
-    if backend in ("modal", "burla"):
+            raise refusal(f"{names} does not apply to --backend cloud")
+    if backend in ("modal", "cloud"):
         _require_extra(backend)
     idx = _index(store) if store.root.is_dir() else _empty_index(store)
     name = o.get("name")
@@ -2362,14 +2391,18 @@ def _planned(
     on_path.enter_context(_folder_first(folder))
     rollout: Any = None
     params: list[_Param] | None = None
-    burla_options: BurlaOptions | None = None
+    cloud_options: CloudOptions | None = None
+    ready: _where_checks.CloudReady | None = None
     modal: tuple[Any, Any] | None = None
     if backend == "modal":
+        _where_checks.check_modal()
         modal = _modal_config(o, Path(spec_path or DEFAULT_SPEC), target)
     else:
         rollout, params = _resolve_target(target, folder=folder, checked=checked, typed=typed)
-    if backend == "burla":
-        burla_options = _burla_config(o, Path(spec_path or DEFAULT_SPEC))
+    if backend == "cloud":
+        cloud_options = _cloud_config(o, Path(spec_path or DEFAULT_SPEC))
+        ready = _where_checks.check_cloud(cloud_options)
+        _notes.extend(ready.notes)
     max_mde = o.get("max_mde")
     try:
         p = _executor_plan(
@@ -2388,10 +2421,10 @@ def _planned(
     if backend == "modal":
         assert modal is not None
         block = _modal.preflight_modal(p, modal[0], modal[1])
-    elif backend == "burla":
-        assert burla_options is not None
+    elif backend == "cloud":
+        assert cloud_options is not None and ready is not None
         try:
-            block = preflight_burla(p, target, burla_options)
+            block = preflight_cloud(p, target, cloud_options, masked=ready.masked)
         except ExecutorError as exc:
             kept = getattr(exc, "plan", None)
             shown_plan = None
@@ -2400,7 +2433,7 @@ def _planned(
                     verdict="plan",
                     sentence=_plan_sentence(p, kept),
                     payload={},
-                    lines=tuple(_look.reprint(line) for line in kept.splitlines()),
+                    lines=tuple(_reprinted(line) for line in kept.splitlines()),
                 )
             raise refusal(str(exc), getattr(exc, "nexts", ()), plan=shown_plan) from exc
     else:
@@ -2412,7 +2445,7 @@ def _planned(
         _target_line(target, params, backend),
         _outcomes_line(spec),
         *([_missing_line(missing)] if missing else []),
-        *(_look.reprint(line) for line in block.splitlines()),
+        *(_reprinted(line) for line in block.splitlines()),
     )
     payload: dict[str, Any] = {
         "run_id": p.run_id,
@@ -2427,6 +2460,10 @@ def _planned(
             "lines": list(lines),
         },
     }
+    if cloud_options is not None and ready is not None:
+        payload["plan"]["cloud"] = plan_object(
+            cloud_options, masked=ready.masked, estimate=estimate_cloud_cost(p, cloud_options)
+        )
     shown = Plan(verdict="plan", sentence=sentence, payload=payload, lines=lines)
     try:
         check_power(p, max_mde=p.max_mde_accepted)
@@ -2488,7 +2525,8 @@ def _planned(
         spec_path=o.get("spec_typed"),
         rollout=rollout,
         modal=modal,
-        burla=burla_options,
+        cloud=cloud_options,
+        cloud_account=None if ready is None else ready.account,
         missing_instrumentors=missing,
         options={
             **o,
@@ -2749,21 +2787,38 @@ def start(
 
     summary: RunSummary
     stopped_by_cancel = False
+    cluster: dict[str, Any] = {}
     try:
         if p.backend == "modal":
             assert plan.modal is not None
             if p.resumed:
                 begin()
             summary = _modal_run(p, plan, st, on_progress, begin)
-        elif p.backend == "burla":
-            assert plan.burla is not None
+        elif p.backend == "cloud":
+            assert plan.cloud is not None and plan.cloud_account is not None
+
+            def name_of(run_id: str) -> str:
+                try:
+                    return _index(store).name_of(run_id)
+                except Exception:  # noqa: BLE001
+                    return run_id
+
+            def on_cluster(detail: dict[str, Any]) -> None:
+                if detail.get("phase") == "summary":
+                    cluster.update(detail)
+                if on_event is not None:
+                    on_event(Event("cluster", detail))
+
             with _folder_first(o.get("spec_folder") or os.getcwd()):
-                summary = run_burla(
+                summary = run_cloud(
                     p,
                     plan.target,
                     st,
-                    options=plan.burla,
+                    options=plan.cloud,
+                    account=plan.cloud_account,
                     on_progress=_starting(begin, on_progress),
+                    on_cluster=on_cluster,
+                    name_of=name_of,
                 )
         else:
             with _folder_first(o.get("spec_folder") or os.getcwd()):
@@ -2786,6 +2841,8 @@ def start(
             sentence, nexts = _kept(
                 st, store, p.run_id, len(p.pairs), _resume_command(o, plan.typed_target)
             )
+            if p.backend == "cloud" and cluster:
+                sentence += "; the cluster was stopped"
             try:
                 kept = closing_progress()
             except BrokenPipeError:
@@ -2796,6 +2853,15 @@ def start(
             raise Interrupted(f"interrupted: {sentence}", nexts) from exc
         raise
     except _REFUSABLE as exc:
+        if p.run_id not in st.runs() and getattr(exc, "spent", False):
+            # Nodes were started and nothing was stored: work started, money spent.
+            raise Stopped(
+                "no rollout was stored, and the cluster may not have stopped"
+                if getattr(exc, "unstopped", False)
+                else "the cluster was stopped and no rollout was stored",
+                list(getattr(exc, "nexts", ())),
+                _final(str(exc)),
+            ) from exc
         if p.run_id in st.runs():
             begin()
             sentence, nexts = _kept(
@@ -2803,6 +2869,8 @@ def start(
             )
             # What the error says to do comes before the resume (an install line, say).
             nexts = [*getattr(exc, "nexts", ()), *nexts]
+            if getattr(exc, "only_nexts", False):
+                nexts = list(getattr(exc, "nexts", ()))
             error = _final(f'{exc} (run "{p.run_id}")')
             kept = closing_progress()
             events.emit("interrupted", {"kept": kept, "status": "partial", "error": error})
@@ -2812,6 +2880,8 @@ def start(
     if before is not None:
         _record_resume(st, p, before)
     result = _sweep_result(plan, store, st, p, summary)
+    if cluster:
+        result = _with_cluster(result, cluster)
     for note in _notes:
         events.emit("note", {"sentence": note})
     # The closing progress reads the store: done is every stored rollout, errored those with no
@@ -2842,6 +2912,33 @@ def start(
             notes=(*result.notes, _dashboard_note(unrefreshed)),
         )
     return result
+
+
+def _with_cluster(result: RunResult, cluster: Mapping[str, Any]) -> RunResult:
+    """The result's cluster line and its ``cluster`` object."""
+    stopped = str(cluster["stopped"])
+    line = (
+        f"{cluster['nodes']} × {cluster['machine_type']} up "
+        f"{_look.fmt_duration(cluster['up_seconds'])}, stopped {stopped[11:19]}Z · ledger "
+        f"{_look.fmt_dollars(cluster['charge'])}"
+    )
+    shown = {
+        key: cluster[key]
+        for key in (
+            "provider",
+            "region",
+            "machine_type",
+            "nodes",
+            "started",
+            "stopped",
+            "up_seconds",
+        )
+    }
+    return dataclasses.replace(
+        result,
+        details=(*result.details, ("cluster", line)),
+        payload={**result.payload, "cluster": shown},
+    )
 
 
 def _dashboard_note(why: str) -> str:
@@ -3039,8 +3136,8 @@ def resume(
     manifest = Store(store.root).manifest(run_id)
     if manifest.backend != "local":
         raise refusal(
-            f'the run "{idx.name_of(run_id)}" ran on {manifest.backend}; its image or bundle '
-            "comes from its spec",
+            f'the run "{idx.name_of(run_id)}" ran on {shown_backend(manifest.backend)}; its image '
+            "or bundle comes from its spec",
             [
                 join(
                     [

@@ -500,7 +500,9 @@ class Plan(Result):
     spec_path: str | None = None
     rollout: Any = None
     modal: Any = None
-    burla: Any = None
+    cloud: Any = None
+    #: The cloud account the readiness checks found signed in (never shown whole).
+    cloud_account: str | None = None
     options: Mapping[str, Any] = field(default_factory=dict)
     #: The ``[capture].instrument`` names no installed package provides (local runs only).
     missing_instrumentors: tuple[str, ...] = ()

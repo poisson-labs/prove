@@ -1,17 +1,22 @@
-"""BU -- the Burla backend: ``poisson-prove sweep … --backend burla`` on a fixed cluster, through Burla.
+"""BU -- the cloud backend's job: ``poisson-prove sweep … --backend cloud`` on the cluster Prove starts,
+through the cluster software Burla.
 
-The frozen tests for the Burla backend: the invariants R1-R7 (the shared runner), M1-M11 (the
+The frozen tests for the cloud backend's job (0.2.1's Burla backend, renamed with the module in
+0.3.0, Remote Backends Spec §2.6): the invariants R1-R7 (the shared runner), M1-M11 (the
 host-side mapper), S1-S7 (the launcher), W1-W6 (the bundle and the worker), C1-C5 (chaos and
 capture), $1-$9 (cost, caps and the ledger), P1-P7 (pre-flight and CLI) and I1-I6 (imports and
 surface).
 
-**No Burla, no network.** Burla is replaced by a fake of the 1.8.1 client, ``tests/bu_fixtures/
-burla``, which cites the tag's lines and runs each call over a pool of local fake workers:
+**No Burla, no network.** Burla is replaced by a fake of the 1.8.1 client (with 1.8.4's coordinator
+and management CLI), ``tests/bu_fixtures/burla``, which cites the tag's lines and runs each call over
+a pool of local fake workers:
 long-lived ``python -I -S`` interpreters with an empty environment and the venv's
 ``site-packages`` appended without ``.pth`` processing, so an editable install is invisible to
-them, as it is to a node. The launcher seam, ``executor_burla._launcher_argv``, is pointed at
+them, as it is to a node. The launcher seam, ``executor_cloud._launcher_argv``, is pointed at
 ``tests/bu_fixtures/launch.py``, which puts the fake first on the launcher's path and runs the
-real ``_burla_submit.py`` as ``__main__``. Every interpreter the fake or a test starts arms a
+real ``_cloud_submit.py`` as ``__main__``. Since 0.3.0 every run also starts and stops the cluster
+(C3): the ``fake`` fixture is ``rb_cloud_support.py``'s world, whose coordinator and CLI seams
+(``_head_argv``, ``_cli_argv``) point at the same fake, sharing its state folder. Every interpreter the fake or a test starts arms a
 network tripwire (a socket other than a Unix one raises); the pytest process never does.
 
 **What the tests fix that the invariants leave open:**
@@ -20,7 +25,7 @@ network tripwire (a socket other than a Unix one raises); the pytest process nev
   seconds), ``estimate``, ``nodes``, ``machine_type``, ``usd_per_node_hour``, ``price_asof``,
   ``stop_cost`` and ``max_cost``; a close line carries ``event="close"``, ``run_id``, ``end``,
   ``charge`` and ``ended``, one of ``complete``, ``stopped``, ``cancelled`` and ``error``.
-- A Burla manifest's ``environment`` carries ``burla`` (at least ``nodes``, ``machine_type``,
+- A cloud manifest's ``environment`` carries ``cloud`` (at least ``nodes``, ``machine_type``,
   ``slots_per_node``, ``usd_per_node_hour``, ``price_asof``, ``estimate``, ``ledger_total``,
   ``stop_cost`` and ``max_cost``) and ``bundle`` (``sha256``, ``size`` and ``packages``, each
   package's ``version``, ``commit`` and ``dirty``).
@@ -28,7 +33,7 @@ network tripwire (a socket other than a Unix one raises); the pytest process nev
   ``launch.py`` does and keeps the gzip'd tar each call ships inside the function it hands the fake.
   The ledger is read as the JSON-lines file it is, and as the pre-flight and the manifest report it.
 - ``_BACKSTOP_S`` and ``_KILL_GRACE_S``, shortened for the backstop's test ($5).
-- ``BurlaOptions`` refuses a bad value, and ``from_sweep_file`` a missing or unknown field, with
+- ``CloudOptions`` refuses a bad value, and ``from_sweep_file`` a missing or unknown field, with
   ``ValueError``; a bundle version is ``importlib.metadata.version`` of the package's name or of
   the distribution that provides it, else ``None``; a bundle's ``commit`` and ``dirty`` are what
   ``git rev-parse HEAD`` and ``git status --porcelain -- .`` say in the package's folder, and
@@ -69,14 +74,15 @@ from typing import Any
 import pytest
 
 import poisson_prove
-from poisson_prove import cli, executor_burla, executor_modal
+from poisson_prove import cli, executor_cloud, executor_modal
 from poisson_prove.executor import ExecutorError, plan, run_local
 from poisson_prove.executor_modal import ModalBackendError, ModalOptions, run_with_mapper
 from poisson_prove.sampler import SweepSpec
 from poisson_prove.store import Store, StoreError
 from isolated_support import isolated as run_isolated
+from rb_cloud_support import ACCOUNT, MASKED, world
 
-eb = executor_burla
+eb = executor_cloud
 _ORIGINAL_ARGV = eb._launcher_argv
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "bu_fixtures"
@@ -86,12 +92,11 @@ DEAF = FIXTURES / "deaf_launcher.py"
 KEEP = FIXTURES / "keep_bundle.py"
 WORKER = FIXTURES / "worker.py"
 PACKAGE = Path(poisson_prove.__file__).resolve().parent
-SUBMIT = Path(eb.__file__).resolve().with_name("_burla_submit.py")
+SUBMIT = Path(eb.__file__).resolve().with_name("_cloud_submit.py")
 SITE_PACKAGES = sysconfig.get_paths()["purelib"]
 PIN = "1.8.4"
-# PF9: Burla's install line names Prove's extra.
-INSTALL_HINT = 'pip install "poisson-prove[burla]"'
-HEAD = "http://localhost:5001"
+# PF9: the install line names Prove's extra (the cloud extra since 0.3.0, RB-3).
+INSTALL_HINT = 'pip install "poisson-prove[cloud]"'
 SALT = "bu-test-salt"
 PLAIN = "bu_targets.plain:rollout"
 VIEW = "bu_targets.view:rollout"
@@ -103,20 +108,23 @@ WATCH = ["poisson_prove", "bu_targets", "bu_version", "bu_helper", "bu_dirty"]
 CHAOS = {"fault": "llm_empty_single", "rate": 1.0, "steps": ["solve"]}
 RECORD_KEYS = frozenset({"requested", "fault", "rate", "steps", "engine_version", "hooks"})
 FAULTED_HOOKS = ["sync", "async"]
-BURLA_ALL = [
-    "BurlaBackendError", "BurlaCostGuard", "BurlaNotInstalled", "BurlaOptions",
-    "BurlaSpendStop", "estimate_burla_cost", "preflight_burla", "run_burla",
+CLOUD_ALL = [
+    "CloudBackendError", "CloudCostGuard", "CloudNotInstalled", "CloudOptions",
+    "CloudSpendStop", "estimate_cloud_cost", "preflight_cloud", "run_cloud",
 ]
-# BurlaOptions' fields, in order: (name, default or REQUIRED).
+# CloudOptions' fields, in order: (name, default or REQUIRED). §4.1: head_url is gone, provider and
+# region are required, the price and the slots default from Prove's table (RB-2, RB-25).
 REQUIRED = object()
 OPTION_FIELDS = [
-    ("nodes", REQUIRED), ("machine_type", REQUIRED), ("slots_per_node", REQUIRED),
-    ("usd_per_node_hour", REQUIRED), ("price_asof", REQUIRED), ("ledger", REQUIRED),
-    ("head_url", REQUIRED), ("stop_cost", REQUIRED), ("max_cost", REQUIRED),
-    ("est_seconds_per_episode", REQUIRED), ("packages", ()), ("func_cpu", 1), ("func_ram", 4),
-    ("boot_minutes", 5.0), ("idle_minutes", 5.0), ("batch_size", 256), ("episode_timeout", None),
-    ("infra_retries", 2), ("max_rollouts", None),
+    ("provider", REQUIRED), ("region", REQUIRED), ("machine_type", REQUIRED), ("nodes", REQUIRED),
+    ("ledger", REQUIRED), ("stop_cost", REQUIRED), ("max_cost", REQUIRED),
+    ("est_seconds_per_episode", REQUIRED), ("max_vcpus", None), ("slots_per_node", None),
+    ("image", None), ("idle_minutes", 5.0), ("boot_minutes", 5.0), ("usd_per_node_hour", None),
+    ("price_asof", None), ("disk_gb", None), ("packages", ()), ("func_cpu", 1), ("func_ram", 4),
+    ("batch_size", 256), ("episode_timeout", None), ("infra_retries", 2), ("max_rollouts", None),
 ]
+#: The nodes' idle allowance: 0.2.1's tests ran with none; §4.1 makes 2 minutes the least (RB-20).
+IDLE = 2.0
 MODAL_ENV_KEYS = frozenset({
     "python", "platform", "poisson_prove_version", "sweep", "image", "modal_app", "concurrency",
     "infra_retries", "import_path", "secrets", "max_mde_accepted",
@@ -130,7 +138,7 @@ MODAL_CAPTURE_REASON = (
     "hold the packages. Each batch records what happened at "
     "backend_meta['capture']"
 )
-# run_with_mapper's shared parameters, then the three the Burla backend adds.
+# run_with_mapper's shared parameters, then the three the cloud backend adds.
 RUNNER_PARAMS = [
     ("p", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
     ("mapper", "POSITIONAL_OR_KEYWORD", inspect.Parameter.empty),
@@ -164,7 +172,7 @@ def write_sweep(
     replicates: int = 2,
     chaos: dict[str, Any] | None = None,
     capture: bool = False,
-    burla: dict[str, Any] | None = None,
+    cloud: dict[str, Any] | None = None,
     name: str = "sweep.toml",
 ) -> Path:
     text = (
@@ -179,38 +187,48 @@ def write_sweep(
         )
     if capture:
         text += '\n[capture]\ninstrument = []\nmax_observation_bytes = "none"\n'
-    if burla is not None:
-        text += "\n[burla]\n" + "".join(f"{key} = {_toml(value)}\n" for key, value in burla.items())
+    if cloud is not None:
+        text += "\n[cloud]\n" + "".join(f"{key} = {_toml(value)}\n" for key, value in cloud.items())
     root.mkdir(parents=True, exist_ok=True)
     path = root / name
     path.write_text(text, encoding="utf-8")
     return path
 
 
-def burla_table(**over: Any) -> dict[str, Any]:
+def cloud_fields(**over: Any) -> dict[str, Any]:
     table: dict[str, Any] = {
-        "nodes": 1, "machine_type": "m7i.2xlarge", "slots_per_node": 2, "usd_per_node_hour": 0.403,
-        "price_asof": "fixture price, 2026-09-27", "ledger": "ledgers/step.jsonl", "head_url": HEAD,
-        "stop_cost": 5.0, "max_cost": 5.0, "est_seconds_per_episode": 0.01,
-        "packages": ["bu_targets"], "batch_size": 2, "boot_minutes": 0.0, "idle_minutes": 0.0,
+        "provider": "aws", "region": "us-east-2", "nodes": 1, "machine_type": "m7i.2xlarge",
+        "slots_per_node": 2, "usd_per_node_hour": 0.403, "price_asof": "fixture price, 2026-09-27",
+        "ledger": "ledgers/step.jsonl", "stop_cost": 5.0, "max_cost": 5.0,
+        "est_seconds_per_episode": 0.01, "packages": ["bu_targets"], "batch_size": 2,
+        "boot_minutes": 0.0, "idle_minutes": IDLE,
     }
     table.update(over)
     return table
 
 
-def options(root: Path, **over: Any) -> eb.BurlaOptions:
+def options(root: Path, **over: Any) -> eb.CloudOptions:
     values: dict[str, Any] = {
-        "nodes": 1, "machine_type": "m7i.2xlarge", "slots_per_node": 2, "usd_per_node_hour": 0.403,
-        "price_asof": "fixture price, 2026-09-27", "ledger": root / "ledger.jsonl", "head_url": HEAD,
-        "stop_cost": 5.0, "max_cost": 5.0, "est_seconds_per_episode": 0.01,
-        "packages": ("bu_targets",), "batch_size": 2, "boot_minutes": 0.0, "idle_minutes": 0.0,
+        "provider": "aws", "region": "us-east-2", "nodes": 1, "machine_type": "m7i.2xlarge",
+        "slots_per_node": 2, "usd_per_node_hour": 0.403, "price_asof": "fixture price, 2026-09-27",
+        "ledger": root / "ledger.jsonl", "stop_cost": 5.0, "max_cost": 5.0,
+        "est_seconds_per_episode": 0.01, "packages": ("bu_targets",), "batch_size": 2,
+        "boot_minutes": 0.0, "idle_minutes": IDLE,
     }
     values.update(over)
-    return eb.BurlaOptions(**values)
+    return eb.CloudOptions(**values)
+
+
+def stop_at(seconds: float, *, usd_per_node_hour: float, before: float = 0.0, boot: float = 0.0) -> float:
+    """The stop that puts a one-node run's deadline ``seconds`` after its ledger line opens, with
+    ``before`` already charged: 0.2.1's tests set no allowances, and §4.1's least idle minutes are
+    now part of every deadline (``(stop - total) / rate - allowances``)."""
+    rate = usd_per_node_hour / 3600
+    return before + rate * (seconds + (boot + IDLE) * 60)
 
 
 def make_plan(
-    spec_path: Path, store: Store, target: str, *, backend: str = "burla", salt: str | None = SALT,
+    spec_path: Path, store: Store, target: str, *, backend: str = "cloud", salt: str | None = SALT,
     resume: str | None = None,
 ) -> Any:
     spec = SweepSpec.load(spec_path)
@@ -352,6 +370,8 @@ class Fake:
     def __init__(self, state: Path, pool: Pool) -> None:
         self.state = state
         self.pool = pool
+        #: The cloud world the fake runs in (set by the fixture): its coordinator and CLI seams.
+        self.world: Any = None
         state.mkdir(parents=True, exist_ok=True)
         (state / "workers.json").write_text(json.dumps(pool.workers), encoding="utf-8")
         self.script()
@@ -401,34 +421,39 @@ class Fake:
         path = self.state / "launchers.txt"
         return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
 
+    def seams(self) -> dict[str, list[str]]:
+        """The three commands the cloud backend starts, as this fixture points them: the job's
+        launcher through ``launch.py``, the coordinator and the CLI through the world's fake."""
+        return {**self.world.seams(), "_launcher_argv": self.argv()}
+
+    def head_urls(self) -> set[str]:
+        """Every coordinator URL a management call was sent to."""
+        return {str(e["head"]) for e in self.world.management() if e.get("head")}
+
 
 @pytest.fixture
-def fake(tmp_path: Path, pool: Pool, monkeypatch: pytest.MonkeyPatch) -> Fake:
-    monkeypatch.syspath_prepend(str(TARGETS))
-    # PF9: a Burla sweep refuses a missing ``burla`` before the plan, as a Modal sweep
-    # refuses a missing ``modal``. The fake client stays importable only in the launcher; here an
-    # empty package of that name, at the pin, is findable, and nothing imports it.
-    findable = tmp_path / "findable-burla"
-    (findable / "burla").mkdir(parents=True)
-    (findable / "burla" / "__init__.py").write_text("", encoding="utf-8")
-    (findable / f"burla-{PIN}.dist-info").mkdir()
-    (findable / f"burla-{PIN}.dist-info" / "METADATA").write_text(
-        f"Metadata-Version: 2.1\nName: burla\nVersion: {PIN}\n", encoding="utf-8")
-    monkeypatch.syspath_prepend(str(findable))
-    made = Fake(tmp_path / "fake-state", pool)
-    monkeypatch.setattr(eb, "_launcher_argv", made.argv)
-    return made
+def fake(tmp_path: Path, pool: Pool, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fake]:
+    # PF9: a cloud sweep refuses a missing cluster software before the plan, as a Modal sweep
+    # refuses a missing ``modal``. The fake client stays importable only in the processes the
+    # seams start; here an empty package of that name, at the pin, is findable (the world's).
+    # Since 0.3.0 a run starts and stops its cluster (C3): the world's fake coordinator, CLI, AWS
+    # CLI and ownership record share the fake's state folder.
+    with world(tmp_path, monkeypatch, pool) as made_world:
+        made = Fake(tmp_path / "fake-state", pool)
+        made.world = made_world
+        monkeypatch.setattr(eb, "_launcher_argv", made.argv)
+        yield made
 
 
-def burla_run(fake: Fake, root: Path, target: str = PLAIN, *, sweep: dict[str, Any] | None = None,
-              **over: Any) -> tuple[Any, Store, eb.BurlaOptions, Any]:
-    """One ``run_burla`` in this process. Returns (plan, store, options, summary or exception)."""
+def cloud_run(fake: Fake, root: Path, target: str = PLAIN, *, sweep: dict[str, Any] | None = None,
+              **over: Any) -> tuple[Any, Store, eb.CloudOptions, Any]:
+    """One ``run_cloud`` in this process. Returns (plan, store, options, summary or exception)."""
     spec_path = write_sweep(root, **(sweep or {}))
     store = Store(root / "store")
     p = make_plan(spec_path, store, target)
     opts = options(root, **over)
     try:
-        outcome: Any = eb.run_burla(p, target, store, options=opts)
+        outcome: Any = eb.run_cloud(p, target, store, options=opts, account=ACCOUNT)
     except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001 - the tests read it
         outcome = exc
     return p, store, opts, outcome
@@ -474,7 +499,7 @@ def import_target(import_path: str) -> Callable[..., Any]:
 
 def child_local(root: str, target: str, chaos: dict[str, Any] | None, episode_timeout: float | None,
                 capture: bool) -> dict[str, Any]:
-    """``run_local`` on the sweep a Burla arm runs, in a fresh interpreter."""
+    """``run_local`` on the sweep a cloud arm runs, in a fresh interpreter."""
     sys.path.insert(0, str(TARGETS))
     spec_path = write_sweep(Path(root), chaos=chaos, capture=capture)
     store = Store(Path(root) / "store")
@@ -483,11 +508,13 @@ def child_local(root: str, target: str, chaos: dict[str, Any] | None, episode_ti
     return {"run_id": p.run_id, "complete": summary.complete}
 
 
-def child_burla(root: str, argv: list[str], target: str, sweep: dict[str, Any],
+def child_cloud(root: str, seams: dict[str, list[str]], target: str, sweep: dict[str, Any],
                 over: dict[str, Any], report: str) -> dict[str, Any]:
-    """``run_burla`` in a fresh interpreter, which a test may interrupt or kill (M9, S6)."""
+    """``run_cloud`` in a fresh interpreter, which a test may interrupt or kill (M9, S6). Every seam
+    is set again here: a spawned interpreter keeps none of the parent's."""
     sys.path.insert(0, str(TARGETS))
-    eb._launcher_argv = lambda: list(argv)
+    for name, argv in seams.items():
+        setattr(eb, name, lambda argv=list(argv): list(argv))
     rootp = Path(root)
     spec_path = write_sweep(rootp, **sweep)
     store = Store(rootp / "store")
@@ -495,7 +522,7 @@ def child_burla(root: str, argv: list[str], target: str, sweep: dict[str, Any],
     Path(report).write_text(json.dumps({"run_id": p.run_id, "pid": os.getpid()}), encoding="utf-8")
     opts = options(rootp, **over)
     try:
-        summary = eb.run_burla(p, target, store, options=opts)
+        summary = eb.run_cloud(p, target, store, options=opts, account=ACCOUNT)
         result = {"run_id": p.run_id, "complete": summary.complete}
     except KeyboardInterrupt:
         result = {"run_id": p.run_id, "raised": "KeyboardInterrupt"}
@@ -544,12 +571,12 @@ def r_plan(root: Path, *, chaos: dict[str, Any] | None = None, capture: bool = F
     return make_plan(spec_path, store, PLAIN, backend="modal"), store
 
 
-PLACEMENT = {"burla": {"nodes": 3, "machine_type": "m7i.2xlarge"}, "bundle": {"sha256": "ab" * 32},
+PLACEMENT = {"cloud": {"nodes": 3, "machine_type": "m7i.2xlarge"}, "bundle": {"sha256": "ab" * 32},
              "cluster_note": "fixture"}
 
 
 def test_r1_a_modal_run_on_the_shared_runner_keeps_the_modal_manifest_and_cost_guard(tmp_path: Path) -> None:
-    """Without the Burla keywords, a Modal run through the shared runner keeps the Modal manifest
+    """Without the cloud backend's keywords, a Modal run through the shared runner keeps the Modal manifest
     keys and capture reason, and its cost guard refuses before the mapper is called."""
     p, store = r_plan(tmp_path / "plain", capture=True)
     run_with_mapper(p, RecordingMapper(), store, options=ModalOptions(batch_size=2))
@@ -578,13 +605,13 @@ def test_r1_a_modal_run_on_the_shared_runner_keeps_the_modal_manifest_and_cost_g
 def test_r2_another_backends_manifest_carries_its_placement_and_the_shared_fields(tmp_path: Path) -> None:
     pm, mstore = r_plan(tmp_path / "modal", capture=True)
     run_with_mapper(pm, RecordingMapper(), mstore, options=ModalOptions(batch_size=2))
-    pb, bstore = r_plan(tmp_path / "burla", capture=True)
+    pb, bstore = r_plan(tmp_path / "cloud", capture=True)
     run_with_mapper(pb, RecordingMapper(), bstore, options=ModalOptions(batch_size=2),
-                    backend="burla", placement=PLACEMENT, cost_check=lambda plan: None)
+                    backend="cloud", placement=PLACEMENT, cost_check=lambda plan: None)
     modal_env = mstore.manifest(pm.run_id).environment
-    burla = bstore.manifest(pb.run_id)
-    assert burla.backend == "burla"
-    env = burla.environment
+    cloud = bstore.manifest(pb.run_id)
+    assert cloud.backend == "cloud"
+    env = cloud.environment
     for key in MODAL_ONLY_KEYS:
         assert key not in env, key
     for key, value in PLACEMENT.items():
@@ -611,18 +638,18 @@ def _accepted(tmp_path: Path, name: str, **kwargs: Any) -> None:
 
 def test_r3_another_backend_without_placement_or_cost_check_is_refused(tmp_path: Path) -> None:
     check = lambda plan: None  # noqa: E731
-    _refused_before_anything(tmp_path, "no-placement", backend="burla", placement=None, cost_check=check)
-    _refused_before_anything(tmp_path, "no-cost-check", backend="burla", placement=PLACEMENT, cost_check=None)
-    _accepted(tmp_path, "both", backend="burla", placement=PLACEMENT, cost_check=check)
+    _refused_before_anything(tmp_path, "no-placement", backend="cloud", placement=None, cost_check=check)
+    _refused_before_anything(tmp_path, "no-cost-check", backend="cloud", placement=PLACEMENT, cost_check=None)
+    _accepted(tmp_path, "both", backend="cloud", placement=PLACEMENT, cost_check=check)
 
 
 @pytest.mark.parametrize("field", ["python", "platform", "poisson_prove_version", "sweep", "infra_retries",
                                    "import_path", "max_mde_accepted", "capture", "chaos"])
 def test_r3_a_placement_key_naming_a_shared_field_is_refused(tmp_path: Path, field: str) -> None:
     check = lambda plan: None  # noqa: E731
-    _refused_before_anything(tmp_path, "clash", backend="burla", placement={**PLACEMENT, field: "x"},
+    _refused_before_anything(tmp_path, "clash", backend="cloud", placement={**PLACEMENT, field: "x"},
                              cost_check=check)
-    _accepted(tmp_path, "control", backend="burla", placement=PLACEMENT, cost_check=check)
+    _accepted(tmp_path, "control", backend="cloud", placement=PLACEMENT, cost_check=check)
 
 
 class HookFailed(Exception):
@@ -655,7 +682,7 @@ def _hooked_run_under(tmp_path: Path, name: str, options: ModalOptions) -> None:
         assert store.runs() == [], "the manifest was written before the cost hook"
 
     summary = run_with_mapper(p, RecordingMapper(events=events), store, options=options,
-                              backend="burla", placement=PLACEMENT, cost_check=check)
+                              backend="cloud", placement=PLACEMENT, cost_check=check)
     assert len(seen) == 1 and seen[0] is p
     assert events[0] == "cost_check" and events.count("cost_check") == 1
     assert summary.complete and len(stored(store, p.run_id)) == len(p.pairs), name
@@ -671,28 +698,28 @@ def test_r4_the_cost_hook_runs_once_first_and_replaces_modals_check(tmp_path: Pa
         raise HookFailed("fixture")
 
     with pytest.raises(HookFailed):
-        run_with_mapper(pf, mapper, fstore, options=ModalOptions(batch_size=2), backend="burla",
+        run_with_mapper(pf, mapper, fstore, options=ModalOptions(batch_size=2), backend="cloud",
                         placement=PLACEMENT, cost_check=refuse)
     assert fstore.runs() == [] and mapper.calls == 0
 
 
-def test_r5_a_burla_manifests_capture_reason_names_burla_and_its_workers(tmp_path: Path) -> None:
-    p, store = r_plan(tmp_path / "burla", capture=True)
-    run_with_mapper(p, RecordingMapper(), store, options=ModalOptions(batch_size=2), backend="burla",
+def test_r5_a_cloud_manifests_capture_reason_names_the_cloud_and_its_workers(tmp_path: Path) -> None:
+    p, store = r_plan(tmp_path / "cloud", capture=True)
+    run_with_mapper(p, RecordingMapper(), store, options=ModalOptions(batch_size=2), backend="cloud",
                     placement=PLACEMENT, cost_check=lambda plan: None)
     reason = store.manifest(p.run_id).environment["capture"]["reason"]
-    assert "Burla" in reason and "worker" in reason and "Modal" not in reason, reason
+    assert "Cloud" in reason and "worker" in reason and "Modal" not in reason, reason
 
 
-def test_r6_a_burla_chaos_run_whose_rows_lack_the_record_is_refused_before_storing(tmp_path: Path) -> None:
+def test_r6_a_cloud_chaos_run_whose_rows_lack_the_record_is_refused_before_storing(tmp_path: Path) -> None:
     p, store = r_plan(tmp_path / "bare", chaos=CHAOS)
     with pytest.raises(ModalBackendError):
         run_with_mapper(p, RecordingMapper(None), store, options=ModalOptions(batch_size=100),
-                        backend="burla", placement=PLACEMENT, cost_check=lambda plan: None)
+                        backend="cloud", placement=PLACEMENT, cost_check=lambda plan: None)
     assert stored(store, p.run_id) == [] and status(store, p.run_id) != "complete"
     pc, cstore = r_plan(tmp_path / "kept", chaos=CHAOS)
     summary = run_with_mapper(pc, RecordingMapper(chaos_record(CHAOS)), cstore,
-                              options=ModalOptions(batch_size=100), backend="burla",
+                              options=ModalOptions(batch_size=100), backend="cloud",
                               placement=PLACEMENT, cost_check=lambda plan: None)
     assert summary.complete
 
@@ -706,7 +733,7 @@ def test_r7_the_runners_surface_gains_three_keyword_only_parameters_and_nothing_
 
 
 def test_m1_one_call_per_round_with_the_declared_shape(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path, nodes=3, slots_per_node=5, func_cpu=2, func_ram=3)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, nodes=3, slots_per_node=5, func_cpu=2, func_ram=3)
     assert_complete(outcome, store, p)
     (call,) = fake.starts()
     assert call["function"]["module"] == "__main__" and call["function"]["qualname"] == "_bootstrap"
@@ -719,7 +746,7 @@ def test_m1_one_call_per_round_with_the_declared_shape(fake: Fake, tmp_path: Pat
 
 def test_m2_one_item_per_batch_carrying_six_fields_in_order(fake: Fake, tmp_path: Path) -> None:
     sweep = {"chaos": {"fault": "none", "rate": 1.0, "steps": []}, "capture": True, "replicates": 3}
-    p, store, opts, outcome = burla_run(fake, tmp_path, PROBE, sweep=sweep, episode_timeout=45.0)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, PROBE, sweep=sweep, episode_timeout=45.0)
     assert_complete(outcome, store, p)
     (call,) = fake.starts()
     # What the sweep file declares, spelled out: ``[capture]`` with ``instrument = []`` and no
@@ -733,7 +760,7 @@ def test_m2_one_item_per_batch_carrying_six_fields_in_order(fake: Fake, tmp_path
         for k, jobs in enumerate(batches_of(p, opts.batch_size))
     ]
     assert json.loads(json.dumps(call["items"])) == json.loads(json.dumps(expected))
-    # Burla calls the shipped function with an item's fields in order, so each field reaches the
+    # The cluster software calls the shipped function with an item's fields in order, so each field reaches the
     # worker as what it is: every row ran the probe, under the capture and the chaos it was handed.
     for row in stored(store, p.run_id):
         assert row["error"] is None and row["meta"]["content"] == "SCRIPTED-OK", row
@@ -755,9 +782,9 @@ def comparable(rows: Sequence[dict[str, Any]]) -> set[tuple[Any, ...]]:
              json.dumps(r["meta"], sort_keys=True)) for r in rows}
 
 
-def test_m3_a_shuffled_burla_run_stores_what_run_local_stores(fake: Fake, tmp_path: Path) -> None:
+def test_m3_a_shuffled_cloud_run_stores_what_run_local_stores(fake: Fake, tmp_path: Path) -> None:
     fake.script(default={"shuffle": 7})
-    p, store, opts, outcome = burla_run(fake, tmp_path / "burla", sweep={"replicates": 3}, batch_size=1)
+    p, store, opts, outcome = cloud_run(fake, tmp_path / "cloud", sweep={"replicates": 3}, batch_size=1)
     assert_complete(outcome, store, p)
     assert fake.ends()[0]["yielded"] != sorted(fake.ends()[0]["yielded"]), "the fake did not shuffle"
     here = local_rows(tmp_path / "local", PLAIN)
@@ -771,7 +798,7 @@ def test_m4_a_batch_returned_twice_is_stored_once_and_the_run_completes(fake: Fa
     pushes out depends on the order the results arrive in (the case where input 0 arrives last is
     the next test)."""
     fake.script(attempts=[{"duplicate": [0], "order": [0, 1, 2]}])
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3})
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3})
     assert_complete(outcome, store, p)
     assert len(fake.starts()) == 2, "the result the duplicate pushed out was not resubmitted"
     assert fake.ends()[0]["yielded"] == [0, 0, 1], fake.ends()[0]
@@ -784,7 +811,7 @@ def test_m4_a_duplicate_arriving_last_is_the_one_cut_and_the_run_completes_in_on
     """Input 0 arrives last: its copy is the result past ``len(inputs)``, so the call yields each
     input once, nothing is missing, and the run completes in one call with every row stored once."""
     fake.script(attempts=[{"duplicate": [0], "order": [1, 2, 0]}])
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3})
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3})
     assert_complete(outcome, store, p)
     assert len(fake.starts()) == 1, fake.starts()
     assert fake.ends()[0]["yielded"] == [1, 2, 0], fake.ends()[0]
@@ -792,7 +819,7 @@ def test_m4_a_duplicate_arriving_last_is_the_one_cut_and_the_run_completes_in_on
 
 def test_m5_a_missing_batch_is_resubmitted_in_a_new_call(fake: Fake, tmp_path: Path) -> None:
     fake.script(attempts=[{"withhold": [1]}])
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3})
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3})
     assert_complete(outcome, store, p)
     first, second = fake.starts()
     assert [item["jobs"] for item in second["items"]] == [batches_of(p, 2)[1]]
@@ -800,7 +827,7 @@ def test_m5_a_missing_batch_is_resubmitted_in_a_new_call(fake: Fake, tmp_path: P
 
 def test_m5_a_batch_never_returned_is_stored_as_infra_rows_after_the_retries(fake: Fake, tmp_path: Path) -> None:
     fake.script(attempts=[{"withhold": [1]}], default={"withhold": [0]})
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3}, infra_retries=2)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3}, infra_retries=2)
     assert not isinstance(outcome, BaseException), outcome
     missing = {tuple(job[3:5]) for job in batches_of(p, 2)[1]}
     rows = stored(store, p.run_id)
@@ -815,7 +842,7 @@ def test_m5_a_batch_never_returned_is_stored_as_infra_rows_after_the_retries(fak
 def test_m6_an_exception_value_is_attributed_and_retried_as_an_infra_failure(fake: Fake, tmp_path: Path,
                                                                              with_index: bool) -> None:
     fake.script(attempts=[{"exceptions": [{"index": 2, "with_index": with_index}]}])
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3})
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3})
     assert_complete(outcome, store, p)
     first, second = fake.starts()
     assert [item["jobs"] for item in second["items"]] == [batches_of(p, 2)[2]]
@@ -826,7 +853,7 @@ def test_m6_each_exception_is_charged_to_its_own_batch(fake: Fake, tmp_path: Pat
     each batch's infra rows carry its own input's exception, not the other's."""
     fake.script(default={"order": [2, 1, 0], "exceptions": [{"index": 0, "with_index": True},
                                                             {"index": 2, "with_index": True}]})
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3}, infra_retries=0)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3}, infra_retries=0)
     assert not isinstance(outcome, BaseException), outcome
     batches = batches_of(p, 2)
     for k, other in ((0, 2), (2, 0)):
@@ -839,7 +866,7 @@ def test_m6_each_exception_is_charged_to_its_own_batch(fake: Fake, tmp_path: Pat
 
 def test_m6_an_unindexed_exception_is_paired_with_the_batch_that_never_came_back(fake: Fake, tmp_path: Path) -> None:
     fake.script(default={"exceptions": [{"index": 2, "with_index": False}]})
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3}, infra_retries=0)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3}, infra_retries=0)
     assert not isinstance(outcome, BaseException), outcome
     keys = {tuple(job[3:5]) for job in batches_of(p, 2)[2]}
     for row in stored(store, p.run_id):
@@ -852,7 +879,7 @@ def test_m6_an_unindexed_exception_is_paired_with_the_batch_that_never_came_back
 def test_m7_a_job_level_failure_keeps_what_arrived_and_resubmits_the_rest(fake: Fake, tmp_path: Path,
                                                                           fault: str) -> None:
     fake.script(attempts=[{fault: 1}])
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3})
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3})
     assert_complete(outcome, store, p)
     first_end = fake.ends()[0]
     delivered = set(first_end["yielded"])
@@ -868,9 +895,9 @@ def test_e5_an_all_errored_first_batch_stops_the_run_and_the_ledger_closes_it_st
     """Remote backends E1 and E5 on the cluster backend: no batch of a target that does not import in
     a worker has an outcome; with no retry left, the first stored batch is rows with no outcome, so
     the run stops in its first call, partial, and the ledger closes it ``stopped``. The launcher is
-    gone when ``run_burla`` returns. (The cluster stop that follows belongs with the cluster's life.)"""
+    gone when ``run_cloud`` returns. (The cluster stop that follows belongs with the cluster's life.)"""
     monkeypatch.setenv("BU_HOST_ONLY", "1")
-    p, store, opts, outcome = burla_run(fake, tmp_path, HOSTONLY, sweep={"replicates": 3}, infra_retries=0)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, HOSTONLY, sweep={"replicates": 3}, infra_retries=0)
     assert not isinstance(outcome, BaseException), outcome
     assert outcome.stopped_by == "first_batch_errored" and not outcome.complete, outcome
     assert len(fake.starts()) == 1, "a batch was submitted after the first stored batch"
@@ -889,9 +916,9 @@ def test_rb_p1_a_cluster_runs_produced_by_names_its_bundle(fake: Fake, tmp_path:
     """Remote backends P1 on the cluster backend, through the command line: ``produced_by`` holds the
     version, the spec and the target, the tool, the manifest's backend, and the bundle's sha256, the
     same digest the manifest's bundle record carries."""
-    spec = write_sweep(tmp_path / "w", burla=burla_table(ledger=str(tmp_path / "ledger.jsonl")))
+    spec = write_sweep(tmp_path / "w", cloud=cloud_fields(ledger=str(tmp_path / "ledger.jsonl")))
     out, err = io.StringIO(), io.StringIO()
-    code = cli.main(["--store", str(tmp_path / "store"), "sweep", str(spec), "--target", PLAIN, "--backend", "burla",
+    code = cli.main(["--store", str(tmp_path / "store"), "sweep", str(spec), "--target", PLAIN, "--backend", "cloud",
                      "--max-mde", "1", "--yes", "--json"], stdout=out, stderr=err, stdin=io.StringIO())
     assert code == 0, (code, out.getvalue(), err.getvalue())
     run_id = json.loads(out.getvalue())["run_id"]
@@ -921,12 +948,21 @@ def _first_line(message: str) -> str:
 @pytest.mark.parametrize("name", REFUSALS + ENDINGS)
 def test_m8_a_refusal_or_an_ending_is_not_retried(fake: Fake, tmp_path: Path, name: str) -> None:
     fake.script(default={"refuse": name})
-    p, store, opts, outcome = burla_run(fake, tmp_path)
-    assert isinstance(outcome, eb.BurlaBackendError), outcome
-    assert not isinstance(outcome, (eb.BurlaSpendStop, eb.BurlaCostGuard, eb.BurlaNotInstalled)), outcome
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
+    assert isinstance(outcome, eb.CloudBackendError), outcome
+    assert not isinstance(outcome, (eb.CloudSpendStop, eb.CloudCostGuard, eb.CloudNotInstalled)), outcome
     assert len(fake.starts()) == 1, "a refusal was retried"
     (end,) = fake.ends()
-    assert _first_line(end["message"]) in str(outcome), (end["message"], str(outcome))
+    raw = _first_line(end["message"])
+    if name in ENDINGS:
+        assert raw in str(outcome), (end["message"], str(outcome))
+    else:
+        # §7.4: the software's own text goes to its log under Prove's state folder, never into the
+        # error; the error names the refusal in Prove's words.
+        log = fake.world.xdg / "poisson-prove" / "cloud" / f"aws-{ACCOUNT}.log"
+        assert raw in log.read_text(encoding="utf-8"), (raw, log)
+        assert raw not in str(outcome), str(outcome)
+        assert end["type"] in str(outcome), (end["type"], str(outcome))
     ended = close_of(opts.ledger, p.run_id)["ended"]
     assert ended == ("cancelled" if name in ENDINGS else "error"), ended
     assert status(store, p.run_id) != "complete"
@@ -934,8 +970,8 @@ def test_m8_a_refusal_or_an_ending_is_not_retried(fake: Fake, tmp_path: Path, na
 
 def test_m8_delivered_batches_stay_stored_when_a_refusal_ends_the_call(fake: Fake, tmp_path: Path) -> None:
     fake.script(default={"refuse": "JobStalled", "refuse_after": 1})
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3})
-    assert isinstance(outcome, eb.BurlaBackendError), outcome
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3})
+    assert isinstance(outcome, eb.CloudBackendError), outcome
     assert len(fake.starts()) == 1
     (delivered,) = fake.ends()[0]["yielded"]
     rows = stored(store, p.run_id)
@@ -962,7 +998,7 @@ def _start_child(fake: Fake, root: Path, target: str, sweep: dict[str, Any], ove
     ctx = multiprocessing.get_context("spawn")
     report = root / "child-report.json"
     root.mkdir(parents=True, exist_ok=True)
-    proc = ctx.Process(target=child_burla, args=(str(root), fake.argv(), target, sweep, over, str(report)))
+    proc = ctx.Process(target=child_cloud, args=(str(root), fake.seams(), target, sweep, over, str(report)))
     proc.start()
     return proc, report
 
@@ -1001,7 +1037,7 @@ def test_m9_ctrl_c_cancels_the_job_closes_the_ledger_and_reaches_the_caller(fake
     store = Store(root / "store")
     assert status(store, run_id) != "complete" and 0 < len(stored(store, run_id)) < 6
     p = make_plan(root / "sweep.toml", store, PLAIN, resume=run_id)
-    summary = eb.run_burla(p, PLAIN, store, options=options(root))
+    summary = eb.run_cloud(p, PLAIN, store, options=options(root), account=ACCOUNT)
     assert summary.complete and len(stored(store, run_id)) == 6
 
 
@@ -1012,14 +1048,14 @@ ALTERED = [{"fault": "llm_error_single"}, {"rate": 0.5}, {"steps": ["other"]}, {
 def test_m10_a_record_that_disagrees_with_the_request_is_refused_before_storing(fake: Fake, tmp_path: Path,
                                                                                 alter: dict[str, Any]) -> None:
     fake.script(default={"alter_record": alter})
-    p, store, opts, outcome = burla_run(fake, tmp_path, PROBE, sweep={"chaos": CHAOS}, batch_size=4)
-    assert isinstance(outcome, eb.BurlaBackendError), outcome
+    p, store, opts, outcome = cloud_run(fake, tmp_path, PROBE, sweep={"chaos": CHAOS}, batch_size=4)
+    assert isinstance(outcome, eb.CloudBackendError), outcome
     assert p.run_id in str(outcome)
     assert stored(store, p.run_id) == []
 
 
 def test_m10_control_an_agreeing_record_is_stored(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path, PROBE, sweep={"chaos": CHAOS}, batch_size=4)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, PROBE, sweep={"chaos": CHAOS}, batch_size=4)
     assert_complete(outcome, store, p)
 
 
@@ -1027,7 +1063,7 @@ def test_m10_control_an_agreeing_record_is_stored(fake: Fake, tmp_path: Path) ->
 @pytest.mark.slow
 def test_m11_busy_nodes_are_asked_again_every_15_s(fake: Fake, tmp_path: Path) -> None:
     fake.script(attempts=[{"busy": True}])
-    p, store, opts, outcome = burla_run(fake, tmp_path)
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     first, second = fake.starts()
     gap = second["time"] - first["time"]
@@ -1036,8 +1072,10 @@ def test_m11_busy_nodes_are_asked_again_every_15_s(fake: Fake, tmp_path: Path) -
 
 def test_m11_busy_past_the_deadline_fires_the_stop(fake: Fake, tmp_path: Path) -> None:
     fake.script(default={"busy": True})
-    p, store, opts, outcome = burla_run(fake, tmp_path, usd_per_node_hour=360.0, stop_cost=0.3, max_cost=1.0)
-    assert isinstance(outcome, eb.BurlaSpendStop), outcome
+    # The deadline 3 s after the ledger opens, as 0.2.1's $0.30 stop at $360/node-hour put it.
+    stop = stop_at(3.0, usd_per_node_hour=360.0)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, usd_per_node_hour=360.0, stop_cost=stop, max_cost=stop + 1.0)
+    assert isinstance(outcome, eb.CloudSpendStop), outcome
     closed = close_of(opts.ledger, p.run_id)
     start = open_of(opts.ledger, p.run_id)["start"]
     assert closed["ended"] == "stopped" and closed["end"] - start <= 3.0 + 5.0 + 2.0, closed
@@ -1047,7 +1085,7 @@ def test_m11_busy_past_the_deadline_fires_the_stop(fake: Fake, tmp_path: Path) -
 
 
 def test_s1_the_launcher_runs_in_its_own_session(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path)
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     assert fake.starts()[0]["session_leader"] is True
 
@@ -1087,7 +1125,7 @@ def test_s1_importing_the_launcher_imports_only_the_standard_library_and_runs_no
 
 
 def test_s2_nothing_of_ours_is_imported_or_shipped_when_burla_is_called(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path, packages=("bu_targets", "bu_helper"))
+    p, store, opts, outcome = cloud_run(fake, tmp_path, packages=("bu_targets", "bu_helper"))
     assert_complete(outcome, store, p)
     (call,) = fake.starts()
     assert call["watched_modules"] == [], call["watched_modules"]
@@ -1095,26 +1133,29 @@ def test_s2_nothing_of_ours_is_imported_or_shipped_when_burla_is_called(fake: Fa
 
 
 def test_s3_the_bootstrap_passes_burlas_rule(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path)
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     assert fake.starts()[0]["offenders"] == []
 
 
 def test_s4_burla_is_called_on_the_launchers_main_thread(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path)
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     assert fake.starts()[0]["main_thread"] is True
 
 
 def test_s5_telemetry_off_head_pinned_and_output_in_a_log_beside_the_ledger(fake: Fake, tmp_path: Path,
                                                                            capfd: pytest.CaptureFixture[str]) -> None:
+    """The head is the coordinator Prove started for the run (§6.2 step 9), no longer one the spec
+    names (RB-2)."""
     junk = '("done", "stopped") {"event": "close", "charge": 99.0} \\x00\\x08'
     fake.script(default={"print": junk})
     ledger = tmp_path / "ledgers" / "step.jsonl"
-    p, store, opts, outcome = burla_run(fake, tmp_path, ledger=ledger, head_url="https://head.fixture.invalid")
+    p, store, opts, outcome = cloud_run(fake, tmp_path, ledger=ledger)
     assert_complete(outcome, store, p)
     (call,) = fake.starts()
-    assert call["env"] == {"DISABLE_BURLA_TELEMETRY": "True", "BURLA_CLUSTER_DASHBOARD_URL": "https://head.fixture.invalid"}
+    (head,) = fake.head_urls()
+    assert call["env"] == {"DISABLE_BURLA_TELEMETRY": "True", "BURLA_CLUSTER_DASHBOARD_URL": head}
     token = call["token"]
     beside = [f for f in ledger.parent.iterdir() if f != ledger and f.is_file()]
     logged = [f for f in beside if f"fake burla stdout {token}" in f.read_text(encoding="utf-8", errors="replace")
@@ -1152,21 +1193,23 @@ def test_s6_when_the_parent_dies_the_launcher_cancels_and_exits_within_10_s(fake
 
 def test_s7_a_client_other_than_1_8_2_is_refused_naming_the_pin(fake: Fake, tmp_path: Path) -> None:
     fake.script(version="1.8.1")
-    p, store, opts, outcome = burla_run(fake, tmp_path)
-    assert isinstance(outcome, eb.BurlaBackendError) and not isinstance(outcome, eb.BurlaNotInstalled), outcome
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
+    assert isinstance(outcome, eb.CloudBackendError) and not isinstance(outcome, eb.CloudNotInstalled), outcome
     assert PIN in str(outcome) and "1.8.1" in str(outcome)
     assert fake.starts() == [], "remote_parallel_map was called"
 
 
-def test_s7_without_burla_importable_run_burla_raises_burla_not_installed(fake: Fake, tmp_path: Path,
+def test_s7_without_the_software_importable_run_cloud_raises_cloud_not_installed(fake: Fake, tmp_path: Path,
                                                                           monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(eb, "_launcher_argv", lambda: fake.argv("absent"))
-    p, store, opts, outcome = burla_run(fake, tmp_path)
-    assert isinstance(outcome, eb.BurlaNotInstalled), outcome
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
+    assert isinstance(outcome, eb.CloudNotInstalled), outcome
     # The message says what failed, with no raw repr of the import error, and the install line is
     # its own next line, not inside the sentence.
     assert outcome.nexts == [INSTALL_HINT] and INSTALL_HINT not in str(outcome), (outcome.nexts, str(outcome))
-    assert "burla" in str(outcome) and "Error(" not in str(outcome), str(outcome)
+    # The message names what is missing in the reader's words, not the software's name (§2.6).
+    assert "cluster software" in str(outcome) and "Error(" not in str(outcome), str(outcome)
+    assert "burla" not in str(outcome).lower(), str(outcome)
     assert fake.starts() == []
 
 
@@ -1225,7 +1268,7 @@ def test_w1_the_bundle_is_deterministic_and_complete(fake: Fake, tmp_path: Path,
     monkeypatch.setattr(eb, "_launcher_argv", fake.keeping_argv)
     recorded = []
     for name in ("first", "second"):
-        p, store, opts, outcome = burla_run(fake, tmp_path / name, "bu_w1pkg.plain:rollout", packages=("bu_w1pkg",))
+        p, store, opts, outcome = cloud_run(fake, tmp_path / name, "bu_w1pkg.plain:rollout", packages=("bu_w1pkg",))
         assert_complete(outcome, store, p)
         recorded.append(store.manifest(p.run_id).environment["bundle"]["sha256"])
         os.utime(copy / "plain.py", (1, 1))  # a new mtime, the same tree
@@ -1254,7 +1297,7 @@ def test_w1_the_manifest_records_the_bundle_prove_s_version_and_each_package_s_v
     fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(eb, "_launcher_argv", fake.keeping_argv)
-    p, store, opts, outcome = burla_run(fake, tmp_path)
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     record = store.manifest(p.run_id).environment["bundle"]
     (shipped,) = fake.bundles()
@@ -1287,7 +1330,7 @@ def test_w2_a_worker_is_an_isolated_interpreter_that_reads_package_data_from_the
     monkeypatch.setenv("BU_HOST_MARKER", "only-on-the-host")
     baseline = _empty_environment()
     assert "BU_HOST_MARKER" not in baseline
-    p, store, opts, outcome = burla_run(fake, tmp_path, VIEW)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, VIEW)
     assert_complete(outcome, store, p)
     table = json.loads((TARGETS / "bu_targets" / "data" / "table.json").read_text(encoding="utf-8"))
     workers = fake.pool.pids
@@ -1302,7 +1345,7 @@ def test_w2_a_worker_is_an_isolated_interpreter_that_reads_package_data_from_the
 
 
 def test_w3_the_bundle_travels_inside_the_pickled_function_not_as_an_input(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path, VIEW)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, VIEW)
     assert_complete(outcome, store, p)
     size = store.manifest(p.run_id).environment["bundle"]["size"]
     (beat,) = fake.heartbeats()
@@ -1322,12 +1365,12 @@ def test_w4_a_warm_worker_unloads_the_last_bundle_before_loading_a_new_one(
     shutil.copytree(TARGETS / "bu_version", copy / "bu_version")
     monkeypatch.syspath_prepend(str(copy))
     sweep = {"replicates": 3}
-    p1, store1, _, out1 = burla_run(fake, tmp_path / "one", "bu_version:rollout", sweep=sweep, packages=("bu_version",))
+    p1, store1, _, out1 = cloud_run(fake, tmp_path / "one", "bu_version:rollout", sweep=sweep, packages=("bu_version",))
     assert_complete(out1, store1, p1)
     init = copy / "bu_version" / "__init__.py"
     init.write_text(init.read_text(encoding="utf-8").replace('VERSION = "one"', 'VERSION = "two"'), encoding="utf-8")
     importlib.invalidate_caches()
-    p2, store2, _, out2 = burla_run(fake, tmp_path / "two", "bu_version:rollout", sweep=sweep, packages=("bu_version",))
+    p2, store2, _, out2 = cloud_run(fake, tmp_path / "two", "bu_version:rollout", sweep=sweep, packages=("bu_version",))
     assert_complete(out2, store2, p2)
     assert {r["meta"]["version"] for r in stored(store1, p1.run_id)} == {"one"}
     assert {r["meta"]["version"] for r in stored(store2, p2.run_id)} == {"two"}
@@ -1351,7 +1394,7 @@ def test_w5_chaos_and_capture_batches_run_in_their_own_interpreter(fake: Fake, f
         sweep["chaos"] = {"fault": "none", "rate": 1.0, "steps": []}
     if table == "capture":
         sweep["capture"] = True
-    p, store, opts, outcome = burla_run(fake, tmp_path, PROBE, sweep=sweep)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, PROBE, sweep=sweep)
     assert_complete(outcome, store, p)
     workers = _pid_by_batch(fake, 0)
     pids_by_batch: dict[int, set[int]] = {}
@@ -1374,7 +1417,7 @@ def test_w6_a_target_that_does_not_import_in_the_worker_is_stored_as_infra_rows(
     fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("BU_HOST_ONLY", "1")
-    p, store, opts, outcome = burla_run(fake, tmp_path, HOSTONLY, infra_retries=1, batch_size=4)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, HOSTONLY, infra_retries=1, batch_size=4)
     assert not isinstance(outcome, BaseException), outcome
     rows = stored(store, p.run_id)
     assert len(rows) == len(p.pairs) and all((r["error"] or "").startswith("infra: ") for r in rows), rows
@@ -1382,7 +1425,7 @@ def test_w6_a_target_that_does_not_import_in_the_worker_is_stored_as_infra_rows(
     assert {s["kind"] for s in fake.served()} == {"ok"}, "the bootstrap raised instead of returning (k, None, traceback)"
 
 
-# ---------- C: chaos and capture on Burla ----------
+# ---------- C: chaos and capture on the cloud backend ----------
 
 
 def _chaos_rows(store: Store, run_id: str) -> dict[tuple[str, int], tuple[Any, ...]]:
@@ -1417,13 +1460,13 @@ def test_c1_a_chaos_sweep_on_burla_arms_its_fault_exactly_as_local_does(fake: Fa
                                                                         local_chaos: Any, episode_timeout: float | None) -> None:
     local = local_chaos(episode_timeout)
     assert len(local) == 4 and all(v[0] == CHAOS and v[1] == "fell" for v in local.values()), local
-    p, store, opts, outcome = burla_run(fake, tmp_path, PROBE, sweep={"chaos": CHAOS}, episode_timeout=episode_timeout)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, PROBE, sweep={"chaos": CHAOS}, episode_timeout=episode_timeout)
     assert_complete(outcome, store, p)
     assert _chaos_rows(store, p.run_id) == local
 
 
 def test_c2_every_ok_row_carries_the_record_its_worker_armed(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path, PROBE, sweep={"chaos": CHAOS})
+    p, store, opts, outcome = cloud_run(fake, tmp_path, PROBE, sweep={"chaos": CHAOS})
     assert_complete(outcome, store, p)
     requested = store.manifest(p.run_id).environment["chaos"]
     for row in stored(store, p.run_id):
@@ -1440,9 +1483,9 @@ def test_c3_a_worker_that_served_another_chaos_run_first_still_matches_local(
     other = {"fault": "llm_error_single", "rate": 1.0, "steps": ["solve"]}
     control = {"fault": "none", "rate": 1.0, "steps": []}
     for name, table in (("other", other), ("none", control)):
-        p, store, opts, outcome = burla_run(fake, tmp_path / name, PROBE, sweep={"chaos": table})
+        p, store, opts, outcome = cloud_run(fake, tmp_path / name, PROBE, sweep={"chaos": table})
         assert_complete(outcome, store, p)
-    p, store, opts, outcome = burla_run(fake, tmp_path / "this", PROBE, sweep={"chaos": CHAOS})
+    p, store, opts, outcome = cloud_run(fake, tmp_path / "this", PROBE, sweep={"chaos": CHAOS})
     assert_complete(outcome, store, p)
     assert _chaos_rows(store, p.run_id) == local_chaos(None)
     served = fake.served()
@@ -1453,20 +1496,20 @@ def test_c3_a_worker_that_served_another_chaos_run_first_still_matches_local(
 @pytest.mark.parametrize("strip", ["strip_chaos_field", "strip_chaos_record"])
 def test_c4_a_dropped_chaos_table_or_record_is_refused_before_storing(fake: Fake, tmp_path: Path, strip: str) -> None:
     fake.script(default={strip: True})
-    p, store, opts, outcome = burla_run(fake, tmp_path / strip, PROBE, sweep={"chaos": CHAOS}, batch_size=4)
+    p, store, opts, outcome = cloud_run(fake, tmp_path / strip, PROBE, sweep={"chaos": CHAOS}, batch_size=4)
     assert isinstance(outcome, ExecutorError), outcome
     assert stored(store, p.run_id) == [] and status(store, p.run_id) != "complete"
     fake.script()
-    pc, cstore, _, control = burla_run(fake, tmp_path / "control", PROBE, sweep={"chaos": CHAOS}, batch_size=4)
+    pc, cstore, _, control = cloud_run(fake, tmp_path / "control", PROBE, sweep={"chaos": CHAOS}, batch_size=4)
     assert_complete(control, cstore, pc)
 
 
 def test_c5_a_capture_sweeps_rows_carry_what_the_worker_saw(fake: Fake, tmp_path: Path) -> None:
-    p, store, opts, outcome = burla_run(fake, tmp_path, PLAIN, sweep={"capture": True})
+    p, store, opts, outcome = cloud_run(fake, tmp_path, PLAIN, sweep={"capture": True})
     assert_complete(outcome, store, p)
     capture = store.manifest(p.run_id).environment["capture"]
     assert capture["requested"] is True
-    assert "Burla" in capture["reason"] and "worker" in capture["reason"] and "Modal" not in capture["reason"]
+    assert "Cloud" in capture["reason"] and "worker" in capture["reason"] and "Modal" not in capture["reason"]
     for row in stored(store, p.run_id):
         seen = row["backend_meta"]["capture"]
         assert seen["requested"] is True and seen["active"] is True, seen
@@ -1476,30 +1519,29 @@ def test_c5_a_capture_sweeps_rows_carry_what_the_worker_saw(fake: Fake, tmp_path
 
 
 def _table_file(root: Path, table: dict[str, Any]) -> Path:
-    return write_sweep(root, burla=table)
+    return write_sweep(root, cloud=table)
 
 
 def test_dollar1_the_options_declare_their_fields_and_hard_wire_grow_and_parallelism() -> None:
     got = [(f.name, REQUIRED if f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING
             else (f.default if f.default is not dataclasses.MISSING else f.default_factory()))
-           for f in dataclasses.fields(eb.BurlaOptions)]
+           for f in dataclasses.fields(eb.CloudOptions)]
     assert got == OPTION_FIELDS, got
 
 
 REQUIRED_FIELDS = [name for name, default in OPTION_FIELDS if default is REQUIRED]
 BAD_VALUES = [("nodes", 0), ("machine_type", ""), ("slots_per_node", 0), ("usd_per_node_hour", 0.0),
-              ("price_asof", ""), ("head_url", "http://example.com:5001"), ("head_url", "ftp://localhost"),
-              ("stop_cost", 0.0), ("max_cost", 1.0), ("est_seconds_per_episode", 0.0)]
+              ("price_asof", ""), ("stop_cost", 0.0), ("max_cost", 1.0), ("est_seconds_per_episode", 0.0)]
 
 
 @pytest.mark.parametrize("field", REQUIRED_FIELDS)
 def test_dollar1_a_missing_declaration_is_refused_by_name(tmp_path: Path, field: str) -> None:
-    table = burla_table(stop_cost=2.0, max_cost=3.0)
+    table = cloud_fields(stop_cost=2.0, max_cost=3.0)
     del table[field]
     with pytest.raises(ValueError) as refused:
-        eb.BurlaOptions.from_sweep_file(_table_file(tmp_path / "missing", table))
+        eb.CloudOptions.from_sweep_file(_table_file(tmp_path / "missing", table))
     assert field in str(refused.value)
-    eb.BurlaOptions.from_sweep_file(_table_file(tmp_path / "control", burla_table(stop_cost=2.0, max_cost=3.0)))
+    eb.CloudOptions.from_sweep_file(_table_file(tmp_path / "control", cloud_fields(stop_cost=2.0, max_cost=3.0)))
 
 
 @pytest.mark.parametrize("field,value", BAD_VALUES, ids=[f"{f}={v!r}" for f, v in BAD_VALUES])
@@ -1507,20 +1549,21 @@ def test_dollar1_a_bad_declaration_is_refused(tmp_path: Path, field: str, value:
     good = options(tmp_path, stop_cost=2.0, max_cost=3.0)
     with pytest.raises(ValueError):
         dataclasses.replace(good, **{field: value})
-    for ok in ("http://localhost:5001", "http://127.0.0.1:5001", "https://head.fixture.invalid"):
-        dataclasses.replace(good, head_url=ok)
+    # RB-2: there is no head to name; Prove starts the coordinator.
+    with pytest.raises(TypeError):
+        dataclasses.replace(good, head_url="http://localhost:5001")
 
 
 def test_dollar1_an_unknown_field_is_refused_by_name_and_a_relative_ledger_is_the_sweeps(tmp_path: Path) -> None:
     with pytest.raises(ValueError) as refused:
-        eb.BurlaOptions.from_sweep_file(_table_file(tmp_path / "unknown", burla_table(nodez=4)))
+        eb.CloudOptions.from_sweep_file(_table_file(tmp_path / "unknown", cloud_fields(nodez=4)))
     assert "nodez" in str(refused.value)
-    loaded = eb.BurlaOptions.from_sweep_file(_table_file(tmp_path / "known", burla_table()))
+    loaded = eb.CloudOptions.from_sweep_file(_table_file(tmp_path / "known", cloud_fields()))
     assert loaded.ledger == tmp_path / "known" / "ledgers" / "step.jsonl"
     assert loaded.packages == ("bu_targets",)
 
 
-def _formula(pairs: int, o: eb.BurlaOptions) -> float:
+def _formula(pairs: int, o: eb.CloudOptions) -> float:
     batches = math.ceil(pairs / o.batch_size)
     waves = math.ceil(batches / (o.nodes * o.slots_per_node))
     minutes = o.boot_minutes + waves * o.batch_size * o.est_seconds_per_episode / 60 + o.idle_minutes
@@ -1539,7 +1582,7 @@ def test_dollar2_the_estimate_is_the_formula_to_the_cent(tmp_path: Path, case: d
     spec_path = write_sweep(tmp_path, cells=[f"c{i:02d}" for i in range(case["cells"])], replicates=case["replicates"])
     p = make_plan(spec_path, Store(tmp_path / "store"), PLAIN)
     o = options(tmp_path, stop_cost=50.0, max_cost=50.0, **case["over"])
-    got = eb.estimate_burla_cost(p, o)
+    got = eb.estimate_cloud_cost(p, o)
     want = _formula(len(p.pairs), o)
     assert abs(got - want) < 0.005, (got, want)
     if case["cells"] == 40:
@@ -1571,42 +1614,44 @@ def test_dollar3_over_the_cap_is_refused_before_anything_starts(fake: Fake, tmp_
     store = Store(tmp_path / "store")
     p = make_plan(spec_path, store, PLAIN)
     o = options(tmp_path, **over)
-    estimate = eb.estimate_burla_cost(p, o)
+    estimate = eb.estimate_cloud_cost(p, o)
     assert 0.37 + estimate > 0.5
-    for call in (lambda: eb.preflight_burla(p, PLAIN, o), lambda: eb.run_burla(p, PLAIN, store, options=o)):
-        with pytest.raises(eb.BurlaCostGuard) as refused:
+    for call in (lambda: eb.preflight_cloud(p, PLAIN, o, masked=MASKED), lambda: eb.run_cloud(p, PLAIN, store, options=o, account=ACCOUNT)):
+        with pytest.raises(eb.CloudCostGuard) as refused:
             call()
         message = str(refused.value)
         for needle in (f"{estimate:.2f}", "0.37", "0.50", str(ledger)):
             assert needle in message, (needle, message)
     assert ledger.read_bytes() == before and store.runs() == [] and fake.launchers() == []
     control = options(tmp_path, **{**over, "stop_cost": 0.37 + estimate + 0.04, "max_cost": 0.37 + estimate + 0.05})
-    assert_complete(eb.run_burla(p, PLAIN, store, options=control), store, p)
+    assert_complete(eb.run_cloud(p, PLAIN, store, options=control, account=ACCOUNT), store, p)
 
 
 def test_dollar4_the_stop_fires_within_5_s_of_its_deadline_and_the_run_resumes(fake: Fake, tmp_path: Path) -> None:
-    """A prior run already charged $0.10 against the $0.30 stop, so this run stops at its own
-    charge of about $0.20 two seconds in, and the message's charge cannot be read off the stop."""
+    """A prior run already charged $0.10 against the stop, so this run stops at its own charge two
+    seconds in, and the message's charge cannot be read off the stop. (0.2.1's $0.30 stop; with
+    §4.1's two idle minutes in every allowance the stop that puts the deadline there is higher.)"""
     fake.script(attempts=[{"hang_after": 1}])
     _seed_ledger(tmp_path / "ledger.jsonl", [{**PRIOR[0], "run_id": "prior-0-10"},
                                               {**PRIOR[1], "run_id": "prior-0-10", "charge": 0.10}])
-    p, store, opts, outcome = burla_run(fake, tmp_path, sweep={"replicates": 3}, usd_per_node_hour=360.0,
-                                        stop_cost=0.3, max_cost=1.0)
+    stop = stop_at(2.0, usd_per_node_hour=360.0, before=0.10)
+    p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3}, usd_per_node_hour=360.0,
+                                        stop_cost=stop, max_cost=stop + 1.0)
     raised_at = time.time()
-    assert isinstance(outcome, eb.BurlaSpendStop), outcome
+    assert isinstance(outcome, eb.CloudSpendStop), outcome
     start = open_of(opts.ledger, p.run_id)["start"]
     deadline = start + 2.0
     assert deadline - 0.5 <= raised_at <= deadline + 5.0, (raised_at - start)
     closed = close_of(opts.ledger, p.run_id)
     assert closed["ended"] == "stopped"
     charge = f"{closed['charge']:.2f}"
-    assert charge not in ("0.10", "0.30"), charge  # the run's own charge, told apart from the prior and the stop
+    assert charge not in ("0.10", f"{stop:.2f}"), charge  # the run's own charge, told apart from the prior and the stop
     for needle in (p.run_id, charge, str(opts.ledger)):
         assert needle in str(outcome), (needle, str(outcome))
     rows = stored(store, p.run_id)
     assert len(rows) == 2 and status(store, p.run_id) != "complete"
     resumed = make_plan(tmp_path / "sweep.toml", store, PLAIN, resume=p.run_id)
-    summary = eb.run_burla(resumed, PLAIN, store, options=options(tmp_path, stop_cost=50.0, max_cost=50.0))
+    summary = eb.run_cloud(resumed, PLAIN, store, options=options(tmp_path, stop_cost=50.0, max_cost=50.0), account=ACCOUNT)
     assert summary.complete and len(stored(store, p.run_id)) == 6
 
 
@@ -1617,10 +1662,16 @@ def test_dollar5_the_backstop_kills_a_launcher_that_never_reports(fake: Fake, tm
     monkeypatch.setattr(eb, "_launcher_argv", lambda: [sys.executable, "-I", str(DEAF), str(fake.state)])
     notes = fake.state / "deaf.jsonl"
     try:
-        p, store, opts, outcome = burla_run(fake, tmp_path, usd_per_node_hour=360.0, stop_cost=0.2, max_cost=1.0)
+        stop = stop_at(2.0, usd_per_node_hour=360.0)
+        p, store, opts, outcome = cloud_run(fake, tmp_path, usd_per_node_hour=360.0, stop_cost=stop,
+                                            max_cost=stop + 1.0)
         raised_at = time.time()
-        assert isinstance(outcome, eb.BurlaSpendStop), outcome
-        assert "burla cluster stop" in str(outcome) and "burla nodes list" in str(outcome), str(outcome)
+        assert isinstance(outcome, eb.CloudSpendStop), outcome
+        # §6.4: after the backstop Prove stops the cluster itself, instead of telling the reader to
+        # type the software's commands; the stop ran, and no command of the software's is named.
+        assert "burla" not in str(outcome).lower(), str(outcome)
+        names = [e["route"] for e in fake.world.management()]
+        assert "POST /v1/management/cluster/stop" in names and fake.world.listed_nodes() == [], names
         entries = [json.loads(line) for line in notes.read_text(encoding="utf-8").splitlines()]
         (who,) = [e for e in entries if "pid" in e]
         sigints = [e["time"] for e in entries if e.get("signal") == int(signal.SIGINT)]
@@ -1643,7 +1694,7 @@ def test_dollar6_open_before_the_launcher_close_after_and_earlier_lines_untouche
     ledger = tmp_path / "ledger.jsonl"
     before = _seed_ledger(ledger, PRIOR)
     fake.watch_ledger(ledger)
-    p, store, opts, outcome = burla_run(fake, tmp_path)
+    p, store, opts, outcome = cloud_run(fake, tmp_path)
     assert_complete(outcome, store, p)
     snapshots = sorted(fake.state.glob("ledger-at-launch-*"))
     assert len(snapshots) == 1
@@ -1660,7 +1711,10 @@ def test_dollar6_open_before_the_launcher_close_after_and_earlier_lines_untouche
     assert closed["ended"] == "complete" and closed["end"] >= opened["start"] and closed["charge"] >= 0
 
 
-def test_dollar7_a_run_that_never_closed_blocks_the_next_preflight(fake: Fake, tmp_path: Path) -> None:
+def test_dollar7_a_run_that_never_closed_counts_its_whole_stop_until_it_is_closed(fake: Fake, tmp_path: Path) -> None:
+    """§6.6 (RB-22): an open line with no close no longer blocks the next sweep (Prove closes the
+    lines its own record names, and there is no hand-closing); until it is closed it counts as
+    having spent its whole stop, in the plan's total and in the run's recorded total."""
     ledger = tmp_path / "ledger.jsonl"
     crashed = {**PRIOR[0], "run_id": "crashed-run-7e2", "stop_cost": 1.25}
     before = _seed_ledger(ledger, [*PRIOR, crashed])
@@ -1668,26 +1722,33 @@ def test_dollar7_a_run_that_never_closed_blocks_the_next_preflight(fake: Fake, t
     store = Store(tmp_path / "store")
     p = make_plan(spec_path, store, PLAIN)
     o = options(tmp_path, stop_cost=50.0, max_cost=100.0)
-    for call in (lambda: eb.preflight_burla(p, PLAIN, o), lambda: eb.run_burla(p, PLAIN, store, options=o)):
-        with pytest.raises(eb.BurlaBackendError) as refused:
-            call()
-        # The run with an open line and no close is named; the closed one beside it is not.
-        message = str(refused.value).replace(str(tmp_path), "")
-        assert "crashed-run-7e2" in message and "prior-run" not in message, message
+    text = eb.preflight_cloud(p, PLAIN, o, masked=MASKED)
+    cost = next(line for line in text.splitlines() if line.startswith("Cost: "))
+    assert f"ledger {ledger} $1.62 so far" in cost, cost
     assert ledger.read_bytes() == before and store.runs() == [] and fake.launchers() == []
-    # The plan the command line keeps on screen when it refuses: the unclosed run counts as
-    # having spent its whole stop, beside the closed run's charge.
-    cli_spec = write_sweep(tmp_path / "cli", burla=burla_table(ledger=str(ledger), stop_cost=50.0, max_cost=100.0))
-    code, out, err = run_cli(sweep_argv(cli_spec.parent, cli_spec))
+    # The plan the command line prints: the unclosed run counts as having spent its whole stop,
+    # beside the closed run's charge.
+    cli_spec = write_sweep(tmp_path / "cli", cloud=cloud_fields(ledger=str(ledger), stop_cost=50.0, max_cost=100.0))
+    code, out, err = run_cli([*sweep_argv(cli_spec.parent, cli_spec), "--dry-run"])
     cost = [line for line in out.splitlines() if line.strip().startswith("Cost: ")]
-    assert code == 1 and len(cost) == 1 and f"ledger {ledger} $1.62 so far" in cost[0], (code, out, err)
+    assert code == 0 and len(cost) == 1 and f"ledger {ledger} $1.62 so far" in cost[0], (code, out, err)
     assert ledger.read_bytes() == before and fake.launchers() == []
+    # A run goes ahead and records the unclosed run's stop in the ledger's total; the line no
+    # record of Prove's names is left as it is.
+    assert_complete(eb.run_cloud(p, PLAIN, store, options=o, account=ACCOUNT), store, p)
+    assert abs(store.manifest(p.run_id).environment["cloud"]["ledger_total"] - (0.37 + 1.25)) < 1e-9
+    assert ledger.read_bytes().startswith(before)
+    assert "crashed-run-7e2" in eb._Ledger(ledger).unclosed()  # noqa: SLF001
+    first_charge = close_of(ledger, p.run_id)["charge"]
     with ledger.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps({"event": "close", "run_id": "crashed-run-7e2", "end": 3.0, "charge": 0.2,
                              "ended": "error"}) + "\n")
-    # Closed by hand, it no longer blocks, and the run records the two charges as the ledger's total.
-    assert_complete(eb.run_burla(p, PLAIN, store, options=o), store, p)
-    assert abs(store.manifest(p.run_id).environment["burla"]["ledger_total"] - (0.37 + 0.2)) < 1e-9
+    # Closed, it counts its charge instead.
+    store2 = Store(tmp_path / "store2")
+    p2 = make_plan(spec_path, store2, PLAIN)
+    assert_complete(eb.run_cloud(p2, PLAIN, store2, options=o, account=ACCOUNT), store2, p2)
+    total = store2.manifest(p2.run_id).environment["cloud"]["ledger_total"]
+    assert abs(total - (0.37 + 0.2 + first_charge)) < 1e-9, total
 
 
 def test_dollar8_the_ledger_reads_high_by_both_allowances_per_run(fake: Fake, tmp_path: Path) -> None:
@@ -1696,7 +1757,7 @@ def test_dollar8_the_ledger_reads_high_by_both_allowances_per_run(fake: Fake, tm
             "max_cost": 5000.0}
     runs = []
     for name in ("first", "second"):
-        p, store, opts, outcome = burla_run(fake, tmp_path / name, ledger=tmp_path / "ledger.jsonl", **over)
+        p, store, opts, outcome = cloud_run(fake, tmp_path / name, ledger=tmp_path / "ledger.jsonl", **over)
         assert_complete(outcome, store, p)
         runs.append(p.run_id)
     lines = ledger_lines(tmp_path / "ledger.jsonl")
@@ -1710,9 +1771,9 @@ def test_dollar8_the_ledger_reads_high_by_both_allowances_per_run(fake: Fake, tm
         assert abs(closed["charge"] - want) < 0.005, (closed["charge"], want)
         assert 2 * 3600.0 * window / 3600 > 0.005, "the window is too short to show in the charge"
     # The ledger's total as the next run reads it before it starts, and records it in its manifest.
-    p, store, opts, outcome = burla_run(fake, tmp_path / "third", ledger=tmp_path / "ledger.jsonl", **over)
+    p, store, opts, outcome = cloud_run(fake, tmp_path / "third", ledger=tmp_path / "ledger.jsonl", **over)
     assert_complete(outcome, store, p)
-    total = store.manifest(p.run_id).environment["burla"]["ledger_total"]
+    total = store.manifest(p.run_id).environment["cloud"]["ledger_total"]
     floor = 2 * 3600.0 * (sum(windows) / 3600 + (1.5 + 2.5) / 60)
     assert total >= floor
     assert abs((total - floor) - 2 * 3600.0 * (1.5 + 2.5) / 60) < 0.005
@@ -1727,16 +1788,16 @@ def test_dollar9_the_preflight_shows_the_declaration_and_the_manifest_keeps_it(f
     store = Store(tmp_path / "store")
     p = make_plan(spec_path, store, PLAIN)
     o = options(tmp_path, **over)
-    estimate = eb.estimate_burla_cost(p, o)
-    text = eb.preflight_burla(p, PLAIN, o)
+    estimate = eb.estimate_cloud_cost(p, o)
+    text = eb.preflight_cloud(p, PLAIN, o, masked=MASKED)
     cluster = next(line for line in text.splitlines() if line.startswith("Cluster: "))
     cost = next(line for line in text.splitlines() if line.startswith("Cost: "))
     for needle in ("3", "m7i.4xlarge", "7"):
         assert needle in cluster, (needle, cluster)
     for needle in ("0.417", "fixture desk, 2026-09-27", f"{estimate:.2f}", "0.37", "2.75", "4.25", str(ledger)):
         assert needle in cost, (needle, cost)
-    assert_complete(eb.run_burla(p, PLAIN, store, options=o), store, p)
-    kept = store.manifest(p.run_id).environment["burla"]
+    assert_complete(eb.run_cloud(p, PLAIN, store, options=o, account=ACCOUNT), store, p)
+    kept = store.manifest(p.run_id).environment["cloud"]
     want = {"nodes": 3, "machine_type": "m7i.4xlarge", "slots_per_node": 7, "usd_per_node_hour": 0.417,
             "price_asof": "fixture desk, 2026-09-27", "stop_cost": 2.75, "max_cost": 4.25}
     for key, value in want.items():
@@ -1761,7 +1822,7 @@ def new_run(store_root: Path, before: set[str]) -> str:
     return added.pop()
 
 
-def sweep_argv(root: Path, spec: Path, target: str = PLAIN, *extra: str, backend: str = "burla") -> list[str]:
+def sweep_argv(root: Path, spec: Path, target: str = PLAIN, *extra: str, backend: str = "cloud") -> list[str]:
     # PF4.30: no lone condition of these small designs can be flagged, which any accepted change
     # below 1 refuses; --max-mde 1 admits them.
     return ["--store", str(root / "store"), "sweep", str(spec), "--target", target, "--backend", backend,
@@ -1769,7 +1830,7 @@ def sweep_argv(root: Path, spec: Path, target: str = PLAIN, *extra: str, backend
 
 
 def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) -> None:
-    spec = write_sweep(tmp_path, replicates=3, burla=burla_table(stop_cost=5.0, max_cost=20.0))
+    spec = write_sweep(tmp_path, replicates=3, cloud=cloud_fields(stop_cost=5.0, max_cost=20.0))
     ledger = tmp_path / "ledgers" / "step.jsonl"
     for flag in (["--concurrency", "2"], ["--app-name", "x"], ["--image", "gpu"]):
         code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, *flag))
@@ -1783,7 +1844,7 @@ def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) 
     opened = open_of(ledger, run_id)
     assert opened["max_cost"] == 7.5
     p = make_plan(spec, Store(tmp_path / "other"), PLAIN)
-    want = eb.estimate_burla_cost(p, dataclasses.replace(eb.BurlaOptions.from_sweep_file(spec),
+    want = eb.estimate_cloud_cost(p, dataclasses.replace(eb.CloudOptions.from_sweep_file(spec),
                                                          est_seconds_per_episode=0.002, batch_size=1))
     assert abs(opened["estimate"] - want) < 1e-12
     assert Store(tmp_path / "store").manifest(run_id).environment["infra_retries"] == 3
@@ -1804,8 +1865,8 @@ def test_p1_the_flag_its_refusals_and_its_overrides(fake: Fake, tmp_path: Path) 
     assert code == 1, "--backend local changed"
 
 
-def test_p1_an_unknown_burla_field_is_a_refusal(fake: Fake, tmp_path: Path) -> None:
-    spec = write_sweep(tmp_path, burla=burla_table(nodez=4))
+def test_p1_an_unknown_cloud_field_is_a_refusal(fake: Fake, tmp_path: Path) -> None:
+    spec = write_sweep(tmp_path, cloud=cloud_fields(nodez=4))
     code, out, err = run_cli(sweep_argv(tmp_path, spec))
     # A refusal exits 1.
     assert code == 1 and "nodez" in err, err
@@ -1813,11 +1874,11 @@ def test_p1_an_unknown_burla_field_is_a_refusal(fake: Fake, tmp_path: Path) -> N
 
 def test_p2_the_target_resolves_here_first_with_the_local_refusal(fake: Fake, tmp_path: Path) -> None:
     bad = "bu_targets.nope:rollout"
-    good = write_sweep(tmp_path / "good", burla=burla_table())
-    # PF3.3: an unknown key in [burla] is refused when the spec is read, before the target; the
-    # [burla] table is broken here in a way strict key checking does not see (nodes, a known field,
+    good = write_sweep(tmp_path / "good", cloud=cloud_fields())
+    # PF3.3: an unknown key in [cloud] is refused when the spec is read, before the target; the
+    # [cloud] table is broken here in a way strict key checking does not see (nodes, a known field,
     # out of range), so the test says the target resolves before the table's values are checked.
-    broken = write_sweep(tmp_path / "broken", burla=burla_table(nodes=0))
+    broken = write_sweep(tmp_path / "broken", cloud=cloud_fields(nodes=0))
     local = run_cli(sweep_argv(tmp_path / "good", good, bad, backend="local"))
     # A refusal exits 1.
     assert local[0] == 1
@@ -1839,11 +1900,11 @@ def test_p3_the_bundle_must_carry_the_target_and_its_local_imports(fake: Fake, t
     store = Store(tmp_path / "store")
     for target, packages, missing in ((PLAIN, (), "bu_targets"), (USES_HELPER, ("bu_targets",), "bu_helper")):
         p = make_plan(spec_path, store, target)
-        with pytest.raises(eb.BurlaBackendError) as refused:
-            eb.preflight_burla(p, target, options(tmp_path, packages=packages))
+        with pytest.raises(eb.CloudBackendError) as refused:
+            eb.preflight_cloud(p, target, options(tmp_path, packages=packages), masked=MASKED)
         assert missing in str(refused.value)
     p = make_plan(spec_path, store, USES_HELPER)
-    eb.preflight_burla(p, USES_HELPER, options(tmp_path, packages=("bu_targets", "bu_helper")))
+    eb.preflight_cloud(p, USES_HELPER, options(tmp_path, packages=("bu_targets", "bu_helper")), masked=MASKED)
     assert fake.launchers() == []
 
 
@@ -1859,20 +1920,20 @@ def test_p3_a_venv_holding_a_local_install_a_worker_would_lack_is_refused(fake: 
     monkeypatch.syspath_prepend(str(dists))
     spec_path = write_sweep(tmp_path)
     p = make_plan(spec_path, Store(tmp_path / "store"), PLAIN)
-    with pytest.raises(eb.BurlaBackendError) as refused:
-        eb.preflight_burla(p, PLAIN, options(tmp_path))
+    with pytest.raises(eb.CloudBackendError) as refused:
+        eb.preflight_cloud(p, PLAIN, options(tmp_path), masked=MASKED)
     message = str(refused.value)
     assert name.replace("-", "_") in message or name in message, message
     assert "bu_fixture_editable" not in message and "bu-fixture-editable" not in message
     shutil.rmtree(dists / f"{name.replace('-', '_')}-1.0.dist-info")
     importlib.invalidate_caches()
-    eb.preflight_burla(p, PLAIN, options(tmp_path))
+    eb.preflight_cloud(p, PLAIN, options(tmp_path), masked=MASKED)
 
 
 def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake: Fake, tmp_path: Path,
                                                                             monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BU_DRIFT_MARKER", "host-value-4c7e")
-    spec = write_sweep(tmp_path / "drift", burla=burla_table())
+    spec = write_sweep(tmp_path / "drift", cloud=cloud_fields())
     code, out, err = run_cli(sweep_argv(spec.parent, spec, DRIFTING))
     # A refusal exits 1.
     assert code == 1, (out, err)
@@ -1880,14 +1941,14 @@ def test_p4_a_job_0_that_differs_in_the_workers_view_is_refused_and_printed(fake
     assert fake.launchers() == [] and not (spec.parent / "ledgers").exists()
     assert Store(spec.parent / "store").runs() == []
     monkeypatch.delenv("BU_DRIFT_MARKER")
-    spec2 = write_sweep(tmp_path / "same", burla=burla_table())
+    spec2 = write_sweep(tmp_path / "same", cloud=cloud_fields())
     code, out, err = run_cli(sweep_argv(spec2.parent, spec2, DRIFTING))
     assert code == 0, err
 
 
 # PF4.22: the preflight block prints no "MDE at N=..." line; the plan's one limit is the gate's
 # line. The other lines keep this order.
-PREFLIGHT_ORDER = ["Backend: burla", "Cluster: ", "Bundle: ", "Worker view: ", "Traffic: ", "Cost: ", "Chaos: "]
+PREFLIGHT_ORDER = ["Backend: cloud", "Cluster: ", "Bundle: ", "Worker view: ", "Traffic: ", "Cost: ", "Chaos: "]
 
 
 def _git_package(root: Path, name: str) -> Path:
@@ -1909,12 +1970,13 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     store = Store(tmp_path / "store")
     p = make_plan(spec_path, store, PLAIN)
     dirty_options = options(tmp_path, packages=("bu_targets", "bu_dirty"))
-    text = eb.preflight_burla(p, PLAIN, dirty_options)
+    text = eb.preflight_cloud(p, PLAIN, dirty_options, masked=MASKED)
     lines = text.splitlines()
     positions = [next(i for i, line in enumerate(lines) if line.startswith(prefix)) for prefix in PREFLIGHT_ORDER]
     assert positions == sorted(positions), lines
     cluster = lines[positions[1]]
-    assert "grow off" in cluster, cluster
+    # §8: the cluster line says Prove starts the nodes and stops them (0.2.1 said "grow off").
+    assert "and stops them when the sweep ends" in cluster, cluster
     bundle_line = lines[positions[2]]
     for name in ("poisson_prove", "bu_targets", "bu_dirty"):
         assert name in bundle_line, (name, bundle_line)
@@ -1924,19 +1986,20 @@ def test_p5_the_preflight_prints_its_lines_in_order(fake: Fake, tmp_path: Path, 
     assert "uncommitted changes" in bundle_line
     # PF4.22: no "MDE at N=" line in the preflight block.
     assert not any(line.startswith("MDE at N=") for line in lines), lines
-    plain = eb.preflight_burla(p, PLAIN, options(tmp_path, packages=("bu_targets",)))
+    plain = eb.preflight_cloud(p, PLAIN, options(tmp_path, packages=("bu_targets",)), masked=MASKED)
     plain_bundle = next(line for line in plain.splitlines() if line.startswith("Bundle: "))
     dirty = bool(_expected_package("bu_targets")["dirty"])
     assert ("uncommitted changes" in plain_bundle) == dirty, (dirty, plain_bundle)
     # The sha256 the pre-flight prints is the one of the bundle the run then ships.
     monkeypatch.setattr(eb, "_launcher_argv", fake.keeping_argv)
-    assert_complete(eb.run_burla(p, PLAIN, store, options=dirty_options), store, p)
+    assert_complete(eb.run_cloud(p, PLAIN, store, options=dirty_options, account=ACCOUNT), store, p)
     (shipped,) = fake.bundles()
-    assert f"sha256 {hashlib.sha256(shipped).hexdigest()}" in bundle_line, bundle_line
+    # Rule 10 and §8: the digest at 12 hex characters in text (the manifest keeps it whole, W1).
+    assert f"sha256 {hashlib.sha256(shipped).hexdigest()[:12]}…" in bundle_line, bundle_line
 
 
-def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None:
-    spec = write_sweep(tmp_path, replicates=3, burla=burla_table())
+def test_p6_a_cloud_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None:
+    spec = write_sweep(tmp_path, replicates=3, cloud=cloud_fields())
     store_root = tmp_path / "store"
     code, out, err = run_cli(sweep_argv(tmp_path, spec, PLAIN, backend="local"))
     assert code == 0, err
@@ -1948,7 +2011,7 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
     # PF2: runs rows lead with # and the name, so the row is found by
     # the id, and the status and backend are the two cells after it.
     assert code == 0 and any(
-        line.split()[line.split().index(remote):][:3] == [remote, "complete", "burla"]
+        line.split()[line.split().index(remote):][:3] == [remote, "complete", "cloud"]
         for line in out.splitlines() if remote in line.split()
     ), out
     assert run_cli(["--store", str(store_root), "diff", local, remote, "--event", "fell"])[0] == 0
@@ -1969,33 +2032,36 @@ def test_p6_a_burla_run_is_read_like_any_run(fake: Fake, tmp_path: Path) -> None
 def test_p7_the_backends_refusals_exit_as_refusals(fake: Fake, tmp_path: Path) -> None:
     ledger = tmp_path / "guard" / "ledgers" / "step.jsonl"
     _seed_ledger(ledger, PRIOR)
-    guard = write_sweep(tmp_path / "guard", burla=burla_table(stop_cost=0.3, max_cost=0.3))
+    guard = write_sweep(tmp_path / "guard", cloud=cloud_fields(stop_cost=0.3, max_cost=0.3))
     code, out, err = run_cli(sweep_argv(guard.parent, guard))
     # A refusal exits 1.
     assert code == 1 and str(ledger) in err, err
     fake.script(attempts=[{"hang_after": 1}])
+    stop_cost = stop_at(3.0, usd_per_node_hour=360.0)
     stop = write_sweep(tmp_path / "stop", replicates=3,
-                       burla=burla_table(usd_per_node_hour=360.0, stop_cost=0.3, max_cost=1.0))
+                       cloud=cloud_fields(usd_per_node_hour=360.0, stop_cost=stop_cost, max_cost=stop_cost + 1.0))
     code, out, err = run_cli(sweep_argv(stop.parent, stop))
     assert code == 3 and str(stop.parent / "ledgers" / "step.jsonl") in err, err
     fake.script(default={"refuse": "NoNodes"})
-    refused = write_sweep(tmp_path / "refused", burla=burla_table())
+    refused = write_sweep(tmp_path / "refused", cloud=cloud_fields())
     code, out, err = run_cli(sweep_argv(refused.parent, refused))
     # PF4.49: under --max-mde 1 this design, in which no lone condition can be flagged, gets the
-    # gate's facts as a note: line first; the backend's refusal is the next.
-    rest = "".join(line for line in err.splitlines(keepends=True) if not line.startswith("note: "))
+    # gate's facts as a note: line first; the backend's refusal is the next. §9: the cluster's own
+    # progress lines (starting, ready, stopping, stopped) are on stderr too, around the job.
+    progress = ("note: ", "starting  ", "ready  ", "stopping  ", "stopped  ")
+    rest = "".join(line for line in err.splitlines(keepends=True) if not line.startswith(progress))
     assert code == 3 and rest.startswith("error: "), err
 
 
 # ---------- I: imports and surface ----------
 
 
-def test_i1_nothing_imports_burla_at_import_time() -> None:
+def test_i1_nothing_imports_the_cluster_software_at_import_time() -> None:
     probe = (
         "import importlib.util, sys\n"
         f"sys.path.insert(0, {str(FIXTURES)!r})\n"
         "assert importlib.util.find_spec('burla') is not None\n"
-        "import poisson_prove, poisson_prove.cli, poisson_prove.executor_burla\n"
+        "import poisson_prove, poisson_prove.cli, poisson_prove.executor_cloud\n"
         "print('burla' in sys.modules)\n"
     )
     done = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
@@ -2005,13 +2071,13 @@ def test_i1_nothing_imports_burla_at_import_time() -> None:
 
 
 def test_i3_the_public_surface_is_the_eight_names() -> None:
-    assert executor_burla.__all__ == BURLA_ALL
+    assert executor_cloud.__all__ == CLOUD_ALL
 
 
-def test_i5_the_burla_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None:
-    # PF9: Burla ships as an experimental backend with a [burla] extra
-    # pinning the client the backend runs; what it pins is test_pf9_backends.py's.
+def test_i5_the_cloud_extra_joins_the_extras_and_cloudpickle_joins_dev() -> None:
+    # PF9: the cloud backend ships with a [cloud] extra (RB-3) pinning the client the backend
+    # runs; what it pins is test_pf9_backends.py's and test_rb_cloud_names.py's.
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     extras = project["optional-dependencies"]
-    assert "burla" in extras
+    assert "cloud" in extras
     assert any(req.split("=")[0].split(">")[0].split("<")[0].strip().lower() == "cloudpickle" for req in extras["dev"])
