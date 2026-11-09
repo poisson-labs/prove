@@ -14,7 +14,7 @@ refused before anything runs. On a terminal it then asks `[y/N]`; piped or in CI
 ```console
 $ poisson-prove sweep --help
 usage: poisson-prove sweep [-h] [--target pkg.module:rollout] [--replicates N]
-                           [--backend {local,modal,burla}]
+                           [--backend {local,modal,cloud}]
                            [--salt HEX | --pair-with RUN | --resume [RUN]]
                            [--name TEXT] [--episode-timeout S]
                            [--max-rollouts N] [--batch-size N]
@@ -40,9 +40,10 @@ options:
                         spec's target (default: the spec's target)
   --replicates N        replicates per condition for this run, recorded in its
                         manifest (default: the spec's replicates)
-  --backend {local,modal,burla}
-                        where the rollouts run: local, modal or burla (burla
-                        is experimental; default: local)
+  --backend {local,modal,cloud}
+                        where the rollouts run: local (this machine), modal,
+                        or cloud (your own cloud account; Prove starts the
+                        cluster and stops it after) (default: local)
   --salt HEX            the run salt seeds are derived from (default: a fresh
                         one)
   --pair-with RUN       inherit that run's salt, so the two runs share their
@@ -69,7 +70,7 @@ options:
                         (default: pretty on a terminal, plain otherwise)
   --debug               also print the traceback of an unexpected failure
 
-remote backends (override the [modal] table; --infra-retries, --max-cost and --est-seconds also override [burla]):
+remote backends (override the [modal] table; --infra-retries, --max-cost and --est-seconds also override [cloud]):
   --concurrency N       containers at once (default: the table's)
   --infra-retries N     retries per batch (default: the table's)
   --max-cost USD        refuse before anything starts when the estimate is
@@ -94,7 +95,8 @@ examples:
   sweep a changed agent against the same spec.
 - `--replicates N` overrides the spec's replicates for this run; the manifest records what ran.
 - `--backend` chooses where the rollouts run: `local` (this machine, the default), `modal` or
-  `burla` (experimental). See [Backends](../backends.md).
+  `cloud` (your own cloud account; Prove starts the cluster and stops it after). See
+  [Backends](../backends.md).
 - `--salt HEX` sets the run salt every seed is derived from; two runs with one salt share their
   seeds. `--pair-with RUN` takes another run's salt, which is how you pair a run with an earlier
   one: `--pair-with latest`. `--resume [RUN]` continues a partial run where it stopped; alone, the
@@ -118,7 +120,7 @@ examples:
   `--json`" below).
 - `--concurrency N`, `--infra-retries N`, `--max-cost USD`, `--est-seconds S`, `--app-name NAME`
   and `--image SECTION` override the `[modal]` table for one run; `--infra-retries`, `--max-cost`
-  and `--est-seconds` also override `[burla]`. `--max-cost` refuses a sweep whose estimate is above
+  and `--est-seconds` also override `[cloud]`. `--max-cost` refuses a sweep whose estimate is above
   it before anything starts.
 - `--store PATH` is the store folder, `./prove-runs` unless `$POISSON_PROVE_STORE` says otherwise;
   `--plain` prints plain text on a terminal too; `--debug` adds the traceback of an unexpected
