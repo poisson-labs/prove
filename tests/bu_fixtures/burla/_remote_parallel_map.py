@@ -145,6 +145,21 @@ def _head_refusal() -> BaseException | None:
     return None
 
 
+def _no_ready_node() -> BaseException | None:
+    """With the fake's cluster in use (``cluster.json`` exists), a call reaches no node unless the
+    head it names is alive and a node is ready: 1.8.4's ``NoNodes("Zero nodes are ready. Is your
+    cluster turned on?")`` with ``grow=False`` (``_remote_parallel_map.py``, the 1.8.4 facts §1)."""
+    if not os.path.exists(os.path.join(_fake.state_dir(), "cluster.json")):
+        return None
+    from burla import _cluster
+
+    url = os.environ.get("BURLA_CLUSTER_DASHBOARD_URL", "")
+    ready = [n for n in _cluster.snapshot().get("nodes", []) if n.get("status") in ("READY", "RUNNING")]
+    if _cluster.head_for(url) is None or not ready:
+        return NoNodes("Zero nodes are ready. Is your cluster turned on?")
+    return None
+
+
 def _edit_rows(value: Any, script: dict[str, Any]) -> Any:
     """``strip_chaos_record`` and ``alter_record``, applied to Prove's ``(k, rows, failure)``."""
     if not (script.get("strip_chaos_record") or script.get("alter_record")):
@@ -350,6 +365,9 @@ def remote_parallel_map(
                 raise AllNodesBusy()
             if script.get("refuse") and script.get("refuse_after") is None:
                 raise _refusal(str(script["refuse"]), token, len(inputs))
+            unready = _no_ready_node()
+            if unready is not None:
+                raise unready
             pool = _fake.workers()
             parallelism = min(len(pool), max_parallelism or len(inputs), len(inputs))
             dispatch = _Dispatch(fn_bytes, inputs, pool, parallelism, call_no, script)
