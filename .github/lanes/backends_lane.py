@@ -3,7 +3,8 @@
     python .github/lanes/backends_lane.py BASE_SHA HEAD_SHA
 
 The backend tests run when a change touches backend code: the Modal and Burla executors, the
-shared runner they drive, the fake Burla client under ``tests/bu_fixtures/``, a test file of the
+shared runner they drive, the command line and the core's operations (the cluster's life is tested
+only here, and its stop on an interrupt is in those two), the fake Burla client under ``tests/bu_fixtures/``, a test file of the
 gate's ``backends`` entry (``$SHARDS``, read with ``shards.py``), or the version the requirements
 resolve to of Modal or Burla. Versions are resolved the way ``math_lane.py`` resolves them, the
 base's ``pyproject.toml`` and the head's at the same moment. The nightly run runs the backend tests
@@ -32,6 +33,10 @@ SOURCES = (
     "src/poisson_prove/_prices_cloud.py",
     "src/poisson_prove/_cloud_submit.py",
     "src/poisson_prove/executor_modal.py",
+    # The cluster's life is tested only in the backends job, and its stop on an interrupt, its
+    # exit codes and its lines are in these two.
+    "src/poisson_prove/cli.py",
+    "src/poisson_prove/core/_ops.py",
 )
 FAKES = "tests/bu_fixtures/"
 LIBRARIES = ("modal", "burla")
