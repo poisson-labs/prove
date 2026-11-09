@@ -519,10 +519,11 @@ def _build_parser(io: _IO) -> _Parser:
     )
     sweep.add_argument(
         "--backend",
-        choices=("local", "modal", "burla"),
+        choices=("local", "modal", "cloud", "burla"),
+        metavar="{local,modal,cloud}",
         default="local",
-        help="where the rollouts run: local, modal or burla (burla is experimental; "
-        "default: local)",
+        help="where the rollouts run: local (this machine), modal, or cloud (your own cloud "
+        "account; Prove starts the cluster and stops it after) (default: local)",
     )
     identity = sweep.add_mutually_exclusive_group()
     identity.add_argument(
@@ -576,7 +577,7 @@ def _build_parser(io: _IO) -> _Parser:
     _add_json_option(sweep, "the plan and the result")
     remote = sweep.add_argument_group(
         "remote backends (override the [modal] table; --infra-retries, --max-cost and "
-        "--est-seconds also override [burla])"
+        "--est-seconds also override [cloud])"
     )
     remote.add_argument(
         "--concurrency", type=int, metavar="N", help="containers at once (default: the table's)"
@@ -1366,10 +1367,17 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
     )
     try:
         with _notes(io):
-            if ns.verb == "sweep" and ns.backend == "burla" and os.name == "nt":
-                # Burla's launcher needs fcntl, select on pipes and process groups.
+            if ns.verb == "sweep" and ns.backend == "burla":
+                raise _Usage(
+                    "--backend burla is now --backend cloud, and Prove starts and stops the "
+                    "cluster itself",
+                    [f"{_COMMAND} where cloud"],
+                )
+            if ns.verb == "sweep" and ns.backend == "cloud" and os.name == "nt":
+                # The cloud backend's launcher needs fcntl, select on pipes and process groups.
                 raise _Refusal(
-                    "the burla backend cannot run on Windows; run it from macOS or Linux"
+                    "your cloud account is not available on Windows yet; run the sweep from "
+                    "macOS or Linux"
                 )
             store = core.open_store(getattr(ns, "store", None), verb=ns.verb)
             for note in store.notes:
