@@ -3,12 +3,13 @@
     python .github/lanes/backends_lane.py BASE_SHA HEAD_SHA
 
 The backend tests run when a change touches backend code: the Modal and Burla executors, the
-shared runner they drive, the command line and the core's operations (the cluster's life is tested
-only here, and its stop on an interrupt is in those two), the fake Burla client under ``tests/bu_fixtures/``, a test file of the
-gate's ``backends`` entry (``$SHARDS``, read with ``shards.py``), or the version the requirements
-resolve to of Modal or Burla. Versions are resolved the way ``math_lane.py`` resolves them, the
-base's ``pyproject.toml`` and the head's at the same moment. The nightly run runs the backend tests
-whatever changed, so a change that reaches a backend through another file is caught there.
+shared runner they drive, the command line and the core's operations (the cluster's life is
+tested only here, and its stop on an interrupt is in those two), the fake Burla client under
+``tests/bu_fixtures/``, a test file of the gate's ``backends`` entry (``$SHARDS``, read with
+``shards.py``), or the version the requirements resolve to of Modal or Burla. Versions are
+resolved the way ``math_lane.py`` resolves them, the base's ``pyproject.toml`` and the head's at
+the same moment. The nightly run runs the backend tests whatever changed, so a change that
+reaches a backend through another file is caught there.
 
 Writes ``backends=true`` or ``backends=false`` to ``$GITHUB_OUTPUT`` and the reasons to the job
 summary.
