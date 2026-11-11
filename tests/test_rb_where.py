@@ -576,7 +576,7 @@ def test_w4_w9_modal_is_asked_of_modals_client_and_never_for_its_secret(
     example(w)
     done = run(w, "where", "modal", "--max-cost", "5", "--yes")
     assert done.code == 0, done
-    assert loaded(w.spec)["modal"] == {"max_cost": 5.0}, loaded(w.spec)
+    assert loaded(w.spec)["modal"] == {"max_cost": 5.0, "est_seconds_per_episode": 1.0}, loaded(w.spec)
     assert "  wrote  [modal] into prove.toml" in done.out.splitlines(), done
     bare = run(w, "where")
     assert bare.code == 0, bare
@@ -722,7 +722,7 @@ def test_w5_answer_2_is_modal(w: CloudWorld, monkeypatch: pytest.MonkeyPatch) ->
     done = asked(w, "init", "--example", typed="2\n4\n")
     assert done.code == 0, done
     assert "refuse above" in done.err, done.err
-    assert loaded(w.spec)["modal"] == {"max_cost": 4.0}, loaded(w.spec)
+    assert loaded(w.spec)["modal"] == {"max_cost": 4.0, "est_seconds_per_episode": 1.0}, loaded(w.spec)
     assert "  wrote  [modal] into prove.toml" in done.out.splitlines(), done
     assert done.nexts == ["next: modal setup"], done
 

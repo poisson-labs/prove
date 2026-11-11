@@ -537,10 +537,14 @@ def cloud_answers(existing: Mapping[str, Any], given: Mapping[str, Any]) -> dict
 
 def modal_answers(existing: Mapping[str, Any], given: Mapping[str, Any]) -> dict[str, Any]:
     """The ``[modal]`` table's own keys (its image tables stay in the spec as they are), with
-    the cap when one is given."""
+    the cap when one is given. A cap is held against an estimate, and Modal's estimate needs
+    the time one rollout takes, so a table with a cap and no such time gets the default the
+    cloud table gets; the reader sets it from a run on this machine."""
     answers = {k: v for k, v in existing.items() if not isinstance(v, Mapping)}
     if given.get("max_cost") is not None:
         answers["max_cost"] = float(given["max_cost"])
+    if answers.get("max_cost") is not None:
+        answers.setdefault("est_seconds_per_episode", EST_SECONDS)
     return answers
 
 
@@ -605,16 +609,6 @@ def ready(choice: str, answers: Mapping[str, Any] | None = None) -> Readiness:
             fix = exc.nexts[0] if exc.nexts else None
             return Readiness((Check("signed in", str(exc), False, fix),))
         checks = [Check("signed in", "Modal", True)]
-        if held.get("max_cost") is not None and held.get("est_seconds_per_episode") is None:
-            checks.append(
-                Check(
-                    "note",
-                    "[modal] holds max_cost and no est_seconds_per_episode, so a sweep has no "
-                    "estimate to hold against the cap and is refused; add "
-                    "est_seconds_per_episode to [modal], from a run on this machine",
-                    True,
-                )
-            )
         return Readiness(tuple(checks))
     try:
         found = _where_checks.check_cloud(_options(held))

@@ -83,7 +83,8 @@ examples:
   ceiling is the nodes times the machine's vCPUs.
 - `--stop-cost USD` is the spend at which Prove stops the sweep, $2 by default.
 - `--max-cost USD` is the estimate above which a sweep is refused, $3 by default on a cloud
-  account. With `modal` it sets the Modal table's cap, which has no default.
+  account. With `modal` it sets the Modal table's cap, which has no default, and the table then
+  also gets `est_seconds_per_episode = 1.0`.
 - `--yes` takes the default for everything no option gives, and asks nothing.
 - `--json` prints the answer as one JSON document, `poisson-prove.where/1`.
 - `--store PATH` is the store folder. `where` reads it only to name the run of a cluster an
@@ -218,11 +219,17 @@ where  Modal; signed in, ready
   next: poisson-prove sweep --dry-run
 ```
 
-With `--yes` and no `--max-cost`, the table holds no cap. A cap needs an estimate to hold against
-it, and Modal's estimate needs `est_seconds_per_episode`, which `where` does not write into
-`[modal]`. So after `where modal --max-cost 5`, add `est_seconds_per_episode` to the table
-yourself, from a run on this machine. Until you do, `where` prints a `note:` saying so, and a
-sweep is refused for having a cap and no estimate.
+With `--yes` and no `--max-cost`, the table holds no cap. With a cap, `where modal` also writes
+`est_seconds_per_episode = 1.0`, the seconds one rollout takes, because a cap is held against an
+estimate and Modal's estimate needs that time. It is the same default the cloud table gets, with
+the same advice: set it from a run on this machine before you trust the estimate.
+
+<!-- docs-check: run -->
+```toml
+[modal]
+max_cost = 5.0
+est_seconds_per_episode = 1.0
+```
 
 ### A 0.2 spec's `[burla]` table
 
