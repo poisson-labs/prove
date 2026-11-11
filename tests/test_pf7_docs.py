@@ -567,7 +567,7 @@ README_SECTIONS = {
         "What the numbers claim, and what they do not", "docs/concepts/what-the-statistics-claim.md"),
     "Where Prove sits beside Trace and Tasks": _link_section(
         "Where Prove sits beside Trace and Tasks", "docs/with-trace-and-tasks.md", "Trace", "Tasks"),
-    "Backends": _link_section("Backends", "docs/backends.md", "Modal", "Burla", "experimental"),
+    "Backends": _link_section("Backends", "docs/backends.md", "Modal", "--backend cloud", "poisson-prove where"),
     "Python": _link_section("Python", "docs/python.md"),
     "Development": _link_section("Development", "CONTRIBUTING.md"),
     "Licence": _link_section("Licence", "LICENSE", "MIT"),
