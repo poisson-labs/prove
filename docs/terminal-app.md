@@ -50,7 +50,7 @@ task_id --y tool_fail_rate
   run         mock-agent 2026-10-26 a      complete  1,746  2026-10-26 14:46Z
 
 ────────────────────────────────────────────────────────────────────────────────
-  ↑↓   enter   tab links   s sweep   c compare   r runs   y   ? help   q quit
+  ↑↓   enter   tab links   s sweep   c compare   r   w   y   ? help   q quit
 ~~~
 
 - **home**: the store at a glance, the latest run and comparison, the next command, and every run
@@ -95,7 +95,7 @@ poisson-prove · home                                                  prove-run
   next   poisson-prove sweep
 
 ────────────────────────────────────────────────────────────────────────────────
-  ↑↓   enter   tab links   s sweep   c compare   r runs   y   ? help   q quit
+  ↑↓   enter   tab links   s sweep   c compare   r   w   y   ? help   q quit
 ~~~
 
 `w` opens the Where sweeps run page, from home and from the runs page, before the first run and
@@ -170,7 +170,8 @@ runs), `t` conditions and `d` could not detect (comparison), `v` back to the ver
 `e` the next event (condition, episodes), `g` the event log (run), `space` and `l` (compare), and
 `p` (sweep, when the plan is refused for its size) to plan again with the replicates the refusal
 names. On the Where sweeps run page, `Enter` changes the answer, a digit answers the question, and
-`Esc` leaves it as it is. The key bar of home and of the runs page does not list `w`.
+`Esc` leaves it as it is. Home's key bar and the runs page's list `w`; at 80 columns home's bar
+shows `r`, `w` and `y` without their words, to fit.
 
 A sweep stopped with `Ctrl-C` leaves the run partial, as the command does, and once the app has
 left the terminal it prints the same stopped line and the `next:` command that resumes it.

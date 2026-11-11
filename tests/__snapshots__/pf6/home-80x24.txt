@@ -21,7 +21,7 @@ poisson-prove · home                                                  prove-run
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-  ↑↓   enter   tab links   s sweep   c compare   r runs   y   ? help   q quit   
+  ↑↓   enter   tab links   s sweep   c compare   r   w   y   ? help   q quit    
 
 BBBBBBBBBBBBBDDD                                                      DDDDDDDDDD
 DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
@@ -46,4 +46,4 @@ VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
                                                                                 
                                                                                 
 DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-  BB   BBBBB   BBB DDDDD   B DDDDD   B DDDDDDD   B DDDD   B   B DDDD   B DDDD   
+  BB   BBBBB   BBB DDDDD   B DDDDD   B DDDDDDD   B   B   B   B DDDD   B DDDD    

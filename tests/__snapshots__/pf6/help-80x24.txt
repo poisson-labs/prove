@@ -18,7 +18,7 @@ poisson-prove · help                                                  prove-run
   s                   home, runs                sweep the spec in this folder   
                       (prove.toml)                                              
   c                   home, runs                compare two runs                
-  ↓ 17 more                                                                     
+  ↓ 19 more                                                                     
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
   ↑↓ move   esc back   q quit                                                   

@@ -498,6 +498,7 @@ class Screens:
                 ("s", "sweep"),
                 ("c", "compare"),
                 ("r", "runs"),
+                ("w", "where"),
                 ("y", "copy"),
             ],
         )
@@ -777,7 +778,9 @@ class Screens:
     def runs_page(self) -> Page:
         from poisson_prove import core
 
-        page = Page("runs", keys=[MOVE, OPEN, BACK, ("/", "filter"), ("c", "compare")])
+        page = Page(
+            "runs", keys=[MOVE, OPEN, BACK, ("/", "filter"), ("c", "compare"), ("w", "where")]
+        )
         try:
             doc = self.runs_view()
         except core.Refusal as exc:
@@ -1674,6 +1677,7 @@ class Screens:
             ("s", "home, runs", "sweep the spec in this folder (prove.toml)"),
             ("c", "home, runs", "compare two runs"),
             ("r", "home", "the runs"),
+            ("w", "home, runs", "where sweeps of the spec in this folder run"),
             ("d", "comparison", "what it could not detect"),
             ("t", "comparison", "its conditions"),
             ("v", "conditions", "back to the verdict"),
