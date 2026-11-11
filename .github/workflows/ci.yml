@@ -77,11 +77,12 @@ env:
     8: tests/test_s29_viewer.py tests/test_pf8_public_hygiene.py tests/test_pf12_ui.py
     9: tests/test_pf4_surfaces.py tests/test_ls_local_serve.py tests/test_pf3_first_run.py
        tests/test_pf12_artifacts.py tests/test_rb_where.py tests/test_rb_where_app.py
+       tests/test_rb_where_built.py
     10: rest
     backends: tests/test_bu_cloud_backend.py tests/test_m3_modal.py tests/test_m3_modal_launch.py
        tests/test_mc_modal_chaos.py tests/test_pf9_backends.py tests/test_pf10_worker_blas.py
        tests/test_rb_cloud_life.py tests/test_rb_cloud_contract.py tests/test_rb_cloud_stop.py
-       tests/test_rb_where_cluster.py
+       tests/test_rb_where_cluster.py tests/test_rb_where_built_cluster.py
     math1: tests/test_pf4_stats.py
     math2: rest
 
