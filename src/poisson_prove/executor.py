@@ -20,6 +20,7 @@ import os
 import platform
 import signal
 import sys
+import threading
 import time
 import traceback
 from collections.abc import Callable, Mapping, Sequence
@@ -680,6 +681,75 @@ def _arm_drain(drain: Connection) -> None:
     signal.signal(signal.SIGTERM, handler)
 
 
+class _HeldInterrupt:
+    """A Ctrl-C that arrives while a child process starts, kept until the caller can act on it.
+
+    Python runs its after-fork callbacks inside ``os.fork()`` and never raises what they raise:
+    an interrupt taken in logging's callback is printed and dropped, and one taken in the
+    warning 3.12 and later give about a fork with threads is dropped without a word. The sweep
+    then runs on as if no one had pressed anything. One taken just after the fork, before the
+    caller's ``try``, leaves the child running with nothing to end it. So while the child starts
+    the interrupt is only noted, and ``release`` puts the handler back and delivers it from
+    inside the caller's ``try``, whose ``finally`` ends the child.
+
+    Only the main thread takes signals, and only a handler Python can call is set aside: a
+    process that ignores SIGINT (one started from a background shell) keeps ignoring it.
+    """
+
+    def __init__(self) -> None:
+        self.previous: Any = None
+        self.noted = False
+        if threading.current_thread() is not threading.main_thread():
+            return
+        previous = signal.getsignal(signal.SIGINT)
+        if callable(previous):
+            self.previous = previous
+            signal.signal(signal.SIGINT, self._note)
+
+    def _note(self, signum: int, frame: FrameType | None) -> None:
+        self.noted = True
+
+    def release(self) -> None:
+        """Put the handler back; an interrupt that came meanwhile is delivered here."""
+        previous, self.previous = self.previous, None
+        if previous is None:
+            return
+        signal.signal(signal.SIGINT, previous)
+        if self.noted:
+            self.noted = False
+            previous(signal.SIGINT, None)
+
+    def release_in_child(self) -> None:
+        """The child was forked with the parent's noting handler in place; it gets its own back.
+        An interrupt it noted is the parent's too, and the parent ends the child for it."""
+        previous, self.previous = self.previous, None
+        if previous is not None:
+            signal.signal(signal.SIGINT, previous)
+
+
+#: The interrupt being held while a child starts; a forked child finds its parent's here.
+_held: _HeldInterrupt | None = None
+
+
+def _start_held(proc: Any) -> None:
+    """Start ``proc`` with any Ctrl-C held, and deliver it once the child exists. Called inside
+    the ``try`` whose ``finally`` ends the child."""
+    global _held
+    held = _held = _HeldInterrupt()
+    try:
+        proc.start()
+    finally:
+        _held = None
+        held.release()
+
+
+def _started_in_child() -> None:
+    global _held
+    held, _held = _held, None
+    if held is not None:
+        held.release_in_child()
+
+
 def _child_main(
     conn: Connection,
     drain: Connection,
@@ -689,6 +759,7 @@ def _child_main(
     capture_call: _CaptureCall | None = None,
     chaos_call: _ChaosCall | None = None,
 ) -> None:
+    _started_in_child()
     # The drain pipe always arrives; only a child with a capture call arms the handler
     # that writes to it, so a run that did not ask keeps the default SIGTERM disposition.
     if capture_call is not None:
@@ -709,6 +780,7 @@ def _child_main(
 
 
 def _probe_main(conn: Connection, spec: CaptureSpec) -> None:
+    _started_in_child()
     try:
         status = install(spec)
     except BaseException:  # noqa: BLE001 - the child must always report
@@ -732,11 +804,11 @@ def _capture_probe(spec: CaptureSpec) -> CaptureStatus:
     ctx = _mp_context()
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     proc = ctx.Process(target=_probe_main, args=(child_conn, spec))
-    proc.start()
-    child_conn.close()
-    deadline = time.perf_counter() + _PROBE_TIMEOUT_S
     reported: Any = None
     try:
+        _start_held(proc)
+        child_conn.close()
+        deadline = time.perf_counter() + _PROBE_TIMEOUT_S
         while reported is None:
             if parent_conn.poll(_POLL_STEP_S):
                 reported = parent_conn.recv()
@@ -746,10 +818,12 @@ def _capture_probe(spec: CaptureSpec) -> CaptureStatus:
         reported = None
     finally:
         parent_conn.close()
-        if proc.is_alive():
-            proc.terminate()
-        proc.join(_JOIN_GRACE_S)
-        proc.close()
+        child_conn.close()
+        if proc.pid is not None:
+            if proc.is_alive():
+                proc.terminate()
+            proc.join(_JOIN_GRACE_S)
+            proc.close()
     if isinstance(reported, CaptureStatus):
         return reported
     return CaptureStatus(
@@ -797,12 +871,12 @@ def _call_with_timeout(
         target=_child_main,
         args=(child_conn, drain_child, rollout, config, seed, capture_call, chaos_call),
     )
-    proc.start()
-    child_conn.close()
-    drain_child.close()  # or poll() never sees EOF and the grace is always paid in full
-    deadline = time.perf_counter() + timeout
     outcome: _Outcome | None = None
     try:
+        _start_held(proc)
+        child_conn.close()
+        drain_child.close()  # or poll() never sees EOF and the grace is always paid in full
+        deadline = time.perf_counter() + timeout
         while outcome is None:
             remaining = deadline - time.perf_counter()
             if parent_conn.poll(min(_POLL_STEP_S, max(remaining, 0.0))):
@@ -819,7 +893,11 @@ def _call_with_timeout(
                 outcome = (_TIMEOUT_ERROR, None)
     finally:
         parent_conn.close()
-        if proc.is_alive():
+        child_conn.close()
+        drain_child.close()
+        if proc.pid is None:
+            pass  # the start itself failed: there is no child to end
+        elif proc.is_alive():
             proc.terminate()
             timed_out = outcome is not None and outcome[0] == _TIMEOUT_ERROR
             if capture_call is not None and timed_out:
@@ -835,7 +913,8 @@ def _call_with_timeout(
         else:
             proc.join(_JOIN_GRACE_S)
         drain_parent.close()
-        proc.close()
+        if proc.pid is not None:
+            proc.close()
     return outcome
 
 

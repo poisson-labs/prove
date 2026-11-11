@@ -44,6 +44,9 @@ HOSTED = {"ubuntu-latest", "macos-latest"}
 #: ``owner/name@<40 hex digits>``: an action pinned to one commit.
 PINNED = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 FLOORS_TEST = "tests/test_pf7_packaging.py::test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor"
+#: PF8.5: the whole suite once more with HOME at an empty folder. Since prove#39 it has a nightly
+#: job of its own, as the floors run has.
+HOME_TEST = "tests/test_pf8_public_hygiene.py::test_pf8_5_with_home_empty_no_skip_names_a_place"
 PYTHONS = ["3.11", "3.12", "3.13", "3.14"]
 PUBLISH = "pypa/gh-action-pypi-publish@"
 
@@ -243,8 +246,8 @@ def test_pf10_3_every_action_is_pinned_to_a_full_commit_sha_with_its_version_bes
 def test_pf10_4_each_lane_selects_its_tests_and_none_selects_a_backend_test() -> None:
     by_lane = {(name, job): marker_expression(arguments) for name, job, arguments in lanes() if "-m" in arguments}
     assert set(by_lane) == {("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "calibration"), ("ci.yml", "backends"),
-                            ("nightly.yml", "code"), ("nightly.yml", "math"), ("nightly.yml", "slow"), ("nightly.yml", "floors"),
-                            ("nightly.yml", "linux"), ("release.yml", "build")}
+                            ("nightly.yml", "code"), ("nightly.yml", "math"), ("nightly.yml", "slow"), ("nightly.yml", "home"),
+                            ("nightly.yml", "floors"), ("nightly.yml", "linux"), ("release.yml", "build")}
     for key in (("ci.yml", "tests"), ("ci.yml", "backends"), ("nightly.yml", "code"), ("nightly.yml", "linux")):
         assert is_code_suite(by_lane[key]), key
     gate_math = by_lane[("ci.yml", "math")]
@@ -328,7 +331,7 @@ def test_pf10_4_nightly_runs_the_code_suite_on_every_python_on_linux_and_macos_a
     nightly = jobs("nightly.yml")
     assert nightly["code"]["strategy"]["matrix"] == {"os": ["ubuntu-latest", "macos-latest"], "python": PYTHONS}
     assert nightly["code"]["name"] == "code (${{ matrix.os }}, ${{ matrix.python }})"
-    for job in ("math", "slow"):
+    for job in ("math", "slow", "home"):
         assert nightly[job]["strategy"]["matrix"] == {"python": PYTHONS}, job
     assert lane("nightly.yml", "code")[-1] == "tests", "the whole code suite, the backend fakes included"
     for job, spec in nightly.items():
@@ -348,6 +351,23 @@ def test_pf10_4_the_floors_run_is_alone_at_its_own_thread_cap_and_keeps_its_whol
     assert '"-n", str(min(8, os.cpu_count() or 1))' in source and "floors-suite-output.txt" in source
 
 
+def test_pf10_4_the_home_run_is_alone_on_every_python_and_keeps_the_report_of_its_suite() -> None:
+    """prove#39: PF8.5 runs the whole suite at one worker per core. Inside the slow lane it shared
+    the runner with the other slow tests, and its suite held the floors run, a third code suite."""
+    home = lane("nightly.yml", "home")
+    assert home[-1].strip('"') == HOME_TEST and selects(marker_expression(home), {"slow"})
+    slow = lane("nightly.yml", "slow")
+    left_out = {slow[i + 1].strip('"') for i, word in enumerate(slow) if word == "--deselect"}
+    assert left_out == {FLOORS_TEST, HOME_TEST}, "each test that runs a suite of its own has a job of its own"
+    assert "playwright install --with-deps chromium firefox webkit" in runs("nightly.yml", "home"), "its suite holds the browser tests"
+    assert {"slow", "home", "floors"} <= set(jobs("nightly.yml")["report"]["needs"])
+    (upload,) = [s for s in jobs("nightly.yml")["home"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]
+    assert upload["if"] == "always()" and upload["with"]["path"].endswith("suite.xml")
+    source = (ROOT / "tests" / "test_pf8_public_hygiene.py").read_text(encoding="utf-8")
+    assert '"--deselect", FLOORS_TEST' in source and f'FLOORS_TEST = "{FLOORS_TEST}"' in source, "the floors run is not run again under it"
+    assert "timeout=7200" in source and home[1] == "7200", "the lane reports against the limit the test gives its suite"
+
+
 def test_pf10_4_every_hosted_lane_runs_one_pytest_worker_per_core() -> None:
     for name, job in (("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "calibration"), ("ci.yml", "backends"),
                       ("nightly.yml", "code"), ("nightly.yml", "math"), ("nightly.yml", "slow")):
@@ -357,6 +377,7 @@ def test_pf10_4_every_hosted_lane_runs_one_pytest_worker_per_core() -> None:
     container = lane("nightly.yml", "linux")
     assert container[container.index("-n") + 1] == '"$(nproc)"'
     assert "-n" not in lane("nightly.yml", "floors"), "the floors test sets its inner suite's workers itself"
+    assert "-n" not in lane("nightly.yml", "home"), "and so does the home test"
 
 
 # ---------- PF10.5: the markers ----------
@@ -394,7 +415,7 @@ def test_pf10_6_every_job_that_builds_a_venv_installs_its_python_and_uv_uses_onl
             (built,) = re.findall(r'uv venv --quiet --python (".*?"|\S+) \.venv', body)
             assert built.strip('"') == str(setup["with"]["python-version"]).strip('"'), (name, job)
             assert "uv==$UV_VERSION" in body and re.fullmatch(r"\d+\.\d+\.\d+", env_of(name, job)["UV_VERSION"]), (name, job)
-    assert len(built_any) == 10, built_any
+    assert len(built_any) == 11, built_any
 
 
 # ---------- PF10.7: when a change runs the math suite, and the backend fakes ----------
@@ -481,7 +502,8 @@ def test_pf10_8_every_job_that_runs_tests_runs_them_through_the_lane_script() ->
             assert "pytest" not in runs(name, job).replace("-p no:cacheprovider", ""), (name, job)
     assert {(name, job) for name, job, _ in lanes()} == {
         ("ci.yml", "tests"), ("ci.yml", "math"), ("ci.yml", "calibration"), ("ci.yml", "backends"), ("nightly.yml", "code"),
-        ("nightly.yml", "math"), ("nightly.yml", "slow"), ("nightly.yml", "floors"), ("nightly.yml", "linux"), ("release.yml", "build")}
+        ("nightly.yml", "math"), ("nightly.yml", "slow"), ("nightly.yml", "home"), ("nightly.yml", "floors"), ("nightly.yml", "linux"),
+        ("release.yml", "build")}
 
 
 def test_pf10_8_each_lane_reports_against_its_hosted_budget() -> None:
@@ -489,7 +511,8 @@ def test_pf10_8_each_lane_reports_against_its_hosted_budget() -> None:
     budgets = {(name, job): arguments[1] for name, job, arguments in lanes()}
     assert budgets == {("ci.yml", "tests"): "300", ("ci.yml", "math"): "300", ("ci.yml", "calibration"): "900", ("ci.yml", "backends"): "600",
                        ("nightly.yml", "code"): "1800", ("nightly.yml", "linux"): "1800", ("nightly.yml", "floors"): "1800",
-                       ("nightly.yml", "math"): "4200", ("nightly.yml", "slow"): "9000", ("release.yml", "build"): "600"}
+                       ("nightly.yml", "math"): "4200", ("nightly.yml", "slow"): "9000", ("nightly.yml", "home"): "7200",
+                       ("release.yml", "build"): "600"}
 
 
 # ---------- PF10.9: nightly keeps one issue while it fails ----------

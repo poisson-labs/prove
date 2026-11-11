@@ -131,6 +131,8 @@ import test_pf1_look as PF1
 
 ROOT = Path(__file__).resolve().parents[1]
 THIS_FILE = "tests/test_pf8_public_hygiene.py"
+#: The floors run (PF7.5): the code suite again, in an environment of its own.
+FLOORS_TEST = "tests/test_pf7_packaging.py::test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor"
 MOCK = "poisson_prove.examples.mock_agent"
 
 # ---------- the fixed lists ----------
@@ -1004,7 +1006,10 @@ def importlib_has(name: str) -> bool:
 def test_pf8_5_with_home_empty_no_skip_names_a_place(tmp_path: Path) -> None:
     """The suite, run once with ``HOME`` at an empty folder (so no code folder under it) and no store
     variable, reports no skip whose reason names a place. Real-backend tests are left out (a paid
-    call), and so is this test. Package caches are kept: a cache is not data a test reads."""
+    call), and so is this test. So is the floors run: it never skips, so it has nothing to report
+    here, and it would run the code suite a third time, under this run, on the same cores (on Python
+    3.11, where it finds its interpreter); nightly gives it a job of its own. Package caches are
+    kept: a cache is not data a test reads."""
     home = tmp_path / "home"
     home.mkdir()
     junit = tmp_path / "suite.xml"
@@ -1016,7 +1021,8 @@ def test_pf8_5_with_home_empty_no_skip_names_a_place(tmp_path: Path) -> None:
     env = {k: v for k, v in os.environ.items() if k not in drop and not k.startswith("PYTEST_")}
     env.update(keep, HOME=str(home), PATH=os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")]))
     argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-m", "not backend", "-rs",
-            "--deselect", f"{THIS_FILE}::test_pf8_5_with_home_empty_no_skip_names_a_place", f"--junitxml={junit}"]
+            "--deselect", f"{THIS_FILE}::test_pf8_5_with_home_empty_no_skip_names_a_place",
+            "--deselect", FLOORS_TEST, f"--junitxml={junit}"]
     if importlib_has("xdist"):
         argv += ["-n", "auto"]
     # Two hours: the inner suite takes over an hour on the four vCPUs of a hosted runner.

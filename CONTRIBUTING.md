@@ -68,7 +68,9 @@ machine of ours or reads a secret, and every action is pinned to a full commit S
   Tasks tag, and the tokenizer file the check fetches.
 - **Nightly** (`nightly.yml`) runs everything slow: the code suite on every supported Python on Linux
   and macOS, the math suite and the slow tests on every supported Python, the floors run and the
-  code suite in a Debian container. No pull request waits on it. When it fails it opens an issue
+  code suite in a Debian container. The two tests that run a suite of their own have a job each,
+  alone on its runner: `floors`, and `home` (the whole suite with `HOME` at an empty folder, on
+  every supported Python). No pull request waits on it. When it fails it opens an issue
   titled "Nightly run failed", or comments on the one already open, and a green night closes it.
 
 Tests marked `backend` never run in CI. Each job's summary gives the tests it ran, its time against

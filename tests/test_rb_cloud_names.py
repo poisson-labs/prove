@@ -347,7 +347,7 @@ def _extras() -> dict[str, list[str]]:
 
 def test_n7_the_cloud_extra_and_the_old_alias_install_the_same_set_and_all_includes_it() -> None:
     extras = _extras()
-    assert extras["cloud"] == sorted(["burla==1.8.4", "botocore[crt]"]), extras
+    assert extras["cloud"] == sorted(["burla==1.8.4", "botocore[crt]>=1.42.39"]), extras
     assert extras["burla"] == extras["cloud"], extras
     assert set(extras["cloud"]) <= set(extras["all"]), extras
 
@@ -364,7 +364,7 @@ def test_n7_the_wheels_metadata_says_so() -> None:
     requires = re.findall(r"^Requires-Dist: (.+)$", text, re.M)
     for extra in ("cloud", "burla", "all"):
         assert f"burla==1.8.4; extra == '{extra}'" in requires, (extra, requires)
-        assert f"botocore[crt]; extra == '{extra}'" in requires, (extra, requires)
+        assert f"botocore[crt]>=1.42.39; extra == '{extra}'" in requires, (extra, requires)
 
 
 # ---------- N8: the name scan ----------
