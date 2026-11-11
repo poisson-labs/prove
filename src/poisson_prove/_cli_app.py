@@ -20,8 +20,11 @@ the store every verb finds from the folder the app runs in; ``sweep`` reads that
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
 import re
+import signal
 import threading
 import time
 import webbrowser
@@ -48,7 +51,7 @@ from poisson_prove._cli_app_pages import (
     verdict_line,
     wrap_line,
 )
-from poisson_prove.cli import _record_failure
+from poisson_prove.cli import _cluster_words, _record_failure
 
 __all__ = ["ProveApp"]
 
@@ -89,6 +92,10 @@ class ProveApp(App[int], Screens):
         self.after: tuple[str, str, list[str]] | None = None
         self.cancel = threading.Event()
         self.sweeping = False
+        #: For a sweep on a cloud account: how long its nodes take to stop themselves when
+        #: this machine leaves them (minutes), and the interrupts so far. ``None``: no such sweep.
+        self.cluster_bound: float | None = None
+        self.presses = 0
         #: The sweep screen whose sweep is running: it cannot be left until the sweep ends.
         self.sweep_page: Page | None = None
         #: Whether the static UI was built (``None``: not tried yet), and where it is.
@@ -315,7 +322,7 @@ class ProveApp(App[int], Screens):
                     "comparison", keys=[BACK], message=f"error: {sentence}", keep_message=True
                 )
             if page is not None:
-                self._from_worker(self._swap, target, page)
+                self.from_worker(self._swap, target, page)
 
         threading.Thread(target=work, name="prove-compare", daemon=True).start()
 
@@ -345,7 +352,7 @@ class ProveApp(App[int], Screens):
         page.message, page.keep_message = note, bool(note)
         return page
 
-    def _from_worker(self, call: Any, *args: Any) -> None:
+    def from_worker(self, call: Any, *args: Any) -> None:
         """``call`` on the app's thread, unless the app has already left."""
         try:
             self.call_from_thread(call, *args)
@@ -435,6 +442,13 @@ class ProveApp(App[int], Screens):
             # a printable key answers nothing; ``?`` is still help
             return ch != "?" and ch.isprintable() and len(ch) == 1
         self.sweeping, self.sweep_page = True, page
+        self.presses = 0
+        on_cloud = getattr(plan, "cloud", None)
+        if on_cloud is not None:
+            from poisson_prove.executor_cloud import _bound_minutes
+
+            self.cluster_bound = _bound_minutes(on_cloud.idle_minutes)
+            self._watch_signals(True)
         page.keys = [("ctrl-c", "stop and keep what is done")]
         progress = Line("  starting")
         named = Line("")
@@ -444,9 +458,18 @@ class ProveApp(App[int], Screens):
 
         def on_event(event: Any) -> None:
             d = event.to_json()
+            if d["kind"] == "cluster":
+                # The cluster's lines, as the command line prints them on stderr.
+                if d["detail"].get("phase") == "note":
+                    self.from_worker(self._note, page, str(d["detail"]["sentence"]))
+                else:
+                    words = _cluster_words(d["detail"])
+                    if words is not None:
+                        self.from_worker(self._set, progress, f"  {words}", [])
+                return
             if d["kind"] == "started" or d["kind"] == "resumed":
                 name = d.get("detail", {}).get("run_name") or plan.to_json().get("run_name", "")
-                self._from_worker(self._set, named, f'  run "{name}" (partial until it ends)', [])
+                self.from_worker(self._set, named, f'  run "{name}" (partial until it ends)', [])
             if d["kind"] != "progress":
                 return
             det = d["detail"]
@@ -460,37 +483,77 @@ class ProveApp(App[int], Screens):
                 f"{'█' * filled}{'░' * (cells - filled)}"
             )
             bar = len(text) - cells
-            self._from_worker(self._set, progress, text, [(bar, len(text), "dim")])
+            self.from_worker(self._set, progress, text, [(bar, len(text), "dim")])
 
         def work() -> None:
             try:
                 result = core.start(plan, on_event=on_event, cancel=self.cancel)
             except core.Interrupted as exc:
-                self._from_worker(self._stopped, str(exc.sentence), list(exc.next))
+                self.from_worker(self._stopped, str(exc.sentence), list(exc.next))
                 return
             except core.Refusal as exc:
-                self._from_worker(self._failed, page, lines, str(exc), list(exc.next))
+                self.from_worker(self._failed, page, lines, str(exc), list(exc.next))
+                return
+            except KeyboardInterrupt:
+                # Stopped before a rollout was stored (a cloud sweep interrupted while its
+                # cluster started): the command line's words for it, and its exit.
+                self.from_worker(self._stopped, "interrupted; nothing was written", [])
                 return
             except Exception as exc:  # noqa: BLE001 - the command's unexpected failure, said its way
                 sentence = _record_failure([COMMAND, "sweep", "--yes"], exc)
-                self._from_worker(self._failed, page, lines, sentence, [])
+                self.from_worker(self._failed, page, lines, sentence, [])
                 return
             if self.cancel.is_set():
-                self._from_worker(self._stopped, str(result.sentence), list(result.next))
+                self.from_worker(self._stopped, str(result.sentence), list(result.next))
                 return
-            self._from_worker(self._done, page, lines, result)
+            self.from_worker(self._done, page, lines, result)
 
-        self.run_worker(work, thread=True)
+        if on_cloud is not None:
+            # Beside the app, not in its pool of workers: leaving while the cluster stops (the
+            # third Ctrl-C) must not wait for the stop, as the command line's does not.
+            threading.Thread(target=work, name="prove-sweep", daemon=True).start()
+        else:
+            self.run_worker(work, thread=True)
         return True
 
     def _set(self, line: Line, text: str, spans: list[tuple[int, int, str]]) -> None:
         line.text, line.spans = text, spans
         self.redraw()
 
+    def _note(self, page: Page, sentence: str) -> None:
+        """A note of the sweep that is running, kept on its screen until the next one."""
+        page.message, page.keep_message = f"note: {sentence}", True
+        self.redraw()
+
+    def _watch_signals(self, on: bool) -> None:
+        """While a sweep runs on a cloud account, SIGTERM and SIGHUP (a ``kill``, a closed
+        terminal) are Ctrl-C, as they are for the command line: Python's default would end the
+        app with the nodes up. Local and Modal sweeps keep the default."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        for name in ("SIGTERM", "SIGHUP"):
+            sig = getattr(signal, name, None)
+            if sig is None:
+                continue
+            # Only the main thread of a Unix process can take a signal this way.
+            with contextlib.suppress(NotImplementedError, ValueError, RuntimeError):
+                if on:
+                    loop.add_signal_handler(sig, self.action_interrupt)
+                else:
+                    loop.remove_signal_handler(sig)
+
+    def _sweep_ended(self) -> None:
+        self.sweeping, self.sweep_page = False, None
+        if self.cluster_bound is not None:
+            self._watch_signals(False)
+        self.cluster_bound = None
+
     def _done(self, page: Page, lines: list[Line], result: Any) -> None:
         """``sweep``'s result line and detail first, its notes, the plan kept below it; Enter
         opens the run."""
-        self.sweeping, self.sweep_page = False, None
+        self._sweep_ended()
         details = [Detail(str(label), str(value)) for label, value in result.details]
         details += [Detail("note", str(note)) for note in getattr(result, "notes", ())]
         details += [Detail("next", c, code=True) for c in result.next]
@@ -514,7 +577,7 @@ class ProveApp(App[int], Screens):
         self.redraw()
 
     def _failed(self, page: Page, lines: list[Line], sentence: str, nexts: list[str]) -> None:
-        self.sweeping, self.sweep_page = False, None
+        self._sweep_ended()
         page.message, page.keep_message = f"error: {sentence}", True
         whole = block([Detail("error", sentence)]) if len(page.message) > self.width() else []
         page.top = [*lines, BLANK, *whole, *block([Detail("next", c, code=True) for c in nexts])]
@@ -524,15 +587,40 @@ class ProveApp(App[int], Screens):
     def _stopped(self, sentence: str, nexts: list[str]) -> None:
         """Ctrl-C during the sweep: the run is partial and resumable; once the app has left
         the terminal, ``sweep``'s stopped line and its next command; exit 130."""
-        self.after = ("stopped", sentence, nexts)
+        if self.after is None:  # not already left, on a third Ctrl-C
+            self.after = ("stopped", sentence, nexts)
+        if self.cluster_bound is not None:
+            self._watch_signals(False)
         self.exit(return_code=130)
 
     # ---------- keys ----------
 
     def action_interrupt(self) -> None:
-        if self.sweeping:
-            self.cancel.set()  # the core stops at the next rollout boundary and keeps the run
+        """Ctrl-C. In a sweep it stops the sweep and keeps what is done: on this machine and on
+        Modal at the next rollout boundary; on a cloud account at once, the job in flight
+        cancelled and the cluster stopped. While the cluster stops, a second Ctrl-C says so and
+        a third leaves at once, as the command line's do."""
+        if not self.sweeping:
+            self.exit(return_code=130)
             return
+        self.cancel.set()
+        self.presses += 1
+        if self.cluster_bound is None or self.presses == 1:
+            return
+        bound = f"{self.cluster_bound:g} min"
+        if self.presses == 2:
+            self.message(
+                "note: stopping the cluster; press ctrl-c again to leave it, and the nodes will "
+                f"stop themselves within {bound}"
+            )
+            return
+        self.after = (
+            "stopped",
+            "interrupted: left while the cluster was stopping; the nodes stop themselves "
+            f"within {bound}, and the next cloud sweep finishes the stop",
+            [f"{COMMAND} where"],
+        )
+        self._watch_signals(False)
         self.exit(return_code=130)
 
     def message(self, text: str) -> None:

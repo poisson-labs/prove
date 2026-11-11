@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -25,6 +26,8 @@ from poisson_prove._render_term import meaning_of
 __all__: list[str] = []
 
 COMMAND = "poisson-prove"
+#: The spec the app sweeps and sets where to run: the one in the folder it was opened in.
+SPEC = "prove.toml"
 #: The width at which a screen shows its wide layout (the design's 120-column drawings).
 WIDE = 120
 
@@ -475,6 +478,13 @@ class Screens:
     def open_sweep(self) -> None:  # pragma: no cover - the app's
         raise NotImplementedError
 
+    def redraw(self) -> None:  # pragma: no cover - the app's
+        raise NotImplementedError
+
+    def from_worker(self, call: Any, *args: Any) -> None:  # pragma: no cover - the app's
+        """``call`` on the app's thread, from a thread beside it."""
+        raise NotImplementedError
+
     # ---------- home ----------
 
     def home_page(self, doc: dict[str, Any]) -> Page:
@@ -512,6 +522,8 @@ class Screens:
                         "compared", f"{short(compared['name'])}: {compared['verdict']}{limit_words}"
                     )
                 )
+            if not doc.get("n_runs"):
+                details.append(Detail("where", self.where_words()))
             details += [Detail("next", c, code=True) for c in doc.get("next", [])]
             if doc.get("n_runs") and self.ui_page(str(doc.get("ui", "index.html"))):
                 details.append(Detail("dashboard", str(doc["ui"]), link=str(doc["ui"])))
@@ -558,11 +570,201 @@ class Screens:
                 self.open_compare()
             elif ch == "s":
                 self.open_sweep()
+            elif ch == "w":
+                self.push(self.where_page())
             else:
                 return False
             return True
 
         page.on_key = keys
+        return page
+
+    # ---------- where sweeps run ----------
+
+    def where_words(self) -> str:
+        """The first-run screen's where line: the answer, and the key that changes it."""
+        from poisson_prove import _where
+
+        try:
+            kind, answers = _where.current(SPEC)
+        except (OSError, ValueError):
+            kind, answers = "local", {}
+        if kind in ("cloud", "modal"):
+            return f"{_where.place(kind, answers)} (press w to change it)"
+        return "this machine (press w to run sweeps on Modal or your cloud account)"
+
+    def where_page(self) -> Page:
+        """Where sweeps run: the answer the spec in this folder holds and whether it is ready on
+        this machine, as ``where`` says it. Enter changes it with the terminal's questions (a
+        digit answers the first, Enter takes each default), written through the same module;
+        the page then reads the spec again.
+
+        The readiness checks call the cloud's CLI, so they run beside the screen: the page
+        shows the answer at once and its readiness when the checks return."""
+        from poisson_prove import _where
+
+        page = Page("where", SPEC, keys=[("enter", "change"), BACK])
+        #: What the spec holds, and the checks of it (``None`` while they run).
+        held: dict[str, Any] = {"kind": "local", "answers": {}, "ready": None, "spec": False}
+        #: The questions being asked: the lines shown, those left, what is typed, what is set.
+        asking: dict[str, Any] = {"mode": "show", "lines": [], "queue": [], "values": {}}
+        turn = {"n": 0}
+
+        def again() -> None:
+            page.laid_width = -1  # the page's lines changed: it is laid out again at this width
+            self.redraw()
+
+        def read() -> None:
+            """The spec as it now is. A check that returns after the spec was read again is
+            dropped."""
+            import os
+
+            turn["n"] += 1
+            mine = turn["n"]
+            held.update(kind="local", answers={}, ready=_where.Readiness(()), both=False)
+            held["spec"] = os.path.isfile(SPEC)
+            if not held["spec"]:
+                return
+            try:
+                tables = _where.tables(SPEC)
+                kind, answers = _where.current(SPEC)
+            except (OSError, ValueError):
+                return  # a spec that does not parse says so where it is swept
+            held.update(kind=kind, answers=answers, both="modal" in tables and len(tables) > 1)
+            if held["both"] or kind not in ("cloud", "modal"):
+                return
+            held["ready"] = None
+
+            def work() -> None:
+                found = _where.ready(kind, answers)
+
+                def tell() -> None:
+                    if turn["n"] == mine:
+                        held["ready"] = found
+                        again()
+
+                self.from_worker(tell)
+
+            threading.Thread(target=work, name="prove-where", daemon=True).start()
+
+        def layout(width: int) -> None:
+            kind, answers, found = held["kind"], held["answers"], held["ready"]
+            details: list[Detail | None] = []
+            if not held["spec"]:
+                sentence = f"this machine; no {SPEC} in this folder yet"
+                details.append(Detail("next", f"{COMMAND} init", code=True))
+            elif held["both"]:
+                sentence = "not said: the spec holds both [cloud] and [modal]; enter keeps one"
+            elif kind == _where.OLD_TABLE:
+                sentence = f"{_where.moved()}; enter moves it"
+            elif found is None:
+                sentence = f"{_where.place(kind, answers)}; checking this machine"
+            else:
+                sentence = _where.sentence(kind, answers, list(found.checks))
+                details += [Detail(c.label, c.value) for c in found.shown]
+                details += [Detail("note", note) for note in found.notes]
+                if found.failed:
+                    details += [Detail("next", c, code=True) for c in found.nexts]
+                elif kind != "local":
+                    details.append(Detail("next", f"{COMMAND} sweep --dry-run", code=True))
+            page.top = [verdict_line("where", sentence), *block(details)]
+            if asking["lines"]:
+                page.top.append(BLANK)
+                for line in asking["lines"]:
+                    parts = [line] if len(line) + 2 <= width else line.split("  ")
+                    page.top += [text_line(part) for part in parts]
+            page.header, page.rows, page.bottom = None, [], []
+
+        page.layout = layout
+
+        def show() -> None:
+            asking.update(mode="show", lines=[], queue=[], values={})
+            page.keys = [("enter", "change"), BACK]
+
+        def apply(choice: str) -> None:
+            kind, answers = held["kind"], held["answers"]
+            try:
+                base = _where.carried(choice, kind, answers)
+                if choice == "cloud":
+                    made = _where.cloud_answers(base, asking["values"])
+                    _where.usable(made)
+                elif choice == "modal":
+                    made = _where.modal_answers(base, asking["values"])
+                else:
+                    made = {}
+                _where.write(SPEC, _where.table(choice, made))
+            except _where.WhereError as exc:
+                page.message = f"error: {exc}"
+            show()
+            read()
+
+        def ask() -> None:
+            """The next question, or with none left the answer is written."""
+            if not asking["queue"]:
+                apply(asking["choice"])
+                return
+            asking["lines"].append(asking["queue"][0].prompt() + " ")
+            asking["typed"] = ""
+
+        def choose(ch: str) -> None:
+            choice = _where.answer("" if ch == "\r" else ch)
+            if choice is None:
+                return
+            kind, answers = held["kind"], held["answers"]
+            asking.update(mode="ask", choice=choice, values={})
+            base = _where.carried(choice, kind, answers)
+            if choice == "cloud":
+                asking["lines"] += _where.not_offered()
+                asking["queue"] = [q for q in _where.QUESTIONS if q.key not in base]
+            elif choice == "modal":
+                asking["queue"] = [] if "max_cost" in base else [_where.MODAL_CAP]
+            else:
+                asking["queue"] = []
+            page.keys = [("enter", "take the default"), ("esc", "leave it as it is")]
+            ask()
+
+        def typed(ch: str) -> None:
+            if ch == "\r":
+                q = asking["queue"][0]
+                try:
+                    value = q.parse(asking["typed"])
+                except _where.WhereError as exc:
+                    page.message = f"error: {exc}"
+                    asking["lines"][-1] = q.prompt() + " "
+                    asking["typed"] = ""
+                    return
+                if value is not None:
+                    asking["values"][q.key] = value
+                asking["queue"].pop(0)
+                ask()
+                return
+            if ch in ("\x7f", "\b"):
+                asking["typed"] = asking["typed"][:-1]
+            elif len(ch) == 1 and ch.isprintable():
+                asking["typed"] += ch
+            asking["lines"][-1] = asking["queue"][0].prompt() + " " + asking["typed"]
+
+        def keys(ch: str) -> bool:
+            if asking["mode"] == "show":
+                if ch != "\r":
+                    return False
+                if not held["spec"]:
+                    page.message = f"error: no sweep spec here: no ./{SPEC} in this folder"
+                    return True
+                text, unavailable = _where.question()
+                asking.update(mode="choose", lines=[*unavailable, text])
+                page.keys = [("1 2 3", "answer"), ("esc", "leave it as it is")]
+            elif ch == "\x1b":
+                show()
+            elif asking["mode"] == "choose":
+                choose(ch)
+            else:
+                typed(ch)
+            page.laid_width = -1
+            return True
+
+        page.on_key = keys
+        read()
         return page
 
     # ---------- runs ----------
@@ -617,6 +819,9 @@ class Screens:
         def keys(ch: str) -> bool:
             if ch == "s":
                 self.open_sweep()
+                return True
+            if ch == "w":
+                self.push(self.where_page())
                 return True
             if ch != "c":
                 return False
@@ -1490,7 +1695,7 @@ class Screens:
             lines.append(
                 text_line(
                     "home · runs · run · sweep · compare · comparison · conditions · condition · "
-                    "episodes · could not detect"
+                    "episodes · could not detect · where"
                 )
             )
             lines.append(
