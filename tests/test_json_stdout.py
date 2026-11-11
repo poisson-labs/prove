@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import multiprocessing
 import os
 import pty
 import select
@@ -460,6 +461,63 @@ def test_ctrl_c_during_a_chatty_sweep_has_its_document_and_exits_130(path: str, 
     assert proc.returncode == 130, (proc.returncode, out[:300], err[-300:])
     assert _document(out)["verdict"] == "stopped"
     assert BANNER.encode() in err
+
+
+#: A Ctrl-C that lands while the sweep starts the process of a timed rollout (prove#39, the nightly
+#: of 2026-11-09). The target puts it there itself, so nothing here is timed: the first sends the
+#: signal from an after-fork callback, where Python reports or drops what is raised and never raises
+#: it; the second sends it once the child exists and before the start returns.
+_SIGINT_ME = "os.kill(os.getpid(), signal.SIGINT)"
+STARTS = {
+    "inside the fork": f"import signal; os.register_at_fork(after_in_parent=lambda: {_SIGINT_ME})",
+    "after the fork, before the start returns": (
+        "import signal, multiprocessing.context as _mpc; _start = _mpc.ForkProcess.start; "
+        f"_mpc.ForkProcess.start = lambda self: (_start(self), {_SIGINT_ME})[0]"
+    ),
+}
+CAPTURE = "\n[capture]\nmax_observation_bytes = 16384\n"
+
+
+def _interrupted_while_starting(base: Path, start: str, spec: str = SPEC) -> tuple[int, bytes, bytes]:
+    """A sweep whose every rollout would hold for ten minutes, interrupted by its own target as
+    ``start`` says. A sweep that lost the interrupt, or left the rollout's process running, is
+    still there after two minutes and is killed."""
+    _folder(base, _target(start, "time.sleep(600)"), spec)
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "poisson_prove", *SWEEP, "--episode-timeout", "600"], cwd=base, env=_child_env(base),
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+        preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL),
+    )
+    try:
+        out, err = proc.communicate(timeout=120)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        out, err = proc.communicate()
+        pytest.fail(f"the sweep did not stop for the interrupt: stdout {out[:300]!r}\nstderr {err[-600:]!r}")
+    return proc.returncode, out, err
+
+
+@pytest.mark.skipif("fork" not in multiprocessing.get_all_start_methods(), reason="the rollout's process is forked only where fork exists")
+@pytest.mark.parametrize("start", list(STARTS))
+def test_ctrl_c_while_a_rollouts_process_starts_stops_the_sweep_and_exits_130(start: str, tmp_path: Path) -> None:
+    code, out, err = _interrupted_while_starting(tmp_path, STARTS[start])
+    assert code == 130, (code, out[:300], err[-600:])
+    assert _document(out)["verdict"] == "stopped"
+    assert b"Exception ignored" not in err and b"Traceback" not in err, err[-600:]
+    (run,) = _stored(tmp_path)
+    assert run["status"] != "complete", run
+
+
+@pytest.mark.skipif("fork" not in multiprocessing.get_all_start_methods(), reason="the capture probe is forked only where fork exists")
+def test_ctrl_c_while_the_capture_probe_starts_stops_the_sweep_before_a_run_exists(tmp_path: Path) -> None:
+    """With ``[capture]`` and a timeout the first process the sweep starts is the capture probe,
+    before the run is created: an interrupt taken in that fork ends the sweep there, with no store
+    made."""
+    code, out, err = _interrupted_while_starting(tmp_path, STARTS["inside the fork"], SPEC + CAPTURE)
+    assert code == 130, (code, out[:300], err[-600:])
+    assert _document(out)["verdict"] == "stopped"
+    assert b"Exception ignored" not in err and b"Traceback" not in err, err[-600:]
+    assert not (tmp_path / "prove-runs").exists(), "the sweep went on to create its run"
 
 
 @pytest.mark.parametrize(
