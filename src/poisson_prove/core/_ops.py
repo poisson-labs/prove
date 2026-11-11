@@ -2279,6 +2279,25 @@ def plan(
         return _planned(spec, store=store, overrides=overrides, on_path=on_path, _notes=_notes)
 
 
+def _spec_backend(spec: Any, o: Mapping[str, Any]) -> str:
+    """Where the spec says it runs, when the command line does not: the table it holds. A spec
+    that holds a cloud table and ``[modal]`` together does not say, and is refused."""
+    from poisson_prove import _where
+
+    path = getattr(spec, "path", None) if spec is not None else None
+    if spec is None:
+        path = o.get("spec_typed") or DEFAULT_SPEC
+    if not path or not Path(str(path)).is_file():
+        return "local"
+    try:
+        held = _where.tables(str(path))
+    except (OSError, ValueError):
+        return "local"  # a spec that does not parse is refused where it is read, with its line
+    if "modal" in held and "cloud" in held:
+        raise refusal(_where.both(path))
+    return "cloud" if "cloud" in held else "modal" if "modal" in held else "local"
+
+
 def _planned(
     spec: Spec | SweepSpec | None,
     *,
@@ -2291,7 +2310,7 @@ def _planned(
     checked = bool(o.get("dry_run"))
     store = _opened(store)
     typed = list(o.get("typed") or [])
-    backend = o.get("backend") or "local"
+    backend = o.get("backend") or _spec_backend(spec, o)
     image = o.get("image") or "image"
     if backend == "local":
         stray = [name for name in MODAL_ONLY_FLAGS if o.get(name) is not None]
@@ -2819,6 +2838,7 @@ def start(
                     on_progress=_starting(begin, on_progress),
                     on_cluster=on_cluster,
                     name_of=name_of,
+                    cancel=cancel,
                 )
         else:
             with _folder_first(o.get("spec_folder") or os.getcwd()):
