@@ -125,6 +125,7 @@ _VERB_NAMES = (
     "inspect",
     "runs",
     "ui",
+    "where",
 )
 _SCHEMAS = {verb: f"{_COMMAND}.{verb}/1" for verb in _VERB_NAMES}
 _ERRORS_LOG = "~/.cache/poisson-prove/errors.log"
@@ -437,7 +438,8 @@ def _build_parser(io: _IO) -> _Parser:
             "else: a commented template to edit, or with --example the keyless quickstart,\n"
             "runnable as it is. With --agent, write instead the setup your own coding agent\n"
             "follows (a skill and the prompt to give it), in the two folders coding agents read\n"
-            "skills from. Nothing is asked."
+            "skills from. In a terminal, init then asks where sweeps should run; --runs-on\n"
+            "answers that on the command line, and off a terminal nothing is asked."
         ),
         epilog=(
             "examples:\n"
@@ -463,6 +465,12 @@ def _build_parser(io: _IO) -> _Parser:
     )
     init_p.add_argument(
         "--force", action="store_true", help="replace the file if it exists (default: refuse)"
+    )
+    init_p.add_argument(
+        "--runs-on",
+        choices=("local", "modal", "cloud"),
+        help="where sweeps of this spec run: this machine, Modal or your cloud account "
+        "(default: asked in a terminal, this machine otherwise)",
     )
     init_p.add_argument(
         "--agent",
@@ -521,9 +529,9 @@ def _build_parser(io: _IO) -> _Parser:
         "--backend",
         choices=("local", "modal", "cloud", "burla"),
         metavar="{local,modal,cloud}",
-        default="local",
         help="where the rollouts run: local (this machine), modal, or cloud (your own cloud "
-        "account; Prove starts the cluster and stops it after) (default: local)",
+        "account; Prove starts the cluster and stops it after) (default: where the spec says, "
+        "see the where verb; local when it says nothing)",
     )
     identity = sweep.add_mutually_exclusive_group()
     identity.add_argument(
@@ -968,6 +976,83 @@ def _build_parser(io: _IO) -> _Parser:
     _add_json_option(ui_p, "where the dashboard is")
     _add_global_options(ui_p, top=False)
 
+    where_p = sub.add_parser(
+        "where",
+        help="say where sweeps of the spec in this folder run, or change it",
+        description=(
+            f"Say where sweeps of ./{_DEFAULT_SPEC} run (this machine, Modal or your own cloud\n"
+            "account) and whether that is ready on this machine; or, with local, modal or\n"
+            "cloud, set it, by writing the matching table into the spec and nothing else.\n"
+            "In a terminal it asks for what no option gives and the spec does not hold;\n"
+            "--yes takes the defaults instead. It asks for no secret and signs in to\n"
+            "nothing: a cloud is reached through that cloud's own sign-in on this machine."
+        ),
+        epilog=(
+            "examples:\n"
+            f"  {_COMMAND} where\n"
+            f"  {_COMMAND} where cloud\n"
+            f"  {_COMMAND} where cloud --region us-east-2 --nodes 4 --yes\n"
+            f"  {_COMMAND} where modal --max-cost 5\n"
+            f"  {_COMMAND} where local"
+        ),
+    )
+    where_p.add_argument(
+        "choice",
+        nargs="?",
+        choices=("local", "modal", "cloud"),
+        metavar="{local,modal,cloud}",
+        help="where sweeps run from now on (default: only say where they run)",
+    )
+    where_p.add_argument(
+        "--spec",
+        metavar="PATH",
+        help=f"the sweep spec to read or change (default: ./{_DEFAULT_SPEC})",
+    )
+    where_p.add_argument(
+        "--cloud", metavar="NAME", help="with cloud: which cloud (default: aws, the one offered)"
+    )
+    where_p.add_argument(
+        "--region", metavar="REGION", help="with cloud: where the nodes start (default: us-east-2)"
+    )
+    where_p.add_argument(
+        "--machine-type",
+        metavar="TYPE",
+        help="with cloud: the nodes' machine type (default: m7i.2xlarge)",
+    )
+    where_p.add_argument(
+        "--nodes",
+        type=int,
+        metavar="N",
+        help="with cloud: how many nodes Prove starts (default: 4)",
+    )
+    where_p.add_argument(
+        "--max-vcpus",
+        type=int,
+        metavar="N",
+        help="with cloud: the vCPU ceiling (default: the nodes times the machine's vCPUs)",
+    )
+    where_p.add_argument(
+        "--stop-cost",
+        type=float,
+        metavar="USD",
+        help="with cloud: the spend at which Prove stops the sweep (default: 2)",
+    )
+    where_p.add_argument(
+        "--max-cost",
+        type=float,
+        metavar="USD",
+        help="with cloud or modal: the estimate above which a sweep is refused (default: 3 on a "
+        "cloud account, no cap on Modal)",
+    )
+    where_p.add_argument(
+        "--yes",
+        action="store_true",
+        help="take the default for what no option gives, and ask nothing (default: ask in a "
+        "terminal)",
+    )
+    _add_json_option(where_p, "where sweeps run")
+    _add_global_options(where_p, top=False)
+
     for p in (parser, *sub.choices.values()):
         if isinstance(p, _Parser):
             p.io = io
@@ -1379,7 +1464,9 @@ def _dispatch(ns: argparse.Namespace, io: _IO, argv: list[str]) -> int:
                     "your cloud account is not available on Windows yet; run the sweep from "
                     "macOS or Linux"
                 )
-            store = core.open_store(getattr(ns, "store", None), verb=ns.verb)
+            # ``where`` reads the spec, not the store: like ``init`` it needs no run to exist.
+            opens_as = "init" if ns.verb == "where" else ns.verb
+            store = core.open_store(getattr(ns, "store", None), verb=opens_as)
             for note in store.notes:
                 io.note(note)
             return _VERBS[ns.verb](ns, io, store, state)
@@ -1835,6 +1922,28 @@ def _write_summary(io: _IO, multi: Any) -> None:
         io.line(trade)
 
 
+def _cluster_words(detail: Mapping[str, Any]) -> str | None:
+    """One of the cluster's progress lines (``starting``, ``ready``, ``stopping``, ``stopped``)
+    as the command line and the terminal app both show it; ``None`` for any other phase."""
+    phase = detail.get("phase")
+    n = int(detail.get("nodes", 0) or 0)
+    nodes = f"{_look.fmt_count(n)} node{'s' if n != 1 else ''}"
+    seconds = _look.fmt_duration(float(detail.get("seconds", 0.0) or 0.0))
+    if phase == "starting":
+        return (
+            f"starting  {n} × {detail['machine_type']} in {detail['region']}  "
+            f"{_look.fmt_count(int(detail.get('ready', 0)))} of {_look.fmt_count(n)} ready"
+            f" · {seconds}"
+        )
+    if phase == "ready":
+        return f"ready  {nodes} · {_look.fmt_count(int(detail['vcpus']))} vCPU · {seconds}"
+    if phase == "stopping":
+        return "stopping  the cluster"
+    if phase == "stopped":
+        return f"stopped  {nodes}, up {seconds}"
+    return None
+
+
 class _Progress:
     """The sweep's progress events as ``done/total`` on stderr: one live line when stderr is a
     terminal (pretty removes it when the work ends), else one line per tenth, counts with
@@ -1873,34 +1982,17 @@ class _Progress:
         if phase == "note":
             self.io.note(str(detail["sentence"]))
             return
-        n = int(detail.get("nodes", 0) or 0)
-        nodes = f"{_look.fmt_count(n)} node{'s' if n != 1 else ''}"
-        seconds = _look.fmt_duration(float(detail.get("seconds", 0.0) or 0.0))
-        if phase == "starting":
-            text = (
-                f"starting  {n} × {detail['machine_type']} in {detail['region']}  "
-                f"{_look.fmt_count(int(detail.get('ready', 0)))} of {_look.fmt_count(n)} ready"
-                f" · {seconds}"
-            )
-            if self.live:
-                self.io.progress(text)
-                self.dirty = True
-                return
-            if self.shown_starting:
-                return
-            self.shown_starting = True
-        elif phase == "ready":
-            text = f"ready  {nodes} · {_look.fmt_count(int(detail['vcpus']))} vCPU · {seconds}"
-        elif phase == "stopping":
-            text = "stopping  the cluster"
-        elif phase == "stopped":
-            text = f"stopped  {nodes}, up {seconds}"
-        else:
+        text = _cluster_words(detail)
+        if text is None:
             return
         if self.live:
             self.io.progress(text)
             self.dirty = True
             return
+        if phase == "starting":
+            if self.shown_starting:
+                return
+            self.shown_starting = True
         self.io.err_write(f"{text}\n")
         self.io.err.flush()
 
@@ -1991,7 +2083,8 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
 
 def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     """Write one sweep spec and nothing else, or with ``--agent`` the setup for the person's own
-    coding agent. Asks nothing."""
+    coding agent. In a terminal it then asks where sweeps should run; off one, under ``--json``
+    or with ``--runs-on``, it asks nothing."""
     if ns.agent:
         given = [
             flag
@@ -1999,6 +2092,7 @@ def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
                 ("--example", ns.example),
                 ("--target", ns.target is not None),
                 ("--out", ns.out is not None),
+                ("--runs-on", ns.runs_on is not None),
             )
             if on
         ]
@@ -2021,15 +2115,37 @@ def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
             f"{flag} goes with --agent",
             [shown + (" --print" if ns.print else ""), f"{_COMMAND} init --help"],
         )
+    if ns.runs_on == "cloud":
+        _refuse_cloud_on_windows()
     written = core.init(
         ns.out, example=ns.example, target=ns.target, force=ns.force, typed=state.argv
     )
+    spec = Path(written.paths[0])
     if ns.json:
-        _print_result(io, "init", written)
+        if ns.runs_on is None:
+            _print_result(io, "init", written)
+            return 0
+        # ``--runs-on`` under ``--json``: the same document, with where the spec runs, whether
+        # that is ready on this machine, and the next that follows from it.
+        placed = _place(io, spec, ns.runs_on, {}, ask=False, yes=True)
+        doc = dict(written.to_json())
+        doc.update(runs_on=placed.choice, ready=not placed.readiness.failed)
+        nexts = list(written.next) if placed.choice == "local" else placed.nexts
+        _write_json(io, "init", doc["verdict"], doc["sentence"], doc, nexts)
         return 0
     io.verdict("ok", written.sentence)
-    for command in written.next:
-        io.next(command)
+    ask = ns.runs_on is None and _tty(io.inp) and _tty(io.err)
+    choice = ns.runs_on or (_ask_where(io) if ask else "local")
+    if choice == "local":
+        for command in written.next:
+            io.next(command)
+        return 0
+    try:
+        placed = _place(io, spec, choice, {}, ask=ask, yes=not ask)
+    except _Refusal as exc:
+        # The spec is written and runs on this machine; ``where`` asks again.
+        raise _Refusal(str(exc), [_where_command(spec, choice)]) from None
+    _print_placed(io, placed, verdict=False)
     return 0
 
 
@@ -2882,6 +2998,281 @@ def _cmd_ui(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     return 0
 
 
+# ---------- where ----------
+
+#: ``where``'s options that describe a cloud account, and so go with ``where cloud`` alone.
+_CLOUD_ONLY = (
+    ("cloud", "--cloud"),
+    ("region", "--region"),
+    ("machine_type", "--machine-type"),
+    ("nodes", "--nodes"),
+    ("max_vcpus", "--max-vcpus"),
+    ("stop_cost", "--stop-cost"),
+)
+
+
+@dataclass(frozen=True)
+class _Placed:
+    """What setting where a spec runs did: the answer, what was written, and how ready it is."""
+
+    choice: str
+    spec: Path
+    sentence: str
+    readiness: Any
+    wrote: str | None
+    nexts: list[str]
+
+
+def _refuse_cloud_on_windows() -> None:
+    if os.name == "nt":
+        raise _Refusal(
+            "your cloud account is not available on Windows yet; run sweeps there from macOS "
+            "or Linux"
+        )
+
+
+def _where_command(spec: Path, choice: str | None = None) -> str:
+    """``where`` as it is typed for ``spec``: the default spec is not named."""
+    words = [_COMMAND, "where", *([choice] if choice else [])]
+    if spec != Path(_DEFAULT_SPEC):
+        words += ["--spec", str(spec)]
+    return _look.command(*words)
+
+
+def _sweep_command(spec: Path, *, dry_run: bool) -> str:
+    words = [_COMMAND, "sweep", *([str(spec)] if spec != Path(_DEFAULT_SPEC) else [])]
+    return _look.command(*words, *(["--dry-run"] if dry_run else []))
+
+
+def _ask(io: _IO, prompt: str) -> str:
+    """One question on stderr, and the line typed for it; the end of the input is Enter."""
+    io.err_write(prompt + " ")
+    io.err.flush()
+    return io.inp.readline().strip()
+
+
+def _ask_where(io: _IO) -> str:
+    """The one question, on stderr; Enter keeps this machine, and so does anything that is not
+    one of the answers offered, with a note."""
+    from poisson_prove import _where
+
+    text, unavailable = _where.question()
+    for line in unavailable:
+        io.err_write(line + "\n")
+    typed = _ask(io, text)
+    choice = _where.answer(typed)
+    if choice is None:
+        io.note(
+            f'"{typed}" is not one of the answers, so sweeps run on this machine; '
+            f"{_COMMAND} where changes it"
+        )
+        return "local"
+    return choice
+
+
+def _place(
+    io: _IO, spec: Path, choice: str, given: Mapping[str, Any], *, ask: bool, yes: bool
+) -> _Placed:
+    """Write ``choice`` into ``spec`` as its where-to-run table and check it on this machine.
+
+    A value ``given`` lacks and the spec's table does not hold is the default under ``yes``,
+    asked for on stderr under ``ask``, and otherwise refused naming its flag. A value Prove
+    cannot use is refused and nothing is written; what depends on this machine's state (the
+    extra, the sign-in, the quota) is written anyway and reported as not ready."""
+    from poisson_prove import _where
+
+    held = _where.tables(spec)
+    kind, existing = _where.current(spec)
+    answers: dict[str, Any] = {}
+    try:
+        if choice == "cloud":
+            _refuse_cloud_on_windows()
+            base = _where.carried(choice, kind, existing)
+            values = {k: v for k, v in given.items() if v is not None}
+            if ask:
+                for line in _where.not_offered():
+                    io.err_write(line + "\n")
+            for q in _where.QUESTIONS:
+                if q.key in values or q.key in base:
+                    continue
+                if yes:
+                    values[q.key] = q.default
+                elif ask:
+                    values[q.key] = q.parse(_ask(io, q.prompt()))
+                else:
+                    raise _Refusal(
+                        f"{q.flag} is not given and stdin is not a terminal, so it cannot be "
+                        "asked for; give it, or --yes to take the defaults"
+                    )
+            answers = _where.cloud_answers(base, values)
+            _where.usable(answers)
+        elif choice == "modal":
+            base = _where.carried(choice, kind, existing)
+            cap = given.get("max_cost")
+            if cap is None and "max_cost" not in base and ask:
+                cap = _where.MODAL_CAP.parse(_ask(io, _where.MODAL_CAP.prompt()))
+            answers = _where.modal_answers(base, {"max_cost": cap})
+        _where.write(spec, _where.table(choice, answers))
+    except _where.WhereError as exc:
+        raise _Refusal(str(exc)) from None
+    if choice != "local":
+        wrote: str | None = f"[{choice}] into {spec}"
+    elif held:
+        wrote = f"{spec} without {' and '.join(f'[{name}]' for name in held)}"
+    else:
+        wrote = None
+    readiness = _where.ready(choice, answers)
+    sentence = _where.sentence(choice, answers, list(readiness.checks))
+    if readiness.failed:
+        nexts = list(readiness.nexts)
+    else:
+        nexts = [_sweep_command(spec, dry_run=choice != "local")]
+    return _Placed(choice, spec, sentence, readiness, wrote, nexts)
+
+
+def _print_placed(io: _IO, placed: _Placed, *, verdict: bool) -> None:
+    """The readiness lines, what was written and the one next; under ``init``, whose own verdict
+    stands above them, the reason an answer is not ready is a line of its own."""
+    if verdict:
+        io.verdict("where", placed.sentence)
+    for c in placed.readiness.shown:
+        io.detail(c.label, c.value)
+    for note in placed.readiness.notes:
+        io.note(note)
+    if placed.wrote is not None:
+        io.detail("wrote", placed.wrote)
+    if not verdict and placed.readiness.failed:
+        io.detail("not ready", placed.readiness.failed[0].value)
+    for command in placed.nexts:
+        io.next(command)
+
+
+def _where_document(placed: _Placed) -> dict[str, Any]:
+    doc: dict[str, Any] = {
+        "runs_on": placed.choice,
+        "spec": str(placed.spec),
+        "ready": not placed.readiness.failed,
+        "checks": [
+            {"label": c.label, "value": c.value, "ok": c.ok, "next": c.next}
+            for c in placed.readiness.checks
+        ],
+    }
+    if placed.wrote is not None:
+        doc["wrote"] = [str(placed.spec)]
+    return doc
+
+
+def _stop_what_was_left(io: _IO, store: Any, answers: Mapping[str, Any], account: str) -> None:
+    """A cluster an earlier sweep left on this account is stopped here, as the next cloud sweep
+    would stop it, with that sweep's note."""
+    from poisson_prove import executor_cloud
+    from poisson_prove.core._ops import _index, _opened
+
+    def name_of(run_id: str) -> str:
+        try:
+            return str(_index(_opened(store)).name_of(run_id))
+        except Exception:  # noqa: BLE001 - the note names the run by its id then
+            return run_id
+
+    def on_cluster(detail: dict[str, Any]) -> None:
+        if detail.get("phase") == "note":
+            io.note(str(detail["sentence"]))
+
+    executor_cloud.finish_what_was_left(
+        str(answers.get("provider")),
+        account,
+        str(answers.get("region")),
+        name_of=name_of,
+        on_cluster=on_cluster,
+    )
+
+
+def _cmd_where(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
+    from poisson_prove import _where, executor_cloud
+
+    spec = Path(ns.spec or _DEFAULT_SPEC)
+    stray = [flag for key, flag in _CLOUD_ONLY if getattr(ns, key) is not None]
+    if ns.choice != "cloud" and stray:
+        raise _Usage(
+            f"{', '.join(stray)} {'go' if len(stray) > 1 else 'goes'} with where cloud",
+            [_where_command(spec, "cloud") + " --help"],
+        )
+    if ns.max_cost is not None and ns.choice not in ("cloud", "modal"):
+        raise _Usage(
+            "--max-cost goes with where cloud or where modal",
+            [f"{_COMMAND} where --help"],
+        )
+    if ns.yes and ns.choice is None:
+        raise _Usage(
+            "--yes goes with local, modal or cloud; bare where only says where sweeps run",
+            [f"{_COMMAND} where --help"],
+        )
+    if ns.max_cost is not None and not ns.max_cost > 0:
+        raise _Usage(f"--max-cost takes an amount in dollars above 0, not {ns.max_cost:g}")
+    if not spec.is_file():
+        if ns.spec is None:
+            raise _Refusal(
+                f"no sweep spec here: no ./{_DEFAULT_SPEC} in this folder", [f"{_COMMAND} init"]
+            )
+        raise _Refusal(
+            f"no sweep spec at {spec}", [_look.command(_COMMAND, "init", "--out", str(spec))]
+        )
+    if ns.choice is not None:
+        given = {
+            "provider": ns.cloud,
+            "region": ns.region,
+            "machine_type": ns.machine_type,
+            "nodes": ns.nodes,
+            "max_vcpus": ns.max_vcpus,
+            "stop_cost": ns.stop_cost,
+            "max_cost": ns.max_cost,
+        }
+        ask = not ns.yes and not ns.json and _tty(io.inp)
+        placed = _place(io, spec, ns.choice, given, ask=ask, yes=ns.yes)
+        if ns.json:
+            for note in placed.readiness.notes:
+                io.note(note)
+            _write_json(
+                io, "where", "where", placed.sentence, _where_document(placed), placed.nexts
+            )
+        else:
+            _print_placed(io, placed, verdict=True)
+        return 0
+    held = _where.tables(spec)
+    if "modal" in held and len(held) > 1:
+        raise _Refusal(_where.both(spec))
+    kind, answers = _where.current(spec)
+    if kind == _where.OLD_TABLE:
+        sentence = _where.moved()
+        move = _where_command(spec, "cloud")
+        if ns.json:
+            doc = {"runs_on": "cloud", "spec": str(spec), "ready": False, "checks": []}
+            _write_json(io, "where", "where", sentence, doc, [move])
+        else:
+            io.verdict("where", sentence)
+            io.next(move)
+        return 0
+    readiness = _where.ready(kind, answers)
+    if kind == "cloud" and readiness.account is not None:
+        try:
+            _stop_what_was_left(io, store, answers, readiness.account)
+        except executor_cloud.CloudStopUnconfirmed as exc:
+            io.error(str(exc))
+            return 3
+        except executor_cloud.CloudRefusal as exc:
+            raise _Refusal(str(exc)) from None
+    sentence = _where.sentence(kind, answers, list(readiness.checks))
+    nexts = list(readiness.nexts) if readiness.failed else [_sweep_command(spec, dry_run=False)]
+    placed = _Placed(kind, spec, sentence, readiness, None, nexts)
+    if ns.json:
+        for note in readiness.notes:
+            io.note(note)
+        _write_json(io, "where", "where", sentence, _where_document(placed), nexts)
+    else:
+        _print_placed(io, placed, verdict=True)
+    return 0
+
+
 _VERBS: dict[str, Callable[[argparse.Namespace, _IO, Any, _State], int]] = {
     "ui": _cmd_ui,
     "init": _cmd_init,
@@ -2893,4 +3284,5 @@ _VERBS: dict[str, Callable[[argparse.Namespace, _IO, Any, _State], int]] = {
     "inspect": _cmd_inspect,
     "runs": _cmd_runs,
     "paired": _cmd_paired,
+    "where": _cmd_where,
 }
