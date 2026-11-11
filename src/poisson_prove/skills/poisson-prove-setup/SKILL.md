@@ -33,6 +33,9 @@ Poisson Prove runs the person's agent many times under conditions they choose, o
 - Never run `poisson-prove sweep` without `--dry-run`.
 - Never touch `prove-runs/` or `.poisson/`: they hold the person's runs.
 - Change nothing outside `prove_rollout.py` and `prove.toml`, even to make the check pass.
+- Where sweeps run (this machine, Modal or the person's own cloud account) is the person's
+  choice. Do not ask it, set it or write a table for it: the person sets it themselves with
+  `poisson-prove where`.
 
 ## Files you write
 

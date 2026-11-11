@@ -135,6 +135,24 @@ quickstart run's manifest, less its `environment`:
 }
 ```
 
+`backend` is where the run's rollouts ran: `"local"`, `"modal"` or `"cloud"`. A run made on your
+own cloud account records `"cloud"`, and its placement, where and on what it ran, as a `cloud`
+object under the manifest's `environment` (the key is `environment.cloud`; no key is named
+`placement`):
+
+- the `provider`, `region`, `machine_type`, `nodes`, `slots_per_node`, `image`, `max_vcpus` and
+  `idle_minutes` the cluster ran with;
+- the price and the money: `usd_per_node_hour`, `price_asof`, `estimate`, `ledger`,
+  `ledger_total`, `stop_cost` and `max_cost`;
+- `func_cpu`, `func_ram` and `boot_minutes`;
+- `account`, masked to its first and last four digits, as the plan shows it;
+- `engine`, the cluster software the run was made on, by `name` and `version`:
+  `{"name": "burla", "version": "1.8.4"}`.
+
+A run stored by 0.2 or earlier on a cluster of your own has `"burla"` as its `backend`, which is
+read as cloud: `runs`, `inspect`, the terminal app and the dashboard show it as `cloud`. Its
+manifest is never rewritten, and the placement it recorded stays as stored.
+
 Two optional keys follow, which a reader that does not know them ignores.
 
 #### `produced_by`

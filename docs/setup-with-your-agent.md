@@ -6,6 +6,11 @@ it. Your agent reads your code, writes the two files Prove needs (`prove_rollout
 and stops for you to review what it wrote. Prove makes no model call and reads no key; your agent
 does the work, and you run the sweep yourself.
 
+Where sweeps run is your choice, not your agent's. The skill does not ask it or set it: the spec
+it writes runs on this machine, and `poisson-prove where` moves it to Modal or your own cloud
+account when you want that. (`poisson-prove init` asks the same question when you write a spec
+yourself in a terminal.)
+
 <!-- docs-check: run -->
 ```bash
 poisson-prove init --agent
@@ -57,8 +62,8 @@ Six steps, in order. The skill says each in full; here is what each is for.
 
 Its rules: it never runs a sweep without `--dry-run` and never passes `--yes`, so nothing is spent;
 it never reads, prints or writes a key or a `.env` file; it installs nothing; it changes nothing
-outside its two files, and never touches `prove-runs/` or `.poisson/`; and it quotes Prove's
-output, never rewording it.
+outside its two files, and never touches `prove-runs/` or `.poisson/`; it leaves where sweeps
+run to you; and it quotes Prove's output, never rewording it.
 
 ## Each case is its own sweep axis
 
@@ -82,4 +87,5 @@ what, with an `error:` line and `next:` lines; when everything is right it print
 Read `prove_rollout.py` and `prove.toml` as you would any change to your repository: the mapping of
 endings to outcomes is the part that decides what the numbers mean
 ([Defining outcomes](defining-outcomes.md)). Then run the sweep, change your agent, and sweep again
-with `--pair-with latest`, as in the [quickstart](quickstart.md).
+with `--pair-with latest`, as in the [quickstart](quickstart.md). To run the sweeps on Modal or
+your own cloud account, say so first with [`poisson-prove where`](commands/where.md).

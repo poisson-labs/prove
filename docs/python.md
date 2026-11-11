@@ -189,4 +189,5 @@ retrying a failed call once.
 These are private and may change in any release: `executor`, `executor_modal`, `executor_cloud`,
 `sampler`, `diff`, `tree`, `report`, `viewer`, `plain`, `paired`, `capture`, `chaos_catalog`,
 `survival` (its functions are public through `stats`), `cli`, `_compat`, `_resolve`,
-`_cloud_submit`, and `core`, the core every face sits on.
+`_cloud_submit`, `_cloud_head`, `_cloud_record`, `_prices_cloud`, `_where`, `_where_checks`, and
+`core`, the core every face sits on.

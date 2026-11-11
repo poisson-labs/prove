@@ -83,6 +83,9 @@ fail most, because the retries use up the budget. [First look](recipes/first-loo
 block of this output, and [What the statistics claim](concepts/what-the-statistics-claim.md) says
 what each verdict word means.
 
+This sweep ran on this machine. To run the same sweep on Modal or on your own cloud account,
+say so with `poisson-prove where`; [Backends](backends.md) has what each needs.
+
 The `next:` line writes the comparison as a report, with a heatmap of the change per condition:
 
 <!-- docs-check: run -->

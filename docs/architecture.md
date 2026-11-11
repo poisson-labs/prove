@@ -20,9 +20,10 @@ surface (`poisson_prove`, `poisson_prove.stats`, `poisson_prove.store`, `poisson
 others).
 
 Under the core sit the modules that do the work: the spec reader (`sampler`), the executors (local,
-Modal, Burla), the store, the statistics (`stats`, `survival`, `diff` and the layered `tree`), the
-detection limits and the verdict, paired replay (`paired`), traces and capture, and fault
-injection (`chaos`). They know nothing of faces.
+Modal, your cloud account), where a sweep runs (`_where`, the one module `init`, `where` and the
+terminal app's page all call), the store, the statistics (`stats`, `survival`, `diff` and the
+layered `tree`), the detection limits and the verdict, paired replay (`paired`), traces and
+capture, and fault injection (`chaos`). They know nothing of faces.
 
 ## The faces
 
