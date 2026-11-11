@@ -5,7 +5,9 @@
 #   and macOS.
 # - math: the statistics, calibration and the slow math tests included, on every supported Python;
 #   its test report is kept a week.
-# - slow: the slow tests, on every supported Python.
+# - slow: the slow tests, on every supported Python, but the two that run a suite of their own.
+# - home: the whole suite once more with HOME at an empty folder, alone on its runner, on every
+#   supported Python; the report of the suite it ran is kept a week.
 # - floors: the code suite with every requirement at its floor.
 # - linux: the code suite in a Debian container, as a user that is not root.
 # - report: when any job fails, opens one issue titled "Nightly run failed", or comments on it if
@@ -14,7 +16,7 @@
 # Each lane runs pytest through .github/lanes/lane.py, which adds the lane's row (tests, wall time
 # against its budget, the runner's load) to the job summary. The budgets are a hosted runner's
 # (4 vCPUs on Linux, 3 on macOS) and are reported, not enforced: code, linux and floors 30
-# minutes, math 70, slow 150. Tests marked backend need a real account and never run in CI.
+# minutes, math 70, slow 150, home 120. Tests marked backend need a real account and never run in CI.
 # Every job runs on a GitHub-hosted runner and reads no secret; only `report` may write, and only
 # issues. Every action is pinned to a full commit SHA.
 
@@ -39,6 +41,7 @@ env:
   OPENBLAS_NUM_THREADS: "1"
   CODE_SUITE: not math and not calibration and not backend and not slow
   FLOORS_TEST: tests/test_pf7_packaging.py::test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor
+  HOME_TEST: tests/test_pf8_public_hygiene.py::test_pf8_5_with_home_empty_no_skip_names_a_place
 
 jobs:
   code:
@@ -124,7 +127,43 @@ jobs:
           .venv/bin/python -m playwright install --with-deps chromium firefox webkit
           echo "WORKERS=$(python -c 'import os; print(os.cpu_count())')" >> "$GITHUB_ENV"
       - name: Slow suite
-        run: .venv/bin/python .github/lanes/lane.py slow 9000 -q -p no:cacheprovider -n "$WORKERS" -m "slow and not backend" --deselect "$FLOORS_TEST" tests
+        run: .venv/bin/python .github/lanes/lane.py slow 9000 --over 10 -q -p no:cacheprovider -n "$WORKERS" -m "slow and not backend" --deselect "$FLOORS_TEST" --deselect "$HOME_TEST" tests
+
+  # This test runs the whole suite, the math and the slow tests included, at one worker per core. In
+  # the slow lane it shared the runner's four cores with the other slow tests, and on the slowest
+  # hosted processors its suite did not end inside the two hours the test gives it (prove#39).
+  home:
+    name: home (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Environment
+        run: |
+          python -m pip install --quiet "uv==$UV_VERSION"
+          uv venv --quiet --python "${{ matrix.python }}" .venv
+          uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/python -m playwright install --with-deps chromium firefox webkit
+      - name: Home (the whole suite at one worker per core, HOME at an empty folder)
+        run: .venv/bin/python .github/lanes/lane.py home 7200 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/home" "$HOME_TEST"
+      - name: Keep the report of the suite it ran
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: home-suite-${{ matrix.python }}
+          path: ${{ runner.temp }}/home/**/suite.xml
+          retention-days: 7
+          if-no-files-found: warn
 
   floors:
     runs-on: ubuntu-latest
@@ -180,7 +219,7 @@ jobs:
           exit "$status"
 
   report:
-    needs: [code, math, slow, floors, linux]
+    needs: [code, math, slow, home, floors, linux]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
