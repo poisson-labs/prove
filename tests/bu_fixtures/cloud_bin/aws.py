@@ -4,9 +4,13 @@ A test copies this file into a folder of its own on ``PATH`` as ``aws`` (with a 
 test's interpreter), beside ``aws-state.json``:
 
     {"account": "603052864933", "signed_in": true | false | "expired",
-     "quota": 40 | "denied" | null}
+     "quota": 40 | "denied" | null, "hangs": ["sts"] | ["service-quotas"],
+     "answers_after": 2.0}
 
-Every call is appended to ``aws-calls.jsonl`` beside it: its arguments and its whole environment.
+Every call is appended to ``aws-calls.jsonl`` beside it: its arguments, its whole environment, its
+pid, its process group and its session. A call whose service is in ``hangs`` is recorded and then
+never answers (a CLI waiting on a network that does not); with ``answers_after`` every call
+waits that many seconds before it answers.
 The two read-only calls it answers, as the real CLI answers them:
 
 - ``aws sts get-caller-identity --output json``: ``{"UserId", "Account", "Arn"}``; signed out,
@@ -29,9 +33,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def main():
     args = sys.argv[1:]
     with open(os.path.join(HERE, "aws-calls.jsonl"), "a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"argv": args, "env": dict(os.environ), "time": time.time()}) + "\n")
+        fh.write(json.dumps({"argv": args, "env": dict(os.environ), "time": time.time(),
+                             "pid": os.getpid(), "pgid": os.getpgid(0), "sid": os.getsid(0)}) + "\n")
     with open(os.path.join(HERE, "aws-state.json"), encoding="utf-8") as fh:
         state = json.load(fh)
+    if args and args[0] in state.get("hangs", []):
+        while True:
+            time.sleep(0.5)
+    time.sleep(float(state.get("answers_after", 0) or 0))
     account = state.get("account", "603052864933")
     if args[:2] == ["sts", "get-caller-identity"]:
         signed_in = state.get("signed_in", True)

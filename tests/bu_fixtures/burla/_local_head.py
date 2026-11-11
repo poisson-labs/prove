@@ -22,6 +22,20 @@ environment and every signal it receives. ``ensure_local_head`` also records, as
 in ``management.jsonl``: its own environment's Burla and AWS variables, and a copy of every
 ownership record Prove holds and of the ledger named in the state folder's ``ledger.path``, as
 they were when the head was asked for (L7, L13).
+
+Three faults a test scripts (``cluster-script.json``), each as 1.8.4 can fail:
+
+- ``head_start_s``: seconds ``ensure_local_head`` waits, after the head process is started and
+  recorded in ``head.json``, before it answers (1.8.4 waits up to 90 s for the head and 15 s for
+  the relay, ``:984-1011``, ``:1104-1122``, with the process already running).
+- ``head_fails_after_start``: after the head process is started and recorded, ``ensure_local_head``
+  raises ``LocalHeadError`` with this text and leaves the process running, as 1.8.4 does when the
+  head or its relay tunnel is not ready in time (``:808-834``: "Written before the readiness wait
+  so a failed boot never leaks the process (the next attempt kills whatever pids are recorded
+  here)"; nothing in that path stops it).
+- ``head_stop_fails``: ``_stop_recorded_head`` raises ``PermissionError`` before it signals the
+  head, as ``psutil.Process.terminate`` does for a process this user may not signal (``:469-480``),
+  so the head is left running and recorded.
 """
 
 from __future__ import annotations
@@ -94,6 +108,8 @@ def _stop_recorded_head(head_state_path: Path, head_pid: int) -> None:
     if head_state.get("head_pid") != head_pid:
         return
     _cluster.record("head stop", pid_stopped=head_pid, head=head_state.get("url"))
+    if _cluster.script().get("head_stop_fails"):
+        raise PermissionError(f"psutil.AccessDenied (pid={head_pid})")
     _terminate_pid(head_pid)
     _clear_process_state(Path(head_state_path), head_pid, head_state.get("frpc_pid"))
 
@@ -176,6 +192,11 @@ def ensure_local_head() -> str:
         "cluster_name": "",
     }
     head_state_path.write_text(json.dumps(head_state))
+    script = _cluster.script()
+    if script.get("head_start_s"):
+        time.sleep(float(script["head_start_s"]))
+    if script.get("head_fails_after_start"):
+        raise LocalHeadError(str(script["head_fails_after_start"]))
     ready = Path(_cluster.path(f"head-{process.pid}.ready"))
     until = time.time() + 90  # _local_head.py's readiness wait
     while not ready.exists():
