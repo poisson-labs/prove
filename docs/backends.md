@@ -92,13 +92,13 @@ pip install "poisson-prove[cloud]"
 aws login
 ```
 
-The extra installs the cluster software Prove uses, pinned to exactly one version
-(`burla==1.8.4`), and `botocore[crt]`, which a sign-in made by `aws login` needs. The AWS CLI is
-not a Python package: install it yourself, and Prove names it when it is missing. Before anything
-starts Prove checks, in this order, the extra, the AWS CLI, that this machine is signed in (a
-read-only `aws sts get-caller-identity`), the region and machine type against its price table,
-the image's Python against this machine's, the vCPU ceiling and the account's vCPU quota. Every
-install line Prove prints for this backend is `pip install "poisson-prove[cloud]"`.
+The extra installs the cluster software Prove uses, pinned to exactly one version (`burla==1.8.4`),
+and `botocore[crt]>=1.42.39`, which a sign-in made by `aws login` needs. The AWS CLI is not a Python
+package: install it yourself, and Prove names it when it is missing. Before anything starts Prove
+checks, in this order, the extra, the AWS CLI, that this machine is signed in (a read-only
+`aws sts get-caller-identity`), the region and machine type against its price table, the image's
+Python against this machine's, the vCPU ceiling and the account's vCPU quota. Every install line
+Prove prints for this backend is `pip install "poisson-prove[cloud]"`.
 
 These keys are required: `provider`, `region`, `machine_type`, `nodes`, `ledger` (a JSON-lines
 file of what has been spent, checked before anything starts and written as the job goes),

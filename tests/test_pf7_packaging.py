@@ -22,8 +22,13 @@ package.
   ``main`` that exists in this tree; ``Source`` is the repository and ``Issues`` its issues page.
 - **k4** Every requirement has a lower bound: the core, every extra, ``dev`` included (the floors
   run resolves ``[dev]`` at its lowest too), and the build backend. An upper bound only on
-  ``openai`` (``openai<3``), an exact pin only for ``burla==1.8.4``, and no bound at all on
-  ``botocore[crt]``, which ``burla``'s ``boto3`` pins exactly (Remote Backends Spec §2.2, RB-3).
+  ``openai`` (``openai<3``), and an exact pin only for ``burla==1.8.4``. ``botocore[crt]`` has the
+  floor ``burla``'s own requirement gives it: ``burla`` 1.8.4 requires ``boto3>=1.42.39`` and each
+  ``boto3`` requires the ``botocore`` of its own number or later, so 1.42.39 is the lowest
+  ``botocore`` that installs beside the pin. (The sign-in the ``crt`` extra is there for, a session
+  made by ``aws login``, came in ``botocore`` 1.41.0.) Remote Backends Spec §2.2 and RB-3 left it
+  with no bound; the floors run of the nightly cannot install a requirement that has none
+  (prove#39).
 - **k5** ``[dev]`` carries what the contributors' test runs need that this file and the docs check
   read: ``pytest-xdist`` (the suite runs on parallel workers), ``hypothesis`` (the property tests), ``hatchling`` (the archives built
   here), ``markdown-it-py`` (the docs check reads pages with it), ``pyyaml`` (it parses YAML
@@ -97,8 +102,10 @@ PYTHONS = ("3.11", "3.12", "3.13", "3.14")
 EXTRAS = {"modal", "agent", "cloud", "burla", "all", "dev"}
 MODAL_FLOOR = "modal>=1.0.0"
 BURLA_PIN = "burla==1.8.4"
-#: RB-3: the cloud extra is the pinned cluster software and botocore's ``crt`` extra, unpinned.
-CLOUD = [BURLA_PIN, "botocore[crt]"]
+#: The lowest botocore that installs beside the pin: burla 1.8.4 requires boto3>=1.42.39.
+BOTOCORE_FLOOR = "botocore[crt]>=1.42.39"
+#: RB-3: the cloud extra is the pinned cluster software and botocore's ``crt`` extra.
+CLOUD = [BURLA_PIN, BOTOCORE_FLOOR]
 DEV_NEEDS = ("pytest-xdist", "hypothesis", "hatchling", "markdown-it-py", "pyyaml", "pyte")
 SDIST_FILES = {"PKG-INFO", "pyproject.toml", ".gitignore", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "NOTICE"}
 SDIST_FOLDERS = ("src", "tests", "docs", "examples")
@@ -237,11 +244,8 @@ def test_pf7_4_every_requirement_has_a_floor_and_no_ceiling_but_openai_and_burla
             if str(req.specifier) != "==1.8.4":
                 problems.append(f"{req}: burla is pinned exactly to the client the backend runs")
             continue
-        if name == "botocore":
-            # RB-3: unpinned; boto3, which the cluster software requires, pins botocore exactly.
-            if str(req.specifier) or req.extras != {"crt"}:
-                problems.append(f"{req}: botocore is unpinned, with its crt extra")
-            continue
+        if name == "botocore" and (req != Requirement(BOTOCORE_FLOOR) or req.extras != {"crt"}):
+            problems.append(f"{req}: botocore has its crt extra and the floor the pinned burla gives it, {BOTOCORE_FLOOR}")
         if ">=" not in operators:
             problems.append(f"{req}: no floor")
         allowed = {">="} | ({"<"} if name == "openai" else set())

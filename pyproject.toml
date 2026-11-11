@@ -48,10 +48,10 @@ Issues = "https://github.com/poisson-labs/prove/issues"
 
 [project.optional-dependencies]
 modal = ["modal>=1.0.0"]
-cloud = ["burla==1.8.4", "botocore[crt]"]
-burla = ["burla==1.8.4", "botocore[crt]"]
+cloud = ["burla==1.8.4", "botocore[crt]>=1.42.39"]
+burla = ["burla==1.8.4", "botocore[crt]>=1.42.39"]
 agent = ["openai>=2.20,<3", "opentelemetry-sdk>=1.41.0"]
-all = ["modal>=1.0.0", "burla==1.8.4", "botocore[crt]", "openai>=2.20,<3", "opentelemetry-sdk>=1.41.0"]
+all = ["modal>=1.0.0", "burla==1.8.4", "botocore[crt]>=1.42.39", "openai>=2.20,<3", "opentelemetry-sdk>=1.41.0"]
 dev = [
     "cloudpickle>=3.1.1",
     "hatchling>=1.27.0",
