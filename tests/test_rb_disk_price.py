@@ -4,7 +4,9 @@ Each row of Prove's AWS table prices a node's disk at the size the cluster softw
 ``disk_gb`` unset: 20 GB plus the machine's RAM. A ``disk_gb`` the reader sets is priced at
 ``disk_gb`` plus the RAM, never under the image's 20 GB. The plan's ``Cost:`` line and ``--json``'s
 ``plan.cloud.disk_gb_priced`` say which size was priced; a price the reader gives prices no disk
-of Prove's.
+of Prove's. Prove sends the disk on every cloud sweep, 20 when the spec leaves ``disk_gb`` unset (ruled
+2026-11-12): the software keeps its settings per account across coordinators, so an earlier
+sweep's ``disk_gb`` would otherwise boot under a price for the default.
 
 The boot size is read from the installed ``burla==1.8.4``'s own files (parsed as text, never
 imported, as C3-K reads them); where the cloud extra is not installed at the pin that test is
@@ -186,3 +188,18 @@ def test_a_done_sweep_with_disk_gb_charges_and_records_the_disk_gb_price(w: Clou
     assert placement["usd_per_node_hour"] == PRICE_500, placement
     opened = w.ledger()
     assert [e["usd_per_node_hour"] for e in opened if e.get("event") == "open"] == [PRICE_500], opened
+
+
+def test_an_earlier_sweeps_disk_gb_is_not_kept_a_sweep_without_it_sends_twenty(w: CloudWorld) -> None:
+    w.write_spec(table=cloud_table(disk_gb=500))
+    assert w.sweep().code == 0
+    assert w.cluster()["settings"]["disk_gb"] == 500, w.cluster()["settings"]
+    w.write_spec(table=cloud_table())
+    plan = w.sweep("--dry-run", "--json")
+    assert plan.code == 0, plan
+    cloud = json.loads(plan.out)["plan"]["cloud"]
+    assert (cloud["usd_per_node_hour"], cloud["disk_gb_priced"]) == (PRICE, 52), cloud
+    assert w.sweep().code == 0
+    updates = [e for e in w.management() if e["route"] == "PATCH /v1/management/settings"]
+    assert [u["body"]["disk_gb"] for u in updates] == [500, 20], updates
+    assert w.cluster()["settings"]["disk_gb"] == 20, w.cluster()["settings"]

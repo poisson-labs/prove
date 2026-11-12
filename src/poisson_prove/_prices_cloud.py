@@ -53,8 +53,10 @@ _AWS_REGIONS: dict[str, tuple[float, float, float, float, float]] = {
     "eu-west-1": (0.11235, 0.088, 0.0055, 45.056, 0.005),
     "eu-central-1": (0.12075, 0.0952, 0.006, 48.7424, 0.005),
 }
-#: The cluster software's disk with ``disk_gb`` unset, before it adds the machine's RAM.
-_DISK_DEFAULT_GB = 20
+#: The cluster software's disk with ``disk_gb`` unset, before it adds the machine's RAM. Prove
+#: sends it when a spec leaves ``disk_gb`` unset: the software keeps its settings per account
+#: across coordinators, so an earlier sweep's ``disk_gb`` would otherwise stay.
+DISK_DEFAULT_GB = 20
 #: The image's own disk: a smaller volume is booted at this size.
 _DISK_FLOOR_GB = 20
 _RAM_GB_PER_VCPU = 4
@@ -79,7 +81,7 @@ def boot_disk_gb(provider: str, machine_type: str, disk_gb: int | None = None) -
     vcpus_ = _AWS_VCPUS.get(machine_type) if provider == "aws" else None
     if vcpus_ is None:
         return None
-    return max((disk_gb or _DISK_DEFAULT_GB) + vcpus_ * _RAM_GB_PER_VCPU, _DISK_FLOOR_GB)
+    return max((disk_gb or DISK_DEFAULT_GB) + vcpus_ * _RAM_GB_PER_VCPU, _DISK_FLOOR_GB)
 
 
 def _aws_row(region: str, kind: str, disk_gb: int | None) -> PriceRow:

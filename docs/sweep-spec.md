@@ -186,7 +186,7 @@ cap or a cluster. [Backends](backends.md#your-cloud-account) says what it needs.
 | `boot_minutes` | minutes | `5.0` | billed time to boot the cluster, in the estimate |
 | `usd_per_node_hour` | dollars | Prove's price table | the price of a node for an hour, given with `price_asof` |
 | `price_asof` | string | Prove's price table | where and when that price was read, given with `usd_per_node_hour` |
-| `disk_gb` | integer, 10 to 2,000 | the cluster software's default | each node's disk, to which the cluster software adds the machine's RAM; priced at that size |
+| `disk_gb` | integer, 10 to 2,000 | `20` | each node's disk, to which the cluster software adds the machine's RAM; priced at that size |
 | `packages` | list of package names | none | local packages shipped to the workers, beside Prove itself |
 | `func_cpu` | integer | `1` | CPUs per worker |
 | `func_ram` | gigabytes | `4` | memory per worker |
@@ -216,7 +216,9 @@ disk size it priced.
 
 When the spec sets `disk_gb`, each node boots `disk_gb` plus its RAM (never less than 20 GB), and
 the plan prices the disk at that size at the same rates: `disk_gb = 500` on `m7i.2xlarge` in
-`us-east-2` is a 532 GB disk and $0.5213 a node-hour.
+`us-east-2` is a 532 GB disk and $0.5213 a node-hour. Prove gives the cluster software the disk on
+every sweep, 20 when the spec leaves `disk_gb` unset, since the software keeps its settings on
+your account from one sweep to the next: a `disk_gb` an earlier sweep set is not kept.
 
 A region or a machine type outside the table is refused, naming the ones the table has, unless
 the spec gives `usd_per_node_hour` and `price_asof` together. The estimate is compute only: what

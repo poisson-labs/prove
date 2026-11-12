@@ -1902,7 +1902,8 @@ def run_cloud(
                     *("--machine-type", options.machine_type),
                     *("--quantity", str(options.nodes)),
                     *("--image", resolved.image),
-                    *(() if options.disk_gb is None else ("--disk-gb", str(options.disk_gb))),
+                    # Always the disk: the software keeps an earlier sweep's on the account.
+                    *("--disk-gb", str(options.disk_gb or _prices_cloud.DISK_DEFAULT_GB)),
                     *("--inactivity-timeout-seconds", str(round(options.idle_minutes * 60))),
                     *("--max-vcpus", str(resolved.max_vcpus)),
                 ]
