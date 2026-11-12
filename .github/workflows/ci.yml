@@ -68,6 +68,7 @@ env:
        tests/test_m10_multi.py
     2: tests/test_s27_leaves.py
     3: tests/test_s26_fault_lines.py tests/test_s21_errors.py tests/test_rb_docs.py
+       tests/test_rb_disk_price.py
     4: tests/test_s28_report.py tests/test_p1_payload.py tests/test_s25_root.py
        tests/test_json_stdout.py
     5: tests/test_pf7_docs.py tests/test_pf5_api_core.py tests/test_pf2_names.py

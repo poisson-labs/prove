@@ -329,7 +329,7 @@ def test_v5_numbers_read_by_rule_10(w: CloudWorld) -> None:
     assert plan.code == 0, plan
     assert " 1,000 rollouts of " in plan.out.splitlines()[0], plan.out
     for money in re.findall(r"\$[0-9][0-9.,]*", plan.out):
-        assert re.fullmatch(DOLLARS, money) or money.startswith("$0.4685"), money
+        assert re.fullmatch(DOLLARS, money) or money.startswith("$0.4687"), money
     w.write_spec(table=cloud_table(nodes=2))
     done = w.sweep()
     assert done.code == 0, done
