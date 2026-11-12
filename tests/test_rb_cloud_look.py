@@ -247,8 +247,10 @@ V4 = [
       '  next: pip install "poisson-prove[cloud]"']),
     ("vcpu", f"503: {{'title': 'An error occurred (VcpuLimitExceeded) when calling the RunInstances "
              f"operation {TOKEN}'}}",
-     [f"error: your AWS account's vCPU quota in {REGION} is too small for 1 × {MACHINE}; lower nodes, or "
-      "ask AWS for more"]),
+     # The quota read at the check (40) fits the cluster, so the refusal is the quota in use (the
+     # AWS check's ruling of 2026-11-12, yes/no 3); a quota not read keeps "too small for".
+     [f"error: your AWS account's vCPU quota in {REGION} is in use (the last cluster may still be stopping); "
+      "try again in a minute, lower nodes, or ask AWS for more"]),
     ("capacity", f"503: {{'title': 'INSUFFICIENT_INSTANCE_CAPACITY: us-east-2a currently have no {TOKEN}'}}",
      [f"error: AWS has no {MACHINE} capacity in {REGION} right now; try another machine type or region"]),
     ("unauthorized", f"503: {{'title': 'An error occurred (UnauthorizedOperation) {TOKEN}'}}",

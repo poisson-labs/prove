@@ -4,14 +4,15 @@ A test copies this file into a folder of its own on ``PATH`` as ``aws`` (with a 
 test's interpreter), beside ``aws-state.json``:
 
     {"account": "603052864933", "signed_in": true | false | "expired",
-     "quota": 40 | "denied" | null, "hangs": ["sts"] | ["service-quotas"],
-     "answers_after": 2.0}
+     "quota": 40 | "denied" | null, "hangs": ["sts"] | ["service-quotas"] | ["ec2"],
+     "answers_after": 2.0, "ec2": {"state": "<the fake's state folder>", "fixtures": "<bu_fixtures>"},
+     "ec2_denied": ["describe-instances", "terminate-instances"]}
 
 Every call is appended to ``aws-calls.jsonl`` beside it: its arguments, its whole environment, its
 pid, its process group and its session. A call whose service is in ``hangs`` is recorded and then
 never answers (a CLI waiting on a network that does not); with ``answers_after`` every call
 waits that many seconds before it answers.
-The two read-only calls it answers, as the real CLI answers them:
+The calls it answers, as the real CLI answers them:
 
 - ``aws sts get-caller-identity --output json``: ``{"UserId", "Account", "Arn"}``; signed out,
   exit 253 and botocore's "Unable to locate credentials" on stderr; an expired session, exit 255.
@@ -19,7 +20,15 @@ The two read-only calls it answers, as the real CLI answers them:
   --output json``: ``{"Quota": {..., "Value": 40.0}}``; ``"denied"``, exit 254 and an
   ``AccessDeniedException`` on stderr.
 
-Anything else is recorded and refused, exit 252: a check must not write, sign in or create.
+- ``aws ec2 describe-instances --region R --filters Name=tag:burla-cluster-node,Values=true
+  --output json``: the fake cloud's instances (``fake_ec2.py``), every state, one reservation each.
+- ``aws ec2 terminate-instances --region R --instance-ids I [I ...] --output json``: the named
+  instances start shutting down. The one write Prove makes to the account, and only to an instance
+  the fake cluster launched.
+
+A call named in ``ec2_denied`` answers EC2's ``UnauthorizedOperation``, exit 254. Anything else is
+recorded and refused, exit 252: a check must not write, sign in or create, and the stop asks EC2
+for nothing else.
 """
 
 import json
@@ -67,8 +76,60 @@ def main():
                                     "T, Z) instances", "Value": float(quota), "Unit": "None",
                                     "Adjustable": True, "GlobalQuota": False}}, indent=4))
         return 0
+    if args[:1] == ["ec2"] and len(args) > 1:
+        return _ec2(args, state)
     print(f"fake aws: {' '.join(args)} is not a call Prove's checks may make", file=sys.stderr)
     return 252
+
+
+def _option(args, name):
+    """The values after ``name`` up to the next option."""
+    if name not in args:
+        return None
+    out = []
+    for word in args[args.index(name) + 1:]:
+        if word.startswith("--"):
+            break
+        out.append(word)
+    return out
+
+
+def _ec2(args, state):
+    verb = args[1]
+    region = (_option(args, "--region") or [None])[0]
+    if verb not in ("describe-instances", "terminate-instances") or not region or \
+            _option(args, "--output") != ["json"]:
+        print(f"fake aws: {' '.join(args)} is not a call Prove may make", file=sys.stderr)
+        return 252
+    if verb == "describe-instances" and _option(args, "--filters") != [
+            "Name=tag:burla-cluster-node,Values=true"]:
+        print("fake aws: describe-instances without the burla-cluster-node filter", file=sys.stderr)
+        return 252
+    account = state.get("account", "603052864933")
+    if verb in state.get("ec2_denied", []):
+        operation = "DescribeInstances" if verb == "describe-instances" else "TerminateInstances"
+        print(f"\nAn error occurred (UnauthorizedOperation) when calling the {operation} operation: "
+              f"You are not authorized to perform this operation. User: arn:aws:iam::{account}:user/reader",
+              file=sys.stderr)
+        return 254
+    where = state.get("ec2") or {}
+    sys.path.insert(0, where["fixtures"])
+    import fake_ec2
+
+    if verb == "describe-instances":
+        print(json.dumps(fake_ec2.describe(where["state"], region), indent=4))
+        return 0
+    ids = _option(args, "--instance-ids") or []
+    if not ids:
+        print("fake aws: terminate-instances names no instance", file=sys.stderr)
+        return 252
+    try:
+        print(json.dumps(fake_ec2.terminate(where["state"], ids), indent=4))
+    except KeyError as missing:
+        print(f"\nAn error occurred (InvalidInstanceID.NotFound) when calling the TerminateInstances "
+              f"operation: The instance ID '{missing.args[0]}' does not exist", file=sys.stderr)
+        return 254
+    return 0
 
 
 if __name__ == "__main__":

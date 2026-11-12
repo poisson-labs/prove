@@ -5,7 +5,7 @@ those of 1.8.4 and keep their state here. Everything lives under the fake's stat
 (``BU_FAKE_BURLA_STATE``):
 
 - ``cluster.json``: ``{"settings": {...}, "nodes": [{"name", "status", "booted_at"}, ...]}``, the
-  nodes as the cloud holds them. A node is listed while its status is ``BOOTING``, ``READY`` or
+  nodes as the cloud holds them (each one instance; ``fake_ec2.py`` says what the cloud shows). A node is listed while its status is ``BOOTING``, ``READY`` or
   ``RUNNING`` (``main_service/endpoints/management.py:222-245``); a deleted node is ``DELETED``.
 - ``clusters/<project>/head.json``: the head's own record, as ``_local_head.py:810-822`` writes it.
 - ``management.jsonl``: one line per management call the fake served, ``{"time", "route",
@@ -27,6 +27,17 @@ The script's keys:
 - ``preexisting``: nodes listed before Prove asks for any (``[{"status": "READY"}]``), or
   ``jobs``: an active job count the status reports.
 - ``head_fails``: ``ensure_local_head`` raises ``LocalHeadError`` with this text.
+- ``shutdown_s``: seconds a deleted node's instance stays ``shutting-down`` in the cloud, still
+  counted against the quota, before it is ``terminated`` (default 0; ``fake_ec2.py``).
+- ``quota_vcpus``: the account's vCPU quota as RunInstances enforces it: cluster start launches
+  nodes while the instances pending, running or shutting down leave room, and answers
+  ``PROVIDER_ERROR`` with EC2's ``VcpuLimitExceeded`` text for the first that does not fit (the
+  ones launched stay up).
+- ``launch_in_flight``: ``{"nodes": k, "hidden": bool}``: a cluster stop that finds nodes
+  booting answers ``off`` while the last k of them are still being launched; they launch anyway,
+  as ``ORPHAN`` nodes the software never lists, running until something terminates them (1.8.4,
+  the AWS check of 2026-11-12, case c). ``hidden``: the cloud does not show them until a test
+  reveals them.
 - ``head_start_s``, ``head_fails_after_start``, ``head_stop_fails``: the head's own faults,
   described in ``_local_head.py``.
 """
@@ -34,7 +45,6 @@ The script's keys:
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import json
 import os
 import signal
@@ -42,6 +52,7 @@ import sys
 from collections.abc import Iterator
 from typing import Any
 
+import fake_ec2
 from burla import _fake
 
 LISTED = ("BOOTING", "READY", "RUNNING")
@@ -68,21 +79,8 @@ def script() -> dict[str, Any]:
 @contextlib.contextmanager
 def locked() -> Iterator[dict[str, Any]]:
     """``cluster.json`` under the fake's lock, written back when the block ends."""
-    with open(path("cluster.lock"), "a+") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        try:
-            try:
-                with open(path("cluster.json"), encoding="utf-8") as fh:
-                    state = json.load(fh)
-            except FileNotFoundError:
-                state = {"settings": {}, "nodes": []}
-            yield state
-            tmp = path(f"cluster.json.{os.getpid()}")
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump(state, fh)
-            os.replace(tmp, path("cluster.json"))
-        finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+    with fake_ec2.locked(_fake.state_dir()) as state:
+        yield state
 
 
 def snapshot() -> dict[str, Any]:
@@ -113,7 +111,9 @@ def seed_preexisting() -> None:
         for i, node in enumerate(wanted):
             state["nodes"].append(
                 {"name": f"burla-node-pre{i:04d}", "status": node.get("status", "READY"),
-                 "booted_at": _fake.now()}
+                 "booted_at": _fake.now(), "id": fake_ec2.new_id(),
+                 # Up before Prove asked for anything.
+                 "launched_at": _fake.now() - 3600}
             )
 
 
