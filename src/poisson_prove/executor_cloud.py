@@ -56,7 +56,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from poisson_prove import _look, _prices_cloud
+from poisson_prove import _cloud_instances, _look, _prices_cloud, _where_checks
 from poisson_prove._cloud_record import Record
 from poisson_prove._resolve import split_import_path
 from poisson_prove.executor import (
@@ -102,6 +102,10 @@ _POLL_S = 0.2
 #: The record's heartbeat while the job runs, and how long the stop polls the cluster's status.
 _ALIVE_S = 30.0
 _STOP_POLL_S = 120.0
+#: How long the stop waits for the cloud to end the sweep's instances, and how often it reads the
+#: cloud meanwhile.
+_CLOUD_WAIT_S = 120.0
+_CLOUD_POLL_S = 5.0
 #: How often the progress line asks the cluster's status while it starts.
 _STATUS_S = 10.0
 #: The software's orphan rule: a node that cannot reach the coordinator stops itself after this.
@@ -1367,8 +1371,11 @@ def _alive(pid: Any) -> bool:
     return True
 
 
-def _words(code: str, message: str, options: CloudOptions, log: Path) -> tuple[str, list[str]]:
-    """The software's error in Prove's words, and the one next."""
+def _words(
+    code: str, message: str, options: CloudOptions, log: Path, *, quota_fits: bool = False
+) -> tuple[str, list[str]]:
+    """The software's error in Prove's words, and the one next. ``quota_fits``: the account's
+    vCPU quota, read, holds the cluster, so a refusal on it is the quota in use, not too small."""
     name = _prices_cloud.NAMES.get(options.provider, options.provider)
     region, machine = options.region, options.machine_type
     if code == "HEAD_UNREACHABLE" or "HEAD_UNREACHABLE" in message:
@@ -1382,6 +1389,13 @@ def _words(code: str, message: str, options: CloudOptions, log: Path) -> tuple[s
         return (
             f"the cluster could not start: this machine's {name} sign-in has expired or is missing",
             ["aws login"],
+        )
+    if "VcpuLimitExceeded" in message and quota_fits:
+        # Instances still shutting down count against the quota: most likely the last cluster's.
+        return (
+            f"your {name} account's vCPU quota in {region} is in use (the last cluster may still "
+            f"be stopping); try again in a minute, lower nodes, or ask {name} for more",
+            [],
         )
     if "VcpuLimitExceeded" in message:
         return (
@@ -1615,6 +1629,96 @@ def _stop_coordinator(
     return False
 
 
+def _whose(run_name: str | None) -> str:
+    return "this sweep" if run_name is None else f'the sweep of "{run_name}"'
+
+
+def _settle(
+    software: _Software,
+    region: str,
+    since: float,
+    until: float | None,
+    run_name: str | None,
+    on_cluster: Callable[[dict[str, Any]], None] | None,
+) -> tuple[int | None, int]:
+    """The cloud's own view of a sweep's nodes, after the cluster software's stop: every instance
+    tagged ``burla-cluster-node`` launched in the window, read with the AWS CLI; any still running
+    is terminated, with one note; then the read again until none is pending, running or shutting
+    down, up to ``_CLOUD_WAIT_S``.
+
+    ``run_name`` is None for the sweep stopping now, else the earlier sweep's name. Returns how
+    many instances the sweep launched (None when the cloud could not be read) and how many still
+    run at the end (pending or running: the stop is then not confirmed)."""
+    if software.provider != "aws":
+        return None, 0
+    seen = _cloud_instances.read(region, since, until)
+    if seen is None:
+        software.note(f"describe-instances in {region} did not answer")
+        again = "; poisson-prove where checks again" if run_name is None else ""
+        _tell(
+            on_cluster,
+            {
+                "phase": "note",
+                "sentence": f"Prove could not read this AWS account's instances in {region}, so "
+                f"it could not check that every node launched for {_whose(run_name)} has "
+                f"stopped{again}",
+            },
+        )
+        return None, 0
+    ended: list[str] = []
+    limit = time.time() + _CLOUD_WAIT_S
+    while True:
+        live = [i.id for i in seen if i.state in _cloud_instances.LIVE and i.id not in ended]
+        if live and _cloud_instances.terminate(region, live):
+            software.note(f"terminated in {region}: {', '.join(live)}")
+            ended += live
+        waiting = [i for i in seen if i.state in _cloud_instances.WAITED]
+        now = time.time()
+        if not waiting or now >= limit:
+            break
+        time.sleep(max(0.0, min(_CLOUD_POLL_S, limit - now)))
+        seen = _cloud_instances.read(region, since, until) or seen
+    if ended:
+        n = len(ended)
+        _tell(
+            on_cluster,
+            {
+                "phase": "note",
+                "sentence": f"the cluster software stopped, but {n} node{'s' if n != 1 else ''} "
+                f"it launched for {_whose(run_name)} {'were' if n != 1 else 'was'} still "
+                f"running in {region}; Prove terminated {'them' if n != 1 else 'it'} with the "
+                f"AWS CLI ({', '.join(ended)})",
+            },
+        )
+    left = [i for i in seen if i.state in _cloud_instances.LIVE and i.id not in ended]
+    return len(seen), len(left)
+
+
+def _last_window(
+    found: Mapping[str, Any],
+    software: _Software,
+    region: str,
+    name_of: Callable[[str], str],
+    on_cluster: Callable[[dict[str, Any]], None] | None,
+    *,
+    until: float | None,
+) -> None:
+    """The last sweep's window, read again by bare ``where`` and the next cloud sweep: from its
+    ``started_at`` to its ``stopped_at`` (open while it was not stopped). Only a sweep that asked
+    for nodes has one. Raises when a node of it cannot be terminated."""
+    if found.get("booted_at") is None or found.get("started_at") is None:
+        return
+    since = float(found["started_at"])
+    name = name_of(str(found.get("run_id")))
+    _, left = _settle(software, region, since, until, name, on_cluster)
+    if left:
+        raise _unconfirmed(region, left, _CLOUD_WAIT_S, spent=False)
+
+
+def _region_of(found: Mapping[str, Any], opened: Mapping[str, Any] | None, fallback: str) -> str:
+    return str(found.get("region") or (opened or {}).get("region") or fallback)
+
+
 def _finish_leftover(
     found: Mapping[str, Any],
     software: _Software,
@@ -1629,7 +1733,7 @@ def _finish_leftover(
     run_id = str(found.get("run_id"))
     ledger = _Ledger(Path(str(found.get("ledger"))))
     opened = ledger.opened(run_id)
-    region = str((opened or {}).get("region") or software.region)
+    region = _region_of(found, opened, software.region)
     recorded = found.get("coordinator")
     pid = recorded.get("pid") if isinstance(recorded, Mapping) else None
     began = time.time()
@@ -1659,6 +1763,8 @@ def _finish_leftover(
     assert isinstance(pid, int)
     if not _stop_coordinator(software, record, pid, on_cluster):
         raise _unconfirmed(region, 0, time.time() - began, spent=False)
+    # What the software missed: the window is open, since the sweep never stopped.
+    _last_window(found, software, region, name_of, on_cluster, until=None)
     since = float((opened or {}).get("start") or found.get("started_at") or began)
     if opened is not None and run_id in ledger.unclosed():
         last_alive = float(found.get("last_alive") or since)
@@ -1673,7 +1779,7 @@ def _finish_leftover(
         spent = f"charged {_look.fmt_dollars(charge)} to the ledger as an upper bound"
     else:
         spent = "its ledger line was closed when it ended"
-    record.update(state="stopped")
+    record.update(state="stopped", stopped_at=time.time())
     up_since = datetime.fromtimestamp(since, UTC).strftime("%H:%MZ")
     _tell(
         on_cluster,
@@ -1683,6 +1789,23 @@ def _finish_leftover(
             f"Prove stopped it (up since {up_since}, {spent})",
         },
     )
+
+
+def _what_was_left(
+    found: Mapping[str, Any],
+    software: _Software,
+    record: Record,
+    name_of: Callable[[str], str],
+    on_cluster: Callable[[dict[str, Any]], None] | None,
+) -> None:
+    """The last record of this account: a sweep that died is finished; a stopped one has
+    its window read again, for a node the software never listed."""
+    if found.get("state") != "stopped":
+        _finish_leftover(found, software, record, name_of, on_cluster)
+        return
+    region = _region_of(found, None, software.region)
+    end = found.get("stopped_at") or found.get("last_alive")
+    _last_window(found, software, region, name_of, on_cluster, until=float(end) if end else None)
 
 
 def finish_what_was_left(
@@ -1697,16 +1820,16 @@ def finish_what_was_left(
     verb that only says where sweeps run."""
     record = Record(provider, account)
     found = record.read()
-    if not found or found.get("state") == "stopped":
+    if not found:
         return
     owner = found.get("pid")
     name = _prices_cloud.NAMES.get(provider, provider)
-    if _alive(owner) and owner != os.getpid():
+    if found.get("state") != "stopped" and _alive(owner) and owner != os.getpid():
         raise CloudRefusal(
             f"another sweep is running on this {name} account from this machine (process {owner})"
         )
     software = _Software(provider, account, region, record.log_path)
-    _finish_leftover(found, software, record, name_of, on_cluster)
+    _what_was_left(found, software, record, name_of, on_cluster)
 
 
 def _start_nodes(
@@ -1805,7 +1928,8 @@ def run_cloud(
                 f"another sweep is running on this {name} account from this machine "
                 f"(process {owner})"
             )
-        _finish_leftover(found, software, record, name_of, on_cluster)
+    if found:
+        _what_was_left(found, software, record, name_of, on_cluster)
     try:
         head = software.head("find", options.provider, account)
     except _SoftwareError as exc:
@@ -1832,7 +1956,11 @@ def run_cloud(
     failure: BaseException | None = None
 
     def worded(exc: _SoftwareError, *, started: bool = False) -> CloudStartError:
-        line, nexts = _words(exc.code, exc.message, options, record.log_path)
+        fits = False
+        if "VcpuLimitExceeded" in exc.message and options.provider == "aws":
+            allowed = _where_checks.aws_quota(options.region)
+            fits = allowed is not None and allowed >= options.nodes * resolved.vcpus
+        line, nexts = _words(exc.code, exc.message, options, record.log_path, quota_fits=fits)
         return CloudStartError(line, nexts, started=started)
 
     with _Presses(on_cluster, _bound_minutes(options.idle_minutes)) as presses:
@@ -1854,6 +1982,7 @@ def run_cloud(
                     started_at=start,
                     last_alive=start,
                     nodes=options.nodes,
+                    region=options.region,
                     coordinator=None,
                     cluster_id=None,
                     software_version=_PIN,
@@ -1914,6 +2043,9 @@ def run_cloud(
                 # The nodes: from here some may be up, and billed.
                 life.booted_at = time.time()
                 life.any_node = True
+                life.started = options.nodes
+                # From here the window of the sweep's own nodes is open.
+                record.update(booted_at=life.booted_at)
                 answer = _start_nodes(software, life.url, options, life.booted_at, on_cluster)
                 if not answer.get("ok"):
                     error = answer.get("error")
@@ -1921,6 +2053,7 @@ def run_cloud(
                     with contextlib.suppress(_SoftwareError):
                         now = software.cli(life.url, "cluster", "status")
                         life.any_node = _listed(now) > 0
+                        life.started = _listed(now)
                     raise worded(
                         _SoftwareError(
                             str(error.get("code", "UNKNOWN")), str(error.get("message", ""))
@@ -2032,6 +2165,9 @@ class _Life:
     leave_nodes: bool = False
     booted_at: float | None = None
     any_node: bool = False
+    #: The nodes the software reported started: the stopped line's count when the cloud cannot
+    #: be read.
+    started: int = 0
 
 
 def _stop_all(
@@ -2066,7 +2202,7 @@ def _stop_all(
             record.update(state="stopping", coordinator=_coordinator(str(left.get("url")), pid))
             gone = _stop_coordinator(software, record, pid, on_cluster)
         if life.recorded and gone:
-            record.update(state="stopped")
+            record.update(state="stopped", stopped_at=time.time())
         close(ended, time.time())
         return None
     record.update(state="stopping")
@@ -2089,14 +2225,23 @@ def _stop_all(
         close("error", time.time())
         seconds = _STOP_POLL_S if listed else time.time() - began
         raise _unconfirmed(options.region, listed, seconds, spent=True)
-    if _stop_coordinator(software, record, life.head_pid, on_cluster):
-        record.update(state="stopped")
+    gone = _stop_coordinator(software, record, life.head_pid, on_cluster)
+    # The cloud's own view, once nothing of the software's can launch more.
+    launched: int | None = None
+    if life.booted_at is not None and not life.leave_nodes:
+        launched, running = _settle(software, options.region, start, None, None, on_cluster)
+        if running:
+            close("error", time.time())
+            raise _unconfirmed(options.region, running, _CLOUD_WAIT_S, spent=True)
     stopped_at = time.time()
+    if gone:
+        record.update(state="stopped", stopped_at=stopped_at)
     close(ended, stopped_at)
     if life.booted_at is not None:
+        started = launched if launched is not None else life.started
         _tell(
             on_cluster,
-            {"phase": "stopped", "nodes": options.nodes, "seconds": stopped_at - life.booted_at},
+            {"phase": "stopped", "nodes": started, "seconds": stopped_at - life.booted_at},
         )
     return stopped_at
 

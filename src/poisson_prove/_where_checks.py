@@ -105,6 +105,28 @@ def _aws(aws: str, *args: str) -> str | None:
     return done.stdout if done.returncode == 0 else None
 
 
+def _quota(aws: str, region: str) -> float | None:
+    """The account's vCPU quota for on-demand standard instances in ``region``, read-only, or None
+    when it could not be read."""
+    quota = _aws(
+        aws,
+        *("service-quotas", "get-service-quota", "--service-code", "ec2"),
+        *("--quota-code", _QUOTA_CODE, "--region", region, "--output", "json"),
+    )
+    if quota is None:
+        return None
+    try:
+        return float(json.loads(quota)["Quota"]["Value"])
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def aws_quota(region: str) -> float | None:
+    """The same, read again after the check: for a start AWS refused on the quota."""
+    aws = shutil.which("aws")
+    return None if aws is None else _quota(aws, region)
+
+
 def check_cloud(options: Any) -> CloudReady:
     """The checks before a cloud sweep, in order. Returns who is signed in, masked, and the
     notes to print."""
@@ -167,17 +189,7 @@ def check_cloud(options: Any) -> CloudReady:
             f"{options.nodes} × {options.machine_type} is {need} vCPUs, over max_vcpus "
             f"{resolved.max_vcpus}"
         )
-    quota = _aws(
-        aws,
-        *("service-quotas", "get-service-quota", "--service-code", "ec2"),
-        *("--quota-code", _QUOTA_CODE, "--region", options.region, "--output", "json"),
-    )
-    allowed = None
-    if quota is not None:
-        try:
-            allowed = float(json.loads(quota)["Quota"]["Value"])
-        except (ValueError, KeyError, TypeError):
-            allowed = None
+    allowed = _quota(aws, options.region)
     if allowed is None:
         notes.append(
             f"your AWS account's vCPU quota in {options.region} could not be read, so it was not "
