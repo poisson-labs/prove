@@ -195,6 +195,16 @@ It starts the nodes in your account and waits until they are ready. It runs the 
 stops the nodes and the coordinator, and the result says how long the nodes were up and what the
 ledger was charged.
 
+The stop does not take the cluster software's word alone. Once the coordinator has stopped, Prove
+reads the instances the cluster software tagged as its nodes in the sweep's region, launched since
+the sweep began (a read-only `aws ec2 describe-instances`). A node still running there, such as
+one whose launch was on its way when an interrupt stopped the boot, is terminated with
+`aws ec2 terminate-instances`, and one `note:` line names it. Prove then waits, up to 2 minutes,
+until every node of the sweep is terminated, since a node still shutting down counts against the
+account's vCPU quota and would refuse a sweep started right after. Those two calls are the only
+ones Prove makes to your instances, and it terminates only instances launched for its own sweep. The
+`stopped` line counts the nodes that started.
+
 The stop happens on every ending: the sweep is done, it failed, it stopped early (the spend
 reached `stop_cost`, or no rollout of the first batch had an outcome), or it was interrupted. An
 interrupt is Ctrl-C, and on a cloud sweep SIGTERM and SIGHUP too (a `kill`, a closed terminal):
@@ -221,7 +231,8 @@ plan's `Cluster` line names that bound. `idle_minutes` cannot be set below 2.
 
 The next cloud sweep, or `poisson-prove where`, finds what was left: it stops any node still
 listed, closes the run's ledger line if it is still open, with a charge that is an upper bound,
-and says so in one `note:` line. When Prove cannot confirm that the nodes stopped, it exits 3,
+and says so in one `note:` line. It also reads the account's instances again for the last sweep,
+from its start to its stop, and terminates any node of it still running, with its own `note:`. When Prove cannot confirm that the nodes stopped, it exits 3,
 says they may still be running, and names `poisson-prove where` as the next command.
 
 What Prove started is recorded under `$XDG_STATE_HOME/poisson-prove/cloud/` (`~/.local/state` when

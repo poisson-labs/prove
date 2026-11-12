@@ -315,7 +315,10 @@ a lost network), the nodes stop themselves, and Prove's record of what it starte
 Bare `where`, on a spec that runs on your cloud account and a machine signed in to it, looks for
 such a record. When it finds one it stops any node still listed, stops the cluster software on
 this machine, closes the run's ledger line if it is still open, and says so in one `note:` line
-before its answer. The next cloud sweep does the same.
+before its answer. It also reads the instances the cluster software tagged as its nodes that the
+last sweep launched, from its start to its stop, and terminates any still running with the AWS
+CLI, in one more `note:` line: a node whose launch was on its way when the sweep stopped is never
+listed by the cluster software. The next cloud sweep does both.
 
 When `where` cannot confirm that the nodes stopped, it says they may still be running, leaves the
 record as it is, and exits 3. `where cloud`, `where modal` and `where local` do not look: they
