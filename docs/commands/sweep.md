@@ -200,7 +200,7 @@ ran, for how long, when it stopped and what the ledger was charged:
 <!-- docs-check: skip: needs your own AWS account -->
 ```console
 $ poisson-prove sweep --yes
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4685/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
 …
 starting  4 × m7i.2xlarge in us-east-2  0 of 4 ready · 35 s
 ready  4 nodes · 32 vCPU · 1 min 12 s

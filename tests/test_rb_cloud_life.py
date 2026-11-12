@@ -199,7 +199,7 @@ def test_l1_without_disk_gb_the_softwares_default_disk_is_kept(w: CloudWorld) ->
     done = w.sweep()
     assert done.code == 0, done
     (update,) = [e for e in w.management() if e["route"] == "PATCH /v1/management/settings"]
-    assert set(update["body"]) == SETTINGS_FIELDS - {"disk_gb"}, update["body"]
+    assert set(update["body"]) == SETTINGS_FIELDS and update["body"]["disk_gb"] == 20, update["body"]
     assert update["body"]["inactivity_timeout_seconds"] == 120, update["body"]
 
 

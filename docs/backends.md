@@ -141,14 +141,14 @@ they cost, and who carries your code:
 <!-- docs-check: skip: needs your own AWS account -->
 ```console
 $ poisson-prove sweep --dry-run
-plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4685/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
 …
   Backend: cloud · AWS · target: mock-agent · t_unit: tool_calls
   Account: AWS 6030…4933, signed in with the AWS CLI
   Cluster: Prove starts 4 × m7i.2xlarge in us-east-2 (8 vCPU each, 32 in all, ceiling 32) running python:3.11, and stops them when the sweep ends · 8 slots each · 32 at once · if this machine stops first, the nodes stop themselves within 5 min · this machine is kept from idle sleep while they run
 …
   Traffic: your code, its inputs and its results go between this machine and the nodes through Burla's relay (the cluster software Prove uses); the store stays on this machine
-  Cost: ~$0.45 this run (4 × m7i.2xlarge at $0.4685/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
+  Cost: ~$0.45 this run (4 × m7i.2xlarge at $0.4687/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06, each node's disk priced at 52 GB) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
 …
 ```
 

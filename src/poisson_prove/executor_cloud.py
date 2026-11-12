@@ -314,7 +314,8 @@ def _shown_ledger(options: CloudOptions) -> str:
 
 @dataclass(frozen=True)
 class Resolved:
-    """The options with Prove's table applied: the price, its source and the machine's size."""
+    """The options with Prove's table applied: the price, its source, the disk it prices and the
+    machine's size."""
 
     usd_per_node_hour: float
     price_source: str
@@ -322,6 +323,9 @@ class Resolved:
     slots_per_node: int
     max_vcpus: int
     image: str
+    #: Each node's disk in GB as Prove's price counts it (the size the cluster software boots);
+    #: None when the reader gives the price.
+    disk_gb_priced: int | None = None
 
 
 def resolve(options: CloudOptions) -> Resolved:
@@ -329,7 +333,7 @@ def resolve(options: CloudOptions) -> Resolved:
     from the machine's vCPUs. Refuses a pair the table does not hold without the override."""
     provider = options.provider
     name = _prices_cloud.NAMES.get(provider, provider)
-    row = _prices_cloud.rows(provider).get((options.region, options.machine_type))
+    row = _prices_cloud.price(provider, options.region, options.machine_type, options.disk_gb)
     vcpus = _prices_cloud.vcpus(provider, options.machine_type)
     if options.usd_per_node_hour is not None:
         if vcpus is None and (options.slots_per_node is None or options.max_vcpus is None):
@@ -339,6 +343,7 @@ def resolve(options: CloudOptions) -> Resolved:
             )
         price = float(options.usd_per_node_hour)
         source = str(options.price_asof)
+        disk = None
     elif row is None:
         types = _prices_cloud.machine_types(provider, options.region)
         if not types:
@@ -354,11 +359,12 @@ def resolve(options: CloudOptions) -> Resolved:
     else:
         price = row.usd_per_node_hour
         source = f"Prove's {name} prices for {options.region} of {row.asof}"
+        disk = row.disk_gb
     size = vcpus if vcpus is not None else int(options.max_vcpus or 1) // options.nodes
     slots = options.slots_per_node or max(1, size // options.func_cpu)
     ceiling = options.max_vcpus if options.max_vcpus is not None else options.nodes * size
     image = options.image or f"python:3.{sys.version_info.minor}"
-    return Resolved(price, source, size, slots, ceiling, image)
+    return Resolved(price, source, size, slots, ceiling, image, disk)
 
 
 def _int(value: object) -> bool:
@@ -837,6 +843,8 @@ def preflight_cloud(p: Plan, import_path: str, options: CloudOptions, *, masked:
         f"{n} × {options.machine_type} at ${resolved.usd_per_node_hour:g}/node-hour, "
         f"{resolved.price_source}"
     )
+    if resolved.disk_gb_priced is not None:
+        source += f", each node's disk priced at {resolved.disk_gb_priced} GB"
     lines = [
         f"Sweep: {len(spec.axis_types)} axes · {len(spec.configs)} cells · "
         f"N={spec.replicates} → {spec.total_rollouts()} rollouts",
@@ -886,6 +894,7 @@ def plan_object(options: CloudOptions, *, masked: str, estimate: float) -> dict[
         "account": masked,
         "usd_per_node_hour": resolved.usd_per_node_hour,
         "price_asof": resolved.price_source,
+        "disk_gb_priced": resolved.disk_gb_priced,
         "estimate": estimate,
         "idle_minutes": options.idle_minutes,
         "stop_cost": options.stop_cost,
@@ -1893,7 +1902,8 @@ def run_cloud(
                     *("--machine-type", options.machine_type),
                     *("--quantity", str(options.nodes)),
                     *("--image", resolved.image),
-                    *(() if options.disk_gb is None else ("--disk-gb", str(options.disk_gb))),
+                    # Always the disk: the software keeps an earlier sweep's on the account.
+                    *("--disk-gb", str(options.disk_gb or _prices_cloud.DISK_DEFAULT_GB)),
                     *("--inactivity-timeout-seconds", str(round(options.idle_minutes * 60))),
                     *("--max-vcpus", str(resolved.max_vcpus)),
                 ]

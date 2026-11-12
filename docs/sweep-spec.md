@@ -186,7 +186,7 @@ cap or a cluster. [Backends](backends.md#your-cloud-account) says what it needs.
 | `boot_minutes` | minutes | `5.0` | billed time to boot the cluster, in the estimate |
 | `usd_per_node_hour` | dollars | Prove's price table | the price of a node for an hour, given with `price_asof` |
 | `price_asof` | string | Prove's price table | where and when that price was read, given with `usd_per_node_hour` |
-| `disk_gb` | integer, 10 to 2,000 | the cluster software's default | each node's disk |
+| `disk_gb` | integer, 10 to 2,000 | `20` | each node's disk, to which the cluster software adds the machine's RAM; priced at that size |
 | `packages` | list of package names | none | local packages shipped to the workers, beside Prove itself |
 | `func_cpu` | integer | `1` | CPUs per worker |
 | `func_ram` | gigabytes | `4` | memory per worker |
@@ -199,18 +199,26 @@ cap or a cluster. [Backends](backends.md#your-cloud-account) says what it needs.
 
 Prove carries a dated table of AWS prices, as it carries Modal's, so a spec needs no price. Each
 figure is dollars for one node for one hour: the on-demand price of the machine, plus its public
-IPv4 address, plus its disk at 50 GB. They were read from AWS's price list, which needs no
-account, on 2026-11-09; the `m7i.2xlarge` row for `us-east-2` was first read on 2026-11-06 and
-keeps that date. The plan names the date of the row it uses.
+IPv4 address, plus its disk at the size the cluster software boots it with `disk_gb` unset, 20 GB
+plus the machine's RAM (a gp3 volume with 4,000 IOPS and 1,000 MiB/s). They were read from AWS's
+price list, which needs no account, on 2026-11-09; the `m7i.2xlarge` row for `us-east-2` was
+first read on 2026-11-06 and keeps that date. The plan names the date of the row it uses and the
+disk size it priced.
 
-| machine type | vCPUs | `us-east-1` | `us-east-2` | `us-west-2` | `eu-west-1` | `eu-central-1` |
-|---|---|---|---|---|---|---|
-| `m7i.large` | 2 | $0.1661 | $0.1661 | $0.1661 | $0.1837 | $0.1975 |
-| `m7i.xlarge` | 4 | $0.2669 | $0.2669 | $0.2669 | $0.2960 | $0.3183 |
-| `m7i.2xlarge` | 8 | $0.4685 | $0.4685 | $0.4685 | $0.5207 | $0.5598 |
-| `m7i.4xlarge` | 16 | $0.8717 | $0.8717 | $0.8717 | $0.9701 | $1.0428 |
-| `m7i.8xlarge` | 32 | $1.6781 | $1.6781 | $1.6781 | $1.8689 | $2.0088 |
-| `m7i.16xlarge` | 64 | $3.2909 | $3.2909 | $3.2909 | $3.6665 | $3.9408 |
+| machine type | vCPUs | disk | `us-east-1` | `us-east-2` | `us-west-2` | `eu-west-1` | `eu-central-1` |
+|---|---|---|---|---|---|---|---|
+| `m7i.large` | 2 | 28 GB | $0.1637 | $0.1637 | $0.1637 | $0.1810 | $0.1947 |
+| `m7i.xlarge` | 4 | 36 GB | $0.2653 | $0.2653 | $0.2653 | $0.2943 | $0.3165 |
+| `m7i.2xlarge` | 8 | 52 GB | $0.4687 | $0.4687 | $0.4687 | $0.5209 | $0.5601 |
+| `m7i.4xlarge` | 16 | 84 GB | $0.8754 | $0.8754 | $0.8754 | $0.9742 | $1.0472 |
+| `m7i.8xlarge` | 32 | 148 GB | $1.6888 | $1.6888 | $1.6888 | $1.8807 | $2.0216 |
+| `m7i.16xlarge` | 64 | 276 GB | $3.3156 | $3.3156 | $3.3156 | $3.6937 | $3.9703 |
+
+When the spec sets `disk_gb`, each node boots `disk_gb` plus its RAM (never less than 20 GB), and
+the plan prices the disk at that size at the same rates: `disk_gb = 500` on `m7i.2xlarge` in
+`us-east-2` is a 532 GB disk and $0.5213 a node-hour. Prove gives the cluster software the disk on
+every sweep, 20 when the spec leaves `disk_gb` unset, since the software keeps its settings on
+your account from one sweep to the next: a `disk_gb` an earlier sweep set is not kept.
 
 A region or a machine type outside the table is refused, naming the ones the table has, unless
 the spec gives `usd_per_node_hour` and `price_asof` together. The estimate is compute only: what

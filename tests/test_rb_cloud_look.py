@@ -98,7 +98,8 @@ def test_v1_the_plan_is_the_specs_block_line_for_line(w: CloudWorld) -> None:
     assert done.code == 0, done
     first, *_ = done.out.splitlines()
     cost = _look.fmt_dollars(estimate(27, nodes=4, slots=8, batch=256, est=0.01, boot=5.0, idle=5.0))
-    source = f"4 × {MACHINE} at ${PRICE}/node-hour, Prove's AWS prices for {REGION} of {PRICE_DATE}"
+    source = (f"4 × {MACHINE} at ${PRICE}/node-hour, Prove's AWS prices for {REGION} of {PRICE_DATE}, "
+              "each node's disk priced at 52 GB")
     assert first == (f"plan  27 rollouts of rb-cloud@v0: 9 cells x 3 replicates on your AWS account, "
                      f"~{cost} this run ({source}) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00"), first
     lines = [line.strip() for line in plan_lines(done.out)]
@@ -329,7 +330,7 @@ def test_v5_numbers_read_by_rule_10(w: CloudWorld) -> None:
     assert plan.code == 0, plan
     assert " 1,000 rollouts of " in plan.out.splitlines()[0], plan.out
     for money in re.findall(r"\$[0-9][0-9.,]*", plan.out):
-        assert re.fullmatch(DOLLARS, money) or money.startswith("$0.4685"), money
+        assert re.fullmatch(DOLLARS, money) or money.startswith("$0.4687"), money
     w.write_spec(table=cloud_table(nodes=2))
     done = w.sweep()
     assert done.code == 0, done
