@@ -4,7 +4,9 @@
 
 The backend tests run when a change touches backend code: the Modal and Burla executors, the
 shared runner they drive, the command line and the core's operations (the cluster's life is
-tested only here, and its stop on an interrupt is in those two), the fake Burla client under
+tested only here, and its stop on an interrupt is in those two), where a sweep runs and the
+terminal app (a cloud sweep started from the app, and ``where`` stopping what a sweep left, are
+tested only here), the fake Burla client under
 ``tests/bu_fixtures/``, a test file of the gate's ``backends`` entry (``$SHARDS``, read with
 ``shards.py``), or the version the requirements resolve to of Modal or Burla. Versions are
 resolved the way ``math_lane.py`` resolves them, the base's ``pyproject.toml`` and the head's at
@@ -38,6 +40,10 @@ SOURCES = (
     # exit codes and its lines are in these two.
     "src/poisson_prove/cli.py",
     "src/poisson_prove/core/_ops.py",
+    # A cloud sweep started from the terminal app, its Ctrl-C, and ``where`` stopping what an
+    # earlier sweep left are tested only in the backends job too.
+    "src/poisson_prove/_where.py",
+    "src/poisson_prove/_cli_app.py",
 )
 FAKES = "tests/bu_fixtures/"
 LIBRARIES = ("modal", "burla")

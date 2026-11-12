@@ -962,6 +962,7 @@ class _CloudMapper:
         deadline: float,
         head_url: str,
         log: Path,
+        cancel: threading.Event | None = None,
     ) -> None:
         self.p = p
         self.import_path = import_path
@@ -970,6 +971,7 @@ class _CloudMapper:
         self.bundle = bundle
         self.deadline = deadline
         self.head_url = head_url
+        self.cancel = cancel
         self.software_log = log
         self.capture = _capture_payload(p.spec.capture, p.run_id)
         self.chaos = _chaos_payload(p.spec.chaos)
@@ -1061,6 +1063,10 @@ class _CloudMapper:
             while done is None:
                 try:
                     messages = pipe.poll(_POLL_S)
+                    if self.cancel is not None and self.cancel.is_set():
+                        # A face with no terminal signal (the app) asked to stop: the job in
+                        # flight is cancelled now, as a Ctrl-C cancels it, not waited for.
+                        raise KeyboardInterrupt
                 except KeyboardInterrupt:
                     forwarded = True
                     self._forward_ctrl_c(proc, pipe)
@@ -1231,6 +1237,12 @@ class _Software:
         self.account = account
         self.region = region
         self.log = log
+        #: Whether the sweep was asked to stop by something other than a signal (the app's
+        #: Ctrl-C, which is a key there). Asked while a call waits, and an interrupt then.
+        self.interrupted: Callable[[], bool] | None = None
+
+    def asked_to_stop(self) -> bool:
+        return self.interrupted is not None and self.interrupted()
 
     def env(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -1275,6 +1287,8 @@ class _Software:
                 if until is not None and time.time() > until:
                     _killpg(proc)
                     raise _SoftwareError("TIMEOUT", f"{' '.join(argv[-3:])} did not answer")
+                if self.asked_to_stop():
+                    raise KeyboardInterrupt
             proc.wait()
         except KeyboardInterrupt:
             if kill_on_interrupt:
@@ -1376,7 +1390,8 @@ def _words(code: str, message: str, options: CloudOptions, log: Path) -> tuple[s
         return f"your {name} sign-in is not allowed to start instances in {region}", []
     if "OptInRequired" in message:
         return f"your {name} account is not opted in to {region}", []
-    if "Nodes cannot reach the head" in message:
+    if "Nodes cannot reach the head" in message or "its relay tunnel" in message:
+        # The second is the coordinator's own start: its relay did not open in 15 s.
         return (
             "the cluster could not open its connection to this machine; check this machine's "
             "network and run the sweep again",
@@ -1661,6 +1676,30 @@ def _finish_leftover(
     )
 
 
+def finish_what_was_left(
+    provider: str,
+    account: str,
+    region: str,
+    *,
+    name_of: Callable[[str], str],
+    on_cluster: Callable[[dict[str, Any]], None] | None,
+) -> None:
+    """Stop what an earlier sweep left on this account, as the next cloud sweep would; for the
+    verb that only says where sweeps run."""
+    record = Record(provider, account)
+    found = record.read()
+    if not found or found.get("state") == "stopped":
+        return
+    owner = found.get("pid")
+    name = _prices_cloud.NAMES.get(provider, provider)
+    if _alive(owner) and owner != os.getpid():
+        raise CloudRefusal(
+            f"another sweep is running on this {name} account from this machine (process {owner})"
+        )
+    software = _Software(provider, account, region, record.log_path)
+    _finish_leftover(found, software, record, name_of, on_cluster)
+
+
 def _start_nodes(
     software: _Software,
     url: str,
@@ -1697,6 +1736,8 @@ def _start_nodes(
                 if not chunk:
                     break
                 out += chunk
+            if software.asked_to_stop():
+                raise KeyboardInterrupt  # the booting nodes are stopped by the stop that follows
             if time.time() - asked >= _STATUS_S:
                 asked = time.time()
                 with contextlib.suppress(_SoftwareError):
@@ -1725,6 +1766,7 @@ def run_cloud(
     on_progress: Callable[[int, int], None] | None = None,
     on_cluster: Callable[[dict[str, Any]], None] | None = None,
     name_of: Callable[[str], str] | None = None,
+    cancel: threading.Event | None = None,
 ) -> RunSummary:
     """Start the cluster, run the plan on it through the launcher into ``store``, and stop
     everything Prove started, however the sweep ends.
@@ -1732,7 +1774,9 @@ def run_cloud(
     ``on_cluster`` is told the cluster's phases (``starting``, ``ready``, ``stopping``,
     ``stopped``), each ``note`` for the reader, and once, after a confirmed stop, the
     ``summary`` the result shows. ``name_of`` gives a run's name for a note about an earlier
-    sweep."""
+    sweep. ``cancel``, once set, is a Ctrl-C from a face that gets no signal (the terminal
+    app): whatever is under way (the coordinator's start, the boot, the job) is interrupted at
+    once, the cluster is stopped, and the ledger's line closes ``cancelled``."""
     resolved = resolve(options)
     name = _prices_cloud.NAMES.get(options.provider, options.provider)
     masked = mask(account)
@@ -1783,8 +1827,15 @@ def run_cloud(
         return CloudStartError(line, nexts, started=started)
 
     with _Presses(on_cluster, _bound_minutes(options.idle_minutes)) as presses:
+        # ``cancel`` is the interrupt of a face that gets no signal. It interrupts the way a
+        # press does: until the stop begins, and never the stop itself.
+        software.interrupted = lambda: (
+            cancel is not None and cancel.is_set() and not presses.stopping
+        )
         try:
             try:
+                if software.asked_to_stop():
+                    raise KeyboardInterrupt
                 # The record and the ledger, before anything is started.
                 record.write(
                     state="starting",
@@ -1878,7 +1929,15 @@ def run_cloud(
                 )
                 # The job, at the coordinator Prove started.
                 mapper = _CloudMapper(
-                    p, import_path, options, resolved, bundle, deadline, life.url, record.log_path
+                    p,
+                    import_path,
+                    options,
+                    resolved,
+                    bundle,
+                    deadline,
+                    life.url,
+                    record.log_path,
+                    cancel,
                 )
                 runner_options = ModalOptions(
                     batch_size=options.batch_size,
@@ -1913,6 +1972,9 @@ def run_cloud(
             failure = exc
         except BaseException as exc:  # noqa: BLE001 - stopped below, then raised as it came
             failure = exc
+            if cancel is not None and cancel.is_set():
+                # The face's cancel reached the runner between two batches: the same ending.
+                ended = "cancelled"
         # Always, whatever happened above.
         stopped_at = _stop_all(
             software, record, ledger, options, p.run_id, start, life, ended, on_cluster

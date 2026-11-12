@@ -37,7 +37,7 @@ poisson-prove · home                                                           
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ↑↓ move   enter open   tab links   s sweep   c compare   r runs   y copy   ? help   q quit                            
+  ↑↓ move   enter open   tab links   s sweep   c compare   r runs   w where   y copy   ? help   q quit                  
 
 BBBBBBBBBBBBBDDD                                                                                              DDDDDDDDDD
 DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
@@ -78,4 +78,4 @@ VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
                                                                                                                         
                                                                                                                         
 DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-  BB DDDD   BBBBB DDDD   BBB DDDDD   B DDDDD   B DDDDDDD   B DDDD   B DDDD   B DDDD   B DDDD                            
+  BB DDDD   BBBBB DDDD   BBB DDDDD   B DDDDD   B DDDDDDD   B DDDD   B DDDDD   B DDDD   B DDDD   B DDDD                  

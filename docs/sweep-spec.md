@@ -130,8 +130,9 @@ it share their seeds.
 
 ## `[modal]`
 
-How a `--backend modal` sweep runs. Every key is optional; the command line's `--concurrency`,
-`--infra-retries`, `--max-cost`, `--est-seconds`, `--app-name`, `--batch-size`,
+How a sweep on Modal runs. A spec that holds this table runs there unless `--backend` says
+otherwise, and `poisson-prove where modal` writes it. Every key is optional; the command line's
+`--concurrency`, `--infra-retries`, `--max-cost`, `--est-seconds`, `--app-name`, `--batch-size`,
 `--episode-timeout` and `--max-rollouts` override it for one run.
 [Backends](backends.md#modal) says what a Modal sweep needs.
 
@@ -142,7 +143,7 @@ How a `--backend modal` sweep runs. Every key is optional; the command line's `-
 | `episode_timeout` | seconds, or none | `300` | the limit on one episode inside a container |
 | `infra_retries` | integer | `2` | retries of a batch that failed for an infrastructure reason |
 | `max_rollouts` | integer, or none | no limit | stop after this many and leave the run partial |
-| `max_cost` | dollars, or none | no cap | refuse before anything starts when the estimate is above it |
+| `max_cost` | dollars, or none | no cap | refuse before anything starts when the estimate is above it, or when there is no estimate to hold against it |
 | `est_seconds_per_episode` | seconds, or none | no estimate | the time one episode takes, for the cost estimate |
 | `app_name` | string | `"poisson-prove"` | the Modal app's name |
 | `secrets` | list of names | none | Modal secrets mounted on the function, by name; Prove never reads their values |
@@ -163,11 +164,10 @@ unless `--image SECTION` names another, so one spec can hold several images.
 
 ## `[cloud]`
 
-How a `--backend cloud` sweep runs: the cluster Prove starts in your own cloud account and stops
-when the sweep ends. The first eight keys are required: there is no default for a cap or a
-cluster. The price comes from Prove's own price table unless `usd_per_node_hour` and `price_asof`
-are given together. [Backends](backends.md#your-cloud-account) says what it needs. A 0.2 spec's
-`[burla]` table is refused, naming the move to `[cloud]`.
+How a sweep on your own cloud account runs: the cluster Prove starts there and stops when the
+sweep ends. `poisson-prove where cloud` writes this table, and a spec that holds it runs there
+unless `--backend` says otherwise. The first eight keys are required: there is no default for a
+cap or a cluster. [Backends](backends.md#your-cloud-account) says what it needs.
 
 | key | type | default | what it is |
 |---|---|---|---|
@@ -194,6 +194,49 @@ are given together. [Backends](backends.md#your-cloud-account) says what it need
 | `episode_timeout` | seconds, or none | no limit | the limit on one episode |
 | `infra_retries` | integer | `2` | retries of a batch that failed for an infrastructure reason |
 | `max_rollouts` | integer, or none | no limit | stop after this many and leave the run partial |
+
+### The price table
+
+Prove carries a dated table of AWS prices, as it carries Modal's, so a spec needs no price. Each
+figure is dollars for one node for one hour: the on-demand price of the machine, plus its public
+IPv4 address, plus its disk at 50 GB. They were read from AWS's price list, which needs no
+account, on 2026-11-09; the `m7i.2xlarge` row for `us-east-2` was first read on 2026-11-06 and
+keeps that date. The plan names the date of the row it uses.
+
+| machine type | vCPUs | `us-east-1` | `us-east-2` | `us-west-2` | `eu-west-1` | `eu-central-1` |
+|---|---|---|---|---|---|---|
+| `m7i.large` | 2 | $0.1661 | $0.1661 | $0.1661 | $0.1837 | $0.1975 |
+| `m7i.xlarge` | 4 | $0.2669 | $0.2669 | $0.2669 | $0.2960 | $0.3183 |
+| `m7i.2xlarge` | 8 | $0.4685 | $0.4685 | $0.4685 | $0.5207 | $0.5598 |
+| `m7i.4xlarge` | 16 | $0.8717 | $0.8717 | $0.8717 | $0.9701 | $1.0428 |
+| `m7i.8xlarge` | 32 | $1.6781 | $1.6781 | $1.6781 | $1.8689 | $2.0088 |
+| `m7i.16xlarge` | 64 | $3.2909 | $3.2909 | $3.2909 | $3.6665 | $3.9408 |
+
+A region or a machine type outside the table is refused, naming the ones the table has, unless
+the spec gives `usd_per_node_hour` and `price_asof` together. The estimate is compute only: what
+your agent spends at its model provider is on that provider's bill.
+
+### A 0.2 spec's `[burla]` table
+
+`[burla]` is now `[cloud]`, and Prove starts and stops the cluster itself. A spec that still
+holds a `[burla]` table is refused, whichever backend it is swept on, naming the move:
+
+<!-- docs-check: run -->
+~~~bash
+poisson-prove init --example --out old.toml
+printf '\n[burla]\nhead_url = "http://127.0.0.1:5001"\n' >> old.toml
+~~~
+
+<!-- docs-check: run -->
+~~~console
+$ poisson-prove sweep old.toml --dry-run  # exits 1
+error: old.toml, line 25: [burla] is now [cloud]; rename the table, delete head_url, and add provider and region (Prove now starts the cluster on your cloud account and stops it after)
+  next: poisson-prove where cloud
+~~~
+
+`poisson-prove where cloud` makes the move in place: it renames the table, keeps every key that
+carries over, deletes `head_url` (Prove runs the coordinator now) and adds `provider` and
+`region`. [Its page](commands/where.md) shows it.
 
 ## The mistakes it refuses
 

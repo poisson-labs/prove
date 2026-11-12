@@ -1058,6 +1058,10 @@ def test_pf8_6_the_changelog_has_the_keep_a_changelog_form(archives: dict[str, A
     assert verbs
     bullets = [line for line in section if re.match(r"\s*[-*] ", line)]
     named = {verb for verb in verbs if any(re.search(rf"`[^`]*\b{re.escape(verb)}\b[^`]*`", line) for line in bullets)}
+    # A verb added after 0.1.0 is named the same way by the entry of the release that added it.
+    later = [line for line in lines[:oldest_no] if re.match(r"\s*[-*] ", line)]
+    named |= {verb for verb in set(verbs) - named
+              if any(re.search(rf"`[^`]*\b{re.escape(verb)}\b[^`]*`", line) for line in later)}
     assert named == set(verbs), sorted(set(verbs) - named)
     old = [no for no, line in enumerate(lines) if re.search(r"(?i)proofload", line)]
     assert len(old) == 1, [lines[no] for no in old]

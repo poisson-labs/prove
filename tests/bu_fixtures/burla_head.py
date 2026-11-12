@@ -2,7 +2,8 @@
 
     python -I burla_head.py <state folder> <project>
 
-It arms the network tripwire, writes ``head-<pid>.json`` (its environment's Burla and AWS
+It arms the network tripwire, prints one line naming itself (``fake head <pid> for <project>
+started``, which lands in the head's own log when the fake's ``ensure_local_head`` started it), writes ``head-<pid>.json`` (its environment's Burla and AWS
 variables and its session) and ``head-<pid>.ready`` into the state folder, records every SIGTERM,
 SIGINT and SIGHUP it receives in ``head-signals.jsonl``, and leaves on SIGTERM or SIGINT, as
 uvicorn does. Started by the fake's ``ensure_local_head``, or by a test that needs a head Prove did
@@ -53,6 +54,7 @@ def main():
     }
     with open(os.path.join(state, f"head-{pid}.json"), "w", encoding="utf-8") as fh:
         json.dump(info, fh)
+    print(f"fake head {pid} for {project} started", flush=True)
     open(os.path.join(state, f"head-{pid}.ready"), "w").close()
     while True:
         time.sleep(0.5)

@@ -393,6 +393,9 @@ def remote_parallel_map(
                 yielded.append(index)
                 yield value
             if cancel.is_set():
+                # The script's ``cancel_s``: how long the cancel takes to come back (the real
+                # call tells the head and waits for the calls in flight, ``:976-985``).
+                _sleep_through(float(script.get("cancel_s", 0) or 0))
                 raise JobCanceled("Job canceled by user.")
         except BaseException as exc:
             how = "cancelled" if cancel.is_set() else "raised"
@@ -410,6 +413,15 @@ def remote_parallel_map(
 
     stream = outputs()
     return stream if generator else list(stream)
+
+
+def _sleep_through(seconds: float) -> None:
+    """Sleep ``seconds`` whatever signals arrive meanwhile (later signals do nothing, as 1.8.1)."""
+    import time
+
+    until = time.monotonic() + seconds
+    while (left := until - time.monotonic()) > 0:
+        time.sleep(min(left, 0.05))
 
 
 def _value(index: int, reply: Any, script: dict[str, Any], raise_errors: bool) -> Any:

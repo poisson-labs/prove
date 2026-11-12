@@ -4,6 +4,32 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
+## 0.3.0 — Unreleased
+
+### Changed
+
+- **Sweeps run on your own cloud account with `--backend cloud`**, and Prove now starts the
+  cluster, sets its shape, and stops it when the sweep ends, on success, on failure and on Ctrl-C.
+  `--backend burla` and the `[burla]` table are replaced: `--backend burla` is refused with the new
+  name, a spec with `[burla]` is refused naming the move, and `poisson-prove where cloud` rewrites
+  the table. Install with `pip install "poisson-prove[cloud]"`; `[burla]` installs the same until 0.4.0.
+- **A spec runs where its table says.** `poisson-prove sweep` with no `--backend` now runs on
+  your cloud account when the spec holds a `[cloud]` table and on Modal when it holds a `[modal]`
+  table. In 0.2 it ran on this machine unless `--backend` was given, so a spec with a `[modal]`
+  table that you swept with no `--backend` now plans on Modal. It still names the cost and asks
+  before anything runs. `--backend local` runs it on this machine as before, and a spec that holds
+  both tables is refused until `--backend` or `poisson-prove where` says which.
+- A Modal or cloud sweep whose first batch has no outcome in any rollout stops there (#11).
+- An interrupted command exits 130 even when its output pipe is closed, and the run records
+  that it was interrupted (#12).
+
+### Added
+
+- `poisson-prove where`, a new verb, and where a sweep runs as part of setting up: `where` shows
+  it or changes it, `init` asks in a terminal (`--runs-on` answers on the command line), and the
+  terminal app has a page for it, behind `w`. The verb's page is `docs/commands/where.md`.
+- The run manifest's `produced_by` (the artifact format's 1.1) (#17).
+
 ## 0.2.2 — 2026-11-08
 
 A release of the docs alone: the package's code is the same as 0.2.1's.

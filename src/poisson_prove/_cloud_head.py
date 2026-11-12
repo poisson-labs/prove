@@ -56,6 +56,18 @@ def probe(provider: str, region: str) -> None:
     _out(doc)
 
 
+#: What the pinned software says when its coordinator does not start: its own two sentences
+#: (``_local_head._wait_for_head_ready``: the process ended, or 90 s passed), and the code its
+#: management CLI gives a coordinator it cannot reach. Prove words all of them as one line that
+#: names the log; the software's text goes to the log only.
+_NOT_STARTED = (
+    "local service never became ready",
+    "local service failed to start",
+    "HEAD_UNREACHABLE",
+    "not become ready",
+)
+
+
 def find(provider: str, account: str) -> None:
     from burla._local_head import _head_state_dir, _pid_alive
 
@@ -75,7 +87,7 @@ def start(provider: str, account: str) -> None:
         url = ensure_local_head()
     except Exception as exc:  # noqa: BLE001 - reported to Prove, which words it
         text = str(exc)
-        unreachable = "HEAD_UNREACHABLE" in text or "not become ready" in text
+        unreachable = any(words in text for words in _NOT_STARTED)
         code = "HEAD_UNREACHABLE" if unreachable else type(exc).__name__
         _out({"error": True, "code": code, "message": text})
         return

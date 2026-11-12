@@ -173,6 +173,7 @@ example end to end and says what each piece does.
 - `inspect`: the episodes behind an outcome, with code to reproduce one ([page](https://github.com/poisson-labs/prove/blob/main/docs/commands/inspect.md)).
 - `runs`: the runs in the store ([page](https://github.com/poisson-labs/prove/blob/main/docs/commands/runs.md)).
 - `ui`: build the dashboard ([page](https://github.com/poisson-labs/prove/blob/main/docs/commands/ui.md)).
+- `where`: say where sweeps run, or change it ([page](https://github.com/poisson-labs/prove/blob/main/docs/commands/where.md)).
 
 ## What the numbers claim, and what they do not
 
@@ -201,11 +202,10 @@ calls neither; Trace reads Prove's store. See
 
 ## Backends
 
-Sweeps run on your machine by default. `--backend modal` runs them in parallel Modal containers on
-your own account (`pip install "poisson-prove[modal]"`), with a cost estimate in the plan.
-`--backend burla` runs them on your own Burla cluster (`pip install "poisson-prove[burla]"`); it is
-experimental. Your rollout's code and conditions go to the account you choose, and the rows come
-back to the same local store. See [Backends](https://github.com/poisson-labs/prove/blob/main/docs/backends.md).
+A sweep runs on this machine unless its spec says otherwise: `poisson-prove where` says where a spec's sweeps run and changes it. `--backend modal` runs them in parallel containers on your own Modal account (`pip install "poisson-prove[modal]"`).
+`--backend cloud` runs them on a cluster in your own cloud account, AWS in this release (`pip install "poisson-prove[cloud]"`, then `aws login`): Poisson Prove starts the nodes and stops them when the sweep ends, however it ends.
+The plan gives the cost before anything starts, and the rows come back to the same local store. See [Backends](https://github.com/poisson-labs/prove/blob/main/docs/backends.md), and
+[What leaves this machine](https://github.com/poisson-labs/prove/blob/main/docs/backends.md#what-leaves-this-machine) for who carries your code on a cloud sweep.
 
 Prove never phones home. No telemetry, no analytics, no update checks. `poisson-prove serve` binds a
 loopback listener on request and makes no outbound connection: it holds one page built from data

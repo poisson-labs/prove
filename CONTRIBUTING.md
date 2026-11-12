@@ -28,7 +28,12 @@ python -m pytest tests -n 10 -m math
 
 `-n` runs the tests in parallel (`pytest-xdist`); pick a number near your machine's cores. The code
 suite takes a few minutes. Tests marked `calibration` are the slow statistical checks of the error
-rates; tests marked `backend` call a real Modal or Burla account and never run unless you opt in.
+rates; tests marked `backend` call a real Modal or cloud account and never run unless you opt in.
+
+Run each lane in the foreground. A test lane started as a background shell job ignores SIGINT, so
+the interrupt tests go falsely red: the shell starts a background job with SIGINT ignored, pytest
+and every process it starts inherit that, and a test that sends its sweep a Ctrl-C then waits for
+an exit that never comes.
 
 Tests marked `slow` take longer and some reach the package index: a browser check of the
 dashboard's pages, every docs page run again from the built wheel in a fresh environment, and the
@@ -55,9 +60,11 @@ machine of ours or reads a secret, and every action is pinned to a full commit S
   anything slow, in two jobs. The release pull request (the one that changes the version) and the
   push to main after a change that ran the math suite also run `calibration`, every calibration
   test cut by test into eight jobs; an ordinary pull request does not, nightly does. A change to
-  the Modal or Burla backend,
-  its fakes or its tests also runs the backend tests. A change to the docs, the version or the
-  CHANGELOG runs the gate alone. The job `gate` always runs and is the one check main requires; the
+  the Modal or cloud backend, to the command line, the core's operations, where a sweep runs
+  (`_where.py`) or the terminal app (`_cli_app.py`), or to the backends' fakes or tests, also runs
+  the backend tests, `backends`, in ten minutes: the fakes of Modal and of the cluster software,
+  and the cluster's whole life on them. A change to the docs, the version or the CHANGELOG runs
+  the gate alone. The job `gate` always runs and is the one check main requires; the
   job summary says why the math suite or the backend tests ran or not.
 - **tasks-check** (in `ci.yml`, one more need of `gate`) runs Poisson Tasks' own Prove check,
   `scripts/release/prove_e2e.py` from Tasks' latest release tag, unedited, against Prove built from
@@ -101,6 +108,11 @@ what its page shows: each block carries a mark in an HTML comment on the line be
 checked by its verdict word and its line labels, never by its counts, which change from one sweep
 to the next. The docs check under `tests/` defines the marks in its docstring. When you change a
 command's output or its help, run the docs tests and update the pages they name.
+
+A block that needs an account is marked `skip` with a reason that names the account ("needs your
+own AWS account", "needs a Modal sign-in"). What such a block quotes from a cloud sweep is still
+checked: the docs tests run its commands on the fakes of the cloud and compare the lines the same
+way. No docs test reaches a cloud, Modal or the real cluster software.
 
 ## Snapshots
 

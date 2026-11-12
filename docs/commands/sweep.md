@@ -6,6 +6,9 @@ condition's failure rate the design can catch. A design too small for the change
 refused before anything runs. On a terminal it then asks `[y/N]`; piped or in CI it needs
 `--yes`.
 
+Where the rollouts run is the spec's to say: this machine, Modal or your own cloud account.
+`poisson-prove where` shows and changes it, and `--backend` overrides it for one run.
+
 <!-- docs-check: setup quickstart -->
 
 ## Help
@@ -43,7 +46,8 @@ options:
   --backend {local,modal,cloud}
                         where the rollouts run: local (this machine), modal,
                         or cloud (your own cloud account; Prove starts the
-                        cluster and stops it after) (default: local)
+                        cluster and stops it after) (default: where the spec
+                        says, see the where verb; local when it says nothing)
   --salt HEX            the run salt seeds are derived from (default: a fresh
                         one)
   --pair-with RUN       inherit that run's salt, so the two runs share their
@@ -94,9 +98,11 @@ examples:
 - `--target pkg.module:rollout` runs another rollout than the spec's `target`: the usual way to
   sweep a changed agent against the same spec.
 - `--replicates N` overrides the spec's replicates for this run; the manifest records what ran.
-- `--backend` chooses where the rollouts run: `local` (this machine, the default), `modal` or
-  `cloud` (your own cloud account; Prove starts the cluster and stops it after). See
-  [Backends](../backends.md).
+- `--backend` chooses where the rollouts run for this run: `local` (this machine), `modal` or
+  `cloud` (your own cloud account; Prove starts the cluster and stops it after). Without it the
+  sweep runs where the spec says: a `[cloud]` table means your cloud account, a `[modal]` table
+  Modal, neither this machine. [`poisson-prove where`](where.md) writes that table. A spec holding
+  both tables is refused unless `--backend` is given. See [Backends](../backends.md).
 - `--salt HEX` sets the run salt every seed is derived from; two runs with one salt share their
   seeds. `--pair-with RUN` takes another run's salt, which is how you pair a run with an earlier
   one: `--pair-with latest`. `--resume [RUN]` continues a partial run where it stopped; alone, the
@@ -171,6 +177,47 @@ plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local
 done  1,746 rollouts in run "stopped-early" (complete) in … s
 ```
 
+A spec that holds both a `[modal]` and a `[cloud]` table does not say where it runs. Swept with
+no `--backend` it is refused, in one line that names both tables and what keeps one:
+
+<!-- docs-check: run -->
+```bash
+poisson-prove init --example --out both.toml
+printf '\n[modal]\n\n[cloud]\nprovider = "aws"\n' >> both.toml
+```
+
+<!-- docs-check: run -->
+```console
+$ poisson-prove sweep both.toml --dry-run  # exits 1
+error: both.toml holds both [cloud] and [modal], so it does not say where its sweeps run; give --backend, or keep one table with poisson-prove where --spec both.toml cloud, modal or local
+```
+
+On your own cloud account (here after `poisson-prove where cloud` wrote the spec's `[cloud]`
+table), the sweep starts the cluster, runs, and stops the cluster before it prints the result.
+The cluster's four lines go to stderr with the progress; the result's `cluster` line says what
+ran, for how long, when it stopped and what the ledger was charged:
+
+<!-- docs-check: skip: needs your own AWS account -->
+```console
+$ poisson-prove sweep --yes
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on your AWS account, ~$0.45 this run (4 × m7i.2xlarge at $0.4685/node-hour, Prove's AWS prices for us-east-2 of 2026-11-06) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00
+…
+starting  4 × m7i.2xlarge in us-east-2  0 of 4 ready · 35 s
+ready  4 nodes · 32 vCPU · 1 min 12 s
+stopping  the cluster
+stopped  4 nodes, up 2 min 3 s
+done  1,746 rollouts in run "mock-agent 2026-11-11 a" (complete) in 48.6 s
+…
+  cluster  4 × m7i.2xlarge up 2 min 3 s, stopped 23:00:45Z · ledger $0.38
+…
+```
+
+The times and the charge are an example: nodes take about a minute to be ready. On a terminal the
+`starting` line is one live line that counts the nodes as they come up; piped, it is printed once.
+The ledger's charge counts the boot and the idle allowance on top of the time the nodes were up,
+so it is an upper bound on what the cloud bills. [Backends](../backends.md#your-cloud-account)
+says what Prove starts and stops, and what happens if this machine stops first.
+
 The plan as JSON, for a script:
 
 <!-- docs-check: run -->
@@ -210,9 +257,22 @@ one `error: ` line that names the errors log, never with exit 0 and an empty std
 
 Without `--json` nothing moves: the target's text stays on stdout, around Prove's own lines.
 `--dry-run` shows nothing of what the import writes, with `--json` or without, because the check
-is not a run. On Modal and Burla, what a rollout writes stays with the worker, in Modal's logs
-and Burla's; what the target's import or the Modal client writes in the sweep's own process goes
-to stderr as above.
+is not a run. On Modal and on a cloud account, what a rollout writes stays with the worker, in
+Modal's logs or the cluster's; what the target's import or the Modal client writes in the sweep's
+own process goes to stderr as above.
+
+## When the first batch has no outcome
+
+A Modal or cloud sweep whose first batch has no outcome in any rollout stops there. Every rollout
+of that batch raised, timed out, or failed for an infrastructure reason after its retries, so the
+rest would only cost money to say the same. The first batch is the first to come back, of at
+least 32 rows (or a whole batch, when batches are smaller). The sweep cancels what is in flight,
+keeps every batch that already came back, stops the cluster on a cloud account, and leaves the run
+partial. It prints `stopped  every rollout of the first batch had no outcome, so the sweep stopped
+after …`, the commonest error, one `next:` line that inspects three of the errored episodes, and
+an `error:` line, and exits 3. There is no resume line: resuming would run the same broken target.
+A first batch with one outcome in it does not stop the sweep, and errors in later batches never
+do. A local sweep is not stopped this way.
 
 ## Exit codes
 
@@ -222,10 +282,16 @@ to stderr as above.
   the question cannot be asked (piped, without `--yes`). Declining the question also writes
   nothing.
 - `2`: the command line is wrong, such as `--pair-with` and `--resume` together.
-- `3`: stopped or failed after work started: `--max-rollouts` reached (resume it), or every
-  rollout errored (the run is stored complete; `inspect` shows the errors). With `--json`, also a
-  target that called `sys.exit`.
-- `130`: interrupted with Ctrl-C; what ran is kept and the run is partial, to resume.
+- `3`: stopped or failed after work started: `--max-rollouts` reached (resume it), every rollout
+  errored (the run is stored complete; `inspect` shows the errors), on Modal or a cloud account
+  the first batch had no outcome in any rollout (the run is partial), or on a cloud account the
+  spend reached `stop_cost`, the cluster failed to start after a node was started, or Prove could
+  not confirm the nodes stopped. With `--json`, also a target that called `sys.exit`.
+- `130`: interrupted with Ctrl-C; what ran is kept and the run is partial, to resume, and the run
+  records that it was interrupted. On a cloud sweep SIGTERM and SIGHUP (a `kill`, a closed
+  terminal) are handled as Ctrl-C is: the cluster is stopped first, then the sweep exits 130. The
+  code is 130 even when the output pipe is closed, as when the sweep is piped into a program that
+  has already exited.
 
 ## What it writes
 
@@ -234,3 +300,7 @@ One run in the store: a folder named by the run's id under `./prove-runs` (or `-
 run's progress, line by line) and `episodes/`, the episodes as Parquet. A dashboard the store
 already has is refreshed. `--dry-run` writes nothing. The layout is in
 [The artifact format](../artifact-format.md).
+
+A cloud sweep also appends to the spend ledger the `[cloud]` table names, and keeps a record of
+what it started, and whether it has stopped it, under `$XDG_STATE_HOME/poisson-prove/cloud/`
+(`~/.local/state` when the variable is unset). `sweep` never writes the spec.

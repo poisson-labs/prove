@@ -27,6 +27,8 @@ The script's keys:
 - ``preexisting``: nodes listed before Prove asks for any (``[{"status": "READY"}]``), or
   ``jobs``: an active job count the status reports.
 - ``head_fails``: ``ensure_local_head`` raises ``LocalHeadError`` with this text.
+- ``head_start_s``, ``head_fails_after_start``, ``head_stop_fails``: the head's own faults,
+  described in ``_local_head.py``.
 """
 
 from __future__ import annotations
