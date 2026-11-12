@@ -15,7 +15,10 @@ a function returning the command to run, which a test points at ``tests/bu_fixtu
 
 There the fake ``burla`` (``tests/bu_fixtures/burla``) and the fake ``boto3`` and ``botocore``
 (``tests/bu_fixtures/sdk``) come first on the path. The fake ``aws``, ``gcloud`` and ``az``
-(``tests/bu_fixtures/cloud_bin``) are the only cloud CLIs on ``PATH``. The ownership record lives
+(``tests/bu_fixtures/cloud_bin``) are the only cloud CLIs on ``PATH``. The fake ``aws`` answers
+``ec2 describe-instances`` and ``ec2 terminate-instances`` over the fake cluster's own nodes, one
+instance each (``tests/bu_fixtures/fake_ec2.py``), so what the cluster software lists and what the
+cloud holds can differ as they did in the AWS check of 2026-11-12. The ownership record lives
 under the test's own ``XDG_STATE_HOME``; ``HOME``, ``AWS_CONFIG_FILE`` and
 ``AWS_SHARED_CREDENTIALS_FILE`` point into the test's folder, which plants a secret in the
 credentials file and in ``AWS_SECRET_ACCESS_KEY`` that no output may carry (R6).
@@ -49,6 +52,7 @@ from poisson_prove import cli
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "bu_fixtures"
+FAKE_EC2 = FIXTURES / "fake_ec2.py"
 TARGETS = FIXTURES / "targets"
 SOFTWARE = FIXTURES / "software.py"
 LAUNCH = FIXTURES / "launch.py"
@@ -240,7 +244,8 @@ class CloudWorld:
         self.install_cli("aws", CLOUD_BIN / "aws.py")
         self.install_cli("gcloud", CLOUD_BIN / "refuse.py")
         self.install_cli("az", CLOUD_BIN / "refuse.py")
-        self.aws_state(account=ACCOUNT, signed_in=True, quota=40)
+        self.aws_state(account=ACCOUNT, signed_in=True, quota=40,
+                       ec2={"state": str(self.state), "fixtures": str(FIXTURES)})
         self.aws_config = root / "aws-config"
         self.aws_config.write_text("[default]\nregion = us-east-2\n", encoding="utf-8")
         self.aws_credentials = root / "aws-credentials"
@@ -440,6 +445,52 @@ class CloudWorld:
 
     def listed_nodes(self) -> list[dict[str, Any]]:
         return [n for n in self.cluster()["nodes"] if n.get("status") in ("BOOTING", "READY", "RUNNING")]
+
+    # -- the cloud's own view (fake_ec2.py) --
+
+    def _ec2(self) -> Any:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("rb_fake_ec2", FAKE_EC2)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def instances(self) -> list[dict[str, Any]]:
+        """Every instance the cloud shows now: ``{"id", "state", "launched_at", "name"}``."""
+        ec2 = self._ec2()
+        shutdown_s = float(ec2.script(str(self.state)).get("shutdown_s", 0) or 0)
+        now = time.time()
+        with ec2.locked(str(self.state)) as state:
+            ec2.ensure_ids(state)
+            return [{"id": n["id"], "state": ec2.cloud_state(n, now, shutdown_s),
+                     "launched_at": float(n["launched_at"]), "name": n["name"]}
+                    for n in state["nodes"] if ec2.cloud_state(n, now, shutdown_s) is not None]
+
+    def not_terminated(self) -> list[dict[str, Any]]:
+        return [i for i in self.instances() if i["state"] != "terminated"]
+
+    def add_instance(self, *, launched_at: float, status: str = "ORPHAN", hidden: bool = False) -> str:
+        """An instance the cloud holds and the cluster software does not list: a node launched for
+        a sweep after its stop, or someone else's. Returns its id."""
+        ec2 = self._ec2()
+        instance = ec2.new_id()
+        with ec2.locked(str(self.state)) as state:
+            state["nodes"].append({"name": f"burla-node-{instance[-8:]}", "status": status,
+                                   "booted_at": launched_at, "launched_at": launched_at,
+                                   "id": instance, "hidden": hidden})
+        return instance
+
+    def reveal(self) -> None:
+        """The instances the cloud did not show yet, shown from now on."""
+        ec2 = self._ec2()
+        with ec2.locked(str(self.state)) as state:
+            for node in state["nodes"]:
+                node["hidden"] = False
+
+    def ec2_calls(self) -> list[list[str]]:
+        return [c["argv"] for c in self.aws_calls() if c["argv"][:1] == ["ec2"]]
 
     def records(self) -> dict[str, dict[str, Any]]:
         folder = self.xdg / "poisson-prove" / "cloud"

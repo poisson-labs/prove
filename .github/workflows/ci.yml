@@ -84,6 +84,7 @@ env:
        tests/test_mc_modal_chaos.py tests/test_pf9_backends.py tests/test_pf10_worker_blas.py
        tests/test_rb_cloud_life.py tests/test_rb_cloud_contract.py tests/test_rb_cloud_stop.py
        tests/test_rb_where_cluster.py tests/test_rb_where_built_cluster.py
+       tests/test_rb_cloud_instances.py
     math1: tests/test_pf4_stats.py
     math2: rest
 

@@ -24,7 +24,8 @@ What 1.8.4 does and the fake keeps:
 - ``cluster start`` is a no-op when the listed nodes already number ``quantity``; otherwise it
   boots the missing nodes one by one and answers when every one is ready, with no rollback when
   one fails (``management.py:319-341``). ``cluster stop`` deletes every listed node, booting ones
-  included (``cluster_lifecycle.py:61-88``: ``READY``, ``BOOTING``, ``RUNNING``).
+  included (``cluster_lifecycle.py:61-88``: ``READY``, ``BOOTING``, ``RUNNING``), and does not wait
+  for or cancel a launch still in flight (the script's ``launch_in_flight``).
 - ``PROVIDER_ERROR`` is exit 6 and its ``message`` the provider's text as the head passes it on.
 
 Nothing here is one of Burla's routes Prove must not call (``POST /v1/settings``,
@@ -42,6 +43,7 @@ import time
 import uuid
 from typing import Any
 
+import fake_ec2
 from burla import _cluster, _fake
 
 ERROR_EXIT_CODES = {
@@ -141,23 +143,47 @@ def _update(args: argparse.Namespace) -> dict[str, Any]:
         return dict(state["settings"])
 
 
+def _vcpu_limit(have: int, need: int, quota: int) -> str:
+    """EC2's refusal as the head passes it on (``main_service/providers/aws.py`` raises the
+    ``ClientError``; the CLI's ``PROVIDER_ERROR`` carries its text)."""
+    return (
+        "503: {'title': 'An error occurred (VcpuLimitExceeded) when calling the RunInstances "
+        f"operation: You have requested more vCPU capacity than your current vCPU limit of {quota} "
+        f"allows for the instance bucket that the specified instance type belongs to ({have} in use, "
+        f"{need} more asked).'}}"
+    )
+
+
 def _start() -> dict[str, Any]:
     _cluster.seed_preexisting()
     script = _cluster.script()
+    fails = script.get("start_fails_after")
     with _cluster.locked() as state:
         wanted = int(state["settings"].get("quantity", 0) or 0)
         have = len(_cluster.listed(state))
         if have >= wanted:
             return {"changed": False, "cluster": _cluster.status_document(state)}
+        machine = str(state["settings"].get("machine_type") or "m7i.2xlarge")
+        quota = script.get("quota_vcpus")
+        fit = wanted - have
+        if quota is not None:
+            in_use = fake_ec2.in_use_vcpus(state, _fake.now(), float(script.get("shutdown_s", 0) or 0),
+                                           machine)
+            each = fake_ec2.VCPUS.get(machine, 0)
+            fit = max(0, min(fit, (int(quota) - in_use) // each)) if each else fit
+            if fit < wanted - have and fails is None:
+                fails = {"nodes": fit, "message": _vcpu_limit(in_use, each * (wanted - have), int(quota))}
         names = []
         for _ in range(wanted - have):
             name = f"burla-node-{uuid.uuid4().hex[:8]}"
             names.append(name)
-            state["nodes"].append({"name": name, "status": "BOOTING", "booted_at": _fake.now()})
+            now = _fake.now()
+            state["nodes"].append({"name": name, "status": "BOOTING", "booted_at": now,
+                                   "id": fake_ec2.new_id(), "launched_at": now,
+                                   "machine_type": machine})
     if script.get("start_hangs"):
         while True:
             time.sleep(0.5)
-    fails = script.get("start_fails_after")
     boot_s = float(script.get("boot_s", 0.05))
     for i, name in enumerate(names):
         if fails is not None and i >= int(fails.get("nodes", 0)):
@@ -180,11 +206,23 @@ def _stop() -> dict[str, Any]:
     time.sleep(float(script.get("stop_s", 0)))
     _scripted_error("stop_fails")
     leave = int(script.get("stop_leaves", 0) or 0)
+    in_flight = script.get("launch_in_flight") or {}
     with _cluster.locked() as state:
         listed = _cluster.listed(state)
         changed = bool(listed)
+        booting = [node for node in listed if node["status"] == "BOOTING"]
+        late = booting[len(booting) - int(in_flight.get("nodes", 0) or 0):] if booting and in_flight else []
+        now = _fake.now()
         for node in listed[leave:]:
-            node["status"] = "DELETED"
+            if any(node is other for other in late):
+                # Its RunInstances was already on its way: the instance launches after the stop,
+                # and the software, which answered off, never lists it.
+                node["status"] = "ORPHAN"
+                node["launched_at"] = now
+                node["hidden"] = bool(in_flight.get("hidden"))
+            else:
+                node["status"] = "DELETED"
+                node["ended_at"] = now
         return {"changed": changed, "cluster": _cluster.status_document(state)}
 
 

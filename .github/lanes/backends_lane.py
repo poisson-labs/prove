@@ -32,6 +32,7 @@ SOURCES = (
     "src/poisson_prove/executor_cloud.py",
     "src/poisson_prove/_cloud_head.py",
     "src/poisson_prove/_cloud_record.py",
+    "src/poisson_prove/_cloud_instances.py",
     "src/poisson_prove/_where_checks.py",
     "src/poisson_prove/_prices_cloud.py",
     "src/poisson_prove/_cloud_submit.py",
