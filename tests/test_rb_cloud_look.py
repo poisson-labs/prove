@@ -98,7 +98,8 @@ def test_v1_the_plan_is_the_specs_block_line_for_line(w: CloudWorld) -> None:
     assert done.code == 0, done
     first, *_ = done.out.splitlines()
     cost = _look.fmt_dollars(estimate(27, nodes=4, slots=8, batch=256, est=0.01, boot=5.0, idle=5.0))
-    source = f"4 × {MACHINE} at ${PRICE}/node-hour, Prove's AWS prices for {REGION} of {PRICE_DATE}"
+    source = (f"4 × {MACHINE} at ${PRICE}/node-hour, Prove's AWS prices for {REGION} of {PRICE_DATE}, "
+              "each node's disk priced at 52 GB")
     assert first == (f"plan  27 rollouts of rb-cloud@v0: 9 cells x 3 replicates on your AWS account, "
                      f"~{cost} this run ({source}) · ledger cloud-ledger.jsonl $0 so far · stop $2.00 · cap $3.00"), first
     lines = [line.strip() for line in plan_lines(done.out)]

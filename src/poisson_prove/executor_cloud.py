@@ -843,6 +843,8 @@ def preflight_cloud(p: Plan, import_path: str, options: CloudOptions, *, masked:
         f"{n} × {options.machine_type} at ${resolved.usd_per_node_hour:g}/node-hour, "
         f"{resolved.price_source}"
     )
+    if resolved.disk_gb_priced is not None:
+        source += f", each node's disk priced at {resolved.disk_gb_priced} GB"
     lines = [
         f"Sweep: {len(spec.axis_types)} axes · {len(spec.configs)} cells · "
         f"N={spec.replicates} → {spec.total_rollouts()} rollouts",

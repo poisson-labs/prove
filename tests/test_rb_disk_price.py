@@ -139,13 +139,14 @@ def test_disk_gb_is_priced_at_disk_gb_plus_the_ram_never_under_the_images_twenty
 # ---------- the plan ----------
 
 
-def test_the_plan_prices_disk_gb_at_disk_gb_plus_the_ram(w: CloudWorld) -> None:
+def test_the_plan_prices_disk_gb_and_says_the_size_priced(w: CloudWorld) -> None:
     w.write_spec(table=cloud_table(nodes=2, disk_gb=500))
     plan = w.sweep("--dry-run")
     assert plan.code == 0, plan
     cost = _cost(plan.out)
-    assert (f"2 × {MACHINE} at ${PRICE_500}/node-hour, Prove's AWS prices for {REGION} of {PRICE_DATE}"
-            in cost), cost
+    assert (f"2 × {MACHINE} at ${PRICE_500}/node-hour, Prove's AWS prices for {REGION} of {PRICE_DATE}, "
+            "each node's disk priced at 532 GB)") in cost, cost
+    assert "each node's disk priced at 532 GB" in plan.out.splitlines()[0], plan.out
     as_json = w.sweep("--dry-run", "--json")
     assert as_json.code == 0, as_json
     cloud = json.loads(as_json.out)["plan"]["cloud"]
@@ -156,12 +157,15 @@ def test_the_plan_prices_disk_gb_at_disk_gb_plus_the_ram(w: CloudWorld) -> None:
     assert f"~{_look.fmt_dollars(cloud['estimate'])} this run" in cost, cost
 
 
-def test_the_plan_without_disk_gb_prices_the_default_size(w: CloudWorld) -> None:
+def test_the_plan_without_disk_gb_says_the_default_size_priced(w: CloudWorld) -> None:
     w.write_spec(table=cloud_table())
     as_json = w.sweep("--dry-run", "--json")
     assert as_json.code == 0, as_json
     cloud = json.loads(as_json.out)["plan"]["cloud"]
     assert (cloud["usd_per_node_hour"], cloud["disk_gb_priced"]) == (PRICE, 52), cloud
+    assert any(line.endswith("each node's disk priced at 52 GB) · ledger ledger.jsonl $0 so far · "
+                             "stop $5.00 · cap $5.00")
+               for line in json.loads(as_json.out)["plan"]["lines"]), as_json.out
 
 
 def test_a_price_the_reader_gives_prices_no_disk_of_proves(w: CloudWorld) -> None:
