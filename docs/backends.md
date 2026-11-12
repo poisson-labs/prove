@@ -202,8 +202,13 @@ one whose launch was on its way when an interrupt stopped the boot, is terminate
 `aws ec2 terminate-instances`, and one `note:` line names it. Prove then waits, up to 2 minutes,
 until every node of the sweep is terminated, since a node still shutting down counts against the
 account's vCPU quota and would refuse a sweep started right after. Those two calls are the only
-ones Prove makes to your instances, and it terminates only instances launched for its own sweep. The
-`stopped` line counts the nodes that started.
+ones Prove makes to your instances, and it terminates only instances launched while its own sweep
+ran. A node of another cluster of the same software, launched in the same account and region while
+a Prove sweep runs, would be ended as Prove's, because the cluster software tags every cluster's
+nodes alike and names every cluster the same unless its environment gives it a name of its own;
+Prove does refuse to start a sweep while another coordinator runs for your account, so only a
+cluster started after the sweep began could meet this. The `stopped` line counts the nodes that
+started.
 
 The stop happens on every ending: the sweep is done, it failed, it stopped early (the spend
 reached `stop_cost`, or no rollout of the first batch had an outcome), or it was interrupted. An
