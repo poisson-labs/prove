@@ -22,6 +22,7 @@ runs a test marked ``backend``.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import subprocess
@@ -45,8 +46,9 @@ HOSTED = {"ubuntu-latest", "macos-latest"}
 PINNED = re.compile(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}")
 FLOORS_TEST = "tests/test_pf7_packaging.py::test_pf7_5_the_code_suite_passes_with_every_requirement_at_its_floor"
 #: PF8.5: the whole suite once more with HOME at an empty folder. Since prove#39 it has a nightly
-#: job of its own, as the floors run has.
+#: job of its own, as the floors run has; since prove#42 that job runs it in four parts.
 HOME_TEST = "tests/test_pf8_public_hygiene.py::test_pf8_5_with_home_empty_no_skip_names_a_place"
+HOME_PARTS = ["code", "math", "calibration", "slow"]
 PYTHONS = ["3.11", "3.12", "3.13", "3.14"]
 PUBLISH = "pypa/gh-action-pypi-publish@"
 
@@ -78,7 +80,7 @@ def runs(name: str, job: str) -> str:
 
 
 def lanes() -> Iterator[tuple[str, str, list[str]]]:
-    """``(workflow, job, the arguments after lane.py)`` for every lane a job runs, each ``"$VAR"``
+    """``(workflow, job, the arguments after lane.py)`` for every lane a job runs, each ``$VAR``
     of the workflow's or the job's environment read in."""
     for name in NAMES:
         for job in jobs(name):
@@ -87,8 +89,7 @@ def lanes() -> Iterator[tuple[str, str, list[str]]]:
                 if ".github/lanes/lane.py" not in line:
                     continue
                 line = line.replace("\\$", "$").replace('\\"', '"')
-                for key, value in env.items():
-                    line = line.replace(f'"${key}"', f'"{value}"')
+                line = re.sub(r"\$(\w+)", lambda m, env=env: str(env.get(m.group(1), m.group(0))), line)
                 words = line.split(".github/lanes/lane.py", 1)[1]
                 yield name, job, re.findall(r'"[^"]*"|\S+', words)
 
@@ -331,8 +332,9 @@ def test_pf10_4_nightly_runs_the_code_suite_on_every_python_on_linux_and_macos_a
     nightly = jobs("nightly.yml")
     assert nightly["code"]["strategy"]["matrix"] == {"os": ["ubuntu-latest", "macos-latest"], "python": PYTHONS}
     assert nightly["code"]["name"] == "code (${{ matrix.os }}, ${{ matrix.python }})"
-    for job in ("math", "slow", "home"):
+    for job in ("math", "slow"):
         assert nightly[job]["strategy"]["matrix"] == {"python": PYTHONS}, job
+    assert nightly["home"]["strategy"]["matrix"] == {"part": HOME_PARTS, "python": PYTHONS}, "every part on every Python"
     assert lane("nightly.yml", "code")[-1] == "tests", "the whole code suite, the backend fakes included"
     for job, spec in nightly.items():
         assert "if" not in spec or job == "report", job
@@ -351,21 +353,55 @@ def test_pf10_4_the_floors_run_is_alone_at_its_own_thread_cap_and_keeps_its_whol
     assert '"-n", str(min(8, os.cpu_count() or 1))' in source and "floors-suite-output.txt" in source
 
 
+def home_parts() -> dict[str, tuple[str, int]]:
+    """PF8.5's ``HOME_PARTS``, read from its source: each part's marker expression and the fewest
+    tests its report may hold."""
+    source = (ROOT / "tests" / "test_pf8_public_hygiene.py").read_text(encoding="utf-8")
+    (value,) = [node.value for node in ast.parse(source).body
+                if isinstance(node, ast.Assign) and [getattr(t, "id", None) for t in node.targets] == ["HOME_PARTS"]]
+    parts: dict[str, tuple[str, int]] = ast.literal_eval(value)
+    return parts
+
+
 def test_pf10_4_the_home_run_is_alone_on_every_python_and_keeps_the_report_of_its_suite() -> None:
     """prove#39: PF8.5 runs the whole suite at one worker per core. Inside the slow lane it shared
-    the runner with the other slow tests, and its suite held the floors run, a third code suite."""
+    the runner with the other slow tests, and its suite held the floors run, a third code suite.
+    prove#42: alone, the whole suite still reached the test's two-hour limit on the slowest hosted
+    processor, so the job runs it in four parts, one case of the test and one runner each."""
     home = lane("nightly.yml", "home")
-    assert home[-1].strip('"') == HOME_TEST and selects(marker_expression(home), {"slow"})
+    assert home[0] == '"home-${{ matrix.part }}"', "each part has its own row in the job summary"
+    assert home[-1] == f'"{HOME_TEST}[${{{{ matrix.part }}}}]"' and selects(marker_expression(home), {"slow"})
+    assert jobs("nightly.yml")["home"]["env"] == {"PART": "${{ matrix.part }}"}
+    assert jobs("nightly.yml")["home"]["name"] == "home (${{ matrix.part }}, ${{ matrix.python }})"
     slow = lane("nightly.yml", "slow")
     left_out = {slow[i + 1].strip('"') for i, word in enumerate(slow) if word == "--deselect"}
+    # ``--deselect`` leaves out every test whose id starts with the one given: all four cases.
     assert left_out == {FLOORS_TEST, HOME_TEST}, "each test that runs a suite of its own has a job of its own"
     assert "playwright install --with-deps chromium firefox webkit" in runs("nightly.yml", "home"), "its suite holds the browser tests"
     assert {"slow", "home", "floors"} <= set(jobs("nightly.yml")["report"]["needs"])
     (upload,) = [s for s in jobs("nightly.yml")["home"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]
     assert upload["if"] == "always()" and upload["with"]["path"].endswith("suite.xml")
+    assert upload["with"]["name"] == "home-suite-${{ matrix.part }}-${{ matrix.python }}", "one report per part and Python"
     source = (ROOT / "tests" / "test_pf8_public_hygiene.py").read_text(encoding="utf-8")
     assert '"--deselect", FLOORS_TEST' in source and f'FLOORS_TEST = "{FLOORS_TEST}"' in source, "the floors run is not run again under it"
-    assert "timeout=7200" in source and home[1] == "7200", "the lane reports against the limit the test gives its suite"
+    assert '"-m", f"({selected}) and not backend"' in source, "each case runs its part, and no backend test"
+    assert '@pytest.mark.parametrize("part", list(HOME_PARTS))' in source
+    assert "timeout=7200" in source and home[1] == "7200", "the lane reports against the limit the test gives each part"
+
+
+def test_pf10_4_the_four_home_parts_are_the_whole_suite_each_test_once() -> None:
+    """prove#42: the split leaves no test out and runs none twice. For every set of the four
+    markers a test can carry, exactly one part selects it unless it is a backend test, and then
+    none does: the four together select what ``-m "not backend"`` selects."""
+    parts = home_parts()
+    assert list(parts) == HOME_PARTS
+    names = ["math", "calibration", "slow", "backend"]
+    for n in range(2 ** len(names)):
+        marks = {name for i, name in enumerate(names) if n >> i & 1}
+        taken = [part for part, (selected, _) in parts.items() if selects(f"({selected}) and not backend", marks)]
+        assert len(taken) == (0 if "backend" in marks else 1), (marks, taken)
+    assert is_code_suite(f"({parts['code'][0]}) and not backend"), "the code part is the code lane's suite"
+    assert all(at_least > 0 for _, at_least in parts.values())
 
 
 def test_pf10_4_every_hosted_lane_runs_one_pytest_worker_per_core() -> None:
