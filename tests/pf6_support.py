@@ -369,8 +369,11 @@ def run_pty(
         launched(*(command or ["-m", "poisson_prove", *argv]), session=True), cwd=cwd, env=child_env(home, *paths, **extra),
         stdin=in_fd, stdout=out_fd, stderr=err_fd, close_fds=True,
     )
-    for _, user in terminals.values():
-        os.close(user)
+    # This process keeps its own copy of each terminal's far end open until the child has gone and
+    # every byte it wrote there has been read. On macOS the last close of that end waits about 0.6 s
+    # for the output still unread and then throws it away, so a reader that a loaded machine holds
+    # back that long would lose the tail of what the child wrote last.
+    held = {name: user for name, (_, user) in terminals.items()}
     readers: dict[int, str] = {controller: name for name, (controller, _) in terminals.items()}
     if proc.stdout is not None:
         readers[proc.stdout.fileno()] = "out-pipe"
@@ -385,23 +388,34 @@ def run_pty(
     step_started = time.monotonic()
     deadline = time.monotonic() + timeout
     open_fds = set(readers)
+
+    def timed_out() -> None:
+        if time.monotonic() > deadline:
+            raise AssertionError(f"timed out after {timeout} s; screen: {screens.get('main', screens.get('errors')).display if screens else raw}")
+
+    def read(fd: int) -> bool:
+        """Read one chunk from ``fd``; False at its end: EOF, or EIO, which is how Linux ends a
+        terminal whose far end is closed."""
+        try:
+            chunk = os.read(fd, 65536)
+        except BlockingIOError:
+            raise
+        except OSError:
+            chunk = b""
+        if not chunk:
+            open_fds.discard(fd)
+            return False
+        raw[readers[fd]] += chunk
+        if readers[fd] in streams:
+            streams[readers[fd]].feed(chunk)
+        return True
+
     try:
-        while open_fds:
-            if time.monotonic() > deadline:
-                raise AssertionError(f"timed out after {timeout} s; screen: {screens.get('main', screens.get('errors')).display if screens else raw}")
+        while open_fds and proc.poll() is None:
+            timed_out()
             ready, _, _ = select.select(list(open_fds), [], [], 0.05)
             for fd in ready:
-                try:
-                    chunk = os.read(fd, 65536)
-                except OSError:
-                    chunk = b""
-                if not chunk:
-                    open_fds.discard(fd)
-                    continue
-                name = readers[fd]
-                raw[name] += chunk
-                if name in streams:
-                    streams[name].feed(chunk)
+                read(fd)
             if pending and typed_into is not None:
                 step = pending[0]
                 shown = "\n".join(screens["main" if "main" in screens else next(iter(screens))].display)
@@ -412,26 +426,35 @@ def run_pty(
                     os.write(typed_into, step.send)
                     pending.pop(0)
                     step_started = time.monotonic()
-            if proc.poll() is not None and not ready:
-                # drain what is left, then stop: a closed terminal reads as an error, not as an end
-                for fd in list(open_fds):
-                    with contextlib.suppress(OSError):
-                        while True:
-                            r, _, _ = select.select([fd], [], [], 0.05)
-                            if not r:
-                                break
-                            chunk = os.read(fd, 65536)
-                            if not chunk:
-                                break
-                            raw[readers[fd]] += chunk
-                            if readers[fd] in streams:
-                                streams[readers[fd]].feed(chunk)
-                    open_fds.discard(fd)
+        # The child has gone. Read what it left in each terminal while this process still holds the
+        # far end (a read that would block has had all of it on macOS), then let go of that end and
+        # read every terminal and pipe to its end, within the same deadline: on Linux a terminal's
+        # last bytes can still be on their way after the child has gone, and come before the EIO.
+        for fd, name in readers.items():
+            if fd in open_fds and name in held:
+                os.set_blocking(fd, False)
+                try:
+                    while read(fd):
+                        pass
+                except BlockingIOError:
+                    pass
+                finally:
+                    os.set_blocking(fd, True)
+        for name in list(held):
+            os.close(held.pop(name))
+        while open_fds:
+            timed_out()
+            ready, _, _ = select.select(list(open_fds), [], [], 0.05)
+            for fd in ready:
+                read(fd)
         code = proc.wait(timeout=10)
     finally:
         if proc.poll() is None:
             proc.kill()
             proc.wait()
+        for user in held.values():
+            with contextlib.suppress(OSError):
+                os.close(user)
         for controller, _ in terminals.values():
             with contextlib.suppress(OSError):
                 os.close(controller)
