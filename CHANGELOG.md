@@ -4,7 +4,7 @@ All notable changes to Poisson Prove are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/).
 
-## 0.3.0 — Unreleased
+## 0.3.0 — 2026-11-13
 
 ### Changed
 
@@ -13,6 +13,24 @@ All notable changes to Poisson Prove are written here. The format follows
   `--backend burla` and the `[burla]` table are replaced: `--backend burla` is refused with the new
   name, a spec with `[burla]` is refused naming the move, and `poisson-prove where cloud` rewrites
   the table. Install with `pip install "poisson-prove[cloud]"`; `[burla]` installs the same until 0.4.0.
+- A cloud sweep's stop reads your account as well as the cluster software. Once the software has
+  stopped, Prove reads the instances tagged as the sweep's nodes (`aws ec2 describe-instances`),
+  terminates any still running, such as one whose launch was on its way when Ctrl-C stopped the
+  boot, and waits up to 2 minutes until every node is terminated, so a sweep started right after
+  is not refused on the account's vCPU quota. The `stopped` line counts the nodes that started.
+- A cloud start that your account refused before any instance launched exits 1, with nothing
+  started, even when the cluster software lists the refused nodes as booting: Prove goes by what
+  the account shows. A start refused after a node launched still exits 3, once that node is stopped.
+- When a policy on your AWS account refuses the launch, such as a spend limit with its early
+  control "Stop new resource launches" on, Prove says that a policy on the account does not allow
+  starting instances, and to check the account's spend limit or ask its administrator, rather
+  than to sign in again. A start refused on the vCPU quota says whether the quota is too small for
+  the nodes asked, or is in use, most likely by the last cluster still stopping.
+- The plan prices each node's disk at the size it boots with, 20 GB or the spec's `disk_gb`, plus
+  the machine's memory, and names that size ("each node's disk priced at 52 GB";
+  `plan.cloud.disk_gb_priced` in `--json`). Every cloud sweep sends its disk size, so a size kept
+  from an earlier sweep on the same account is not the one that boots.
+- The `[cloud]` extra installs `botocore[crt]>=1.42.39`, which a sign-in made by `aws login` needs.
 - **A spec runs where its table says.** `poisson-prove sweep` with no `--backend` now runs on
   your cloud account when the spec holds a `[cloud]` table and on Modal when it holds a `[modal]`
   table. In 0.2 it ran on this machine unless `--backend` was given, so a spec with a `[modal]`
@@ -29,6 +47,12 @@ All notable changes to Poisson Prove are written here. The format follows
   it or changes it, `init` asks in a terminal (`--runs-on` answers on the command line), and the
   terminal app has a page for it, behind `w`. The verb's page is `docs/commands/where.md`.
 - The run manifest's `produced_by` (the artifact format's 1.1) (#17).
+
+### Fixed
+
+- A Ctrl-C that lands while a rollout's own process is starting, under `--episode-timeout`, or
+  while the capture probe's process is starting, stops the sweep and exits 130. Before, it could
+  be lost, and the sweep ran on until that process ended.
 
 ## 0.2.2 — 2026-11-08
 
