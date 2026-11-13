@@ -164,9 +164,9 @@ MIT_BODY = (
     "OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."
 )
 
-#: PF8.7 (r11): the sha256 of the canonical ``docs/repo-hygiene.md``, 8,206 bytes. A new version
+#: PF8.7 (r11): the sha256 of the canonical ``docs/repo-hygiene.md``, 9,614 bytes. A new version
 #: of the standard moves this pin.
-REPO_HYGIENE_SHA256 = "5017a2b3b03e2f50bcc193fff79645498e4cb69df8c3bd26ef0420b205fe8366"
+REPO_HYGIENE_SHA256 = "e09f4a8ec199783089606f64b4d11837fb455288d5d2ba53eb3169209b6ae34e"
 
 #: The two standards the plain-words test leaves out.
 STANDARDS = ("docs/cli-look.md", "docs/repo-hygiene.md")

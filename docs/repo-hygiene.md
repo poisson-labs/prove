@@ -3,7 +3,7 @@
 **Standard:** `docs/repo-hygiene.md`  
 **Applies to:** All public repositories published under `github.com/poisson-labs`.  
 **Effective:** September 2026  
-**Revised:** 2026-09-21. Devlogs are kept outside every repository (section 1.5 withdrawn, new section 2.7 and checklist item 12). History is rewritten only when a repository goes public, and that rewrite is the one force-push the standard allows (checklist items 9 and 10).
+**Revised:** 2026-09-21. Devlogs are kept outside every repository (section 1.5 withdrawn, new section 2.7 and checklist item 12). History is rewritten only when a repository goes public, and that rewrite is the one force-push the standard allows (checklist items 9 and 10). Revised 2026-10-22: merge commits are signed by the maintainer who merged them (checklist item 10). Revised 2026-11-12: what GitHub shows around the code (new section 1.7 and checklist items 13 to 16).
 
 This standard defines what a Poisson Labs public repository must contain and what it must never contain. It ensures that every public codebase is immediately reproducible, honest about its scope, legally sound, and free of internal agent tooling artifacts or personal data.
 
@@ -47,6 +47,12 @@ A repository no longer carries a study log. Devlogs are kept outside the reposit
 - Scripts that extract published figures and metrics from raw data must be deterministic, self-contained, and output relative paths.
 - Analysis notebooks must execute cleanly top-to-bottom.
 - Raw run data (such as Parquet shards, logs, and run manifests) that are intentional and load-bearing for the study must be documented, checksummed, and tracked.
+
+### 1.7 What GitHub Shows Around the Code
+A reader meets the repository's GitHub page before its README. Three fields on it are part of the release:
+- **Description:** One or two sentences saying what was measured or what the tool does, in plain words, with no claim the README does not support.
+- **Homepage:** The page on `poissonlabs.ai` that cites the repository: the study, or the tool's page. The address loads.
+- **Topics:** Three to eight GitHub topics, lower case, naming the subject and the method (for example `robustness`, `reinforcement-learning`, `evaluation`). No topic names an internal project.
 
 ---
 
@@ -96,6 +102,10 @@ Before releasing any Poisson Labs repository to public visibility:
 7. [ ] All agent request files and tooling traces are purged.
 8. [ ] Working tree is clean; load-bearing run data is verified; all uncommitted study files are resolved.
 9. [ ] Git commit history is reviewed: plain commit messages, zero AI attribution. No force-pushes, with one exception: the history rewrite in item 10, when the repository goes public. That is the only force-push this standard allows.
-10. [ ] Author identity is the work identity: commits are authored as `TaylorKolasinski` with `taylor@poissonlabs.ai`, as author and as committer (a commit GitHub itself makes keeps GitHub as committer). Every address the author commits with is verified on that one GitHub account, so no second account is involved. History is rewritten only when a repository goes public, and only then: the rewrite gives every commit the work address, and it is the one case in which a force-push is allowed (item 9). A repository staying private is not rewritten. A rewrite moves every commit hash, so every record that cites those hashes needs re-pointing afterwards.
+10. [ ] Author identity is the work identity: commits are authored as `TaylorKolasinski` with `taylor@poissonlabs.ai`, as author and as committer. Merge commits are signed by the maintainer who merged them; a merge GitHub made is re-signed by that maintainer, who is named as its committer, when the history is rewritten. Every address the author commits with is verified on that one GitHub account, so no second account is involved. History is rewritten only when a repository goes public, and only then: the rewrite gives every commit the work address, and it is the one case in which a force-push is allowed (item 9). A repository staying private is not rewritten. A rewrite moves every commit hash, so every record that cites those hashes needs re-pointing afterwards.
 11. [ ] Commits are signed, so GitHub shows them as verified rather than unverified. The signing key is registered on the GitHub account as a signing key; a key registered only for authentication still shows every commit as unverified. For a repo going public, the history rewrite resigns the existing commits in the same pass.
 12. [ ] `.gitignore` includes `devlog.md`, and no devlog is tracked. Devlogs are kept outside the repository (section 2.7).
+13. [ ] The repository has a GitHub description: one or two plain sentences the README supports (section 1.7).
+14. [ ] The GitHub homepage is the page on `poissonlabs.ai` that cites the repository, and that address loads (section 1.7).
+15. [ ] The repository has three to eight GitHub topics, lower case, none naming an internal project (section 1.7).
+16. [ ] Every repository a page on `poissonlabs.ai` links is public, or the page says in the same sentence that it is not.
