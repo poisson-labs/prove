@@ -26,8 +26,12 @@ WORK_DOMAIN = "@poissonlabs.ai"
 GITHUB = "noreply@github.com"
 #: Full hashes whose addresses pass; a hash fixes its commit's addresses. The merge of pull request
 #: #1 took the GitHub account's default address; main's history stays as it is rather than rewritten
-#: for one merge.
-ALLOWED = {"cced18c379d805524af07630e7ac77e3e55dab11"}
+#: for one merge. The merge of pull request #47 (GitHub's web merge, 2026-11-12) took the same
+#: address, and is allowed the same way.
+ALLOWED = {
+    "cced18c379d805524af07630e7ac77e3e55dab11",
+    "a5cebb70d0737e82e23dd7dc087a4fa10e8d3505",
+}
 
 
 def problems(commits: Iterable[tuple[str, str, str, str]]) -> list[str]:

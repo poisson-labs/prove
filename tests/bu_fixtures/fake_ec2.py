@@ -12,7 +12,9 @@ state folder, under its lock (``cluster.lock``). Each node is one instance tagge
 - ``id``: the instance id, ``i-`` and 17 hex digits;
 - ``launched_at``: the instance's ``LaunchTime``;
 - ``ended_at``: when it was deleted by the software's stop or terminated by the AWS CLI;
-- ``hidden``: true while ``describe-instances`` does not show it yet (a test reveals it).
+- ``hidden``: true while ``describe-instances`` does not show it yet (a test reveals it);
+- ``refused``: true when the launch was refused but the software still lists the node: no
+  instance, whatever the software's status says.
 
 How the cloud sees each status of the software's:
 
@@ -93,7 +95,7 @@ def locked(state_dir: str) -> Iterator[dict[str, Any]]:
 def cloud_state(node: dict[str, Any], now: float, shutdown_s: float) -> str | None:
     """The instance's state as EC2 reports it, or None when there is no instance (yet)."""
     status = node.get("status")
-    if status == "FAILED" or node.get("hidden"):
+    if status == "FAILED" or node.get("hidden") or node.get("refused"):
         return None
     if status == "BOOTING":
         return "pending"

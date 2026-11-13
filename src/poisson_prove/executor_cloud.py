@@ -1409,6 +1409,14 @@ def _words(
             "or region",
             [],
         )
+    if "UnauthorizedOperation" in message and "service control policy" in message:
+        # An organization's policy denies the launch, whoever signs in: on AWS a spend limit's
+        # early control "Stop new resource launches" is one (the AWS rerun of 2026-11-12).
+        return (
+            f"a policy on this {name} account (such as a spend limit) does not allow starting "
+            f"instances in {region}",
+            ["check the account's spend limit, or ask its administrator"],
+        )
     if "UnauthorizedOperation" in message:
         return f"your {name} sign-in is not allowed to start instances in {region}", []
     if "OptInRequired" in message:
@@ -2137,6 +2145,12 @@ def run_cloud(
                 "charge": _charge(options, stopped_at - start),
             },
         )
+    if life.launched == 0:
+        # The cloud launched nothing for the sweep: no work started and no node billed, whatever
+        # the software listed (1.8.4 lists nodes whose launch was refused as booting), so exit 1.
+        life.any_node = False
+        if isinstance(failure, CloudStartError):
+            failure.started = False
     if failure is not None:
         if life.any_node and isinstance(failure, ExecutorError):
             # Nodes were started: work started and money spent, whatever was stored.
@@ -2168,6 +2182,8 @@ class _Life:
     #: The nodes the software reported started: the stopped line's count when the cloud cannot
     #: be read.
     started: int = 0
+    #: The instances the cloud shows the sweep launched, read at the stop (None when not read).
+    launched: int | None = None
 
 
 def _stop_all(
@@ -2230,6 +2246,7 @@ def _stop_all(
     launched: int | None = None
     if life.booted_at is not None and not life.leave_nodes:
         launched, running = _settle(software, options.region, start, None, None, on_cluster)
+        life.launched = launched
         if running:
             close("error", time.time())
             raise _unconfirmed(options.region, running, _CLOUD_WAIT_S, spent=True)

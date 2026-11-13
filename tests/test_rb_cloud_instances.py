@@ -38,6 +38,17 @@ fake cluster scripts the two behaviours of the check: ``launch_in_flight`` (case
 - When the cloud cannot be read the sweep's result stands, with one note, and the stopped line
   counts what the software listed.
 - The notes' words, pinned below.
+
+The AWS rerun of 2026-11-12 found two more, both at a start AWS refused before any instance
+launched (an organization's service control policy, put in place by the account's spend limit),
+both ruled yes the same day:
+
+- **R1.** A start failure exits 1 when the cloud shows no instance launched for the sweep, as §6.3
+  and §7.4 say, though 1.8.4's status still lists the refused nodes as booting; the ledger keeps
+  charging its allowances. When the cloud cannot be read, the software's count stands.
+- **R2.** When the software's ``UnauthorizedOperation`` text names a service control policy, Prove
+  says a policy on the account (such as a spend limit) does not allow starting instances, with
+  ``next: check the account's spend limit, or ask its administrator``, not the sign-in line.
 """
 
 from __future__ import annotations
@@ -55,6 +66,7 @@ import pytest
 from rb_cloud_support import (
     ACCOUNT,
     MACHINE,
+    PRICE,
     REGION,
     CloudWorld,
     Pool,
@@ -460,3 +472,93 @@ def test_aws4_the_record_keeps_the_window(w: CloudWorld) -> None:
     (instance,) = w.instances()
     assert float(record["booted_at"]) <= instance["launched_at"] <= float(record["stopped_at"])
     assert f"aws-{ACCOUNT}.json" in w.records()
+
+
+# ---------- R1 and R2 of the AWS rerun: a start AWS refused before any instance launched ----------
+
+#: 1.8.4's ``PROVIDER_ERROR`` text in the rerun's blocked attempt (22:52Z), the ids changed.
+REFUSED_BY_POLICY = (
+    "An error occurred (UnauthorizedOperation) when calling the RunInstances operation: You are not "
+    f"authorized to perform this operation. User: arn:aws:sts::{ACCOUNT}:assumed-role/AccountFullAccessRole/"
+    "a448f408 is not authorized to perform: ec2:RunInstances on resource: "
+    f"arn:aws:ec2:{REGION}:{ACCOUNT}:instance/* with an explicit deny in a service control policy: "
+    "arn:aws:organizations::111122223333:policy/o-exampleorg1/service_control_policy/p-example1. "
+    "Encoded authorization failure message: <encoded>"
+)
+REFUSED_BY_SIGN_IN = (
+    "An error occurred (UnauthorizedOperation) when calling the RunInstances operation: You are not "
+    f"authorized to perform this operation. User: arn:aws:iam::{ACCOUNT}:user/reader is not authorized "
+    f"to perform: ec2:RunInstances on resource: arn:aws:ec2:{REGION}:{ACCOUNT}:instance/* because no "
+    "identity-based policy allows the ec2:RunInstances action. Encoded authorization failure message: "
+    "<encoded>"
+)
+POLICY = (f"error: a policy on this AWS account (such as a spend limit) does not allow starting "
+          f"instances in {REGION}")
+POLICY_NEXT = "next: check the account's spend limit, or ask its administrator"
+SIGN_IN = f"error: your AWS sign-in is not allowed to start instances in {REGION}"
+
+
+def test_r1_a_start_refused_before_any_instance_launched_exits_1_though_the_software_lists_nodes(w: CloudWorld) -> None:
+    """The rerun's blocked attempt: EC2 refused every RunInstances, 1.8.4's status after the
+    refusal still said booting (3 of 4), and Prove exited 3 with ``stopped  0 nodes``."""
+    w.script_cluster(start_fails_after={"nodes": 0, "listed": 3, "message": REFUSED_BY_SIGN_IN})
+    w.write_spec(table=cloud_table(nodes=4))
+    done = w.sweep()
+    assert done.code == 1, done
+    assert done.errors == [SIGN_IN], done
+    assert "no rollout was stored" not in done.out + done.err, done
+    (line,) = stopped_lines(done.err)
+    assert line.startswith("stopped  0 nodes, up "), done.err
+    assert w.instances() == [], w.instances()
+    assert len(describes(w)) >= 1, "the cloud was not read"
+    assert terminations(w) == [], "there was nothing to terminate"
+    names = [n for _, n in sorted(_events(w))]
+    assert names.count("cluster stop") == 1, names
+    # The ledger still charges the allowances, as designed: no node is not no charge.
+    close = w.ledger()[-1]
+    assert close["event"] == "close" and close["ended"] == "error", w.ledger()
+    assert close["charge"] >= 4 * PRICE * 2 / 60, close
+    record = w.record()
+    assert record is not None and record["state"] == "stopped", record
+    assert ended_clean(w) == [], done
+
+
+def test_r1_when_the_cloud_cannot_be_read_the_softwares_count_stands_and_exits_3(w: CloudWorld) -> None:
+    w.aws_state(ec2_denied=["describe-instances"])
+    w.script_cluster(start_fails_after={"nodes": 0, "listed": 3, "message": REFUSED_BY_SIGN_IN})
+    w.write_spec(table=cloud_table(nodes=4))
+    done = w.sweep()
+    assert done.code == 3, done
+    assert done.errors == [SIGN_IN], done
+    assert len(notes(done.err, UNREAD)) == 1, done.err
+
+
+def test_r1_a_start_that_launched_one_instance_before_the_refusal_still_exits_3(w: CloudWorld) -> None:
+    w.script_cluster(start_fails_after={"nodes": 1, "listed": 2, "message": REFUSED_BY_SIGN_IN})
+    w.write_spec(table=cloud_table(nodes=4))
+    done = w.sweep()
+    assert done.code == 3, done
+    (line,) = stopped_lines(done.err)
+    assert line.startswith("stopped  1 node, up "), done.err
+    assert w.not_terminated() == [], w.instances()
+
+
+def test_r2_a_service_control_policy_deny_reads_as_a_policy_on_the_account(w: CloudWorld) -> None:
+    w.script_cluster(start_fails_after={"nodes": 0, "listed": 3, "message": REFUSED_BY_POLICY})
+    w.write_spec(table=cloud_table(nodes=4))
+    done = w.sweep()
+    assert done.code == 1, done
+    assert done.errors == [POLICY], done
+    assert done.nexts == [POLICY_NEXT], done
+    assert "sign-in" not in done.out + done.err, done
+    assert "aws login" not in done.out + done.err, done
+    assert ended_clean(w) == [], done
+
+
+def test_r2_any_other_unauthorized_operation_keeps_the_sign_in_line(w: CloudWorld) -> None:
+    w.script_cluster(start_fails_after={"nodes": 0, "message": REFUSED_BY_SIGN_IN})
+    w.write_spec(table=cloud_table())
+    done = w.sweep()
+    assert done.code == 1, done
+    assert done.errors == [SIGN_IN], done
+    assert done.nexts == [], done

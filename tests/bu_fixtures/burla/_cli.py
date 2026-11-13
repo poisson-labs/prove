@@ -187,9 +187,15 @@ def _start() -> dict[str, Any]:
     boot_s = float(script.get("boot_s", 0.05))
     for i, name in enumerate(names):
         if fails is not None and i >= int(fails.get("nodes", 0)):
+            # ``listed``: the first of the refused nodes the software goes on listing as booting,
+            # with no instance behind them (1.8.4 on EC2's UnauthorizedOperation, the AWS rerun of
+            # 2026-11-12: its status said booting 3 of 4 after the refusal).
+            still = set(names[i:i + int(fails.get("listed", 0) or 0)])
             with _cluster.locked() as state:
                 for node in state["nodes"]:
-                    if node["name"] in names[i:]:
+                    if node["name"] in still:
+                        node["refused"] = True
+                    elif node["name"] in names[i:]:
                         node["status"] = "FAILED"
             raise _Error("PROVIDER_ERROR", str(fails.get("message", "")), retryable=True)
         time.sleep(boot_s)

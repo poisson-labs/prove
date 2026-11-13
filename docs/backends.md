@@ -186,7 +186,9 @@ every install line Prove prints for this backend is `pip install "poisson-prove[
 sign-in check reads which AWS profile is active from `AWS_PROFILE` (or `AWS_DEFAULT_PROFILE`) and
 `AWS_CONFIG_FILE`, to name `aws sso login` for an SSO profile; it never reads a credential.
 Prove stores no cloud secret and asks for none: it reaches your account only through the AWS
-CLI's own sign-in on this machine.
+CLI's own sign-in on this machine. An account's spend limit with its early controls on (such as
+"Stop new resource launches") can stop new launches after a heavy day of sweeps; Prove then says
+that a policy on the account, such as a spend limit, does not allow starting instances.
 
 ### What Prove starts and stops
 
