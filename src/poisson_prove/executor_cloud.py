@@ -1409,6 +1409,14 @@ def _words(
             "or region",
             [],
         )
+    if "UnauthorizedOperation" in message and "service control policy" in message:
+        # An organization's policy denies the launch, whoever signs in: on AWS a spend limit's
+        # early control "Stop new resource launches" is one (the AWS rerun of 2026-11-12).
+        return (
+            f"a policy on this {name} account (such as a spend limit) does not allow starting "
+            f"instances in {region}",
+            ["check the account's spend limit, or ask its administrator"],
+        )
     if "UnauthorizedOperation" in message:
         return f"your {name} sign-in is not allowed to start instances in {region}", []
     if "OptInRequired" in message:
