@@ -38,6 +38,13 @@ fake cluster scripts the two behaviours of the check: ``launch_in_flight`` (case
 - When the cloud cannot be read the sweep's result stands, with one note, and the stopped line
   counts what the software listed.
 - The notes' words, pinned below.
+
+The AWS rerun of 2026-11-12 found one more, at a start AWS refused before any instance launched,
+ruled yes the same day:
+
+- **R1.** A start failure exits 1 when the cloud shows no instance launched for the sweep, as §6.3
+  and §7.4 say, though 1.8.4's status still lists the refused nodes as booting; the ledger keeps
+  charging its allowances. When the cloud cannot be read, the software's count stands.
 """
 
 from __future__ import annotations
@@ -55,6 +62,7 @@ import pytest
 from rb_cloud_support import (
     ACCOUNT,
     MACHINE,
+    PRICE,
     REGION,
     CloudWorld,
     Pool,
@@ -460,3 +468,60 @@ def test_aws4_the_record_keeps_the_window(w: CloudWorld) -> None:
     (instance,) = w.instances()
     assert float(record["booted_at"]) <= instance["launched_at"] <= float(record["stopped_at"])
     assert f"aws-{ACCOUNT}.json" in w.records()
+
+
+# ---------- R1 of the AWS rerun: a start AWS refused before any instance launched ----------
+
+REFUSED_BY_SIGN_IN = (
+    "An error occurred (UnauthorizedOperation) when calling the RunInstances operation: You are not "
+    f"authorized to perform this operation. User: arn:aws:iam::{ACCOUNT}:user/reader is not authorized "
+    f"to perform: ec2:RunInstances on resource: arn:aws:ec2:{REGION}:{ACCOUNT}:instance/* because no "
+    "identity-based policy allows the ec2:RunInstances action. Encoded authorization failure message: "
+    "<encoded>"
+)
+SIGN_IN = f"error: your AWS sign-in is not allowed to start instances in {REGION}"
+
+
+def test_r1_a_start_refused_before_any_instance_launched_exits_1_though_the_software_lists_nodes(w: CloudWorld) -> None:
+    """The rerun's blocked attempt: EC2 refused every RunInstances, 1.8.4's status after the
+    refusal still said booting (3 of 4), and Prove exited 3 with ``stopped  0 nodes``."""
+    w.script_cluster(start_fails_after={"nodes": 0, "listed": 3, "message": REFUSED_BY_SIGN_IN})
+    w.write_spec(table=cloud_table(nodes=4))
+    done = w.sweep()
+    assert done.code == 1, done
+    assert done.errors == [SIGN_IN], done
+    assert "no rollout was stored" not in done.out + done.err, done
+    (line,) = stopped_lines(done.err)
+    assert line.startswith("stopped  0 nodes, up "), done.err
+    assert w.instances() == [], w.instances()
+    assert len(describes(w)) >= 1, "the cloud was not read"
+    assert terminations(w) == [], "there was nothing to terminate"
+    names = [n for _, n in sorted(_events(w))]
+    assert names.count("cluster stop") == 1, names
+    # The ledger still charges the allowances, as designed: no node is not no charge.
+    close = w.ledger()[-1]
+    assert close["event"] == "close" and close["ended"] == "error", w.ledger()
+    assert close["charge"] >= 4 * PRICE * 2 / 60, close
+    record = w.record()
+    assert record is not None and record["state"] == "stopped", record
+    assert ended_clean(w) == [], done
+
+
+def test_r1_when_the_cloud_cannot_be_read_the_softwares_count_stands_and_exits_3(w: CloudWorld) -> None:
+    w.aws_state(ec2_denied=["describe-instances"])
+    w.script_cluster(start_fails_after={"nodes": 0, "listed": 3, "message": REFUSED_BY_SIGN_IN})
+    w.write_spec(table=cloud_table(nodes=4))
+    done = w.sweep()
+    assert done.code == 3, done
+    assert done.errors == [SIGN_IN], done
+    assert len(notes(done.err, UNREAD)) == 1, done.err
+
+
+def test_r1_a_start_that_launched_one_instance_before_the_refusal_still_exits_3(w: CloudWorld) -> None:
+    w.script_cluster(start_fails_after={"nodes": 1, "listed": 2, "message": REFUSED_BY_SIGN_IN})
+    w.write_spec(table=cloud_table(nodes=4))
+    done = w.sweep()
+    assert done.code == 3, done
+    (line,) = stopped_lines(done.err)
+    assert line.startswith("stopped  1 node, up "), done.err
+    assert w.not_terminated() == [], w.instances()

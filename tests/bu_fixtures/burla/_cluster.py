@@ -18,7 +18,9 @@ The script's keys:
 - ``boot_s``: seconds each node takes from ``BOOTING`` to ``READY`` (default 0.05).
 - ``start_fails_after``: ``{"nodes": k, "message": text}``: cluster start boots k nodes, then
   answers ``PROVIDER_ERROR`` with ``message`` (the nodes it booted stay up: no rollback,
-  ``management.py:319-341``).
+  ``management.py:319-341``). With ``"listed": j``, j of the refused nodes stay listed as
+  ``BOOTING`` though the cloud refused their launch and holds no instance for them (1.8.4 on EC2's
+  ``UnauthorizedOperation``, the AWS rerun of 2026-11-12); the software's stop deletes them.
 - ``start_hangs``: cluster start boots nothing and blocks until it is killed.
 - ``status_fails``, ``settings_fails``, ``stop_fails``: that call answers an error envelope
   (``{"code", "message"}``), every time, or only the first ``"times"`` calls.
