@@ -1628,13 +1628,16 @@ def test_dollar3_over_the_cap_is_refused_before_anything_starts(fake: Fake, tmp_
 
 
 def test_dollar4_the_stop_fires_within_5_s_of_its_deadline_and_the_run_resumes(fake: Fake, tmp_path: Path) -> None:
-    """A prior run already charged $0.10 against the stop, so this run stops at its own charge two
+    """A prior run already charged $0.80 against the stop, so this run stops at its own charge two
     seconds in, and the message's charge cannot be read off the stop. (0.2.1's $0.30 stop; with
-    §4.1's two idle minutes in every allowance the stop that puts the deadline there is higher.)"""
+    §4.1's two idle minutes in every allowance the stop that puts the deadline there is higher.)
+    At $0.10 a second the run's own charge equals the stop only when the stop fires as many
+    seconds late as the prior charged dimes: 8 s, past the 5 s this test allows. The prior was
+    $0.10, and a stop 1 s late on a loaded runner read as the stop (nightly 43359938284, macOS 3.13)."""
     fake.script(attempts=[{"hang_after": 1}])
-    _seed_ledger(tmp_path / "ledger.jsonl", [{**PRIOR[0], "run_id": "prior-0-10"},
-                                              {**PRIOR[1], "run_id": "prior-0-10", "charge": 0.10}])
-    stop = stop_at(2.0, usd_per_node_hour=360.0, before=0.10)
+    _seed_ledger(tmp_path / "ledger.jsonl", [{**PRIOR[0], "run_id": "prior-0-80"},
+                                              {**PRIOR[1], "run_id": "prior-0-80", "charge": 0.80}])
+    stop = stop_at(2.0, usd_per_node_hour=360.0, before=0.80)
     p, store, opts, outcome = cloud_run(fake, tmp_path, sweep={"replicates": 3}, usd_per_node_hour=360.0,
                                         stop_cost=stop, max_cost=stop + 1.0)
     raised_at = time.time()
@@ -1645,7 +1648,7 @@ def test_dollar4_the_stop_fires_within_5_s_of_its_deadline_and_the_run_resumes(f
     closed = close_of(opts.ledger, p.run_id)
     assert closed["ended"] == "stopped"
     charge = f"{closed['charge']:.2f}"
-    assert charge not in ("0.10", f"{stop:.2f}"), charge  # the run's own charge, told apart from the prior and the stop
+    assert charge not in ("0.80", f"{stop:.2f}"), charge  # the run's own charge, told apart from the prior and the stop
     for needle in (p.run_id, charge, str(opts.ledger)):
         assert needle in str(outcome), (needle, str(outcome))
     rows = stored(store, p.run_id)
