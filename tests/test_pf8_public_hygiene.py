@@ -86,7 +86,7 @@ hold), PF4.11 (paths in output), PF0's accept-list (the old name read back).
 | PF8.3 NOTICE lists every third-party item that ships, with its URL | ``test_pf8_3_notice_names_every_third_party_item_that_ships`` (tree, sdist, wheel) |
 | PF8.4 the pattern list catches every family, passes ordinary words, and each exception allows its case and no more | ``test_pf8_4_each_family_catches_its_terms_and_passes_ordinary_words`` (one case per family) |
 | PF8.4 the plain-words test passes over its whole corpus | ``test_pf8_4_the_plain_words_test_passes_over_its_whole_corpus`` (one case per part) |
-| PF8.5 no skip caused by data outside the repo | ``test_pf8_5_no_test_names_a_place_outside_the_repository``; ``test_pf8_5_with_home_empty_no_skip_names_a_place`` (slow) |
+| PF8.5 no skip caused by data outside the repo | ``test_pf8_5_no_test_names_a_place_outside_the_repository``; ``test_pf8_5_with_home_empty_no_skip_names_a_place`` (slow, one case per part of the suite) |
 | PF8.6 the CHANGELOG has the form of r9 | ``test_pf8_6_the_changelog_has_the_keep_a_changelog_form`` |
 | PF8.7 ``docs/repo-hygiene.md`` equals the canonical copy | ``test_pf8_7_repo_hygiene_md_equals_the_canonical_copy`` (tree, sdist) |
 
@@ -1002,14 +1002,30 @@ def importlib_has(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
+#: PF8.5's suite in four parts, by marker, each run with its own two-hour limit and its own report
+#: (prove#42: whole, on the slowest hosted processor, the suite reached its one two-hour limit).
+#: Together the four select every test that ``-m "not backend"`` selects, each test once
+#: (``test_pf10_ci``), so the four runs together are the whole suite. Each part: the tests it
+#: runs, and how many there must at least be in its report (a part that selects nothing is a
+#: broken expression, not a pass).
+HOME_PARTS = {
+    "code": ("not math and not calibration and not slow", 1000),
+    "math": ("math and not calibration and not slow", 250),
+    "calibration": ("calibration and not slow", 80),
+    "slow": ("slow", 50),
+}
+
+
 @pytest.mark.slow
-def test_pf8_5_with_home_empty_no_skip_names_a_place(tmp_path: Path) -> None:
-    """The suite, run once with ``HOME`` at an empty folder (so no code folder under it) and no store
-    variable, reports no skip whose reason names a place. Real-backend tests are left out (a paid
-    call), and so is this test. So is the floors run: it never skips, so it has nothing to report
-    here, and it would run the code suite a third time, under this run, on the same cores (on Python
-    3.11, where it finds its interpreter); nightly gives it a job of its own. Package caches are
-    kept: a cache is not data a test reads."""
+@pytest.mark.parametrize("part", list(HOME_PARTS))
+def test_pf8_5_with_home_empty_no_skip_names_a_place(part: str, tmp_path: Path) -> None:
+    """The suite, run with ``HOME`` at an empty folder (so no code folder under it) and no store
+    variable, one part at a time, reports no skip whose reason names a place. Real-backend tests
+    are left out (a paid call), and so is this test. So is the floors run: it never skips, so it
+    has nothing to report here, and it would run the code suite a third time, under this run, on
+    the same cores (on Python 3.11, where it finds its interpreter); nightly gives it a job of its
+    own. Package caches are kept: a cache is not data a test reads."""
+    selected, at_least = HOME_PARTS[part]
     home = tmp_path / "home"
     home.mkdir()
     junit = tmp_path / "suite.xml"
@@ -1020,16 +1036,17 @@ def test_pf8_5_with_home_empty_no_skip_names_a_place(tmp_path: Path) -> None:
     drop = ("PROOFLOAD_STORE", "POISSON_PROVE_STORE", "PYTHONDONTWRITEBYTECODE")
     env = {k: v for k, v in os.environ.items() if k not in drop and not k.startswith("PYTEST_")}
     env.update(keep, HOME=str(home), PATH=os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")]))
-    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-m", "not backend", "-rs",
+    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-m", f"({selected}) and not backend", "-rs",
             "--deselect", f"{THIS_FILE}::test_pf8_5_with_home_empty_no_skip_names_a_place",
             "--deselect", FLOORS_TEST, f"--junitxml={junit}"]
     if importlib_has("xdist"):
         argv += ["-n", "auto"]
-    # Two hours: the inner suite takes over an hour on the four vCPUs of a hosted runner.
+    # Two hours for each part: the whole suite took up to two hours on the four vCPUs of a hosted
+    # runner, and the slowest part about an hour.
     done = subprocess.run(argv, cwd=ROOT, env=env, capture_output=True, text=True, timeout=7200, preexec_fn=PF1.default_sigint)
     assert junit.is_file(), done.stdout[-2000:] + done.stderr[-2000:]
     root = ET.parse(junit).getroot()
-    assert sum(1 for _ in root.iter("testcase")) > 1000, done.stdout[-2000:]
+    assert sum(1 for _ in root.iter("testcase")) > at_least, done.stdout[-2000:]
     skips = []
     for case in root.iter("testcase"):
         skipped = case.find("skipped")

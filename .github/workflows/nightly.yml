@@ -6,8 +6,9 @@
 # - math: the statistics, calibration and the slow math tests included, on every supported Python;
 #   its test report is kept a week.
 # - slow: the slow tests, on every supported Python, but the two that run a suite of their own.
-# - home: the whole suite once more with HOME at an empty folder, alone on its runner, on every
-#   supported Python; the report of the suite it ran is kept a week.
+# - home: the whole suite once more with HOME at an empty folder, on every supported Python, in
+#   four parts by marker (code, math, calibration, slow), each alone on its runner and under its
+#   own two-hour limit; the report of each part's suite is kept a week.
 # - floors: the code suite with every requirement at its floor.
 # - linux: the code suite in a Debian container, as a user that is not root.
 # - report: when any job fails, opens one issue titled "Nightly run failed", or comments on it if
@@ -16,7 +17,7 @@
 # Each lane runs pytest through .github/lanes/lane.py, which adds the lane's row (tests, wall time
 # against its budget, the runner's load) to the job summary. The budgets are a hosted runner's
 # (4 vCPUs on Linux, 3 on macOS) and are reported, not enforced: code, linux and floors 30
-# minutes, math 70, slow 150, home 120. Tests marked backend need a real account and never run in CI.
+# minutes, math 70, slow 150, each home part 120. Tests marked backend need a real account and never run in CI.
 # Every job runs on a GitHub-hosted runner and reads no secret; only `report` may write, and only
 # issues. Every action is pinned to a full commit SHA.
 
@@ -131,15 +132,20 @@ jobs:
 
   # This test runs the whole suite, the math and the slow tests included, at one worker per core. In
   # the slow lane it shared the runner's four cores with the other slow tests, and on the slowest
-  # hosted processors its suite did not end inside the two hours the test gives it (prove#39).
+  # hosted processors its suite did not end inside the two hours the test gives it (prove#39). In a
+  # job of its own the whole suite still took up to two hours on an AMD EPYC 7763 (prove#42), so it
+  # runs in four parts, one case of the test each, which together are the whole suite.
   home:
-    name: home (${{ matrix.python }})
+    name: home (${{ matrix.part }}, ${{ matrix.python }})
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
+        part: [code, math, calibration, slow]
         python: ["3.11", "3.12", "3.13", "3.14"]
+    env:
+      PART: ${{ matrix.part }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -154,13 +160,13 @@ jobs:
           uv pip install --quiet --python .venv/bin/python -e ".[all,dev]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
           .venv/bin/python -m playwright install --with-deps chromium firefox webkit
-      - name: Home (the whole suite at one worker per core, HOME at an empty folder)
-        run: .venv/bin/python .github/lanes/lane.py home 7200 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/home" "$HOME_TEST"
+      - name: Home (one part of the suite at one worker per core, HOME at an empty folder)
+        run: .venv/bin/python .github/lanes/lane.py "home-$PART" 7200 -q -p no:cacheprovider -m "slow and not backend" --basetemp "$RUNNER_TEMP/home" "$HOME_TEST[$PART]"
       - name: Keep the report of the suite it ran
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: home-suite-${{ matrix.python }}
+          name: home-suite-${{ matrix.part }}-${{ matrix.python }}
           path: ${{ runner.temp }}/home/**/suite.xml
           retention-days: 7
           if-no-files-found: warn
