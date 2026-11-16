@@ -473,7 +473,7 @@ def test_n6_runs_has_no_note_column_when_no_run_has_a_note(tmp_path: Path) -> No
     assert "note" not in header
 
 
-def test_n6_runs_json_carries_note_on_every_run(noted: Path) -> None:
+def test_n6_runs_json_carries_note_on_each_run_that_has_one(noted: Path) -> None:
     doc = ok_json(at(noted, "runs", "--json"))
     by_id = {entry["run_id"]: entry for entry in doc["runs"]}
     assert by_id[BASE_ID]["note"] == BASE_NOTE
