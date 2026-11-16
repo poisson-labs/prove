@@ -12,7 +12,7 @@ yes/no).
 - R1 Where it is stored: the run's ``manifest.json``, a top-level key ``note`` holding the text,
   written when the run is opened, absent when the sweep was given no note. The artifact format's
   1.2: an optional key a reader that does not know it ignores. A stored ``note`` that is not a
-  non-blank string (another writer's) reads as no note. (yes/nos 3, 4)
+  non-blank string (another writer's) reads as no note. (yes/nos 4, 5)
 - R2 What a note may be: one line of 1 to 200 characters after the ends are trimmed, any
   character but a control character or a line or paragraph separator (a tab is refused too). A
   note that is not is refused before the run folder exists, as an unfit ``--name`` is: exit 1, one
