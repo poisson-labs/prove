@@ -1335,8 +1335,9 @@ def test_p10_17_the_check_and_the_report_write_nothing_under_the_store(tmp_path:
 
 
 def test_p10_17_the_manifest_has_no_field_for_a_check_result() -> None:
-    # PF2: RunManifest gains the field `name` (None unless given at sweep time).
-    assert {f.name for f in dataclasses.fields(RunManifest)} == TWELVE | {"declared", "name"}
+    # PF2: RunManifest gains the field `name` (None unless given at sweep time); 0.3.1 the field
+    # `note` (None unless given at sweep time, prove#4).
+    assert {f.name for f in dataclasses.fields(RunManifest)} == TWELVE | {"declared", "name", "note"}
 
 
 # ---------- P10-19: the two gate identities ----------
