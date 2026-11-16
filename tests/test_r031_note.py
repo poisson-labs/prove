@@ -16,27 +16,29 @@ yes/no).
 - R2 What a note may be: one line of 1 to 200 characters after the ends are trimmed, any
   character but a control character or a line or paragraph separator (a tab is refused too). A
   note that is not is refused before the run folder exists, as an unfit ``--name`` is: exit 1, one
-  ``error:`` line naming ``--note``, nothing on stdout. (yes/no 5)
+  ``error:`` line naming ``--note``, nothing on stdout. (yes/no 6)
 - R3 A resume: the run keeps the note it was opened with; ``--resume`` with ``--note`` is refused,
-  exit 1, the run untouched. (yes/no 6)
+  exit 1, the run untouched. (yes/no 7)
 - R4 Where it shows, as a line or a field of its own beside each run, so that the output of a run
   with no note is what it is today:
   - ``diff`` and ``check``: in the verdict block, ``  before note  <note>`` directly after
     ``  before  <name>``, and ``  after note  <note>`` directly after ``  after  <name>``; their
     ``--json`` document (and so ``report``'s pair document and the saved ``comparison.json``)
-    carries ``note_a`` and ``note_b``, the text or null.
+    carries ``note_a`` and ``note_b``, each only for a run that has a note.
   - ``report`` of a pair: ``report.md`` has ``before note  <note>`` directly after its ``before``
     line and ``after note  <note>`` after its ``after`` line; ``receipt.html`` shows both notes.
     ``report`` of one run: ``report.md`` has a line ``note  <note>``; ``--json`` carries ``note``.
   - ``runs``: a last column ``note`` when any run listed has one (a run without one shows ``-``),
-    no such column when none has; ``--json`` carries ``note`` on every run, the text or null.
+    no such column when none has; ``--json`` carries ``note`` on each run that has one.
   - ``inspect``: ``  note  <note>`` directly after its first line; ``--json`` carries ``note``.
   - The core's views, which the dashboard and the terminal app render: the runs view's
     ``runs[*].note``, the run view's ``note``, the comparison view's ``before.note`` and
-    ``after.note``, the text or null. The dashboard's runs list, run page and comparison page
-    show them, as text, never as markup (``receipt.html`` too); the app's run screen shows the
+    ``after.note``, each only for a run that has a note. The dashboard's runs list, run page
+    and comparison page show them, as text, never as markup (``receipt.html`` too); the app's run screen shows the
     run's note, and its verdict screen each run's note directly under that run, as ``diff`` does.
-  (yes/nos 7 to 9)
+  A run with no note prints exactly what it prints today, in text and in JSON: every key above
+  is absent for it (the page and app snapshots and the pinned JSON documents hold that).
+  (yes/nos 8 and 9)
 - R5 The docs: ``docs/artifact-format.md`` names ``note`` with the manifest's keys and as the
   format's 1.2; ``docs/commands/sweep.md`` gives ``--note``, its limit and what a resume does.
 
@@ -396,7 +398,7 @@ def test_n4_json_carries_note_a_and_note_b(verb: str, noted: Path) -> None:
     doc = ok_json(at(noted, verb, "base", "retry", "--event", EVENT[verb], "--json"))
     assert doc["note_a"] == BASE_NOTE and doc["note_b"] == RETRY_NOTE
     doc = ok_json(at(noted, verb, "plain", "retry", "--event", EVENT[verb], "--json"))
-    assert doc["note_a"] is None and doc["note_b"] == RETRY_NOTE
+    assert "note_a" not in doc and doc["note_b"] == RETRY_NOTE
 
 
 def test_n4_the_saved_comparison_carries_the_notes(noted: Path, tmp_path: Path) -> None:
@@ -440,7 +442,7 @@ def test_n5_a_one_run_report_shows_its_note(noted: Path, tmp_path: Path) -> None
     doc = ok_json(at(store, "report", "retry", "--x", "cell", "--event", "violated", "--out", tmp_path / "out2", "--json"))
     assert doc["note"] == RETRY_NOTE
     doc = ok_json(at(store, "report", "plain", "--x", "cell", "--event", "violated", "--out", tmp_path / "out3", "--json"))
-    assert doc["note"] is None
+    assert "note" not in doc
     lines = (tmp_path / "out3" / "report.md").read_text(encoding="utf-8").splitlines()
     assert not any(line.startswith("note  ") for line in lines)
 
@@ -476,7 +478,7 @@ def test_n6_runs_json_carries_note_on_every_run(noted: Path) -> None:
     by_id = {entry["run_id"]: entry for entry in doc["runs"]}
     assert by_id[BASE_ID]["note"] == BASE_NOTE
     assert by_id[RETRY_ID]["note"] == RETRY_NOTE
-    assert "note" in by_id[PLAIN_ID] and by_id[PLAIN_ID]["note"] is None
+    assert "note" not in by_id[PLAIN_ID]
 
 
 # ---------- N7 inspect ----------
@@ -508,7 +510,7 @@ def test_n7_the_note_comes_before_the_runs_declaration_lines(tmp_path: Path) -> 
 
 def test_n7_inspect_json_carries_the_note(noted: Path) -> None:
     assert ok_json(at(noted, "inspect", "retry", "--event", "violated", "--limit", "1", "--json"))["note"] == RETRY_NOTE
-    assert ok_json(at(noted, "inspect", "plain", "--event", "violated", "--limit", "1", "--json"))["note"] is None
+    assert "note" not in ok_json(at(noted, "inspect", "plain", "--event", "violated", "--limit", "1", "--json"))
 
 
 # ---------- N8 the core's views and the dashboard ----------
@@ -531,9 +533,9 @@ def saved_comparison(store: Path) -> str:
 def test_n8_the_runs_and_run_views_carry_the_note(noted: Path, tmp_path: Path) -> None:
     store = copied(noted, tmp_path)
     runs = {r["run_id"]: r for r in view_document(store, "index.html")["runs"]}
-    assert runs[BASE_ID]["note"] == BASE_NOTE and runs[RETRY_ID]["note"] == RETRY_NOTE and runs[PLAIN_ID]["note"] is None
+    assert runs[BASE_ID]["note"] == BASE_NOTE and runs[RETRY_ID]["note"] == RETRY_NOTE and "note" not in runs[PLAIN_ID]
     assert view_document(store, f"runs/{RETRY_ID}.html")["note"] == RETRY_NOTE
-    assert view_document(store, f"runs/{PLAIN_ID}.html")["note"] is None
+    assert "note" not in view_document(store, f"runs/{PLAIN_ID}.html")
 
 
 def test_n8_the_comparison_view_carries_both_notes(noted: Path, tmp_path: Path) -> None:
@@ -632,10 +634,10 @@ def test_n10_a_stored_note_that_is_not_a_note_reads_as_none(stored: Any, tmp_pat
     r = at(store, "diff", "base", "retry", "--event", "violated")
     assert r.code in (0, 4), r
     assert "  after note" not in r.out
-    assert ok_json(at(store, "diff", "base", "retry", "--event", "violated", "--json"))["note_b"] is None
-    assert {e["run_id"]: e for e in ok_json(at(store, "runs", "--json"))["runs"]}[RETRY_ID]["note"] is None
-    assert ok_json(at(store, "inspect", "retry", "--event", "violated", "--limit", "1", "--json"))["note"] is None
-    assert view_document(store, f"runs/{RETRY_ID}.html")["note"] is None
+    assert "note_b" not in ok_json(at(store, "diff", "base", "retry", "--event", "violated", "--json"))
+    assert "note" not in {e["run_id"]: e for e in ok_json(at(store, "runs", "--json"))["runs"]}[RETRY_ID]
+    assert "note" not in ok_json(at(store, "inspect", "retry", "--event", "violated", "--limit", "1", "--json"))
+    assert "note" not in view_document(store, f"runs/{RETRY_ID}.html")
 
 
 # ---------- N11 the docs ----------
