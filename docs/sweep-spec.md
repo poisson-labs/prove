@@ -52,7 +52,8 @@ max_observation_bytes = 16384
 | `[modal]` | table | Modal's defaults below | how a `--backend modal` sweep runs |
 | `[cloud]` | table | required for `--backend cloud` | how a `--backend cloud` sweep runs on your own cloud account |
 
-A spec has no `name`: a run is named on the command line with `sweep --name`.
+A spec has no `name` and no `note`: a run is named on the command line with `sweep --name`, and
+what changed for it is recorded with `sweep --note`.
 
 ## `[axes.<name>]`
 

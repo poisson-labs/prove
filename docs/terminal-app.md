@@ -57,13 +57,14 @@ task_id --y tool_fail_rate
   and saved comparison, newest first. With no run yet it is the first-run screen, below.
 - **runs**: every run with its number, status, backend and row counts, and the saved comparisons.
 - **run**: one run: its status, target, outcomes and their kinds, the design it was swept with,
-  and each condition's share of each outcome with its interval; `g` shows its event log.
+  and each condition's share of each outcome with its interval; `g` shows its event log. A run
+  swept with `--note` shows its note.
 - **sweep**: the plan `sweep` prints, the same question, then the sweep's progress; declining
   writes nothing.
 - **compare**: pick two runs, `space` for before then after, or `l` for previous and latest, and
   `enter` compares them; the comparison is saved, as `diff --save` saves it.
-- **comparison**: the verdict block `diff` prints, then each event's count of conditions worse,
-  safer, unchanged and could-not-tell, and links to its charts.
+- **comparison**: the verdict block `diff` prints, each run's note under that run, then each
+  event's count of conditions worse, safer, unchanged and could-not-tell, and links to its charts.
 - **conditions** (`t`): every condition and event with its shares before and after, its change,
   q, verdict and limit.
 - **condition**: one condition: each run's share with its interval, the change and its

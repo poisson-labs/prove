@@ -36,7 +36,7 @@ examples:
 ## Options
 
 - `--json` prints the list as one JSON document, `poisson-prove.runs/1`, each run with its
-  `run_id`, `run_name`, status and counts.
+  `run_id`, `run_name`, status and counts, and its `note` when it has one.
 - `--store PATH` lists another store than `./prove-runs` (or `$POISSON_PROVE_STORE`); `--plain`
   prints plain text on a terminal too; `--debug` adds the traceback of an unexpected failure.
 
@@ -56,7 +56,8 @@ ok  2 runs in prove-runs
 `rows without an outcome` counts the episodes that errored, those stopped at `--episode-timeout`
 included; `inspect` shows them by their error. A complete run in which every episode errored is
 shown as `stopped`, as the sweep showed it; `runs --json` and the run's manifest keep `complete`,
-with `rows` and `no_outcome` carrying the fact. The same list as JSON:
+with `rows` and `no_outcome` carrying the fact. When a listed run has a note (`sweep --note`), the
+table gains a last column, `note`, with `-` for a run that has none. The same list as JSON:
 
 <!-- docs-check: run -->
 ```console

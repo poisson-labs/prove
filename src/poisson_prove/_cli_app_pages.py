@@ -1924,16 +1924,20 @@ def _verdict_block(doc: Mapping[str, Any], *, saved: bool) -> list[Detail]:
     method = doc.get("method") or {}
     facts = list(doc.get("facts") or [])
     early = [f for f in facts if f["label"] in ("comparison", "threshold")]
-    late = [f for f in facts if f["label"] not in ("comparison", "threshold")]
+    # The notes are among the facts, and shown under their runs below instead, as diff does.
+    placed = ("comparison", "threshold", "before note", "after note")
+    late = [f for f in facts if f["label"] not in placed]
     out = [
         Detail(
             "method", str(method.get("line") or f"{method.get('words')}, {method.get('chosen')}")
         )
     ]
     out += [Detail(str(f["label"]), str(f["text"])) for f in early]
-    out += [
-        *[Detail(side, _run_words(doc.get(side) or {})) for side in ("before", "after")],
-    ]
+    for side in ("before", "after"):
+        run = doc.get(side) or {}
+        out.append(Detail(side, _run_words(run)))
+        if run.get("note"):
+            out.append(Detail(f"{side} note", str(run["note"])))
     for t in doc.get("trades") or []:
         moved = [f"{e} fell" for e in t.get("safer") or []] + [
             f"{e} rose" for e in t.get("worse") or []

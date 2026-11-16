@@ -29,9 +29,11 @@ from poisson_prove.core._ops import (
     COMMAND,
     _index,
     _method_first,
+    _note_key,
     _old_writer,
     _opened,
     _operation,
+    _pair_notes,
     method_line,
     refusal,
     shown_backend,
@@ -426,6 +428,7 @@ def _saved_document(result: Comparison, kind: str) -> dict[str, Any]:
     payload: dict[str, Any] = _method_first(
         result.multi.to_json(), result.method, result.method_chosen
     )
+    payload.update(_pair_notes(result.manifests))
     nested = result.tree
     if nested is not None:
         payload = {**payload, "omnibus": nested.root.to_json(), "tree": nested.to_json()}
@@ -667,6 +670,7 @@ def runs_view(ctx: _Context) -> View:
                     "rows": row["rows"],
                     "rows_without_outcome": row["no_outcome"],
                     "created_at": row["created_at"],
+                    **({"note": row["note"]} if row.get("note") else {}),
                     "run_salt": ctx.manifest(str(row["run_id"])).run_salt,
                     "address": _run_address(str(row["run_id"])),
                 }
@@ -890,6 +894,7 @@ def run_view(ctx: _Context, run: str) -> View:
         "sentence": f'"{ctx.run_name(run)}": {m.status}, {_look.fmt_count(len(frame))} rows',
         "name": ctx.run_name(run),
         "run_id": run,
+        **_note_key(m),
         "status": shown_status(m.status, len(frame), int(frame["outcome"].isna().sum())),
         "done": int(len(frame)),
         "total": total,
@@ -1092,6 +1097,7 @@ def comparison_view(ctx: _Context, cid: str) -> View:
             "name": ctx.run_name(a),
             "run_id": a,
             "status": ctx.manifest(a).status,
+            **_note_key(ctx.manifest(a)),
             "address": _run_address(a),
             **_writer(writers, "before"),
         },
@@ -1099,6 +1105,7 @@ def comparison_view(ctx: _Context, cid: str) -> View:
             "name": ctx.run_name(b),
             "run_id": b,
             "status": ctx.manifest(b).status,
+            **_note_key(ctx.manifest(b)),
             "address": _run_address(b),
             **_writer(writers, "after"),
         },

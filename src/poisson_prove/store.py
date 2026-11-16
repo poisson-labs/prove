@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import stat
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ import pyarrow.parquet as pq
 
 from poisson_prove import __version__
 from poisson_prove._compat import retired_manifest_version
+from poisson_prove._names import note_unfit
 from poisson_prove.episode import Episode
 from poisson_prove.trace import Declaration, Span, Trace, TraceValidationError, assemble, split
 
@@ -57,6 +59,14 @@ _SCHEMA_VERSION = 1
 _TRACE_KEY = "trace"
 _PART_PREFIX = "part-"
 _PART_SUFFIX = ".parquet"
+#: What makes a part "the same part" to a Store that has read it: its inode, its size and its
+#: modification time in nanoseconds. Not its change time, which moves when nothing in it has.
+_PartId = tuple[int, int, int]
+
+
+def _part_id(st: os.stat_result) -> _PartId:
+    return (st.st_ino, st.st_size, st.st_mtime_ns)
+
 
 # The two error marks ``tally`` partitions no-outcome rows on, written here because
 # ``executor`` imports this module and not the reverse. They are one vocabulary across three
@@ -278,6 +288,17 @@ def _now_iso_utc() -> str:
 # ---------- RunManifest ----------
 
 
+def _stored_note(value: Any) -> str | None:
+    """A manifest's ``note`` as a reader takes it: trimmed, and a note only when ``sweep --note``
+    would have recorded it, by the one rule both go by (``note_unfit``). Another writer's
+    number, list or map, a blank string, a note over the limit or on two lines, or one holding
+    a control character is not a note and is shown nowhere."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text if note_unfit(text) is None else None
+
+
 @dataclass(frozen=True)
 class RunManifest:
     """A run's manifest: its id and name, the target and its time unit, the salt its seeds
@@ -304,6 +325,8 @@ class RunManifest:
     declared: Declaration | None = None
     #: The name given at sweep time, or ``None``.
     name: str | None = None
+    #: What changed for this run, as ``sweep --note`` recorded it (the format's 1.2), or ``None``.
+    note: str | None = None
 
     @property
     def written_by(self) -> str | None:
@@ -342,6 +365,7 @@ class RunManifest:
             "schema_version": self.schema_version,
             "declared": None if self.declared is None else self.declared.to_dict(),
             **({} if self.name is None else {"name": self.name}),
+            **({} if self.note is None else {"note": self.note}),
         }
 
     @classmethod
@@ -373,6 +397,7 @@ class RunManifest:
             schema_version=d.get("schema_version", _SCHEMA_VERSION),
             declared=None if declared is None else Declaration.from_dict(declared),
             name=d.get("name") if isinstance(d.get("name"), str) else None,
+            note=_stored_note(d.get("note")),
         )
         if written_by is not None:
             object.__setattr__(manifest, "_written_by", written_by)
@@ -531,6 +556,10 @@ class Store:
 
     def __init__(self, root: Path | str) -> None:
         self._root = Path(root)
+        # What this Store has read of each run, so an append reads only the parts that are new to
+        # it: run_id -> (each part read, by name, as (inode, size, mtime_ns); the keys they hold).
+        # In memory only; nothing of it is written to the store.
+        self._known: dict[str, tuple[dict[str, _PartId], set[tuple[str, int]]]] = {}
 
     # -- paths --
 
@@ -597,6 +626,7 @@ class Store:
         if run_dir.exists():
             raise StoreError(f"run already exists: {run_id!r}")
         self._episodes_dir(run_id).mkdir(parents=True, exist_ok=False)
+        self._known.pop(run_id, None)
         self._write_manifest(
             replace(manifest, status="partial"),
             None if produced_by is None else {"produced_by": dict(produced_by)},
@@ -696,23 +726,27 @@ class Store:
                 }
             )
 
-        existing = self._existing_keys(run_id)
+        existing, last_part = self._keys_on_disk(run_id)
         clash = existing & seen
         if clash:
             raise DuplicateEpisode(
                 f"(config_hash, replicate_index) already in store: {sorted(clash)[:5]}"
             )
 
-        parts = self._parts(run_id)
         next_index = 0
-        if parts:
-            last = parts[-1].name[len(_PART_PREFIX) : -len(_PART_SUFFIX)]
-            next_index = int(last) + 1
+        if last_part is not None:
+            next_index = int(last_part[len(_PART_PREFIX) : -len(_PART_SUFFIX)]) + 1
         final = self._episodes_dir(run_id) / f"{_PART_PREFIX}{next_index:05d}{_PART_SUFFIX}"
         tmp = final.with_name(final.name + ".tmp")
         table = pa.Table.from_pylist(rows, schema=_SCHEMA)
         pq.write_table(table, tmp)
         os.replace(tmp, final)
+        # Only now, with the part in place, are its keys remembered: a refused batch or a write
+        # that failed leaves none behind.
+        known = self._known.get(run_id)
+        if known is not None:
+            known[0][final.name] = _part_id(final.stat())
+            known[1].update(seen)
         return len(rows)
 
     # -- read --
@@ -735,11 +769,45 @@ class Store:
             [pq.read_table(p, schema=_SCHEMA, columns=columns, filters=filters) for p in parts]
         )
 
-    def _existing_keys(self, run_id: str) -> set[tuple[str, int]]:
-        table = self._read_table(run_id, columns=["config_hash", "replicate_index"])
-        hashes = table.column("config_hash").to_pylist()
-        reps = table.column("replicate_index").to_pylist()
-        return {(str(h), int(r)) for h, r in zip(hashes, reps, strict=True)}
+    def _keys_on_disk(self, run_id: str) -> tuple[set[tuple[str, int]], str | None]:
+        """The ``(config_hash, replicate_index)`` of every row the run holds on disk now, whoever
+        wrote it, and the name of its last part (None for a run with no part).
+
+        The folder is listed on every call, but a part is read only the first time this Store
+        sees it: each part read is remembered by its name, inode, size and modification time,
+        with the keys it held. A remembered part that is gone, or whose name now holds another
+        file, means the run is not the one remembered, and every part is read again. The set
+        returned is this Store's own; a caller does not change it.
+        """
+        listed: dict[str, _PartId] = {}
+        d = self._episodes_dir(run_id)
+        if d.is_dir():
+            with os.scandir(d) as entries:
+                for entry in entries:
+                    name = entry.name
+                    if not (name.startswith(_PART_PREFIX) and name.endswith(_PART_SUFFIX)):
+                        continue
+                    try:
+                        st = entry.stat()
+                    except FileNotFoundError:
+                        continue
+                    if stat.S_ISREG(st.st_mode):
+                        listed[name] = _part_id(st)
+        known = self._known.get(run_id)
+        if known is None or any(listed.get(name) != seen for name, seen in known[0].items()):
+            known = self._known[run_id] = ({}, set())
+        read, keys = known
+        for name in sorted(listed):
+            if name in read:
+                continue
+            table = pq.read_table(
+                d / name, schema=_SCHEMA, columns=["config_hash", "replicate_index"]
+            )
+            hashes = table.column("config_hash").to_pylist()
+            reps = table.column("replicate_index").to_pylist()
+            keys.update((str(h), int(r)) for h, r in zip(hashes, reps, strict=True))
+            read[name] = listed[name]
+        return keys, max(listed, default=None)
 
     def read(
         self,
@@ -945,5 +1013,5 @@ class Store:
         )
 
     def missing(self, run_id: str, expected: Iterable[tuple[str, int]]) -> list[tuple[str, int]]:
-        existing = self._existing_keys(run_id)
+        existing, _ = self._keys_on_disk(run_id)
         return [(h, i) for h, i in expected if (str(h), int(i)) not in existing]

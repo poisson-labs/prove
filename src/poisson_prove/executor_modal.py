@@ -576,6 +576,7 @@ def _open_run(
             retain_traces_for=p.spec.retain_traces_for,
             declared=_spec_declared(p.spec),
             name=p.name,
+            note=p.note,
         ),
         produced_by=p.produced_by,
     )

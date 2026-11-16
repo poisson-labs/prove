@@ -32,6 +32,8 @@ fact its screen does.
 
 The front page, `index.html`: every run in the store with its name, status, backend, target and
 row counts, newest first, and every saved comparison with its verdict. Each links to its page.
+A run swept with `--note` shows its note here, on its own page and, for each of the two runs, on
+a comparison's page.
 
 ## Run
 

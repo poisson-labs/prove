@@ -35,6 +35,8 @@ from poisson_prove import _look
 
 NAMES_FILE = "trace-names.toml"
 LONGEST = 80
+#: the most characters a run's note holds (``sweep --note``)
+NOTE_LONGEST = 200
 IMPORTED = "import:"
 #: the most runs a refusal lists before it says how many more there are
 SHOWN = 10
@@ -87,6 +89,23 @@ def unfit(text: str) -> str | None:
         return "a name beginning # is the word for a row of poisson-prove runs"
     if text.startswith("-"):
         return "a name beginning with a dash is read as an option on a command line"
+    return None
+
+
+def note_unfit(text: str) -> str | None:
+    """Why ``text``, already trimmed, cannot be a run's note (``sweep --note``), or None when it
+    can: a note is not empty and is one line of at most 200 characters, with no control
+    character (a tab is one) and no line or paragraph separator. Unlike a name it may open with
+    a dash: nothing reads a note back as a word."""
+    if not text:
+        return "a note is not empty"
+    if len(text) > NOTE_LONGEST:
+        count = _look.fmt_count(len(text))
+        return f"a note is at most {NOTE_LONGEST} characters, and this one has {count}"
+    if any(ch in _BREAKS or unicodedata.category(ch) in ("Zl", "Zp") for ch in text):
+        return "a note is one line"
+    if any(unicodedata.category(ch) == "Cc" for ch in text):
+        return "a note holds no control character, and a tab is one"
     return None
 
 

@@ -201,3 +201,8 @@ The report folder: `report.md`, `heatmap.svg` and `receipt.html`, and with `--pa
 replay's files beside them. A comparison of two runs is also saved into the store, under
 `.poisson/artifacts/comparison/`, with its charts, and a dashboard the store already has is
 refreshed; a survival report of one run saves nothing.
+
+A run swept with `--note` has its note in `report.md` and `receipt.html`: for two runs, a
+`before note` or `after note` line under that run's line; for one run, a `note` line under the
+title. `--json` carries `note_a` and `note_b` for two runs and `note` for one, each only for a
+run that has a note.

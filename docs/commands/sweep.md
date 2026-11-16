@@ -19,7 +19,7 @@ $ poisson-prove sweep --help
 usage: poisson-prove sweep [-h] [--target pkg.module:rollout] [--replicates N]
                            [--backend {local,modal,cloud}]
                            [--salt HEX | --pair-with RUN | --resume [RUN]]
-                           [--name TEXT] [--episode-timeout S]
+                           [--name TEXT] [--note TEXT] [--episode-timeout S]
                            [--max-rollouts N] [--batch-size N]
                            [--max-mde FRACTION] [--dry-run] [--yes] [--json]
                            [--concurrency N] [--infra-retries N]
@@ -57,6 +57,9 @@ options:
                         spec is given, so the spec is not read as the run
                         (default: none)
   --name TEXT           the name the new run goes by (default: computed)
+  --note TEXT           what changed for this run, one line of at most 200
+                        characters, shown beside it wherever a comparison
+                        shows it (default: none)
   --episode-timeout S   seconds an episode may take before it is recorded as
                         timed out (default: no limit)
   --max-rollouts N      stop after N rollouts and leave the run partial
@@ -109,6 +112,13 @@ examples:
   latest partial run. Only one of the three may be given.
 - `--name TEXT` names the run. Without it the run is named by its target, the date and a letter,
   such as `mock-agent 2026-10-26 a`; every verb accepts the name in place of the run's id.
+- `--note TEXT` records what changed for this run, such as `--note "retry each tool call once"`,
+  in the run's manifest. `diff`, `check` and `report` show each run's note under that run, and
+  `runs`, `inspect`, the dashboard and the terminal app show it with the run. A note is one line
+  of 1 to 200 characters once the spaces at its ends are trimmed, with no tab or other control
+  character; one that is not is refused before anything is written. A note may begin with a dash,
+  written `--note=-TEXT`. A resume keeps the note the run was opened with, and `--resume` with
+  `--note` is refused.
 - `--episode-timeout S` stops an episode that runs longer than `S` seconds and stores it with no
   outcome, as an error of kind `episode_timeout`; `--event episode_timeout` reaches those episodes
   (as `--event timeout` does in a run whose agent has no `timeout` outcome of its own). On the local

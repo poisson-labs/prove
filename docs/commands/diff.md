@@ -167,6 +167,10 @@ trade  timeout: … safer, … worse · violated: … safer, … worse (paired t
   next: poisson-prove report --x task_id --y tool_fail_rate
 ```
 
+A run swept with `--note` has its note on the line under it, `before note` under `before` and
+`after note` under `after`, and the JSON document carries them as `note_a` and `note_b`. A run
+with no note has neither the line nor the key.
+
 The machine sections, behind the flag:
 
 <!-- docs-check: run -->
