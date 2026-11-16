@@ -54,6 +54,9 @@ examples:
   counted in one line.
 - `--json` prints the episodes and the snippet's parts as one JSON document,
   `poisson-prove.inspect/1`.
+
+A run swept with `--note` has its note on a `note` line directly under the first line, and as
+`note` in the JSON document.
 - `--store PATH` is the store folder; `--plain` prints plain text on a terminal too; `--debug`
   adds the traceback of an unexpected failure.
 

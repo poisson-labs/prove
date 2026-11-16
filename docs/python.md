@@ -130,7 +130,8 @@ print(curve.survival, incidence.cif["violated"])
 Reading runs from Python.
 
 - `Store`: a folder of runs; reads and writes them.
-- `RunManifest`: a run's manifest: its id, target, salt, axes, status and what it recorded.
+- `RunManifest`: a run's manifest: its id, target, salt, axes, status, its `name` and `note`
+  when the sweep was given them, and what it recorded.
 - `EpisodeRecord`: one stored episode.
 - `RunTally`: how a run's rows divide into rows with an outcome and rows without one.
 - `config_hash`: the digest of a condition, the key every stored row carries.

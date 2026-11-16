@@ -287,6 +287,12 @@ def _now_iso_utc() -> str:
 # ---------- RunManifest ----------
 
 
+def _stored_note(value: Any) -> str | None:
+    """A manifest's ``note`` as a reader takes it: a string that is not blank, else no note.
+    Another writer's number, list, map or empty string is not a note and is shown nowhere."""
+    return value if isinstance(value, str) and value.strip() else None
+
+
 @dataclass(frozen=True)
 class RunManifest:
     """A run's manifest: its id and name, the target and its time unit, the salt its seeds
@@ -313,6 +319,8 @@ class RunManifest:
     declared: Declaration | None = None
     #: The name given at sweep time, or ``None``.
     name: str | None = None
+    #: What changed for this run, as ``sweep --note`` recorded it (the format's 1.2), or ``None``.
+    note: str | None = None
 
     @property
     def written_by(self) -> str | None:
@@ -351,6 +359,7 @@ class RunManifest:
             "schema_version": self.schema_version,
             "declared": None if self.declared is None else self.declared.to_dict(),
             **({} if self.name is None else {"name": self.name}),
+            **({} if self.note is None else {"note": self.note}),
         }
 
     @classmethod
@@ -382,6 +391,7 @@ class RunManifest:
             schema_version=d.get("schema_version", _SCHEMA_VERSION),
             declared=None if declared is None else Declaration.from_dict(declared),
             name=d.get("name") if isinstance(d.get("name"), str) else None,
+            note=_stored_note(d.get("note")),
         )
         if written_by is not None:
             object.__setattr__(manifest, "_written_by", written_by)

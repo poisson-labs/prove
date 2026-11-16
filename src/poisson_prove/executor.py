@@ -155,6 +155,8 @@ class Plan:
     max_mde_accepted: float | None = None
     #: The name given at sweep time, recorded in the new run's manifest.
     name: str | None = None
+    #: The note given at sweep time, recorded in the new run's manifest.
+    note: str | None = None
     #: Under ``pair_with=``, the earlier run's replicates: the gate then asks the paired test, its
     #: pairs the smaller of the two runs'. None for a run paired with nothing.
     paired_replicates: int | None = None
@@ -1306,6 +1308,7 @@ def run_local(
                 retain_traces_for=p.spec.retain_traces_for,
                 declared=_spec_declared(p.spec),
                 name=p.name,
+                note=p.note,
             ),
             produced_by=p.produced_by,
         )

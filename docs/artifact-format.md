@@ -101,7 +101,9 @@ and the upgrade, `pip install -U poisson-prove`.
 The run's manifest, as `sweep` writes it: `run_id`, `target_id`, `t_unit`, `run_salt`,
 `axis_types`, `backend`, `environment`, `retain_traces_for`, `status` (`partial` or `complete`),
 `created_at`, `poisson_prove_version`, `schema_version`, `declared` and, when the sweep was given
-`--name`, `name`. A manifest
+`--name`, `name`. A sweep given `--note` also writes `note` (the format's 1.2): what changed for the
+run, one line of 1 to 200 characters with no control character. The key is absent for a run with
+no note, and a `note` that is not a string, or is blank, reads as none. A manifest
 written by 0.0.1 recorded its version under the old name's key and reads as it is.
 
 The manifest's `environment` keeps the run's provenance (the platform, the Python build, the
@@ -277,6 +279,7 @@ is `next`, the commands to run next. A check carries `passed` and `fail_on` as w
 | `n_tests` | the size of the family: every (condition, event) tested |
 | `n_not_comparable`, `dropped_a`, `dropped_b` | conditions that could not be compared, and those only one run had |
 | `truncated` | rows cut at the horizon |
+| `note_a`, `note_b` | each run's note, what `sweep --note` recorded for it (the format's 1.2); each is absent for a run with no note |
 | `inferred`, `non_event`, `events` | whether the events were defaulted (to the failures and successes the runs declare, else to every outcome but the most frequent), that most frequent outcome when it was used (null otherwise), and the events compared |
 | `by_event` | per event, its counts and its conditions (below) |
 | `trades` | conditions where one event got safer and another worse: `config`, `config_hash`, `safer_events`, `worse_events` |

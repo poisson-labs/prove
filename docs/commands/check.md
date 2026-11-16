@@ -95,6 +95,9 @@ passed  violated: … worse, … safer in 9 conditions; fail on worse (paired te
 …
 ```
 
+As in `diff`, a run swept with `--note` has its note on the line under it (`before note`,
+`after note`), and `--json` carries `note_a` and `note_b`.
+
 It runs out of tool calls more often where tools fail most, so a gate on `timeout` fails, names the
 condition, and exits 4:
 

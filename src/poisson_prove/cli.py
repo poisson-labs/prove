@@ -555,6 +555,12 @@ def _build_parser(io: _IO) -> _Parser:
         "--name", metavar="TEXT", help="the name the new run goes by (default: computed)"
     )
     sweep.add_argument(
+        "--note",
+        metavar="TEXT",
+        help="what changed for this run, one line of at most 200 characters, shown beside it "
+        "wherever a comparison shows it (default: none)",
+    )
+    sweep.add_argument(
         "--episode-timeout",
         type=float,
         metavar="S",
@@ -1685,6 +1691,14 @@ def _method_html(page: str, line: str, *, summary: bool = False, pair: Sequence[
     return page
 
 
+def _noted(markdown: str, page: str, line: str) -> tuple[str, str]:
+    """One run's ``report.md`` and ``receipt.html`` with the run's note: a paragraph of its own
+    under the title of each. The note is the user's text, so the page gets it escaped."""
+    head, gap, rest = markdown.partition("\n\n")
+    markdown = f"{head}\n\n{line}\n\n{rest}" if gap else f"{markdown.rstrip(chr(10))}\n\n{line}\n"
+    return markdown, page.replace("</h1>", f"</h1>\n<p>{html.escape(line)}</p>", 1)
+
+
 def _method_of(result: core.Comparison) -> str:
     return next(text for label, text in result.detail if label == "method")
 
@@ -2022,6 +2036,7 @@ def _sweep_overrides(ns: argparse.Namespace, state: _State) -> dict[str, Any]:
         "pair_with",
         "resume",
         "name",
+        "note",
         "max_mde",
         "episode_timeout",
         "max_rollouts",
@@ -2398,6 +2413,7 @@ def _write_report_files(
     bundle: Any = None,
     method_line: str | None = None,
     pair: Sequence[str] = (),
+    note: str | None = None,
 ) -> list[Path]:
     written: list[Path] = []
     with _staged(out_dir) as staging:
@@ -2405,6 +2421,8 @@ def _write_report_files(
             markdown, page, figure = report.to_markdown(), receipt.to_html(), report.to_svg()
         if bundle is not None:
             markdown, page = bundle.fold_markdown(markdown), bundle.fold_html(page)
+        if note:
+            markdown, page = _noted(markdown, page, f"note  {note}")
         if method_line is not None:
             markdown = _method_markdown(markdown, method_line, pair)
             page = _method_html(page, method_line, pair=pair)
@@ -2551,10 +2569,14 @@ def _report_pair(
         # Each run's id is in the header beside its name, so the provenance list gives it no more.
         built.provenance.pop("run_id_a", None)
         built.provenance.pop("run_id_b", None)
-    pair = [
-        f"before  {result.names.get(result.run_a, result.run_a)} ({result.run_a})",
-        f"after  {result.names.get(result.run_b, result.run_b)} ({result.run_b})",
-    ]
+    # Each run by name and id, its note (when it has one) on the line under it, as diff prints.
+    pair: list[str] = []
+    for role, run_id, manifest in zip(
+        ("before", "after"), (result.run_a, result.run_b), result.manifests, strict=True
+    ):
+        pair.append(f"{role}  {result.names.get(run_id, run_id)} ({run_id})")
+        if manifest.note:
+            pair.append(f"{role} note  {manifest.note}")
     written = _write_report_files(
         io, out_dir, report, receipt, result.bundle, _method_of(result), pair
     )
@@ -2637,10 +2659,12 @@ def _report_run(ns: argparse.Namespace, io: _IO, store: Any, word: str, state: _
                 detail.cells, dataclasses.replace(spec, theme="light"), **kwargs
             )
         )
-    written = _write_report_files(io, out_dir, report, receipt)
+    written = _write_report_files(io, out_dir, report, receipt, note=detail.manifest.note)
     if ns.json:
         doc = detail.to_json()
         payload = {"out": str(out_dir), "wrote": [str(p) for p in written]}
+        if detail.manifest.note:
+            payload["note"] = detail.manifest.note
         for key in (
             "run_id",
             "run_name",
@@ -2890,6 +2914,8 @@ def _cmd_inspect(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> 
         _print_result(io, "inspect", result)
         return 0
     io.verdict("ok", result.sentence)
+    if result.payload.get("note"):
+        io.detail("note", str(result.payload["note"]))
     if not result.rows:
         return 0
     for line in result.provenance:
@@ -2950,7 +2976,7 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
         for command in listed.next:
             io.next(command)
         return 0
-    header = (
+    header: tuple[str, ...] = (
         "#",
         "name",
         "id",
@@ -2961,6 +2987,11 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
         "rows without an outcome",
         "created",
     )
+    # A last column for the notes, only when a listed run has one: a store with no note lists
+    # as it always has.
+    noted = any(run.entry.get("note") for run in listed)
+    if noted:
+        header = (*header, "note")
     lines: list[tuple[str, ...]] = [header]
     for run in listed:
         entry = run.entry
@@ -2975,6 +3006,7 @@ def _cmd_runs(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
                 _look.fmt_count(entry["rows"]),
                 _look.fmt_count(entry["no_outcome"]),
                 run.created,
+                *((str(entry.get("note") or "-"),) if noted else ()),
             )
         )
     io.line()

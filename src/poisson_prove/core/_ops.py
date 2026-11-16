@@ -42,7 +42,7 @@ from poisson_prove._compat import (
     retired_store_variable_note,
     version_as_recorded,
 )
-from poisson_prove._names import Index, NamesError, started, unfit
+from poisson_prove._names import Index, NamesError, note_unfit, started, unfit
 from poisson_prove._names import index as names_index
 from poisson_prove._resolve import resolve as _resolve_import
 from poisson_prove._resolve import split_import_path
@@ -434,6 +434,7 @@ def runs(store: Any, *, counted: bool = True, _notes: list[str]) -> RunList:
                     "backend": shown_backend(m.backend),
                     "target_id": m.target_id,
                     "t_unit": m.t_unit,
+                    **_note_key(m),
                     **(
                         {
                             "rows": st.count(named.run_id),
@@ -505,6 +506,18 @@ def _method_first(payload: Mapping[str, Any], method: str, chosen: str) -> dict[
         if key == "method":
             out["method_chosen"] = chosen
     return out
+
+
+def _note_key(manifest: RunManifest) -> dict[str, str]:
+    """A run's note under ``note``, for a document about one run: the key is there only for a run
+    that has a note, so a run without one gives the document it always gave."""
+    return {"note": manifest.note} if manifest.note else {}
+
+
+def _pair_notes(manifests: Sequence[RunManifest]) -> dict[str, str]:
+    """A pair's notes under ``note_a`` and ``note_b``, each only for a run that has one."""
+    notes = zip(("note_a", "note_b"), (m.note for m in manifests), strict=False)
+    return {key: note for key, note in notes if note}
 
 
 def _old_writer(manifests: tuple[RunManifest, RunManifest]) -> dict[str, str]:
@@ -883,9 +896,11 @@ def _detail(
         source = THRESHOLD_SOURCES[multi.threshold_source]
         lines.append(("threshold", f"{_look.fmt_rate(multi.threshold)} ({source})"))
     writers = _old_writer(manifests)
-    for role, run_id in (("before", a), ("after", b)):
+    for (role, run_id), m in zip((("before", a), ("after", b)), manifests, strict=True):
         shown = idx.name_of(run_id)
         lines.append((role, f"{shown}, {writers[role]}" if role in writers else shown))
+        if m.note:
+            lines.append((f"{role} note", m.note))
     for record in multi.trades.to_dict(orient="records"):
         moved = [_moved(multi, event, "fell") for event in record.get("safer_events", ())]
         moved += [_moved(multi, event, "rose") for event in record.get("worse_events", ())]
@@ -1035,6 +1050,7 @@ def compare(
 
     def document() -> dict[str, Any]:
         payload: dict[str, Any] = _method_first(multi.to_json(), multi.method, chosen)
+        payload.update(_pair_notes(manifests))
         if others:
             payload = {multi.method: payload, **{m: d.to_json() for m, d in others.items()}}
             payload["threshold"] = multi.threshold
@@ -1179,6 +1195,7 @@ def check(
         "passed": passed,
         "fail_on": fail_on,
         **_method_first(multi.to_json(), multi.method, chosen),
+        **_pair_notes(manifests),
     }
     return CheckResult(
         verdict=word,
@@ -1459,7 +1476,13 @@ def inspect(
         rows = rows.head(max(limit, 0))
     if rows.empty:
         sentence = f'no rows with outcome or error "{event}" in run "{name}"'
-        empty = {"run_id": run_id, "run_name": name, "event": event, "episodes": []}
+        empty = {
+            "run_id": run_id,
+            "run_name": name,
+            **_note_key(manifest),
+            "event": event,
+            "episodes": [],
+        }
         return InspectResult(verdict="ok", sentence=sentence, payload=empty, provenance=provenance)
     selected = [
         (str(h), int(i)) for h, i in zip(rows["config_hash"], rows["replicate_index"], strict=True)
@@ -1483,6 +1506,7 @@ def inspect(
     payload = {
         "run_id": run_id,
         "run_name": name,
+        **_note_key(manifest),
         "event": event,
         "episodes": [_episode_json(row) for row in full.itertuples(index=False)],
         "reproduce": {
@@ -2327,6 +2351,16 @@ def _planned(
     idx = _index(store) if store.root.is_dir() else _empty_index(store)
     name = o.get("name")
     resume_ref = o.get("resume")
+    note = o.get("note")
+    if note is not None:
+        if resume_ref is not None:
+            raise refusal(
+                "--note says what changed for a new run; a resumed run keeps the note it has"
+            )
+        note = str(note).strip()
+        why = note_unfit(note)
+        if why is not None:
+            raise refusal(f"--note cannot be recorded: {why}")
     if name is not None:
         if resume_ref is not None:
             raise refusal("--name names a new run; a resumed run keeps the name it has")
@@ -2436,7 +2470,9 @@ def _planned(
         )
     except ExecutorError as exc:
         raise refusal(_with_names(_look.plain_words(str(exc)), idx)) from exc
-    p = dataclasses.replace(p, name=name, produced_by=_produced_by(spec_path, target, backend))
+    p = dataclasses.replace(
+        p, name=name, note=note, produced_by=_produced_by(spec_path, target, backend)
+    )
     if backend == "modal":
         assert modal is not None
         block = _modal.preflight_modal(p, modal[0], modal[1])
