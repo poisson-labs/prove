@@ -20,6 +20,7 @@ import pyarrow.parquet as pq
 
 from poisson_prove import __version__
 from poisson_prove._compat import retired_manifest_version
+from poisson_prove._names import note_unfit
 from poisson_prove.episode import Episode
 from poisson_prove.trace import Declaration, Span, Trace, TraceValidationError, assemble, split
 
@@ -288,9 +289,14 @@ def _now_iso_utc() -> str:
 
 
 def _stored_note(value: Any) -> str | None:
-    """A manifest's ``note`` as a reader takes it: a string that is not blank, else no note.
-    Another writer's number, list, map or empty string is not a note and is shown nowhere."""
-    return value if isinstance(value, str) and value.strip() else None
+    """A manifest's ``note`` as a reader takes it: trimmed, and a note only when ``sweep --note``
+    would have recorded it, by the one rule both go by (``note_unfit``). Another writer's
+    number, list or map, a blank string, a note over the limit or on two lines, or one holding
+    a control character is not a note and is shown nowhere."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text if note_unfit(text) is None else None
 
 
 @dataclass(frozen=True)

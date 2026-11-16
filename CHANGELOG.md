@@ -16,8 +16,10 @@ All notable changes to Poisson Prove are written here. The format follows
   terminal app show it on the run and on the comparison. In `--json` the notes are `note_a` and
   `note_b` on a comparison and `note` on a run. A note is one line of 1 to 200 characters with no
   tab or other control character; one that is not is refused before anything is written. A
-  resume keeps the run's note, and `--resume` with `--note` is refused. A run with no note prints
-  exactly what it printed in 0.3, JSON included (#4).
+  resume keeps the run's note, and `--resume` with `--note` is refused. A note another writer
+  stored that `sweep` would have refused reads as no note, so no command prints a line break or a
+  terminal escape sequence from one. A run with no note prints exactly what it printed in 0.3,
+  JSON included (#4).
 - The artifact format's 1.2: the run manifest's optional key `note`, and the optional keys
   `note_a` and `note_b` of a comparison and a check. A reader that does not know them ignores
   them.

@@ -103,7 +103,9 @@ The run's manifest, as `sweep` writes it: `run_id`, `target_id`, `t_unit`, `run_
 `created_at`, `poisson_prove_version`, `schema_version`, `declared` and, when the sweep was given
 `--name`, `name`. A sweep given `--note` also writes `note` (the format's 1.2): what changed for the
 run, one line of 1 to 200 characters with no control character. The key is absent for a run with
-no note, and a `note` that is not a string, or is blank, reads as none. A manifest
+no note. A reader trims a stored `note` and takes it by the rule `sweep` records by: one that is
+not a string, is blank, is over 200 characters, is on more than one line or holds a control
+character reads as none, and is shown nowhere. A manifest
 written by 0.0.1 recorded its version under the old name's key and reads as it is.
 
 The manifest's `environment` keeps the run's provenance (the platform, the Python build, the
