@@ -33,7 +33,7 @@ then ask for a cloud sweep tells them the one thing to type, before anything sta
   extra is named before the missing table is.
 - **The CHANGELOG's 0.5.0 entry** is headed ``## 0.5.0 — Unreleased`` until the release session
   dates it, and its Removed list has one item naming the ``[burla]`` extra and the line to type.
-  Its sentences are Session B's; the facts are pinned.
+  Its sentences are the build's; the facts are pinned.
 """
 
 from __future__ import annotations
