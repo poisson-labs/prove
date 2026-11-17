@@ -1,7 +1,7 @@
 """The Burla pin agrees everywhere it is named: the cloud backend's ``_PIN``, the ``[cloud]``
-extra, its ``[burla]`` alias and the ``[all]`` extra, and every Burla version the README, the docs pages and Prove's own source name.
+extra and the ``[all]`` extra, and every Burla version the README, the docs pages and Prove's own source name.
 
-**What is pinned.** The launcher runs exactly one client, ``_PIN``; the three extras require
+**What is pinned.** The launcher runs exactly one client, ``_PIN``; the two extras require
 exactly that version; and a page or docstring that names a Burla version (``burla==X.Y.Z`` or
 "Burla X.Y.Z") names that one. The backends page must name the pin, so the scan cannot pass by
 finding nothing.
@@ -34,7 +34,7 @@ def _pages() -> list[Path]:
 
 def test_the_extras_require_exactly_the_client_the_backend_runs() -> None:
     extras = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["optional-dependencies"]
-    for extra in ("cloud", "burla", "all"):
+    for extra in ("cloud", "all"):
         burla = [req for req in extras[extra] if re.match(r"burla\b", req)]
         assert burla == [f"burla=={PIN}"], (extra, burla, PIN)
 

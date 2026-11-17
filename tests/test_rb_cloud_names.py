@@ -345,10 +345,12 @@ def _extras() -> dict[str, list[str]]:
     return {name: sorted(reqs) for name, reqs in data["project"]["optional-dependencies"].items()}
 
 
-def test_n7_the_cloud_extra_and_the_old_alias_install_the_same_set_and_all_includes_it() -> None:
+def test_n7_the_cloud_extra_installs_the_set_the_old_alias_is_gone_and_all_includes_it() -> None:
+    """0.5.0, First run (X1): the ``burla`` extra, kept as an alias of ``cloud`` through 0.4.0
+    (RB-4), is removed."""
     extras = _extras()
     assert extras["cloud"] == sorted(["burla==1.8.4", "botocore[crt]>=1.42.39"]), extras
-    assert extras["burla"] == extras["cloud"], extras
+    assert "burla" not in extras, extras
     assert set(extras["cloud"]) <= set(extras["all"]), extras
 
 
@@ -360,9 +362,10 @@ def test_n7_the_wheels_metadata_says_so() -> None:
     metadata = ProjectMetadata(str(REPO), None)
     text = construct_metadata_file_2_4(metadata)
     extras = re.findall(r"^Provides-Extra: (\S+)$", text, re.M)
-    assert "cloud" in extras and "burla" in extras, extras
+    assert "cloud" in extras and "burla" not in extras, extras
     requires = re.findall(r"^Requires-Dist: (.+)$", text, re.M)
-    for extra in ("cloud", "burla", "all"):
+    assert not [r for r in requires if "extra == 'burla'" in r], requires
+    for extra in ("cloud", "all"):
         assert f"burla==1.8.4; extra == '{extra}'" in requires, (extra, requires)
         assert f"botocore[crt]>=1.42.39; extra == '{extra}'" in requires, (extra, requires)
 
