@@ -619,6 +619,8 @@ def test_pf10_10_the_readme_badge_shows_the_gates_push_runs_on_main() -> None:
 ALLOWED_COMMIT = "cced18c379d805524af07630e7ac77e3e55dab11"
 #: The merge of pull request #47, allowed the same way (2026-11-12).
 ALLOWED_MERGE_47 = "a5cebb70d0737e82e23dd7dc087a4fa10e8d3505"
+#: The merge of pull request #61, allowed the same way (First run M2, M2A-15, 2026-11-18).
+ALLOWED_MERGE_61 = "b31a950c101f8b89231f771bd8fe54817893a57b"
 
 
 @pytest.mark.parametrize(("commit", "flagged"), [
@@ -632,13 +634,16 @@ ALLOWED_MERGE_47 = "a5cebb70d0737e82e23dd7dc087a4fa10e8d3505"
     ((ALLOWED_COMMIT, "someone@gmail.com", "noreply@github.com", "Merge\n\nGenerated with Claude Code\n"), True),
     ((ALLOWED_MERGE_47, "someone@gmail.com", "noreply@github.com", "Merge pull request #47\n"), False),
     ((ALLOWED_MERGE_47, "someone@gmail.com", "noreply@github.com", "Merge\n\nGenerated with Claude Code\n"), True),
+    ((ALLOWED_MERGE_61, "someone@gmail.com", "noreply@github.com", "Merge pull request #61\n"), False),
+    ((ALLOWED_MERGE_61, "someone@gmail.com", "noreply@github.com", "Merge\n\nGenerated with Claude Code\n"), True),
 ], ids=["work-address", "a-github-merge", "a-personal-address", "an-assistant-trailer", "an-assistant-line",
         "the-allowed-commit", "a-personal-address-on-another-commit", "the-allowed-commit-naming-an-assistant",
-        "the-merge-of-47", "the-merge-of-47-naming-an-assistant"])
+        "the-merge-of-47", "the-merge-of-47-naming-an-assistant",
+        "the-merge-of-61", "the-merge-of-61-naming-an-assistant"])
 def test_the_history_check_flags_a_personal_address_or_an_assistant_and_nothing_else(commit: tuple[str, str, str, str], flagged: bool) -> None:
     history = import_script("history")
     assert bool(history.problems([commit])) is flagged
 
 
-def test_the_history_check_allows_the_two_merges_and_no_other_commit() -> None:
-    assert import_script("history").ALLOWED == {ALLOWED_COMMIT, ALLOWED_MERGE_47}
+def test_the_history_check_allows_the_three_merges_and_no_other_commit() -> None:
+    assert import_script("history").ALLOWED == {ALLOWED_COMMIT, ALLOWED_MERGE_47, ALLOWED_MERGE_61}
