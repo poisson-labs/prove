@@ -450,18 +450,27 @@ def _passes_both(spec: SweepSpec, accepted: float) -> Callable[[int], bool]:
 
 
 def _smallest_passing(
-    spec: SweepSpec, accepted: float, paired_replicates: int | None, *, both: bool = False
+    spec: SweepSpec,
+    accepted: float,
+    paired_replicates: int | None,
+    *,
+    both: bool = False,
+    earlier_recorded: bool = True,
 ) -> int:
     """The fewest replicates of this sweep at which the gate passes ``accepted``. For a first
     sweep (``both``) each N is read both ways. Under ``--pair-with`` the earlier run stays at the
     replicates it recorded, as the gate itself holds it: more replicates of this sweep never make
-    a pair longer than its earlier run."""
+    a pair longer than its earlier run. An earlier run that recorded no replicates is read at
+    this sweep's, so there it moves with N."""
     if both:
         return _fewest(spec.replicates, _passes_both(spec, accepted))
 
     def passes(n: int) -> bool:
         resized = replace(spec, replicates=n)
-        return _design(resized, threshold=accepted, paired_replicates=paired_replicates).passes
+        earlier = paired_replicates
+        if earlier is not None and not earlier_recorded:
+            earlier = n
+        return _design(resized, threshold=accepted, paired_replicates=earlier).passes
 
     return _fewest(spec.replicates, passes)
 
@@ -539,7 +548,13 @@ def check_power(p: Plan, *, max_mde: float | None = None) -> None:
     n = p.spec.replicates
     if p.paired_with is not None and p.paired_replicates is not None:
         _refuse_a_short_earlier_run(p, accepted)
-    needed = _smallest_passing(p.spec, accepted, p.paired_replicates, both=both)
+    needed = _smallest_passing(
+        p.spec,
+        accepted,
+        p.paired_replicates,
+        both=both,
+        earlier_recorded=p.paired_with is not None,
+    )
     if not named.flaggable:
         # Fisher's smallest p is never above the paired test's, so where both readings are asked
         # the paired one is the one that cannot flag; the count offered is the smaller of the two.
