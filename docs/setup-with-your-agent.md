@@ -38,6 +38,22 @@ Use the poisson-prove-setup skill in this repository: set Poisson Prove up for m
 - `--repo DIR` writes into another folder; `--print` prints the skill and writes nothing.
 - `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/` and your other files are never written.
 
+## Practise on the demo
+
+With no agent of your own at hand, `poisson-prove init --demo` writes a small support bot into
+this folder: a stand-in that calls no model and needs no key and no network. Run
+`poisson-prove init --agent` beside it and give your coding agent the prompt, as above; the
+`demo.md` it comes with says what to change between the two sweeps. With no coding agent either,
+`poisson-prove init --demo --with-setup` also writes the two files your agent would, and
+`poisson-prove sweep` runs them as they are.
+
+For an agent on a real model,
+[`examples/your-first-real-agent/`](https://github.com/poisson-labs/prove/tree/main/examples/your-first-real-agent)
+is a small agent that calls a real model (OpenAI's `gpt-4.1-mini`). It needs an OpenAI API key in
+`OPENAI_API_KEY`, `pip install "poisson-prove[agent]"`, and a network; each sweep makes 1,200
+short requests, billed to your OpenAI account. Without the key every case errors and the sweep
+stops; without a network every case ends `api_error`.
+
 ## What the skill asks your agent to do
 
 Six steps, in order. The skill says each in full; here is what each is for.

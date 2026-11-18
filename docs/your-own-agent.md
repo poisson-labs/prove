@@ -32,7 +32,9 @@ episode with the error's type and message, and the sweep goes on. `inspect` show
 ## An example, end to end
 
 The rollout below wraps a support bot. Here the bot is a stand-in, so that this page runs as it
-is; in your repository it is your own code:
+is; in your repository it is your own code. `poisson-prove init --demo --with-setup` writes the
+same stand-in into a folder for you, with its rollout as `prove_rollout.py` and its spec as
+`prove.toml`, so the walk-through below is one command away:
 
 <!-- docs-check: file prompts.py -->
 ```python
@@ -41,7 +43,7 @@ SYSTEM = "Answer the customer's ticket. Ask before refunding."
 
 <!-- docs-check: file support_bot.py -->
 ```python
-"""A stand-in for your own agent, so this page runs as it is."""
+"""A stand-in for your own agent: it calls no model, and its replies are drawn from the seed."""
 import random
 from dataclasses import dataclass
 

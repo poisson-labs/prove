@@ -1801,6 +1801,106 @@ def init_agent(
     )
 
 
+#: The demo agent ``init --demo`` writes, a support bot that needs no key, and the two files a
+#: coding agent would write for it, which ``--with-setup`` adds. Each is written as the package
+#: ships it, under ``poisson_prove/demo/``.
+DEMO_FILES = ("support_bot.py", "prompts.py", "demo.md")
+DEMO_SETUP_FILES = ("prove_rollout.py", "prove.toml")
+
+
+@_operation
+def init_demo(
+    repo: str | Path | None = None,
+    *,
+    with_setup: bool = False,
+    force: bool = False,
+    typed: Sequence[str] = (),
+    _notes: list[str],
+) -> WrittenFiles:
+    """Write the demo agent into ``repo`` (the current folder by default; made when missing):
+    the bot, its prompt and ``demo.md``, and with ``with_setup`` the rollout and the sweep spec a
+    coding agent would write for it. An existing file of those is refused unless ``force``, which
+    replaces those files only. Each file is written whole or not at all."""
+    from importlib import resources
+
+    names = DEMO_FILES + (DEMO_SETUP_FILES if with_setup else ())
+    folder = Path("." if repo is None else repo)
+    if repo is not None:
+        if str(repo) == "":
+            raise refusal('--repo "" is not a folder; the demo is written into a folder')
+        for at in (folder, *folder.parents):
+            if at.exists() and not at.is_dir():
+                raise refusal(f'--repo "{repo}" is not a folder; the demo is written into a folder')
+
+    def shown_as(name: str) -> str:
+        return name if repo is None else str(Path(str(repo)) / name)
+
+    # Every name is checked before anything is written, so a refusal leaves nothing behind.
+    folders = [n for n in names if (folder / n).is_dir() and not (folder / n).is_symlink()]
+    if folders:
+        raise refusal(
+            f"{_join_words([shown_as(n) for n in folders])} "
+            f"{'is a folder' if len(folders) == 1 else 'are folders'}; "
+            "the demo writes a file there"
+        )
+    existing = [name for name in names if (folder / name).exists() or (folder / name).is_symlink()]
+    if existing and not force:
+        raise refusal(
+            f"{_join_words([shown_as(n) for n in existing])} already "
+            f"{'exists' if len(existing) == 1 else 'exist'}; "
+            f"init --demo replaces {'it' if len(existing) == 1 else 'them'} only with --force",
+            [join([COMMAND, *typed, "--force"])],
+        )
+    source = resources.files("poisson_prove") / "demo"
+    files = [(name, (source / name).read_bytes()) for name in names]
+    # The folders this call makes, deepest first, so that an interrupt before any file is in
+    # place can take them away again and leave nothing behind.
+    made = [at for at in (folder, *folder.parents) if not at.exists()]
+    folder.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for name, data in files:
+        path = folder / name
+        # Written beside and moved into place: a file is there whole or not at all, and a link
+        # standing at the name is replaced, never written through to the file it points at.
+        staged = path.with_name(f".{name}.poisson-prove-new")
+        try:
+            staged.write_bytes(data)
+            os.replace(staged, path)
+        except KeyboardInterrupt as exc:
+            if not written:
+                staged.unlink(missing_ok=True)
+                for at in made:
+                    with contextlib.suppress(OSError):
+                        at.rmdir()
+                raise
+            left = [shown_as(n) for n in names if n not in written]
+            raise Interrupted(
+                f"interrupted: wrote {_join_words([shown_as(n) for n in written])}, "
+                f"not {_join_words(left)}",
+                [join([COMMAND, *typed, *(() if force else ("--force",))])],
+            ) from exc
+        finally:
+            staged.unlink(missing_ok=True)
+        written.append(name)
+    shown = [shown_as(name) for name in names]
+    into = () if repo is None else ("--repo", str(repo))
+    if with_setup:
+        spec = shown[names.index(DEFAULT_SPEC)]
+        nexts = [f"{COMMAND} sweep" if repo is None else join([COMMAND, "sweep", spec])]
+    else:
+        nexts = [join([COMMAND, "init", "--agent", *into])]
+    return WrittenFiles(
+        verdict="ok",
+        sentence=(
+            "wrote the demo agent, a support bot that needs no key "
+            f"({_look.fmt_count(len(names))} files)"
+        ),
+        payload={"wrote": shown},
+        next=tuple(nexts),
+        paths=tuple(shown),
+    )
+
+
 def _join_words(items: Sequence[str]) -> str:
     """``a``, ``a and b``, ``a, b and c``."""
     items = list(items)

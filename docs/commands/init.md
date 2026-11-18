@@ -1,8 +1,8 @@
 # `poisson-prove init`
 
 Writes a sweep spec and nothing else: the keyless example, or a commented template to edit for
-your own rollout. With `--agent` it writes instead the setup your own coding agent follows. It
-never touches a store.
+your own rollout. With `--agent` it writes instead the setup your own coding agent follows, and
+with `--demo` a small support bot that needs no key, to try Prove on. It never touches a store.
 
 In a terminal, after it writes a spec, `init` asks one question: where sweeps of the spec should
 run. This machine is the default, and Enter takes it. `--runs-on` answers on the command line.
@@ -17,15 +17,17 @@ $ poisson-prove init --help
 usage: poisson-prove init [-h] [--example] [--target pkg.module:rollout]
                           [--out PATH] [--force]
                           [--runs-on {local,modal,cloud}] [--agent]
-                          [--repo DIR] [--print] [--json] [--store PATH]
-                          [--plain] [--debug]
+                          [--repo DIR] [--print] [--demo] [--with-setup]
+                          [--json] [--store PATH] [--plain] [--debug]
 
 Write a sweep spec, ./prove.toml unless --out names another file, and nothing
 else: a commented template to edit, or with --example the keyless quickstart,
 runnable as it is. With --agent, write instead the setup your own coding agent
 follows (a skill and the prompt to give it), in the two folders coding agents read
-skills from. In a terminal, init then asks where sweeps should run; --runs-on
-answers that on the command line, and off a terminal nothing is asked.
+skills from. With --demo, write instead a small support bot that needs no key, to
+try Prove on. In a terminal, init then asks where sweeps of a spec it wrote should
+run; --runs-on answers that on the command line, and off a terminal nothing is
+asked.
 
 options:
   -h, --help            show this help message and exit
@@ -35,17 +37,24 @@ options:
                         fill the template's target with this rollout (default:
                         a commented placeholder)
   --out PATH            the file to write (default: ./prove.toml)
-  --force               replace the file if it exists (default: refuse)
+  --force               replace what init writes if it exists (default:
+                        refuse)
   --runs-on {local,modal,cloud}
                         where sweeps of this spec run: this machine, Modal or
                         your cloud account (default: asked in a terminal, this
                         machine otherwise)
   --agent               write the setup your own coding agent follows, a skill
                         and its prompt, instead of a sweep spec
-  --repo DIR            with --agent: the repository to write the setup into
-                        (default: this folder)
+  --repo DIR            with --agent or --demo: the folder to write into, made
+                        by --demo when it is missing (default: this folder)
   --print               with --agent: print the skill and write nothing
                         (default: write the files)
+  --demo                write the demo agent, a support bot that needs no key
+                        (support_bot.py, prompts.py, demo.md), instead of a
+                        sweep spec
+  --with-setup          with --demo: also write the two files a coding agent
+                        would, prove_rollout.py and prove.toml (default: the
+                        demo alone)
   --json                print the file written as one JSON document instead of
                         text
   --store PATH          the store folder (default: $POISSON_PROVE_STORE when
@@ -58,6 +67,7 @@ examples:
   poisson-prove init --example
   poisson-prove init --target my_agent:rollout
   poisson-prove init --agent
+  poisson-prove init --demo
 ```
 
 ## Options
@@ -67,7 +77,8 @@ examples:
 - `--target pkg.module:rollout` fills the template's `target` with your rollout, so `sweep` finds
   it without `--target`.
 - `--out PATH` writes to another file than `./prove.toml`; `sweep` then takes that file's name.
-- `--force` replaces a file that exists. Without it an existing file is refused and left as it is.
+- `--force` replaces a file that exists, and only a file `init` was going to write. Without it an
+  existing file is refused and left as it is.
 - `--runs-on local`, `--runs-on modal` or `--runs-on cloud` says where sweeps of the spec run,
   and `init` then asks nothing: `local` writes the spec alone, `modal` adds a `[modal]` table,
   and `cloud` adds a `[cloud]` table with the defaults the question offers (AWS, `us-east-2`,
@@ -79,8 +90,17 @@ examples:
   prompt to give it, `prompt.txt`, in `.agents/skills/poisson-prove-setup/` and
   `.claude/skills/poisson-prove-setup/`. [Set Prove up with your coding agent](../setup-with-your-agent.md)
   says what the skill asks of your agent.
-- `--repo DIR`, with `--agent`, writes the setup into another folder.
+- `--repo DIR`, with `--agent` or `--demo`, writes into another folder. `--demo` makes the folder
+  when it is missing; `--agent` wants a folder that is there.
 - `--print`, with `--agent`, prints the skill and writes nothing.
+- `--demo` writes the demo agent instead of a spec: `support_bot.py`, a support bot that calls no
+  model and needs no key and no network; `prompts.py`, its system prompt; and `demo.md`, which says
+  what it is and what to do with it. It is the stand-in [Your own agent](../your-own-agent.md)
+  walks through. It asks nothing, and goes with `--with-setup`, `--repo`, `--force` and `--json`
+  only.
+- `--with-setup`, with `--demo`, also writes the two files a coding agent would write for the demo:
+  `prove_rollout.py` and `prove.toml`, three tickets at two temperatures, 194 replicates each. The
+  demo then sweeps as it is, for someone with no coding agent.
 - `--json` prints what was written as one JSON document.
 - `--store PATH`, `--plain` and `--debug` are the options every verb takes: the store folder
   (`init` reads none), plain text on a terminal too, and the traceback of an unexpected failure.
@@ -195,20 +215,51 @@ $ poisson-prove init --example --out other.toml --json
 }
 ```
 
+The demo agent, into a folder of its own, and then with the two files a coding agent would write:
+
+<!-- docs-check: run -->
+```console
+$ poisson-prove init --demo --repo support-bot
+ok  wrote the demo agent, a support bot that needs no key (3 files)
+  wrote  support-bot/support_bot.py
+  wrote  support-bot/prompts.py
+  wrote  support-bot/demo.md
+  next: poisson-prove init --agent --repo support-bot
+$ poisson-prove init --demo --with-setup --repo support-bot  # exits 1
+error: support-bot/support_bot.py, support-bot/prompts.py and support-bot/demo.md already exist; init --demo replaces them only with --force
+  next: poisson-prove init --demo --with-setup --repo support-bot --force
+$ poisson-prove init --demo --with-setup --repo support-bot --force
+ok  wrote the demo agent, a support bot that needs no key (5 files)
+  wrote  support-bot/support_bot.py
+  wrote  support-bot/prompts.py
+  wrote  support-bot/demo.md
+  wrote  support-bot/prove_rollout.py
+  wrote  support-bot/prove.toml
+  next: poisson-prove sweep support-bot/prove.toml
+```
+
+Without `--repo` the files go into this folder, and the `next:` lines are
+`poisson-prove init --agent` and, with `--with-setup`, `poisson-prove sweep`.
+
 ## Exit codes
 
-- `0`: the file, or the four files of `--agent`, were written (or printed, with `--print`).
+- `0`: the file, the four files of `--agent` or the files of `--demo` were written (or printed,
+  with `--print`).
 - `1`: refused, and nothing was written: a file exists and `--force` was not given, or a folder
   cannot be written. Also a value at one of its questions that Prove cannot use: the spec is
   written then, and its where-to-run table is not.
-- `2`: the command line is wrong, such as `--repo` without `--agent`, or `--runs-on` with it.
+- `2`: the command line is wrong, such as `--repo` without `--agent` or `--demo`, `--runs-on`
+  with either, `--demo` with `--example`, `--target`, `--out`, `--agent` or `--print`, or
+  `--with-setup` without `--demo`.
 - `3`: an unexpected failure; `--debug` prints its traceback.
-- `130`: interrupted with Ctrl-C.
+- `130`: interrupted with Ctrl-C. Under `--demo`, each file already in place is whole and is
+  named, the rest are not written, and `--force` is the way on.
 
 ## What it writes
 
 `./prove.toml`, or the file `--out` names; with `--agent`, the four files above in the folder, or
-in `--repo`. When the answer to its question is Modal or your cloud account, the spec it wrote
+in `--repo`; with `--demo`, the demo's three files, or five with `--with-setup`, in the folder or
+in `--repo`, never a `README.md`. When the answer to its question is Modal or your cloud account, the spec it wrote
 also holds that `[modal]` or `[cloud]` table. Nothing else: no store, no `.gitignore` entry, none
 of your agent's own files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules/`). It stores no secret and
 asks for none.

@@ -1,0 +1,19 @@
+# The demo support bot's sweep spec: three tickets at two temperatures, 194 times each.
+target = "prove_rollout:rollout"
+target_id = "support-bot"
+t_unit = "steps"
+replicates = 194
+
+[axes.ticket]
+type = "categorical"
+values = ["refund", "password", "shipping"]
+
+[axes.temperature]
+type = "continuous"
+values = [0.0, 0.7]
+
+# An unresolved ticket and a timeout count against the bot; a resolved ticket counts for it.
+[declare]
+outcomes = ["resolved", "unresolved", "timeout"]
+failures = ["unresolved", "timeout"]
+successes = ["resolved"]

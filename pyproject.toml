@@ -94,6 +94,8 @@ only-include = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# The demo agent ships as docs/your-own-agent.md shows it, a short stand-in, not as package code.
+extend-exclude = ["src/poisson_prove/demo"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
@@ -104,6 +106,7 @@ select = ["E", "F", "W", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.11"
 files = ["src"]
+exclude = ["^src/poisson_prove/demo/"]
 strict = true
 
 [[tool.mypy.overrides]]

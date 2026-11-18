@@ -124,3 +124,15 @@ Set its axes to what you vary and its outcomes to how your agent's cases end, ch
 sweep again with `--pair-with latest`. [Your own agent](your-own-agent.md) does exactly this on a
 small example, and [Set Prove up with your coding agent](setup-with-your-agent.md) has your coding
 agent write the two files for you to review.
+
+To try the whole loop before you bring an agent of your own, `poisson-prove init --demo` writes a
+small support bot that needs no key and no network, to set Prove up on; with `--with-setup` it also
+writes the rollout and the spec, so `poisson-prove sweep` runs at once. Its `demo.md` says what to
+change between the two sweeps.
+
+For an agent on a real model,
+[`examples/your-first-real-agent/`](https://github.com/poisson-labs/prove/tree/main/examples/your-first-real-agent)
+is a small agent that calls a real model (OpenAI's `gpt-4.1-mini`). It needs an OpenAI API key in
+`OPENAI_API_KEY`, `pip install "poisson-prove[agent]"`, and a network; each sweep makes 1,200
+short requests, billed to your OpenAI account. Without the key every case errors and the sweep
+stops; without a network every case ends `api_error`.

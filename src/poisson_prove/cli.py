@@ -438,14 +438,17 @@ def _build_parser(io: _IO) -> _Parser:
             "else: a commented template to edit, or with --example the keyless quickstart,\n"
             "runnable as it is. With --agent, write instead the setup your own coding agent\n"
             "follows (a skill and the prompt to give it), in the two folders coding agents read\n"
-            "skills from. In a terminal, init then asks where sweeps should run; --runs-on\n"
-            "answers that on the command line, and off a terminal nothing is asked."
+            "skills from. With --demo, write instead a small support bot that needs no key, to\n"
+            "try Prove on. In a terminal, init then asks where sweeps of a spec it wrote should\n"
+            "run; --runs-on answers that on the command line, and off a terminal nothing is\n"
+            "asked."
         ),
         epilog=(
             "examples:\n"
             f"  {_COMMAND} init --example\n"
             f"  {_COMMAND} init --target my_agent:rollout\n"
-            f"  {_COMMAND} init --agent"
+            f"  {_COMMAND} init --agent\n"
+            f"  {_COMMAND} init --demo"
         ),
     )
     init_p.add_argument(
@@ -464,7 +467,9 @@ def _build_parser(io: _IO) -> _Parser:
         help=f"the file to write (default: ./{_DEFAULT_SPEC})",
     )
     init_p.add_argument(
-        "--force", action="store_true", help="replace the file if it exists (default: refuse)"
+        "--force",
+        action="store_true",
+        help="replace what init writes if it exists (default: refuse)",
     )
     init_p.add_argument(
         "--runs-on",
@@ -481,12 +486,25 @@ def _build_parser(io: _IO) -> _Parser:
     init_p.add_argument(
         "--repo",
         metavar="DIR",
-        help="with --agent: the repository to write the setup into (default: this folder)",
+        help="with --agent or --demo: the folder to write into, made by --demo when it is "
+        "missing (default: this folder)",
     )
     init_p.add_argument(
         "--print",
         action="store_true",
         help="with --agent: print the skill and write nothing (default: write the files)",
+    )
+    init_p.add_argument(
+        "--demo",
+        action="store_true",
+        help="write the demo agent, a support bot that needs no key (support_bot.py, "
+        "prompts.py, demo.md), instead of a sweep spec",
+    )
+    init_p.add_argument(
+        "--with-setup",
+        action="store_true",
+        help="with --demo: also write the two files a coding agent would, prove_rollout.py and "
+        f"{_DEFAULT_SPEC} (default: the demo alone)",
     )
     _add_json_option(init_p, "the file written")
     _add_global_options(init_p, top=False)
@@ -2101,7 +2119,32 @@ def _cmd_sweep(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> in
 def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int:
     """Write one sweep spec and nothing else, or with ``--agent`` the setup for the person's own
     coding agent. In a terminal it then asks where sweeps should run; off one, under ``--json``
-    or with ``--runs-on``, it asks nothing."""
+    or with ``--runs-on``, it asks nothing. With ``--demo`` it writes the demo agent and asks
+    nothing."""
+    if ns.demo:
+        given = [
+            flag
+            for flag, on in (
+                ("--example", ns.example),
+                ("--target", ns.target is not None),
+                ("--out", ns.out is not None),
+                ("--runs-on", ns.runs_on is not None),
+                ("--agent", ns.agent),
+                ("--print", ns.print),
+            )
+            if on
+        ]
+        if given:
+            raise _Usage(
+                f"--demo writes the demo agent; it takes no {', '.join(given)}",
+                [f"{_COMMAND} init --demo", f"{_COMMAND} init --help"],
+            )
+        return _cmd_init_demo(ns, io, state)
+    if ns.with_setup:
+        raise _Usage(
+            "--with-setup goes with --demo",
+            [f"{_COMMAND} init --demo --with-setup", f"{_COMMAND} init --help"],
+        )
     if ns.agent:
         given = [
             flag
@@ -2128,9 +2171,13 @@ def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
         flag = "--repo" if ns.repo is not None else "--print"
         repo = ["--repo", ns.repo] if ns.repo is not None else []
         shown = _look.command(_COMMAND, "init", "--agent", *repo)
+        if ns.print:
+            raise _Usage(
+                f"{flag} goes with --agent", [shown + " --print", f"{_COMMAND} init --help"]
+            )
         raise _Usage(
-            f"{flag} goes with --agent",
-            [shown + (" --print" if ns.print else ""), f"{_COMMAND} init --help"],
+            "--repo goes with --agent or --demo",
+            [shown, _look.command(_COMMAND, "init", "--demo", *repo), f"{_COMMAND} init --help"],
         )
     if ns.runs_on == "cloud":
         _refuse_cloud_on_windows()
@@ -2163,6 +2210,19 @@ def _cmd_init(ns: argparse.Namespace, io: _IO, store: Any, state: _State) -> int
         # The spec is written and runs on this machine; ``where`` asks again.
         raise _Refusal(str(exc), [_where_command(spec, choice)]) from None
     _print_placed(io, placed, verdict=False)
+    return 0
+
+
+def _cmd_init_demo(ns: argparse.Namespace, io: _IO, state: _State) -> int:
+    written = core.init_demo(ns.repo, with_setup=ns.with_setup, force=ns.force, typed=state.argv)
+    if ns.json:
+        _print_result(io, "init", written)
+        return 0
+    io.verdict("ok", written.sentence)
+    for path in written.payload["wrote"]:
+        io.detail("wrote", path)
+    for line in written.next:
+        io.next(line)
     return 0
 
 
