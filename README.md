@@ -75,6 +75,14 @@ reads your code, writes `prove_rollout.py` and `prove.toml`, checks them with
 key. When the files look right, run `poisson-prove sweep` yourself. The whole procedure is in
 [Set Prove up with your coding agent](https://github.com/poisson-labs/prove/blob/main/docs/setup-with-your-agent.md).
 
+No agent at hand? `poisson-prove init --demo` writes a small support bot that needs no key, to set
+Prove up on and try the whole loop with; `--with-setup` also writes the two files a coding agent would.
+[`examples/your-first-real-agent/`](https://github.com/poisson-labs/prove/tree/main/examples/your-first-real-agent)
+is a small agent that calls a real model (OpenAI's `gpt-4.1-mini`). It needs an OpenAI API key in
+`OPENAI_API_KEY`, `pip install "poisson-prove[agent]"`, and a network; each sweep makes 1,200
+short requests, billed to your OpenAI account. Without the key every case errors and the sweep
+stops; without a network every case ends `api_error`.
+
 ## The terminal app and the dashboard
 
 On a terminal, `poisson-prove` with no verb opens the terminal app: your runs, your comparisons and

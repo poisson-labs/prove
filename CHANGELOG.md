@@ -6,6 +6,13 @@ All notable changes to Poisson Prove are written here. The format follows
 
 ## 0.5.0 — Unreleased
 
+### Added
+
+- `poisson-prove init --demo` writes a small support bot that needs no key and no network, to set
+  Prove up on and try the whole loop with; `--with-setup` also writes the two files a coding agent
+  would. The README and docs link `examples/your-first-real-agent/`, a small agent on a real
+  model, and say what it needs: an OpenAI API key, the `agent` extra and a network (#3).
+
 ### Changed
 
 - A sweep that is not paired with an earlier one is now sized for the paired sweep that follows
