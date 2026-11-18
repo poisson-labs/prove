@@ -1853,6 +1853,9 @@ def init_demo(
         )
     source = resources.files("poisson_prove") / "demo"
     files = [(name, (source / name).read_bytes()) for name in names]
+    # The folders this call makes, deepest first, so that an interrupt before any file is in
+    # place can take them away again and leave nothing behind.
+    made = [at for at in (folder, *folder.parents) if not at.exists()]
     folder.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
     for name, data in files:
@@ -1865,10 +1868,15 @@ def init_demo(
             os.replace(staged, path)
         except KeyboardInterrupt as exc:
             if not written:
+                staged.unlink(missing_ok=True)
+                for at in made:
+                    with contextlib.suppress(OSError):
+                        at.rmdir()
                 raise
-            left = [n for n in names if n not in written]
+            left = [shown_as(n) for n in names if n not in written]
             raise Interrupted(
-                f"interrupted: wrote {_join_words(written)}, not {_join_words(left)}",
+                f"interrupted: wrote {_join_words([shown_as(n) for n in written])}, "
+                f"not {_join_words(left)}",
                 [join([COMMAND, *typed, *(() if force else ("--force",))])],
             ) from exc
         finally:
