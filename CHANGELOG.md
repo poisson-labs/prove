@@ -6,6 +6,15 @@ All notable changes to Poisson Prove are written here. The format follows
 
 ## 0.5.0 — Unreleased
 
+### Changed
+
+- A sweep that is not paired with an earlier one is now sized for the paired sweep that follows
+  it: its plan gives both readings and refuses a design either cannot pass, so `sweep --pair-with`
+  on the same spec and replicates is never refused for its size (#6). A paired sweep whose earlier
+  run is too small says so and offers a new baseline at the size that passes. In `--json`, the
+  plan of a sweep paired with nothing carries the paired reading as `design_paired`, beside
+  `design_mde` and with the same keys.
+
 ### Removed
 
 - The `[burla]` install extra. 0.3.0 kept it as another name for `[cloud]` until 0.4.0, and 0.4.0

@@ -231,6 +231,34 @@ def _ref_gate_table(n: int, rows: int, test: str) -> tuple[tuple[tuple[float, st
     return tuple(keys), np.array(table)
 
 
+@functools.cache
+def _ref_paired_column(n: int, rows: int, accepted: float) -> tuple[tuple[tuple[float, str], ...], np.ndarray]:
+    """The paired reading's column of the table above alone: for each base rate and way, the power at
+    exactly ``accepted``, NaN where it has no room. The whole table costs the paired reference
+    minutes at the replicates a passing design needs; one column costs under a second (First run M2)."""
+    from test_pf4_stats import ref_paired_power
+
+    level = Q / rows
+    keys: list[tuple[float, str]] = []
+    column: list[float] = []
+    for base in np.round(np.arange(0.0, 1.0 + 1e-9, 0.005), 3):
+        for way in ("rise", "fall"):
+            room = 1 - base if way == "rise" else base
+            keys.append((float(base), way))
+            if accepted <= room + 1e-9:
+                column.append(float(ref_paired_power(float(base), n, level, np.array([accepted]), way == "rise")[0]))
+            else:
+                column.append(float("nan"))
+    return tuple(keys), np.array(column)
+
+
+def _ref_gate_column(n: int, rows: int, accepted: float, test: str) -> tuple[tuple[tuple[float, str], ...], np.ndarray]:
+    if test == "mcnemar":
+        return _ref_paired_column(n, rows, float(GATE_T[_column(accepted)]))
+    keys, table = _ref_gate_table(n, rows, test)
+    return keys, table[:, _column(accepted)]
+
+
 def _column(accepted: float) -> int:
     k = int(round(accepted * 1000)) - 1
     assert abs(GATE_T[k] - accepted) <= 1e-12, accepted
@@ -240,8 +268,7 @@ def _column(accepted: float) -> int:
 def ref_admits(n: int, rows: int, accepted: float, test: str = "fisher") -> bool:
     """The gate's rule: the power at exactly ``accepted`` reaches the target at every base rate
     where it has room."""
-    _, table = _ref_gate_table(n, rows, test)
-    column = table[:, _column(accepted)]
+    _, column = _ref_gate_column(n, rows, accepted, test)
     return bool((column[~np.isnan(column)] >= POWER).all())
 
 
@@ -250,9 +277,9 @@ def ref_worst(n: int, rows: int, accepted: float, test: str = "fisher") -> tuple
     first; PF4.48a), the way the change goes there, and the limit that way at that base rate."""
     from test_pf4_stats import ref_fisher_power, ref_limit, ref_paired_power
 
-    keys, table = _ref_gate_table(n, rows, test)
+    keys, column = _ref_gate_column(n, rows, accepted, test)
     worst = (2.0, 0.0, "rise")
-    for (base, way), power in zip(keys, table[:, _column(accepted)]):
+    for (base, way), power in zip(keys, column):
         if not np.isnan(power) and power < worst[0] - 1e-12:
             worst = (float(power), base, way)
     _, base, way = worst
@@ -271,6 +298,28 @@ def ref_offer(n: int, rows: int, accepted: float, test: str = "fisher") -> float
         if t >= accepted - 1e-12 and ref_admits(n, rows, float(t), test):
             return float(t)
     raise AssertionError((n, rows, accepted, test))
+
+
+# First run M2 (#6, Z1, Z3): a sweep paired with nothing is read both ways, Fisher's test and the
+# paired test with both arms and the pairs the spec's replicates, and passes when both do.
+
+
+def ref_admits_both(n: int, rows: int, accepted: float) -> bool:
+    """The gate's rule for a sweep paired with nothing: both readings admit the design."""
+    return ref_admits(n, rows, accepted) and ref_admits(n, rows, accepted, test="mcnemar")
+
+
+def ref_offer_both(n: int, rows: int, accepted: float) -> float:
+    """The smallest three-decimal accepted change at or above ``accepted`` that both readings admit:
+    the larger of the two readings' own, as a larger accepted change only makes each easier to pass."""
+    return max(ref_offer(n, rows, accepted), ref_offer(n, rows, accepted, test="mcnemar"))
+
+
+def ref_named(n: int, rows: int, accepted: float) -> tuple[str, float, str, float | None]:
+    """The reading a refusal names, with its worst base rate, way and limit: the paired one when it
+    fails (alone or with Fisher's, the larger need), else Fisher's."""
+    test = "fisher" if ref_admits(n, rows, accepted, test="mcnemar") else "mcnemar"
+    return (test, *ref_worst(n, rows, accepted, test))
 
 
 def assert_design_recorded(design: dict, *, n: int, rows: int, accepted: float) -> None:
@@ -352,8 +401,10 @@ def test_w3_equality_passes(tmp_path: Path) -> None:
     # PF4.30: a design passes when its power at exactly the accepted change is at
     # least the target at every base rate with room, so the boundary is the smallest accepted change
     # the references admit; it passes and one step of 0.001 below it is refused.
-    boundary = ref_offer(LATTICE_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
-    assert not ref_admits(LATTICE_REPLICATES, FOUR, round(boundary - 0.001, 3)), boundary
+    # First run M2 (Z1): a sweep paired with nothing must pass both readings, so the boundary is the
+    # smallest accepted change both admit.
+    boundary = ref_offer_both(LATTICE_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    assert not ref_admits_both(LATTICE_REPLICATES, FOUR, round(boundary - 0.001, 3)), boundary
     assert executor.check_power(p, max_mde=boundary) is None
     with pytest.raises(executor.UnderpoweredDesign):
         executor.check_power(p, max_mde=round(boundary - 0.001, 3))
@@ -429,7 +480,9 @@ def test_w4_the_refusal_names_the_mde_the_accepted_value_the_n_and_a_reachable_n
     # a change of X at its worst base rate, B, and you accept T`), all read from the references; the
     # design's N and the N that passes are the refusal's numbers, which the command line prints as
     # its `--replicates N` next: line.
-    base, _, mde = ref_worst(replicates, FOUR, accepted)
+    # First run M2 (Z1, Z3): the facts are those of the reading that failed (the paired one when
+    # both fail), and the N that passes and the offered --max-mde are the smallest both readings pass.
+    _, base, _, mde = ref_named(replicates, FOUR, accepted)
     assert mde is not None
     exc = refusal(spec, accepted)
     message = str(exc)
@@ -439,10 +492,10 @@ def test_w4_the_refusal_names_the_mde_the_accepted_value_the_n_and_a_reachable_n
     assert exc.replicates == replicates, exc.replicates
     needed = exc.replicates_needed
     assert needed is not None and needed > replicates, needed
-    assert ref_admits(needed, FOUR, accepted), needed
-    assert not ref_admits(needed - 1, FOUR, accepted), needed
+    assert ref_admits_both(needed, FOUR, accepted), needed
+    assert not ref_admits_both(needed - 1, FOUR, accepted), needed
     # The offered --max-mde is the smallest three-decimal value that admits the design as it is.
-    assert exc.offered == pytest.approx(ref_offer(replicates, FOUR, accepted), abs=1e-12), exc.offered
+    assert exc.offered == pytest.approx(ref_offer_both(replicates, FOUR, accepted), abs=1e-12), exc.offered
 
 
 def test_w4_the_override_the_message_suggests_actually_clears_the_gate() -> None:
@@ -459,19 +512,21 @@ def test_w4_the_override_the_message_suggests_actually_clears_the_gate() -> None
     # for the accepted change, and the --max-mde it offers (the command line's second next: line) is
     # the smallest three-decimal change that admits the design. Pasting the printed limit back does
     # not admit it; the offer does, and one step of 0.001 below the offer does not.
-    _, _, mde = ref_worst(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z1, Z3): the printed limit is the failed reading's (the paired one here), and
+    # the offer is the smallest change both readings admit.
+    _, _, _, mde = ref_named(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
     assert mde is not None
     exc = refusal(spec, executor.DEFAULT_MAX_MDE)
     assert f"{mde:.3f}" in str(exc), str(exc)
     offered = exc.offered
     assert offered is not None, str(exc)
-    assert offered == pytest.approx(ref_offer(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE), abs=1e-12)
+    assert offered == pytest.approx(ref_offer_both(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE), abs=1e-12)
     printed = float(f"{mde:.3f}")
-    assert printed < offered and not ref_admits(LATTICE_REPLICATES, rows, printed), (printed, offered)  # the trap is real
+    assert printed < offered and not ref_admits_both(LATTICE_REPLICATES, rows, printed), (printed, offered)  # the trap is real
     with pytest.raises(executor.UnderpoweredDesign):
         executor.check_power(_bare_plan(spec), max_mde=printed)
     assert executor.check_power(_bare_plan(spec), max_mde=offered) is None, (offered, mde, str(exc))
-    assert not ref_admits(LATTICE_REPLICATES, rows, round(offered - 0.001, 3)), offered
+    assert not ref_admits_both(LATTICE_REPLICATES, rows, round(offered - 0.001, 3)), offered
 
 
 # ---------- W5: --yes does not clear the gate, and nothing is created ----------
@@ -513,7 +568,8 @@ def test_w6_an_accepted_value_at_or_above_the_computed_mde_proceeds(tmp_path: Pa
     # PF4.30: the computed value is the smallest accepted change the gate admits for
     # this design (the references' Fisher power at q / M at every base rate), not the normal
     # approximation at base rate 0.5.
-    mde = ref_offer(SweepSpec.load(spec_path).replicates, FOUR, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z1): the smallest both readings admit.
+    mde = ref_offer_both(SweepSpec.load(spec_path).replicates, FOUR, executor.DEFAULT_MAX_MDE)
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(mde)))
     assert r.code == 0, r.text
     assert len(Store(root).runs()) == 1
@@ -528,7 +584,8 @@ def test_w6_an_accepted_value_below_the_computed_mde_refuses(tmp_path: Path) -> 
     spec_path = write_spec(tmp_path / "under.toml", underpowered_toml())
     root = tmp_path / "runs"
     # PF4.30: below the smallest accepted change the gate admits, by one step of 0.001.
-    mde = ref_offer(SweepSpec.load(spec_path).replicates, FOUR, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z1): the smallest both readings admit; one step below it, one of them refuses.
+    mde = ref_offer_both(SweepSpec.load(spec_path).replicates, FOUR, executor.DEFAULT_MAX_MDE)
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(round(mde - 0.001, 3))))
     # A refusal exits 1.
     assert r.code == 1, r.text
@@ -578,7 +635,8 @@ def test_w7_the_refusal_follows_the_complete_preflight_block_on_stdout(tmp_path:
     # worst base rate, on the refusal's own error line, to three decimals (rule 10), from the
     # references.
     assert not MDE_LINE.search(r.out), r.out
-    base, _, limit = ref_worst(spec.replicates, FOUR, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z3): the limit and base rate are those of the reading that failed.
+    _, base, _, limit = ref_named(spec.replicates, FOUR, executor.DEFAULT_MAX_MDE)
     assert limit is not None
     (error,) = [line for line in r.err.splitlines() if line.startswith("error: ")]
     assert f"{limit:.3f}" in error and f"{base:.3f}" in error, error
@@ -594,12 +652,14 @@ def test_w8_a_launched_local_run_records_the_accepted_value(tmp_path: Path) -> N
     # PF4.30: the accepted value is the smallest the gate admits for this design,
     # from the references.
     replicates = SweepSpec.load(spec_path).replicates
-    accepted = ref_offer(replicates, FOUR, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z1): the smallest both readings admit.
+    accepted = ref_offer_both(replicates, FOUR, executor.DEFAULT_MAX_MDE)
     r = run_cli(sweep_argv(root, spec_path, MOCK_ROLLOUT, "--max-mde", repr(accepted)))
     assert r.code == 0, r.text
     environment = Store(root).manifest(run_id_of(root)).environment
     assert environment["max_mde_accepted"] == pytest.approx(accepted)
-    # PF4.30, PF4.48a: the run also records the gate's design limit for that value.
+    # PF4.30, PF4.48a: the run also records the gate's design limit for that value. First run M2
+    # (Z7): for a run paired with nothing that record is still Fisher's reading.
     assert_design_recorded(environment["design_mde"], n=replicates, rows=FOUR, accepted=accepted)
 
 
@@ -657,7 +717,8 @@ def test_w9_a_resume_inherits_the_accepted_value_without_the_flag(tmp_path: Path
     root = tmp_path / "runs"
     spec = SweepSpec.load(spec_path)
     # PF4.30: the smallest accepted change the gate admits, from the references.
-    accepted = ref_offer(spec.replicates, FOUR, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z1): the first sweep must pass both readings.
+    accepted = ref_offer_both(spec.replicates, FOUR, executor.DEFAULT_MAX_MDE)
     first = launched_underpowered(root, spec_path, accepted, "--max-rollouts", "4")
     # A sweep stopped by --max-rollouts exits 3.
     assert first.code == 3, first.text
@@ -675,7 +736,9 @@ def test_w9_a_resume_is_refused_when_the_recorded_value_no_longer_covers_the_des
     started = write_spec(tmp_path / "a.toml", underpowered_toml(replicates=64))
     # PF4.30: the accepted change and whether it still covers the design are the
     # gate's rule, read from the references.
-    accepted = ref_offer(64, FOUR, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z1, Z6): the first sweep must pass both readings; the resume is read as before,
+    # with Fisher's test alone.
+    accepted = ref_offer_both(64, FOUR, executor.DEFAULT_MAX_MDE)
     first = launched_underpowered(root, started, accepted, "--max-rollouts", "4")
     # A sweep stopped by --max-rollouts exits 3.
     assert first.code == 3, first.text
@@ -739,12 +802,14 @@ def test_w10_both_preflights_say_base_rate_and_neither_says_worst_case(tmp_path:
     # it names the limit at the worst base rate, that base rate, the test and the family; the
     # numbers are the references'.
     spec_path = write_spec(tmp_path / "plan.toml", underpowered_toml(replicates=LATTICE_REPLICATES))
-    accepted = ref_offer(LATTICE_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z1, Z2): the accepted change is the smallest both readings admit, and the gate
+    # line is the first of the plan's two design lines (the second is the paired reading's).
+    accepted = ref_offer_both(LATTICE_REPLICATES, FOUR, executor.DEFAULT_MAX_MDE)
     r = run_cli(sweep_argv(tmp_path / "runs", spec_path, MOCK_ROLLOUT, "--max-mde", repr(accepted), "--dry-run"))
     assert r.code == 0, r.text
     base, _, limit = ref_worst(LATTICE_REPLICATES, FOUR, accepted)
     assert limit is not None
-    (line,) = [x for x in r.out.splitlines() if "worst base rate" in x]
+    line, _paired = [x for x in r.out.splitlines() if "worst base rate" in x]
     assert f"{limit:.3f}" in line and f"{base:.3f}" in line and "Fisher" in line and "over 4 tests" in line, line
 
 
@@ -792,8 +857,10 @@ def test_w12_the_lattice_design_passes_at_its_own_mde_and_not_at_the_printed_rou
     # PF4.30: the design's own value is the smallest accepted change the gate admits
     # (the references' Fisher power at q / 72 at every base rate); the printed limit at the worst
     # base rate, rounded to three decimals, is below it and refused.
-    own = ref_offer(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
-    _, _, mde = ref_worst(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    # First run M2 (Z1, Z3): its own value is the smallest both readings admit, and the printed
+    # limit is that of the reading that failed.
+    own = ref_offer_both(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
+    _, _, _, mde = ref_named(LATTICE_REPLICATES, rows, executor.DEFAULT_MAX_MDE)
     assert mde is not None
     assert executor.check_power(_bare_plan(spec), max_mde=own) is None
     with pytest.raises(executor.UnderpoweredDesign):

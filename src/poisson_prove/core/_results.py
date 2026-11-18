@@ -494,6 +494,8 @@ class Plan(Result):
     inner: Any = None
     lines: tuple[str, ...] = ()
     design_line: str | None = None
+    #: For a sweep paired with nothing: the same limit as a sweep paired with this one will read it.
+    paired_line: str | None = None
     store: Any = None
     target: str = ""
     typed_target: str | None = None

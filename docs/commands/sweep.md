@@ -6,6 +6,12 @@ condition's failure rate the design can catch. A design too small for the change
 refused before anything runs. On a terminal it then asks `[y/N]`; piped or in CI it needs
 `--yes`.
 
+A sweep that is not paired with an earlier one is planned twice over: as it stands, and as the
+first half of the pair that `--pair-with` makes of it later. The plan gives both readings and
+passes only when both do, so the sweep you pair with it, on the same spec and replicates, is
+never refused for its size. Both readings are planned for the worst base rate and with no credit
+for pairing, so the plan needs no pilot run: nothing is estimated from earlier data.
+
 Where the rollouts run is the spec's to say: this machine, Modal or your own cloud account.
 `poisson-prove where` shows and changes it, and `--backend` overrides it for one run.
 
@@ -127,7 +133,8 @@ examples:
 - `--batch-size N` is how many rows are written to the store at a time; a stopped run keeps every
   whole batch.
 - `--max-mde FRACTION` is the largest smallest-detectable-change you accept, 0.200 by default: the
-  plan refuses a design whose worst condition could not catch a change that size 4 times in 5.
+  plan refuses a design whose worst condition could not catch a change that size 4 times in 5,
+  in this sweep or, for a sweep paired with nothing, in the sweep paired with it afterwards.
 - `--dry-run` prints the plan and stops. It checks the spec, imports the rollout in a process of
   its own with the network blocked, and checks it takes `(cfg, seed)`, without calling it.
 - `--yes` skips the question after the plan.
@@ -154,20 +161,51 @@ plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local
   outcomes  failures: timeout, violated
 …
   smallest rise one condition alone would be flagged for  0.199 at its worst base rate, 0.400 (Fisher, q 0.05 over 18 tests, 4 times in 5; you accept up to 0.200)
+  and in a sweep paired with this one  0.200 at its worst base rate, 0.400 (paired test on shared seeds, McNemar, q 0.05 over 18 tests, 4 times in 5; planned for the worst base rate and with no credit for pairing, so it needs no pilot run)
 ```
 
+The first of the two lines reads this sweep beside another one on separate seeds (Fisher's test);
+the second reads it beside the sweep you will pair with it on the same seeds (the paired test).
+The paired reading counts on no agreement between the two runs of a pair, so a pair that agrees
+more than chance, as runs on shared seeds usually do, can only catch more than the plan says.
+
 Twenty replicates per condition are too few to catch a change of 0.20, so the plan is refused,
-with the two ways out: more replicates, or accepting a larger change:
+naming the reading that failed (the paired one when both do), with the two ways out: the fewest
+replicates that pass both readings, or the smallest larger change that admits both:
 
 <!-- docs-check: run -->
 ```console
 $ poisson-prove sweep --replicates 20 --dry-run  # exits 1
 plan  180 rollouts of mock-agent: 9 cells x 20 replicates on local, $0 (local)
 …
-error: underpowered design: one condition alone would be flagged for a change of 0.519 at its worst base rate, 0.000, and you accept 0.200
-  next: poisson-prove sweep --replicates 193 --dry-run
-  next: poisson-prove sweep --replicates 20 --dry-run --max-mde 0.625
+error: underpowered design: a sweep paired with this one would flag a change of 0.568 at its worst base rate, 0.000, and you accept 0.200
+  next: poisson-prove sweep --replicates 194 --dry-run
+  next: poisson-prove sweep --replicates 20 --dry-run --max-mde 0.662
 ```
+
+A paired sweep is read with the paired test alone, its pairs the smaller of the two runs'
+replicates. When the earlier run is the short one, more replicates of the new sweep cannot help,
+and the refusal says so. Here the baseline was swept at 100 replicates under a larger accepted
+change, and the sweep paired with it asks for the default 0.20:
+
+<!-- docs-check: run -->
+```console
+$ poisson-prove sweep --yes --replicates 100 --max-mde 0.3 --name short-baseline
+plan  900 rollouts of mock-agent: 9 cells x 100 replicates on local, $0 (local)
+…
+done  900 rollouts in run "short-baseline" (complete) in … s
+…
+$ poisson-prove sweep --pair-with short-baseline --dry-run  # exits 1
+plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)
+…
+error: underpowered design: run "short-baseline" has 100 replicates, and a sweep paired with it needs 194 on both sides; sweep a new baseline at 194, then your change with --pair-with latest --replicates 194
+  next: poisson-prove sweep --dry-run --replicates 194
+  next: poisson-prove sweep --pair-with short-baseline --dry-run --max-mde 0.281
+```
+
+The first way out is a new baseline at the size that passes, typed with no `--pair-with`; sweep
+it, then sweep your change paired with it. The second keeps the pair as it stands and accepts
+the larger change it can catch. Neither is refused for its size when typed.
 
 A sweep stopped short keeps what it ran, exits 3 and says how to go on:
 
@@ -238,7 +276,8 @@ $ poisson-prove sweep --dry-run --json
   "verdict": "plan",
   "sentence": "1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local)",
   "plan": {"rollouts": 1746, "cells": 9, "replicates": 194, "backend": "local"},
-  "design_mde": {"mde": 0.1991, "base_rate": 0.4, "direction": "rise"}
+  "design_mde": {"mde": 0.1991, "base_rate": 0.4, "direction": "rise", "test": "fisher"},
+  "design_paired": {"mde": 0.1998, "base_rate": 0.4, "direction": "rise", "test": "mcnemar"}
   …
 }
 ```

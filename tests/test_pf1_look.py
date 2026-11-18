@@ -85,7 +85,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from test_pf4_surfaces import ref_gate
+from test_s23_power import ref_named
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -124,9 +124,10 @@ values = [0.0, 0.3, 0.55]
 MAX_MDE = "0.3"
 #: The same design at N=10: its smallest detectable change is over the default 0.200.
 LOW_SPEC = SPEC.replace("replicates = 120", "replicates = 10")
-#: PF4.30, PF4.48a: the gate's limit for LOW_SPEC is the exact Fisher limit at level q / 9 at
-#: its worst base rate, computed from the stats file's references.
-LOW_LIMIT = ref_gate(10, 9, 0.2)[2]
+#: PF4.30, PF4.48a: the gate's limit for LOW_SPEC is the exact limit at level q / 9 at its worst
+#: base rate, computed from the stats file's references. First run M2 (#6, Z3): a sweep paired with
+#: nothing is read both ways and the refusal names the reading that failed, here the paired one.
+LOW_LIMIT = ref_named(10, 9, 0.2)[3]
 #: Three cells of three replicates for the targets that never return an episode.
 TRIPLE_SPEC = """\
 target_id = "pf1-errors"

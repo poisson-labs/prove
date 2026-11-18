@@ -2021,6 +2021,8 @@ def _print_plan(io: _IO, p: core.Plan) -> None:
         io.line(f"  {line}")
     if p.design_line is not None:
         io.line(p.design_line)
+    if p.paired_line is not None:
+        io.line(p.paired_line)
 
 
 # ---------- sweep ----------

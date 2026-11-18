@@ -1639,10 +1639,16 @@ class Screens:
         lines += [Line(f"  {line}") for line in plan.lines]
         if plan.design_line:
             lines.append(Line(str(plan.design_line)))
+        if getattr(plan, "paired_line", None):
+            # It wraps as the design line above it does, not under its own long label.
+            lines.append(Line(str(plan.paired_line), hang=4))
         details: list[Detail | None] = []
         if doc.get("run_name"):
             details.append(Detail("run", f"{doc['run_name']} ({doc.get('run_id')})"))
         details += design_lines(doc.get("design_mde"), None)
+        # A sweep paired with nothing is planned both ways: the paired reading's facts, as the
+        # design's are shown.
+        details += [Detail("paired", d.value) for d in design_lines(doc.get("design_paired"), None)]
         inner = doc.get("plan") or {}
         details.append(
             Detail(
@@ -1854,7 +1860,17 @@ _CND_KNOWN = {
     "gate_replicates",
     "facts",
 }
-_PLAN_KNOWN = {"schema", "verdict", "sentence", "run_id", "run_name", "plan", "design_mde", "next"}
+_PLAN_KNOWN = {
+    "schema",
+    "verdict",
+    "sentence",
+    "run_id",
+    "run_name",
+    "plan",
+    "design_mde",
+    "design_paired",
+    "next",
+}
 
 
 _RUN_COLUMNS = [

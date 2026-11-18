@@ -86,7 +86,14 @@ class UnderpoweredDesign(ExecutorError):
     Carries the numbers the refusal is about, so a caller can name the override it offers
     without computing anything: ``mde`` (the design's), ``accepted``, ``replicates`` (the
     design's N), ``replicates_needed`` (the smallest N reaching ``accepted``) and ``offered``
-    (the ``--max-mde`` that admits this design, rounded up).
+    (the ``--max-mde`` that admits this design, rounded up). ``reading`` is the test of the
+    reading that failed, ``fisher`` or ``mcnemar``: a sweep paired with nothing is read both
+    ways, and when both fail the refusal is the paired one's.
+
+    When the run named by ``pair_with=`` is too small for any sweep to be paired with it at the
+    accepted change, ``earlier_run`` is that run and ``earlier_replicates`` what it recorded;
+    ``replicates_needed`` is then the size of a new baseline, to be swept with no ``pair_with``,
+    and ``offered`` the ``--max-mde`` that admits the pair as it stands.
     """
 
     def __init__(
@@ -99,9 +106,15 @@ class UnderpoweredDesign(ExecutorError):
         replicates_needed: int | None = None,
         offered: float | None = None,
         most_conditions: int | None = None,
+        reading: str | None = None,
+        earlier_run: str | None = None,
+        earlier_replicates: int | None = None,
     ) -> None:
         super().__init__(message)
         self.most_conditions = most_conditions
+        self.reading = reading
+        self.earlier_run = earlier_run
+        self.earlier_replicates = earlier_replicates
         self.mde = mde
         self.accepted = accepted
         self.replicates = replicates
@@ -160,6 +173,9 @@ class Plan:
     #: Under ``pair_with=``, the earlier run's replicates: the gate then asks the paired test, its
     #: pairs the smaller of the two runs'. None for a run paired with nothing.
     paired_replicates: int | None = None
+    #: Under ``pair_with=``, the earlier run, when it recorded its replicates: the gate can then
+    #: say that run, and not this sweep, is too small to pair.
+    paired_with: str | None = None
     #: What this segment of the run was made from (the manifest's ``produced_by``: the version,
     #: the spec and the target with their digests, the tool, the backend). A new run's manifest
     #: records it; a resumed run keeps its manifest's and records this one in its ``resumed``
@@ -207,6 +223,7 @@ def plan(
     resumed = False
     already_stored = 0
     paired_replicates: int | None = None
+    paired_with: str | None = None
     wanted: list[tuple[str, int]] | None = None
 
     if resume is not None:
@@ -246,6 +263,7 @@ def plan(
         salt = manifest.run_salt
         recorded = (manifest.environment.get("sweep") or {}).get("replicates")
         paired_replicates = int(recorded) if recorded is not None else spec.replicates
+        paired_with = pair_with if recorded is not None else None
     else:
         run_id = new_run_id(spec.target_id)
         salt = run_salt if run_salt is not None else new_run_salt()
@@ -272,6 +290,7 @@ def plan(
         import_path=import_path,
         max_mde_accepted=max_mde_accepted,
         paired_replicates=paired_replicates,
+        paired_with=paired_with,
     )
 
 
@@ -344,8 +363,31 @@ def _design(spec: SweepSpec, *, threshold: float, paired_replicates: int | None)
 
 
 def _plan_design(p: Plan) -> Design:
-    """The gate's reading of the plan's design at the change the launcher accepts."""
+    """The gate's reading of the plan's design at the change the launcher accepts: the one the
+    run records. For a run paired with nothing that is Fisher's."""
     return _design(p.spec, threshold=_accepted_mde(p), paired_replicates=p.paired_replicates)
+
+
+def _sized_for_a_pair(p: Plan) -> bool:
+    """Whether the gate also reads the plan as the first half of a pair: a sweep that is neither
+    paired with an earlier run nor a resume. The sweep paired with it afterwards is read with the
+    paired test, which can need more replicates than Fisher's, so a first sweep passes only when
+    both readings do and the pair is never refused for its size."""
+    return p.paired_replicates is None and not p.resumed
+
+
+def _paired_reading(spec: SweepSpec, *, threshold: float) -> Design:
+    """The reading of a sweep paired with this one on the same spec: the paired test, both arms and
+    the pairs the spec's replicates."""
+    return _design(spec, threshold=threshold, paired_replicates=spec.replicates)
+
+
+def _plan_paired(p: Plan) -> Design | None:
+    """The second reading of a first sweep at the change the launcher accepts; None for a paired
+    sweep and for a resume, which have one reading."""
+    if not _sized_for_a_pair(p):
+        return None
+    return _paired_reading(p.spec, threshold=_accepted_mde(p))
 
 
 def _design_record(p: Plan) -> dict[str, Any]:
@@ -378,16 +420,11 @@ def _recorded_design(manifest: RunManifest) -> dict[str, Any] | None:
     return {**found.record(), "computed_at_read_time": True}
 
 
-def _smallest_passing(spec: SweepSpec, accepted: float, paired_replicates: int | None) -> int:
-    """The fewest replicates at which the gate passes ``accepted``, by doubling then bisection on
-    N; under ``--pair-with`` the earlier run's replicates move with N, as a fresh pair's would."""
-
-    def passes(n: int) -> bool:
-        paired = None if paired_replicates is None else n
-        resized = replace(spec, replicates=n)
-        return _design(resized, threshold=accepted, paired_replicates=paired).passes
-
-    lo, hi = spec.replicates, max(spec.replicates + 1, 2)
+def _fewest(start: int, passes: Callable[[int], bool]) -> int:
+    """The fewest replicates above ``start`` at which ``passes`` holds, by doubling then bisection:
+    an N that passes whose N - 1 does not. (Fisher's pass is not monotone in N, so this is the
+    boundary the search meets, which is what a refusal has always offered.)"""
+    lo, hi = start, max(start + 1, 2)
     while not passes(hi) and hi < _N_SEARCH_LIMIT:
         lo, hi = hi, hi * 2
     while lo + 1 < hi:
@@ -399,17 +436,58 @@ def _smallest_passing(spec: SweepSpec, accepted: float, paired_replicates: int |
     return hi
 
 
+def _passes_both(spec: SweepSpec, accepted: float) -> Callable[[int], bool]:
+    """Whether a first sweep of ``n`` replicates passes Fisher's reading and the paired one."""
+
+    def passes(n: int) -> bool:
+        resized = replace(spec, replicates=n)
+        return (
+            _design(resized, threshold=accepted, paired_replicates=None).passes
+            and _paired_reading(resized, threshold=accepted).passes
+        )
+
+    return passes
+
+
+def _smallest_passing(
+    spec: SweepSpec,
+    accepted: float,
+    paired_replicates: int | None,
+    *,
+    both: bool = False,
+    earlier_recorded: bool = True,
+) -> int:
+    """The fewest replicates of this sweep at which the gate passes ``accepted``. For a first
+    sweep (``both``) each N is read both ways. Under ``--pair-with`` the earlier run stays at the
+    replicates it recorded, as the gate itself holds it: more replicates of this sweep never make
+    a pair longer than its earlier run. An earlier run that recorded no replicates is read at
+    this sweep's, so there it moves with N."""
+    if both:
+        return _fewest(spec.replicates, _passes_both(spec, accepted))
+
+    def passes(n: int) -> bool:
+        resized = replace(spec, replicates=n)
+        earlier = paired_replicates
+        if earlier is not None and not earlier_recorded:
+            earlier = n
+        return _design(resized, threshold=accepted, paired_replicates=earlier).passes
+
+    return _fewest(spec.replicates, passes)
+
+
 def _smallest_accepted(
-    spec: SweepSpec, accepted: float, paired_replicates: int | None
+    spec: SweepSpec, accepted: float, paired_replicates: int | None, *, both: bool = False
 ) -> float | None:
     """The smallest ``--max-mde`` at three decimals, at or above ``accepted``, that admits the
-    design as it stands; None when only 1, which accepts any design, would. A larger accepted
-    change only makes the gate easier to pass (more power at it, fewer base rates with room), so
-    a bisection over thousandths finds it."""
+    design as it stands (for a first sweep, ``both``, under both readings); None when only 1, which
+    accepts any design, would. A larger accepted change only makes the gate easier to pass (more
+    power at it, fewer base rates with room), so a bisection over thousandths finds it."""
 
     def passes(thousandths: int) -> bool:
         threshold = thousandths / 1000
-        return _design(spec, threshold=threshold, paired_replicates=paired_replicates).passes
+        if not _design(spec, threshold=threshold, paired_replicates=paired_replicates).passes:
+            return False
+        return not both or _paired_reading(spec, threshold=threshold).passes
 
     lo, hi = max(1, math.ceil(accepted * 1000 - 1e-9)), 999
     if not passes(hi):
@@ -423,6 +501,12 @@ def _smallest_accepted(
     return lo / 1000
 
 
+def _most_conditions(found: Design) -> int:
+    """How many conditions could each be flagged alone at these replicates under a reading: the
+    family whose level q / (K E) is still above the smallest p."""
+    return max(0, math.ceil(_GATE_Q / (found.p_min * found.events)) - 1)
+
+
 def check_power(p: Plan, *, max_mde: float | None = None) -> None:
     """Refuse a design that cannot resolve an effect as small as the caller accepts.
 
@@ -432,10 +516,18 @@ def check_power(p: Plan, *, max_mde: float | None = None) -> None:
     admits every design. On the passing path it returns None and does nothing at all --
     it never prints, never touches the store, and never mutates the plan.
 
-    Raises ``UnderpoweredDesign`` carrying the replicates that pass and, where a limit exists,
-    the ``--max-mde`` that admits the design; a design in which no lone condition can be flagged
-    is refused with the smallest possible p, the level a flag needs, and no ``--max-mde``
-    offer.
+    Which test reads the design: a sweep paired with an earlier run, the paired test, its pairs
+    the smaller of the two runs' replicates; a resume, Fisher's test, as the run was planned; a
+    sweep that is neither, both, Fisher's and the paired test with both arms the spec's
+    replicates, and it passes only when both do. So the sweep paired with it afterwards, on the
+    same spec and replicates, is never refused for its size. Nothing is estimated from data.
+
+    Raises ``UnderpoweredDesign`` carrying the reading that failed (the paired one when both do),
+    the replicates that pass and, where a limit exists, the ``--max-mde`` that admits the design;
+    a design in which no lone condition can be flagged is refused with the smallest possible p,
+    the level a flag needs, and no ``--max-mde`` offer. Under ``pair_with=``, when the earlier
+    run is too small for any sweep paired with it to pass, the refusal names that run, and its
+    replicates are those of a new baseline.
 
     The range check on ``max_mde`` lives here rather than in the CLI, by exact analogy with
     the comparison's ``0 < q < 1`` in ``diff.py``: the CLI parses a float and decides nothing
@@ -444,35 +536,85 @@ def check_power(p: Plan, *, max_mde: float | None = None) -> None:
     accepted = DEFAULT_MAX_MDE if max_mde is None else float(max_mde)
     if not 0.0 < accepted <= 1.0:
         raise ExecutorError(f"--max-mde must be above 0 and at most 1, got {accepted!r}")
+    both = _sized_for_a_pair(p)
     found = _design(p.spec, threshold=accepted, paired_replicates=p.paired_replicates)
-    if found.passes:
+    paired = _paired_reading(p.spec, threshold=accepted) if both else None
+    if paired is not None and not paired.passes:
+        named = paired
+    elif not found.passes:
+        named = found
+    else:
         return
     n = p.spec.replicates
-    needed = _smallest_passing(p.spec, accepted, p.paired_replicates)
-    if not found.flaggable:
-        # How many conditions could each be flagged alone at these replicates: the family whose
-        # level q / (K E) is still above the smallest p.
-        most = max(0, math.ceil(_GATE_Q / (found.p_min * found.events)) - 1)
+    if p.paired_with is not None and p.paired_replicates is not None:
+        _refuse_a_short_earlier_run(p, accepted)
+    needed = _smallest_passing(
+        p.spec,
+        accepted,
+        p.paired_replicates,
+        both=both,
+        earlier_recorded=p.paired_with is not None,
+    )
+    if not named.flaggable:
+        # Fisher's smallest p is never above the paired test's, so where both readings are asked
+        # the paired one is the one that cannot flag; the count offered is the smaller of the two.
+        most = min(_most_conditions(d) for d in (found, paired) if d is not None)
+        where = " in a sweep paired with this one" if named is paired else ""
+        test = " of the paired test" if named is paired else ""
         raise UnderpoweredDesign(
-            f"no single condition of this design can be flagged: with {n} replicates a side the "
-            f"smallest possible p is {_look.fmt_p(found.p_min)}, and a flag needs less than "
-            f"{_look.fmt_p(found.level)} (q {_GATE_Q:g} over {found.family} tests)",
+            f"no single condition of this design can be flagged{where}: with {n} replicates a "
+            f"side the smallest possible p{test} is {_look.fmt_p(named.p_min)}, and a flag needs "
+            f"less than {_look.fmt_p(named.level)} (q {_GATE_Q:g} over {named.family} tests)",
             mde=math.nan,
             accepted=accepted,
             replicates=n,
             replicates_needed=needed,
             offered=None,
             most_conditions=most,
+            reading=named.test,
         )
-    mde = math.nan if found.mde is None else found.mde
+    mde = math.nan if named.mde is None else named.mde
+    if named is paired:
+        sentence = f"a sweep paired with this one would flag a change of {mde:.3f}"
+    else:
+        sentence = f"one condition alone would be flagged for a change of {mde:.3f}"
     raise UnderpoweredDesign(
-        f"underpowered design: one condition alone would be flagged for a change of {mde:.3f} at "
-        f"its worst base rate, {found.base_rate:.3f}, and you accept {accepted:.3f}",
+        f"underpowered design: {sentence} at its worst base rate, {named.base_rate:.3f}, and you "
+        f"accept {accepted:.3f}",
         mde=mde,
         accepted=accepted,
         replicates=n,
         replicates_needed=needed,
-        offered=_smallest_accepted(p.spec, accepted, p.paired_replicates),
+        offered=_smallest_accepted(p.spec, accepted, p.paired_replicates, both=both),
+        reading=named.test,
+    )
+
+
+def _refuse_a_short_earlier_run(p: Plan, accepted: float) -> None:
+    """Under ``pair_with=``, raise when the earlier run is the short side: when a sweep of this
+    spec with as many replicates as that run recorded still could not be paired with it at
+    ``accepted``. More replicates of this sweep would be refused again, so what the refusal
+    carries is a new baseline's size, the fewest replicates above the earlier run's at which a
+    first sweep passes both readings, and the accepted change that admits the pair as it stands.
+    Returns when the earlier run is long enough, and this sweep is the short side."""
+    earlier = p.paired_replicates
+    assert earlier is not None and p.paired_with is not None
+    at_its_size = replace(p.spec, replicates=earlier)
+    if _paired_reading(at_its_size, threshold=accepted).passes:
+        return
+    needed = _fewest(earlier, _passes_both(p.spec, accepted))
+    stands = _design(p.spec, threshold=accepted, paired_replicates=earlier)
+    raise UnderpoweredDesign(
+        f"underpowered design: run {p.paired_with!r} has {earlier} replicates, and a sweep paired "
+        f"with it needs {needed} on both sides",
+        mde=math.nan if stands.mde is None else stands.mde,
+        accepted=accepted,
+        replicates=p.spec.replicates,
+        replicates_needed=needed,
+        offered=_smallest_accepted(p.spec, accepted, earlier) if stands.flaggable else None,
+        reading=stands.test,
+        earlier_run=p.paired_with,
+        earlier_replicates=earlier,
     )
 
 

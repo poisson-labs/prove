@@ -60,8 +60,10 @@ all; both are said in words.
 
 **The power gate** is the same limit computed before a sweep runs, at the worst base rate the
 design could meet. If it is above the change you accept, `--max-mde`, 0.20 by default, `sweep`
-refuses the design and names the replicates it needs. A run records the change it accepted; the
-comparison uses it as its threshold.
+refuses the design and names the replicates it needs. A first sweep is planned for the paired
+comparison that follows it: it is read with the test for two separate samples and with the paired
+test, with no credit for pairing, and passes only when both limits are within the change you
+accept. A run records the change it accepted; the comparison uses it as its threshold.
 
 **The fragility** is how many episodes would have to have ended differently for the verdict word
 to change. A small number means the word rests on a few episodes.

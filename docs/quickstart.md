@@ -40,15 +40,17 @@ plan  1,746 rollouts of mock-agent: 9 cells x 194 replicates on local, $0 (local
   outcomes  failures: timeout, violated
 …
   smallest rise one condition alone would be flagged for  0.199 at its worst base rate, 0.400 (Fisher, q 0.05 over 18 tests, 4 times in 5; you accept up to 0.200)
+  and in a sweep paired with this one  0.200 at its worst base rate, 0.400 (paired test on shared seeds, McNemar, q 0.05 over 18 tests, 4 times in 5; planned for the worst base rate and with no credit for pairing, so it needs no pilot run)
 done  1,746 rollouts in run "mock-agent 2026-10-26 a" (complete) in … s
 …
   next: poisson-prove sweep --target poisson_prove.examples.mock_agent:rollout_patched --pair-with latest
 ```
 
 The plan says what will run and what it costs (nothing, here), and the smallest change in one
-condition's failure rate this design would catch 4 times in 5. Had that been above the 0.20 you
-accept by default, the sweep would have refused before running anything and said how many
-replicates it needs. The run gets a name, `mock-agent`, the date and a letter, which every later
+condition's failure rate this design would catch 4 times in 5: once for this sweep as it stands,
+and once for the sweep you will pair with it on the same seeds. Had either been above the 0.20
+you accept by default, the sweep would have refused before running anything and said how many
+replicates it needs, so the paired sweep below is never refused for its size. The run gets a name, `mock-agent`, the date and a letter, which every later
 command accepts in place of its id.
 
 The patched agent retries a failed tool call once. `--pair-with latest` gives its run the same
